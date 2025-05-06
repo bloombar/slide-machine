@@ -1,0 +1,141 @@
+body {
+  font-family: 'Arial', sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #f4f4f4;
+  color: #333;
+  line-height: 1.6;
+  font-size: 1em; /* Base font size */
+}
+
+.subtitles-container {
+  display: none;
+  position: fixed;
+  bottom: 0px;
+  left: 0px;
+  right: 0px;
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 0 0.3125em 0 0.3125em; /* 5px converted to em */
+  font-size: 2.25em; /* 36px converted to em */
+  text-align: center;
+  overflow: scroll;
+  height: 7.5em; /* 120px converted to em */
+  line-height: 7.5em; /* 120px converted to em */
+  max-height: 7.5em; /* 120px converted to em */
+}
+
+.subtitles-text {
+  display: inline-block;
+  margin: 0;
+  padding: 0;
+}
+
+img.topic-thumbnail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.2;
+}
+
+header {
+  display: none;
+}
+
+header h1 {
+  font-size: 2.5em; /* 40px converted to em */
+  font-weight: bold;
+  margin: 0;
+  text-align: center;
+  color: #444;
+}
+
+header p.byline {
+  text-align: center;
+  font-size: 1.2em; /* 19.2px converted to em */
+  font-style: italic;
+  margin: 0; /* 8px converted to em */
+  color: #666;
+}
+
+.slides {
+  margin: 30px;
+  /* border: 0.3125em solid #c0c0c0; */
+  border-radius: 0.625em; /* 10px converted to em */
+  padding: 1.25em; /* 20px converted to em */
+  box-shadow: 0 0.625em 1.25em rgba(0, 0, 0, 0.2); /* 10px and 20px converted to em */
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0 0 1.25em 0; /* 20px converted to em */
+  font-weight: 300;
+  color: #222;
+  text-align: center;
+}
+
+h1 {
+  font-size: 4em; /* 3rem remains the same */
+  text-align: center;
+  margin: 0;
+}
+
+h2 {
+  font-size: 3.5em; /* 2.5rem remains the same */
+  text-align: center;
+  margin: 0;
+}
+
+p {
+  margin: 0 0 1.25em 0; /* 20px converted to em */
+  font-size: 2.2em; /* 1.2rem remains the same */
+  text-align: center;
+}
+
+ul,
+ol {
+  margin: 0 0 1.25em 1.25em; /* 20px converted to em */
+  padding: 0;
+  list-style-type: none;
+}
+li {
+  margin: 0 0 0.225em 0; /* 10px converted to em */
+  font-size: 1.5em; /* 1.1rem remains the same */
+  position: relative;
+  padding-left: 1.5em; /* Add space for the icon */
+}
+
+li::before {
+  content: '★'; /* Decorative icon */
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.2em; /* Adjust icon size */
+  color: #007bff; /* Icon color */
+}
+
+a {
+  color: #007bff;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.container {
+  max-width: 40em; /* 640px converted to em */
+  margin: 0 auto;
+  padding: 2.5em; /* 40px converted to em */
+}

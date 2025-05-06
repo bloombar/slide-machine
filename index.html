@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Amos Bloomberg's Career Presentation to 3rd Graders</title>
+    <link rel="stylesheet" href="styles/main.css" />
+    <script type="text/javascript" src="env.js"></script>
+    <script type="text/javascript" src="js/screenshot.js"></script>
+    <script type="text/javascript">
+      const env = loadEnv() // assuming loadEnv is an object defined in env.js
+      console.log(env)
+    </script>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>The Life of a Professor</h1>
+        <p class="byline">By Amos Bloomberg</p>
+      </header>
+      <!-- <video id="video" autoplay playsinline></video> -->
+      <!-- <button id="startRecording">Start Recording</button>
+    <button id="stopRecording" disabled>Stop Recording</button>
+    <a id="downloadLink" style="display: none">Download Recording</a> -->
+
+      <main class="slides">
+        <article class="slide">
+          <h1>The Life of a Professor</h1>
+          <p class="byline">By Amos Bloomberg</p>
+        </article>
+      </main>
+
+      <section class="subtitles-container">
+        <p class="subtitles-text">&nbsp;</p>
+      </section>
+      <script type="text/javascript" src="js/openai.js"></script>
+      <script type="text/javascript" src="js/wikipedia.js"></script>
+      <script type="text/javascript" src="js/speech-recognition.js"></script>
+      <script type="text/javascript">
+        // do now
+        const videoEl = document.getElementById('video')
+        startStream(videoEl)
+      </script>
+    </div>
+  </body>
+</html>
