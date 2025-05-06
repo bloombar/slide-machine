@@ -21,7 +21,7 @@ const getThumbnailImage = async topic => {
       //   console.log(`Pages: ${JSON.stringify(pages, null, 2)}`)
       const arrPages = Object.keys(pages).map(key => pages[key])
       arrPages.forEach(page => {
-        console.log(JSON.stringify(page, null, 2))
+        console.log(`Wikipedia page data: ${JSON.stringify(page, null, 2)}`)
       })
 
       // select a random page if multiple
