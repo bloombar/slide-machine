@@ -8,6 +8,16 @@ body {
   font-size: 1em; /* Base font size */
 }
 
+.container {
+  max-width: 40em; /* 640px converted to em */
+  margin: 0 auto;
+  padding: 2.5em; /* 40px converted to em */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100vh; /* Full viewport height */
+}
+
 .subtitles-container {
   display: none;
   position: fixed;
@@ -132,10 +142,4 @@ a {
 
 a:hover {
   text-decoration: underline;
-}
-
-.container {
-  max-width: 40em; /* 640px converted to em */
-  margin: 0 auto;
-  padding: 2.5em; /* 40px converted to em */
 }
