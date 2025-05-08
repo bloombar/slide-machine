@@ -7,40 +7,109 @@
     <link rel="stylesheet" href="styles/main.css" />
     <script type="text/javascript" src="env.js"></script>
     <script type="text/javascript" src="js/screenshot.js"></script>
+    <script type="text/javascript" src="js/openai.js"></script>
+    <script type="text/javascript" src="js/wikipedia.js"></script>
+    <script type="text/javascript" src="js/slides.js"></script>
+    <script type="text/javascript" src="js/speech-recognition.js"></script>
+    <script type="text/javascript" src="js/settings.js"></script>
     <script type="text/javascript">
       const env = loadEnv() // assuming loadEnv is an object defined in env.js
-      console.log(env)
+      //   console.log(env)
+      // start presentation when page loads
+      window.addEventListener('load', function () {
+        // load title and byline from local storage
+        updateStartSlide()
+
+        startStream()
+
+        // const startButtonEl = document.querySelector('.start-button')
+        // const stopButtonEl = document.querySelector('.stop-button')
+        // startButtonEl.addEventListener('click', function () {
+        //   console.log('starting...')
+        //   startStream()
+        //   startButtonEl.classList.add('hidden')
+        //   stopButtonEl.classList.remove('hidden')
+        // })
+        // stopButtonEl.addEventListener('click', function () {
+        //   console.log('stopping...')
+        //   stopStream()
+        //   startButtonEl.classList.remove('hidden')
+        //   stopButtonEl.classList.add('hidden')
+        // })
+      }) // page load
     </script>
   </head>
   <body>
+    <!-- BEGIN SETTINGS PANEL -->
+    <div class="settings-icon" id="open-settings-icon">
+      <img src="images/gear-icon.png" alt="Settings" />
+    </div>
+    <div class="settings-icon hidden" id="close-settings-icon">
+      <img src="images/close-icon.png" alt="Settings" />
+    </div>
+
+    <aside id="settings-screen" class="settings-screen" style="display: none">
+      <form class="settings-form" onsubmit="return false;">
+        <h2>Settings</h2>
+        <label for="setting1">OpenAI API key:</label>
+        <input
+          type="text"
+          id="openai-api-key"
+          name="openai-api-key"
+          class="settings-field"
+          placeholder="OpenAI API key"
+        />
+        <label for="setting2">Presentation title:</label>
+        <input
+          type="text"
+          id="presentation-title"
+          name="presentation-title"
+          class="settings-field"
+          placeholder="Presentation title"
+        />
+        <label for="setting2">Presentation byline:</label>
+        <input
+          type="text"
+          id="presentation-byline"
+          name="presentation-byline"
+          class="settings-field"
+          placeholder="Presentation byline"
+        />
+        <label for="setting3">Presentation description:</label>
+        <textarea
+          id="presentation-description"
+          name="presentation-description"
+          class="settings-field"
+          placeholder="Presentation description"
+        ></textarea>
+        <button id="close-settings" style="margin-top: 10px">Close</button>
+      </form>
+    </aside>
+    <!-- END SETTINGS PANEL -->
+
     <div class="container">
-      <header>
-        <h1>The Life of a Professor</h1>
-        <p class="byline">according to Amos Bloomberg</p>
-      </header>
       <!-- <video id="video" autoplay playsinline></video> -->
       <!-- <button id="startRecording">Start Recording</button>
     <button id="stopRecording" disabled>Stop Recording</button>
     <a id="downloadLink" style="display: none">Download Recording</a> -->
 
       <main class="slides">
-        <article class="slide">
-          <h1>The Life of a Professor</h1>
-          <p class="byline">according to Amos Bloomberg</p>
+        <article class="slide start">
+          <div class="slide-text">
+            <h1 class="presentation-text-title">Title</h1>
+            <p class="presentation-text-byline">Byline</p>
+          </div>
         </article>
       </main>
 
+      <!-- <div class="controls">
+        <button class="start-button">Start</button>
+        <button class="stop-button hidden">Stop</button>
+      </div>
+
       <section class="subtitles-container">
         <p class="subtitles-text">&nbsp;</p>
-      </section>
-      <script type="text/javascript" src="js/openai.js"></script>
-      <script type="text/javascript" src="js/wikipedia.js"></script>
-      <script type="text/javascript" src="js/speech-recognition.js"></script>
-      <script type="text/javascript">
-        // do now
-        const videoEl = document.getElementById('video')
-        startStream(videoEl)
-      </script>
+      </section> -->
     </div>
   </body>
 </html>
