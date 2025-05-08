@@ -1,4 +1,22 @@
 let historic_prompts = [] // will store prompt history
+const presentationDescription = localStorage.getItem('presentation-description') // custom description of presentation, if available
+console.log(`Presentation description: ${presentationDescription}`)
+
+// openAI prompts
+const system_prompt = `
+You are an assistant creating a slide presentation for a lecture.  ${presentationDescription}
+
+You create slide content in short sentences of simple English based on the main subject or object in the input.  
+Return a JSON object for a slide with the following structure.  Return raw JSON, not Markdown.  Make sure JSON arrays are followed by a comma separating them from the following field.
+{
+    "title": "Slide title, 5 words or less",
+    "topic": "The main object in the input, in singular form.",
+    "intro": "1 sentence overview of the topic",
+    "list": ["list of up to 3 simple English bullet point details for small children"]
+    "summary": "A 1-sentence summary of the user input so far.",
+}
+`
+let summary_prompt = '' // no prompt summary at start
 
 async function getOpenAIResponse(
   apiBaseUrl,

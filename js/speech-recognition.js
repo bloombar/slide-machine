@@ -5,21 +5,6 @@ let slowdownTimeout
 let lastSpokenContent = ''
 let presenting = false
 
-// openAI prompts
-const system_prompt = `
-You are an assistant creating a slide presentation for a guest presenting their occupation to children in Ms. Glynn's 3rd grade class.  
-You create slide content in short sentences of simple English based on the main subject or object in the input.  
-Return a JSON object for a slide with the following structure.  Return raw JSON, not Markdown.  Make sure JSON arrays are followed by a comma separating them from the following field.
-{
-    "title": "Slide title, 5 words or less",
-    "topic": "The main object in the input, in singular form.",
-    "intro": "1 sentence overview of the topic",
-    "list": ["list of up to 3 simple English bullet point details for small children"]
-    "summary": "A 1-sentence summary of the user input so far.",
-}
-`
-let summary_prompt = '' // no prompt summary at start
-
 // const background_prompt = `
 // The following is some background context about this user:
 // - Who or what inspired me to go into this profession? I ended up in this field accidentally by following my interests.  I learned to program for fun when I was a kid, forgot about it, then rediscovered it again when I was in college.
