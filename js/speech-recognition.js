@@ -1,26 +1,56 @@
 //   const startRecordingButton = document.getElementById("startRecording");
 
-let subtitleTimeout
+// let subtitleTimeout
 let slowdownTimeout
-let lastTopic = ''
 let lastSpokenContent = ''
+let presenting = false
 
-function resetSubtitles() {
-  const subtitlesText = document.querySelector('.subtitles-text')
-  subtitlesText.textContent = '\u00A0' // Non-breaking space
+// openAI prompts
+const system_prompt = `
+You are an assistant creating a slide presentation for a guest presenting their occupation to children in Ms. Glynn's 3rd grade class.  
+You create slide content in short sentences of simple English based on the main subject or object in the input.  
+Return a JSON object for a slide with the following structure.  Return raw JSON, not Markdown.  Make sure JSON arrays are followed by a comma separating them from the following field.
+{
+    "title": "Slide title, 5 words or less",
+    "topic": "The main object in the input, in singular form.",
+    "intro": "1 sentence overview of the topic",
+    "list": ["list of up to 3 simple English bullet point details for small children"]
+    "summary": "A 1-sentence summary of the user input so far.",
 }
+`
+let summary_prompt = '' // no prompt summary at start
 
-function startSubtitleTimeout() {
-  clearTimeout(subtitleTimeout)
-  subtitleTimeout = setTimeout(resetSubtitles, env.CLEAR_SUBTITLES_AFTER)
-}
+// const background_prompt = `
+// The following is some background context about this user:
+// - Who or what inspired me to go into this profession? I ended up in this field accidentally by following my interests.  I learned to program for fun when I was a kid, forgot about it, then rediscovered it again when I was in college.
+// - When growing up, was this your dream profession or field of study? I never had any dream profession.  I never really understood what a profession was and had no idea what I wanted to do or even how to think about that.
+// - Did certain passions or interests guide you towards this career? I learned to program computers when I was around 12 years old with help from my father.  I suppose being a bit of a homebody and introvert helped me.
+// - Who helped you along the way? My father introduced me to programming - he was an early adopter of computers at his workplace and in personal life, but I am mostly self-taught.  I only ever took one computer science class on artificial intelligence in college.  I am otherwise entirely self-taught.
+// - What type of education is needed and how long does it take to enter this career?  The traditional background would be to go to undergrad for computer science or math and then to graduate school and a PhD for the same.  However, I never studied computer science.  I studied neuroscience and psychology and later studied tech-related art and creativity, but I worked as a software engineer for many years before becoming a professor.
+// - How long were/have you been in this field? I've been a professor for 12 years.  Before becoming a professor, I worked as a software engineer and technology consultant for 15 years.  I started teaching at university part-time on weekends mostly because I found it interesting and pleasant to help people, which was different from my usual jobs work at the time.
+// - What do you enjoy about this profession the most? Faculty I work with are extremely smart and very nice.  Flexibilty. I have no boss.  I can choose my own areas of inquiry and research.  I decide what I do most days.  Continually thinking and learning are part of the job.  Did I mention not having a boss?!
+// - What do you find most challenging?  Dealing with students who complain about their grades.  Grading is really a challenge, because it is often unfair and somewhat arbitrary.  In some cases, we know that students who cheat to do perfect work get better grades than students who do their own imperfect work.
+// - What is your vision for the future when talking about your career? A professor's career is a sort of dead end.  There is no real room for growth for faculty in academia.  There is more room for growth in administration.  However, that means there is no really a "rat race" where people are constantly trying to get ahead, although that does happen in some cases.  Most people I work with are highly intelligent and very nice.
+//`
+
+// function resetSubtitles() {
+//   const subtitlesText = document.querySelector('.subtitles-text')
+//   subtitlesText.textContent = '\u00A0' // Non-breaking space
+// }
+
+// function startSubtitleTimeout() {
+//   clearTimeout(subtitleTimeout)
+//   subtitleTimeout = setTimeout(resetSubtitles, env.CLEAR_SUBTITLES_AFTER)
+// }
 //   const stopRecordingButton = document.getElementById("stopRecording");
 //   const downloadLink = document.getElementById("downloadLink");
 
 //   let mediaRecorder;
 //   let recordedChunks = [];
-
-async function startStream(videoEl) {
+function stopStream() {
+  presenting = false // unset the flag
+}
+async function startStream(/*videoEl*/) {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: false,
@@ -35,14 +65,15 @@ async function startStream(videoEl) {
       window.SpeechRecognition || window.webkitSpeechRecognition
 
     if (speechRecognition) {
+      presenting = true
       console.log('Speech recognition is supported.')
       const recognition = new speechRecognition()
       recognition.continuous = true
       recognition.interimResults = false
       recognition.lang = 'en-US'
 
-      const subtitlesContainer = document.querySelector('.subtitles-container')
-      const subtitlesText = subtitlesContainer.querySelector('.subtitles-text')
+      // const subtitlesContainer = document.querySelector('.subtitles-container')
+      // const subtitlesText = subtitlesContainer.querySelector('.subtitles-text')
 
       recognition.onend = () => {
         console.log('Speech recognition ended.')
@@ -69,124 +100,34 @@ async function startStream(videoEl) {
         console.log('Speech ended.')
       }
       recognition.onresult = event => {
+        if (!presenting) return // don't process results if not presenting
         //   const transcript = event.results[0][0].transcript;
         const result = event.results[event.results.length - 1][0] // get latest result
         console.log(
           `Transcript: ${result.transcript}\nConfidence: ${result.confidence}`
         )
-        const subtitlesText = document.querySelector('.subtitles-text')
-        subtitlesText.textContent = result.transcript
-        subtitlesText.scrollTop = subtitlesText.scrollHeight
-        startSubtitleTimeout()
+        // const subtitlesText = document.querySelector('.subtitles-text')
+        // subtitlesText.textContent = result.transcript
+        // subtitlesText.scrollTop = subtitlesText.scrollHeight
+        // startSubtitleTimeout()
 
         // append to the last spoken content since we fetched an AI response
         lastSpokenContent += result.transcript + ' '
 
-        // get OpenAI response based on last spoken content
+        // get OpenAI response based on last spoken content, along with system and historic prompt summary
         if (!slowdownTimeout) {
-          ;(async () => {
-            const openAIResponse = await getOpenAIResponse(
-              env.OPENAI_API_BASE,
-              env.OPENAI_MODEL,
-              env.OPENAI_API_KEY,
-              lastSpokenContent
-            )
-            // console.log(`openAIResponse: ${JSON.stringify(openAIResponse, null, 2)}`);
-
-            // remove last spoken content from queue
-            lastSpokenContent = ''
-
-            // remove any previous slides from the screen
-            const existingSlides = document.querySelectorAll('.slide')
-            existingSlides.forEach(slide => slide.remove())
-
-            // get the container
-            const slideContainerEl = document.querySelector('.slides')
-
-            // create a new slide on the screen
-            const slideEl = document.createElement('article')
-            slideEl.classList.add('slide')
-
-            if (openAIResponse.title) {
-              const headingEl = document.createElement('h2')
-              headingEl.textContent = openAIResponse.title
-              slideEl.appendChild(headingEl)
-            }
-
-            if (openAIResponse.intro) {
-              const paragraphEl = document.createElement('p')
-              paragraphEl.textContent = openAIResponse.intro
-              slideEl.appendChild(paragraphEl)
-            }
-
-            if (
-              Array.isArray(openAIResponse.list) &&
-              openAIResponse.list.length > 0
-            ) {
-              const listEl = document.createElement('ul')
-              openAIResponse.list.forEach(item => {
-                const listItemEl = document.createElement('li')
-                listItemEl.textContent = item
-                listEl.appendChild(listItemEl)
-              })
-              slideEl.appendChild(listEl)
-            }
-
-            // add slide to container
-            slideContainerEl.appendChild(slideEl)
-
-            // get Wikipedia thumbnail image
-            if (openAIResponse.topic) {
-              const topicThumbnailImageUrl = await getThumbnailImage(
-                openAIResponse.topic
-              )
-              console.log(
-                `Wikipedia '${openAIResponse.topic}' page thumbnail image: ${topicThumbnailImageUrl}`
-              )
-              if (topicThumbnailImageUrl) {
-                // remove any existing images
-                const existingImages =
-                  document.querySelectorAll('.topic-thumbnail')
-                existingImages.forEach(image => image.remove())
-
-                // add a new image
-                const imageEl = document.createElement('img')
-                imageEl.src = topicThumbnailImageUrl
-                imageEl.alt = 'Topic Thumbnail'
-                imageEl.classList.add('topic-thumbnail') // Optional: Add a class for styling
-
-                // add image to container
-                const containerEl = document.querySelector('.container')
-                containerEl.appendChild(imageEl)
-              } else {
-                console.log('No thumbnail image found for the topic.')
-
-                // remove any existing images
-                const existingImages =
-                  document.querySelectorAll('.topic-thumbnail')
-                existingImages.forEach(image => image.remove())
-
-                // add a random image
-                const randomImageUrl = 'https://picsum.photos/400'
-                const imageEl = document.createElement('img')
-                imageEl.src = randomImageUrl
-                imageEl.alt = 'Topic Thumbnail'
-                imageEl.classList.add('topic-thumbnail') // Optional: Add a class for styling
-
-                // add image to container
-                const containerEl = document.querySelector('.container')
-                containerEl.appendChild(imageEl)
-              }
-            } else {
-              console.log('No topic found in the OpenAI response.')
-            }
-          })()
+          // create a new slide
+          createNewSlide(lastSpokenContent)
+          lastSpokenContent = '' // reset the last spoken content
 
           // Prevent running this part more than once every 5 seconds
           slowdownTimeout = setTimeout(() => {
             clearTimeout(slowdownTimeout)
             slowdownTimeout = null
             console.log('Resetting slowdownTimeout')
+            // create a new slide, in case there's spoken content that has not yet been processed
+            createNewSlide(lastSpokenContent)
+            lastSpokenContent = '' // reset the last spoken content
           }, env.PAUSE_BETWEEN_SLIDES)
         }
 

@@ -5,19 +5,88 @@ body {
   background-color: #f4f4f4;
   color: #333;
   line-height: 1.6;
-  font-size: 1em; /* Base font size */
+  font-size: 0.9em; /* Base font size */
 }
 
+@media print {
+  body {
+    font-size: 0.7em; /* Reduce font size for print */
+  }
+
+  h1 {
+    font-size: 2.5em; /* Adjust heading size for print */
+  }
+
+  h2 {
+    font-size: 2em; /* Adjust heading size for print */
+  }
+
+  p,
+  li {
+    font-size: 1em; /* Adjust paragraph and list item size for print */
+  }
+
+  .slide {
+    box-shadow: none; /* Remove box shadow for print */
+    margin: 0;
+    padding: 1em; /* Adjust padding for print */
+    width: 100%; /* Full width for print */
+    /* height: auto;  */
+  }
+
+  a {
+    color: black; /* Ensure links are readable in print */
+    text-decoration: underline; /* Add underline for links in print */
+  }
+}
+
+.hidden {
+  display: none;
+}
+
+/*  BEGIN SETTINGS SCREEN */
+.settings-icon {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  cursor: pointer;
+  padding: 1em;
+}
+.settings-icon img {
+  width: 30px;
+  height: 30px;
+}
+.settings-screen {
+  display: none;
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 300px;
+  height: 100%;
+  background-color: white;
+  box-shadow: -2px 0 5px rgba(0, 0, 0, 0.2);
+  padding: 20px;
+  z-index: 1000;
+}
+
+.settings-screen .settings-field {
+  width: 100%;
+  margin-bottom: 10px;
+}
+/*  END SETTINGS SCREEN */
+
 .container {
-  max-width: 40em; /* 640px converted to em */
   margin: 0 auto;
-  padding: 2.5em; /* 40px converted to em */
+  padding: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  height: 100vh; /* Full viewport height */
+}
+.subtitles-container {
+  display: none;
 }
 
+/* 
 .subtitles-container {
   display: none;
   position: fixed;
@@ -26,40 +95,28 @@ body {
   right: 0px;
   background-color: rgba(0, 0, 0, 0.7);
   color: white;
-  padding: 0 0.3125em 0 0.3125em; /* 5px converted to em */
-  font-size: 2.25em; /* 36px converted to em */
+  padding: 0 0.3125em 0 0.3125em;
+  font-size: 2.25em;
   text-align: center;
   overflow: scroll;
-  height: 7.5em; /* 120px converted to em */
-  line-height: 7.5em; /* 120px converted to em */
-  max-height: 7.5em; /* 120px converted to em */
+  height: 7.5em;
+  line-height: 7.5em;
+  max-height: 7.5em;
 }
 
 .subtitles-text {
   display: inline-block;
   margin: 0;
   padding: 0;
-}
+} */
 
-img.topic-thumbnail {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  z-index: -1;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0.2;
-}
-
+/* 
 header {
   display: none;
 }
 
 header h1 {
-  font-size: 2.5em; /* 40px converted to em */
+  font-size: 2.5em;
   font-weight: bold;
   margin: 0;
   text-align: center;
@@ -68,19 +125,90 @@ header h1 {
 
 header p.byline {
   text-align: center;
-  font-size: 1.2em; /* 19.2px converted to em */
+  font-size: 1.2em; 
   font-style: italic;
-  margin: 0; /* 8px converted to em */
   color: #666;
-}
+} */
 
 .slides {
-  margin: 30px;
+  /* margin: 30px; */
   /* border: 0.3125em solid #c0c0c0; */
-  border-radius: 0.625em; /* 10px converted to em */
-  padding: 1.25em; /* 20px converted to em */
-  box-shadow: 0 0 2em rgba(0, 0, 0, 0.2); /* 10px and 20px converted to em */
+  /* border-radius: 0.625em; */
+  padding: 2em;
 }
+
+.slide {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  margin: 2em;
+  padding: 2em;
+  width: 80vw; /* Full viewport width */
+  height: 80vh; /* Full viewport height */
+  /* box-shadow: 0 0 2em rgba(0, 0, 0, 0.2); */
+}
+.slide.start {
+  text-align: center;
+}
+.slide.start .slide-text {
+  text-align: center;
+}
+
+.slide-text,
+.slide-image {
+  flex: 1 1 50%; /* Take up 50% of the horizontal space */
+  box-sizing: border-box;
+  padding: 0.625em; /* 10px converted to em */
+}
+
+.slide-text {
+  text-align: left;
+}
+
+.slide-image {
+  text-align: center;
+}
+
+.slide-image img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.625em; /* 10px converted to em */
+  box-shadow: 0 0 1.25em rgba(0, 0, 0, 0.2); /* 20px converted to em */
+  object-fit: cover;
+}
+
+.controls {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100vw;
+  padding-bottom: 1.25em; /* 20px converted to em */
+  text-align: center;
+}
+.controls button {
+  background-color: #c0c0c0;
+  color: white;
+  border: none;
+  padding: 0.625em 1.25em; /* 10px converted to em */
+  font-size: 1.5em; /* 1.2rem remains the same */
+  cursor: pointer;
+  border-radius: 0.3125em; /* 5px converted to em */
+}
+
+/* img.topic-thumbnail {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    z-index: -1;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0.2;
+  } */
 
 h1,
 h2,
@@ -91,25 +219,21 @@ h6 {
   margin: 0 0 1.25em 0; /* 20px converted to em */
   font-weight: 300;
   color: #222;
-  text-align: center;
 }
 
 h1 {
   font-size: 4em; /* 3rem remains the same */
-  text-align: center;
   margin: 0;
 }
 
 h2 {
   font-size: 3.5em; /* 2.5rem remains the same */
-  text-align: center;
   margin: 0;
 }
 
 p {
   margin: 0 0 1.25em 0; /* 20px converted to em */
   font-size: 2.2em; /* 1.2rem remains the same */
-  text-align: center;
 }
 
 ul,
