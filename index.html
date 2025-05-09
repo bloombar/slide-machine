@@ -83,7 +83,22 @@
           class="settings-field"
           placeholder="Presentation description"
         ></textarea>
-        <button id="close-settings" style="margin-top: 10px">Close</button>
+
+        <div class="image-upload-area">
+          <div id="drop-zone" class="drop-zone">
+            <p>Drag and drop images here, or click to upload</p>
+            <input
+              type="file"
+              id="file-input"
+              accept="image/*"
+              multiple
+              style="display: none"
+            />
+          </div>
+          <div id="image-thumbnails" class="image-thumbnails"></div>
+        </div>
+
+        <!-- <button id="close-settings">Close</button> -->
       </form>
     </aside>
     <!-- END SETTINGS PANEL -->
