@@ -48,4 +48,4 @@ const getFlickrPhoto = async (FLICKR_API_KEY, searchTerm) => {
     })
 }
 
-getFlickrPhoto('YOUR_FLICKR_API_KEY', 'pink kitten')
+// getFlickrPhoto('YOUR_FLICKR_API_KEY', 'pink kitten')
