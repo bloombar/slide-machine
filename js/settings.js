@@ -34,7 +34,7 @@ window.addEventListener('load', () => {
 
   // when any of the form field inputs are changed, save the new value in local storage with the same name as the field
   const formFields = document.querySelectorAll(
-    '.settings-form input, .settings-form textarea'
+    '.settings-form input:not([type="file"]), .settings-form textarea'
   )
   formFields.forEach(field => {
     // console.log(`Adding change listener to: ${field.name}`)
@@ -63,16 +63,16 @@ window.addEventListener('load', () => {
 
   dropZone.addEventListener('click', () => fileInput.click())
 
-  dropZone.addEventListener('dragover', e => {
+  settingsScreen.addEventListener('dragover', e => {
     e.preventDefault()
     dropZone.classList.add('drag-over')
   })
 
-  dropZone.addEventListener('dragleave', () =>
+  settingsScreen.addEventListener('dragleave', () =>
     dropZone.classList.remove('drag-over')
   )
 
-  dropZone.addEventListener('drop', e => {
+  settingsScreen.addEventListener('drop', e => {
     e.preventDefault()
     dropZone.classList.remove('drag-over')
     handleFiles(e.dataTransfer.files)
