@@ -85,6 +85,12 @@ async function getOpenAIResponse(
 
         // console.log('OpenAI response fixed text:', fixedText)
         try {
+          // append the new response to the historic prompts
+          historic_prompts.push({
+            role: 'assistant',
+            content: text,
+          })
+
           return JSON.parse(text)
         } catch (error) {
           console.error('Failed to parse JSON:', error)

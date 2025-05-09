@@ -84,26 +84,70 @@ function createNewSlide(user_prompt) {
     slideEl.appendChild(slideImageEl)
     slideContainerEl.appendChild(slideEl)
 
-    // get Wikipedia thumbnail image or random image
-    let imageUrl = ''
-    if (openAIResponse.topic && openAIResponse.topic !== lastTopic) {
-      imageUrl = await getThumbnailImage(openAIResponse.topic)
-      console.log(
-        `Wikipedia '${openAIResponse.topic}' page thumbnail image: ${imageUrl}`
+    // decide which image to show
+    let imgUrl = ''
+    let imgCaption = ''
+
+    // load any images saved in local storage
+    const savedImages = JSON.parse(localStorage.getItem('images')) || {}
+    const imageKeys = Object.keys(savedImages)
+
+    // Check if any saved image's caption contains the topic identified by OpenAI
+    if (openAIResponse.topic) {
+      const matchingImageKeys = imageKeys.filter(
+        key =>
+          savedImages[key].caption &&
+          savedImages[key].caption
+            .toLowerCase()
+            .includes(openAIResponse.topic.toLowerCase())
       )
-    } else {
-      console.log('No new topic.')
+      if (matchingImageKeys.length > 0) {
+        const randomMatchingKey =
+          matchingImageKeys[
+            Math.floor(Math.random() * matchingImageKeys.length)
+          ]
+        imgUrl = savedImages[randomMatchingKey].url
+        imgCaption = savedImages[randomMatchingKey].caption
+        console.log(
+          `Using local storage image with matching caption: ${randomMatchingKey} - '${savedImages[randomMatchingKey].caption}'`
+        )
+      }
+    }
+
+    // get Wikipedia thumbnail image or random image
+    if (!imgUrl && openAIResponse.topic && openAIResponse.topic !== lastTopic) {
+      imgUrl = await getThumbnailImage(openAIResponse.topic)
+      console.log(
+        `Wikipedia '${openAIResponse.topic}' page thumbnail image: ${imgUrl}`
+      )
+    }
+
+    // if no image set yet, we need to pick something random
+    const useLocalImage = Math.random() < 0.5 // 50% chance to use local image
+
+    if (!imgUrl && useLocalImage) {
+      const savedImages = JSON.parse(localStorage.getItem('images')) || {}
+      const imageKeys = Object.keys(savedImages)
+      if (imageKeys.length > 0) {
+        const randomImageKey =
+          imageKeys[Math.floor(Math.random() * imageKeys.length)]
+        imgUrl = savedImages[randomImageKey].url
+        imgCaption = savedImages[randomImageKey].caption
+        console.log(
+          `Using local storage image ${randomImageKey} - '${imgCaption}'`
+        )
+      }
     }
 
     // if no image set yet, get a random image
-    if (!imageUrl) {
+    if (!imgUrl) {
       console.log('No thumbnail image found for the topic.')
-      imageUrl = 'https://picsum.photos/400?random=' + Math.random()
+      imgUrl = 'https://picsum.photos/400?random=' + Math.random()
     }
 
     // create an image element and add to the .slide-image container
     const imageEl = document.createElement('img')
-    imageEl.src = imageUrl
+    imageEl.src = imgUrl
     imageEl.alt = openAIResponse.topic
     slideImageEl.appendChild(imageEl)
 

@@ -51,6 +51,7 @@ body {
   right: 10px;
   cursor: pointer;
   padding: 1em;
+  z-index: 1001;
 }
 .settings-icon img {
   width: 30px;
@@ -59,6 +60,7 @@ body {
 .settings-screen {
   display: none;
   position: fixed;
+  overflow: auto;
   top: 0;
   right: 0;
   width: 300px;
@@ -74,6 +76,45 @@ body {
   margin-bottom: 10px;
 }
 /*  END SETTINGS SCREEN */
+
+/* BEGIN IMAGE UPLOAD */
+.settings-screen .drop-zone {
+  border: 2px dashed #ccc;
+  padding: 20px;
+  text-align: center;
+  cursor: pointer;
+  font-size: 0.5em;
+}
+.settings-screen .drop-zone.drag-over {
+  border-color: #000;
+}
+.settings-screen .image-thumbnails {
+  margin-top: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.settings-screen .thumbnail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+.settings-screen .thumbnail img {
+  max-width: 100px;
+  max-height: 100px;
+  object-fit: cover;
+}
+.settings-screen .delete-button {
+  display: none;
+  position: absolute;
+  margin: 0 auto;
+}
+.settings-screen .caption-input {
+  width: 100px;
+  padding: 5px;
+}
+/* END IMAGE UPLOAD */
 
 .container {
   margin: 0 auto;
@@ -196,19 +237,6 @@ header p.byline {
   cursor: pointer;
   border-radius: 0.3125em; /* 5px converted to em */
 }
-
-/* img.topic-thumbnail {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    z-index: -1;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    opacity: 0.2;
-  } */
 
 h1,
 h2,
