@@ -8,38 +8,6 @@ body {
   font-size: 0.9em; /* Base font size */
 }
 
-@media print {
-  body {
-    font-size: 0.7em; /* Reduce font size for print */
-  }
-
-  h1 {
-    font-size: 2.5em; /* Adjust heading size for print */
-  }
-
-  h2 {
-    font-size: 2em; /* Adjust heading size for print */
-  }
-
-  p,
-  li {
-    font-size: 1em; /* Adjust paragraph and list item size for print */
-  }
-
-  .slide {
-    box-shadow: none; /* Remove box shadow for print */
-    margin: 0;
-    padding: 1em; /* Adjust padding for print */
-    width: 100%; /* Full width for print */
-    /* height: auto;  */
-  }
-
-  a {
-    color: black; /* Ensure links are readable in print */
-    text-decoration: underline; /* Add underline for links in print */
-  }
-}
-
 .hidden {
   display: none;
 }
@@ -294,4 +262,42 @@ a {
 
 a:hover {
   text-decoration: underline;
+}
+
+/** Print styles **/
+
+@media print {
+  body {
+    font-size: 0.7em; /* Reduce font size for print */
+  }
+
+  h1 {
+    font-size: 2.5em; /* Adjust heading size for print */
+  }
+
+  h2 {
+    font-size: 2em; /* Adjust heading size for print */
+  }
+
+  p,
+  li {
+    font-size: 1em; /* Adjust paragraph and list item size for print */
+  }
+
+  .slide {
+    box-shadow: none; /* Remove box shadow for print */
+    margin: 0;
+    padding: 1em; /* Adjust padding for print */
+    width: 100%; /* Full width for print */
+    height: auto;
+  }
+  .settings-icon,
+  .settings-screen {
+    display: none; /* Hide settings screen in print */
+  }
+
+  a {
+    color: black; /* Ensure links are readable in print */
+    text-decoration: underline; /* Add underline for links in print */
+  }
 }
