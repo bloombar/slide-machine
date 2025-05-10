@@ -7,7 +7,7 @@ const loadEnv = () => {
       'https://api.openai.com/v1/responses',
     OPENAI_MODEL: localStorage.getItem('openai-api-model') || 'gpt-4.1', //'gpt-3.5-turbo', //o4-mini
     OPENAI_HISTORY_DEPTH: localStorage.getItem('openai-history-depth') || 10,
-    PAUSE_BETWEEN_SLIDES: localStorage.getItem('pause-between-slides') || 10000,
+    PAUSE_BETWEEN_SLIDES: localStorage.getItem('pause-between-slides') || 12000,
     CLEAR_SUBTITLES_AFTER: localStorage.getItem('pause-between-slides') || 2000,
     VARY_LAYOUT_EVERY: localStorage.getItem('vary-layout-every') || 7,
   }
