@@ -322,6 +322,34 @@ a:hover {
 
 /** Print styles **/
 
+@media (max-width: 768px) {
+  .slide {
+    margin: 0; /* Remove margin for mobile */
+    padding: 0.5em; /* Adjust padding for mobile */
+    width: 90vw; /* Full viewport width */
+  }
+  body {
+    font-size: 0.7em; /* Reduce base font size for mobile */
+  }
+
+  h1 {
+    font-size: 2em; /* Adjust heading size for mobile */
+  }
+
+  h2 {
+    font-size: 1.75em; /* Adjust heading size for mobile */
+  }
+
+  p,
+  li {
+    font-size: 1.2em; /* Adjust paragraph and list item size for mobile */
+  }
+
+  .controls button {
+    font-size: 1em; /* Adjust button font size for mobile */
+  }
+}
+
 @media print {
   body {
     font-size: 0.7em; /* Reduce font size for print */
