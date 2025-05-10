@@ -12,6 +12,8 @@ function updateStartSlide() {
   titleEl.innerText = title
   bylineEl.innerText = byline
   // descriptionEl.innerText = description
+
+  document.title = `${title} - ${byline} | Slide machine`
 }
 
 function createNewSlide(user_prompt, className = '') {
