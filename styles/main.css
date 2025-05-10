@@ -168,7 +168,7 @@ header p.byline {
 .slide-image {
   flex: 1 1 50%; /* Take up 50% of the horizontal space */
   box-sizing: border-box;
-  padding: 0.625em; /* 10px converted to em */
+  padding: 0 1em 0 1em; /* 10px converted to em */
 }
 
 .slide-text {
@@ -184,8 +184,64 @@ header p.byline {
   height: auto;
   border-radius: 0.625em; /* 10px converted to em */
   box-shadow: 0 0 1.25em rgba(0, 0, 0, 0.2); /* 20px converted to em */
-  object-fit: cover;
+  object-fit: fill; /* alternatives: contain, fill */
 }
+
+/** END SLIDE VARIATIONS **/
+
+/* Variation 1: .slide-text to the left of .slide-image */
+.slide.image-right .slide-text {
+  order: 1;
+  /* text-align: left; */
+}
+.slide.image-right .slide-image {
+  order: 2;
+  /* text-align: center; */
+}
+
+/* Variation 2: .slide-text to the right of .slide-image */
+.slide.image-left .slide-text {
+  order: 2;
+  /* text-align: left; */
+}
+.slide.image-left .slide-image {
+  order: 1;
+  /* text-align: center; */
+}
+
+/* Variation 3: .slide-image full screen behind .slide-text */
+.slide.image-behind {
+  position: relative;
+}
+.slide.image-behind .slide-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+}
+.slide.image-behind .slide-image img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.5; /* Adjust transparency as needed */
+  object-fit: fill; /* alternatives: contain, cover */
+}
+.slide.image-behind .slide-text {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  font-weight: bold;
+  width: 100%;
+  color: white; /* Ensure text is readable */
+}
+.slide.image-behind .slide-text ul {
+  display: none;
+}
+/** END SLIDE VARIATIONS **/
 
 .controls {
   position: fixed;

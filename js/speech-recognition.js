@@ -4,6 +4,8 @@
 let slowdownTimeout
 let lastSpokenContent = ''
 let presenting = false
+let slideLayoutClass = 'image-right' // alternatives are 'image-left' and 'image-behind'
+let slideCounter = 0
 
 // const background_prompt = `
 // The following is some background context about this user:
@@ -102,8 +104,14 @@ async function startStream(/*videoEl*/) {
         // get OpenAI response based on last spoken content, along with system and historic prompt summary
         if (!slowdownTimeout) {
           // create a new slide
-          createNewSlide(lastSpokenContent)
+          createNewSlide(lastSpokenContent, slideLayoutClass)
+          slideCounter++
           lastSpokenContent = '' // reset the last spoken content
+          slideLayoutClass =
+            slideLayoutClass === 'image-right' ? 'image-left' : 'image-right' // alternative layouts each slide
+          if (slideCounter % 10 == 0) {
+            slideLayoutClass = 'image-behind' // every 5th slide, use this layout
+          }
 
           // Prevent running this part more than once every 5 seconds
           slowdownTimeout = setTimeout(() => {
@@ -111,8 +119,14 @@ async function startStream(/*videoEl*/) {
             slowdownTimeout = null
             console.log('Resetting slowdownTimeout')
             // create a new slide, in case there's spoken content that has not yet been processed
-            createNewSlide(lastSpokenContent)
+            slideCounter++
+            createNewSlide(lastSpokenContent, slideLayoutClass)
             lastSpokenContent = '' // reset the last spoken content
+            slideLayoutClass =
+              slideLayoutClass === 'image-right' ? 'image-left' : 'image-right' // alternative layouts each slide
+            if (slideCounter % 10 == 0) {
+              slideLayoutClass = 'image-behind' // every 5th slide, use this layout
+            }
           }, env.PAUSE_BETWEEN_SLIDES)
         }
 

@@ -7,13 +7,14 @@ function updateStartSlide() {
   const description = localStorage.getItem('presentation-description')
   const titleEl = document.querySelector('.presentation-text-title')
   const bylineEl = document.querySelector('.presentation-text-byline')
+
   // const descriptionEl = document.querySelector('.presentation-text-description')
   titleEl.innerText = title
   bylineEl.innerText = byline
   // descriptionEl.innerText = description
 }
 
-function createNewSlide(user_prompt) {
+function createNewSlide(user_prompt, className = '') {
   if (!user_prompt) {
     console.log('No user prompt content to process.')
     return
@@ -47,6 +48,10 @@ function createNewSlide(user_prompt) {
     // create a new slide on the screen
     const slideEl = document.createElement('article')
     slideEl.classList.add('slide')
+    // if a custom class name is specified, apply it to the .slide element
+    if (className) {
+      slideEl.classList.add(className)
+    }
 
     // create two child elements: .slide-text and .slide-image
     const slideTextEl = document.createElement('div')
