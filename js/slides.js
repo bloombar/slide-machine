@@ -130,7 +130,7 @@ function createNewSlide(user_prompt, className = '') {
     }
 
     // if no image set yet, we need to pick something random
-    const useLocalImage = Math.random() < 0.5 // 50% chance to use local image
+    const useLocalImage = Math.random() < env.LOCAL_IMAGE_CHANCE // 50% chance to use local image
 
     if (!imgUrl && useLocalImage) {
       const savedImages = JSON.parse(localStorage.getItem('images')) || {}
