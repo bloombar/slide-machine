@@ -124,7 +124,7 @@ async function startStream(/*videoEl*/) {
             lastSpokenContent = '' // reset the last spoken content
             slideLayoutClass =
               slideLayoutClass === 'image-right' ? 'image-left' : 'image-right' // alternative layouts each slide
-            if (slideCounter % VARY_LAYOUT_EVERY == 0) {
+            if (slideCounter % env.VARY_LAYOUT_EVERY == 0) {
               slideLayoutClass = 'image-behind' // every 5th slide, use this layout
             }
           }, env.PAUSE_BETWEEN_SLIDES)
