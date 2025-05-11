@@ -10,6 +10,6 @@ const loadEnv = () => {
     PAUSE_BETWEEN_SLIDES: localStorage.getItem('pause-between-slides') || 12000,
     CLEAR_SUBTITLES_AFTER: localStorage.getItem('pause-between-slides') || 2000,
     VARY_LAYOUT_EVERY: localStorage.getItem('vary-layout-every') || 7,
-    LOCAL_IMAGE_CHANCE: localStorage.getItem('local-image-chance') || 0.15,
+    LOCAL_IMAGE_CHANCE: localStorage.getItem('local-image-chance') || 0.25,
   }
 }
