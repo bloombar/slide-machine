@@ -115,12 +115,14 @@ async function startStream(/*videoEl*/) {
 
           // Prevent running this part more than once every 5 seconds
           slowdownTimeout = setTimeout(() => {
-            clearTimeout(slowdownTimeout)
-            slowdownTimeout = null
-            console.log('Resetting slowdownTimeout')
             // create a new slide, in case there's spoken content that has not yet been processed
             slideCounter++
-            createNewSlide(lastSpokenContent, slideLayoutClass)
+            createNewSlide(lastSpokenContent, slideLayoutClass).then(() => {
+              // reset the timeout
+              clearTimeout(slowdownTimeout)
+              slowdownTimeout = null
+              console.log('Resetting slowdownTimeout')
+            })
             lastSpokenContent = '' // reset the last spoken content
             slideLayoutClass =
               slideLayoutClass === 'image-right' ? 'image-left' : 'image-right' // alternative layouts each slide
