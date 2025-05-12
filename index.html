@@ -21,7 +21,21 @@
         // load title and byline from local storage
         updateStartSlide()
 
-        startStream()
+        // check for google chrome browser, not brave or other spinoffs
+        if (
+          navigator.userAgent.includes('Chrome') &&
+          navigator &&
+          !('brave' in navigator)
+        ) {
+          console.log('Chrome browser detected')
+          startStream()
+        } else {
+          console.log('Non-Chrome browser detected')
+          document.querySelector('.presentation-text-title').textContent =
+            'Incompatible Web Browser'
+          document.querySelector('.presentation-text-byline').textContent =
+            'This app only works in Google Chrome... for now.  Sorry.'
+        }
 
         // const startButtonEl = document.querySelector('.start-button')
         // const stopButtonEl = document.querySelector('.stop-button')
