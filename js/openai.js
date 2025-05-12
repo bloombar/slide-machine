@@ -65,8 +65,16 @@ async function getOpenAIResponse(
   })
     .then(response => response.json())
     .then(data => {
-      //   console.log(JSON.stringify(data, null, 2));
+      // console.log(JSON.stringify(data, null, 2))
       //   console.log(JSON.stringify(data.output[0].content, null, 2));
+      let inputTokens = data?.usage?.input_tokens // number of tokens used... used to estimate cost
+      let outputTokens = data?.usage?.output_tokens // number of tokens used... used to estimate cost
+      let totalTokens = data?.usage?.total_tokens // number of tokens used... used to estimate cost
+      const tokens = {
+        input: inputTokens,
+        output: outputTokens,
+        total: totalTokens,
+      }
       let text = data?.output?.[0]?.content?.[0]?.text
       if (text) {
         console.log('OpenAI response:', text)
@@ -91,7 +99,9 @@ async function getOpenAIResponse(
             content: text,
           })
 
-          return JSON.parse(text)
+          let objData = JSON.parse(text)
+          objData.tokens = tokens // add the number of tokens used
+          return objData
         } catch (error) {
           console.error('Failed to parse JSON:', error)
           return null

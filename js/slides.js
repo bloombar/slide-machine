@@ -1,5 +1,6 @@
 let lastTopic = '' // keep track of each topic
 let lastTitle = ''
+let totalCost = 0 // total cost of openai tokens used so far
 
 function updateStartSlide() {
   const title = localStorage.getItem('presentation-title')
@@ -159,6 +160,16 @@ async function createNewSlide(user_prompt, className = '') {
   // keep track of this topic and title to compare to next slide
   lastTopic = openAIResponse.topic
   lastTitle = openAIResponse.title
+
+  // log the money we've spent on this damn presentation so far
+  const totalInputTokens = openAIResponse.tokens.input / 1000000 // cost var is per million
+  const totalOutputTokens = openAIResponse.tokens.output / 1000000 // cost var is per million
+  const inputTokenCost = totalInputTokens * env.OPENAI_COST_PER_1M_INPUT_TOKEN
+  const outputTokenCost =
+    totalOutputTokens * env.OPENAI_COST_PER_1M_OUTPUT_TOKEN
+  totalCost += inputTokenCost + outputTokenCost
+  // totalCost = Math.round(totalCost * 10000) / 10000 // round to 2 decimal places
+  console.log(`Total presentation cost so far: $${totalCost}`)
 
   // scroll to top of the last .slide element in the .slides container
   const lastSlide = slideContainerEl.querySelector('.slide:last-child')
