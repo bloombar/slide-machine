@@ -41,5 +41,6 @@ The following are features that would be nice to implement, in case you feel the
 - Easy post-production editing of slides.
 - Export as Markdown + images.
 - Retrofit the code to a simple front-end framework, perhaps [Svelte](https://svelte.dev/). Definitely not React.
+- Refactor `js` files to be less interdependent.
 - Allow user to create custom slide layouts... currently, it alternates among 3 different generic layouts.
 - Allow alternatives to OpenAI's API, preferably free or low-cost.
