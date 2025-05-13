@@ -30,24 +30,27 @@
             })
             .catch(error => {
               // failure
-              console.error('Error starting microphone stream:', error)
+              // console.error('Error starting microphone stream:', error)
               // custom brave message
+              let slideTitle = 'Microphone access denied'
+              let slideByline =
+                'Please check your browser settings and try again.'
+
               if (error.message.includes('Brave')) {
                 // console.error('Brave browser detected')
-                document.querySelector('.presentation-text-title').textContent =
-                  'Brave is sadly unsupported'
-                document.querySelector(
-                  '.presentation-text-byline'
-                ).textContent =
+                slideTitle = 'Brave is sadly unsupported'
+                slideByline =
                   'This is because Google does not allow Brave access to its speech-to-text service.  Sorry.'
-              } else {
-                document.querySelector('.presentation-text-title').textContent =
-                  'Microphone access denied'
-                document.querySelector(
-                  '.presentation-text-byline'
-                ).textContent =
-                  'Please check your browser settings and try again.'
+              } else if (error.message.includes('Speech recognition')) {
+                slideTitle = 'Speech recognition unavaialable'
+                slideByline =
+                  "Make sure you are using Google Chrome, since Google bars other browser's from accessing its free speech-to-text service."
               }
+              // update landing slide content
+              document.querySelector('.presentation-text-title').textContent =
+                slideTitle
+              document.querySelector('.presentation-text-byline').textContent =
+                slideByline
             })
         })()
 
