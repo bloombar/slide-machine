@@ -43,16 +43,22 @@ async function startStream(/*videoEl*/) {
     )
   }
 
+  // try to get microphone access
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: false,
       audio: true,
     })
     //   videoEl.srcObject = stream;
+  } catch (error) {
+    console.error('Error accessing microphone.', error)
+    throw new Error('Error accessing microphone')
+  }
 
-    // handle audio
-    const audioContext = new (window.AudioContext ||
-      window.webkitAudioContext)()
+  // handle audio
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+  // assuming we have audio, try to do speech recognition
+  try {
     const speechRecognition =
       window.SpeechRecognition || window.webkitSpeechRecognition
 
@@ -141,7 +147,8 @@ async function startStream(/*videoEl*/) {
       }
 
       recognition.onerror = event => {
-        console.error('Speech recognition error:', event.error)
+        // console.error('Speech recognition error:', event.error)
+        throw new Error(`Speech recognition error: ${event.error}`)
       }
 
       recognition.start()
@@ -150,25 +157,25 @@ async function startStream(/*videoEl*/) {
       console.warn('Speech recognition not supported in this browser.')
       throw new Error('Speech recognition not supported')
     }
-
-    //   mediaRecorder = new MediaRecorder(stream);
-    //   mediaRecorder.ondataavailable = (event) => {
-    //     if (event.data.size > 0) {
-    //       recordedChunks.push(event.data);
-    //     }
-    //   };
-
-    //   mediaRecorder.onstop = () => {
-    //     const blob = new Blob(recordedChunks, { type: "video/webm" });
-    //     const url = URL.createObjectURL(blob);
-    //     downloadLink.href = url;
-    //     downloadLink.download = "recording.webm";
-    //     downloadLink.style.display = "block";
-    //   };
   } catch (error) {
-    console.error('Error accessing microphone.', error)
-    throw new Error('Error accessing microphone')
+    console.error('Speech recognition error:', error.message)
+    throw new Error(`Speech recognition error: ${error.message}`)
   }
+
+  //   mediaRecorder = new MediaRecorder(stream);
+  //   mediaRecorder.ondataavailable = (event) => {
+  //     if (event.data.size > 0) {
+  //       recordedChunks.push(event.data);
+  //     }
+  //   };
+
+  //   mediaRecorder.onstop = () => {
+  //     const blob = new Blob(recordedChunks, { type: "video/webm" });
+  //     const url = URL.createObjectURL(blob);
+  //     downloadLink.href = url;
+  //     downloadLink.download = "recording.webm";
+  //     downloadLink.style.display = "block";
+  //   };
 }
 
 //   startRecordingButton.addEventListener("click", () => {
