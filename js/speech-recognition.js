@@ -25,6 +25,24 @@ function stopStream() {
   presenting = false // unset the flag
 }
 async function startStream(/*videoEl*/) {
+  if (
+    navigator.brave &&
+    (await navigator.brave.isBrave()) &&
+    !/Mobi|Android/i.test(navigator.userAgent)
+  ) {
+    // Brave on Desktop is not supported due to Google's unwillingness to share its speech recognition API with them
+    throw new Error('Speech recognition is not supported in Brave browser.')
+  }
+  if (
+    navigator.userAgent.includes('Safari') &&
+    !navigator.userAgent.includes('Chrome')
+  ) {
+    // Safari works, but requires Siri or Dictation to be enabled in order for speech recognition to work
+    console.log(
+      "Please ensure 'Dictation' is turned on in your System Settings for Apple's speech recognition to work."
+    )
+  }
+
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: false,
@@ -127,8 +145,10 @@ async function startStream(/*videoEl*/) {
       }
 
       recognition.start()
+      return true // success
     } else {
       console.warn('Speech recognition not supported in this browser.')
+      throw new Error('Speech recognition not supported')
     }
 
     //   mediaRecorder = new MediaRecorder(stream);
@@ -146,7 +166,8 @@ async function startStream(/*videoEl*/) {
     //     downloadLink.style.display = "block";
     //   };
   } catch (error) {
-    console.error('Error accessing media devices.', error)
+    console.error('Error accessing microphone.', error)
+    throw new Error('Error accessing microphone')
   }
 }
 
