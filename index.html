@@ -18,10 +18,38 @@
       //   console.log(env)
       // start presentation when page loads
       window.addEventListener('load', function () {
+        console.log(`User agent: ${navigator.userAgent}`) // debug
         // load title and byline from local storage
         updateStartSlide()
-
-        startStream()
+        ;(async () => {
+          // start streaming audio
+          startStream()
+            .then(() => {
+              // success
+              console.log('Microphone stream started')
+            })
+            .catch(error => {
+              // failure
+              console.error('Error starting microphone stream:', error)
+              // custom brave message
+              if (error.message.includes('Brave')) {
+                // console.error('Brave browser detected')
+                document.querySelector('.presentation-text-title').textContent =
+                  'Brave is sadly unsupported'
+                document.querySelector(
+                  '.presentation-text-byline'
+                ).textContent =
+                  'This is because Google does not allow Brave access to its speech-to-text service.  Sorry.'
+              } else {
+                document.querySelector('.presentation-text-title').textContent =
+                  'Microphone access denied'
+                document.querySelector(
+                  '.presentation-text-byline'
+                ).textContent =
+                  'Please check your browser settings and try again.'
+              }
+            })
+        })()
 
         // const startButtonEl = document.querySelector('.start-button')
         // const stopButtonEl = document.querySelector('.stop-button')
