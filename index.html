@@ -36,6 +36,7 @@
               let slideByline =
                 'Please check your browser settings and try again.'
 
+              console.log(`Error: ${error.message}`)
               if (error.message.includes('Brave')) {
                 // console.error('Brave browser detected')
                 slideTitle = 'Brave is sadly unsupported'
@@ -45,6 +46,13 @@
                 slideTitle = 'Speech recognition unavaialable'
                 slideByline =
                   "Make sure you are using Google Chrome, since Google bars other browser's from accessing its free speech-to-text service."
+              } else if (
+                navigator.userAgent.includes('Safari') &&
+                !navigator.userAgent.includes('Chrome')
+              ) {
+                slideTitle = 'Error accessing microphone'
+                slideByline =
+                  "If using Safari, ensure 'Dictation' is enabled in System Settings."
               }
               // update landing slide content
               document.querySelector('.presentation-text-title').textContent =
