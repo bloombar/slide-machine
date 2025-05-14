@@ -20,7 +20,7 @@ This **slide machine** returns power to the educator! Now you can lecture or bla
 
 - **OpenAI API Key**. You can get create an account and make an API key at [OpenAI](https://platform.openai.com/api-keys).
 - **Google Chrome**, since Google only allows their own web browser to use their speech recognition API free of charge. Using a different browser would require paying for the transcription service.
-- **Microphone**. The app depends upon text-to-speech. So you will need a microphone.
+- **Microphone**. The app depends upon speech-to-text conversion. So you will need a microphone to capture your speech.
 
 ## How it works
 
