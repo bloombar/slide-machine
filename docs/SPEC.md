@@ -1,10 +1,8 @@
 # Slide Machine V2 — Software Design Document (SDD)
 
----
+## Part I — Product & Functional Requirements
 
-> **Part I — Product & Functional Requirements**
-
-## 1. Overview
+### 1. Overview
 
 Slide Machine V2 turns the relationship between lecturer and slides on its head: instead of speaking _to_ prepared slides, the instructor speaks freely and slides are generated _from_ their speech in real time. At the end of a lecture, an "exit-ticket" quiz is auto-generated from the slide content, distributed to students, and auto-graded — producing per-lecture comprehension signals for both instructor and students.
 
@@ -14,9 +12,9 @@ V2 also relates to a second, deliberately **separate** project — **The Quiz Ge
 
 This document specifies both the **functional** behavior (what the system does, for whom, under what rules) and the **technical** shape (stack, configuration, data models, testing) of V2.
 
-## 2. Goals & Non-Goals
+### 2. Goals & Non-Goals
 
-### 2.1 Goals
+#### 2.1 Goals
 
 1. Generate slides in real time from an instructor's live speech, optionally blended with seeded materials.
 2. Give users full control over sessions and decks: start/pause/stop/rewind/forward, plus full post-hoc editing.
@@ -27,18 +25,19 @@ This document specifies both the **functional** behavior (what the system does, 
 7. Support standards-based export/import (PDF, Google Slides, YAML) for both decks and templates.
 8. Meter and monetize usage through tiered plans (Free/Pro/Max) with server-configurable caps on costly services.
 9. Keep the core logic provider-agnostic so AI engines (commercial or locally-hosted) and the billing provider can be swapped via configuration.
-10. Keep all student data inside NYU-approved, FERPA-compliant systems. No student PII leaves the institution.
-11. Remain discipline-agnostic and extensible so student teams can contribute features during the pilot.
+10. Provide a fully localized UI in English, French, Spanish, Russian, and Mandarin.
+11. Keep all student data inside NYU-approved, FERPA-compliant systems. No student PII leaves the institution.
+12. Remain discipline-agnostic and extensible so student teams can contribute features during the pilot.
 
-### 2.2 Non-Goals
+#### 2.2 Non-Goals
 
 - A pixel-perfect general-purpose design tool (e.g., a full PowerPoint/Keynote competitor). Editing and templating are first-class, but the system optimizes for fast, structured, AI-assisted decks rather than freeform graphic design.
-- Real-time multilingual **translation** of speech. A Google Cloud Translation key is provisioned in config for optional caption translation, but live translated slide generation is out of scope for the pilot ([§18](#18-future-work)).
+- Real-time/live multilingual **translation** during the lecture (translating speech or generating translated slides on the fly). Post-lecture, on-demand translation of finished slides for viewing **is** supported ([SHARE-2](#share-2-post-lecture-translated-viewing)); only the live path is out of scope for the pilot ([§18](#18-future-work)).
 - Locally-hosted / in-house AI models. The proposal names this as a _future_ direction; V2 uses commercial NYU-provided models.
 - Hosting or proxying the Quiz Generator itself — V2 integrates with it as an external service.
 - Custom invoicing or purchase-order workflows — billing is subscription-based via the configured billing provider (Stripe by default; the provider is abstracted and swappable — [TECH-9](#tech-9-billing-provider-abstraction-layer)).
 
-## 3. Personas & Roles
+### 3. Personas & Roles
 
 | Role                                | Description                                                                                        | Primary needs                                                                |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
@@ -48,9 +47,9 @@ This document specifies both the **functional** behavior (what the system does, 
 | **Researcher / evaluator**          | PI and collaborators evaluating the pilot.                                                         | Anonymized exit-ticket scores, latency/reliability metrics, quality ratings. |
 | **Contributor (student developer)** | Pilot students extending the codebase.                                                             | Clear module boundaries, shared types, documented APIs.                      |
 
-## 4. Accounts & Authentication
+### 4. Accounts & Authentication
 
-### AUTH-1 Registration & sign-in methods
+#### AUTH-1 Registration & sign-in methods
 
 Users can register and log in by **either** of two supported methods:
 
@@ -60,25 +59,25 @@ Users can register and log in by **either** of two supported methods:
 
 A given **verified** email maps to a single account: if a user who registered with a password later signs in with Google or GitHub for that same verified email (or vice versa), the methods resolve to the same account rather than creating a duplicate. Where a provider does not expose a verified primary email (GitHub can omit this), the identity is treated as distinct until the user verifies/links it. Signing in is separate from **connecting** a Google or GitHub account for import/export, which requires broader scopes ([EXP-4](#exp-4-connected-accounts-google-drive--github)).
 
-### AUTH-2 Login & sessions
+#### AUTH-2 Login & sessions
 
 Email/password login issues JWT access + refresh tokens. Sessions persist across reloads; logout invalidates the refresh token.
 
-### AUTH-3 Email verification
+#### AUTH-3 Email verification
 
 Registration sends a verification link; unverified accounts have limited capability (e.g., cannot publish publicly) until verified.
 
-### AUTH-4 Password reset
+#### AUTH-4 Password reset
 
 Standard "forgot password" flow: time-limited, single-use reset link sent by email; resets invalidate existing sessions.
 
-### AUTH-5 Profile & ownership
+#### AUTH-5 Profile & ownership
 
-Each user has a profile (display name, bio, avatar) and owns their projects, decks, and templates. Authorization enforces that users may only modify their own resources (except admin).
+Each user has a profile (display name, bio, avatar, **preferred locale**) and owns their projects, decks, and templates. The preferred locale drives the UI language ([TECH-12](#tech-12-internationalization-i18n--localization)). Authorization enforces that users may only modify their own resources (except admin).
 
-## 5. Plans, Billing & Usage Limits
+### 5. Plans, Billing & Usage Limits
 
-### BILL-1 Subscription tiers
+#### BILL-1 Subscription tiers
 
 The product offers three subscription tiers, each priced accordingly (exact prices set in configuration — BILL-6):
 
@@ -88,7 +87,7 @@ The product offers three subscription tiers, each priced accordingly (exact pric
 
 Each tier defines what features are available and the usage caps that apply to costly services (BILL-3).
 
-### BILL-2 Billing provider (Stripe) integration
+#### BILL-2 Billing provider (Stripe) integration
 
 Payments and subscription management run through a configured **billing provider — Stripe by default**, integrated behind a provider-agnostic abstraction ([TECH-9](#tech-9-billing-provider-abstraction-layer)) so a different provider can be adopted later without reworking application logic:
 
@@ -97,7 +96,7 @@ Payments and subscription management run through a configured **billing provider
 - **Webhooks** keep the user's subscription status (active, past-due, canceled) in sync with the provider as the source of truth for billing state; events are normalized to internal billing events at the adapter boundary.
 - The app never handles raw card data; the billing provider is the system of record for payment instruments ([P-8](#16-privacy-security--compliance)).
 
-### BILL-3 Usage caps & metering
+#### BILL-3 Usage caps & metering
 
 Each tier carries **usage caps on AI and other costly services**, metered per billing period and enforced **server-side**, including at minimum:
 
@@ -108,29 +107,29 @@ Each tier carries **usage caps on AI and other costly services**, metered per bi
 
 Usage is recorded against the user's current period; the user can view remaining quota for each metered resource.
 
-### BILL-4 Enforcement & upgrade prompts
+#### BILL-4 Enforcement & upgrade prompts
 
 When a metered cap is reached, the system **fails gracefully**: the costly operation is blocked (or degraded to a free alternative where one exists) rather than silently incurring cost, and the user is shown a clear message with an **upgrade** path. Caps reset at the start of each billing period. Higher tiers raise or remove the relevant caps.
 
-### BILL-5 Plan management
+#### BILL-5 Plan management
 
 Users can **upgrade, downgrade, or cancel** at any time via Stripe Checkout / the billing portal, with proration handled by Stripe. Feature access and caps update to match the active tier; downgrades take effect per the configured policy (immediately or at period end).
 
-### BILL-6 Configurable pricing & caps
+#### BILL-6 Configurable pricing & caps
 
 Tier definitions — **price and per-tier usage caps** — live in **server-side configuration** (BILL config + Stripe price IDs in [TECH-4](#tech-4-server-configuration)) and are **adjustable without code changes**. Exact prices and cap values are TBD and will be tuned against real service costs ([§19](#19-open-questions)).
 
-## 6. Slide Projects & Seeding
+### 6. Slide Projects & Seeding
 
-### PROJ-1 Pre-create a project
+#### PROJ-1 Pre-create a project
 
 An instructor can create a **slide project** ahead of a lecture, with metadata (title, course, description) and optional **seed information** that informs later slide generation (topic outline, key terms, learning objectives, tone/style notes).
 
-### PROJ-2 Project lifecycle
+#### PROJ-2 Project lifecycle
 
 Projects persist in MongoDB and can be reopened, duplicated, archived, and deleted. A project may contain multiple decks (e.g., one per lecture session).
 
-### SEED-1 Document seeding
+#### SEED-1 Document seeding
 
 Users can seed a project by importing content from:
 
@@ -140,21 +139,62 @@ Users can seed a project by importing content from:
 
 Imported text is parsed, normalized, and stored as seed context for generation.
 
-### SEED-2 Image seeding
+#### SEED-2 Image seeding
 
 Users can upload **seed images** with **captions/descriptions/keywords**. Seeded images are preferred during generation when their captions match a slide's topic (see IMG-1).
 
-### SEED-3 Seed management
+#### SEED-3 Seed management
 
 Users can view, edit captions for, reorder, enable/disable, and delete seeded content and images before or between sessions.
 
-## 7. Style Template Library
+#### PREP-1 Preflight concept extraction
 
-### TMPL-1 Template library & preview
+When a project has been seeded (SEED-1/SEED-2), the system can run an **optional, pre-lecture "preflight"**: the AI analyzes the uploaded files, the text description, and image captions to extract a ranked list of **concepts likely to come up** — key terms, named entities (people/places/orgs/products), jargon, and acronyms. Each candidate is presented with:
+
+- a short **gloss** and the **source** it came from (which seed document/image);
+- a **relevance score**;
+- where a term is ambiguous, a **resolved sense / entity suggestion** (e.g., `Prince → Prince (musician)`, with the candidate Wikidata entity) to pre-empt mismatches ([IMG-3](#img-3-image-disambiguation)).
+
+This is feasible with standard AI keyphrase/entity extraction over content the project already imports; it runs once and is cheap relative to the live session.
+
+#### PREP-2 Instructor review & honing
+
+The instructor refines the candidate set in an interactive back-and-forth before speaking. The UI allows the instructor to:
+
+- **Add** concepts the AI missed (free text), **remove** irrelevant ones, and **edit** labels/glosses.
+- **Disambiguate** an ambiguous term by choosing the intended entity/sense from suggestions (pre-resolving IMG-3 for the live run).
+- Set **importance/priority** (e.g., "definitely cover" vs. "maybe") to weight downstream emphasis.
+- Define **canonical names with synonyms/abbreviations** (e.g., "NYU" ↔ "New York University") so variants are recognized.
+- Attach a **preferred image** per concept (from seeded images SEED-2 or a quick search) to be used when the concept arises.
+- **Iterate with the AI** — ask it to suggest more concepts ("what am I missing?"), propose subtopics/definitions, or cluster related terms — a genuine honing loop.
+
+These actions are available through the UI or **by voice** ([PREP-4](#prep-4-verbal-interaction-with-the-preflight)). Preflight is **optional and non-blocking**: the instructor may skip it and rely on live generation.
+
+#### PREP-3 Use of the honed concept set
+
+The confirmed concept set is saved to the project ([§15](#15-data-models)), reusable and editable across sessions, and drives the live lecture:
+
+- **Generation bias** — supplied as part of seed context so slide generation ([GEN-1](#gen-1-speech-to-slide-generation)) frames and prioritizes these concepts correctly.
+- **Transcription accuracy** — terms, names, acronyms, and synonyms are passed to Google Cloud Speech-to-Text **speech adaptation / phrase hints** ([CAP-3](#cap-3-speech-to-text-transcription)) so jargon and proper nouns transcribe correctly live.
+- **Image pre-resolution** — disambiguated entities and preferred images mean the right picture is chosen the moment a concept is spoken ([GEN-7](#gen-7-ai-image-guidance) / IMG-3).
+
+#### PREP-4 Verbal interaction with the preflight
+
+The instructor can drive the preflight honing ([PREP-2](#prep-2-instructor-review--honing)) **by voice**, not just through the UI, using the existing speech-to-text ([CAP-3](#cap-3-speech-to-text-transcription)) and gen-AI text processing ([GEN-2](#gen-2-ai-provider-abstraction)) to interpret intent.
+
+- The process **prompts** the instructor (e.g., "I found these 12 concepts — anything to add or remove?"), and the instructor responds naturally by speaking ("drop the last two, add photosynthesis, and Prince means the musician").
+- Spoken input is transcribed (CAP-3) and parsed by the AI into concrete **honing actions** — add / remove / rename / disambiguate / set importance / define synonyms / "suggest more" — the same actions available in the PREP-2 UI.
+- Unlike the fixed live command vocabulary ([CAP-4](#cap-4-voice-commands)), this is **conversational and free-form**: the model resolves intent from natural phrasing rather than matching set keywords.
+- Each interpreted action is **echoed back for confirmation** (on screen, optionally spoken) before it is applied; **low-confidence or ambiguous** requests trigger a clarifying question instead of a wrong edit — a genuine back-and-forth.
+- Voice is **complementary and optional** — the instructor can switch between speaking and the UI at any time — and doubles as a low-stakes rehearsal of the same speak-to-the-system interaction used during the lecture. Preflight STT and AI usage count against plan caps ([BILL-3](#bill-3-usage-caps--metering)).
+
+### 7. Style Template Library
+
+#### TMPL-1 Template library & preview
 
 A browsable **template library** lets users preview and select slide-style templates. Each template defines a visual theme (colors, typography, spacing) plus a set of **layouts**.
 
-### TMPL-2 Conventional layout types
+#### TMPL-2 Conventional layout types
 
 Each template provides multiple layout types, using conventional slide conventions, including at minimum:
 
@@ -166,35 +206,46 @@ Each template provides multiple layout types, using conventional slide conventio
 - **Two-column** (text + image) slide
 - **Quote / callout** slide
 
-### TMPL-3 Pre-made templates
+#### TMPL-3 Pre-made templates
 
 Ship several polished, ready-to-use templates covering common lecture styles.
 
-### TMPL-4 Custom templates (create / edit / save)
+#### TMPL-4 Custom templates (create / edit / save)
 
 Users can create, edit, save, and name their own templates — defining layouts and the **positioning** of slide content elements (title, body, image, caption) on each layout. Custom templates appear in the user's library and may be shared/published.
 
-### TMPL-5 Template application
+#### TMPL-5 Template application
 
 A template (and any specific layout) can be applied at deck level and overridden per slide (see EDIT-3).
 
-## 8. Live Lecture Capture
+#### TMPL-6 Layout descriptors (for AI selection)
 
-### CAP-1 Session lifecycle
+Every layout in a template carries a **machine-readable descriptor** so the AI can choose the right layout per slide ([GEN-6](#gen-6-ai-layout-selection)). A descriptor includes:
+
+- a stable **`type`/id** and human label (e.g., `title`, `section`, `content`, `list`, `image-heavy`, `two-column`, `quote` — TMPL-2);
+- a short **purpose / when-to-use** description the AI can reason over (e.g., "use for 3–6 parallel points");
+- the **content slots** the layout expects (e.g., `title`, `body`, `bullets[]`, `image`, `caption`, `columns`) and any **constraints** (max bullets, approximate text length, whether an image is required/optional).
+
+Descriptors are authored as part of the template (TMPL-3/TMPL-4), stored with it ([§15](#15-data-models)), and serialized into the generation request as the **option set** the AI must pick from.
+
+### 8. Live Lecture Capture
+
+#### CAP-1 Session lifecycle
 
 The user explicitly controls a live session with **Start**, **Pause/Resume**, and **Stop**. Stop finalizes the deck and can trigger quiz generation ([§17](#17-quiz-generator-integration)). Session state (listening / paused / stopped) is clearly indicated.
 
-### CAP-2 Microphone & permissions
+#### CAP-2 Microphone & permissions
 
 The app requires microphone access, prompts for and reports permission state, and surfaces actionable errors rather than failing silently.
 
-### CAP-3 Speech-to-text transcription
+#### CAP-3 Speech-to-text transcription
 
 - Uses **Google Cloud Speech-to-Text** for fast, accurate, low-latency transcription (removing V1's Chrome-only constraint).
 - Audio is streamed and segmented into phrases on natural pauses; interim text may display as live captions, finalized phrases drive generation.
+- **Speech adaptation** — when a preflight concept set exists ([PREP-3](#prep-3-use-of-the-honed-concept-set)), its terms, names, acronyms, and synonyms are supplied to Google Cloud STT as phrase hints/boosts so domain jargon and proper nouns transcribe correctly.
 - Target: near-real-time latency suitable for live lecture (a key evaluation metric — [§12](#12-evaluation--metrics)). Raw audio is not persisted.
 
-### CAP-4 Voice commands
+#### CAP-4 Voice commands
 
 The user can drive the slide generator hands-free by **speaking commands** — at minimum **start**, **stop**, **pause** (and resume), **rewind** (previous slide), and **fast-forward** (next slide) — mirroring the manual playback controls in [PLAY-1](#play-1-playback-controls).
 
@@ -202,13 +253,13 @@ The user can drive the slide generator hands-free by **speaking commands** — a
 - A wake-word or command prefix (e.g., "slide machine, …") and/or a distinct command mode keeps ordinary lecture speech from being misinterpreted as a command; normal speech continues to drive slide generation (GEN-1).
 - Recognized commands are confirmed visually (and optionally audibly) so the user can tell a command registered. Low-confidence matches are ignored rather than acted on, to avoid disrupting a live lecture.
 
-## 9. Slide Generation & Enrichment
+### 9. Slide Generation & Enrichment
 
-### GEN-1 Speech-to-slide generation
+#### GEN-1 Speech-to-slide generation
 
-Each finalized phrase, combined with project **seed context**, is sent to the **Gemini API**, which identifies the topic, produces concise slide text, and maintains short rolling context across recent phrases so slides cohere across a topic.
+Each finalized phrase, combined with project **seed context**, is sent to the **Gemini API**, which identifies the topic, produces concise slide text, and maintains short rolling context across recent phrases so slides cohere across a topic. The model also **selects the slide layout** for each content block from the active template's options ([GEN-6](#gen-6-ai-layout-selection)), returning content already mapped to the chosen layout's slots.
 
-### GEN-2 AI-provider abstraction
+#### GEN-2 AI-provider abstraction
 
 The **core logic of the slide generator (and quiz maker) is decoupled from any specific LLM or AI engine.** All AI calls — speech-to-text, slide-content generation, and quiz generation — go through a provider-agnostic interface so engines can be swapped in/out without touching the generation logic.
 
@@ -216,61 +267,117 @@ The **core logic of the slide generator (and quiz maker) is decoupled from any s
 - The abstraction spans every costly AI capability: **transcription** (CAP-3), **text generation** (GEN-1), and **quiz generation** (QUIZ-1) each define a stable internal contract that any provider adapter implements.
 - The active provider per capability is selected in server configuration ([TECH-4](#tech-4-server-configuration)); multiple providers may be registered and chosen per capability (e.g., cloud STT + local LLM). See the adapter design in [TECH-8](#tech-8-ai-provider-abstraction-layer).
 
-### IMG-1 Real-time image enrichment
+#### IMG-1 Real-time image enrichment
 
-Slides are enriched with images in priority order:
+Slides are enriched with images using the AI's per-slide image guidance ([GEN-7](#gen-7-ai-image-guidance)), in priority order:
 
-1. A **seeded** image whose caption/keywords match the slide topic (SEED-2).
-2. A topic-relevant image fetched in real time from **Wikimedia**, **Flickr**, and **Openverse** APIs.
-3. A graceful fallback (placeholder/solid layout) when nothing relevant is found.
+1. A **seeded** image the AI selected for the slide, or whose caption/keywords match the slide topic (SEED-2).
+2. An image fetched in real time from **Wikimedia**, **Flickr**, and **Openverse** APIs using the AI's **recommended keywords** (falling back to the slide topic if none).
+3. A graceful fallback (placeholder/solid layout) when no image is recommended or found.
 
-### IMG-2 Fault tolerance
+#### IMG-2 Fault tolerance
 
 Image enrichment is **fault-tolerant**: any single image API may be slow, rate-limited, or down without causing a hard failure. The system times out per source, falls back across sources, and never blocks slide display on image retrieval. Licensing/attribution metadata is captured where the source requires it.
 
-### GEN-3 Live display
+#### IMG-3 Image disambiguation
+
+Polysemous terms must not pull the wrong picture — speech about **"Prince" the musician** must not surface Wikipedia's imagery for the royal title. The system disambiguates both before and after fetching:
+
+- **Disambiguated queries** — the AI's recommended keywords ([GEN-7](#gen-7-ai-image-guidance)) carry qualifying context from the lecture so the query targets the intended sense (e.g., `Prince (musician)` / `Prince Rogers Nelson`, not bare `Prince`). The model has the full phrase, rolling context, and seed context needed to resolve it.
+- **Entity resolution** — for the Wikimedia path, the disambiguated term is resolved to a specific **Wikidata/Wikipedia entity** (choosing among candidates by best contextual match) and that entity's image is fetched, rather than a free-text page-title match that can land on the wrong article.
+- **Relevance ranking & rejection** — candidate images carry metadata (titles, captions, tags, categories); candidates are ranked by similarity to the slide topic/keywords, and low-confidence matches are **rejected in favor of the graceful fallback** ([IMG-2](#img-2-fault-tolerance)). A missing image is preferable to a misleading one.
+- **Consistency & caching** — the same disambiguated query is applied across Wikimedia / Flickr / Openverse, and the resolved entity/decision is cached per slide so re-runs ([GEN-4](#gen-4-post-lecture-ai-reformat-holistic-regeneration)) stay stable.
+- **User override** — if disambiguation still picks poorly, the user can edit the keywords or replace the image ([EDIT-1](#edit-1-full-content-editing)).
+
+#### GEN-3 Live display
 
 Generated slides render full-screen in real time as the user speaks, advancing as new slides are produced, with a configurable minimum dwell time per slide.
 
-> **Metering note.** Gemini, Speech-to-Text, and image-API usage in §8–§9 all count against the user's plan caps (BILL-3) and are subject to enforcement (BILL-4).
+#### GEN-4 Post-lecture AI reformat (holistic regeneration)
 
-## 10. Playback, Editing & Sharing
+Once a session ends ([CAP-1](#cap-1-session-lifecycle) Stop) and the **full transcript** is available, the user is offered a **"Reformat with AI"** option that regenerates the deck holistically from the complete transcript plus project seed context — something the live, phrase-by-phrase pipeline (GEN-1) cannot do because it lacks the full picture.
 
-### PLAY-1 Playback controls
+- **Improves and re-organizes content** — tighten wording, merge or split slides, add structure, and reconcile mid-lecture backtracking now that the whole lecture is known.
+- **Re-selects template layouts per slide** — choose the most fitting layout type (heading, section, list, two-column, image-heavy, quote — [TMPL-2](#tmpl-2-conventional-layout-types)) for each slide given the overall arc, within the deck's chosen template ([EDIT-2](#edit-2-deck-level-template-switch) / [EDIT-3](#edit-3-per-slide-layout-switch)).
+- **Re-enriches images** — re-runs image enrichment ([IMG-1](#img-1-real-time-image-enrichment) / IMG-2) for new or changed slides.
+- **Non-destructive** — produces a **proposed new version** the user can preview and compare against the original live deck, then **accept, reject, or merge** selectively; the original is retained until accepted, and manual edits ([EDIT-1](#edit-1-full-content-editing)) are preserved where possible (with a warning when a reformat would overwrite them).
+- Uses the abstracted AI provider ([GEN-2](#gen-2-ai-provider-abstraction)) and counts against the user's AI usage caps ([BILL-3](#bill-3-usage-caps--metering) / BILL-4). The deck retains the finalized transcript ([§15](#15-data-models)) so reformatting can be re-run later.
+
+#### GEN-5 Progressive slide rendering (skeleton loaders)
+
+Live generation has unavoidable lag: slide text trails the spoken phrase ([CAP-3](#cap-3-speech-to-text-transcription)), and an enriched image ([IMG-1](#img-1-real-time-image-enrichment)) may arrive later still. Slides therefore render **progressively**, so the audience always sees forward motion without being confused by constantly changing content.
+
+- **Render-as-ready** — a slide shows whatever parts are ready (e.g., title and body) immediately; each part still pending shows a **skeleton placeholder sized to the final layout**, so its space is reserved up front.
+- **Slot-in on arrival** — slower content (typically the image, occasionally a refined heading) fades into its **reserved slot** when it arrives, without reflowing or reordering content already on screen — **no layout shift**.
+- **Always-on activity indicator** — a subtle, persistent cue (a pulsing skeleton, a "generating…" affordance, and/or the live speech caption from CAP-3) signals that something is happening even while a slide is momentarily incomplete.
+- **Stability over freshness** — once a slide's text is committed it stays put; interim transcription corrections are **debounced** so they settle before changing a displayed slide, and a slide's chosen layout ([TMPL-2](#tmpl-2-conventional-layout-types)) is **not swapped after it is shown**. The minimum dwell time (GEN-3) prevents rapid flips, and late content that would be too disruptive is deferred to the next slide rather than rewriting the current one.
+- **Bounded waiting** — if an optional element never arrives (e.g., image enrichment exhausts all sources — [IMG-2](#img-2-fault-tolerance)), its skeleton resolves to the layout's graceful fallback rather than lingering indefinitely.
+
+#### GEN-6 AI layout selection
+
+The AI does not only write slide text — it also **chooses which layout each content block uses**.
+
+- The active template's **layout descriptors** ([TMPL-6](#tmpl-6-layout-descriptors-for-ai-selection)) are serialized into the generation request as the explicit **option set** the model must select from.
+- For each content block the model returns a **chosen `layoutType`** plus the content mapped to that layout's slots (title/body/bullets/image/caption/columns), so a list-like block becomes a list layout, a single striking idea becomes a quote/callout, etc.
+- The choice is **constrained to the template's available layouts**; if the model returns an unknown or ill-fitting type, the system falls back to a sensible default layout (e.g., `content`).
+- The user can always override the AI's choice per slide ([EDIT-3](#edit-3-per-slide-layout-switch)), and the post-lecture reformat ([GEN-4](#gen-4-post-lecture-ai-reformat-holistic-regeneration)) re-runs this selection holistically.
+
+#### GEN-7 AI image guidance
+
+For each slide, the AI also **recommends the supporting imagery**, feeding image enrichment ([IMG-1](#img-1-real-time-image-enrichment)):
+
+- It returns **search keywords / query terms** to use against the image-enrichment providers (Wikimedia / Flickr / Openverse), **context-qualified to disambiguate polysemous names** (e.g., `Prince (musician)`, not bare `Prince`) — see [IMG-3](#img-3-image-disambiguation).
+- When the project has **teacher-supplied (seeded) images** ([SEED-2](#seed-2-image-seeding)), their captions/keywords are sent to the model as context options, and the model may **select a specific seeded image** it deems the best fit for a given slide (or indicate that no image is needed).
+- This guidance is per-slide and optional: a slide may warrant no image, in which case the model says so and the layout adapts (TMPL-6).
+
+**Metering note.** Gemini, Speech-to-Text, and image-API usage in §8–§9 all count against the user's plan caps (BILL-3) and are subject to enforcement (BILL-4).
+
+### 10. Playback, Editing & Sharing
+
+#### PLAY-1 Playback controls
 
 During and after a session, simple UI controls let the user **start**, **pause**, **stop**, **rewind** (previous slide), and **forward** (next slide) through the deck. The same actions are available hands-free via spoken commands ([CAP-4](#cap-4-voice-commands)).
 
-### EDIT-1 Full content editing
+#### EDIT-1 Full content editing
 
 Users can **add, edit, and delete** all slide content: slide text (title/body/bullets/caption), images (replace from seed, re-fetch, upload, or remove), and slide order.
 
-### EDIT-2 Deck-level template switch
+#### EDIT-2 Deck-level template switch
 
 Users can switch the **entire deck's style template**, re-flowing all slides into the new theme/layouts.
 
-### EDIT-3 Per-slide layout switch
+#### EDIT-3 Per-slide layout switch
 
 Users can change the **layout type** of an individual slide (e.g., convert a content slide to image-heavy or two-column) independent of the deck default.
 
-### SHARE-1 Saved deck viewer & permalink
+#### SHARE-1 Saved deck viewer & permalink
 
 Saved decks have a **deck viewer** reachable via a stable **permalink** that can be shared. Sharing visibility is controllable (private / unlisted-by-link / public). Public/shared class artifacts respect [§16](#16-privacy-security--compliance).
 
-## 11. Export/Import, Voting & Social
+#### SHARE-2 Post-lecture translated viewing
 
-### EXP-1 Deck export
+When viewing a saved deck, students and instructors can switch the **displayed language of the slide content** to any supported locale (English, French, Spanish, Russian, Mandarin — [TECH-12](#tech-12-internationalization-i18n--localization)). This is an on-demand, **post-lecture viewing** option — distinct from the out-of-scope live/real-time translated generation ([§2.2](#22-non-goals)).
+
+- Translation uses **Google Cloud Translation** (key already provisioned — [TECH-4](#tech-4-server-configuration)), behind a provider-agnostic adapter consistent with [GEN-2](#gen-2-ai-provider-abstraction).
+- **Non-destructive** — the translated text is an alternate view layered over the deck; the original authored/generated content is preserved and remains authoritative (machine translation may be imperfect).
+- Translations are computed on demand and **cached per deck + locale** ([§15](#15-data-models)), so repeat views are fast and the work is metered once ([BILL-3](#bill-3-usage-caps--metering)).
+- Only **slide content** is translated (not quizzes). Translated text is lecture-derived and de-identified, consistent with [P-2](#16-privacy-security--compliance).
+
+### 11. Export/Import, Voting & Social
+
+#### EXP-1 Deck export
 
 Decks can be exported to **PDF**, **Google Slides**, and other easily supportable common formats.
 
-### EXP-2 Standards-based data export
+#### EXP-2 Standards-based data export
 
 Both **slide decks** and **style templates** can be exported to a standard, human-readable format (**YAML** or equivalent) capturing structure, content, and styling.
 
-### EXP-3 Round-trip import
+#### EXP-3 Round-trip import
 
 The exported format is **import-compatible**: a user can re-import a previously exported deck and/or template and restore it faithfully. Import validates and reports errors without partial-corrupting existing data. Imports may come from an upload or a connected account (EXP-4).
 
-### EXP-4 Connected accounts (Google Drive & GitHub)
+#### EXP-4 Connected accounts (Google Drive & GitHub)
 
 Users can connect their **own Google Drive and/or GitHub** accounts via OAuth to import from and export to those resources:
 
@@ -278,51 +385,49 @@ Users can connect their **own Google Drive and/or GitHub** accounts via OAuth to
 - **Export** — push outputs to the connected destination: **PDF / Google Slides / YAML** to Google Drive, and **YAML** deck/template files to a GitHub repo (round-trippable via EXP-3).
 - Connecting an account is **separate from sign-in identity** (AUTH-1): it grants broader, purpose-specific scopes (Drive files / repo contents) and a user who signed in by email can still connect Drive and GitHub. Connections are listed in the profile and are **revocable** at any time; tokens are stored encrypted ([P-9](#16-privacy-security--compliance)).
 
-### SOC-1 Voting
+#### SOC-1 Voting
 
 Registered users can **up/down-vote** slide decks and style templates. Vote tallies inform ranking and discovery; one vote per user per item, changeable.
 
-### SOC-2 Browse & search
+#### SOC-2 Browse & search
 
 A simple social layer lets users **browse and search** others' public decks and template libraries, by title, author, tags, and content.
 
-### SOC-3 Latest feed
+#### SOC-3 Latest feed
 
 A **"Latest" feed** surfaces recently published public decks and templates, with search/filter.
 
-### SOC-4 User profiles
+#### SOC-4 User profiles
 
 Each user has a public **profile page** listing their published decks and templates, with search within the profile.
 
-## 12. Evaluation & Metrics
+### 12. Evaluation & Metrics
 
 The system must surface data supporting the grant's mixed-methods evaluation ([GRANT_PROPOSAL.md](GRANT_PROPOSAL.md) §4):
 
-**Process measures**
+#### Process measures
 
 - System reliability (session completion rate, API error rates, image-enrichment fallbacks).
 - Speech-to-text latency (phrase finalization time) and slide-generation latency.
 - Slide- and quiz-relevance ratings (via the SOC voting layer and/or instructor/student 1–5 ratings).
 
-**Learning measures**
+#### Learning measures
 
 - Exit-ticket scores as a per-lecture comprehension signal.
 - Comparison across Slide-Machine-delivered units vs. traditionally-delivered units in the same course.
 - Student survey on clarity, engagement, perceived usefulness.
 
-**Extensibility measure**
+#### Extensibility measure
 
 - Count and nature of student-contributed features merged during the pilot.
 
 All metrics are anonymized before analysis.
 
----
+## Part II — Technical Design
 
-> **Part II — Technical Design**
+### 13. System Architecture
 
-## 13. System Architecture
-
-### Architecture style: modular monolith ("monolith-first")
+#### Architecture style: modular monolith ("monolith-first")
 
 V2 ships as a **modular monolith** — a single deployable Express application (serving the React SPA and the REST API) backed by one MongoDB database — rather than a fleet of microservices. The candidate services one might split out (auth, enrichment, speech-to-text, slide generation, quiz generation, web UI, data logging) exist instead as **cohesive internal modules** behind clean seams.
 
@@ -365,25 +470,25 @@ Crucially, the existing **provider abstractions** (TECH-8 AI, TECH-9 billing) an
 
 The **Express.js API** box above is the **modular monolith** (its bulleted responsibilities are the internal modules listed earlier); everything outside it — Google Cloud STT, Gemini, image APIs, Stripe, Google/GitHub APIs, MongoDB, and the Quiz Generator — is an external dependency or a separate deployment. The two projects (Slide Machine, Quiz Generator) remain separate repositories and deployments, integrated only through documented HTTP APIs ([§17](#17-quiz-generator-integration)).
 
-## 14. Technical Stack & Conventions
+### 14. Technical Stack & Conventions
 
-### TECH-1 Front-end
+#### TECH-1 Front-end
 
 - **React** (function components + hooks) built with **Vite**, styled with **TailwindCSS**.
 - Client-side routing for projects, deck viewer/permalinks, template library, billing, social feed, and profiles.
 - Real-time slide rendering driven by streamed transcription/generation events.
 
-### TECH-2 Back-end
+#### TECH-2 Back-end
 
 - **Express.js** (Node) REST API.
 - **JWT-based authentication**: short-lived access tokens + refresh, sent as `Authorization: Bearer` (or secure httpOnly cookie). Protected routes enforce role/ownership checks.
 - Stateless API layer; all persistence in MongoDB. Billing state is reconciled from Stripe webhooks.
 
-### TECH-3 Database
+#### TECH-3 Database
 
 - **MongoDB** (via an ODM such as Mongoose). Collections defined in [§15](#15-data-models). Stores users, subscriptions, usage records, projects, decks, slides, templates, votes, and social/feed metadata. Raw lecture audio is **not** persisted.
 
-### TECH-4 Server configuration
+#### TECH-4 Server configuration
 
 Server-side secrets and global settings live in a `.env` file (never committed), including:
 
@@ -435,32 +540,32 @@ Server-side secrets and global settings live in a `.env` file (never committed),
 
 (`null` = unlimited; exact values TBD — [§19](#19-open-questions).)
 
-### TECH-5 Client configuration
+#### TECH-5 Client configuration
 
 Client build/runtime variables live in a Vite env file (`.env.local`, `VITE_`-prefixed), e.g. `VITE_API_BASE_URL`, `VITE_STRIPE_PUBLISHABLE_KEY`, public Google/GitHub OAuth client IDs (for sign-in and connect flows), feature flags, and analytics toggles. **No secrets** are exposed to the client.
 
-### TECH-6 Shared types & data models
+#### TECH-6 Shared types & data models
 
 Where feasible, front-end and back-end share **TypeScript** types and data-model definitions (e.g., a shared `packages/types` or `shared/` module) so DTOs, deck/slide/template/plan schemas, and API contracts have a single source of truth. The codebase is TypeScript end-to-end.
 
-### TECH-7 Testing & coverage
+#### TECH-7 Testing & coverage
 
 - **100% code coverage** target across **unit**, **integration**, and **end-to-end** tests.
 - Unit/integration via a standard runner (e.g., Vitest/Jest) for both client and server; integration tests exercise the Express API against a test MongoDB instance.
 - **End-to-end tests use a Playwright harness** covering the critical user journeys (register → subscribe → create project → seed → live capture → edit → share → export → vote), including cap-enforcement and upgrade paths.
 - External services (Gemini, Google Cloud, image APIs, Stripe, Quiz Generator) are mocked/stubbed in CI; coverage gates block merges below target.
 
-### TECH-8 AI-provider abstraction layer
+#### TECH-8 AI-provider abstraction layer
 
 The system implements GEN-2 with a **capability-based adapter layer** so the core slide-generation and quiz-generation logic depends only on interfaces, never on a concrete AI vendor (dependency inversion):
 
-- **Capability interfaces** (defined once in the shared types module, [TECH-6](#tech-6-shared-types--data-models)): `TranscriptionProvider` (audio → text), `GenerationProvider` (speech + seed context → slide content), and `QuizGenerationProvider` (slide text → quiz definition). Each interface fixes the request/response contract independent of any vendor.
+- **Capability interfaces** (defined once in the shared types module, [TECH-6](#tech-6-shared-types--data-models)): `TranscriptionProvider` (audio → text), `GenerationProvider` (speech + seed context + layout descriptors + seeded-image descriptors → slide content with a chosen layout and image guidance — GEN-6/GEN-7), and `QuizGenerationProvider` (slide text → quiz definition). Each interface fixes the request/response contract independent of any vendor.
 - **Adapters** implement those interfaces per engine — e.g. `GeminiGenerationProvider`, `GoogleCloudTranscriptionProvider`, and future `LocalLlmProvider` / `LocalWhisperProvider` for self-hosted models — with no other code aware of which is active.
 - A **provider registry** resolves the active adapter **per capability** from server config ([TECH-4](#tech-4-server-configuration)), so capabilities can mix sources (e.g., cloud STT + locally-hosted LLM) and a provider can be swapped by configuration alone, with no change to generator logic.
 - Usage metering (BILL-3) and cost accounting hook in at the adapter boundary, so caps and pricing remain consistent regardless of provider.
 - The separate Quiz Generator service follows the **same principle** internally ([§17](#17-quiz-generator-integration)): its quiz-authoring logic is decoupled from the AI engine it uses.
 
-### TECH-9 Billing-provider abstraction layer
+#### TECH-9 Billing-provider abstraction layer
 
 Billing is decoupled from any specific payment vendor, the same way AI is (TECH-8), so the provider can change without touching application logic:
 
@@ -470,7 +575,7 @@ Billing is decoupled from any specific payment vendor, the same way AI is (TECH-
 - The active provider and its credentials are selected in server config ([TECH-4](#tech-4-server-configuration)); provider-specific keys and price IDs are isolated to the adapter.
 - Persisted billing references are **provider-neutral** ([§15](#15-data-models)): a `billingProvider` discriminator plus opaque `billingCustomerId` / `providerSubscriptionId`, so a future migration is an adapter + data backfill, not an application rewrite.
 
-### TECH-10 Deployment topology (Digital Ocean App Platform)
+#### TECH-10 Deployment topology (Digital Ocean App Platform)
 
 The modular monolith ([§13](#13-system-architecture)) deploys to **Digital Ocean App Platform** (PaaS), chosen for minimal operational overhead:
 
@@ -480,30 +585,52 @@ The modular monolith ([§13](#13-system-architecture)) deploys to **Digital Ocea
 - **Scaling** — the API is stateless (JWT), so App Platform can run multiple horizontal instances behind its load balancer. The one caveat is **real-time STT streaming**: a WebSocket pipeline needs sticky sessions, or the client streams audio **directly to Google Cloud STT** with the back-end only brokering credentials (see [§19](#19-open-questions)).
 - **Quiz Generator** — deployed as a **separate** App Platform service (or Google Apps Script), reached over HTTP per [§17](#17-quiz-generator-integration).
 
-### TECH-11 Local dev & CI/CD
+#### TECH-11 Local dev & CI/CD
 
 - **Local dev** — a `Dockerfile` plus `docker compose` (app + MongoDB, with Spaces mockable via an S3-compatible local service) lets contributors — including pilot students — run the whole stack with **one command**, and lets the Playwright e2e harness ([TECH-7](#tech-7-testing--coverage)) run against a realistic environment.
 - **CI/CD** — GitHub Actions runs unit + integration + e2e tests and enforces the **100% coverage gate**, then **auto-deploys to App Platform on push to the default branch** (App Platform's GitHub integration), replacing V1's GitHub Pages workflow (`.github/workflows/static.yml`). Failed gates block deploy.
 
-## 15. Data Models
+#### TECH-12 Internationalization (i18n) & localization
+
+The application UI is fully internationalized — no hardcoded user-facing strings.
+
+- **Supported locales** at launch: **English (`en`), French (`fr`), Spanish (`es`), Russian (`ru`), and Mandarin Chinese (`zh`)**. All five are left-to-right; the i18n layer should not preclude adding a right-to-left locale later (use logical CSS properties and a per-document `dir`).
+- **Implementation** — an i18n library (e.g., **react-i18next** / FormatJS with **ICU message format**) with one resource bundle per locale; pluralization and date/number/currency formatting via the `Intl` API. Adding a locale is a resource-bundle addition, not a code change.
+- **Locale selection** — detected from the browser (`Accept-Language`) on first visit, overridable by an in-app language switcher, and **persisted to the user profile** (`User.locale`, AUTH-5).
+- **Scope boundary** — i18n localizes the application UI/chrome only and does **not** automatically translate slide/quiz content. Translating **slide content** is a separate, explicit, on-demand **post-lecture viewing** feature ([SHARE-2](#share-2-post-lecture-translated-viewing)); live/real-time translated generation remains out of scope ([§2.2](#22-non-goals), [§18](#18-future-work)).
+- **Relationship to speech/generation** — the STT language ([CAP-3](#cap-3-speech-to-text-transcription)) and the language the generator is asked to produce ([GEN-1](#gen-1-speech-to-slide-generation)) default to the user's locale but remain independently selectable, so an instructor can run the UI in one language while lecturing/generating in another.
+- **Testing** — locale resource-bundle completeness is checked in CI, and at least one non-English locale is exercised in the Playwright e2e suite ([TECH-7](#tech-7-testing--coverage)).
+
+#### TECH-13 Application action/command layer
+
+All operations that modify a project, concept set, or deck are exposed through a **single channel-agnostic action/command layer** — a named set of operations (e.g., `concept.add`, `concept.disambiguate`, `slide.editContent`, `slide.setLayout`, `deck.switchTemplate`, `deck.reformat`, `slide.setImageGuidance`) rather than logic embedded in individual UI handlers.
+
+- Each action validates input, enforces **authorization/ownership** and **plan-cap metering** (BILL-3), and records the change once — so every channel behaves identically and securely.
+- The layer is consumed by **multiple front ends**: the React UI, the verbal preflight loop ([PREP-4](#prep-4-verbal-interaction-with-the-preflight)), the post-lecture reformat ([GEN-4](#gen-4-post-lecture-ai-reformat-holistic-regeneration)), and any future agent interface.
+- This makes a future **MCP server** ([§18](#18-future-work)) a thin facade that maps MCP tools onto existing actions, with no duplicated editing logic and the same auth/metering guarantees.
+- AI-driven channels (PREP-4, and any agent) translate natural-language intent into these typed actions via the gen-AI provider ([GEN-2](#gen-2-ai-provider-abstraction)); the action contracts are the stable boundary between intent interpretation and effect.
+
+### 15. Data Models
 
 Indicative MongoDB collections, expressed as shared TypeScript types ([TECH-6](#tech-6-shared-types--data-models)):
 
-- **User** — `{ id, email, displayName, passwordHash, emailVerified, bio, avatarUrl, planTier: 'free'|'pro'|'max', billingProvider?, billingCustomerId?, createdAt }`
+- **User** — `{ id, email, displayName, passwordHash, emailVerified, bio, avatarUrl, locale: 'en'|'fr'|'es'|'ru'|'zh', planTier: 'free'|'pro'|'max', billingProvider?, billingCustomerId?, createdAt }`
 - **Subscription** — `{ id, userId, tier, billingProvider, providerSubscriptionId, status: 'active'|'past_due'|'canceled', currentPeriodStart, currentPeriodEnd }`
 - **UsageRecord** — `{ id, userId, period, metric: 'geminiTokens'|'sttMinutes'|'imageCalls'|'exports'|..., used, cap }`
 - **ConnectedAccount** — `{ id, userId, provider: 'google'|'github', scopes[], accessTokenEnc, refreshTokenEnc?, externalAccountLabel, connectedAt }` (for import/export — EXP-4; tokens encrypted at rest — P-9)
 - **Project** — `{ id, ownerId, title, course, description, seedContext, createdAt }`
 - **SeedAsset** — `{ id, projectId, type: 'doc'|'pdf'|'gdoc'|'gdrive'|'gslides'|'image', text?, imageUrl?, caption?, keywords[], enabled }`
-- **Deck** — `{ id, projectId, ownerId, title, templateId, visibility: 'private'|'unlisted'|'public', permalinkSlug, slideOrder[], voteScore, createdAt }`
-- **Slide** — `{ id, deckId, index, layoutType, title?, body?, bullets[]?, imageRef?, caption?, sourceTranscript?, attribution? }`
-- **Template** — `{ id, ownerId, name, theme, layouts: Layout[], visibility, voteScore, createdAt }` where `Layout = { type, elementPositions }`
+- **Concept** — `{ id, projectId, label, canonical, synonyms[], gloss?, entityId?, preferredImageRef?, importance: 'must'|'maybe', source?, confirmed }` (preflight concept set — PREP-1/2/3; `entityId` = resolved entity e.g. Wikidata QID)
+- **Deck** — `{ id, projectId, ownerId, title, templateId, visibility: 'private'|'unlisted'|'public', permalinkSlug, slideOrder[], transcript?, voteScore, createdAt }` (`transcript` = finalized full lecture transcript, retained for post-lecture reformat — GEN-4)
+- **Slide** — `{ id, deckId, index, layoutType, title?, body?, bullets[]?, imageRef?, imageKeywords[]?, caption?, sourceTranscript?, attribution? }` (`layoutType` chosen by the AI — GEN-6; `imageKeywords` are AI-recommended search terms — GEN-7)
+- **SlideTranslation** — `{ id, deckId, locale: 'en'|'fr'|'es'|'ru'|'zh', perSlide: { slideId: { title?, body?, bullets[]?, caption? } }, createdAt }` (on-demand slide-content translation cache — SHARE-2)
+- **Template** — `{ id, ownerId, name, theme, layouts: Layout[], visibility, voteScore, createdAt }` where `Layout = { type, label, purpose, slots[], constraints?, elementPositions }` (`purpose`/`slots`/`constraints` are the AI-facing descriptor — TMPL-6 / GEN-6)
 - **Vote** — `{ id, userId, targetType: 'deck'|'template', targetId, value: 1|-1 }`
 - **QuizRef** — `{ id, deckId, quizGeneratorId, formUrl, status }` (link to the external Quiz Generator artifact)
 
 The same definitions back API request/response DTOs and validation on both tiers.
 
-## 16. Privacy, Security & Compliance
+### 16. Privacy, Security & Compliance
 
 | ID      | Requirement                                                                                                                                                                                                                                                                                                             |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -517,39 +644,40 @@ The same definitions back API request/response DTOs and validation on both tiers
 | **P-8** | Payments are processed by the configured billing provider (**Stripe** by default); the app stores no raw card data. Provider webhooks are signature-verified; only minimal, provider-neutral billing references (`billingCustomerId`, subscription status) are stored.                                                  |
 | **P-9** | Connected-account (Google Drive / GitHub — EXP-4) OAuth tokens are stored **encrypted at rest**, request only **least-privilege scopes**, are **per-user and revocable**, and are never exposed to the client. Exports that contain student data must not be pushed to public GitHub/Drive locations (FERPA — P-1/P-2). |
 
-## 17. Quiz Generator Integration
+### 17. Quiz Generator Integration
 
 The Quiz Generator remains a **separate project/service**; the two communicate over simple HTTP APIs. Like the Slide Machine, its core quiz-authoring logic is **decoupled from the specific AI engine** it uses (GEN-2 / [TECH-8](#tech-8-ai-provider-abstraction-layer)), so its provider can be swapped independently.
 
-### QUIZ-1 Generation trigger
+#### QUIZ-1 Generation trigger
 
 On session **Stop** (or on demand), Slide Machine sends finalized, de-identified slide text to the Quiz Generator's API to generate an exit-ticket quiz definition (the Quiz Generator's native YAML format).
 
-### QUIZ-2 Review & publish
+#### QUIZ-2 Review & publish
 
 The user may review/edit generated questions, then publish. The Quiz Generator creates the **Google Form** quiz; Slide Machine stores a `QuizRef` (form URL + status) against the deck.
 
-### QUIZ-3 Distribution & grading
+#### QUIZ-3 Distribution & grading
 
 The published Google Form is distributed to enrolled students within NYU Google Workspace and **auto-graded** via answer keys; per-lecture comprehension is reported back for evaluation ([§12](#12-evaluation--metrics)).
 
-### QUIZ-4 Loose coupling
+#### QUIZ-4 Loose coupling
 
 APIs are versioned and documented; neither project depends on the other's internals. The Quiz Generator base URL and any shared token are configured server-side ([TECH-4](#tech-4-server-configuration)).
 
-## 18. Future Work
+### 18. Future Work
 
 Out of scope for the Fall 2026 pilot:
 
 - Locally-hosted / in-house AI models for transcription and generation (the grant addendum's long-term thesis) — the provider abstraction (GEN-2 / TECH-8) is built now so this is a configuration/adapter change later, not a rewrite.
 - Real-time multilingual **translation** of speech into translated slides (the Translation key supports optional captions only for now).
 - Extracting the latency-sensitive real-time **STT → slide-generation pipeline** into its own Digital Ocean service (and, only if pilot scale demands, moving from App Platform to DO Kubernetes/DOKS) — the modular-monolith seams ([§13](#13-system-architecture)) make this an extraction, not a rewrite.
+- A remote, OAuth-authenticated, multi-user **MCP server** that exposes the action/command layer ([TECH-13](#tech-13-application-actioncommand-layer)) as agent tools, letting users modify upcoming or saved decks through back-and-forth with an external AI agent (preflight and post-lecture). Built as a thin facade over existing actions — reusing the same auth, ownership, and plan-cap metering — so it adds reach without duplicating logic. Deferred from the pilot for scope/timeline; a good student-contribution target.
 - Real-time collaborative (multi-user) editing of a single deck.
 - Team/organization (seat-based) billing and institutional licensing beyond individual Free/Pro/Max plans.
 - Richer analytics dashboards and recommendation/ranking beyond simple vote tallies.
 - Publishing a setup guide for other NYU faculty (dissemination deliverable).
 
-## 19. Open Questions
+### 19. Open Questions
 
 1. **Plan pricing & caps** — exact Free/Pro/Max prices and per-metric caps, tuned against measured per-lecture Gemini + Speech-to-Text + image-API costs.
 2. **Pilot vs. paid** — are NYU pilot instructors/students exempt from paid tiers (e.g., a comped institutional tier) during Fall 2026?
@@ -557,5 +685,8 @@ Out of scope for the Fall 2026 pilot:
 4. **Student identity / roster source** — how are enrolled students resolved for quiz distribution (NYU SIS, Google Classroom, manual roster)?
 5. **Latency target** — what phrase-to-slide latency counts as "near real-time" for pilot acceptance?
 6. **Image licensing** — how are Wikimedia/Flickr/Openverse license terms surfaced and enforced on shared/exported decks?
-7. **Google Slides export fidelity** — native Slides API generation vs. import of an exported format; how faithfully are custom templates mapped?
-8. **100% coverage feasibility** — which boundaries (third-party SDK glue, generated code) are excluded via documented ignore rules to keep the 100% gate realistic?
+7. **Image disambiguation depth** ([IMG-3](#img-3-image-disambiguation)) — is Wikidata/Wikipedia entity resolution plus metadata ranking sufficient, or is an added AI relevance-verification pass on candidate images worth its latency/cost?
+8. **Google Slides export fidelity** — native Slides API generation vs. import of an exported format; how faithfully are custom templates mapped?
+9. **100% coverage feasibility** — which boundaries (third-party SDK glue, generated code) are excluded via documented ignore rules to keep the 100% gate realistic?
+10. **Speech-adaptation limits** ([PREP-3](#prep-3-use-of-the-honed-concept-set)) — how large a preflight concept set can be supplied to Google Cloud STT phrase hints/boost without latency or cost penalty, and how to prioritize terms if the set exceeds that limit.
+11. **MCP server auth & scope** ([§18](#18-future-work)) — for the future MCP server: the remote-OAuth model, tool granularity, FERPA boundaries on agent-driven edits, and how plan-cap metering applies to agent tool calls.
