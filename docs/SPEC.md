@@ -1,0 +1,561 @@
+# Slide Machine V2 — Software Design Document (SDD)
+
+---
+
+> **Part I — Product & Functional Requirements**
+
+## 1. Overview
+
+Slide Machine V2 turns the relationship between lecturer and slides on its head: instead of speaking _to_ prepared slides, the instructor speaks freely and slides are generated _from_ their speech in real time. At the end of a lecture, an "exit-ticket" quiz is auto-generated from the slide content, distributed to students, and auto-graded — producing per-lecture comprehension signals for both instructor and students.
+
+Where V1 was a single-page, vanilla-JS browser app with no server or accounts, **V2 is a full-stack web application**: a React front-end, an Express/JWT back-end, and a MongoDB database, shipped as a **modular monolith deployed on Digital Ocean App Platform** ([§13](#13-system-architecture)). This enables persistent user accounts, tiered subscription plans, saved slide projects and template libraries, shareable permalinks, and a lightweight social layer for browsing and rating others' work — in addition to the core speech-to-slides experience.
+
+V2 also relates to a second, deliberately **separate** project — **The Quiz Generator** ([github.com/bloombar/google-forms-quiz-generator](https://github.com/bloombar/google-forms-quiz-generator)) — which converts quiz definitions into Google Forms quizzes. Rather than merging the two codebases, V2 keeps them independent and has them communicate over simple HTTP APIs ([§17](#17-quiz-generator-integration)).
+
+This document specifies both the **functional** behavior (what the system does, for whom, under what rules) and the **technical** shape (stack, configuration, data models, testing) of V2.
+
+## 2. Goals & Non-Goals
+
+### 2.1 Goals
+
+1. Generate slides in real time from an instructor's live speech, optionally blended with seeded materials.
+2. Give users full control over sessions and decks: start/pause/stop/rewind/forward, plus full post-hoc editing.
+3. Let users register accounts, subscribe to a plan tier, and create/save slide **projects** and **style templates** they can share via permalink.
+4. Provide a library of reusable, previewable slide-style templates with conventional layout types, extensible by users.
+5. Auto-generate, publish, and auto-grade an exit-ticket quiz per lecture via the separate Quiz Generator.
+6. Offer a lightweight social layer: browse, search, and up/down-vote decks and templates; user profiles; a "Latest" feed.
+7. Support standards-based export/import (PDF, Google Slides, YAML) for both decks and templates.
+8. Meter and monetize usage through tiered plans (Free/Pro/Max) with server-configurable caps on costly services.
+9. Keep the core logic provider-agnostic so AI engines (commercial or locally-hosted) and the billing provider can be swapped via configuration.
+10. Keep all student data inside NYU-approved, FERPA-compliant systems. No student PII leaves the institution.
+11. Remain discipline-agnostic and extensible so student teams can contribute features during the pilot.
+
+### 2.2 Non-Goals
+
+- A pixel-perfect general-purpose design tool (e.g., a full PowerPoint/Keynote competitor). Editing and templating are first-class, but the system optimizes for fast, structured, AI-assisted decks rather than freeform graphic design.
+- Real-time multilingual **translation** of speech. A Google Cloud Translation key is provisioned in config for optional caption translation, but live translated slide generation is out of scope for the pilot ([§18](#18-future-work)).
+- Locally-hosted / in-house AI models. The proposal names this as a _future_ direction; V2 uses commercial NYU-provided models.
+- Hosting or proxying the Quiz Generator itself — V2 integrates with it as an external service.
+- Custom invoicing or purchase-order workflows — billing is subscription-based via the configured billing provider (Stripe by default; the provider is abstracted and swappable — [TECH-9](#tech-9-billing-provider-abstraction-layer)).
+
+## 3. Personas & Roles
+
+| Role                                | Description                                                                                        | Primary needs                                                                |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| **Instructor / author**             | Registered user who creates projects, delivers live lectures, and authors templates.               | Reliable real-time slides, seeding, editing, sharing, quiz oversight.        |
+| **Student**                         | Receives the exit-ticket quiz; may also be a registered author (pilot students extend the system). | Timely quiz access; auto-grading; ability to browse/learn from public decks. |
+| **Viewer (public/shared)**          | Anyone with a deck permalink.                                                                      | Read-only deck playback; optional voting if registered.                      |
+| **Researcher / evaluator**          | PI and collaborators evaluating the pilot.                                                         | Anonymized exit-ticket scores, latency/reliability metrics, quality ratings. |
+| **Contributor (student developer)** | Pilot students extending the codebase.                                                             | Clear module boundaries, shared types, documented APIs.                      |
+
+## 4. Accounts & Authentication
+
+### AUTH-1 Registration & sign-in methods
+
+Users can register and log in by **either** of two supported methods:
+
+- **Email + password** (with display name). Passwords are stored hashed (e.g., bcrypt/argon2); registration requires confirming an **email verification link** (AUTH-3) before the account is fully enabled.
+- **Google sign-in** (OAuth 2.0 / OpenID Connect), which **supports NYU Google accounts** (NYU Workspace) as well as standard Google accounts. Google-verified email needs no separate verification step.
+- **GitHub sign-in** (OAuth), for users who prefer their GitHub identity (convenient for the pilot's student developers).
+
+A given **verified** email maps to a single account: if a user who registered with a password later signs in with Google or GitHub for that same verified email (or vice versa), the methods resolve to the same account rather than creating a duplicate. Where a provider does not expose a verified primary email (GitHub can omit this), the identity is treated as distinct until the user verifies/links it. Signing in is separate from **connecting** a Google or GitHub account for import/export, which requires broader scopes ([EXP-4](#exp-4-connected-accounts-google-drive--github)).
+
+### AUTH-2 Login & sessions
+
+Email/password login issues JWT access + refresh tokens. Sessions persist across reloads; logout invalidates the refresh token.
+
+### AUTH-3 Email verification
+
+Registration sends a verification link; unverified accounts have limited capability (e.g., cannot publish publicly) until verified.
+
+### AUTH-4 Password reset
+
+Standard "forgot password" flow: time-limited, single-use reset link sent by email; resets invalidate existing sessions.
+
+### AUTH-5 Profile & ownership
+
+Each user has a profile (display name, bio, avatar) and owns their projects, decks, and templates. Authorization enforces that users may only modify their own resources (except admin).
+
+## 5. Plans, Billing & Usage Limits
+
+### BILL-1 Subscription tiers
+
+The product offers three subscription tiers, each priced accordingly (exact prices set in configuration — BILL-6):
+
+- **Free** — basic level for personal/occasional use; the default tier on registration.
+- **Pro** — mid level for professional / regular instructional use; higher caps and access to paid-tier features.
+- **Max** — highest tier; the largest usage caps and full feature access.
+
+Each tier defines what features are available and the usage caps that apply to costly services (BILL-3).
+
+### BILL-2 Billing provider (Stripe) integration
+
+Payments and subscription management run through a configured **billing provider — Stripe by default**, integrated behind a provider-agnostic abstraction ([TECH-9](#tech-9-billing-provider-abstraction-layer)) so a different provider can be adopted later without reworking application logic:
+
+- **Checkout** for new subscriptions and tier upgrades/downgrades.
+- A hosted **customer/billing portal** for managing payment methods, invoices, and cancellation.
+- **Webhooks** keep the user's subscription status (active, past-due, canceled) in sync with the provider as the source of truth for billing state; events are normalized to internal billing events at the adapter boundary.
+- The app never handles raw card data; the billing provider is the system of record for payment instruments ([P-8](#16-privacy-security--compliance)).
+
+### BILL-3 Usage caps & metering
+
+Each tier carries **usage caps on AI and other costly services**, metered per billing period and enforced **server-side**, including at minimum:
+
+- AI generation (e.g., Gemini tokens or number of slide generations).
+- Speech-to-Text minutes (Google Cloud).
+- Image-enrichment API calls (Wikimedia/Flickr/Openverse).
+- Document/Drive import volume, storage, and export operations.
+
+Usage is recorded against the user's current period; the user can view remaining quota for each metered resource.
+
+### BILL-4 Enforcement & upgrade prompts
+
+When a metered cap is reached, the system **fails gracefully**: the costly operation is blocked (or degraded to a free alternative where one exists) rather than silently incurring cost, and the user is shown a clear message with an **upgrade** path. Caps reset at the start of each billing period. Higher tiers raise or remove the relevant caps.
+
+### BILL-5 Plan management
+
+Users can **upgrade, downgrade, or cancel** at any time via Stripe Checkout / the billing portal, with proration handled by Stripe. Feature access and caps update to match the active tier; downgrades take effect per the configured policy (immediately or at period end).
+
+### BILL-6 Configurable pricing & caps
+
+Tier definitions — **price and per-tier usage caps** — live in **server-side configuration** (BILL config + Stripe price IDs in [TECH-4](#tech-4-server-configuration)) and are **adjustable without code changes**. Exact prices and cap values are TBD and will be tuned against real service costs ([§19](#19-open-questions)).
+
+## 6. Slide Projects & Seeding
+
+### PROJ-1 Pre-create a project
+
+An instructor can create a **slide project** ahead of a lecture, with metadata (title, course, description) and optional **seed information** that informs later slide generation (topic outline, key terms, learning objectives, tone/style notes).
+
+### PROJ-2 Project lifecycle
+
+Projects persist in MongoDB and can be reopened, duplicated, archived, and deleted. A project may contain multiple decks (e.g., one per lecture session).
+
+### SEED-1 Document seeding
+
+Users can seed a project by importing content from:
+
+- Uploaded **PDFs** and document files (e.g., `.docx`, `.pptx`, `.txt`, Markdown).
+- A connected **Google Drive** account — **Google Docs**, Drive files, and **Google Slides** ([EXP-4](#exp-4-connected-accounts-google-drive--github)).
+- A connected **GitHub** account — files from a repo or gist (e.g., previously-exported YAML decks/templates) ([EXP-4](#exp-4-connected-accounts-google-drive--github)).
+
+Imported text is parsed, normalized, and stored as seed context for generation.
+
+### SEED-2 Image seeding
+
+Users can upload **seed images** with **captions/descriptions/keywords**. Seeded images are preferred during generation when their captions match a slide's topic (see IMG-1).
+
+### SEED-3 Seed management
+
+Users can view, edit captions for, reorder, enable/disable, and delete seeded content and images before or between sessions.
+
+## 7. Style Template Library
+
+### TMPL-1 Template library & preview
+
+A browsable **template library** lets users preview and select slide-style templates. Each template defines a visual theme (colors, typography, spacing) plus a set of **layouts**.
+
+### TMPL-2 Conventional layout types
+
+Each template provides multiple layout types, using conventional slide conventions, including at minimum:
+
+- **Title / heading** slide
+- **Section / subheading** slide
+- **Content** (title + body) slide
+- **List / bullet** slide
+- **Image-heavy** (full-bleed or image-dominant) slide
+- **Two-column** (text + image) slide
+- **Quote / callout** slide
+
+### TMPL-3 Pre-made templates
+
+Ship several polished, ready-to-use templates covering common lecture styles.
+
+### TMPL-4 Custom templates (create / edit / save)
+
+Users can create, edit, save, and name their own templates — defining layouts and the **positioning** of slide content elements (title, body, image, caption) on each layout. Custom templates appear in the user's library and may be shared/published.
+
+### TMPL-5 Template application
+
+A template (and any specific layout) can be applied at deck level and overridden per slide (see EDIT-3).
+
+## 8. Live Lecture Capture
+
+### CAP-1 Session lifecycle
+
+The user explicitly controls a live session with **Start**, **Pause/Resume**, and **Stop**. Stop finalizes the deck and can trigger quiz generation ([§17](#17-quiz-generator-integration)). Session state (listening / paused / stopped) is clearly indicated.
+
+### CAP-2 Microphone & permissions
+
+The app requires microphone access, prompts for and reports permission state, and surfaces actionable errors rather than failing silently.
+
+### CAP-3 Speech-to-text transcription
+
+- Uses **Google Cloud Speech-to-Text** for fast, accurate, low-latency transcription (removing V1's Chrome-only constraint).
+- Audio is streamed and segmented into phrases on natural pauses; interim text may display as live captions, finalized phrases drive generation.
+- Target: near-real-time latency suitable for live lecture (a key evaluation metric — [§12](#12-evaluation--metrics)). Raw audio is not persisted.
+
+### CAP-4 Voice commands
+
+The user can drive the slide generator hands-free by **speaking commands** — at minimum **start**, **stop**, **pause** (and resume), **rewind** (previous slide), and **fast-forward** (next slide) — mirroring the manual playback controls in [PLAY-1](#play-1-playback-controls).
+
+- Commands are recognized from the same Google Cloud Speech-to-Text stream, using a small, configurable command vocabulary (with synonyms, e.g. "go back" → rewind) so they are **reliably transcribed** and unambiguous.
+- A wake-word or command prefix (e.g., "slide machine, …") and/or a distinct command mode keeps ordinary lecture speech from being misinterpreted as a command; normal speech continues to drive slide generation (GEN-1).
+- Recognized commands are confirmed visually (and optionally audibly) so the user can tell a command registered. Low-confidence matches are ignored rather than acted on, to avoid disrupting a live lecture.
+
+## 9. Slide Generation & Enrichment
+
+### GEN-1 Speech-to-slide generation
+
+Each finalized phrase, combined with project **seed context**, is sent to the **Gemini API**, which identifies the topic, produces concise slide text, and maintains short rolling context across recent phrases so slides cohere across a topic.
+
+### GEN-2 AI-provider abstraction
+
+The **core logic of the slide generator (and quiz maker) is decoupled from any specific LLM or AI engine.** All AI calls — speech-to-text, slide-content generation, and quiz generation — go through a provider-agnostic interface so engines can be swapped in/out without touching the generation logic.
+
+- Gemini is the default provider for the pilot (migrating from V1's OpenAI integration), but the system must support substituting **other commercial providers or a locally-hosted/in-house model** purely via configuration and an adapter — no changes to the core generator.
+- The abstraction spans every costly AI capability: **transcription** (CAP-3), **text generation** (GEN-1), and **quiz generation** (QUIZ-1) each define a stable internal contract that any provider adapter implements.
+- The active provider per capability is selected in server configuration ([TECH-4](#tech-4-server-configuration)); multiple providers may be registered and chosen per capability (e.g., cloud STT + local LLM). See the adapter design in [TECH-8](#tech-8-ai-provider-abstraction-layer).
+
+### IMG-1 Real-time image enrichment
+
+Slides are enriched with images in priority order:
+
+1. A **seeded** image whose caption/keywords match the slide topic (SEED-2).
+2. A topic-relevant image fetched in real time from **Wikimedia**, **Flickr**, and **Openverse** APIs.
+3. A graceful fallback (placeholder/solid layout) when nothing relevant is found.
+
+### IMG-2 Fault tolerance
+
+Image enrichment is **fault-tolerant**: any single image API may be slow, rate-limited, or down without causing a hard failure. The system times out per source, falls back across sources, and never blocks slide display on image retrieval. Licensing/attribution metadata is captured where the source requires it.
+
+### GEN-3 Live display
+
+Generated slides render full-screen in real time as the user speaks, advancing as new slides are produced, with a configurable minimum dwell time per slide.
+
+> **Metering note.** Gemini, Speech-to-Text, and image-API usage in §8–§9 all count against the user's plan caps (BILL-3) and are subject to enforcement (BILL-4).
+
+## 10. Playback, Editing & Sharing
+
+### PLAY-1 Playback controls
+
+During and after a session, simple UI controls let the user **start**, **pause**, **stop**, **rewind** (previous slide), and **forward** (next slide) through the deck. The same actions are available hands-free via spoken commands ([CAP-4](#cap-4-voice-commands)).
+
+### EDIT-1 Full content editing
+
+Users can **add, edit, and delete** all slide content: slide text (title/body/bullets/caption), images (replace from seed, re-fetch, upload, or remove), and slide order.
+
+### EDIT-2 Deck-level template switch
+
+Users can switch the **entire deck's style template**, re-flowing all slides into the new theme/layouts.
+
+### EDIT-3 Per-slide layout switch
+
+Users can change the **layout type** of an individual slide (e.g., convert a content slide to image-heavy or two-column) independent of the deck default.
+
+### SHARE-1 Saved deck viewer & permalink
+
+Saved decks have a **deck viewer** reachable via a stable **permalink** that can be shared. Sharing visibility is controllable (private / unlisted-by-link / public). Public/shared class artifacts respect [§16](#16-privacy-security--compliance).
+
+## 11. Export/Import, Voting & Social
+
+### EXP-1 Deck export
+
+Decks can be exported to **PDF**, **Google Slides**, and other easily supportable common formats.
+
+### EXP-2 Standards-based data export
+
+Both **slide decks** and **style templates** can be exported to a standard, human-readable format (**YAML** or equivalent) capturing structure, content, and styling.
+
+### EXP-3 Round-trip import
+
+The exported format is **import-compatible**: a user can re-import a previously exported deck and/or template and restore it faithfully. Import validates and reports errors without partial-corrupting existing data. Imports may come from an upload or a connected account (EXP-4).
+
+### EXP-4 Connected accounts (Google Drive & GitHub)
+
+Users can connect their **own Google Drive and/or GitHub** accounts via OAuth to import from and export to those resources:
+
+- **Import** — pull source documents and previously-exported decks/templates from Drive or a GitHub repo/gist ([SEED-1](#seed-1-document-seeding)).
+- **Export** — push outputs to the connected destination: **PDF / Google Slides / YAML** to Google Drive, and **YAML** deck/template files to a GitHub repo (round-trippable via EXP-3).
+- Connecting an account is **separate from sign-in identity** (AUTH-1): it grants broader, purpose-specific scopes (Drive files / repo contents) and a user who signed in by email can still connect Drive and GitHub. Connections are listed in the profile and are **revocable** at any time; tokens are stored encrypted ([P-9](#16-privacy-security--compliance)).
+
+### SOC-1 Voting
+
+Registered users can **up/down-vote** slide decks and style templates. Vote tallies inform ranking and discovery; one vote per user per item, changeable.
+
+### SOC-2 Browse & search
+
+A simple social layer lets users **browse and search** others' public decks and template libraries, by title, author, tags, and content.
+
+### SOC-3 Latest feed
+
+A **"Latest" feed** surfaces recently published public decks and templates, with search/filter.
+
+### SOC-4 User profiles
+
+Each user has a public **profile page** listing their published decks and templates, with search within the profile.
+
+## 12. Evaluation & Metrics
+
+The system must surface data supporting the grant's mixed-methods evaluation ([GRANT_PROPOSAL.md](GRANT_PROPOSAL.md) §4):
+
+**Process measures**
+
+- System reliability (session completion rate, API error rates, image-enrichment fallbacks).
+- Speech-to-text latency (phrase finalization time) and slide-generation latency.
+- Slide- and quiz-relevance ratings (via the SOC voting layer and/or instructor/student 1–5 ratings).
+
+**Learning measures**
+
+- Exit-ticket scores as a per-lecture comprehension signal.
+- Comparison across Slide-Machine-delivered units vs. traditionally-delivered units in the same course.
+- Student survey on clarity, engagement, perceived usefulness.
+
+**Extensibility measure**
+
+- Count and nature of student-contributed features merged during the pilot.
+
+All metrics are anonymized before analysis.
+
+---
+
+> **Part II — Technical Design**
+
+## 13. System Architecture
+
+### Architecture style: modular monolith ("monolith-first")
+
+V2 ships as a **modular monolith** — a single deployable Express application (serving the React SPA and the REST API) backed by one MongoDB database — rather than a fleet of microservices. The candidate services one might split out (auth, enrichment, speech-to-text, slide generation, quiz generation, web UI, data logging) exist instead as **cohesive internal modules** behind clean seams.
+
+This is a deliberate "monolith-first" choice for the build team (PI + one grad student), a single-course Fall-2026 pilot, a tight Summer-2026 timeline, and a $2k services budget. Microservices' costs — independent deploys, inter-service auth, network-failure handling, distributed tracing, and Kubernetes operations — buy scaling and team-autonomy benefits this project does not yet need, while making the system harder for pilot students to run and extend. The monolith keeps **one deploy and one local `docker compose up`** ([TECH-10](#tech-10-deployment-topology-digital-ocean-app-platform), [TECH-11](#tech-11-local-dev--cicd)).
+
+Crucially, the existing **provider abstractions** (TECH-8 AI, TECH-9 billing) and **shared-types seams** (TECH-6) keep module boundaries explicit, so a module can later be extracted into its own service **if** load ever justifies it — with no rewrite. The **first extraction candidate** is the latency-sensitive real-time **STT → slide-generation pipeline** ([§18](#18-future-work)). The Quiz Generator already runs as the one **separate** service ([§17](#17-quiz-generator-integration)).
+
+**Internal modules** of the Express monolith: `auth`, `billing`, `projects`, `seeding/ingest` (incl. Drive/GitHub connected accounts), `transcription` (STT adapter), `generation` (slide-gen), `enrichment` (images), `social` (votes/feed/search), `export/import`, `logging/metrics`, and a `quiz-bridge` to the external Quiz Generator. External engines (Google Cloud STT, Gemini, image APIs, Stripe, Google/GitHub APIs, Quiz Generator) sit behind the modules as the diagram shows.
+
+```text
+┌──────────────────────────── Client (browser) ────────────────────────────┐
+│  React + Vite + TailwindCSS SPA                                           │
+│   • Auth UI (register / login / reset)   • Billing UI (Stripe Checkout)   │
+│   • Project & seeding UI       • Live capture + real-time slide display   │
+│   • Template library + editor  • Deck editor   • Social feed / profiles   │
+│   • Playback controls (start/pause/stop/rewind/forward)                   │
+└───────┬───────────────────────────────────────────────────┬──────────────┘
+        │ Web Speech / mic                                   │ REST + JWT
+        ▼                                                    ▼
+┌─────────────────┐                          ┌──────────────────────────────┐
+│ Google Cloud    │                          │  Express.js API (Node)        │
+│ Speech-to-Text  │◀── audio/stream          │   • Auth (JWT, password reset)│
+└─────────────────┘                          │   • Billing + usage metering  │
+┌─────────────────┐                          │   • Projects / decks / slides │
+│ Gemini API      │◀── speech + seed ───────▶│   • Templates / library       │
+└─────────────────┘    slide/quiz content    │   • Seeding ingest (PDF/Docs) │
+┌──────────────────────────────────┐         │   • Image enrichment proxy    │
+│ Wikimedia · Flickr · Openverse   │◀───────▶│   • Social: votes/feed/search │
+└──────────────────────────────────┘         │   • Export/import             │
+┌──────────────────────────────────┐         └──────┬─────────────┬──────────┘
+│ Google Drive / Docs / Slides API │◀───────────────┤             │
+└──────────────────────────────────┘                │             ▼
+┌──────────────────────────────────┐   webhooks  ┌───────────┐ ┌───────────┐
+│ Stripe (payments/subscriptions)  │◀───────────▶│  Express  │ │  MongoDB  │
+└──────────────────────────────────┘             └───────────┘ └───────────┘
+┌──────────────────────────────────┐
+│ Quiz Generator (separate service)│◀── REST API ── Express
+└──────────────────────────────────┘
+```
+
+The **Express.js API** box above is the **modular monolith** (its bulleted responsibilities are the internal modules listed earlier); everything outside it — Google Cloud STT, Gemini, image APIs, Stripe, Google/GitHub APIs, MongoDB, and the Quiz Generator — is an external dependency or a separate deployment. The two projects (Slide Machine, Quiz Generator) remain separate repositories and deployments, integrated only through documented HTTP APIs ([§17](#17-quiz-generator-integration)).
+
+## 14. Technical Stack & Conventions
+
+### TECH-1 Front-end
+
+- **React** (function components + hooks) built with **Vite**, styled with **TailwindCSS**.
+- Client-side routing for projects, deck viewer/permalinks, template library, billing, social feed, and profiles.
+- Real-time slide rendering driven by streamed transcription/generation events.
+
+### TECH-2 Back-end
+
+- **Express.js** (Node) REST API.
+- **JWT-based authentication**: short-lived access tokens + refresh, sent as `Authorization: Bearer` (or secure httpOnly cookie). Protected routes enforce role/ownership checks.
+- Stateless API layer; all persistence in MongoDB. Billing state is reconciled from Stripe webhooks.
+
+### TECH-3 Database
+
+- **MongoDB** (via an ODM such as Mongoose). Collections defined in [§15](#15-data-models). Stores users, subscriptions, usage records, projects, decks, slides, templates, votes, and social/feed metadata. Raw lecture audio is **not** persisted.
+
+### TECH-4 Server configuration
+
+Server-side secrets and global settings live in a `.env` file (never committed), including:
+
+- `OPENAI_API_KEY` _(legacy)_ / `GEMINI_API_KEY` _(post-migration)_ and model/endpoint settings.
+- `GOOGLE_CLOUD_STT_KEY` (Speech-to-Text) and `GOOGLE_CLOUD_TRANSLATION_KEY`.
+- `GOOGLE_OAUTH_CLIENT_ID/SECRET` — used both for **Google sign-in** (AUTH-1) and for **connected Google Drive** import/export with broader scopes (EXP-4); plus any service-account credentials for Docs/Slides.
+- `GITHUB_OAUTH_CLIENT_ID/SECRET` — used both for **GitHub sign-in** (AUTH-1) and for **connected GitHub** repo/gist import/export (EXP-4).
+- `CONNECTED_ACCOUNT_TOKEN_ENC_KEY` — key for encrypting stored connected-account OAuth tokens at rest (P-9).
+- `MONGODB_URI`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, token TTLs.
+- Image-API keys/config (Flickr; Wikimedia and Openverse are keyless/optional).
+- Billing-provider credentials (adapter-specific; for the default Stripe adapter: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and per-tier price IDs) plus a `BILLING_PROVIDER` selector ([TECH-9](#tech-9-billing-provider-abstraction-layer)).
+- Object-storage credentials for **DO Spaces** (S3-compatible) used by uploads/exports (TECH-10).
+- `QUIZ_GENERATOR_BASE_URL` and any shared API token for the Quiz Generator.
+- SMTP / email-provider settings for verification and password-reset mail.
+
+**Plan definitions** — the Free/Pro/Max **prices and usage caps** (BILL-1, BILL-3) live in an adjustable server-side config (e.g., `config/plans.*`) so pricing and caps can be tuned **without code changes** (see BILL-6 and TECH-4). Illustrative shape:
+
+```jsonc
+{
+  "free": {
+    "priceId": null,
+    "caps": {
+      "geminiTokens": 50000,
+      "sttMinutes": 60,
+      "imageCalls": 200,
+      "exports": 5,
+    },
+  },
+  "pro": {
+    "priceId": "price_pro_xxx",
+    "caps": {
+      "geminiTokens": 1000000,
+      "sttMinutes": 1200,
+      "imageCalls": 5000,
+      "exports": 200,
+    },
+  },
+  "max": {
+    "priceId": "price_max_xxx",
+    "caps": {
+      "geminiTokens": null,
+      "sttMinutes": null,
+      "imageCalls": null,
+      "exports": null,
+    },
+  },
+}
+```
+
+(`null` = unlimited; exact values TBD — [§19](#19-open-questions).)
+
+### TECH-5 Client configuration
+
+Client build/runtime variables live in a Vite env file (`.env.local`, `VITE_`-prefixed), e.g. `VITE_API_BASE_URL`, `VITE_STRIPE_PUBLISHABLE_KEY`, public Google/GitHub OAuth client IDs (for sign-in and connect flows), feature flags, and analytics toggles. **No secrets** are exposed to the client.
+
+### TECH-6 Shared types & data models
+
+Where feasible, front-end and back-end share **TypeScript** types and data-model definitions (e.g., a shared `packages/types` or `shared/` module) so DTOs, deck/slide/template/plan schemas, and API contracts have a single source of truth. The codebase is TypeScript end-to-end.
+
+### TECH-7 Testing & coverage
+
+- **100% code coverage** target across **unit**, **integration**, and **end-to-end** tests.
+- Unit/integration via a standard runner (e.g., Vitest/Jest) for both client and server; integration tests exercise the Express API against a test MongoDB instance.
+- **End-to-end tests use a Playwright harness** covering the critical user journeys (register → subscribe → create project → seed → live capture → edit → share → export → vote), including cap-enforcement and upgrade paths.
+- External services (Gemini, Google Cloud, image APIs, Stripe, Quiz Generator) are mocked/stubbed in CI; coverage gates block merges below target.
+
+### TECH-8 AI-provider abstraction layer
+
+The system implements GEN-2 with a **capability-based adapter layer** so the core slide-generation and quiz-generation logic depends only on interfaces, never on a concrete AI vendor (dependency inversion):
+
+- **Capability interfaces** (defined once in the shared types module, [TECH-6](#tech-6-shared-types--data-models)): `TranscriptionProvider` (audio → text), `GenerationProvider` (speech + seed context → slide content), and `QuizGenerationProvider` (slide text → quiz definition). Each interface fixes the request/response contract independent of any vendor.
+- **Adapters** implement those interfaces per engine — e.g. `GeminiGenerationProvider`, `GoogleCloudTranscriptionProvider`, and future `LocalLlmProvider` / `LocalWhisperProvider` for self-hosted models — with no other code aware of which is active.
+- A **provider registry** resolves the active adapter **per capability** from server config ([TECH-4](#tech-4-server-configuration)), so capabilities can mix sources (e.g., cloud STT + locally-hosted LLM) and a provider can be swapped by configuration alone, with no change to generator logic.
+- Usage metering (BILL-3) and cost accounting hook in at the adapter boundary, so caps and pricing remain consistent regardless of provider.
+- The separate Quiz Generator service follows the **same principle** internally ([§17](#17-quiz-generator-integration)): its quiz-authoring logic is decoupled from the AI engine it uses.
+
+### TECH-9 Billing-provider abstraction layer
+
+Billing is decoupled from any specific payment vendor, the same way AI is (TECH-8), so the provider can change without touching application logic:
+
+- A single **`BillingProvider` interface** abstracts the operations the app needs — create/checkout subscription, change tier, open billing portal, cancel, and **normalize provider webhooks into internal billing events** (`subscription.active`, `subscription.past_due`, `subscription.canceled`).
+- A **`StripeBillingProvider` adapter** implements it for the pilot; future adapters (e.g., Paddle, Braintree, Chargebee) implement the same interface. Only the adapter knows vendor-specific objects, API shapes, and webhook formats.
+- Application and UI logic deal exclusively in **internal, provider-neutral concepts** — tier, subscription status, and opaque customer/subscription references — never vendor-specific types.
+- The active provider and its credentials are selected in server config ([TECH-4](#tech-4-server-configuration)); provider-specific keys and price IDs are isolated to the adapter.
+- Persisted billing references are **provider-neutral** ([§15](#15-data-models)): a `billingProvider` discriminator plus opaque `billingCustomerId` / `providerSubscriptionId`, so a future migration is an adapter + data backfill, not an application rewrite.
+
+### TECH-10 Deployment topology (Digital Ocean App Platform)
+
+The modular monolith ([§13](#13-system-architecture)) deploys to **Digital Ocean App Platform** (PaaS), chosen for minimal operational overhead:
+
+- **App components** — one **API service** (the Express monolith) plus a **static site** component for the built React/Vite SPA (or the API serves the static bundle). App Platform provides managed TLS, build-on-push, and rolling deploys. Secrets are set as App Platform env vars, mirroring [TECH-4](#tech-4-server-configuration).
+- **Database** — **DO Managed MongoDB** (automated backups, point-in-time restore) rather than self-hosted.
+- **Object storage** — **DO Spaces** (S3-compatible) for uploaded seed assets, cached enrichment images, and generated exports.
+- **Scaling** — the API is stateless (JWT), so App Platform can run multiple horizontal instances behind its load balancer. The one caveat is **real-time STT streaming**: a WebSocket pipeline needs sticky sessions, or the client streams audio **directly to Google Cloud STT** with the back-end only brokering credentials (see [§19](#19-open-questions)).
+- **Quiz Generator** — deployed as a **separate** App Platform service (or Google Apps Script), reached over HTTP per [§17](#17-quiz-generator-integration).
+
+### TECH-11 Local dev & CI/CD
+
+- **Local dev** — a `Dockerfile` plus `docker compose` (app + MongoDB, with Spaces mockable via an S3-compatible local service) lets contributors — including pilot students — run the whole stack with **one command**, and lets the Playwright e2e harness ([TECH-7](#tech-7-testing--coverage)) run against a realistic environment.
+- **CI/CD** — GitHub Actions runs unit + integration + e2e tests and enforces the **100% coverage gate**, then **auto-deploys to App Platform on push to the default branch** (App Platform's GitHub integration), replacing V1's GitHub Pages workflow (`.github/workflows/static.yml`). Failed gates block deploy.
+
+## 15. Data Models
+
+Indicative MongoDB collections, expressed as shared TypeScript types ([TECH-6](#tech-6-shared-types--data-models)):
+
+- **User** — `{ id, email, displayName, passwordHash, emailVerified, bio, avatarUrl, planTier: 'free'|'pro'|'max', billingProvider?, billingCustomerId?, createdAt }`
+- **Subscription** — `{ id, userId, tier, billingProvider, providerSubscriptionId, status: 'active'|'past_due'|'canceled', currentPeriodStart, currentPeriodEnd }`
+- **UsageRecord** — `{ id, userId, period, metric: 'geminiTokens'|'sttMinutes'|'imageCalls'|'exports'|..., used, cap }`
+- **ConnectedAccount** — `{ id, userId, provider: 'google'|'github', scopes[], accessTokenEnc, refreshTokenEnc?, externalAccountLabel, connectedAt }` (for import/export — EXP-4; tokens encrypted at rest — P-9)
+- **Project** — `{ id, ownerId, title, course, description, seedContext, createdAt }`
+- **SeedAsset** — `{ id, projectId, type: 'doc'|'pdf'|'gdoc'|'gdrive'|'gslides'|'image', text?, imageUrl?, caption?, keywords[], enabled }`
+- **Deck** — `{ id, projectId, ownerId, title, templateId, visibility: 'private'|'unlisted'|'public', permalinkSlug, slideOrder[], voteScore, createdAt }`
+- **Slide** — `{ id, deckId, index, layoutType, title?, body?, bullets[]?, imageRef?, caption?, sourceTranscript?, attribution? }`
+- **Template** — `{ id, ownerId, name, theme, layouts: Layout[], visibility, voteScore, createdAt }` where `Layout = { type, elementPositions }`
+- **Vote** — `{ id, userId, targetType: 'deck'|'template', targetId, value: 1|-1 }`
+- **QuizRef** — `{ id, deckId, quizGeneratorId, formUrl, status }` (link to the external Quiz Generator artifact)
+
+The same definitions back API request/response DTOs and validation on both tiers.
+
+## 16. Privacy, Security & Compliance
+
+| ID      | Requirement                                                                                                                                                                                                                                                                                                             |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **P-1** | All student data (rosters, quiz responses, scores) stays within NYU-approved, FERPA-compliant systems (NYU Google Workspace, NYU-provided models).                                                                                                                                                                      |
+| **P-2** | No student PII is sent to external AI models. Only de-identified lecture/slide/seed text drives slide and quiz generation.                                                                                                                                                                                              |
+| **P-3** | All secrets live in server-side `.env` (Gemini/OpenAI, Google Cloud, OAuth, JWT, SMTP, Stripe, Quiz Generator token) — never committed and never exposed to the client. (V1's committed `openai.key` and `localStorage` key storage are removed in V2.)                                                                 |
+| **P-4** | Passwords hashed; JWTs signed with rotating secrets; reset/verification links time-limited and single-use; ownership/role checks on every mutating route.                                                                                                                                                               |
+| **P-5** | Google Drive/Docs/Slides access uses per-user OAuth consent and least-privilege scopes; imported content is the user's own.                                                                                                                                                                                             |
+| **P-6** | Microphone audio is used only for transcription and is not persisted; capture is bounded by explicit start/stop with clear UI state.                                                                                                                                                                                    |
+| **P-7** | Evaluation data is anonymized before analysis and submitted for IRB/program review; findings (positive or negative) shared with the NYU community.                                                                                                                                                                      |
+| **P-8** | Payments are processed by the configured billing provider (**Stripe** by default); the app stores no raw card data. Provider webhooks are signature-verified; only minimal, provider-neutral billing references (`billingCustomerId`, subscription status) are stored.                                                  |
+| **P-9** | Connected-account (Google Drive / GitHub — EXP-4) OAuth tokens are stored **encrypted at rest**, request only **least-privilege scopes**, are **per-user and revocable**, and are never exposed to the client. Exports that contain student data must not be pushed to public GitHub/Drive locations (FERPA — P-1/P-2). |
+
+## 17. Quiz Generator Integration
+
+The Quiz Generator remains a **separate project/service**; the two communicate over simple HTTP APIs. Like the Slide Machine, its core quiz-authoring logic is **decoupled from the specific AI engine** it uses (GEN-2 / [TECH-8](#tech-8-ai-provider-abstraction-layer)), so its provider can be swapped independently.
+
+### QUIZ-1 Generation trigger
+
+On session **Stop** (or on demand), Slide Machine sends finalized, de-identified slide text to the Quiz Generator's API to generate an exit-ticket quiz definition (the Quiz Generator's native YAML format).
+
+### QUIZ-2 Review & publish
+
+The user may review/edit generated questions, then publish. The Quiz Generator creates the **Google Form** quiz; Slide Machine stores a `QuizRef` (form URL + status) against the deck.
+
+### QUIZ-3 Distribution & grading
+
+The published Google Form is distributed to enrolled students within NYU Google Workspace and **auto-graded** via answer keys; per-lecture comprehension is reported back for evaluation ([§12](#12-evaluation--metrics)).
+
+### QUIZ-4 Loose coupling
+
+APIs are versioned and documented; neither project depends on the other's internals. The Quiz Generator base URL and any shared token are configured server-side ([TECH-4](#tech-4-server-configuration)).
+
+## 18. Future Work
+
+Out of scope for the Fall 2026 pilot:
+
+- Locally-hosted / in-house AI models for transcription and generation (the grant addendum's long-term thesis) — the provider abstraction (GEN-2 / TECH-8) is built now so this is a configuration/adapter change later, not a rewrite.
+- Real-time multilingual **translation** of speech into translated slides (the Translation key supports optional captions only for now).
+- Extracting the latency-sensitive real-time **STT → slide-generation pipeline** into its own Digital Ocean service (and, only if pilot scale demands, moving from App Platform to DO Kubernetes/DOKS) — the modular-monolith seams ([§13](#13-system-architecture)) make this an extraction, not a rewrite.
+- Real-time collaborative (multi-user) editing of a single deck.
+- Team/organization (seat-based) billing and institutional licensing beyond individual Free/Pro/Max plans.
+- Richer analytics dashboards and recommendation/ranking beyond simple vote tallies.
+- Publishing a setup guide for other NYU faculty (dissemination deliverable).
+
+## 19. Open Questions
+
+1. **Plan pricing & caps** — exact Free/Pro/Max prices and per-metric caps, tuned against measured per-lecture Gemini + Speech-to-Text + image-API costs.
+2. **Pilot vs. paid** — are NYU pilot instructors/students exempt from paid tiers (e.g., a comped institutional tier) during Fall 2026?
+3. **STT streaming path** — does Speech-to-Text audio stream client→Google directly, or proxy through the Express back-end (affects latency, credential exposure, cost accounting, and metering)? This also determines whether App Platform needs **WebSocket sticky sessions** for horizontal scaling ([TECH-10](#tech-10-deployment-topology-digital-ocean-app-platform)).
+4. **Student identity / roster source** — how are enrolled students resolved for quiz distribution (NYU SIS, Google Classroom, manual roster)?
+5. **Latency target** — what phrase-to-slide latency counts as "near real-time" for pilot acceptance?
+6. **Image licensing** — how are Wikimedia/Flickr/Openverse license terms surfaced and enforced on shared/exported decks?
+7. **Google Slides export fidelity** — native Slides API generation vs. import of an exported format; how faithfully are custom templates mapped?
+8. **100% coverage feasibility** — which boundaries (third-party SDK glue, generated code) are excluded via documented ignore rules to keep the 100% gate realistic?
