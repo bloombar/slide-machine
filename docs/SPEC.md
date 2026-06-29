@@ -103,6 +103,7 @@ Each tier carries **usage caps on AI and other costly services**, metered per bi
 - AI generation (e.g., Gemini tokens or number of slide generations).
 - Speech-to-Text minutes (Google Cloud).
 - Image-enrichment API calls (Wikimedia/Flickr/Openverse).
+- AI image generation (IMG-4), typically a Pro/Max-tier capability.
 - Document/Drive import volume, storage, and export operations.
 
 Usage is recorded against the user's current period; the user can view remaining quota for each metered resource.
@@ -257,7 +258,7 @@ The user can drive the slide generator hands-free by **speaking commands** — a
 
 #### GEN-1 Speech-to-slide generation
 
-Each finalized phrase, combined with project **seed context**, is sent to the **Gemini API**, which identifies the topic, produces concise slide text, and maintains short rolling context across recent phrases so slides cohere across a topic. The model also **selects the slide layout** for each content block from the active template's options ([GEN-6](#gen-6-ai-layout-selection)), returning content already mapped to the chosen layout's slots.
+Each finalized phrase, combined with project **seed context**, is sent to the **Gemini API**, which identifies the topic, produces concise slide text, and maintains short rolling context across recent phrases so slides cohere across a topic. The model also **selects the slide layout** for each content block from the active template's options ([GEN-6](#gen-6-ai-layout-selection)), returning content already mapped to the chosen layout's slots, and **decides whether each phrase starts a new slide or updates the current one** ([GEN-8](#gen-8-new-slide-vs-update-current)).
 
 #### GEN-2 AI-provider abstraction
 
@@ -289,6 +290,16 @@ Polysemous terms must not pull the wrong picture — speech about **"Prince" the
 - **Consistency & caching** — the same disambiguated query is applied across Wikimedia / Flickr / Openverse, and the resolved entity/decision is cached per slide so re-runs ([GEN-4](#gen-4-post-lecture-ai-reformat-holistic-regeneration)) stay stable.
 - **User override** — if disambiguation still picks poorly, the user can edit the keywords or replace the image ([EDIT-1](#edit-1-full-content-editing)).
 
+#### IMG-4 AI-generated imagery (optional)
+
+For slides that warrant a **custom diagram or infographic** rather than a stock photo, an image can be **AI-generated** instead of fetched. This is an **optional, off-by-default** enrichment source the AI may choose per slide ([GEN-7](#gen-7-ai-image-guidance)).
+
+- **Provider-agnostic** — generation goes through an `ImageGenerationProvider` adapter ([TECH-8](#tech-8-ai-provider-abstraction-layer)); most major engines support this (e.g., Google's Gemini/Imagen "Nano Banana" family, OpenAI's image models), so the engine is configurable/swappable like every other AI capability ([GEN-2](#gen-2-ai-provider-abstraction)).
+- **Best in the latency-tolerant paths** — generation is slower and costlier than a stock fetch, so it is favored in the **post-lecture reformat** ([GEN-4](#gen-4-post-lecture-ai-reformat-holistic-regeneration)) and on demand; live use is optional and limited.
+- **Tiered & metered** — image generation is its own metered capability ([BILL-3](#bill-3-usage-caps--metering)), typically a **Pro/Max-tier** feature; results are cached per slide.
+- **Provenance & disclosure** — AI-generated images are **labeled as such** (and may carry a provider watermark, e.g., SynthID); their provenance and licensing differ from stock imagery and are recorded for sharing/export ([§11](#11-exportimport-voting--social), licensing — [§19](#19-open-questions)).
+- **Accuracy caveat** — generated infographics may contain factual or textual errors; the original content remains authoritative and the user can review, regenerate, or replace ([EDIT-1](#edit-1-full-content-editing)).
+
 #### GEN-3 Live display
 
 Generated slides render full-screen in real time as the user speaks, advancing as new slides are produced, with a configurable minimum dwell time per slide.
@@ -310,7 +321,7 @@ Live generation has unavoidable lag: slide text trails the spoken phrase ([CAP-3
 - **Render-as-ready** — a slide shows whatever parts are ready (e.g., title and body) immediately; each part still pending shows a **skeleton placeholder sized to the final layout**, so its space is reserved up front.
 - **Slot-in on arrival** — slower content (typically the image, occasionally a refined heading) fades into its **reserved slot** when it arrives, without reflowing or reordering content already on screen — **no layout shift**.
 - **Always-on activity indicator** — a subtle, persistent cue (a pulsing skeleton, a "generating…" affordance, and/or the live speech caption from CAP-3) signals that something is happening even while a slide is momentarily incomplete.
-- **Stability over freshness** — once a slide's text is committed it stays put; interim transcription corrections are **debounced** so they settle before changing a displayed slide, and a slide's chosen layout ([TMPL-2](#tmpl-2-conventional-layout-types)) is **not swapped after it is shown**. The minimum dwell time (GEN-3) prevents rapid flips, and late content that would be too disruptive is deferred to the next slide rather than rewriting the current one.
+- **Stability over freshness** — once a slide's text is committed it stays put; interim transcription corrections are **debounced** so they settle before changing a displayed slide. If a slide's layout ([TMPL-2](#tmpl-2-conventional-layout-types)) must change after it is shown, the change happens through an **animated transition** ([GEN-9](#gen-9-animated-layout-transitions)), never an abrupt swap. The minimum dwell time (GEN-3) prevents rapid flips, and late content that would be too disruptive is deferred to the next slide rather than rewriting the current one.
 - **Bounded waiting** — if an optional element never arrives (e.g., image enrichment exhausts all sources — [IMG-2](#img-2-fault-tolerance)), its skeleton resolves to the layout's graceful fallback rather than lingering indefinitely.
 
 #### GEN-6 AI layout selection
@@ -328,7 +339,30 @@ For each slide, the AI also **recommends the supporting imagery**, feeding image
 
 - It returns **search keywords / query terms** to use against the image-enrichment providers (Wikimedia / Flickr / Openverse), **context-qualified to disambiguate polysemous names** (e.g., `Prince (musician)`, not bare `Prince`) — see [IMG-3](#img-3-image-disambiguation).
 - When the project has **teacher-supplied (seeded) images** ([SEED-2](#seed-2-image-seeding)), their captions/keywords are sent to the model as context options, and the model may **select a specific seeded image** it deems the best fit for a given slide (or indicate that no image is needed).
+- For a slide better served by a **custom diagram/infographic** than a stock photo, the model may instead recommend **generating** the image ([IMG-4](#img-4-ai-generated-imagery-optional)).
 - This guidance is per-slide and optional: a slide may warrant no image, in which case the model says so and the layout adapts (TMPL-6).
+
+#### GEN-8 New slide vs. update current
+
+Not every phrase deserves a brand-new slide. As each finalized phrase arrives, the AI decides whether it **continues the current slide** or **starts a new one**, rather than always emitting a fresh slide.
+
+- The model classifies the phrase against the **currently displayed slide** and rolling context and returns a structured action: **update current** (append a bullet, extend/refine the body, tighten the title), **new slide** (a topic shift), or **no visible change** (filler/aside).
+- **Update** operations are **additive and contained** to preserve live stability ([GEN-5](#gen-5-progressive-slide-rendering-skeleton-loaders)): a new bullet slots into the reserved layout area, but already-committed text is not rewritten on screen; a change too disruptive to apply in place is deferred to a new slide instead.
+- **Re-fit the layout on update** — just as it chooses a layout for new slides ([GEN-6](#gen-6-ai-layout-selection)), the AI can decide to **keep the current slide's layout or switch it** to better accommodate added content (e.g., promote a single-column `content` slide to `two-column` or `list` as it grows). Changing the layout of an already-displayed slide is done via an **animated transition** ([GEN-9](#gen-9-animated-layout-transitions)) so it reads as intentional.
+- A slide's **layout slot capacity** ([TMPL-6](#tmpl-6-layout-descriptors-for-ai-selection)) bounds updates — when no available layout can hold the growing content, the overflow **spills into a new slide** with its own AI-selected layout ([GEN-6](#gen-6-ai-layout-selection)) rather than overstuffing the current one.
+- These decisions are expressed as [TECH-13](#tech-13-application-actioncommand-layer) actions (`slide.append`, `slide.editContent`, `slide.setLayout`, `slide.new`), so the same logic serves live generation, the post-lecture reformat ([GEN-4](#gen-4-post-lecture-ai-reformat-holistic-regeneration)), and any agent.
+- **Manual new-slide mode (opt-in)** — the instructor can require that new slides are created **only on an explicit spoken cue** such as "**next slide**" (a [CAP-4](#cap-4-voice-commands)-style command, with synonyms and the same reliable-transcription/confirmation handling). This is configurable **per project when pre-planning** ([PROJ-1](#proj-1-pre-create-a-project)) **or** as a **user-settings default that applies to all new projects** (overridable per project). In this mode the AI no longer decides _when_ to start a slide — ongoing speech only **updates the current slide**, and a new one appears solely on the cue — while the AI still handles content and layout (GEN-6) within each slide. Default is the automatic decision above; manual mode gives instructors deterministic pacing.
+
+#### GEN-9 Animated layout transitions
+
+When an **already-displayed** slide changes layout — whether from an AI update ([GEN-8](#gen-8-new-slide-vs-update-current)) or a user-driven template/layout change ([EDIT-2](#edit-2-deck-level-template-switch) / [EDIT-3](#edit-3-per-slide-layout-switch)) — the change is **animated** so it looks deliberate, not like a technical glitch.
+
+- **Morph, don't snap** — shared elements (title, body, image, caption) **move, resize, and reflow** from their old positions to the new layout using stable element identity, animating smoothly between old and new placement rather than jumping; entering elements fade/slide in, leaving elements fade out.
+- **Brief and bounded** — transitions use a short, consistent duration, and are **queued/debounced** so updates never overlap or trigger rapid re-animation (consistent with live stability — [GEN-5](#gen-5-progressive-slide-rendering-skeleton-loaders)).
+- **Content-stable** — committed text/content is preserved across the transition; the layout (element arrangement) changes, the meaning does not.
+- **Accessibility** — the **reduced-motion** preference is honored, falling back to a quick cross-fade or instant change.
+- **Opt-out setting** — animated transitions **default to on**, and can be turned off **per project** ([PROJ-1](#proj-1-pre-create-a-project)) or as a **user-settings default applied to all new projects** (the same default/override pattern as GEN-8's manual mode). When off, layout changes apply instantly.
+- One shared transition system covers live layout re-fits, new-slide advances, and post-lecture editing for a consistent feel.
 
 **Metering note.** Gemini, Speech-to-Text, and image-API usage in §8–§9 all count against the user's plan caps (BILL-3) and are subject to enforcement (BILL-4).
 
@@ -389,17 +423,17 @@ Users can connect their **own Google Drive and/or GitHub** accounts via OAuth to
 
 Registered users can **up/down-vote** slide decks and style templates. Vote tallies inform ranking and discovery; one vote per user per item, changeable.
 
-#### SOC-2 Browse & search
+#### SOC-2 Browse, search & sort
 
-A simple social layer lets users **browse and search** others' public decks and template libraries, by title, author, tags, and content.
+A simple social layer lets users **browse and search** others' public decks and style templates, by title, author, tags, and content. Every browsable list — decks and templates alike — is **sortable by recency** (most recently published first) and **by rank** (highest net vote score first, from SOC-1), and the chosen sort applies to search results as well.
 
-#### SOC-3 Latest feed
+#### SOC-3 Feeds
 
-A **"Latest" feed** surfaces recently published public decks and templates, with search/filter.
+Two default views surface public content, both searchable/filterable and available for decks and templates: a **"Latest"** feed (sorted by recency) and a **"Top"** feed (sorted by rank). These are the SOC-2 sorts applied to the global public listing.
 
 #### SOC-4 User profiles
 
-Each user has a public **profile page** listing their published decks and templates, with search within the profile.
+Each user has a public **profile page** listing their published decks and templates, with search and the same recency/rank sorting (SOC-2) within the profile.
 
 ### 12. Evaluation & Metrics
 
@@ -559,7 +593,7 @@ Where feasible, front-end and back-end share **TypeScript** types and data-model
 
 The system implements GEN-2 with a **capability-based adapter layer** so the core slide-generation and quiz-generation logic depends only on interfaces, never on a concrete AI vendor (dependency inversion):
 
-- **Capability interfaces** (defined once in the shared types module, [TECH-6](#tech-6-shared-types--data-models)): `TranscriptionProvider` (audio → text), `GenerationProvider` (speech + seed context + layout descriptors + seeded-image descriptors → slide content with a chosen layout and image guidance — GEN-6/GEN-7), and `QuizGenerationProvider` (slide text → quiz definition). Each interface fixes the request/response contract independent of any vendor.
+- **Capability interfaces** (defined once in the shared types module, [TECH-6](#tech-6-shared-types--data-models)): `TranscriptionProvider` (audio → text), `GenerationProvider` (speech + seed context + layout descriptors + seeded-image descriptors → slide content with a chosen layout and image guidance — GEN-6/GEN-7), `QuizGenerationProvider` (slide text → quiz definition), and `ImageGenerationProvider` (prompt → generated image — IMG-4). Each interface fixes the request/response contract independent of any vendor.
 - **Adapters** implement those interfaces per engine — e.g. `GeminiGenerationProvider`, `GoogleCloudTranscriptionProvider`, and future `LocalLlmProvider` / `LocalWhisperProvider` for self-hosted models — with no other code aware of which is active.
 - A **provider registry** resolves the active adapter **per capability** from server config ([TECH-4](#tech-4-server-configuration)), so capabilities can mix sources (e.g., cloud STT + locally-hosted LLM) and a provider can be swapped by configuration alone, with no change to generator logic.
 - Usage metering (BILL-3) and cost accounting hook in at the adapter boundary, so caps and pricing remain consistent regardless of provider.
@@ -614,19 +648,19 @@ All operations that modify a project, concept set, or deck are exposed through a
 
 Indicative MongoDB collections, expressed as shared TypeScript types ([TECH-6](#tech-6-shared-types--data-models)):
 
-- **User** — `{ id, email, displayName, passwordHash, emailVerified, bio, avatarUrl, locale: 'en'|'fr'|'es'|'ru'|'zh', planTier: 'free'|'pro'|'max', billingProvider?, billingCustomerId?, createdAt }`
+- **User** — `{ id, email, displayName, passwordHash, emailVerified, bio, avatarUrl, locale: 'en'|'fr'|'es'|'ru'|'zh', projectDefaults?: { manualSlideAdvance?, animatedTransitions?, ... }, planTier: 'free'|'pro'|'max', billingProvider?, billingCustomerId?, createdAt }` (`projectDefaults` apply to all new projects unless overridden — GEN-8)
 - **Subscription** — `{ id, userId, tier, billingProvider, providerSubscriptionId, status: 'active'|'past_due'|'canceled', currentPeriodStart, currentPeriodEnd }`
 - **UsageRecord** — `{ id, userId, period, metric: 'geminiTokens'|'sttMinutes'|'imageCalls'|'exports'|..., used, cap }`
 - **ConnectedAccount** — `{ id, userId, provider: 'google'|'github', scopes[], accessTokenEnc, refreshTokenEnc?, externalAccountLabel, connectedAt }` (for import/export — EXP-4; tokens encrypted at rest — P-9)
-- **Project** — `{ id, ownerId, title, course, description, seedContext, createdAt }`
+- **Project** — `{ id, ownerId, title, course, description, seedContext, settings?: { manualSlideAdvance?, animatedTransitions?, ... }, createdAt }` (`settings` override the user's `projectDefaults`)
 - **SeedAsset** — `{ id, projectId, type: 'doc'|'pdf'|'gdoc'|'gdrive'|'gslides'|'image', text?, imageUrl?, caption?, keywords[], enabled }`
 - **Concept** — `{ id, projectId, label, canonical, synonyms[], gloss?, entityId?, preferredImageRef?, importance: 'must'|'maybe', source?, confirmed }` (preflight concept set — PREP-1/2/3; `entityId` = resolved entity e.g. Wikidata QID)
 - **Deck** — `{ id, projectId, ownerId, title, templateId, visibility: 'private'|'unlisted'|'public', permalinkSlug, slideOrder[], transcript?, voteScore, createdAt }` (`transcript` = finalized full lecture transcript, retained for post-lecture reformat — GEN-4)
-- **Slide** — `{ id, deckId, index, layoutType, title?, body?, bullets[]?, imageRef?, imageKeywords[]?, caption?, sourceTranscript?, attribution? }` (`layoutType` chosen by the AI — GEN-6; `imageKeywords` are AI-recommended search terms — GEN-7)
+- **Slide** — `{ id, deckId, index, layoutType, title?, body?, bullets[]?, imageRef?, imageSource?: 'seeded'|'stock'|'generated', imageKeywords[]?, caption?, sourceTranscript?, attribution? }` (`layoutType` chosen by the AI — GEN-6; `imageKeywords` are AI-recommended search terms — GEN-7; `imageSource` records provenance incl. AI-generated — IMG-4)
 - **SlideTranslation** — `{ id, deckId, locale: 'en'|'fr'|'es'|'ru'|'zh', perSlide: { slideId: { title?, body?, bullets[]?, caption? } }, createdAt }` (on-demand slide-content translation cache — SHARE-2)
 - **Template** — `{ id, ownerId, name, theme, layouts: Layout[], visibility, voteScore, createdAt }` where `Layout = { type, label, purpose, slots[], constraints?, elementPositions }` (`purpose`/`slots`/`constraints` are the AI-facing descriptor — TMPL-6 / GEN-6)
 - **Vote** — `{ id, userId, targetType: 'deck'|'template', targetId, value: 1|-1 }`
-- **QuizRef** — `{ id, deckId, quizGeneratorId, formUrl, status }` (link to the external Quiz Generator artifact)
+- **QuizRef** — `{ id, deckId, quizGeneratorId, formUrl, status, publishConfig: { authMode, defaultPoints, driveFolderId, title } }` (link to the external Quiz Generator artifact + the publish config used — QUIZ-2/QUIZ-3)
 
 The same definitions back API request/response DTOs and validation on both tiers.
 
@@ -646,23 +680,43 @@ The same definitions back API request/response DTOs and validation on both tiers
 
 ### 17. Quiz Generator Integration
 
-The Quiz Generator remains a **separate project/service**; the two communicate over simple HTTP APIs. Like the Slide Machine, its core quiz-authoring logic is **decoupled from the specific AI engine** it uses (GEN-2 / [TECH-8](#tech-8-ai-provider-abstraction-layer)), so its provider can be swapped independently.
+The Quiz Generator remains a **separate project/service**; the two communicate over simple, versioned HTTP APIs. Responsibilities are split by concern:
 
-#### QUIZ-1 Generation trigger
+- **Slide Machine (monolith)** — **generates** the quiz definition, owns the instructor configuration UI, orchestrates publishing, and stores the result.
+- **Quiz Generator (separate service)** — **publishes**: it takes a quiz definition plus a publish configuration and creates the **Google Form** quiz, applies its settings, places it in Drive, and returns the link.
 
-On session **Stop** (or on demand), Slide Machine sends finalized, de-identified slide text to the Quiz Generator's API to generate an exit-ticket quiz definition (the Quiz Generator's native YAML format).
+This keeps the sizeable Google Forms/Drive/Apps Script surface out of the core while leaving AI generation where the provider abstraction already lives (GEN-2 / [TECH-8](#tech-8-ai-provider-abstraction-layer)).
 
-#### QUIZ-2 Review & publish
+#### QUIZ-1 Quiz YAML generation (in the monolith)
 
-The user may review/edit generated questions, then publish. The Quiz Generator creates the **Google Form** quiz; Slide Machine stores a `QuizRef` (form URL + status) against the deck.
+On session **Stop** (or on demand), the monolith's `QuizGenerationProvider` ([TECH-8](#tech-8-ai-provider-abstraction-layer)) turns finalized, de-identified slide text into an exit-ticket quiz definition in the **Quiz Generator's YAML format**. The user may review/edit the questions before publishing ([BILL-3](#bill-3-usage-caps--metering) metering applies).
 
-#### QUIZ-3 Distribution & grading
+#### QUIZ-2 Instructor publish configuration
+
+Before publishing, the instructor controls publish options, which are sent with the YAML as a structured **publish request**:
+
+- **Authentication** — whether responding requires sign-in, and the **type** (e.g., open / restricted to the NYU Workspace domain / collect verified email / per-respondent limits).
+- **Default point value** applied to each question (overridable per question).
+- **Drive destination** — the folder in the instructor's Google Drive where the Form is created/moved.
+- **Form metadata** — title, description, and grading/feedback release options.
+
+Defaults for these are configurable and remembered per project.
+
+#### QUIZ-3 Publishing & link return
+
+The Quiz Generator receives the **{YAML + publish config}** request, creates the **Google Form** quiz, applies the auth/point/feedback settings, moves it to the specified Drive folder, and returns the **shareable link**. The monolith stores a `QuizRef` (form URL, status, and the config used) against the deck ([§15](#15-data-models)).
+
+#### QUIZ-4 Delegated Google access
+
+Because the Form is created in the **instructor's** Drive, publishing uses the instructor's **connected Google account** ([EXP-4](#exp-4-connected-accounts-google-drive--github)) — the publisher acts with delegated, least-privilege Forms/Drive scopes. The token-sharing model between the two services is a security-sensitive integration point ([§19](#19-open-questions)); tokens remain encrypted and per-user ([P-9](#16-privacy-security--compliance)).
+
+#### QUIZ-5 Distribution & grading
 
 The published Google Form is distributed to enrolled students within NYU Google Workspace and **auto-graded** via answer keys; per-lecture comprehension is reported back for evaluation ([§12](#12-evaluation--metrics)).
 
-#### QUIZ-4 Loose coupling
+#### QUIZ-6 Loose coupling
 
-APIs are versioned and documented; neither project depends on the other's internals. The Quiz Generator base URL and any shared token are configured server-side ([TECH-4](#tech-4-server-configuration)).
+APIs are versioned and documented; neither project depends on the other's internals. The Quiz Generator base URL and any shared token are configured server-side ([TECH-4](#tech-4-server-configuration)). The Quiz Generator stays independently deployable and reusable, and its own quiz-authoring logic remains engine-agnostic if it generates any content itself.
 
 ### 18. Future Work
 
@@ -672,6 +726,7 @@ Out of scope for the Fall 2026 pilot:
 - Real-time multilingual **translation** of speech into translated slides (the Translation key supports optional captions only for now).
 - Extracting the latency-sensitive real-time **STT → slide-generation pipeline** into its own Digital Ocean service (and, only if pilot scale demands, moving from App Platform to DO Kubernetes/DOKS) — the modular-monolith seams ([§13](#13-system-architecture)) make this an extraction, not a rewrite.
 - A remote, OAuth-authenticated, multi-user **MCP server** that exposes the action/command layer ([TECH-13](#tech-13-application-actioncommand-layer)) as agent tools, letting users modify upcoming or saved decks through back-and-forth with an external AI agent (preflight and post-lecture). Built as a thin facade over existing actions — reusing the same auth, ownership, and plan-cap metering — so it adds reach without duplicating logic. Deferred from the pilot for scope/timeline; a good student-contribution target.
+- **Text-to-speech narration** — let students have slides spoken to them, via **ElevenLabs or other TTS engines kept behind a provider-agnostic adapter** (a `SpeechSynthesisProvider`, mirroring the AI abstraction in GEN-2 / [TECH-8](#tech-8-ai-provider-abstraction-layer)) so engines can be swapped or self-hosted. TTS is a costly external service, so usage is **metered and capped per plan tier** (a new metric under BILL-3 / [TECH-4](#tech-4-server-configuration) plan caps, e.g., synthesized characters/minutes), with generated audio cached per slide/locale to avoid re-synthesis. Pairs naturally with the post-lecture translated viewing ([SHARE-2](#share-2-post-lecture-translated-viewing)) for spoken slides in the student's language.
 - Real-time collaborative (multi-user) editing of a single deck.
 - Team/organization (seat-based) billing and institutional licensing beyond individual Free/Pro/Max plans.
 - Richer analytics dashboards and recommendation/ranking beyond simple vote tallies.
@@ -690,3 +745,5 @@ Out of scope for the Fall 2026 pilot:
 9. **100% coverage feasibility** — which boundaries (third-party SDK glue, generated code) are excluded via documented ignore rules to keep the 100% gate realistic?
 10. **Speech-adaptation limits** ([PREP-3](#prep-3-use-of-the-honed-concept-set)) — how large a preflight concept set can be supplied to Google Cloud STT phrase hints/boost without latency or cost penalty, and how to prioritize terms if the set exceeds that limit.
 11. **MCP server auth & scope** ([§18](#18-future-work)) — for the future MCP server: the remote-OAuth model, tool granularity, FERPA boundaries on agent-driven edits, and how plan-cap metering applies to agent tool calls.
+12. **Quiz publishing token model** ([QUIZ-4](#quiz-4-delegated-google-access)) — how the Quiz Generator obtains delegated access to the instructor's Google Drive/Forms: a short-lived scoped token minted by the monolith per publish, vs. the QG holding its own OAuth grant. Affects scope blast-radius and whether the QG ever stores instructor tokens.
+13. **AI-generated infographic accuracy** ([IMG-4](#img-4-ai-generated-imagery-optional)) — how much to rely on generated diagrams/infographics given factual/text-rendering errors: default off, require user confirmation before display, and/or prefer search-grounded generation where the provider supports it.
