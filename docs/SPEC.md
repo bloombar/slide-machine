@@ -1,5 +1,7 @@
 # Slide Machine V2 — Software Design Document (SDD)
 
+For how this is phased and staffed toward the Sept 1 build deadline, see the [Delivery Roadmap](ROADMAP.md).
+
 ## Part I — Product & Functional Requirements
 
 ### 1. Overview
