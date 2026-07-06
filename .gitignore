@@ -1,2 +1,6 @@
 #env.js
 openai.key
+
+# Kept locally, excluded from the repo (also purged from history)
+docs/GRANT_PROPOSAL.md
+docs/LAB.md
