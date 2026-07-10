@@ -1,0 +1,10 @@
+# Pre-existing documentation is not reformatted
+docs/
+
+# Build & test artifacts
+dist/
+coverage/
+node_modules/
+playwright-report/
+test-results/
+package-lock.json

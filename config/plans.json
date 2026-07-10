@@ -1,0 +1,29 @@
+{
+  "free": {
+    "priceId": null,
+    "caps": {
+      "geminiTokens": 50000,
+      "sttMinutes": 60,
+      "imageCalls": 200,
+      "exports": 5
+    }
+  },
+  "pro": {
+    "priceId": "price_pro_REPLACE_ME",
+    "caps": {
+      "geminiTokens": 1000000,
+      "sttMinutes": 1200,
+      "imageCalls": 5000,
+      "exports": 200
+    }
+  },
+  "max": {
+    "priceId": "price_max_REPLACE_ME",
+    "caps": {
+      "geminiTokens": null,
+      "sttMinutes": null,
+      "imageCalls": null,
+      "exports": null
+    }
+  }
+}

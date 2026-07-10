@@ -1,0 +1,57 @@
+/**
+ * GenerationProvider — finalized speech + context in, slide content out
+ * (SPEC GEN-1/GEN-6/GEN-7/GEN-8 / TECH-8). Gemini is the pilot adapter.
+ * Interface is minimal and expected to evolve with the first adapter.
+ */
+import type { LayoutDescriptor, LayoutType } from '../types/template'
+
+/** A seeded image the model may select for a slide (SEED-2 / GEN-7). */
+export interface SeededImageDescriptor {
+  id: string
+  caption?: string
+  keywords: string[]
+}
+
+export interface SlideGenerationRequest {
+  /** The finalized spoken phrase driving this generation step. */
+  phrase: string
+  /** Short rolling context of recent phrases/slides for topic coherence. */
+  rollingContext: string[]
+  /** Project seed context (typed notes, imported docs, honed concepts). */
+  seedContext?: string
+  /** The active template's layouts — the option set the model must pick from (GEN-6). */
+  layoutDescriptors: LayoutDescriptor[]
+  seededImages?: SeededImageDescriptor[]
+}
+
+/** The model's per-slide image recommendation (GEN-7). */
+export interface ImageGuidance {
+  keywords: string[]
+  /** Set when the model selects a specific seeded image. */
+  seededImageId?: string
+  /** True when the model recommends generating an image instead (IMG-4). */
+  generate?: boolean
+  /** True when the slide warrants no image. */
+  none?: boolean
+}
+
+export interface SlideGenerationResult {
+  /** Whether the phrase starts a new slide, updates the current one, or changes nothing (GEN-8). */
+  action: 'new' | 'update' | 'none'
+  layoutType: LayoutType
+  /** Content mapped to the chosen layout's slots. */
+  slots: {
+    title?: string
+    body?: string
+    bullets?: string[]
+    caption?: string
+  }
+  imageGuidance?: ImageGuidance
+}
+
+export interface GenerationProvider {
+  readonly name: string
+  generateSlideContent(
+    request: SlideGenerationRequest,
+  ): Promise<SlideGenerationResult>
+}

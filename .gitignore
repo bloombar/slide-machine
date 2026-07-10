@@ -1,6 +1,26 @@
-#env.js
+# Dependencies & build output
+node_modules/
+dist/
+coverage/
+
+# Environment files — .env.example files are committed, real env files never
+.env
+.env.*
+!.env.example
+*.local
+
+# Test artifacts
+test-results/
+playwright-report/
+blob-report/
+
+# OS
+.DS_Store
+
+# Legacy V1 secret file (defense in depth)
 openai.key
 
 # Kept locally, excluded from the repo (also purged from history)
 docs/GRANT_PROPOSAL.md
 docs/LAB.md
+docs/grant_proposal.pdf

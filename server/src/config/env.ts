@@ -1,0 +1,109 @@
+/**
+ * Server configuration (SPEC TECH-4). Loads .env via dotenv, validates
+ * process.env with zod, and fails fast on missing or invalid values so
+ * misconfiguration is caught at boot, never mid-request.
+ *
+ * Only the variables the walking skeleton needs are required today;
+ * feature-specific keys are declared optional and flip to required as
+ * their features land. See server/.env.example for the full list.
+ */
+import 'dotenv/config'
+import { existsSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { z } from 'zod'
+
+/**
+ * Finds the server package root by walking up to the nearest package.json.
+ * Works from both src/ (tsx dev) and the bundled dist/ output, whose
+ * directory depths differ.
+ */
+const findServerRoot = (startDir: string): string => {
+  let dir = startDir
+  while (!existsSync(path.join(dir, 'package.json'))) {
+    const parent = path.dirname(dir)
+    if (parent === dir) throw new Error('Could not locate server package root')
+    dir = parent
+  }
+  return dir
+}
+
+const serverRoot = findServerRoot(path.dirname(fileURLToPath(import.meta.url)))
+
+const envSchema = z.object({
+  NODE_ENV: z
+    .enum(['development', 'test', 'production'])
+    .default('development'),
+  PORT: z.coerce.number().int().positive().default(3000),
+
+  // Database
+  MONGODB_URI: z.string().min(1),
+
+  // Paths (defaults resolve relative to the repo layout; Docker overrides them)
+  CLIENT_DIST: z
+    .string()
+    .default(path.join(serverRoot, '..', 'client', 'dist')),
+  PLANS_CONFIG_PATH: z
+    .string()
+    .default(path.join(serverRoot, '..', 'config', 'plans.json')),
+
+  // Active AI adapter per capability (SPEC TECH-8)
+  TRANSCRIPTION_PROVIDER: z.string().default('google-cloud'),
+  GENERATION_PROVIDER: z.string().default('gemini'),
+  QUIZ_PROVIDER: z.string().default('gemini'),
+  IMAGE_GEN_PROVIDER: z.string().default('gemini'),
+
+  // Billing (SPEC TECH-9)
+  BILLING_PROVIDER: z.string().default('stripe'),
+
+  // Secrets & service credentials — optional until their features land
+  JWT_SECRET: z.string().optional(),
+  JWT_REFRESH_SECRET: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
+  GOOGLE_CLOUD_STT_KEY: z.string().optional(),
+  GOOGLE_CLOUD_TRANSLATION_KEY: z.string().optional(),
+  GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
+  GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
+  GITHUB_OAUTH_CLIENT_ID: z.string().optional(),
+  GITHUB_OAUTH_CLIENT_SECRET: z.string().optional(),
+  CONNECTED_ACCOUNT_TOKEN_ENC_KEY: z.string().optional(),
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  FLICKR_API_KEY: z.string().optional(),
+  QUIZ_GENERATOR_BASE_URL: z.string().optional(),
+  QUIZ_GENERATOR_TOKEN: z.string().optional(),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().optional(),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+  // S3-compatible object storage: MinIO in dev, DO Spaces in prod (TECH-10)
+  S3_ENDPOINT: z.string().optional(),
+  S3_REGION: z.string().optional(),
+  S3_BUCKET: z.string().optional(),
+  // Path-style addressing is required for MinIO; virtual-hosted for Spaces
+  S3_FORCE_PATH_STYLE: z.stringbool().default(false),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
+  S3_PUBLIC_BASE_URL: z.string().optional(),
+})
+
+export type Env = z.infer<typeof envSchema>
+
+/**
+ * Parses and validates an environment map. Exported separately from the
+ * singleton so tests can exercise validation without touching process.env.
+ */
+export const parseEnv = (source: Record<string, string | undefined>): Env => {
+  const result = envSchema.safeParse(source)
+  if (!result.success) {
+    const details = result.error.issues
+      .map(issue => `  ${issue.path.join('.')}: ${issue.message}`)
+      .join('\n')
+    console.error(`Invalid server configuration:\n${details}`)
+    process.exit(1)
+  }
+  return Object.freeze(result.data)
+}
+
+/** Validated, frozen server configuration. Import this everywhere. */
+export const env = parseEnv(process.env)

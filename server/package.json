@@ -1,0 +1,32 @@
+{
+  "name": "@slide-machine/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Express API for Slide Machine V2 — serves the built SPA in production",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsup",
+    "start": "node dist/index.js",
+    "test": "vitest run src",
+    "test:integration": "vitest run test/integration",
+    "test:coverage": "vitest run src --coverage",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "mongoose": "^9.7.4",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.1.1",
+    "@types/supertest": "^7.2.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "supertest": "^7.2.2",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.0",
+    "vitest": "^4.1.10"
+  }
+}

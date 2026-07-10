@@ -1,0 +1,71 @@
+# One-command local stack (SPEC TECH-11): the app plus MongoDB, and an
+# optional MinIO for S3-compatible object storage (start with
+# `docker compose --profile storage up`). Everything here is optional —
+# the server runs against any MONGODB_URI / S3_ENDPOINT you host yourself.
+services:
+  app:
+    build: .
+    ports:
+      - '3000:3000'
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/slide-machine
+      # In-network MinIO (storage profile). Using a MinIO on the host
+      # instead? Point S3_ENDPOINT at http://host.docker.internal:9000
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: slide-machine-dev
+      S3_FORCE_PATH_STYLE: 'true'
+      S3_ACCESS_KEY_ID: minioadmin
+      S3_SECRET_ACCESS_KEY: minioadmin
+      # Browser-facing URL, so host-mapped rather than in-network
+      S3_PUBLIC_BASE_URL: http://localhost:9000/slide-machine-dev
+    depends_on:
+      - mongo
+
+  mongo:
+    image: mongo:8
+    ports:
+      # Host port 27018 so a locally-installed mongod on 27017 can coexist;
+      # reach this container from the host at mongodb://localhost:27018
+      - '27018:27017'
+    volumes:
+      - mongo-data:/data/db
+
+  minio:
+    image: minio/minio
+    # Opt-in so `docker compose up` cannot clash with a MinIO already
+    # running on the host (ports 9000/9001)
+    profiles: [storage]
+    command: server /data --console-address ':9001'
+    ports:
+      - '9000:9000' # S3 API
+      - '9001:9001' # web console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # One-shot job: creates the dev bucket and allows anonymous reads, so
+  # S3_PUBLIC_BASE_URL works out of the box; exits when done
+  minio-init:
+    image: minio/mc
+    profiles: [storage]
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb --ignore-existing local/slide-machine-dev &&
+      mc anonymous set download local/slide-machine-dev
+      "
+
+volumes:
+  mongo-data:
+  minio-data:

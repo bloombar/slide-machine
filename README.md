@@ -1,47 +1,66 @@
-# Slide Machine
+# Slide Machine V2
 
-[View online](https://bloombar.github.io/slide-machine/)
+Slide Machine turns the relationship between lecturer and slides on its head: instead of speaking _to_ prepared slides, the instructor speaks freely and slides are generated _from_ their speech in real time. After a lecture, an exit-ticket quiz is auto-generated, distributed, and auto-graded.
 
-## Description
+V2 is a full-stack TypeScript application — a React SPA, an Express API, and MongoDB — shipped as a modular monolith on Digital Ocean App Platform. See the [Software Design Document](docs/SPEC.md) and the [Delivery Roadmap](docs/ROADMAP.md). The V1 single-page vanilla-JS app lives in git history (last V1 commit: `1683ad2`).
 
-Research suggests that slide presentations are an ineffective medium for learning. Yet virtually all teachers spend inumerable hours preparing and refining slides. Those who do not make their own slides usually use preprepared slides made by others, turning lectures into a kind of performative karaoke, parroting the words of others, restricting freedom of speech. Students have come to expect this as normal, to the great detriment of education.
+## Repository layout
 
-This **slide machine** returns power to the educator! Now you can lecture or blather about whatever you want whenever you want, and the slides will follow. Just make sure your microphone is on and enabled in the web browser. It's a simple web app that will create slides in real-time based on whatever you choose to speak about.
+| Path      | Package                 | Purpose                                                       |
+| --------- | ----------------------- | ------------------------------------------------------------- |
+| `shared/` | `@slide-machine/shared` | Shared types, API DTOs, and AI-provider interfaces (TECH-6/8) |
+| `server/` | `@slide-machine/server` | Express API; serves the built SPA in production (TECH-2/10)   |
+| `client/` | `@slide-machine/client` | React + Vite + TailwindCSS SPA (TECH-1)                       |
+| `e2e/`    | `@slide-machine/e2e`    | Playwright end-to-end tests against the built app (TECH-7)    |
+| `config/` | —                       | Adjustable plan tiers/caps (`plans.json`, BILL-6)             |
 
-## Usage
+## Getting started
 
-1. Open the [slide machine](https://bloombar.github.io/slide-machine/) in Google Chrome.
-2. Open the settings by clicking the gear icon in the top right corner.
-3. Enter an `OpenAI API key` (requires an [OpenAI API account](https://platform.openai.com/api-keys)).
-4. (Optional) Enter your presentation's `title`, `byline`, and a short `description`.
-5. (Optional) Upload any images you would like to use in the presentation, and label them with any relevant keywords. If you do not upload any images, the slide machine will find freely-accessible images for you.
+Prerequisites: **Node ≥ 22** and **MongoDB** (either run your own, or `docker compose up` provides one on host port 27018). Features that store files also need **MinIO** (see [Object storage](#object-storage)).
 
-## Requirements
+```sh
+npm ci
+cp server/.env.example server/.env    # fill in values; only MONGODB_URI is required
+cp client/.env.example client/.env.local
+npm run dev                            # Express on :3000 + Vite on :5173 (proxied /api)
+```
 
-- **OpenAI API Key**. You can get create an account and make an API key at [OpenAI](https://platform.openai.com/api-keys).
-- **Google Chrome**, since Google only allows their own web browser to use their speech recognition API free of charge. Using a different browser would require paying for the transcription service.
-- **Microphone**. The app depends upon speech-to-text conversion. So you will need a microphone to capture your speech.
+Or run the whole stack in Docker with one command: `docker compose up` (add `--profile storage` to include MinIO).
 
-## How it works
+## Commands
 
-1. The slide machine uses the web browser's [SpeechRecognition API](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition) to listen to your speech and transcribe it to text every time you pause speaking.
-2. Each phrase of that text is then packaged and sent to [OpenAI's API](https://platform.openai.com), where maching learning models are used to deconstruct the speech into its component parts, identifying the main topic of the phrase, and creating concise textual slide content to summarize the main points of your speech.
-3. The slide machine then tries to match the speech to an image. If you have uploaded an image and labeled it with a matching term, one of your custom images will be used. Otherwise, the main topic of your speech will be used to search [Wikipedia's API](https://www.mediawiki.org/wiki/API:Main_page) for an image that corresponds with the topic. If no Wikipedia image is found for the topic, a random image is retrieved from [Picsum](https://picsum.photos/).
-4. The image and the textual slide content are then combined to create a new slide, which is displayed on the screen. This process continues until you stop speaking.
-5. At the end, you are welcome to save the presentation using the browser's `File`->`Save Page` functionality. This will save the presentation as a static `HTML` file. If you would prefer a `PDF`, you can use the browser's `Print` functionality to print to a `PDF` file.
+| Command                    | What it does                                                 |
+| -------------------------- | ------------------------------------------------------------ |
+| `npm run dev`              | Server (`tsx watch`) + client (Vite) with `/api` proxy       |
+| `npm run build`            | Build the SPA, then bundle the server to `server/dist`       |
+| `npm start`                | Run the built app (production mode, serves the SPA on :3000) |
+| `npm test`                 | Unit tests (server + client, Vitest)                         |
+| `npm run test:integration` | API tests against a real MongoDB (`MONGODB_TEST_URI`)        |
+| `npm run e2e`              | Playwright tests against the built app (run `build` first)   |
+| `npm run lint`             | ESLint across the repo                                       |
+| `npm run format`           | Prettier write / `format:check` to verify                    |
+| `npm run typecheck`        | `tsc --noEmit` in every workspace                            |
 
-Some settings can be tweaked in the `env.js` file, if self-hosting.
+## Configuration
 
-## Future work
+All adjustable settings and credentials live in config files, never in code:
 
-The following are features that would be nice to implement, in case you feel the urge:
+- **Server** — `server/.env` (see [server/.env.example](server/.env.example)); validated at boot, the server refuses to start on invalid config.
+- **Client** — `client/.env.local` with `VITE_`-prefixed vars (no secrets — these ship to the browser).
+- **Plan tiers** — [config/plans.json](config/plans.json): prices and usage caps, tunable without a code change.
 
-- A `Start/Stop` button... currently, it starts listening immediately on load.
-- A `Pause/Resume` button... currently, you can simply pause speaking.
-- Automatic hosting of the compelted presentation on a server with a unique URL.
-- Easy post-production editing of slides.
-- Export as Markdown + images.
-- Retrofit the code to a simple front-end framework, perhaps [Svelte](https://svelte.dev/). Definitely not React.
-- Refactor `js` files to be less interdependent.
-- Allow user to create custom slide layouts... currently, it alternates among 3 different generic layouts.
-- Allow alternatives to OpenAI's API, preferably free or low-cost.
+### Object storage
+
+Uploads and exports (seed assets, cached images, generated files — TECH-10) use S3-compatible object storage: **MinIO locally**, **DO Spaces in production**. Both are configured by the same `S3_*` variables in `server/.env`, whose defaults already point at a local MinIO:
+
+```sh
+docker compose --profile storage up   # MinIO on :9000, web console on :9001
+```
+
+The `minio-init` job creates the `slide-machine-dev` bucket automatically and allows anonymous reads, so `S3_PUBLIC_BASE_URL` works immediately. The console at <http://localhost:9001> (login `minioadmin` / `minioadmin`) lets you browse stored files. If you already run your own MinIO on port 9000, skip the profile — the `.env` defaults work with it as-is; just create a `slide-machine-dev` bucket.
+
+Note `S3_FORCE_PATH_STYLE=true` is required for MinIO; production Spaces uses virtual-hosted addressing (`false`, the default) — see the production examples in [server/.env.example](server/.env.example).
+
+## Deployment
+
+Pushes to the default branch deploy via [.do/app.yaml](.do/app.yaml): a single Docker-built App Platform service running the Express monolith (API + SPA), health-checked at `/api/health`, backed by DO Managed MongoDB. CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs lint, typecheck, unit, integration, and e2e tests on every push.
