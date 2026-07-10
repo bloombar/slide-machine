@@ -117,20 +117,20 @@ export default function SessionPage() {
   const slide = slides[current]
 
   return (
-    <main className="flex min-h-screen flex-col bg-slate-950 p-6 text-slate-100">
+    <main className="flex min-h-screen flex-col bg-white p-6 text-slate-900">
       <header className="mb-4 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-slate-300">
+        <h1 className="text-lg font-semibold text-slate-700">
           {view?.deck.title ?? 'Loading…'}
         </h1>
         <div className="flex items-center gap-4">
-          <span className="text-sm text-slate-400">
+          <span className="text-sm text-slate-500">
             {slides.length
               ? `Slide ${current + 1} of ${slides.length}`
               : 'No slides yet'}
           </span>
           <button
             onClick={() => view && navigate(`/d/${view.deck.permalinkSlug}`)}
-            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium"
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white"
           >
             End session
           </button>
@@ -145,7 +145,7 @@ export default function SessionPage() {
             imagePending={pendingImages.has(slide.id)}
           />
         ) : (
-          <div className="flex aspect-video items-center justify-center rounded-xl border-2 border-dashed border-slate-700 text-slate-500">
+          <div className="flex aspect-video items-center justify-center rounded-xl border-2 border-dashed border-slate-300 text-slate-400">
             Speak (type, for now) and slides will follow
           </div>
         )}
@@ -154,7 +154,7 @@ export default function SessionPage() {
             <button
               onClick={() => setCurrent(c => Math.max(0, c - 1))}
               disabled={current === 0}
-              className="rounded bg-slate-800 px-3 py-1 text-sm disabled:opacity-40"
+              className="rounded border border-slate-300 px-3 py-1 text-sm disabled:opacity-40"
             >
               ← Back
             </button>
@@ -163,7 +163,7 @@ export default function SessionPage() {
                 setCurrent(c => Math.min(slides.length - 1, c + 1))
               }
               disabled={current === slides.length - 1}
-              className="rounded bg-slate-800 px-3 py-1 text-sm disabled:opacity-40"
+              className="rounded border border-slate-300 px-3 py-1 text-sm disabled:opacity-40"
             >
               Forward →
             </button>
@@ -181,12 +181,12 @@ export default function SessionPage() {
           onChange={e => setPhrase(e.target.value)}
           placeholder="Say something about your topic…"
           aria-label="Spoken phrase"
-          className="flex-1 rounded-lg bg-slate-800 px-4 py-3"
+          className="flex-1 rounded-lg border border-slate-300 px-4 py-3"
         />
         <button
           type="submit"
           disabled={busy}
-          className="rounded-lg bg-indigo-600 px-6 py-3 font-medium disabled:opacity-50"
+          className="rounded-lg bg-indigo-600 px-6 py-3 font-medium text-white disabled:opacity-50"
         >
           {busy ? 'Generating…' : 'Speak'}
         </button>
@@ -194,7 +194,7 @@ export default function SessionPage() {
       {error && (
         <p
           role="alert"
-          className="mx-auto mt-2 w-full max-w-4xl text-sm text-red-400"
+          className="mx-auto mt-2 w-full max-w-4xl text-sm text-red-600"
         >
           {error}
         </p>

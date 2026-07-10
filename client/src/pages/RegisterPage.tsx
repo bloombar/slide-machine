@@ -37,32 +37,32 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-900 text-slate-100">
+    <div className="flex flex-1 items-center justify-center px-4">
       <form
         onSubmit={onSubmit}
-        className="flex w-80 flex-col gap-4 rounded-xl bg-slate-800 p-8"
+        className="flex w-80 flex-col gap-4 rounded-lg border border-slate-200 p-8"
       >
         <h1 className="text-2xl font-bold">Create account</h1>
-        <label className="flex flex-col gap-1 text-sm text-slate-300">
+        <label className="flex flex-col gap-1 text-sm text-slate-700">
           Display name
           <input
             required
             value={displayName}
             onChange={e => setDisplayName(e.target.value)}
-            className="rounded-md bg-slate-700 px-3 py-2 text-slate-100"
+            className="rounded-md border border-slate-300 px-3 py-2"
           />
         </label>
-        <label className="flex flex-col gap-1 text-sm text-slate-300">
+        <label className="flex flex-col gap-1 text-sm text-slate-700">
           Email
           <input
             type="email"
             required
             value={email}
             onChange={e => setEmail(e.target.value)}
-            className="rounded-md bg-slate-700 px-3 py-2 text-slate-100"
+            className="rounded-md border border-slate-300 px-3 py-2"
           />
         </label>
-        <label className="flex flex-col gap-1 text-sm text-slate-300">
+        <label className="flex flex-col gap-1 text-sm text-slate-700">
           Password
           <input
             type="password"
@@ -70,28 +70,28 @@ export default function RegisterPage() {
             minLength={8}
             value={password}
             onChange={e => setPassword(e.target.value)}
-            className="rounded-md bg-slate-700 px-3 py-2 text-slate-100"
+            className="rounded-md border border-slate-300 px-3 py-2"
           />
         </label>
         {error && (
-          <p role="alert" className="text-sm text-red-400">
+          <p role="alert" className="text-sm text-red-600">
             {error}
           </p>
         )}
         <button
           type="submit"
           disabled={submitting}
-          className="rounded-lg bg-indigo-600 px-4 py-2 font-medium disabled:opacity-50"
+          className="rounded-md bg-indigo-600 px-4 py-2 font-medium text-white disabled:opacity-50"
         >
           {submitting ? 'Creating…' : 'Create account'}
         </button>
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-slate-500">
           Already registered?{' '}
-          <Link to="/login" className="text-indigo-400">
+          <Link to="/login" className="text-indigo-600">
             Sign in
           </Link>
         </p>
       </form>
-    </main>
+    </div>
   )
 }

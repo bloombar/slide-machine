@@ -45,7 +45,7 @@ export default function DeckViewerPage() {
 
   if (error) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-400">
+      <main className="flex min-h-screen items-center justify-center bg-white text-slate-500">
         <p role="alert">{error}</p>
       </main>
     )
@@ -53,7 +53,7 @@ export default function DeckViewerPage() {
 
   if (!view) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-500">
+      <main className="flex min-h-screen items-center justify-center bg-white text-slate-400">
         Loading…
       </main>
     )
@@ -62,9 +62,9 @@ export default function DeckViewerPage() {
   const slide = view.slides[index]
 
   return (
-    <main className="flex min-h-screen flex-col bg-slate-950 p-6 text-slate-100">
+    <main className="flex min-h-screen flex-col bg-white p-6 text-slate-900">
       <header className="mb-4 text-center">
-        <h1 className="text-lg font-semibold text-slate-300">
+        <h1 className="text-lg font-semibold text-slate-700">
           {view.deck.title}
         </h1>
       </header>
@@ -72,7 +72,7 @@ export default function DeckViewerPage() {
         {slide ? (
           <SlideView slide={slide} template={view.template} />
         ) : (
-          <p className="text-center text-slate-500">This deck has no slides.</p>
+          <p className="text-center text-slate-400">This deck has no slides.</p>
         )}
       </div>
       {view.slides.length > 0 && (
@@ -80,11 +80,11 @@ export default function DeckViewerPage() {
           <button
             onClick={() => setIndex(i => Math.max(0, i - 1))}
             disabled={index === 0}
-            className="rounded-lg bg-slate-800 px-4 py-2 disabled:opacity-40"
+            className="rounded-lg border border-slate-300 px-4 py-2 disabled:opacity-40"
           >
             ← Previous
           </button>
-          <span className="text-sm text-slate-400">
+          <span className="text-sm text-slate-500">
             {index + 1} / {view.slides.length}
           </span>
           <button
@@ -92,7 +92,7 @@ export default function DeckViewerPage() {
               setIndex(i => Math.min(view.slides.length - 1, i + 1))
             }
             disabled={index === view.slides.length - 1}
-            className="rounded-lg bg-slate-800 px-4 py-2 disabled:opacity-40"
+            className="rounded-lg border border-slate-300 px-4 py-2 disabled:opacity-40"
           >
             Next →
           </button>

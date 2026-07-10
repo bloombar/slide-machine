@@ -4,6 +4,7 @@
  */
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
+import { ArrowLeft, Mic } from 'lucide-react'
 import type { Deck, Project, Template } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import TemplatePicker from '../components/TemplatePicker'
@@ -57,16 +58,20 @@ export default function ProjectPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-900 p-8 text-slate-100">
+    <div>
       <header className="mb-8 flex items-center gap-4">
-        <Link to="/app" className="text-slate-400 hover:text-slate-200">
-          ← Projects
+        <Link
+          to="/app"
+          className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden />
+          Projects
         </Link>
         <h1 className="text-2xl font-bold">{project?.title ?? 'Loading…'}</h1>
       </header>
 
       <section className="mb-10 max-w-2xl">
-        <h2 className="mb-4 text-lg font-semibold text-slate-300">
+        <h2 className="mb-4 text-lg font-semibold text-slate-700">
           Start a new lecture
         </h2>
         <form onSubmit={onCreate} className="flex flex-col gap-4">
@@ -75,7 +80,7 @@ export default function ProjectPage() {
             onChange={e => setTitle(e.target.value)}
             placeholder="Lecture title"
             aria-label="Lecture title"
-            className="rounded-md bg-slate-800 px-3 py-2"
+            className="rounded-md border border-slate-300 px-3 py-2"
           />
           {templates.length > 0 && (
             <TemplatePicker
@@ -86,35 +91,36 @@ export default function ProjectPage() {
           )}
           <button
             type="submit"
-            className="self-start rounded-lg bg-indigo-600 px-4 py-2 font-medium"
+            className="flex items-center gap-2 self-start rounded-md bg-indigo-600 px-4 py-2 font-medium text-white"
           >
+            <Mic className="h-4 w-4" aria-hidden />
             Start lecture
           </button>
         </form>
         {error && (
-          <p role="alert" className="mt-4 text-sm text-red-400">
+          <p role="alert" className="mt-4 text-sm text-red-600">
             {error}
           </p>
         )}
       </section>
 
       <section className="max-w-2xl">
-        <h2 className="mb-4 text-lg font-semibold text-slate-300">Lectures</h2>
+        <h2 className="mb-4 text-lg font-semibold text-slate-700">Lectures</h2>
         {decks.length === 0 ? (
-          <p className="text-slate-400">No lectures yet.</p>
+          <p className="text-slate-500">No lectures yet.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {decks.map(d => (
               <li
                 key={d.id}
-                className="flex items-center justify-between rounded-lg bg-slate-800 px-4 py-3"
+                className="flex items-center justify-between rounded-md border border-slate-200 px-4 py-3"
               >
                 <span>{d.title}</span>
                 <span className="flex gap-3 text-sm">
-                  <Link to={`/app/session/${d.id}`} className="text-indigo-400">
+                  <Link to={`/app/session/${d.id}`} className="text-indigo-600">
                     Resume
                   </Link>
-                  <Link to={`/d/${d.permalinkSlug}`} className="text-slate-400">
+                  <Link to={`/d/${d.permalinkSlug}`} className="text-slate-500">
                     View
                   </Link>
                 </span>
@@ -123,6 +129,6 @@ export default function ProjectPage() {
           </ul>
         )}
       </section>
-    </main>
+    </div>
   )
 }

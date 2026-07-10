@@ -30,8 +30,8 @@ export default function HealthBadge() {
   const status = error ? 'error' : (health?.status ?? 'loading')
 
   return (
-    <div className="flex items-center gap-3 rounded-lg bg-slate-800 px-4 py-3">
-      <span className="text-sm text-slate-400">API status</span>
+    <div className="flex items-center gap-3 rounded-lg border border-slate-200 px-4 py-3">
+      <span className="text-sm text-slate-500">API status</span>
       <span
         data-testid="health-badge"
         className={`rounded-full px-3 py-1 text-sm font-medium ${badgeStyles[status]}`}
@@ -39,7 +39,7 @@ export default function HealthBadge() {
         {error ? 'unreachable' : status === 'loading' ? 'checking…' : status}
       </span>
       {health && (
-        <span className="text-sm text-slate-400">mongo: {health.mongo}</span>
+        <span className="text-sm text-slate-500">mongo: {health.mongo}</span>
       )}
     </div>
   )

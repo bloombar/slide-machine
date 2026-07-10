@@ -46,6 +46,9 @@ test('projects persist across logout and login', async ({ page }) => {
   await page.getByRole('button', { name: 'Create' }).click()
   await expect(page.getByText('Biology 101')).toBeVisible()
 
+  // Sign out lives at the bottom of the profile page
+  await page.getByRole('link', { name: 'Profile' }).click()
+  await expect(page).toHaveURL(/\/app\/profile$/)
   await page.getByRole('button', { name: 'Sign out' }).click()
   await expect(page).toHaveURL(/\/login$/)
 

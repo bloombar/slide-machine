@@ -1,1 +1,12 @@
 @import 'tailwindcss';
+
+@layer base {
+  /* Tailwind v4 resets buttons to cursor:default; interactive elements
+     should always read as clickable */
+  a,
+  button:not(:disabled),
+  [role='button']:not(:disabled),
+  [role='radio']:not(:disabled) {
+    cursor: pointer;
+  }
+}
