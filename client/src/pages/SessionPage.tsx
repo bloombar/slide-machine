@@ -4,11 +4,12 @@
  * through session.phrase and comes back as a SlideEvent, exactly the
  * contract the streamed pipeline will use.
  */
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import type { DeckViewResponse, Slide, SlideEvent } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import { pollSlideImage } from '../api/slides'
+import { useArrowKeys } from '../hooks/useArrowKeys'
 import SlideView from '../components/SlideView'
 
 export default function SessionPage() {
@@ -103,6 +104,15 @@ export default function SessionPage() {
       setBusy(false)
     }
   }
+
+  const slideCount = slides.length
+  useArrowKeys(
+    useCallback(() => setCurrent(c => Math.max(0, c - 1)), []),
+    useCallback(
+      () => setCurrent(c => Math.min(slideCount - 1, c + 1)),
+      [slideCount],
+    ),
+  )
 
   const slide = slides[current]
 

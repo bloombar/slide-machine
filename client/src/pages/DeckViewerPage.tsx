@@ -2,10 +2,11 @@
  * Public deck viewer reached by permalink (SHARE-1) with basic playback
  * controls (PLAY-1: rewind/forward).
  */
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router'
 import type { DeckViewResponse } from '@slide-machine/shared'
 import { apiFetch, ApiError } from '../api/http'
+import { useArrowKeys } from '../hooks/useArrowKeys'
 import SlideView from '../components/SlideView'
 
 export default function DeckViewerPage() {
@@ -32,6 +33,15 @@ export default function DeckViewerPage() {
       cancelled = true
     }
   }, [slug])
+
+  const slideCount = view?.slides.length ?? 0
+  useArrowKeys(
+    useCallback(() => setIndex(i => Math.max(0, i - 1)), []),
+    useCallback(
+      () => setIndex(i => Math.min(slideCount - 1, i + 1)),
+      [slideCount],
+    ),
+  )
 
   if (error) {
     return (

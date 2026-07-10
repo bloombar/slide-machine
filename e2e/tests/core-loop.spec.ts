@@ -67,4 +67,10 @@ test('speak-to-slides core loop, session to permalink playback', async ({
   await page.getByRole('button', { name: 'Next →' }).click()
   await expect(page.getByText('2 / 2')).toBeVisible()
   await expect(page.getByText('carbon dioxide')).toBeVisible()
+
+  // Arrow keys navigate too (PLAY-1)
+  await page.keyboard.press('ArrowLeft')
+  await expect(page.getByText('1 / 2')).toBeVisible()
+  await page.keyboard.press('ArrowRight')
+  await expect(page.getByText('2 / 2')).toBeVisible()
 })
