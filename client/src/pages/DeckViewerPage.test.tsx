@@ -1,0 +1,99 @@
+/**
+ * Unit tests for the deck viewer: the Resume affordance appears for the
+ * deck's owner only.
+ */
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { MemoryRouter, Routes, Route } from 'react-router'
+import { AuthProvider } from '../auth/AuthContext'
+import { setAccessToken } from '../auth/token'
+import DeckViewerPage from './DeckViewerPage'
+import { mockFetchRoutes } from '../test/fetch-mock'
+
+const deckView = {
+  deck: {
+    id: 'deck1',
+    ownerId: 'u1',
+    title: 'Shared Lecture',
+    permalinkSlug: 'shared-abc123',
+    slideOrder: ['s1'],
+    visibility: 'public',
+  },
+  slides: [
+    {
+      id: 's1',
+      deckId: 'deck1',
+      index: 0,
+      layoutType: 'title',
+      title: 'Hello',
+    },
+  ],
+  template: {
+    id: 'classic',
+    ownerId: 'system',
+    name: 'Classic',
+    theme: {},
+    layouts: [],
+    visibility: 'public',
+    voteScore: 0,
+    createdAt: '',
+  },
+}
+
+const renderViewer = (refreshStatus: number, ownerId = 'u1') => {
+  mockFetchRoutes({
+    '/api/auth/refresh': () =>
+      refreshStatus === 200
+        ? {
+            status: 200,
+            body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+          }
+        : { status: 401 },
+    '/api/decks/shared-abc123': () => ({
+      status: 200,
+      body: { ...deckView, deck: { ...deckView.deck, ownerId } },
+    }),
+  })
+  return render(
+    <MemoryRouter initialEntries={['/d/shared-abc123']}>
+      <AuthProvider>
+        <Routes>
+          <Route path="/d/:slug" element={<DeckViewerPage />} />
+        </Routes>
+      </AuthProvider>
+    </MemoryRouter>,
+  )
+}
+
+beforeEach(() => {
+  setAccessToken(null)
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
+describe('DeckViewerPage', () => {
+  it('shows Resume lecture to the deck owner', async () => {
+    renderViewer(200)
+    expect(
+      await screen.findByRole('link', { name: /resume lecture/i }),
+    ).toHaveAttribute('href', '/app/session/deck1')
+  })
+
+  it('hides Resume lecture from anonymous viewers', async () => {
+    renderViewer(401)
+    expect(await screen.findByText('Shared Lecture')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: /resume lecture/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('hides Resume lecture from signed-in non-owners', async () => {
+    renderViewer(200, 'someone-else')
+    expect(await screen.findByText('Shared Lecture')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: /resume lecture/i }),
+    ).not.toBeInTheDocument()
+  })
+})

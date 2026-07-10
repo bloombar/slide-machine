@@ -73,4 +73,19 @@ test('speak-to-slides core loop, session to permalink playback', async ({
   await expect(page.getByText('1 / 2')).toBeVisible()
   await page.keyboard.press('ArrowRight')
   await expect(page.getByText('2 / 2')).toBeVisible()
+
+  // Ending a session never closes it: the owner can resume and continue
+  await page.getByRole('link', { name: 'Resume lecture' }).click()
+  await expect(page).toHaveURL(/\/app\/session\//)
+  await expect(page.getByText('Slide 2 of 2')).toBeVisible()
+
+  await page
+    .getByLabel('Spoken phrase')
+    .fill('What separates plants from animals?')
+  await page.getByRole('button', { name: 'Speak' }).click()
+  await expect(page.getByTestId('slide')).toHaveAttribute(
+    'data-layout',
+    'quote',
+  )
+  await expect(page.getByText('Slide 3 of 3')).toBeVisible()
 })
