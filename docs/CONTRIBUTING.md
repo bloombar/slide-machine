@@ -25,6 +25,21 @@ npm run dev                               # Express :3000 + Vite :5173
 
 Commands, configuration, and deployment are documented in the [README](../README.md); the system design is in [SPEC.md](SPEC.md) and the schedule in [ROADMAP.md](ROADMAP.md).
 
+## Running the app
+
+MongoDB must be reachable at `MONGODB_URI` for every mode (`/api/health` reports `degraded` otherwise).
+
+| What                    | Command                                    | Where                                                     |
+| ----------------------- | ------------------------------------------ | --------------------------------------------------------- |
+| Everything (dev)        | `npm run dev`                              | app at <http://localhost:5173>, API proxied to `:3000`    |
+| Server only             | `npm run dev -w server`                    | API at <http://localhost:3000/api/health>                 |
+| Client only             | `npm run dev -w client`                    | `:5173`; `/api` calls fail unless the server is up        |
+| Production build, local | `npm run build && npm start`               | whole app (SPA + API) served by Express on `:3000`        |
+| Docker stack            | `docker compose up`                        | app on `:3000`, MongoDB on host `:27018`                  |
+| Docker stack + MinIO    | `docker compose --profile storage up`      | adds MinIO S3 on `:9000`, console on `:9001`              |
+
+Dev mode hot-reloads both sides (`tsx watch` + Vite HMR). The server reads `server/.env` at boot and exits with a clear message if required config is missing.
+
 ## Before opening a PR
 
 ```sh
