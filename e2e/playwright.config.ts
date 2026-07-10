@@ -33,6 +33,7 @@ export default defineConfig({
         'mongodb://localhost:27017/slide-machine-test',
       JWT_SECRET: 'e2e-jwt-secret-at-least-32-characters!!',
       JWT_REFRESH_SECRET: 'e2e-refresh-secret-at-least-32-chars!!!',
+      GENERATION_PROVIDER: 'mock',
     },
   },
 })

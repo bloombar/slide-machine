@@ -47,6 +47,18 @@ export const projectList = defineAction<Record<string, never>, Project[]>({
   },
 })
 
+export const projectGet = defineAction<{ projectId: string }, Project>({
+  name: 'project.get',
+  input: z.object({ projectId: z.string().min(1) }),
+  execute: async (ctx, input) => {
+    const userId = requireUser(ctx)
+    const doc = await ProjectModel.findById(input.projectId).catch(() => null)
+    if (!doc || doc.ownerId.toString() !== userId)
+      throw new ActionForbiddenError()
+    return toProjectDto(doc)
+  },
+})
+
 export const projectDelete = defineAction<
   ProjectDeleteInput,
   { deleted: true }
@@ -69,4 +81,5 @@ export const projectDelete = defineAction<
 
 registerAction(projectCreate)
 registerAction(projectList)
+registerAction(projectGet)
 registerAction(projectDelete)

@@ -12,3 +12,23 @@ export interface ProjectCreateInput {
 export interface ProjectDeleteInput {
   projectId: string
 }
+
+export interface DeckCreateInput {
+  projectId: string
+  title: string
+  templateId: string
+}
+
+export interface DeckListInput {
+  projectId: string
+}
+
+export interface DeckGetInput {
+  deckId: string
+}
+
+/** One finalized spoken (or typed, until STT lands) phrase for a live session. */
+export interface SessionPhraseInput {
+  deckId: string
+  phrase: string
+}

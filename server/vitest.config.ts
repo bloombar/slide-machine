@@ -24,6 +24,7 @@ export default defineConfig({
         'mongodb://localhost:27017/slide-machine-test',
       JWT_SECRET: 'test-jwt-secret-at-least-32-characters!',
       JWT_REFRESH_SECRET: 'test-refresh-secret-at-least-32-chars!!',
+      GENERATION_PROVIDER: 'mock',
       // No grace window in tests: rotated-out tokens must die immediately
       REFRESH_GRACE_SECONDS: '0',
     },

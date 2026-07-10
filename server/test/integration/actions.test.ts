@@ -85,6 +85,21 @@ describe('POST /api/actions/:name', () => {
     expect((await act(ada, 'project.list')).body).toHaveLength(0)
   })
 
+  it('project.get returns own projects and 403s foreign ones', async () => {
+    const ada = await registerUser('ada@example.com')
+    const bob = await registerUser('bob@example.com')
+    const created = await act(ada, 'project.create', { title: 'Mine' })
+
+    const own = await act(ada, 'project.get', { projectId: created.body.id })
+    expect(own.status).toBe(200)
+    expect(own.body.title).toBe('Mine')
+
+    const foreign = await act(bob, 'project.get', {
+      projectId: created.body.id,
+    })
+    expect(foreign.status).toBe(403)
+  })
+
   it('404s unknown actions and 400s invalid input', async () => {
     const ada = await registerUser('ada@example.com')
 

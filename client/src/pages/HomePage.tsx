@@ -3,6 +3,7 @@
  * end with project list/create (PROJ-1 via TECH-13).
  */
 import { useEffect, useState, type FormEvent } from 'react'
+import { Link } from 'react-router'
 import type { Project } from '@slide-machine/shared'
 import { useAuth } from '../auth/AuthContext'
 import { dispatchAction } from '../api/actions'
@@ -87,8 +88,13 @@ export default function HomePage() {
         ) : (
           <ul className="flex flex-col gap-2">
             {projects.map(p => (
-              <li key={p.id} className="rounded-lg bg-slate-800 px-4 py-3">
-                {p.title}
+              <li key={p.id}>
+                <Link
+                  to={`/app/projects/${p.id}`}
+                  className="block rounded-lg bg-slate-800 px-4 py-3 hover:bg-slate-700"
+                >
+                  {p.title}
+                </Link>
               </li>
             ))}
           </ul>

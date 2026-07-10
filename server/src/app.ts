@@ -8,10 +8,14 @@ import { env } from './config/env'
 import { healthRouter } from './routes/health'
 import { authRouter } from './routes/auth'
 import { actionsRouter } from './routes/actions'
+import { decksRouter } from './routes/decks'
 import { errorHandler } from './middleware/error'
 import { serveSpa } from './static'
 import './actions/system'
 import './actions/project'
+import './actions/template'
+import './actions/deck'
+import './providers/mock-generation'
 
 export const createApp = (): Express => {
   const app = express()
@@ -22,6 +26,7 @@ export const createApp = (): Express => {
   api.use(healthRouter)
   api.use('/auth', authRouter)
   api.use(actionsRouter)
+  api.use(decksRouter)
   app.use('/api', api)
 
   if (env.NODE_ENV === 'production') {
