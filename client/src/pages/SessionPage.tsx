@@ -11,6 +11,7 @@ import { dispatchAction } from '../api/actions'
 import { pollSlideImage } from '../api/slides'
 import { useArrowKeys } from '../hooks/useArrowKeys'
 import SlideView from '../components/SlideView'
+import SlideNavZones from '../components/SlideNavZones'
 
 export default function SessionPage() {
   const { deckId } = useParams<{ deckId: string }>()
@@ -139,34 +140,21 @@ export default function SessionPage() {
 
       <div className="mx-auto w-full max-w-4xl flex-1">
         {slide && view ? (
-          <SlideView
-            slide={slide}
-            template={view.template}
-            imagePending={pendingImages.has(slide.id)}
-          />
+          <SlideNavZones
+            hasPrev={current > 0}
+            hasNext={current < slides.length - 1}
+            onPrev={() => setCurrent(c => Math.max(0, c - 1))}
+            onNext={() => setCurrent(c => Math.min(slides.length - 1, c + 1))}
+          >
+            <SlideView
+              slide={slide}
+              template={view.template}
+              imagePending={pendingImages.has(slide.id)}
+            />
+          </SlideNavZones>
         ) : (
           <div className="flex aspect-video items-center justify-center rounded-xl border-2 border-dashed border-slate-300 text-slate-400">
             Speak (type, for now) and slides will follow
-          </div>
-        )}
-        {slides.length > 1 && (
-          <div className="mt-3 flex justify-center gap-2">
-            <button
-              onClick={() => setCurrent(c => Math.max(0, c - 1))}
-              disabled={current === 0}
-              className="rounded border border-slate-300 px-3 py-1 text-sm disabled:opacity-40"
-            >
-              ← Back
-            </button>
-            <button
-              onClick={() =>
-                setCurrent(c => Math.min(slides.length - 1, c + 1))
-              }
-              disabled={current === slides.length - 1}
-              className="rounded border border-slate-300 px-3 py-1 text-sm disabled:opacity-40"
-            >
-              Forward →
-            </button>
           </div>
         )}
       </div>

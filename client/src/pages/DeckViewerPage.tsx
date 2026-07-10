@@ -12,6 +12,7 @@ import { apiFetch, ApiError } from '../api/http'
 import { useAuth } from '../auth/AuthContext'
 import { useArrowKeys } from '../hooks/useArrowKeys'
 import SlideView from '../components/SlideView'
+import SlideNavZones from '../components/SlideNavZones'
 
 export default function DeckViewerPage() {
   const { slug } = useParams<{ slug: string }>()
@@ -88,33 +89,24 @@ export default function DeckViewerPage() {
       </header>
       <div className="mx-auto w-full max-w-4xl flex-1">
         {slide ? (
-          <SlideView slide={slide} template={view.template} />
+          <SlideNavZones
+            hasPrev={index > 0}
+            hasNext={index < view.slides.length - 1}
+            onPrev={() => setIndex(i => Math.max(0, i - 1))}
+            onNext={() =>
+              setIndex(i => Math.min(view.slides.length - 1, i + 1))
+            }
+          >
+            <SlideView slide={slide} template={view.template} />
+          </SlideNavZones>
         ) : (
           <p className="text-center text-slate-400">This deck has no slides.</p>
         )}
       </div>
       {view.slides.length > 0 && (
-        <nav className="mx-auto mt-4 flex items-center gap-4">
-          <button
-            onClick={() => setIndex(i => Math.max(0, i - 1))}
-            disabled={index === 0}
-            className="rounded-lg border border-slate-300 px-4 py-2 disabled:opacity-40"
-          >
-            ← Previous
-          </button>
-          <span className="text-sm text-slate-500">
-            {index + 1} / {view.slides.length}
-          </span>
-          <button
-            onClick={() =>
-              setIndex(i => Math.min(view.slides.length - 1, i + 1))
-            }
-            disabled={index === view.slides.length - 1}
-            className="rounded-lg border border-slate-300 px-4 py-2 disabled:opacity-40"
-          >
-            Next →
-          </button>
-        </nav>
+        <p className="mx-auto mt-4 text-sm text-slate-500">
+          {index + 1} / {view.slides.length}
+        </p>
       )}
     </main>
   )

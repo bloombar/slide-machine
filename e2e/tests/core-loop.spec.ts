@@ -64,9 +64,14 @@ test('speak-to-slides core loop, session to permalink playback', async ({
     page.getByRole('heading', { name: 'Photosynthesis Basics' }),
   ).toBeVisible()
 
-  await page.getByRole('button', { name: 'Next →' }).click()
+  // Hover-zone navigation: chevrons over the slide's side thirds
+  await page.getByTestId('slide').hover()
+  await page.getByRole('button', { name: 'Next slide' }).click()
   await expect(page.getByText('2 / 2')).toBeVisible()
   await expect(page.getByText('carbon dioxide')).toBeVisible()
+  await page.getByRole('button', { name: 'Previous slide' }).click()
+  await expect(page.getByText('1 / 2')).toBeVisible()
+  await page.getByRole('button', { name: 'Next slide' }).click()
 
   // Arrow keys navigate too (PLAY-1)
   await page.keyboard.press('ArrowLeft')
