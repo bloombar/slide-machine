@@ -9,6 +9,9 @@ services:
       - '3000:3000'
     environment:
       MONGODB_URI: mongodb://mongo:27017/slide-machine
+      # Local-stack-only signing secrets — never reuse outside compose
+      JWT_SECRET: compose-local-jwt-secret-32-chars-min!!
+      JWT_REFRESH_SECRET: compose-local-refresh-secret-32-chars!!
       # In-network MinIO (storage profile). Using a MinIO on the host
       # instead? Point S3_ENDPOINT at http://host.docker.internal:9000
       S3_ENDPOINT: http://minio:9000

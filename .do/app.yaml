@@ -23,11 +23,11 @@ services:
         value: production
       - key: MONGODB_URI
         type: SECRET
+      - key: JWT_SECRET
+        type: SECRET
+      - key: JWT_REFRESH_SECRET
+        type: SECRET
       # --- Uncomment and set as features land (mirrors server/.env.example) ---
-      # - key: JWT_SECRET
-      #   type: SECRET
-      # - key: JWT_REFRESH_SECRET
-      #   type: SECRET
       # - key: GEMINI_API_KEY
       #   type: SECRET
       # - key: GOOGLE_CLOUD_STT_KEY

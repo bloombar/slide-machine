@@ -1,4 +1,9 @@
 import { defineConfig, devices } from '@playwright/test'
+import { config as loadDotenv } from 'dotenv'
+
+// Pick up MONGODB_TEST_URI from server/.env so local e2e runs hit the
+// developer's authenticated MongoDB; CI provides its own env.
+loadDotenv({ path: '../server/.env', quiet: true })
 
 /**
  * E2E tests run against the BUILT app — Express serving the SPA and /api,
@@ -26,6 +31,8 @@ export default defineConfig({
       MONGODB_URI:
         process.env.MONGODB_TEST_URI ??
         'mongodb://localhost:27017/slide-machine-test',
+      JWT_SECRET: 'e2e-jwt-secret-at-least-32-characters!!',
+      JWT_REFRESH_SECRET: 'e2e-refresh-secret-at-least-32-chars!!!',
     },
   },
 })

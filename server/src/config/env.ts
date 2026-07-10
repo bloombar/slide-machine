@@ -56,9 +56,15 @@ const envSchema = z.object({
   // Billing (SPEC TECH-9)
   BILLING_PROVIDER: z.string().default('stripe'),
 
+  // Auth (AUTH-1/2): signing secrets are required; TTLs are tunable
+  JWT_SECRET: z.string().min(32),
+  JWT_REFRESH_SECRET: z.string().min(32),
+  JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900),
+  JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().positive().default(2592000),
+  // How long a rotated-out refresh token stays valid (two-tab race window)
+  REFRESH_GRACE_SECONDS: z.coerce.number().int().nonnegative().default(60),
+
   // Secrets & service credentials — optional until their features land
-  JWT_SECRET: z.string().optional(),
-  JWT_REFRESH_SECRET: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   GOOGLE_CLOUD_STT_KEY: z.string().optional(),
   GOOGLE_CLOUD_TRANSLATION_KEY: z.string().optional(),

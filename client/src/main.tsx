@@ -1,13 +1,19 @@
 /**
- * Client entry point: mounts the React app.
+ * Client entry point: router + auth provider around the app.
  */
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router'
+import { AuthProvider } from './auth/AuthContext'
 import App from './App'
 import './index.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <BrowserRouter>
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    </BrowserRouter>
   </StrictMode>,
 )

@@ -13,6 +13,13 @@ export class ActionNotFoundError extends Error {
   }
 }
 
+export class ActionForbiddenError extends Error {
+  constructor(message = 'You do not have access to this resource') {
+    super(message)
+    this.name = 'ActionForbiddenError'
+  }
+}
+
 export class ActionValidationError extends Error {
   constructor(
     actionName: string,

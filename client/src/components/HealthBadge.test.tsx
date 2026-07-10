@@ -1,10 +1,10 @@
 /**
- * Unit test for the health status page with a stubbed fetch.
+ * Unit tests for the health badge (moved from the original App test).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import type { HealthResponse } from '@slide-machine/shared'
-import App from './App'
+import HealthBadge from './HealthBadge'
 
 const healthFixture: HealthResponse = {
   status: 'ok',
@@ -17,14 +17,14 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('App', () => {
+describe('HealthBadge', () => {
   it('renders the API health status', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ json: () => Promise.resolve(healthFixture) }),
     )
 
-    render(<App />)
+    render(<HealthBadge />)
 
     expect(await screen.findByTestId('health-badge')).toHaveTextContent('ok')
     expect(screen.getByText('mongo: connected')).toBeInTheDocument()
@@ -33,7 +33,7 @@ describe('App', () => {
   it('shows unreachable when the API is down', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('boom')))
 
-    render(<App />)
+    render(<HealthBadge />)
 
     expect(await screen.findByTestId('health-badge')).toHaveTextContent(
       'unreachable',

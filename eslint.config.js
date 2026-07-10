@@ -23,6 +23,16 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    rules: {
+      // Underscore prefix marks intentionally unused params (e.g. the
+      // required 4-arg Express error handler signature)
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
+    },
+  },
+  {
     files: ['client/src/**/*.{ts,tsx}'],
     plugins: {
       'react-hooks': reactHooks,

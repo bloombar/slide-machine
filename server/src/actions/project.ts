@@ -1,0 +1,72 @@
+/**
+ * Project actions (SPEC PROJ-1/PROJ-2 via TECH-13). The authorize hooks
+ * enforce ownership (P-4) — the first real use of the action pipeline.
+ */
+import { z } from 'zod'
+import type {
+  Project,
+  ProjectCreateInput,
+  ProjectDeleteInput,
+} from '@slide-machine/shared'
+import { defineAction } from './define'
+import { registerAction, ActionForbiddenError } from './dispatch'
+import type { ActionContext } from './context'
+import { ProjectModel, toProjectDto } from '../models/project'
+
+/** Returns the acting user's id or throws; actions requiring auth start here. */
+const requireUser = (ctx: ActionContext): string => {
+  if (!ctx.userId) throw new ActionForbiddenError('Sign in to continue')
+  return ctx.userId
+}
+
+export const projectCreate = defineAction<ProjectCreateInput, Project>({
+  name: 'project.create',
+  input: z.object({
+    title: z.string().trim().min(1),
+    course: z.string().optional(),
+    description: z.string().optional(),
+    seedContext: z.string().optional(),
+  }),
+  execute: async (ctx, input) => {
+    const doc = await ProjectModel.create({
+      ...input,
+      ownerId: requireUser(ctx),
+    })
+    return toProjectDto(doc)
+  },
+})
+
+export const projectList = defineAction<Record<string, never>, Project[]>({
+  name: 'project.list',
+  input: z.object({}),
+  execute: async ctx => {
+    const docs = await ProjectModel.find({ ownerId: requireUser(ctx) }).sort({
+      createdAt: -1,
+    })
+    return docs.map(toProjectDto)
+  },
+})
+
+export const projectDelete = defineAction<
+  ProjectDeleteInput,
+  { deleted: true }
+>({
+  name: 'project.delete',
+  input: z.object({ projectId: z.string().min(1) }),
+  authorize: async (ctx, input) => {
+    const userId = requireUser(ctx)
+    const doc = await ProjectModel.findById(input.projectId)
+    if (!doc || doc.ownerId.toString() !== userId) {
+      // Same error for missing and foreign projects: no existence leaks
+      throw new ActionForbiddenError()
+    }
+  },
+  execute: async (_ctx, input) => {
+    await ProjectModel.deleteOne({ _id: input.projectId })
+    return { deleted: true }
+  },
+})
+
+registerAction(projectCreate)
+registerAction(projectList)
+registerAction(projectDelete)

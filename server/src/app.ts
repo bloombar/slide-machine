@@ -3,22 +3,33 @@
  * can exercise it with supertest; src/index.ts owns startup.
  */
 import express, { Router, type Express } from 'express'
+import cookieParser from 'cookie-parser'
 import { env } from './config/env'
 import { healthRouter } from './routes/health'
+import { authRouter } from './routes/auth'
+import { actionsRouter } from './routes/actions'
+import { errorHandler } from './middleware/error'
 import { serveSpa } from './static'
 import './actions/system'
+import './actions/project'
 
 export const createApp = (): Express => {
   const app = express()
   app.use(express.json())
+  app.use(cookieParser())
 
   const api = Router()
   api.use(healthRouter)
+  api.use('/auth', authRouter)
+  api.use(actionsRouter)
   app.use('/api', api)
 
   if (env.NODE_ENV === 'production') {
     serveSpa(app, env.CLIENT_DIST)
   }
+
+  // Must be registered last; Express 5 forwards rejected async handlers here
+  app.use(errorHandler)
 
   return app
 }
