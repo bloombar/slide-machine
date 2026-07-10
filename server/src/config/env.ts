@@ -53,6 +53,9 @@ const envSchema = z.object({
   QUIZ_PROVIDER: z.string().default('gemini'),
   IMAGE_GEN_PROVIDER: z.string().default('gemini'),
 
+  // Image enrichment (IMG-1): background stock-image fetch for slides
+  IMAGE_ENRICHMENT_ENABLED: z.stringbool().default(true),
+
   // Billing (SPEC TECH-9)
   BILLING_PROVIDER: z.string().default('stripe'),
 

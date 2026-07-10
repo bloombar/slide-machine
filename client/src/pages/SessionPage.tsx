@@ -8,6 +8,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import type { DeckViewResponse, Slide, SlideEvent } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
+import { pollSlideImage } from '../api/slides'
 import SlideView from '../components/SlideView'
 
 export default function SessionPage() {
@@ -19,7 +20,37 @@ export default function SessionPage() {
   const [phrase, setPhrase] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [pendingImages, setPendingImages] = useState<Set<string>>(new Set())
   const inputRef = useRef<HTMLInputElement>(null)
+  const pollCancelsRef = useRef<Map<string, () => void>>(new Map())
+
+  // Stop any in-flight image polling when the session unmounts
+  useEffect(() => {
+    const cancels = pollCancelsRef.current
+    return () => {
+      cancels.forEach(cancel => cancel())
+      cancels.clear()
+    }
+  }, [])
+
+  /** Watches a slide whose image may still arrive from background enrichment. */
+  const watchImage = (slide: Slide) => {
+    if (!slide.imageKeywords?.length || slide.imageRef) return
+    if (pollCancelsRef.current.has(slide.id)) return
+    setPendingImages(prev => new Set(prev).add(slide.id))
+    const cancel = pollSlideImage(slide.id, resolved => {
+      pollCancelsRef.current.delete(slide.id)
+      setPendingImages(prev => {
+        const next = new Set(prev)
+        next.delete(slide.id)
+        return next
+      })
+      if (resolved) {
+        setSlides(prev => prev.map(s => (s.id === resolved.id ? resolved : s)))
+      }
+    })
+    pollCancelsRef.current.set(slide.id, cancel)
+  }
 
   useEffect(() => {
     if (!deckId) return
@@ -50,6 +81,7 @@ export default function SessionPage() {
       setCurrent(next.length - 1)
       return next
     })
+    watchImage(slide)
   }
 
   const onSpeak = async (e: FormEvent) => {
@@ -97,7 +129,11 @@ export default function SessionPage() {
 
       <div className="mx-auto w-full max-w-4xl flex-1">
         {slide && view ? (
-          <SlideView slide={slide} template={view.template} />
+          <SlideView
+            slide={slide}
+            template={view.template}
+            imagePending={pendingImages.has(slide.id)}
+          />
         ) : (
           <div className="flex aspect-video items-center justify-center rounded-xl border-2 border-dashed border-slate-700 text-slate-500">
             Speak (type, for now) and slides will follow

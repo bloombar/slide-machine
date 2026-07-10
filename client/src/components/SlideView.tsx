@@ -1,8 +1,11 @@
 /**
  * Renders one slide in its template theme, arranged by layoutType
- * (GEN-3 / TMPL-2). Image slots show a pulsing skeleton until image
- * enrichment lands (GEN-5's reserved-slot behavior).
+ * (GEN-3 / TMPL-2). Image slots reserve their space (GEN-5): a pulsing
+ * skeleton while enrichment is in flight, a quiet static block once it
+ * resolves without an image, and a silent fallback if the image itself
+ * fails to load — enrichment never surfaces an error.
  */
+import { useState } from 'react'
 import type { Slide, Template } from '@slide-machine/shared'
 
 interface ThemeColors {
@@ -28,36 +31,56 @@ const themeColors = (theme: Record<string, unknown>): ThemeColors => ({
   accent: color(theme, 'accent', '#38bdf8'),
 })
 
-/** Reserved image slot: real image when enriched, skeleton until then. */
-function ImageSlot({ slide, colors }: { slide: Slide; colors: ThemeColors }) {
-  if (slide.imageRef) {
+/** Reserved image slot: image when enriched, pulsing skeleton while
+ * pending, quiet static block otherwise. */
+function ImageSlot({
+  slide,
+  colors,
+  pending,
+}: {
+  slide: Slide
+  colors: ThemeColors
+  pending?: boolean
+}) {
+  const [loadFailed, setLoadFailed] = useState(false)
+
+  if (slide.imageRef && !loadFailed) {
     return (
       <img
         src={slide.imageRef}
         alt={slide.caption ?? ''}
-        className="h-full w-full object-cover"
+        onError={() => setLoadFailed(true)}
+        className="h-full w-full object-cover transition-opacity duration-500"
+      />
+    )
+  }
+  if (pending) {
+    return (
+      <div
+        data-testid="image-skeleton"
+        className="h-full min-h-32 w-full animate-pulse rounded-lg"
+        style={{ backgroundColor: colors.surface }}
       />
     )
   }
   return (
     <div
-      data-testid="image-skeleton"
-      className="flex h-full min-h-32 w-full animate-pulse items-center justify-center rounded-lg"
+      data-testid="image-fallback"
+      className="h-full min-h-32 w-full rounded-lg"
       style={{ backgroundColor: colors.surface }}
-    >
-      <span className="text-sm" style={{ color: colors.muted }}>
-        image
-      </span>
-    </div>
+    />
   )
 }
 
 export default function SlideView({
   slide,
   template,
+  imagePending,
 }: {
   slide: Slide
   template: Template
+  /** True while background enrichment may still deliver an image (GEN-5). */
+  imagePending?: boolean
 }) {
   const colors = themeColors(template.theme)
 
@@ -109,7 +132,7 @@ export default function SlideView({
       {slide.layoutType === 'image-heavy' && (
         <div className="flex h-full flex-col gap-3 p-8">
           <div className="flex-1 overflow-hidden rounded-lg">
-            <ImageSlot slide={slide} colors={colors} />
+            <ImageSlot slide={slide} colors={colors} pending={imagePending} />
           </div>
           {slide.caption && (
             <p className="text-center text-sm" style={{ color: colors.muted }}>
@@ -130,7 +153,7 @@ export default function SlideView({
             <p className="text-lg leading-relaxed">{slide.body}</p>
           </div>
           <div className="h-3/4 overflow-hidden rounded-lg">
-            <ImageSlot slide={slide} colors={colors} />
+            <ImageSlot slide={slide} colors={colors} pending={imagePending} />
           </div>
         </div>
       )}

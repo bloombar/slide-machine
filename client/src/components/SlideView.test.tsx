@@ -70,14 +70,26 @@ describe('SlideView', () => {
     expect(screen.getByText(/What happens at night\?/)).toBeInTheDocument()
   })
 
-  it('shows an image skeleton in image slots until enrichment exists', () => {
+  it('pulses the image skeleton while enrichment is pending', () => {
+    render(
+      <SlideView
+        slide={slide({ layoutType: 'two-column', title: 'T', body: 'B' })}
+        template={template}
+        imagePending
+      />,
+    )
+    expect(screen.getByTestId('image-skeleton')).toBeInTheDocument()
+  })
+
+  it('shows a quiet static fallback when no image is pending or found', () => {
     render(
       <SlideView
         slide={slide({ layoutType: 'two-column', title: 'T', body: 'B' })}
         template={template}
       />,
     )
-    expect(screen.getByTestId('image-skeleton')).toBeInTheDocument()
+    expect(screen.getByTestId('image-fallback')).toBeInTheDocument()
+    expect(screen.queryByTestId('image-skeleton')).not.toBeInTheDocument()
   })
 
   it('renders a real image when the slide has one', () => {

@@ -29,6 +29,22 @@ import { ProjectModel } from '../models/project'
 import { getBuiltinTemplate, layoutDescriptors } from '../templates/builtin'
 import { registry } from '../providers/registry'
 import { permalinkSlug } from '../lib/slug'
+import { enrichSlideImage } from '../enrichment/enrich'
+import { env } from '../config/env'
+import type { ImageGuidance } from '@slide-machine/shared'
+
+/**
+ * Kicks off background image enrichment AFTER the SlideEvent is on its
+ * way — never on the phrase→slide critical path, never throwing (IMG-2).
+ */
+const maybeEnrich = (
+  slideId: string,
+  guidance: ImageGuidance | undefined,
+): void => {
+  if (!env.IMAGE_ENRICHMENT_ENABLED) return
+  if (!guidance || guidance.none || !guidance.keywords.length) return
+  void enrichSlideImage(slideId, guidance.keywords)
+}
 
 const requireUser = (ctx: ActionContext): string => {
   if (!ctx.userId) throw new ActionForbiddenError('Sign in to continue')
@@ -160,6 +176,8 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
         .filter(Boolean)
         .join(' ')
       await lastSlide.save()
+      if (!lastSlide.imageRef)
+        maybeEnrich(lastSlide._id.toString(), result.imageGuidance)
       return { kind: 'slide.update', slide: toSlideDto(lastSlide) }
     }
 
@@ -177,6 +195,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
     deck.slideOrder.push(slide._id.toString())
     deck.transcript = [deck.transcript, input.phrase].filter(Boolean).join('\n')
     await deck.save()
+    maybeEnrich(slide._id.toString(), result.imageGuidance)
     return { kind: 'slide.new', slide: toSlideDto(slide) }
   },
 })

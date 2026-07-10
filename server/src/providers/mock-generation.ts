@@ -95,6 +95,16 @@ export class MockGenerationProvider implements GenerationProvider {
       }
     }
 
+    // Longer descriptive sentences get an image beside the text
+    if (words.length >= 10) {
+      return {
+        action: 'new',
+        layoutType: fitLayout('two-column', req.layoutDescriptors),
+        slots: { title: titleCase(words.slice(0, 5)), body: phrase },
+        imageGuidance: { keywords: keywords(words) },
+      }
+    }
+
     return {
       action: 'new',
       layoutType: fitLayout('content', req.layoutDescriptors),

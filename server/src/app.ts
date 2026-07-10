@@ -15,6 +15,7 @@ import './actions/system'
 import './actions/project'
 import './actions/template'
 import './actions/deck'
+import './actions/slide'
 import './providers/mock-generation'
 
 export const createApp = (): Express => {

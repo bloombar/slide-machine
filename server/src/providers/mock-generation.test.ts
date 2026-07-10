@@ -57,3 +57,13 @@ describe('MockGenerationProvider', () => {
     expect(r.layoutType).toBe('content')
   })
 })
+
+describe('MockGenerationProvider two-column heuristic', () => {
+  it('gives long descriptive sentences a two-column layout with image keywords', async () => {
+    const r = await gen(
+      'The mitochondria is the powerhouse of the cell as everyone knows',
+    )
+    expect(r).toMatchObject({ action: 'new', layoutType: 'two-column' })
+    expect(r.imageGuidance?.keywords.length).toBeGreaterThan(0)
+  })
+})
