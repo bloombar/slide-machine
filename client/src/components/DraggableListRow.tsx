@@ -79,6 +79,9 @@ export default function DraggableListRow({
           : ''
       }`}
     >
+      {/* Native <button> handle, matching Atlassian's own DragHandleButton.
+          Do not wrap in components that cancel mousedown — that kills the
+          native drag before it starts */}
       <button
         ref={handleRef}
         aria-label={handleLabel}
@@ -90,7 +93,7 @@ export default function DraggableListRow({
             onKeyMove(id, e.key === 'ArrowUp' ? -1 : 1)
           }
         }}
-        className="mt-2 cursor-grab rounded-md p-2 text-slate-400 hover:text-slate-900 active:cursor-grabbing"
+        className="mt-2 inline-block cursor-grab rounded-md p-2 text-slate-400 select-none hover:text-slate-900 active:cursor-grabbing"
       >
         <GripVertical className="h-5 w-5" aria-hidden />
       </button>
