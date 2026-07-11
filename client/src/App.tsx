@@ -13,7 +13,6 @@ import HomePage from './pages/HomePage'
 import ProjectPage from './pages/ProjectPage'
 import ProfilePage from './pages/ProfilePage'
 import SessionPage from './pages/SessionPage'
-import DeckEditorPage from './pages/DeckEditorPage'
 import DeckViewerPage from './pages/DeckViewerPage'
 import RequireAuth from './auth/RequireAuth'
 
@@ -37,7 +36,6 @@ export default function App() {
         <Route path="/app/projects/:projectId" element={<ProjectPage />} />
         <Route path="/app/profile" element={<ProfilePage />} />
         <Route path="/app/session/:deckId" element={<SessionPage />} />
-        <Route path="/app/decks/:deckId/edit" element={<DeckEditorPage />} />
       </Route>
     </Routes>
   )

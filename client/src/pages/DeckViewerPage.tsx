@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { Mic, Pencil } from 'lucide-react'
+import { Mic } from 'lucide-react'
 import type { DeckViewResponse, Slide } from '@slide-machine/shared'
 import { apiFetch, ApiError } from '../api/http'
 import { dispatchAction } from '../api/actions'
@@ -93,22 +93,13 @@ export default function DeckViewerPage() {
         title={view.deck.title}
         actions={
           isOwner && (
-            <>
-              <Link
-                to={`/app/decks/${view.deck.id}/edit`}
-                aria-label="Edit lecture"
-                className="rounded-md p-2 text-slate-500 hover:text-slate-900"
-              >
-                <Pencil className="h-5 w-5" aria-hidden />
-              </Link>
-              <Link
-                to={`/app/session/${view.deck.id}`}
-                aria-label="Resume lecture"
-                className="rounded-md p-2 text-slate-500 hover:text-slate-900"
-              >
-                <Mic className="h-5 w-5" aria-hidden />
-              </Link>
-            </>
+            <Link
+              to={`/app/session/${view.deck.id}`}
+              aria-label="Resume lecture"
+              className="rounded-md p-2 text-slate-500 hover:text-slate-900"
+            >
+              <Mic className="h-5 w-5" aria-hidden />
+            </Link>
           )
         }
       />

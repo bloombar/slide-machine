@@ -1,7 +1,7 @@
 /**
- * EDIT-1 e2e: build a small deck, then edit with auto-save, switch
- * between carousel and list views, reorder, delete, and verify the
- * changes in the permalink viewer.
+ * EDIT-1 e2e: slide text is edited in place from the deck viewer — the
+ * app's single editing surface. Covers list view, Markdown source
+ * roundtrip, and persistence.
  */
 import { test, expect, type Page } from '@playwright/test'
 
@@ -29,45 +29,43 @@ const buildDeck = async (page: Page) => {
   }
 }
 
-test('edit, reorder, and delete slides with auto-save', async ({ page }) => {
+test('in-place editing in the viewer, including list view and bullets', async ({
+  page,
+}) => {
   await buildDeck(page)
 
-  // Enter the editor from the project page (brand link goes home)
-  await page.getByRole('link', { name: 'The Slide Machine' }).click()
-  await page.getByRole('link', { name: 'Chemistry' }).click()
-  await page.getByRole('link', { name: 'Edit' }).click()
-  await expect(page).toHaveURL(/\/app\/decks\/.+\/edit$/)
-
-  // Carousel view is the default: edit the first slide's title; auto-save
-  await expect(
-    page.getByRole('button', { name: 'Carousel view' }),
-  ).toHaveAttribute('aria-pressed', 'true')
-  await page.getByLabel('Slide title').fill('Introduction to Atoms')
-  await expect(page.getByText('Saved')).toBeVisible()
-
-  // Switch to list view: both slides visible and editable at once
-  await page.getByRole('button', { name: 'List view' }).click()
-  await expect(page.getByText('Slide 1')).toBeVisible()
-  await expect(page.getByText('Slide 2')).toBeVisible()
-  await expect(page.getByLabel('Slide title').first()).toHaveValue(
-    'Introduction to Atoms',
-  )
-
-  // Reorder: move slide 2 up
-  await page.getByRole('button', { name: 'Move slide 2 up' }).click()
-  await expect(page.getByLabel('Slide title').first()).not.toHaveValue(
-    'Introduction to Atoms',
-  )
-
-  // Delete the (now) second slide
-  await page.getByRole('button', { name: 'Delete slide 2' }).click()
-  await expect(page.getByText('Slide 2')).not.toBeVisible()
-
-  // The permalink viewer reflects everything (lecture title links to it)
+  // Open the deck in the viewer via the home screen
   await page.getByRole('link', { name: 'The Slide Machine' }).click()
   await page.getByRole('link', { name: 'Atoms' }).click()
-  await expect(page.getByText('1 / 1')).toBeVisible()
+  await expect(page).toHaveURL(/\/d\//)
+
+  // Edit the title slide's text in place
+  await page.getByTitle('Click to edit Slide title').click()
+  await page
+    .getByRole('textbox', { name: 'Slide title' })
+    .fill('Introduction to Atoms')
+  await page.keyboard.press('Enter')
   await expect(
-    page.getByRole('heading', { name: /Protons, Neutrons, Electrons/ }),
+    page.getByRole('heading', { name: 'Introduction to Atoms' }),
   ).toBeVisible()
+
+  // List view: every slide is editable up-front; edit a bullet in place
+  await page.getByRole('button', { name: 'List view' }).click()
+  await expect(page.getByTestId('slide')).toHaveCount(2)
+  await page.getByTitle('Click to edit Bullet 2').click()
+  await page.getByRole('textbox', { name: 'Bullet 2' }).fill('**neutrons**')
+  await page.keyboard.press('Enter')
+  await expect(page.getByTestId('slide').last().locator('strong')).toHaveText(
+    'neutrons',
+  )
+
+  // Everything persists across a fresh page load
+  await page.reload()
+  await expect(
+    page.getByRole('heading', { name: 'Introduction to Atoms' }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: 'List view' }).click()
+  await expect(page.getByTestId('slide').last().locator('strong')).toHaveText(
+    'neutrons',
+  )
 })
