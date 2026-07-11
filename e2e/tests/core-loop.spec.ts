@@ -82,13 +82,16 @@ test('speak-to-slides core loop, session to permalink playback', async ({
     page.getByRole('heading', { name: 'Photosynthesis 101' }),
   ).toBeVisible()
 
-  // Hover-zone navigation: half-slide hotspots (click implies hover)
-  await page.getByRole('button', { name: 'Next slide' }).click()
+  // Hover-zone navigation: half-slide hotspots (click implies hover).
+  // Clicks land near the zone's top corner — editable text sits above
+  // the hotspots by design, so center clicks would edit, not navigate.
+  const zoneClick = { position: { x: 20, y: 20 } }
+  await page.getByRole('button', { name: 'Next slide' }).click(zoneClick)
   await expect(page.getByText('2 / 2')).toBeVisible()
   await expect(page.getByText('carbon dioxide')).toBeVisible()
-  await page.getByRole('button', { name: 'Previous slide' }).click()
+  await page.getByRole('button', { name: 'Previous slide' }).click(zoneClick)
   await expect(page.getByText('1 / 2')).toBeVisible()
-  await page.getByRole('button', { name: 'Next slide' }).click()
+  await page.getByRole('button', { name: 'Next slide' }).click(zoneClick)
 
   // Arrow keys navigate too (PLAY-1)
   await page.keyboard.press('ArrowLeft')
