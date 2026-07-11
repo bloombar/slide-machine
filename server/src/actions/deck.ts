@@ -12,6 +12,7 @@ import type {
   DeckListInput,
   DeckRenameInput,
   DeckReorderInput,
+  DeckSwitchTemplateInput,
   DeckViewResponse,
   GenerationProvider,
   SessionPhraseInput,
@@ -159,6 +160,25 @@ export const deckRename = defineAction<DeckRenameInput, Deck>({
   },
 })
 
+export const deckSwitchTemplate = defineAction<DeckSwitchTemplateInput, Deck>({
+  name: 'deck.switchTemplate',
+  input: z.object({
+    deckId: z.string().min(1),
+    templateId: z.string().min(1),
+  }),
+  execute: async (ctx, input) => {
+    const deck = await loadOwnedDeck(ctx, input.deckId)
+    if (!getBuiltinTemplate(input.templateId)) {
+      throw new ActionValidationError('deck.switchTemplate', [
+        'templateId: unknown template',
+      ])
+    }
+    deck.templateId = input.templateId
+    await deck.save()
+    return toDeckDto(deck)
+  },
+})
+
 export const deckReorderSlides = defineAction<DeckReorderInput, Deck>({
   name: 'deck.reorderSlides',
   input: z.object({
@@ -275,6 +295,7 @@ registerAction(deckCreate)
 registerAction(deckList)
 registerAction(deckGet)
 registerAction(deckRename)
+registerAction(deckSwitchTemplate)
 registerAction(slideAdd)
 registerAction(deckReorderSlides)
 registerAction(sessionPhrase)

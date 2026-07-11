@@ -341,3 +341,78 @@ describe('DeckViewerPage slide reordering', () => {
     ).not.toBeInTheDocument()
   })
 })
+
+describe('DeckViewerPage settings modal', () => {
+  const withSettingsRoutes = () =>
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({ status: 200, body: deckView }),
+      '/api/actions/template.list': () => ({
+        status: 200,
+        body: [
+          deckView.template,
+          { ...deckView.template, id: 'midnight', name: 'Midnight' },
+        ],
+      }),
+      '/api/actions/deck.switchTemplate': () => ({
+        status: 200,
+        body: { ...deckView.deck, templateId: 'midnight' },
+      }),
+    })
+
+  const renderWithSettings = () =>
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+  it('opens from the gear, switches templates, and closes from the icon', async () => {
+    withSettingsRoutes()
+    renderWithSettings()
+    await screen.findByText('Shared Lecture')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Lecture settings' }))
+    expect(
+      await screen.findByRole('dialog', { name: 'Lecture settings' }),
+    ).toBeInTheDocument()
+
+    fireEvent.click(await screen.findByRole('radio', { name: /midnight/i }))
+    await vi.waitFor(() =>
+      expect(screen.getByRole('radio', { name: /midnight/i })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      ),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close settings' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('closes on Escape', async () => {
+    withSettingsRoutes()
+    renderWithSettings()
+    await screen.findByText('Shared Lecture')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Lecture settings' }))
+    await screen.findByRole('dialog', { name: 'Lecture settings' })
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('hides the settings gear from non-owners', async () => {
+    renderViewer(401)
+    await screen.findByText('Shared Lecture')
+    expect(
+      screen.queryByRole('button', { name: 'Lecture settings' }),
+    ).not.toBeInTheDocument()
+  })
+})

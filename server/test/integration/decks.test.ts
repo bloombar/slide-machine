@@ -326,3 +326,36 @@ describe('slide.add', () => {
     )
   })
 })
+
+describe('deck.switchTemplate', () => {
+  it('switches an owned deck template; rejects unknown templates and foreign decks', async () => {
+    const deck = await act(ada, 'deck.create', {
+      projectId,
+      title: 'Themed',
+      templateId: 'classic',
+    })
+
+    const switched = await act(ada, 'deck.switchTemplate', {
+      deckId: deck.body.id,
+      templateId: 'midnight',
+    })
+    expect(switched.status).toBe(200)
+    expect(switched.body.templateId).toBe('midnight')
+
+    const view = await act(ada, 'deck.get', { deckId: deck.body.id })
+    expect(view.body.template.id).toBe('midnight')
+
+    const unknown = await act(ada, 'deck.switchTemplate', {
+      deckId: deck.body.id,
+      templateId: 'does-not-exist',
+    })
+    expect(unknown.status).toBe(400)
+
+    const bob = await registerUser('bob@example.com')
+    const foreign = await act(bob, 'deck.switchTemplate', {
+      deckId: deck.body.id,
+      templateId: 'classic',
+    })
+    expect(foreign.status).toBe(403)
+  })
+})

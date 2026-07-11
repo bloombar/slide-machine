@@ -109,6 +109,35 @@ test('in-place editing in the viewer, including list view and bullets', async ({
   await page.reload()
   await expect(page.getByText('1 / 1')).toBeVisible()
 
+  // Lecture settings open as a full-width modal over the viewer
+  await page.getByRole('button', { name: 'Lecture settings' }).click()
+  await expect(
+    page.getByRole('dialog', { name: 'Lecture settings' }),
+  ).toBeVisible()
+  await expect(page.getByRole('radio', { name: /classic/i })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  )
+  await page.getByRole('radio', { name: /seminar/i }).click()
+  await expect(page.getByRole('radio', { name: /seminar/i })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  )
+
+  // Escape closes the modal and returns to the slides
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).not.toBeVisible()
+  await expect(page.getByTestId('slide')).toBeVisible()
+
+  // The switch persisted: reopen after a reload and check
+  await page.reload()
+  await page.getByRole('button', { name: 'Lecture settings' }).click()
+  await expect(page.getByRole('radio', { name: /seminar/i })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  )
+  await page.getByRole('button', { name: 'Close settings' }).click()
+
   // The add icon appends a starter slide at the end
   await page.getByRole('button', { name: 'Add slide' }).click()
   await expect(page.getByText('2 / 2')).toBeVisible()

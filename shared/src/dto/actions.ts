@@ -33,6 +33,12 @@ export interface DeckRenameInput {
   title: string
 }
 
+/** Deck-level template switch (EDIT-2). */
+export interface DeckSwitchTemplateInput {
+  deckId: string
+  templateId: string
+}
+
 /** One finalized spoken (or typed, until STT lands) phrase for a live session. */
 export interface SessionPhraseInput {
   deckId: string

@@ -9,7 +9,7 @@
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
-import { Mic, Plus } from 'lucide-react'
+import { Mic, Plus, Settings } from 'lucide-react'
 import type {
   Deck,
   DeckViewResponse,
@@ -27,6 +27,7 @@ import SlideDeleteButton from '../components/SlideDeleteButton'
 import DraggableListRow from '../components/DraggableListRow'
 import EditableText from '../components/EditableText'
 import DeckPageHeader from '../components/DeckPageHeader'
+import DeckSettingsModal from '../components/DeckSettingsModal'
 import { type ViewMode } from '../components/ViewModeToggle'
 
 export default function DeckViewerPage() {
@@ -37,6 +38,7 @@ export default function DeckViewerPage() {
   const [view, setView] = useState<DeckViewResponse | null>(null)
   const [mode, setMode] = useState<ViewMode>('carousel')
   const [error, setError] = useState<string | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [speaking, setSpeaking] = useState<boolean>(() =>
     Boolean(
       (location.state as { startSpeaking?: boolean } | null)?.startSpeaking,
@@ -326,6 +328,14 @@ export default function DeckViewerPage() {
           isOwner && (
             <>
               <button
+                aria-label="Lecture settings"
+                title="Lecture settings"
+                onClick={() => setSettingsOpen(true)}
+                className="rounded-md p-2 text-slate-500 hover:text-slate-900"
+              >
+                <Settings className="h-5 w-5" aria-hidden />
+              </button>
+              <button
                 aria-label="Add slide"
                 title="Add a slide at the end"
                 onClick={() => void addSlide()}
@@ -413,6 +423,16 @@ export default function DeckViewerPage() {
             ),
           )}
         </ul>
+      )}
+
+      {isOwner && settingsOpen && (
+        <DeckSettingsModal
+          deck={view.deck}
+          onClose={() => setSettingsOpen(false)}
+          onTemplateChange={(deck, template) =>
+            setView(v => (v ? { ...v, deck, template } : v))
+          }
+        />
       )}
 
       {isOwner && speaking && (
