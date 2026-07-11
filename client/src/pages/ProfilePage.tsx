@@ -3,7 +3,7 @@
  * out. Editing (display name, bio, avatar, locale) arrives later.
  */
 import { useNavigate } from 'react-router'
-import { CircleUser, LogOut } from 'lucide-react'
+import { LogOut } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 
 export default function ProfilePage() {
@@ -20,18 +20,15 @@ export default function ProfilePage() {
     <div>
       <h1 className="mb-8 text-2xl font-bold">Profile</h1>
       <section className="max-w-xl">
-        <div className="flex items-center gap-4 rounded-lg border border-slate-200 p-6">
-          <CircleUser className="h-14 w-14 text-slate-400" aria-hidden />
-          <div className="flex flex-col gap-1">
-            <p className="text-lg font-semibold">{user.displayName}</p>
-            <p className="text-sm text-slate-600">{user.email}</p>
-            <p className="text-sm text-slate-600">
-              Plan:{' '}
-              <span className="rounded-full bg-indigo-50 px-2 py-0.5 font-medium text-indigo-700">
-                {user.planTier}
-              </span>
-            </p>
-          </div>
+        <div className="flex flex-col gap-1">
+          <p className="text-lg font-semibold">{user.displayName}</p>
+          <p className="text-sm text-slate-600">{user.email}</p>
+          <p className="text-sm text-slate-600">
+            Plan:{' '}
+            <span className="rounded-full bg-indigo-50 px-2 py-0.5 font-medium text-indigo-700">
+              {user.planTier}
+            </span>
+          </p>
         </div>
         <button
           onClick={() => void onSignOut()}
