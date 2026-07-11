@@ -279,3 +279,56 @@ describe('DeckViewerPage add slide', () => {
     ).not.toBeInTheDocument()
   })
 })
+
+describe('DeckViewerPage slide reordering', () => {
+  it('shows drag handles to owners in list view and reorders via Alt+arrows', async () => {
+    let reorderBody: unknown
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({ status: 200, body: deckView }),
+      '/api/actions/deck.reorderSlides': init => {
+        reorderBody = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: { ...deckView.deck, slideOrder: ['s2', 's1'] },
+        }
+      },
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'List view' }))
+
+    // Slide 1 (title layout) moves down past slide 2 (content layout)
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Reorder slide 1' }), {
+      key: 'ArrowDown',
+      altKey: true,
+    })
+
+    await vi.waitFor(() =>
+      expect(reorderBody).toMatchObject({ slideOrder: ['s2', 's1'] }),
+    )
+    const slides = screen.getAllByTestId('slide')
+    expect(slides[0]).toHaveAttribute('data-layout', 'content')
+    expect(slides[1]).toHaveAttribute('data-layout', 'title')
+  })
+
+  it('hides drag handles from non-owners', async () => {
+    renderViewer(401)
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'List view' }))
+    expect(
+      screen.queryByRole('button', { name: /reorder slide/i }),
+    ).not.toBeInTheDocument()
+  })
+})

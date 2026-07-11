@@ -13,7 +13,7 @@ export default function PublicShell() {
 
   return (
     <div className="flex min-h-screen flex-col bg-white text-slate-900">
-      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-4">
           <Link to="/" className="flex items-center gap-2 font-semibold">
             <Presentation className="h-5 w-5 text-indigo-600" aria-hidden />

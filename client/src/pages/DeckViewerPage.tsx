@@ -16,6 +16,7 @@ import { useSlideNavigation } from '../hooks/useSlideNavigation'
 import SlideView, { type SlideTextPatch } from '../components/SlideView'
 import SlideNavZones from '../components/SlideNavZones'
 import SlideDeleteButton from '../components/SlideDeleteButton'
+import DraggableListRow from '../components/DraggableListRow'
 import EditableText from '../components/EditableText'
 import DeckPageHeader from '../components/DeckPageHeader'
 import { type ViewMode } from '../components/ViewModeToggle'
@@ -121,6 +122,53 @@ export default function DeckViewerPage() {
     }
   }
 
+  /** Persists a new slide order optimistically, reverting on failure. */
+  const applyOrder = (ids: string[]) => {
+    const previous = view.slides
+    const byId = new Map(view.slides.map(s => [s.id, s]))
+    setView(v =>
+      v
+        ? {
+            ...v,
+            deck: { ...v.deck, slideOrder: ids },
+            slides: ids.map((id, i) => ({ ...byId.get(id)!, index: i })),
+          }
+        : v,
+    )
+    dispatchAction<Deck>('deck.reorderSlides', {
+      deckId: view.deck.id,
+      slideOrder: ids,
+    }).catch(() => {
+      setView(v =>
+        v
+          ? {
+              ...v,
+              deck: { ...v.deck, slideOrder: previous.map(s => s.id) },
+              slides: previous,
+            }
+          : v,
+      )
+    })
+  }
+
+  /** Drag drop: move the dragged slide to the target row's position. */
+  const moveSlideTo = (sourceId: string, targetIndex: number) => {
+    const ids = view.slides.map(s => s.id)
+    const from = ids.indexOf(sourceId)
+    if (from < 0 || from === targetIndex) return
+    ids.splice(from, 1)
+    ids.splice(targetIndex, 0, sourceId)
+    applyOrder(ids)
+  }
+
+  /** Keyboard path on the handle: move a slide one step up or down. */
+  const moveSlideBy = (sourceId: string, delta: -1 | 1) => {
+    const from = view.slides.findIndex(s => s.id === sourceId)
+    const to = from + delta
+    if (from < 0 || to < 0 || to >= view.slides.length) return
+    moveSlideTo(sourceId, to)
+  }
+
   /** Removes a slide via slide.delete and drops it from the local view. */
   const deleteSlide = async (slideId: string) => {
     try {
@@ -214,22 +262,34 @@ export default function DeckViewerPage() {
         </>
       ) : (
         <ul className="mx-auto flex w-full max-w-4xl flex-col gap-6">
-          {view.slides.map((s, i) => (
-            <li key={s.id} ref={nav.registerItem(i)} className="relative">
-              <SlideView
-                slide={s}
-                template={view.template}
-                editable={isOwner}
-                onEdit={editSlide(s.id)}
-              />
-              {isOwner && (
+          {view.slides.map((s, i) =>
+            isOwner ? (
+              <DraggableListRow
+                key={s.id}
+                id={s.id}
+                index={i}
+                handleLabel={`Reorder slide ${i + 1}`}
+                onDropOn={moveSlideTo}
+                onKeyMove={moveSlideBy}
+                itemRef={nav.registerItem(i)}
+              >
+                <SlideView
+                  slide={s}
+                  template={view.template}
+                  editable
+                  onEdit={editSlide(s.id)}
+                />
                 <SlideDeleteButton
                   label={`Delete slide ${i + 1}`}
                   onDelete={() => void deleteSlide(s.id)}
                 />
-              )}
-            </li>
-          ))}
+              </DraggableListRow>
+            ) : (
+              <li key={s.id} ref={nav.registerItem(i)} className="relative">
+                <SlideView slide={s} template={view.template} />
+              </li>
+            ),
+          )}
         </ul>
       )}
     </div>
