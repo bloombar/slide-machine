@@ -22,7 +22,7 @@ import { pollSlideImage } from '../api/slides'
 import { useAuth } from '../auth/AuthContext'
 import { useTimeAgo } from '../hooks/useTimeAgo'
 import { useSlideNavigation } from '../hooks/useSlideNavigation'
-import SlideView, { type SlideTextPatch } from '../components/SlideView'
+import SlideView, { type SlideContentPatch } from '../components/SlideView'
 import SlideNavZones from '../components/SlideNavZones'
 import SlideDeleteButton from '../components/SlideDeleteButton'
 import DraggableListRow from '../components/DraggableListRow'
@@ -215,7 +215,7 @@ export default function DeckViewerPage() {
   }
 
   /** In-place edits (EDIT-1) persist through the action layer. */
-  const editSlide = (slideId: string) => (patch: SlideTextPatch) => {
+  const editSlide = (slideId: string) => (patch: SlideContentPatch) => {
     dispatchAction<Slide>('slide.editContent', { slideId, ...patch })
       .then(updated => {
         setView(v =>

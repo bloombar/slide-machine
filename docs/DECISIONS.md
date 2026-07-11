@@ -29,3 +29,11 @@ Rule of thumb: nothing inside a slide may exceed `z-10`; nothing outside
 page chrome may use `z-30`+. Previously the sticky header sat at `z-10`,
 tied with in-slide controls, so slide text could paint over the nav when
 scrolled beneath it.
+
+## Slide content slots: descriptor + editor registry (2026-07-11)
+
+**Problem.** Editable slide parts (title, body, bullets) were hardcoded into every layout branch of SlideView, so each new template field — and eventually non-text media — meant touching every layout.
+
+**Choice.** Layouts only *name* their content slots (`slots: LayoutSlot[]`, already the AI-facing vocabulary in [template.ts](../shared/src/types/template.ts)). Each slot has a shared `SlotDescriptor` (`SLOT_DESCRIPTORS`) giving its media `kind` and label, and the client keeps one editor component per kind in [slots.tsx](../client/src/components/slide/slots.tsx) (`text` → in-place markdown editor, `bullets` → whole-list editor, `image` → reserved image slot). [SlideView](../client/src/components/SlideView.tsx) layouts render `slot('title')` etc. and know nothing about editing.
+
+**Adding a media type later** (video, embed, …): extend `SlotKind`, describe the slots that use it in `SLOT_DESCRIPTORS`, register one editor component in the `EDITORS` map. Layouts, SlideView, and the save path (`slide.editContent` partial patches) stay untouched; unknown slots render nothing, so old clients degrade quietly.

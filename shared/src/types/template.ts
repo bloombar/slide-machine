@@ -21,6 +21,36 @@ export type LayoutType = (typeof LAYOUT_TYPES)[number]
 export type LayoutSlot =
   'title' | 'body' | 'bullets' | 'image' | 'caption' | 'columns'
 
+/**
+ * Media kind of a content slot. The client keeps a registry of one
+ * editor component per kind, so this union is the extension point for
+ * new editable media types (video, embeds, ...).
+ */
+export type SlotKind = 'text' | 'bullets' | 'image'
+
+/** How a content slot is displayed and edited. */
+export interface SlotDescriptor {
+  kind: SlotKind
+  /** Accessible label for the slot's editor ("Slide title", ...). */
+  label: string
+  /** Text slots only: edit as a multi-line block. */
+  multiline?: boolean
+}
+
+/**
+ * The descriptor for every slot a layout can name. Adding an editable
+ * media type means: extend SlotKind, describe the slots that use it
+ * here, and register a client editor for the kind.
+ */
+export const SLOT_DESCRIPTORS: Record<LayoutSlot, SlotDescriptor> = {
+  title: { kind: 'text', label: 'Slide title' },
+  body: { kind: 'text', label: 'Slide body', multiline: true },
+  bullets: { kind: 'bullets', label: 'Slide bullets' },
+  caption: { kind: 'text', label: 'Slide caption' },
+  image: { kind: 'image', label: 'Slide image' },
+  columns: { kind: 'text', label: 'Slide columns', multiline: true },
+}
+
 /** Constraints the AI must respect when filling a layout (TMPL-6). */
 export interface LayoutConstraints {
   maxBullets?: number
