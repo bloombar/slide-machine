@@ -15,6 +15,8 @@ import type {
   DeckViewResponse,
   GenerationProvider,
   SessionPhraseInput,
+  Slide,
+  SlideAddInput,
   SlideEvent,
 } from '@slide-machine/shared'
 import type { HydratedDocument } from 'mongoose'
@@ -122,6 +124,24 @@ export const deckGet = defineAction<DeckGetInput, DeckViewResponse>({
       index: 1,
     })
     return { deck: toDeckDto(deck), slides: slides.map(toSlideDto), template }
+  },
+})
+
+export const slideAdd = defineAction<SlideAddInput, Slide>({
+  name: 'slide.add',
+  input: z.object({ deckId: z.string().min(1) }),
+  execute: async (ctx, input) => {
+    const deck = await loadOwnedDeck(ctx, input.deckId)
+    const slide = await SlideModel.create({
+      deckId: deck._id,
+      index: deck.slideOrder.length,
+      layoutType: 'content',
+      title: 'New slide',
+      body: 'Click to edit',
+    })
+    deck.slideOrder.push(slide._id.toString())
+    await deck.save()
+    return toSlideDto(slide)
   },
 })
 
@@ -255,5 +275,6 @@ registerAction(deckCreate)
 registerAction(deckList)
 registerAction(deckGet)
 registerAction(deckRename)
+registerAction(slideAdd)
 registerAction(deckReorderSlides)
 registerAction(sessionPhrase)

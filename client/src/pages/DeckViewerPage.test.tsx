@@ -233,3 +233,49 @@ describe('DeckViewerPage lecture title editing', () => {
     ).not.toBeInTheDocument()
   })
 })
+
+describe('DeckViewerPage add slide', () => {
+  it('lets the owner append a slide and navigates to it', async () => {
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({ status: 200, body: deckView }),
+      '/api/actions/slide.add': () => ({
+        status: 200,
+        body: {
+          id: 's3',
+          deckId: 'deck1',
+          index: 2,
+          layoutType: 'content',
+          title: 'New slide',
+          body: 'Click to edit',
+        },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add slide' }))
+
+    expect(await screen.findByText('3 / 3')).toBeInTheDocument()
+    expect(screen.getByText('New slide')).toBeInTheDocument()
+  })
+
+  it('hides the add-slide icon from non-owners', async () => {
+    renderViewer(401)
+    await screen.findByText('Shared Lecture')
+    expect(
+      screen.queryByRole('button', { name: 'Add slide' }),
+    ).not.toBeInTheDocument()
+  })
+})

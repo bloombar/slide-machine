@@ -84,4 +84,11 @@ test('in-place editing in the viewer, including list view and bullets', async ({
   await expect(page.getByTestId('slide')).toHaveCount(1)
   await page.reload()
   await expect(page.getByText('1 / 1')).toBeVisible()
+
+  // The add icon appends a starter slide at the end
+  await page.getByRole('button', { name: 'Add slide' }).click()
+  await expect(page.getByText('2 / 2')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'New slide' })).toBeVisible()
+  await page.reload()
+  await expect(page.getByText('1 / 2')).toBeVisible()
 })

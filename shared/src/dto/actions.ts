@@ -52,6 +52,11 @@ export interface SlideDeleteInput {
   slideId: string
 }
 
+/** Appends a blank starter slide at the end of the deck. */
+export interface SlideAddInput {
+  deckId: string
+}
+
 /** Full new ordering; must contain exactly the deck's current slide ids. */
 export interface DeckReorderInput {
   deckId: string

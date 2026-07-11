@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { Mic } from 'lucide-react'
+import { Mic, Plus } from 'lucide-react'
 import type { Deck, DeckViewResponse, Slide } from '@slide-machine/shared'
 import { apiFetch, ApiError } from '../api/http'
 import { dispatchAction } from '../api/actions'
@@ -96,6 +96,31 @@ export default function DeckViewerPage() {
       })
   }
 
+  /** Appends a starter slide at the end and navigates to it. */
+  const addSlide = async () => {
+    try {
+      const nextIndex = view.slides.length
+      const slide = await dispatchAction<Slide>('slide.add', {
+        deckId: view.deck.id,
+      })
+      setView(v =>
+        v
+          ? {
+              ...v,
+              deck: {
+                ...v.deck,
+                slideOrder: [...v.deck.slideOrder, slide.id],
+              },
+              slides: [...v.slides, slide],
+            }
+          : v,
+      )
+      nav.setCurrent(nextIndex)
+    } catch {
+      // Quiet failure
+    }
+  }
+
   /** Removes a slide via slide.delete and drops it from the local view. */
   const deleteSlide = async (slideId: string) => {
     try {
@@ -138,13 +163,22 @@ export default function DeckViewerPage() {
         }
         actions={
           isOwner && (
-            <Link
-              to={`/app/session/${view.deck.id}`}
-              aria-label="Resume lecture"
-              className="rounded-md p-2 text-slate-500 hover:text-slate-900"
-            >
-              <Mic className="h-5 w-5" aria-hidden />
-            </Link>
+            <>
+              <button
+                aria-label="Add slide"
+                onClick={() => void addSlide()}
+                className="rounded-md p-2 text-slate-500 hover:text-slate-900"
+              >
+                <Plus className="h-5 w-5" aria-hidden />
+              </button>
+              <Link
+                to={`/app/session/${view.deck.id}`}
+                aria-label="Resume lecture"
+                className="rounded-md p-2 text-slate-500 hover:text-slate-900"
+              >
+                <Mic className="h-5 w-5" aria-hidden />
+              </Link>
+            </>
           )
         }
       />

@@ -279,3 +279,41 @@ describe('deck.rename', () => {
     expect(foreign.status).toBe(403)
   })
 })
+
+describe('slide.add', () => {
+  it('appends a starter slide at the end of an owned deck', async () => {
+    const deck = await act(ada, 'deck.create', {
+      projectId,
+      title: 'L2',
+      templateId: 'classic',
+    })
+    await act(ada, 'session.phrase', {
+      deckId: deck.body.id,
+      phrase: 'Photosynthesis basics',
+    })
+
+    const added = await act(ada, 'slide.add', { deckId: deck.body.id })
+    expect(added.status).toBe(200)
+    expect(added.body).toMatchObject({
+      index: 1,
+      layoutType: 'content',
+      title: 'New slide',
+    })
+
+    const view = await act(ada, 'deck.get', { deckId: deck.body.id })
+    expect(view.body.deck.slideOrder).toHaveLength(2)
+    expect(view.body.slides[1].id).toBe(added.body.id)
+  })
+
+  it("403s adding to another user's deck", async () => {
+    const deck = await act(ada, 'deck.create', {
+      projectId,
+      title: 'L3',
+      templateId: 'classic',
+    })
+    const bob = await registerUser('bob@example.com')
+    expect((await act(bob, 'slide.add', { deckId: deck.body.id })).status).toBe(
+      403,
+    )
+  })
+})
