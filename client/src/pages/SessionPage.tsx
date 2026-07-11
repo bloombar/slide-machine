@@ -118,7 +118,7 @@ export default function SessionPage() {
   const slide = slides[current]
 
   return (
-    <main className="flex min-h-screen flex-col bg-white p-6 text-slate-900">
+    <div className="flex flex-col">
       <header className="mb-4 flex items-center justify-between">
         <h1 className="text-lg font-semibold text-slate-700">
           {view?.deck.title ?? 'Loading…'}
@@ -187,6 +187,6 @@ export default function SessionPage() {
           {error}
         </p>
       )}
-    </main>
+    </div>
   )
 }

@@ -10,6 +10,7 @@ import type {
   DeckCreateInput,
   DeckGetInput,
   DeckListInput,
+  DeckReorderInput,
   DeckViewResponse,
   GenerationProvider,
   SessionPhraseInput,
@@ -122,6 +123,36 @@ export const deckGet = defineAction<DeckGetInput, DeckViewResponse>({
   },
 })
 
+export const deckReorderSlides = defineAction<DeckReorderInput, Deck>({
+  name: 'deck.reorderSlides',
+  input: z.object({
+    deckId: z.string().min(1),
+    slideOrder: z.array(z.string().min(1)).min(1),
+  }),
+  execute: async (ctx, input) => {
+    const deck = await loadOwnedDeck(ctx, input.deckId)
+    const current = [...deck.slideOrder].sort()
+    const proposed = [...input.slideOrder].sort()
+    if (
+      current.length !== proposed.length ||
+      current.some((id, i) => id !== proposed[i])
+    ) {
+      throw new ActionValidationError('deck.reorderSlides', [
+        'slideOrder must contain exactly the current slide ids',
+      ])
+    }
+    deck.slideOrder = input.slideOrder
+    await deck.save()
+    // Keep index consistent with slideOrder position
+    await Promise.all(
+      deck.slideOrder.map((id, i) =>
+        SlideModel.updateOne({ _id: id }, { index: i }),
+      ),
+    )
+    return toDeckDto(deck)
+  },
+})
+
 export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
   name: 'session.phrase',
   input: z.object({
@@ -146,11 +177,14 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
         [s.title, s.body, ...(s.bullets ?? [])].filter(Boolean).join(' — '),
       )
 
+    // Project seed notes bias generation toward the planned material (PROJ-1)
+    const project = await ProjectModel.findById(deck.projectId)
+
     const provider = registry.get<GenerationProvider>('generation')
     const result = await provider.generateSlideContent({
       phrase: input.phrase,
       rollingContext,
-      seedContext: undefined,
+      seedContext: project?.seedContext,
       layoutDescriptors: layoutDescriptors(template),
     })
 
@@ -203,4 +237,5 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
 registerAction(deckCreate)
 registerAction(deckList)
 registerAction(deckGet)
+registerAction(deckReorderSlides)
 registerAction(sessionPhrase)

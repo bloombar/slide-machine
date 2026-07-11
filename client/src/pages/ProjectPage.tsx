@@ -120,6 +120,12 @@ export default function ProjectPage() {
                   <Link to={`/app/session/${d.id}`} className="text-indigo-600">
                     Resume
                   </Link>
+                  <Link
+                    to={`/app/decks/${d.id}/edit`}
+                    className="text-slate-600"
+                  >
+                    Edit
+                  </Link>
                   <Link to={`/d/${d.permalinkSlug}`} className="text-slate-500">
                     View
                   </Link>

@@ -32,3 +32,22 @@ export interface SessionPhraseInput {
   deckId: string
   phrase: string
 }
+
+/** Partial slide-content update (EDIT-1); only provided fields change. */
+export interface SlideEditInput {
+  slideId: string
+  title?: string
+  body?: string
+  bullets?: string[]
+  caption?: string
+}
+
+export interface SlideDeleteInput {
+  slideId: string
+}
+
+/** Full new ordering; must contain exactly the deck's current slide ids. */
+export interface DeckReorderInput {
+  deckId: string
+  slideOrder: string[]
+}

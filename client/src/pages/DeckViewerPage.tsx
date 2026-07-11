@@ -51,17 +51,17 @@ export default function DeckViewerPage() {
 
   if (error) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-white text-slate-500">
+      <div className="flex flex-1 items-center justify-center text-slate-500">
         <p role="alert">{error}</p>
-      </main>
+      </div>
     )
   }
 
   if (!view) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-white text-slate-400">
+      <div className="flex flex-1 items-center justify-center text-slate-400">
         Loading…
-      </main>
+      </div>
     )
   }
 
@@ -69,7 +69,7 @@ export default function DeckViewerPage() {
   const isOwner = user?.id === view.deck.ownerId
 
   return (
-    <main className="flex min-h-screen flex-col bg-white p-6 text-slate-900">
+    <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col p-6">
       <header className="mb-4 grid grid-cols-3 items-center">
         <div />
         <h1 className="text-center text-lg font-semibold text-slate-700">
@@ -108,6 +108,6 @@ export default function DeckViewerPage() {
           {index + 1} / {view.slides.length}
         </p>
       )}
-    </main>
+    </div>
   )
 }
