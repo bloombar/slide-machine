@@ -148,3 +148,88 @@ describe('DeckViewerPage pasted permalinks', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })
+
+describe('DeckViewerPage slide deletion', () => {
+  it('lets the owner delete a slide from the superimposed icon', async () => {
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({ status: 200, body: deckView }),
+      '/api/actions/slide.delete': () => ({
+        status: 200,
+        body: { deleted: true, slideOrder: ['s2'] },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete slide 1' }))
+
+    // The first slide is gone; the second becomes the current slide
+    expect(await screen.findByText('1 / 1')).toBeInTheDocument()
+    expect(screen.getByTestId('slide')).toHaveAttribute(
+      'data-layout',
+      'content',
+    )
+  })
+
+  it('hides the delete icon from non-owners', async () => {
+    renderViewer(401)
+    await screen.findByText('Shared Lecture')
+    expect(
+      screen.queryByRole('button', { name: /delete slide/i }),
+    ).not.toBeInTheDocument()
+  })
+})
+
+describe('DeckViewerPage lecture title editing', () => {
+  it('lets the owner rename the lecture in place', async () => {
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({ status: 200, body: deckView }),
+      '/api/actions/deck.rename': () => ({
+        status: 200,
+        body: { ...deckView.deck, title: 'Renamed Lecture' },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+
+    fireEvent.click(screen.getByTitle('Click to edit Lecture title'))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Lecture title' }), {
+      target: { value: 'Renamed Lecture' },
+    })
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
+
+    expect(await screen.findByText('Renamed Lecture')).toBeInTheDocument()
+  })
+
+  it('renders the title as plain text for non-owners', async () => {
+    renderViewer(401)
+    await screen.findByText('Shared Lecture')
+    expect(
+      screen.queryByTitle('Click to edit Lecture title'),
+    ).not.toBeInTheDocument()
+  })
+})

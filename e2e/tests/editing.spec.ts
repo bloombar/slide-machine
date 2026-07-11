@@ -39,6 +39,16 @@ test('in-place editing in the viewer, including list view and bullets', async ({
   await page.getByRole('link', { name: 'Atoms' }).click()
   await expect(page).toHaveURL(/\/d\//)
 
+  // Rename the lecture itself from the header
+  await page.getByTitle('Click to edit Lecture title').click()
+  await page
+    .getByRole('textbox', { name: 'Lecture title' })
+    .fill('Atoms, Revised')
+  await page.keyboard.press('Enter')
+  await expect(
+    page.getByRole('heading', { name: 'Atoms, Revised' }),
+  ).toBeVisible()
+
   // Edit the title slide's text in place
   await page.getByTitle('Click to edit Slide title').click()
   await page
@@ -68,4 +78,10 @@ test('in-place editing in the viewer, including list view and bullets', async ({
   await expect(page.getByTestId('slide').last().locator('strong')).toHaveText(
     'neutrons',
   )
+
+  // The superimposed delete icon removes a slide permanently
+  await page.getByRole('button', { name: 'Delete slide 2' }).click()
+  await expect(page.getByTestId('slide')).toHaveCount(1)
+  await page.reload()
+  await expect(page.getByText('1 / 1')).toBeVisible()
 })

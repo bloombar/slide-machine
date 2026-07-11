@@ -8,13 +8,15 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { Mic } from 'lucide-react'
-import type { DeckViewResponse, Slide } from '@slide-machine/shared'
+import type { Deck, DeckViewResponse, Slide } from '@slide-machine/shared'
 import { apiFetch, ApiError } from '../api/http'
 import { dispatchAction } from '../api/actions'
 import { useAuth } from '../auth/AuthContext'
 import { useSlideNavigation } from '../hooks/useSlideNavigation'
 import SlideView, { type SlideTextPatch } from '../components/SlideView'
 import SlideNavZones from '../components/SlideNavZones'
+import SlideDeleteButton from '../components/SlideDeleteButton'
+import EditableText from '../components/EditableText'
 import DeckPageHeader from '../components/DeckPageHeader'
 import { type ViewMode } from '../components/ViewModeToggle'
 
@@ -85,12 +87,55 @@ export default function DeckViewerPage() {
       })
   }
 
+  /** Renames the lecture through the action layer (owner only). */
+  const renameDeck = (title: string) => {
+    dispatchAction<Deck>('deck.rename', { deckId: view.deck.id, title })
+      .then(deck => setView(v => (v ? { ...v, deck } : v)))
+      .catch(() => {
+        // Quiet failure: the title reverts to the saved value
+      })
+  }
+
+  /** Removes a slide via slide.delete and drops it from the local view. */
+  const deleteSlide = async (slideId: string) => {
+    try {
+      await dispatchAction('slide.delete', { slideId })
+      setView(v =>
+        v
+          ? {
+              ...v,
+              deck: {
+                ...v.deck,
+                slideOrder: v.deck.slideOrder.filter(id => id !== slideId),
+              },
+              slides: v.slides
+                .filter(s => s.id !== slideId)
+                .map((s, i) => ({ ...s, index: i })),
+            }
+          : v,
+      )
+      nav.setCurrent(c => Math.max(0, Math.min(c, view.slides.length - 2)))
+    } catch {
+      // Quiet failure: the slide simply stays
+    }
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col p-6">
       <DeckPageHeader
         mode={mode}
         onModeChange={setMode}
-        title={view.deck.title}
+        title={
+          isOwner ? (
+            <EditableText
+              value={view.deck.title}
+              label="Lecture title"
+              onSave={renameDeck}
+            />
+          ) : (
+            view.deck.title
+          )
+        }
         actions={
           isOwner && (
             <Link
@@ -121,6 +166,12 @@ export default function DeckViewerPage() {
                 editable={isOwner}
                 onEdit={editSlide(slide!.id)}
               />
+              {isOwner && (
+                <SlideDeleteButton
+                  label={`Delete slide ${nav.current + 1}`}
+                  onDelete={() => void deleteSlide(slide!.id)}
+                />
+              )}
             </SlideNavZones>
           </div>
           <p className="mx-auto mt-4 text-sm text-slate-500">
@@ -130,13 +181,19 @@ export default function DeckViewerPage() {
       ) : (
         <ul className="mx-auto flex w-full max-w-4xl flex-col gap-6">
           {view.slides.map((s, i) => (
-            <li key={s.id} ref={nav.registerItem(i)}>
+            <li key={s.id} ref={nav.registerItem(i)} className="relative">
               <SlideView
                 slide={s}
                 template={view.template}
                 editable={isOwner}
                 onEdit={editSlide(s.id)}
               />
+              {isOwner && (
+                <SlideDeleteButton
+                  label={`Delete slide ${i + 1}`}
+                  onDelete={() => void deleteSlide(s.id)}
+                />
+              )}
             </li>
           ))}
         </ul>

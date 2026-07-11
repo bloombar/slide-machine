@@ -10,6 +10,7 @@ import type {
   DeckCreateInput,
   DeckGetInput,
   DeckListInput,
+  DeckRenameInput,
   DeckReorderInput,
   DeckViewResponse,
   GenerationProvider,
@@ -121,6 +122,20 @@ export const deckGet = defineAction<DeckGetInput, DeckViewResponse>({
       index: 1,
     })
     return { deck: toDeckDto(deck), slides: slides.map(toSlideDto), template }
+  },
+})
+
+export const deckRename = defineAction<DeckRenameInput, Deck>({
+  name: 'deck.rename',
+  input: z.object({
+    deckId: z.string().min(1),
+    title: z.string().trim().min(1),
+  }),
+  execute: async (ctx, input) => {
+    const deck = await loadOwnedDeck(ctx, input.deckId)
+    deck.title = input.title
+    await deck.save()
+    return toDeckDto(deck)
   },
 })
 
@@ -239,5 +254,6 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
 registerAction(deckCreate)
 registerAction(deckList)
 registerAction(deckGet)
+registerAction(deckRename)
 registerAction(deckReorderSlides)
 registerAction(sessionPhrase)

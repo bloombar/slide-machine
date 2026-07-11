@@ -252,3 +252,30 @@ describe('deck.list across projects (home screen)', () => {
     ])
   })
 })
+
+describe('deck.rename', () => {
+  it('renames an owned deck and 403s foreign decks', async () => {
+    const deck = await act(ada, 'deck.create', {
+      projectId,
+      title: 'Old Name',
+      templateId: 'classic',
+    })
+
+    const renamed = await act(ada, 'deck.rename', {
+      deckId: deck.body.id,
+      title: 'New Name',
+    })
+    expect(renamed.status).toBe(200)
+    expect(renamed.body.title).toBe('New Name')
+
+    const view = await act(ada, 'deck.get', { deckId: deck.body.id })
+    expect(view.body.deck.title).toBe('New Name')
+
+    const bob = await registerUser('bob@example.com')
+    const foreign = await act(bob, 'deck.rename', {
+      deckId: deck.body.id,
+      title: 'Hijacked',
+    })
+    expect(foreign.status).toBe(403)
+  })
+})
