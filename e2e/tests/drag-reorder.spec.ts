@@ -4,11 +4,15 @@
  *
  * Two hard-won constraints for automating pragmatic-drag-and-drop:
  * - locator.dragTo() moves the pointer to the target in one step, so the
- *   dragstart coordinates land outside the handle and the library's
- *   elementFromPoint drag-handle check cancels the drag. The drag must
- *   start with a small move while still over the handle.
+ *   dragstart coordinates land outside the source row and the library's
+ *   elementFromPoint check cancels the drag. The drag must start with a
+ *   small move while still over the source.
  * - Drag events are only delivered inside the viewport, so the drop
  *   target must be on-screen (hence the tall viewport).
+ *
+ * The whole row is the drag surface, but drags must start from a
+ * non-interactive spot — the slide's padding corner, not the editable
+ * text (which is reserved for click-to-edit).
  */
 import { test, expect, type Page } from '@playwright/test'
 
@@ -36,24 +40,24 @@ const buildDeck = async (page: Page) => {
   await page.getByRole('button', { name: 'List view' }).click()
 }
 
-test('slides reorder by dragging the handle with the pointer', async ({
-  page,
-}) => {
+test('slides reorder by dragging anywhere on the slide', async ({ page }) => {
   await buildDeck(page)
   await expect(page.getByTestId('slide').first()).toHaveAttribute(
     'data-layout',
     'title',
   )
 
-  const handle = page.getByRole('button', { name: 'Reorder slide 1' })
+  const source = page.getByRole('listitem', { name: 'Slide 1' })
   const target = page.getByTestId('slide').nth(1)
-  const hb = (await handle.boundingBox())!
+  const sb = (await source.boundingBox())!
   const tb = (await target.boundingBox())!
 
-  await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2)
+  // Grab the slide's top-left padding, away from editable text and the
+  // top-right delete button
+  await page.mouse.move(sb.x + 15, sb.y + 15)
   await page.mouse.down()
-  // Small move first: dragstart must fire while still over the handle
-  await page.mouse.move(hb.x + hb.width / 2 + 3, hb.y + hb.height / 2 + 3)
+  // Small move first: dragstart must fire while still over the source
+  await page.mouse.move(sb.x + 18, sb.y + 18)
   await page.mouse.move(
     tb.x + tb.width / 2,
     tb.y + Math.min(tb.height / 2, 200),

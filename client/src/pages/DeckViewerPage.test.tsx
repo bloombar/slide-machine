@@ -8,6 +8,8 @@ import { MemoryRouter, Routes, Route } from 'react-router'
 import { AuthProvider } from '../auth/AuthContext'
 import { setAccessToken } from '../auth/token'
 import DeckViewerPage from './DeckViewerPage'
+import PublicShell from '../components/layout/PublicShell'
+import { ShellTitleProvider } from '../components/layout/ShellTitle'
 import { mockFetchRoutes } from '../test/fetch-mock'
 
 const deckView = {
@@ -18,6 +20,7 @@ const deckView = {
     permalinkSlug: 'shared-abc123',
     slideOrder: ['s1'],
     visibility: 'public',
+    updatedAt: new Date(Date.now() - 120_000).toISOString(),
   },
   slides: [
     {
@@ -290,7 +293,7 @@ describe('DeckViewerPage add slide', () => {
 })
 
 describe('DeckViewerPage slide reordering', () => {
-  it('shows drag handles to owners in list view and reorders via Alt+arrows', async () => {
+  it('lets owners reorder focused rows in list view via Alt+arrows', async () => {
     let reorderBody: unknown
     mockFetchRoutes({
       '/api/auth/refresh': () => ({
@@ -319,7 +322,7 @@ describe('DeckViewerPage slide reordering', () => {
     fireEvent.click(screen.getByRole('button', { name: 'List view' }))
 
     // Slide 1 (title layout) moves down past slide 2 (content layout)
-    fireEvent.keyDown(screen.getByRole('button', { name: 'Reorder slide 1' }), {
+    fireEvent.keyDown(screen.getByRole('listitem', { name: 'Slide 1' }), {
       key: 'ArrowDown',
       altKey: true,
     })
@@ -332,12 +335,12 @@ describe('DeckViewerPage slide reordering', () => {
     expect(slides[1]).toHaveAttribute('data-layout', 'title')
   })
 
-  it('hides drag handles from non-owners', async () => {
+  it('gives non-owners plain, non-draggable rows', async () => {
     renderViewer(401)
     await screen.findByText('Shared Lecture')
     fireEvent.click(screen.getByRole('button', { name: 'List view' }))
     expect(
-      screen.queryByRole('button', { name: /reorder slide/i }),
+      screen.queryByRole('listitem', { name: /slide \d/i }),
     ).not.toBeInTheDocument()
   })
 })
@@ -414,5 +417,92 @@ describe('DeckViewerPage settings modal', () => {
     expect(
       screen.queryByRole('button', { name: 'Lecture settings' }),
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('DeckViewerPage title in the primary nav', () => {
+  it('teleports the deck title into the shell header in place of the brand', async () => {
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({ status: 200, body: deckView }),
+      '/api/health': () => ({
+        status: 200,
+        body: { status: 'ok', mongo: 'connected', uptime: 1, version: '0' },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <ShellTitleProvider>
+            <Routes>
+              <Route element={<PublicShell />}>
+                <Route path="/d/:slug" element={<DeckViewerPage />} />
+              </Route>
+            </Routes>
+          </ShellTitleProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    // The deck title renders as the page heading inside the nav banner
+    const heading = await screen.findByRole('heading', {
+      name: 'Shared Lecture',
+    })
+    expect(heading.closest('header')).not.toBeNull()
+    // The brand text yields a commit after the portal lands, hence waitFor;
+    // the home icon link remains
+    await vi.waitFor(() =>
+      expect(screen.queryByText('The Slide Machine')).not.toBeInTheDocument(),
+    )
+    expect(
+      screen.getByRole('link', { name: /the slide machine — home/i }),
+    ).toBeInTheDocument()
+    // Owners can still edit the title in place, now inside the nav
+    expect(screen.getByTitle('Click to edit Lecture title')).toBeInTheDocument()
+    // Slide count and modification age sit beside the title, outside
+    // the heading so they don't pollute its accessible name
+    const meta = screen.getByText(/slides · edited 2 minutes ago/)
+    expect(meta.closest('header')).not.toBeNull()
+    expect(heading.contains(meta)).toBe(false)
+  })
+
+  it('refreshes the edited age immediately after an auto-save', async () => {
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({ status: 200, body: deckView }),
+      '/api/actions/slide.add': () => ({
+        status: 200,
+        body: {
+          id: 's9',
+          deckId: 'deck1',
+          index: 2,
+          layoutType: 'content',
+          title: 'New slide',
+          body: 'Click to edit',
+        },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText(/edited 2 minutes ago/)).toBeInTheDocument()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Add slide' }))
+
+    // The local stamp lands as soon as the save resolves — no reload
+    expect(await screen.findByText(/edited just now/)).toBeInTheDocument()
   })
 })

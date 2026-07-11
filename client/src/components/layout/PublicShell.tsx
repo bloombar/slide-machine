@@ -7,18 +7,30 @@ import { Link, Outlet } from 'react-router'
 import { Presentation, User } from 'lucide-react'
 import { useAuth } from '../../auth/AuthContext'
 import HealthFooter from './HealthFooter'
+import { useShellTitleSlot } from './ShellTitle'
 
 export default function PublicShell() {
   const { status } = useAuth()
+  const shellTitle = useShellTitleSlot()
 
   return (
     <div className="flex min-h-screen flex-col bg-white text-slate-900">
       <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-4">
-          <Link to="/" className="flex items-center gap-2 font-semibold">
-            <Presentation className="h-5 w-5 text-indigo-600" aria-hidden />
-            The Slide Machine
-          </Link>
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <Link
+              to="/"
+              aria-label="The Slide Machine — home"
+              className="flex items-center gap-2 font-semibold"
+            >
+              <Presentation className="h-5 w-5 text-indigo-600" aria-hidden />
+              {!shellTitle?.active && <span>The Slide Machine</span>}
+            </Link>
+            <div
+              ref={el => shellTitle?.setSlot(el)}
+              className="flex min-w-0 flex-1 items-baseline gap-2 text-base font-semibold text-slate-700"
+            />
+          </div>
           <nav
             aria-label="Primary"
             className="flex items-center gap-1 sm:gap-2"

@@ -20,6 +20,7 @@ import { apiFetch, ApiError } from '../api/http'
 import { dispatchAction } from '../api/actions'
 import { pollSlideImage } from '../api/slides'
 import { useAuth } from '../auth/AuthContext'
+import { useTimeAgo } from '../hooks/useTimeAgo'
 import { useSlideNavigation } from '../hooks/useSlideNavigation'
 import SlideView, { type SlideTextPatch } from '../components/SlideView'
 import SlideNavZones from '../components/SlideNavZones'
@@ -28,7 +29,18 @@ import DraggableListRow from '../components/DraggableListRow'
 import EditableText from '../components/EditableText'
 import DeckPageHeader from '../components/DeckPageHeader'
 import DeckSettingsModal from '../components/DeckSettingsModal'
+import { ShellTitle } from '../components/layout/ShellTitle'
 import { type ViewMode } from '../components/ViewModeToggle'
+
+/** Slide count and modification age, small beside the title in the nav. */
+function DeckTitleMeta({ deck, count }: { deck: Deck; count: number }) {
+  const age = useTimeAgo(deck.updatedAt)
+  return (
+    <span className="whitespace-nowrap text-xs font-normal text-slate-500">
+      {count} slide{count === 1 ? '' : 's'} · edited {age}
+    </span>
+  )
+}
 
 export default function DeckViewerPage() {
   const { slug } = useParams<{ slug: string }>()
@@ -146,6 +158,19 @@ export default function DeckViewerPage() {
     pollCancelsRef.current.set(target.id, cancel)
   }
 
+  /**
+   * Stamps the deck as edited right now, mirroring the server-side
+   * touch, so the "edited <age>" nav metadata updates in real time
+   * after every auto-save.
+   */
+  const touchDeckLocally = () => {
+    setView(v =>
+      v
+        ? { ...v, deck: { ...v.deck, updatedAt: new Date().toISOString() } }
+        : v,
+    )
+  }
+
   /** Applies a generation event: new slides append, updates replace. */
   const applyEvent = (event: SlideEvent) => {
     if (event.kind === 'none' || !event.slide) return
@@ -165,6 +190,7 @@ export default function DeckViewerPage() {
         : v,
     )
     setCurrent((isNew ? view.slides.length + 1 : view.slides.length) - 1)
+    touchDeckLocally()
     watchImage(next)
   }
 
@@ -191,7 +217,7 @@ export default function DeckViewerPage() {
   /** In-place edits (EDIT-1) persist through the action layer. */
   const editSlide = (slideId: string) => (patch: SlideTextPatch) => {
     dispatchAction<Slide>('slide.editContent', { slideId, ...patch })
-      .then(updated =>
+      .then(updated => {
         setView(v =>
           v
             ? {
@@ -199,8 +225,9 @@ export default function DeckViewerPage() {
                 slides: v.slides.map(s => (s.id === updated.id ? updated : s)),
               }
             : v,
-        ),
-      )
+        )
+        touchDeckLocally()
+      })
       .catch(() => {
         // Quiet failure: the on-screen text simply reverts to the saved value
       })
@@ -231,6 +258,7 @@ export default function DeckViewerPage() {
             }
           : v,
       )
+      touchDeckLocally()
       nav.setCurrent(nextIndex)
     } catch {
       // Quiet failure
@@ -253,17 +281,19 @@ export default function DeckViewerPage() {
     dispatchAction<Deck>('deck.reorderSlides', {
       deckId: view.deck.id,
       slideOrder: ids,
-    }).catch(() => {
-      setView(v =>
-        v
-          ? {
-              ...v,
-              deck: { ...v.deck, slideOrder: previous.map(s => s.id) },
-              slides: previous,
-            }
-          : v,
-      )
     })
+      .then(() => touchDeckLocally())
+      .catch(() => {
+        setView(v =>
+          v
+            ? {
+                ...v,
+                deck: { ...v.deck, slideOrder: previous.map(s => s.id) },
+                slides: previous,
+              }
+            : v,
+        )
+      })
   }
 
   /** Drag drop: move the dragged slide to the target row's position. */
@@ -302,6 +332,7 @@ export default function DeckViewerPage() {
             }
           : v,
       )
+      touchDeckLocally()
       nav.setCurrent(c => Math.max(0, Math.min(c, view.slides.length - 2)))
     } catch {
       // Quiet failure: the slide simply stays
@@ -310,11 +341,9 @@ export default function DeckViewerPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col p-6">
-      <DeckPageHeader
-        mode={mode}
-        onModeChange={setMode}
-        title={
-          isOwner ? (
+      <ShellTitle>
+        <h1 className="min-w-0 truncate">
+          {isOwner ? (
             <EditableText
               value={view.deck.title}
               label="Lecture title"
@@ -322,8 +351,14 @@ export default function DeckViewerPage() {
             />
           ) : (
             view.deck.title
-          )
-        }
+          )}
+        </h1>
+        <DeckTitleMeta deck={view.deck} count={view.slides.length} />
+      </ShellTitle>
+
+      <DeckPageHeader
+        mode={mode}
+        onModeChange={setMode}
         actions={
           isOwner && (
             <>
@@ -399,7 +434,7 @@ export default function DeckViewerPage() {
                 key={s.id}
                 id={s.id}
                 index={i}
-                handleLabel={`Reorder slide ${i + 1}`}
+                label={`Slide ${i + 1}`}
                 onDropOn={moveSlideTo}
                 onKeyMove={moveSlideBy}
                 itemRef={nav.registerItem(i)}

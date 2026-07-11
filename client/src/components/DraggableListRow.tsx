@@ -1,22 +1,31 @@
 /**
- * Reorderable list row with a drag handle on the left, generalizable to
- * any vertical list. Pointer dragging comes from Atlassian's
- * pragmatic-drag-and-drop (each row is both draggable-by-handle and a
- * drop target); Alt+ArrowUp/Down on the handle is the keyboard path.
+ * Reorderable list row where the whole row is the drag surface,
+ * generalizable to any vertical list. Pointer dragging comes from
+ * Atlassian's pragmatic-drag-and-drop (each row is both draggable and a
+ * drop target). Drags never start from interactive or editable elements
+ * inside the row, so click-to-edit keeps working; Alt+ArrowUp/Down on
+ * the focused row is the keyboard path.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { GripVertical } from 'lucide-react'
 import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine'
 import {
   draggable,
   dropTargetForElements,
 } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
 
+/** True when dragging from `target` would steal a click or text edit. */
+const isInteractive = (target: EventTarget | null): boolean =>
+  target instanceof Element &&
+  target.closest(
+    'input, textarea, select, button, a, [role="button"], [contenteditable="true"]',
+  ) !== null
+
 interface Props {
   /** Stable identity carried through the drag. */
   id: string
   index: number
-  handleLabel: string
+  /** Accessible name for the row (e.g. "Slide 1"). */
+  label: string
   /** A drag dropped onto this row: move `sourceId` to this row's index. */
   onDropOn: (sourceId: string, targetIndex: number) => void
   /** Keyboard path: move this row one step up or down. */
@@ -29,41 +38,26 @@ interface Props {
 export default function DraggableListRow({
   id,
   index,
-  handleLabel,
+  label,
   onDropOn,
   onKeyMove,
   itemRef,
   children,
 }: Props) {
   const rowRef = useRef<HTMLLIElement | null>(null)
-  const handleRef = useRef<HTMLButtonElement>(null)
-  const contentRef = useRef<HTMLDivElement>(null)
+  // Where the pointer went down, checked when the drag tries to start
+  const pointerOnInteractive = useRef(false)
   const [dragging, setDragging] = useState(false)
   const [isOver, setIsOver] = useState(false)
 
   useEffect(() => {
     const row = rowRef.current
-    const handle = handleRef.current
-    if (!row || !handle) return
+    if (!row) return
     return combine(
       draggable({
         element: row,
-        dragHandle: handle,
         getInitialData: () => ({ rowId: id }),
-        // Drag preview shows only the row's content (the slide), not the
-        // whole row — otherwise the ghost includes the handle gutter and
-        // its shadow box extends past the slide
-        onGenerateDragPreview: ({ nativeSetDragImage, location }) => {
-          const content = contentRef.current
-          if (!content || !nativeSetDragImage) return
-          const rect = content.getBoundingClientRect()
-          const { clientX, clientY } = location.initial.input
-          nativeSetDragImage(
-            content,
-            Math.max(16, clientX - rect.x),
-            Math.min(rect.height - 16, Math.max(16, clientY - rect.y)),
-          )
-        },
+        canDrag: () => !pointerOnInteractive.current,
         onDragStart: () => setDragging(true),
         onDrop: () => setDragging(false),
       }),
@@ -88,34 +82,28 @@ export default function DraggableListRow({
         rowRef.current = el
         itemRef?.(el)
       }}
-      className={`flex items-center gap-2 ${dragging ? 'opacity-40' : ''} ${
+      tabIndex={0}
+      aria-label={label}
+      aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+      onMouseDownCapture={e => {
+        pointerOnInteractive.current = isInteractive(e.target)
+      }}
+      onKeyDown={e => {
+        if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+          e.preventDefault()
+          e.stopPropagation()
+          onKeyMove(id, e.key === 'ArrowUp' ? -1 : 1)
+        }
+      }}
+      className={`relative w-full cursor-grab select-none active:cursor-grabbing ${
+        dragging ? 'opacity-40' : ''
+      } ${
         isOver
           ? 'rounded-lg outline-2 outline-offset-4 outline-indigo-400 outline-dashed'
           : ''
       }`}
     >
-      {/* Native <button> handle, matching Atlassian's own DragHandleButton.
-          Do not wrap in components that cancel mousedown — that kills the
-          native drag before it starts */}
-      <button
-        ref={handleRef}
-        aria-label={handleLabel}
-        aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
-        title={`Drag to reorder (or Alt+↑/↓)`}
-        onKeyDown={e => {
-          if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
-            e.preventDefault()
-            e.stopPropagation()
-            onKeyMove(id, e.key === 'ArrowUp' ? -1 : 1)
-          }
-        }}
-        className="inline-block cursor-grab rounded-md p-2 text-slate-400 select-none hover:text-slate-900 active:cursor-grabbing"
-      >
-        <GripVertical className="h-5 w-5" aria-hidden />
-      </button>
-      <div ref={contentRef} className="relative min-w-0 flex-1">
-        {children}
-      </div>
+      {children}
     </li>
   )
 }

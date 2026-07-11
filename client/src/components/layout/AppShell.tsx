@@ -7,6 +7,7 @@
 import { Link, NavLink, Outlet } from 'react-router'
 import { Presentation, User } from 'lucide-react'
 import HealthFooter from './HealthFooter'
+import { useShellTitleSlot } from './ShellTitle'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }): string =>
   `flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium ${
@@ -14,14 +15,25 @@ const navLinkClass = ({ isActive }: { isActive: boolean }): string =>
   }`
 
 export default function AppShell() {
+  const shellTitle = useShellTitleSlot()
   return (
     <div className="flex min-h-screen flex-col bg-white text-slate-900">
       <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-4">
-          <Link to="/app" className="flex items-center gap-2 font-semibold">
-            <Presentation className="h-5 w-5 text-indigo-600" aria-hidden />
-            The Slide Machine
-          </Link>
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <Link
+              to="/app"
+              aria-label="The Slide Machine — home"
+              className="flex items-center gap-2 font-semibold"
+            >
+              <Presentation className="h-5 w-5 text-indigo-600" aria-hidden />
+              {!shellTitle?.active && <span>The Slide Machine</span>}
+            </Link>
+            <div
+              ref={el => shellTitle?.setSlot(el)}
+              className="flex min-w-0 flex-1 items-baseline gap-2 text-base font-semibold text-slate-700"
+            />
+          </div>
           <nav
             aria-label="Primary"
             className="flex items-center gap-1 sm:gap-2"

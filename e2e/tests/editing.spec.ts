@@ -81,10 +81,9 @@ test('in-place editing in the viewer, including list view and bullets', async ({
     'neutrons',
   )
 
-  // Drag handles reorder slides; Alt+arrows is the keyboard path
-  await page
-    .getByRole('button', { name: 'Reorder slide 1' })
-    .press('Alt+ArrowDown')
+  // Whole rows drag to reorder; Alt+arrows on a focused row is the
+  // keyboard path
+  await page.getByRole('listitem', { name: 'Slide 1' }).press('Alt+ArrowDown')
   await expect(page.getByTestId('slide').first()).toHaveAttribute(
     'data-layout',
     'list',
@@ -95,9 +94,7 @@ test('in-place editing in the viewer, including list view and bullets', async ({
     'data-layout',
     'list',
   )
-  await page
-    .getByRole('button', { name: 'Reorder slide 2' })
-    .press('Alt+ArrowUp')
+  await page.getByRole('listitem', { name: 'Slide 2' }).press('Alt+ArrowUp')
   await expect(page.getByTestId('slide').first()).toHaveAttribute(
     'data-layout',
     'title',
