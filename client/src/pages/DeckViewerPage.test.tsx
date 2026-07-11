@@ -82,11 +82,15 @@ afterEach(() => {
 })
 
 describe('DeckViewerPage', () => {
-  it('shows Resume lecture to the deck owner', async () => {
+  it('shows edit and resume icons to the deck owner', async () => {
     renderViewer(200)
     expect(
       await screen.findByRole('link', { name: /resume lecture/i }),
     ).toHaveAttribute('href', '/app/session/deck1')
+    expect(screen.getByRole('link', { name: /edit lecture/i })).toHaveAttribute(
+      'href',
+      '/app/decks/deck1/edit',
+    )
   })
 
   it('hides Resume lecture from anonymous viewers', async () => {

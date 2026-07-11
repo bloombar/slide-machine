@@ -14,19 +14,13 @@ import { config } from '../config'
 
 function LectureRow({ deck }: { deck: Deck }) {
   return (
-    <li className="flex items-center justify-between rounded-md border border-slate-200 px-4 py-2">
-      <span>{deck.title}</span>
-      <span className="flex gap-3 text-sm">
-        <Link to={`/app/session/${deck.id}`} className="text-indigo-600">
-          Resume
-        </Link>
-        <Link to={`/app/decks/${deck.id}/edit`} className="text-slate-600">
-          Edit
-        </Link>
-        <Link to={`/d/${deck.permalinkSlug}`} className="text-slate-500">
-          View
-        </Link>
-      </span>
+    <li>
+      <Link
+        to={`/d/${deck.permalinkSlug}`}
+        className="block rounded-md border border-slate-200 px-4 py-2 hover:border-slate-300 hover:bg-slate-50"
+      >
+        {deck.title}
+      </Link>
     </li>
   )
 }

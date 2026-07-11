@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { Mic } from 'lucide-react'
+import { Mic, Pencil } from 'lucide-react'
 import type { DeckViewResponse } from '@slide-machine/shared'
 import { apiFetch, ApiError } from '../api/http'
 import { useAuth } from '../auth/AuthContext'
@@ -69,15 +69,24 @@ export default function DeckViewerPage() {
         <h1 className="text-center text-lg font-semibold text-slate-700">
           {view.deck.title}
         </h1>
-        <div className="text-right">
+        <div className="flex items-center justify-end gap-1">
           {isOwner && (
-            <Link
-              to={`/app/session/${view.deck.id}`}
-              className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white"
-            >
-              <Mic className="h-4 w-4" aria-hidden />
-              Resume lecture
-            </Link>
+            <>
+              <Link
+                to={`/app/decks/${view.deck.id}/edit`}
+                aria-label="Edit lecture"
+                className="rounded-md p-2 text-slate-500 hover:text-slate-900"
+              >
+                <Pencil className="h-5 w-5" aria-hidden />
+              </Link>
+              <Link
+                to={`/app/session/${view.deck.id}`}
+                aria-label="Resume lecture"
+                className="rounded-md p-2 text-slate-500 hover:text-slate-900"
+              >
+                <Mic className="h-5 w-5" aria-hidden />
+              </Link>
+            </>
           )}
         </div>
       </header>

@@ -19,12 +19,12 @@ export function useSlideNavigation(count: number, mode: ViewMode) {
   )
   useArrowKeys(goPrev, goNext)
 
-  // List view: navigating scrolls the now-current slide into view
+  // List view: prev/next navigation centers the now-current slide
   useEffect(() => {
     if (mode !== 'list') return
     itemsRef.current
       .get(current)
-      ?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' })
+      ?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
   }, [current, mode])
 
   /** Ref callback for list items so navigation can scroll to them. */
