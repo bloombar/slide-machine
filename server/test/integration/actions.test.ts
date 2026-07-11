@@ -11,17 +11,26 @@ import { UserModel } from '../../src/models/user'
 import { ProjectModel } from '../../src/models/project'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
 
-const app = createApp()
+// One long-lived server per file: supertest's default per-request
+// ephemeral servers intermittently lost requests to localhost port
+// churn on macOS (bare 404s with no Express headers)
+const server = createApp().listen(0)
+afterAll(() => server.close())
 
 const registerUser = async (email: string): Promise<string> => {
-  const res = await request(app)
+  const res = await request(server)
     .post('/api/auth/register')
     .send({ email, password: 'longenough1', displayName: email.split('@')[0] })
+  if (res.status !== 201) {
+    throw new Error(
+      `registration failed: ${res.status} ${JSON.stringify(res.body)}`,
+    )
+  }
   return res.body.accessToken as string
 }
 
 const act = (token: string, name: string, input: object = {}) =>
-  request(app)
+  request(server)
     .post(`/api/actions/${name}`)
     .set('Authorization', `Bearer ${token}`)
     .send(input)
@@ -45,7 +54,7 @@ beforeEach(async () => {
 
 describe('POST /api/actions/:name', () => {
   it('rejects unauthenticated calls with 401', async () => {
-    const res = await request(app)
+    const res = await request(server)
       .post('/api/actions/project.create')
       .send({ title: 'Sneaky' })
     expect(res.status).toBe(401)

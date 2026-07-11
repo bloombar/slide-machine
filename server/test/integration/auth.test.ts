@@ -13,7 +13,11 @@ import { UserModel } from '../../src/models/user'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
 import { signAccessToken } from '../../src/auth/tokens'
 
-const app = createApp()
+// One long-lived server per file: supertest's default per-request
+// ephemeral servers intermittently lost requests to localhost port
+// churn on macOS (bare 404s with no Express headers)
+const server = createApp().listen(0)
+afterAll(() => server.close())
 const CREDS = {
   email: 'ada@example.com',
   password: 'longenough1',
@@ -42,7 +46,7 @@ beforeEach(async () => {
 
 describe('POST /api/auth/register', () => {
   it('creates the account, returns user + access token, sets the refresh cookie', async () => {
-    const res = await request(app).post('/api/auth/register').send(CREDS)
+    const res = await request(server).post('/api/auth/register').send(CREDS)
 
     expect(res.status).toBe(201)
     expect(res.body.user).toMatchObject({
@@ -59,8 +63,8 @@ describe('POST /api/auth/register', () => {
   })
 
   it('rejects duplicate emails, including case variants, with 409', async () => {
-    await request(app).post('/api/auth/register').send(CREDS)
-    const dup = await request(app)
+    await request(server).post('/api/auth/register').send(CREDS)
+    const dup = await request(server)
       .post('/api/auth/register')
       .send({ ...CREDS, email: 'ADA@example.com' })
 
@@ -69,7 +73,7 @@ describe('POST /api/auth/register', () => {
   })
 
   it('rejects invalid input with details', async () => {
-    const res = await request(app)
+    const res = await request(server)
       .post('/api/auth/register')
       .send({ email: 'not-an-email', password: 'short', displayName: '' })
 
@@ -81,11 +85,11 @@ describe('POST /api/auth/register', () => {
 
 describe('POST /api/auth/login', () => {
   beforeEach(async () => {
-    await request(app).post('/api/auth/register').send(CREDS)
+    await request(server).post('/api/auth/register').send(CREDS)
   })
 
   it('logs in with correct credentials', async () => {
-    const res = await request(app)
+    const res = await request(server)
       .post('/api/auth/login')
       .send({ email: CREDS.email, password: CREDS.password })
 
@@ -95,10 +99,10 @@ describe('POST /api/auth/login', () => {
   })
 
   it('returns the same 401 for wrong password and unknown email', async () => {
-    const wrongPw = await request(app)
+    const wrongPw = await request(server)
       .post('/api/auth/login')
       .send({ email: CREDS.email, password: 'incorrect1' })
-    const noUser = await request(app)
+    const noUser = await request(server)
       .post('/api/auth/login')
       .send({ email: 'ghost@example.com', password: 'whatever1' })
 
@@ -111,22 +115,22 @@ describe('POST /api/auth/login', () => {
 
 describe('GET /api/auth/me', () => {
   it('returns the user with a valid token and 401 without one', async () => {
-    const reg = await request(app).post('/api/auth/register').send(CREDS)
+    const reg = await request(server).post('/api/auth/register').send(CREDS)
 
-    const me = await request(app)
+    const me = await request(server)
       .get('/api/auth/me')
       .set('Authorization', `Bearer ${reg.body.accessToken}`)
     expect(me.status).toBe(200)
     expect(me.body.email).toBe(CREDS.email)
 
-    expect((await request(app).get('/api/auth/me')).status).toBe(401)
+    expect((await request(server).get('/api/auth/me')).status).toBe(401)
   })
 
   it('rejects expired access tokens', async () => {
-    const reg = await request(app).post('/api/auth/register').send(CREDS)
+    const reg = await request(server).post('/api/auth/register').send(CREDS)
     const expired = await signAccessToken(reg.body.user.id, -10)
 
-    const res = await request(app)
+    const res = await request(server)
       .get('/api/auth/me')
       .set('Authorization', `Bearer ${expired}`)
     expect(res.status).toBe(401)
@@ -136,10 +140,10 @@ describe('GET /api/auth/me', () => {
 
 describe('POST /api/auth/refresh', () => {
   it('rotates the token: new cookie works, replayed old cookie fails', async () => {
-    const reg = await request(app).post('/api/auth/register').send(CREDS)
+    const reg = await request(server).post('/api/auth/register').send(CREDS)
     const oldCookie = refreshCookie(reg)!
 
-    const first = await request(app)
+    const first = await request(server)
       .post('/api/auth/refresh')
       .set('Cookie', oldCookie)
     expect(first.status).toBe(200)
@@ -149,53 +153,53 @@ describe('POST /api/auth/refresh', () => {
     expect(newCookie).not.toBe(oldCookie)
 
     // Grace is 0 in tests: the rotated-out token must be dead immediately
-    const replay = await request(app)
+    const replay = await request(server)
       .post('/api/auth/refresh')
       .set('Cookie', oldCookie)
     expect(replay.status).toBe(401)
 
-    const second = await request(app)
+    const second = await request(server)
       .post('/api/auth/refresh')
       .set('Cookie', newCookie)
     expect(second.status).toBe(200)
   })
 
   it('honors a positive grace window on the rotated-out token', async () => {
-    const reg = await request(app).post('/api/auth/register').send(CREDS)
+    const reg = await request(server).post('/api/auth/register').send(CREDS)
     const oldCookie = refreshCookie(reg)!
-    await request(app).post('/api/auth/refresh').set('Cookie', oldCookie)
+    await request(server).post('/api/auth/refresh').set('Cookie', oldCookie)
 
     // Simulate a grace window by extending the (now-shortened) old record
     await RefreshTokenModel.updateMany(
       {},
       { $set: { expiresAt: new Date(Date.now() + 60000) } },
     )
-    const withinGrace = await request(app)
+    const withinGrace = await request(server)
       .post('/api/auth/refresh')
       .set('Cookie', oldCookie)
     expect(withinGrace.status).toBe(200)
   })
 
   it('401s with no cookie', async () => {
-    expect((await request(app).post('/api/auth/refresh')).status).toBe(401)
+    expect((await request(server).post('/api/auth/refresh')).status).toBe(401)
   })
 })
 
 describe('POST /api/auth/logout', () => {
   it('revokes the session and clears the cookie; idempotent', async () => {
-    const reg = await request(app).post('/api/auth/register').send(CREDS)
+    const reg = await request(server).post('/api/auth/register').send(CREDS)
     const cookie = refreshCookie(reg)!
 
-    const out = await request(app)
+    const out = await request(server)
       .post('/api/auth/logout')
       .set('Cookie', cookie)
     expect(out.status).toBe(204)
     expect(refreshCookie(out)).toContain('sm_refresh=;')
 
     expect(
-      (await request(app).post('/api/auth/refresh').set('Cookie', cookie))
+      (await request(server).post('/api/auth/refresh').set('Cookie', cookie))
         .status,
     ).toBe(401)
-    expect((await request(app).post('/api/auth/logout')).status).toBe(204)
+    expect((await request(server).post('/api/auth/logout')).status).toBe(204)
   })
 })

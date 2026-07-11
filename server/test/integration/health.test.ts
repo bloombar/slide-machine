@@ -8,6 +8,8 @@ import { env } from '../../src/config/env'
 import { connectMongo, disconnectMongo } from '../../src/db/mongoose'
 import { createApp } from '../../src/app'
 
+const server = createApp().listen(0)
+
 describe('GET /api/health', () => {
   beforeAll(async () => {
     await connectMongo(env.MONGODB_URI)
@@ -15,10 +17,11 @@ describe('GET /api/health', () => {
 
   afterAll(async () => {
     await disconnectMongo()
+    server.close()
   })
 
   it('reports ok with Mongo connected', async () => {
-    const res = await request(createApp()).get('/api/health')
+    const res = await request(server).get('/api/health')
 
     expect(res.status).toBe(200)
     expect(res.body).toMatchObject({ status: 'ok', mongo: 'connected' })

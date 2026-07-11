@@ -13,17 +13,26 @@ import { DeckModel } from '../../src/models/deck'
 import { SlideModel } from '../../src/models/slide'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
 
-const app = createApp()
+// One long-lived server per file: supertest's default per-request
+// ephemeral servers intermittently lost requests to localhost port
+// churn on macOS (bare 404s with no Express headers)
+const server = createApp().listen(0)
+afterAll(() => server.close())
 
 const registerUser = async (email: string): Promise<string> => {
-  const res = await request(app)
+  const res = await request(server)
     .post('/api/auth/register')
     .send({ email, password: 'longenough1', displayName: email.split('@')[0] })
+  if (res.status !== 201) {
+    throw new Error(
+      `registration failed: ${res.status} ${JSON.stringify(res.body)}`,
+    )
+  }
   return res.body.accessToken as string
 }
 
 const act = (token: string, name: string, input: object = {}) =>
-  request(app)
+  request(server)
     .post(`/api/actions/${name}`)
     .set('Authorization', `Bearer ${token}`)
     .send(input)
@@ -186,10 +195,10 @@ describe('GET /api/decks/:slug (viewer)', () => {
   })
 
   it('serves private decks to their owner only, as 404 to others', async () => {
-    const anon = await request(app).get(`/api/decks/${slug}`)
+    const anon = await request(server).get(`/api/decks/${slug}`)
     expect(anon.status).toBe(404)
 
-    const owner = await request(app)
+    const owner = await request(server)
       .get(`/api/decks/${slug}`)
       .set('Authorization', `Bearer ${ada}`)
     expect(owner.status).toBe(200)
@@ -199,13 +208,13 @@ describe('GET /api/decks/:slug (viewer)', () => {
 
   it('serves public decks anonymously', async () => {
     await DeckModel.updateOne({ permalinkSlug: slug }, { visibility: 'public' })
-    const res = await request(app).get(`/api/decks/${slug}`)
+    const res = await request(server).get(`/api/decks/${slug}`)
     expect(res.status).toBe(200)
     expect(res.body.deck.title).toBe('Shared Lecture')
   })
 
   it('404s unknown slugs', async () => {
-    expect((await request(app).get('/api/decks/nope-12345678')).status).toBe(
+    expect((await request(server).get('/api/decks/nope-12345678')).status).toBe(
       404,
     )
   })
