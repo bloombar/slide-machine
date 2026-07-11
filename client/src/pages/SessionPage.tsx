@@ -13,7 +13,8 @@ import { pollSlideImage } from '../api/slides'
 import { useSlideNavigation } from '../hooks/useSlideNavigation'
 import SlideView from '../components/SlideView'
 import SlideNavZones from '../components/SlideNavZones'
-import ViewModeToggle, { type ViewMode } from '../components/ViewModeToggle'
+import DeckPageHeader from '../components/DeckPageHeader'
+import { type ViewMode } from '../components/ViewModeToggle'
 
 export default function SessionPage() {
   const { deckId } = useParams<{ deckId: string }>()
@@ -114,27 +115,26 @@ export default function SessionPage() {
 
   return (
     <div className="flex flex-col">
-      <header className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold text-slate-700">
-            {view?.deck.title ?? 'Loading…'}
-          </h1>
-          <ViewModeToggle mode={mode} onChange={setMode} />
-        </div>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-slate-500">
-            {slides.length
-              ? `Slide ${nav.current + 1} of ${slides.length}`
-              : 'No slides yet'}
-          </span>
-          <button
-            onClick={() => view && navigate(`/d/${view.deck.permalinkSlug}`)}
-            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white"
-          >
-            End session
-          </button>
-        </div>
-      </header>
+      <DeckPageHeader
+        mode={mode}
+        onModeChange={setMode}
+        title={view?.deck.title ?? 'Loading…'}
+        actions={
+          <>
+            <span className="mr-2 text-sm whitespace-nowrap text-slate-500">
+              {slides.length
+                ? `Slide ${nav.current + 1} of ${slides.length}`
+                : 'No slides yet'}
+            </span>
+            <button
+              onClick={() => view && navigate(`/d/${view.deck.permalinkSlug}`)}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium whitespace-nowrap text-white"
+            >
+              End session
+            </button>
+          </>
+        }
+      />
 
       <div className="mx-auto w-full max-w-4xl flex-1">
         {!slides.length || !view ? (

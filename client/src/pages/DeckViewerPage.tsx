@@ -14,7 +14,8 @@ import { useAuth } from '../auth/AuthContext'
 import { useSlideNavigation } from '../hooks/useSlideNavigation'
 import SlideView from '../components/SlideView'
 import SlideNavZones from '../components/SlideNavZones'
-import ViewModeToggle, { type ViewMode } from '../components/ViewModeToggle'
+import DeckPageHeader from '../components/DeckPageHeader'
+import { type ViewMode } from '../components/ViewModeToggle'
 
 export default function DeckViewerPage() {
   const { slug } = useParams<{ slug: string }>()
@@ -64,13 +65,12 @@ export default function DeckViewerPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col p-6">
-      <header className="mb-4 grid grid-cols-3 items-center">
-        <ViewModeToggle mode={mode} onChange={setMode} />
-        <h1 className="text-center text-lg font-semibold text-slate-700">
-          {view.deck.title}
-        </h1>
-        <div className="flex items-center justify-end gap-1">
-          {isOwner && (
+      <DeckPageHeader
+        mode={mode}
+        onModeChange={setMode}
+        title={view.deck.title}
+        actions={
+          isOwner && (
             <>
               <Link
                 to={`/app/decks/${view.deck.id}/edit`}
@@ -87,9 +87,9 @@ export default function DeckViewerPage() {
                 <Mic className="h-5 w-5" aria-hidden />
               </Link>
             </>
-          )}
-        </div>
-      </header>
+          )
+        }
+      />
 
       {view.slides.length === 0 ? (
         <p className="text-center text-slate-400">This deck has no slides.</p>

@@ -6,14 +6,15 @@
  */
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { ArrowDown, ArrowLeft, ArrowUp, Mic, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Mic, Trash2 } from 'lucide-react'
 import type { Deck, DeckViewResponse, Slide } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import { useSlideNavigation } from '../hooks/useSlideNavigation'
 import SlideView from '../components/SlideView'
 import SlideNavZones from '../components/SlideNavZones'
 import SlideEditorFields from '../components/SlideEditorFields'
-import ViewModeToggle, { type ViewMode } from '../components/ViewModeToggle'
+import DeckPageHeader from '../components/DeckPageHeader'
+import { type ViewMode } from '../components/ViewModeToggle'
 
 export default function DeckEditorPage() {
   const { deckId } = useParams<{ deckId: string }>()
@@ -90,28 +91,20 @@ export default function DeckEditorPage() {
 
   return (
     <div>
-      <header className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link
-            to={`/app/projects/${view.deck.projectId}`}
-            className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900"
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden />
-            Project
-          </Link>
-          <h1 className="text-2xl font-bold">{view.deck.title}</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <ViewModeToggle mode={mode} onChange={setMode} />
+      <DeckPageHeader
+        mode={mode}
+        onModeChange={setMode}
+        title={view.deck.title}
+        actions={
           <Link
             to={`/app/session/${view.deck.id}`}
-            className="ml-2 flex items-center gap-2 rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white"
+            aria-label="Resume lecture"
+            className="rounded-md p-2 text-slate-500 hover:text-slate-900"
           >
-            <Mic className="h-4 w-4" aria-hidden />
-            Resume lecture
+            <Mic className="h-5 w-5" aria-hidden />
           </Link>
-        </div>
-      </header>
+        }
+      />
 
       {error && (
         <p role="alert" className="mb-4 text-sm text-red-600">
