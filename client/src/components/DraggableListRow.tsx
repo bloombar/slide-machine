@@ -37,6 +37,7 @@ export default function DraggableListRow({
 }: Props) {
   const rowRef = useRef<HTMLLIElement | null>(null)
   const handleRef = useRef<HTMLButtonElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState(false)
   const [isOver, setIsOver] = useState(false)
 
@@ -49,6 +50,20 @@ export default function DraggableListRow({
         element: row,
         dragHandle: handle,
         getInitialData: () => ({ rowId: id }),
+        // Drag preview shows only the row's content (the slide), not the
+        // whole row — otherwise the ghost includes the handle gutter and
+        // its shadow box extends past the slide
+        onGenerateDragPreview: ({ nativeSetDragImage, location }) => {
+          const content = contentRef.current
+          if (!content || !nativeSetDragImage) return
+          const rect = content.getBoundingClientRect()
+          const { clientX, clientY } = location.initial.input
+          nativeSetDragImage(
+            content,
+            Math.max(16, clientX - rect.x),
+            Math.min(rect.height - 16, Math.max(16, clientY - rect.y)),
+          )
+        },
         onDragStart: () => setDragging(true),
         onDrop: () => setDragging(false),
       }),
@@ -97,7 +112,9 @@ export default function DraggableListRow({
       >
         <GripVertical className="h-5 w-5" aria-hidden />
       </button>
-      <div className="relative min-w-0 flex-1">{children}</div>
+      <div ref={contentRef} className="relative min-w-0 flex-1">
+        {children}
+      </div>
     </li>
   )
 }
