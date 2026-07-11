@@ -129,7 +129,7 @@ describe('SlideView in-place editing', () => {
     expect(onEdit).toHaveBeenCalledWith({ title: 'Photosynthesis 101' })
   })
 
-  it('edits a single bullet, emitting the full bullets array', () => {
+  it('edits the bullet list as a whole, one line per bullet', () => {
     const onEdit = vi.fn()
     render(
       <SlideView
@@ -144,13 +144,17 @@ describe('SlideView in-place editing', () => {
       />,
     )
 
-    fireEvent.click(screen.getByTitle('Click to edit Bullet 2'))
-    fireEvent.change(screen.getByRole('textbox', { name: 'Bullet 2' }), {
-      target: { value: 'fresh water' },
+    fireEvent.click(screen.getByTitle('Click to edit Slide bullets'))
+    const box = screen.getByRole('textbox', { name: 'Slide bullets' })
+    expect(box).toHaveValue('sun\nwater')
+    fireEvent.change(box, {
+      target: { value: 'sun\nfresh water\nsoil\n' },
     })
-    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
+    fireEvent.keyDown(box, { key: 'Enter', metaKey: true })
 
-    expect(onEdit).toHaveBeenCalledWith({ bullets: ['sun', 'fresh water'] })
+    expect(onEdit).toHaveBeenCalledWith({
+      bullets: ['sun', 'fresh water', 'soil'],
+    })
   })
 
   it('renders plain text when not editable', () => {

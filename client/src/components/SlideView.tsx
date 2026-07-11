@@ -121,21 +121,29 @@ export default function SlideView({
       <SlideMarkdown text={value ?? ''} inline={!multiline} />
     )
 
-  const bullet = (b: string, i: number) =>
-    editable && onEdit ? (
-      <EditableText
-        value={b}
-        label={`Bullet ${i + 1}`}
-        renderValue={v => <SlideMarkdown text={v} inline links={false} />}
-        onSave={v =>
-          onEdit({
-            bullets: (slide.bullets ?? []).map((x, j) => (j === i ? v : x)),
-          })
-        }
-      />
-    ) : (
-      <SlideMarkdown text={b} inline />
+  /** The bullet list edits as a whole: one line per bullet. */
+  const bulletsBlock = () => {
+    const items = slide.bullets ?? []
+    const rendered = (bullets: string[]) => (
+      <ul className="flex list-disc flex-col gap-[1.5cqi] pl-[4cqi] text-left text-[2.75cqi]">
+        {bullets.map((b, i) => (
+          <li key={i}>
+            <SlideMarkdown text={b} inline links={!(editable && onEdit)} />
+          </li>
+        ))}
+      </ul>
     )
+    if (!(editable && onEdit)) return rendered(items)
+    return (
+      <EditableText
+        value={items.join('\n')}
+        label="Slide bullets"
+        multiline
+        renderValue={v => rendered(v.split('\n'))}
+        onSave={v => onEdit({ bullets: v.split('\n').filter(b => b.trim()) })}
+      />
+    )
+  }
 
   const body = (
     <>
@@ -170,9 +178,9 @@ export default function SlideView({
           >
             {text(slide.title, 'Slide title', 'title')}
           </h2>
-          <p className="text-[2.75cqi] leading-relaxed">
+          <div className="text-[2.75cqi] leading-relaxed">
             {text(slide.body, 'Slide body', 'body', true)}
-          </p>
+          </div>
         </div>
       )}
       {slide.layoutType === 'list' && (
@@ -183,11 +191,7 @@ export default function SlideView({
           >
             {text(slide.title, 'Slide title', 'title')}
           </h2>
-          <ul className="flex list-disc flex-col gap-[1.5cqi] pl-[4cqi] text-[2.75cqi]">
-            {(slide.bullets ?? []).map((b, i) => (
-              <li key={i}>{bullet(b, i)}</li>
-            ))}
-          </ul>
+          {bulletsBlock()}
         </div>
       )}
       {slide.layoutType === 'image-heavy' && (
@@ -214,9 +218,9 @@ export default function SlideView({
             >
               {text(slide.title, 'Slide title', 'title')}
             </h2>
-            <p className="text-[2.5cqi] leading-relaxed">
+            <div className="text-[2.5cqi] leading-relaxed">
               {text(slide.body, 'Slide body', 'body', true)}
-            </p>
+            </div>
           </div>
           <div className="h-3/4 overflow-hidden rounded-lg">
             <ImageSlot slide={slide} colors={colors} pending={imagePending} />
@@ -225,9 +229,9 @@ export default function SlideView({
       )}
       {slide.layoutType === 'quote' && (
         <div className="flex h-full flex-col items-center justify-center gap-[2cqi] px-[8cqi] text-center">
-          <p className="text-[4cqi] font-medium italic">
+          <div className="text-[4cqi] font-medium italic">
             “{text(slide.body, 'Slide body', 'body', true)}”
-          </p>
+          </div>
           {slide.caption && (
             <p style={{ color: colors.muted }}>
               {text(slide.caption, 'Slide caption', 'caption')}

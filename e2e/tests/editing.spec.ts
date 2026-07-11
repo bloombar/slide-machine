@@ -62,9 +62,11 @@ test('in-place editing in the viewer, including list view and bullets', async ({
   // List view: every slide is editable up-front; edit a bullet in place
   await page.getByRole('button', { name: 'List view' }).click()
   await expect(page.getByTestId('slide')).toHaveCount(2)
-  await page.getByTitle('Click to edit Bullet 2').click()
-  await page.getByRole('textbox', { name: 'Bullet 2' }).fill('**neutrons**')
-  await page.keyboard.press('Enter')
+  await page.getByTitle('Click to edit Slide bullets').click()
+  await page
+    .getByRole('textbox', { name: 'Slide bullets' })
+    .fill('protons\n**neutrons**')
+  await page.keyboard.press('ControlOrMeta+Enter')
   await expect(page.getByTestId('slide').last().locator('strong')).toHaveText(
     'neutrons',
   )
@@ -113,4 +115,14 @@ test('in-place editing in the viewer, including list view and bullets', async ({
   await expect(page.getByRole('heading', { name: 'New slide' })).toBeVisible()
   await page.reload()
   await expect(page.getByText('1 / 2')).toBeVisible()
+
+  // Line breaks entered while editing are preserved in the rendered text
+  await page.keyboard.press('ArrowRight')
+  await page.getByTitle('Click to edit Slide body').click()
+  await page
+    .getByRole('textbox', { name: 'Slide body' })
+    .fill('line one\nline two')
+  await page.keyboard.press('ControlOrMeta+Enter')
+  await expect(page.getByTestId('slide').locator('br')).toHaveCount(1)
+  await expect(page.getByTestId('slide')).toContainText('line two')
 })

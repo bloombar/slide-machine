@@ -55,3 +55,19 @@ describe('SlideMarkdown', () => {
     expect(screen.getByText(/Not a heading/)).toBeInTheDocument()
   })
 })
+
+describe('SlideMarkdown line breaks', () => {
+  it('preserves single line breaks as <br>', () => {
+    const { container } = render(<SlideMarkdown text={'line one\nline two'} />)
+    expect(container.querySelector('br')).not.toBeNull()
+    expect(screen.getByText(/line one/)).toBeInTheDocument()
+    expect(screen.getByText(/line two/)).toBeInTheDocument()
+  })
+
+  it('renders blank-line separations as separate paragraphs', () => {
+    const { container } = render(
+      <SlideMarkdown text={'first para\n\nsecond para'} />,
+    )
+    expect(container.querySelectorAll('p')).toHaveLength(2)
+  })
+})

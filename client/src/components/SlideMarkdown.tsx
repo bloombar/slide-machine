@@ -6,8 +6,9 @@
  * Elements are styled to inherit the slide's template typography.
  */
 import Markdown from 'react-markdown'
+import remarkBreaks from 'remark-breaks'
 
-const INLINE_ELEMENTS = ['p', 'strong', 'em', 'del', 'code', 'a']
+const INLINE_ELEMENTS = ['p', 'br', 'strong', 'em', 'del', 'code', 'a']
 const BLOCK_ELEMENTS = [...INLINE_ELEMENTS, 'ul', 'ol', 'li']
 
 interface Props {
@@ -25,17 +26,16 @@ export default function SlideMarkdown({
 }: Props) {
   return (
     <Markdown
+      remarkPlugins={[remarkBreaks]}
       allowedElements={inline ? INLINE_ELEMENTS : BLOCK_ELEMENTS}
       unwrapDisallowed
       components={{
         // Inline slots live inside existing h1/p elements — no nested <p>
-        ...(inline
-          ? {
-              p: ({ children }: { children?: React.ReactNode }) => (
-                <>{children}</>
-              ),
-            }
-          : {}),
+        p: inline
+          ? ({ children }: { children?: React.ReactNode }) => <>{children}</>
+          : ({ children }: { children?: React.ReactNode }) => (
+              <p className="mb-[2cqi] last:mb-0">{children}</p>
+            ),
         a: ({ href, children }) =>
           links ? (
             <a
