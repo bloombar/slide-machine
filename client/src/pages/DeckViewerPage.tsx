@@ -8,11 +8,12 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { Mic, Pencil } from 'lucide-react'
-import type { DeckViewResponse } from '@slide-machine/shared'
+import type { DeckViewResponse, Slide } from '@slide-machine/shared'
 import { apiFetch, ApiError } from '../api/http'
+import { dispatchAction } from '../api/actions'
 import { useAuth } from '../auth/AuthContext'
 import { useSlideNavigation } from '../hooks/useSlideNavigation'
-import SlideView from '../components/SlideView'
+import SlideView, { type SlideTextPatch } from '../components/SlideView'
 import SlideNavZones from '../components/SlideNavZones'
 import DeckPageHeader from '../components/DeckPageHeader'
 import { type ViewMode } from '../components/ViewModeToggle'
@@ -66,6 +67,24 @@ export default function DeckViewerPage() {
   const slide = view.slides[nav.current]
   const isOwner = user?.id === view.deck.ownerId
 
+  /** In-place edits (EDIT-1) persist through the same action as the editor. */
+  const editSlide = (slideId: string) => (patch: SlideTextPatch) => {
+    dispatchAction<Slide>('slide.editContent', { slideId, ...patch })
+      .then(updated =>
+        setView(v =>
+          v
+            ? {
+                ...v,
+                slides: v.slides.map(s => (s.id === updated.id ? updated : s)),
+              }
+            : v,
+        ),
+      )
+      .catch(() => {
+        // Quiet failure: the on-screen text simply reverts to the saved value
+      })
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col p-6">
       <DeckPageHeader
@@ -105,7 +124,12 @@ export default function DeckViewerPage() {
               onPrev={nav.goPrev}
               onNext={nav.goNext}
             >
-              <SlideView slide={slide!} template={view.template} />
+              <SlideView
+                slide={slide!}
+                template={view.template}
+                editable={isOwner}
+                onEdit={editSlide(slide!.id)}
+              />
             </SlideNavZones>
           </div>
           <p className="mx-auto mt-4 text-sm text-slate-500">
@@ -116,7 +140,12 @@ export default function DeckViewerPage() {
         <ul className="mx-auto flex w-full max-w-4xl flex-col gap-6">
           {view.slides.map((s, i) => (
             <li key={s.id} ref={nav.registerItem(i)}>
-              <SlideView slide={s} template={view.template} />
+              <SlideView
+                slide={s}
+                template={view.template}
+                editable={isOwner}
+                onEdit={editSlide(s.id)}
+              />
             </li>
           ))}
         </ul>

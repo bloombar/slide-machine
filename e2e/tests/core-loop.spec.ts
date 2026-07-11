@@ -65,8 +65,21 @@ test('speak-to-slides core loop, session to permalink playback', async ({
   // owner of a private deck — session restore precedes the deck fetch
   await page.reload()
   await expect(page.getByText('1 / 2')).toBeVisible()
+
+  // Owners edit slide text in place from the viewer; text clicks win
+  // over the prev/next hotspots, and the change persists
+  await page.getByTitle('Click to edit Slide title').click()
+  await page
+    .getByRole('textbox', { name: 'Slide title' })
+    .fill('Photosynthesis 101')
+  await page.keyboard.press('Enter')
   await expect(
-    page.getByRole('heading', { name: 'Photosynthesis Basics' }),
+    page.getByRole('heading', { name: 'Photosynthesis 101' }),
+  ).toBeVisible()
+  await expect(page.getByText('1 / 2')).toBeVisible()
+  await page.reload()
+  await expect(
+    page.getByRole('heading', { name: 'Photosynthesis 101' }),
   ).toBeVisible()
 
   // Hover-zone navigation: half-slide hotspots (click implies hover)

@@ -4,9 +4,19 @@
  * skeleton while enrichment is in flight, a quiet static block once it
  * resolves without an image, and a silent fallback if the image itself
  * fails to load — enrichment never surfaces an error.
+ *
+ * With `editable` + `onEdit`, every text component becomes editable
+ * in place (EDIT-1): clicking it swaps in an input that inherits the
+ * slide's typography and auto-saves via the debounced pattern.
  */
 import { useState } from 'react'
 import type { Slide, Template } from '@slide-machine/shared'
+import EditableText from './EditableText'
+
+/** Partial text update produced by in-place editing. */
+export type SlideTextPatch = Partial<
+  Pick<Slide, 'title' | 'body' | 'caption' | 'bullets'>
+>
 
 interface ThemeColors {
   background: string
@@ -76,21 +86,63 @@ export default function SlideView({
   slide,
   template,
   imagePending,
+  editable,
+  onEdit,
 }: {
   slide: Slide
   template: Template
   /** True while background enrichment may still deliver an image (GEN-5). */
   imagePending?: boolean
+  /** Owner-only: enables click-to-edit on every text component. */
+  editable?: boolean
+  onEdit?: (patch: SlideTextPatch) => void
 }) {
   const colors = themeColors(template.theme)
+
+  /** A text slot: plain text normally, in-place editable for owners. */
+  const text = (
+    value: string | undefined,
+    label: string,
+    key: 'title' | 'body' | 'caption',
+    multiline = false,
+  ) =>
+    editable && onEdit ? (
+      <EditableText
+        value={value ?? ''}
+        label={label}
+        multiline={multiline}
+        onSave={v => onEdit({ [key]: v })}
+      />
+    ) : (
+      value
+    )
+
+  const bullet = (b: string, i: number) =>
+    editable && onEdit ? (
+      <EditableText
+        value={b}
+        label={`Bullet ${i + 1}`}
+        onSave={v =>
+          onEdit({
+            bullets: (slide.bullets ?? []).map((x, j) => (j === i ? v : x)),
+          })
+        }
+      />
+    ) : (
+      b
+    )
 
   const body = (
     <>
       {slide.layoutType === 'title' && (
         <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
-          <h1 className="text-5xl font-bold">{slide.title}</h1>
+          <h1 className="text-5xl font-bold">
+            {text(slide.title, 'Slide title', 'title')}
+          </h1>
           {slide.caption && (
-            <p style={{ color: colors.muted }}>{slide.caption}</p>
+            <p style={{ color: colors.muted }}>
+              {text(slide.caption, 'Slide caption', 'caption')}
+            </p>
           )}
         </div>
       )}
@@ -100,7 +152,9 @@ export default function SlideView({
             className="h-1 w-16 rounded"
             style={{ backgroundColor: colors.accent }}
           />
-          <h2 className="text-4xl font-semibold">{slide.title}</h2>
+          <h2 className="text-4xl font-semibold">
+            {text(slide.title, 'Slide title', 'title')}
+          </h2>
         </div>
       )}
       {slide.layoutType === 'content' && (
@@ -109,9 +163,11 @@ export default function SlideView({
             className="text-3xl font-semibold"
             style={{ color: colors.accent }}
           >
-            {slide.title}
+            {text(slide.title, 'Slide title', 'title')}
           </h2>
-          <p className="text-xl leading-relaxed">{slide.body}</p>
+          <p className="text-xl leading-relaxed">
+            {text(slide.body, 'Slide body', 'body', true)}
+          </p>
         </div>
       )}
       {slide.layoutType === 'list' && (
@@ -120,11 +176,11 @@ export default function SlideView({
             className="text-3xl font-semibold"
             style={{ color: colors.accent }}
           >
-            {slide.title}
+            {text(slide.title, 'Slide title', 'title')}
           </h2>
           <ul className="flex list-disc flex-col gap-3 pl-8 text-xl">
             {(slide.bullets ?? []).map((b, i) => (
-              <li key={i}>{b}</li>
+              <li key={i}>{bullet(b, i)}</li>
             ))}
           </ul>
         </div>
@@ -136,7 +192,7 @@ export default function SlideView({
           </div>
           {slide.caption && (
             <p className="text-center text-sm" style={{ color: colors.muted }}>
-              {slide.caption}
+              {text(slide.caption, 'Slide caption', 'caption')}
             </p>
           )}
         </div>
@@ -148,9 +204,11 @@ export default function SlideView({
               className="text-3xl font-semibold"
               style={{ color: colors.accent }}
             >
-              {slide.title}
+              {text(slide.title, 'Slide title', 'title')}
             </h2>
-            <p className="text-lg leading-relaxed">{slide.body}</p>
+            <p className="text-lg leading-relaxed">
+              {text(slide.body, 'Slide body', 'body', true)}
+            </p>
           </div>
           <div className="h-3/4 overflow-hidden rounded-lg">
             <ImageSlot slide={slide} colors={colors} pending={imagePending} />
@@ -159,9 +217,13 @@ export default function SlideView({
       )}
       {slide.layoutType === 'quote' && (
         <div className="flex h-full flex-col items-center justify-center gap-4 px-16 text-center">
-          <p className="text-3xl font-medium italic">“{slide.body}”</p>
+          <p className="text-3xl font-medium italic">
+            “{text(slide.body, 'Slide body', 'body', true)}”
+          </p>
           {slide.caption && (
-            <p style={{ color: colors.muted }}>{slide.caption}</p>
+            <p style={{ color: colors.muted }}>
+              {text(slide.caption, 'Slide caption', 'caption')}
+            </p>
           )}
         </div>
       )}
