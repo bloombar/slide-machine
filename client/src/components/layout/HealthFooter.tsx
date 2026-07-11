@@ -6,7 +6,7 @@ import HealthBadge from '../HealthBadge'
 
 export default function HealthFooter() {
   return (
-    <footer className="sticky bottom-0 z-30 border-t border-slate-200 bg-white/95 py-1.5 backdrop-blur">
+    <footer className="sticky bottom-0 z-30 flex h-8 items-center overflow-hidden border-t border-slate-200 bg-white/95 backdrop-blur">
       <HealthBadge />
     </footer>
   )

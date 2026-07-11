@@ -36,7 +36,7 @@ export default function HealthBadge() {
   return (
     <div
       data-testid="health-bar"
-      className="flex w-full items-center justify-center gap-2 text-xs text-slate-500"
+      className="flex w-full flex-nowrap items-center justify-center gap-2 text-xs whitespace-nowrap text-slate-500"
     >
       <span
         className={`h-2 w-2 rounded-full ${dotStyles[status]}`}
