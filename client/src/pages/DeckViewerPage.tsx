@@ -1,25 +1,28 @@
 /**
- * Public deck viewer reached by permalink (SHARE-1) with basic playback
- * controls (PLAY-1: rewind/forward). The deck's owner also gets a
- * "Resume lecture" affordance — ending a session never closes it
- * (CAP-1); speaking can continue any time.
+ * Public deck viewer reached by permalink (SHARE-1). Playback (PLAY-1)
+ * and the carousel/list switch come from the shared slide-navigation
+ * codebase (useSlideNavigation + SlideNavZones + ViewModeToggle). The
+ * deck's owner also gets a "Resume lecture" affordance — ending a
+ * session never closes it (CAP-1).
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { Mic } from 'lucide-react'
 import type { DeckViewResponse } from '@slide-machine/shared'
 import { apiFetch, ApiError } from '../api/http'
 import { useAuth } from '../auth/AuthContext'
-import { useArrowKeys } from '../hooks/useArrowKeys'
+import { useSlideNavigation } from '../hooks/useSlideNavigation'
 import SlideView from '../components/SlideView'
 import SlideNavZones from '../components/SlideNavZones'
+import ViewModeToggle, { type ViewMode } from '../components/ViewModeToggle'
 
 export default function DeckViewerPage() {
   const { slug } = useParams<{ slug: string }>()
   const { user } = useAuth()
   const [view, setView] = useState<DeckViewResponse | null>(null)
-  const [index, setIndex] = useState(0)
+  const [mode, setMode] = useState<ViewMode>('carousel')
   const [error, setError] = useState<string | null>(null)
+  const nav = useSlideNavigation(view?.slides.length ?? 0, mode)
 
   useEffect(() => {
     let cancelled = false
@@ -40,15 +43,6 @@ export default function DeckViewerPage() {
     }
   }, [slug])
 
-  const slideCount = view?.slides.length ?? 0
-  useArrowKeys(
-    useCallback(() => setIndex(i => Math.max(0, i - 1)), []),
-    useCallback(
-      () => setIndex(i => Math.min(slideCount - 1, i + 1)),
-      [slideCount],
-    ),
-  )
-
   if (error) {
     return (
       <div className="flex flex-1 items-center justify-center text-slate-500">
@@ -65,13 +59,13 @@ export default function DeckViewerPage() {
     )
   }
 
-  const slide = view.slides[index]
+  const slide = view.slides[nav.current]
   const isOwner = user?.id === view.deck.ownerId
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col p-6">
       <header className="mb-4 grid grid-cols-3 items-center">
-        <div />
+        <ViewModeToggle mode={mode} onChange={setMode} />
         <h1 className="text-center text-lg font-semibold text-slate-700">
           {view.deck.title}
         </h1>
@@ -87,26 +81,33 @@ export default function DeckViewerPage() {
           )}
         </div>
       </header>
-      <div className="mx-auto w-full max-w-4xl flex-1">
-        {slide ? (
-          <SlideNavZones
-            hasPrev={index > 0}
-            hasNext={index < view.slides.length - 1}
-            onPrev={() => setIndex(i => Math.max(0, i - 1))}
-            onNext={() =>
-              setIndex(i => Math.min(view.slides.length - 1, i + 1))
-            }
-          >
-            <SlideView slide={slide} template={view.template} />
-          </SlideNavZones>
-        ) : (
-          <p className="text-center text-slate-400">This deck has no slides.</p>
-        )}
-      </div>
-      {view.slides.length > 0 && (
-        <p className="mx-auto mt-4 text-sm text-slate-500">
-          {index + 1} / {view.slides.length}
-        </p>
+
+      {view.slides.length === 0 ? (
+        <p className="text-center text-slate-400">This deck has no slides.</p>
+      ) : mode === 'carousel' ? (
+        <>
+          <div className="mx-auto w-full max-w-4xl flex-1">
+            <SlideNavZones
+              hasPrev={nav.hasPrev}
+              hasNext={nav.hasNext}
+              onPrev={nav.goPrev}
+              onNext={nav.goNext}
+            >
+              <SlideView slide={slide!} template={view.template} />
+            </SlideNavZones>
+          </div>
+          <p className="mx-auto mt-4 text-sm text-slate-500">
+            {nav.current + 1} / {view.slides.length}
+          </p>
+        </>
+      ) : (
+        <ul className="mx-auto flex w-full max-w-4xl flex-col gap-6">
+          {view.slides.map((s, i) => (
+            <li key={s.id} ref={nav.registerItem(i)}>
+              <SlideView slide={s} template={view.template} />
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   )

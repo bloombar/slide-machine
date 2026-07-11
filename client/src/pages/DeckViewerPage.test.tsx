@@ -3,7 +3,7 @@
  * deck's owner only.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router'
 import { AuthProvider } from '../auth/AuthContext'
 import { setAccessToken } from '../auth/token'
@@ -26,6 +26,14 @@ const deckView = {
       index: 0,
       layoutType: 'title',
       title: 'Hello',
+    },
+    {
+      id: 's2',
+      deckId: 'deck1',
+      index: 1,
+      layoutType: 'content',
+      title: 'Second',
+      body: 'More detail',
     },
   ],
   template: {
@@ -95,5 +103,19 @@ describe('DeckViewerPage', () => {
     expect(
       screen.queryByRole('link', { name: /resume lecture/i }),
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('DeckViewerPage view modes', () => {
+  it('carousel shows one slide; list view stacks all slides', async () => {
+    renderViewer(401)
+    await screen.findByText('Shared Lecture')
+    expect(screen.getAllByTestId('slide')).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'List view' }))
+    expect(screen.getAllByTestId('slide')).toHaveLength(2)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Carousel view' }))
+    expect(screen.getAllByTestId('slide')).toHaveLength(1)
   })
 })

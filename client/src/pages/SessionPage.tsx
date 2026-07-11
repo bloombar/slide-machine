@@ -2,29 +2,33 @@
  * Live lecture session (CAP-1 minimal + GEN-1/GEN-3 via the mock
  * pipeline). Until real STT lands, phrases are typed — each one flows
  * through session.phrase and comes back as a SlideEvent, exactly the
- * contract the streamed pipeline will use.
+ * contract the streamed pipeline will use. Navigation and the
+ * carousel/list switch come from the shared slide-navigation codebase.
  */
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import type { DeckViewResponse, Slide, SlideEvent } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import { pollSlideImage } from '../api/slides'
-import { useArrowKeys } from '../hooks/useArrowKeys'
+import { useSlideNavigation } from '../hooks/useSlideNavigation'
 import SlideView from '../components/SlideView'
 import SlideNavZones from '../components/SlideNavZones'
+import ViewModeToggle, { type ViewMode } from '../components/ViewModeToggle'
 
 export default function SessionPage() {
   const { deckId } = useParams<{ deckId: string }>()
   const navigate = useNavigate()
   const [view, setView] = useState<DeckViewResponse | null>(null)
   const [slides, setSlides] = useState<Slide[]>([])
-  const [current, setCurrent] = useState(0)
+  const [mode, setMode] = useState<ViewMode>('carousel')
   const [phrase, setPhrase] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pendingImages, setPendingImages] = useState<Set<string>>(new Set())
   const inputRef = useRef<HTMLInputElement>(null)
   const pollCancelsRef = useRef<Map<string, () => void>>(new Map())
+  const nav = useSlideNavigation(slides.length, mode)
+  const { setCurrent } = nav
 
   // Stop any in-flight image polling when the session unmounts
   useEffect(() => {
@@ -70,7 +74,7 @@ export default function SessionPage() {
     return () => {
       cancelled = true
     }
-  }, [deckId])
+  }, [deckId, setCurrent])
 
   const applyEvent = (event: SlideEvent) => {
     if (event.kind === 'none' || !event.slide) return
@@ -106,27 +110,21 @@ export default function SessionPage() {
     }
   }
 
-  const slideCount = slides.length
-  useArrowKeys(
-    useCallback(() => setCurrent(c => Math.max(0, c - 1)), []),
-    useCallback(
-      () => setCurrent(c => Math.min(slideCount - 1, c + 1)),
-      [slideCount],
-    ),
-  )
-
-  const slide = slides[current]
+  const slide = slides[nav.current]
 
   return (
     <div className="flex flex-col">
       <header className="mb-4 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-slate-700">
-          {view?.deck.title ?? 'Loading…'}
-        </h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-lg font-semibold text-slate-700">
+            {view?.deck.title ?? 'Loading…'}
+          </h1>
+          <ViewModeToggle mode={mode} onChange={setMode} />
+        </div>
         <div className="flex items-center gap-4">
           <span className="text-sm text-slate-500">
             {slides.length
-              ? `Slide ${current + 1} of ${slides.length}`
+              ? `Slide ${nav.current + 1} of ${slides.length}`
               : 'No slides yet'}
           </span>
           <button
@@ -139,23 +137,35 @@ export default function SessionPage() {
       </header>
 
       <div className="mx-auto w-full max-w-4xl flex-1">
-        {slide && view ? (
-          <SlideNavZones
-            hasPrev={current > 0}
-            hasNext={current < slides.length - 1}
-            onPrev={() => setCurrent(c => Math.max(0, c - 1))}
-            onNext={() => setCurrent(c => Math.min(slides.length - 1, c + 1))}
-          >
-            <SlideView
-              slide={slide}
-              template={view.template}
-              imagePending={pendingImages.has(slide.id)}
-            />
-          </SlideNavZones>
-        ) : (
+        {!slides.length || !view ? (
           <div className="flex aspect-video items-center justify-center rounded-xl border-2 border-dashed border-slate-300 text-slate-400">
             Speak (type, for now) and slides will follow
           </div>
+        ) : mode === 'carousel' ? (
+          <SlideNavZones
+            hasPrev={nav.hasPrev}
+            hasNext={nav.hasNext}
+            onPrev={nav.goPrev}
+            onNext={nav.goNext}
+          >
+            <SlideView
+              slide={slide!}
+              template={view.template}
+              imagePending={pendingImages.has(slide!.id)}
+            />
+          </SlideNavZones>
+        ) : (
+          <ul className="flex flex-col gap-6">
+            {slides.map((s, i) => (
+              <li key={s.id} ref={nav.registerItem(i)}>
+                <SlideView
+                  slide={s}
+                  template={view.template}
+                  imagePending={pendingImages.has(s.id)}
+                />
+              </li>
+            ))}
+          </ul>
         )}
       </div>
 

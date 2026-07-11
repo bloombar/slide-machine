@@ -78,6 +78,12 @@ test('speak-to-slides core loop, session to permalink playback', async ({
   await page.keyboard.press('ArrowRight')
   await expect(page.getByText('2 / 2')).toBeVisible()
 
+  // The viewer offers the same carousel/list switch as every slide view
+  await page.getByRole('button', { name: 'List view' }).click()
+  await expect(page.getByTestId('slide')).toHaveCount(2)
+  await page.getByRole('button', { name: 'Carousel view' }).click()
+  await expect(page.getByTestId('slide')).toHaveCount(1)
+
   // Ending a session never closes it: the owner can resume and continue
   await page.getByRole('link', { name: 'Resume lecture' }).click()
   await expect(page).toHaveURL(/\/app\/session\//)

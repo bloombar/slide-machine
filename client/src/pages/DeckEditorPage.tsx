@@ -1,34 +1,28 @@
 /**
- * Deck editor (EDIT-1): two switchable views — a carousel (one slide,
- * prev/next navigation) and a list (all slides stacked and visible).
- * Edits auto-save (debounced); slides can be reordered and deleted.
+ * Deck editor (EDIT-1): carousel and list views via the shared
+ * slide-navigation codebase (useSlideNavigation + SlideNavZones +
+ * ViewModeToggle). Edits auto-save (debounced); slides can be reordered
+ * and deleted.
  */
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
-import {
-  ArrowDown,
-  ArrowLeft,
-  ArrowUp,
-  GalleryHorizontal,
-  LayoutList,
-  Mic,
-  Trash2,
-} from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, Mic, Trash2 } from 'lucide-react'
 import type { Deck, DeckViewResponse, Slide } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
+import { useSlideNavigation } from '../hooks/useSlideNavigation'
 import SlideView from '../components/SlideView'
 import SlideNavZones from '../components/SlideNavZones'
 import SlideEditorFields from '../components/SlideEditorFields'
-
-type EditorMode = 'carousel' | 'list'
+import ViewModeToggle, { type ViewMode } from '../components/ViewModeToggle'
 
 export default function DeckEditorPage() {
   const { deckId } = useParams<{ deckId: string }>()
   const [view, setView] = useState<DeckViewResponse | null>(null)
   const [slides, setSlides] = useState<Slide[]>([])
-  const [mode, setMode] = useState<EditorMode>('carousel')
-  const [current, setCurrent] = useState(0)
+  const [mode, setMode] = useState<ViewMode>('carousel')
   const [error, setError] = useState<string | null>(null)
+  const nav = useSlideNavigation(slides.length, mode)
+  const { setCurrent } = nav
 
   useEffect(() => {
     if (!deckId) return
@@ -92,26 +86,7 @@ export default function DeckEditorPage() {
     return <p className="text-slate-400">Loading…</p>
   }
 
-  const modeButton = (
-    target: EditorMode,
-    label: string,
-    Icon: typeof LayoutList,
-  ) => (
-    <button
-      aria-label={label}
-      aria-pressed={mode === target}
-      onClick={() => setMode(target)}
-      className={`rounded-md p-2 ${
-        mode === target
-          ? 'bg-indigo-50 text-indigo-600'
-          : 'text-slate-500 hover:text-slate-900'
-      }`}
-    >
-      <Icon className="h-5 w-5" aria-hidden />
-    </button>
-  )
-
-  const slide = slides[Math.min(current, slides.length - 1)]
+  const slide = slides[Math.min(nav.current, slides.length - 1)]
 
   return (
     <div>
@@ -127,8 +102,7 @@ export default function DeckEditorPage() {
           <h1 className="text-2xl font-bold">{view.deck.title}</h1>
         </div>
         <div className="flex items-center gap-2">
-          {modeButton('carousel', 'Carousel view', GalleryHorizontal)}
-          {modeButton('list', 'List view', LayoutList)}
+          <ViewModeToggle mode={mode} onChange={setMode} />
           <Link
             to={`/app/session/${view.deck.id}`}
             className="ml-2 flex items-center gap-2 rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white"
@@ -150,16 +124,16 @@ export default function DeckEditorPage() {
       ) : mode === 'carousel' ? (
         <div className="mx-auto flex max-w-3xl flex-col gap-4">
           <SlideNavZones
-            hasPrev={current > 0}
-            hasNext={current < slides.length - 1}
-            onPrev={() => setCurrent(c => Math.max(0, c - 1))}
-            onNext={() => setCurrent(c => Math.min(slides.length - 1, c + 1))}
+            hasPrev={nav.hasPrev}
+            hasNext={nav.hasNext}
+            onPrev={nav.goPrev}
+            onNext={nav.goNext}
           >
             <SlideView slide={slide!} template={view.template} />
           </SlideNavZones>
           <div className="flex items-center justify-between">
             <p className="text-sm text-slate-500">
-              {Math.min(current, slides.length - 1) + 1} / {slides.length}
+              {Math.min(nav.current, slides.length - 1) + 1} / {slides.length}
             </p>
             <button
               aria-label="Delete slide"
@@ -179,7 +153,11 @@ export default function DeckEditorPage() {
       ) : (
         <ul className="flex flex-col gap-6">
           {slides.map((s, i) => (
-            <li key={s.id} className="grid gap-4 md:grid-cols-2">
+            <li
+              key={s.id}
+              ref={nav.registerItem(i)}
+              className="grid gap-4 md:grid-cols-2"
+            >
               <div>
                 <SlideView slide={s} template={view.template} />
               </div>
