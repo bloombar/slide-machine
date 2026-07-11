@@ -15,7 +15,7 @@ import { defineAction } from './define'
 import { registerAction, ActionForbiddenError } from './dispatch'
 import type { ActionContext } from './context'
 import { SlideModel, toSlideDto, type SlideDb } from '../models/slide'
-import { DeckModel, type DeckDb } from '../models/deck'
+import { DeckModel, touchDeck, type DeckDb } from '../models/deck'
 
 interface OwnedSlide {
   slide: HydratedDocument<SlideDb>
@@ -61,6 +61,7 @@ export const slideEditContent = defineAction<SlideEditInput, Slide>({
     if (input.bullets !== undefined) slide.bullets = input.bullets
     if (input.caption !== undefined) slide.caption = input.caption
     await slide.save()
+    await touchDeck(slide.deckId)
     return toSlideDto(slide)
   },
 })

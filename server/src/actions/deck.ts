@@ -24,7 +24,7 @@ import {
   ActionValidationError,
 } from './dispatch'
 import type { ActionContext } from './context'
-import { DeckModel, toDeckDto, type DeckDb } from '../models/deck'
+import { DeckModel, toDeckDto, touchDeck, type DeckDb } from '../models/deck'
 import { SlideModel, toSlideDto } from '../models/slide'
 import { ProjectModel } from '../models/project'
 import { getBuiltinTemplate, layoutDescriptors } from '../templates/builtin'
@@ -98,12 +98,13 @@ export const deckCreate = defineAction<DeckCreateInput, Deck>({
 
 export const deckList = defineAction<DeckListInput, Deck[]>({
   name: 'deck.list',
-  input: z.object({ projectId: z.string().min(1) }),
+  input: z.object({ projectId: z.string().min(1).optional() }),
   execute: async (ctx, input) => {
-    const docs = await DeckModel.find({
-      projectId: input.projectId,
+    const filter: { ownerId: string; projectId?: string } = {
       ownerId: requireUser(ctx),
-    }).sort({ createdAt: -1 })
+    }
+    if (input.projectId) filter.projectId = input.projectId
+    const docs = await DeckModel.find(filter).sort({ updatedAt: -1 })
     return docs.map(toDeckDto)
   },
 })
@@ -210,6 +211,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
         .filter(Boolean)
         .join(' ')
       await lastSlide.save()
+      await touchDeck(deck._id)
       if (!lastSlide.imageRef)
         maybeEnrich(lastSlide._id.toString(), result.imageGuidance)
       return { kind: 'slide.update', slide: toSlideDto(lastSlide) }

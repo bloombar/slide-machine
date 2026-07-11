@@ -210,3 +210,45 @@ describe('GET /api/decks/:slug (viewer)', () => {
     )
   })
 })
+
+describe('deck.list across projects (home screen)', () => {
+  it('returns all owned decks ordered by modification date descending', async () => {
+    const deckA = await act(ada, 'deck.create', {
+      projectId,
+      title: 'Lecture A',
+      templateId: 'classic',
+    })
+    const deckB = await act(ada, 'deck.create', {
+      projectId,
+      title: 'Lecture B',
+      templateId: 'classic',
+    })
+
+    // Speaking into A modifies it, moving it ahead of the newer B
+    const event = await act(ada, 'session.phrase', {
+      deckId: deckA.body.id,
+      phrase: 'Photosynthesis basics',
+    })
+    let list = await act(ada, 'deck.list')
+    expect(list.status).toBe(200)
+    expect(list.body.map((d: { id: string }) => d.id)).toEqual([
+      deckA.body.id,
+      deckB.body.id,
+    ])
+
+    // Editing a slide touches its deck too
+    await act(ada, 'session.phrase', {
+      deckId: deckB.body.id,
+      phrase: 'Cells overview',
+    })
+    await act(ada, 'slide.editContent', {
+      slideId: event.body.slide.id,
+      title: 'Edited',
+    })
+    list = await act(ada, 'deck.list')
+    expect(list.body.map((d: { id: string }) => d.id)).toEqual([
+      deckA.body.id,
+      deckB.body.id,
+    ])
+  })
+})

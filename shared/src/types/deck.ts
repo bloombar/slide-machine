@@ -20,6 +20,8 @@ export interface Deck {
   transcript?: string
   voteScore: number
   createdAt: string
+  /** Bumped whenever the deck or its slides change; drives recency ordering. */
+  updatedAt: string
 }
 
 /** Where a slide's image came from, including AI-generated provenance (IMG-4). */

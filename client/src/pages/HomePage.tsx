@@ -1,26 +1,113 @@
 /**
- * Authenticated home: greets the user and lists/creates projects via
- * the action layer (PROJ-1 via TECH-13).
+ * Authenticated home: every project as a sub-heading with its lectures
+ * beneath, newest modification first. Each project shows at most
+ * config.homeLecturesLimit lectures with a "Show all" expander.
  */
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { Plus } from 'lucide-react'
-import type { Project } from '@slide-machine/shared'
+import type { Deck, Project } from '@slide-machine/shared'
 import { useAuth } from '../auth/AuthContext'
 import { dispatchAction } from '../api/actions'
 import { userHandle } from '../lib/handle'
+import { config } from '../config'
+
+function LectureRow({ deck }: { deck: Deck }) {
+  return (
+    <li className="flex items-center justify-between rounded-md border border-slate-200 px-4 py-2">
+      <span>{deck.title}</span>
+      <span className="flex gap-3 text-sm">
+        <Link to={`/app/session/${deck.id}`} className="text-indigo-600">
+          Resume
+        </Link>
+        <Link to={`/app/decks/${deck.id}/edit`} className="text-slate-600">
+          Edit
+        </Link>
+        <Link to={`/d/${deck.permalinkSlug}`} className="text-slate-500">
+          View
+        </Link>
+      </span>
+    </li>
+  )
+}
+
+function ProjectSection({
+  project,
+  decks,
+}: {
+  project: Project
+  decks: Deck[]
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const limit = config.homeLecturesLimit
+  const visible = expanded ? decks : decks.slice(0, limit)
+  const hiddenCount = decks.length - limit
+
+  return (
+    <section className="mb-8">
+      <h2 className="mb-3 text-lg font-semibold">
+        <Link
+          to={`/app/projects/${project.id}`}
+          className="hover:text-indigo-600"
+        >
+          {project.title}
+        </Link>
+      </h2>
+      {decks.length === 0 ? (
+        <p className="text-sm text-slate-500">
+          No lectures yet —{' '}
+          <Link to={`/app/projects/${project.id}`} className="text-indigo-600">
+            start one
+          </Link>
+        </p>
+      ) : (
+        <>
+          <ul className="flex flex-col gap-2">
+            {visible.map(d => (
+              <LectureRow key={d.id} deck={d} />
+            ))}
+          </ul>
+          {!expanded && hiddenCount > 0 && (
+            <button
+              onClick={() => setExpanded(true)}
+              className="mt-2 text-sm text-indigo-600"
+            >
+              Show all {decks.length} lectures
+            </button>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
 
 export default function HomePage() {
   const { user } = useAuth()
   const [projects, setProjects] = useState<Project[] | null>(null)
+  const [decksByProject, setDecksByProject] = useState<Map<string, Deck[]>>(
+    new Map(),
+  )
   const [title, setTitle] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    dispatchAction<Project[]>('project.list')
-      .then(list => {
-        if (!cancelled) setProjects(list)
+    Promise.all([
+      dispatchAction<Project[]>('project.list'),
+      dispatchAction<Deck[]>('deck.list'),
+    ])
+      .then(([projectList, decks]) => {
+        if (cancelled) return
+        // decks arrive sorted by updatedAt desc; grouping preserves order
+        const grouped = new Map<string, Deck[]>()
+        for (const deck of decks) {
+          grouped.set(deck.projectId, [
+            ...(grouped.get(deck.projectId) ?? []),
+            deck,
+          ])
+        }
+        setProjects(projectList)
+        setDecksByProject(grouped)
       })
       .catch(() => {
         if (!cancelled) setError('Could not load projects')
@@ -51,11 +138,8 @@ export default function HomePage() {
         Welcome, {user ? userHandle(user) : ''}
       </h1>
 
-      <section className="max-w-xl">
-        <h2 className="mb-4 text-lg font-semibold text-slate-700">
-          Your projects
-        </h2>
-        <form onSubmit={onCreate} className="mb-4 flex gap-2">
+      <div className="max-w-2xl">
+        <form onSubmit={onCreate} className="mb-8 flex gap-2">
           <input
             value={title}
             onChange={e => setTitle(e.target.value)}
@@ -83,20 +167,15 @@ export default function HomePage() {
             No projects yet — create your first one above.
           </p>
         ) : (
-          <ul className="flex flex-col gap-2">
-            {projects.map(p => (
-              <li key={p.id}>
-                <Link
-                  to={`/app/projects/${p.id}`}
-                  className="block rounded-md border border-slate-200 px-4 py-3 hover:border-slate-300 hover:bg-slate-50"
-                >
-                  {p.title}
-                </Link>
-              </li>
-            ))}
-          </ul>
+          projects.map(p => (
+            <ProjectSection
+              key={p.id}
+              project={p}
+              decks={decksByProject.get(p.id) ?? []}
+            />
+          ))
         )}
-      </section>
+      </div>
     </div>
   )
 }

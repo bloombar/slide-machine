@@ -19,8 +19,9 @@ export interface DeckCreateInput {
   templateId: string
 }
 
+/** Omit projectId to list every deck the caller owns (recency-ordered). */
 export interface DeckListInput {
-  projectId: string
+  projectId?: string
 }
 
 export interface DeckGetInput {
