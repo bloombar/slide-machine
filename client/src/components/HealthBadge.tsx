@@ -35,6 +35,7 @@ export default function HealthBadge() {
 
   return (
     <div
+      role="status"
       data-testid="health-bar"
       className="flex w-full flex-nowrap items-center justify-center gap-2 text-xs whitespace-nowrap text-slate-500"
     >

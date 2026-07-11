@@ -8,6 +8,7 @@ import { ArrowLeft, Mic } from 'lucide-react'
 import type { Deck, Project, Template } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import TemplatePicker from '../components/TemplatePicker'
+import LectureRow from '../components/LectureRow'
 
 export default function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -51,7 +52,7 @@ export default function ProjectPage() {
         title: title.trim(),
         templateId,
       })
-      navigate(`/app/session/${deck.id}`)
+      navigate(`/d/${deck.permalinkSlug}`, { state: { startSpeaking: true } })
     } catch {
       setError('Could not create the lecture')
     }
@@ -111,20 +112,7 @@ export default function ProjectPage() {
         ) : (
           <ul className="flex flex-col gap-2">
             {decks.map(d => (
-              <li
-                key={d.id}
-                className="flex items-center justify-between rounded-md border border-slate-200 px-4 py-3"
-              >
-                <span>{d.title}</span>
-                <span className="flex gap-3 text-sm">
-                  <Link to={`/app/session/${d.id}`} className="text-indigo-600">
-                    Resume
-                  </Link>
-                  <Link to={`/d/${d.permalinkSlug}`} className="text-slate-500">
-                    View
-                  </Link>
-                </span>
-              </li>
+              <LectureRow key={d.id} deck={d} />
             ))}
           </ul>
         )}

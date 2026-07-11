@@ -100,6 +100,7 @@ export default function DraggableListRow({
       <button
         ref={handleRef}
         aria-label={handleLabel}
+        aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
         title={`Drag to reorder (or Alt+↑/↓)`}
         onKeyDown={e => {
           if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {

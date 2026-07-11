@@ -12,7 +12,6 @@ import RegisterPage from './pages/RegisterPage'
 import HomePage from './pages/HomePage'
 import ProjectPage from './pages/ProjectPage'
 import ProfilePage from './pages/ProfilePage'
-import SessionPage from './pages/SessionPage'
 import DeckViewerPage from './pages/DeckViewerPage'
 import RequireAuth from './auth/RequireAuth'
 
@@ -35,7 +34,6 @@ export default function App() {
         <Route path="/app" element={<HomePage />} />
         <Route path="/app/projects/:projectId" element={<ProjectPage />} />
         <Route path="/app/profile" element={<ProfilePage />} />
-        <Route path="/app/session/:deckId" element={<SessionPage />} />
       </Route>
     </Routes>
   )

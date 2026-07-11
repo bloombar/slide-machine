@@ -31,6 +31,7 @@ export default function TemplatePicker({ templates, value, onChange }: Props) {
           }`}
         >
           <span
+            aria-hidden
             className="flex h-8 w-12 items-center justify-center rounded"
             style={{ backgroundColor: swatch(t.theme, 'background') }}
           >

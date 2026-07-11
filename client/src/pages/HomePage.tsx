@@ -10,20 +10,8 @@ import type { Deck, Project } from '@slide-machine/shared'
 import { useAuth } from '../auth/AuthContext'
 import { dispatchAction } from '../api/actions'
 import { userHandle } from '../lib/handle'
+import LectureRow from '../components/LectureRow'
 import { config } from '../config'
-
-function LectureRow({ deck }: { deck: Deck }) {
-  return (
-    <li>
-      <Link
-        to={`/d/${deck.permalinkSlug}`}
-        className="block rounded-md border border-slate-200 px-4 py-2 hover:border-slate-300 hover:bg-slate-50"
-      >
-        {deck.title}
-      </Link>
-    </li>
-  )
-}
 
 function ProjectSection({
   project,

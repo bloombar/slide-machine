@@ -82,26 +82,35 @@ afterEach(() => {
 })
 
 describe('DeckViewerPage', () => {
-  it('shows the resume icon to the deck owner', async () => {
+  it('gives the owner a Live session toggle that reveals the Speak bar', async () => {
     renderViewer(200)
+    const toggle = await screen.findByRole('button', { name: 'Live session' })
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
     expect(
-      await screen.findByRole('link', { name: /resume lecture/i }),
-    ).toHaveAttribute('href', '/app/session/deck1')
+      screen.queryByRole('textbox', { name: 'Spoken phrase' }),
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(toggle)
+
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    expect(
+      screen.getByRole('textbox', { name: 'Spoken phrase' }),
+    ).toBeInTheDocument()
   })
 
-  it('hides Resume lecture from anonymous viewers', async () => {
+  it('hides the Live session toggle from anonymous viewers', async () => {
     renderViewer(401)
     expect(await screen.findByText('Shared Lecture')).toBeInTheDocument()
     expect(
-      screen.queryByRole('link', { name: /resume lecture/i }),
+      screen.queryByRole('button', { name: 'Live session' }),
     ).not.toBeInTheDocument()
   })
 
-  it('hides Resume lecture from signed-in non-owners', async () => {
+  it('hides the Live session toggle from signed-in non-owners', async () => {
     renderViewer(200, 'someone-else')
     expect(await screen.findByText('Shared Lecture')).toBeInTheDocument()
     expect(
-      screen.queryByRole('link', { name: /resume lecture/i }),
+      screen.queryByRole('button', { name: 'Live session' }),
     ).not.toBeInTheDocument()
   })
 })

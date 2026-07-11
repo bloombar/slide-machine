@@ -88,7 +88,9 @@ export default function EditableText({
         role="button"
         tabIndex={0}
         // The text itself stays the accessible name (an aria-label would
-        // mask it from AT and heading queries); the hint rides on title
+        // mask it from AT and heading queries); the hint rides on title.
+        // Empty values get an explicit name so the control stays reachable
+        aria-label={value ? undefined : `Edit ${label}`}
         title={`Click to edit ${label}`}
         onClick={startEditing}
         onKeyDown={e => {

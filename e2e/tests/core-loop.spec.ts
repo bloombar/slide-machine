@@ -29,7 +29,10 @@ test('speak-to-slides core loop, session to permalink playback', async ({
   await page.getByLabel('Lecture title').fill('Photosynthesis')
   await page.getByRole('radio', { name: /midnight/i }).click()
   await page.getByRole('button', { name: 'Start lecture' }).click()
-  await expect(page).toHaveURL(/\/app\/session\//)
+  await expect(page).toHaveURL(/\/d\/photosynthesis-/)
+  await expect(
+    page.getByRole('button', { name: 'Live session' }),
+  ).toHaveAttribute('aria-pressed', 'true')
 
   // Speak: a short opener becomes a title slide
   await page.getByLabel('Spoken phrase').fill('Photosynthesis basics')
@@ -48,17 +51,20 @@ test('speak-to-slides core loop, session to permalink playback', async ({
     .fill('Plants need sunlight, water, carbon dioxide')
   await page.getByRole('button', { name: 'Speak' }).click()
   await expect(page.getByTestId('slide')).toHaveAttribute('data-layout', 'list')
-  await expect(page.getByText('Slide 2 of 2')).toBeVisible()
+  await expect(page.getByText('2 / 2')).toBeVisible()
 
   // A continuation phrase updates the current slide instead of adding one
   await page.getByLabel('Spoken phrase').fill('Also minerals from the soil')
   await page.getByRole('button', { name: 'Speak' }).click()
   await expect(page.getByText('minerals from the soil')).toBeVisible()
-  await expect(page.getByText('Slide 2 of 2')).toBeVisible()
+  await expect(page.getByText('2 / 2')).toBeVisible()
 
-  // End the session → permalink viewer with playback controls
-  await page.getByRole('button', { name: 'End session' }).click()
-  await expect(page).toHaveURL(/\/d\/photosynthesis-/)
+  // Toggling the mic off hides the Speak bar; the deck stays put
+  await page.getByRole('button', { name: 'Live session' }).click()
+  await expect(
+    page.getByRole('textbox', { name: 'Spoken phrase' }),
+  ).not.toBeVisible()
+  await page.keyboard.press('ArrowLeft')
   await expect(page.getByText('1 / 2')).toBeVisible()
 
   // Pasting the permalink directly (fresh page load) also works for the
@@ -109,11 +115,8 @@ test('speak-to-slides core loop, session to permalink playback', async ({
   await page.getByRole('button', { name: 'Carousel view' }).click()
   await expect(page.getByTestId('slide')).toHaveCount(1)
 
-  // Ending a session never closes it: the owner can resume and continue
-  await page.getByRole('link', { name: 'Resume lecture' }).click()
-  await expect(page).toHaveURL(/\/app\/session\//)
-  await expect(page.getByText('Slide 2 of 2')).toBeVisible()
-
+  // A session never really ends: the mic re-opens and speaking continues
+  await page.getByRole('button', { name: 'Live session' }).click()
   await page
     .getByLabel('Spoken phrase')
     .fill('What separates plants from animals?')
@@ -122,5 +125,5 @@ test('speak-to-slides core loop, session to permalink playback', async ({
     'data-layout',
     'quote',
   )
-  await expect(page.getByText('Slide 3 of 3')).toBeVisible()
+  await expect(page.getByText('3 / 3')).toBeVisible()
 })

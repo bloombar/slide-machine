@@ -1,16 +1,24 @@
 /**
- * Public deck viewer reached by permalink (SHARE-1). Playback (PLAY-1)
- * and the carousel/list switch come from the shared slide-navigation
- * codebase (useSlideNavigation + SlideNavZones + ViewModeToggle). The
- * deck's owner also gets a "Resume lecture" affordance — ending a
- * session never closes it (CAP-1).
+ * Deck viewer reached by permalink (SHARE-1) — and, for the deck's
+ * owner, the single surface for everything: in-place text editing,
+ * adding/deleting/reordering slides, and the live session. The
+ * microphone icon toggles the (typed, until STT lands) "Speak" bar,
+ * whose phrases flow through session.phrase exactly as the streamed
+ * pipeline will (GEN-1/CAP-1). Playback and the carousel/list switch
+ * come from the shared slide-navigation codebase.
  */
-import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useLocation, useNavigate, useParams } from 'react-router'
 import { Mic, Plus } from 'lucide-react'
-import type { Deck, DeckViewResponse, Slide } from '@slide-machine/shared'
+import type {
+  Deck,
+  DeckViewResponse,
+  Slide,
+  SlideEvent,
+} from '@slide-machine/shared'
 import { apiFetch, ApiError } from '../api/http'
 import { dispatchAction } from '../api/actions'
+import { pollSlideImage } from '../api/slides'
 import { useAuth } from '../auth/AuthContext'
 import { useSlideNavigation } from '../hooks/useSlideNavigation'
 import SlideView, { type SlideTextPatch } from '../components/SlideView'
@@ -23,11 +31,25 @@ import { type ViewMode } from '../components/ViewModeToggle'
 
 export default function DeckViewerPage() {
   const { slug } = useParams<{ slug: string }>()
+  const location = useLocation()
+  const navigate = useNavigate()
   const { user, status } = useAuth()
   const [view, setView] = useState<DeckViewResponse | null>(null)
   const [mode, setMode] = useState<ViewMode>('carousel')
   const [error, setError] = useState<string | null>(null)
+  const [speaking, setSpeaking] = useState<boolean>(() =>
+    Boolean(
+      (location.state as { startSpeaking?: boolean } | null)?.startSpeaking,
+    ),
+  )
+  const [phrase, setPhrase] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [speakError, setSpeakError] = useState<string | null>(null)
+  const [pendingImages, setPendingImages] = useState<Set<string>>(new Set())
+  const inputRef = useRef<HTMLInputElement>(null)
+  const pollCancelsRef = useRef<Map<string, () => void>>(new Map())
   const nav = useSlideNavigation(view?.slides.length ?? 0, mode)
+  const { setCurrent } = nav
 
   useEffect(() => {
     // Wait for session restore: a pasted permalink must send the owner's
@@ -51,6 +73,30 @@ export default function DeckViewerPage() {
     }
   }, [slug, status])
 
+  // Stop any in-flight image polling when the viewer unmounts
+  useEffect(() => {
+    const cancels = pollCancelsRef.current
+    return () => {
+      cancels.forEach(cancel => cancel())
+      cancels.clear()
+    }
+  }, [])
+
+  // Opening the live session focuses the phrase input
+  useEffect(() => {
+    if (speaking) inputRef.current?.focus()
+  }, [speaking])
+
+  // "Start lecture" hands over with startSpeaking in router state (read
+  // by the lazy initializer above); scrub it so a reload doesn't re-open
+  // the mic — history.state survives reloads
+  useEffect(() => {
+    if ((location.state as { startSpeaking?: boolean } | null)?.startSpeaking) {
+      navigate(location.pathname, { replace: true, state: null })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   if (error) {
     return (
       <div className="flex flex-1 items-center justify-center text-slate-500">
@@ -70,7 +116,77 @@ export default function DeckViewerPage() {
   const slide = view.slides[nav.current]
   const isOwner = user?.id === view.deck.ownerId
 
-  /** In-place edits (EDIT-1) persist through the same action as the editor. */
+  /** Watches a slide whose image may still arrive from background enrichment. */
+  const watchImage = (target: Slide) => {
+    if (!target.imageKeywords?.length || target.imageRef) return
+    if (pollCancelsRef.current.has(target.id)) return
+    setPendingImages(prev => new Set(prev).add(target.id))
+    const cancel = pollSlideImage(target.id, resolved => {
+      pollCancelsRef.current.delete(target.id)
+      setPendingImages(prev => {
+        const next = new Set(prev)
+        next.delete(target.id)
+        return next
+      })
+      if (resolved) {
+        setView(v =>
+          v
+            ? {
+                ...v,
+                slides: v.slides.map(s =>
+                  s.id === resolved.id ? resolved : s,
+                ),
+              }
+            : v,
+        )
+      }
+    })
+    pollCancelsRef.current.set(target.id, cancel)
+  }
+
+  /** Applies a generation event: new slides append, updates replace. */
+  const applyEvent = (event: SlideEvent) => {
+    if (event.kind === 'none' || !event.slide) return
+    const next = event.slide
+    const isNew = event.kind === 'slide.new'
+    setView(v =>
+      v
+        ? {
+            ...v,
+            deck: isNew
+              ? { ...v.deck, slideOrder: [...v.deck.slideOrder, next.id] }
+              : v.deck,
+            slides: isNew
+              ? [...v.slides, next]
+              : v.slides.map(s => (s.id === next.id ? next : s)),
+          }
+        : v,
+    )
+    setCurrent((isNew ? view.slides.length + 1 : view.slides.length) - 1)
+    watchImage(next)
+  }
+
+  const onSpeak = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!phrase.trim() || busy) return
+    setBusy(true)
+    setSpeakError(null)
+    try {
+      const event = await dispatchAction<SlideEvent>('session.phrase', {
+        deckId: view.deck.id,
+        phrase: phrase.trim(),
+      })
+      applyEvent(event)
+      setPhrase('')
+      inputRef.current?.focus()
+    } catch {
+      setSpeakError('Generation failed — try again')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** In-place edits (EDIT-1) persist through the action layer. */
   const editSlide = (slideId: string) => (patch: SlideTextPatch) => {
     dispatchAction<Slide>('slide.editContent', { slideId, ...patch })
       .then(updated =>
@@ -101,18 +217,15 @@ export default function DeckViewerPage() {
   const addSlide = async () => {
     try {
       const nextIndex = view.slides.length
-      const slide = await dispatchAction<Slide>('slide.add', {
+      const added = await dispatchAction<Slide>('slide.add', {
         deckId: view.deck.id,
       })
       setView(v =>
         v
           ? {
               ...v,
-              deck: {
-                ...v.deck,
-                slideOrder: [...v.deck.slideOrder, slide.id],
-              },
-              slides: [...v.slides, slide],
+              deck: { ...v.deck, slideOrder: [...v.deck.slideOrder, added.id] },
+              slides: [...v.slides, added],
             }
           : v,
       )
@@ -214,18 +327,25 @@ export default function DeckViewerPage() {
             <>
               <button
                 aria-label="Add slide"
+                title="Add a slide at the end"
                 onClick={() => void addSlide()}
                 className="rounded-md p-2 text-slate-500 hover:text-slate-900"
               >
                 <Plus className="h-5 w-5" aria-hidden />
               </button>
-              <Link
-                to={`/app/session/${view.deck.id}`}
-                aria-label="Resume lecture"
-                className="rounded-md p-2 text-slate-500 hover:text-slate-900"
+              <button
+                aria-label="Live session"
+                title="Speak to add slides"
+                aria-pressed={speaking}
+                onClick={() => setSpeaking(s => !s)}
+                className={`rounded-md p-2 ${
+                  speaking
+                    ? 'bg-indigo-50 text-indigo-600'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
               >
                 <Mic className="h-5 w-5" aria-hidden />
-              </Link>
+              </button>
             </>
           )
         }
@@ -235,7 +355,7 @@ export default function DeckViewerPage() {
         <p className="text-center text-slate-400">This deck has no slides.</p>
       ) : mode === 'carousel' ? (
         <>
-          <div className="mx-auto w-full max-w-4xl flex-1">
+          <div className="w-full flex-1">
             <SlideNavZones
               hasPrev={nav.hasPrev}
               hasNext={nav.hasNext}
@@ -247,6 +367,7 @@ export default function DeckViewerPage() {
                 template={view.template}
                 editable={isOwner}
                 onEdit={editSlide(slide!.id)}
+                imagePending={pendingImages.has(slide!.id)}
               />
               {isOwner && (
                 <SlideDeleteButton
@@ -261,7 +382,7 @@ export default function DeckViewerPage() {
           </p>
         </>
       ) : (
-        <ul className="mx-auto flex w-full max-w-4xl flex-col gap-6">
+        <ul className="flex w-full flex-col gap-6">
           {view.slides.map((s, i) =>
             isOwner ? (
               <DraggableListRow
@@ -278,6 +399,7 @@ export default function DeckViewerPage() {
                   template={view.template}
                   editable
                   onEdit={editSlide(s.id)}
+                  imagePending={pendingImages.has(s.id)}
                 />
                 <SlideDeleteButton
                   label={`Delete slide ${i + 1}`}
@@ -291,6 +413,37 @@ export default function DeckViewerPage() {
             ),
           )}
         </ul>
+      )}
+
+      {isOwner && speaking && (
+        <>
+          <form
+            onSubmit={onSpeak}
+            aria-label="Live session"
+            className="mt-6 flex w-full gap-2"
+          >
+            <input
+              ref={inputRef}
+              value={phrase}
+              onChange={e => setPhrase(e.target.value)}
+              placeholder="Say something about your topic…"
+              aria-label="Spoken phrase"
+              className="flex-1 rounded-lg border border-slate-300 px-4 py-3"
+            />
+            <button
+              type="submit"
+              disabled={busy}
+              className="rounded-lg bg-indigo-600 px-6 py-3 font-medium text-white disabled:opacity-50"
+            >
+              {busy ? 'Generating…' : 'Speak'}
+            </button>
+          </form>
+          {speakError && (
+            <p role="alert" className="mt-2 w-full text-sm text-red-600">
+              {speakError}
+            </p>
+          )}
+        </>
       )}
     </div>
   )

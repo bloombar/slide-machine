@@ -32,7 +32,7 @@ const buildDeck = async (page: Page) => {
     await page.getByRole('button', { name: 'Speak' }).click()
     await expect(page.getByTestId('slide')).toBeVisible()
   }
-  await page.getByRole('button', { name: 'End session' }).click()
+  await page.getByRole('button', { name: 'Live session' }).click()
   await page.getByRole('button', { name: 'List view' }).click()
 }
 

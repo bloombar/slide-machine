@@ -22,7 +22,7 @@ const deck = (id: string, projectId: string, title: string) => ({
   templateId: 'classic',
   visibility: 'private',
   permalinkSlug: `${id}-slug`,
-  slideOrder: [],
+  slideOrder: ['a', 'b'],
   voteScore: 0,
   createdAt: '2026-07-01T00:00:00.000Z',
   updatedAt: '2026-07-02T00:00:00.000Z',
@@ -76,6 +76,13 @@ describe('HomePage', () => {
       screen.getByRole('heading', { name: 'Chemistry' }),
     ).toBeInTheDocument()
     expect(screen.getByText('Newest lecture')).toBeInTheDocument()
+  })
+
+  it('shows slide count and modification age per lecture', async () => {
+    renderHome()
+    await screen.findByText('Newest lecture')
+    const meta = screen.getAllByText(/2 slides · edited .+ ago/)
+    expect(meta.length).toBeGreaterThan(0)
   })
 
   it('caps lectures at the configured limit and expands on demand', async () => {

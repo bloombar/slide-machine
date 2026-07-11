@@ -59,7 +59,7 @@ function ImageSlot({
     return (
       <img
         src={slide.imageRef}
-        alt={slide.caption ?? ''}
+        alt={slide.caption ?? slide.title ?? 'Slide image'}
         onError={() => setLoadFailed(true)}
         className="h-full w-full object-cover transition-opacity duration-500"
       />
@@ -68,6 +68,7 @@ function ImageSlot({
   if (pending) {
     return (
       <div
+        aria-hidden
         data-testid="image-skeleton"
         className="h-full min-h-[16cqi] w-full animate-pulse rounded-lg"
         style={{ backgroundColor: colors.surface }}
@@ -76,6 +77,7 @@ function ImageSlot({
   }
   return (
     <div
+      aria-hidden
       data-testid="image-fallback"
       className="h-full min-h-[16cqi] w-full rounded-lg"
       style={{ backgroundColor: colors.surface }}
