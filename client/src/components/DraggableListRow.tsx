@@ -88,7 +88,7 @@ export default function DraggableListRow({
         rowRef.current = el
         itemRef?.(el)
       }}
-      className={`flex items-start gap-2 ${dragging ? 'opacity-40' : ''} ${
+      className={`flex items-center gap-2 ${dragging ? 'opacity-40' : ''} ${
         isOver
           ? 'rounded-lg outline-2 outline-offset-4 outline-indigo-400 outline-dashed'
           : ''
@@ -108,7 +108,7 @@ export default function DraggableListRow({
             onKeyMove(id, e.key === 'ArrowUp' ? -1 : 1)
           }
         }}
-        className="mt-2 inline-block cursor-grab rounded-md p-2 text-slate-400 select-none hover:text-slate-900 active:cursor-grabbing"
+        className="inline-block cursor-grab rounded-md p-2 text-slate-400 select-none hover:text-slate-900 active:cursor-grabbing"
       >
         <GripVertical className="h-5 w-5" aria-hidden />
       </button>
