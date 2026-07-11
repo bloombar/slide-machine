@@ -12,6 +12,7 @@
 import { useState } from 'react'
 import type { Slide, Template } from '@slide-machine/shared'
 import EditableText from './EditableText'
+import SlideMarkdown from './SlideMarkdown'
 
 /** Partial text update produced by in-place editing. */
 export type SlideTextPatch = Partial<
@@ -111,10 +112,13 @@ export default function SlideView({
         value={value ?? ''}
         label={label}
         multiline={multiline}
+        renderValue={v => (
+          <SlideMarkdown text={v} inline={!multiline} links={false} />
+        )}
         onSave={v => onEdit({ [key]: v })}
       />
     ) : (
-      value
+      <SlideMarkdown text={value ?? ''} inline={!multiline} />
     )
 
   const bullet = (b: string, i: number) =>
@@ -122,6 +126,7 @@ export default function SlideView({
       <EditableText
         value={b}
         label={`Bullet ${i + 1}`}
+        renderValue={v => <SlideMarkdown text={v} inline links={false} />}
         onSave={v =>
           onEdit({
             bullets: (slide.bullets ?? []).map((x, j) => (j === i ? v : x)),
@@ -129,7 +134,7 @@ export default function SlideView({
         }
       />
     ) : (
-      b
+      <SlideMarkdown text={b} inline />
     )
 
   const body = (

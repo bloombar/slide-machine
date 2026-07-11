@@ -4,8 +4,13 @@
  * auto-save through a debounced onSave while typing (the app-wide
  * pattern); blur or Enter flushes immediately, Escape reverts — including
  * undoing any interim debounced save.
+ *
+ * `renderValue` lets the display show a formatted view (e.g. rendered
+ * Markdown) while the field edits the raw source. The display box is
+ * measured on entry and reserved as the field's minimum size, so
+ * swapping between the two never shifts the slide layout.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 interface Props {
   value: string
@@ -13,6 +18,8 @@ interface Props {
   label: string
   onSave: (value: string) => void
   multiline?: boolean
+  /** Formatted display of the value; editing always shows the raw source. */
+  renderValue?: (value: string) => ReactNode
   /** Debounce for auto-save while typing; overridable in tests. */
   debounceMs?: number
 }
@@ -22,10 +29,16 @@ export default function EditableText({
   label,
   onSave,
   multiline = false,
+  renderValue,
   debounceMs = 800,
 }: Props) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
+  const [reservedBox, setReservedBox] = useState<{
+    w: number
+    h: number
+  } | null>(null)
+  const displayRef = useRef<HTMLSpanElement>(null)
   const originalRef = useRef(value)
   const lastSavedRef = useRef(value)
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -45,6 +58,9 @@ export default function EditableText({
   }, [draft, editing, debounceMs])
 
   const startEditing = () => {
+    // Reserve the rendered box so the source field can't shrink the layout
+    const el = displayRef.current
+    setReservedBox(el ? { w: el.offsetWidth, h: el.offsetHeight } : null)
     originalRef.current = value
     lastSavedRef.current = value
     setDraft(value)
@@ -68,6 +84,7 @@ export default function EditableText({
   if (!editing) {
     return (
       <span
+        ref={displayRef}
         role="button"
         tabIndex={0}
         // The text itself stays the accessible name (an aria-label would
@@ -82,9 +99,9 @@ export default function EditableText({
         }}
         // relative z-10 lifts the text above SlideNavZones' overlay
         // hotspots, so clicking text edits instead of navigating
-        className="relative z-10 -mx-1 cursor-text rounded px-1 hover:bg-black/5"
+        className="relative z-10 -mx-1 inline-block cursor-text rounded px-1 hover:bg-black/5"
       >
-        {value}
+        {renderValue ? renderValue(value) : value}
       </span>
     )
   }
@@ -114,6 +131,8 @@ export default function EditableText({
       color: 'inherit',
       textAlign: 'inherit',
       letterSpacing: 'inherit',
+      minWidth: reservedBox?.w,
+      minHeight: reservedBox?.h,
     } as React.CSSProperties,
   }
 

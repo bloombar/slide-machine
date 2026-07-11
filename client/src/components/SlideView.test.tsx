@@ -165,3 +165,47 @@ describe('SlideView in-place editing', () => {
     ).not.toBeInTheDocument()
   })
 })
+
+describe('SlideView markdown rendering', () => {
+  it('renders inline markdown in the title for viewers', () => {
+    render(
+      <SlideView
+        slide={slide({ layoutType: 'title', title: 'The **Krebs** cycle' })}
+        template={template}
+      />,
+    )
+    expect(screen.getByText('Krebs').tagName).toBe('STRONG')
+  })
+
+  it('renders list markdown inside the body slot', () => {
+    render(
+      <SlideView
+        slide={slide({
+          layoutType: 'content',
+          title: 'Steps',
+          body: '- glycolysis\n- oxidation',
+        })}
+        template={template}
+      />,
+    )
+    expect(screen.getAllByRole('listitem')).toHaveLength(2)
+  })
+
+  it('shows formatted markdown in editable display, raw source when editing', () => {
+    const onEdit = vi.fn()
+    render(
+      <SlideView
+        slide={slide({ layoutType: 'title', title: 'The **Krebs** cycle' })}
+        template={template}
+        editable
+        onEdit={onEdit}
+      />,
+    )
+    expect(screen.getByText('Krebs').tagName).toBe('STRONG')
+
+    fireEvent.click(screen.getByTitle('Click to edit Slide title'))
+    expect(screen.getByRole('textbox', { name: 'Slide title' })).toHaveValue(
+      'The **Krebs** cycle',
+    )
+  })
+})

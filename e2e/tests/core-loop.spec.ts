@@ -71,11 +71,15 @@ test('speak-to-slides core loop, session to permalink playback', async ({
   await page.getByTitle('Click to edit Slide title').click()
   await page
     .getByRole('textbox', { name: 'Slide title' })
-    .fill('Photosynthesis 101')
+    .fill('**Photosynthesis** 101')
   await page.keyboard.press('Enter')
   await expect(
     page.getByRole('heading', { name: 'Photosynthesis 101' }),
   ).toBeVisible()
+  // Markdown renders as formatting, not source
+  await expect(page.getByTestId('slide').locator('strong')).toHaveText(
+    'Photosynthesis',
+  )
   await expect(page.getByText('1 / 2')).toBeVisible()
   await page.reload()
   await expect(
