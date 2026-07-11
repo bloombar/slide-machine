@@ -33,7 +33,7 @@ test('edit, reorder, and delete slides with auto-save', async ({ page }) => {
   await buildDeck(page)
 
   // Enter the editor from the project page (brand link goes home)
-  await page.getByRole('link', { name: 'Slide Machine' }).click()
+  await page.getByRole('link', { name: 'The Slide Machine' }).click()
   await page.getByRole('link', { name: 'Chemistry' }).click()
   await page.getByRole('link', { name: 'Edit' }).click()
   await expect(page).toHaveURL(/\/app\/decks\/.+\/edit$/)
@@ -64,7 +64,7 @@ test('edit, reorder, and delete slides with auto-save', async ({ page }) => {
   await expect(page.getByText('Slide 2')).not.toBeVisible()
 
   // The permalink viewer reflects everything (lecture title links to it)
-  await page.getByRole('link', { name: 'Slide Machine' }).click()
+  await page.getByRole('link', { name: 'The Slide Machine' }).click()
   await page.getByRole('link', { name: 'Atoms' }).click()
   await expect(page.getByText('1 / 1')).toBeVisible()
   await expect(

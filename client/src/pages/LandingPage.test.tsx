@@ -48,7 +48,7 @@ describe('LandingPage', () => {
   it('shows the hero to anonymous visitors', async () => {
     renderLanding(401)
     expect(
-      await screen.findByRole('heading', { name: 'Slide Machine V2' }),
+      await screen.findByRole('heading', { name: 'The Slide Machine V2' }),
     ).toBeInTheDocument()
   })
 

@@ -58,3 +58,31 @@ describe('useArrowKeys', () => {
     expect(onPrev).not.toHaveBeenCalled()
   })
 })
+
+describe('useArrowKeys vertical aliases', () => {
+  it('maps ArrowUp/ArrowDown to prev/next like left/right', () => {
+    const onPrev = vi.fn()
+    const onNext = vi.fn()
+    render(<Harness onPrev={onPrev} onNext={onNext} />)
+
+    fireEvent.keyDown(window, { key: 'ArrowDown' })
+    fireEvent.keyDown(window, { key: 'ArrowDown' })
+    fireEvent.keyDown(window, { key: 'ArrowUp' })
+
+    expect(onNext).toHaveBeenCalledTimes(2)
+    expect(onPrev).toHaveBeenCalledTimes(1)
+  })
+
+  it('still ignores vertical arrows while typing', () => {
+    const onPrev = vi.fn()
+    const onNext = vi.fn()
+    render(<Harness onPrev={onPrev} onNext={onNext} />)
+
+    fireEvent.keyDown(screen.getByLabelText('typing field'), {
+      key: 'ArrowDown',
+    })
+
+    expect(onNext).not.toHaveBeenCalled()
+    expect(onPrev).not.toHaveBeenCalled()
+  })
+})
