@@ -64,8 +64,7 @@ test('speak-to-slides core loop, session to permalink playback', async ({
     page.getByRole('heading', { name: 'Photosynthesis Basics' }),
   ).toBeVisible()
 
-  // Hover-zone navigation: chevrons over the slide's side thirds
-  await page.getByTestId('slide').hover()
+  // Hover-zone navigation: half-slide hotspots (click implies hover)
   await page.getByRole('button', { name: 'Next slide' }).click()
   await expect(page.getByText('2 / 2')).toBeVisible()
   await expect(page.getByText('carbon dioxide')).toBeVisible()
