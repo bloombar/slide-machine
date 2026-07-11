@@ -57,12 +57,12 @@ export default function SlideMarkdown({
           </code>
         ),
         ul: ({ children }) => (
-          <ul className="flex list-disc flex-col gap-1 pl-6 text-left">
+          <ul className="flex list-disc flex-col gap-[0.5cqi] pl-[3cqi] text-left">
             {children}
           </ul>
         ),
         ol: ({ children }) => (
-          <ol className="flex list-decimal flex-col gap-1 pl-6 text-left">
+          <ol className="flex list-decimal flex-col gap-[0.5cqi] pl-[3cqi] text-left">
             {children}
           </ol>
         ),

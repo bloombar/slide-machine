@@ -69,7 +69,7 @@ function ImageSlot({
     return (
       <div
         data-testid="image-skeleton"
-        className="h-full min-h-32 w-full animate-pulse rounded-lg"
+        className="h-full min-h-[16cqi] w-full animate-pulse rounded-lg"
         style={{ backgroundColor: colors.surface }}
       />
     )
@@ -77,7 +77,7 @@ function ImageSlot({
   return (
     <div
       data-testid="image-fallback"
-      className="h-full min-h-32 w-full rounded-lg"
+      className="h-full min-h-[16cqi] w-full rounded-lg"
       style={{ backgroundColor: colors.surface }}
     />
   )
@@ -140,8 +140,8 @@ export default function SlideView({
   const body = (
     <>
       {slide.layoutType === 'title' && (
-        <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
-          <h1 className="text-5xl font-bold">
+        <div className="flex h-full flex-col items-center justify-center gap-[2cqi] text-center">
+          <h1 className="text-[7cqi] font-bold">
             {text(slide.title, 'Slide title', 'title')}
           </h1>
           {slide.caption && (
@@ -152,38 +152,38 @@ export default function SlideView({
         </div>
       )}
       {slide.layoutType === 'section' && (
-        <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+        <div className="flex h-full flex-col items-center justify-center gap-[1.5cqi] text-center">
           <div
-            className="h-1 w-16 rounded"
+            className="h-[0.4cqi] w-[8cqi] rounded"
             style={{ backgroundColor: colors.accent }}
           />
-          <h2 className="text-4xl font-semibold">
+          <h2 className="text-[5.5cqi] font-semibold">
             {text(slide.title, 'Slide title', 'title')}
           </h2>
         </div>
       )}
       {slide.layoutType === 'content' && (
-        <div className="flex h-full flex-col justify-center gap-6 px-12">
+        <div className="flex h-full flex-col justify-center gap-[3cqi] px-[6cqi]">
           <h2
-            className="text-3xl font-semibold"
+            className="text-[4cqi] font-semibold"
             style={{ color: colors.accent }}
           >
             {text(slide.title, 'Slide title', 'title')}
           </h2>
-          <p className="text-xl leading-relaxed">
+          <p className="text-[2.75cqi] leading-relaxed">
             {text(slide.body, 'Slide body', 'body', true)}
           </p>
         </div>
       )}
       {slide.layoutType === 'list' && (
-        <div className="flex h-full flex-col justify-center gap-6 px-12">
+        <div className="flex h-full flex-col justify-center gap-[3cqi] px-[6cqi]">
           <h2
-            className="text-3xl font-semibold"
+            className="text-[4cqi] font-semibold"
             style={{ color: colors.accent }}
           >
             {text(slide.title, 'Slide title', 'title')}
           </h2>
-          <ul className="flex list-disc flex-col gap-3 pl-8 text-xl">
+          <ul className="flex list-disc flex-col gap-[1.5cqi] pl-[4cqi] text-[2.75cqi]">
             {(slide.bullets ?? []).map((b, i) => (
               <li key={i}>{bullet(b, i)}</li>
             ))}
@@ -191,27 +191,30 @@ export default function SlideView({
         </div>
       )}
       {slide.layoutType === 'image-heavy' && (
-        <div className="flex h-full flex-col gap-3 p-8">
+        <div className="flex h-full flex-col gap-[1.5cqi] p-[4cqi]">
           <div className="flex-1 overflow-hidden rounded-lg">
             <ImageSlot slide={slide} colors={colors} pending={imagePending} />
           </div>
           {slide.caption && (
-            <p className="text-center text-sm" style={{ color: colors.muted }}>
+            <p
+              className="text-center text-[2cqi]"
+              style={{ color: colors.muted }}
+            >
               {text(slide.caption, 'Slide caption', 'caption')}
             </p>
           )}
         </div>
       )}
       {slide.layoutType === 'two-column' && (
-        <div className="grid h-full grid-cols-2 items-center gap-8 px-12">
-          <div className="flex flex-col gap-4">
+        <div className="grid h-full grid-cols-2 items-center gap-[4cqi] px-[6cqi]">
+          <div className="flex flex-col gap-[2cqi]">
             <h2
-              className="text-3xl font-semibold"
+              className="text-[4cqi] font-semibold"
               style={{ color: colors.accent }}
             >
               {text(slide.title, 'Slide title', 'title')}
             </h2>
-            <p className="text-lg leading-relaxed">
+            <p className="text-[2.5cqi] leading-relaxed">
               {text(slide.body, 'Slide body', 'body', true)}
             </p>
           </div>
@@ -221,8 +224,8 @@ export default function SlideView({
         </div>
       )}
       {slide.layoutType === 'quote' && (
-        <div className="flex h-full flex-col items-center justify-center gap-4 px-16 text-center">
-          <p className="text-3xl font-medium italic">
+        <div className="flex h-full flex-col items-center justify-center gap-[2cqi] px-[8cqi] text-center">
+          <p className="text-[4cqi] font-medium italic">
             “{text(slide.body, 'Slide body', 'body', true)}”
           </p>
           {slide.caption && (
@@ -239,7 +242,7 @@ export default function SlideView({
     <div
       data-testid="slide"
       data-layout={slide.layoutType}
-      className="aspect-video w-full overflow-hidden rounded-xl shadow-2xl"
+      className="@container aspect-video w-full overflow-hidden rounded-xl shadow-2xl"
       style={{ backgroundColor: colors.background, color: colors.text }}
     >
       {body}
