@@ -27,6 +27,8 @@ interface AuthState {
     displayName: string,
   ) => Promise<void>
   logout: () => Promise<void>
+  /** Replaces the cached user after a settings change elsewhere. */
+  updateUser: (user: SafeUser) => void
 }
 
 const AuthContext = createContext<AuthState | null>(null)
@@ -66,6 +68,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   )
 
+  const updateUser = useCallback((next: SafeUser) => setUser(next), [])
+
   const logout = useCallback(async () => {
     await authApi.logout()
     setAccessToken(null)
@@ -74,7 +78,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, status, login, register, logout }}>
+    <AuthContext.Provider
+      value={{ user, status, login, register, logout, updateUser }}
+    >
       {children}
     </AuthContext.Provider>
   )

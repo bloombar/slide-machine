@@ -82,7 +82,7 @@ describe('deck.create / deck.list / deck.get', () => {
     })
     expect(created.status).toBe(200)
     expect(created.body.permalinkSlug).toMatch(/^lecture-1-cells-[0-9a-f]{8}$/)
-    expect(created.body.visibility).toBe('private')
+    expect(created.body.visibility).toBe('public')
 
     const list = await act(ada, 'deck.list', { projectId })
     expect(list.body).toHaveLength(1)
@@ -194,7 +194,11 @@ describe('GET /api/decks/:slug (viewer)', () => {
     })
   })
 
-  it('serves private decks to their owner only, as 404 to others', async () => {
+  it('serves restricted decks to their owner only, as 404 to others', async () => {
+    await DeckModel.updateOne(
+      { permalinkSlug: slug },
+      { visibility: 'restricted' },
+    )
     const anon = await request(server).get(`/api/decks/${slug}`)
     expect(anon.status).toBe(404)
 

@@ -1,11 +1,18 @@
 /**
- * Public deck viewer route (SHARE-1): GET /api/decks/:slug. Private
- * decks resolve only for their owner (optional auth); missing and
- * forbidden are both 404 so existence never leaks.
+ * Public deck viewer route (SHARE-1): GET /api/decks/:slug. Access
+ * follows the deck ACL (visibility + shared viewers/editors, optional
+ * auth); missing and forbidden are both 404 so existence never leaks.
+ * canEdit tells the client whether to enable the editing surface.
  */
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import type { DeckViewResponse } from '@slide-machine/shared'
-import { DeckModel, toDeckDto } from '../models/deck'
+import {
+  DeckModel,
+  canEditDeck,
+  canViewDeck,
+  toDeckDto,
+  toSharedDeckDto,
+} from '../models/deck'
 import { SlideModel, toSlideDto } from '../models/slide'
 import { getBuiltinTemplate } from '../templates/builtin'
 import { verifyAccessToken } from '../auth/tokens'
@@ -38,19 +45,18 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
   const deck = await DeckModel.findOne({
     permalinkSlug: String(req.params.slug),
   })
-  if (!deck) throw notFound
-  if (deck.visibility === 'private' && deck.ownerId.toString() !== req.userId) {
-    throw notFound
-  }
+  if (!deck || !canViewDeck(deck, req.userId)) throw notFound
 
   const template = getBuiltinTemplate(deck.templateId)
   if (!template) throw notFound
 
+  const isOwner = deck.ownerId.toString() === req.userId
   const slides = await SlideModel.find({ deckId: deck._id }).sort({ index: 1 })
   const body: DeckViewResponse = {
-    deck: toDeckDto(deck),
+    deck: isOwner ? toDeckDto(deck) : toSharedDeckDto(deck),
     slides: slides.map(toSlideDto),
     template,
+    canEdit: canEditDeck(deck, req.userId),
   }
   res.json(body)
 })

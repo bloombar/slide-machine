@@ -1,14 +1,15 @@
 /**
  * Lecture settings as a full-width modal over the viewer, organized as
- * sections we add to over time — for now, the style template (EDIT-2
- * via deck.switchTemplate; changes save immediately). Closes from the
- * top-right icon or the Escape key.
+ * sections we add to over time: access control (owners only, SHARE-1)
+ * and the style template (EDIT-2 via deck.switchTemplate; changes save
+ * immediately). Closes from the top-right icon or the Escape key.
  */
 import { useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import type { Deck, Template } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import TemplatePicker from './TemplatePicker'
+import DeckAccessSettings from './DeckAccessSettings'
 
 const isTypingTarget = (target: EventTarget | null): boolean =>
   target instanceof HTMLElement &&
@@ -18,15 +19,21 @@ const isTypingTarget = (target: EventTarget | null): boolean =>
 
 interface Props {
   deck: Deck
+  /** Owners also manage access; shared editors only switch templates. */
+  isOwner: boolean
   onClose: () => void
   /** Fired after a successful save so the viewer re-themes immediately. */
   onTemplateChange: (deck: Deck, template: Template) => void
+  /** Fired after an access change so the viewer keeps a fresh deck. */
+  onAccessChange: (deck: Deck) => void
 }
 
 export default function DeckSettingsModal({
   deck,
+  isOwner,
   onClose,
   onTemplateChange,
+  onAccessChange,
 }: Props) {
   const [templates, setTemplates] = useState<Template[]>([])
   const closeRef = useRef<HTMLButtonElement>(null)
@@ -80,7 +87,7 @@ export default function DeckSettingsModal({
         role="dialog"
         aria-modal="true"
         aria-label="Lecture settings"
-        className="fixed inset-x-0 top-14 z-40 border-b border-slate-200 bg-white p-6 shadow-xl"
+        className="fixed inset-x-0 top-14 z-40 max-h-[calc(100vh-3.5rem)] overflow-y-auto border-b border-slate-200 bg-white p-6 shadow-xl"
       >
         <div className="mx-auto w-full max-w-5xl">
           <header className="mb-6 flex items-center justify-between">
@@ -96,16 +103,21 @@ export default function DeckSettingsModal({
             </button>
           </header>
 
-          <section>
-            <h3 className="mb-4 text-lg font-semibold text-slate-700">
-              Template
-            </h3>
-            <TemplatePicker
-              templates={templates}
-              value={deck.templateId}
-              onChange={switchTemplate}
-            />
-          </section>
+          <div className="flex flex-col gap-8">
+            {isOwner && (
+              <DeckAccessSettings deck={deck} onAccessChange={onAccessChange} />
+            )}
+            <section>
+              <h3 className="mb-4 text-lg font-semibold text-slate-700">
+                Template
+              </h3>
+              <TemplatePicker
+                templates={templates}
+                value={deck.templateId}
+                onChange={switchTemplate}
+              />
+            </section>
+          </div>
         </div>
       </div>
     </>

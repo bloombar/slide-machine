@@ -20,4 +20,6 @@ export interface DeckViewResponse {
   deck: Deck
   slides: Slide[]
   template: Template
+  /** Whether the requesting user may edit (owner or shared editor). */
+  canEdit: boolean
 }

@@ -20,6 +20,7 @@ beforeEach(() => {
           displayName: 'Ada',
           email: 'ada@example.com',
           planTier: 'free',
+          profileVisibility: 'public',
         },
         accessToken: 't',
       },
@@ -50,6 +51,53 @@ describe('ProfilePage', () => {
     expect(await screen.findByText('Ada')).toBeInTheDocument()
     expect(screen.getByText('ada@example.com')).toBeInTheDocument()
     expect(screen.getByText('free')).toBeInTheDocument()
+  })
+
+  it('toggles profile visibility and links to the public profile', async () => {
+    let sent: unknown
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: {
+          user: {
+            id: 'u1',
+            displayName: 'Ada',
+            email: 'ada@example.com',
+            planTier: 'free',
+            profileVisibility: 'public',
+          },
+          accessToken: 't',
+        },
+      }),
+      '/api/actions/user.setProfileVisibility': init => {
+        sent = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: {
+            id: 'u1',
+            displayName: 'Ada',
+            email: 'ada@example.com',
+            planTier: 'free',
+            profileVisibility: 'private',
+          },
+        }
+      },
+    })
+    renderProfile()
+
+    const toggle = await screen.findByRole('checkbox', {
+      name: 'Public profile',
+    })
+    expect(toggle).toBeChecked()
+    fireEvent.click(toggle)
+
+    await vi.waitFor(() =>
+      expect(sent).toEqual({ profileVisibility: 'private' }),
+    )
+    await vi.waitFor(() => expect(toggle).not.toBeChecked())
+    expect(
+      screen.getByRole('link', { name: 'View your public profile' }),
+    ).toHaveAttribute('href', '/u/u1')
   })
 
   it('signs out from the bottom button and redirects to login', async () => {

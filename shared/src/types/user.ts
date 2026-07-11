@@ -11,12 +11,16 @@ export interface ProjectDefaults {
   animatedTransitions?: boolean
 }
 
+/** Whether a user's profile page is visible to others. */
+export type ProfileVisibility = 'public' | 'private'
+
 export interface User {
   id: string
   email: string
   displayName: string
   passwordHash?: string
   emailVerified: boolean
+  profileVisibility: ProfileVisibility
   bio?: string
   avatarUrl?: string
   locale: Locale

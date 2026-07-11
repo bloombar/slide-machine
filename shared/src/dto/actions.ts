@@ -2,6 +2,9 @@
  * Input DTOs for TECH-13 actions dispatched via POST /api/actions/:name.
  * Results reuse the shared data-model types (e.g. Project).
  */
+import type { Visibility } from '../types/deck'
+import type { ProfileVisibility } from '../types/user'
+
 export interface ProjectCreateInput {
   title: string
   course?: string
@@ -37,6 +40,46 @@ export interface DeckRenameInput {
 export interface DeckSwitchTemplateInput {
   deckId: string
   templateId: string
+}
+
+/** Owner-only general-access change (SHARE-1). */
+export interface DeckSetAccessInput {
+  deckId: string
+  visibility: Visibility
+}
+
+/** The role a shared user holds on a deck. */
+export type ShareRole = 'viewer' | 'editor'
+
+/** Grants a user (found by account email) view or edit access. */
+export interface DeckShareInput {
+  deckId: string
+  email: string
+  role: ShareRole
+}
+
+/** Revokes a previously granted share. */
+export interface DeckUnshareInput {
+  deckId: string
+  userId: string
+  role: ShareRole
+}
+
+/** One granted share, as listed to the deck owner. */
+export interface DeckShare {
+  userId: string
+  displayName: string
+  email: string
+  role: ShareRole
+}
+
+export interface DeckSharesInput {
+  deckId: string
+}
+
+/** Profile settings update (AUTH-5). */
+export interface UserSetProfileVisibilityInput {
+  profileVisibility: ProfileVisibility
 }
 
 /** One finalized spoken (or typed, until STT lands) phrase for a live session. */

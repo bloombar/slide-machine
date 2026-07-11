@@ -8,6 +8,11 @@ import { z } from 'zod'
 import type {
   Deck,
   DeckCreateInput,
+  DeckSetAccessInput,
+  DeckShare,
+  DeckShareInput,
+  DeckSharesInput,
+  DeckUnshareInput,
   DeckGetInput,
   DeckListInput,
   DeckRenameInput,
@@ -28,7 +33,16 @@ import {
   ActionValidationError,
 } from './dispatch'
 import type { ActionContext } from './context'
-import { DeckModel, toDeckDto, touchDeck, type DeckDb } from '../models/deck'
+import {
+  DeckModel,
+  canEditDeck,
+  canViewDeck,
+  toDeckDto,
+  toSharedDeckDto,
+  touchDeck,
+  type DeckDb,
+} from '../models/deck'
+import { UserModel } from '../models/user'
 import { SlideModel, toSlideDto } from '../models/slide'
 import { ProjectModel } from '../models/project'
 import { getBuiltinTemplate, layoutDescriptors } from '../templates/builtin'
@@ -65,6 +79,17 @@ const loadOwnedDeck = async (
   const deck = await DeckModel.findById(deckId).catch(() => null)
   if (!deck || deck.ownerId.toString() !== userId)
     throw new ActionForbiddenError()
+  return deck
+}
+
+/** Loads a deck the acting user may edit (owner or shared editor). */
+const loadEditableDeck = async (
+  ctx: ActionContext,
+  deckId: string,
+): Promise<HydratedDocument<DeckDb>> => {
+  const userId = requireUser(ctx)
+  const deck = await DeckModel.findById(deckId).catch(() => null)
+  if (!deck || !canEditDeck(deck, userId)) throw new ActionForbiddenError()
   return deck
 }
 
@@ -117,14 +142,22 @@ export const deckGet = defineAction<DeckGetInput, DeckViewResponse>({
   name: 'deck.get',
   input: z.object({ deckId: z.string().min(1) }),
   execute: async (ctx, input) => {
-    const deck = await loadOwnedDeck(ctx, input.deckId)
+    const userId = requireUser(ctx)
+    const deck = await DeckModel.findById(input.deckId).catch(() => null)
+    if (!deck || !canViewDeck(deck, userId)) throw new ActionForbiddenError()
     const template = getBuiltinTemplate(deck.templateId)
     if (!template)
       throw new ActionValidationError('deck.get', ['template no longer exists'])
     const slides = await SlideModel.find({ deckId: deck._id }).sort({
       index: 1,
     })
-    return { deck: toDeckDto(deck), slides: slides.map(toSlideDto), template }
+    const isOwner = deck.ownerId.toString() === userId
+    return {
+      deck: isOwner ? toDeckDto(deck) : toSharedDeckDto(deck),
+      slides: slides.map(toSlideDto),
+      template,
+      canEdit: canEditDeck(deck, userId),
+    }
   },
 })
 
@@ -132,7 +165,7 @@ export const slideAdd = defineAction<SlideAddInput, Slide>({
   name: 'slide.add',
   input: z.object({ deckId: z.string().min(1) }),
   execute: async (ctx, input) => {
-    const deck = await loadOwnedDeck(ctx, input.deckId)
+    const deck = await loadEditableDeck(ctx, input.deckId)
     const slide = await SlideModel.create({
       deckId: deck._id,
       index: deck.slideOrder.length,
@@ -153,7 +186,7 @@ export const deckRename = defineAction<DeckRenameInput, Deck>({
     title: z.string().trim().min(1),
   }),
   execute: async (ctx, input) => {
-    const deck = await loadOwnedDeck(ctx, input.deckId)
+    const deck = await loadEditableDeck(ctx, input.deckId)
     deck.title = input.title
     await deck.save()
     return toDeckDto(deck)
@@ -167,7 +200,7 @@ export const deckSwitchTemplate = defineAction<DeckSwitchTemplateInput, Deck>({
     templateId: z.string().min(1),
   }),
   execute: async (ctx, input) => {
-    const deck = await loadOwnedDeck(ctx, input.deckId)
+    const deck = await loadEditableDeck(ctx, input.deckId)
     if (!getBuiltinTemplate(input.templateId)) {
       throw new ActionValidationError('deck.switchTemplate', [
         'templateId: unknown template',
@@ -186,7 +219,7 @@ export const deckReorderSlides = defineAction<DeckReorderInput, Deck>({
     slideOrder: z.array(z.string().min(1)).min(1),
   }),
   execute: async (ctx, input) => {
-    const deck = await loadOwnedDeck(ctx, input.deckId)
+    const deck = await loadEditableDeck(ctx, input.deckId)
     const current = [...deck.slideOrder].sort()
     const proposed = [...input.slideOrder].sort()
     if (
@@ -216,7 +249,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
     phrase: z.string().trim().min(1).max(2000),
   }),
   execute: async (ctx, input) => {
-    const deck = await loadOwnedDeck(ctx, input.deckId)
+    const deck = await loadEditableDeck(ctx, input.deckId)
     const template = getBuiltinTemplate(deck.templateId)
     if (!template)
       throw new ActionValidationError('session.phrase', [
@@ -291,6 +324,103 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
   },
 })
 
+/** The owner-facing share list: granted users with names and roles. */
+const sharesOf = async (
+  deck: HydratedDocument<DeckDb>,
+): Promise<DeckShare[]> => {
+  const ids = [...new Set([...deck.viewers, ...deck.editors])]
+  const users = await UserModel.find({ _id: { $in: ids } })
+  const byId = new Map(users.map(u => [u._id.toString(), u]))
+  const entry = (userId: string, role: DeckShare['role']): DeckShare | null => {
+    const user = byId.get(userId)
+    if (!user) return null
+    return {
+      userId,
+      displayName: user.displayName,
+      email: user.email,
+      role,
+    }
+  }
+  return [
+    ...deck.viewers.map(id => entry(id, 'viewer')),
+    ...deck.editors.map(id => entry(id, 'editor')),
+  ].filter((share): share is DeckShare => share !== null)
+}
+
+export const deckSetAccess = defineAction<DeckSetAccessInput, Deck>({
+  name: 'deck.setAccess',
+  input: z.object({
+    deckId: z.string().min(1),
+    visibility: z.enum(['restricted', 'public']),
+  }),
+  execute: async (ctx, input) => {
+    const deck = await loadOwnedDeck(ctx, input.deckId)
+    deck.visibility = input.visibility
+    await deck.save()
+    return toDeckDto(deck)
+  },
+})
+
+export const deckShare = defineAction<DeckShareInput, DeckShare[]>({
+  name: 'deck.share',
+  input: z.object({
+    deckId: z.string().min(1),
+    email: z.email(),
+    role: z.enum(['viewer', 'editor']),
+  }),
+  execute: async (ctx, input) => {
+    const deck = await loadOwnedDeck(ctx, input.deckId)
+    const user = await UserModel.findOne({
+      email: input.email.toLowerCase().trim(),
+    })
+    if (!user) {
+      throw new ActionValidationError('deck.share', [
+        'email: no account with that email',
+      ])
+    }
+    const userId = user._id.toString()
+    if (userId === ctx.userId) {
+      throw new ActionValidationError('deck.share', [
+        'email: that is your own account',
+      ])
+    }
+    const list = input.role === 'editor' ? deck.editors : deck.viewers
+    if (!list.includes(userId)) list.push(userId)
+    // One role per user: granting one revokes the other
+    const other = input.role === 'editor' ? deck.viewers : deck.editors
+    const index = other.indexOf(userId)
+    if (index >= 0) other.splice(index, 1)
+    await deck.save()
+    return sharesOf(deck)
+  },
+})
+
+export const deckUnshare = defineAction<DeckUnshareInput, DeckShare[]>({
+  name: 'deck.unshare',
+  input: z.object({
+    deckId: z.string().min(1),
+    userId: z.string().min(1),
+    role: z.enum(['viewer', 'editor']),
+  }),
+  execute: async (ctx, input) => {
+    const deck = await loadOwnedDeck(ctx, input.deckId)
+    const list = input.role === 'editor' ? deck.editors : deck.viewers
+    const index = list.indexOf(input.userId)
+    if (index >= 0) {
+      list.splice(index, 1)
+      await deck.save()
+    }
+    return sharesOf(deck)
+  },
+})
+
+export const deckShares = defineAction<DeckSharesInput, DeckShare[]>({
+  name: 'deck.shares',
+  input: z.object({ deckId: z.string().min(1) }),
+  execute: async (ctx, input) =>
+    sharesOf(await loadOwnedDeck(ctx, input.deckId)),
+})
+
 registerAction(deckCreate)
 registerAction(deckList)
 registerAction(deckGet)
@@ -299,3 +429,7 @@ registerAction(deckSwitchTemplate)
 registerAction(slideAdd)
 registerAction(deckReorderSlides)
 registerAction(sessionPhrase)
+registerAction(deckSetAccess)
+registerAction(deckShare)
+registerAction(deckUnshare)
+registerAction(deckShares)

@@ -62,7 +62,11 @@ const renderViewer = (refreshStatus: number, ownerId = 'u1') => {
         : { status: 401 },
     '/api/decks/shared-abc123': () => ({
       status: 200,
-      body: { ...deckView, deck: { ...deckView.deck, ownerId } },
+      body: {
+        ...deckView,
+        deck: { ...deckView.deck, ownerId },
+        canEdit: refreshStatus === 200 && ownerId === 'u1',
+      },
     }),
   })
   return render(
@@ -143,7 +147,7 @@ describe('DeckViewerPage pasted permalinks', () => {
       }),
       '/api/decks/shared-abc123': init =>
         new Headers(init?.headers).has('Authorization')
-          ? { status: 200, body: deckView }
+          ? { status: 200, body: { ...deckView, canEdit: true } }
           : { status: 404 },
     })
     render(
@@ -168,7 +172,10 @@ describe('DeckViewerPage slide deletion', () => {
         status: 200,
         body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
       }),
-      '/api/decks/shared-abc123': () => ({ status: 200, body: deckView }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
       '/api/actions/slide.delete': () => ({
         status: 200,
         body: { deleted: true, slideOrder: ['s2'] },
@@ -211,7 +218,10 @@ describe('DeckViewerPage lecture title editing', () => {
         status: 200,
         body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
       }),
-      '/api/decks/shared-abc123': () => ({ status: 200, body: deckView }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
       '/api/actions/deck.rename': () => ({
         status: 200,
         body: { ...deckView.deck, title: 'Renamed Lecture' },
@@ -253,7 +263,10 @@ describe('DeckViewerPage add slide', () => {
         status: 200,
         body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
       }),
-      '/api/decks/shared-abc123': () => ({ status: 200, body: deckView }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
       '/api/actions/slide.add': () => ({
         status: 200,
         body: {
@@ -300,7 +313,10 @@ describe('DeckViewerPage slide reordering', () => {
         status: 200,
         body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
       }),
-      '/api/decks/shared-abc123': () => ({ status: 200, body: deckView }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
       '/api/actions/deck.reorderSlides': init => {
         reorderBody = JSON.parse(String(init?.body))
         return {
@@ -352,7 +368,10 @@ describe('DeckViewerPage settings modal', () => {
         status: 200,
         body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
       }),
-      '/api/decks/shared-abc123': () => ({ status: 200, body: deckView }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
       '/api/actions/template.list': () => ({
         status: 200,
         body: [
@@ -427,7 +446,10 @@ describe('DeckViewerPage title in the primary nav', () => {
         status: 200,
         body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
       }),
-      '/api/decks/shared-abc123': () => ({ status: 200, body: deckView }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
       '/api/health': () => ({
         status: 200,
         body: { status: 'ok', mongo: 'connected', uptime: 1, version: '0' },
@@ -475,7 +497,10 @@ describe('DeckViewerPage title in the primary nav', () => {
         status: 200,
         body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
       }),
-      '/api/decks/shared-abc123': () => ({ status: 200, body: deckView }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
       '/api/actions/slide.add': () => ({
         status: 200,
         body: {

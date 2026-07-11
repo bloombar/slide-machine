@@ -5,7 +5,12 @@
 import type { Locale } from './locale'
 import type { LayoutType } from './template'
 
-export type Visibility = 'private' | 'unlisted' | 'public'
+/**
+ * General access (Google-Docs style): 'restricted' means only the owner
+ * and people with access can open the deck; 'public' means anyone on
+ * the internet with the link can view.
+ */
+export type Visibility = 'restricted' | 'public'
 
 export interface Deck {
   id: string
@@ -14,6 +19,10 @@ export interface Deck {
   title: string
   templateId: string
   visibility: Visibility
+  /** User ids with view access ("people with access"). Owner-only surfaces. */
+  viewers?: string[]
+  /** User ids with edit access ("people with access"). Owner-only surfaces. */
+  editors?: string[]
   permalinkSlug: string
   slideOrder: string[]
   /** Finalized full lecture transcript, retained for post-lecture reformat (GEN-4). */

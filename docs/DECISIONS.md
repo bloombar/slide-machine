@@ -37,3 +37,17 @@ scrolled beneath it.
 **Choice.** Layouts only *name* their content slots (`slots: LayoutSlot[]`, already the AI-facing vocabulary in [template.ts](../shared/src/types/template.ts)). Each slot has a shared `SlotDescriptor` (`SLOT_DESCRIPTORS`) giving its media `kind` and label, and the client keeps one editor component per kind in [slots.tsx](../client/src/components/slide/slots.tsx) (`text` → in-place markdown editor, `bullets` → whole-list editor, `image` → reserved image slot). [SlideView](../client/src/components/SlideView.tsx) layouts render `slot('title')` etc. and know nothing about editing.
 
 **Adding a media type later** (video, embed, …): extend `SlotKind`, describe the slots that use it in `SLOT_DESCRIPTORS`, register one editor component in the `EDITORS` map. Layouts, SlideView, and the save path (`slide.editContent` partial patches) stay untouched; unknown slots render nothing, so old clients degrade quietly.
+
+## Deck access control: Google-Docs model (2026-07-11)
+
+**Problem.** SPEC §15 sketched `visibility: private | unlisted | public` per deck, with no way to grant specific people view or edit access.
+
+**Choice.** Google-Docs-style ACL on each deck, one mental model users already know:
+
+- **General access** — `visibility: 'public'` (anyone on the internet with the link can view; the default) or `'restricted'` (only people with access can open with the link).
+- **People with access** — `viewers[]` / `editors[]` user-id lists, managed by email (`deck.share` / `deck.unshare` / `deck.shares`, owner-only). A person holds one role; granting the other role moves them. Editors can always view and edit regardless of general access. Editing covers content (slides, rename, reorder, template, live session); access management and the share lists themselves stay owner-only — non-owner responses strip `viewers`/`editors` and carry a `canEdit` flag instead.
+- `canViewDeck` / `canEditDeck` in [deck.ts](../server/src/models/deck.ts) are the single source of truth, used by the permalink route, `deck.get`, and every content action.
+
+**Profiles.** Users get `profileVisibility: 'public' | 'private'` (default public). `GET /api/users/:id` lists the lectures the requester can view, grouped by project (empty projects omitted). Missing and private both return an identical 404 — profile existence never leaks, same rule as restricted decks.
+
+**Dropped.** The old `unlisted` tier (public-with-link covers it) and a separate deck-level edit-access switch (an earlier draft; the people list alone decides who edits).

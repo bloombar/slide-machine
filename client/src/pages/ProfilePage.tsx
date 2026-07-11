@@ -1,19 +1,34 @@
 /**
- * User profile (AUTH-5, minimal): account details, plan tier, and sign
- * out. Editing (display name, bio, avatar, locale) arrives later.
+ * User profile (AUTH-5, minimal): account details, plan tier, profile
+ * visibility (gates the public profile page, SHARE-1), and sign out.
+ * Editing (display name, bio, avatar, locale) arrives later.
  */
-import { useNavigate } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { LogOut } from 'lucide-react'
+import type { SafeUser } from '@slide-machine/shared'
 import { useAuth } from '../auth/AuthContext'
+import { dispatchAction } from '../api/actions'
 
 export default function ProfilePage() {
-  const { user, logout } = useAuth()
+  const { user, logout, updateUser } = useAuth()
   const navigate = useNavigate()
   if (!user) return null
 
   const onSignOut = async () => {
     await logout()
     navigate('/login')
+  }
+
+  const toggleVisibility = () => {
+    const profileVisibility =
+      user.profileVisibility === 'public' ? 'private' : 'public'
+    dispatchAction<SafeUser>('user.setProfileVisibility', {
+      profileVisibility,
+    })
+      .then(updateUser)
+      .catch(() => {
+        // Quiet failure: the toggle reverts to the saved value
+      })
   }
 
   return (
@@ -29,6 +44,23 @@ export default function ProfilePage() {
               {user.planTier}
             </span>
           </p>
+        </div>
+        <div className="mt-6 flex flex-col gap-2">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={user.profileVisibility === 'public'}
+              onChange={toggleVisibility}
+              aria-label="Public profile"
+            />
+            Public profile — others can see your public and shared lectures
+          </label>
+          <Link
+            to={`/u/${user.id}`}
+            className="text-sm text-indigo-600 hover:underline"
+          >
+            View your public profile
+          </Link>
         </div>
         <button
           onClick={() => void onSignOut()}

@@ -129,6 +129,7 @@ export default function DeckViewerPage() {
 
   const slide = view.slides[nav.current]
   const isOwner = user?.id === view.deck.ownerId
+  const canEdit = view.canEdit
 
   /** Watches a slide whose image may still arrive from background enrichment. */
   const watchImage = (target: Slide) => {
@@ -343,7 +344,7 @@ export default function DeckViewerPage() {
     <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col p-6">
       <ShellTitle>
         <h1 className="min-w-0 truncate">
-          {isOwner ? (
+          {canEdit ? (
             <EditableText
               value={view.deck.title}
               label="Lecture title"
@@ -360,7 +361,7 @@ export default function DeckViewerPage() {
         mode={mode}
         onModeChange={setMode}
         actions={
-          isOwner && (
+          canEdit && (
             <>
               <button
                 aria-label="Lecture settings"
@@ -410,11 +411,11 @@ export default function DeckViewerPage() {
               <SlideView
                 slide={slide!}
                 template={view.template}
-                editable={isOwner}
+                editable={canEdit}
                 onEdit={editSlide(slide!.id)}
                 imagePending={pendingImages.has(slide!.id)}
               />
-              {isOwner && (
+              {canEdit && (
                 <SlideDeleteButton
                   label={`Delete slide ${nav.current + 1}`}
                   onDelete={() => void deleteSlide(slide!.id)}
@@ -429,7 +430,7 @@ export default function DeckViewerPage() {
       ) : (
         <ul className="flex w-full flex-col gap-6">
           {view.slides.map((s, i) =>
-            isOwner ? (
+            canEdit ? (
               <DraggableListRow
                 key={s.id}
                 id={s.id}
@@ -460,17 +461,19 @@ export default function DeckViewerPage() {
         </ul>
       )}
 
-      {isOwner && settingsOpen && (
+      {canEdit && settingsOpen && (
         <DeckSettingsModal
           deck={view.deck}
+          isOwner={isOwner}
           onClose={() => setSettingsOpen(false)}
+          onAccessChange={deck => setView(v => (v ? { ...v, deck } : v))}
           onTemplateChange={(deck, template) =>
             setView(v => (v ? { ...v, deck, template } : v))
           }
         />
       )}
 
-      {isOwner && speaking && (
+      {canEdit && speaking && (
         <>
           <form
             onSubmit={onSpeak}

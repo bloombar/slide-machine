@@ -13,6 +13,7 @@ import HomePage from './pages/HomePage'
 import ProjectPage from './pages/ProjectPage'
 import ProfilePage from './pages/ProfilePage'
 import DeckViewerPage from './pages/DeckViewerPage'
+import PublicProfilePage from './pages/PublicProfilePage'
 import RequireAuth from './auth/RequireAuth'
 
 export default function App() {
@@ -23,6 +24,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/d/:slug" element={<DeckViewerPage />} />
+        <Route path="/u/:userId" element={<PublicProfilePage />} />
       </Route>
       <Route
         element={

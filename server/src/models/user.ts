@@ -7,6 +7,7 @@ import { Schema, model, type HydratedDocument } from 'mongoose'
 import {
   LOCALES,
   PLAN_TIERS,
+  type PublicUser,
   type SafeUser,
   type User,
 } from '@slide-machine/shared'
@@ -27,6 +28,11 @@ const userSchema = new Schema<UserDb>(
     displayName: { type: String, required: true, trim: true },
     passwordHash: { type: String, select: false },
     emailVerified: { type: Boolean, default: false },
+    profileVisibility: {
+      type: String,
+      enum: ['public', 'private'],
+      default: 'public',
+    },
     bio: String,
     avatarUrl: String,
     locale: { type: String, enum: LOCALES, default: 'en' },
@@ -44,12 +50,22 @@ const userSchema = new Schema<UserDb>(
 
 export const UserModel = model<UserDb>('User', userSchema)
 
+/** The stranger-safe subset of a user for public profile pages. */
+export const toPublicUserDto = (doc: HydratedDocument<UserDb>): PublicUser => ({
+  id: doc._id.toString(),
+  displayName: doc.displayName,
+  bio: doc.bio,
+  avatarUrl: doc.avatarUrl,
+  createdAt: doc.createdAt.toISOString(),
+})
+
 /** Maps a user document to the wire shape; never exposes passwordHash. */
 export const toUserDto = (doc: HydratedDocument<UserDb>): SafeUser => ({
   id: doc._id.toString(),
   email: doc.email,
   displayName: doc.displayName,
   emailVerified: doc.emailVerified,
+  profileVisibility: doc.profileVisibility,
   bio: doc.bio,
   avatarUrl: doc.avatarUrl,
   locale: doc.locale,

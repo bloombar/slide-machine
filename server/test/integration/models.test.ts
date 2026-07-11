@@ -115,7 +115,9 @@ describe('Deck and Slide models', () => {
     })
     expect(toDeckDto(deck)).toMatchObject({
       title: 'Lecture 1',
-      visibility: 'private',
+      visibility: 'public',
+      viewers: [],
+      editors: [],
       voteScore: 0,
       slideOrder: [],
       projectId: project._id.toString(),
