@@ -6,6 +6,7 @@
  */
 import { Link, NavLink, Outlet } from 'react-router'
 import { Presentation, User } from 'lucide-react'
+import HealthFooter from './HealthFooter'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }): string =>
   `flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium ${
@@ -38,6 +39,7 @@ export default function AppShell() {
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
         <Outlet />
       </main>
+      <HealthFooter />
     </div>
   )
 }

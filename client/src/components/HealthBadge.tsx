@@ -1,19 +1,18 @@
 /**
- * API health widget: fetches /api/health and shows a status badge —
- * the original walking-skeleton check, now part of the landing page.
+ * Compact API health bar: fetches /api/health once and reports the API
+ * and MongoDB state. Rendered inside the sticky footer on every page.
  */
 import { useEffect, useState } from 'react'
 import type { HealthResponse } from '@slide-machine/shared'
 import { config } from '../config'
 
-const badgeStyles: Record<
-  HealthResponse['status'] | 'loading' | 'error',
-  string
-> = {
-  ok: 'bg-green-100 text-green-800',
-  degraded: 'bg-yellow-100 text-yellow-800',
-  loading: 'bg-gray-100 text-gray-600',
-  error: 'bg-red-100 text-red-800',
+type DisplayStatus = HealthResponse['status'] | 'loading' | 'error'
+
+const dotStyles: Record<DisplayStatus, string> = {
+  ok: 'bg-green-500',
+  degraded: 'bg-yellow-500',
+  loading: 'bg-slate-300',
+  error: 'bg-red-500',
 }
 
 export default function HealthBadge() {
@@ -27,20 +26,24 @@ export default function HealthBadge() {
       .catch(() => setError(true))
   }, [])
 
-  const status = error ? 'error' : (health?.status ?? 'loading')
+  const status: DisplayStatus = error ? 'error' : (health?.status ?? 'loading')
+  const label = error
+    ? 'unreachable'
+    : status === 'loading'
+      ? 'checking…'
+      : status
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-slate-200 px-4 py-3">
-      <span className="text-sm text-slate-500">API status</span>
+    <div
+      data-testid="health-bar"
+      className="flex w-full items-center justify-center gap-2 text-xs text-slate-500"
+    >
       <span
-        data-testid="health-badge"
-        className={`rounded-full px-3 py-1 text-sm font-medium ${badgeStyles[status]}`}
-      >
-        {error ? 'unreachable' : status === 'loading' ? 'checking…' : status}
-      </span>
-      {health && (
-        <span className="text-sm text-slate-500">mongo: {health.mongo}</span>
-      )}
+        className={`h-2 w-2 rounded-full ${dotStyles[status]}`}
+        aria-hidden
+      />
+      <span>API {label}</span>
+      {health && <span>· mongo {health.mongo}</span>}
     </div>
   )
 }

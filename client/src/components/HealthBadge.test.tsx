@@ -1,5 +1,5 @@
 /**
- * Unit tests for the health badge (moved from the original App test).
+ * Unit tests for the compact health bar.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
@@ -18,7 +18,7 @@ afterEach(() => {
 })
 
 describe('HealthBadge', () => {
-  it('renders the API health status', async () => {
+  it('reports API and mongo status in the bar', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ json: () => Promise.resolve(healthFixture) }),
@@ -26,8 +26,8 @@ describe('HealthBadge', () => {
 
     render(<HealthBadge />)
 
-    expect(await screen.findByTestId('health-badge')).toHaveTextContent('ok')
-    expect(screen.getByText('mongo: connected')).toBeInTheDocument()
+    expect(await screen.findByText('API ok')).toBeInTheDocument()
+    expect(screen.getByText('· mongo connected')).toBeInTheDocument()
   })
 
   it('shows unreachable when the API is down', async () => {
@@ -35,8 +35,6 @@ describe('HealthBadge', () => {
 
     render(<HealthBadge />)
 
-    expect(await screen.findByTestId('health-badge')).toHaveTextContent(
-      'unreachable',
-    )
+    expect(await screen.findByText('API unreachable')).toBeInTheDocument()
   })
 })

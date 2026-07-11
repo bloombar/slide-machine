@@ -1,16 +1,24 @@
 /**
- * Walking-skeleton e2e: loading the landing page and seeing a healthy
- * status transitively proves SPA serving, the API, and MongoDB together.
+ * Walking-skeleton e2e: the landing page renders with a sign-in call to
+ * action, and the sticky footer's health bar transitively proves SPA
+ * serving, the API, and MongoDB together.
  */
 import { test, expect } from '@playwright/test'
 
-test('landing page reports a healthy API', async ({ page }) => {
+test('landing page shows the hero and a healthy API footer', async ({
+  page,
+}) => {
   await page.goto('/')
 
   await expect(page).toHaveTitle('Slide Machine')
   await expect(
     page.getByRole('heading', { name: 'Slide Machine V2' }),
   ).toBeVisible()
-  await expect(page.getByTestId('health-badge')).toHaveText('ok')
-  await expect(page.getByText('mongo: connected')).toBeVisible()
+  await expect(
+    page.getByRole('link', { name: /sign in to get started/i }),
+  ).toBeVisible()
+
+  const bar = page.getByTestId('health-bar')
+  await expect(bar).toContainText('API ok')
+  await expect(bar).toContainText('mongo connected')
 })
