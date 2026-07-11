@@ -99,6 +99,15 @@ export default function HomePage() {
     }
   }, [])
 
+  // Decks owned here but living in someone else's project (ownership
+  // was transferred in)
+  const otherDecks =
+    projects === null
+      ? []
+      : [...decksByProject.entries()]
+          .filter(([projectId]) => !projects.some(p => p.id === projectId))
+          .flatMap(([, list]) => list)
+
   const onCreate = async (e: FormEvent) => {
     e.preventDefault()
     if (!title.trim()) return
@@ -156,6 +165,19 @@ export default function HomePage() {
               decks={decksByProject.get(p.id) ?? []}
             />
           ))
+        )}
+        {otherDecks.length > 0 && (
+          <section className="mb-8">
+            <h2 className="mb-3 text-lg font-semibold">Other lectures</h2>
+            <p className="mb-3 text-sm text-slate-500">
+              Lectures you own inside other people&apos;s projects.
+            </p>
+            <ul className="flex flex-col gap-2">
+              {otherDecks.map(d => (
+                <LectureRow key={d.id} deck={d} />
+              ))}
+            </ul>
+          </section>
         )}
       </div>
     </div>

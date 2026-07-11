@@ -1,14 +1,15 @@
 /**
- * Owner-only access controls for a lecture (SHARE-1), Google-Docs
- * style. "People with access": add people by account email and choose
- * per person whether they can edit or only view — this is how other
- * editors are granted. "General access": Public (anyone on the internet
- * with the link can view, the default) or Restricted (only people with
- * access can open with the link). Changes save immediately through the
- * action layer.
+ * Access controls for a lecture (SHARE-1), Google-Docs style, managed
+ * by the owner and by editors. "People with access": add people by
+ * account email and choose per person whether they can edit or only
+ * view — this is how other editors are granted; the per-person menu
+ * also revokes access, and (owner only) transfers ownership, after
+ * which the old owner stays an editor. "General access": Public (anyone
+ * on the internet with the link can view, the default) or Restricted
+ * (only people with access can open with the link). Changes save
+ * immediately through the action layer.
  */
 import { useEffect, useState, type FormEvent } from 'react'
-import { X } from 'lucide-react'
 import type {
   Deck,
   DeckShare,
@@ -36,11 +37,17 @@ const GENERAL_ACCESS: Array<{
 
 interface Props {
   deck: Deck
+  /** Only the owner may transfer ownership. */
+  isOwner: boolean
   /** Fired after a successful save so the viewer keeps a fresh deck. */
   onAccessChange: (deck: Deck) => void
 }
 
-export default function DeckAccessSettings({ deck, onAccessChange }: Props) {
+export default function DeckAccessSettings({
+  deck,
+  isOwner,
+  onAccessChange,
+}: Props) {
   const [shares, setShares] = useState<DeckShare[]>([])
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<ShareRole>('viewer')
@@ -91,15 +98,6 @@ export default function DeckAccessSettings({ deck, onAccessChange }: Props) {
     }
   }
 
-  const changeRole = (entry: DeckShare, nextRole: ShareRole) => {
-    if (nextRole === entry.role) return
-    grant(entry.email, nextRole)
-      .then(setShares)
-      .catch(() => {
-        // Quiet failure: the row keeps its saved role
-      })
-  }
-
   const remove = (entry: DeckShare) => {
     dispatchAction<DeckShare[]>('deck.unshare', {
       deckId: deck.id,
@@ -109,6 +107,40 @@ export default function DeckAccessSettings({ deck, onAccessChange }: Props) {
       .then(setShares)
       .catch(() => {
         // Quiet failure: the entry simply stays listed
+      })
+  }
+
+  const transferOwnership = (entry: DeckShare) => {
+    const confirmed = window.confirm(
+      `Make ${entry.displayName} the owner of this lecture? You will keep edit access.`,
+    )
+    if (!confirmed) return
+    dispatchAction<Deck>('deck.transferOwnership', {
+      deckId: deck.id,
+      userId: entry.userId,
+    })
+      .then(updated => {
+        onAccessChange(updated)
+        // Re-read the list: the new owner leaves it, the old owner joins
+        return dispatchAction<DeckShare[]>('deck.shares', {
+          deckId: deck.id,
+        }).then(setShares)
+      })
+      .catch(() => {
+        // Quiet failure: ownership stays as saved
+      })
+  }
+
+  /** The per-person menu: role change, ownership transfer, revocation. */
+  const onRowAction = (entry: DeckShare, value: string) => {
+    if (value === 'remove') return remove(entry)
+    if (value === 'transfer') return transferOwnership(entry)
+    const nextRole = value as ShareRole
+    if (nextRole === entry.role) return
+    grant(entry.email, nextRole)
+      .then(setShares)
+      .catch(() => {
+        // Quiet failure: the row keeps its saved role
       })
   }
 
@@ -165,21 +197,17 @@ export default function DeckAccessSettings({ deck, onAccessChange }: Props) {
                 <span className="truncate text-slate-500">{entry.email}</span>
                 <select
                   value={entry.role}
-                  onChange={e => changeRole(entry, e.target.value as ShareRole)}
+                  onChange={e => onRowAction(entry, e.target.value)}
                   aria-label={`Role for ${entry.displayName}`}
                   className="ml-auto rounded-md border border-slate-300 px-2 py-1 text-xs"
                 >
                   <option value="viewer">Viewer</option>
                   <option value="editor">Editor</option>
+                  {isOwner && (
+                    <option value="transfer">Transfer ownership</option>
+                  )}
+                  <option value="remove">Remove access</option>
                 </select>
-                <button
-                  aria-label={`Remove ${entry.displayName}`}
-                  title="Remove access"
-                  onClick={() => remove(entry)}
-                  className="rounded p-1 text-slate-400 hover:text-red-600"
-                >
-                  <X className="h-4 w-4" aria-hidden />
-                </button>
               </li>
             ))}
             {shares.length === 0 && (

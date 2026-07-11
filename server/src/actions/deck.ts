@@ -12,6 +12,7 @@ import type {
   DeckShare,
   DeckShareInput,
   DeckSharesInput,
+  DeckTransferOwnershipInput,
   DeckUnshareInput,
   DeckGetInput,
   DeckListInput,
@@ -354,7 +355,7 @@ export const deckSetAccess = defineAction<DeckSetAccessInput, Deck>({
     visibility: z.enum(['restricted', 'public']),
   }),
   execute: async (ctx, input) => {
-    const deck = await loadOwnedDeck(ctx, input.deckId)
+    const deck = await loadEditableDeck(ctx, input.deckId)
     deck.visibility = input.visibility
     await deck.save()
     return toDeckDto(deck)
@@ -369,7 +370,7 @@ export const deckShare = defineAction<DeckShareInput, DeckShare[]>({
     role: z.enum(['viewer', 'editor']),
   }),
   execute: async (ctx, input) => {
-    const deck = await loadOwnedDeck(ctx, input.deckId)
+    const deck = await loadEditableDeck(ctx, input.deckId)
     const user = await UserModel.findOne({
       email: input.email.toLowerCase().trim(),
     })
@@ -379,9 +380,9 @@ export const deckShare = defineAction<DeckShareInput, DeckShare[]>({
       ])
     }
     const userId = user._id.toString()
-    if (userId === ctx.userId) {
+    if (userId === deck.ownerId.toString()) {
       throw new ActionValidationError('deck.share', [
-        'email: that is your own account',
+        'email: that user owns this lecture',
       ])
     }
     const list = input.role === 'editor' ? deck.editors : deck.viewers
@@ -403,7 +404,7 @@ export const deckUnshare = defineAction<DeckUnshareInput, DeckShare[]>({
     role: z.enum(['viewer', 'editor']),
   }),
   execute: async (ctx, input) => {
-    const deck = await loadOwnedDeck(ctx, input.deckId)
+    const deck = await loadEditableDeck(ctx, input.deckId)
     const list = input.role === 'editor' ? deck.editors : deck.viewers
     const index = list.indexOf(input.userId)
     if (index >= 0) {
@@ -418,7 +419,43 @@ export const deckShares = defineAction<DeckSharesInput, DeckShare[]>({
   name: 'deck.shares',
   input: z.object({ deckId: z.string().min(1) }),
   execute: async (ctx, input) =>
-    sharesOf(await loadOwnedDeck(ctx, input.deckId)),
+    sharesOf(await loadEditableDeck(ctx, input.deckId)),
+})
+
+export const deckTransferOwnership = defineAction<
+  DeckTransferOwnershipInput,
+  Deck
+>({
+  name: 'deck.transferOwnership',
+  input: z.object({
+    deckId: z.string().min(1),
+    userId: z.string().min(1),
+  }),
+  execute: async (ctx, input) => {
+    const deck = await loadOwnedDeck(ctx, input.deckId)
+    const target = await UserModel.findById(input.userId).catch(() => null)
+    if (!target) {
+      throw new ActionValidationError('deck.transferOwnership', [
+        'userId: no such user',
+      ])
+    }
+    const targetId = target._id.toString()
+    if (targetId === ctx.userId) {
+      throw new ActionValidationError('deck.transferOwnership', [
+        'userId: already the owner',
+      ])
+    }
+    // The new owner leaves the people list; the old owner stays an editor
+    deck.viewers = deck.viewers.filter(id => id !== targetId)
+    deck.editors = deck.editors.filter(id => id !== targetId)
+    if (ctx.userId && !deck.editors.includes(ctx.userId)) {
+      deck.editors.push(ctx.userId)
+    }
+    deck.ownerId = target._id
+    await deck.save()
+    // The caller is no longer the owner, so share lists stay behind
+    return toSharedDeckDto(deck)
+  },
 })
 
 registerAction(deckCreate)
@@ -433,3 +470,4 @@ registerAction(deckSetAccess)
 registerAction(deckShare)
 registerAction(deckUnshare)
 registerAction(deckShares)
+registerAction(deckTransferOwnership)

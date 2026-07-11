@@ -4,7 +4,7 @@
  * role that can be changed or revoked in place.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import type { Deck } from '@slide-machine/shared'
 import DeckAccessSettings from './DeckAccessSettings'
 import { mockFetchRoutes } from '../test/fetch-mock'
@@ -46,7 +46,13 @@ describe('DeckAccessSettings', () => {
         return { status: 200, body: deck({ visibility: 'restricted' }) }
       },
     })
-    render(<DeckAccessSettings deck={deck()} onAccessChange={onAccessChange} />)
+    render(
+      <DeckAccessSettings
+        deck={deck()}
+        isOwner
+        onAccessChange={onAccessChange}
+      />,
+    )
 
     fireEvent.click(screen.getByRole('radio', { name: /restricted/i }))
 
@@ -65,7 +71,9 @@ describe('DeckAccessSettings', () => {
         return { status: 200, body: [{ ...share, role: 'editor' }] }
       },
     })
-    render(<DeckAccessSettings deck={deck()} onAccessChange={vi.fn()} />)
+    render(
+      <DeckAccessSettings deck={deck()} isOwner onAccessChange={vi.fn()} />,
+    )
 
     fireEvent.change(screen.getByLabelText('Add people by email'), {
       target: { value: 'byron@example.com' },
@@ -89,7 +97,9 @@ describe('DeckAccessSettings', () => {
       '/api/actions/deck.shares': () => ({ status: 200, body: [] }),
       '/api/actions/deck.share': () => ({ status: 400 }),
     })
-    render(<DeckAccessSettings deck={deck()} onAccessChange={vi.fn()} />)
+    render(
+      <DeckAccessSettings deck={deck()} isOwner onAccessChange={vi.fn()} />,
+    )
     fireEvent.change(screen.getByLabelText('Add people by email'), {
       target: { value: 'nobody@example.com' },
     })
@@ -108,7 +118,9 @@ describe('DeckAccessSettings', () => {
         return { status: 200, body: [{ ...share, role: 'editor' }] }
       },
     })
-    render(<DeckAccessSettings deck={deck()} onAccessChange={vi.fn()} />)
+    render(
+      <DeckAccessSettings deck={deck()} isOwner onAccessChange={vi.fn()} />,
+    )
 
     fireEvent.change(await screen.findByLabelText('Role for byron'), {
       target: { value: 'editor' },
@@ -123,7 +135,7 @@ describe('DeckAccessSettings', () => {
     )
   })
 
-  it('revokes access from the remove button', async () => {
+  it('revokes access from the Remove access menu option', async () => {
     let sent: unknown
     mockFetchRoutes({
       '/api/actions/deck.shares': () => ({ status: 200, body: [share] }),
@@ -132,13 +144,85 @@ describe('DeckAccessSettings', () => {
         return { status: 200, body: [] }
       },
     })
-    render(<DeckAccessSettings deck={deck()} onAccessChange={vi.fn()} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove byron' }))
+    render(
+      <DeckAccessSettings deck={deck()} isOwner onAccessChange={vi.fn()} />,
+    )
+    fireEvent.change(await screen.findByLabelText('Role for byron'), {
+      target: { value: 'remove' },
+    })
     await vi.waitFor(() =>
       expect(sent).toEqual({ deckId: 'deck1', userId: 'u2', role: 'viewer' }),
     )
     expect(
       await screen.findByText('Only you have access so far.'),
     ).toBeInTheDocument()
+  })
+
+  it('offers Transfer ownership to the owner only', async () => {
+    mockFetchRoutes({
+      '/api/actions/deck.shares': () => ({ status: 200, body: [share] }),
+    })
+    const { unmount } = render(
+      <DeckAccessSettings deck={deck()} isOwner onAccessChange={vi.fn()} />,
+    )
+    const menu = await screen.findByLabelText('Role for byron')
+    expect(within(menu).getByText('Transfer ownership')).toBeInTheDocument()
+    unmount()
+
+    mockFetchRoutes({
+      '/api/actions/deck.shares': () => ({ status: 200, body: [share] }),
+    })
+    render(
+      <DeckAccessSettings
+        deck={deck()}
+        isOwner={false}
+        onAccessChange={vi.fn()}
+      />,
+    )
+    const editorMenu = await screen.findByLabelText('Role for byron')
+    expect(
+      within(editorMenu).queryByText('Transfer ownership'),
+    ).not.toBeInTheDocument()
+    expect(within(editorMenu).getByText('Remove access')).toBeInTheDocument()
+  })
+
+  it('transfers ownership after confirmation and refreshes the deck', async () => {
+    let sent: unknown
+    vi.stubGlobal('confirm', vi.fn().mockReturnValue(true))
+    mockFetchRoutes({
+      '/api/actions/deck.shares': () => ({ status: 200, body: [share] }),
+      '/api/actions/deck.transferOwnership': init => {
+        sent = JSON.parse(String(init?.body))
+        return { status: 200, body: deck({ ownerId: 'u2' }) }
+      },
+    })
+    render(
+      <DeckAccessSettings deck={deck()} isOwner onAccessChange={vi.fn()} />,
+    )
+
+    fireEvent.change(await screen.findByLabelText('Role for byron'), {
+      target: { value: 'transfer' },
+    })
+
+    await vi.waitFor(() =>
+      expect(sent).toEqual({ deckId: 'deck1', userId: 'u2' }),
+    )
+  })
+
+  it('does nothing when the transfer confirmation is declined', async () => {
+    vi.stubGlobal('confirm', vi.fn().mockReturnValue(false))
+    const { fetchMock } = mockFetchRoutes({
+      '/api/actions/deck.shares': () => ({ status: 200, body: [share] }),
+    })
+    render(
+      <DeckAccessSettings deck={deck()} isOwner onAccessChange={vi.fn()} />,
+    )
+
+    fireEvent.change(await screen.findByLabelText('Role for byron'), {
+      target: { value: 'transfer' },
+    })
+
+    const urls = fetchMock.mock.calls.map(c => String(c[0]))
+    expect(urls.some(u => u.includes('transferOwnership'))).toBe(false)
   })
 })

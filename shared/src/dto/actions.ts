@@ -77,6 +77,12 @@ export interface DeckSharesInput {
   deckId: string
 }
 
+/** Owner-only: hand the deck to another user; the old owner stays an editor. */
+export interface DeckTransferOwnershipInput {
+  deckId: string
+  userId: string
+}
+
 /** Profile settings update (AUTH-5). */
 export interface UserSetProfileVisibilityInput {
   profileVisibility: ProfileVisibility

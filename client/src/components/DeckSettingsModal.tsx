@@ -19,7 +19,7 @@ const isTypingTarget = (target: EventTarget | null): boolean =>
 
 interface Props {
   deck: Deck
-  /** Owners also manage access; shared editors only switch templates. */
+  /** Editors manage access too; only the owner can transfer ownership. */
   isOwner: boolean
   onClose: () => void
   /** Fired after a successful save so the viewer re-themes immediately. */
@@ -104,9 +104,11 @@ export default function DeckSettingsModal({
           </header>
 
           <div className="flex flex-col gap-8">
-            {isOwner && (
-              <DeckAccessSettings deck={deck} onAccessChange={onAccessChange} />
-            )}
+            <DeckAccessSettings
+              deck={deck}
+              isOwner={isOwner}
+              onAccessChange={onAccessChange}
+            />
             <section>
               <h3 className="mb-4 text-lg font-semibold text-slate-700">
                 Template

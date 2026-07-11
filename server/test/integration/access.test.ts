@@ -191,8 +191,8 @@ describe('deck edit access', () => {
     expect(view.body.canEdit).toBe(true)
   })
 
-  it('keeps access management owner-only', async () => {
-    await grantEditor()
+  it('lets editors manage access but never strangers', async () => {
+    // A stranger cannot touch access management
     expect(
       (
         await act(byron, 'deck.setAccess', {
@@ -201,16 +201,41 @@ describe('deck edit access', () => {
         })
       ).status,
     ).toBe(403)
+    expect((await act(byron, 'deck.shares', { deckId })).status).toBe(403)
+
+    // An editor can change general access and manage people
+    await grantEditor()
+    const casey = await registerUser('casey@example.com')
+    void casey
+    expect(
+      (
+        await act(byron, 'deck.setAccess', {
+          deckId,
+          visibility: 'restricted',
+        })
+      ).status,
+    ).toBe(200)
+    const shares = await act(byron, 'deck.share', {
+      deckId,
+      email: 'casey@example.com',
+      role: 'viewer',
+    })
+    expect(shares.status).toBe(200)
+    expect(shares.body).toHaveLength(2)
+    expect((await act(byron, 'deck.shares', { deckId })).status).toBe(200)
+  })
+
+  it('rejects granting access to the owner', async () => {
+    await grantEditor()
     expect(
       (
         await act(byron, 'deck.share', {
           deckId,
           email: 'ada@example.com',
-          role: 'editor',
+          role: 'viewer',
         })
       ).status,
-    ).toBe(403)
-    expect((await act(byron, 'deck.shares', { deckId })).status).toBe(403)
+    ).toBe(400)
   })
 
   it('promoting a viewer to editor drops the viewer entry', async () => {
@@ -247,6 +272,100 @@ describe('deck edit access', () => {
         })
       ).status,
     ).toBe(400)
+  })
+})
+
+describe('ownership transfer', () => {
+  const userId = async (email: string) =>
+    (await UserModel.findOne({ email }))!._id!.toString()
+
+  it('is owner-only: editors cannot transfer', async () => {
+    await act(ada, 'deck.share', {
+      deckId,
+      email: 'byron@example.com',
+      role: 'editor',
+    })
+    const casey = await registerUser('casey@example.com')
+    void casey
+    expect(
+      (
+        await act(byron, 'deck.transferOwnership', {
+          deckId,
+          userId: await userId('casey@example.com'),
+        })
+      ).status,
+    ).toBe(403)
+  })
+
+  it('hands the deck over and keeps the old owner as an editor', async () => {
+    const res = await act(ada, 'deck.transferOwnership', {
+      deckId,
+      userId: await userId('byron@example.com'),
+    })
+    expect(res.status).toBe(200)
+    expect(res.body.ownerId).toBe(await userId('byron@example.com'))
+
+    // The new owner sees the old one listed as an editor
+    const shares = await act(byron, 'deck.shares', { deckId })
+    expect(shares.body).toEqual([
+      expect.objectContaining({
+        email: 'ada@example.com',
+        role: 'editor',
+      }),
+    ])
+
+    // The old owner can still edit but no longer transfer
+    expect(
+      (await act(ada, 'deck.rename', { deckId, title: 'Still editing' }))
+        .status,
+    ).toBe(200)
+    expect(
+      (
+        await act(ada, 'deck.transferOwnership', {
+          deckId,
+          userId: await userId('ada@example.com'),
+        })
+      ).status,
+    ).toBe(403)
+
+    // The new owner appears nowhere in the people lists
+    const deck = await DeckModel.findById(deckId)
+    expect(deck!.viewers).not.toContain(await userId('byron@example.com'))
+    expect(deck!.editors).not.toContain(await userId('byron@example.com'))
+  })
+
+  it('rejects transfers to unknown users or to the owner themself', async () => {
+    expect(
+      (
+        await act(ada, 'deck.transferOwnership', {
+          deckId,
+          userId: new Types.ObjectId().toString(),
+        })
+      ).status,
+    ).toBe(400)
+    expect(
+      (
+        await act(ada, 'deck.transferOwnership', {
+          deckId,
+          userId: await userId('ada@example.com'),
+        })
+      ).status,
+    ).toBe(400)
+  })
+
+  it('shows a transferred-in deck under Other lectures on the profile', async () => {
+    await act(ada, 'deck.transferOwnership', {
+      deckId,
+      userId: await userId('byron@example.com'),
+    })
+    const res = await getProfile(await userId('byron@example.com'))
+    expect(res.status).toBe(200)
+    expect(res.body.projects).toEqual([
+      expect.objectContaining({
+        project: expect.objectContaining({ title: 'Other lectures' }),
+      }),
+    ])
+    expect(res.body.projects[0].decks[0].title).toBe('Waves')
   })
 })
 

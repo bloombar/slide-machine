@@ -63,19 +63,34 @@ usersRouter.get('/users/:id', optionalAuth, async (req, res) => {
     byProject.set(dto.projectId, list)
   }
 
+  const grouped: ProfileResponse['projects'] = projects
+    .filter(project => byProject.has(project._id.toString()))
+    .map(project => ({
+      project: {
+        id: project._id.toString(),
+        title: project.title,
+        course: project.course,
+        description: project.description,
+      },
+      decks: byProject.get(project._id.toString())!,
+    }))
+
+  // Decks owned here but living in someone else's project (ownership
+  // was transferred in) still deserve a home on the page
+  const ownProjectIds = new Set(projects.map(p => p._id.toString()))
+  const other = [...byProject.entries()]
+    .filter(([projectId]) => !ownProjectIds.has(projectId))
+    .flatMap(([, list]) => list)
+  if (other.length > 0) {
+    grouped.push({
+      project: { id: 'other', title: 'Other lectures' },
+      decks: other,
+    })
+  }
+
   const body: ProfileResponse = {
     user: toPublicUserDto(user),
-    projects: projects
-      .filter(project => byProject.has(project._id.toString()))
-      .map(project => ({
-        project: {
-          id: project._id.toString(),
-          title: project.title,
-          course: project.course,
-          description: project.description,
-        },
-        decks: byProject.get(project._id.toString())!,
-      })),
+    projects: grouped,
   }
   res.json(body)
 })
