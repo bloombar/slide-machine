@@ -19,13 +19,16 @@ import { type ViewMode } from '../components/ViewModeToggle'
 
 export default function DeckViewerPage() {
   const { slug } = useParams<{ slug: string }>()
-  const { user } = useAuth()
+  const { user, status } = useAuth()
   const [view, setView] = useState<DeckViewResponse | null>(null)
   const [mode, setMode] = useState<ViewMode>('carousel')
   const [error, setError] = useState<string | null>(null)
   const nav = useSlideNavigation(view?.slides.length ?? 0, mode)
 
   useEffect(() => {
+    // Wait for session restore: a pasted permalink must send the owner's
+    // credentials or a private deck would 404 before login completes
+    if (status === 'restoring') return
     let cancelled = false
     apiFetch<DeckViewResponse>(`/api/decks/${slug}`)
       .then(v => {
@@ -42,7 +45,7 @@ export default function DeckViewerPage() {
     return () => {
       cancelled = true
     }
-  }, [slug])
+  }, [slug, status])
 
   if (error) {
     return (

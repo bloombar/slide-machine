@@ -4,17 +4,17 @@
  */
 import { vi } from 'vitest'
 
-type Handler = () => { status: number; body?: unknown }
+type Handler = (init?: RequestInit) => { status: number; body?: unknown }
 
 export const mockFetchRoutes = (routes: Record<string, Handler>) => {
   const calls: string[] = []
   const fetchMock = vi.fn(
-    async (input: RequestInfo | URL, _init?: RequestInit) => {
+    async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       calls.push(url)
       const key = Object.keys(routes).find(k => url.includes(k))
       if (!key) throw new Error(`Unmocked fetch: ${url}`)
-      const { status, body } = routes[key]!()
+      const { status, body } = routes[key]!(init)
       return {
         ok: status >= 200 && status < 300,
         status,

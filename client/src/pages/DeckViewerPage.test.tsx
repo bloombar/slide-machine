@@ -123,3 +123,32 @@ describe('DeckViewerPage view modes', () => {
     expect(screen.getAllByTestId('slide')).toHaveLength(1)
   })
 })
+
+describe('DeckViewerPage pasted permalinks', () => {
+  it('waits for session restore so owners can open private-deck URLs directly', async () => {
+    // Simulates a fresh page load: the deck endpoint only succeeds with
+    // the Bearer token that the boot-time refresh provides
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': init =>
+        new Headers(init?.headers).has('Authorization')
+          ? { status: 200, body: deckView }
+          : { status: 404 },
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Shared Lecture')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})

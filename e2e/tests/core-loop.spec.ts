@@ -60,6 +60,11 @@ test('speak-to-slides core loop, session to permalink playback', async ({
   await page.getByRole('button', { name: 'End session' }).click()
   await expect(page).toHaveURL(/\/d\/photosynthesis-/)
   await expect(page.getByText('1 / 2')).toBeVisible()
+
+  // Pasting the permalink directly (fresh page load) also works for the
+  // owner of a private deck — session restore precedes the deck fetch
+  await page.reload()
+  await expect(page.getByText('1 / 2')).toBeVisible()
   await expect(
     page.getByRole('heading', { name: 'Photosynthesis Basics' }),
   ).toBeVisible()
