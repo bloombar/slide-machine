@@ -10,6 +10,9 @@ const testEnv = vi.hoisted(() => ({
   GEMINI_API_KEY: 'test-key' as string | undefined,
   GEMINI_MODEL: 'gemini-test-model',
   GEMINI_TIMEOUT_MS: 5000,
+  GENERATION_LOG_PROMPTS: false as boolean,
+  // The real externalized templates: tests assert their content
+  PROMPTS_DIR: new URL('../../../config/prompts', import.meta.url).pathname,
 }))
 vi.mock('../config/env', () => ({ env: testEnv }))
 
@@ -225,6 +228,24 @@ describe('GeminiGenerationProvider', () => {
     await expect(provider.generateSlideContent(request())).rejects.toThrow(
       /no candidate/,
     )
+  })
+
+  it('dumps the prompt and raw response when logging is enabled', async () => {
+    testEnv.GENERATION_LOG_PROMPTS = true
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
+    )
+    try {
+      await provider.generateSlideContent(request())
+      const logged = logSpy.mock.calls.map(c => String(c[0])).join('\n')
+      expect(logged).toContain('===== GENERATION PROMPT')
+      expect(logged).toContain('New phrase:')
+      expect(logged).toContain('===== GENERATION RESPONSE')
+    } finally {
+      logSpy.mockRestore()
+      testEnv.GENERATION_LOG_PROMPTS = false
+    }
   })
 
   it('refuses to run without an API key', async () => {

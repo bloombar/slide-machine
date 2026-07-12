@@ -46,6 +46,10 @@ const envSchema = z.object({
   PLANS_CONFIG_PATH: z
     .string()
     .default(path.join(serverRoot, '..', 'config', 'plans.json')),
+  /** Externalized prompt templates (docs/GENERATION_PROMPT.md). */
+  PROMPTS_DIR: z
+    .string()
+    .default(path.join(serverRoot, '..', 'config', 'prompts')),
 
   // Active AI adapter per capability (SPEC TECH-8)
   TRANSCRIPTION_PROVIDER: z.string().default('google-cloud'),
@@ -75,6 +79,9 @@ const envSchema = z.object({
   // AI content freedom 1-10: 1 = slides contain only what the speaker
   // said; 10 = free elaboration. Projects/lectures can override.
   GENERATION_FREEDOM: z.coerce.number().int().min(1).max(10).default(3),
+  // Debug: dump each assembled prompt and raw model response to the
+  // server log. Prompts include seed material — dev use only.
+  GENERATION_LOG_PROMPTS: z.stringbool().default(false),
   /** Hard cap on one generation call — phrase-to-slide must stay live. */
   GEMINI_TIMEOUT_MS: z.coerce.number().default(12_000),
   GOOGLE_CLOUD_STT_KEY: z.string().optional(),

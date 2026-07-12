@@ -20,6 +20,7 @@ import type {
 } from '@slide-machine/shared'
 import { env } from '../config/env'
 import { registry } from './registry'
+import { freedomPolicy, renderGenerationPrompt } from './prompt-templates'
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 
@@ -56,23 +57,6 @@ const resultSchema = z.object({
     .optional(),
 })
 
-/** The content-freedom policy for a 1-10 setting: the number anchors a
- * gradient, the band text makes it operational for the model. */
-const freedomPolicy = (level: number): string => {
-  const n = Math.min(10, Math.max(1, Math.round(level)))
-  const band =
-    n <= 2
-      ? `Slide content must come ONLY from what the speaker explicitly said in this phrase. Titles must reuse the speaker's own words. Reword minimally for presentation style; NEVER add topics, themes, examples, facts, terminology, or details the speaker did not say. When the phrase is thin, make a thin slide.`
-      : n <= 4
-        ? `Slide content must come from what the speaker said. Reword freely for concision, but do not add topics, themes, examples, or facts the speaker did not mention.`
-        : n <= 6
-          ? `Stay within what the speaker said. You may add a short clarifying connective or complete an obviously truncated thought, but do not introduce new topics, themes, or examples.`
-          : n <= 8
-            ? `You may lightly enrich slides with closely related supporting details consistent with the speaker's point and the seed context, keeping the speaker's actual content primary.`
-            : `You may elaborate freely around the speaker's point, drawing on the seed context and general knowledge, while making sure everything the speaker said is represented.`
-  return `CONTENT FREEDOM ${n}/10 (1 = only what was said, 10 = free elaboration): ${band}`
-}
-
 const instructions = (req: SlideGenerationRequest): string => {
   const layouts = req.layoutDescriptors
     .map(
@@ -83,7 +67,7 @@ const instructions = (req: SlideGenerationRequest): string => {
     )
     .join('\n')
 
-  const seeded = req.seededImages?.length
+  const seededImages = req.seededImages?.length
     ? `\nInstructor-provided images (set imageGuidance.seededImageId to an id ONLY when one clearly fits the slide):\n${req.seededImages
         .map(
           i => `- id "${i.id}": ${i.caption ?? ''} [${i.keywords.join(', ')}]`,
@@ -108,28 +92,17 @@ const instructions = (req: SlideGenerationRequest): string => {
     ? `\nCurrent slide load: ${req.currentSlide.bulletCount} bullets, ~${req.currentSlide.bodyWords} body words (layout "${req.currentSlide.layoutType}"). If adding this phrase's content would exceed the layout's limits, choose "new" instead of "update".`
     : ''
 
-  return `You turn live lecture speech into presentation slides, one decision per spoken phrase.
-
-Respond with ONLY one JSON object, no markdown fences, exactly this shape:
-${OUTPUT_SHAPE}
-
-${freedomPolicy(req.freedom ?? 3)}
-
-Decide exactly one action for the new phrase:
-- "none": filler, asides, or classroom logistics — changes nothing.
-- "update": ONLY when the phrase adds a SMALL amount (one bullet or one short sentence) to the CURRENT (last) slide's exact topic AND the slide has room left. Put ONLY the added material in slots; never repeat existing content.
-- "new": the phrase starts new material, shifts the angle, or the current slide is already comfortably full — produce a complete slide. Prefer "new" whenever in doubt: many small slides beat one crowded slide.
-
-Choose layoutType strictly from this set:
-${layouts}
-
-Slide text must be concise and presentation-ready: tight bullets, no filler words, no first person. Constraints list APPROXIMATE WORD BUDGETS (maxTitleWords, maxBodyWords, maxBulletWords, maxCaptionWords, maxBullets) — never exceed them; the server rejects overloaded slides.
-
-For imageGuidance: 2-4 concrete search keywords when an illustrative photo would help; set none=true for text-only slides (title/section/quote usually).${seeded}
-${projectSeed}${deckSeed}
-${rolling}${capacity}
-
-New phrase: "${req.phrase}"`
+  return renderGenerationPrompt({
+    outputShape: OUTPUT_SHAPE,
+    freedomPolicy: freedomPolicy(req.freedom ?? 3),
+    layouts,
+    seededImages,
+    projectSeed,
+    deckSeed,
+    rolling,
+    capacity,
+    phrase: req.phrase,
+  })
 }
 
 export class GeminiGenerationProvider implements GenerationProvider {
@@ -142,6 +115,13 @@ export class GeminiGenerationProvider implements GenerationProvider {
       throw new Error('GENERATION_PROVIDER=gemini requires GEMINI_API_KEY')
     }
 
+    const prompt = instructions(req)
+    if (env.GENERATION_LOG_PROMPTS) {
+      console.log(
+        `\n===== GENERATION PROMPT (${env.GEMINI_MODEL}) =====\n${prompt}\n===== END PROMPT =====`,
+      )
+    }
+
     const res = await fetch(
       `${API_BASE}/models/${env.GEMINI_MODEL}:generateContent`,
       {
@@ -151,7 +131,7 @@ export class GeminiGenerationProvider implements GenerationProvider {
           'x-goog-api-key': env.GEMINI_API_KEY,
         },
         body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: instructions(req) }] }],
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
           generationConfig: {
             responseMimeType: 'application/json',
             temperature: 0.4,
@@ -174,6 +154,11 @@ export class GeminiGenerationProvider implements GenerationProvider {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
     }
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+    if (env.GENERATION_LOG_PROMPTS) {
+      console.log(
+        `===== GENERATION RESPONSE =====\n${text ?? '(no candidate text)'}\n===== END RESPONSE =====`,
+      )
+    }
     if (!text) throw new Error('Gemini returned no candidate text')
 
     let raw: unknown
