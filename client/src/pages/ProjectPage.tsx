@@ -3,8 +3,8 @@
  * chosen template (PROJ-2, TMPL-1).
  */
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
-import { ArrowLeft, Mic } from 'lucide-react'
+import { useNavigate, useParams } from 'react-router'
+import { Mic } from 'lucide-react'
 import type { Deck, Project, Template } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import TemplatePicker from '../components/TemplatePicker'
@@ -61,14 +61,7 @@ export default function ProjectPage() {
 
   return (
     <div>
-      <header className="mb-8 flex items-center gap-4">
-        <Link
-          to="/app"
-          className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden />
-          Projects
-        </Link>
+      <header className="mb-8">
         <h1 className="text-2xl font-bold">{project?.title ?? 'Loading…'}</h1>
       </header>
 
