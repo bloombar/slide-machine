@@ -3,13 +3,15 @@
  * text; DOCX embedded photos become their own image assets; uploaded
  * images become photo assets directly. Runs fire-and-forget after the
  * upload response, never throws to the caller, and marks the asset
- * 'failed' quietly on any error. An AI tier (vision captions, OCR)
- * plugs in behind this same function when credentials exist.
+ * 'failed' quietly on any error. The AI tier (ai-extract.ts) layers on
+ * when GEMINI_API_KEY exists: vision captions/keywords for photos and
+ * OCR for scanned PDFs; without a key the baseline stands unchanged.
  */
 import AdmZip from 'adm-zip'
 import mammoth from 'mammoth'
 import { extractText, getDocumentProxy } from 'unpdf'
 import { SeedAssetModel, type SeedAssetDb } from '../models/seed-asset'
+import { describeImage, ocrPdf } from './ai-extract'
 import { getStorage } from '../storage'
 import type { HydratedDocument } from 'mongoose'
 
@@ -25,6 +27,10 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
   jpeg: 'image/jpeg',
   webp: 'image/webp',
 }
+
+/** Below this much embedded text, a PDF is treated as scanned and the
+ * AI tier (when a key exists) is asked to read it instead. */
+export const SCANNED_PDF_TEXT_THRESHOLD = 64
 
 /** Filename → keyword tokens ("cell-membrane_2.png" → cell, membrane). */
 export const keywordsFromName = (name: string): string[] =>
@@ -75,9 +81,16 @@ const extractDocxImages = async (
       keywords: keywordsFromName(parent.name),
     })
     const key = `seed/${child._id.toString()}/${fileName}`
-    await storage.put(key, entry.getData(), IMAGE_EXTENSIONS[ext]!)
+    const bytes = entry.getData()
+    await storage.put(key, bytes, IMAGE_EXTENSIONS[ext]!)
     child.storageKey = key
     child.imageUrl = storage.publicUrl(key)
+    // AI tier: caption the embedded photo (quietly skipped without a key)
+    const described = await describeImage(bytes, IMAGE_EXTENSIONS[ext]!)
+    if (described) {
+      child.caption = described.caption
+      child.keywords = [...new Set([...child.keywords, ...described.keywords])]
+    }
     child.status = 'ready'
     await child.save()
   }
@@ -96,12 +109,26 @@ export const processSeedAsset = async (
   if (!asset) return
   try {
     if (mimeType === 'application/pdf') {
-      asset.text = (await pdfText(buffer)).slice(0, MAX_TEXT_CHARS)
+      let text = (await pdfText(buffer)).trim()
+      // Scanned PDFs have no text layer; the AI tier reads the pages
+      if (text.length < SCANNED_PDF_TEXT_THRESHOLD) {
+        text = (await ocrPdf(buffer)) ?? text
+      }
+      asset.text = text.slice(0, MAX_TEXT_CHARS)
     } else if (mimeType.startsWith('image/')) {
       // The upload route already stored the binary and set imageUrl
       asset.keywords = [
         ...new Set([...asset.keywords, ...keywordsFromName(asset.name)]),
       ]
+      // AI tier: vision caption + search keywords (quietly skipped
+      // without a key); user-entered captions are never overwritten
+      const described = await describeImage(buffer, mimeType)
+      if (described) {
+        asset.caption ??= described.caption
+        asset.keywords = [
+          ...new Set([...asset.keywords, ...described.keywords]),
+        ]
+      }
     } else {
       // DOCX: text plus any embedded photos worth keeping
       asset.text = (await docxText(buffer)).slice(0, MAX_TEXT_CHARS)
