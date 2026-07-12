@@ -113,9 +113,18 @@ describe('Deck and Slide models', () => {
       title: 'Bio 101',
       ownerId: ownerId.toString(),
     })
-    expect(toDeckDto(deck)).toMatchObject({
+    expect(
+      toDeckDto(deck, {
+        ownerId: ownerId.toString(),
+        visibility: 'public',
+        viewers: [],
+        editors: [],
+        inherited: true,
+      }),
+    ).toMatchObject({
       title: 'Lecture 1',
       visibility: 'public',
+      accessInherited: true,
       viewers: [],
       editors: [],
       voteScore: 0,

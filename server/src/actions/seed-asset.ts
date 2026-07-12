@@ -19,8 +19,9 @@ import {
   ActionValidationError,
 } from './dispatch'
 import type { ActionContext } from './context'
-import { ProjectModel } from '../models/project'
-import { DeckModel, canEditDeck } from '../models/deck'
+import { ProjectModel, projectAcl } from '../models/project'
+import { DeckModel, loadDeckAcl } from '../models/deck'
+import { canEditAcl } from '../lib/access'
 import {
   SeedAssetModel,
   toSeedAssetDto,
@@ -42,11 +43,12 @@ const authorizeLevel = async (
   const userId = requireUser(ctx)
   if (deckId) {
     const deck = await DeckModel.findById(deckId).catch(() => null)
-    if (!deck || !canEditDeck(deck, userId)) throw new ActionForbiddenError()
+    if (!deck || !canEditAcl(await loadDeckAcl(deck), userId))
+      throw new ActionForbiddenError()
     return
   }
   const project = await ProjectModel.findById(projectId).catch(() => null)
-  if (!project || project.ownerId.toString() !== userId)
+  if (!project || !canEditAcl(projectAcl(project), userId))
     throw new ActionForbiddenError()
 }
 

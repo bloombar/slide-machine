@@ -18,10 +18,15 @@ export interface Deck {
   ownerId: string
   title: string
   templateId: string
+  /** EFFECTIVE general access: the lecture's own override when one
+   * exists, otherwise inherited from its project. */
   visibility: Visibility
-  /** User ids with view access ("people with access"). Owner-only surfaces. */
+  /** True when this lecture has no privacy override and follows its
+   * project's settings (the default). */
+  accessInherited: boolean
+  /** Effective user ids with view access. Owner-only surfaces. */
   viewers?: string[]
-  /** User ids with edit access ("people with access"). Owner-only surfaces. */
+  /** Effective user ids with edit access. Owner-only surfaces. */
   editors?: string[]
   permalinkSlug: string
   slideOrder: string[]

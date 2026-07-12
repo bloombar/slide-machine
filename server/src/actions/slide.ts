@@ -15,7 +15,8 @@ import { defineAction } from './define'
 import { registerAction, ActionForbiddenError } from './dispatch'
 import type { ActionContext } from './context'
 import { SlideModel, toSlideDto, type SlideDb } from '../models/slide'
-import { DeckModel, canEditDeck, touchDeck, type DeckDb } from '../models/deck'
+import { DeckModel, loadDeckAcl, touchDeck, type DeckDb } from '../models/deck'
+import { canEditAcl } from '../lib/access'
 
 interface OwnedSlide {
   slide: HydratedDocument<SlideDb>
@@ -31,7 +32,9 @@ const loadOwnedSlide = async (
   const slide = await SlideModel.findById(slideId).catch(() => null)
   if (!slide) throw new ActionForbiddenError()
   const deck = await DeckModel.findById(slide.deckId)
-  if (!deck || !canEditDeck(deck, ctx.userId)) throw new ActionForbiddenError()
+  if (!deck) throw new ActionForbiddenError()
+  if (!canEditAcl(await loadDeckAcl(deck), ctx.userId))
+    throw new ActionForbiddenError()
   return { slide, deck }
 }
 

@@ -215,7 +215,9 @@ describe('GET /api/decks/:slug (viewer)', () => {
   it('serves restricted decks to their owner only, as 404 to others', async () => {
     await DeckModel.updateOne(
       { permalinkSlug: slug },
-      { visibility: 'restricted' },
+      {
+        accessOverride: { visibility: 'restricted', viewers: [], editors: [] },
+      },
     )
     const anon = await request(server).get(`/api/decks/${slug}`)
     expect(anon.status).toBe(404)
@@ -229,7 +231,10 @@ describe('GET /api/decks/:slug (viewer)', () => {
   })
 
   it('serves public decks anonymously', async () => {
-    await DeckModel.updateOne({ permalinkSlug: slug }, { visibility: 'public' })
+    await DeckModel.updateOne(
+      { permalinkSlug: slug },
+      { accessOverride: { visibility: 'public', viewers: [], editors: [] } },
+    )
     const res = await request(server).get(`/api/decks/${slug}`)
     expect(res.status).toBe(200)
     expect(res.body.deck.title).toBe('Shared Lecture')

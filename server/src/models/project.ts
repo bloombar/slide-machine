@@ -4,12 +4,15 @@
  */
 import { Schema, model, Types, type HydratedDocument } from 'mongoose'
 import type { Project } from '@slide-machine/shared'
+import type { ResolvedAcl } from '../lib/access'
 
 export interface ProjectDb extends Omit<
   Project,
-  'id' | 'ownerId' | 'createdAt'
+  'id' | 'ownerId' | 'createdAt' | 'viewers' | 'editors'
 > {
   ownerId: Types.ObjectId
+  viewers: string[]
+  editors: string[]
   createdAt: Date
 }
 
@@ -25,6 +28,13 @@ const projectSchema = new Schema<ProjectDb>(
     course: String,
     description: String,
     seedContext: String,
+    visibility: {
+      type: String,
+      enum: ['restricted', 'public'],
+      default: 'public',
+    },
+    viewers: { type: [String], default: [] },
+    editors: { type: [String], default: [] },
     settings: {
       type: { manualSlideAdvance: Boolean, animatedTransitions: Boolean },
       default: undefined,
@@ -36,6 +46,17 @@ const projectSchema = new Schema<ProjectDb>(
 
 export const ProjectModel = model<ProjectDb>('Project', projectSchema)
 
+/** A project's ACL is always its own (never inherited). */
+export const projectAcl = (
+  doc: Pick<ProjectDb, 'ownerId' | 'visibility' | 'viewers' | 'editors'>,
+): ResolvedAcl => ({
+  ownerId: doc.ownerId.toString(),
+  visibility: doc.visibility,
+  viewers: doc.viewers,
+  editors: doc.editors,
+  inherited: false,
+})
+
 export const toProjectDto = (doc: HydratedDocument<ProjectDb>): Project => ({
   id: doc._id.toString(),
   ownerId: doc.ownerId.toString(),
@@ -43,6 +64,19 @@ export const toProjectDto = (doc: HydratedDocument<ProjectDb>): Project => ({
   course: doc.course,
   description: doc.description,
   seedContext: doc.seedContext,
+  visibility: doc.visibility,
+  viewers: doc.viewers,
+  editors: doc.editors,
   settings: doc.settings,
   createdAt: doc.createdAt.toISOString(),
 })
+
+/** The project as shown to non-owners: share lists stay with the owner. */
+export const toSharedProjectDto = (
+  doc: HydratedDocument<ProjectDb>,
+): Project => {
+  const dto = toProjectDto(doc)
+  delete dto.viewers
+  delete dto.editors
+  return dto
+}

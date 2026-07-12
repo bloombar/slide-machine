@@ -74,10 +74,43 @@ export interface DeckSetSeedNotesInput {
   seedContext: string
 }
 
-/** Owner-only general-access change (SHARE-1). */
+/** Lecture general-access change; creates the lecture's override (SHARE-1). */
 export interface DeckSetAccessInput {
   deckId: string
   visibility: Visibility
+}
+
+/** Drops a lecture's privacy override so it follows its project again. */
+export interface DeckResetAccessInput {
+  deckId: string
+}
+
+/** Project general-access change; cascades to inheriting lectures. */
+export interface ProjectSetAccessInput {
+  projectId: string
+  visibility: Visibility
+}
+
+export interface ProjectShareInput {
+  projectId: string
+  email: string
+  role: ShareRole
+}
+
+export interface ProjectUnshareInput {
+  projectId: string
+  userId: string
+  role: ShareRole
+}
+
+export interface ProjectSharesInput {
+  projectId: string
+}
+
+/** Owner-only: hand the project to another user; the old owner stays an editor. */
+export interface ProjectTransferOwnershipInput {
+  projectId: string
+  userId: string
 }
 
 /** The role a shared user holds on a deck. */

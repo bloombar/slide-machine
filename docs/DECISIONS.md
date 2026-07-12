@@ -63,3 +63,13 @@ scrolled beneath it.
 - **Upload** (`POST /api/seed-assets`, 20 MB, PDF/DOCX/PNG/JPEG/WebP) answers immediately with a `processing` asset; extraction runs fire-and-forget and settles to `ready`/`failed` — the same fault-tolerant background pattern as image enrichment. Project-level uploads are owner-only; lecture-level follow deck edit rights.
 - **Baseline extraction** ([seeding/extract.ts](../server/src/seeding/extract.ts)): PDF text via unpdf, DOCX text via mammoth plus embedded photos (≥10 KiB, ≤12) spun into their own image assets, uploaded photos used directly with caption-derived keywords. The **AI tier** (vision captions, OCR, summarization) plugs in behind `processSeedAsset` when `GEMINI_API_KEY` lands.
 - **Payoffs**: enabled assets' text joins the structured seed layers (`seedContext: { project, deck }`, additive, deck outranks project; 8k chars/layer). Seeded photos enter the enrichment pool with source prior **1.2 — above every web source** — and a model-selected `seededImageId` short-circuits search entirely (`imageSource: 'seeded'`, IMG-1).
+
+## Access control: project-level ACLs with lecture inheritance (2026-07-12)
+
+**Problem.** Privacy was per-lecture only; instructors needed one place to control a whole project, with per-lecture exceptions.
+
+**Choice.** One generalized ACL core ([lib/access.ts](../server/src/lib/access.ts)): every decision — project or lecture — runs through `canViewAcl` / `canEditAcl` over a `ResolvedAcl { ownerId, visibility, viewers, editors, inherited }`.
+
+- **Projects** own their ACL directly (`project.setAccess/share/unshare/shares/transferOwnership`, same semantics as lectures; management by owner + editors, transfer owner-only). Project **editors can edit every inheriting lecture** and the project's seed material; the project *entity* page and member lists are member-only even when visibility is `public` (`isAclMember`) — public opens the lectures by link, not the management surface or seed notes.
+- **Lectures store nothing until touched**: no `visibility`/lists on the deck document — the effective ACL is the project's (`resolveDeckAcl`), so project changes cascade automatically. The first lecture-level change (general access, share, unshare, or a transfer) snapshots the project's current settings into `deck.accessOverride` (**copy-on-write**) and detaches the lecture. `deck.resetAccess` drops the override and re-attaches. The DTO carries the *effective* `visibility` plus `accessInherited`, so clients render one field.
+- **Client**: one `AccessSettings` component drives both `deck.*` and `project.*` action families; the lecture tab shows "Inherited from the project…" or "Overridden… Use project settings". Ownership transfer now confirms in the shared ConfirmDialog.

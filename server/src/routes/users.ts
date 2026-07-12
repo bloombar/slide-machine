@@ -12,10 +12,11 @@ import { UserModel, toPublicUserDto } from '../models/user'
 import { ProjectModel } from '../models/project'
 import {
   DeckModel,
-  canViewDeck,
+  loadDeckAcls,
   toSharedDeckDto,
   toDeckDto,
 } from '../models/deck'
+import { canViewAcl } from '../lib/access'
 import { verifyAccessToken } from '../auth/tokens'
 import { HttpError } from '../middleware/error'
 
@@ -54,10 +55,14 @@ usersRouter.get('/users/:id', optionalAuth, async (req, res) => {
     ProjectModel.find({ ownerId: id }),
     DeckModel.find({ ownerId: id }).sort({ updatedAt: -1 }),
   ])
-  const visible = decks.filter(deck => canViewDeck(deck, req.userId))
+  const acls = await loadDeckAcls(decks)
+  const visible = decks.filter(deck =>
+    canViewAcl(acls.get(deck._id.toString())!, req.userId),
+  )
   const byProject = new Map<string, Deck[]>()
   for (const deck of visible) {
-    const dto = isSelf ? toDeckDto(deck) : toSharedDeckDto(deck)
+    const acl = acls.get(deck._id.toString())!
+    const dto = isSelf ? toDeckDto(deck, acl) : toSharedDeckDto(deck, acl)
     const list = byProject.get(dto.projectId) ?? []
     list.push(dto)
     byProject.set(dto.projectId, list)

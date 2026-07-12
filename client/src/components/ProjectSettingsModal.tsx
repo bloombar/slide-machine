@@ -1,10 +1,10 @@
 /**
  * Project settings as a full-width modal, mirroring the lecture
- * settings chrome: seed notes and seed material (which apply to every
- * lecture in the project, PROJ-1/SEED-1) plus an owner Danger zone that
- * deletes the whole project — lectures, slides, and seed material —
- * after an in-app confirmation. Closes from the top-right icon or the
- * Escape key.
+ * settings chrome, in tabs: General (seed notes + seed material, which
+ * apply to every lecture, PROJ-1/SEED-1; plus an owner Danger zone that
+ * deletes the whole project after confirmation) and Privacy & Sharing —
+ * the project's ACL, which every lecture without its own override
+ * inherits (SHARE-1). Closes from the top-right icon or Escape.
  */
 import { useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
@@ -13,6 +13,7 @@ import { dispatchAction } from '../api/actions'
 import SeedNotesEditor from './SeedNotesEditor'
 import SeedMaterial from './SeedMaterial'
 import ConfirmDialog from './ConfirmDialog'
+import AccessSettings from './AccessSettings'
 
 const isTypingTarget = (target: EventTarget | null): boolean =>
   target instanceof HTMLElement &&
@@ -20,8 +21,17 @@ const isTypingTarget = (target: EventTarget | null): boolean =>
     target.tagName === 'TEXTAREA' ||
     target.isContentEditable)
 
+const TABS = [
+  { id: 'general', label: 'General' },
+  { id: 'sharing', label: 'Privacy & Sharing' },
+] as const
+
+type TabId = (typeof TABS)[number]['id']
+
 interface Props {
   project: Project
+  /** Editors manage access too; only the owner can transfer ownership. */
+  isOwner: boolean
   onClose: () => void
   /** Fired after a successful save so the page keeps a fresh project. */
   onProjectChange: (project: Project) => void
@@ -31,11 +41,13 @@ interface Props {
 
 export default function ProjectSettingsModal({
   project,
+  isOwner,
   onClose,
   onProjectChange,
   onDeleted,
 }: Props) {
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [tab, setTab] = useState<TabId>('general')
   const closeRef = useRef<HTMLButtonElement>(null)
 
   // Escape closes (unless typing in a field); focus lands on close
@@ -90,59 +102,112 @@ export default function ProjectSettingsModal({
             </button>
           </header>
 
-          <div className="flex flex-col gap-8">
-            <div>
-              <h3 className="mb-2 text-lg font-semibold text-slate-700">
-                Seed notes
-              </h3>
-              <p className="mb-3 text-sm text-slate-500">
-                Background material that guides slide generation for every
-                lecture in this project. Saved automatically.
-              </p>
-              <SeedNotesEditor
-                value={project.seedContext ?? ''}
-                label="Project seed notes"
-                placeholder="Key topics, terminology, planned structure…"
-                onSave={seedContext => {
-                  dispatchAction<Project>('project.update', {
-                    projectId: project.id,
-                    seedContext,
-                  })
-                    .then(onProjectChange)
-                    .catch(() => {
-                      // Quiet failure: the next keystroke retries
-                    })
-                }}
-              />
-            </div>
-
-            <div>
-              <h3 className="mb-2 text-lg font-semibold text-slate-700">
-                Seed material
-              </h3>
-              <p className="mb-3 text-sm text-slate-500">
-                Documents and photos scanned for background text and imagery,
-                available to every lecture in this project.
-              </p>
-              <SeedMaterial projectId={project.id} />
-            </div>
-
-            <div className="rounded-md border border-red-200 p-4">
-              <h3 className="mb-2 text-lg font-semibold text-red-700">
-                Danger zone
-              </h3>
-              <p className="mb-3 text-sm text-slate-600">
-                Deleting a project permanently removes all of its lectures,
-                slides, and seed material. This cannot be undone.
-              </p>
+          <div
+            role="tablist"
+            aria-label="Settings sections"
+            className="mb-6 flex gap-1 border-b border-slate-200"
+          >
+            {TABS.map(t => (
               <button
-                onClick={() => setConfirmingDelete(true)}
-                className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+                key={t.id}
+                role="tab"
+                id={`project-tab-${t.id}`}
+                aria-selected={tab === t.id}
+                aria-controls={`project-panel-${t.id}`}
+                tabIndex={tab === t.id ? 0 : -1}
+                onClick={() => setTab(t.id)}
+                className={`-mb-px rounded-t-md border-b-2 px-4 py-2 text-sm font-medium ${
+                  tab === t.id
+                    ? 'border-indigo-600 text-indigo-700'
+                    : 'border-transparent text-slate-500 hover:text-slate-900'
+                }`}
               >
-                Delete project
+                {t.label}
               </button>
-            </div>
+            ))}
           </div>
+
+          {tab === 'sharing' && (
+            <section
+              role="tabpanel"
+              id="project-panel-sharing"
+              aria-labelledby="project-tab-sharing"
+            >
+              <AccessSettings
+                entity="project"
+                subject={{
+                  id: project.id,
+                  name: project.title,
+                  visibility: project.visibility,
+                }}
+                isOwner={isOwner}
+                onChange={updated => onProjectChange(updated as Project)}
+              />
+            </section>
+          )}
+
+          {tab === 'general' && (
+            <div
+              role="tabpanel"
+              id="project-panel-general"
+              aria-labelledby="project-tab-general"
+              className="flex flex-col gap-8"
+            >
+              <div>
+                <h3 className="mb-2 text-lg font-semibold text-slate-700">
+                  Seed notes
+                </h3>
+                <p className="mb-3 text-sm text-slate-500">
+                  Background material that guides slide generation for every
+                  lecture in this project. Saved automatically.
+                </p>
+                <SeedNotesEditor
+                  value={project.seedContext ?? ''}
+                  label="Project seed notes"
+                  placeholder="Key topics, terminology, planned structure…"
+                  onSave={seedContext => {
+                    dispatchAction<Project>('project.update', {
+                      projectId: project.id,
+                      seedContext,
+                    })
+                      .then(onProjectChange)
+                      .catch(() => {
+                        // Quiet failure: the next keystroke retries
+                      })
+                  }}
+                />
+              </div>
+
+              <div>
+                <h3 className="mb-2 text-lg font-semibold text-slate-700">
+                  Seed material
+                </h3>
+                <p className="mb-3 text-sm text-slate-500">
+                  Documents and photos scanned for background text and imagery,
+                  available to every lecture in this project.
+                </p>
+                <SeedMaterial projectId={project.id} />
+              </div>
+
+              {isOwner && (
+                <div className="rounded-md border border-red-200 p-4">
+                  <h3 className="mb-2 text-lg font-semibold text-red-700">
+                    Danger zone
+                  </h3>
+                  <p className="mb-3 text-sm text-slate-600">
+                    Deleting a project permanently removes all of its lectures,
+                    slides, and seed material. This cannot be undone.
+                  </p>
+                  <button
+                    onClick={() => setConfirmingDelete(true)}
+                    className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+                  >
+                    Delete project
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {confirmingDelete && (
             <ConfirmDialog

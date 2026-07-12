@@ -11,7 +11,7 @@ import { X } from 'lucide-react'
 import type { Deck, Template } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import TemplatePicker from './TemplatePicker'
-import DeckAccessSettings from './DeckAccessSettings'
+import AccessSettings from './AccessSettings'
 import SeedNotesEditor from './SeedNotesEditor'
 import SeedMaterial from './SeedMaterial'
 import ConfirmDialog from './ConfirmDialog'
@@ -276,10 +276,16 @@ export default function DeckSettingsModal({
               id="settings-panel-sharing"
               aria-labelledby="settings-tab-sharing"
             >
-              <DeckAccessSettings
-                deck={deck}
+              <AccessSettings
+                entity="deck"
+                subject={{
+                  id: deck.id,
+                  name: lectureTitle(deck),
+                  visibility: deck.visibility,
+                  accessInherited: deck.accessInherited,
+                }}
                 isOwner={isOwner}
-                onAccessChange={onDeckChange}
+                onChange={updated => onDeckChange(updated as Deck)}
               />
             </section>
           )}

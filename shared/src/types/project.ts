@@ -3,6 +3,7 @@
  * Field sets are indicative — they will evolve as features land.
  */
 import type { ProjectDefaults } from './user'
+import type { Visibility } from './deck'
 
 export interface Project {
   id: string
@@ -11,6 +12,12 @@ export interface Project {
   course?: string
   description?: string
   seedContext?: string
+  /** General access; lectures inherit this unless they override (SHARE-1). */
+  visibility: Visibility
+  /** User ids with view access. Owner-only surfaces. */
+  viewers?: string[]
+  /** User ids with edit access (can edit every lecture inside). Owner-only surfaces. */
+  editors?: string[]
   /** Overrides the owner's projectDefaults (GEN-8/GEN-9). */
   settings?: ProjectDefaults
   createdAt: string

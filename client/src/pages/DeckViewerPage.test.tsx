@@ -20,6 +20,7 @@ const deckView = {
     permalinkSlug: 'shared-abc123',
     slideOrder: ['s1'],
     visibility: 'public',
+    accessInherited: true,
     updatedAt: new Date(Date.now() - 120_000).toISOString(),
   },
   slides: [

@@ -7,6 +7,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router'
 import ProjectPage from './ProjectPage'
+import { AuthProvider } from '../auth/AuthContext'
 import { mockFetchRoutes } from '../test/fetch-mock'
 
 const project = {
@@ -14,10 +15,15 @@ const project = {
   ownerId: 'u1',
   title: 'Physics',
   seedContext: 'Existing notes',
+  visibility: 'public',
   createdAt: '2026-07-01T00:00:00.000Z',
 }
 
 const baseRoutes = {
+  '/api/auth/refresh': () => ({
+    status: 200,
+    body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+  }),
   '/api/actions/project.get': () => ({ status: 200, body: project }),
   '/api/actions/deck.list': () => ({
     status: 200,
@@ -37,11 +43,13 @@ const baseRoutes = {
 const renderPage = () =>
   render(
     <MemoryRouter initialEntries={['/app/projects/p1']}>
-      <Routes>
-        <Route path="/app/projects/:projectId" element={<ProjectPage />} />
-        <Route path="/d/:slug" element={<div>VIEWER</div>} />
-        <Route path="/app" element={<div>HOME</div>} />
-      </Routes>
+      <AuthProvider>
+        <Routes>
+          <Route path="/app/projects/:projectId" element={<ProjectPage />} />
+          <Route path="/d/:slug" element={<div>VIEWER</div>} />
+          <Route path="/app" element={<div>HOME</div>} />
+        </Routes>
+      </AuthProvider>
     </MemoryRouter>,
   )
 

@@ -330,8 +330,12 @@ describe('ownership transfer', () => {
 
     // The new owner appears nowhere in the people lists
     const deck = await DeckModel.findById(deckId)
-    expect(deck!.viewers).not.toContain(await userId('byron@example.com'))
-    expect(deck!.editors).not.toContain(await userId('byron@example.com'))
+    expect(deck!.accessOverride!.viewers).not.toContain(
+      await userId('byron@example.com'),
+    )
+    expect(deck!.accessOverride!.editors).not.toContain(
+      await userId('byron@example.com'),
+    )
   })
 
   it('rejects transfers to unknown users or to the owner themself', async () => {

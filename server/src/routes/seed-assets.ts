@@ -12,8 +12,9 @@ import multer from 'multer'
 import type { SeedAsset } from '@slide-machine/shared'
 import { requireAuth } from '../middleware/auth'
 import { HttpError } from '../middleware/error'
-import { ProjectModel } from '../models/project'
-import { DeckModel, canEditDeck } from '../models/deck'
+import { ProjectModel, projectAcl } from '../models/project'
+import { DeckModel, loadDeckAcl } from '../models/deck'
+import { canEditAcl } from '../lib/access'
 import { SeedAssetModel, toSeedAssetDto } from '../models/seed-asset'
 import { getStorage } from '../storage'
 import { processSeedAsset, keywordsFromName } from '../seeding/extract'
@@ -58,11 +59,13 @@ seedAssetsRouter.post(
 
     if (deckId) {
       const deck = await DeckModel.findById(deckId).catch(() => null)
-      if (!deck || !canEditDeck(deck, req.userId)) throw forbidden
+      if (!deck || !canEditAcl(await loadDeckAcl(deck), req.userId))
+        throw forbidden
       if (deck.projectId.toString() !== projectId) throw forbidden
     } else {
       const project = await ProjectModel.findById(projectId).catch(() => null)
-      if (!project || project.ownerId.toString() !== req.userId) throw forbidden
+      if (!project || !canEditAcl(projectAcl(project), req.userId))
+        throw forbidden
     }
 
     const name = file.originalname || 'upload'

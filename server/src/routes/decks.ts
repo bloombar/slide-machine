@@ -8,11 +8,11 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import type { DeckViewResponse } from '@slide-machine/shared'
 import {
   DeckModel,
-  canEditDeck,
-  canViewDeck,
+  loadDeckAcl,
   toDeckDto,
   toSharedDeckDto,
 } from '../models/deck'
+import { canEditAcl, canViewAcl } from '../lib/access'
 import { SlideModel, toSlideDto } from '../models/slide'
 import { getBuiltinTemplate } from '../templates/builtin'
 import { verifyAccessToken } from '../auth/tokens'
@@ -45,18 +45,20 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
   const deck = await DeckModel.findOne({
     permalinkSlug: String(req.params.slug),
   })
-  if (!deck || !canViewDeck(deck, req.userId)) throw notFound
+  if (!deck) throw notFound
+  const acl = await loadDeckAcl(deck)
+  if (!canViewAcl(acl, req.userId)) throw notFound
 
   const template = getBuiltinTemplate(deck.templateId)
   if (!template) throw notFound
 
-  const isOwner = deck.ownerId.toString() === req.userId
+  const isOwner = acl.ownerId === req.userId
   const slides = await SlideModel.find({ deckId: deck._id }).sort({ index: 1 })
   const body: DeckViewResponse = {
-    deck: isOwner ? toDeckDto(deck) : toSharedDeckDto(deck),
+    deck: isOwner ? toDeckDto(deck, acl) : toSharedDeckDto(deck, acl),
     slides: slides.map(toSlideDto),
     template,
-    canEdit: canEditDeck(deck, req.userId),
+    canEdit: canEditAcl(acl, req.userId),
   }
   res.json(body)
 })

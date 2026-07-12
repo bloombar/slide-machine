@@ -52,8 +52,11 @@ test('owner transfers a lecture; old owner stays an editor', async ({
   await expect(bellaRow).toHaveValue('editor')
 
   // Transfer ownership from the per-person menu (confirming the dialog)
-  alicePage.once('dialog', dialog => void dialog.accept())
   await bellaRow.selectOption('transfer')
+  await alicePage
+    .getByRole('alertdialog', { name: 'Transfer ownership?' })
+    .getByRole('button', { name: 'Transfer' })
+    .click()
 
   // Alice is now an editor: the list re-reads with her in it, and her
   // own menu no longer offers a transfer

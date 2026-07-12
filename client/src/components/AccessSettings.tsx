@@ -1,22 +1,19 @@
 /**
- * Access controls for a lecture (SHARE-1), Google-Docs style, managed
- * by the owner and by editors. "People with access": add people by
- * account email and choose per person whether they can edit or only
- * view — this is how other editors are granted; the per-person menu
- * also revokes access, and (owner only) transfers ownership, after
- * which the old owner stays an editor. "General access": Public (anyone
- * on the internet with the link can view, the default) or Restricted
- * (only people with access can open with the link). Changes save
- * immediately through the action layer.
+ * Access controls (SHARE-1), Google-Docs style, shared by lectures and
+ * projects — the same component drives `deck.*` or `project.*` access
+ * actions by entity. "People with access": add people by account email
+ * with per-person role, revocation, and (owner-only) ownership
+ * transfer. "General access": Public or Restricted.
+ *
+ * Lectures additionally surface inheritance: by default they follow
+ * their project's settings (nothing stored on the lecture); the first
+ * change here detaches them (copy-on-write, done server-side), and
+ * "Use project settings" re-attaches.
  */
 import { useEffect, useState, type FormEvent } from 'react'
-import type {
-  Deck,
-  DeckShare,
-  ShareRole,
-  Visibility,
-} from '@slide-machine/shared'
+import type { DeckShare, ShareRole, Visibility } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
+import ConfirmDialog from './ConfirmDialog'
 
 const GENERAL_ACCESS: Array<{
   value: Visibility
@@ -35,28 +32,46 @@ const GENERAL_ACCESS: Array<{
   },
 ]
 
-interface Props {
-  deck: Deck
-  /** Only the owner may transfer ownership. */
-  isOwner: boolean
-  /** Fired after a successful save so the viewer keeps a fresh deck. */
-  onAccessChange: (deck: Deck) => void
+export interface AccessSubject {
+  id: string
+  /** Display name for confirmation copy. */
+  name: string
+  /** Effective general access. */
+  visibility: Visibility
+  /** Lectures only: true while following the project's settings. */
+  accessInherited?: boolean
 }
 
-export default function DeckAccessSettings({
-  deck,
+interface Props {
+  /** Selects the action family (deck.setAccess … / project.setAccess …). */
+  entity: 'deck' | 'project'
+  subject: AccessSubject
+  /** Only the owner may transfer ownership. */
+  isOwner: boolean
+  /** Fired with the updated deck/project after any saved change. */
+  onChange: (updated: unknown) => void
+}
+
+export default function AccessSettings({
+  entity,
+  subject,
   isOwner,
-  onAccessChange,
+  onChange,
 }: Props) {
   const [shares, setShares] = useState<DeckShare[]>([])
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<ShareRole>('viewer')
   const [shareError, setShareError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [confirmingTransfer, setConfirmingTransfer] =
+    useState<DeckShare | null>(null)
+
+  const action = (name: string) => `${entity}.${name}`
+  const idInput = { [`${entity}Id`]: subject.id }
 
   useEffect(() => {
     let cancelled = false
-    dispatchAction<DeckShare[]>('deck.shares', { deckId: deck.id })
+    dispatchAction<DeckShare[]>(action('shares'), idInput)
       .then(list => {
         if (!cancelled) setShares(list)
       })
@@ -66,19 +81,34 @@ export default function DeckAccessSettings({
     return () => {
       cancelled = true
     }
-  }, [deck.id])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entity, subject.id])
 
   const setGeneralAccess = (visibility: Visibility) => {
-    dispatchAction<Deck>('deck.setAccess', { deckId: deck.id, visibility })
-      .then(onAccessChange)
+    dispatchAction(action('setAccess'), { ...idInput, visibility })
+      .then(onChange)
       .catch(() => {
-        // Quiet failure: the radios revert to the saved deck on rerender
+        // Quiet failure: the radios revert to the saved value on rerender
+      })
+  }
+
+  const resetToProject = () => {
+    dispatchAction(action('resetAccess'), idInput)
+      .then(updated => {
+        onChange(updated)
+        // Back on project settings: re-read the effective people list
+        return dispatchAction<DeckShare[]>(action('shares'), idInput).then(
+          setShares,
+        )
+      })
+      .catch(() => {
+        // Quiet failure: the override simply stays
       })
   }
 
   const grant = (grantEmail: string, grantRole: ShareRole) =>
-    dispatchAction<DeckShare[]>('deck.share', {
-      deckId: deck.id,
+    dispatchAction<DeckShare[]>(action('share'), {
+      ...idInput,
       email: grantEmail,
       role: grantRole,
     })
@@ -99,8 +129,8 @@ export default function DeckAccessSettings({
   }
 
   const remove = (entry: DeckShare) => {
-    dispatchAction<DeckShare[]>('deck.unshare', {
-      deckId: deck.id,
+    dispatchAction<DeckShare[]>(action('unshare'), {
+      ...idInput,
       userId: entry.userId,
       role: entry.role,
     })
@@ -111,30 +141,28 @@ export default function DeckAccessSettings({
   }
 
   const transferOwnership = (entry: DeckShare) => {
-    const confirmed = window.confirm(
-      `Make ${entry.displayName} the owner of this lecture? You will keep edit access.`,
-    )
-    if (!confirmed) return
-    dispatchAction<Deck>('deck.transferOwnership', {
-      deckId: deck.id,
+    dispatchAction(action('transferOwnership'), {
+      ...idInput,
       userId: entry.userId,
     })
       .then(updated => {
-        onAccessChange(updated)
+        setConfirmingTransfer(null)
+        onChange(updated)
         // Re-read the list: the new owner leaves it, the old owner joins
-        return dispatchAction<DeckShare[]>('deck.shares', {
-          deckId: deck.id,
-        }).then(setShares)
+        return dispatchAction<DeckShare[]>(action('shares'), idInput).then(
+          setShares,
+        )
       })
       .catch(() => {
         // Quiet failure: ownership stays as saved
+        setConfirmingTransfer(null)
       })
   }
 
   /** The per-person menu: role change, ownership transfer, revocation. */
   const onRowAction = (entry: DeckShare, value: string) => {
     if (value === 'remove') return remove(entry)
-    if (value === 'transfer') return transferOwnership(entry)
+    if (value === 'transfer') return setConfirmingTransfer(entry)
     const nextRole = value as ShareRole
     if (nextRole === entry.role) return
     grant(entry.email, nextRole)
@@ -147,6 +175,25 @@ export default function DeckAccessSettings({
   return (
     <section>
       <h3 className="mb-4 text-lg font-semibold text-slate-700">Access</h3>
+
+      {entity === 'deck' && (
+        <p className="mb-4 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600">
+          {subject.accessInherited ? (
+            <>Inherited from the project — changes here detach this lecture.</>
+          ) : (
+            <>
+              Overridden for this lecture.{' '}
+              <button
+                onClick={resetToProject}
+                className="cursor-pointer text-indigo-600 hover:underline"
+              >
+                Use project settings
+              </button>
+            </>
+          )}
+        </p>
+      )}
+
       <div className="flex flex-col gap-6">
         <div>
           <h4 className="mb-2 text-sm font-medium text-slate-700">
@@ -232,7 +279,7 @@ export default function DeckAccessSettings({
                   type="radio"
                   name="General access"
                   value={option.value}
-                  checked={deck.visibility === option.value}
+                  checked={subject.visibility === option.value}
                   onChange={() => setGeneralAccess(option.value)}
                   className="mt-1"
                 />
@@ -249,6 +296,16 @@ export default function DeckAccessSettings({
           </div>
         </fieldset>
       </div>
+
+      {confirmingTransfer && (
+        <ConfirmDialog
+          title="Transfer ownership?"
+          message={`Make ${confirmingTransfer.displayName} the owner of "${subject.name}"? You will keep edit access.`}
+          confirmLabel="Transfer"
+          onConfirm={() => transferOwnership(confirmingTransfer)}
+          onCancel={() => setConfirmingTransfer(null)}
+        />
+      )}
     </section>
   )
 }

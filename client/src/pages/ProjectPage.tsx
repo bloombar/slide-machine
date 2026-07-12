@@ -10,6 +10,7 @@ import { useNavigate, useParams } from 'react-router'
 import { Plus, Settings } from 'lucide-react'
 import type { Deck, Project } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
+import { useAuth } from '../auth/AuthContext'
 import LectureRow from '../components/LectureRow'
 import EditableText from '../components/EditableText'
 import ProjectSettingsModal from '../components/ProjectSettingsModal'
@@ -17,6 +18,7 @@ import ProjectSettingsModal from '../components/ProjectSettingsModal'
 export default function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [project, setProject] = useState<Project | null>(null)
   const [decks, setDecks] = useState<Deck[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -132,6 +134,7 @@ export default function ProjectPage() {
       {settingsOpen && project && (
         <ProjectSettingsModal
           project={project}
+          isOwner={user?.id === project.ownerId}
           onClose={() => setSettingsOpen(false)}
           onProjectChange={setProject}
           onDeleted={() => void navigate('/app')}

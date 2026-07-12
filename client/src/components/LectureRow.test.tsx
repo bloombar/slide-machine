@@ -17,6 +17,7 @@ const deck: Deck = {
   title: 'Waves',
   templateId: 'classic',
   visibility: 'public',
+  accessInherited: true,
   permalinkSlug: 'waves-abc123',
   slideOrder: ['s1'],
   voteScore: 0,
