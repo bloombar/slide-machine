@@ -94,7 +94,13 @@ export default function ProjectPage() {
         ) : (
           <ul className="flex flex-col gap-2">
             {decks.map(d => (
-              <LectureRow key={d.id} deck={d} />
+              <LectureRow
+                key={d.id}
+                deck={d}
+                onDeleted={id =>
+                  setDecks(prev => prev.filter(deck => deck.id !== id))
+                }
+              />
             ))}
           </ul>
         )}

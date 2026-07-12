@@ -28,7 +28,9 @@ import SlideDeleteButton from '../components/SlideDeleteButton'
 import DraggableListRow from '../components/DraggableListRow'
 import EditableText from '../components/EditableText'
 import DeckPageHeader from '../components/DeckPageHeader'
-import DeckSettingsModal from '../components/DeckSettingsModal'
+import DeckSettingsModal, {
+  type SettingsTabId,
+} from '../components/DeckSettingsModal'
 import { ShellTitle } from '../components/layout/ShellTitle'
 import { type ViewMode } from '../components/ViewModeToggle'
 import { lectureTitle, UNTITLED } from '../lib/lecture'
@@ -51,7 +53,13 @@ export default function DeckViewerPage() {
   const [view, setView] = useState<DeckViewResponse | null>(null)
   const [mode, setMode] = useState<ViewMode>('carousel')
   const [error, setError] = useState<string | null>(null)
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  // A lecture list's Share option deep-links to the sharing tab
+  const [settingsTab] = useState<SettingsTabId | null>(
+    () =>
+      (location.state as { settingsTab?: SettingsTabId } | null)?.settingsTab ??
+      null,
+  )
+  const [settingsOpen, setSettingsOpen] = useState(() => settingsTab !== null)
   const [speaking, setSpeaking] = useState<boolean>(() =>
     Boolean(
       (location.state as { startSpeaking?: boolean } | null)?.startSpeaking,
@@ -106,7 +114,11 @@ export default function DeckViewerPage() {
   // by the lazy initializer above); scrub it so a reload doesn't re-open
   // the mic — history.state survives reloads
   useEffect(() => {
-    if ((location.state as { startSpeaking?: boolean } | null)?.startSpeaking) {
+    const state = location.state as {
+      startSpeaking?: boolean
+      settingsTab?: string
+    } | null
+    if (state?.startSpeaking || state?.settingsTab) {
       navigate(location.pathname, { replace: true, state: null })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -466,6 +478,7 @@ export default function DeckViewerPage() {
       {canEdit && settingsOpen && (
         <DeckSettingsModal
           deck={view.deck}
+          initialTab={settingsTab ?? 'general'}
           isOwner={isOwner}
           onClose={() => setSettingsOpen(false)}
           onDeckChange={deck => setView(v => (v ? { ...v, deck } : v))}

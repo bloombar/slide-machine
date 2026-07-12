@@ -29,10 +29,13 @@ const TABS = [
   { id: 'sharing', label: 'Privacy & Sharing' },
 ] as const
 
-type TabId = (typeof TABS)[number]['id']
+export type SettingsTabId = (typeof TABS)[number]['id']
+type TabId = SettingsTabId
 
 interface Props {
   deck: Deck
+  /** Which tab opens first (deep links, e.g. Share from a lecture list). */
+  initialTab?: TabId
   /** Editors manage access too; only the owner can transfer ownership. */
   isOwner: boolean
   onClose: () => void
@@ -46,6 +49,7 @@ interface Props {
 
 export default function DeckSettingsModal({
   deck,
+  initialTab = 'general',
   isOwner,
   onClose,
   onTemplateChange,
@@ -53,7 +57,7 @@ export default function DeckSettingsModal({
   onDeleted,
 }: Props) {
   const [templates, setTemplates] = useState<Template[]>([])
-  const [tab, setTab] = useState<TabId>('general')
+  const [tab, setTab] = useState<TabId>(initialTab)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const closeRef = useRef<HTMLButtonElement>(null)
   const tabRefs = useRef(new Map<TabId, HTMLButtonElement>())

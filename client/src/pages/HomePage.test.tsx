@@ -85,21 +85,17 @@ describe('HomePage', () => {
     expect(meta.length).toBeGreaterThan(0)
   })
 
-  it('caps lectures at the configured limit and expands on demand', async () => {
+  it('caps lectures at the limit and links Show all to the project', async () => {
     renderHome()
     await screen.findByText('Newest lecture')
 
-    // Limit is mocked to 2: third lecture hidden behind the expander
+    // Limit is mocked to 2: the third lecture stays behind the link
     expect(screen.getByText('Middle lecture')).toBeInTheDocument()
     expect(screen.queryByText('Oldest lecture')).not.toBeInTheDocument()
 
-    fireEvent.click(
-      screen.getByRole('button', { name: /show all 3 lectures/i }),
-    )
-    expect(screen.getByText('Oldest lecture')).toBeInTheDocument()
     expect(
-      screen.queryByRole('button', { name: /show all/i }),
-    ).not.toBeInTheDocument()
+      screen.getByRole('link', { name: /show all 3 lectures/i }),
+    ).toHaveAttribute('href', '/app/projects/p1')
   })
 
   it('starts a new untitled lecture from the + beside a project', async () => {

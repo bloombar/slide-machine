@@ -17,14 +17,15 @@ function ProjectSection({
   project,
   decks,
   onStartLecture,
+  onLectureDeleted,
 }: {
   project: Project
   decks: Deck[]
   onStartLecture: (project: Project) => void
+  onLectureDeleted: (deckId: string) => void
 }) {
-  const [expanded, setExpanded] = useState(false)
   const limit = config.homeLecturesLimit
-  const visible = expanded ? decks : decks.slice(0, limit)
+  const visible = decks.slice(0, limit)
   const hiddenCount = decks.length - limit
 
   return (
@@ -58,16 +59,16 @@ function ProjectSection({
         <>
           <ul className="flex flex-col gap-2">
             {visible.map(d => (
-              <LectureRow key={d.id} deck={d} />
+              <LectureRow key={d.id} deck={d} onDeleted={onLectureDeleted} />
             ))}
           </ul>
-          {!expanded && hiddenCount > 0 && (
-            <button
-              onClick={() => setExpanded(true)}
-              className="mt-2 text-sm text-indigo-600"
+          {hiddenCount > 0 && (
+            <Link
+              to={`/app/projects/${project.id}`}
+              className="mt-2 inline-block text-sm text-indigo-600"
             >
               Show all {decks.length} lectures
-            </button>
+            </Link>
           )}
         </>
       )}
@@ -125,6 +126,20 @@ export default function HomePage() {
       : [...decksByProject.entries()]
           .filter(([projectId]) => !projects.some(p => p.id === projectId))
           .flatMap(([, list]) => list)
+
+  /** A row's Delete already removed it server-side; drop it locally. */
+  const removeLecture = (deckId: string) => {
+    setDecksByProject(prev => {
+      const next = new Map(prev)
+      for (const [projectId, list] of next) {
+        next.set(
+          projectId,
+          list.filter(d => d.id !== deckId),
+        )
+      }
+      return next
+    })
+  }
 
   /** The + beside a project: new untitled lecture, straight in. */
   const startLecture = async (project: Project) => {
@@ -196,6 +211,7 @@ export default function HomePage() {
               project={p}
               decks={decksByProject.get(p.id) ?? []}
               onStartLecture={proj => void startLecture(proj)}
+              onLectureDeleted={removeLecture}
             />
           ))
         )}
@@ -207,7 +223,7 @@ export default function HomePage() {
             </p>
             <ul className="flex flex-col gap-2">
               {otherDecks.map(d => (
-                <LectureRow key={d.id} deck={d} />
+                <LectureRow key={d.id} deck={d} onDeleted={removeLecture} />
               ))}
             </ul>
           </section>

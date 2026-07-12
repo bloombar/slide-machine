@@ -508,6 +508,33 @@ describe('DeckViewerPage settings modal', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('opens settings on the sharing tab when deep-linked', async () => {
+    withSettingsRoutes()
+    render(
+      <MemoryRouter
+        initialEntries={[
+          { pathname: '/d/shared-abc123', state: { settingsTab: 'sharing' } },
+        ]}
+      >
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Lecture settings' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('tab', { name: 'Privacy & Sharing' }),
+    ).toHaveAttribute('aria-selected', 'true')
+    expect(
+      await screen.findByRole('group', { name: 'General access' }),
+    ).toBeInTheDocument()
+  })
+
   it('divides settings into tabs with arrow-key navigation', async () => {
     withSettingsRoutes()
     renderWithSettings()
