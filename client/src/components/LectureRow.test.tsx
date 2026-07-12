@@ -59,6 +59,13 @@ describe('LectureRow kebab menu', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('Settings opens the lecture on its General settings tab', () => {
+    renderRow(vi.fn())
+    fireEvent.click(screen.getByRole('button', { name: 'Options for Waves' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Settings' }))
+    expect(screen.getByText('VIEWER tab=general')).toBeInTheDocument()
+  })
+
   it('Share opens the lecture on its Privacy & Sharing settings', () => {
     renderRow(vi.fn())
     fireEvent.click(screen.getByRole('button', { name: 'Options for Waves' }))

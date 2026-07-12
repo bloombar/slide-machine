@@ -2,9 +2,9 @@
  * A lecture (deck) in a list: title linking to the viewer, with
  * modification age and slide count as metadata. Shared by the home
  * screen, project pages, and public profiles. When `onDeleted` is
- * provided (owner lists), a kebab menu on the right offers Share —
- * which opens the lecture's Privacy & Sharing settings — and Delete,
- * which confirms in a dialog first.
+ * provided (owner lists), a kebab menu on the right offers Settings
+ * (the lecture's General settings tab), Share (its Privacy & Sharing
+ * tab), and Delete, which confirms in a dialog first.
  */
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
@@ -44,11 +44,9 @@ function RowMenu({
     }
   }, [open])
 
-  const share = () => {
+  const openSettings = (settingsTab: 'general' | 'sharing') => {
     setOpen(false)
-    navigate(`/d/${deck.permalinkSlug}`, {
-      state: { settingsTab: 'sharing' },
-    })
+    navigate(`/d/${deck.permalinkSlug}`, { state: { settingsTab } })
   }
 
   const deleteLecture = () => {
@@ -82,7 +80,14 @@ function RowMenu({
         >
           <button
             role="menuitem"
-            onClick={share}
+            onClick={() => openSettings('general')}
+            className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+          >
+            Settings
+          </button>
+          <button
+            role="menuitem"
+            onClick={() => openSettings('sharing')}
             className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
           >
             Share

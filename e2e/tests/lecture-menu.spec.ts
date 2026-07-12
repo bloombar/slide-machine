@@ -21,7 +21,25 @@ test('kebab menu shares and deletes lectures from lists', async ({ page }) => {
     .click()
   await expect(page).toHaveURL(/\/d\/untitled-/)
 
-  // Back home: Share opens the viewer on the Privacy & Sharing tab
+  // Back home: Settings opens the viewer on the General tab
+  await page.getByRole('link', { name: 'The Slide Machine' }).click()
+  await page
+    .getByRole('button', { name: 'Options for Untitled lecture' })
+    .click()
+  await page.getByRole('menuitem', { name: 'Settings' }).click()
+  await expect(
+    page.getByRole('dialog', { name: 'Lecture settings' }),
+  ).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'General' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await expect(
+    page.getByRole('textbox', { name: 'Lecture seed notes' }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: 'Close settings' }).click()
+
+  // Share opens the viewer on the Privacy & Sharing tab
   await page.getByRole('link', { name: 'The Slide Machine' }).click()
   await page
     .getByRole('button', { name: 'Options for Untitled lecture' })
