@@ -58,28 +58,36 @@ export default function FreedomSlider({
     <div>
       <div className="flex items-center gap-3">
         <span className="text-xs text-slate-500">Only what I say</span>
-        <input
-          type="range"
-          min={GENERATION_FREEDOM_MIN}
-          max={GENERATION_FREEDOM_MAX}
-          step={1}
-          value={draft}
-          onChange={e => slide(Number(e.target.value))}
-          aria-label="AI freedom"
-          aria-valuetext={`${draft} of 10`}
-          className="flex-1 accent-indigo-600"
-        />
+        <div className="min-w-0 flex-1">
+          <input
+            type="range"
+            min={GENERATION_FREEDOM_MIN}
+            max={GENERATION_FREEDOM_MAX}
+            step={1}
+            value={draft}
+            onChange={e => slide(Number(e.target.value))}
+            aria-label="AI freedom"
+            aria-valuetext={`${draft} of 10`}
+            className="w-full accent-indigo-600"
+          />
+          {/* Light tick scale; inset to sit under the thumb centers */}
+          <div
+            aria-hidden
+            className="flex justify-between px-[7px] text-[10px] leading-none text-slate-300 select-none"
+          >
+            {Array.from(
+              { length: GENERATION_FREEDOM_MAX - GENERATION_FREEDOM_MIN + 1 },
+              (_, i) => (
+                <span key={i}>{GENERATION_FREEDOM_MIN + i}</span>
+              ),
+            )}
+          </div>
+        </div>
         <span className="text-xs text-slate-500">Free elaboration</span>
-        <span className="w-10 text-right text-sm font-medium text-slate-700">
-          {draft}/10
-        </span>
       </div>
       <p className="mt-1 text-xs text-slate-500">
         {value === undefined ? (
-          <>
-            Using the {inheritedLabel} ({inheritedValue}/10) — move the slider
-            to set it here.
-          </>
+          <>Using the {inheritedLabel} — move the slider to set it here.</>
         ) : (
           <>
             Set at this level.{' '}

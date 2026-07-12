@@ -19,9 +19,9 @@ describe('FreedomSlider', () => {
     )
     const slider = screen.getByRole('slider', { name: 'AI freedom' })
     expect(slider).toHaveValue('3')
-    expect(
-      screen.getByText(/using the project setting \(3\/10\)/i),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/using the project setting/i)).toBeInTheDocument()
+    // The numeric value is not displayed; a light 1-10 tick scale is
+    expect(screen.queryByText('3/10')).not.toBeInTheDocument()
 
     fireEvent.change(slider, { target: { value: '7' } })
     expect(onChange).not.toHaveBeenCalled()
