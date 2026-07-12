@@ -4,11 +4,11 @@
  */
 import { describe, it, expect } from 'vitest'
 import { MockGenerationProvider } from './mock-generation'
-import { BUILTIN_TEMPLATES, layoutDescriptors } from '../templates/builtin'
+import { listBuiltinTemplates, layoutDescriptors } from '../templates/builtin'
 import type { LayoutDescriptor } from '@slide-machine/shared'
 
 const provider = new MockGenerationProvider()
-const descriptors = layoutDescriptors(BUILTIN_TEMPLATES[0]!)
+const descriptors = layoutDescriptors(listBuiltinTemplates()[0]!)
 
 const gen = (
   phrase: string,

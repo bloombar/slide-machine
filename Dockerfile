@@ -31,6 +31,7 @@ COPY e2e/package.json e2e/
 RUN npm ci --omit=dev
 
 COPY --from=build /app/server/dist server/dist
+COPY --from=build /app/server/config server/config
 COPY --from=build /app/client/dist client/dist
 COPY config config
 

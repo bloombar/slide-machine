@@ -1,113 +1,104 @@
 /**
- * Built-in slide-style templates (TMPL-2/TMPL-3). Each carries the seven
- * conventional layouts with AI-facing descriptors (TMPL-6) that are
- * serialized into generation requests as the layout option set (GEN-6).
- * Stored as code, not DB documents — user-authored templates (TMPL-4)
- * will live in MongoDB later.
+ * Built-in slide-style templates (TMPL-2/TMPL-3), loaded from JSON
+ * files in server/config/templates — one file per template, editable
+ * without a code change (see docs/TEMPLATES.md). Each carries the
+ * conventional layouts with AI-facing descriptors (TMPL-6) serialized
+ * into generation requests as the layout option set (GEN-6).
+ *
+ * Files are validated with zod at first use and cached; a malformed
+ * template fails loudly rather than producing broken slides.
+ * User-authored templates (TMPL-4) will live in MongoDB later; these
+ * files are the interim store for the starter set.
  */
-import type { Layout, LayoutDescriptor, Template } from '@slide-machine/shared'
+import { readdirSync, readFileSync } from 'node:fs'
+import path from 'node:path'
+import { z } from 'zod'
+import {
+  LAYOUT_TYPES,
+  type Layout,
+  type LayoutDescriptor,
+  type Template,
+} from '@slide-machine/shared'
+import { env } from '../config/env'
 
-/** The seven conventional layouts shared by every built-in template. */
-const standardLayouts = (): Layout[] => [
-  {
-    type: 'title',
-    label: 'Title',
-    purpose: 'Opening slide: the lecture or major-topic title, nothing else',
-    slots: ['title', 'caption'],
-    constraints: { maxBodyLength: 0, maxTitleWords: 8, maxCaptionWords: 14 },
-    elementPositions: {},
-  },
-  {
-    type: 'section',
-    label: 'Section',
-    purpose: 'A new section or subtopic heading within the lecture',
-    slots: ['title'],
-    constraints: { maxTitleWords: 8 },
-    elementPositions: {},
-  },
-  {
-    type: 'content',
-    label: 'Content',
-    purpose: 'General slide: a short title plus one paragraph of body text',
-    slots: ['title', 'body'],
-    constraints: { maxBodyLength: 400, maxTitleWords: 8, maxBodyWords: 60 },
-    elementPositions: {},
-  },
-  {
-    type: 'list',
-    label: 'Bullet list',
-    purpose: 'Use for 3-6 short parallel points',
-    slots: ['title', 'bullets'],
-    constraints: { maxBullets: 6, maxTitleWords: 8, maxBulletWords: 12 },
-    elementPositions: {},
-  },
-  {
-    type: 'image-heavy',
-    label: 'Image',
-    purpose: 'A striking image dominates; minimal caption text',
-    slots: ['image', 'caption'],
-    constraints: { imageRequired: true, maxCaptionWords: 14 },
-    elementPositions: {},
-  },
-  {
-    type: 'two-column',
-    label: 'Two column',
-    purpose: 'Text beside a supporting image',
-    slots: ['title', 'body', 'image'],
-    constraints: { maxBodyLength: 250, maxTitleWords: 8, maxBodyWords: 40 },
-    elementPositions: {},
-  },
-  {
-    type: 'quote',
-    label: 'Quote',
-    purpose: 'A single striking statement, question, or quotation',
-    slots: ['body', 'caption'],
-    constraints: { maxBodyLength: 200, maxBodyWords: 30, maxCaptionWords: 10 },
-    elementPositions: {},
-  },
-]
+const SLOT_NAMES = [
+  'title',
+  'body',
+  'bullets',
+  'image',
+  'caption',
+  'columns',
+] as const
 
-const builtin = (
-  id: string,
-  name: string,
-  theme: Record<string, unknown>,
-): Template => ({
-  id,
-  ownerId: 'system',
-  name,
-  theme,
-  layouts: standardLayouts(),
-  visibility: 'public',
-  voteScore: 0,
-  createdAt: '2026-07-01T00:00:00.000Z',
+const layoutSchema = z.object({
+  type: z.enum(LAYOUT_TYPES),
+  label: z.string().min(1),
+  purpose: z.string().min(1),
+  slots: z.array(z.enum(SLOT_NAMES)).min(1),
+  constraints: z
+    .object({
+      maxBullets: z.number().int().positive().optional(),
+      maxBodyLength: z.number().int().nonnegative().optional(),
+      maxTitleWords: z.number().int().positive().optional(),
+      maxBodyWords: z.number().int().positive().optional(),
+      maxBulletWords: z.number().int().positive().optional(),
+      maxCaptionWords: z.number().int().positive().optional(),
+      imageRequired: z.boolean().optional(),
+    })
+    .optional(),
+  elementPositions: z.record(z.string(), z.unknown()).default({}),
 })
 
-export const BUILTIN_TEMPLATES: Template[] = [
-  builtin('classic', 'Classic', {
-    background: '#fefce8',
-    surface: '#ffffff',
-    text: '#1c1917',
-    muted: '#78716c',
-    accent: '#b45309',
-  }),
-  builtin('midnight', 'Midnight', {
-    background: '#0f172a',
-    surface: '#1e293b',
-    text: '#f1f5f9',
-    muted: '#94a3b8',
-    accent: '#38bdf8',
-  }),
-  builtin('seminar', 'Seminar', {
-    background: '#f0fdf4',
-    surface: '#ffffff',
-    text: '#14532d',
-    muted: '#4d7c0f',
-    accent: '#16a34a',
-  }),
-]
+const templateFileSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  theme: z.record(z.string(), z.unknown()),
+  layouts: z.array(layoutSchema).min(1),
+})
+
+let cache: Template[] | undefined
+
+/** Loads and validates every *.json in the templates directory. */
+export const loadBuiltinTemplates = (
+  dir: string = env.TEMPLATES_DIR,
+): Template[] => {
+  const files = readdirSync(dir)
+    .filter(f => f.endsWith('.json'))
+    .sort()
+  if (!files.length) {
+    throw new Error(`No template files found in ${dir}`)
+  }
+  return files.map(file => {
+    const raw: unknown = JSON.parse(readFileSync(path.join(dir, file), 'utf8'))
+    const parsed = templateFileSchema.safeParse(raw)
+    if (!parsed.success) {
+      throw new Error(
+        `Invalid template file ${file}: ${parsed.error.issues
+          .map(i => `${i.path.join('.')}: ${i.message}`)
+          .join('; ')}`,
+      )
+    }
+    return {
+      ...parsed.data,
+      layouts: parsed.data.layouts as Layout[],
+      ownerId: 'system',
+      visibility: 'public' as const,
+      voteScore: 0,
+      createdAt: '2026-07-01T00:00:00.000Z',
+    }
+  })
+}
+
+const templates = (): Template[] => {
+  cache ??= loadBuiltinTemplates()
+  return cache
+}
+
+/** The starter template set, for template.list. */
+export const listBuiltinTemplates = (): Template[] => templates()
 
 export const getBuiltinTemplate = (id: string): Template | undefined =>
-  BUILTIN_TEMPLATES.find(t => t.id === id)
+  templates().find(t => t.id === id)
 
 /** The AI-facing option set for a template (GEN-6). */
 export const layoutDescriptors = (template: Template): LayoutDescriptor[] =>
@@ -118,3 +109,8 @@ export const layoutDescriptors = (template: Template): LayoutDescriptor[] =>
     slots,
     constraints,
   }))
+
+/** Test hook: re-read template files. */
+export const resetTemplateCache = (): void => {
+  cache = undefined
+}

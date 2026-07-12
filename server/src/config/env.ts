@@ -50,6 +50,10 @@ const envSchema = z.object({
   PROMPTS_DIR: z
     .string()
     .default(path.join(serverRoot, '..', 'config', 'prompts')),
+  /** Starter slide templates, one JSON per template (docs/TEMPLATES.md). */
+  TEMPLATES_DIR: z
+    .string()
+    .default(path.join(serverRoot, 'config', 'templates')),
 
   // Active AI adapter per capability (SPEC TECH-8)
   TRANSCRIPTION_PROVIDER: z.string().default('google-cloud'),

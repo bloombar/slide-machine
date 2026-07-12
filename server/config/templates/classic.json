@@ -1,0 +1,94 @@
+{
+  "id": "classic",
+  "name": "Classic",
+  "theme": {
+    "background": "#fefce8",
+    "surface": "#ffffff",
+    "text": "#1c1917",
+    "muted": "#78716c",
+    "accent": "#b45309"
+  },
+  "layouts": [
+    {
+      "type": "title",
+      "label": "Title",
+      "purpose": "Opening slide: the lecture or major-topic title, nothing else",
+      "slots": ["title", "caption"],
+      "constraints": {
+        "maxBodyLength": 0,
+        "maxTitleWords": 8,
+        "maxCaptionWords": 14
+      },
+      "elementPositions": {}
+    },
+    {
+      "type": "section",
+      "label": "Section",
+      "purpose": "A new section or subtopic heading within the lecture",
+      "slots": ["title"],
+      "constraints": {
+        "maxTitleWords": 8
+      },
+      "elementPositions": {}
+    },
+    {
+      "type": "content",
+      "label": "Content",
+      "purpose": "General slide: a short title plus one paragraph of body text",
+      "slots": ["title", "body"],
+      "constraints": {
+        "maxBodyLength": 400,
+        "maxTitleWords": 8,
+        "maxBodyWords": 60
+      },
+      "elementPositions": {}
+    },
+    {
+      "type": "list",
+      "label": "Bullet list",
+      "purpose": "Use for 3-6 short parallel points",
+      "slots": ["title", "bullets"],
+      "constraints": {
+        "maxBullets": 6,
+        "maxTitleWords": 8,
+        "maxBulletWords": 12
+      },
+      "elementPositions": {}
+    },
+    {
+      "type": "image-heavy",
+      "label": "Image",
+      "purpose": "A striking image dominates; minimal caption text",
+      "slots": ["image", "caption"],
+      "constraints": {
+        "imageRequired": true,
+        "maxCaptionWords": 14
+      },
+      "elementPositions": {}
+    },
+    {
+      "type": "two-column",
+      "label": "Two column",
+      "purpose": "Text beside a supporting image",
+      "slots": ["title", "body", "image"],
+      "constraints": {
+        "maxBodyLength": 250,
+        "maxTitleWords": 8,
+        "maxBodyWords": 40
+      },
+      "elementPositions": {}
+    },
+    {
+      "type": "quote",
+      "label": "Quote",
+      "purpose": "A single striking statement, question, or quotation",
+      "slots": ["body", "caption"],
+      "constraints": {
+        "maxBodyLength": 200,
+        "maxBodyWords": 30,
+        "maxCaptionWords": 10
+      },
+      "elementPositions": {}
+    }
+  ]
+}
