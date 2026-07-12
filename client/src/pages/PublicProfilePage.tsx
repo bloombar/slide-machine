@@ -3,12 +3,22 @@
  * viewer is allowed to see, grouped by project. Private profiles and
  * unknown users both read as "not found" — existence never leaks.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useParams } from 'react-router'
 import type { ProfileResponse } from '@slide-machine/shared'
 import { apiFetch } from '../api/http'
 import { useAuth } from '../auth/AuthContext'
 import LectureRow from '../components/LectureRow'
+
+/** The standard content container (mirrors AppShell's main wrapper —
+ * PublicShell leaves containment to its pages for the deck viewer). */
+function PageContainer({ children }: { children: ReactNode }) {
+  return (
+    <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
+      {children}
+    </div>
+  )
+}
 
 export default function PublicProfilePage() {
   const { userId } = useParams<{ userId: string }>()
@@ -34,15 +44,23 @@ export default function PublicProfilePage() {
 
   if (error) {
     return (
-      <p className="text-slate-600">
-        This profile does not exist or is private.
-      </p>
+      <PageContainer>
+        <p className="text-slate-600">
+          This profile does not exist or is private.
+        </p>
+      </PageContainer>
     )
   }
-  if (!profile) return <p className="text-slate-500">Loading…</p>
+  if (!profile) {
+    return (
+      <PageContainer>
+        <p className="text-slate-500">Loading…</p>
+      </PageContainer>
+    )
+  }
 
   return (
-    <div>
+    <PageContainer>
       <h1 className="mb-2 text-2xl font-bold">{profile.user.displayName}</h1>
       {profile.user.bio && (
         <p className="mb-6 text-slate-600">{profile.user.bio}</p>
@@ -63,6 +81,6 @@ export default function PublicProfilePage() {
           </section>
         ))
       )}
-    </div>
+    </PageContainer>
   )
 }
