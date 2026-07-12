@@ -69,6 +69,11 @@ const envSchema = z.object({
 
   // Secrets & service credentials — optional until their features land
   GEMINI_API_KEY: z.string().optional(),
+  // Chosen for phrase-to-slide latency: ~1s, no thinking overhead
+  // (thinking models measured 10-30s; see docs/DECISIONS.md)
+  GEMINI_MODEL: z.string().default('gemini-3.1-flash-lite-preview'),
+  /** Hard cap on one generation call — phrase-to-slide must stay live. */
+  GEMINI_TIMEOUT_MS: z.coerce.number().default(12_000),
   GOOGLE_CLOUD_STT_KEY: z.string().optional(),
   GOOGLE_CLOUD_TRANSLATION_KEY: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),

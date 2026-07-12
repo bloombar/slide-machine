@@ -79,3 +79,11 @@ scrolled beneath it.
 **Problem.** Real speech capture (CAP-1) is blocked on Google Cloud STT credentials, but live demos shouldn't wait for them.
 
 **Choice.** Capture is a client-side seam ([stt/capture.ts](../client/src/stt/capture.ts)) selected by `VITE_STT_PROVIDER`: `browser` (the default) uses the Web Speech API — keyless, Chrome/Edge/Safari, mic-permission gated; finalized phrases feed the same `session.phrase` pipeline as the typed Speak bar, with interim text shown live and silence auto-restart. `none` disables capture. `google-cloud` is reserved: it will stream audio to the server, whose separate `TRANSCRIPTION_PROVIDER` (already in env.ts) picks the Cloud STT adapter — flipping the two env vars is the whole migration, the UI does not change. Caveat: Chrome's "built-in" recognition relays audio to Google's servers; acceptable for the bridge, and the cloud path replaces it for the pilot proper.
+
+## Gemini generation adapter: model + output strategy (2026-07-12)
+
+**Problem.** The real GenerationProvider must return one structured slide decision per spoken phrase in near real time (Open Q #5), on the free-tier dev key.
+
+**Measured on our key** (single-phrase prompt, July 2026): `gemini-2.5-flash*` — retired for new users (404); `gemini-2.0-*` — zero quota (429); `gemini-flash-latest` — ~30s; `gemini-3-flash-preview` — ~10s (thinking tokens); **`gemini-3.1-flash-lite-preview` — ~1s, no thinking, correct new/update/none decisions**. That's the `GEMINI_MODEL` default (env-overridable).
+
+**No `responseSchema`.** Gemini's constrained decoding sent every model we tried into degenerate repetition loops (hundreds of duplicated phrases until MAX_TOKENS), while `responseMimeType: application/json` plus the exact shape spelled out in the prompt stays clean. The adapter therefore prompts the contract and enforces it server-side: zod validation, layout drift coerced back to the offered option set, seeded-image ids checked against what was offered, `maxOutputTokens: 2048` as a hard stop. Revisit the schema if a later API fixes constrained decoding.

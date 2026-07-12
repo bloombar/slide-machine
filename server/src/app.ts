@@ -22,6 +22,7 @@ import './actions/slide'
 import './actions/user'
 import './actions/seed-asset'
 import './providers/mock-generation'
+import './providers/gemini-generation'
 
 export const createApp = (): Express => {
   const app = express()
