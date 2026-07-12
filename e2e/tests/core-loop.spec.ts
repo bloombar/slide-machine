@@ -25,14 +25,23 @@ test('speak-to-slides core loop, session to permalink playback', async ({
   await page.getByRole('link', { name: 'Biology 101', exact: true }).click()
   await expect(page).toHaveURL(/\/app\/projects\//)
 
-  // Start a lecture with the Midnight template
-  await page.getByLabel('Lecture title').fill('Photosynthesis')
-  await page.getByRole('radio', { name: /midnight/i }).click()
-  await page.getByRole('button', { name: 'Start lecture' }).click()
-  await expect(page).toHaveURL(/\/d\/photosynthesis-/)
+  // The + starts a new untitled lecture straight into the live session
+  await page.getByRole('button', { name: 'Start a new lecture' }).click()
+  await expect(page).toHaveURL(/\/d\/untitled-/)
   await expect(
     page.getByRole('button', { name: 'Live session' }),
   ).toHaveAttribute('aria-pressed', 'true')
+
+  // Name it from the nav and pick the Midnight template in settings
+  await page.getByTitle('Click to edit Lecture title').click()
+  await page
+    .getByRole('textbox', { name: 'Lecture title' })
+    .fill('Photosynthesis')
+  await page.keyboard.press('Enter')
+  await page.getByRole('button', { name: 'Lecture settings' }).click()
+  await page.getByRole('tab', { name: 'Design template' }).click()
+  await page.getByRole('radio', { name: /midnight/i }).click()
+  await page.getByRole('button', { name: 'Close settings' }).click()
 
   // Speak: a short opener becomes a title slide
   await page.getByLabel('Spoken phrase').fill('Photosynthesis basics')

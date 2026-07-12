@@ -16,23 +16,26 @@ test('project and lecture seed notes auto-save and persist', async ({
   await page.getByLabel('Password').fill('sturdy-passw0rd')
   await page.getByRole('button', { name: 'Create account' }).click()
 
-  // Project-level notes save from the project page (blur flushes)
+  // Project-level notes save from the project settings modal (blur flushes)
   await page.getByLabel('New project title').fill('SeedProj')
   await page.getByRole('button', { name: 'Create' }).click()
   await page.getByRole('link', { name: 'SeedProj', exact: true }).click()
+  await page.getByRole('button', { name: 'Project settings' }).click()
   await page
     .getByRole('textbox', { name: 'Project seed notes' })
     .fill('Course covers waves, optics, and thermodynamics')
   await page.getByRole('textbox', { name: 'Project seed notes' }).blur()
+  await page.getByRole('button', { name: 'Close settings' }).click()
 
   await page.reload()
+  await page.getByRole('button', { name: 'Project settings' }).click()
   await expect(
     page.getByRole('textbox', { name: 'Project seed notes' }),
   ).toHaveValue('Course covers waves, optics, and thermodynamics')
+  await page.getByRole('button', { name: 'Close settings' }).click()
 
-  // Lecture-level notes save from the settings modal
-  await page.getByLabel('Lecture title').fill('Optics')
-  await page.getByRole('button', { name: 'Start lecture' }).click()
+  // Lecture-level notes save from the lecture settings modal
+  await page.getByRole('button', { name: 'Start a new lecture' }).click()
   await expect(page).toHaveURL(/\/d\//)
   await page.getByRole('button', { name: 'Lecture settings' }).click()
   await page

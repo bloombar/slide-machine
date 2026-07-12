@@ -41,8 +41,16 @@ test('sharing: view/edit grants, private no-leak, public profile', async ({
   await ownerPage.getByLabel('New project title').fill('ShareProj')
   await ownerPage.getByRole('button', { name: 'Create' }).click()
   await ownerPage.getByRole('link', { name: 'ShareProj', exact: true }).click()
-  await ownerPage.getByLabel('Lecture title').fill('Shared Waves')
-  await ownerPage.getByRole('button', { name: 'Start lecture' }).click()
+  await ownerPage.getByRole('button', { name: 'Start a new lecture' }).click()
+  await expect(ownerPage).toHaveURL(/\/d\//)
+  await ownerPage.getByTitle('Click to edit Lecture title').click()
+  await ownerPage
+    .getByRole('textbox', { name: 'Lecture title' })
+    .fill('Shared Waves')
+  await ownerPage.keyboard.press('Enter')
+  await expect(
+    ownerPage.getByRole('heading', { name: 'Shared Waves' }),
+  ).toBeVisible()
   await ownerPage.getByLabel('Spoken phrase').fill('Wave basics')
   await ownerPage.getByRole('button', { name: 'Speak' }).click()
   await expect(ownerPage.getByTestId('slide')).toBeVisible()

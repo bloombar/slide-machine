@@ -19,8 +19,12 @@ const buildDeck = async (page: Page) => {
   await page.getByRole('button', { name: 'Create' }).click()
   await page.getByRole('link', { name: 'Chemistry', exact: true }).click()
 
-  await page.getByLabel('Lecture title').fill('Atoms')
-  await page.getByRole('button', { name: 'Start lecture' }).click()
+  await page.getByRole('button', { name: 'Start a new lecture' }).click()
+  await expect(page).toHaveURL(/\/d\//)
+  await page.getByTitle('Click to edit Lecture title').click()
+  await page.getByRole('textbox', { name: 'Lecture title' }).fill('Atoms')
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('heading', { name: 'Atoms' })).toBeVisible()
 
   for (const phrase of ['Atomic structure', 'Protons, neutrons, electrons']) {
     await page.getByLabel('Spoken phrase').fill(phrase)

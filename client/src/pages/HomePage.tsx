@@ -4,7 +4,7 @@
  * config.homeLecturesLimit lectures with a "Show all" expander.
  */
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { Plus } from 'lucide-react'
 import type { Deck, Project } from '@slide-machine/shared'
 import { useAuth } from '../auth/AuthContext'
@@ -16,9 +16,11 @@ import { config } from '../config'
 function ProjectSection({
   project,
   decks,
+  onStartLecture,
 }: {
   project: Project
   decks: Deck[]
+  onStartLecture: (project: Project) => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const limit = config.homeLecturesLimit
@@ -36,14 +38,14 @@ function ProjectSection({
             {project.title}
           </Link>
         </h2>
-        <Link
-          to={`/app/projects/${project.id}`}
+        <button
           aria-label={`Start a new lecture in ${project.title}`}
           title="Start a new lecture"
+          onClick={() => onStartLecture(project)}
           className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"
         >
           <Plus className="h-4 w-4" aria-hidden />
-        </Link>
+        </button>
       </div>
       {decks.length === 0 ? (
         <p className="text-sm text-slate-500">
@@ -75,6 +77,7 @@ function ProjectSection({
 
 export default function HomePage() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [projects, setProjects] = useState<Project[] | null>(null)
   const [decksByProject, setDecksByProject] = useState<Map<string, Deck[]>>(
     new Map(),
@@ -122,6 +125,20 @@ export default function HomePage() {
       : [...decksByProject.entries()]
           .filter(([projectId]) => !projects.some(p => p.id === projectId))
           .flatMap(([, list]) => list)
+
+  /** The + beside a project: new untitled lecture, straight in. */
+  const startLecture = async (project: Project) => {
+    setError(null)
+    try {
+      const deck = await dispatchAction<Deck>('deck.create', {
+        projectId: project.id,
+        templateId: 'classic',
+      })
+      navigate(`/d/${deck.permalinkSlug}`, { state: { startSpeaking: true } })
+    } catch {
+      setError('Could not create the lecture')
+    }
+  }
 
   const onCreate = async (e: FormEvent) => {
     e.preventDefault()
@@ -178,6 +195,7 @@ export default function HomePage() {
               key={p.id}
               project={p}
               decks={decksByProject.get(p.id) ?? []}
+              onStartLecture={proj => void startLecture(proj)}
             />
           ))
         )}

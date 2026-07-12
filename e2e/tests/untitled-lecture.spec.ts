@@ -20,14 +20,10 @@ test('untitled lectures start from the + option and can be named later', async (
   await page.getByLabel('New project title').fill('QuickStart')
   await page.getByRole('button', { name: 'Create' }).click()
 
-  // The + beside the project heading leads to the start-lecture form
+  // The + beside the project heading starts an untitled lecture directly
   await page
-    .getByRole('link', { name: 'Start a new lecture in QuickStart' })
+    .getByRole('button', { name: 'Start a new lecture in QuickStart' })
     .click()
-  await expect(page).toHaveURL(/\/app\/projects\//)
-
-  // No title typed: Start lecture works anyway
-  await page.getByRole('button', { name: 'Start lecture' }).click()
   await expect(page).toHaveURL(/\/d\/untitled-/)
   await expect(
     page.getByRole('heading', { name: 'Untitled lecture' }),

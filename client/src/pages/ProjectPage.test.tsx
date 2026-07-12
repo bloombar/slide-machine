@@ -1,6 +1,7 @@
 /**
- * Unit tests for the project page: seed notes load and auto-save
- * through project.update (PROJ-1).
+ * Unit tests for the project page: lectures listed up front, the +
+ * starting an untitled lecture immediately, and the settings modal
+ * (seed notes auto-save + project deletion with confirmation).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
@@ -16,64 +17,81 @@ const project = {
   createdAt: '2026-07-01T00:00:00.000Z',
 }
 
+const baseRoutes = {
+  '/api/actions/project.get': () => ({ status: 200, body: project }),
+  '/api/actions/deck.list': () => ({
+    status: 200,
+    body: [
+      {
+        id: 'd1',
+        projectId: 'p1',
+        title: 'Waves',
+        permalinkSlug: 'waves-abc123',
+        slideOrder: ['s1'],
+        updatedAt: new Date().toISOString(),
+      },
+    ],
+  }),
+}
+
+const renderPage = () =>
+  render(
+    <MemoryRouter initialEntries={['/app/projects/p1']}>
+      <Routes>
+        <Route path="/app/projects/:projectId" element={<ProjectPage />} />
+        <Route path="/d/:slug" element={<div>VIEWER</div>} />
+        <Route path="/app" element={<div>HOME</div>} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
 afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('ProjectPage lecture creation', () => {
-  it('starts an untitled lecture when the title is left empty', async () => {
+describe('ProjectPage', () => {
+  it('lists lectures up front with their metadata', async () => {
+    mockFetchRoutes(baseRoutes)
+    renderPage()
+    expect(
+      await screen.findByRole('heading', { name: 'Lectures' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Waves/ })).toHaveAttribute(
+      'href',
+      '/d/waves-abc123',
+    )
+  })
+
+  it('starts an untitled lecture from the + beside Lectures', async () => {
     let sent: unknown
     mockFetchRoutes({
-      '/api/actions/project.get': () => ({ status: 200, body: project }),
-      '/api/actions/deck.list': () => ({ status: 200, body: [] }),
-      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+      ...baseRoutes,
       '/api/actions/deck.create': init => {
         sent = JSON.parse(String(init?.body))
         return {
           status: 200,
-          body: {
-            id: 'd1',
-            title: '',
-            permalinkSlug: 'untitled-abc123',
-            slideOrder: [],
-          },
+          body: { id: 'd2', title: '', permalinkSlug: 'untitled-abc123' },
         }
       },
     })
-    render(
-      <MemoryRouter initialEntries={['/app/projects/p1']}>
-        <Routes>
-          <Route path="/app/projects/:projectId" element={<ProjectPage />} />
-          <Route path="/d/:slug" element={<div>VIEWER</div>} />
-        </Routes>
-      </MemoryRouter>,
-    )
+    renderPage()
 
     fireEvent.click(
-      await vi.waitFor(() =>
-        screen.getByRole('button', { name: 'Start lecture' }),
-      ),
+      await screen.findByRole('button', { name: 'Start a new lecture' }),
     )
 
     await vi.waitFor(() =>
-      expect(sent).toEqual({
-        projectId: 'p1',
-        title: '',
-        templateId: 'classic',
-      }),
+      expect(sent).toEqual({ projectId: 'p1', templateId: 'classic' }),
     )
     expect(await screen.findByText('VIEWER')).toBeInTheDocument()
   })
-})
 
-describe('ProjectPage seed notes', () => {
-  it('loads existing notes and auto-saves edits via project.update', async () => {
+  it('auto-saves seed notes from the settings modal', async () => {
     vi.useFakeTimers()
     let sent: unknown
     mockFetchRoutes({
-      '/api/actions/project.get': () => ({ status: 200, body: project }),
-      '/api/actions/deck.list': () => ({ status: 200, body: [] }),
-      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+      ...baseRoutes,
+      '/api/actions/seedAsset.list': () => ({ status: 200, body: [] }),
       '/api/actions/project.update': init => {
         sent = JSON.parse(String(init?.body))
         return {
@@ -82,22 +100,19 @@ describe('ProjectPage seed notes', () => {
         }
       },
     })
-    render(
-      <MemoryRouter initialEntries={['/app/projects/p1']}>
-        <Routes>
-          <Route path="/app/projects/:projectId" element={<ProjectPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
+    renderPage()
 
+    fireEvent.click(
+      await vi.waitFor(() =>
+        screen.getByRole('button', { name: 'Project settings' }),
+      ),
+    )
     const box = await vi.waitFor(() =>
       screen.getByRole('textbox', { name: 'Project seed notes' }),
     )
     expect(box).toHaveValue('Existing notes')
 
-    fireEvent.change(box, {
-      target: { value: 'Existing notes, updated' },
-    })
+    fireEvent.change(box, { target: { value: 'Existing notes, updated' } })
     vi.advanceTimersByTime(800)
 
     await vi.waitFor(() =>
@@ -107,5 +122,37 @@ describe('ProjectPage seed notes', () => {
       }),
     )
     vi.useRealTimers()
+  })
+
+  it('deletes the project from the Danger zone after confirmation', async () => {
+    let deleted = false
+    mockFetchRoutes({
+      ...baseRoutes,
+      '/api/actions/seedAsset.list': () => ({ status: 200, body: [] }),
+      '/api/actions/project.delete': () => {
+        deleted = true
+        return { status: 200, body: { deleted: true } }
+      },
+    })
+    renderPage()
+
+    fireEvent.click(
+      await vi.waitFor(() =>
+        screen.getByRole('button', { name: 'Project settings' }),
+      ),
+    )
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Delete project' }),
+    )
+
+    // Cancel first: nothing happens
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(deleted).toBe(false)
+
+    // Confirm: the project goes and the page leaves for home
+    fireEvent.click(screen.getByRole('button', { name: 'Delete project' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    expect(await screen.findByText('HOME')).toBeInTheDocument()
+    expect(deleted).toBe(true)
   })
 })

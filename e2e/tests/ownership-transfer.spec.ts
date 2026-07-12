@@ -39,8 +39,7 @@ test('owner transfers a lecture; old owner stays an editor', async ({
   await alicePage
     .getByRole('link', { name: 'TransferProj', exact: true })
     .click()
-  await alicePage.getByLabel('Lecture title').fill('Handover')
-  await alicePage.getByRole('button', { name: 'Start lecture' }).click()
+  await alicePage.getByRole('button', { name: 'Start a new lecture' }).click()
   await expect(alicePage).toHaveURL(/\/d\//)
   const deckUrl = alicePage.url()
 

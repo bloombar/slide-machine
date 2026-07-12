@@ -1,25 +1,23 @@
 /**
- * One project: its decks, and starting a new lecture (deck) with a
- * chosen template (PROJ-2, TMPL-1).
+ * One project: its lectures up front (newest modification first, like
+ * the home screen), a + beside the heading that starts a new untitled
+ * lecture immediately, and a settings icon on the title row opening the
+ * project settings modal (seed material + danger zone).
  */
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
-import { Mic } from 'lucide-react'
-import type { Deck, Project, Template } from '@slide-machine/shared'
+import { Plus, Settings } from 'lucide-react'
+import type { Deck, Project } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
-import TemplatePicker from '../components/TemplatePicker'
 import LectureRow from '../components/LectureRow'
-import SeedNotesEditor from '../components/SeedNotesEditor'
-import SeedMaterial from '../components/SeedMaterial'
+import ProjectSettingsModal from '../components/ProjectSettingsModal'
 
 export default function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
   const [project, setProject] = useState<Project | null>(null)
   const [decks, setDecks] = useState<Deck[]>([])
-  const [templates, setTemplates] = useState<Template[]>([])
-  const [title, setTitle] = useState('')
-  const [templateId, setTemplateId] = useState('classic')
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -28,13 +26,11 @@ export default function ProjectPage() {
     Promise.all([
       dispatchAction<Project>('project.get', { projectId }),
       dispatchAction<Deck[]>('deck.list', { projectId }),
-      dispatchAction<Template[]>('template.list'),
     ])
-      .then(([proj, deckList, templateList]) => {
+      .then(([proj, deckList]) => {
         if (cancelled) return
         setProject(proj)
         setDecks(deckList)
-        setTemplates(templateList)
       })
       .catch(() => {
         if (!cancelled) setError('Could not load this project')
@@ -44,14 +40,13 @@ export default function ProjectPage() {
     }
   }, [projectId])
 
-  const onCreate = async (e: FormEvent) => {
-    e.preventDefault()
+  /** Starts a new untitled lecture and jumps straight into it. */
+  const startLecture = async () => {
     setError(null)
     try {
       const deck = await dispatchAction<Deck>('deck.create', {
         projectId,
-        title: title.trim(),
-        templateId,
+        templateId: 'classic',
       })
       navigate(`/d/${deck.permalinkSlug}`, { state: { startSpeaking: true } })
     } catch {
@@ -61,86 +56,41 @@ export default function ProjectPage() {
 
   return (
     <div>
-      <header className="mb-8">
-        <h1 className="text-2xl font-bold">{project?.title ?? 'Loading…'}</h1>
+      <header className="mb-8 flex items-center justify-between gap-4">
+        <h1 className="min-w-0 truncate text-2xl font-bold">
+          {project?.title ?? 'Loading…'}
+        </h1>
+        <button
+          aria-label="Project settings"
+          title="Project settings"
+          onClick={() => setSettingsOpen(true)}
+          className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+        >
+          <Settings className="h-5 w-5" aria-hidden />
+        </button>
       </header>
 
-      <section className="mb-10 max-w-2xl">
-        <h2 className="mb-4 text-lg font-semibold text-slate-700">
-          Start a new lecture
-        </h2>
-        <form onSubmit={onCreate} className="flex flex-col gap-4">
-          <input
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            placeholder="Lecture title (optional)"
-            aria-label="Lecture title"
-            className="rounded-md border border-slate-300 px-3 py-2"
-          />
-          {templates.length > 0 && (
-            <TemplatePicker
-              templates={templates}
-              value={templateId}
-              onChange={setTemplateId}
-            />
-          )}
+      <section className="max-w-2xl">
+        <div className="mb-4 flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-slate-700">Lectures</h2>
           <button
-            type="submit"
-            className="flex items-center gap-2 self-start rounded-md bg-indigo-600 px-4 py-2 font-medium text-white"
+            aria-label="Start a new lecture"
+            title="Start a new lecture"
+            onClick={() => void startLecture()}
+            className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"
           >
-            <Mic className="h-4 w-4" aria-hidden />
-            Start lecture
+            <Plus className="h-5 w-5" aria-hidden />
           </button>
-        </form>
+        </div>
         {error && (
-          <p role="alert" className="mt-4 text-sm text-red-600">
+          <p role="alert" className="mb-4 text-sm text-red-600">
             {error}
           </p>
         )}
-      </section>
-
-      <section className="mb-10 max-w-2xl">
-        <h2 className="mb-2 text-lg font-semibold text-slate-700">
-          Seed notes
-        </h2>
-        <p className="mb-3 text-sm text-slate-500">
-          Background material that guides slide generation for every lecture in
-          this project. Saved automatically.
-        </p>
-        {project && (
-          <SeedNotesEditor
-            value={project.seedContext ?? ''}
-            label="Project seed notes"
-            placeholder="Key topics, terminology, planned structure…"
-            onSave={seedContext => {
-              dispatchAction<Project>('project.update', {
-                projectId,
-                seedContext,
-              })
-                .then(updated => setProject(updated))
-                .catch(() => {
-                  // Quiet failure: the next keystroke retries
-                })
-            }}
-          />
-        )}
-      </section>
-
-      <section className="mb-10 max-w-2xl">
-        <h2 className="mb-2 text-lg font-semibold text-slate-700">
-          Seed material
-        </h2>
-        <p className="mb-3 text-sm text-slate-500">
-          Documents and photos scanned for background text and imagery,
-          available to every lecture in this project.
-        </p>
-        {projectId && <SeedMaterial projectId={projectId} />}
-      </section>
-
-      <section className="max-w-2xl">
-        <h2 className="mb-4 text-lg font-semibold text-slate-700">Lectures</h2>
         {decks.length === 0 ? (
-          <p className="text-slate-500">No lectures yet.</p>
+          <p className="text-slate-500">
+            No lectures yet — use + to start one.
+          </p>
         ) : (
           <ul className="flex flex-col gap-2">
             {decks.map(d => (
@@ -149,6 +99,15 @@ export default function ProjectPage() {
           </ul>
         )}
       </section>
+
+      {settingsOpen && project && (
+        <ProjectSettingsModal
+          project={project}
+          onClose={() => setSettingsOpen(false)}
+          onProjectChange={setProject}
+          onDeleted={() => void navigate('/app')}
+        />
+      )}
     </div>
   )
 }

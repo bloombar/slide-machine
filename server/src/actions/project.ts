@@ -1,6 +1,7 @@
 /**
  * Project actions (SPEC PROJ-1/PROJ-2 via TECH-13). The authorize hooks
  * enforce ownership (P-4) — the first real use of the action pipeline.
+ * project.delete cascades through decks, slides, and seed material.
  */
 import { z } from 'zod'
 import type {
@@ -13,6 +14,10 @@ import { defineAction } from './define'
 import { registerAction, ActionForbiddenError } from './dispatch'
 import type { ActionContext } from './context'
 import { ProjectModel, toProjectDto } from '../models/project'
+import { DeckModel } from '../models/deck'
+import { SlideModel } from '../models/slide'
+import { SeedAssetModel } from '../models/seed-asset'
+import { getStorage } from '../storage'
 
 /** Returns the acting user's id or throws; actions requiring auth start here. */
 const requireUser = (ctx: ActionContext): string => {
@@ -98,6 +103,26 @@ export const projectDelete = defineAction<
     }
   },
   execute: async (_ctx, input) => {
+    // Cascade: every deck in the project, their slides, all seed
+    // material at both levels (including stored files), then the project
+    const decks = await DeckModel.find({ projectId: input.projectId })
+    const deckIds = decks.map(d => d._id)
+    const assets = await SeedAssetModel.find({ projectId: input.projectId })
+    const storage = getStorage()
+    await Promise.all(
+      assets
+        .filter(a => a.storageKey)
+        .map(a =>
+          storage.delete(a.storageKey!).catch(() => {
+            // A dangling file is preferable to a failed delete
+          }),
+        ),
+    )
+    await Promise.all([
+      SlideModel.deleteMany({ deckId: { $in: deckIds } }),
+      SeedAssetModel.deleteMany({ projectId: input.projectId }),
+      DeckModel.deleteMany({ projectId: input.projectId }),
+    ])
     await ProjectModel.deleteOne({ _id: input.projectId })
     return { deleted: true }
   },

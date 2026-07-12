@@ -24,6 +24,7 @@ test('photo seed material uploads, captions, toggles, and deletes', async ({
   await page.getByLabel('New project title').fill('MaterialProj')
   await page.getByRole('button', { name: 'Create' }).click()
   await page.getByRole('link', { name: 'MaterialProj', exact: true }).click()
+  await page.getByRole('button', { name: 'Project settings' }).click()
 
   // Upload a photo and watch extraction settle
   await page
@@ -39,6 +40,7 @@ test('photo seed material uploads, captions, toggles, and deletes', async ({
   await page.getByLabel('Caption for golgi.png').blur()
   await page.waitForTimeout(200)
   await page.reload()
+  await page.getByRole('button', { name: 'Project settings' }).click()
   await expect(page.getByLabel('Caption for golgi.png')).toHaveValue(
     'Golgi apparatus micrograph',
   )
@@ -51,6 +53,7 @@ test('photo seed material uploads, captions, toggles, and deletes', async ({
   await toggle.click()
   await expect(toggle).not.toBeChecked()
   await page.reload()
+  await page.getByRole('button', { name: 'Project settings' }).click()
   await expect(
     page.getByRole('checkbox', { name: 'Use golgi.png in generation' }),
   ).not.toBeChecked()

@@ -385,6 +385,35 @@ describe('asset management actions', () => {
   })
 })
 
+describe('project.delete cascade', () => {
+  it('removes decks, slides, and seed material at both levels', async () => {
+    await act(ada, 'slide.add', { deckId })
+    const projectAsset = await uploadFile(
+      ada,
+      { projectId },
+      { name: 'p.png', type: 'image/png', body: PNG },
+    )
+    const deckAsset = await uploadFile(
+      ada,
+      { projectId, deckId },
+      { name: 'd.png', type: 'image/png', body: PNG },
+    )
+    await settled(projectAsset.body.id)
+    await settled(deckAsset.body.id)
+    const fileUrl = (await SeedAssetModel.findById(projectAsset.body.id))!
+      .imageUrl!
+
+    const res = await act(ada, 'project.delete', { projectId })
+    expect(res.status).toBe(200)
+
+    expect(await DeckModel.countDocuments({ projectId })).toBe(0)
+    expect(await SlideModel.countDocuments({ deckId })).toBe(0)
+    expect(await SeedAssetModel.countDocuments({ projectId })).toBe(0)
+    // Stored files went with it
+    expect((await request(server).get(fileUrl)).status).toBe(404)
+  })
+})
+
 describe('generation integration', () => {
   it('joins asset text into seed layers and lists seeded images', async () => {
     const pdf = await uploadFile(

@@ -102,13 +102,36 @@ describe('HomePage', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('shows a + option per project to start a new lecture', async () => {
+  it('starts a new untitled lecture from the + beside a project', async () => {
+    let sent: unknown
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/actions/project.list': () => ({
+        status: 200,
+        body: [{ id: 'p1', ownerId: 'u1', title: 'Biology', createdAt: '' }],
+      }),
+      '/api/actions/deck.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.create': init => {
+        sent = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: { id: 'd9', title: '', permalinkSlug: 'untitled-fff000' },
+        }
+      },
+    })
     renderHome()
     await screen.findByRole('heading', { name: 'Biology' })
-    const plus = screen.getByRole('link', {
-      name: 'Start a new lecture in Biology',
-    })
-    expect(plus.getAttribute('href')).toMatch(/^\/app\/projects\//)
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Start a new lecture in Biology' }),
+    )
+
+    await vi.waitFor(() =>
+      expect(sent).toEqual({ projectId: 'p1', templateId: 'classic' }),
+    )
   })
 
   it('offers to start a lecture in empty projects', async () => {
