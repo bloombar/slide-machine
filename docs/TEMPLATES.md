@@ -13,12 +13,37 @@ Each file contains:
 | --- | --- |
 | `id`, `name` | Stable id (referenced by decks/projects) and display name. |
 | `theme` | Renderer colors: `background`, `surface`, `text`, `muted`, `accent`. |
-| `layouts` | The layout set. Each layout: `type` (one of the seven conventional types, SPEC TMPL-2), `label`, `purpose` (**read by the AI** when choosing layouts), `slots`, `constraints`, `elementPositions` (reserved). |
+| `layouts` | The layout set. Each layout: `type` (one of the seven conventional types, SPEC TMPL-2), `label`, `purpose` (**read by the AI** when choosing layouts), `slots`, `constraints`, `elementPositions` (reserved for data-driven arrangement). |
 
-`constraints` are the word budgets enforced both in the generation prompt
-and server-side ([slide-fit.ts](../server/src/lib/slide-fit.ts)):
-`maxTitleWords`, `maxBodyWords`, `maxBulletWords`, `maxCaptionWords`,
-`maxBullets`, plus `maxBodyLength` (legacy chars) and `imageRequired`.
+**Slots use the WYSIWYG-ready object form** — the same shape the future
+template editor will author and MongoDB will store:
+
+```json
+{ "name": "body", "kind": "text", "label": "Slide body",
+  "multiline": true, "maxWords": 60,
+  "style": {}, "metadata": {} }
+```
+
+`kind` selects the client editor (`text` | `bullets` | `image`);
+`maxWords` is per-slot validation that **overrides the layout-level
+constraint** for that slot; `style` and `metadata` are reserved for the
+visual editor. Conventional slot names (`title`, `body`, `bullets`,
+`image`, `caption`) may be written as bare-string shorthand and are
+expanded from the shared defaults; custom-named slots must declare their
+`kind`. The starter files use the full object form so file and future DB
+documents are shape-identical.
+
+Layout-level `constraints` remain the budget fallback, enforced both in
+the generation prompt and server-side
+([slide-fit.ts](../server/src/lib/slide-fit.ts)): `maxTitleWords`,
+`maxBodyWords`, `maxBulletWords`, `maxCaptionWords`, `maxBullets`, plus
+`maxBodyLength` (legacy chars) and `imageRequired`.
+
+**One place:** every piece of externalized template data — themes,
+layouts, slots, validation — lives in this directory and nowhere else.
+The only template-related thing outside it is code: the client's layout
+renderers (below), which the data-driven engine will subsume for
+user-authored layouts.
 
 Files are zod-validated at first use ([builtin.ts](../server/src/templates/builtin.ts))
 and fail loudly if malformed. `TEMPLATES_DIR` overrides the directory.

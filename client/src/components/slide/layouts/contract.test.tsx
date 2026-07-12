@@ -40,8 +40,11 @@ const fullSlide: Slide = {
 
 interface TemplateFile {
   id: string
-  layouts: Array<{ type: string; slots: string[] }>
+  layouts: Array<{ type: string; slots: Array<string | { name: string }> }>
 }
+
+const slotName = (s: string | { name: string }): string =>
+  typeof s === 'string' ? s : s.name
 
 const templateFiles: TemplateFile[] = readdirSync(templatesDir)
   .filter(f => f.endsWith('.json'))
@@ -67,7 +70,7 @@ describe('layout renderers match the template files', () => {
             slot: spy,
           }),
         )
-        expect([...requested].sort()).toEqual([...layout.slots].sort())
+        expect([...requested].sort()).toEqual(layout.slots.map(slotName).sort())
       })
     }
   }

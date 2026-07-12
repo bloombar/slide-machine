@@ -90,6 +90,20 @@ describe('SlideSlot', () => {
     expect(screen.getByTestId('image-fallback')).toBeInTheDocument()
   })
 
+  it("lets the template's slot spec override the conventional defaults", () => {
+    render(
+      <SlideSlot
+        slot="title"
+        spec={{ name: 'title', kind: 'text', label: 'Headline' }}
+        slide={slide({ title: 'Osmosis' })}
+        colors={colors}
+        onEdit={vi.fn()}
+      />,
+    )
+    // The template-declared label reaches the editor affordances
+    expect(screen.getByTitle('Click to edit Headline')).toBeInTheDocument()
+  })
+
   it('renders nothing for a slot without a descriptor', () => {
     const { container } = render(
       <SlideSlot

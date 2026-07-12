@@ -45,6 +45,68 @@ describe('externalized templates', () => {
     expect(descriptors[0]).not.toHaveProperty('elementPositions')
   })
 
+  it('normalizes slots and accepts custom slots with explicit kinds', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'tmpl-slots-'))
+    writeFileSync(
+      path.join(dir, 'custom.json'),
+      JSON.stringify({
+        id: 'custom',
+        name: 'Custom',
+        theme: {},
+        layouts: [
+          {
+            type: 'content',
+            label: 'C',
+            purpose: 'p',
+            // Shorthand string + full object + custom-named slot
+            slots: [
+              'title',
+              { name: 'body', maxWords: 12 },
+              { name: 'pull-quote', kind: 'text', label: 'Pull quote' },
+            ],
+            elementPositions: {},
+          },
+        ],
+      }),
+    )
+    const [template] = loadBuiltinTemplates(dir)
+    const slots = template!.layouts[0]!.slots
+    expect(slots[0]).toMatchObject({
+      name: 'title',
+      kind: 'text',
+      label: 'Slide title',
+    })
+    expect(slots[1]).toMatchObject({
+      name: 'body',
+      kind: 'text',
+      maxWords: 12,
+      multiline: true,
+    })
+    expect(slots[2]).toMatchObject({ name: 'pull-quote', kind: 'text' })
+  })
+
+  it('rejects custom slots without a declared kind', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'tmpl-nokind-'))
+    writeFileSync(
+      path.join(dir, 'bad.json'),
+      JSON.stringify({
+        id: 'bad',
+        name: 'Bad',
+        theme: {},
+        layouts: [
+          {
+            type: 'content',
+            label: 'C',
+            purpose: 'p',
+            slots: [{ name: 'mystery' }],
+            elementPositions: {},
+          },
+        ],
+      }),
+    )
+    expect(() => loadBuiltinTemplates(dir)).toThrow(/must declare its kind/)
+  })
+
   it('rejects malformed template files loudly', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'tmpl-'))
     writeFileSync(

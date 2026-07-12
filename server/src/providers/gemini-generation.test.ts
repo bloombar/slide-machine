@@ -34,14 +34,20 @@ const request = (
       type: 'content',
       label: 'Content',
       purpose: 'General slide',
-      slots: ['title', 'body'],
+      slots: [
+        { name: 'title', kind: 'text', label: 'Slide title', maxWords: 8 },
+        { name: 'body', kind: 'text', label: 'Slide body' },
+      ],
       constraints: { maxBodyLength: 400 },
     },
     {
       type: 'list',
       label: 'Bullet list',
       purpose: '3-6 parallel points',
-      slots: ['title', 'bullets'],
+      slots: [
+        { name: 'title', kind: 'text', label: 'Slide title' },
+        { name: 'bullets', kind: 'bullets', label: 'Slide bullets' },
+      ],
       constraints: { maxBullets: 6 },
     },
   ],
@@ -96,8 +102,10 @@ describe('GeminiGenerationProvider', () => {
     expect(prompt).toContain('PROJECT-SEED')
     expect(prompt).toContain('DECK-SEED')
     expect(prompt.indexOf('more specific')).toBeGreaterThan(0)
-    // The layout option set and constraints are spelled out
+    // The layout option set and constraints are spelled out, with
+    // per-slot budgets riding on the slot names
     expect(prompt).toContain('"content" (Content)')
+    expect(prompt).toContain('title (max 8 words)')
     expect(prompt).toContain('maxBullets')
     // Seeded images are offered by id
     expect(prompt).toContain('id "asset1"')

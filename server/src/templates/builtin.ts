@@ -15,26 +15,63 @@ import path from 'node:path'
 import { z } from 'zod'
 import {
   LAYOUT_TYPES,
+  SLOT_DESCRIPTORS,
   type Layout,
   type LayoutDescriptor,
+  type LayoutSlot,
+  type SlotSpec,
   type Template,
 } from '@slide-machine/shared'
 import { env } from '../config/env'
 
-const SLOT_NAMES = [
-  'title',
-  'body',
-  'bullets',
-  'image',
-  'caption',
-  'columns',
-] as const
+/** A slot in a template file: bare-name shorthand for the conventional
+ * slots, or the full WYSIWYG-ready object (custom slots must state
+ * their media kind). Normalized to SlotSpec at load. */
+const slotFileSchema = z.union([
+  z.string().min(1),
+  z.object({
+    name: z.string().min(1),
+    kind: z.enum(['text', 'bullets', 'image']).optional(),
+    label: z.string().min(1).optional(),
+    multiline: z.boolean().optional(),
+    maxWords: z.number().int().positive().optional(),
+    style: z.record(z.string(), z.unknown()).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  }),
+])
+
+const normalizeSlot = (raw: z.infer<typeof slotFileSchema>): SlotSpec => {
+  const name = typeof raw === 'string' ? raw : raw.name
+  const conventional = SLOT_DESCRIPTORS[name as LayoutSlot] as
+    (typeof SLOT_DESCRIPTORS)[LayoutSlot] | undefined
+  if (typeof raw === 'string') {
+    if (!conventional) {
+      throw new Error(
+        `Slot "${name}" is not a conventional slot; use the object form with an explicit kind`,
+      )
+    }
+    return { name, ...conventional }
+  }
+  const kind = raw.kind ?? conventional?.kind
+  if (!kind) {
+    throw new Error(`Custom slot "${name}" must declare its kind`)
+  }
+  return {
+    name,
+    kind,
+    label: raw.label ?? conventional?.label ?? name,
+    multiline: raw.multiline ?? conventional?.multiline,
+    maxWords: raw.maxWords,
+    style: raw.style,
+    metadata: raw.metadata,
+  }
+}
 
 const layoutSchema = z.object({
   type: z.enum(LAYOUT_TYPES),
   label: z.string().min(1),
   purpose: z.string().min(1),
-  slots: z.array(z.enum(SLOT_NAMES)).min(1),
+  slots: z.array(slotFileSchema).min(1),
   constraints: z
     .object({
       maxBullets: z.number().int().positive().optional(),
@@ -80,7 +117,10 @@ export const loadBuiltinTemplates = (
     }
     return {
       ...parsed.data,
-      layouts: parsed.data.layouts as Layout[],
+      layouts: parsed.data.layouts.map(layout => ({
+        ...layout,
+        slots: layout.slots.map(normalizeSlot),
+      })) as Layout[],
       ownerId: 'system',
       visibility: 'public' as const,
       voteScore: 0,

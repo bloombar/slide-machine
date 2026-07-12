@@ -25,11 +25,24 @@ const clampWords = (
   return `${words.slice(0, max).join(' ')}…`
 }
 
-const constraintsFor = (
+/** Effective budgets: per-slot maxWords (the WYSIWYG-ready form)
+ * override the layout-level constraint for that slot. */
+const budgetsFor = (
   result: SlideGenerationResult,
   descriptors: LayoutDescriptor[],
-): LayoutConstraints =>
-  descriptors.find(d => d.type === result.layoutType)?.constraints ?? {}
+): LayoutConstraints => {
+  const layout = descriptors.find(d => d.type === result.layoutType)
+  const constraints = layout?.constraints ?? {}
+  const slotWords = (name: string): number | undefined =>
+    layout?.slots.find(s => s.name === name)?.maxWords
+  return {
+    ...constraints,
+    maxTitleWords: slotWords('title') ?? constraints.maxTitleWords,
+    maxBodyWords: slotWords('body') ?? constraints.maxBodyWords,
+    maxBulletWords: slotWords('bullets') ?? constraints.maxBulletWords,
+    maxCaptionWords: slotWords('caption') ?? constraints.maxCaptionWords,
+  }
+}
 
 /** The content the current slide already holds, for capacity checks. */
 export interface CurrentSlideLoad {
@@ -47,7 +60,7 @@ export const updateOverflows = (
   descriptors: LayoutDescriptor[],
 ): boolean => {
   if (result.action !== 'update') return false
-  const limits = constraintsFor(result, descriptors)
+  const limits = budgetsFor(result, descriptors)
   const bullets = current.bulletCount + (result.slots.bullets?.length ?? 0)
   if (limits.maxBullets && bullets > limits.maxBullets) return true
   const bodyWords = current.bodyWords + wordCount(result.slots.body)
@@ -60,7 +73,7 @@ export const clampToBudget = (
   result: SlideGenerationResult,
   descriptors: LayoutDescriptor[],
 ): SlideGenerationResult => {
-  const limits = constraintsFor(result, descriptors)
+  const limits = budgetsFor(result, descriptors)
   return {
     ...result,
     slots: {

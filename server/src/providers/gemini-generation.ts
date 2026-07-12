@@ -59,12 +59,14 @@ const resultSchema = z.object({
 
 const instructions = (req: SlideGenerationRequest): string => {
   const layouts = req.layoutDescriptors
-    .map(
-      d =>
-        `- "${d.type}" (${d.label}): ${d.purpose}. Slots: ${d.slots.join(', ')}${
-          d.constraints ? `. Constraints: ${JSON.stringify(d.constraints)}` : ''
-        }`,
-    )
+    .map(d => {
+      const slots = d.slots
+        .map(s => (s.maxWords ? `${s.name} (max ${s.maxWords} words)` : s.name))
+        .join(', ')
+      return `- "${d.type}" (${d.label}): ${d.purpose}. Slots: ${slots}${
+        d.constraints ? `. Constraints: ${JSON.stringify(d.constraints)}` : ''
+      }`
+    })
     .join('\n')
 
   const seededImages = req.seededImages?.length

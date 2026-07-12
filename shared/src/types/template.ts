@@ -66,6 +66,28 @@ export interface LayoutConstraints {
 }
 
 /**
+ * One content slot in a layout — the WYSIWYG-ready form (TMPL-4): a
+ * template author (eventually through a visual editor) names the slot,
+ * picks its media kind, and attaches labels, validation, styling, and
+ * arbitrary metadata. Template files may write conventional slots as
+ * bare-name shorthand; loaders normalize to this shape.
+ */
+export interface SlotSpec {
+  name: string
+  kind: SlotKind
+  label: string
+  /** Text slots only: edit as a multi-line block. */
+  multiline?: boolean
+  /** Per-slot validation: approximate word ceiling (overrides the
+   * layout-level constraint for this slot). */
+  maxWords?: number
+  /** Reserved: per-slot styling authored in the template editor. */
+  style?: Record<string, unknown>
+  /** Reserved: arbitrary author metadata. */
+  metadata?: Record<string, unknown>
+}
+
+/**
  * A single layout within a template. `purpose`, `slots`, and `constraints`
  * form the machine-readable descriptor serialized into generation requests.
  */
@@ -73,7 +95,7 @@ export interface Layout {
   type: LayoutType
   label: string
   purpose: string
-  slots: LayoutSlot[]
+  slots: SlotSpec[]
   constraints?: LayoutConstraints
   /** Positioning of content elements; shape is renderer-defined for now. */
   elementPositions: Record<string, unknown>

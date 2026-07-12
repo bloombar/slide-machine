@@ -33,11 +33,15 @@ export default function SlideView({
   onEdit?: (patch: SlideContentPatch) => void
 }) {
   const colors = themeColors(template.theme)
+  const layoutDef = template.layouts.find(l => l.type === slide.layoutType)
 
-  /** A named content slot, editable when the owner is viewing. */
+  /** A named content slot, editable when the owner is viewing. The
+   * template's own slot spec (kind/label/validation) takes precedence
+   * over the conventional defaults. */
   const slot = (name: LayoutSlot) => (
     <SlideSlot
       slot={name}
+      spec={layoutDef?.slots.find(s => s.name === name)}
       slide={slide}
       colors={colors}
       onEdit={editable ? onEdit : undefined}

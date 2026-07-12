@@ -15,6 +15,7 @@ import {
   type SlideEditInput,
   type SlotDescriptor,
   type SlotKind,
+  type SlotSpec,
 } from '@slide-machine/shared'
 import EditableText from '../EditableText'
 import SlideMarkdown from '../SlideMarkdown'
@@ -34,6 +35,9 @@ const SLOT_FIELDS: Partial<Record<LayoutSlot, keyof Slide>> = {
 
 export interface SlotEditorProps {
   slot: LayoutSlot
+  /** The template's own spec for this slot, when it declares one —
+   * kind/label/validation from the template file (WYSIWYG-ready). */
+  spec?: SlotSpec
   descriptor: SlotDescriptor
   slide: Slide
   colors: ThemeColors
@@ -134,9 +138,20 @@ const EDITORS: Record<SlotKind, ComponentType<SlotEditorProps>> = {
   image: ImageSlot,
 }
 
-/** Renders the right editor for a named slot; unknown slots render nothing. */
+/** Renders the right editor for a named slot; unknown slots render
+ * nothing. The template's SlotSpec (when provided) takes precedence
+ * over the conventional defaults, so template-declared kinds, labels,
+ * and validation flow into the editor. */
 export default function SlideSlot(props: Omit<SlotEditorProps, 'descriptor'>) {
-  const descriptor = SLOT_DESCRIPTORS[props.slot]
+  const conventional = SLOT_DESCRIPTORS[props.slot] as
+    SlotDescriptor | undefined
+  const descriptor: SlotDescriptor | undefined = props.spec
+    ? {
+        kind: props.spec.kind,
+        label: props.spec.label,
+        multiline: props.spec.multiline ?? conventional?.multiline,
+      }
+    : conventional
   const Editor = descriptor && EDITORS[descriptor.kind]
   if (!Editor) return null
   return <Editor {...props} descriptor={descriptor} />

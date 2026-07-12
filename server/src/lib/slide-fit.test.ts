@@ -20,15 +20,22 @@ const descriptors: LayoutDescriptor[] = [
     type: 'list',
     label: 'Bullet list',
     purpose: 'points',
-    slots: ['title', 'bullets'],
+    slots: [
+      { name: 'title', kind: 'text', label: 'Slide title' },
+      { name: 'bullets', kind: 'bullets', label: 'Slide bullets' },
+    ],
     constraints: { maxBullets: 3, maxBulletWords: 4, maxTitleWords: 5 },
   },
   {
     type: 'content',
     label: 'Content',
     purpose: 'general',
-    slots: ['title', 'body'],
-    constraints: { maxBodyWords: 10, maxTitleWords: 5 },
+    slots: [
+      { name: 'title', kind: 'text', label: 'Slide title' },
+      // Per-slot validation (the WYSIWYG form) overrides layout budgets
+      { name: 'body', kind: 'text', label: 'Slide body', maxWords: 10 },
+    ],
+    constraints: { maxTitleWords: 5 },
   },
 ]
 
@@ -107,6 +114,35 @@ describe('clampToBudget', () => {
       slots: { title: 'Short', body: 'Fits fine.' },
     })
     expect(clampToBudget(r, descriptors).slots).toEqual(r.slots)
+  })
+})
+
+describe('per-slot budgets (WYSIWYG form)', () => {
+  it('slot-level maxWords overrides the layout constraint', () => {
+    // content layout: body budget comes from the SLOT (10), title from
+    // the layout constraint (5)
+    const clamped = clampToBudget(
+      result({
+        action: 'new',
+        layoutType: 'content',
+        slots: {
+          title: 'one two three four five six',
+          body: 'w1 w2 w3 w4 w5 w6 w7 w8 w9 w10 w11 w12',
+        },
+      }),
+      descriptors,
+    )
+    expect(clamped.slots.title).toBe('one two three four five…')
+    expect(clamped.slots.body!.split(/\s+/)).toHaveLength(10)
+
+    // updateOverflows consults the same merged budgets
+    expect(
+      updateOverflows(
+        result({ layoutType: 'content', slots: { body: 'a b c' } }),
+        { bulletCount: 0, bodyWords: 9 },
+        descriptors,
+      ),
+    ).toBe(true)
   })
 })
 

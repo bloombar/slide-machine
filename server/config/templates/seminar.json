@@ -13,7 +13,18 @@
       "type": "title",
       "label": "Title",
       "purpose": "Opening slide: the lecture or major-topic title, nothing else",
-      "slots": ["title", "caption"],
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Slide title"
+        },
+        {
+          "name": "caption",
+          "kind": "text",
+          "label": "Slide caption"
+        }
+      ],
       "constraints": {
         "maxBodyLength": 0,
         "maxTitleWords": 8,
@@ -25,7 +36,13 @@
       "type": "section",
       "label": "Section",
       "purpose": "A new section or subtopic heading within the lecture",
-      "slots": ["title"],
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Slide title"
+        }
+      ],
       "constraints": {
         "maxTitleWords": 8
       },
@@ -35,7 +52,19 @@
       "type": "content",
       "label": "Content",
       "purpose": "General slide: a short title plus one paragraph of body text",
-      "slots": ["title", "body"],
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Slide title"
+        },
+        {
+          "name": "body",
+          "kind": "text",
+          "label": "Slide body",
+          "multiline": true
+        }
+      ],
       "constraints": {
         "maxBodyLength": 400,
         "maxTitleWords": 8,
@@ -47,7 +76,18 @@
       "type": "list",
       "label": "Bullet list",
       "purpose": "Use for 3-6 short parallel points",
-      "slots": ["title", "bullets"],
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Slide title"
+        },
+        {
+          "name": "bullets",
+          "kind": "bullets",
+          "label": "Slide bullets"
+        }
+      ],
       "constraints": {
         "maxBullets": 6,
         "maxTitleWords": 8,
@@ -59,7 +99,18 @@
       "type": "image-heavy",
       "label": "Image",
       "purpose": "A striking image dominates; minimal caption text",
-      "slots": ["image", "caption"],
+      "slots": [
+        {
+          "name": "image",
+          "kind": "image",
+          "label": "Slide image"
+        },
+        {
+          "name": "caption",
+          "kind": "text",
+          "label": "Slide caption"
+        }
+      ],
       "constraints": {
         "imageRequired": true,
         "maxCaptionWords": 14
@@ -70,7 +121,24 @@
       "type": "two-column",
       "label": "Two column",
       "purpose": "Text beside a supporting image",
-      "slots": ["title", "body", "image"],
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Slide title"
+        },
+        {
+          "name": "body",
+          "kind": "text",
+          "label": "Slide body",
+          "multiline": true
+        },
+        {
+          "name": "image",
+          "kind": "image",
+          "label": "Slide image"
+        }
+      ],
       "constraints": {
         "maxBodyLength": 250,
         "maxTitleWords": 8,
@@ -82,7 +150,19 @@
       "type": "quote",
       "label": "Quote",
       "purpose": "A single striking statement, question, or quotation",
-      "slots": ["body", "caption"],
+      "slots": [
+        {
+          "name": "body",
+          "kind": "text",
+          "label": "Slide body",
+          "multiline": true
+        },
+        {
+          "name": "caption",
+          "kind": "text",
+          "label": "Slide caption"
+        }
+      ],
       "constraints": {
         "maxBodyLength": 200,
         "maxBodyWords": 30,
