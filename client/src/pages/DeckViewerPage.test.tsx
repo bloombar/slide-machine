@@ -430,6 +430,42 @@ describe('DeckViewerPage settings modal', () => {
     vi.useRealTimers()
   })
 
+  it('divides settings into tabs with arrow-key navigation', async () => {
+    withSettingsRoutes()
+    renderWithSettings()
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Lecture settings' }))
+
+    // General is the default tab: seed notes + uploads live here
+    const general = await screen.findByRole('tab', { name: 'General' })
+    expect(general).toHaveAttribute('aria-selected', 'true')
+    expect(
+      screen.getByRole('textbox', { name: 'Lecture seed notes' }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Upload seed material')).toBeInTheDocument()
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
+
+    // Privacy & Sharing holds the access controls
+    fireEvent.click(screen.getByRole('tab', { name: 'Privacy & Sharing' }))
+    expect(
+      screen.getByRole('group', { name: 'General access' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('textbox', { name: 'Lecture seed notes' }),
+    ).not.toBeInTheDocument()
+
+    // Arrow keys walk the tab list (wrapping)
+    fireEvent.keyDown(screen.getByRole('tablist'), { key: 'ArrowRight' })
+    expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    fireEvent.keyDown(screen.getByRole('tablist'), { key: 'ArrowLeft' })
+    expect(
+      screen.getByRole('tab', { name: 'Privacy & Sharing' }),
+    ).toHaveAttribute('aria-selected', 'true')
+  })
+
   it('opens from the gear, switches templates, and closes from the icon', async () => {
     withSettingsRoutes()
     renderWithSettings()
@@ -439,6 +475,7 @@ describe('DeckViewerPage settings modal', () => {
     expect(
       await screen.findByRole('dialog', { name: 'Lecture settings' }),
     ).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('tab', { name: 'Design template' }))
 
     fireEvent.click(await screen.findByRole('radio', { name: /midnight/i }))
     await vi.waitFor(() =>

@@ -57,6 +57,7 @@ test('sharing: view/edit grants, private no-leak, public profile', async ({
 
   // Owner adds the guest as an editor under "People with access"
   await ownerPage.getByRole('button', { name: 'Lecture settings' }).click()
+  await ownerPage.getByRole('tab', { name: 'Privacy & Sharing' }).click()
   await ownerPage.getByLabel('Add people by email').fill(guest.email)
   await ownerPage.getByLabel('Access role').selectOption('editor')
   await ownerPage.getByRole('button', { name: 'Add', exact: true }).click()
@@ -78,6 +79,7 @@ test('sharing: view/edit grants, private no-leak, public profile', async ({
   // sees the same not-found message as for a nonexistent deck (no
   // leak), while the listed editor still gets in
   await ownerPage.getByRole('button', { name: 'Lecture settings' }).click()
+  await ownerPage.getByRole('tab', { name: 'Privacy & Sharing' }).click()
   await ownerPage.getByRole('radio', { name: /restricted/i }).click()
   await expect(
     ownerPage.getByRole('radio', { name: /restricted/i }),

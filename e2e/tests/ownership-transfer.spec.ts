@@ -43,6 +43,7 @@ test('owner transfers a lecture; old owner stays an editor', async ({
   const deckUrl = alicePage.url()
 
   await alicePage.getByRole('button', { name: 'Lecture settings' }).click()
+  await alicePage.getByRole('tab', { name: 'Privacy & Sharing' }).click()
   await alicePage.getByLabel('Add people by email').fill(bella.email)
   await alicePage.getByLabel('Access role').selectOption('editor')
   await alicePage.getByRole('button', { name: 'Add', exact: true }).click()
@@ -74,6 +75,7 @@ test('owner transfers a lecture; old owner stays an editor', async ({
   // and the deck shows up at home under "Other lectures"
   await bellaPage.goto(deckUrl)
   await bellaPage.getByRole('button', { name: 'Lecture settings' }).click()
+  await bellaPage.getByRole('tab', { name: 'Privacy & Sharing' }).click()
   await expect(
     bellaPage
       .getByLabel(`Role for ${alice.name}`)
