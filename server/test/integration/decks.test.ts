@@ -284,6 +284,40 @@ describe('deck.list across projects (home screen)', () => {
   })
 })
 
+describe('deck.delete', () => {
+  it('cascades slides and lecture-level seed material, owner-only', async () => {
+    const deck = await act(ada, 'deck.create', {
+      projectId,
+      title: 'Doomed',
+      templateId: 'classic',
+    })
+    const deckId = deck.body.id as string
+    await act(ada, 'slide.add', { deckId })
+
+    // A stranger (even a shared editor) cannot delete
+    const byron = await registerUser('byron-delete@example.com')
+    expect((await act(byron, 'deck.delete', { deckId })).status).toBe(403)
+    await act(ada, 'deck.share', {
+      deckId,
+      email: 'byron-delete@example.com',
+      role: 'editor',
+    })
+    expect((await act(byron, 'deck.delete', { deckId })).status).toBe(403)
+
+    const res = await act(ada, 'deck.delete', { deckId })
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ deleted: true })
+
+    // Gone everywhere: the deck, its slides, and its permalink
+    expect((await act(ada, 'deck.get', { deckId })).status).toBe(403)
+    expect(await SlideModel.countDocuments({ deckId })).toBe(0)
+    const permalink = await request(server).get(
+      `/api/decks/${deck.body.permalinkSlug}`,
+    )
+    expect(permalink.status).toBe(404)
+  })
+})
+
 describe('deck.rename', () => {
   it('renames an owned deck and 403s foreign decks', async () => {
     const deck = await act(ada, 'deck.create', {

@@ -8,6 +8,7 @@ import { z } from 'zod'
 import type {
   Deck,
   DeckCreateInput,
+  DeckDeleteInput,
   DeckSetAccessInput,
   DeckSetSeedNotesInput,
   DeckShare,
@@ -53,6 +54,7 @@ import { permalinkSlug } from '../lib/slug'
 import { enrichSlideImage } from '../enrichment/enrich'
 import type { ImageCandidate } from '../enrichment/types'
 import { SeedAssetModel, type SeedAssetDb } from '../models/seed-asset'
+import { getStorage } from '../storage'
 
 type SeedAssetDoc = HydratedDocument<SeedAssetDb>
 import { env } from '../config/env'
@@ -524,6 +526,34 @@ export const deckShares = defineAction<DeckSharesInput, DeckShare[]>({
     sharesOf(await loadEditableDeck(ctx, input.deckId)),
 })
 
+export const deckDelete = defineAction<DeckDeleteInput, { deleted: true }>({
+  name: 'deck.delete',
+  input: z.object({ deckId: z.string().min(1) }),
+  execute: async (ctx, input) => {
+    const deck = await loadOwnedDeck(ctx, input.deckId)
+
+    // Cascade: slides, lecture-level seed assets (and their stored
+    // files), then the deck itself
+    const assets = await SeedAssetModel.find({ deckId: deck._id })
+    const storage = getStorage()
+    await Promise.all(
+      assets
+        .filter(a => a.storageKey)
+        .map(a =>
+          storage.delete(a.storageKey!).catch(() => {
+            // A dangling file is preferable to a failed delete
+          }),
+        ),
+    )
+    await Promise.all([
+      SlideModel.deleteMany({ deckId: deck._id }),
+      SeedAssetModel.deleteMany({ deckId: deck._id }),
+    ])
+    await deck.deleteOne()
+    return { deleted: true }
+  },
+})
+
 export const deckTransferOwnership = defineAction<
   DeckTransferOwnershipInput,
   Deck
@@ -573,4 +603,5 @@ registerAction(deckSetAccess)
 registerAction(deckShare)
 registerAction(deckUnshare)
 registerAction(deckShares)
+registerAction(deckDelete)
 registerAction(deckTransferOwnership)

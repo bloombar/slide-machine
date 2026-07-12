@@ -24,6 +24,7 @@ Fixed tiers so page chrome always paints above slide content:
 | In-slide controls | `z-10` | EditableText (display + field), SlideDeleteButton — must beat the nav hotspots only |
 | Sticky page footer | `z-30` | HealthFooter |
 | Primary navigation | `z-50` | AppShell / PublicShell headers |
+| Confirmation dialogs | `z-60` | ConfirmDialog — must beat everything, including the nav |
 
 Rule of thumb: nothing inside a slide may exceed `z-10`; nothing outside
 page chrome may use `z-30`+. Previously the sticky header sat at `z-10`,

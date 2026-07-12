@@ -469,6 +469,7 @@ export default function DeckViewerPage() {
           isOwner={isOwner}
           onClose={() => setSettingsOpen(false)}
           onDeckChange={deck => setView(v => (v ? { ...v, deck } : v))}
+          onDeleted={() => void navigate('/app')}
           onTemplateChange={(deck, template) =>
             setView(v => (v ? { ...v, deck, template } : v))
           }

@@ -14,6 +14,8 @@ import TemplatePicker from './TemplatePicker'
 import DeckAccessSettings from './DeckAccessSettings'
 import SeedNotesEditor from './SeedNotesEditor'
 import SeedMaterial from './SeedMaterial'
+import ConfirmDialog from './ConfirmDialog'
+import { lectureTitle } from '../lib/lecture'
 
 const isTypingTarget = (target: EventTarget | null): boolean =>
   target instanceof HTMLElement &&
@@ -38,6 +40,8 @@ interface Props {
   onTemplateChange: (deck: Deck, template: Template) => void
   /** Fired after any deck-level save so the viewer keeps a fresh deck. */
   onDeckChange: (deck: Deck) => void
+  /** Fired after the lecture is deleted; the viewer leaves the page. */
+  onDeleted: () => void
 }
 
 export default function DeckSettingsModal({
@@ -46,9 +50,11 @@ export default function DeckSettingsModal({
   onClose,
   onTemplateChange,
   onDeckChange,
+  onDeleted,
 }: Props) {
   const [templates, setTemplates] = useState<Template[]>([])
   const [tab, setTab] = useState<TabId>('general')
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const closeRef = useRef<HTMLButtonElement>(null)
   const tabRefs = useRef(new Map<TabId, HTMLButtonElement>())
 
@@ -87,6 +93,18 @@ export default function DeckSettingsModal({
       })
       .catch(() => {
         // Quiet failure: the picker stays on the saved template
+      })
+  }
+
+  const deleteLecture = () => {
+    dispatchAction('deck.delete', { deckId: deck.id })
+      .then(() => {
+        setConfirmingDelete(false)
+        onDeleted()
+      })
+      .catch(() => {
+        // Quiet failure: the lecture simply stays
+        setConfirmingDelete(false)
       })
   }
 
@@ -201,7 +219,34 @@ export default function DeckSettingsModal({
                 </p>
                 <SeedMaterial projectId={deck.projectId} deckId={deck.id} />
               </div>
+              {isOwner && (
+                <div className="rounded-md border border-red-200 p-4">
+                  <h3 className="mb-2 text-lg font-semibold text-red-700">
+                    Danger zone
+                  </h3>
+                  <p className="mb-3 text-sm text-slate-600">
+                    Deleting a lecture permanently removes its slides and seed
+                    material. This cannot be undone.
+                  </p>
+                  <button
+                    onClick={() => setConfirmingDelete(true)}
+                    className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+                  >
+                    Delete lecture
+                  </button>
+                </div>
+              )}
             </section>
+          )}
+
+          {confirmingDelete && (
+            <ConfirmDialog
+              title="Delete lecture?"
+              message={`"${lectureTitle(deck)}" and all of its slides and seed material will be permanently deleted.`}
+              confirmLabel="Delete"
+              onConfirm={deleteLecture}
+              onCancel={() => setConfirmingDelete(false)}
+            />
           )}
 
           {tab === 'template' && (

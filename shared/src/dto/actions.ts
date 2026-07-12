@@ -109,6 +109,11 @@ export interface DeckSharesInput {
   deckId: string
 }
 
+/** Owner-only: delete the lecture and everything in it. */
+export interface DeckDeleteInput {
+  deckId: string
+}
+
 /** Owner-only: hand the deck to another user; the old owner stays an editor. */
 export interface DeckTransferOwnershipInput {
   deckId: string

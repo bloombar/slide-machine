@@ -49,4 +49,25 @@ test('untitled lectures start from the + option and can be named later', async (
   await expect(
     page.getByRole('heading', { name: 'Named at last' }),
   ).toBeVisible()
+
+  // Danger zone: deletion asks for confirmation, then leads home
+  await page.getByRole('button', { name: 'Lecture settings' }).click()
+  await page.getByRole('button', { name: 'Delete lecture' }).click()
+  const dialog = page.getByRole('alertdialog', { name: 'Delete lecture?' })
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  await expect(dialog).not.toBeVisible()
+
+  await page.getByRole('button', { name: 'Delete lecture' }).click()
+  await page
+    .getByRole('alertdialog', { name: 'Delete lecture?' })
+    .getByRole('button', { name: 'Delete', exact: true })
+    .click()
+  await expect(page).toHaveURL(/\/app$/)
+  await expect(page.getByText('Named at last')).toHaveCount(0)
+  // The permalink is dead too
+  await page.goBack()
+  await expect(
+    page.getByText('This deck does not exist or is private'),
+  ).toBeVisible()
 })

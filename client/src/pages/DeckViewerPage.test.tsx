@@ -430,6 +430,84 @@ describe('DeckViewerPage settings modal', () => {
     vi.useRealTimers()
   })
 
+  it('deletes the lecture from the Danger zone after confirmation', async () => {
+    let deleted = false
+    withSettingsRoutes()
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.shares': () => ({ status: 200, body: [] }),
+      '/api/actions/seedAsset.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.delete': () => {
+        deleted = true
+        return { status: 200, body: { deleted: true } }
+      },
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+            <Route path="/app" element={<div>HOME</div>} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Lecture settings' }))
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Delete lecture' }),
+    )
+    const dialog = await screen.findByRole('alertdialog', {
+      name: 'Delete lecture?',
+    })
+    expect(dialog).toBeInTheDocument()
+
+    // Cancel keeps everything
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(deleted).toBe(false)
+    expect(
+      screen.queryByRole('alertdialog', { name: 'Delete lecture?' }),
+    ).not.toBeInTheDocument()
+
+    // Confirm deletes and leaves for home
+    fireEvent.click(screen.getByRole('button', { name: 'Delete lecture' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    expect(await screen.findByText('HOME')).toBeInTheDocument()
+    expect(deleted).toBe(true)
+  })
+
+  it('hides the Danger zone from non-owner editors', async () => {
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'editor9', displayName: 'Ed' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.shares': () => ({ status: 200, body: [] }),
+      '/api/actions/seedAsset.list': () => ({ status: 200, body: [] }),
+    })
+    renderWithSettings()
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Lecture settings' }))
+    await screen.findByRole('tab', { name: 'General' })
+    expect(
+      screen.queryByRole('button', { name: 'Delete lecture' }),
+    ).not.toBeInTheDocument()
+  })
+
   it('divides settings into tabs with arrow-key navigation', async () => {
     withSettingsRoutes()
     renderWithSettings()
