@@ -33,6 +33,29 @@ const slide = (overrides: Partial<Slide>): Slide => ({
 })
 
 describe('SlideView', () => {
+  it('renders unknown layout types through the generic fallback', () => {
+    render(
+      <SlideView
+        slide={slide({
+          // A layout this client has no renderer for (e.g. a future
+          // user-authored type) must degrade, never disappear
+          layoutType: 'timeline' as never,
+          title: 'Milestones',
+          body: 'From seed to harvest',
+        })}
+        template={template}
+      />,
+    )
+    expect(
+      screen.getByRole('heading', { name: 'Milestones' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('From seed to harvest')).toBeInTheDocument()
+    expect(screen.getByTestId('slide')).toHaveAttribute(
+      'data-layout',
+      'timeline',
+    )
+  })
+
   it('renders a title layout', () => {
     render(
       <SlideView

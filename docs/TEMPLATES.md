@@ -24,6 +24,11 @@ Files are zod-validated at first use ([builtin.ts](../server/src/templates/built
 and fail loudly if malformed. `TEMPLATES_DIR` overrides the directory.
 The Docker image ships `server/config/`.
 
-Visual arrangement per layout lives in the client renderer
-([SlideView.tsx](../client/src/components/SlideView.tsx)); the slide
-scaling strategy and z-index tiers are in [DECISIONS.md](DECISIONS.md).
+Visual arrangement per layout lives in the client's **layout-renderer
+registry** ([slide/layouts/](../client/src/components/slide/layouts/)):
+one React/Tailwind component per layout type implementing the shared
+`LayoutProps` contract, registered in `layouts/index.tsx`. Adding a
+layout type = one component + one registry entry (+ declaring it in a
+template file); unknown types render through a generic fallback. The
+slide scaling strategy and z-index tiers are in
+[DECISIONS.md](DECISIONS.md).
