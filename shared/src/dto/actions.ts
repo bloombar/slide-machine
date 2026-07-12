@@ -23,6 +23,8 @@ export interface ProjectUpdateInput {
   course?: string
   description?: string
   seedContext?: string
+  /** 1-10; null clears the setting back to the server default. */
+  generationFreedom?: number | null
 }
 
 export interface DeckCreateInput {
@@ -65,6 +67,12 @@ export interface SeedAssetUpdateInput {
 
 export interface SeedAssetDeleteInput {
   assetId: string
+}
+
+/** Lecture AI-freedom (1-10); null re-inherits the project's setting. */
+export interface DeckSetGenerationFreedomInput {
+  deckId: string
+  freedom: number | null
 }
 
 /** Lecture-level seed notes (owner and editors). */

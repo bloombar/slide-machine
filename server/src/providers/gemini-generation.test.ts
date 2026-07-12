@@ -112,6 +112,37 @@ describe('GeminiGenerationProvider', () => {
     expect(init.headers['x-goog-api-key']).toBe('test-key')
   })
 
+  it('anchors the content-freedom policy to the numeric setting', async () => {
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
+    )
+    await provider.generateSlideContent(request({ freedom: 2 }))
+    let prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+      .contents[0].parts[0].text as string
+    expect(prompt).toContain('CONTENT FREEDOM 2/10')
+    expect(prompt).toContain('NEVER add topics')
+
+    fetchMock.mockClear()
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
+    )
+    await provider.generateSlideContent(request({ freedom: 9 }))
+    prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body)).contents[0]
+      .parts[0].text as string
+    expect(prompt).toContain('CONTENT FREEDOM 9/10')
+    expect(prompt).toContain('elaborate freely')
+
+    // Default without a setting: 3/10
+    fetchMock.mockClear()
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
+    )
+    await provider.generateSlideContent(request({ freedom: undefined }))
+    prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body)).contents[0]
+      .parts[0].text as string
+    expect(prompt).toContain('CONTENT FREEDOM 3/10')
+  })
+
   it('parses a valid structured response', async () => {
     fetchMock.mockResolvedValue(
       geminiReply({

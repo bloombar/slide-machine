@@ -26,6 +26,9 @@ export interface SlideGenerationRequest {
   /** The active template's layouts — the option set the model must pick from (GEN-6). */
   layoutDescriptors: LayoutDescriptor[]
   seededImages?: SeededImageDescriptor[]
+  /** Content freedom 1-10: 1 = only what was said, 10 = free
+   * elaboration. Servers resolve it from lecture → project → config. */
+  freedom?: number
   /** Snapshot of the current (last) slide so the model can judge
    * whether an update still fits or a new slide is due (GEN-8). */
   currentSlide?: {

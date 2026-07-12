@@ -22,4 +22,7 @@ export interface DeckViewResponse {
   template: Template
   /** Whether the requesting user may edit (owner or shared editor). */
   canEdit: boolean
+  /** The project-level AI freedom (own or server default) — what this
+   * lecture uses while it has no setting of its own. */
+  projectGenerationFreedom: number
 }

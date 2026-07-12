@@ -570,6 +570,7 @@ export default function DeckViewerPage() {
       {canEdit && settingsOpen && (
         <DeckSettingsModal
           deck={view.deck}
+          projectGenerationFreedom={view.projectGenerationFreedom}
           initialTab={settingsTab ?? 'general'}
           isOwner={isOwner}
           onClose={() => setSettingsOpen(false)}

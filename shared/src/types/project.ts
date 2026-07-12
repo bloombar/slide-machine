@@ -17,6 +17,12 @@ export interface Project {
   /** Default template applied to new lectures at creation (TMPL-2);
    * each lecture stores its own template and can switch any time. */
   templateId: string
+  /** AI content freedom (1-10) for lectures in this project; absent =
+   * the server default. Lectures inherit unless they set their own. */
+  generationFreedom?: number
+  /** The value in effect (own or the server default) — what inheriting
+   * lectures actually use; for display. */
+  effectiveGenerationFreedom: number
   /** User ids with view access. Owner-only surfaces. */
   viewers?: string[]
   /** User ids with edit access (can edit every lecture inside). Owner-only surfaces. */

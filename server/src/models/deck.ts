@@ -76,6 +76,8 @@ const deckSchema = new Schema<DeckDb>(
     permalinkSlug: { type: String, required: true, unique: true },
     slideOrder: { type: [String], default: [] },
     seedContext: String,
+    // Absent = inherit the project's setting; stored only when set
+    generationFreedom: { type: Number, min: 1, max: 10, default: undefined },
     transcript: String,
     voteScore: { type: Number, default: 0 },
   },
@@ -172,6 +174,7 @@ export const toDeckDto = (
   permalinkSlug: doc.permalinkSlug,
   slideOrder: doc.slideOrder,
   seedContext: doc.seedContext,
+  generationFreedom: doc.generationFreedom,
   transcript: doc.transcript,
   voteScore: doc.voteScore,
   createdAt: doc.createdAt.toISOString(),

@@ -5,6 +5,7 @@
 import { Schema, model, Types, type HydratedDocument } from 'mongoose'
 import type { Project } from '@slide-machine/shared'
 import type { ResolvedAcl } from '../lib/access'
+import { env } from '../config/env'
 
 export interface ProjectDb extends Omit<
   Project,
@@ -34,6 +35,8 @@ const projectSchema = new Schema<ProjectDb>(
       default: 'public',
     },
     templateId: { type: String, default: 'classic' },
+    // Absent = server default; stored only when explicitly set
+    generationFreedom: { type: Number, min: 1, max: 10, default: undefined },
     viewers: { type: [String], default: [] },
     editors: { type: [String], default: [] },
     settings: {
@@ -67,6 +70,8 @@ export const toProjectDto = (doc: HydratedDocument<ProjectDb>): Project => ({
   seedContext: doc.seedContext,
   visibility: doc.visibility,
   templateId: doc.templateId,
+  generationFreedom: doc.generationFreedom,
+  effectiveGenerationFreedom: doc.generationFreedom ?? env.GENERATION_FREEDOM,
   viewers: doc.viewers,
   editors: doc.editors,
   settings: doc.settings,

@@ -113,6 +113,7 @@ export const projectUpdate = defineAction<ProjectUpdateInput, Project>({
     course: z.string().optional(),
     description: z.string().optional(),
     seedContext: z.string().max(20_000).optional(),
+    generationFreedom: z.number().int().min(1).max(10).nullable().optional(),
   }),
   execute: async (ctx, input) => {
     const doc = await loadEditableProject(ctx, input.projectId)
@@ -120,6 +121,10 @@ export const projectUpdate = defineAction<ProjectUpdateInput, Project>({
     if (input.course !== undefined) doc.course = input.course
     if (input.description !== undefined) doc.description = input.description
     if (input.seedContext !== undefined) doc.seedContext = input.seedContext
+    if (input.generationFreedom !== undefined) {
+      // null clears back to the server default (stores nothing)
+      doc.generationFreedom = input.generationFreedom ?? undefined
+    }
     await doc.save()
     return toProjectDto(doc)
   },

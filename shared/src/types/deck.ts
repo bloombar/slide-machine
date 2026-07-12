@@ -12,6 +12,15 @@ import type { LayoutType } from './template'
  */
 export type Visibility = 'restricted' | 'public'
 
+/**
+ * AI content freedom, 1-10 (GEN-1): 1 = slides contain only what the
+ * speaker explicitly said; 10 = the AI may elaborate freely around it.
+ * Stored per project/lecture only when explicitly set — lectures
+ * inherit their project, projects inherit the server default.
+ */
+export const GENERATION_FREEDOM_MIN = 1
+export const GENERATION_FREEDOM_MAX = 10
+
 export interface Deck {
   id: string
   projectId: string
@@ -34,6 +43,8 @@ export interface Deck {
   slideOrder: string[]
   /** Lecture-level seed notes; stack on top of the project's (PROJ-1/SEED-1). */
   seedContext?: string
+  /** Own AI-freedom setting (1-10); absent = inherit the project's. */
+  generationFreedom?: number
   /** Finalized full lecture transcript, retained for post-lecture reformat (GEN-4). */
   transcript?: string
   voteScore: number

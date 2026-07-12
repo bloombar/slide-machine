@@ -16,6 +16,8 @@ import { canEditAcl, canViewAcl } from '../lib/access'
 import { SlideModel, toSlideDto } from '../models/slide'
 import { getBuiltinTemplate } from '../templates/builtin'
 import { verifyAccessToken } from '../auth/tokens'
+import { ProjectModel } from '../models/project'
+import { env } from '../config/env'
 import { HttpError } from '../middleware/error'
 
 /** Attaches userId when a valid Bearer token is present; never rejects. */
@@ -54,11 +56,14 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
 
   const isOwner = acl.ownerId === req.userId
   const slides = await SlideModel.find({ deckId: deck._id }).sort({ index: 1 })
+  const project = await ProjectModel.findById(deck.projectId).catch(() => null)
   const body: DeckViewResponse = {
     deck: isOwner ? toDeckDto(deck, acl) : toSharedDeckDto(deck, acl),
     slides: slides.map(toSlideDto),
     template,
     canEdit: canEditAcl(acl, req.userId),
+    projectGenerationFreedom:
+      project?.generationFreedom ?? env.GENERATION_FREEDOM,
   }
   res.json(body)
 })

@@ -50,6 +50,7 @@ const deckView = {
     voteScore: 0,
     createdAt: '',
   },
+  projectGenerationFreedom: 3,
 }
 
 const renderViewer = (refreshStatus: number, ownerId = 'u1') => {

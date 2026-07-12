@@ -11,6 +11,7 @@ import type {
   DeckDeleteInput,
   DeckResetAccessInput,
   DeckSetAccessInput,
+  DeckSetGenerationFreedomInput,
   DeckSetSeedNotesInput,
   DeckShare,
   DeckShareInput,
@@ -270,11 +271,16 @@ export const deckGet = defineAction<DeckGetInput, DeckViewResponse>({
       index: 1,
     })
     const isOwner = acl.ownerId === userId
+    const project = await ProjectModel.findById(deck.projectId).catch(
+      () => null,
+    )
     return {
       deck: isOwner ? toDeckDto(deck, acl) : toSharedDeckDto(deck, acl),
       slides: slides.map(toSlideDto),
       template,
       canEdit: canEditAcl(acl, userId),
+      projectGenerationFreedom:
+        project?.generationFreedom ?? env.GENERATION_FREEDOM,
     }
   },
 })
@@ -415,6 +421,10 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
       },
       layoutDescriptors: descriptors,
       seededImages: seededImages.length ? seededImages : undefined,
+      freedom:
+        deck.generationFreedom ??
+        project?.generationFreedom ??
+        env.GENERATION_FREEDOM,
       currentSlide: lastSlide
         ? {
             layoutType: lastSlide.layoutType,
@@ -503,6 +513,24 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
 })
 
 const sharesOf = sharesOfAcl
+
+/** Lecture-level AI freedom; null re-inherits the project's setting. */
+export const deckSetGenerationFreedom = defineAction<
+  DeckSetGenerationFreedomInput,
+  Deck
+>({
+  name: 'deck.setGenerationFreedom',
+  input: z.object({
+    deckId: z.string().min(1),
+    freedom: z.number().int().min(1).max(10).nullable(),
+  }),
+  execute: async (ctx, input) => {
+    const { deck, acl } = await loadEditableDeck(ctx, input.deckId)
+    deck.generationFreedom = input.freedom ?? undefined
+    await deck.save()
+    return toDeckDto(deck, acl)
+  },
+})
 
 export const deckSetSeedNotes = defineAction<DeckSetSeedNotesInput, Deck>({
   name: 'deck.setSeedNotes',
@@ -689,6 +717,7 @@ registerAction(slideAdd)
 registerAction(deckReorderSlides)
 registerAction(sessionPhrase)
 registerAction(deckSetSeedNotes)
+registerAction(deckSetGenerationFreedom)
 registerAction(deckSetAccess)
 registerAction(deckResetAccess)
 registerAction(deckShare)

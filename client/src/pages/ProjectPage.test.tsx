@@ -17,6 +17,7 @@ const project = {
   seedContext: 'Existing notes',
   visibility: 'public',
   templateId: 'classic',
+  effectiveGenerationFreedom: 3,
   createdAt: '2026-07-01T00:00:00.000Z',
 }
 

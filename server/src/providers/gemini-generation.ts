@@ -56,6 +56,23 @@ const resultSchema = z.object({
     .optional(),
 })
 
+/** The content-freedom policy for a 1-10 setting: the number anchors a
+ * gradient, the band text makes it operational for the model. */
+const freedomPolicy = (level: number): string => {
+  const n = Math.min(10, Math.max(1, Math.round(level)))
+  const band =
+    n <= 2
+      ? `Slide content must come ONLY from what the speaker explicitly said in this phrase. Titles must reuse the speaker's own words. Reword minimally for presentation style; NEVER add topics, themes, examples, facts, terminology, or details the speaker did not say. When the phrase is thin, make a thin slide.`
+      : n <= 4
+        ? `Slide content must come from what the speaker said. Reword freely for concision, but do not add topics, themes, examples, or facts the speaker did not mention.`
+        : n <= 6
+          ? `Stay within what the speaker said. You may add a short clarifying connective or complete an obviously truncated thought, but do not introduce new topics, themes, or examples.`
+          : n <= 8
+            ? `You may lightly enrich slides with closely related supporting details consistent with the speaker's point and the seed context, keeping the speaker's actual content primary.`
+            : `You may elaborate freely around the speaker's point, drawing on the seed context and general knowledge, while making sure everything the speaker said is represented.`
+  return `CONTENT FREEDOM ${n}/10 (1 = only what was said, 10 = free elaboration): ${band}`
+}
+
 const instructions = (req: SlideGenerationRequest): string => {
   const layouts = req.layoutDescriptors
     .map(
@@ -95,6 +112,8 @@ const instructions = (req: SlideGenerationRequest): string => {
 
 Respond with ONLY one JSON object, no markdown fences, exactly this shape:
 ${OUTPUT_SHAPE}
+
+${freedomPolicy(req.freedom ?? 3)}
 
 Decide exactly one action for the new phrase:
 - "none": filler, asides, or classroom logistics — changes nothing.

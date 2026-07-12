@@ -130,6 +130,54 @@ describe('deck.setSeedNotes', () => {
   })
 })
 
+describe('generation freedom resolution', () => {
+  it('resolves lecture -> project -> server default, storing nothing until set', async () => {
+    const provider = registry.get<GenerationProvider>('generation')
+    const original = provider.generateSlideContent.bind(provider)
+    const seen: SlideGenerationRequest[] = []
+    provider.generateSlideContent = async request => {
+      seen.push(request)
+      return original(request)
+    }
+    try {
+      // Nothing set anywhere: the server default (3) applies
+      await act(ada, 'session.phrase', { deckId, phrase: 'one two three' })
+      expect(seen[0]!.freedom).toBe(3)
+      expect(
+        (await DeckModel.findById(deckId))!.generationFreedom,
+      ).toBeUndefined()
+
+      // Project setting cascades to the inheriting lecture
+      await act(ada, 'project.update', { projectId, generationFreedom: 8 })
+      await act(ada, 'session.phrase', { deckId, phrase: 'four five six' })
+      expect(seen[1]!.freedom).toBe(8)
+      expect(
+        (await DeckModel.findById(deckId))!.generationFreedom,
+      ).toBeUndefined()
+
+      // Lecture override wins
+      await act(ada, 'deck.setGenerationFreedom', { deckId, freedom: 1 })
+      await act(ada, 'session.phrase', { deckId, phrase: 'seven eight' })
+      expect(seen[2]!.freedom).toBe(1)
+
+      // Clearing re-inherits the project's value
+      await act(ada, 'deck.setGenerationFreedom', { deckId, freedom: null })
+      await act(ada, 'session.phrase', { deckId, phrase: 'nine ten' })
+      expect(seen[3]!.freedom).toBe(8)
+      expect(
+        (await DeckModel.findById(deckId))!.generationFreedom,
+      ).toBeUndefined()
+
+      // Clearing the project re-inherits the server default
+      await act(ada, 'project.update', { projectId, generationFreedom: null })
+      await act(ada, 'session.phrase', { deckId, phrase: 'eleven twelve' })
+      expect(seen[4]!.freedom).toBe(3)
+    } finally {
+      provider.generateSlideContent = original
+    }
+  })
+})
+
 describe('session.phrase seed layers', () => {
   it('passes project and deck notes to the generation provider', async () => {
     await act(ada, 'project.update', {

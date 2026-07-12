@@ -14,6 +14,7 @@ import TemplatePicker from './TemplatePicker'
 import AccessSettings from './AccessSettings'
 import SeedNotesEditor from './SeedNotesEditor'
 import SeedMaterial from './SeedMaterial'
+import FreedomSlider from './FreedomSlider'
 import ConfirmDialog from './ConfirmDialog'
 import { lectureTitle } from '../lib/lecture'
 
@@ -34,6 +35,8 @@ type TabId = SettingsTabId
 
 interface Props {
   deck: Deck
+  /** The project-level AI freedom this lecture inherits by default. */
+  projectGenerationFreedom: number
   /** Which tab opens first (deep links, e.g. Share from a lecture list). */
   initialTab?: TabId
   /** Editors manage access too; only the owner can transfer ownership. */
@@ -49,6 +52,7 @@ interface Props {
 
 export default function DeckSettingsModal({
   deck,
+  projectGenerationFreedom,
   initialTab = 'general',
   isOwner,
   onClose,
@@ -209,6 +213,30 @@ export default function DeckSettingsModal({
                       .then(onDeckChange)
                       .catch(() => {
                         // Quiet failure: the next keystroke retries
+                      })
+                  }}
+                />
+              </div>
+              <div>
+                <h3 className="mb-2 text-lg font-semibold text-slate-700">
+                  AI freedom
+                </h3>
+                <p className="mb-3 text-sm text-slate-500">
+                  How much the AI may add beyond what you actually say while
+                  generating this lecture&apos;s slides.
+                </p>
+                <FreedomSlider
+                  value={deck.generationFreedom}
+                  inheritedValue={projectGenerationFreedom}
+                  inheritedLabel="project setting"
+                  onChange={freedom => {
+                    dispatchAction<Deck>('deck.setGenerationFreedom', {
+                      deckId: deck.id,
+                      freedom,
+                    })
+                      .then(onDeckChange)
+                      .catch(() => {
+                        // Quiet failure: the slider reverts on rerender
                       })
                   }}
                 />

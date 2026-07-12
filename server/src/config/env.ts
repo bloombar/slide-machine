@@ -72,6 +72,9 @@ const envSchema = z.object({
   // Chosen for phrase-to-slide latency: ~1s, no thinking overhead
   // (thinking models measured 10-30s; see docs/DECISIONS.md)
   GEMINI_MODEL: z.string().default('gemini-3.1-flash-lite-preview'),
+  // AI content freedom 1-10: 1 = slides contain only what the speaker
+  // said; 10 = free elaboration. Projects/lectures can override.
+  GENERATION_FREEDOM: z.coerce.number().int().min(1).max(10).default(3),
   /** Hard cap on one generation call — phrase-to-slide must stay live. */
   GEMINI_TIMEOUT_MS: z.coerce.number().default(12_000),
   GOOGLE_CLOUD_STT_KEY: z.string().optional(),

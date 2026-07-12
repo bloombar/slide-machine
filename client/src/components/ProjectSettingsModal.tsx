@@ -14,6 +14,7 @@ import SeedNotesEditor from './SeedNotesEditor'
 import SeedMaterial from './SeedMaterial'
 import ConfirmDialog from './ConfirmDialog'
 import AccessSettings from './AccessSettings'
+import FreedomSlider from './FreedomSlider'
 import TemplatePicker from './TemplatePicker'
 
 const isTypingTarget = (target: EventTarget | null): boolean =>
@@ -225,6 +226,30 @@ export default function ProjectSettingsModal({
                 />
               </div>
 
+              <div>
+                <h3 className="mb-2 text-lg font-semibold text-slate-700">
+                  AI freedom
+                </h3>
+                <p className="mb-3 text-sm text-slate-500">
+                  How much the AI may add beyond what the speaker says. Lectures
+                  in this project inherit it unless they set their own.
+                </p>
+                <FreedomSlider
+                  value={project.generationFreedom}
+                  inheritedValue={project.effectiveGenerationFreedom}
+                  inheritedLabel="server default"
+                  onChange={generationFreedom => {
+                    dispatchAction<Project>('project.update', {
+                      projectId: project.id,
+                      generationFreedom,
+                    })
+                      .then(onProjectChange)
+                      .catch(() => {
+                        // Quiet failure: the slider reverts on rerender
+                      })
+                  }}
+                />
+              </div>
               <div>
                 <h3 className="mb-2 text-lg font-semibold text-slate-700">
                   Seed material
