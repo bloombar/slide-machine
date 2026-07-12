@@ -88,6 +88,17 @@ describe('browser speech capture', () => {
     expect(recognition.started).toBe(startsAfterStop)
   })
 
+  it('gives up after rapid start-end cycles instead of spinning', () => {
+    stubApi()
+    const capture = createSpeechCapture('browser')
+    capture.start({ onPhrase: vi.fn() })
+    const recognition = FakeRecognition.instances[0]!
+
+    // Immediate end after every start: a capped number of retries
+    for (let i = 0; i < 10; i++) recognition.onend?.()
+    expect(recognition.started).toBeLessThanOrEqual(6)
+  })
+
   it('surfaces fatal permission errors and stops', () => {
     stubApi()
     const capture = createSpeechCapture('browser')

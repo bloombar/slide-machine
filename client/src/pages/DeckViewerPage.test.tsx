@@ -309,6 +309,9 @@ describe('DeckViewerPage add slide', () => {
 describe('DeckViewerPage microphone capture', () => {
   class FakeRecognition {
     static last: FakeRecognition | null = null
+    static reset() {
+      FakeRecognition.last = null
+    }
     continuous = false
     interimResults = false
     lang = ''
@@ -325,6 +328,7 @@ describe('DeckViewerPage microphone capture', () => {
   }
 
   it('transitions to slides created or updated by queued mic phrases', async () => {
+    FakeRecognition.reset()
     vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
     const scrolled = vi.fn()
     Element.prototype.scrollIntoView = scrolled
@@ -379,8 +383,8 @@ describe('DeckViewerPage microphone capture', () => {
       </MemoryRouter>,
     )
     await screen.findByText('Shared Lecture')
+    // One toggle: opening the live session starts the microphone
     fireEvent.click(screen.getByRole('button', { name: 'Live session' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Start listening' }))
     const recognition = FakeRecognition.last!
 
     // First recognized phrase: a NEW slide — carousel moves to it. The
@@ -422,6 +426,7 @@ describe('DeckViewerPage microphone capture', () => {
   })
 
   it('transcribed phrases flow through session.phrase', async () => {
+    FakeRecognition.reset()
     vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
     let sent: unknown
     mockFetchRoutes({
@@ -448,11 +453,11 @@ describe('DeckViewerPage microphone capture', () => {
       </MemoryRouter>,
     )
     await screen.findByText('Shared Lecture')
-    fireEvent.click(screen.getByRole('button', { name: 'Live session' }))
-
-    const toggle = screen.getByRole('button', { name: 'Start listening' })
+    // The Live session toggle opens the bar AND starts capture
+    const toggle = screen.getByRole('button', { name: 'Live session' })
     fireEvent.click(toggle)
     expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    expect(FakeRecognition.last).not.toBeNull()
 
     const recognition = FakeRecognition.last!
     // Interim text shows without dispatching
@@ -481,10 +486,14 @@ describe('DeckViewerPage microphone capture', () => {
       }),
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Stop listening' }))
+    // Toggling off closes the bar and stops the microphone
+    const stopSpy = vi.spyOn(recognition, 'stop')
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    expect(stopSpy).toHaveBeenCalled()
     expect(
-      screen.getByRole('button', { name: 'Start listening' }),
-    ).toHaveAttribute('aria-pressed', 'false')
+      screen.queryByRole('textbox', { name: 'Spoken phrase' }),
+    ).not.toBeInTheDocument()
   })
 })
 

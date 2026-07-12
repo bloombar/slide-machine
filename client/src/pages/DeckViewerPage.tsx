@@ -9,7 +9,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
-import { AudioLines, Mic, Plus, Settings } from 'lucide-react'
+import { Mic, Plus, Settings } from 'lucide-react'
 import type {
   Deck,
   DeckViewResponse,
@@ -76,7 +76,13 @@ export default function DeckViewerPage() {
   const [busy, setBusy] = useState(false)
   const [speakError, setSpeakError] = useState<string | null>(null)
   const capture = useMemo(() => createSpeechCapture(), [])
-  const [listening, setListening] = useState(false)
+  // Entering via "Start a new lecture" opens the bar AND the microphone
+  const [listening, setListening] = useState<boolean>(
+    () =>
+      Boolean(
+        (location.state as { startSpeaking?: boolean } | null)?.startSpeaking,
+      ) && capture.available,
+  )
   const [interim, setInterim] = useState('')
   // Finalized phrases submit sequentially so rolling context stays sane
   const phraseQueueRef = useRef<Promise<void>>(Promise.resolve())
@@ -141,26 +147,6 @@ export default function DeckViewerPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  if (error) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-slate-500">
-        <p role="alert">{error}</p>
-      </div>
-    )
-  }
-
-  if (!view) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-slate-400">
-        Loading…
-      </div>
-    )
-  }
-
-  const slide = view.slides[nav.current]
-  const isOwner = user?.id === view.deck.ownerId
-  const canEdit = view.canEdit
 
   /** Watches a slide whose image may still arrive from background enrichment. */
   const watchImage = (target: Slide) => {
@@ -238,11 +224,14 @@ export default function DeckViewerPage() {
   }
 
   const submitPhrase = async (text: string) => {
+    // Via the ref: mic phrases can arrive from long-lived callbacks
+    const deckId = viewRef.current?.deck.id
+    if (!deckId) return
     setBusy(true)
     setSpeakError(null)
     try {
       const event = await dispatchAction<SlideEvent>('session.phrase', {
-        deckId: view.deck.id,
+        deckId,
         phrase: text,
       })
       applyEvent(event)
@@ -267,13 +256,9 @@ export default function DeckViewerPage() {
     setInterim('')
   }
 
-  /** Mic capture: recognized phrases queue through the same pipeline. */
-  const toggleListening = () => {
-    if (listening) {
-      stopListening()
-      return
-    }
-    setSpeakError(null)
+  /** Attaches recognition; recognized phrases queue through the same
+   * pipeline as typed ones. State flags belong to the callers. */
+  const beginCapture = () => {
     capture.start({
       onPhrase: text => {
         setInterim('')
@@ -288,8 +273,41 @@ export default function DeckViewerPage() {
         setSpeakError(message)
       },
     })
+  }
+
+  const startListening = () => {
+    if (!capture.available) return
+    setSpeakError(null)
+    beginCapture()
     setListening(true)
   }
+
+  // "Start a new lecture" auto-opens the mic: the bar and the listening
+  // flag are already on (lazy init), so only the capture needs kicking
+  useEffect(() => {
+    if (listening) beginCapture()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  if (error) {
+    return (
+      <div className="flex flex-1 items-center justify-center text-slate-500">
+        <p role="alert">{error}</p>
+      </div>
+    )
+  }
+
+  if (!view) {
+    return (
+      <div className="flex flex-1 items-center justify-center text-slate-400">
+        Loading…
+      </div>
+    )
+  }
+
+  const slide = view.slides[nav.current]
+  const isOwner = user?.id === view.deck.ownerId
+  const canEdit = view.canEdit
 
   /** In-place edits (EDIT-1) persist through the action layer. */
   const editSlide = (slideId: string) => (patch: SlideContentPatch) => {
@@ -461,8 +479,9 @@ export default function DeckViewerPage() {
                 title="Speak to add slides"
                 aria-pressed={speaking}
                 onClick={() => {
-                  // Closing the Speak bar also stops the microphone
+                  // One toggle: the bar and the microphone together
                   if (speaking) stopListening()
+                  else startListening()
                   setSpeaking(s => !s)
                 }}
                 className={`rounded-md p-2 ${
@@ -563,26 +582,6 @@ export default function DeckViewerPage() {
             aria-label="Live session"
             className="mt-6 flex w-full gap-2"
           >
-            {capture.available && (
-              <button
-                type="button"
-                onClick={toggleListening}
-                aria-label={listening ? 'Stop listening' : 'Start listening'}
-                aria-pressed={listening}
-                title={
-                  listening
-                    ? 'Stop the microphone'
-                    : 'Transcribe from the microphone'
-                }
-                className={`rounded-lg border px-4 py-3 ${
-                  listening
-                    ? 'border-red-300 bg-red-50 text-red-600'
-                    : 'border-slate-300 text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <AudioLines className="h-5 w-5" aria-hidden />
-              </button>
-            )}
             <input
               ref={inputRef}
               value={phrase}

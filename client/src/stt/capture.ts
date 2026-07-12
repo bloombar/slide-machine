@@ -66,9 +66,16 @@ const FATAL_ERRORS = new Set([
   'audio-capture',
 ])
 
+/** Give up after this many immediate start→end cycles (no speech
+ * service, headless browsers) instead of restarting forever. */
+const MAX_RAPID_RESTARTS = 5
+const RAPID_RESTART_MS = 1000
+
 const browserCapture = (): SpeechCapture => {
   let recognition: Recognition | null = null
   let active = false
+  let rapidRestarts = 0
+  let lastStart = 0
 
   return {
     get available() {
@@ -105,9 +112,23 @@ const browserCapture = (): SpeechCapture => {
         // onend, which restarts while still active
       }
       recognition.onend = () => {
-        // Browsers stop recognition after silence; keep listening
-        if (active) recognition?.start()
+        if (!active) return
+        // Browsers stop recognition after silence; keep listening — but
+        // an immediate start→end cycle means capture can't run here, so
+        // give up quietly instead of spinning
+        if (Date.now() - lastStart < RAPID_RESTART_MS) {
+          rapidRestarts++
+          if (rapidRestarts >= MAX_RAPID_RESTARTS) {
+            active = false
+            return
+          }
+        } else {
+          rapidRestarts = 0
+        }
+        lastStart = Date.now()
+        recognition?.start()
       }
+      lastStart = Date.now()
       recognition.start()
     },
     stop() {
