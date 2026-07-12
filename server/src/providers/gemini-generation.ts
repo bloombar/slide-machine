@@ -87,6 +87,10 @@ const instructions = (req: SlideGenerationRequest): string => {
         .join('\n')}`
     : '\nNo slides exist yet.'
 
+  const capacity = req.currentSlide
+    ? `\nCurrent slide load: ${req.currentSlide.bulletCount} bullets, ~${req.currentSlide.bodyWords} body words (layout "${req.currentSlide.layoutType}"). If adding this phrase's content would exceed the layout's limits, choose "new" instead of "update".`
+    : ''
+
   return `You turn live lecture speech into presentation slides, one decision per spoken phrase.
 
 Respond with ONLY one JSON object, no markdown fences, exactly this shape:
@@ -94,17 +98,17 @@ ${OUTPUT_SHAPE}
 
 Decide exactly one action for the new phrase:
 - "none": filler, asides, or classroom logistics — changes nothing.
-- "update": the phrase continues the CURRENT (last) slide's topic — extend it. Put ONLY the added material in slots (new bullets in slots.bullets, or a sentence in slots.body); never repeat existing content.
-- "new": the phrase starts new material — produce a complete slide.
+- "update": ONLY when the phrase adds a SMALL amount (one bullet or one short sentence) to the CURRENT (last) slide's exact topic AND the slide has room left. Put ONLY the added material in slots; never repeat existing content.
+- "new": the phrase starts new material, shifts the angle, or the current slide is already comfortably full — produce a complete slide. Prefer "new" whenever in doubt: many small slides beat one crowded slide.
 
 Choose layoutType strictly from this set:
 ${layouts}
 
-Slide text must be concise and presentation-ready: short titles (max ~8 words), tight bullets, no filler words, no first person. Respect every layout constraint.
+Slide text must be concise and presentation-ready: tight bullets, no filler words, no first person. Constraints list APPROXIMATE WORD BUDGETS (maxTitleWords, maxBodyWords, maxBulletWords, maxCaptionWords, maxBullets) — never exceed them; the server rejects overloaded slides.
 
 For imageGuidance: 2-4 concrete search keywords when an illustrative photo would help; set none=true for text-only slides (title/section/quote usually).${seeded}
 ${projectSeed}${deckSeed}
-${rolling}
+${rolling}${capacity}
 
 New phrase: "${req.phrase}"`
 }

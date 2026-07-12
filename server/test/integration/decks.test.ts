@@ -310,6 +310,34 @@ describe('deck.list across projects (home screen)', () => {
   })
 })
 
+describe('session.phrase capacity enforcement', () => {
+  it('converts an update that would overflow the slide into a new slide', async () => {
+    const deck = await act(ada, 'deck.create', { projectId, title: 'Full' })
+    const deckId = deck.body.id as string
+
+    // Build a bullet slide already at the classic template's cap (6)
+    await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'alpha, beta, gamma, delta, epsilon, zeta',
+    })
+    const before = await act(ada, 'deck.get', { deckId })
+    expect(before.body.slides[0].bullets).toHaveLength(6)
+
+    // The mock treats "Also ..." as an update adding one bullet — but
+    // the slide is full, so the server promotes it to a NEW slide
+    const res = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Also eta belongs in this list',
+    })
+    expect(res.body.kind).toBe('slide.new')
+    const after = await act(ada, 'deck.get', { deckId })
+    expect(after.body.slides).toHaveLength(2)
+    expect(after.body.slides[0].bullets).toHaveLength(6)
+    // The promoted slide gets a synthesized title
+    expect(after.body.slides[1].title).toBeTruthy()
+  })
+})
+
 describe('deck.delete', () => {
   it('cascades slides and lecture-level seed material, owner-only', async () => {
     const deck = await act(ada, 'deck.create', {

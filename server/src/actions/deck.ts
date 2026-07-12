@@ -54,6 +54,12 @@ import {
   type ResolvedAcl,
 } from '../lib/access'
 import { sharesOfAcl } from '../lib/shares'
+import {
+  clampToBudget,
+  titleFromPhrase,
+  updateOverflows,
+  wordCount,
+} from '../lib/slide-fit'
 import { UserModel } from '../models/user'
 import { SlideModel, toSlideDto } from '../models/slide'
 import { ProjectModel, projectAcl } from '../models/project'
@@ -396,21 +402,56 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
         keywords: a.keywords,
       }))
 
+    const lastSlide = recent.length ? recent[recent.length - 1] : undefined
+    const descriptors = layoutDescriptors(template)
+
     const provider = registry.get<GenerationProvider>('generation')
-    const result = await provider.generateSlideContent({
+    const rawResult = await provider.generateSlideContent({
       phrase: input.phrase,
       rollingContext,
       seedContext: {
         project: seedLayer(project?.seedContext, assets.project),
         deck: seedLayer(deck.seedContext, assets.deck),
       },
-      layoutDescriptors: layoutDescriptors(template),
+      layoutDescriptors: descriptors,
       seededImages: seededImages.length ? seededImages : undefined,
+      currentSlide: lastSlide
+        ? {
+            layoutType: lastSlide.layoutType,
+            bulletCount: lastSlide.bullets?.length ?? 0,
+            bodyWords: wordCount(lastSlide.body),
+          }
+        : undefined,
     })
 
-    if (result.action === 'none') return { kind: 'none' }
+    if (rawResult.action === 'none') return { kind: 'none' }
 
-    const lastSlide = recent.length ? recent[recent.length - 1] : undefined
+    // Capacity enforcement (never trust the model): an update that
+    // would overflow the slide's word budget becomes a NEW slide, and
+    // new-slide content is clamped to the budget
+    let result = rawResult
+    if (
+      result.action === 'update' &&
+      lastSlide &&
+      updateOverflows(
+        result,
+        {
+          bulletCount: lastSlide.bullets?.length ?? 0,
+          bodyWords: wordCount(lastSlide.body),
+        },
+        descriptors,
+      )
+    ) {
+      result = {
+        ...result,
+        action: 'new',
+        slots: {
+          ...result.slots,
+          title: result.slots.title || titleFromPhrase(input.phrase),
+        },
+      }
+    }
+    if (result.action === 'new') result = clampToBudget(result, descriptors)
     if (result.action === 'update' && lastSlide) {
       // Additive update (GEN-8): new bullets slot in, body extends,
       // layout may re-fit; committed text is never rewritten

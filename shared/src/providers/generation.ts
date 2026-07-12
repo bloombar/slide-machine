@@ -26,6 +26,13 @@ export interface SlideGenerationRequest {
   /** The active template's layouts — the option set the model must pick from (GEN-6). */
   layoutDescriptors: LayoutDescriptor[]
   seededImages?: SeededImageDescriptor[]
+  /** Snapshot of the current (last) slide so the model can judge
+   * whether an update still fits or a new slide is due (GEN-8). */
+  currentSlide?: {
+    layoutType: LayoutType
+    bulletCount: number
+    bodyWords: number
+  }
 }
 
 /** The model's per-slide image recommendation (GEN-7). */

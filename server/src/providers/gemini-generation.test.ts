@@ -49,6 +49,7 @@ const request = (
       keywords: ['chloroplast'],
     },
   ],
+  currentSlide: { layoutType: 'list', bulletCount: 5, bodyWords: 0 },
   ...overrides,
 })
 
@@ -103,6 +104,9 @@ describe('GeminiGenerationProvider', () => {
     expect(body.generationConfig.responseSchema).toBeUndefined()
     expect(body.generationConfig.maxOutputTokens).toBe(2048)
     expect(prompt).toContain('"action": "new" | "update" | "none"')
+    // Capacity guidance: current load and the prefer-new bias
+    expect(prompt).toContain('Current slide load: 5 bullets')
+    expect(prompt).toContain('Prefer "new" whenever in doubt')
     // The key travels in a header, never the URL
     expect(String(url)).not.toContain('test-key')
     expect(init.headers['x-goog-api-key']).toBe('test-key')

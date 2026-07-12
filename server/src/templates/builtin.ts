@@ -14,7 +14,7 @@ const standardLayouts = (): Layout[] => [
     label: 'Title',
     purpose: 'Opening slide: the lecture or major-topic title, nothing else',
     slots: ['title', 'caption'],
-    constraints: { maxBodyLength: 0 },
+    constraints: { maxBodyLength: 0, maxTitleWords: 8, maxCaptionWords: 14 },
     elementPositions: {},
   },
   {
@@ -22,6 +22,7 @@ const standardLayouts = (): Layout[] => [
     label: 'Section',
     purpose: 'A new section or subtopic heading within the lecture',
     slots: ['title'],
+    constraints: { maxTitleWords: 8 },
     elementPositions: {},
   },
   {
@@ -29,7 +30,7 @@ const standardLayouts = (): Layout[] => [
     label: 'Content',
     purpose: 'General slide: a short title plus one paragraph of body text',
     slots: ['title', 'body'],
-    constraints: { maxBodyLength: 400 },
+    constraints: { maxBodyLength: 400, maxTitleWords: 8, maxBodyWords: 60 },
     elementPositions: {},
   },
   {
@@ -37,7 +38,7 @@ const standardLayouts = (): Layout[] => [
     label: 'Bullet list',
     purpose: 'Use for 3-6 short parallel points',
     slots: ['title', 'bullets'],
-    constraints: { maxBullets: 6 },
+    constraints: { maxBullets: 6, maxTitleWords: 8, maxBulletWords: 12 },
     elementPositions: {},
   },
   {
@@ -45,7 +46,7 @@ const standardLayouts = (): Layout[] => [
     label: 'Image',
     purpose: 'A striking image dominates; minimal caption text',
     slots: ['image', 'caption'],
-    constraints: { imageRequired: true },
+    constraints: { imageRequired: true, maxCaptionWords: 14 },
     elementPositions: {},
   },
   {
@@ -53,7 +54,7 @@ const standardLayouts = (): Layout[] => [
     label: 'Two column',
     purpose: 'Text beside a supporting image',
     slots: ['title', 'body', 'image'],
-    constraints: { maxBodyLength: 250 },
+    constraints: { maxBodyLength: 250, maxTitleWords: 8, maxBodyWords: 40 },
     elementPositions: {},
   },
   {
@@ -61,7 +62,7 @@ const standardLayouts = (): Layout[] => [
     label: 'Quote',
     purpose: 'A single striking statement, question, or quotation',
     slots: ['body', 'caption'],
-    constraints: { maxBodyLength: 200 },
+    constraints: { maxBodyLength: 200, maxBodyWords: 30, maxCaptionWords: 10 },
     elementPositions: {},
   },
 ]

@@ -51,10 +51,17 @@ export const SLOT_DESCRIPTORS: Record<LayoutSlot, SlotDescriptor> = {
   columns: { kind: 'text', label: 'Slide columns', multiline: true },
 }
 
-/** Constraints the AI must respect when filling a layout (TMPL-6). */
+/** Constraints the AI must respect when filling a layout (TMPL-6).
+ * Word counts are approximate ceilings; the server also enforces them
+ * (overflowing updates become new slides) so slides stay readable. */
 export interface LayoutConstraints {
   maxBullets?: number
+  /** Legacy character cap for body text. */
   maxBodyLength?: number
+  maxTitleWords?: number
+  maxBodyWords?: number
+  maxBulletWords?: number
+  maxCaptionWords?: number
   imageRequired?: boolean
 }
 
