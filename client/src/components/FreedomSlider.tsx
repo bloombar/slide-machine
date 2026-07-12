@@ -2,8 +2,9 @@
  * AI content-freedom slider (GEN-1), 1-10: 1 keeps slides to exactly
  * what the speaker said, 10 lets the AI elaborate freely. Used at both
  * levels — a lecture inherits its project's setting (and a project the
- * server default) until the slider is moved; "Use …" re-inherits,
- * storing nothing at this level again. Saves with the usual debounce.
+ * server default) until the slider is moved; "Reset to default"
+ * appears only once a value is set here, and re-inherits (storing
+ * nothing at this level again). Saves with the usual debounce.
  */
 import { useEffect, useRef, useState } from 'react'
 import {
@@ -14,11 +15,9 @@ import {
 interface Props {
   /** This level's own stored value; undefined while inheriting. */
   value?: number
-  /** What applies while inheriting (for display). */
+  /** What applies while inheriting (positions the slider). */
   inheritedValue: number
-  /** Where the inherited value comes from, e.g. "project setting". */
-  inheritedLabel: string
-  /** A number sets this level's value; null re-inherits. */
+  /** A number sets this level's value; null resets to the default. */
   onChange: (value: number | null) => void
   debounceMs?: number
 }
@@ -26,7 +25,6 @@ interface Props {
 export default function FreedomSlider({
   value,
   inheritedValue,
-  inheritedLabel,
   onChange,
   debounceMs = 500,
 }: Props) {
@@ -85,21 +83,16 @@ export default function FreedomSlider({
         </div>
         <span className="text-xs text-slate-500">Free elaboration</span>
       </div>
-      <p className="mt-1 text-xs text-slate-500">
-        {value === undefined ? (
-          <>Using the {inheritedLabel} — move the slider to set it here.</>
-        ) : (
-          <>
-            Set at this level.{' '}
-            <button
-              onClick={reset}
-              className="cursor-pointer text-indigo-600 hover:underline"
-            >
-              Use {inheritedLabel}
-            </button>
-          </>
-        )}
-      </p>
+      {value !== undefined && (
+        <p className="mt-1 text-xs">
+          <button
+            onClick={reset}
+            className="cursor-pointer text-indigo-600 hover:underline"
+          >
+            Reset to default
+          </button>
+        </p>
+      )}
     </div>
   )
 }

@@ -6,7 +6,7 @@
  * project settings modal (seed material + danger zone).
  */
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router'
+import { useLocation, useNavigate, useParams } from 'react-router'
 import { Plus, Settings } from 'lucide-react'
 import type { Deck, Project } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
@@ -21,8 +21,22 @@ export default function ProjectPage() {
   const { user } = useAuth()
   const [project, setProject] = useState<Project | null>(null)
   const [decks, setDecks] = useState<Deck[]>([])
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  const location = useLocation()
+  // A lecture's settings link deep-links into the project settings
+  const [settingsOpen, setSettingsOpen] = useState<boolean>(() =>
+    Boolean(
+      (location.state as { openSettings?: boolean } | null)?.openSettings,
+    ),
+  )
   const [error, setError] = useState<string | null>(null)
+
+  // Scrub the deep-link state so a reload doesn't re-open settings
+  useEffect(() => {
+    if ((location.state as { openSettings?: boolean } | null)?.openSettings) {
+      navigate(location.pathname, { replace: true, state: null })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (!projectId) return

@@ -211,6 +211,30 @@ describe('ProjectPage', () => {
     )
   })
 
+  it('opens settings when deep-linked from a lecture', async () => {
+    mockFetchRoutes({
+      ...baseRoutes,
+      '/api/actions/seedAsset.list': () => ({ status: 200, body: [] }),
+    })
+    render(
+      <MemoryRouter
+        initialEntries={[
+          { pathname: '/app/projects/p1', state: { openSettings: true } },
+        ]}
+      >
+        <AuthProvider>
+          <Routes>
+            <Route path="/app/projects/:projectId" element={<ProjectPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    expect(
+      await screen.findByRole('dialog', { name: 'Project settings' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/apply across all lectures/i)).toBeInTheDocument()
+  })
+
   it('deletes the project from the Danger zone after confirmation', async () => {
     let deleted = false
     mockFetchRoutes({

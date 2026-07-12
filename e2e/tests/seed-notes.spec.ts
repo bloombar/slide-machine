@@ -50,13 +50,17 @@ test('project and lecture seed notes auto-save and persist', async ({
     page.getByRole('textbox', { name: 'Lecture seed notes' }),
   ).toHaveValue("Snell's law with the laser tank demo")
 
-  // AI freedom: the lecture inherits until its slider moves, then keeps
-  // its own value across reloads
+  // AI freedom: the lecture inherits until its slider moves; Reset to
+  // default appears only once a value is set here
   const slider = page.getByRole('slider', { name: 'AI freedom' })
   await expect(slider).toHaveValue('3')
-  await expect(page.getByText(/using the project setting/i)).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Reset to default' }),
+  ).toHaveCount(0)
   await slider.fill('8')
-  await expect(page.getByText(/set at this level/i)).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Reset to default' }),
+  ).toBeVisible()
   await page.waitForTimeout(700)
   await page.reload()
   await page.getByRole('button', { name: 'Lecture settings' }).click()
@@ -64,7 +68,12 @@ test('project and lecture seed notes auto-save and persist', async ({
     '8',
   )
 
-  // Re-inheriting drops back to the project setting
-  await page.getByRole('button', { name: 'Use project setting' }).click()
-  await expect(page.getByText(/using the project setting/i)).toBeVisible()
+  // Reset re-inherits the project setting and hides itself again
+  await page.getByRole('button', { name: 'Reset to default' }).click()
+  await expect(
+    page.getByRole('button', { name: 'Reset to default' }),
+  ).toHaveCount(0)
+  await expect(page.getByRole('slider', { name: 'AI freedom' })).toHaveValue(
+    '3',
+  )
 })

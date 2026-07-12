@@ -10,17 +10,13 @@ describe('FreedomSlider', () => {
   it('shows the inherited value and saves a moved slider after debounce', () => {
     vi.useFakeTimers()
     const onChange = vi.fn()
-    render(
-      <FreedomSlider
-        inheritedValue={3}
-        inheritedLabel="project setting"
-        onChange={onChange}
-      />,
-    )
+    render(<FreedomSlider inheritedValue={3} onChange={onChange} />)
     const slider = screen.getByRole('slider', { name: 'AI freedom' })
     expect(slider).toHaveValue('3')
-    expect(screen.getByText(/using the project setting/i)).toBeInTheDocument()
-    // The numeric value is not displayed; a light 1-10 tick scale is
+    // Inheriting: no status line, no reset, no numeric readout
+    expect(
+      screen.queryByRole('button', { name: 'Reset to default' }),
+    ).not.toBeInTheDocument()
     expect(screen.queryByText('3/10')).not.toBeInTheDocument()
 
     fireEvent.change(slider, { target: { value: '7' } })
@@ -30,18 +26,11 @@ describe('FreedomSlider', () => {
     vi.useRealTimers()
   })
 
-  it('offers re-inheriting when a value is set at this level', () => {
+  it('offers Reset to default only when a value is set at this level', () => {
     const onChange = vi.fn()
-    render(
-      <FreedomSlider
-        value={9}
-        inheritedValue={3}
-        inheritedLabel="server default"
-        onChange={onChange}
-      />,
-    )
+    render(<FreedomSlider value={9} inheritedValue={3} onChange={onChange} />)
     expect(screen.getByRole('slider', { name: 'AI freedom' })).toHaveValue('9')
-    fireEvent.click(screen.getByRole('button', { name: 'Use server default' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reset to default' }))
     expect(onChange).toHaveBeenCalledWith(null)
   })
 })

@@ -15,6 +15,7 @@ import { mockFetchRoutes } from '../test/fetch-mock'
 const deckView = {
   deck: {
     id: 'deck1',
+    projectId: 'p1',
     ownerId: 'u1',
     title: 'Shared Lecture',
     permalinkSlug: 'shared-abc123',
@@ -737,6 +738,14 @@ describe('DeckViewerPage settings modal', () => {
     renderWithSettings()
     await screen.findByText('Shared Lecture')
     fireEvent.click(screen.getByRole('button', { name: 'Lecture settings' }))
+
+    // The subtitle scopes the modal and links to project-wide settings
+    expect(
+      await screen.findByText(/apply to just this lecture/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: 'project-wide settings' }),
+    ).toHaveAttribute('href', '/app/projects/p1')
 
     // General is the default tab: seed notes + uploads live here
     const general = await screen.findByRole('tab', { name: 'General' })

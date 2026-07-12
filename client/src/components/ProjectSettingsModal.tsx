@@ -108,7 +108,13 @@ export default function ProjectSettingsModal({
       >
         <div className="mx-auto w-full max-w-5xl">
           <header className="mb-6 flex items-center justify-between">
-            <h2 className="text-xl font-bold">Project settings</h2>
+            <div>
+              <h2 className="text-xl font-bold">Project settings</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                These settings apply across all lectures in this project
+                (lectures can override some of them individually).
+              </p>
+            </div>
             <button
               ref={closeRef}
               aria-label="Close settings"
@@ -228,6 +234,17 @@ export default function ProjectSettingsModal({
 
               <div>
                 <h3 className="mb-2 text-lg font-semibold text-slate-700">
+                  Seed material
+                </h3>
+                <p className="mb-3 text-sm text-slate-500">
+                  Documents and photos scanned for background text and imagery,
+                  available to every lecture in this project.
+                </p>
+                <SeedMaterial projectId={project.id} />
+              </div>
+
+              <div>
+                <h3 className="mb-2 text-lg font-semibold text-slate-700">
                   AI freedom
                 </h3>
                 <p className="mb-3 text-sm text-slate-500">
@@ -237,7 +254,6 @@ export default function ProjectSettingsModal({
                 <FreedomSlider
                   value={project.generationFreedom}
                   inheritedValue={project.effectiveGenerationFreedom}
-                  inheritedLabel="server default"
                   onChange={generationFreedom => {
                     dispatchAction<Project>('project.update', {
                       projectId: project.id,
@@ -250,17 +266,6 @@ export default function ProjectSettingsModal({
                   }}
                 />
               </div>
-              <div>
-                <h3 className="mb-2 text-lg font-semibold text-slate-700">
-                  Seed material
-                </h3>
-                <p className="mb-3 text-sm text-slate-500">
-                  Documents and photos scanned for background text and imagery,
-                  available to every lecture in this project.
-                </p>
-                <SeedMaterial projectId={project.id} />
-              </div>
-
               {isOwner && (
                 <div className="rounded-md border border-red-200 p-4">
                   <h3 className="mb-2 text-lg font-semibold text-red-700">

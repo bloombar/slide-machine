@@ -7,6 +7,7 @@
  * tabs when the tab list has focus.
  */
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router'
 import { X } from 'lucide-react'
 import type { Deck, Template } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
@@ -145,7 +146,20 @@ export default function DeckSettingsModal({
       >
         <div className="mx-auto w-full max-w-5xl">
           <header className="mb-4 flex items-center justify-between">
-            <h2 className="text-xl font-bold">Lecture settings</h2>
+            <div>
+              <h2 className="text-xl font-bold">Lecture settings</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                These settings apply to just this lecture. The{' '}
+                <Link
+                  to={`/app/projects/${deck.projectId}`}
+                  state={{ openSettings: true }}
+                  className="text-indigo-600 hover:underline"
+                >
+                  project-wide settings
+                </Link>{' '}
+                may affect this lecture as well.
+              </p>
+            </div>
             <button
               ref={closeRef}
               aria-label="Close settings"
@@ -219,6 +233,16 @@ export default function DeckSettingsModal({
               </div>
               <div>
                 <h3 className="mb-2 text-lg font-semibold text-slate-700">
+                  Seed material
+                </h3>
+                <p className="mb-3 text-sm text-slate-500">
+                  Documents and photos scanned for background text and imagery,
+                  used by this lecture only.
+                </p>
+                <SeedMaterial projectId={deck.projectId} deckId={deck.id} />
+              </div>
+              <div>
+                <h3 className="mb-2 text-lg font-semibold text-slate-700">
                   AI freedom
                 </h3>
                 <p className="mb-3 text-sm text-slate-500">
@@ -228,7 +252,6 @@ export default function DeckSettingsModal({
                 <FreedomSlider
                   value={deck.generationFreedom}
                   inheritedValue={projectGenerationFreedom}
-                  inheritedLabel="project setting"
                   onChange={freedom => {
                     dispatchAction<Deck>('deck.setGenerationFreedom', {
                       deckId: deck.id,
@@ -240,16 +263,6 @@ export default function DeckSettingsModal({
                       })
                   }}
                 />
-              </div>
-              <div>
-                <h3 className="mb-2 text-lg font-semibold text-slate-700">
-                  Seed material
-                </h3>
-                <p className="mb-3 text-sm text-slate-500">
-                  Documents and photos scanned for background text and imagery,
-                  used by this lecture only.
-                </p>
-                <SeedMaterial projectId={deck.projectId} deckId={deck.id} />
               </div>
               {isOwner && (
                 <div className="rounded-md border border-red-200 p-4">
