@@ -9,6 +9,7 @@ import type { Deck, Project, Template } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import TemplatePicker from '../components/TemplatePicker'
 import LectureRow from '../components/LectureRow'
+import SeedNotesEditor from '../components/SeedNotesEditor'
 
 export default function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -102,6 +103,33 @@ export default function ProjectPage() {
           <p role="alert" className="mt-4 text-sm text-red-600">
             {error}
           </p>
+        )}
+      </section>
+
+      <section className="mb-10 max-w-2xl">
+        <h2 className="mb-2 text-lg font-semibold text-slate-700">
+          Seed notes
+        </h2>
+        <p className="mb-3 text-sm text-slate-500">
+          Background material that guides slide generation for every lecture in
+          this project. Saved automatically.
+        </p>
+        {project && (
+          <SeedNotesEditor
+            value={project.seedContext ?? ''}
+            label="Project seed notes"
+            placeholder="Key topics, terminology, planned structure…"
+            onSave={seedContext => {
+              dispatchAction<Project>('project.update', {
+                projectId,
+                seedContext,
+              })
+                .then(updated => setProject(updated))
+                .catch(() => {
+                  // Quiet failure: the next keystroke retries
+                })
+            }}
+          />
         )}
       </section>
 

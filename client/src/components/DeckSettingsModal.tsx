@@ -10,6 +10,7 @@ import type { Deck, Template } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import TemplatePicker from './TemplatePicker'
 import DeckAccessSettings from './DeckAccessSettings'
+import SeedNotesEditor from './SeedNotesEditor'
 
 const isTypingTarget = (target: EventTarget | null): boolean =>
   target instanceof HTMLElement &&
@@ -24,8 +25,8 @@ interface Props {
   onClose: () => void
   /** Fired after a successful save so the viewer re-themes immediately. */
   onTemplateChange: (deck: Deck, template: Template) => void
-  /** Fired after an access change so the viewer keeps a fresh deck. */
-  onAccessChange: (deck: Deck) => void
+  /** Fired after any deck-level save so the viewer keeps a fresh deck. */
+  onDeckChange: (deck: Deck) => void
 }
 
 export default function DeckSettingsModal({
@@ -33,7 +34,7 @@ export default function DeckSettingsModal({
   isOwner,
   onClose,
   onTemplateChange,
-  onAccessChange,
+  onDeckChange,
 }: Props) {
   const [templates, setTemplates] = useState<Template[]>([])
   const closeRef = useRef<HTMLButtonElement>(null)
@@ -104,10 +105,35 @@ export default function DeckSettingsModal({
           </header>
 
           <div className="flex flex-col gap-8">
+            <section>
+              <h3 className="mb-2 text-lg font-semibold text-slate-700">
+                Seed notes
+              </h3>
+              <p className="mb-3 text-sm text-slate-500">
+                Lecture-specific background material, added on top of the
+                project&apos;s seed notes. Saved automatically.
+              </p>
+              <SeedNotesEditor
+                value={deck.seedContext ?? ''}
+                label="Lecture seed notes"
+                placeholder="What this lecture covers, key terms, examples…"
+                onSave={seedContext => {
+                  dispatchAction<Deck>('deck.setSeedNotes', {
+                    deckId: deck.id,
+                    seedContext,
+                  })
+                    .then(onDeckChange)
+                    .catch(() => {
+                      // Quiet failure: the next keystroke retries
+                    })
+                }}
+              />
+            </section>
+
             <DeckAccessSettings
               deck={deck}
               isOwner={isOwner}
-              onAccessChange={onAccessChange}
+              onAccessChange={onDeckChange}
             />
             <section>
               <h3 className="mb-4 text-lg font-semibold text-slate-700">

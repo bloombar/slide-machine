@@ -88,7 +88,12 @@ export default function HomePage() {
             deck,
           ])
         }
-        setProjects(projectList)
+        // Merge, don't replace: a project created while this request was
+        // in flight must survive the stale response landing after it
+        setProjects(prev => {
+          const known = new Set(projectList.map(p => p.id))
+          return [...(prev ?? []).filter(p => !known.has(p.id)), ...projectList]
+        })
         setDecksByProject(grouped)
       })
       .catch(() => {

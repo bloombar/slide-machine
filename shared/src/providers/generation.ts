@@ -17,8 +17,12 @@ export interface SlideGenerationRequest {
   phrase: string
   /** Short rolling context of recent phrases/slides for topic coherence. */
   rollingContext: string[]
-  /** Project seed context (typed notes, imported docs, honed concepts). */
-  seedContext?: string
+  /** Seed context layers (typed notes, imported docs, honed concepts).
+   * Deck-level notes are more specific and outrank project-level ones. */
+  seedContext?: {
+    project?: string
+    deck?: string
+  }
   /** The active template's layouts — the option set the model must pick from (GEN-6). */
   layoutDescriptors: LayoutDescriptor[]
   seededImages?: SeededImageDescriptor[]

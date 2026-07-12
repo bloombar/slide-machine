@@ -383,7 +383,17 @@ describe('DeckViewerPage settings modal', () => {
         status: 200,
         body: { ...deckView.deck, templateId: 'midnight' },
       }),
+      '/api/actions/deck.shares': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.setSeedNotes': init => {
+        seedNotesBody = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: { ...deckView.deck, seedContext: 'Tuning fork demo' },
+        }
+      },
     })
+
+  let seedNotesBody: unknown
 
   const renderWithSettings = () =>
     render(
@@ -395,6 +405,30 @@ describe('DeckViewerPage settings modal', () => {
         </AuthProvider>
       </MemoryRouter>,
     )
+
+  it('auto-saves lecture seed notes from the settings modal', async () => {
+    vi.useFakeTimers()
+    withSettingsRoutes()
+    renderWithSettings()
+    await vi.waitFor(() =>
+      expect(screen.getByText('Shared Lecture')).toBeInTheDocument(),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Lecture settings' }))
+
+    const box = await vi.waitFor(() =>
+      screen.getByRole('textbox', { name: 'Lecture seed notes' }),
+    )
+    fireEvent.change(box, { target: { value: 'Tuning fork demo' } })
+    vi.advanceTimersByTime(800)
+
+    await vi.waitFor(() =>
+      expect(seedNotesBody).toEqual({
+        deckId: 'deck1',
+        seedContext: 'Tuning fork demo',
+      }),
+    )
+    vi.useRealTimers()
+  })
 
   it('opens from the gear, switches templates, and closes from the icon', async () => {
     withSettingsRoutes()

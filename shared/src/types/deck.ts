@@ -25,6 +25,8 @@ export interface Deck {
   editors?: string[]
   permalinkSlug: string
   slideOrder: string[]
+  /** Lecture-level seed notes; stack on top of the project's (PROJ-1/SEED-1). */
+  seedContext?: string
   /** Finalized full lecture transcript, retained for post-lecture reformat (GEN-4). */
   transcript?: string
   voteScore: number

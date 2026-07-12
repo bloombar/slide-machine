@@ -9,6 +9,7 @@ import type {
   Deck,
   DeckCreateInput,
   DeckSetAccessInput,
+  DeckSetSeedNotesInput,
   DeckShare,
   DeckShareInput,
   DeckSharesInput,
@@ -274,7 +275,10 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
     const result = await provider.generateSlideContent({
       phrase: input.phrase,
       rollingContext,
-      seedContext: project?.seedContext,
+      seedContext: {
+        project: project?.seedContext,
+        deck: deck.seedContext,
+      },
       layoutDescriptors: layoutDescriptors(template),
     })
 
@@ -347,6 +351,20 @@ const sharesOf = async (
     ...deck.editors.map(id => entry(id, 'editor')),
   ].filter((share): share is DeckShare => share !== null)
 }
+
+export const deckSetSeedNotes = defineAction<DeckSetSeedNotesInput, Deck>({
+  name: 'deck.setSeedNotes',
+  input: z.object({
+    deckId: z.string().min(1),
+    seedContext: z.string().max(20_000),
+  }),
+  execute: async (ctx, input) => {
+    const deck = await loadEditableDeck(ctx, input.deckId)
+    deck.seedContext = input.seedContext
+    await deck.save()
+    return toDeckDto(deck)
+  },
+})
 
 export const deckSetAccess = defineAction<DeckSetAccessInput, Deck>({
   name: 'deck.setAccess',
@@ -466,6 +484,7 @@ registerAction(deckSwitchTemplate)
 registerAction(slideAdd)
 registerAction(deckReorderSlides)
 registerAction(sessionPhrase)
+registerAction(deckSetSeedNotes)
 registerAction(deckSetAccess)
 registerAction(deckShare)
 registerAction(deckUnshare)

@@ -16,6 +16,15 @@ export interface ProjectDeleteInput {
   projectId: string
 }
 
+/** Owner-only project edit; only provided fields change. */
+export interface ProjectUpdateInput {
+  projectId: string
+  title?: string
+  course?: string
+  description?: string
+  seedContext?: string
+}
+
 export interface DeckCreateInput {
   projectId: string
   title: string
@@ -40,6 +49,12 @@ export interface DeckRenameInput {
 export interface DeckSwitchTemplateInput {
   deckId: string
   templateId: string
+}
+
+/** Lecture-level seed notes (owner and editors). */
+export interface DeckSetSeedNotesInput {
+  deckId: string
+  seedContext: string
 }
 
 /** Owner-only general-access change (SHARE-1). */

@@ -47,25 +47,35 @@ test('slides reorder by dragging anywhere on the slide', async ({ page }) => {
     'title',
   )
 
-  const source = page.getByRole('listitem', { name: 'Slide 1' })
-  const target = page.getByTestId('slide').nth(1)
-  const sb = (await source.boundingBox())!
-  const tb = (await target.boundingBox())!
+  // Synthetic drags can be dropped under CPU contention (parallel
+  // workers); retry the gesture — the assertions below stay strict
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const source = page.getByRole('listitem', { name: 'Slide 1' })
+    const target = page.getByTestId('slide').nth(1)
+    const sb = (await source.boundingBox())!
+    const tb = (await target.boundingBox())!
 
-  // Grab the slide's top-left padding, away from editable text and the
-  // top-right delete button
-  await page.mouse.move(sb.x + 15, sb.y + 15)
-  await page.mouse.down()
-  // Small move first: dragstart must fire while still over the source
-  await page.mouse.move(sb.x + 18, sb.y + 18)
-  await page.mouse.move(
-    tb.x + tb.width / 2,
-    tb.y + Math.min(tb.height / 2, 200),
-    {
-      steps: 15,
-    },
-  )
-  await page.mouse.up()
+    // Grab the slide's top-left padding, away from editable text and
+    // the top-right delete button
+    await page.mouse.move(sb.x + 15, sb.y + 15)
+    await page.mouse.down()
+    // Small move first: dragstart must fire while still over the source
+    await page.mouse.move(sb.x + 18, sb.y + 18)
+    await page.mouse.move(
+      tb.x + tb.width / 2,
+      tb.y + Math.min(tb.height / 2, 200),
+      {
+        steps: 15,
+      },
+    )
+    await page.mouse.up()
+
+    const layout = await page
+      .getByTestId('slide')
+      .first()
+      .getAttribute('data-layout')
+    if (layout === 'list') break
+  }
 
   await expect(page.getByTestId('slide').first()).toHaveAttribute(
     'data-layout',

@@ -466,7 +466,7 @@ export default function DeckViewerPage() {
           deck={view.deck}
           isOwner={isOwner}
           onClose={() => setSettingsOpen(false)}
-          onAccessChange={deck => setView(v => (v ? { ...v, deck } : v))}
+          onDeckChange={deck => setView(v => (v ? { ...v, deck } : v))}
           onTemplateChange={(deck, template) =>
             setView(v => (v ? { ...v, deck, template } : v))
           }

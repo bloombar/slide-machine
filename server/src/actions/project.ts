@@ -7,6 +7,7 @@ import type {
   Project,
   ProjectCreateInput,
   ProjectDeleteInput,
+  ProjectUpdateInput,
 } from '@slide-machine/shared'
 import { defineAction } from './define'
 import { registerAction, ActionForbiddenError } from './dispatch'
@@ -59,6 +60,29 @@ export const projectGet = defineAction<{ projectId: string }, Project>({
   },
 })
 
+export const projectUpdate = defineAction<ProjectUpdateInput, Project>({
+  name: 'project.update',
+  input: z.object({
+    projectId: z.string().min(1),
+    title: z.string().trim().min(1).optional(),
+    course: z.string().optional(),
+    description: z.string().optional(),
+    seedContext: z.string().max(20_000).optional(),
+  }),
+  execute: async (ctx, input) => {
+    const userId = requireUser(ctx)
+    const doc = await ProjectModel.findById(input.projectId).catch(() => null)
+    if (!doc || doc.ownerId.toString() !== userId)
+      throw new ActionForbiddenError()
+    if (input.title !== undefined) doc.title = input.title
+    if (input.course !== undefined) doc.course = input.course
+    if (input.description !== undefined) doc.description = input.description
+    if (input.seedContext !== undefined) doc.seedContext = input.seedContext
+    await doc.save()
+    return toProjectDto(doc)
+  },
+})
+
 export const projectDelete = defineAction<
   ProjectDeleteInput,
   { deleted: true }
@@ -82,4 +106,5 @@ export const projectDelete = defineAction<
 registerAction(projectCreate)
 registerAction(projectList)
 registerAction(projectGet)
+registerAction(projectUpdate)
 registerAction(projectDelete)
