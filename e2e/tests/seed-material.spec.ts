@@ -23,7 +23,7 @@ test('photo seed material uploads, captions, toggles, and deletes', async ({
 
   await page.getByLabel('New project title').fill('MaterialProj')
   await page.getByRole('button', { name: 'Create' }).click()
-  await page.getByRole('link', { name: 'MaterialProj' }).click()
+  await page.getByRole('link', { name: 'MaterialProj', exact: true }).click()
 
   // Upload a photo and watch extraction settle
   await page

@@ -74,6 +74,24 @@ describe('template.list', () => {
 })
 
 describe('deck.create / deck.list / deck.get', () => {
+  it('creates untitled lectures with an empty title and untitled slug', async () => {
+    const created = await act(ada, 'deck.create', {
+      projectId,
+      templateId: 'classic',
+    })
+    expect(created.status).toBe(200)
+    expect(created.body.title).toBe('')
+    expect(created.body.permalinkSlug).toMatch(/^untitled-[0-9a-f]{8}$/)
+
+    // Titles can also be cleared later; the UI shows "Untitled lecture"
+    const cleared = await act(ada, 'deck.rename', {
+      deckId: created.body.id,
+      title: '',
+    })
+    expect(cleared.status).toBe(200)
+    expect(cleared.body.title).toBe('')
+  })
+
   it('creates a deck with a unique permalink slug and lists it', async () => {
     const created = await act(ada, 'deck.create', {
       projectId,

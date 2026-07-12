@@ -36,7 +36,9 @@ test('owner transfers a lecture; old owner stays an editor', async ({
   // Alice builds a lecture and adds Bella as an editor
   await alicePage.getByLabel('New project title').fill('TransferProj')
   await alicePage.getByRole('button', { name: 'Create' }).click()
-  await alicePage.getByRole('link', { name: 'TransferProj' }).click()
+  await alicePage
+    .getByRole('link', { name: 'TransferProj', exact: true })
+    .click()
   await alicePage.getByLabel('Lecture title').fill('Handover')
   await alicePage.getByRole('button', { name: 'Start lecture' }).click()
   await expect(alicePage).toHaveURL(/\/d\//)

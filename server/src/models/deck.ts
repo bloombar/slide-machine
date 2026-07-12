@@ -46,7 +46,8 @@ const deckSchema = new Schema<DeckDb>(
       required: true,
       index: true,
     },
-    title: { type: String, required: true, trim: true },
+    // Empty allowed: the UI shows untitled lectures as 'Untitled lecture'
+    title: { type: String, default: '', trim: true },
     templateId: { type: String, required: true },
     visibility: {
       type: String,

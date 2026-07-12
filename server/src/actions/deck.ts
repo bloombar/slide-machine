@@ -160,7 +160,8 @@ export const deckCreate = defineAction<DeckCreateInput, Deck>({
   name: 'deck.create',
   input: z.object({
     projectId: z.string().min(1),
-    title: z.string().trim().min(1),
+    // Untitled lectures are fine; the UI labels them "Untitled lecture"
+    title: z.string().trim().default(''),
     templateId: z.string().min(1),
   }),
   authorize: async (ctx, input) => {
@@ -182,7 +183,7 @@ export const deckCreate = defineAction<DeckCreateInput, Deck>({
       ownerId: ctx.userId,
       title: input.title,
       templateId: input.templateId,
-      permalinkSlug: permalinkSlug(input.title),
+      permalinkSlug: permalinkSlug(input.title || 'untitled'),
     })
     return toDeckDto(deck)
   },
@@ -246,7 +247,8 @@ export const deckRename = defineAction<DeckRenameInput, Deck>({
   name: 'deck.rename',
   input: z.object({
     deckId: z.string().min(1),
-    title: z.string().trim().min(1),
+    // Clearing the title is allowed; it displays as "Untitled lecture"
+    title: z.string().trim(),
   }),
   execute: async (ctx, input) => {
     const deck = await loadEditableDeck(ctx, input.deckId)

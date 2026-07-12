@@ -40,7 +40,7 @@ test('sharing: view/edit grants, private no-leak, public profile', async ({
   // Owner builds a one-slide lecture
   await ownerPage.getByLabel('New project title').fill('ShareProj')
   await ownerPage.getByRole('button', { name: 'Create' }).click()
-  await ownerPage.getByRole('link', { name: 'ShareProj' }).click()
+  await ownerPage.getByRole('link', { name: 'ShareProj', exact: true }).click()
   await ownerPage.getByLabel('Lecture title').fill('Shared Waves')
   await ownerPage.getByRole('button', { name: 'Start lecture' }).click()
   await ownerPage.getByLabel('Spoken phrase').fill('Wave basics')

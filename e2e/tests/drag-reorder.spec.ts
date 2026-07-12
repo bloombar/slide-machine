@@ -28,7 +28,7 @@ const buildDeck = async (page: Page) => {
   await page.getByRole('button', { name: 'Create account' }).click()
   await page.getByLabel('New project title').fill('DragProj')
   await page.getByRole('button', { name: 'Create' }).click()
-  await page.getByRole('link', { name: 'DragProj' }).click()
+  await page.getByRole('link', { name: 'DragProj', exact: true }).click()
   await page.getByLabel('Lecture title').fill('DragDeck')
   await page.getByRole('button', { name: 'Start lecture' }).click()
   for (const phrase of ['Atomic structure', 'Protons, neutrons, electrons']) {

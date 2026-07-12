@@ -6,6 +6,7 @@
 import { Link } from 'react-router'
 import type { Deck } from '@slide-machine/shared'
 import { useTimeAgo } from '../hooks/useTimeAgo'
+import { lectureTitle } from '../lib/lecture'
 
 export default function LectureRow({ deck }: { deck: Deck }) {
   const age = useTimeAgo(deck.updatedAt)
@@ -17,7 +18,7 @@ export default function LectureRow({ deck }: { deck: Deck }) {
         to={`/d/${deck.permalinkSlug}`}
         className="block rounded-md border border-slate-200 px-4 py-2 hover:border-slate-300 hover:bg-slate-50"
       >
-        <span className="block">{deck.title}</span>
+        <span className="block">{lectureTitle(deck)}</span>
         <span className="block text-xs text-slate-500">
           {count} slide{count === 1 ? '' : 's'} · edited {age}
         </span>

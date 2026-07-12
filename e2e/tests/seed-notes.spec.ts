@@ -19,7 +19,7 @@ test('project and lecture seed notes auto-save and persist', async ({
   // Project-level notes save from the project page (blur flushes)
   await page.getByLabel('New project title').fill('SeedProj')
   await page.getByRole('button', { name: 'Create' }).click()
-  await page.getByRole('link', { name: 'SeedProj' }).click()
+  await page.getByRole('link', { name: 'SeedProj', exact: true }).click()
   await page
     .getByRole('textbox', { name: 'Project seed notes' })
     .fill('Course covers waves, optics, and thermodynamics')

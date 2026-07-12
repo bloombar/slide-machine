@@ -22,7 +22,7 @@ test('speak-to-slides core loop, session to permalink playback', async ({
   // Create a project and open it
   await page.getByLabel('New project title').fill('Biology 101')
   await page.getByRole('button', { name: 'Create' }).click()
-  await page.getByRole('link', { name: 'Biology 101' }).click()
+  await page.getByRole('link', { name: 'Biology 101', exact: true }).click()
   await expect(page).toHaveURL(/\/app\/projects\//)
 
   // Start a lecture with the Midnight template

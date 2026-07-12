@@ -20,6 +20,9 @@ interface Props {
   multiline?: boolean
   /** Formatted display of the value; editing always shows the raw source. */
   renderValue?: (value: string) => ReactNode
+  /** Shown (and read as the accessible name) when the value is empty,
+   * e.g. "Untitled lecture"; editing still starts from the empty value. */
+  emptyDisplay?: string
   /** Debounce for auto-save while typing; overridable in tests. */
   debounceMs?: number
 }
@@ -30,6 +33,7 @@ export default function EditableText({
   onSave,
   multiline = false,
   renderValue,
+  emptyDisplay,
   debounceMs = 800,
 }: Props) {
   const [editing, setEditing] = useState(false)
@@ -89,8 +93,9 @@ export default function EditableText({
         tabIndex={0}
         // The text itself stays the accessible name (an aria-label would
         // mask it from AT and heading queries); the hint rides on title.
-        // Empty values get an explicit name so the control stays reachable
-        aria-label={value ? undefined : `Edit ${label}`}
+        // Empty values get an explicit name so the control stays
+        // reachable — unless emptyDisplay already provides visible text
+        aria-label={value || emptyDisplay ? undefined : `Edit ${label}`}
         title={`Click to edit ${label}`}
         onClick={startEditing}
         onKeyDown={e => {
@@ -103,7 +108,9 @@ export default function EditableText({
         // hotspots, so clicking text edits instead of navigating
         className="relative z-10 -mx-1 inline-block cursor-text rounded px-1 hover:bg-black/5"
       >
-        {renderValue ? renderValue(value) : value}
+        {value
+          ? (renderValue?.(value) ?? value)
+          : (emptyDisplay ?? renderValue?.(value) ?? value)}
       </span>
     )
   }

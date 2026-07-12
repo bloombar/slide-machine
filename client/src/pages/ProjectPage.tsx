@@ -46,7 +46,6 @@ export default function ProjectPage() {
 
   const onCreate = async (e: FormEvent) => {
     e.preventDefault()
-    if (!title.trim()) return
     setError(null)
     try {
       const deck = await dispatchAction<Deck>('deck.create', {
@@ -81,7 +80,7 @@ export default function ProjectPage() {
           <input
             value={title}
             onChange={e => setTitle(e.target.value)}
-            placeholder="Lecture title"
+            placeholder="Lecture title (optional)"
             aria-label="Lecture title"
             className="rounded-md border border-slate-300 px-3 py-2"
           />

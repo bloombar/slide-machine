@@ -27,14 +27,24 @@ function ProjectSection({
 
   return (
     <section className="mb-8">
-      <h2 className="mb-3 text-lg font-semibold">
+      <div className="mb-3 flex items-center gap-2">
+        <h2 className="text-lg font-semibold">
+          <Link
+            to={`/app/projects/${project.id}`}
+            className="hover:text-indigo-600"
+          >
+            {project.title}
+          </Link>
+        </h2>
         <Link
           to={`/app/projects/${project.id}`}
-          className="hover:text-indigo-600"
+          aria-label={`Start a new lecture in ${project.title}`}
+          title="Start a new lecture"
+          className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"
         >
-          {project.title}
+          <Plus className="h-4 w-4" aria-hidden />
         </Link>
-      </h2>
+      </div>
       {decks.length === 0 ? (
         <p className="text-sm text-slate-500">
           No lectures yet —{' '}

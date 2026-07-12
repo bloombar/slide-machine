@@ -17,7 +17,7 @@ const buildDeck = async (page: Page) => {
 
   await page.getByLabel('New project title').fill('Chemistry')
   await page.getByRole('button', { name: 'Create' }).click()
-  await page.getByRole('link', { name: 'Chemistry' }).click()
+  await page.getByRole('link', { name: 'Chemistry', exact: true }).click()
 
   await page.getByLabel('Lecture title').fill('Atoms')
   await page.getByRole('button', { name: 'Start lecture' }).click()

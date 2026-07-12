@@ -102,6 +102,15 @@ describe('HomePage', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('shows a + option per project to start a new lecture', async () => {
+    renderHome()
+    await screen.findByRole('heading', { name: 'Biology' })
+    const plus = screen.getByRole('link', {
+      name: 'Start a new lecture in Biology',
+    })
+    expect(plus.getAttribute('href')).toMatch(/^\/app\/projects\//)
+  })
+
   it('offers to start a lecture in empty projects', async () => {
     renderHome()
     await screen.findByRole('heading', { name: 'Chemistry' })

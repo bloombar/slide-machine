@@ -562,6 +562,39 @@ describe('DeckViewerPage title in the primary nav', () => {
     expect(heading.contains(meta)).toBe(false)
   })
 
+  it('shows empty titles as "Untitled lecture" in the nav', async () => {
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: {
+          ...deckView,
+          deck: { ...deckView.deck, title: '' },
+          canEdit: true,
+        },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Untitled lecture')).toBeInTheDocument()
+    // Editing still starts from the real (empty) value
+    fireEvent.click(screen.getByTitle('Click to edit Lecture title'))
+    expect(screen.getByRole('textbox', { name: 'Lecture title' })).toHaveValue(
+      '',
+    )
+  })
+
   it('refreshes the edited age immediately after an auto-save', async () => {
     mockFetchRoutes({
       '/api/auth/refresh': () => ({

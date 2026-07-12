@@ -31,6 +31,7 @@ import DeckPageHeader from '../components/DeckPageHeader'
 import DeckSettingsModal from '../components/DeckSettingsModal'
 import { ShellTitle } from '../components/layout/ShellTitle'
 import { type ViewMode } from '../components/ViewModeToggle'
+import { lectureTitle, UNTITLED } from '../lib/lecture'
 
 /** Slide count and modification age, small beside the title in the nav. */
 function DeckTitleMeta({ deck, count }: { deck: Deck; count: number }) {
@@ -348,10 +349,11 @@ export default function DeckViewerPage() {
             <EditableText
               value={view.deck.title}
               label="Lecture title"
+              emptyDisplay={UNTITLED}
               onSave={renameDeck}
             />
           ) : (
-            view.deck.title
+            lectureTitle(view.deck)
           )}
         </h1>
         <DeckTitleMeta deck={view.deck} count={view.slides.length} />
