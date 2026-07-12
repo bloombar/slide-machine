@@ -51,6 +51,23 @@ export interface DeckSwitchTemplateInput {
   templateId: string
 }
 
+/** Lists seed assets at one level: a project's own, or a lecture's. */
+export interface SeedAssetListInput {
+  projectId?: string
+  deckId?: string
+}
+
+/** Caption/enabled edits on a seed asset; only provided fields change. */
+export interface SeedAssetUpdateInput {
+  assetId: string
+  caption?: string
+  enabled?: boolean
+}
+
+export interface SeedAssetDeleteInput {
+  assetId: string
+}
+
 /** Lecture-level seed notes (owner and editors). */
 export interface DeckSetSeedNotesInput {
   deckId: string

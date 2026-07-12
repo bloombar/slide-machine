@@ -10,6 +10,8 @@ import { authRouter } from './routes/auth'
 import { actionsRouter } from './routes/actions'
 import { decksRouter } from './routes/decks'
 import { usersRouter } from './routes/users'
+import { seedAssetsRouter } from './routes/seed-assets'
+import { filesRouter } from './routes/files'
 import { errorHandler } from './middleware/error'
 import { serveSpa } from './static'
 import './actions/system'
@@ -18,6 +20,7 @@ import './actions/template'
 import './actions/deck'
 import './actions/slide'
 import './actions/user'
+import './actions/seed-asset'
 import './providers/mock-generation'
 
 export const createApp = (): Express => {
@@ -31,6 +34,8 @@ export const createApp = (): Express => {
   api.use(actionsRouter)
   api.use(decksRouter)
   api.use(usersRouter)
+  api.use(seedAssetsRouter)
+  api.use(filesRouter)
   app.use('/api', api)
 
   if (env.NODE_ENV === 'production') {

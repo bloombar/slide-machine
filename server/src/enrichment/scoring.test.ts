@@ -82,3 +82,31 @@ describe('pickBest', () => {
     expect(pickBest([], ['anything'])).toBeNull()
   })
 })
+
+describe('seeded source prior (SEED-2)', () => {
+  it("prefers the instructor's own image over an equal web match", () => {
+    const keywords = ['mitochondria']
+    const seeded = candidate({
+      url: 'http://files/own.jpg',
+      title: 'mitochondria diagram',
+      source: 'seeded',
+      width: undefined,
+    })
+    const web = candidate({
+      url: 'http://img/web.jpg',
+      title: 'mitochondria diagram',
+      source: 'wikimedia',
+      width: 1200,
+    })
+    expect(pickBest([web, seeded], keywords)?.url).toBe('http://files/own.jpg')
+  })
+
+  it('still rejects irrelevant seeded images', () => {
+    const seeded = candidate({
+      title: 'holiday photo',
+      tags: ['beach'],
+      source: 'seeded',
+    })
+    expect(pickBest([seeded], ['mitochondria'])).toBeNull()
+  })
+})

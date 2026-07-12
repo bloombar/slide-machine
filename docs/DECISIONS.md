@@ -51,3 +51,14 @@ scrolled beneath it.
 **Profiles.** Users get `profileVisibility: 'public' | 'private'` (default public). `GET /api/users/:id` lists the lectures the requester can view, grouped by project (empty projects omitted). Missing and private both return an identical 404 — profile existence never leaks, same rule as restricted decks.
 
 **Dropped.** The old `unlisted` tier (public-with-link covers it) and a separate deck-level edit-access switch (an earlier draft; the people list alone decides who edits).
+
+## Seed material: upload → keyless extraction → generation (2026-07-11)
+
+**Problem.** SEED-1/2 need instructor documents (PDF/DOCX/photos) feeding slide generation and image enrichment, but every AI credential (Gemini) is still pending.
+
+**Choice.** A two-tier pipeline where the baseline needs no keys:
+
+- **Storage** behind a `FileStorage` seam ([storage/index.ts](../server/src/storage/index.ts)): `local` (disk + `GET /api/files/*`, the dev/test default) or `s3` (MinIO/DO Spaces), selected by `STORAGE_PROVIDER`.
+- **Upload** (`POST /api/seed-assets`, 20 MB, PDF/DOCX/PNG/JPEG/WebP) answers immediately with a `processing` asset; extraction runs fire-and-forget and settles to `ready`/`failed` — the same fault-tolerant background pattern as image enrichment. Project-level uploads are owner-only; lecture-level follow deck edit rights.
+- **Baseline extraction** ([seeding/extract.ts](../server/src/seeding/extract.ts)): PDF text via unpdf, DOCX text via mammoth plus embedded photos (≥10 KiB, ≤12) spun into their own image assets, uploaded photos used directly with caption-derived keywords. The **AI tier** (vision captions, OCR, summarization) plugs in behind `processSeedAsset` when `GEMINI_API_KEY` lands.
+- **Payoffs**: enabled assets' text joins the structured seed layers (`seedContext: { project, deck }`, additive, deck outranks project; 8k chars/layer). Seeded photos enter the enrichment pool with source prior **1.2 — above every web source** — and a model-selected `seededImageId` short-circuits search entirely (`imageSource: 'seeded'`, IMG-1).

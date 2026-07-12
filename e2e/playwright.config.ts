@@ -35,6 +35,8 @@ export default defineConfig({
       JWT_REFRESH_SECRET: 'e2e-refresh-secret-at-least-32-chars!!!',
       GENERATION_PROVIDER: 'mock',
       IMAGE_ENRICHMENT_ENABLED: 'false',
+      STORAGE_PROVIDER: 'local',
+      STORAGE_LOCAL_DIR: '.uploads-e2e',
     },
   },
 })

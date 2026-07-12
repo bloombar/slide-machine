@@ -6,8 +6,11 @@
  */
 import type { EnrichmentSource, ImageCandidate } from './types'
 
-/** Wikimedia ranks highest for named entities/concepts; Flickr is prettiest but noisiest. */
+/** The instructor's own material beats any web source (IMG-1); among
+ * web sources, Wikimedia ranks highest for named entities/concepts and
+ * Flickr is prettiest but noisiest. */
 const SOURCE_PRIOR: Record<EnrichmentSource, number> = {
+  seeded: 1.2,
   wikimedia: 1.0,
   openverse: 0.9,
   flickr: 0.85,

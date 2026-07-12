@@ -24,3 +24,6 @@ openai.key
 docs/GRANT_PROPOSAL.md
 docs/LAB.md
 docs/grant_proposal.pdf
+
+# Local upload storage (STORAGE_PROVIDER=local)
+.uploads*/

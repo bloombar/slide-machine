@@ -29,6 +29,9 @@ export default defineConfig({
       IMAGE_ENRICHMENT_ENABLED: 'false',
       // No grace window in tests: rotated-out tokens must die immediately
       REFRESH_GRACE_SECONDS: '0',
+      // Uploads land on disk in an isolated test dir
+      STORAGE_PROVIDER: 'local',
+      STORAGE_LOCAL_DIR: '.uploads-test',
     },
     coverage: {
       provider: 'v8',

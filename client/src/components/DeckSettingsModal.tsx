@@ -11,6 +11,7 @@ import { dispatchAction } from '../api/actions'
 import TemplatePicker from './TemplatePicker'
 import DeckAccessSettings from './DeckAccessSettings'
 import SeedNotesEditor from './SeedNotesEditor'
+import SeedMaterial from './SeedMaterial'
 
 const isTypingTarget = (target: EventTarget | null): boolean =>
   target instanceof HTMLElement &&
@@ -128,6 +129,9 @@ export default function DeckSettingsModal({
                     })
                 }}
               />
+              <div className="mt-4">
+                <SeedMaterial projectId={deck.projectId} deckId={deck.id} />
+              </div>
             </section>
 
             <DeckAccessSettings

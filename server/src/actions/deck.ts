@@ -51,20 +51,81 @@ import { getBuiltinTemplate, layoutDescriptors } from '../templates/builtin'
 import { registry } from '../providers/registry'
 import { permalinkSlug } from '../lib/slug'
 import { enrichSlideImage } from '../enrichment/enrich'
+import type { ImageCandidate } from '../enrichment/types'
+import { SeedAssetModel, type SeedAssetDb } from '../models/seed-asset'
+
+type SeedAssetDoc = HydratedDocument<SeedAssetDb>
 import { env } from '../config/env'
-import type { ImageGuidance } from '@slide-machine/shared'
+import type {
+  ImageGuidance,
+  SeededImageDescriptor,
+} from '@slide-machine/shared'
 
 /**
  * Kicks off background image enrichment AFTER the SlideEvent is on its
  * way — never on the phrase→slide critical path, never throwing (IMG-2).
+ * When the model picked a specific seeded image (GEN-7), it applies
+ * directly; otherwise seeded images join the search pool with the top
+ * source prior (SEED-2).
  */
 const maybeEnrich = (
   slideId: string,
   guidance: ImageGuidance | undefined,
+  seeded: SeedAssetDoc[] = [],
 ): void => {
   if (!env.IMAGE_ENRICHMENT_ENABLED) return
-  if (!guidance || guidance.none || !guidance.keywords.length) return
-  void enrichSlideImage(slideId, guidance.keywords)
+  if (!guidance || guidance.none) return
+
+  const images = seeded.filter(a => a.type === 'image' && a.imageUrl)
+  const chosen = guidance.seededImageId
+    ? images.find(a => a._id.toString() === guidance.seededImageId)
+    : undefined
+  if (chosen?.imageUrl) {
+    void SlideModel.updateOne(
+      { _id: slideId, imageRef: { $exists: false } },
+      { imageRef: chosen.imageUrl, imageSource: 'seeded' },
+    ).catch(() => undefined)
+    return
+  }
+
+  if (!guidance.keywords.length) return
+  const candidates: ImageCandidate[] = images.map(a => ({
+    url: a.imageUrl!,
+    title: a.caption ?? a.name,
+    tags: a.keywords,
+    source: 'seeded',
+  }))
+  void enrichSlideImage(slideId, guidance.keywords, candidates)
+}
+
+/** Enabled, extracted seed assets that apply to a lecture: the
+ * project's own plus the deck's (additive layering, SEED-1). */
+const seedAssetsFor = async (
+  deck: HydratedDocument<DeckDb>,
+): Promise<{ project: SeedAssetDoc[]; deck: SeedAssetDoc[] }> => {
+  const docs = await SeedAssetModel.find({
+    projectId: deck.projectId,
+    enabled: true,
+    status: 'ready',
+    $or: [{ deckId: { $exists: false } }, { deckId: deck._id }],
+  })
+  return {
+    project: docs.filter(a => !a.deckId),
+    deck: docs.filter(a => a.deckId),
+  }
+}
+
+/** One seed-context layer: typed notes first, then extracted text. */
+const seedLayer = (
+  notes: string | undefined,
+  assets: SeedAssetDoc[],
+  maxChars = 8000,
+): string | undefined => {
+  const text = [notes, ...assets.map(a => a.text)]
+    .filter(Boolean)
+    .join('\n\n')
+    .slice(0, maxChars)
+  return text || undefined
 }
 
 const requireUser = (ctx: ActionContext): string => {
@@ -268,18 +329,33 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
         [s.title, s.body, ...(s.bullets ?? [])].filter(Boolean).join(' — '),
       )
 
-    // Project seed notes bias generation toward the planned material (PROJ-1)
-    const project = await ProjectModel.findById(deck.projectId)
+    // Seed layers bias generation toward the planned material (PROJ-1/
+    // SEED-1): typed notes plus extracted text, project- and deck-level
+    const [project, assets] = await Promise.all([
+      ProjectModel.findById(deck.projectId),
+      seedAssetsFor(deck),
+    ])
+    const seededImages: SeededImageDescriptor[] = [
+      ...assets.project,
+      ...assets.deck,
+    ]
+      .filter(a => a.type === 'image' && a.imageUrl)
+      .map(a => ({
+        id: a._id.toString(),
+        caption: a.caption ?? a.name,
+        keywords: a.keywords,
+      }))
 
     const provider = registry.get<GenerationProvider>('generation')
     const result = await provider.generateSlideContent({
       phrase: input.phrase,
       rollingContext,
       seedContext: {
-        project: project?.seedContext,
-        deck: deck.seedContext,
+        project: seedLayer(project?.seedContext, assets.project),
+        deck: seedLayer(deck.seedContext, assets.deck),
       },
       layoutDescriptors: layoutDescriptors(template),
+      seededImages: seededImages.length ? seededImages : undefined,
     })
 
     if (result.action === 'none') return { kind: 'none' }
@@ -306,7 +382,10 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
       await lastSlide.save()
       await touchDeck(deck._id)
       if (!lastSlide.imageRef)
-        maybeEnrich(lastSlide._id.toString(), result.imageGuidance)
+        maybeEnrich(lastSlide._id.toString(), result.imageGuidance, [
+          ...assets.project,
+          ...assets.deck,
+        ])
       return { kind: 'slide.update', slide: toSlideDto(lastSlide) }
     }
 
@@ -324,7 +403,10 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
     deck.slideOrder.push(slide._id.toString())
     deck.transcript = [deck.transcript, input.phrase].filter(Boolean).join('\n')
     await deck.save()
-    maybeEnrich(slide._id.toString(), result.imageGuidance)
+    maybeEnrich(slide._id.toString(), result.imageGuidance, [
+      ...assets.project,
+      ...assets.deck,
+    ])
     return { kind: 'slide.new', slide: toSlideDto(slide) }
   },
 })

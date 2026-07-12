@@ -10,6 +10,7 @@ import { dispatchAction } from '../api/actions'
 import TemplatePicker from '../components/TemplatePicker'
 import LectureRow from '../components/LectureRow'
 import SeedNotesEditor from '../components/SeedNotesEditor'
+import SeedMaterial from '../components/SeedMaterial'
 
 export default function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -131,6 +132,17 @@ export default function ProjectPage() {
             }}
           />
         )}
+      </section>
+
+      <section className="mb-10 max-w-2xl">
+        <h2 className="mb-2 text-lg font-semibold text-slate-700">
+          Seed material
+        </h2>
+        <p className="mb-3 text-sm text-slate-500">
+          Documents and photos scanned for background text and imagery,
+          available to every lecture in this project.
+        </p>
+        {projectId && <SeedMaterial projectId={projectId} />}
       </section>
 
       <section className="max-w-2xl">

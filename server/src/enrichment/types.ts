@@ -3,7 +3,7 @@
  * scoring picks one winner or none — a missing image is preferable to a
  * misleading one (IMG-3).
  */
-export type EnrichmentSource = 'wikimedia' | 'openverse' | 'flickr'
+export type EnrichmentSource = 'seeded' | 'wikimedia' | 'openverse' | 'flickr'
 
 export interface ImageCandidate {
   url: string

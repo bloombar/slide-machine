@@ -19,16 +19,25 @@ export interface Project {
 export type SeedAssetType =
   'doc' | 'pdf' | 'gdoc' | 'gdrive' | 'gslides' | 'image'
 
+/** Upload → background extraction lifecycle. */
+export type SeedAssetStatus = 'processing' | 'ready' | 'failed'
+
 /** Imported seed content used as context for slide generation (SEED-1/SEED-2). */
 export interface SeedAsset {
   id: string
   projectId: string
+  /** Present for lecture-level assets; absent for project-level ones. */
+  deckId?: string
   type: SeedAssetType
+  /** Original file name, shown in the asset list. */
+  name: string
+  status: SeedAssetStatus
   text?: string
   imageUrl?: string
   caption?: string
   keywords: string[]
   enabled: boolean
+  createdAt: string
 }
 
 /** A preflight concept the instructor has honed before lecturing (PREP-1/2/3). */

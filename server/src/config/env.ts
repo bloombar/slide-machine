@@ -85,6 +85,10 @@ const envSchema = z.object({
   SMTP_PORT: z.coerce.number().optional(),
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
+  // Uploaded-file storage: 'local' (disk, dev/test default) or 's3'
+  STORAGE_PROVIDER: z.enum(['local', 's3']).default('local'),
+  STORAGE_LOCAL_DIR: z.string().default('.uploads'),
+
   // S3-compatible object storage: MinIO in dev, DO Spaces in prod (TECH-10)
   S3_ENDPOINT: z.string().optional(),
   S3_REGION: z.string().optional(),
