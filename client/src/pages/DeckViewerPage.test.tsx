@@ -458,6 +458,9 @@ describe('DeckViewerPage microphone capture', () => {
     fireEvent.click(toggle)
     expect(toggle).toHaveAttribute('aria-pressed', 'true')
     expect(FakeRecognition.last).not.toBeNull()
+    // Recording state pulsates red so capture is unmistakable
+    expect(toggle.className).toContain('animate-pulse')
+    expect(toggle.className).toContain('text-red-600')
 
     const recognition = FakeRecognition.last!
     // Interim text shows without dispatching
@@ -491,6 +494,7 @@ describe('DeckViewerPage microphone capture', () => {
     fireEvent.click(toggle)
     expect(toggle).toHaveAttribute('aria-pressed', 'false')
     expect(stopSpy).toHaveBeenCalled()
+    expect(toggle.className).not.toContain('animate-pulse')
     expect(
       screen.queryByRole('textbox', { name: 'Spoken phrase' }),
     ).not.toBeInTheDocument()

@@ -476,7 +476,11 @@ export default function DeckViewerPage() {
               </button>
               <button
                 aria-label="Live session"
-                title="Speak to add slides"
+                title={
+                  listening
+                    ? 'Recording — click to stop'
+                    : 'Speak to add slides'
+                }
                 aria-pressed={speaking}
                 onClick={() => {
                   // One toggle: the bar and the microphone together
@@ -485,9 +489,11 @@ export default function DeckViewerPage() {
                   setSpeaking(s => !s)
                 }}
                 className={`rounded-md p-2 ${
-                  speaking
-                    ? 'bg-indigo-50 text-indigo-600'
-                    : 'text-slate-500 hover:text-slate-900'
+                  listening
+                    ? 'animate-pulse bg-red-50 text-red-600'
+                    : speaking
+                      ? 'bg-indigo-50 text-indigo-600'
+                      : 'text-slate-500 hover:text-slate-900'
                 }`}
               >
                 <Mic className="h-5 w-5" aria-hidden />
