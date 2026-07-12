@@ -130,13 +130,33 @@ describe('HomePage', () => {
     )
   })
 
-  it('offers to start a lecture in empty projects', async () => {
+  it('starts a lecture straight from an empty project', async () => {
+    let sent: unknown
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/actions/project.list': () => ({
+        status: 200,
+        body: [{ id: 'p2', ownerId: 'u1', title: 'Chemistry', createdAt: '' }],
+      }),
+      '/api/actions/deck.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.create': init => {
+        sent = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: { id: 'd9', title: '', permalinkSlug: 'untitled-fff000' },
+        }
+      },
+    })
     renderHome()
     await screen.findByRole('heading', { name: 'Chemistry' })
     expect(screen.getByText(/no lectures yet/i)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'start one' })).toHaveAttribute(
-      'href',
-      '/app/projects/p2',
+
+    fireEvent.click(screen.getByRole('button', { name: 'start one' }))
+    await vi.waitFor(() =>
+      expect(sent).toEqual({ projectId: 'p2', templateId: 'classic' }),
     )
   })
 })

@@ -1,7 +1,8 @@
 /**
  * One project: its lectures up front (newest modification first, like
  * the home screen), a + beside the heading that starts a new untitled
- * lecture immediately, and a settings icon on the title row opening the
+ * lecture immediately, an in-place editable title, and a settings icon
+ * on the title row opening the
  * project settings modal (seed material + danger zone).
  */
 import { useEffect, useState } from 'react'
@@ -10,6 +11,7 @@ import { Plus, Settings } from 'lucide-react'
 import type { Deck, Project } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import LectureRow from '../components/LectureRow'
+import EditableText from '../components/EditableText'
 import ProjectSettingsModal from '../components/ProjectSettingsModal'
 
 export default function ProjectPage() {
@@ -40,6 +42,19 @@ export default function ProjectPage() {
     }
   }, [projectId])
 
+  /** Renames the project in place; empty titles are ignored. */
+  const renameProject = (title: string) => {
+    if (!title.trim() || !project) return
+    dispatchAction<Project>('project.update', {
+      projectId,
+      title: title.trim(),
+    })
+      .then(setProject)
+      .catch(() => {
+        // Quiet failure: the title reverts to the saved value
+      })
+  }
+
   /** Starts a new untitled lecture and jumps straight into it. */
   const startLecture = async () => {
     setError(null)
@@ -57,8 +72,16 @@ export default function ProjectPage() {
   return (
     <div>
       <header className="mb-8 flex items-center justify-between gap-4">
-        <h1 className="min-w-0 truncate text-2xl font-bold">
-          {project?.title ?? 'Loading…'}
+        <h1 className="min-w-0 flex-1 truncate text-2xl font-bold">
+          {project ? (
+            <EditableText
+              value={project.title}
+              label="Project title"
+              onSave={renameProject}
+            />
+          ) : (
+            'Loading…'
+          )}
         </h1>
         <button
           aria-label="Project settings"

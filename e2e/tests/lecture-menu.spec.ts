@@ -77,4 +77,15 @@ test('kebab menu shares and deletes lectures from lists', async ({ page }) => {
   await expect(
     page.getByText('No lectures yet — use + to start one.'),
   ).toBeVisible()
+
+  // The project title edits in place; home reflects the rename
+  await page.getByTitle('Click to edit Project title').click()
+  await page
+    .getByRole('textbox', { name: 'Project title' })
+    .fill('MenuProj Renamed')
+  await page.keyboard.press('Enter')
+  await page.getByRole('link', { name: 'The Slide Machine' }).click()
+  await expect(
+    page.getByRole('heading', { name: 'MenuProj Renamed' }),
+  ).toBeVisible()
 })

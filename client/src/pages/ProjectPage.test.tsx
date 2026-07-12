@@ -62,6 +62,35 @@ describe('ProjectPage', () => {
     )
   })
 
+  it('renames the project title in place', async () => {
+    vi.useFakeTimers()
+    let sent: unknown
+    mockFetchRoutes({
+      ...baseRoutes,
+      '/api/actions/project.update': init => {
+        sent = JSON.parse(String(init?.body))
+        return { status: 200, body: { ...project, title: 'Physics II' } }
+      },
+    })
+    renderPage()
+
+    fireEvent.click(
+      await vi.waitFor(() => screen.getByTitle('Click to edit Project title')),
+    )
+    fireEvent.change(screen.getByRole('textbox', { name: 'Project title' }), {
+      target: { value: 'Physics II' },
+    })
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Project title' }), {
+      key: 'Enter',
+    })
+    vi.advanceTimersByTime(800)
+
+    await vi.waitFor(() =>
+      expect(sent).toEqual({ projectId: 'p1', title: 'Physics II' }),
+    )
+    vi.useRealTimers()
+  })
+
   it('starts an untitled lecture from the + beside Lectures', async () => {
     let sent: unknown
     mockFetchRoutes({

@@ -51,9 +51,12 @@ function ProjectSection({
       {decks.length === 0 ? (
         <p className="text-sm text-slate-500">
           No lectures yet —{' '}
-          <Link to={`/app/projects/${project.id}`} className="text-indigo-600">
+          <button
+            onClick={() => onStartLecture(project)}
+            className="cursor-pointer text-indigo-600 hover:underline"
+          >
             start one
-          </Link>
+          </button>
         </p>
       ) : (
         <>
