@@ -427,6 +427,62 @@ describe('DeckViewerPage microphone capture', () => {
     await vi.waitFor(() => expect(scrolled).toHaveBeenCalled())
   })
 
+  it('wake-worded voice commands act locally and never reach generation', async () => {
+    FakeRecognition.reset()
+    vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
+    let generationCalls = 0
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+      '/api/actions/session.phrase': () => {
+        generationCalls++
+        return { status: 200, body: { kind: 'none' } }
+      },
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Live session' }))
+    const recognition = FakeRecognition.last!
+    const speak = (transcript: string) =>
+      act(() => {
+        recognition.onresult?.({
+          resultIndex: 0,
+          results: [{ isFinal: true, 0: { transcript } }],
+        })
+      })
+
+    // Navigation commands move the carousel without generating
+    expect(screen.getByText('1 / 2')).toBeInTheDocument()
+    speak('Slide machine, next slide')
+    expect(await screen.findByText('2 / 2')).toBeInTheDocument()
+    speak('slide machine go back')
+    expect(await screen.findByText('1 / 2')).toBeInTheDocument()
+    expect(generationCalls).toBe(0)
+
+    // Without the wake word, the same words are lecture content
+    speak('next slide')
+    await vi.waitFor(() => expect(generationCalls).toBe(1))
+
+    // Pause stops the microphone
+    const stopSpy = vi.spyOn(recognition, 'stop')
+    speak('slide machine, pause')
+    expect(stopSpy).toHaveBeenCalled()
+  })
+
   it('transcribed phrases flow through session.phrase', async () => {
     FakeRecognition.reset()
     vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)

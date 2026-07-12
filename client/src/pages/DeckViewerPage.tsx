@@ -23,6 +23,11 @@ import { useAuth } from '../auth/AuthContext'
 import { useTimeAgo } from '../hooks/useTimeAgo'
 import { useSlideNavigation } from '../hooks/useSlideNavigation'
 import { createSpeechCapture } from '../stt/capture'
+import {
+  COMMAND_LABELS,
+  matchVoiceCommand,
+  type VoiceCommand,
+} from '../stt/commands'
 import SlideView, { type SlideContentPatch } from '../components/SlideView'
 import SlideNavZones from '../components/SlideNavZones'
 import SlideDeleteButton from '../components/SlideDeleteButton'
@@ -256,12 +261,68 @@ export default function DeckViewerPage() {
     setInterim('')
   }
 
+  /** Appends a starter slide at the end and navigates to it. Reads
+   * through the ref: voice commands call this from stale closures. */
+  const addSlide = async () => {
+    const current = viewRef.current
+    if (!current) return
+    try {
+      const nextIndex = current.slides.length
+      const added = await dispatchAction<Slide>('slide.add', {
+        deckId: current.deck.id,
+      })
+      setView(v =>
+        v
+          ? {
+              ...v,
+              deck: { ...v.deck, slideOrder: [...v.deck.slideOrder, added.id] },
+              slides: [...v.slides, added],
+            }
+          : v,
+      )
+      touchDeckLocally()
+      nav.setCurrent(nextIndex)
+    } catch {
+      // Quiet failure
+    }
+  }
+
+  /** Executes a wake-worded voice command (CAP-4). Navigation goes
+   * through functional setCurrent so stale closures stay correct. */
+  const runVoiceCommand = (command: VoiceCommand) => {
+    if (command === 'next' || command === 'previous') {
+      const delta = command === 'next' ? 1 : -1
+      setCurrent(c => {
+        const count = viewRef.current?.slides.length ?? 0
+        const target = Math.max(0, Math.min(count - 1, c + delta))
+        requestAnimationFrame(() => nav.scrollTo(target))
+        return target
+      })
+    } else if (command === 'pause') {
+      stopListening()
+    } else if (command === 'newSlide') {
+      void addSlide()
+    }
+    // Brief on-screen echo of the interpreted command
+    setInterim(`✓ ${COMMAND_LABELS[command]}`)
+    window.setTimeout(
+      () => setInterim(prev => (prev.startsWith('✓') ? '' : prev)),
+      1500,
+    )
+  }
+
   /** Attaches recognition; recognized phrases queue through the same
-   * pipeline as typed ones. State flags belong to the callers. */
+   * pipeline as typed ones — unless the phrase is a wake-worded
+   * command, which acts immediately and never reaches generation. */
   const beginCapture = () => {
     capture.start({
       onPhrase: text => {
         setInterim('')
+        const command = matchVoiceCommand(text)
+        if (command) {
+          runVoiceCommand(command)
+          return
+        }
         phraseQueueRef.current = phraseQueueRef.current.then(() =>
           submitPhrase(text),
         )
@@ -335,29 +396,6 @@ export default function DeckViewerPage() {
       .catch(() => {
         // Quiet failure: the title reverts to the saved value
       })
-  }
-
-  /** Appends a starter slide at the end and navigates to it. */
-  const addSlide = async () => {
-    try {
-      const nextIndex = view.slides.length
-      const added = await dispatchAction<Slide>('slide.add', {
-        deckId: view.deck.id,
-      })
-      setView(v =>
-        v
-          ? {
-              ...v,
-              deck: { ...v.deck, slideOrder: [...v.deck.slideOrder, added.id] },
-              slides: [...v.slides, added],
-            }
-          : v,
-      )
-      touchDeckLocally()
-      nav.setCurrent(nextIndex)
-    } catch {
-      // Quiet failure
-    }
   }
 
   /** Persists a new slide order optimistically, reverting on failure. */
