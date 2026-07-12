@@ -504,7 +504,23 @@ export default function DeckViewerPage() {
       />
 
       {view.slides.length === 0 ? (
-        <p className="text-center text-slate-400">This deck has no slides.</p>
+        canEdit ? (
+          <p className="text-center text-slate-400">
+            Click the{' '}
+            <Plus
+              className="inline h-4 w-4 align-text-bottom"
+              aria-label="plus"
+            />{' '}
+            or{' '}
+            <Mic
+              className="inline h-4 w-4 align-text-bottom"
+              aria-label="microphone"
+            />{' '}
+            icons to start adding content.
+          </p>
+        ) : (
+          <p className="text-center text-slate-400">This deck has no slides.</p>
+        )
       ) : mode === 'carousel' ? (
         <>
           <div className="w-full flex-1">

@@ -32,6 +32,8 @@ export default defineConfig({
       // Uploads land on disk in an isolated test dir
       STORAGE_PROVIDER: 'local',
       STORAGE_LOCAL_DIR: '.uploads-test',
+      // Hermetic: the developer's local .env must not leak into tests
+      GENERATION_FREEDOM: '3',
     },
     coverage: {
       provider: 'v8',

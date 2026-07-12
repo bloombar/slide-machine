@@ -37,6 +37,8 @@ export default defineConfig({
       IMAGE_ENRICHMENT_ENABLED: 'false',
       STORAGE_PROVIDER: 'local',
       STORAGE_LOCAL_DIR: '.uploads-e2e',
+      // Hermetic: the developer's local .env must not leak into e2e
+      GENERATION_FREEDOM: '3',
     },
   },
 })

@@ -906,6 +906,40 @@ describe('DeckViewerPage title in the primary nav', () => {
     )
   })
 
+  it('guides editors of empty decks to the plus and microphone icons', async () => {
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: {
+          ...deckView,
+          slides: [],
+          deck: { ...deckView.deck, slideOrder: [] },
+          canEdit: true,
+        },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    expect(
+      await screen.findByText(/icons to start adding content/),
+    ).toBeInTheDocument()
+    // The actual icons ride inline in the message
+    expect(screen.getByLabelText('plus')).toBeInTheDocument()
+    expect(screen.getByLabelText('microphone')).toBeInTheDocument()
+    expect(screen.queryByText('This deck has no slides.')).toBeNull()
+  })
+
   it('refreshes the edited age immediately after an auto-save', async () => {
     mockFetchRoutes({
       '/api/auth/refresh': () => ({
