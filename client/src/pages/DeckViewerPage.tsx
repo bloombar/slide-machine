@@ -52,6 +52,12 @@ export default function DeckViewerPage() {
   const navigate = useNavigate()
   const { user, status } = useAuth()
   const [view, setView] = useState<DeckViewResponse | null>(null)
+  // Always-fresh view for callbacks that outlive their render (the mic
+  // queue submits phrases from closures captured when listening began)
+  const viewRef = useRef<DeckViewResponse | null>(null)
+  useEffect(() => {
+    viewRef.current = view
+  }, [view])
   const [mode, setMode] = useState<ViewMode>('carousel')
   const [error, setError] = useState<string | null>(null)
   // A lecture list's Share option deep-links to the sharing tab
@@ -197,11 +203,15 @@ export default function DeckViewerPage() {
     )
   }
 
-  /** Applies a generation event: new slides append, updates replace. */
+  /** Applies a generation event: new slides append, updates replace —
+   * and the view always transitions to the slide that changed. */
   const applyEvent = (event: SlideEvent) => {
     if (event.kind === 'none' || !event.slide) return
     const next = event.slide
     const isNew = event.kind === 'slide.new'
+    // Read through the ref, not the closure: mic-queued phrases arrive
+    // long after the render that created this callback
+    const slides = viewRef.current?.slides ?? []
     setView(v =>
       v
         ? {
@@ -215,7 +225,14 @@ export default function DeckViewerPage() {
           }
         : v,
     )
-    setCurrent((isNew ? view.slides.length + 1 : view.slides.length) - 1)
+    const target = isNew
+      ? slides.length
+      : slides.findIndex(s => s.id === next.id)
+    setCurrent(Math.max(0, target))
+    // List view: center the changed slide after it commits — the index
+    // may be unchanged (updating the current slide), so the navigation
+    // effect alone wouldn't re-scroll
+    requestAnimationFrame(() => nav.scrollTo(Math.max(0, target)))
     touchDeckLocally()
     watchImage(next)
   }

@@ -324,6 +324,103 @@ describe('DeckViewerPage microphone capture', () => {
     }
   }
 
+  it('transitions to slides created or updated by queued mic phrases', async () => {
+    vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
+    const scrolled = vi.fn()
+    Element.prototype.scrollIntoView = scrolled
+    let calls = 0
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+      '/api/actions/session.phrase': () => {
+        calls++
+        return {
+          status: 200,
+          body:
+            calls === 1
+              ? {
+                  kind: 'slide.new',
+                  slide: {
+                    id: 's3',
+                    deckId: 'deck1',
+                    index: 2,
+                    layoutType: 'content',
+                    title: 'Third slide',
+                    body: 'Body',
+                  },
+                }
+              : {
+                  kind: 'slide.update',
+                  slide: {
+                    id: 's3',
+                    deckId: 'deck1',
+                    index: 2,
+                    layoutType: 'content',
+                    title: 'Third slide',
+                    body: 'Body extended',
+                  },
+                },
+        }
+      },
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Live session' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start listening' }))
+    const recognition = FakeRecognition.last!
+
+    // First recognized phrase: a NEW slide — carousel moves to it. The
+    // closure is stale (captured before the slide existed): the counter
+    // must still land on 3 / 3
+    act(() => {
+      recognition.onresult?.({
+        resultIndex: 0,
+        results: [{ isFinal: true, 0: { transcript: 'a third topic' } }],
+      })
+    })
+    expect(await screen.findByText('3 / 3')).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Third slide' }),
+    ).toBeInTheDocument()
+
+    // Navigate away, then an UPDATE to that slide pulls the view back
+    fireEvent.keyDown(window, { key: 'ArrowLeft' })
+    expect(screen.getByText('2 / 3')).toBeInTheDocument()
+    act(() => {
+      recognition.onresult?.({
+        resultIndex: 0,
+        results: [{ isFinal: true, 0: { transcript: 'more on that' } }],
+      })
+    })
+    expect(await screen.findByText('3 / 3')).toBeInTheDocument()
+    expect(screen.getByText('Body extended')).toBeInTheDocument()
+
+    // In list view, generation events center the changed slide
+    fireEvent.click(screen.getByRole('button', { name: 'List view' }))
+    scrolled.mockClear()
+    act(() => {
+      recognition.onresult?.({
+        resultIndex: 0,
+        results: [{ isFinal: true, 0: { transcript: 'and more' } }],
+      })
+    })
+    await vi.waitFor(() => expect(scrolled).toHaveBeenCalled())
+  })
+
   it('transcribed phrases flow through session.phrase', async () => {
     vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
     let sent: unknown
