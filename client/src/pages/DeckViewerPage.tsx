@@ -206,12 +206,6 @@ export default function DeckViewerPage() {
   /** Applies a generation event: new slides append, updates replace —
    * and the view always transitions to the slide that changed. */
   const applyEvent = (event: SlideEvent) => {
-    // AI-recognized command intent (feature-flagged server-side):
-    // execute exactly as if the wake-worded phrase had matched locally
-    if (event.kind === 'command') {
-      if (event.command) runVoiceCommand(event.command)
-      return
-    }
     if (event.kind === 'none' || !event.slide) return
     const next = event.slide
     const isNew = event.kind === 'slide.new'
