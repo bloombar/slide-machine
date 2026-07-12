@@ -3,7 +3,7 @@
  * deck's owner only.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router'
 import { AuthProvider } from '../auth/AuthContext'
 import { setAccessToken } from '../auth/token'
@@ -303,6 +303,91 @@ describe('DeckViewerPage add slide', () => {
     expect(
       screen.queryByRole('button', { name: 'Add slide' }),
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('DeckViewerPage microphone capture', () => {
+  class FakeRecognition {
+    static last: FakeRecognition | null = null
+    continuous = false
+    interimResults = false
+    lang = ''
+    onresult: ((e: unknown) => void) | null = null
+    onerror: ((e: unknown) => void) | null = null
+    onend: (() => void) | null = null
+    start() {}
+    stop() {
+      this.onend?.()
+    }
+    constructor() {
+      FakeRecognition.last = this
+    }
+  }
+
+  it('transcribed phrases flow through session.phrase', async () => {
+    vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
+    let sent: unknown
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+      '/api/actions/session.phrase': init => {
+        sent = JSON.parse(String(init?.body))
+        return { status: 200, body: { kind: 'none' } }
+      },
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Live session' }))
+
+    const toggle = screen.getByRole('button', { name: 'Start listening' })
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+
+    const recognition = FakeRecognition.last!
+    // Interim text shows without dispatching
+    act(() => {
+      recognition.onresult?.({
+        resultIndex: 0,
+        results: [{ isFinal: false, 0: { transcript: 'photosynthesis ba' } }],
+      })
+    })
+    expect(screen.getByText('photosynthesis ba')).toBeInTheDocument()
+    expect(sent).toBeUndefined()
+
+    // A final phrase dispatches through the same pipeline as typing
+    act(() => {
+      recognition.onresult?.({
+        resultIndex: 0,
+        results: [
+          { isFinal: true, 0: { transcript: 'photosynthesis basics' } },
+        ],
+      })
+    })
+    await vi.waitFor(() =>
+      expect(sent).toEqual({
+        deckId: 'deck1',
+        phrase: 'photosynthesis basics',
+      }),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop listening' }))
+    expect(
+      screen.getByRole('button', { name: 'Start listening' }),
+    ).toHaveAttribute('aria-pressed', 'false')
   })
 })
 

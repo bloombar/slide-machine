@@ -7,9 +7,9 @@
  * pipeline will (GEN-1/CAP-1). Playback and the carousel/list switch
  * come from the shared slide-navigation codebase.
  */
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
-import { Mic, Plus, Settings } from 'lucide-react'
+import { AudioLines, Mic, Plus, Settings } from 'lucide-react'
 import type {
   Deck,
   DeckViewResponse,
@@ -22,6 +22,7 @@ import { pollSlideImage } from '../api/slides'
 import { useAuth } from '../auth/AuthContext'
 import { useTimeAgo } from '../hooks/useTimeAgo'
 import { useSlideNavigation } from '../hooks/useSlideNavigation'
+import { createSpeechCapture } from '../stt/capture'
 import SlideView, { type SlideContentPatch } from '../components/SlideView'
 import SlideNavZones from '../components/SlideNavZones'
 import SlideDeleteButton from '../components/SlideDeleteButton'
@@ -68,6 +69,11 @@ export default function DeckViewerPage() {
   const [phrase, setPhrase] = useState('')
   const [busy, setBusy] = useState(false)
   const [speakError, setSpeakError] = useState<string | null>(null)
+  const capture = useMemo(() => createSpeechCapture(), [])
+  const [listening, setListening] = useState(false)
+  const [interim, setInterim] = useState('')
+  // Finalized phrases submit sequentially so rolling context stays sane
+  const phraseQueueRef = useRef<Promise<void>>(Promise.resolve())
   const [pendingImages, setPendingImages] = useState<Set<string>>(new Set())
   const inputRef = useRef<HTMLInputElement>(null)
   const pollCancelsRef = useRef<Map<string, () => void>>(new Map())
@@ -109,6 +115,12 @@ export default function DeckViewerPage() {
   useEffect(() => {
     if (speaking) inputRef.current?.focus()
   }, [speaking])
+
+  // Leaving the page stops the microphone
+  useEffect(() => {
+    return () => capture.stop()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // "Start lecture" hands over with startSpeaking in router state (read
   // by the lazy initializer above); scrub it so a reload doesn't re-open
@@ -208,24 +220,58 @@ export default function DeckViewerPage() {
     watchImage(next)
   }
 
-  const onSpeak = async (e: FormEvent) => {
-    e.preventDefault()
-    if (!phrase.trim() || busy) return
+  const submitPhrase = async (text: string) => {
     setBusy(true)
     setSpeakError(null)
     try {
       const event = await dispatchAction<SlideEvent>('session.phrase', {
         deckId: view.deck.id,
-        phrase: phrase.trim(),
+        phrase: text,
       })
       applyEvent(event)
-      setPhrase('')
-      inputRef.current?.focus()
     } catch {
       setSpeakError('Generation failed — try again')
     } finally {
       setBusy(false)
     }
+  }
+
+  const onSpeak = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!phrase.trim() || busy) return
+    await submitPhrase(phrase.trim())
+    setPhrase('')
+    inputRef.current?.focus()
+  }
+
+  const stopListening = () => {
+    capture.stop()
+    setListening(false)
+    setInterim('')
+  }
+
+  /** Mic capture: recognized phrases queue through the same pipeline. */
+  const toggleListening = () => {
+    if (listening) {
+      stopListening()
+      return
+    }
+    setSpeakError(null)
+    capture.start({
+      onPhrase: text => {
+        setInterim('')
+        phraseQueueRef.current = phraseQueueRef.current.then(() =>
+          submitPhrase(text),
+        )
+      },
+      onInterim: setInterim,
+      onError: message => {
+        setListening(false)
+        setInterim('')
+        setSpeakError(message)
+      },
+    })
+    setListening(true)
   }
 
   /** In-place edits (EDIT-1) persist through the action layer. */
@@ -397,7 +443,11 @@ export default function DeckViewerPage() {
                 aria-label="Live session"
                 title="Speak to add slides"
                 aria-pressed={speaking}
-                onClick={() => setSpeaking(s => !s)}
+                onClick={() => {
+                  // Closing the Speak bar also stops the microphone
+                  if (speaking) stopListening()
+                  setSpeaking(s => !s)
+                }}
                 className={`rounded-md p-2 ${
                   speaking
                     ? 'bg-indigo-50 text-indigo-600'
@@ -496,11 +546,35 @@ export default function DeckViewerPage() {
             aria-label="Live session"
             className="mt-6 flex w-full gap-2"
           >
+            {capture.available && (
+              <button
+                type="button"
+                onClick={toggleListening}
+                aria-label={listening ? 'Stop listening' : 'Start listening'}
+                aria-pressed={listening}
+                title={
+                  listening
+                    ? 'Stop the microphone'
+                    : 'Transcribe from the microphone'
+                }
+                className={`rounded-lg border px-4 py-3 ${
+                  listening
+                    ? 'border-red-300 bg-red-50 text-red-600'
+                    : 'border-slate-300 text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <AudioLines className="h-5 w-5" aria-hidden />
+              </button>
+            )}
             <input
               ref={inputRef}
               value={phrase}
               onChange={e => setPhrase(e.target.value)}
-              placeholder="Say something about your topic…"
+              placeholder={
+                listening
+                  ? 'Listening… (you can still type)'
+                  : 'Say something about your topic…'
+              }
               aria-label="Spoken phrase"
               className="flex-1 rounded-lg border border-slate-300 px-4 py-3"
             />
@@ -512,6 +586,14 @@ export default function DeckViewerPage() {
               {busy ? 'Generating…' : 'Speak'}
             </button>
           </form>
+          {interim && (
+            <p
+              aria-live="polite"
+              className="mt-2 w-full text-sm text-slate-400 italic"
+            >
+              {interim}
+            </p>
+          )}
           {speakError && (
             <p role="alert" className="mt-2 w-full text-sm text-red-600">
               {speakError}
