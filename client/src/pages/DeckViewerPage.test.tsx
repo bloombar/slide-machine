@@ -845,11 +845,13 @@ describe('DeckViewerPage settings modal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Change layout' }))
 
-    // The picker highlights the slide's current layout
+    // The picker highlights the slide's current layout and names the
+    // template these layouts come from
     const dialog = await screen.findByRole('dialog', {
       name: 'Change slide layout',
     })
     expect(dialog).toBeInTheDocument()
+    expect(screen.getByText('Classic')).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /title/i })).toHaveAttribute(
       'aria-checked',
       'true',
@@ -867,6 +869,32 @@ describe('DeckViewerPage settings modal', () => {
     expect(
       screen.queryByRole('dialog', { name: 'Change slide layout' }),
     ).not.toBeInTheDocument()
+  })
+
+  it('jumps from the layout picker to the Design template settings tab', async () => {
+    withSettingsRoutes()
+    renderWithSettings()
+    await screen.findByText('Shared Lecture')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Change layout' }))
+    await screen.findByRole('dialog', { name: 'Change slide layout' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change template' }))
+
+    // The picker closes and settings open straight on the template tab
+    expect(
+      await screen.findByRole('dialog', { name: 'Lecture settings' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('dialog', { name: 'Change slide layout' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('tab', { name: 'Design template' }),
+    ).toHaveAttribute('aria-selected', 'true')
+    expect(
+      await screen.findByRole('radio', { name: /midnight/i }),
+    ).toBeInTheDocument()
   })
 
   it('divides settings into tabs with arrow-key navigation', async () => {

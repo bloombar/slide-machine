@@ -60,7 +60,7 @@ test('sharing: view/edit grants, private no-leak, public profile', async ({
   await guestPage.goto(deckUrl)
   await expect(guestPage.getByTestId('slide')).toBeVisible()
   await expect(
-    guestPage.getByRole('button', { name: 'Add slide' }),
+    guestPage.getByRole('button', { name: 'Add slide', exact: true }),
   ).toHaveCount(0)
 
   // Owner adds the guest as an editor under "People with access"

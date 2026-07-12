@@ -104,12 +104,16 @@ test('in-place editing in the viewer, including list view and bullets', async ({
     'title',
   )
 
-  // The slide kebab changes layouts via the picker (current highlighted)
+  // The slide kebab changes layouts via the picker (current highlighted,
+  // source template named)
   await page.getByRole('button', { name: 'Options for slide 1' }).click()
   await page.getByRole('menuitem', { name: 'Change layout' }).click()
   await expect(
     page.getByRole('dialog', { name: 'Change slide layout' }),
   ).toBeVisible()
+  await expect(
+    page.getByRole('dialog', { name: 'Change slide layout' }),
+  ).toContainText('Layouts from the Classic template')
   await expect(
     page.getByRole('radio', { name: /^Title Opening/ }),
   ).toHaveAttribute('aria-checked', 'true')
@@ -118,6 +122,15 @@ test('in-place editing in the viewer, including list view and bullets', async ({
     'data-layout',
     'quote',
   )
+
+  // The quote layout's caption was empty and hidden before the switch —
+  // editors get a clickable placeholder into the blank slot
+  await page.getByText('Add slide caption').click()
+  await page
+    .getByRole('textbox', { name: 'Slide caption' })
+    .fill('Dalton, 1803')
+  await page.keyboard.press('Enter')
+  await expect(page.getByTestId('slide').first()).toContainText('Dalton, 1803')
 
   // ...and deletes a slide with no confirmation
   await page.getByRole('button', { name: 'Options for slide 2' }).click()
@@ -129,6 +142,7 @@ test('in-place editing in the viewer, including list view and bullets', async ({
     'data-layout',
     'quote',
   )
+  await expect(page.getByTestId('slide')).toContainText('Dalton, 1803')
 
   // Lecture settings open as a full-width modal over the viewer
   await page.getByRole('button', { name: 'Lecture settings' }).click()
@@ -162,7 +176,7 @@ test('in-place editing in the viewer, including list view and bullets', async ({
   await page.getByRole('button', { name: 'Close settings' }).click()
 
   // The add icon appends a starter slide at the end
-  await page.getByRole('button', { name: 'Add slide' }).click()
+  await page.getByRole('button', { name: 'Add slide', exact: true }).click()
   await expect(page.getByText('2 / 2')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'New slide' })).toBeVisible()
   await page.reload()

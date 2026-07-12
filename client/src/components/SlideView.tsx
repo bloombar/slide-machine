@@ -59,6 +59,7 @@ export default function SlideView({
       {createElement(getLayoutRenderer(slide.layoutType), {
         slide,
         colors,
+        editable: Boolean(editable && onEdit),
         slot,
       })}
     </div>

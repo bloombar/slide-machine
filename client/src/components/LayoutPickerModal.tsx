@@ -13,6 +13,8 @@ interface Props {
   current: string
   onPick: (layoutType: string) => void
   onClose: () => void
+  /** Closes the picker and opens the Design template settings tab. */
+  onChangeTemplate: () => void
 }
 
 export default function LayoutPickerModal({
@@ -20,6 +22,7 @@ export default function LayoutPickerModal({
   current,
   onPick,
   onClose,
+  onChangeTemplate,
 }: Props) {
   const closeRef = useRef<HTMLButtonElement>(null)
 
@@ -48,8 +51,19 @@ export default function LayoutPickerModal({
         aria-label="Change slide layout"
         className="relative max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-2xl"
       >
-        <header className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-bold">Change slide layout</h3>
+        <header className="mb-4 flex items-start justify-between">
+          <div>
+            <h3 className="text-lg font-bold">Change slide layout</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Layouts from the <strong>{template.name}</strong> template.{' '}
+              <button
+                onClick={onChangeTemplate}
+                className="text-indigo-600 underline hover:text-indigo-800"
+              >
+                Change template
+              </button>
+            </p>
+          </div>
           <button
             ref={closeRef}
             aria-label="Close layout picker"

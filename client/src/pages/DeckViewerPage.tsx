@@ -66,8 +66,9 @@ export default function DeckViewerPage() {
   }, [view])
   const [mode, setMode] = useState<ViewMode>('carousel')
   const [error, setError] = useState<string | null>(null)
-  // A lecture list's Share option deep-links to the sharing tab
-  const [settingsTab] = useState<SettingsTabId | null>(
+  // A lecture list's Share option deep-links to the sharing tab; the
+  // layout picker's "Change template" link deep-links to the design tab
+  const [settingsTab, setSettingsTab] = useState<SettingsTabId | null>(
     () =>
       (location.state as { settingsTab?: SettingsTabId } | null)?.settingsTab ??
       null,
@@ -654,6 +655,11 @@ export default function DeckViewerPage() {
           }
           onPick={layoutType => setSlideLayout(layoutPickerFor, layoutType)}
           onClose={() => setLayoutPickerFor(null)}
+          onChangeTemplate={() => {
+            setLayoutPickerFor(null)
+            setSettingsTab('template')
+            setSettingsOpen(true)
+          }}
         />
       )}
 

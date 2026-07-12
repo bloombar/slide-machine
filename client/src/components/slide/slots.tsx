@@ -66,6 +66,10 @@ function TextSlot({ slot, descriptor, slide, onEdit }: SlotEditorProps) {
       renderValue={v => (
         <SlideMarkdown text={v} inline={!multiline} links={false} />
       )}
+      // Empty slots (e.g. after a layout switch) stay clickable via a
+      // muted call-to-action placeholder
+      emptyDisplay={`Add ${descriptor.label.toLowerCase()}`}
+      placeholderStyle
       onSave={v => onEdit({ [slot]: v } as SlideContentPatch)}
     />
   )
@@ -90,6 +94,8 @@ function BulletsSlot({ descriptor, slide, onEdit }: SlotEditorProps) {
       label={descriptor.label}
       multiline
       renderValue={v => rendered(v.split('\n'))}
+      emptyDisplay={`Add ${descriptor.label.toLowerCase()}`}
+      placeholderStyle
       onSave={v => onEdit({ bullets: v.split('\n').filter(b => b.trim()) })}
     />
   )

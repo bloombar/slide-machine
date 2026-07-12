@@ -23,6 +23,9 @@ interface Props {
   /** Shown (and read as the accessible name) when the value is empty,
    * e.g. "Untitled lecture"; editing still starts from the empty value. */
   emptyDisplay?: string
+  /** Style the emptyDisplay as a muted call-to-action placeholder
+   * ("Add slide body") rather than as ordinary display text. */
+  placeholderStyle?: boolean
   /** Debounce for auto-save while typing; overridable in tests. */
   debounceMs?: number
 }
@@ -34,6 +37,7 @@ export default function EditableText({
   multiline = false,
   renderValue,
   emptyDisplay,
+  placeholderStyle = false,
   debounceMs = 800,
 }: Props) {
   const [editing, setEditing] = useState(false)
@@ -106,7 +110,9 @@ export default function EditableText({
         }}
         // relative z-10 lifts the text above SlideNavZones' overlay
         // hotspots, so clicking text edits instead of navigating
-        className="relative z-10 -mx-1 inline-block cursor-text rounded px-1 hover:bg-black/5"
+        className={`relative z-10 -mx-1 inline-block cursor-text rounded px-1 hover:bg-black/5 ${
+          !value && emptyDisplay && placeholderStyle ? 'italic opacity-50' : ''
+        }`}
       >
         {value
           ? (renderValue?.(value) ?? value)

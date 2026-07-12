@@ -13,6 +13,10 @@ import type { ThemeColors } from '../theme'
 export interface LayoutProps {
   slide: Slide
   colors: ThemeColors
+  /** True when the viewer may edit: layouts must then render even
+   * their EMPTY conditional slots (as clickable placeholders) so a
+   * layout switch never strands content the user can't reach. */
+  editable?: boolean
   /** Renders a named content slot (editable when the viewer may edit). */
   slot: (name: LayoutSlot) => ReactNode
 }

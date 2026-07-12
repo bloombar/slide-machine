@@ -191,6 +191,38 @@ describe('SlideView in-place editing', () => {
       screen.queryByTitle('Click to edit Slide title'),
     ).not.toBeInTheDocument()
   })
+
+  it('shows empty conditional slots as clickable placeholders for editors', () => {
+    const onEdit = vi.fn()
+    render(
+      <SlideView
+        // Title layout hides its caption when empty — editors still
+        // need a way in after a layout switch strands the slot
+        slide={slide({ layoutType: 'title', title: 'Photosynthesis' })}
+        template={template}
+        editable
+        onEdit={onEdit}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('Add slide caption'))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Slide caption' }), {
+      target: { value: 'An overview' },
+    })
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
+
+    expect(onEdit).toHaveBeenCalledWith({ caption: 'An overview' })
+  })
+
+  it('keeps empty conditional slots hidden from viewers', () => {
+    render(
+      <SlideView
+        slide={slide({ layoutType: 'title', title: 'Photosynthesis' })}
+        template={template}
+      />,
+    )
+    expect(screen.queryByText('Add slide caption')).not.toBeInTheDocument()
+  })
 })
 
 describe('SlideView markdown rendering', () => {

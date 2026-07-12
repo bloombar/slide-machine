@@ -6,10 +6,15 @@
  */
 import type { LayoutProps } from './types'
 
-export default function GenericLayout({ slide, colors, slot }: LayoutProps) {
+export default function GenericLayout({
+  slide,
+  colors,
+  editable,
+  slot,
+}: LayoutProps) {
   return (
     <div className="flex h-full flex-col justify-center gap-[2cqi] px-[6cqi]">
-      {slide.title !== undefined && (
+      {(slide.title !== undefined || editable) && (
         <h2
           className="text-[4cqi] font-semibold"
           style={{ color: colors.accent }}
@@ -17,7 +22,7 @@ export default function GenericLayout({ slide, colors, slot }: LayoutProps) {
           {slot('title')}
         </h2>
       )}
-      {slide.body !== undefined && (
+      {(slide.body !== undefined || editable) && (
         <div className="text-[2.75cqi] leading-relaxed">{slot('body')}</div>
       )}
       {slide.bullets !== undefined && slot('bullets')}
@@ -26,7 +31,7 @@ export default function GenericLayout({ slide, colors, slot }: LayoutProps) {
           {slot('image')}
         </div>
       )}
-      {slide.caption !== undefined && (
+      {(slide.caption !== undefined || editable) && (
         <p className="text-[2cqi]" style={{ color: colors.muted }}>
           {slot('caption')}
         </p>
