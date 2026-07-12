@@ -111,21 +111,42 @@ describe('deck.create / deck.list / deck.get', () => {
     expect(got.body.slides).toEqual([])
   })
 
-  it("rejects deck creation in someone else's project and unknown templates", async () => {
+  it("rejects deck creation in someone else's project", async () => {
     const bob = await registerUser('bob@example.com')
     const foreign = await act(bob, 'deck.create', {
       projectId,
       title: 'Sneaky',
-      templateId: 'classic',
     })
     expect(foreign.status).toBe(403)
+  })
 
-    const badTemplate = await act(ada, 'deck.create', {
+  it("new lectures start from the project's default template", async () => {
+    await act(ada, 'project.switchTemplate', {
       projectId,
-      title: 'Nope',
-      templateId: 'does-not-exist',
+      templateId: 'midnight',
     })
-    expect(badTemplate.status).toBe(400)
+    const created = await act(ada, 'deck.create', { projectId, title: 'M' })
+    expect(created.body.templateId).toBe('midnight')
+
+    // Existing lectures keep their stored template; a later project
+    // change never rewrites them
+    const before = await act(ada, 'deck.create', { projectId, title: 'Kept' })
+    await act(ada, 'project.switchTemplate', {
+      projectId,
+      templateId: 'seminar',
+    })
+    const view = await act(ada, 'deck.get', { deckId: before.body.id })
+    expect(view.body.deck.templateId).toBe('midnight')
+
+    // Unknown project templates are rejected
+    expect(
+      (
+        await act(ada, 'project.switchTemplate', {
+          projectId,
+          templateId: 'does-not-exist',
+        })
+      ).status,
+    ).toBe(400)
   })
 })
 

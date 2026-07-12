@@ -16,6 +16,7 @@ const project = {
   title: 'Physics',
   seedContext: 'Existing notes',
   visibility: 'public',
+  templateId: 'classic',
   createdAt: '2026-07-01T00:00:00.000Z',
 }
 
@@ -117,9 +118,7 @@ describe('ProjectPage', () => {
       await screen.findByRole('button', { name: 'Start a new lecture' }),
     )
 
-    await vi.waitFor(() =>
-      expect(sent).toEqual({ projectId: 'p1', templateId: 'classic' }),
-    )
+    await vi.waitFor(() => expect(sent).toEqual({ projectId: 'p1' }))
     expect(await screen.findByText('VIEWER')).toBeInTheDocument()
   })
 
@@ -159,6 +158,56 @@ describe('ProjectPage', () => {
       }),
     )
     vi.useRealTimers()
+  })
+
+  it('sets the project default template from the Design template tab', async () => {
+    let sent: unknown
+    mockFetchRoutes({
+      ...baseRoutes,
+      '/api/actions/seedAsset.list': () => ({ status: 200, body: [] }),
+      '/api/actions/template.list': () => ({
+        status: 200,
+        body: [
+          {
+            id: 'classic',
+            name: 'Classic',
+            theme: {},
+            layouts: [],
+            visibility: 'public',
+            voteScore: 0,
+            ownerId: 'system',
+            createdAt: '',
+          },
+          {
+            id: 'midnight',
+            name: 'Midnight',
+            theme: {},
+            layouts: [],
+            visibility: 'public',
+            voteScore: 0,
+            ownerId: 'system',
+            createdAt: '',
+          },
+        ],
+      }),
+      '/api/actions/project.switchTemplate': init => {
+        sent = JSON.parse(String(init?.body))
+        return { status: 200, body: { ...project, templateId: 'midnight' } }
+      },
+    })
+    renderPage()
+
+    fireEvent.click(
+      await vi.waitFor(() =>
+        screen.getByRole('button', { name: 'Project settings' }),
+      ),
+    )
+    fireEvent.click(await screen.findByRole('tab', { name: 'Design template' }))
+    fireEvent.click(await screen.findByRole('radio', { name: /midnight/i }))
+
+    await vi.waitFor(() =>
+      expect(sent).toEqual({ projectId: 'p1', templateId: 'midnight' }),
+    )
   })
 
   it('deletes the project from the Danger zone after confirmation', async () => {

@@ -17,6 +17,8 @@ export interface Deck {
   projectId: string
   ownerId: string
   title: string
+  /** Always stored on the lecture; initialized from the project's
+   * default template at creation (TMPL-2). */
   templateId: string
   /** EFFECTIVE general access: the lecture's own override when one
    * exists, otherwise inherited from its project. */

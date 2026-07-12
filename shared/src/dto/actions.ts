@@ -27,8 +27,7 @@ export interface ProjectUpdateInput {
 
 export interface DeckCreateInput {
   projectId: string
-  title: string
-  templateId: string
+  title?: string
 }
 
 /** Omit projectId to list every deck the caller owns (recency-ordered). */
@@ -78,6 +77,12 @@ export interface DeckSetSeedNotesInput {
 export interface DeckSetAccessInput {
   deckId: string
   visibility: Visibility
+}
+
+/** Project default template: applied to lectures at creation (TMPL-2). */
+export interface ProjectSwitchTemplateInput {
+  projectId: string
+  templateId: string
 }
 
 /** Drops a lecture's privacy override so it follows its project again. */

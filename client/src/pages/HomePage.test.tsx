@@ -125,9 +125,7 @@ describe('HomePage', () => {
       screen.getByRole('button', { name: 'Start a new lecture in Biology' }),
     )
 
-    await vi.waitFor(() =>
-      expect(sent).toEqual({ projectId: 'p1', templateId: 'classic' }),
-    )
+    await vi.waitFor(() => expect(sent).toEqual({ projectId: 'p1' }))
   })
 
   it('starts a lecture straight from an empty project', async () => {
@@ -155,8 +153,6 @@ describe('HomePage', () => {
     expect(screen.getByText(/no lectures yet/i)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'start one' }))
-    await vi.waitFor(() =>
-      expect(sent).toEqual({ projectId: 'p2', templateId: 'classic' }),
-    )
+    await vi.waitFor(() => expect(sent).toEqual({ projectId: 'p2' }))
   })
 })

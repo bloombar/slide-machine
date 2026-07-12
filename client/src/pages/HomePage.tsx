@@ -150,7 +150,6 @@ export default function HomePage() {
     try {
       const deck = await dispatchAction<Deck>('deck.create', {
         projectId: project.id,
-        templateId: 'classic',
       })
       navigate(`/d/${deck.permalinkSlug}`, { state: { startSpeaking: true } })
     } catch {

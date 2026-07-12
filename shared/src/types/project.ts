@@ -14,6 +14,9 @@ export interface Project {
   seedContext?: string
   /** General access; lectures inherit this unless they override (SHARE-1). */
   visibility: Visibility
+  /** Default template applied to new lectures at creation (TMPL-2);
+   * each lecture stores its own template and can switch any time. */
+  templateId: string
   /** User ids with view access. Owner-only surfaces. */
   viewers?: string[]
   /** User ids with edit access (can edit every lecture inside). Owner-only surfaces. */

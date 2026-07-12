@@ -193,7 +193,6 @@ export const deckCreate = defineAction<DeckCreateInput, Deck>({
     projectId: z.string().min(1),
     // Untitled lectures are fine; the UI labels them "Untitled lecture"
     title: z.string().trim().default(''),
-    templateId: z.string().min(1),
   }),
   authorize: async (ctx, input) => {
     const userId = requireUser(ctx)
@@ -204,16 +203,17 @@ export const deckCreate = defineAction<DeckCreateInput, Deck>({
       throw new ActionForbiddenError()
   },
   execute: async (ctx, input) => {
-    if (!getBuiltinTemplate(input.templateId)) {
-      throw new ActionValidationError('deck.create', [
-        `templateId: unknown template`,
-      ])
-    }
+    // The project's template is the creation-time default; the lecture
+    // stores its own copy and can switch independently afterwards
+    const project = await ProjectModel.findById(input.projectId)
+    const templateId = getBuiltinTemplate(project?.templateId ?? '')
+      ? project!.templateId
+      : 'classic'
     const deck = await DeckModel.create({
       projectId: input.projectId,
       ownerId: ctx.userId,
       title: input.title,
-      templateId: input.templateId,
+      templateId,
       permalinkSlug: permalinkSlug(input.title || 'untitled'),
     })
     return toDeckDto(deck, await loadDeckAcl(deck))

@@ -12,6 +12,7 @@ import type {
   ProjectSetAccessInput,
   ProjectShareInput,
   ProjectSharesInput,
+  ProjectSwitchTemplateInput,
   ProjectTransferOwnershipInput,
   ProjectUnshareInput,
   ProjectUpdateInput,
@@ -33,6 +34,7 @@ import {
 import { UserModel } from '../models/user'
 import { canEditAcl, isAclMember } from '../lib/access'
 import { sharesOfAcl } from '../lib/shares'
+import { getBuiltinTemplate } from '../templates/builtin'
 import type { HydratedDocument } from 'mongoose'
 import { DeckModel } from '../models/deck'
 import { SlideModel } from '../models/slide'
@@ -237,6 +239,29 @@ export const projectShares = defineAction<ProjectSharesInput, DeckShare[]>({
     sharesOfAcl(projectAcl(await loadEditableProject(ctx, input.projectId))),
 })
 
+/** Sets the default template new lectures start from (TMPL-2). */
+export const projectSwitchTemplate = defineAction<
+  ProjectSwitchTemplateInput,
+  Project
+>({
+  name: 'project.switchTemplate',
+  input: z.object({
+    projectId: z.string().min(1),
+    templateId: z.string().min(1),
+  }),
+  execute: async (ctx, input) => {
+    const doc = await loadEditableProject(ctx, input.projectId)
+    if (!getBuiltinTemplate(input.templateId)) {
+      throw new ActionValidationError('project.switchTemplate', [
+        'templateId: unknown template',
+      ])
+    }
+    doc.templateId = input.templateId
+    await doc.save()
+    return toProjectDto(doc)
+  },
+})
+
 export const projectTransferOwnership = defineAction<
   ProjectTransferOwnershipInput,
   Project
@@ -281,6 +306,7 @@ registerAction(projectGet)
 registerAction(projectUpdate)
 registerAction(projectDelete)
 registerAction(projectSetAccess)
+registerAction(projectSwitchTemplate)
 registerAction(projectShare)
 registerAction(projectUnshare)
 registerAction(projectShares)

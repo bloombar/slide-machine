@@ -8,12 +8,13 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
-import type { Project } from '@slide-machine/shared'
+import type { Project, Template } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import SeedNotesEditor from './SeedNotesEditor'
 import SeedMaterial from './SeedMaterial'
 import ConfirmDialog from './ConfirmDialog'
 import AccessSettings from './AccessSettings'
+import TemplatePicker from './TemplatePicker'
 
 const isTypingTarget = (target: EventTarget | null): boolean =>
   target instanceof HTMLElement &&
@@ -23,6 +24,7 @@ const isTypingTarget = (target: EventTarget | null): boolean =>
 
 const TABS = [
   { id: 'general', label: 'General' },
+  { id: 'template', label: 'Design template' },
   { id: 'sharing', label: 'Privacy & Sharing' },
 ] as const
 
@@ -48,6 +50,21 @@ export default function ProjectSettingsModal({
 }: Props) {
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [tab, setTab] = useState<TabId>('general')
+  const [templates, setTemplates] = useState<Template[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    dispatchAction<Template[]>('template.list')
+      .then(list => {
+        if (!cancelled) setTemplates(list)
+      })
+      .catch(() => {
+        // Quiet failure: the section simply stays empty
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
   const closeRef = useRef<HTMLButtonElement>(null)
 
   // Escape closes (unless typing in a field); focus lands on close
@@ -126,6 +143,36 @@ export default function ProjectSettingsModal({
               </button>
             ))}
           </div>
+
+          {tab === 'template' && (
+            <section
+              role="tabpanel"
+              id="project-panel-template"
+              aria-labelledby="project-tab-template"
+            >
+              <h3 className="mb-2 text-lg font-semibold text-slate-700">
+                Default template
+              </h3>
+              <p className="mb-4 text-sm text-slate-500">
+                New lectures in this project start with this template. Each
+                lecture keeps its own and can switch any time in its settings.
+              </p>
+              <TemplatePicker
+                templates={templates}
+                value={project.templateId}
+                onChange={templateId => {
+                  dispatchAction<Project>('project.switchTemplate', {
+                    projectId: project.id,
+                    templateId,
+                  })
+                    .then(onProjectChange)
+                    .catch(() => {
+                      // Quiet failure: the picker stays on the saved value
+                    })
+                }}
+              />
+            </section>
+          )}
 
           {tab === 'sharing' && (
             <section

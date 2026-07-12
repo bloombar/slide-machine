@@ -33,6 +33,7 @@ const projectSchema = new Schema<ProjectDb>(
       enum: ['restricted', 'public'],
       default: 'public',
     },
+    templateId: { type: String, default: 'classic' },
     viewers: { type: [String], default: [] },
     editors: { type: [String], default: [] },
     settings: {
@@ -65,6 +66,7 @@ export const toProjectDto = (doc: HydratedDocument<ProjectDb>): Project => ({
   description: doc.description,
   seedContext: doc.seedContext,
   visibility: doc.visibility,
+  templateId: doc.templateId,
   viewers: doc.viewers,
   editors: doc.editors,
   settings: doc.settings,

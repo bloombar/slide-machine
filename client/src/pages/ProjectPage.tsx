@@ -63,7 +63,6 @@ export default function ProjectPage() {
     try {
       const deck = await dispatchAction<Deck>('deck.create', {
         projectId,
-        templateId: 'classic',
       })
       navigate(`/d/${deck.permalinkSlug}`, { state: { startSpeaking: true } })
     } catch {
