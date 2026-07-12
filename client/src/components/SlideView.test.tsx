@@ -205,6 +205,10 @@ describe('SlideView in-place editing', () => {
       />,
     )
 
+    // The placeholder is invisible to the audience (transparent text,
+    // skeleton on hover/reveal — index.css) but stays clickable
+    expect(screen.getByText('Add slide caption')).toHaveClass('slot-blank')
+
     fireEvent.click(screen.getByText('Add slide caption'))
     fireEvent.change(screen.getByRole('textbox', { name: 'Slide caption' }), {
       target: { value: 'An overview' },

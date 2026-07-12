@@ -10,3 +10,16 @@
     cursor: pointer;
   }
 }
+
+/* Blank slide slots: invisible to the audience by default — their
+   placeholder text is transparent. Hovering one, or clicking the page
+   background (which stamps data-reveal-blanks on the deck viewer),
+   surfaces a subtle skeleton so editors can find and click into them. */
+.slot-blank {
+  color: transparent;
+  user-select: none;
+}
+span.slot-blank:hover,
+[data-reveal-blanks] .slot-blank {
+  background-color: rgb(148 163 184 / 0.35);
+}

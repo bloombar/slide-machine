@@ -484,6 +484,59 @@ describe('DeckViewerPage microphone capture', () => {
     expect(stopSpy).toHaveBeenCalled()
   })
 
+  it('executes AI-recognized command events from session.phrase', async () => {
+    FakeRecognition.reset()
+    vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
+    // The server (flag on) recognizes the first phrase as "next" and
+    // the second as "pause"; the client must execute both exactly like
+    // wake-worded commands
+    const commands = ['next', 'pause']
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+      '/api/actions/session.phrase': () => ({
+        status: 200,
+        body: { kind: 'command', command: commands.shift() },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Live session' }))
+    const recognition = FakeRecognition.last!
+    const speak = (transcript: string) =>
+      act(() => {
+        recognition.onresult?.({
+          resultIndex: 0,
+          results: [{ isFinal: true, 0: { transcript } }],
+        })
+      })
+
+    // No wake word: the phrase reaches the server, which flags it as a
+    // command — the carousel moves and no slide is created
+    expect(screen.getByText('1 / 2')).toBeInTheDocument()
+    speak('please move on')
+    expect(await screen.findByText('2 / 2')).toBeInTheDocument()
+
+    // A server-recognized pause stops the microphone
+    const stopSpy = vi.spyOn(recognition, 'stop')
+    speak('please pause')
+    await vi.waitFor(() => expect(stopSpy).toHaveBeenCalled())
+  })
+
   it('transcribed phrases flow through session.phrase', async () => {
     FakeRecognition.reset()
     vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
@@ -869,6 +922,31 @@ describe('DeckViewerPage settings modal', () => {
     expect(
       screen.queryByRole('dialog', { name: 'Change slide layout' }),
     ).not.toBeInTheDocument()
+  })
+
+  it('flashes the blank-slot reveal for half a second on a page-background click', async () => {
+    vi.useFakeTimers()
+    withSettingsRoutes()
+    const { container } = renderWithSettings()
+    await vi.waitFor(() =>
+      expect(screen.getByText('Shared Lecture')).toBeInTheDocument(),
+    )
+
+    const wrapper = container.firstElementChild as HTMLElement
+    expect(wrapper).not.toHaveAttribute('data-reveal-blanks')
+
+    // A background click reveals blank slots…
+    fireEvent.click(wrapper)
+    expect(wrapper).toHaveAttribute('data-reveal-blanks', 'true')
+
+    // …and they hide again on their own after 500ms
+    act(() => vi.advanceTimersByTime(500))
+    expect(wrapper).not.toHaveAttribute('data-reveal-blanks')
+
+    // Clicks on controls (buttons, links, the slide itself) never reveal
+    fireEvent.click(screen.getByRole('button', { name: 'List view' }))
+    expect(wrapper).not.toHaveAttribute('data-reveal-blanks')
+    vi.useRealTimers()
   })
 
   it('jumps from the layout picker to the Design template settings tab', async () => {

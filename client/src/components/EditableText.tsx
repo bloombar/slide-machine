@@ -23,8 +23,10 @@ interface Props {
   /** Shown (and read as the accessible name) when the value is empty,
    * e.g. "Untitled lecture"; editing still starts from the empty value. */
   emptyDisplay?: string
-  /** Style the emptyDisplay as a muted call-to-action placeholder
-   * ("Add slide body") rather than as ordinary display text. */
+  /** Treat the emptyDisplay as a blank-slot placeholder: its text is
+   * invisible (audiences see nothing) but still sizes the click target
+   * and names the control; a skeleton background appears on hover or
+   * under a data-reveal-blanks ancestor (see index.css). */
   placeholderStyle?: boolean
   /** Debounce for auto-save while typing; overridable in tests. */
   debounceMs?: number
@@ -111,7 +113,7 @@ export default function EditableText({
         // relative z-10 lifts the text above SlideNavZones' overlay
         // hotspots, so clicking text edits instead of navigating
         className={`relative z-10 -mx-1 inline-block cursor-text rounded px-1 hover:bg-black/5 ${
-          !value && emptyDisplay && placeholderStyle ? 'italic opacity-50' : ''
+          !value && emptyDisplay && placeholderStyle ? 'slot-blank' : ''
         }`}
       >
         {value

@@ -76,6 +76,11 @@ export default function DeckViewerPage() {
   const [settingsOpen, setSettingsOpen] = useState(() => settingsTab !== null)
   // Which slide the layout picker is open for (EDIT-3)
   const [layoutPickerFor, setLayoutPickerFor] = useState<string | null>(null)
+  // Blank slots are invisible to the audience; clicking the page
+  // background flashes a half-second skeleton reveal so editors can
+  // find them
+  const [revealBlanks, setRevealBlanks] = useState(false)
+  const revealTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [speaking, setSpeaking] = useState<boolean>(() =>
     Boolean(
       (location.state as { startSpeaking?: boolean } | null)?.startSpeaking,
@@ -201,6 +206,12 @@ export default function DeckViewerPage() {
   /** Applies a generation event: new slides append, updates replace —
    * and the view always transitions to the slide that changed. */
   const applyEvent = (event: SlideEvent) => {
+    // AI-recognized command intent (feature-flagged server-side):
+    // execute exactly as if the wake-worded phrase had matched locally
+    if (event.kind === 'command') {
+      if (event.command) runVoiceCommand(event.command)
+      return
+    }
     if (event.kind === 'none' || !event.slide) return
     const next = event.slide
     const isNew = event.kind === 'slide.new'
@@ -354,6 +365,31 @@ export default function DeckViewerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // A click on the page background — not the slide, a control, or a
+  // modal backdrop — briefly reveals blank slots (styled in index.css),
+  // which hide again on their own half a second later
+  const canEditView = Boolean(view?.canEdit)
+  useEffect(() => {
+    if (!canEditView) return
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as Element | null
+      if (
+        target?.closest(
+          'a, button, input, textarea, select, label, [role], [aria-hidden], [data-testid="slide"]',
+        )
+      )
+        return
+      setRevealBlanks(true)
+      clearTimeout(revealTimerRef.current)
+      revealTimerRef.current = setTimeout(() => setRevealBlanks(false), 500)
+    }
+    document.addEventListener('click', onClick)
+    return () => {
+      document.removeEventListener('click', onClick)
+      clearTimeout(revealTimerRef.current)
+    }
+  }, [canEditView])
+
   if (error) {
     return (
       <div className="flex flex-1 items-center justify-center text-slate-500">
@@ -497,7 +533,10 @@ export default function DeckViewerPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col p-6">
+    <div
+      className="mx-auto flex w-full max-w-5xl flex-1 flex-col p-6"
+      data-reveal-blanks={revealBlanks ? 'true' : undefined}
+    >
       <ShellTitle>
         <h1 className="min-w-0 truncate">
           {canEdit ? (
