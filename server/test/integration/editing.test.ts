@@ -106,6 +106,43 @@ describe('slide.editContent', () => {
   })
 })
 
+describe('slide.setLayout', () => {
+  it('switches to another of the template layouts, keeping content', async () => {
+    const res = await act(ada, 'slide.setLayout', {
+      slideId: slideIds[0],
+      layoutType: 'quote',
+    })
+    expect(res.status).toBe(200)
+    expect(res.body.layoutType).toBe('quote')
+
+    // Content is untouched; only the layout changed
+    const view = await act(ada, 'deck.get', { deckId })
+    expect(view.body.slides[0].layoutType).toBe('quote')
+    expect(view.body.slides[0].title).toBeTruthy()
+  })
+
+  it('rejects layouts the template does not offer and foreign slides', async () => {
+    expect(
+      (
+        await act(ada, 'slide.setLayout', {
+          slideId: slideIds[0],
+          layoutType: 'hologram',
+        })
+      ).status,
+    ).toBe(400)
+
+    const bob = await registerUser('bob-layout@example.com')
+    expect(
+      (
+        await act(bob, 'slide.setLayout', {
+          slideId: slideIds[0],
+          layoutType: 'quote',
+        })
+      ).status,
+    ).toBe(403)
+  })
+})
+
 describe('slide.delete', () => {
   it('removes the slide, updates slideOrder, and reindexes the rest', async () => {
     const res = await act(ada, 'slide.delete', { slideId: slideIds[1] })

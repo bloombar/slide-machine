@@ -7,15 +7,22 @@
 import { z } from 'zod'
 import type { HydratedDocument } from 'mongoose'
 import type {
+  LayoutType,
   Slide,
   SlideDeleteInput,
   SlideEditInput,
+  SlideSetLayoutInput,
 } from '@slide-machine/shared'
 import { defineAction } from './define'
-import { registerAction, ActionForbiddenError } from './dispatch'
+import {
+  registerAction,
+  ActionForbiddenError,
+  ActionValidationError,
+} from './dispatch'
 import type { ActionContext } from './context'
 import { SlideModel, toSlideDto, type SlideDb } from '../models/slide'
 import { DeckModel, loadDeckAcl, touchDeck, type DeckDb } from '../models/deck'
+import { getBuiltinTemplate } from '../templates/builtin'
 import { canEditAcl } from '../lib/access'
 
 interface OwnedSlide {
@@ -68,6 +75,29 @@ export const slideEditContent = defineAction<SlideEditInput, Slide>({
   },
 })
 
+/** Per-slide layout switch (EDIT-3): the target must be one of the
+ * deck template's layouts; slot content is preserved as-is. */
+export const slideSetLayout = defineAction<SlideSetLayoutInput, Slide>({
+  name: 'slide.setLayout',
+  input: z.object({
+    slideId: z.string().min(1),
+    layoutType: z.string().min(1),
+  }),
+  execute: async (ctx, input) => {
+    const { slide, deck } = await loadOwnedSlide(ctx, input.slideId)
+    const template = getBuiltinTemplate(deck.templateId)
+    if (!template?.layouts.some(l => l.type === input.layoutType)) {
+      throw new ActionValidationError('slide.setLayout', [
+        'layoutType: not a layout of this template',
+      ])
+    }
+    slide.layoutType = input.layoutType as LayoutType
+    await slide.save()
+    await touchDeck(slide.deckId)
+    return toSlideDto(slide)
+  },
+})
+
 export const slideDelete = defineAction<
   SlideDeleteInput,
   { deleted: true; slideOrder: string[] }
@@ -91,4 +121,5 @@ export const slideDelete = defineAction<
 
 registerAction(slideGet)
 registerAction(slideEditContent)
+registerAction(slideSetLayout)
 registerAction(slideDelete)

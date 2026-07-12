@@ -104,11 +104,31 @@ test('in-place editing in the viewer, including list view and bullets', async ({
     'title',
   )
 
-  // The superimposed delete icon removes a slide permanently
-  await page.getByRole('button', { name: 'Delete slide 2' }).click()
+  // The slide kebab changes layouts via the picker (current highlighted)
+  await page.getByRole('button', { name: 'Options for slide 1' }).click()
+  await page.getByRole('menuitem', { name: 'Change layout' }).click()
+  await expect(
+    page.getByRole('dialog', { name: 'Change slide layout' }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('radio', { name: /^Title Opening/ }),
+  ).toHaveAttribute('aria-checked', 'true')
+  await page.getByRole('radio', { name: /quote/i }).click()
+  await expect(page.getByTestId('slide').first()).toHaveAttribute(
+    'data-layout',
+    'quote',
+  )
+
+  // ...and deletes a slide with no confirmation
+  await page.getByRole('button', { name: 'Options for slide 2' }).click()
+  await page.getByRole('menuitem', { name: 'Delete slide' }).click()
   await expect(page.getByTestId('slide')).toHaveCount(1)
   await page.reload()
   await expect(page.getByText('1 / 1')).toBeVisible()
+  await expect(page.getByTestId('slide')).toHaveAttribute(
+    'data-layout',
+    'quote',
+  )
 
   // Lecture settings open as a full-width modal over the viewer
   await page.getByRole('button', { name: 'Lecture settings' }).click()

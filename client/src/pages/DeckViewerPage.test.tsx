@@ -195,9 +195,10 @@ describe('DeckViewerPage slide deletion', () => {
     )
     await screen.findByText('Shared Lecture')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete slide 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete slide' }))
 
-    // The first slide is gone; the second becomes the current slide
+    // No confirmation: the first slide is gone; the second becomes current
     expect(await screen.findByText('1 / 1')).toBeInTheDocument()
     expect(screen.getByTestId('slide')).toHaveAttribute(
       'data-layout',
@@ -787,6 +788,85 @@ describe('DeckViewerPage settings modal', () => {
     expect(
       await screen.findByRole('group', { name: 'General access' }),
     ).toBeInTheDocument()
+  })
+
+  it('changes a slide layout from the kebab via the picker modal', async () => {
+    let sent: unknown
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: {
+          ...deckView,
+          canEdit: true,
+          template: {
+            ...deckView.template,
+            layouts: [
+              {
+                type: 'title',
+                label: 'Title',
+                purpose: 'Opening slide',
+                slots: [],
+                elementPositions: {},
+              },
+              {
+                type: 'quote',
+                label: 'Quote',
+                purpose: 'A striking statement',
+                slots: [],
+                elementPositions: {},
+              },
+            ],
+          },
+        },
+      }),
+      '/api/actions/slide.setLayout': init => {
+        sent = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: { ...deckView.slides[0], layoutType: 'quote' },
+        }
+      },
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Change layout' }))
+
+    // The picker highlights the slide's current layout
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Change slide layout',
+    })
+    expect(dialog).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /title/i })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+
+    fireEvent.click(screen.getByRole('radio', { name: /quote/i }))
+    await vi.waitFor(() =>
+      expect(sent).toEqual({ slideId: 's1', layoutType: 'quote' }),
+    )
+    // The slide re-renders in its new layout; the modal is gone
+    expect(await screen.findByTestId('slide')).toHaveAttribute(
+      'data-layout',
+      'quote',
+    )
+    expect(
+      screen.queryByRole('dialog', { name: 'Change slide layout' }),
+    ).not.toBeInTheDocument()
   })
 
   it('divides settings into tabs with arrow-key navigation', async () => {

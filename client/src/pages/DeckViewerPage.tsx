@@ -30,7 +30,8 @@ import {
 } from '../stt/commands'
 import SlideView, { type SlideContentPatch } from '../components/SlideView'
 import SlideNavZones from '../components/SlideNavZones'
-import SlideDeleteButton from '../components/SlideDeleteButton'
+import SlideMenu from '../components/SlideMenu'
+import LayoutPickerModal from '../components/LayoutPickerModal'
 import DraggableListRow from '../components/DraggableListRow'
 import EditableText from '../components/EditableText'
 import DeckPageHeader from '../components/DeckPageHeader'
@@ -72,6 +73,8 @@ export default function DeckViewerPage() {
       null,
   )
   const [settingsOpen, setSettingsOpen] = useState(() => settingsTab !== null)
+  // Which slide the layout picker is open for (EDIT-3)
+  const [layoutPickerFor, setLayoutPickerFor] = useState<string | null>(null)
   const [speaking, setSpeaking] = useState<boolean>(() =>
     Boolean(
       (location.state as { startSpeaking?: boolean } | null)?.startSpeaking,
@@ -370,6 +373,26 @@ export default function DeckViewerPage() {
   const isOwner = user?.id === view.deck.ownerId
   const canEdit = view.canEdit
 
+  /** Per-slide layout switch (EDIT-3): content stays, arrangement changes. */
+  const setSlideLayout = (slideId: string, layoutType: string) => {
+    dispatchAction<Slide>('slide.setLayout', { slideId, layoutType })
+      .then(updated => {
+        setView(v =>
+          v
+            ? {
+                ...v,
+                slides: v.slides.map(s => (s.id === updated.id ? updated : s)),
+              }
+            : v,
+        )
+        touchDeckLocally()
+      })
+      .catch(() => {
+        // Quiet failure: the slide keeps its layout
+      })
+    setLayoutPickerFor(null)
+  }
+
   /** In-place edits (EDIT-1) persist through the action layer. */
   const editSlide = (slideId: string) => (patch: SlideContentPatch) => {
     dispatchAction<Slide>('slide.editContent', { slideId, ...patch })
@@ -576,8 +599,9 @@ export default function DeckViewerPage() {
                 imagePending={pendingImages.has(slide!.id)}
               />
               {canEdit && (
-                <SlideDeleteButton
-                  label={`Delete slide ${nav.current + 1}`}
+                <SlideMenu
+                  number={nav.current + 1}
+                  onChangeLayout={() => setLayoutPickerFor(slide!.id)}
                   onDelete={() => void deleteSlide(slide!.id)}
                 />
               )}
@@ -607,8 +631,9 @@ export default function DeckViewerPage() {
                   onEdit={editSlide(s.id)}
                   imagePending={pendingImages.has(s.id)}
                 />
-                <SlideDeleteButton
-                  label={`Delete slide ${i + 1}`}
+                <SlideMenu
+                  number={i + 1}
+                  onChangeLayout={() => setLayoutPickerFor(s.id)}
                   onDelete={() => void deleteSlide(s.id)}
                 />
               </DraggableListRow>
@@ -619,6 +644,17 @@ export default function DeckViewerPage() {
             ),
           )}
         </ul>
+      )}
+
+      {canEdit && layoutPickerFor && (
+        <LayoutPickerModal
+          template={view.template}
+          current={
+            view.slides.find(s => s.id === layoutPickerFor)?.layoutType ?? ''
+          }
+          onPick={layoutType => setSlideLayout(layoutPickerFor, layoutType)}
+          onClose={() => setLayoutPickerFor(null)}
+        />
       )}
 
       {canEdit && settingsOpen && (

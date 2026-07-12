@@ -190,6 +190,12 @@ export interface SlideDeleteInput {
   slideId: string
 }
 
+/** Switches one slide's layout to another of its template's layouts (EDIT-3). */
+export interface SlideSetLayoutInput {
+  slideId: string
+  layoutType: string
+}
+
 /** Appends a blank starter slide at the end of the deck. */
 export interface SlideAddInput {
   deckId: string
