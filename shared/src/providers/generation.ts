@@ -4,6 +4,10 @@
  * Interface is minimal and expected to evolve with the first adapter.
  */
 import type { LayoutDescriptor, LayoutType } from '../types/template'
+import type {
+  VoiceCommand,
+  VoiceCommandDescriptor,
+} from '../types/voice-commands'
 
 /** A seeded image the model may select for a slide (SEED-2 / GEN-7). */
 export interface SeededImageDescriptor {
@@ -35,7 +39,24 @@ export interface SlideGenerationRequest {
     layoutType: LayoutType
     bulletCount: number
     bodyWords: number
+    /** The slide's exact slot content — present when layout re-fit is
+     * allowed, so the model can re-map it rather than guess it from
+     * the rolling context. */
+    content?: {
+      title?: string
+      body?: string
+      bullets?: string[]
+      caption?: string
+    }
   }
+  /** GENERATION_LAYOUT_REFIT feature flag: the model may switch an
+   * updated slide's layout — including a full re-map of existing
+   * content via updateMode 'refit' (GEN-8 "re-fit the layout"). */
+  allowLayoutRefit?: boolean
+  /** The fixed CAP-4 command set the model may recognize as the intent
+   * of a phrase. Present only when the server's GENERATION_VOICE_COMMANDS
+   * feature flag is on; absent = command detection disabled. */
+  voiceCommands?: VoiceCommandDescriptor[]
 }
 
 /** The model's per-slide image recommendation (GEN-7). */
@@ -50,8 +71,10 @@ export interface ImageGuidance {
 }
 
 export interface SlideGenerationResult {
-  /** Whether the phrase starts a new slide, updates the current one, or changes nothing (GEN-8). */
-  action: 'new' | 'update' | 'none'
+  /** Whether the phrase starts a new slide, updates the current one,
+   * changes nothing (GEN-8) — or, when voice commands were offered, is
+   * an operational command addressed to the slide system. */
+  action: 'new' | 'update' | 'none' | 'command'
   layoutType: LayoutType
   /** Content mapped to the chosen layout's slots. */
   slots: {
@@ -61,6 +84,12 @@ export interface SlideGenerationResult {
     caption?: string
   }
   imageGuidance?: ImageGuidance
+  /** Update semantics (allowLayoutRefit only): 'delta' (the default)
+   * means slots hold ONLY the added material; 'refit' means slots hold
+   * the COMPLETE slide re-mapped to the chosen layout. */
+  updateMode?: 'delta' | 'refit'
+  /** Set when action is 'command': the recognized command id. */
+  command?: VoiceCommand
 }
 
 export interface GenerationProvider {

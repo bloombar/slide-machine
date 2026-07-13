@@ -18,6 +18,7 @@ import type {
   SlideGenerationResult,
   LayoutType,
 } from '@slide-machine/shared'
+import { isVoiceCommand } from '@slide-machine/shared'
 import { env } from '../config/env'
 import { registry } from './registry'
 import { freedomPolicy, renderGenerationPrompt } from './prompt-templates'
@@ -28,17 +29,30 @@ const API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
  * JSON via responseMimeType but deliberately do NOT send a
  * responseSchema: constrained decoding sends current Gemini models
  * into degenerate repetition loops, while prompt-specified JSON stays
- * clean — and zod validates everything server-side regardless. */
-const OUTPUT_SHAPE = `{
-  "action": "new" | "update" | "none",
+ * clean — and zod validates everything server-side regardless. The
+ * "command" action exists only when the request offers voice commands
+ * (GENERATION_VOICE_COMMANDS). */
+const outputShape = (withCommands: boolean, withRefit: boolean): string => `{
+  "action": "new" | "update" | "none"${withCommands ? ' | "command"' : ''},
   "layoutType": "<one of the layout types offered below>",
   "slots": { "title"?: string, "body"?: string, "bullets"?: string[], "caption"?: string },
-  "imageGuidance"?: { "keywords": string[], "seededImageId"?: string, "none"?: boolean }
+  "imageGuidance"?: { "keywords": string[], "seededImageId"?: string, "none"?: boolean }${
+    withRefit ? ',\n  "updateMode"?: "delta" | "refit"' : ''
+  }${withCommands ? ',\n  "command"?: "<a command id from the list below>"' : ''}
 }`
+
+/** A command claim, validated separately: the model may (reasonably)
+ * omit layoutType/slots when it picks "command", so it must not be
+ * forced through the content schema. */
+const commandClaimSchema = z.object({
+  action: z.literal('command'),
+  command: z.string().optional(),
+})
 
 /** Server-side validation of what the model claims (never trust it). */
 const resultSchema = z.object({
   action: z.enum(['new', 'update', 'none']),
+  updateMode: z.enum(['delta', 'refit']).optional(),
   layoutType: z.string(),
   slots: z
     .object({
@@ -94,8 +108,34 @@ const instructions = (req: SlideGenerationRequest): string => {
     ? `\nCurrent slide load: ${req.currentSlide.bulletCount} bullets, ~${req.currentSlide.bodyWords} body words (layout "${req.currentSlide.layoutType}"). If adding this phrase's content would exceed the layout's limits, choose "new" instead of "update".`
     : ''
 
+  // Update semantics + the slide's exact content, present only when
+  // layout re-fit is allowed (GEN-8): "delta" stays cheap (added
+  // material only); "refit" pays for the complete re-mapped slide only
+  // when the layout actually changes
+  const updateRules =
+    req.allowLayoutRefit && req.currentSlide?.content
+      ? `\nFor "update", also set "updateMode":
+- "delta": adds a small amount; slots contain ONLY the added material. Keep layoutType "${req.currentSlide.layoutType}" unless another layout still displays every slot this slide uses.
+- "refit": the slide's combined content now fits a different layout better (e.g. prose grown into an enumeration fits "list"); slots must contain the COMPLETE slide re-mapped to the new layout — every existing point preserved plus the added material, reworded only as the new slots require.
+Current slide content: ${JSON.stringify(req.currentSlide.content)}`
+      : ''
+
+  // A fourth action bullet, present only when commands are offered:
+  // the bar is deliberately high — a wrong "command" hijacks the deck
+  // mid-lecture, while a missed one merely adds a slide
+  const voiceCommands = req.voiceCommands?.length
+    ? `\n- "command": ONLY when the phrase is unmistakably the speaker operating the slide system rather than lecturing (e.g. "let's move on to the next slide", "go back one"). Set "command" to one id from the list below and leave slots empty. If the phrase could plausibly be lecture content, do NOT choose "command".\nCommand ids:\n${req.voiceCommands
+        .map(c => `- "${c.id}": ${c.description}`)
+        .join('\n')}`
+    : ''
+
   return renderGenerationPrompt({
-    outputShape: OUTPUT_SHAPE,
+    outputShape: outputShape(
+      Boolean(req.voiceCommands?.length),
+      Boolean(req.allowLayoutRefit && req.currentSlide?.content),
+    ),
+    updateRules,
+    voiceCommands,
     freedomPolicy: freedomPolicy(req.freedom ?? 3),
     layouts,
     seededImages,
@@ -169,6 +209,19 @@ export class GeminiGenerationProvider implements GenerationProvider {
     } catch {
       throw new Error('Gemini returned unparseable JSON')
     }
+    // A "command" claim is validated on its own (the model may omit
+    // content fields) and honored only when commands were offered AND
+    // the id is one we listed; anything else is treated as filler —
+    // never guess at a command mid-lecture
+    const claim = commandClaimSchema.safeParse(raw)
+    if (claim.success) {
+      const offered = new Set(req.voiceCommands?.map(c => c.id) ?? [])
+      const { command } = claim.data
+      return isVoiceCommand(command) && offered.has(command)
+        ? { action: 'command', command, layoutType: 'content', slots: {} }
+        : { action: 'none', layoutType: 'content', slots: {} }
+    }
+
     const parsed = resultSchema.parse(raw)
 
     // The model must pick from the offered layouts; drift falls back to
@@ -187,6 +240,11 @@ export class GeminiGenerationProvider implements GenerationProvider {
     const guidance = parsed.imageGuidance
     return {
       action: parsed.action,
+      // An updateMode claim only counts when refit was actually offered
+      updateMode:
+        req.allowLayoutRefit && parsed.action === 'update'
+          ? parsed.updateMode
+          : undefined,
       layoutType,
       slots: parsed.slots,
       imageGuidance: guidance

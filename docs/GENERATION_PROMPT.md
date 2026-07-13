@@ -15,7 +15,11 @@ Slots filled by [`gemini-generation.ts`](../server/src/providers/gemini-generati
 `freedomPolicy` (from the bands + the resolved 1–10 setting),
 `layouts` (the template's layout descriptors and word budgets),
 `seededImages`, `projectSeed`, `deckSeed` (seed notes + extracted document
-text), `rolling` (recent slides), `capacity` (current-slide load), `phrase`.
+text), `rolling` (recent slides), `capacity` (current-slide load),
+`voiceCommands` (the CAP-4 command option set — empty unless
+`GENERATION_VOICE_COMMANDS=true`), `updateRules` (delta/refit update
+semantics plus the current slide's exact content — empty unless
+`GENERATION_LAYOUT_REFIT=true`, the default), `phrase`.
 
 `PROMPTS_DIR` overrides the directory (defaults to `config/prompts`).
 

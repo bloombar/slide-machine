@@ -213,6 +213,59 @@ describe('session.phrase', () => {
     })
     expect(res.status).toBe(403)
   })
+
+  it('refits the layout when an update outgrows it (GEN-8, flag default on)', async () => {
+    // A prose phrase becomes a content slide (title + body)
+    const first = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'The cell membrane is a strong protective barrier',
+    })
+    expect(first.body.slide.layoutType).toBe('content')
+    const originalBody = first.body.slide.body as string
+
+    // An enumerating continuation triggers the mock's full refit
+    const update = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Also it contains cholesterol, embedded proteins, glycolipids',
+    })
+    expect(update.body.kind).toBe('slide.update')
+    expect(update.body.slide.layoutType).toBe('list')
+    // The hidden body migrated into the bullets…
+    expect(update.body.slide.bullets).toContain(originalBody)
+    expect(update.body.slide.bullets).toContain('glycolipids')
+    // …and the original body data is retained, so EDIT-3 strands nothing
+    expect(update.body.slide.body).toBe(originalBody)
+
+    // Still one slide: a refit reworks, never appends
+    const view = await act(ada, 'deck.get', { deckId })
+    expect(view.body.slides).toHaveLength(1)
+  })
+
+  it('keeps the layout on delta updates that would hide displayed content', async () => {
+    await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'The cell membrane is a strong protective barrier',
+    })
+    // Single-item continuation: a delta update; the mock proposes
+    // "list" but that would hide the body, so the layout must hold
+    const update = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Also chlorophyll absorbs light energy',
+    })
+    expect(update.body.kind).toBe('slide.update')
+    expect(update.body.slide.layoutType).toBe('content')
+  })
+
+  it('treats command-like phrases as content while GENERATION_VOICE_COMMANDS is off (default)', async () => {
+    // The mock provider only recognizes "please …" intents when the
+    // pipeline offers commands; with the flag off it must not
+    const res = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Please next slide',
+    })
+    expect(res.body.kind).toBe('slide.new')
+    expect(res.body.command).toBeUndefined()
+  })
 })
 
 describe('GET /api/decks/:slug (viewer)', () => {

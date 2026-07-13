@@ -86,6 +86,16 @@ const envSchema = z.object({
   // Debug: dump each assembled prompt and raw model response to the
   // server log. Prompts include seed material — dev use only.
   GENERATION_LOG_PROMPTS: z.stringbool().default(false),
+  // Experimental: offer the CAP-4 voice-command set to the generation
+  // model so plain lecture speech (no wake word) can trigger commands
+  // like next/previous slide. Off by default — a misread phrase becomes
+  // a surprise navigation, so this stays an easy on/off switch.
+  GENERATION_VOICE_COMMANDS: z.stringbool().default(false),
+  // GEN-8 layout re-fit: the model may switch an updated slide's layout
+  // (e.g. promote content → list as material grows), including a full
+  // slot re-map ("refit"). On by default; flip off to pin every slide's
+  // layout from its creation.
+  GENERATION_LAYOUT_REFIT: z.stringbool().default(true),
   /** Hard cap on one generation call — phrase-to-slide must stay live. */
   GEMINI_TIMEOUT_MS: z.coerce.number().default(12_000),
   GOOGLE_CLOUD_STT_KEY: z.string().optional(),

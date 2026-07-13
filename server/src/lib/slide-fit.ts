@@ -68,6 +68,23 @@ export const updateOverflows = (
   return false
 }
 
+/**
+ * True when a refit's COMPLETE slots exceed the target layout's hard
+ * budgets (bullet count / body words). Refits are absolute, not
+ * additive, so this is the refit counterpart of updateOverflows.
+ */
+export const refitOverflows = (
+  result: SlideGenerationResult,
+  descriptors: LayoutDescriptor[],
+): boolean => {
+  const limits = budgetsFor(result, descriptors)
+  const bullets = result.slots.bullets?.length ?? 0
+  if (limits.maxBullets && bullets > limits.maxBullets) return true
+  const bodyWords = wordCount(result.slots.body)
+  if (limits.maxBodyWords && bodyWords > limits.maxBodyWords) return true
+  return false
+}
+
 /** Clamps a result's slots to its layout's word budgets (new slides). */
 export const clampToBudget = (
   result: SlideGenerationResult,

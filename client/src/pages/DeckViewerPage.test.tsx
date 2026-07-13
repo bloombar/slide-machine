@@ -484,6 +484,106 @@ describe('DeckViewerPage microphone capture', () => {
     expect(stopSpy).toHaveBeenCalled()
   })
 
+  it('executes AI-recognized command events from session.phrase', async () => {
+    FakeRecognition.reset()
+    vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
+    // The server (flag on) recognizes the first phrase as "next" and
+    // the second as "pause"; the client must execute both exactly like
+    // wake-worded commands
+    const commands = ['next', 'pause']
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+      '/api/actions/session.phrase': () => ({
+        status: 200,
+        body: { kind: 'command', command: commands.shift() },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Live session' }))
+    const recognition = FakeRecognition.last!
+    const speak = (transcript: string) =>
+      act(() => {
+        recognition.onresult?.({
+          resultIndex: 0,
+          results: [{ isFinal: true, 0: { transcript } }],
+        })
+      })
+
+    // No wake word: the phrase reaches the server, which flags it as a
+    // command — the carousel moves and no slide is created
+    expect(screen.getByText('1 / 2')).toBeInTheDocument()
+    speak('please move on')
+    expect(await screen.findByText('2 / 2')).toBeInTheDocument()
+
+    // A server-recognized pause stops the microphone
+    const stopSpy = vi.spyOn(recognition, 'stop')
+    speak('please pause')
+    await vi.waitFor(() => expect(stopSpy).toHaveBeenCalled())
+  })
+
+  it('surfaces a dead microphone: rapid capture failures stop listening and show an error', async () => {
+    FakeRecognition.reset()
+    vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Live session' }))
+    const recognition = FakeRecognition.last!
+    expect(
+      screen.getByPlaceholderText('Listening… (you can still type)'),
+    ).toBeInTheDocument()
+
+    // The speech service dies: immediate start→end cycles until capture
+    // gives up — the failure must be visible, not a silent hot mic
+    act(() => {
+      for (let i = 0; i < 10; i++) recognition.onend?.()
+    })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Microphone unavailable — speech recognition keeps stopping',
+    )
+    // Listening flipped off: the bar stays open but the mic is no longer hot
+    expect(
+      screen.getByPlaceholderText('Say something about your topic…'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Live session' }),
+    ).toHaveAttribute('title', 'Speak to add slides')
+  })
+
   it('transcribed phrases flow through session.phrase', async () => {
     FakeRecognition.reset()
     vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)

@@ -6,6 +6,7 @@
  */
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import type { SlideGenerationRequest } from '@slide-machine/shared'
+import { VOICE_COMMAND_DESCRIPTORS } from '@slide-machine/shared'
 const testEnv = vi.hoisted(() => ({
   GEMINI_API_KEY: 'test-key' as string | undefined,
   GEMINI_MODEL: 'gemini-test-model',
@@ -201,6 +202,135 @@ describe('GeminiGenerationProvider', () => {
     )
     const result = await provider.generateSlideContent(request())
     expect(result.imageGuidance?.seededImageId).toBe('asset1')
+  })
+
+  it('offers refit semantics only when allowLayoutRefit rides along with slide content', async () => {
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
+    )
+    await provider.generateSlideContent(request())
+    let prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+      .contents[0].parts[0].text as string
+    expect(prompt).not.toContain('updateMode')
+    expect(prompt).not.toContain('Current slide content:')
+
+    fetchMock.mockClear()
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
+    )
+    await provider.generateSlideContent(
+      request({
+        allowLayoutRefit: true,
+        currentSlide: {
+          layoutType: 'content',
+          bulletCount: 0,
+          bodyWords: 7,
+          content: { title: 'Membranes', body: 'A phospholipid bilayer' },
+        },
+      }),
+    )
+    prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body)).contents[0]
+      .parts[0].text as string
+    expect(prompt).toContain('"updateMode"?: "delta" | "refit"')
+    expect(prompt).toContain('Keep layoutType "content"')
+    expect(prompt).toContain(
+      'Current slide content: {"title":"Membranes","body":"A phospholipid bilayer"}',
+    )
+  })
+
+  it('passes updateMode through only when refit was offered', async () => {
+    const reply = {
+      action: 'update',
+      updateMode: 'refit',
+      layoutType: 'list',
+      slots: { title: 'Membranes', bullets: ['bilayer', 'proteins'] },
+    }
+    fetchMock.mockResolvedValue(geminiReply(reply))
+    let result = await provider.generateSlideContent(
+      request({
+        allowLayoutRefit: true,
+        currentSlide: {
+          layoutType: 'content',
+          bulletCount: 0,
+          bodyWords: 7,
+          content: { title: 'Membranes', body: 'A phospholipid bilayer' },
+        },
+      }),
+    )
+    expect(result.updateMode).toBe('refit')
+    expect(result.layoutType).toBe('list')
+
+    // Same reply without the offer: the claim is stripped
+    fetchMock.mockClear()
+    fetchMock.mockResolvedValue(geminiReply(reply))
+    result = await provider.generateSlideContent(request())
+    expect(result.updateMode).toBeUndefined()
+  })
+
+  it('offers the "command" action only when voice commands ride along', async () => {
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
+    )
+    await provider.generateSlideContent(request())
+    let prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+      .contents[0].parts[0].text as string
+    expect(prompt).not.toContain('"command"')
+    expect(prompt).not.toContain('Command ids:')
+
+    fetchMock.mockClear()
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
+    )
+    await provider.generateSlideContent(
+      request({ voiceCommands: VOICE_COMMAND_DESCRIPTORS }),
+    )
+    prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body)).contents[0]
+      .parts[0].text as string
+    expect(prompt).toContain('"action": "new" | "update" | "none" | "command"')
+    expect(prompt).toContain('Command ids:')
+    expect(prompt).toContain('- "next": Advance to the next slide')
+    expect(prompt).toContain('- "newSlide": Append a new blank slide')
+  })
+
+  it('returns a recognized command and drops any content fields', async () => {
+    fetchMock.mockResolvedValue(
+      geminiReply({
+        action: 'command',
+        command: 'previous',
+        layoutType: 'hologram',
+        slots: { title: 'stray content' },
+      }),
+    )
+    const result = await provider.generateSlideContent(
+      request({ voiceCommands: VOICE_COMMAND_DESCRIPTORS }),
+    )
+    expect(result).toEqual({
+      action: 'command',
+      command: 'previous',
+      layoutType: 'content',
+      slots: {},
+    })
+  })
+
+  it('degrades invented or unoffered command claims to none', async () => {
+    // A command id we never defined
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'command', command: 'jazzhands', slots: {} }),
+    )
+    let result = await provider.generateSlideContent(
+      request({ voiceCommands: VOICE_COMMAND_DESCRIPTORS }),
+    )
+    expect(result.action).toBe('none')
+    expect(result.command).toBeUndefined()
+
+    // A real id, but commands were never offered in this request
+    fetchMock.mockClear()
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'command', command: 'next', slots: {} }),
+    )
+    result = await provider.generateSlideContent(request())
+    expect(result.action).toBe('none')
+    expect(result.command).toBeUndefined()
   })
 
   it('throws on API errors with the status attached', async () => {

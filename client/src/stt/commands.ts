@@ -8,8 +8,14 @@
  * SPEC's start/resume-by-voice needs an always-listening command mode
  * and arrives with the Cloud STT path; pause works today (it stops the
  * mic, so resuming is a click).
+ *
+ * The command ids live in shared: the server's AI command-intent path
+ * (GENERATION_VOICE_COMMANDS) returns the same ids, so both routes run
+ * through the same executor.
  */
-export type VoiceCommand = 'next' | 'previous' | 'pause' | 'newSlide'
+import type { VoiceCommand } from '@slide-machine/shared'
+
+export type { VoiceCommand }
 
 export const WAKE_WORD = 'slide machine'
 

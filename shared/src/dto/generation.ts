@@ -6,13 +6,19 @@
  */
 import type { Deck, Slide } from '../types/deck'
 import type { Template } from '../types/template'
+import type { VoiceCommand } from '../types/voice-commands'
 
-export type SlideEventKind = 'slide.new' | 'slide.update' | 'none'
+export type SlideEventKind = 'slide.new' | 'slide.update' | 'none' | 'command'
 
-/** One generation step's outcome. `none` = filler speech, nothing changed. */
+/** One generation step's outcome. `none` = filler speech, nothing
+ * changed. `command` = the AI recognized the phrase as a CAP-4 voice
+ * command (feature-flagged); the client executes it like a wake-worded
+ * command and nothing persists. */
 export interface SlideEvent {
   kind: SlideEventKind
   slide?: Slide
+  /** Set when kind is 'command'. */
+  command?: VoiceCommand
 }
 
 /** Everything needed to render a deck: returned by deck.get and the viewer route. */

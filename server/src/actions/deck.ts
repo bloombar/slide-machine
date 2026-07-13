@@ -57,10 +57,16 @@ import {
 import { sharesOfAcl } from '../lib/shares'
 import {
   clampToBudget,
+  refitOverflows,
   titleFromPhrase,
   updateOverflows,
   wordCount,
 } from '../lib/slide-fit'
+import {
+  layoutDisplaysContent,
+  refitPreservesContent,
+  type SlideContentSnapshot,
+} from '../lib/layout-refit'
 import { UserModel } from '../models/user'
 import { SlideModel, toSlideDto } from '../models/slide'
 import { ProjectModel, projectAcl } from '../models/project'
@@ -78,6 +84,7 @@ import type {
   ImageGuidance,
   SeededImageDescriptor,
 } from '@slide-machine/shared'
+import { VOICE_COMMAND_DESCRIPTORS } from '@slide-machine/shared'
 
 /**
  * Kicks off background image enrichment AFTER the SlideEvent is on its
@@ -430,16 +437,109 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
             layoutType: lastSlide.layoutType,
             bulletCount: lastSlide.bullets?.length ?? 0,
             bodyWords: wordCount(lastSlide.body),
+            // The exact slot content, so a refit re-maps real text
+            // instead of guessing from the rolling context
+            content: env.GENERATION_LAYOUT_REFIT
+              ? {
+                  title: lastSlide.title,
+                  body: lastSlide.body,
+                  bullets: lastSlide.bullets,
+                  caption: lastSlide.caption,
+                }
+              : undefined,
           }
+        : undefined,
+      // Feature flag (GENERATION_LAYOUT_REFIT): updates may switch the
+      // slide's layout, including a full refit (GEN-8)
+      allowLayoutRefit: env.GENERATION_LAYOUT_REFIT,
+      // Feature flag (GENERATION_VOICE_COMMANDS): offer the CAP-4
+      // command set so the model can flag operational phrases
+      voiceCommands: env.GENERATION_VOICE_COMMANDS
+        ? VOICE_COMMAND_DESCRIPTORS
         : undefined,
     })
 
+    // AI-recognized voice command: nothing persists (no slide, no
+    // transcript); the client executes it like a wake-worded command.
+    // With the flag off nothing was offered, so a "command" claim is a
+    // provider bug — degrade to filler rather than act on it
+    if (rawResult.action === 'command') {
+      return env.GENERATION_VOICE_COMMANDS && rawResult.command
+        ? { kind: 'command', command: rawResult.command }
+        : { kind: 'none' }
+    }
+
     if (rawResult.action === 'none') return { kind: 'none' }
+
+    // Full layout refit (GEN-8 / GENERATION_LAYOUT_REFIT): the model
+    // returned the COMPLETE slide re-mapped to a new layout. Verified
+    // before it touches the deck — a refit we can't verify is safer
+    // discarded (one phrase lost) than half-applied (audience content
+    // lost). Old slot data the new layout hides is kept on the
+    // document, so a later layout switch (EDIT-3) strands nothing.
+    if (
+      rawResult.action === 'update' &&
+      rawResult.updateMode === 'refit' &&
+      lastSlide
+    ) {
+      if (!env.GENERATION_LAYOUT_REFIT) return { kind: 'none' }
+      const snapshot: SlideContentSnapshot = {
+        title: lastSlide.title,
+        body: lastSlide.body,
+        bullets: lastSlide.bullets,
+        caption: lastSlide.caption,
+        hasImage: Boolean(lastSlide.imageRef),
+      }
+      if (
+        !refitPreservesContent(rawResult, snapshot, descriptors) ||
+        refitOverflows(rawResult, descriptors)
+      ) {
+        return { kind: 'none' }
+      }
+      const refit = clampToBudget(rawResult, descriptors)
+      if (refit.slots.title) lastSlide.title = refit.slots.title
+      if (refit.slots.body) lastSlide.body = refit.slots.body
+      if (refit.slots.bullets?.length) lastSlide.bullets = refit.slots.bullets
+      if (refit.slots.caption) lastSlide.caption = refit.slots.caption
+      lastSlide.layoutType = refit.layoutType
+      lastSlide.sourceTranscript = [lastSlide.sourceTranscript, input.phrase]
+        .filter(Boolean)
+        .join(' ')
+      await lastSlide.save()
+      await touchDeck(deck._id)
+      if (!lastSlide.imageRef)
+        maybeEnrich(lastSlide._id.toString(), refit.imageGuidance, [
+          ...assets.project,
+          ...assets.deck,
+        ])
+      return { kind: 'slide.update', slide: toSlideDto(lastSlide) }
+    }
 
     // Capacity enforcement (never trust the model): an update that
     // would overflow the slide's word budget becomes a NEW slide, and
     // new-slide content is clamped to the budget
     let result = rawResult
+    if (
+      result.action === 'update' &&
+      lastSlide &&
+      result.layoutType !== lastSlide.layoutType &&
+      (!env.GENERATION_LAYOUT_REFIT ||
+        !layoutDisplaysContent(
+          result.layoutType,
+          {
+            title: lastSlide.title,
+            body: lastSlide.body,
+            bullets: lastSlide.bullets,
+            caption: lastSlide.caption,
+            hasImage: Boolean(lastSlide.imageRef),
+          },
+          descriptors,
+        ))
+    ) {
+      // Delta layout switches may not hide displayed content (and are
+      // disabled entirely when the flag is off): keep the layout
+      result = { ...result, layoutType: lastSlide.layoutType }
+    }
     if (
       result.action === 'update' &&
       lastSlide &&

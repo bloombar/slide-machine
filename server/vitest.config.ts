@@ -34,6 +34,10 @@ export default defineConfig({
       STORAGE_LOCAL_DIR: '.uploads-test',
       // Hermetic: the developer's local .env must not leak into tests
       GENERATION_FREEDOM: '3',
+      // Feature flags pinned to their code defaults; flag-variant tests
+      // mock env per file instead
+      GENERATION_VOICE_COMMANDS: 'false',
+      GENERATION_LAYOUT_REFIT: 'true',
     },
     coverage: {
       provider: 'v8',

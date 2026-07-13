@@ -39,6 +39,12 @@ export default defineConfig({
       STORAGE_LOCAL_DIR: '.uploads-e2e',
       // Hermetic: the developer's local .env must not leak into e2e
       GENERATION_FREEDOM: '3',
+      // Exercise the AI command-intent path (voice-command-intent.spec);
+      // the mock provider only recognizes explicit "please …" phrases,
+      // so other specs are unaffected
+      GENERATION_VOICE_COMMANDS: 'true',
+      // Layout re-fit on updates (layout-refit.spec), pinned hermetically
+      GENERATION_LAYOUT_REFIT: 'true',
     },
   },
 })
