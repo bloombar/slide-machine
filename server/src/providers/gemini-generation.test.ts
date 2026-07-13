@@ -126,6 +126,22 @@ describe('GeminiGenerationProvider', () => {
     expect(init.headers['x-goog-api-key']).toBe('test-key')
   })
 
+  it('tolerates responses that omit layoutType (none / delta updates)', async () => {
+    // A bare "none" — exactly what the live model returned mid-lecture
+    fetchMock.mockResolvedValue(geminiReply({ action: 'none' }))
+    let result = await provider.generateSlideContent(request())
+    expect(result.action).toBe('none')
+
+    // An update without a layout claim keeps the slide's own layout
+    fetchMock.mockClear()
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'update', slots: { bullets: ['more'] } }),
+    )
+    result = await provider.generateSlideContent(request())
+    expect(result.action).toBe('update')
+    expect(result.layoutType).toBe('list') // currentSlide.layoutType
+  })
+
   it('asks for and accepts a deck title only when requested', async () => {
     fetchMock.mockResolvedValue(
       geminiReply({

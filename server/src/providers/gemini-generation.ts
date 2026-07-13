@@ -59,7 +59,9 @@ const commandClaimSchema = z.object({
 const resultSchema = z.object({
   action: z.enum(['new', 'update', 'none']),
   updateMode: z.enum(['delta', 'refit']).optional(),
-  layoutType: z.string(),
+  // Models legitimately omit this on "none" and delta-update decisions
+  // (the layout isn't changing); drift correction fills it in
+  layoutType: z.string().optional(),
   slots: z
     .object({
       title: z.string().optional(),
@@ -246,15 +248,18 @@ export class GeminiGenerationProvider implements GenerationProvider {
 
     const parsed = resultSchema.parse(raw)
 
-    // The model must pick from the offered layouts; drift falls back to
-    // the closest sane default rather than crashing the live session
+    // The model must pick from the offered layouts; a missing or
+    // drifted claim falls back to the closest sane default rather than
+    // crashing the live session — for updates, the slide's own layout
     const allowed = new Set(req.layoutDescriptors.map(d => d.type))
     const layoutType = (
-      allowed.has(parsed.layoutType as LayoutType)
+      parsed.layoutType && allowed.has(parsed.layoutType as LayoutType)
         ? parsed.layoutType
-        : allowed.has('content')
-          ? 'content'
-          : (req.layoutDescriptors[0]?.type ?? 'content')
+        : parsed.action === 'update' && req.currentSlide
+          ? req.currentSlide.layoutType
+          : allowed.has('content')
+            ? 'content'
+            : (req.layoutDescriptors[0]?.type ?? 'content')
     ) as LayoutType
 
     // Seeded-image ids likewise must be ones we offered
