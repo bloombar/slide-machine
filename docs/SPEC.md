@@ -255,6 +255,7 @@ The user can drive the slide generator hands-free by **speaking commands** — a
 - Commands are recognized from the same Google Cloud Speech-to-Text stream, using a small, configurable command vocabulary (with synonyms, e.g. "go back" → rewind) so they are **reliably transcribed** and unambiguous.
 - A wake-word or command prefix (e.g., "slide machine, …") and/or a distinct command mode keeps ordinary lecture speech from being misinterpreted as a command; normal speech continues to drive slide generation (GEN-1).
 - Recognized commands are confirmed visually (and optionally audibly) so the user can tell a command registered. Low-confidence matches are ignored rather than acted on, to avoid disrupting a live lecture.
+- **AI command intent (experimental, flagged)** — in addition to the deterministic wake-word matcher, the generation model ([GEN-1](#gen-1-speech-to-slide-generation)) is offered the same command set and may classify a plain phrase ("let's go to the next slide") as a command instead of lecture content; the client executes it through the same path, and nothing persists. Off by default (`GENERATION_VOICE_COMMANDS`) because a misread phrase becomes a surprise navigation.
 
 ### 9. Slide Generation & Enrichment
 
