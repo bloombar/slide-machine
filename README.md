@@ -20,7 +20,7 @@ Prerequisites: **Node ≥ 22** and **MongoDB** (either run your own, or `docker 
 
 ```sh
 npm ci
-cp server/.env.example server/.env    # fill in values; only MONGODB_URI is required
+cp server/.env.example server/.env    # required: MONGODB_URI + JWT secrets (see docs/CONTRIBUTING.md)
 cp client/.env.example client/.env.local
 npm run dev                            # Express on :3000 + Vite on :5173 (proxied /api)
 ```
