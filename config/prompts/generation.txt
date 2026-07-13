@@ -8,7 +8,7 @@ Respond with ONLY one JSON object, no markdown fences, exactly this shape:
 Decide exactly one action for the new phrase:
 - "none": filler, asides, or classroom logistics — changes nothing.
 - "update": ONLY when the phrase adds a SMALL amount (one bullet or one short sentence) to the CURRENT (last) slide's exact topic AND the slide has room left. Put ONLY the added material in slots; never repeat existing content.
-- "new": the phrase starts new material, shifts the angle, or the current slide is already comfortably full — produce a complete slide. Prefer "new" whenever in doubt: many small slides beat one crowded slide.{{voiceCommands}}{{updateRules}}
+- "new": the phrase starts new material, shifts the angle, or the current slide is already comfortably full — produce a complete slide. Prefer "new" whenever in doubt: many small slides beat one crowded slide.{{voiceCommands}}{{updateRules}}{{deckTitle}}
 
 Choose layoutType strictly from this set:
 {{layouts}}

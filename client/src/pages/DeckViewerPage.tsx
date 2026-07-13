@@ -206,6 +206,12 @@ export default function DeckViewerPage() {
   /** Applies a generation event: new slides append, updates replace —
    * and the view always transitions to the slide that changed. */
   const applyEvent = (event: SlideEvent) => {
+    // The AI titled the (previously untitled) lecture — reflect it in
+    // the header; the server has already saved it
+    if (event.deckTitle) {
+      const title = event.deckTitle
+      setView(v => (v ? { ...v, deck: { ...v.deck, title } } : v))
+    }
     // AI-recognized command intent (feature-flagged server-side):
     // execute exactly as if the wake-worded phrase had matched locally
     if (event.kind === 'command') {

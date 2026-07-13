@@ -35,8 +35,36 @@ test('untitled lectures start from the + option and can be named later', async (
     page.getByRole('link', { name: /Untitled lecture/ }),
   ).toBeVisible()
 
-  // Name it later in place from the nav
+  // Speaking earns an AI title once the topic is clear (second phrase
+  // with the mock provider) — saved server-side, live in the header
   await page.getByRole('link', { name: /Untitled lecture/ }).click()
+  await page.getByRole('button', { name: 'Live session' }).click()
+  await page.getByLabel('Spoken phrase').fill('Photosynthesis basics')
+  await page.getByRole('button', { name: 'Speak' }).click()
+  await expect(page.getByTestId('slide')).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Untitled lecture' }),
+  ).toBeVisible()
+  await page
+    .getByLabel('Spoken phrase')
+    .fill('Plants convert light into energy')
+  await page.getByRole('button', { name: 'Speak' }).click()
+  await expect(
+    page.getByRole('heading', {
+      name: 'Plants Convert Light Into Energy',
+      level: 1,
+    }),
+  ).toBeVisible()
+  await page.reload()
+  await expect(
+    page.getByRole('heading', {
+      name: 'Plants Convert Light Into Energy',
+      level: 1,
+    }),
+  ).toBeVisible()
+
+  // Renaming by hand still works — the AI never overwrites it
+
   await page.getByTitle('Click to edit Lecture title').click()
   await page
     .getByRole('textbox', { name: 'Lecture title' })

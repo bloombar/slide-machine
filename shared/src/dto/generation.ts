@@ -20,6 +20,8 @@ export interface SlideEvent {
   slide?: Slide
   /** Set when kind is 'command'. */
   command?: VoiceCommand
+  /** An AI-proposed lecture title was just saved (untitled decks only). */
+  deckTitle?: string
 }
 
 /** Everything needed to render a deck: returned by deck.get and the viewer route. */

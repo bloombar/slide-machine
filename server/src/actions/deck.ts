@@ -469,7 +469,21 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
       voiceCommands: env.GENERATION_VOICE_COMMANDS
         ? VOICE_COMMAND_DESCRIPTORS
         : undefined,
+      // Untitled lecture: keep asking for a title until the model
+      // commits to one (it holds off until the topic is clear)
+      suggestDeckTitle: !deck.title,
     })
+
+    // Save the first title the model offers; once stored, subsequent
+    // phrases stop asking. The event carries it so the header updates.
+    let savedDeckTitle: string | undefined
+    if (!deck.title && rawResult.deckTitle?.trim()) {
+      deck.title = rawResult.deckTitle.trim().slice(0, 80)
+      savedDeckTitle = deck.title
+      await deck.save()
+    }
+    const event = (e: SlideEvent): SlideEvent =>
+      savedDeckTitle ? { ...e, deckTitle: savedDeckTitle } : e
 
     // AI-recognized voice command: nothing persists (no slide, no
     // transcript); the client executes it like a wake-worded command.
@@ -478,10 +492,10 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
     if (rawResult.action === 'command') {
       return env.GENERATION_VOICE_COMMANDS && rawResult.command
         ? { kind: 'command', command: rawResult.command }
-        : { kind: 'none' }
+        : event({ kind: 'none' })
     }
 
-    if (rawResult.action === 'none') return { kind: 'none' }
+    if (rawResult.action === 'none') return event({ kind: 'none' })
 
     // Full layout refit (GEN-8 / GENERATION_LAYOUT_REFIT): the model
     // returned the COMPLETE slide re-mapped to a new layout. Verified
@@ -494,7 +508,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
       rawResult.updateMode === 'refit' &&
       lastSlide
     ) {
-      if (!env.GENERATION_LAYOUT_REFIT) return { kind: 'none' }
+      if (!env.GENERATION_LAYOUT_REFIT) return event({ kind: 'none' })
       const snapshot: SlideContentSnapshot = {
         title: lastSlide.title,
         body: lastSlide.body,
@@ -506,7 +520,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
         !refitPreservesContent(rawResult, snapshot, descriptors) ||
         refitOverflows(rawResult, descriptors)
       ) {
-        return { kind: 'none' }
+        return event({ kind: 'none' })
       }
       const refit = clampToBudget(rawResult, descriptors)
       if (refit.slots.title) lastSlide.title = refit.slots.title
@@ -524,7 +538,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
           ...assets.project,
           ...assets.deck,
         ])
-      return { kind: 'slide.update', slide: toSlideDto(lastSlide) }
+      return event({ kind: 'slide.update', slide: toSlideDto(lastSlide) })
     }
 
     // Capacity enforcement (never trust the model): an update that
@@ -599,7 +613,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
           ...assets.project,
           ...assets.deck,
         ])
-      return { kind: 'slide.update', slide: toSlideDto(lastSlide) }
+      return event({ kind: 'slide.update', slide: toSlideDto(lastSlide) })
     }
 
     const slide = await SlideModel.create({
@@ -620,7 +634,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
       ...assets.project,
       ...assets.deck,
     ])
-    return { kind: 'slide.new', slide: toSlideDto(slide) }
+    return event({ kind: 'slide.new', slide: toSlideDto(slide) })
   },
 })
 

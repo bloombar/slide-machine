@@ -126,6 +126,41 @@ describe('GeminiGenerationProvider', () => {
     expect(init.headers['x-goog-api-key']).toBe('test-key')
   })
 
+  it('asks for and accepts a deck title only when requested', async () => {
+    fetchMock.mockResolvedValue(
+      geminiReply({
+        action: 'new',
+        layoutType: 'content',
+        slots: { title: 'T' },
+        deckTitle: '  Photosynthesis 101  ',
+      }),
+    )
+    let result = await provider.generateSlideContent(
+      request({ suggestDeckTitle: true }),
+    )
+    let prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+      .contents[0].parts[0].text as string
+    expect(prompt).toContain('"deckTitle"?: string')
+    expect(prompt).toContain('no title yet')
+    expect(result.deckTitle).toBe('Photosynthesis 101')
+
+    // Unrequested claims are dropped, and the prompt never mentions it
+    fetchMock.mockClear()
+    fetchMock.mockResolvedValue(
+      geminiReply({
+        action: 'new',
+        layoutType: 'content',
+        slots: { title: 'T' },
+        deckTitle: 'Sneaky',
+      }),
+    )
+    result = await provider.generateSlideContent(request())
+    prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body)).contents[0]
+      .parts[0].text as string
+    expect(prompt).not.toContain('deckTitle')
+    expect(result.deckTitle).toBeUndefined()
+  })
+
   it('pins the output language when the request resolves one', async () => {
     fetchMock.mockResolvedValue(
       geminiReply({ action: 'none', layoutType: 'content', slots: {} }),

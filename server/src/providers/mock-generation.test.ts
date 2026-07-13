@@ -89,6 +89,34 @@ describe('MockGenerationProvider', () => {
     expect(r.updateMode).toBe('delta')
   })
 
+  it('proposes a deck title only once context gives it the topic', async () => {
+    // First phrase of an untitled lecture: no context yet, no title
+    const first = await provider.generateSlideContent({
+      phrase: 'Photosynthesis basics',
+      rollingContext: [],
+      layoutDescriptors: descriptors,
+      suggestDeckTitle: true,
+    })
+    expect(first.deckTitle).toBeUndefined()
+
+    // With rolling context the topic counts as known
+    const second = await provider.generateSlideContent({
+      phrase: 'Plants convert light into chemical energy',
+      rollingContext: ['Photosynthesis basics'],
+      layoutDescriptors: descriptors,
+      suggestDeckTitle: true,
+    })
+    expect(second.deckTitle).toBe('Plants Convert Light Into Chemical')
+
+    // Not asked: never offered
+    const unasked = await provider.generateSlideContent({
+      phrase: 'Plants convert light into chemical energy',
+      rollingContext: ['Photosynthesis basics'],
+      layoutDescriptors: descriptors,
+    })
+    expect(unasked.deckTitle).toBeUndefined()
+  })
+
   it('returns none for empty speech', async () => {
     expect((await gen('   ')).action).toBe('none')
   })

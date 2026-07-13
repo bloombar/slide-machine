@@ -37,6 +37,9 @@ export interface SlideGenerationRequest {
    * project ?? speaker-profile setting, else the speaker's browser
    * language tag. Absent = let the model mirror the speech. */
   language?: string
+  /** The lecture is still untitled: also propose a short deck title.
+   * The server stops asking once a title is saved. */
+  suggestDeckTitle?: boolean
   /** Snapshot of the current (last) slide so the model can judge
    * whether an update still fits or a new slide is due (GEN-8). */
   currentSlide?: {
@@ -94,6 +97,8 @@ export interface SlideGenerationResult {
   updateMode?: 'delta' | 'refit'
   /** Set when action is 'command': the recognized command id. */
   command?: VoiceCommand
+  /** Proposed lecture title (suggestDeckTitle requests only). */
+  deckTitle?: string
 }
 
 export interface GenerationProvider {

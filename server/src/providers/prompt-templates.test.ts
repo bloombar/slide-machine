@@ -22,6 +22,7 @@ const allSlots = {
   voiceCommands: '',
   updateRules: '',
   language: '',
+  deckTitle: '',
   phrase: 'the phrase',
 }
 

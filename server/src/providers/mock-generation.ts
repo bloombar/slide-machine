@@ -78,6 +78,23 @@ export class MockGenerationProvider implements GenerationProvider {
   async generateSlideContent(
     req: SlideGenerationRequest,
   ): Promise<SlideGenerationResult> {
+    const result = this.decide(req)
+    // Mock stand-in for "return a title once the topic is clear": with
+    // prior context the topic counts as known, and the title is the
+    // first words of the current phrase (deterministic for tests)
+    const words = req.phrase.trim().split(/\s+/).filter(Boolean)
+    if (
+      req.suggestDeckTitle &&
+      req.rollingContext.length > 0 &&
+      result.action !== 'command' &&
+      words.length
+    ) {
+      return { ...result, deckTitle: titleCase(words.slice(0, 5)) }
+    }
+    return result
+  }
+
+  private decide(req: SlideGenerationRequest): SlideGenerationResult {
     const phrase = req.phrase.trim()
     const words = phrase.split(/\s+/).filter(Boolean)
     const segments = phrase

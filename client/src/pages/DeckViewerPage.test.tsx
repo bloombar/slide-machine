@@ -661,6 +661,46 @@ describe('DeckViewerPage microphone capture', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('retitles the header when a SlideEvent carries an AI deck title', async () => {
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: {
+          ...deckView,
+          deck: { ...deckView.deck, title: '' },
+          canEdit: true,
+        },
+      }),
+      '/api/actions/session.phrase': () => ({
+        status: 200,
+        body: { kind: 'none', deckTitle: 'Photosynthesis Basics' },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Untitled lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Live session' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Spoken phrase' }), {
+      target: { value: 'photosynthesis converts light' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Speak' }))
+
+    // The server saved the AI title; the header follows immediately
+    expect(await screen.findByText('Photosynthesis Basics')).toBeInTheDocument()
+    expect(screen.queryByText('Untitled lecture')).not.toBeInTheDocument()
+  })
+
   it('restarts recognition when the lecture language changes mid-recording', async () => {
     FakeRecognition.reset()
     vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)

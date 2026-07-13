@@ -32,13 +32,19 @@ const API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
  * clean — and zod validates everything server-side regardless. The
  * "command" action exists only when the request offers voice commands
  * (GENERATION_VOICE_COMMANDS). */
-const outputShape = (withCommands: boolean, withRefit: boolean): string => `{
+const outputShape = (
+  withCommands: boolean,
+  withRefit: boolean,
+  withDeckTitle: boolean,
+): string => `{
   "action": "new" | "update" | "none"${withCommands ? ' | "command"' : ''},
   "layoutType": "<one of the layout types offered below>",
   "slots": { "title"?: string, "body"?: string, "bullets"?: string[], "caption"?: string },
   "imageGuidance"?: { "keywords": string[], "seededImageId"?: string, "none"?: boolean }${
     withRefit ? ',\n  "updateMode"?: "delta" | "refit"' : ''
-  }${withCommands ? ',\n  "command"?: "<a command id from the list below>"' : ''}
+  }${withCommands ? ',\n  "command"?: "<a command id from the list below>"' : ''}${
+    withDeckTitle ? ',\n  "deckTitle"?: string' : ''
+  }
 }`
 
 /** A command claim, validated separately: the model may (reasonably)
@@ -69,6 +75,7 @@ const resultSchema = z.object({
       none: z.boolean().optional(),
     })
     .optional(),
+  deckTitle: z.string().optional(),
 })
 
 const instructions = (req: SlideGenerationRequest): string => {
@@ -129,6 +136,12 @@ Current slide content: ${JSON.stringify(req.currentSlide.content)}`
         .join('\n')}`
     : ''
 
+  // Untitled lecture: ask for a title alongside the slide decision;
+  // the server stops asking once one is saved
+  const deckTitle = req.suggestDeckTitle
+    ? '\nThe lecture itself has no title yet. Once — and ONLY once — the speech and context give you a clear sense of the lecture topic, ALSO set "deckTitle": a concise lecture title (under 60 characters, no quotes). If the topic is not yet clear, omit deckTitle; you will be asked again.'
+    : ''
+
   // Resolved language cascade (lecture ?? project ?? profile ??
   // browser tag); absent = the model mirrors the speech
   const language = req.language
@@ -139,7 +152,9 @@ Current slide content: ${JSON.stringify(req.currentSlide.content)}`
     outputShape: outputShape(
       Boolean(req.voiceCommands?.length),
       Boolean(req.allowLayoutRefit && req.currentSlide?.content),
+      Boolean(req.suggestDeckTitle),
     ),
+    deckTitle,
     updateRules,
     voiceCommands,
     freedomPolicy: freedomPolicy(req.freedom ?? 3),
@@ -264,6 +279,11 @@ export class GeminiGenerationProvider implements GenerationProvider {
             none: guidance.none,
           }
         : undefined,
+      // A title claim only counts when we asked for one
+      deckTitle:
+        req.suggestDeckTitle && parsed.deckTitle?.trim()
+          ? parsed.deckTitle.trim().slice(0, 80)
+          : undefined,
     }
   }
 }
