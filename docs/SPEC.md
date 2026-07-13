@@ -656,6 +656,7 @@ All operations that modify a project, concept set, or deck are exposed through a
 - The layer is consumed by **multiple front ends**: the React UI, the verbal preflight loop ([PREP-4](#prep-4-verbal-interaction-with-the-preflight)), the post-lecture reformat ([GEN-4](#gen-4-post-lecture-ai-reformat-holistic-regeneration)), and any future agent interface.
 - This makes a future **MCP server** ([§18](#18-future-work)) a thin facade that maps MCP tools onto existing actions, with no duplicated editing logic and the same auth/metering guarantees.
 - AI-driven channels (PREP-4, and any agent) translate natural-language intent into these typed actions via the gen-AI provider ([GEN-2](#gen-2-ai-provider-abstraction)); the action contracts are the stable boundary between intent interpretation and effect.
+- To make that translation possible, the layer exposes a **machine-readable action catalog** — for each registered action, its `name`, a human-readable description, and its input JSON Schema (derived from the action's validation schema). AI channels feed this catalog to the model as its function-calling tool list so intent is resolved against the actual action contracts rather than a hardcoded prompt; adding or changing an action updates the catalog automatically, keeping the model in sync with no separate maintenance. The same catalog is the tool list a future **MCP server** ([§18](#18-future-work)) advertises — built once for PREP-4, reused there.
 
 ### 15. Data Models
 
