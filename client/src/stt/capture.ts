@@ -67,7 +67,9 @@ const FATAL_ERRORS = new Set([
 ])
 
 /** Give up after this many immediate start→end cycles (no speech
- * service, headless browsers) instead of restarting forever. */
+ * service, headless browsers) instead of restarting forever — and
+ * surface the failure, so the mic never looks live while capture is
+ * dead. */
 const MAX_RAPID_RESTARTS = 5
 const RAPID_RESTART_MS = 1000
 
@@ -115,11 +117,14 @@ const browserCapture = (): SpeechCapture => {
         if (!active) return
         // Browsers stop recognition after silence; keep listening — but
         // an immediate start→end cycle means capture can't run here, so
-        // give up quietly instead of spinning
+        // give up and report it instead of spinning
         if (Date.now() - lastStart < RAPID_RESTART_MS) {
           rapidRestarts++
           if (rapidRestarts >= MAX_RAPID_RESTARTS) {
             active = false
+            handlers.onError?.(
+              'Microphone unavailable — speech recognition keeps stopping',
+            )
             return
           }
         } else {

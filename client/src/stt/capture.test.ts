@@ -88,15 +88,21 @@ describe('browser speech capture', () => {
     expect(recognition.started).toBe(startsAfterStop)
   })
 
-  it('gives up after rapid start-end cycles instead of spinning', () => {
+  it('gives up after rapid start-end cycles and surfaces the failure', () => {
     stubApi()
     const capture = createSpeechCapture('browser')
-    capture.start({ onPhrase: vi.fn() })
+    const onError = vi.fn()
+    capture.start({ onPhrase: vi.fn(), onError })
     const recognition = FakeRecognition.instances[0]!
 
-    // Immediate end after every start: a capped number of retries
+    // Immediate end after every start: a capped number of retries,
+    // then the dead mic is reported instead of silently abandoned
     for (let i = 0; i < 10; i++) recognition.onend?.()
     expect(recognition.started).toBeLessThanOrEqual(6)
+    expect(onError).toHaveBeenCalledWith(
+      'Microphone unavailable — speech recognition keeps stopping',
+    )
+    expect(onError).toHaveBeenCalledTimes(1)
   })
 
   it('surfaces fatal permission errors and stops', () => {
