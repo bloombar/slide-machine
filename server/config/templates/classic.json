@@ -26,9 +26,8 @@
         }
       ],
       "constraints": {
-        "maxBodyLength": 0,
-        "maxTitleWords": 8,
-        "maxCaptionWords": 14
+        "maxTitleChars": 50,
+        "maxCaptionChars": 80
       },
       "elementPositions": {}
     },
@@ -44,7 +43,7 @@
         }
       ],
       "constraints": {
-        "maxTitleWords": 8
+        "maxTitleChars": 50
       },
       "elementPositions": {}
     },
@@ -66,9 +65,8 @@
         }
       ],
       "constraints": {
-        "maxBodyLength": 400,
-        "maxTitleWords": 8,
-        "maxBodyWords": 60
+        "maxBodyChars": 400,
+        "maxTitleChars": 50
       },
       "elementPositions": {}
     },
@@ -90,8 +88,8 @@
       ],
       "constraints": {
         "maxBullets": 6,
-        "maxTitleWords": 8,
-        "maxBulletWords": 12
+        "maxTitleChars": 50,
+        "maxBulletChars": 70
       },
       "elementPositions": {}
     },
@@ -113,7 +111,7 @@
       ],
       "constraints": {
         "imageRequired": true,
-        "maxCaptionWords": 14
+        "maxCaptionChars": 80
       },
       "elementPositions": {}
     },
@@ -140,9 +138,8 @@
         }
       ],
       "constraints": {
-        "maxBodyLength": 250,
-        "maxTitleWords": 8,
-        "maxBodyWords": 40
+        "maxBodyChars": 250,
+        "maxTitleChars": 50
       },
       "elementPositions": {}
     },
@@ -164,9 +161,8 @@
         }
       ],
       "constraints": {
-        "maxBodyLength": 200,
-        "maxBodyWords": 30,
-        "maxCaptionWords": 10
+        "maxBodyChars": 200,
+        "maxCaptionChars": 60
       },
       "elementPositions": {}
     }

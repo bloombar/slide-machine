@@ -55,14 +55,14 @@ scrolled beneath it.
 
 ## Seed material: upload → keyless extraction → generation (2026-07-11)
 
-**Problem.** SEED-1/2 need instructor documents (PDF/DOCX/photos) feeding slide generation and image enrichment, but every AI credential (Gemini) is still pending.
+**Problem.** [SEED-1](SPEC.md#seed-1-document-seeding)/[2](SPEC.md#seed-2-image-seeding) need instructor documents (PDF/DOCX/photos) feeding slide generation and image enrichment, but every AI credential (Gemini) is still pending.
 
 **Choice.** A two-tier pipeline where the baseline needs no keys:
 
 - **Storage** behind a `FileStorage` seam ([storage/index.ts](../server/src/storage/index.ts)): `local` (disk + `GET /api/files/*`, the dev/test default) or `s3` (MinIO/DO Spaces), selected by `STORAGE_PROVIDER`.
 - **Upload** (`POST /api/seed-assets`, 20 MB, PDF/DOCX/PNG/JPEG/WebP) answers immediately with a `processing` asset; extraction runs fire-and-forget and settles to `ready`/`failed` — the same fault-tolerant background pattern as image enrichment. Project-level uploads are owner-only; lecture-level follow deck edit rights.
 - **Baseline extraction** ([seeding/extract.ts](../server/src/seeding/extract.ts)): PDF text via unpdf, DOCX text via mammoth plus embedded photos (≥10 KiB, ≤12) spun into their own image assets, uploaded photos used directly with caption-derived keywords. The **AI tier** (vision captions, OCR, summarization) plugs in behind `processSeedAsset` when `GEMINI_API_KEY` lands.
-- **Payoffs**: enabled assets' text joins the structured seed layers (`seedContext: { project, deck }`, additive, deck outranks project; 8k chars/layer). Seeded photos enter the enrichment pool with source prior **1.2 — above every web source** — and a model-selected `seededImageId` short-circuits search entirely (`imageSource: 'seeded'`, IMG-1).
+- **Payoffs**: enabled assets' text joins the structured seed layers (`seedContext: { project, deck }`, additive, deck outranks project; 8k chars/layer). Seeded photos enter the enrichment pool with source prior **1.2 — above every web source** — and a model-selected `seededImageId` short-circuits search entirely (`imageSource: 'seeded'`, [IMG-1](SPEC.md#img-1-real-time-image-enrichment)).
 
 ## Access control: project-level ACLs with lecture inheritance (2026-07-12)
 
@@ -76,7 +76,7 @@ scrolled beneath it.
 
 ## Speech capture: browser bridge until Cloud STT (2026-07-12)
 
-**Problem.** Real speech capture (CAP-1) is blocked on Google Cloud STT credentials, but live demos shouldn't wait for them.
+**Problem.** Real speech capture ([CAP-1](SPEC.md#cap-1-session-lifecycle)) is blocked on Google Cloud STT credentials, but live demos shouldn't wait for them.
 
 **Choice.** Capture is a client-side seam ([stt/capture.ts](../client/src/stt/capture.ts)) selected by `VITE_STT_PROVIDER`: `browser` (the default) uses the Web Speech API — keyless, Chrome/Edge/Safari, mic-permission gated; finalized phrases feed the same `session.phrase` pipeline as the typed Speak bar, with interim text shown live and silence auto-restart. `none` disables capture. `google-cloud` is reserved: it will stream audio to the server, whose separate `TRANSCRIPTION_PROVIDER` (already in env.ts) picks the Cloud STT adapter — flipping the two env vars is the whole migration, the UI does not change. Caveat: Chrome's "built-in" recognition relays audio to Google's servers; acceptable for the bridge, and the cloud path replaces it for the pilot proper.
 
@@ -90,7 +90,7 @@ scrolled beneath it.
 
 ## Slide layouts: renderer registry (2026-07-12)
 
-**Problem.** Each layout type's arrangement was a hard-coded branch in SlideView, so new layout types — ours or, later, user-authored ones (TMPL-4) — meant editing the central renderer.
+**Problem.** Each layout type's arrangement was a hard-coded branch in SlideView, so new layout types — ours or, later, user-authored ones ([TMPL-4](SPEC.md#tmpl-4-custom-templates-create--edit--save)) — meant editing the central renderer.
 
 **Choice.** The same pattern as content slots: a registry. Every layout type is one component implementing `LayoutProps { slide, colors, slot }` in [slide/layouts/](../client/src/components/slide/layouts/), registered by name in `layouts/index.tsx`; [SlideView](../client/src/components/SlideView.tsx) is just the themed container-query frame plus a lookup. `slot(name)` keeps arrangement decoupled from content/editing (the slot system), and colors arrive resolved from the theme. Unknown layout types render through `GenericLayout` — a stack of whatever slots the slide populates — so newer servers or unsupported custom layouts degrade instead of going blank. `LayoutType` stays the strict seven-value union for now; widening it to open strings is the one shared-type change custom layouts will need.
 
@@ -98,10 +98,10 @@ scrolled beneath it.
 
 **Problem.** The wake-word matcher ([stt/commands.ts](../client/src/stt/commands.ts)) is reliable but rigid; natural phrasing ("let's go to the next slide") reads as lecture content. Interpreting intent with the generation model risks mid-lecture misfires.
 
-**Choice.** Both paths, one executor. The client-side wake-word matcher stays the always-on live path. Behind `GENERATION_VOICE_COMMANDS` (**default off**), the CAP-4 command set ([voice-commands.ts](../shared/src/types/voice-commands.ts)) rides along with each `session.phrase`; the model may answer `action: "command"` instead of slide content, validated at every layer (adapter checks the id was offered; the pipeline re-checks the flag; nothing persists — no slide, no transcript). The client runs the returned command through the same `runVoiceCommand` as wake-worded matches. Off by default because the prompt's "unmistakably operating the slide system" bar is the only guard against a misread phrase becoming a surprise navigation; the deterministic tier has no such failure mode.
+**Choice.** Both paths, one executor. The client-side wake-word matcher stays the always-on live path. Behind `GENERATION_VOICE_COMMANDS` (**default off**), the [CAP-4](SPEC.md#cap-4-voice-commands) command set ([voice-commands.ts](../shared/src/types/voice-commands.ts)) rides along with each `session.phrase`; the model may answer `action: "command"` instead of slide content, validated at every layer (adapter checks the id was offered; the pipeline re-checks the flag; nothing persists — no slide, no transcript). The client runs the returned command through the same `runVoiceCommand` as wake-worded matches. Off by default because the prompt's "unmistakably operating the slide system" bar is the only guard against a misread phrase becoming a surprise navigation; the deterministic tier has no such failure mode.
 
 ## Layout re-fit on update: model declares delta vs refit, server audits (2026-07-12)
 
-**Problem.** GEN-8 says an update may switch the slide's layout (content → list as material grows), but the update contract was delta-only ("return ONLY the added material"), so the model never re-fit — and a naive switch can hide committed content (list layouts don't render `body`).
+**Problem.** [GEN-8](SPEC.md#gen-8-new-slide-vs-update-current) says an update may switch the slide's layout (content → list as material grows), but the update contract was delta-only ("return ONLY the added material"), so the model never re-fit — and a naive switch can hide committed content (list layouts don't render `body`).
 
-**Choice.** The model declares its semantics per update via `updateMode` (behind `GENERATION_LAYOUT_REFIT`, **default on**): `delta` keeps the cheap added-material contract and may switch layout only if the target still displays every populated slot; `refit` returns the complete slide re-mapped (the request carries the slide's exact slot content for this). The server audits every claim ([lib/layout-refit.ts](../server/src/lib/layout-refit.ts)): known layout, an image slot never vanishes, displayed slots stay populated, hidden content must demonstrably migrate (≥50% significant-word overlap), and absolute budgets hold. An unverifiable refit is discarded (`none`) rather than half-applied; slot data the new layout hides stays on the document so EDIT-3 strands nothing. Keeps the common delta path at today's token cost — the full-slide response is paid only when the layout actually changes. GEN-9's animated transition is still future work; refits currently swap instantly.
+**Choice.** The model declares its semantics per update via `updateMode` (behind `GENERATION_LAYOUT_REFIT`, **default on**): `delta` keeps the cheap added-material contract and may switch layout only if the target still displays every populated slot; `refit` returns the complete slide re-mapped (the request carries the slide's exact slot content for this). The server audits every claim ([lib/layout-refit.ts](../server/src/lib/layout-refit.ts)): known layout, an image slot never vanishes, displayed slots stay populated, hidden content must demonstrably migrate (≥50% significant-word overlap), and absolute budgets hold. An unverifiable refit is discarded (`none`) rather than half-applied; slot data the new layout hides stays on the document so [EDIT-3](SPEC.md#edit-3-per-slide-layout-switch) strands nothing. Keeps the common delta path at today's token cost — the full-slide response is paid only when the layout actually changes. [GEN-9](SPEC.md#gen-9-animated-layout-transitions)'s animated transition is still future work; refits currently swap instantly.

@@ -6,7 +6,7 @@ The server reads three Google credentials from `server/.env` (see
 - `GEMINI_API_KEY` — Gemini API (generation, quizzes, images)
 - `GOOGLE_CLOUD_STT_KEY` — Cloud Speech-to-Text (live transcription)
 - `GOOGLE_CLOUD_TRANSLATION_KEY` — Cloud Translation (on-demand deck
-  translation, SHARE-2)
+  translation, [SHARE-2](SPEC.md#share-2-post-lecture-translated-viewing))
 
 All are plain API keys, not service-account JSON. To keep them independent
 of any personal account, create them inside a dedicated Google Cloud project

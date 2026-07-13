@@ -18,12 +18,24 @@
 
 ```sh
 npm ci
-cp server/.env.example server/.env        # set MONGODB_URI at minimum
+cp server/.env.example server/.env
 cp client/.env.example client/.env.local
+openssl rand -base64 48                   # run twice → JWT_SECRET and JWT_REFRESH_SECRET in server/.env
 npm run dev                               # Express :3000 + Vite :5173
 ```
 
 Commands, configuration, and deployment are documented in the [README](../README.md); the system design is in [SPEC.md](SPEC.md) and the schedule in [ROADMAP.md](ROADMAP.md).
+
+## Configuration & API keys
+
+Everything is set in `server/.env` — [server/.env.example](../server/.env.example) documents every variable — and the server validates it at boot, refusing to start with a clear message if something required is missing or malformed.
+
+- **Required to boot:** `MONGODB_URI` (prefilled for a local mongod on `:27017`; use `mongodb://localhost:27018/slide-machine` for the Docker one) and `JWT_SECRET` + `JWT_REFRESH_SECRET` (≥ 32 chars each — generate with `openssl rand -base64 48`).
+- **Google services** — `GEMINI_API_KEY` (slide/quiz/image generation), `GOOGLE_CLOUD_STT_KEY` (live transcription), `GOOGLE_CLOUD_TRANSLATION_KEY` (deck translation): how to create each is in [GOOGLE_API_KEYS.md](GOOGLE_API_KEYS.md). No Gemini key yet? Keep `GENERATION_PROVIDER=mock` (the `.env.example` default) for deterministic keyless slides.
+- **Image enrichment** ([IMG-1](SPEC.md#img-1-real-time-image-enrichment)) — Wikimedia and Openverse are keyless and work out of the box; an optional `FLICKR_API_KEY` adds a third source: [IMAGE_ENRICHMENT_KEYS.md](IMAGE_ENRICHMENT_KEYS.md).
+- **File uploads/exports** — `STORAGE_PROVIDER=local` (the default) writes to disk with no extra setup; `s3` needs MinIO, see [Object storage in the README](../README.md#object-storage).
+- **Feature-specific, optional until you work on that feature** — Google/GitHub OAuth (sign-in, connected accounts), Stripe (billing), SMTP (email verification/reset), Quiz Generator (base URL + token). Each is documented inline in `.env.example`.
+- **Tests** — integration and e2e runs use the separate `MONGODB_TEST_URI` database (e2e reads it from `server/.env` and starts its own app).
 
 ## Running the app
 

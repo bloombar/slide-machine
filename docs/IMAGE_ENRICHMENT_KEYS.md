@@ -1,6 +1,6 @@
 # Image enrichment provider accounts and keys
 
-Image enrichment (IMG-1) fetches CC-licensed stock images for slides from
+Image enrichment ([IMG-1](SPEC.md#img-1-real-time-image-enrichment)) fetches CC-licensed stock images for slides from
 three providers (`server/src/enrichment/`). Two are keyless; only Flickr
 needs an account and API key, and it is optional — without a key the
 pipeline simply runs on the other two.

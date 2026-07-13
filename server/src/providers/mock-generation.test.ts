@@ -58,7 +58,7 @@ describe('MockGenerationProvider', () => {
       currentSlide: {
         layoutType: 'content',
         bulletCount: 0,
-        bodyWords: 5,
+        bodyChars: 26,
         content: {
           title: 'Cell Membranes',
           body: 'The membrane is a bilayer',

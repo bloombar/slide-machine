@@ -52,16 +52,16 @@ export const SLOT_DESCRIPTORS: Record<LayoutSlot, SlotDescriptor> = {
 }
 
 /** Constraints the AI must respect when filling a layout (TMPL-6).
- * Word counts are approximate ceilings; the server also enforces them
- * (overflowing updates become new slides) so slides stay readable. */
+ * Character counts are approximate ceilings; the server also enforces
+ * them (overflowing updates become new slides) so slides stay readable.
+ * Characters, not words, so the caps hold in unspaced languages
+ * (e.g. Mandarin) where "word" is undefined. */
 export interface LayoutConstraints {
   maxBullets?: number
-  /** Legacy character cap for body text. */
-  maxBodyLength?: number
-  maxTitleWords?: number
-  maxBodyWords?: number
-  maxBulletWords?: number
-  maxCaptionWords?: number
+  maxTitleChars?: number
+  maxBodyChars?: number
+  maxBulletChars?: number
+  maxCaptionChars?: number
   imageRequired?: boolean
 }
 
@@ -78,9 +78,9 @@ export interface SlotSpec {
   label: string
   /** Text slots only: edit as a multi-line block. */
   multiline?: boolean
-  /** Per-slot validation: approximate word ceiling (overrides the
-   * layout-level constraint for this slot). */
-  maxWords?: number
+  /** Per-slot validation: approximate character ceiling (overrides
+   * the layout-level constraint for this slot). */
+  maxChars?: number
   /** Reserved: per-slot styling authored in the template editor. */
   style?: Record<string, unknown>
   /** Reserved: arbitrary author metadata. */

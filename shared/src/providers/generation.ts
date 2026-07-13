@@ -38,7 +38,7 @@ export interface SlideGenerationRequest {
   currentSlide?: {
     layoutType: LayoutType
     bulletCount: number
-    bodyWords: number
+    bodyChars: number
     /** The slide's exact slot content — present when layout re-fit is
      * allowed, so the model can re-map it rather than guess it from
      * the rolling context. */

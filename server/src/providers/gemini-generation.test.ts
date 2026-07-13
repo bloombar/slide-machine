@@ -36,10 +36,10 @@ const request = (
       label: 'Content',
       purpose: 'General slide',
       slots: [
-        { name: 'title', kind: 'text', label: 'Slide title', maxWords: 8 },
+        { name: 'title', kind: 'text', label: 'Slide title', maxChars: 50 },
         { name: 'body', kind: 'text', label: 'Slide body' },
       ],
-      constraints: { maxBodyLength: 400 },
+      constraints: { maxBodyChars: 400 },
     },
     {
       type: 'list',
@@ -59,7 +59,7 @@ const request = (
       keywords: ['chloroplast'],
     },
   ],
-  currentSlide: { layoutType: 'list', bulletCount: 5, bodyWords: 0 },
+  currentSlide: { layoutType: 'list', bulletCount: 5, bodyChars: 0 },
   ...overrides,
 })
 
@@ -106,7 +106,7 @@ describe('GeminiGenerationProvider', () => {
     // The layout option set and constraints are spelled out, with
     // per-slot budgets riding on the slot names
     expect(prompt).toContain('"content" (Content)')
-    expect(prompt).toContain('title (max 8 words)')
+    expect(prompt).toContain('title (max 50 chars)')
     expect(prompt).toContain('maxBullets')
     // Seeded images are offered by id
     expect(prompt).toContain('id "asset1"')
@@ -224,7 +224,7 @@ describe('GeminiGenerationProvider', () => {
         currentSlide: {
           layoutType: 'content',
           bulletCount: 0,
-          bodyWords: 7,
+          bodyChars: 40,
           content: { title: 'Membranes', body: 'A phospholipid bilayer' },
         },
       }),
@@ -252,7 +252,7 @@ describe('GeminiGenerationProvider', () => {
         currentSlide: {
           layoutType: 'content',
           bulletCount: 0,
-          bodyWords: 7,
+          bodyChars: 40,
           content: { title: 'Membranes', body: 'A phospholipid bilayer' },
         },
       }),

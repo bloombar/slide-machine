@@ -60,7 +60,7 @@ import {
   refitOverflows,
   titleFromPhrase,
   updateOverflows,
-  wordCount,
+  charCount,
 } from '../lib/slide-fit'
 import {
   layoutDisplaysContent,
@@ -436,7 +436,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
         ? {
             layoutType: lastSlide.layoutType,
             bulletCount: lastSlide.bullets?.length ?? 0,
-            bodyWords: wordCount(lastSlide.body),
+            bodyChars: charCount(lastSlide.body),
             // The exact slot content, so a refit re-maps real text
             // instead of guessing from the rolling context
             content: env.GENERATION_LAYOUT_REFIT
@@ -547,7 +547,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
         result,
         {
           bulletCount: lastSlide.bullets?.length ?? 0,
-          bodyWords: wordCount(lastSlide.body),
+          bodyChars: charCount(lastSlide.body),
         },
         descriptors,
       )

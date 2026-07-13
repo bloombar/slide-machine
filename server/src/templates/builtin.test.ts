@@ -33,7 +33,7 @@ describe('externalized templates', () => {
       )
       const list = template.layouts.find(l => l.type === 'list')!
       expect(list.constraints?.maxBullets).toBe(6)
-      expect(list.constraints?.maxBulletWords).toBe(12)
+      expect(list.constraints?.maxBulletChars).toBe(70)
     }
   })
 
@@ -61,7 +61,7 @@ describe('externalized templates', () => {
             // Shorthand string + full object + custom-named slot
             slots: [
               'title',
-              { name: 'body', maxWords: 12 },
+              { name: 'body', maxChars: 70 },
               { name: 'pull-quote', kind: 'text', label: 'Pull quote' },
             ],
             elementPositions: {},
@@ -79,7 +79,7 @@ describe('externalized templates', () => {
     expect(slots[1]).toMatchObject({
       name: 'body',
       kind: 'text',
-      maxWords: 12,
+      maxChars: 70,
       multiline: true,
     })
     expect(slots[2]).toMatchObject({ name: 'pull-quote', kind: 'text' })

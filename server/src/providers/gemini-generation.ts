@@ -75,7 +75,7 @@ const instructions = (req: SlideGenerationRequest): string => {
   const layouts = req.layoutDescriptors
     .map(d => {
       const slots = d.slots
-        .map(s => (s.maxWords ? `${s.name} (max ${s.maxWords} words)` : s.name))
+        .map(s => (s.maxChars ? `${s.name} (max ${s.maxChars} chars)` : s.name))
         .join(', ')
       return `- "${d.type}" (${d.label}): ${d.purpose}. Slots: ${slots}${
         d.constraints ? `. Constraints: ${JSON.stringify(d.constraints)}` : ''
@@ -105,7 +105,7 @@ const instructions = (req: SlideGenerationRequest): string => {
     : '\nNo slides exist yet.'
 
   const capacity = req.currentSlide
-    ? `\nCurrent slide load: ${req.currentSlide.bulletCount} bullets, ~${req.currentSlide.bodyWords} body words (layout "${req.currentSlide.layoutType}"). If adding this phrase's content would exceed the layout's limits, choose "new" instead of "update".`
+    ? `\nCurrent slide load: ${req.currentSlide.bulletCount} bullets, ~${req.currentSlide.bodyChars} body characters (layout "${req.currentSlide.layoutType}"). If adding this phrase's content would exceed the layout's limits, choose "new" instead of "update".`
     : ''
 
   // Update semantics + the slide's exact content, present only when

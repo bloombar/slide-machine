@@ -34,7 +34,7 @@ const slotFileSchema = z.union([
     kind: z.enum(['text', 'bullets', 'image']).optional(),
     label: z.string().min(1).optional(),
     multiline: z.boolean().optional(),
-    maxWords: z.number().int().positive().optional(),
+    maxChars: z.number().int().positive().optional(),
     style: z.record(z.string(), z.unknown()).optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
   }),
@@ -61,7 +61,7 @@ const normalizeSlot = (raw: z.infer<typeof slotFileSchema>): SlotSpec => {
     kind,
     label: raw.label ?? conventional?.label ?? name,
     multiline: raw.multiline ?? conventional?.multiline,
-    maxWords: raw.maxWords,
+    maxChars: raw.maxChars,
     style: raw.style,
     metadata: raw.metadata,
   }
@@ -75,11 +75,10 @@ const layoutSchema = z.object({
   constraints: z
     .object({
       maxBullets: z.number().int().positive().optional(),
-      maxBodyLength: z.number().int().nonnegative().optional(),
-      maxTitleWords: z.number().int().positive().optional(),
-      maxBodyWords: z.number().int().positive().optional(),
-      maxBulletWords: z.number().int().positive().optional(),
-      maxCaptionWords: z.number().int().positive().optional(),
+      maxTitleChars: z.number().int().positive().optional(),
+      maxBodyChars: z.number().int().positive().optional(),
+      maxBulletChars: z.number().int().positive().optional(),
+      maxCaptionChars: z.number().int().positive().optional(),
       imageRequired: z.boolean().optional(),
     })
     .optional(),

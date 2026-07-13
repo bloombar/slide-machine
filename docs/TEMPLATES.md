@@ -3,7 +3,7 @@
 A template is **data** (theme, layouts, slots, validation — all of it in
 one place) plus, for now, a small amount of **code** (the visual
 arrangement of each layout). This page documents how that works today
-and how it changes once the WYSIWYG template editor (SPEC TMPL-4)
+and how it changes once the WYSIWYG template editor (SPEC [TMPL-4](SPEC.md#tmpl-4-custom-templates-create--edit--save))
 exists.
 
 ## How it works today
@@ -22,19 +22,19 @@ Docker image ships `server/config/`.
 | --- | --- |
 | `id`, `name` | Stable id (referenced by decks/projects) and display name. |
 | `theme` | Renderer colors: `background`, `surface`, `text`, `muted`, `accent`. |
-| `layouts` | The layout set. Each layout: `type` (one of the seven conventional types, SPEC TMPL-2), `label`, `purpose` (**read by the AI** when choosing layouts), `slots`, `constraints`, `elementPositions` (reserved — see the future section). |
+| `layouts` | The layout set. Each layout: `type` (one of the seven conventional types, SPEC [TMPL-2](SPEC.md#tmpl-2-conventional-layout-types)), `label`, `purpose` (**read by the AI** when choosing layouts), `slots`, `constraints`, `elementPositions` (reserved — see the future section). |
 
 Slots use the WYSIWYG-ready object form — the same shape the future
 editor will author and MongoDB will store:
 
 ```json
 { "name": "body", "kind": "text", "label": "Slide body",
-  "multiline": true, "maxWords": 60,
+  "multiline": true, "maxChars": 400,
   "style": {}, "metadata": {} }
 ```
 
 `kind` selects the client editor (`text` | `bullets` | `image`);
-`maxWords` is per-slot validation that **overrides the layout-level
+`maxChars` is per-slot validation that **overrides the layout-level
 constraint** for that slot; `style` and `metadata` are reserved for the
 visual editor. Conventional slot names (`title`, `body`, `bullets`,
 `image`, `caption`) may be written as bare-string shorthand and expand
@@ -44,8 +44,9 @@ document are shape-identical.
 
 Layout-level `constraints` are the budget fallback, enforced both in the
 generation prompt and server-side
-([slide-fit.ts](../server/src/lib/slide-fit.ts)): `maxTitleWords`,
-`maxBodyWords`, `maxBulletWords`, `maxCaptionWords`, `maxBullets`, plus
+([slide-fit.ts](../server/src/lib/slide-fit.ts)): `maxTitleChars`,
+`maxBodyChars`, `maxBulletChars`, `maxCaptionChars` (characters, not
+words, so budgets hold in unspaced languages like Mandarin), `maxBullets`, plus
 `maxBodyLength` (legacy chars) and `imageRequired`.
 
 ### The code: `client/src/components/slide/layouts/`
@@ -67,7 +68,7 @@ blank.
 1. The template file's layout descriptors (purposes, slots, budgets) are
    serialized into the generation prompt — the AI picks a `type` and
    fills its slots.
-2. The server enforces the budgets (slot `maxWords` over layout
+2. The server enforces the budgets (slot `maxChars` over layout
    constraints) regardless of what the model returns.
 3. The client resolves the layout renderer by `type` and each slot's
    editor by `kind`, with the template's own slot spec taking precedence
@@ -83,7 +84,7 @@ invisible content or never-filled slots.
 entry + declaring the layout in a template file (the contract test binds
 them).
 
-## How it will work with the WYSIWYG editor (TMPL-4)
+## How it will work with the WYSIWYG editor ([TMPL-4](SPEC.md#tmpl-4-custom-templates-create--edit--save))
 
 Users will create templates visually: add text/image/media slots, style
 them, attach labels, metadata, and validation (word limits etc.), and
