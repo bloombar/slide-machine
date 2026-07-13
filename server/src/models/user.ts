@@ -36,6 +36,9 @@ const userSchema = new Schema<UserDb>(
     bio: String,
     avatarUrl: String,
     locale: { type: String, enum: LOCALES, default: 'en' },
+    // Lecturing/generation language: stored ONLY when explicitly chosen
+    // (no default) — absent falls through to the browser's language
+    language: { type: String, enum: LOCALES },
     projectDefaults: {
       type: { manualSlideAdvance: Boolean, animatedTransitions: Boolean },
       default: undefined,
@@ -69,6 +72,7 @@ export const toUserDto = (doc: HydratedDocument<UserDb>): SafeUser => ({
   bio: doc.bio,
   avatarUrl: doc.avatarUrl,
   locale: doc.locale,
+  language: doc.language,
   projectDefaults: doc.projectDefaults,
   planTier: doc.planTier,
   billingProvider: doc.billingProvider,

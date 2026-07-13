@@ -14,6 +14,7 @@
  */
 import { Schema, model, Types, type HydratedDocument } from 'mongoose'
 import type { Deck, Visibility } from '@slide-machine/shared'
+import { LOCALES } from '@slide-machine/shared'
 import type { ResolvedAcl } from '../lib/access'
 import { ProjectModel, projectAcl, type ProjectDb } from './project'
 
@@ -78,6 +79,9 @@ const deckSchema = new Schema<DeckDb>(
     seedContext: String,
     // Absent = inherit the project's setting; stored only when set
     generationFreedom: { type: Number, min: 1, max: 10, default: undefined },
+    // Explicit lecturing language only; absent = inherit (project, then
+    // owner profile, then the speaker's browser)
+    language: { type: String, enum: LOCALES, default: undefined },
     transcript: String,
     voteScore: { type: Number, default: 0 },
   },
@@ -175,6 +179,7 @@ export const toDeckDto = (
   slideOrder: doc.slideOrder,
   seedContext: doc.seedContext,
   generationFreedom: doc.generationFreedom,
+  language: doc.language,
   transcript: doc.transcript,
   voteScore: doc.voteScore,
   createdAt: doc.createdAt.toISOString(),

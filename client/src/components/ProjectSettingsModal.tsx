@@ -15,6 +15,7 @@ import SeedMaterial from './SeedMaterial'
 import ConfirmDialog from './ConfirmDialog'
 import AccessSettings from './AccessSettings'
 import FreedomSlider from './FreedomSlider'
+import LanguageSelect from './LanguageSelect'
 import TemplatePicker from './TemplatePicker'
 
 const isTypingTarget = (target: EventTarget | null): boolean =>
@@ -262,6 +263,30 @@ export default function ProjectSettingsModal({
                       .then(onProjectChange)
                       .catch(() => {
                         // Quiet failure: the slider reverts on rerender
+                      })
+                  }}
+                />
+              </div>
+
+              <div>
+                <h3 className="mb-2 text-lg font-semibold text-slate-700">
+                  Language
+                </h3>
+                <p className="mb-3 text-sm text-slate-500">
+                  Speech recognition and generated slide text for lectures in
+                  this project, unless a lecture sets its own.
+                </p>
+                <LanguageSelect
+                  value={project.language}
+                  defaultLabel="your profile setting or browser language"
+                  onChange={language => {
+                    dispatchAction<Project>('project.update', {
+                      projectId: project.id,
+                      language,
+                    })
+                      .then(onProjectChange)
+                      .catch(() => {
+                        // Quiet failure: the select reverts on rerender
                       })
                   }}
                 />

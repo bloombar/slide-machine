@@ -5,9 +5,10 @@
  */
 import { Link, useNavigate } from 'react-router'
 import { LogOut } from 'lucide-react'
-import type { SafeUser } from '@slide-machine/shared'
+import type { Locale, SafeUser } from '@slide-machine/shared'
 import { useAuth } from '../auth/AuthContext'
 import { dispatchAction } from '../api/actions'
+import LanguageSelect from '../components/LanguageSelect'
 
 export default function ProfilePage() {
   const { user, logout, updateUser } = useAuth()
@@ -17,6 +18,14 @@ export default function ProfilePage() {
   const onSignOut = async () => {
     await logout()
     navigate('/login')
+  }
+
+  const setLanguage = (language: Locale | null) => {
+    dispatchAction<SafeUser>('user.setLanguage', { language })
+      .then(updateUser)
+      .catch(() => {
+        // Quiet failure: the select reverts to the saved value
+      })
   }
 
   const toggleVisibility = () => {
@@ -61,6 +70,18 @@ export default function ProfilePage() {
           >
             View your public profile
           </Link>
+        </div>
+        <div className="mt-6 flex flex-col gap-1">
+          <p className="text-sm font-medium text-slate-700">Lecture language</p>
+          <p className="text-xs text-slate-500">
+            Speech recognition and generated slides use this language. Projects
+            and lectures can override it.
+          </p>
+          <LanguageSelect
+            value={user.language}
+            defaultLabel="your browser's language"
+            onChange={setLanguage}
+          />
         </div>
         <button
           onClick={() => void onSignOut()}

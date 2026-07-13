@@ -4,6 +4,7 @@
  * future streamed transport. Defined early per ROADMAP §5.1 — this is
  * the seam between the generation pipeline and the renderer.
  */
+import type { Locale } from '../types/locale'
 import type { Deck, Slide } from '../types/deck'
 import type { Template } from '../types/template'
 import type { VoiceCommand } from '../types/voice-commands'
@@ -31,4 +32,7 @@ export interface DeckViewResponse {
   /** The project-level AI freedom (own or server default) — what this
    * lecture uses while it has no setting of its own. */
   projectGenerationFreedom: number
+  /** Resolved lecturing language for the requesting user (lecture ??
+   * project ?? their profile); absent = use the browser default. */
+  effectiveLanguage?: Locale
 }

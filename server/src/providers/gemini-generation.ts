@@ -129,6 +129,12 @@ Current slide content: ${JSON.stringify(req.currentSlide.content)}`
         .join('\n')}`
     : ''
 
+  // Resolved language cascade (lecture ?? project ?? profile ??
+  // browser tag); absent = the model mirrors the speech
+  const language = req.language
+    ? ` Write ALL slide text in the language with IETF tag "${req.language}", regardless of the language spoken.`
+    : ''
+
   return renderGenerationPrompt({
     outputShape: outputShape(
       Boolean(req.voiceCommands?.length),
@@ -143,6 +149,7 @@ Current slide content: ${JSON.stringify(req.currentSlide.content)}`
     deckSeed,
     rolling,
     capacity,
+    language,
     phrase: req.phrase,
   })
 }

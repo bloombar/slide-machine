@@ -27,7 +27,9 @@ export interface SpeechCaptureHandlers {
 export interface SpeechCapture {
   /** False when this provider can't run in the current browser. */
   readonly available: boolean
-  start(handlers: SpeechCaptureHandlers): void
+  /** `lang` is the resolved lecture language (lecture ?? project ??
+   * profile); omitted = the browser's own language. */
+  start(handlers: SpeechCaptureHandlers, lang?: string): void
   stop(): void
 }
 
@@ -83,14 +85,14 @@ const browserCapture = (): SpeechCapture => {
     get available() {
       return recognitionCtor() !== undefined
     },
-    start(handlers) {
+    start(handlers, lang) {
       const Ctor = recognitionCtor()
       if (!Ctor || active) return
       active = true
       recognition = new Ctor()
       recognition.continuous = true
       recognition.interimResults = true
-      recognition.lang = navigator.language || 'en-US'
+      recognition.lang = lang || navigator.language || 'en-US'
       recognition.onresult = e => {
         let interim = ''
         for (let i = e.resultIndex; i < e.results.length; i++) {

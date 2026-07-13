@@ -4,6 +4,7 @@
  * project.delete cascades through decks, slides, and seed material.
  */
 import { z } from 'zod'
+import { LOCALES } from '@slide-machine/shared'
 import type {
   DeckShare,
   Project,
@@ -114,6 +115,7 @@ export const projectUpdate = defineAction<ProjectUpdateInput, Project>({
     description: z.string().optional(),
     seedContext: z.string().max(20_000).optional(),
     generationFreedom: z.number().int().min(1).max(10).nullable().optional(),
+    language: z.enum(LOCALES).nullable().optional(),
   }),
   execute: async (ctx, input) => {
     const doc = await loadEditableProject(ctx, input.projectId)
@@ -124,6 +126,10 @@ export const projectUpdate = defineAction<ProjectUpdateInput, Project>({
     if (input.generationFreedom !== undefined) {
       // null clears back to the server default (stores nothing)
       doc.generationFreedom = input.generationFreedom ?? undefined
+    }
+    if (input.language !== undefined) {
+      // null clears back to inherited (stores nothing)
+      doc.language = input.language ?? undefined
     }
     await doc.save()
     return toProjectDto(doc)

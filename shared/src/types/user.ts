@@ -24,6 +24,9 @@ export interface User {
   bio?: string
   avatarUrl?: string
   locale: Locale
+  /** Lecturing/generation language, only when explicitly chosen; absent
+   * = browser default. Cascades: lecture ?? project ?? this ?? browser. */
+  language?: Locale
   projectDefaults?: ProjectDefaults
   planTier: PlanTier
   billingProvider?: string

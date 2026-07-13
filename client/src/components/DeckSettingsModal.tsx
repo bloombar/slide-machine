@@ -16,6 +16,7 @@ import AccessSettings from './AccessSettings'
 import SeedNotesEditor from './SeedNotesEditor'
 import SeedMaterial from './SeedMaterial'
 import FreedomSlider from './FreedomSlider'
+import LanguageSelect from './LanguageSelect'
 import ConfirmDialog from './ConfirmDialog'
 import { lectureTitle } from '../lib/lecture'
 
@@ -260,6 +261,28 @@ export default function DeckSettingsModal({
                       .then(onDeckChange)
                       .catch(() => {
                         // Quiet failure: the slider reverts on rerender
+                      })
+                  }}
+                />
+              </div>
+              <div>
+                <h3 className="mb-2 text-lg font-semibold text-slate-700">
+                  Language
+                </h3>
+                <p className="mb-3 text-sm text-slate-500">
+                  Speech recognition and generated slide text for this lecture.
+                </p>
+                <LanguageSelect
+                  value={deck.language}
+                  defaultLabel="project, profile, or browser setting"
+                  onChange={language => {
+                    dispatchAction<Deck>('deck.setLanguage', {
+                      deckId: deck.id,
+                      language,
+                    })
+                      .then(onDeckChange)
+                      .catch(() => {
+                        // Quiet failure: the select reverts on rerender
                       })
                   }}
                 />

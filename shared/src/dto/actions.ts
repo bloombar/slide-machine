@@ -2,6 +2,7 @@
  * Input DTOs for TECH-13 actions dispatched via POST /api/actions/:name.
  * Results reuse the shared data-model types (e.g. Project).
  */
+import type { Locale } from '../types/locale'
 import type { Visibility } from '../types/deck'
 import type { ProfileVisibility } from '../types/user'
 
@@ -25,6 +26,8 @@ export interface ProjectUpdateInput {
   seedContext?: string
   /** 1-10; null clears the setting back to the server default. */
   generationFreedom?: number | null
+  /** Explicit project language; null clears back to inherited. */
+  language?: Locale | null
 }
 
 export interface DeckCreateInput {
@@ -171,10 +174,25 @@ export interface UserSetProfileVisibilityInput {
   profileVisibility: ProfileVisibility
 }
 
+/** Explicit lecturing/generation language; null clears back to the
+ * browser default. */
+export interface UserSetLanguageInput {
+  language: Locale | null
+}
+
+/** Lecture-level language; null re-inherits project/profile/browser. */
+export interface DeckSetLanguageInput {
+  deckId: string
+  language: Locale | null
+}
+
 /** One finalized spoken (or typed, until STT lands) phrase for a live session. */
 export interface SessionPhraseInput {
   deckId: string
   phrase: string
+  /** The speaker's browser language tag (e.g. "fr-CA") — the last
+   * fallback when no lecture/project/profile language is set. */
+  browserLanguage?: string
 }
 
 /** Partial slide-content update (EDIT-1); only provided fields change. */

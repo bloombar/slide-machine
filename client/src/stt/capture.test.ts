@@ -72,6 +72,18 @@ describe('browser speech capture', () => {
     expect(onInterim).toHaveBeenLastCalledWith('')
   })
 
+  it('recognizes in the requested language, browser default otherwise', () => {
+    stubApi()
+    const capture = createSpeechCapture('browser')
+    capture.start({ onPhrase: vi.fn() }, 'fr')
+    expect(FakeRecognition.instances[0]!.lang).toBe('fr')
+    capture.stop()
+    capture.start({ onPhrase: vi.fn() })
+    expect(FakeRecognition.instances[1]!.lang).toBe(
+      navigator.language || 'en-US',
+    )
+  })
+
   it('auto-restarts after silence but not after stop()', () => {
     stubApi()
     const capture = createSpeechCapture('browser')

@@ -33,6 +33,10 @@ export interface SlideGenerationRequest {
   /** Content freedom 1-10: 1 = only what was said, 10 = free
    * elaboration. Servers resolve it from lecture → project → config. */
   freedom?: number
+  /** Language for generated slide text: the resolved lecture ??
+   * project ?? speaker-profile setting, else the speaker's browser
+   * language tag. Absent = let the model mirror the speech. */
+  language?: string
   /** Snapshot of the current (last) slide so the model can judge
    * whether an update still fits or a new slide is due (GEN-8). */
   currentSlide?: {

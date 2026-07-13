@@ -13,7 +13,7 @@ Decide exactly one action for the new phrase:
 Choose layoutType strictly from this set:
 {{layouts}}
 
-Slide text must be concise and presentation-ready: tight bullets, no filler words, no first person. Constraints list APPROXIMATE CHARACTER BUDGETS (maxTitleChars, maxBodyChars, maxBulletChars, maxCaptionChars, plus maxBullets, a count) — never exceed them in any language; the server rejects overloaded slides.
+Slide text must be concise and presentation-ready: tight bullets, no filler words, no first person.{{language}} Constraints list APPROXIMATE CHARACTER BUDGETS (maxTitleChars, maxBodyChars, maxBulletChars, maxCaptionChars, plus maxBullets, a count) — never exceed them in any language; the server rejects overloaded slides.
 
 For imageGuidance: 2-4 concrete search keywords when an illustrative photo would help; set none=true for text-only slides (title/section/quote usually).{{seededImages}}
 {{projectSeed}}{{deckSeed}}

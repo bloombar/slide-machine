@@ -119,9 +119,23 @@ describe('GeminiGenerationProvider', () => {
     // Capacity guidance: current load and the prefer-new bias
     expect(prompt).toContain('Current slide load: 5 bullets')
     expect(prompt).toContain('Prefer "new" whenever in doubt')
+    // No language resolved anywhere: no language directive
+    expect(prompt).not.toContain('IETF tag')
     // The key travels in a header, never the URL
     expect(String(url)).not.toContain('test-key')
     expect(init.headers['x-goog-api-key']).toBe('test-key')
+  })
+
+  it('pins the output language when the request resolves one', async () => {
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
+    )
+    await provider.generateSlideContent(request({ language: 'fr' }))
+    const prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+      .contents[0].parts[0].text as string
+    expect(prompt).toContain(
+      'Write ALL slide text in the language with IETF tag "fr"',
+    )
   })
 
   it('anchors the content-freedom policy to the numeric setting', async () => {

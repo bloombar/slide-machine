@@ -4,3 +4,12 @@
 export const LOCALES = ['en', 'fr', 'es', 'ru', 'zh'] as const
 
 export type Locale = (typeof LOCALES)[number]
+
+/** Display names for language pickers (native name first). */
+export const LOCALE_LABELS: Record<Locale, string> = {
+  en: 'English',
+  fr: 'Français (French)',
+  es: 'Español (Spanish)',
+  ru: 'Русский (Russian)',
+  zh: '中文 (Mandarin)',
+}

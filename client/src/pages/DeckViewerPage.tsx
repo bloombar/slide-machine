@@ -253,6 +253,9 @@ export default function DeckViewerPage() {
       const event = await dispatchAction<SlideEvent>('session.phrase', {
         deckId,
         phrase: text,
+        // Last fallback in the language cascade (lecture ?? project ??
+        // profile ?? this) — only used when nothing is stored anywhere
+        browserLanguage: navigator.language || undefined,
       })
       applyEvent(event)
     } catch {
@@ -330,25 +333,30 @@ export default function DeckViewerPage() {
    * pipeline as typed ones — unless the phrase is a wake-worded
    * command, which acts immediately and never reaches generation. */
   const beginCapture = () => {
-    capture.start({
-      onPhrase: text => {
-        setInterim('')
-        const command = matchVoiceCommand(text)
-        if (command) {
-          runVoiceCommand(command)
-          return
-        }
-        phraseQueueRef.current = phraseQueueRef.current.then(() =>
-          submitPhrase(text),
-        )
+    capture.start(
+      {
+        onPhrase: text => {
+          setInterim('')
+          const command = matchVoiceCommand(text)
+          if (command) {
+            runVoiceCommand(command)
+            return
+          }
+          phraseQueueRef.current = phraseQueueRef.current.then(() =>
+            submitPhrase(text),
+          )
+        },
+        onInterim: setInterim,
+        onError: message => {
+          setListening(false)
+          setInterim('')
+          setSpeakError(message)
+        },
       },
-      onInterim: setInterim,
-      onError: message => {
-        setListening(false)
-        setInterim('')
-        setSpeakError(message)
-      },
-    })
+      // Recognize speech in the resolved lecture language; undefined
+      // leaves the browser's own language in charge
+      viewRef.current?.effectiveLanguage,
+    )
   }
 
   const startListening = () => {
@@ -359,11 +367,17 @@ export default function DeckViewerPage() {
   }
 
   // "Start a new lecture" auto-opens the mic: the bar and the listening
-  // flag are already on (lazy init), so only the capture needs kicking
+  // flag are already on (lazy init), so only the capture needs kicking —
+  // once the view arrives, so recognition starts in the resolved
+  // lecture language instead of the browser default
+  const autoStartedRef = useRef(false)
   useEffect(() => {
-    if (listening) beginCapture()
+    if (listening && view && !autoStartedRef.current) {
+      autoStartedRef.current = true
+      beginCapture()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [view])
 
   // A click on the page background — not the slide, a control, or a
   // modal backdrop — briefly reveals blank slots (styled in index.css),

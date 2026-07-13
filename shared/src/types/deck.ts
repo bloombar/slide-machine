@@ -45,6 +45,9 @@ export interface Deck {
   seedContext?: string
   /** Own AI-freedom setting (1-10); absent = inherit the project's. */
   generationFreedom?: number
+  /** Lecturing/generation language, only when explicitly chosen; absent
+   * = inherit (project, then owner profile, then browser default). */
+  language?: Locale
   /** Finalized full lecture transcript, retained for post-lecture reformat (GEN-4). */
   transcript?: string
   voteScore: number

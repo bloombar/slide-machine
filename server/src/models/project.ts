@@ -4,6 +4,7 @@
  */
 import { Schema, model, Types, type HydratedDocument } from 'mongoose'
 import type { Project } from '@slide-machine/shared'
+import { LOCALES } from '@slide-machine/shared'
 import type { ResolvedAcl } from '../lib/access'
 import { env } from '../config/env'
 
@@ -37,6 +38,9 @@ const projectSchema = new Schema<ProjectDb>(
     templateId: { type: String, default: 'classic' },
     // Absent = server default; stored only when explicitly set
     generationFreedom: { type: Number, min: 1, max: 10, default: undefined },
+    // Explicit lecturing language only; absent = inherit (owner profile,
+    // then the speaker's browser)
+    language: { type: String, enum: LOCALES, default: undefined },
     viewers: { type: [String], default: [] },
     editors: { type: [String], default: [] },
     settings: {
@@ -71,6 +75,7 @@ export const toProjectDto = (doc: HydratedDocument<ProjectDb>): Project => ({
   visibility: doc.visibility,
   templateId: doc.templateId,
   generationFreedom: doc.generationFreedom,
+  language: doc.language,
   effectiveGenerationFreedom: doc.generationFreedom ?? env.GENERATION_FREEDOM,
   viewers: doc.viewers,
   editors: doc.editors,

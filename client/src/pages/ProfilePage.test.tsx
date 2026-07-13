@@ -100,6 +100,52 @@ describe('ProfilePage', () => {
     ).toHaveAttribute('href', '/u/u1')
   })
 
+  it('saves an explicit lecture language and clears back to default', async () => {
+    let sent: unknown
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: {
+          user: {
+            id: 'u1',
+            displayName: 'Ada',
+            email: 'ada@example.com',
+            planTier: 'free',
+            profileVisibility: 'public',
+          },
+          accessToken: 't',
+        },
+      }),
+      '/api/actions/user.setLanguage': init => {
+        sent = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: {
+            id: 'u1',
+            displayName: 'Ada',
+            email: 'ada@example.com',
+            planTier: 'free',
+            profileVisibility: 'public',
+            language: 'fr',
+          },
+        }
+      },
+    })
+    renderProfile()
+    const select = await screen.findByRole('combobox', { name: 'Language' })
+    // Nothing stored: the browser-default option is selected
+    expect(select).toHaveValue('')
+
+    fireEvent.change(select, { target: { value: 'fr' } })
+    await vi.waitFor(() => expect(sent).toEqual({ language: 'fr' }))
+    // The saved user round-trips into the select via the auth context
+    await vi.waitFor(() => expect(select).toHaveValue('fr'))
+
+    // Choosing the default option clears the stored value (null)
+    fireEvent.change(select, { target: { value: '' } })
+    await vi.waitFor(() => expect(sent).toEqual({ language: null }))
+  })
+
   it('signs out from the bottom button and redirects to login', async () => {
     renderProfile()
     fireEvent.click(await screen.findByRole('button', { name: /sign out/i }))

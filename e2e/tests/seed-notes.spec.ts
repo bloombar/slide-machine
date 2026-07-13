@@ -76,4 +76,18 @@ test('project and lecture seed notes auto-save and persist', async ({
   await expect(page.getByRole('slider', { name: 'AI freedom' })).toHaveValue(
     '3',
   )
+
+  // Language: nothing stored until chosen; an explicit choice persists
+  // and clearing back to the default option re-inherits
+  const language = page.getByRole('combobox', { name: 'Language' })
+  await expect(language).toHaveValue('')
+  await language.selectOption('fr')
+  await page.waitForTimeout(400)
+  await page.reload()
+  await page.getByRole('button', { name: 'Lecture settings' }).click()
+  await expect(page.getByRole('combobox', { name: 'Language' })).toHaveValue(
+    'fr',
+  )
+  await page.getByRole('combobox', { name: 'Language' }).selectOption('')
+  await expect(page.getByRole('combobox', { name: 'Language' })).toHaveValue('')
 })

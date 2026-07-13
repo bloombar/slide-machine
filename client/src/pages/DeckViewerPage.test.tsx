@@ -645,6 +645,8 @@ describe('DeckViewerPage microphone capture', () => {
       expect(sent).toEqual({
         deckId: 'deck1',
         phrase: 'photosynthesis basics',
+        // The browser tag rides along as the cascade's last resort
+        browserLanguage: navigator.language,
       }),
     )
 

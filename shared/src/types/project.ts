@@ -2,6 +2,7 @@
  * Project, seeding, and preflight-concept data models (SPEC §15, §6).
  * Field sets are indicative — they will evolve as features land.
  */
+import type { Locale } from './locale'
 import type { ProjectDefaults } from './user'
 import type { Visibility } from './deck'
 
@@ -23,6 +24,9 @@ export interface Project {
   /** The value in effect (own or the server default) — what inheriting
    * lectures actually use; for display. */
   effectiveGenerationFreedom: number
+  /** Lecturing/generation language, only when explicitly chosen; absent
+   * = inherit (owner profile, then browser default). */
+  language?: Locale
   /** User ids with view access. Owner-only surfaces. */
   viewers?: string[]
   /** User ids with edit access (can edit every lecture inside). Owner-only surfaces. */

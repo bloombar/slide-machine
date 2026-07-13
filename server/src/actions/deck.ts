@@ -12,6 +12,7 @@ import type {
   DeckResetAccessInput,
   DeckSetAccessInput,
   DeckSetGenerationFreedomInput,
+  DeckSetLanguageInput,
   DeckSetSeedNotesInput,
   DeckShare,
   DeckShareInput,
@@ -30,6 +31,7 @@ import type {
   SlideAddInput,
   SlideEvent,
 } from '@slide-machine/shared'
+import { LOCALES } from '@slide-machine/shared'
 import type { HydratedDocument } from 'mongoose'
 import { defineAction } from './define'
 import {
@@ -379,6 +381,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
   input: z.object({
     deckId: z.string().min(1),
     phrase: z.string().trim().min(1).max(2000),
+    browserLanguage: z.string().trim().max(35).optional(),
   }),
   execute: async (ctx, input) => {
     const { deck } = await loadEditableDeck(ctx, input.deckId)
@@ -400,9 +403,10 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
 
     // Seed layers bias generation toward the planned material (PROJ-1/
     // SEED-1): typed notes plus extracted text, project- and deck-level
-    const [project, assets] = await Promise.all([
+    const [project, assets, speaker] = await Promise.all([
       ProjectModel.findById(deck.projectId),
       seedAssetsFor(deck),
+      UserModel.findById(ctx.userId),
     ])
     const seededImages: SeededImageDescriptor[] = [
       ...assets.project,
@@ -432,6 +436,14 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
         deck.generationFreedom ??
         project?.generationFreedom ??
         env.GENERATION_FREEDOM,
+      // Language precedence: lecture ?? project ?? speaker profile ??
+      // the speaker's browser (sent with the phrase); nothing stored
+      // anywhere leaves the model mirroring the speech
+      language:
+        deck.language ??
+        project?.language ??
+        speaker?.language ??
+        input.browserLanguage,
       currentSlide: lastSlide
         ? {
             layoutType: lastSlide.layoutType,
@@ -632,6 +644,21 @@ export const deckSetGenerationFreedom = defineAction<
   },
 })
 
+/** Lecture-level language; null re-inherits project/profile/browser. */
+export const deckSetLanguage = defineAction<DeckSetLanguageInput, Deck>({
+  name: 'deck.setLanguage',
+  input: z.object({
+    deckId: z.string().min(1),
+    language: z.enum(LOCALES).nullable(),
+  }),
+  execute: async (ctx, input) => {
+    const { deck, acl } = await loadEditableDeck(ctx, input.deckId)
+    deck.language = input.language ?? undefined
+    await deck.save()
+    return toDeckDto(deck, acl)
+  },
+})
+
 export const deckSetSeedNotes = defineAction<DeckSetSeedNotesInput, Deck>({
   name: 'deck.setSeedNotes',
   input: z.object({
@@ -818,6 +845,7 @@ registerAction(deckReorderSlides)
 registerAction(sessionPhrase)
 registerAction(deckSetSeedNotes)
 registerAction(deckSetGenerationFreedom)
+registerAction(deckSetLanguage)
 registerAction(deckSetAccess)
 registerAction(deckResetAccess)
 registerAction(deckShare)
