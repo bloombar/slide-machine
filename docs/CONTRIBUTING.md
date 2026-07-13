@@ -14,6 +14,8 @@
 - [Claude Code](https://claude.com/claude-code) — AI coding assistant; project instructions live in `.claude/CLAUDE.md`
 - [Visual Studio Code](https://code.visualstudio.com/) with the [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode), [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint), and [Claude Code](https://marketplace.visualstudio.com/items?itemName=anthropic.claude-code) extensions
 
+See instructions for [using the Claude Code Extension in VS Code](https://code.claude.com/docs/en/vs-code)
+
 ## Setup
 
 ```sh
