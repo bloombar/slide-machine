@@ -140,23 +140,27 @@ describe('language cascade', () => {
     }
   })
 
-  it('exposes the resolved language on the deck view for STT', async () => {
+  it('exposes the deck and project levels on the view for client-side STT resolution', async () => {
     const view = () =>
       request(server)
         .get(`/api/decks/${slug}`)
         .set('Authorization', `Bearer ${ada}`)
 
-    // Nothing set: absent — the client falls back to the browser
-    expect((await view()).body.effectiveLanguage).toBeUndefined()
-
-    await act(ada, 'user.setLanguage', { language: 'zh' })
-    expect((await view()).body.effectiveLanguage).toBe('zh')
+    // Nothing set: both levels absent — the client falls through to the
+    // signed-in profile, then the browser
+    let body = (await view()).body
+    expect(body.projectLanguage).toBeUndefined()
+    expect(body.deck.language).toBeUndefined()
 
     await act(ada, 'project.update', { projectId, language: 'ru' })
-    expect((await view()).body.effectiveLanguage).toBe('ru')
+    body = (await view()).body
+    expect(body.projectLanguage).toBe('ru')
+    expect(body.deck.language).toBeUndefined()
 
     await act(ada, 'deck.setLanguage', { deckId, language: 'fr' })
-    expect((await view()).body.effectiveLanguage).toBe('fr')
+    body = (await view()).body
+    expect(body.deck.language).toBe('fr')
+    expect(body.projectLanguage).toBe('ru')
   })
 
   it('rejects unsupported languages', async () => {

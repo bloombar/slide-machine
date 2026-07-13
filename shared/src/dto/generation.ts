@@ -32,7 +32,8 @@ export interface DeckViewResponse {
   /** The project-level AI freedom (own or server default) — what this
    * lecture uses while it has no setting of its own. */
   projectGenerationFreedom: number
-  /** Resolved lecturing language for the requesting user (lecture ??
-   * project ?? their profile); absent = use the browser default. */
-  effectiveLanguage?: Locale
+  /** The project's own language setting, so the client can resolve the
+   * lecture language live (deck ?? this ?? viewer profile ?? browser)
+   * even as settings change mid-session. */
+  projectLanguage?: Locale
 }

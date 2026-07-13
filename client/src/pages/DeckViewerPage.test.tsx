@@ -660,6 +660,55 @@ describe('DeckViewerPage microphone capture', () => {
       screen.queryByRole('textbox', { name: 'Spoken phrase' }),
     ).not.toBeInTheDocument()
   })
+
+  it('restarts recognition when the lecture language changes mid-recording', async () => {
+    FakeRecognition.reset()
+    vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
+    let saved: unknown
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true, projectLanguage: 'ru' },
+      }),
+      '/api/actions/deck.setLanguage': init => {
+        saved = JSON.parse(String(init?.body))
+        return { status: 200, body: { ...deckView.deck, language: 'fr' } }
+      },
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Live session' }))
+
+    // No lecture override: the project's language drives recognition
+    const first = FakeRecognition.last!
+    expect(first.lang).toBe('ru')
+
+    // Switch the lecture language from settings while recording
+    fireEvent.click(screen.getByRole('button', { name: 'Lecture settings' }))
+    const select = await screen.findByRole('combobox', { name: 'Language' })
+    fireEvent.change(select, { target: { value: 'fr' } })
+    await vi.waitFor(() =>
+      expect(saved).toEqual({ deckId: 'deck1', language: 'fr' }),
+    )
+
+    // Recognition restarted with the new language
+    await vi.waitFor(() => {
+      expect(FakeRecognition.last).not.toBe(first)
+      expect(FakeRecognition.last!.lang).toBe('fr')
+    })
+  })
 })
 
 describe('DeckViewerPage slide reordering', () => {

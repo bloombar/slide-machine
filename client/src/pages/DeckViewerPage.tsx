@@ -329,6 +329,14 @@ export default function DeckViewerPage() {
     )
   }
 
+  /** The lecture language in effect right now, resolved client-side so
+   * mid-session settings changes take hold: lecture ?? project ??
+   * speaker profile; undefined = the browser's own language. */
+  const sttLanguage = () => {
+    const v = viewRef.current
+    return v?.deck.language ?? v?.projectLanguage ?? user?.language
+  }
+
   /** Attaches recognition; recognized phrases queue through the same
    * pipeline as typed ones — unless the phrase is a wake-worded
    * command, which acts immediately and never reaches generation. */
@@ -353,9 +361,7 @@ export default function DeckViewerPage() {
           setSpeakError(message)
         },
       },
-      // Recognize speech in the resolved lecture language; undefined
-      // leaves the browser's own language in charge
-      viewRef.current?.effectiveLanguage,
+      sttLanguage(),
     )
   }
 
@@ -378,6 +384,21 @@ export default function DeckViewerPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view])
+
+  // Switching the lecture language mid-recording: recognition holds its
+  // language for the life of the instance, so restart it with the new
+  // one. Only while listening, and only on an actual change.
+  const activeLanguage =
+    view?.deck.language ?? view?.projectLanguage ?? user?.language
+  const prevLanguageRef = useRef(activeLanguage)
+  useEffect(() => {
+    if (prevLanguageRef.current === activeLanguage) return
+    prevLanguageRef.current = activeLanguage
+    if (!listening) return
+    capture.stop()
+    beginCapture()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeLanguage, listening])
 
   // A click on the page background — not the slide, a control, or a
   // modal backdrop — briefly reveals blank slots (styled in index.css),

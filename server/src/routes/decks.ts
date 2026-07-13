@@ -18,7 +18,6 @@ import { getBuiltinTemplate } from '../templates/builtin'
 import { verifyAccessToken } from '../auth/tokens'
 import { ProjectModel } from '../models/project'
 import { env } from '../config/env'
-import { UserModel } from '../models/user'
 import { HttpError } from '../middleware/error'
 
 /** Attaches userId when a valid Bearer token is present; never rejects. */
@@ -58,11 +57,6 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
   const isOwner = acl.ownerId === req.userId
   const slides = await SlideModel.find({ deckId: deck._id }).sort({ index: 1 })
   const project = await ProjectModel.findById(deck.projectId).catch(() => null)
-  // Lecture ?? project ?? viewer profile; absent = the browser decides
-  // (the client falls back to navigator.language for STT)
-  const viewer = req.userId
-    ? await UserModel.findById(req.userId).catch(() => null)
-    : null
   const body: DeckViewResponse = {
     deck: isOwner ? toDeckDto(deck, acl) : toSharedDeckDto(deck, acl),
     slides: slides.map(toSlideDto),
@@ -70,8 +64,7 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
     canEdit: canEditAcl(acl, req.userId),
     projectGenerationFreedom:
       project?.generationFreedom ?? env.GENERATION_FREEDOM,
-    effectiveLanguage:
-      deck.language ?? project?.language ?? viewer?.language ?? undefined,
+    projectLanguage: project?.language ?? undefined,
   }
   res.json(body)
 })
