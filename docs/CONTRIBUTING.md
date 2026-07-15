@@ -51,6 +51,7 @@ MongoDB must be reachable at `MONGODB_URI` for every mode (`/api/health` reports
 | Production build, local | `npm run build && npm start`               | whole app (SPA + API) served by Express on `:3000`        |
 | Docker stack            | `docker compose up`                        | app on `:3000`, MongoDB on host `:27018`                  |
 | Docker stack + MinIO    | `docker compose --profile storage up`      | adds MinIO S3 on `:9000`, console on `:9001`              |
+| Seed dev data           | `npm run seed -w server`                   | sample users/lectures ([SEEDING.md](SEEDING.md))          |
 
 Dev mode hot-reloads both sides (`tsx watch` + Vite HMR). The server reads `server/.env` at boot and exits with a clear message if required config is missing.
 

@@ -111,8 +111,13 @@ const makeGate = (limit: number): (<T>(fn: () => Promise<T>) => Promise<T>) => {
   }
 }
 
-/** Backoff schedule (ms) for successive 429s; the last value repeats. */
-const BACKOFF_MS = [3000, 8000, 20000, 45000, 60000]
+/** Backoff schedule (ms) for successive transient failures; the delays
+ * ramp up then hold at 60s, giving many patient retries before a call is
+ * finally given up on (the dev key's per-minute quota recovers slowly). */
+const BACKOFF_MS = [
+  3000, 8000, 20000, 45000, 60000, 60000, 60000, 60000, 60000, 60000, 60000,
+  60000,
+]
 
 /** A transient failure worth retrying: a rate limit, a request timeout,
  * or a 5xx — all mean nothing was persisted, so replaying the same unit
@@ -123,9 +128,21 @@ const isRetryable = (message: string): boolean =>
   /\b(500|502|503|504)\b/.test(message) ||
   message.includes('fetch failed')
 
+/** A short, human label for why a call failed, so the log distinguishes
+ * a rate limit from a timeout from a server error. */
+const failureReason = (message: string): string => {
+  if (message.includes('429')) return 'rate limit (429)'
+  if (/aborted|timeout/i.test(message)) return 'timeout'
+  const status = /\b(500|502|503|504)\b/.exec(message)
+  if (status) return `server error (${status[1]})`
+  if (message.includes('fetch failed')) return 'network error'
+  return 'transient error'
+}
+
 /**
  * Runs `fn`, retrying transient failures with backoff. Honors the
- * server's suggested retry delay (429 RetryInfo) when present.
+ * server's suggested retry delay (429 RetryInfo) when present, and logs
+ * the actual reason (rate limit / timeout / server error) each attempt.
  */
 const withRateLimitRetry = async <T>(
   fn: () => Promise<T>,
@@ -142,7 +159,7 @@ const withRateLimitRetry = async <T>(
         ? Number(suggested[1]) * 1000
         : BACKOFF_MS[attempt]!
       console.warn(
-        `  transient error (${label}); retrying in ${wait / 1000}s...`,
+        `  ${failureReason(message)} on ${label} (attempt ${attempt + 1}/${BACKOFF_MS.length}); retrying in ${wait / 1000}s...`,
       )
       await sleep(wait)
     }
@@ -461,16 +478,22 @@ const main = async (): Promise<void> => {
   const summaryRows: string[] = []
 
   for (const persona of personas) {
-    const user = await UserModel.create({
-      email: `${persona.handle}@${SEED_DOMAIN}`,
-      displayName: persona.displayName,
-      passwordHash,
-      emailVerified: true,
-      profileVisibility: persona.profileVisibility,
-      bio: persona.bio,
-      locale: persona.locale,
-      planTier: persona.planTier,
-    })
+    const email = `${persona.handle}@${SEED_DOMAIN}`
+    // Reuse an existing seed user in --append mode (a plain reset run has
+    // already removed them, so this only matches when appending); a fresh
+    // create would collide with the unique email index.
+    const user =
+      (await UserModel.findOne({ email })) ??
+      (await UserModel.create({
+        email,
+        displayName: persona.displayName,
+        passwordHash,
+        emailVerified: true,
+        profileVisibility: persona.profileVisibility,
+        bio: persona.bio,
+        locale: persona.locale,
+        planTier: persona.planTier,
+      }))
     const userId = user._id.toString()
 
     const projectCount = opts.smoke ? 1 : randInt(rng, 0, 3)
