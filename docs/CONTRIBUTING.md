@@ -34,7 +34,7 @@ Everything is set in `server/.env` — [server/.env.example](../server/.env.exam
 
 - **Required to boot:** `MONGODB_URI` (prefilled for a local mongod on `:27017`; use `mongodb://localhost:27018/slide-machine` for the Docker one) and `JWT_SECRET` + `JWT_REFRESH_SECRET` (≥ 32 chars each — generate with `openssl rand -base64 48`).
 - **Google services** — `GEMINI_API_KEY` (slide/quiz/image generation), `GOOGLE_CLOUD_STT_KEY` (live transcription), `GOOGLE_CLOUD_TRANSLATION_KEY` (deck translation): how to create each is in [GOOGLE_API_KEYS.md](GOOGLE_API_KEYS.md). No Gemini key yet? Keep `GENERATION_PROVIDER=mock` (the `.env.example` default) for deterministic keyless slides.
-- **Image enrichment** ([IMG-1](SPEC.md#img-1-real-time-image-enrichment)) — Wikimedia and Openverse are keyless and work out of the box; an optional `FLICKR_API_KEY` adds a third source: [IMAGE_ENRICHMENT_KEYS.md](IMAGE_ENRICHMENT_KEYS.md).
+- **Image enrichment** ([IMG-1](SPEC.md#img-1-real-time-image-enrichment)) — Wikimedia and Openverse are keyless and work out of the box; an optional `FLICKR_API_KEY` adds a third source: [IMAGE_ENRICHMENT.md](IMAGE_ENRICHMENT.md).
 - **File uploads/exports** — `STORAGE_PROVIDER=local` (the default) writes to disk with no extra setup; `s3` needs MinIO, see [Object storage in the README](../README.md#object-storage).
 - **Feature-specific, optional until you work on that feature** — Google/GitHub OAuth (sign-in, connected accounts), Stripe (billing), SMTP (email verification/reset), Quiz Generator (base URL + token). Each is documented inline in `.env.example`.
 - **Tests** — integration and e2e runs use the separate `MONGODB_TEST_URI` database (e2e reads it from `server/.env` and starts its own app).

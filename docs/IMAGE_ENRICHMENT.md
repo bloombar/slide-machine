@@ -1,9 +1,33 @@
-# Image enrichment provider accounts and keys
+# Image enrichment
 
-Image enrichment ([IMG-1](SPEC.md#img-1-real-time-image-enrichment)) fetches CC-licensed stock images for slides from
-three providers (`server/src/enrichment/`). Two are keyless; only Flickr
-needs an account and API key, and it is optional — without a key the
-pipeline simply runs on the other two.
+Image enrichment ([IMG-1](SPEC.md#img-1-real-time-image-enrichment)) puts a
+relevant illustration on a slide without the instructor picking one. It runs
+in the background, off the phrase→slide critical path: once a slide's text
+exists, the system searches CC-licensed image providers for the slide's
+keywords, ranks what comes back, and — if anything clears the bar — attaches
+the best match. It never blocks slide generation and never overwrites an
+image already on a slide.
+
+## How candidates are scored
+
+All providers are queried in parallel and their results pooled, then
+`pickBest` (`server/src/enrichment/scoring.ts`) picks a single winner:
+
+- **Relevance** — the fraction of the slide's keywords found in a candidate's
+  title and tags. Zero keyword overlap scores zero; nothing else can rescue it.
+- **Source prior** — relevance is weighted by how much we trust each source.
+  The instructor's own seeded images (`1.2`) beat any web source; among web
+  sources Wikimedia (`1.0`) leads for named entities and concepts, then
+  Openverse (`0.9`), then Flickr (`0.85`) — prettiest but noisiest.
+- **Size** — candidates under 320px wide are dropped (won't survive a
+  projector); ≥600px adds a small bonus.
+- **Threshold** — the top candidate must score at least `0.3` or no image is
+  used at all. A missing image beats a misleading one.
+
+The rest of this document covers the provider accounts and keys.
+
+Two providers are keyless; only Flickr needs an account and API key, and it
+is optional — without a key the pipeline simply runs on the other two.
 
 | Provider          | Account/key needed | Env var          |
 | ----------------- | ------------------ | ---------------- |
