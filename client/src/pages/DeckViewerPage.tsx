@@ -378,6 +378,28 @@ export default function DeckViewerPage() {
     setListening(true)
   }
 
+  // Settings is an aside, not part of the lecture: talking through it
+  // must never reach generation. Opening pauses capture; closing resumes
+  // it only when it was actually recording beforehand.
+  const resumeAfterSettingsRef = useRef(false)
+
+  /** Opens lecture settings, pausing the microphone while it is up. */
+  const openSettings = (tab?: SettingsTabId) => {
+    resumeAfterSettingsRef.current = listening
+    if (listening) stopListening()
+    if (tab) setSettingsTab(tab)
+    setSettingsOpen(true)
+  }
+
+  /** Closes lecture settings, resuming the microphone if it was paused. */
+  const closeSettings = () => {
+    setSettingsOpen(false)
+    if (resumeAfterSettingsRef.current) {
+      resumeAfterSettingsRef.current = false
+      startListening()
+    }
+  }
+
   // "Start a new lecture" auto-opens the mic: the bar and the listening
   // flag are already on (lazy init), so only the capture needs kicking —
   // once the view arrives, so recognition starts in the resolved
@@ -597,13 +619,14 @@ export default function DeckViewerPage() {
       <DeckPageHeader
         mode={mode}
         onModeChange={setMode}
+        deckId={view.deck.id}
         actions={
           canEdit && (
             <>
               <button
                 aria-label="Lecture settings"
                 title="Lecture settings"
-                onClick={() => setSettingsOpen(true)}
+                onClick={() => openSettings()}
                 className="rounded-md p-2 text-slate-500 hover:text-slate-900"
               >
                 <Settings className="h-5 w-5" aria-hidden />
@@ -630,9 +653,11 @@ export default function DeckViewerPage() {
                   else startListening()
                   setSpeaking(s => !s)
                 }}
+                // Recording fills solid red and pulses: the audience is
+                // live, so the state has to be unmissable at a glance
                 className={`rounded-md p-2 ${
                   listening
-                    ? 'animate-pulse bg-red-50 text-red-600'
+                    ? 'animate-pulse bg-red-600 text-white ring-2 ring-red-300'
                     : speaking
                       ? 'bg-indigo-50 text-indigo-600'
                       : 'text-slate-500 hover:text-slate-900'
@@ -737,8 +762,7 @@ export default function DeckViewerPage() {
           onClose={() => setLayoutPickerFor(null)}
           onChangeTemplate={() => {
             setLayoutPickerFor(null)
-            setSettingsTab('template')
-            setSettingsOpen(true)
+            openSettings('template')
           }}
         />
       )}
@@ -749,7 +773,7 @@ export default function DeckViewerPage() {
           projectGenerationFreedom={view.projectGenerationFreedom}
           initialTab={settingsTab ?? 'general'}
           isOwner={isOwner}
-          onClose={() => setSettingsOpen(false)}
+          onClose={closeSettings}
           onDeckChange={deck => setView(v => (v ? { ...v, deck } : v))}
           onDeleted={() => void navigate('/app')}
           onTemplateChange={(deck, template) =>

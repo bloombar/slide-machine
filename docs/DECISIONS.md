@@ -22,7 +22,7 @@ Fixed tiers so page chrome always paints above slide content:
 | --- | --- | --- |
 | Slide content & nav hotspots | auto | SlideView, SlideNavZones zones |
 | In-slide controls | `z-10` | EditableText (display + field), SlideDeleteButton — must beat the nav hotspots only |
-| Sticky page footer | `z-30` | HealthFooter |
+| Sticky page chrome | `z-30` | HealthFooter, DeckPageHeader (the deck toolbar pill, pinned under the nav) |
 | Primary navigation | `z-50` | AppShell / PublicShell headers |
 | Confirmation dialogs | `z-60` | ConfirmDialog — must beat everything, including the nav |
 

@@ -617,9 +617,10 @@ describe('DeckViewerPage microphone capture', () => {
     fireEvent.click(toggle)
     expect(toggle).toHaveAttribute('aria-pressed', 'true')
     expect(FakeRecognition.last).not.toBeNull()
-    // Recording state pulsates red so capture is unmistakable
+    // Recording state fills solid red and pulses so capture is unmistakable
     expect(toggle.className).toContain('animate-pulse')
-    expect(toggle.className).toContain('text-red-600')
+    expect(toggle.className).toContain('bg-red-600')
+    expect(toggle.className).toContain('text-white')
 
     const recognition = FakeRecognition.last!
     // Interim text shows without dispatching
@@ -743,11 +744,115 @@ describe('DeckViewerPage microphone capture', () => {
       expect(saved).toEqual({ deckId: 'deck1', language: 'fr' }),
     )
 
-    // Recognition restarted with the new language
+    // Settings pauses the microphone, so recognition picks the new
+    // language up when it resumes on close, not while the panel is up
+    fireEvent.click(screen.getByRole('button', { name: 'Close settings' }))
     await vi.waitFor(() => {
       expect(FakeRecognition.last).not.toBe(first)
       expect(FakeRecognition.last!.lang).toBe('fr')
     })
+  })
+
+  it('pauses the microphone while lecture settings are open', async () => {
+    FakeRecognition.reset()
+    vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+
+    const toggle = screen.getByRole('button', { name: 'Live session' })
+    fireEvent.click(toggle)
+    expect(toggle.className).toContain('bg-red-600')
+
+    // Settings is an aside: talking through it must not reach generation
+    fireEvent.click(screen.getByRole('button', { name: 'Lecture settings' }))
+    expect(toggle.className).not.toContain('bg-red-600')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close settings' }))
+    expect(toggle.className).toContain('bg-red-600')
+  })
+
+  it('resumes the microphone when settings close on Escape', async () => {
+    FakeRecognition.reset()
+    vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+
+    const toggle = screen.getByRole('button', { name: 'Live session' })
+    fireEvent.click(toggle)
+    fireEvent.click(screen.getByRole('button', { name: 'Lecture settings' }))
+    expect(toggle.className).not.toContain('bg-red-600')
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(toggle.className).toContain('bg-red-600')
+  })
+
+  it('leaves the microphone off when settings close if it was never on', async () => {
+    FakeRecognition.reset()
+    vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+
+    // Never started recording: closing settings must not start it
+    fireEvent.click(screen.getByRole('button', { name: 'Lecture settings' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close settings' }))
+
+    const toggle = screen.getByRole('button', { name: 'Live session' })
+    expect(toggle.className).not.toContain('bg-red-600')
+    expect(FakeRecognition.last).toBeNull()
   })
 })
 
