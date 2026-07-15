@@ -16,11 +16,16 @@
  * non-deterministic). All seed users live under @seed.slidemachine.dev;
  * a run wipes and rebuilds only that domain's data, never real accounts.
  *
+ * Quota-aware: it stays under the model's per-minute cap (--rpm) and, if
+ * the per-day quota runs out, stops cleanly — keeping everything already
+ * generated — rather than crashing. Re-run with --append after a reset.
+ *
  *   npm run seed -w server                # full seed (spec ranges)
  *   npm run seed -w server -- --smoke     # 1 user / 1 project / 1 lecture
  *   npm run seed -w server -- --no-images # skip image enrichment
  *   npm run seed -w server -- --append    # keep existing seed data
  *   npm run seed -w server -- --seed=42   # different structure RNG
+ *   npm run seed -w server -- --rpm=8     # cap Gemini requests per minute
  */
 import { env } from '../config/env'
 import { connectMongo, disconnectMongo } from './mongoose'
@@ -59,6 +64,8 @@ interface CliOptions {
   concurrency: number
   /** Cap total lectures (0 = no cap); handy for a bounded paid test. */
   limit: number
+  /** Max Gemini requests per minute; kept under the model's RPM cap. */
+  rpm: number
 }
 
 const parseArgs = (argv: string[]): CliOptions => {
@@ -75,17 +82,61 @@ const parseArgs = (argv: string[]): CliOptions => {
     rngSeed: num('--seed=', 1337),
     concurrency: Math.max(1, num('--concurrency=', 2)),
     limit: Math.max(0, num('--limit=', 0)),
+    rpm: Math.max(1, num('--rpm=', 10)),
   }
 }
 
 // ---------------------------------------------------------------------------
-// Gemini call pacing: a global concurrency gate + 429-aware backoff, so a
-// burst of phrase calls stays under the model's per-minute rate limit
-// instead of getting dropped.
+// Gemini call pacing. Three layers keep the run inside the API's quotas:
+//   1. a proactive per-minute rate limiter (stay under the RPM cap);
+//   2. a concurrency gate (bound burst);
+//   3. 429-aware backoff, plus a daily-quota circuit breaker that stops
+//      the whole run cleanly (no crash, no data loss) once the per-DAY
+//      cap is hit — retrying that is pointless until the quota resets.
 // ---------------------------------------------------------------------------
 
 const sleep = (ms: number): Promise<void> =>
   new Promise(resolve => setTimeout(resolve, ms))
+
+/** Thrown to unwind the run cleanly once the daily Gemini quota is spent.
+ * Distinct from a normal error so callers can stop rather than skip. */
+class QuotaExhaustedError extends Error {
+  constructor(message = 'Gemini daily quota exhausted') {
+    super(message)
+    this.name = 'QuotaExhaustedError'
+  }
+}
+
+/** Latched once the per-day quota is detected; every later call
+ * short-circuits so the run winds down without more wasted requests. */
+let quotaExhausted = false
+
+/** True when a 429 names the per-DAY quota (a hard wall until reset), vs
+ * the per-minute limit (which recovers within our backoff window). */
+const isDailyQuota = (message: string): boolean => /per[-\s]?day/i.test(message)
+
+/**
+ * A rolling-window rate limiter: resolves at most `perMinute` times in any
+ * 60s span, delaying callers past that. Proactively keeps us under the
+ * model's requests-per-minute cap so per-minute 429s rarely happen.
+ */
+const makeRateLimiter = (perMinute: number): (() => Promise<void>) => {
+  const times: number[] = []
+  return async () => {
+    for (;;) {
+      const now = Date.now()
+      while (times.length && now - times[0]! >= 60_000) times.shift()
+      if (times.length < perMinute) {
+        times.push(now)
+        return
+      }
+      await sleep(60_000 - (now - times[0]!) + 50)
+    }
+  }
+}
+
+/** Rate limiter shared by every Gemini call; initialized in main(). */
+let rateLimit: () => Promise<void> = async () => {}
 
 /** A simple async semaphore bounding concurrent Gemini calls. */
 const makeGate = (limit: number): (<T>(fn: () => Promise<T>) => Promise<T>) => {
@@ -140,9 +191,11 @@ const failureReason = (message: string): string => {
 }
 
 /**
- * Runs `fn`, retrying transient failures with backoff. Honors the
- * server's suggested retry delay (429 RetryInfo) when present, and logs
- * the actual reason (rate limit / timeout / server error) each attempt.
+ * Runs `fn`, retrying transient failures with backoff. A daily-quota 429
+ * trips the circuit breaker immediately (retrying is futile until reset);
+ * any other 429 that outlives every retry is treated the same way. Honors
+ * the server's suggested retry delay (429 RetryInfo) when present, and
+ * logs the actual reason (rate limit / timeout / server error).
  */
 const withRateLimitRetry = async <T>(
   fn: () => Promise<T>,
@@ -152,8 +205,22 @@ const withRateLimitRetry = async <T>(
     try {
       return await fn()
     } catch (err) {
+      if (err instanceof QuotaExhaustedError) throw err
       const message = (err as Error).message ?? ''
-      if (!isRetryable(message) || attempt >= BACKOFF_MS.length) throw err
+      // A per-day 429 is a hard wall today — stop the whole run cleanly.
+      if (message.includes('429') && isDailyQuota(message)) {
+        quotaExhausted = true
+        throw new QuotaExhaustedError(message)
+      }
+      if (!isRetryable(message) || attempt >= BACKOFF_MS.length) {
+        // A 429 that survived every retry is almost certainly the daily
+        // cap even if the message didn't spell it out — wind down.
+        if (message.includes('429')) {
+          quotaExhausted = true
+          throw new QuotaExhaustedError(message)
+        }
+        throw err
+      }
       const suggested = /retryDelay"?:\s*"?(\d+)s/.exec(message)
       const wait = suggested
         ? Number(suggested[1]) * 1000
@@ -171,9 +238,18 @@ const withRateLimitRetry = async <T>(
  * session.phrase call pass through it. */
 let geminiGate: <T>(fn: () => Promise<T>) => Promise<T> = fn => fn()
 
-/** Paces one Gemini-backed call: bounded concurrency + 429 retry. */
-const gemini = <T>(fn: () => Promise<T>, label: string): Promise<T> =>
-  geminiGate(() => withRateLimitRetry(fn, label))
+/** Paces one Gemini-backed call: short-circuits once the quota is spent,
+ * then rate-limit + concurrency-gate + backoff-retry the request. */
+const gemini = <T>(fn: () => Promise<T>, label: string): Promise<T> => {
+  if (quotaExhausted) return Promise.reject(new QuotaExhaustedError())
+  return geminiGate(() =>
+    withRateLimitRetry(async () => {
+      if (quotaExhausted) throw new QuotaExhaustedError()
+      await rateLimit()
+      return fn()
+    }, label),
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Deterministic RNG (mulberry32) — reproducible account/lecture structure
@@ -269,7 +345,9 @@ Produce a transcript of exactly what you SAY — as if a speech-to-text system c
     if (!res.ok) {
       const detail = await res.text().catch(() => '')
       throw new Error(
-        `Transcript request failed (${res.status}): ${detail.slice(0, 200)}`,
+        // Keep the whole body: the daily-quota marker (quotaId) and the
+        // RetryInfo sit at the very end, past the human message.
+        `Transcript request failed (${res.status}): ${detail.slice(0, 2000)}`,
       )
     }
     const data = (await res.json()) as {
@@ -365,12 +443,20 @@ interface LectureResult {
   slides: number
   images: number
   title: string
+  /** True when the quota ran out mid-lecture; slides so far are kept. */
+  stopped: boolean
 }
 
 /**
  * Creates a deck, generates its transcript, replays it through the real
  * session.phrase pipeline phrase by phrase, then runs live image
  * enrichment on the slides the model flagged for an image.
+ *
+ * Every slide is persisted the instant session.phrase creates it, so a
+ * lecture cut short by the quota keeps everything generated up to that
+ * point; the loop just stops early and the full transcript is still
+ * saved. Throws QuotaExhaustedError only when even the transcript
+ * couldn't be generated (in which case the empty deck is removed).
  */
 const seedLecture = async (plan: LecturePlan): Promise<LectureResult> => {
   const deck = await DeckModel.create({
@@ -384,16 +470,29 @@ const seedLecture = async (plan: LecturePlan): Promise<LectureResult> => {
     voteScore: 0,
   })
 
-  const transcript = await generateTranscript(
-    plan.topic,
-    plan.courseBlurb,
-    plan.length,
-  )
+  let transcript: string
+  try {
+    transcript = await generateTranscript(
+      plan.topic,
+      plan.courseBlurb,
+      plan.length,
+    )
+  } catch (err) {
+    // No transcript means the deck has no content at all — drop the husk
+    // so a quota-interrupted run leaves no empty lectures behind.
+    await DeckModel.deleteOne({ _id: deck._id }).catch(() => undefined)
+    throw err
+  }
   const phrases = splitPhrases(transcript)
 
   const ctx = { userId: plan.ownerId, requestId: `seed-${deck._id}` }
   const deckId = deck._id.toString()
+  let stopped = false
   for (const phrase of phrases) {
+    if (quotaExhausted) {
+      stopped = true
+      break
+    }
     try {
       // Each phrase makes exactly one Gemini call inside the action, so
       // gate + 429-retry it the same as the transcript call.
@@ -402,14 +501,19 @@ const seedLecture = async (plan: LecturePlan): Promise<LectureResult> => {
         `phrase (${plan.topic})`,
       )
     } catch (err) {
+      // Quota gone: stop replaying but keep the slides already generated.
+      if (err instanceof QuotaExhaustedError) {
+        stopped = true
+        break
+      }
       // One lost phrase must never abort a lecture (matches live behavior).
       console.warn(`  phrase skipped: ${(err as Error).message}`)
     }
   }
 
-  // Store the FULL spoken transcript on the deck (GEN-4). session.phrase
-  // accumulates only the phrases that produced content; we want the
-  // complete lecture text retained for post-lecture reformatting.
+  // Store the FULL spoken transcript on the deck (GEN-4), even for a
+  // lecture cut short — session.phrase accumulates only the phrases that
+  // produced content, and we want the complete lecture text retained.
   const fresh = await DeckModel.findById(deck._id)
   if (fresh) {
     fresh.transcript = transcript
@@ -420,7 +524,9 @@ const seedLecture = async (plan: LecturePlan): Promise<LectureResult> => {
   // Live image enrichment (IMG-1): the pipeline fires this in the
   // background and unawaited; here we await it so images are present
   // before the script exits. enrichSlideImage no-ops when it finds no
-  // image above threshold, leaving the slide imageless (IMG-3).
+  // image above threshold, leaving the slide imageless (IMG-3). Runs even
+  // when the run stopped early — it uses Wikimedia/Openverse, not the
+  // (exhausted) Gemini quota, so the slides we did make still get images.
   let images = 0
   if (plan.useImages && env.IMAGE_ENRICHMENT_ENABLED) {
     const needImages = await SlideModel.find({
@@ -444,6 +550,7 @@ const seedLecture = async (plan: LecturePlan): Promise<LectureResult> => {
     slides,
     images,
     title: titled?.title || plan.topic,
+    stopped,
   }
 }
 
@@ -456,10 +563,12 @@ const main = async (): Promise<void> => {
   const rng = makeRng(opts.rngSeed)
   const templateIds = listBuiltinTemplates().map(t => t.id)
   geminiGate = makeGate(opts.concurrency)
+  rateLimit = makeRateLimiter(opts.rpm)
 
   console.log(
     `Seeding via provider "${env.GENERATION_PROVIDER}" (model ${env.GEMINI_MODEL}); ` +
-      `structure RNG seed ${opts.rngSeed}, concurrency ${opts.concurrency}` +
+      `structure RNG seed ${opts.rngSeed}, concurrency ${opts.concurrency}, ` +
+      `≤${opts.rpm} req/min` +
       `${opts.limit ? `, limit ${opts.limit}` : ''}${opts.smoke ? ' [smoke]' : ''}.`,
   )
   await connectMongo(env.MONGODB_URI)
@@ -561,20 +670,40 @@ const main = async (): Promise<void> => {
 
   let done = 0
   const results = await pool(toRun, opts.concurrency, async lec => {
-    const r = await seedLecture(lec)
-    done++
-    console.log(
-      `[${done}/${toRun.length}] ${lec.userName} — "${r.title}": ${r.slides} slides, ${r.images} images`,
-    )
-    return r
+    // Once the quota is spent, don't even start new lectures (no deck,
+    // no API calls) — the run is winding down.
+    if (quotaExhausted) return null
+    try {
+      const r = await seedLecture(lec)
+      done++
+      console.log(
+        `[${done}/${toRun.length}] ${lec.userName} — "${r.title}": ` +
+          `${r.slides} slides, ${r.images} images${r.stopped ? ' (stopped early — quota)' : ''}`,
+      )
+      return r
+    } catch (err) {
+      // Quota hit at the transcript stage: the empty deck is already gone.
+      if (err instanceof QuotaExhaustedError) return null
+      // Any other lecture-level failure is logged, never fatal to the run.
+      console.warn(`  lecture "${lec.topic}" failed: ${(err as Error).message}`)
+      return null
+    }
   })
 
-  const totalSlides = results.reduce((n, r) => n + r.slides, 0)
-  const totalImages = results.reduce((n, r) => n + r.images, 0)
+  const seeded = results.filter((r): r is LectureResult => r !== null)
+  const totalSlides = seeded.reduce((n, r) => n + r.slides, 0)
+  const totalImages = seeded.reduce((n, r) => n + r.images, 0)
   console.log(
-    `\nDone. ${personas.length} users, ${results.length} lectures, ` +
+    `\nDone. ${personas.length} users, ${seeded.length} lectures, ` +
       `${totalSlides} slides, ${totalImages} images.`,
   )
+  if (quotaExhausted) {
+    console.log(
+      `\n⚠ Stopped early: Gemini daily quota exhausted. Seeded ${seeded.length} of ` +
+        `${toRun.length} planned lectures; everything generated was saved. ` +
+        `Re-run with --append once the quota resets to add the rest.`,
+    )
+  }
   console.log(
     `Sign in with any seed address (e.g. ada.lovelace@${SEED_DOMAIN}) / password "${SEED_PASSWORD}".`,
   )

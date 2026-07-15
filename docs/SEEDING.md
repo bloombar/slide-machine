@@ -25,11 +25,13 @@ npm run seed -w server -- --no-images  # skip image enrichment (faster)
 npm run seed -w server -- --append     # keep existing seed data, don't wipe
 npm run seed -w server -- --seed=42    # different reproducible structure
 npm run seed -w server -- --concurrency=4  # decks generated in parallel
+npm run seed -w server -- --rpm=8      # cap Gemini requests per minute
 ```
 
 The full run is a large, **paid** operation (~900+ Gemini calls, tens of
-minutes) — the calls are rate-limited and retried, so it completes even
-when the key throttles. Use `--limit` for a quick bounded check first.
+minutes) — calls are throttled under the model's per-minute cap and
+retried, so it completes even when the key rate-limits. Use `--limit` for
+a quick bounded check first.
 
 | Flag | Default | Effect |
 | --- | --- | --- |
@@ -38,7 +40,23 @@ when the key throttles. Use `--limit` for a quick bounded check first.
 | `--no-images` | images on | Skip image sourcing. |
 | `--append` | off (wipes) | Keep existing seed data instead of rebuilding. |
 | `--seed=N` | 1337 | PRNG seed fixing the account/lecture *structure*. |
-| `--concurrency=N` | 2 | Decks generated concurrently (Gemini calls are gated + retried regardless). |
+| `--concurrency=N` | 2 | Decks generated concurrently (Gemini calls are throttled + retried regardless). |
+| `--rpm=N` | 10 | Max Gemini requests per minute — keep under your key's RPM cap. |
+
+## Quotas and interruptions
+
+The script respects the Gemini API's limits so it doesn't burn quota or
+crash:
+
+- **Per-minute cap** — requests are proactively throttled to `--rpm`
+  (default 10) and any `429` is retried with backoff, so per-minute
+  limits just slow the run rather than dropping slides.
+- **Per-day cap** — when the daily quota is exhausted (a hard wall until
+  it resets), the run **stops cleanly and reports how far it got**
+  instead of hammering the API or crashing. Everything already generated
+  is saved — each slide is persisted the moment it's created, and every
+  lecture keeps its transcript and slides. Re-run with `--append` after
+  the quota resets to add the remaining lectures.
 
 ## Editing the seed data
 
