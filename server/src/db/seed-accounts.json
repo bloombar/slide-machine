@@ -1,0 +1,51 @@
+{
+  "domain": "seed.slidemachine.dev",
+  "password": "slidemachine",
+  "users": [
+    {
+      "handle": "ada.lovelace",
+      "displayName": "Ada Lovelace",
+      "bio": "Mathematician and lecturer with a soft spot for the machinery of computation.",
+      "planTier": "pro",
+      "locale": "en",
+      "profileVisibility": "public",
+      "disciplines": ["machine-learning", "physics"]
+    },
+    {
+      "handle": "carl.sagan",
+      "displayName": "Carl Sagan",
+      "bio": "Astronomer and science communicator. The cosmos is within us.",
+      "planTier": "max",
+      "locale": "en",
+      "profileVisibility": "public",
+      "disciplines": ["astronomy", "climate-science"]
+    },
+    {
+      "handle": "marie.curie",
+      "displayName": "Marie Curie",
+      "bio": "Physicist and chemist; two Nobel Prizes, endless curiosity.",
+      "planTier": "pro",
+      "locale": "fr",
+      "profileVisibility": "public",
+      "disciplines": ["physics", "cell-biology"]
+    },
+    {
+      "handle": "jane.goodall",
+      "displayName": "Jane Goodall",
+      "bio": "Primatologist and educator. Every individual matters.",
+      "planTier": "free",
+      "locale": "en",
+      "profileVisibility": "private",
+      "disciplines": ["neuroscience", "cell-biology"]
+    },
+    {
+      "handle": "mary.beard",
+      "displayName": "Mary Beard",
+      "bio": "Classicist. Rome, and what the past can (and cannot) teach us.",
+      "planTier": "free",
+      "locale": "en",
+      "profileVisibility": "public",
+      "disciplines": ["roman-history", "art-history"]
+    }
+  ]
+}

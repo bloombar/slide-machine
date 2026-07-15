@@ -1,0 +1,114 @@
+[
+  {
+    "key": "astronomy",
+    "course": "ASTR 101: Introduction to Astronomy",
+    "blurb": "A first-year survey of the universe: the solar system, stars and their life cycles, galaxies, and modern cosmology. Emphasis on how observation and evidence shape our models of the cosmos.",
+    "topics": [
+      "The Solar System",
+      "The Life Cycle of Stars",
+      "Black Holes and Neutron Stars",
+      "Galaxies and the Milky Way",
+      "The Big Bang and the Expanding Universe",
+      "Exoplanets and the Search for Life",
+      "Telescopes and How We Observe the Cosmos"
+    ]
+  },
+  {
+    "key": "cell-biology",
+    "course": "BIOL 210: Cell Biology",
+    "blurb": "The structure and function of the cell: membranes, organelles, energy metabolism, and the molecular machinery of the central dogma. Lab-oriented with an emphasis on mechanism.",
+    "topics": [
+      "The Cell Membrane and Transport",
+      "Mitochondria and Cellular Respiration",
+      "DNA Replication",
+      "Photosynthesis",
+      "The Cell Cycle and Mitosis",
+      "Protein Synthesis and the Ribosome",
+      "Cell Signaling"
+    ]
+  },
+  {
+    "key": "roman-history",
+    "course": "HIST 140: The Roman World",
+    "blurb": "From the founding myths of Rome through the Republic, the Empire, and its decline. We read Livy, Cicero, and Tacitus alongside material evidence from archaeology.",
+    "topics": [
+      "The Founding of Rome",
+      "The Roman Republic and Its Institutions",
+      "Julius Caesar and the Fall of the Republic",
+      "The Age of Augustus",
+      "Daily Life in Pompeii",
+      "The Roman Army on the Frontier",
+      "The Fall of the Western Empire"
+    ]
+  },
+  {
+    "key": "machine-learning",
+    "course": "CS 229: Foundations of Machine Learning",
+    "blurb": "Core supervised and unsupervised learning: regression, classification, neural networks, and the bias–variance tradeoff. Assumes linear algebra and probability.",
+    "topics": [
+      "What Is Machine Learning",
+      "Linear Regression and Gradient Descent",
+      "Logistic Regression and Classification",
+      "Neural Networks",
+      "Overfitting and Regularization",
+      "Decision Trees and Ensembles",
+      "Convolutional Neural Networks"
+    ]
+  },
+  {
+    "key": "art-history",
+    "course": "ARTH 120: Survey of Western Art",
+    "blurb": "A chronological survey from prehistoric cave painting to twentieth-century abstraction, reading works in their social and technological context.",
+    "topics": [
+      "Prehistoric Cave Painting",
+      "Classical Greek Sculpture",
+      "The Italian Renaissance",
+      "The Drama of the Baroque",
+      "Impressionism",
+      "Cubism and Picasso",
+      "Abstract Expressionism"
+    ]
+  },
+  {
+    "key": "climate-science",
+    "course": "ENVS 150: Climate and the Earth System",
+    "blurb": "How the atmosphere, oceans, ice, and biosphere interact to set climate — and how human activity is changing it. Data-literacy and systems thinking are central.",
+    "topics": [
+      "The Greenhouse Effect",
+      "Ocean Currents and Heat Transport",
+      "The Carbon Cycle",
+      "Ice Ages and Milankovitch Cycles",
+      "Extreme Weather in a Warming World",
+      "Renewable Energy",
+      "Sea Level Rise"
+    ]
+  },
+  {
+    "key": "neuroscience",
+    "course": "NEUR 200: Introduction to Neuroscience",
+    "blurb": "From single neurons to systems: membrane potentials, synaptic transmission, sensory processing, memory, and plasticity.",
+    "topics": [
+      "The Neuron and the Action Potential",
+      "Synaptic Transmission",
+      "Memory and the Hippocampus",
+      "Vision and the Visual Cortex",
+      "Neurotransmitters and Their Receptors",
+      "Sleep and the Brain",
+      "Neuroplasticity"
+    ]
+  },
+  {
+    "key": "physics",
+    "course": "PHYS 121: Foundations of Modern Physics",
+    "blurb": "The pillars of physics from Newton to the quantum: mechanics, relativity, electromagnetism, and thermodynamics, with an eye on the experiments that forced each idea.",
+    "topics": [
+      "Newton's Laws of Motion",
+      "Special Relativity",
+      "Introduction to Quantum Mechanics",
+      "Electromagnetism and Maxwell",
+      "Thermodynamics and Entropy",
+      "Waves, Light, and Optics",
+      "The Standard Model of Particle Physics"
+    ]
+  }
+]
