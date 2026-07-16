@@ -21,6 +21,7 @@ import type {
 import { isVoiceCommand } from '@slide-machine/shared'
 import { env } from '../config/env'
 import { registry } from './registry'
+import { GenerationUnavailableError } from './errors'
 import { freedomPolicy, renderGenerationPrompt } from './prompt-templates'
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
@@ -211,9 +212,19 @@ export class GeminiGenerationProvider implements GenerationProvider {
     )
     if (!res.ok) {
       const detail = await res.text().catch(() => '')
-      // Keep the whole body: the quota metric name (e.g. "...PerDay...")
-      // and RetryInfo sit at the end, so callers can tell a daily cap from
-      // a transient one and honor the server's retry delay.
+      // Quota/credit exhaustion (429) and transient overload (503) become a
+      // user-facing "generation unavailable" error instead of a raw 500. The
+      // full body is still logged: the quota metric name (e.g. "...PerDay...")
+      // and RetryInfo sit at the end, so a daily cap can be told from a blip.
+      if (res.status === 429 || res.status === 503) {
+        console.warn(`Gemini ${res.status}: ${detail.slice(0, 2000)}`)
+        throw new GenerationUnavailableError(
+          res.status === 429
+            ? 'Slide generation is unavailable — the AI provider is out of quota or credits.'
+            : 'Slide generation is temporarily busy — please try again in a moment.',
+          res.status === 503,
+        )
+      }
       throw new Error(
         `Gemini request failed (${res.status}): ${detail.slice(0, 2000)}`,
       )

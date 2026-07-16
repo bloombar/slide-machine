@@ -15,6 +15,9 @@ export interface TranscriptionStreamOptions {
   languageCode: string
   /** Preflight concept terms passed as speech-adaptation phrase hints (PREP-3). */
   phraseHints?: string[]
+  /** Sample rate of the incoming PCM audio; the client reports its actual
+   * AudioContext rate so no resampling is needed. Defaults to 16 kHz. */
+  sampleRateHertz?: number
 }
 
 /** A live audio → text stream for one capture session. */

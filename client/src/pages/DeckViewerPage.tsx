@@ -265,8 +265,15 @@ export default function DeckViewerPage() {
         browserLanguage: navigator.language || undefined,
       })
       applyEvent(event)
-    } catch {
-      setSpeakError('Generation failed — try again')
+    } catch (err) {
+      // Show the server's message when generation is unavailable (quota/
+      // credits exhausted or the provider is overloaded); otherwise a
+      // generic retry prompt.
+      setSpeakError(
+        err instanceof ApiError && err.code === 'generation_unavailable'
+          ? err.message
+          : 'Generation failed — try again',
+      )
     } finally {
       setBusy(false)
     }

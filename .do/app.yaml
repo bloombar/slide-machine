@@ -30,8 +30,9 @@ services:
       # --- Uncomment and set as features land (mirrors server/.env.example) ---
       # - key: GEMINI_API_KEY
       #   type: SECRET
-      # - key: GOOGLE_CLOUD_STT_KEY
-      #   type: SECRET
+      # Real-time Cloud STT: mount the service-account JSON and point this at
+      # it (only when TRANSCRIPTION_PROVIDER=google-cloud).
+      # - key: GOOGLE_APPLICATION_CREDENTIALS
       # - key: GOOGLE_CLOUD_TRANSLATION_KEY
       #   type: SECRET
       # - key: GOOGLE_OAUTH_CLIENT_ID

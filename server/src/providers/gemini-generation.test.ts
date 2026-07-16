@@ -18,6 +18,7 @@ const testEnv = vi.hoisted(() => ({
 vi.mock('../config/env', () => ({ env: testEnv }))
 
 import { GeminiGenerationProvider } from './gemini-generation'
+import { GenerationUnavailableError } from './errors'
 
 const provider = new GeminiGenerationProvider()
 
@@ -398,14 +399,16 @@ describe('GeminiGenerationProvider', () => {
     expect(result.command).toBeUndefined()
   })
 
-  it('throws on API errors with the status attached', async () => {
+  it('throws on other API errors with the status attached', async () => {
+    // 429/503 map to friendly errors (covered below); other statuses keep
+    // the raw status for debugging.
     fetchMock.mockResolvedValue({
       ok: false,
-      status: 429,
-      text: async () => 'quota exceeded',
+      status: 400,
+      text: async () => 'bad request',
     })
     await expect(provider.generateSlideContent(request())).rejects.toThrow(
-      /429/,
+      /400/,
     )
   })
 
@@ -456,5 +459,27 @@ describe('GeminiGenerationProvider', () => {
     await expect(provider.generateSlideContent(request())).rejects.toThrow(
       /GEMINI_API_KEY/,
     )
+  })
+
+  it('maps quota/credit exhaustion (429) to a non-retryable friendly error', async () => {
+    fetchMock.mockResolvedValue(
+      geminiReply({ error: { code: 429, status: 'RESOURCE_EXHAUSTED' } }, 429),
+    )
+    const err = await provider
+      .generateSlideContent(request())
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(GenerationUnavailableError)
+    expect((err as GenerationUnavailableError).retryable).toBe(false)
+    expect((err as Error).message).toMatch(/quota or credits/)
+  })
+
+  it('maps provider overload (503) to a retryable friendly error', async () => {
+    fetchMock.mockResolvedValue(geminiReply({ error: { code: 503 } }, 503))
+    const err = await provider
+      .generateSlideContent(request())
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(GenerationUnavailableError)
+    expect((err as GenerationUnavailableError).retryable).toBe(true)
+    expect((err as Error).message).toMatch(/temporarily busy/)
   })
 })

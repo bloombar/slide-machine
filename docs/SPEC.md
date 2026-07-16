@@ -540,7 +540,7 @@ The **Express.js API** box above is the **modular monolith** (its bulleted respo
 Server-side secrets and global settings live in a `.env` file (never committed), including:
 
 - `OPENAI_API_KEY` _(legacy)_ / `GEMINI_API_KEY` _(post-migration)_ and model/endpoint settings.
-- `GOOGLE_CLOUD_STT_KEY` (Speech-to-Text) and `GOOGLE_CLOUD_TRANSLATION_KEY`.
+- `GOOGLE_APPLICATION_CREDENTIALS` (service account for real-time Speech-to-Text streaming) and `GOOGLE_CLOUD_TRANSLATION_KEY`.
 - `GOOGLE_OAUTH_CLIENT_ID/SECRET` — used both for **Google sign-in** (AUTH-1) and for **connected Google Drive** import/export with broader scopes (EXP-4); plus any service-account credentials for Docs/Slides.
 - `GITHUB_OAUTH_CLIENT_ID/SECRET` — used both for **GitHub sign-in** (AUTH-1) and for **connected GitHub** repo/gist import/export (EXP-4).
 - `CONNECTED_ACCOUNT_TOKEN_ENC_KEY` — key for encrypting stored connected-account OAuth tokens at rest (P-9).
