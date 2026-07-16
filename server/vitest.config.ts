@@ -38,6 +38,11 @@ export default defineConfig({
       // mock env per file instead
       GENERATION_VOICE_COMMANDS: 'false',
       GENERATION_LAYOUT_REFIT: 'true',
+      // Fake Google OAuth creds so the sign-in routes activate; the real
+      // Google network calls are mocked in the tests themselves
+      GOOGLE_OAUTH_CLIENT_ID: 'test-google-client-id',
+      GOOGLE_OAUTH_CLIENT_SECRET: 'test-google-client-secret',
+      PUBLIC_BASE_URL: 'http://localhost:3000',
     },
     coverage: {
       provider: 'v8',

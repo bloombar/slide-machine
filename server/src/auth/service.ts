@@ -6,6 +6,7 @@
 import type { SafeUser } from '@slide-machine/shared'
 import { UserModel, toUserDto } from '../models/user'
 import { HttpError } from '../middleware/error'
+import type { GoogleProfile } from './google'
 import { hashPassword, verifyPassword } from './password'
 import { signAccessToken } from './tokens'
 import {
@@ -67,6 +68,55 @@ export const login = async (
       'Incorrect email or password',
     )
   }
+  return {
+    user: toUserDto(user),
+    accessToken: await signAccessToken(user._id.toString()),
+    refreshRaw: await issueRefreshToken(user._id.toString()),
+  }
+}
+
+/**
+ * Signs a user in from a verified Google profile (AUTH-1), creating the
+ * account on first sign-in. A verified email maps to a single account, so
+ * the resolution order is: existing Google link, then a matching account
+ * to link Google onto, then a brand-new account.
+ */
+export const loginWithGoogle = async (
+  profile: GoogleProfile,
+): Promise<AuthResult> => {
+  // Google only returns verified emails for real accounts, but guard
+  // anyway: an unverified email must not silently claim someone's account
+  if (!profile.emailVerified) {
+    throw new HttpError(
+      401,
+      'google_email_unverified',
+      'Your Google email is not verified',
+    )
+  }
+
+  const email = profile.email.toLowerCase().trim()
+  let user = await UserModel.findOne({ googleId: profile.googleId })
+
+  if (!user) {
+    const existing = await UserModel.findOne({ email })
+    if (existing) {
+      // Same verified email as a password (or other) account — link, not duplicate
+      existing.googleId = profile.googleId
+      if (!existing.avatarUrl && profile.picture)
+        existing.avatarUrl = profile.picture
+      user = await existing.save()
+    } else {
+      user = await UserModel.create({
+        email,
+        displayName: profile.name?.trim() || email.split('@')[0],
+        googleId: profile.googleId,
+        // Google-verified email needs no separate verification (AUTH-1)
+        emailVerified: true,
+        avatarUrl: profile.picture,
+      })
+    }
+  }
+
   return {
     user: toUserDto(user),
     accessToken: await signAccessToken(user._id.toString()),

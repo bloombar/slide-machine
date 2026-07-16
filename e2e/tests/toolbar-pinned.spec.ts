@@ -133,6 +133,52 @@ test('the toolbar drags anywhere and stays where it is dropped', async ({
   await expect(page.getByRole('button', { name: 'Add slide' })).toBeInViewport()
 })
 
+test('the toolbar drags from its buttons without firing them', async ({
+  page,
+}) => {
+  await buildDeck(page, 'anywhere')
+  const built = await page.getByTestId('slide').count()
+  const add = page.getByRole('button', { name: 'Add slide' })
+  const box = (await add.boundingBox())!
+
+  // Press on the Add-slide button itself and drag the whole toolbar away
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(300, 480, { steps: 10 })
+  await page.mouse.up()
+
+  // It moved...
+  const grip = page.getByRole('button', { name: GRIP })
+  expect((await grip.boundingBox())!.y).toBeGreaterThan(300)
+  // ...and the button it was dragged from must not have fired
+  await expect(page.getByTestId('slide')).toHaveCount(built)
+
+  // A press that does not travel is still an ordinary click
+  await page.getByRole('button', { name: 'Add slide' }).click()
+  await expect(page.getByTestId('slide')).toHaveCount(built + 1)
+})
+
+test('icon labels show on hover, and do not stay up after a click', async ({
+  page,
+}) => {
+  await buildDeck(page, 'tooltip')
+  const add = page.getByRole('button', { name: 'Add slide' })
+  const label = page.getByText('Add a slide')
+  // Playwright counts an opacity-0 element as visible, so read the style
+  const opacity = () => label.evaluate(el => getComputedStyle(el).opacity)
+
+  expect(await opacity()).toBe('0')
+
+  await add.hover()
+  await expect.poll(opacity).toBe('1')
+
+  // Clicking focuses the button; the label must not stay pinned open once
+  // the pointer leaves — that is what :focus-within got wrong
+  await add.click()
+  await page.mouse.move(10, 400)
+  await expect.poll(opacity).toBe('0')
+})
+
 test('the toolbar cannot be dragged out of the window', async ({ page }) => {
   await buildDeck(page, 'clamp')
   // Aim far past the bottom-right corner; the pill must stay reachable

@@ -80,4 +80,20 @@ describe('LoginPage', () => {
     )
     expect(screen.queryByText('APP HOME')).not.toBeInTheDocument()
   })
+
+  it('surfaces a failed Google sign-in from the callback redirect', async () => {
+    mockFetchRoutes({ '/api/auth/refresh': () => ({ status: 401 }) })
+    render(
+      <MemoryRouter initialEntries={['/login?error=google_auth_failed']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not sign in with Google — try again',
+    )
+  })
 })

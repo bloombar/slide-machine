@@ -579,9 +579,11 @@ describe('DeckViewerPage microphone capture', () => {
     expect(
       screen.getByPlaceholderText('Say something about your topic…'),
     ).toBeInTheDocument()
+    // The mic's tooltip reverts to its idle label rather than "Recording"
+    expect(screen.getByText('Speak to add slides')).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: 'Live session' }),
-    ).toHaveAttribute('title', 'Speak to add slides')
+      screen.queryByText('Recording — click to stop'),
+    ).not.toBeInTheDocument()
   })
 
   it('transcribed phrases flow through session.phrase', async () => {

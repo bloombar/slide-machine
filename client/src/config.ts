@@ -16,4 +16,7 @@ export const config = {
   /** Speech capture: 'browser' (Web Speech API bridge), 'none', or —
    * once credentials and the streaming path exist — 'google-cloud'. */
   sttProvider: import.meta.env.VITE_STT_PROVIDER ?? 'browser',
+  /** Show the "Continue with Google" button (AUTH-1). Gated on the public
+   * client id, so the button appears only once Google sign-in is set up. */
+  googleAuthEnabled: Boolean(import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID),
 } as const

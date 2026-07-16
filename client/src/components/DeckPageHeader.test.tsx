@@ -46,19 +46,24 @@ const renderToolbar = (props: Partial<{ deckId: string }> = {}): RenderResult =>
 
 const grip = () =>
   screen.getByRole('button', { name: 'Drag to move the toolbar' })
-const pill = () => grip().parentElement as HTMLElement
+const pill = () => screen.getByTestId('deck-toolbar')
 const header = (container: HTMLElement) =>
   container.querySelector('header') as HTMLElement
 
-/** Drags the grip from the pill's centre to a point, as a pointer would. */
-const dragTo = (x: number, y: number) => {
-  fireEvent.pointerDown(grip(), {
+/**
+ * Drags to a point from anywhere on the pill — by default its centre.
+ * Pointer events bubble, so pressing a button inside drags too, which is
+ * exactly the behaviour under test.
+ */
+const dragTo = (x: number, y: number, from: HTMLElement = pill()) => {
+  fireEvent.pointerDown(from, {
     pointerId: 1,
+    button: 0,
     clientX: PILL.width / 2,
     clientY: PILL.height / 2,
   })
-  fireEvent.pointerMove(grip(), { pointerId: 1, clientX: x, clientY: y })
-  fireEvent.pointerUp(grip(), { pointerId: 1 })
+  fireEvent.pointerMove(from, { pointerId: 1, clientX: x, clientY: y })
+  fireEvent.pointerUp(from, { pointerId: 1 })
 }
 
 beforeEach(() => {
@@ -132,6 +137,82 @@ describe('DeckPageHeader', () => {
     // The vacated row keeps its height, so the slides do not jump up
     expect(header(container)).toHaveStyle({ height: '46px' })
     expect(header(container)).not.toHaveClass('sticky')
+  })
+
+  it('keeps following the pointer for the rest of a drag', () => {
+    renderToolbar()
+    fireEvent.pointerDown(pill(), {
+      pointerId: 1,
+      button: 0,
+      clientX: 150,
+      clientY: 23,
+    })
+    // First move crosses the threshold and starts the drag
+    fireEvent.pointerMove(pill(), { pointerId: 1, clientX: 400, clientY: 300 })
+    expect(pill()).toHaveStyle({ left: '250px', top: '277px' })
+
+    // Every move after just tracks — a real drag is dozens of these
+    fireEvent.pointerMove(pill(), { pointerId: 1, clientX: 500, clientY: 400 })
+    expect(pill()).toHaveStyle({ left: '350px', top: '377px' })
+    fireEvent.pointerUp(pill(), { pointerId: 1 })
+  })
+
+  it('drags from a button without firing it', () => {
+    const onAdd = vi.fn()
+    render(
+      <DeckPageHeader
+        mode="list"
+        onModeChange={() => {}}
+        deckId={DECK}
+        actions={<button onClick={onAdd}>Add slide</button>}
+      />,
+    )
+    const button = screen.getByRole('button', { name: 'Add slide' })
+    dragTo(400, 300, button)
+    // A real browser fires click after pointerup; it must be swallowed
+    fireEvent.click(button)
+
+    expect(pill()).toHaveStyle({ left: '250px', top: '277px' })
+    expect(onAdd).not.toHaveBeenCalled()
+  })
+
+  it('still clicks a button when the press barely moves', () => {
+    const onAdd = vi.fn()
+    render(
+      <DeckPageHeader
+        mode="list"
+        onModeChange={() => {}}
+        deckId={DECK}
+        actions={<button onClick={onAdd}>Add slide</button>}
+      />,
+    )
+    const button = screen.getByRole('button', { name: 'Add slide' })
+    // Under the 4px threshold: a shaky click is still a click
+    fireEvent.pointerDown(button, {
+      pointerId: 1,
+      button: 0,
+      clientX: 150,
+      clientY: 23,
+    })
+    fireEvent.pointerMove(button, { pointerId: 1, clientX: 152, clientY: 24 })
+    fireEvent.pointerUp(button, { pointerId: 1 })
+    fireEvent.click(button)
+
+    expect(onAdd).toHaveBeenCalledTimes(1)
+    expect(pill()).not.toHaveClass('fixed')
+  })
+
+  it('ignores a non-primary button press', () => {
+    renderToolbar()
+    // Right-click must not drag the toolbar away
+    fireEvent.pointerDown(pill(), {
+      pointerId: 1,
+      button: 2,
+      clientX: 150,
+      clientY: 23,
+    })
+    fireEvent.pointerMove(pill(), { pointerId: 1, clientX: 400, clientY: 300 })
+    expect(pill()).not.toHaveClass('fixed')
   })
 
   it('clamps a drag past the edge back inside the window', () => {

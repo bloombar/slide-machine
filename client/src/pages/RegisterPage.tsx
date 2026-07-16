@@ -6,6 +6,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router'
 import { useAuth } from '../auth/AuthContext'
 import { ApiError } from '../api/http'
+import GoogleSignInButton from '../components/GoogleSignInButton'
 
 export default function RegisterPage() {
   const { status, register } = useAuth()
@@ -85,6 +86,7 @@ export default function RegisterPage() {
         >
           {submitting ? 'Creating…' : 'Create account'}
         </button>
+        <GoogleSignInButton action="Sign up" />
         <p className="text-sm text-slate-500">
           Already registered?{' '}
           <Link to="/login" className="text-indigo-600">

@@ -102,6 +102,11 @@ const envSchema = z.object({
   GOOGLE_CLOUD_TRANSLATION_KEY: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
+  // Public origin the app is reached at, used to build the Google OAuth
+  // redirect URI (docs/GOOGLE_SIGN_IN.md). Must match a redirect URI
+  // registered in the Cloud Console byte-for-byte. Absent = derive from
+  // the incoming request, which is right for localhost dev.
+  PUBLIC_BASE_URL: z.string().optional(),
   GITHUB_OAUTH_CLIENT_ID: z.string().optional(),
   GITHUB_OAUTH_CLIENT_SECRET: z.string().optional(),
   CONNECTED_ACCOUNT_TOKEN_ENC_KEY: z.string().optional(),

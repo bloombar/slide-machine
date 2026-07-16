@@ -1,9 +1,12 @@
 /**
  * Carousel/list view switcher shared by every deck/slide surface
  * (viewer, editor, session): carousel shows one slide with prev/next
- * navigation; list stacks all slides vertically, visible up-front.
+ * navigation; list stacks all slides vertically, visible up-front. The
+ * two sit in a shared grey well, so they read as one control for
+ * switching views rather than two loose icons.
  */
 import { GalleryHorizontal, LayoutList } from 'lucide-react'
+import Tooltip from './Tooltip'
 
 export type ViewMode = 'carousel' | 'list'
 
@@ -26,22 +29,25 @@ export default function ViewModeToggle({ mode, onChange }: Props) {
     <div
       role="group"
       aria-label="Slide view mode"
-      className="flex items-center gap-1"
+      className="flex items-center gap-0.5 rounded-full bg-slate-200 p-0.5"
     >
       {OPTIONS.map(({ mode: target, label, Icon }) => (
-        <button
-          key={target}
-          aria-label={label}
-          aria-pressed={mode === target}
-          onClick={() => onChange(target)}
-          className={`rounded-md p-2 ${
-            mode === target
-              ? 'bg-indigo-50 text-indigo-600'
-              : 'text-slate-500 hover:text-slate-900'
-          }`}
-        >
-          <Icon className="h-5 w-5" aria-hidden />
-        </button>
+        <Tooltip key={target} label={label}>
+          <button
+            aria-label={label}
+            aria-pressed={mode === target}
+            onClick={() => onChange(target)}
+            // The active view lifts out of the well in white, the way a
+            // segmented control marks its selection
+            className={`rounded-full p-1.5 ${
+              mode === target
+                ? 'bg-white text-indigo-600 shadow-sm'
+                : 'text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <Icon className="h-4 w-4" aria-hidden />
+          </button>
+        </Tooltip>
       ))}
     </div>
   )

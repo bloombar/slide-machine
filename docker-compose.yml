@@ -13,6 +13,12 @@ services:
       JWT_SECRET: compose-local-jwt-secret-32-chars-min!!
       JWT_REFRESH_SECRET: compose-local-refresh-secret-32-chars!!
       GENERATION_PROVIDER: mock
+      # Google sign-in (AUTH-1). Values come from a gitignored root .env
+      # via Compose substitution — no secret lives in this committed file.
+      # Empty by default, so the sign-in button stays off until set.
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
       # In-network MinIO (storage profile). Using a MinIO on the host
       # instead? Point S3_ENDPOINT at http://host.docker.internal:9000
       S3_ENDPOINT: http://minio:9000

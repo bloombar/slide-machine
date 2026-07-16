@@ -9,6 +9,7 @@
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { GripVertical } from 'lucide-react'
+import Tooltip from './Tooltip'
 import ViewModeToggle, { type ViewMode } from './ViewModeToggle'
 
 interface Props {
@@ -41,6 +42,13 @@ const FOOTER_HEIGHT = 32
 
 /** Pixels an arrow key moves the pill — the keyboard path for dragging. */
 const NUDGE = 16
+
+/**
+ * Pointer travel before a press counts as a drag. The whole pill is the
+ * drag surface, buttons included, so a press has to stay still to read as
+ * a click — past this it becomes a drag and the click is dropped.
+ */
+const DRAG_THRESHOLD = 4
 
 const STORAGE_PREFIX = 'sm:deck-toolbar:'
 
@@ -123,30 +131,70 @@ export default function DeckPageHeader({
     return rect
   }
 
-  const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
-    const rect = lift()
+  // Where the press began, and whether it has travelled far enough to be
+  // a drag rather than a click
+  const pressRef = useRef<Point | null>(null)
+  const draggedRef = useRef(false)
+
+  // Tears down an in-flight drag's listeners, on drop or on unmount
+  const endDragRef = useRef<(() => void) | null>(null)
+  useEffect(() => () => endDragRef.current?.(), [])
+
+  /**
+   * Starts tracking a press. The move/up listeners go on the window, not
+   * the pill: a drag leaves the pill almost immediately, and element
+   * handlers would stop firing the moment it does. Pointer capture would
+   * also solve that, but it re-targets the click away from the button
+   * underneath, so buttons would stop working.
+   */
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Primary button only: a right-click must not drag the toolbar off
+    if (e.button !== 0) return
+    const rect = pillRect()
+    pressRef.current = { x: e.clientX, y: e.clientY }
+    draggedRef.current = false
     grabOffset.current = { x: e.clientX - rect.left, y: e.clientY - rect.top }
-    setPos(clampToViewport({ x: rect.left, y: rect.top }, rect))
-    setDragging(true)
-    e.currentTarget.setPointerCapture(e.pointerId)
+
+    const onMove = (ev: PointerEvent) => {
+      // press is set above before this listener is added, and cleared only
+      // in onUp which also removes the listener, so it holds here
+      const press = pressRef.current!
+      let box = pillRect()
+      if (!draggedRef.current) {
+        const travel = Math.hypot(ev.clientX - press.x, ev.clientY - press.y)
+        if (travel < DRAG_THRESHOLD) return
+        draggedRef.current = true
+        box = lift()
+        setDragging(true)
+      }
+      setPos(
+        clampToViewport(
+          {
+            x: ev.clientX - grabOffset.current.x,
+            y: ev.clientY - grabOffset.current.y,
+          },
+          box,
+        ),
+      )
+    }
+    const onUp = () => {
+      pressRef.current = null
+      setDragging(false)
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      endDragRef.current = null
+    }
+    endDragRef.current = onUp
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
   }
 
-  const onPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (!dragging) return
-    setPos(
-      clampToViewport(
-        {
-          x: e.clientX - grabOffset.current.x,
-          y: e.clientY - grabOffset.current.y,
-        },
-        pillRect(),
-      ),
-    )
-  }
-
-  const onPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
-    setDragging(false)
-    e.currentTarget.releasePointerCapture(e.pointerId)
+  /** Drops the click that ends a drag, so dragging off a button never fires it. */
+  const onClickCapture = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!draggedRef.current) return
+    e.preventDefault()
+    e.stopPropagation()
+    draggedRef.current = false
   }
 
   /** Keyboard parity: arrows nudge the pill, Escape parks it again. */
@@ -227,34 +275,30 @@ export default function DeckPageHeader({
     >
       <div
         ref={attachPill}
+        data-testid="deck-toolbar"
+        onPointerDown={onPointerDown}
+        onClickCapture={onClickCapture}
         style={pos ? { left: pos.x, top: pos.y } : undefined}
-        className={`pointer-events-auto flex items-center gap-1 rounded-full border border-slate-200 bg-white/95 px-2 py-1 shadow-lg backdrop-blur ${
+        // The whole pill is the drag surface, buttons included, so it is
+        // grabbable wherever the pointer lands. touch-none: a touch drag
+        // must move the pill, not scroll the page.
+        className={`pointer-events-auto flex touch-none cursor-grab items-center gap-1 rounded-full border border-slate-200 bg-white/95 px-2 py-1 shadow-lg backdrop-blur select-none active:cursor-grabbing ${
           pos ? 'fixed z-30' : ''
         }`}
       >
-        <button
-          aria-label="Drag to move the toolbar"
-          title="Drag to move · arrow keys nudge · Esc resets"
-          aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown Escape"
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onKeyDown={onKeyDown}
-          // touch-none: a touch drag must move the pill, not scroll the page
-          className={`touch-none rounded-md p-2 text-slate-400 select-none hover:text-slate-600 ${
-            dragging ? 'cursor-grabbing' : 'cursor-grab'
-          }`}
-        >
-          <GripVertical className="h-5 w-5" aria-hidden />
-        </button>
-        <span className="mx-1 h-5 w-px bg-slate-200" aria-hidden />
+        <Tooltip label="Drag to move">
+          <button
+            aria-label="Drag to move the toolbar"
+            aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown Escape"
+            onKeyDown={onKeyDown}
+            // The smallest thing on the pill: a handle, not a control
+            className="rounded-md p-1 text-slate-300 hover:text-slate-500"
+          >
+            <GripVertical className="h-3 w-3" aria-hidden />
+          </button>
+        </Tooltip>
         <ViewModeToggle mode={mode} onChange={onModeChange} />
-        {actions && (
-          <>
-            <span className="mx-1 h-5 w-px bg-slate-200" aria-hidden />
-            <div className="flex items-center gap-1">{actions}</div>
-          </>
-        )}
+        {actions && <div className="flex items-center gap-1">{actions}</div>}
       </div>
     </header>
   )

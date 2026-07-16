@@ -23,4 +23,27 @@ describe('ViewModeToggle', () => {
     fireEvent.click(screen.getByRole('button', { name: 'List view' }))
     expect(onChange).toHaveBeenCalledWith('list')
   })
+
+  it('groups both views in one well, lifting the active one out of it', () => {
+    const { container } = render(
+      <ViewModeToggle mode="list" onChange={() => {}} />,
+    )
+    // The well is what says "these two icons are one control"
+    expect(container.querySelector('[role="group"]')).toHaveClass(
+      'bg-slate-200',
+    )
+    expect(screen.getByRole('button', { name: 'List view' })).toHaveClass(
+      'bg-white',
+    )
+    expect(
+      screen.getByRole('button', { name: 'Carousel view' }),
+    ).not.toHaveClass('bg-white')
+  })
+
+  it('labels each view on hover', () => {
+    render(<ViewModeToggle mode="list" onChange={() => {}} />)
+    // Icon-only buttons: the tooltip is what says what they do
+    expect(screen.getByText('Carousel view')).toBeInTheDocument()
+    expect(screen.getByText('List view')).toBeInTheDocument()
+  })
 })

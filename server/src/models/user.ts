@@ -14,6 +14,10 @@ import {
 
 export interface UserDb extends Omit<User, 'id' | 'createdAt'> {
   createdAt: Date
+  // Google's stable subject id, set when an account signs in with Google
+  // (AUTH-1). Kept out of the shared User type so it never crosses the
+  // wire — it is an internal identity link, not client-facing.
+  googleId?: string
 }
 
 const userSchema = new Schema<UserDb>(
@@ -27,6 +31,9 @@ const userSchema = new Schema<UserDb>(
     },
     displayName: { type: String, required: true, trim: true },
     passwordHash: { type: String, select: false },
+    // Sparse + unique: at most one account per Google identity, but the
+    // many password-only users share the absent value without colliding
+    googleId: { type: String, unique: true, sparse: true },
     emailVerified: { type: Boolean, default: false },
     profileVisibility: {
       type: String,

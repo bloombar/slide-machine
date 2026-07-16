@@ -6,6 +6,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router'
 import { useAuth } from '../auth/AuthContext'
 import { ApiError } from '../api/http'
+import GoogleSignInButton from '../components/GoogleSignInButton'
 
 export default function LoginPage() {
   const { status, login } = useAuth()
@@ -13,7 +14,12 @@ export default function LoginPage() {
   const location = useLocation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  // A failed Google callback redirects here with ?error=<code>
+  const googleFailed =
+    new URLSearchParams(location.search).get('error') === 'google_auth_failed'
+  const [error, setError] = useState<string | null>(
+    googleFailed ? 'Could not sign in with Google — try again' : null,
+  )
   const [submitting, setSubmitting] = useState(false)
 
   if (status === 'authenticated') return <Navigate to="/app" replace />
@@ -77,6 +83,7 @@ export default function LoginPage() {
         >
           {submitting ? 'Signing in…' : 'Sign in'}
         </button>
+        <GoogleSignInButton action="Sign in" />
         <p className="text-sm text-slate-500">
           No account?{' '}
           <Link to="/register" className="text-indigo-600">
