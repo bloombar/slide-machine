@@ -6,6 +6,7 @@
  * owner).
  */
 import { test, expect, type Browser, type Page } from '@playwright/test'
+import { createProject } from './helpers'
 
 const stamp = Date.now()
 const alice = { email: `alice-${stamp}@example.com`, name: 'Alice' }
@@ -34,12 +35,10 @@ test('owner transfers a lecture; old owner stays an editor', async ({
   const bellaPage = await newUserPage(browser, bella)
 
   // Alice builds a lecture and adds Bella as an editor
-  await alicePage.getByLabel('New project title').fill('TransferProj')
-  await alicePage.getByRole('button', { name: 'Create' }).click()
+  await createProject(alicePage, 'TransferProj')
   await alicePage
-    .getByRole('link', { name: 'TransferProj', exact: true })
+    .getByRole('button', { name: 'Start a new lecture in TransferProj' })
     .click()
-  await alicePage.getByRole('button', { name: 'Start a new lecture' }).click()
   await expect(alicePage).toHaveURL(/\/d\//)
   const deckUrl = alicePage.url()
 

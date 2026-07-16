@@ -4,6 +4,7 @@
  * asset toggles out of generation, and deletion clears the list.
  */
 import { test, expect } from '@playwright/test'
+import { createProject } from './helpers'
 
 const email = `material-${Date.now()}@example.com`
 
@@ -21,9 +22,7 @@ test('photo seed material uploads, captions, toggles, and deletes', async ({
   await page.getByLabel('Password').fill('sturdy-passw0rd')
   await page.getByRole('button', { name: 'Create account' }).click()
 
-  await page.getByLabel('New project title').fill('MaterialProj')
-  await page.getByRole('button', { name: 'Create' }).click()
-  await page.getByRole('link', { name: 'MaterialProj', exact: true }).click()
+  await createProject(page, 'MaterialProj')
   await page.getByRole('button', { name: 'Project settings' }).click()
 
   // Upload a photo and watch extraction settle

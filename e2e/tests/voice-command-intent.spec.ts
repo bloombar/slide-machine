@@ -5,6 +5,7 @@
  * client — navigating or adding a slide instead of generating content.
  */
 import { test, expect } from '@playwright/test'
+import { createProject } from './helpers'
 
 const email = `voice-cmd-${Date.now()}@example.com`
 const password = 'sturdy-passw0rd'
@@ -19,10 +20,10 @@ test('AI-recognized commands act on the deck without generating slides', async (
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Create account' }).click()
   await expect(page).toHaveURL(/\/app$/)
-  await page.getByLabel('New project title').fill('Chemistry 101')
-  await page.getByRole('button', { name: 'Create' }).click()
-  await page.getByRole('link', { name: 'Chemistry 101', exact: true }).click()
-  await page.getByRole('button', { name: 'Start a new lecture' }).click()
+  await createProject(page, 'Chemistry 101')
+  await page
+    .getByRole('button', { name: 'Start a new lecture in Chemistry 101' })
+    .click()
   await expect(page).toHaveURL(/\/d\/untitled-/)
 
   // Two lecture phrases become two slides

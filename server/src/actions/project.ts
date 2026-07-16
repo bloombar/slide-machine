@@ -36,7 +36,7 @@ import { UserModel } from '../models/user'
 import { canEditAcl, isAclMember } from '../lib/access'
 import { sharesOfAcl } from '../lib/shares'
 import { getBuiltinTemplate } from '../templates/builtin'
-import type { HydratedDocument } from 'mongoose'
+import type { HydratedDocument, Types } from 'mongoose'
 import { DeckModel } from '../models/deck'
 import { SlideModel } from '../models/slide'
 import { SeedAssetModel } from '../models/seed-asset'
@@ -81,10 +81,27 @@ export const projectList = defineAction<Record<string, never>, Project[]>({
   name: 'project.list',
   input: z.object({}),
   execute: async ctx => {
-    const docs = await ProjectModel.find({ ownerId: requireUser(ctx) }).sort({
-      createdAt: -1,
-    })
-    return docs.map(toProjectDto)
+    const docs = await ProjectModel.find({ ownerId: requireUser(ctx) })
+    // A project is "modified" when its own settings change OR when any deck
+    // inside it changes; rank by whichever happened most recently. The newest
+    // deck edit per project (across all decks, not just the caller's) comes
+    // from a single grouped query.
+    const rows = await DeckModel.aggregate<{
+      _id: Types.ObjectId
+      updatedAt: Date
+    }>([
+      { $match: { projectId: { $in: docs.map(d => d._id) } } },
+      { $group: { _id: '$projectId', updatedAt: { $max: '$updatedAt' } } },
+    ])
+    const latestDeckEdit = new Map(
+      rows.map(r => [r._id.toString(), r.updatedAt.getTime()]),
+    )
+    const modifiedAt = (doc: HydratedDocument<ProjectDb>) =>
+      Math.max(
+        (doc.updatedAt ?? doc.createdAt).getTime(),
+        latestDeckEdit.get(doc._id.toString()) ?? 0,
+      )
+    return docs.sort((a, b) => modifiedAt(b) - modifiedAt(a)).map(toProjectDto)
   },
 })
 

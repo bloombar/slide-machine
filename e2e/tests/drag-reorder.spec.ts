@@ -15,6 +15,7 @@
  * text (which is reserved for click-to-edit).
  */
 import { test, expect, type Page } from '@playwright/test'
+import { createProject } from './helpers'
 
 test.use({ viewport: { width: 1280, height: 1600 } })
 
@@ -26,10 +27,10 @@ const buildDeck = async (page: Page) => {
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill('sturdy-passw0rd')
   await page.getByRole('button', { name: 'Create account' }).click()
-  await page.getByLabel('New project title').fill('DragProj')
-  await page.getByRole('button', { name: 'Create' }).click()
-  await page.getByRole('link', { name: 'DragProj', exact: true }).click()
-  await page.getByRole('button', { name: 'Start a new lecture' }).click()
+  await createProject(page, 'DragProj')
+  await page
+    .getByRole('button', { name: 'Start a new lecture in DragProj' })
+    .click()
   await expect(page).toHaveURL(/\/d\//)
   for (const phrase of ['Atomic structure', 'Protons, neutrons, electrons']) {
     await page.getByLabel('Spoken phrase').fill(phrase)

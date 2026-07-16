@@ -5,6 +5,7 @@
  * project settings" re-attaches it.
  */
 import { test, expect, type Browser, type Page } from '@playwright/test'
+import { createProject } from './helpers'
 
 const stamp = Date.now()
 const owner = { email: `powner-${stamp}@example.com`, name: 'Powner' }
@@ -32,8 +33,7 @@ test('project privacy cascades to lectures; overrides detach and reset', async (
   const anonPage = await anonContext.newPage()
 
   // A project with one lecture, public by default
-  await ownerPage.getByLabel('New project title').fill('CascadeProj')
-  await ownerPage.getByRole('button', { name: 'Create' }).click()
+  await createProject(ownerPage, 'CascadeProj')
   await ownerPage
     .getByRole('button', { name: 'Start a new lecture in CascadeProj' })
     .click()

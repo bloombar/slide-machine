@@ -4,6 +4,7 @@
  * and removes the lecture from the list.
  */
 import { test, expect } from '@playwright/test'
+import { createProject } from './helpers'
 
 const email = `menu-${Date.now()}@example.com`
 
@@ -14,8 +15,7 @@ test('kebab menu shares and deletes lectures from lists', async ({ page }) => {
   await page.getByLabel('Password').fill('sturdy-passw0rd')
   await page.getByRole('button', { name: 'Create account' }).click()
 
-  await page.getByLabel('New project title').fill('MenuProj')
-  await page.getByRole('button', { name: 'Create' }).click()
+  await createProject(page, 'MenuProj')
   await page
     .getByRole('button', { name: 'Start a new lecture in MenuProj' })
     .click()
@@ -74,8 +74,10 @@ test('kebab menu shares and deletes lectures from lists', async ({ page }) => {
     .getByRole('alertdialog', { name: 'Delete lecture?' })
     .getByRole('button', { name: 'Delete', exact: true })
     .click()
+  // The lecture is gone; only the dashed New lecture zone remains
+  await expect(page.getByText(/Untitled lecture/)).toHaveCount(0)
   await expect(
-    page.getByText('No lectures yet — use + to start one.'),
+    page.getByRole('button', { name: 'Start a new lecture in MenuProj' }),
   ).toBeVisible()
 
   // The project title edits in place; home reflects the rename

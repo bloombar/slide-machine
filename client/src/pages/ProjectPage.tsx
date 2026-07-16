@@ -1,19 +1,22 @@
 /**
  * One project: its lectures up front (newest modification first, like
- * the home screen), a + beside the heading that starts a new untitled
- * lecture immediately, an in-place editable title, and a settings icon
- * on the title row opening the
- * project settings modal (seed material + danger zone).
+ * the home screen), a dashed "New lecture" zone atop the list that starts
+ * a new untitled lecture immediately, an in-place editable title, and a
+ * settings icon on the title row opening the project settings modal
+ * (seed material + danger zone).
  */
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
-import { Plus, Settings } from 'lucide-react'
+import { Settings } from 'lucide-react'
 import type { Deck, Project } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import { useAuth } from '../auth/AuthContext'
 import LectureRow from '../components/LectureRow'
+import NewLectureZone from '../components/NewLectureZone'
 import EditableText from '../components/EditableText'
-import ProjectSettingsModal from '../components/ProjectSettingsModal'
+import ProjectSettingsModal, {
+  type ProjectSettingsTabId,
+} from '../components/ProjectSettingsModal'
 
 export default function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -22,17 +25,23 @@ export default function ProjectPage() {
   const [project, setProject] = useState<Project | null>(null)
   const [decks, setDecks] = useState<Deck[]>([])
   const location = useLocation()
-  // A lecture's settings link deep-links into the project settings
+  // A lecture's settings link or the home kebab deep-links into the
+  // project settings, optionally on a specific tab.
+  const navState = location.state as {
+    openSettings?: boolean
+    settingsTab?: ProjectSettingsTabId
+  } | null
   const [settingsOpen, setSettingsOpen] = useState<boolean>(() =>
-    Boolean(
-      (location.state as { openSettings?: boolean } | null)?.openSettings,
-    ),
+    Boolean(navState?.openSettings),
+  )
+  const [settingsTab, setSettingsTab] = useState<ProjectSettingsTabId>(
+    () => navState?.settingsTab ?? 'general',
   )
   const [error, setError] = useState<string | null>(null)
 
   // Scrub the deep-link state so a reload doesn't re-open settings
   useEffect(() => {
-    if ((location.state as { openSettings?: boolean } | null)?.openSettings) {
+    if (navState?.openSettings) {
       navigate(location.pathname, { replace: true, state: null })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -101,7 +110,10 @@ export default function ProjectPage() {
         <button
           aria-label="Project settings"
           title="Project settings"
-          onClick={() => setSettingsOpen(true)}
+          onClick={() => {
+            setSettingsTab('general')
+            setSettingsOpen(true)
+          }}
           className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
         >
           <Settings className="h-5 w-5" aria-hidden />
@@ -109,45 +121,37 @@ export default function ProjectPage() {
       </header>
 
       <section className="max-w-2xl">
-        <div className="mb-4 flex items-center gap-2">
-          <h2 className="text-lg font-semibold text-slate-700">Lectures</h2>
-          <button
-            aria-label="Start a new lecture"
-            title="Start a new lecture"
-            onClick={() => void startLecture()}
-            className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"
-          >
-            <Plus className="h-5 w-5" aria-hidden />
-          </button>
-        </div>
+        <h2 className="mb-4 text-lg font-semibold text-slate-700">Lectures</h2>
         {error && (
           <p role="alert" className="mb-4 text-sm text-red-600">
             {error}
           </p>
         )}
-        {decks.length === 0 ? (
-          <p className="text-slate-500">
-            No lectures yet — use + to start one.
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {decks.map(d => (
-              <LectureRow
-                key={d.id}
-                deck={d}
-                onDeleted={id =>
-                  setDecks(prev => prev.filter(deck => deck.id !== id))
-                }
-              />
-            ))}
-          </ul>
-        )}
+        <ul className="flex flex-col gap-2">
+          {/* Always first: a dashed zone to add a lecture */}
+          {project && (
+            <NewLectureZone
+              projectTitle={project.title}
+              onStart={() => void startLecture()}
+            />
+          )}
+          {decks.map(d => (
+            <LectureRow
+              key={d.id}
+              deck={d}
+              onDeleted={id =>
+                setDecks(prev => prev.filter(deck => deck.id !== id))
+              }
+            />
+          ))}
+        </ul>
       </section>
 
       {settingsOpen && project && (
         <ProjectSettingsModal
           project={project}
           isOwner={user?.id === project.ownerId}
+          initialTab={settingsTab}
           onClose={() => setSettingsOpen(false)}
           onProjectChange={setProject}
           onDeleted={() => void navigate('/app')}

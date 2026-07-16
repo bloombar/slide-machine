@@ -4,6 +4,7 @@
  * roundtrip, and persistence.
  */
 import { test, expect, type Page } from '@playwright/test'
+import { createProject } from './helpers'
 
 const email = `edit-${Date.now()}@example.com`
 const password = 'sturdy-passw0rd'
@@ -15,11 +16,10 @@ const buildDeck = async (page: Page) => {
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Create account' }).click()
 
-  await page.getByLabel('New project title').fill('Chemistry')
-  await page.getByRole('button', { name: 'Create' }).click()
-  await page.getByRole('link', { name: 'Chemistry', exact: true }).click()
-
-  await page.getByRole('button', { name: 'Start a new lecture' }).click()
+  await createProject(page, 'Chemistry')
+  await page
+    .getByRole('button', { name: 'Start a new lecture in Chemistry' })
+    .click()
   await expect(page).toHaveURL(/\/d\//)
   await page.getByTitle('Click to edit Lecture title').click()
   await page.getByRole('textbox', { name: 'Lecture title' }).fill('Atoms')

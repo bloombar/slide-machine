@@ -34,6 +34,9 @@ export interface Project {
   /** Overrides the owner's projectDefaults (GEN-8/GEN-9). */
   settings?: ProjectDefaults
   createdAt: string
+  /** When the project's own settings last changed. Home-page ordering
+   * combines this with the newest deck edit inside the project. */
+  updatedAt: string
 }
 
 export type SeedAssetType =
