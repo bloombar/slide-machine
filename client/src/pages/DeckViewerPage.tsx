@@ -22,6 +22,7 @@ import { pollSlideImage } from '../api/slides'
 import { useAuth } from '../auth/AuthContext'
 import { useTimeAgo } from '../hooks/useTimeAgo'
 import { useSlideNavigation } from '../hooks/useSlideNavigation'
+import { useBracketKeys } from '../hooks/useBracketKeys'
 import { createSpeechCapture } from '../stt/capture'
 import {
   COMMAND_LABELS,
@@ -203,6 +204,52 @@ export default function DeckViewerPage() {
         : v,
     )
   }
+
+  /** Per-slide layout switch (EDIT-3): content stays, arrangement changes. */
+  const setSlideLayout = (slideId: string, layoutType: string) => {
+    dispatchAction<Slide>('slide.setLayout', { slideId, layoutType })
+      .then(updated => {
+        setView(v =>
+          v
+            ? {
+                ...v,
+                slides: v.slides.map(s => (s.id === updated.id ? updated : s)),
+              }
+            : v,
+        )
+        touchDeckLocally()
+      })
+      .catch(() => {
+        // Quiet failure: the slide keeps its layout
+      })
+    setLayoutPickerFor(null)
+  }
+
+  /**
+   * Steps the active slide through the template's layouts (EDIT-3) via
+   * the "[" / "]" keys. The active slide is the displayed one in carousel
+   * view; in list view it's whichever slide is actually on screen — never
+   * a stale off-screen `current` after the user has scrolled away. Wraps
+   * around and is a no-op unless the viewer can edit.
+   */
+  const cycleLayout = (direction: 1 | -1) => {
+    const v = viewRef.current
+    if (!v?.canEdit) return
+    const layouts = v.template.layouts
+    if (layouts.length < 2) return
+    const index = mode === 'carousel' ? nav.current : nav.visibleIndex()
+    if (index == null) return
+    const target = v.slides[index]
+    if (!target) return
+    const at = layouts.findIndex(l => l.type === target.layoutType)
+    const next = layouts[(at + direction + layouts.length) % layouts.length]
+    if (!next || next.type === target.layoutType) return
+    setSlideLayout(target.id, next.type)
+  }
+  useBracketKeys(
+    () => cycleLayout(-1),
+    () => cycleLayout(1),
+  )
 
   /** Applies a generation event: new slides append, updates replace —
    * and the view always transitions to the slide that changed. */
@@ -480,26 +527,6 @@ export default function DeckViewerPage() {
   const slide = view.slides[nav.current]
   const isOwner = user?.id === view.deck.ownerId
   const canEdit = view.canEdit
-
-  /** Per-slide layout switch (EDIT-3): content stays, arrangement changes. */
-  const setSlideLayout = (slideId: string, layoutType: string) => {
-    dispatchAction<Slide>('slide.setLayout', { slideId, layoutType })
-      .then(updated => {
-        setView(v =>
-          v
-            ? {
-                ...v,
-                slides: v.slides.map(s => (s.id === updated.id ? updated : s)),
-              }
-            : v,
-        )
-        touchDeckLocally()
-      })
-      .catch(() => {
-        // Quiet failure: the slide keeps its layout
-      })
-    setLayoutPickerFor(null)
-  }
 
   /** In-place edits (EDIT-1) persist through the action layer. */
   const editSlide = (slideId: string) => (patch: SlideContentPatch) => {

@@ -69,6 +69,7 @@ import {
   refitPreservesContent,
   type SlideContentSnapshot,
 } from '../lib/layout-refit'
+import { layoutHasImageSlot, reconcileImageLayout } from '../lib/image-layout'
 import { UserModel } from '../models/user'
 import { SlideModel, toSlideDto } from '../models/slide'
 import { ProjectModel, projectAcl } from '../models/project'
@@ -549,10 +550,13 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
       await lastSlide.save()
       await touchDeck(deck._id)
       if (!lastSlide.imageRef)
-        maybeEnrich(lastSlide._id.toString(), refit.imageGuidance, [
-          ...assets.project,
-          ...assets.deck,
-        ])
+        maybeEnrich(
+          lastSlide._id.toString(),
+          layoutHasImageSlot(refit.layoutType, descriptors)
+            ? refit.imageGuidance
+            : undefined,
+          [...assets.project, ...assets.deck],
+        )
       return event({ kind: 'slide.update', slide: toSlideDto(lastSlide) })
     }
 
@@ -602,7 +606,15 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
         },
       }
     }
-    if (result.action === 'new') result = clampToBudget(result, descriptors)
+    // Honor image intent by giving it a layout that can show the image
+    // (GEN-7): if the model asked for a photo on a layout without an
+    // image slot, upgrade to one that fits — or drop the image if none
+    // can, so no invisible, orphaned image is ever stored.
+    if (result.action === 'new')
+      result = clampToBudget(
+        reconcileImageLayout(result, descriptors),
+        descriptors,
+      )
     if (result.action === 'update' && lastSlide) {
       // Additive update (GEN-8): new bullets slot in, body extends,
       // layout may re-fit; committed text is never rewritten
@@ -624,10 +636,13 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
       await lastSlide.save()
       await touchDeck(deck._id)
       if (!lastSlide.imageRef)
-        maybeEnrich(lastSlide._id.toString(), result.imageGuidance, [
-          ...assets.project,
-          ...assets.deck,
-        ])
+        maybeEnrich(
+          lastSlide._id.toString(),
+          layoutHasImageSlot(lastSlide.layoutType, descriptors)
+            ? result.imageGuidance
+            : undefined,
+          [...assets.project, ...assets.deck],
+        )
       return event({ kind: 'slide.update', slide: toSlideDto(lastSlide) })
     }
 
@@ -645,10 +660,13 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
     deck.slideOrder.push(slide._id.toString())
     deck.transcript = [deck.transcript, input.phrase].filter(Boolean).join('\n')
     await deck.save()
-    maybeEnrich(slide._id.toString(), result.imageGuidance, [
-      ...assets.project,
-      ...assets.deck,
-    ])
+    maybeEnrich(
+      slide._id.toString(),
+      layoutHasImageSlot(slide.layoutType, descriptors)
+        ? result.imageGuidance
+        : undefined,
+      [...assets.project, ...assets.deck],
+    )
     return event({ kind: 'slide.new', slide: toSlideDto(slide) })
   },
 })
