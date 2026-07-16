@@ -29,7 +29,7 @@ const serverEnv = (over: Record<string, string>): Record<string, string> => ({
   IMAGE_ENRICHMENT_ENABLED: 'false',
   STORAGE_PROVIDER: 'local',
   // Hermetic: the developer's local .env must not leak into e2e
-  GENERATION_FREEDOM: '3',
+  GENERATION_FREEDOM: '2',
   // Exercise the AI command-intent path (voice-command-intent.spec);
   // the mock provider only recognizes explicit "please …" phrases,
   // so other specs are unaffected

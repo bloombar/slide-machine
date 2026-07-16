@@ -160,7 +160,7 @@ Current slide content: ${JSON.stringify(req.currentSlide.content)}`
     deckTitle,
     updateRules,
     voiceCommands,
-    freedomPolicy: freedomPolicy(req.freedom ?? 3),
+    freedomPolicy: freedomPolicy(req.freedom ?? 2),
     layouts,
     seededImages,
     projectSeed,

@@ -38,7 +38,7 @@ const projectSchema = new Schema<ProjectDb>(
     },
     templateId: { type: String, default: 'classic' },
     // Absent = server default; stored only when explicitly set
-    generationFreedom: { type: Number, min: 1, max: 10, default: undefined },
+    generationFreedom: { type: Number, min: 1, max: 5, default: undefined },
     // Explicit lecturing language only; absent = inherit (owner profile,
     // then the speaker's browser)
     language: { type: String, enum: LOCALES, default: undefined },

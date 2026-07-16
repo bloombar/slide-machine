@@ -72,7 +72,7 @@ export interface SeedAssetDeleteInput {
   assetId: string
 }
 
-/** Lecture AI-freedom (1-10); null re-inherits the project's setting. */
+/** Lecture AI-freedom (1-5); null re-inherits the project's setting. */
 export interface DeckSetGenerationFreedomInput {
   deckId: string
   freedom: number | null

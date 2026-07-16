@@ -648,7 +648,7 @@ export const deckSetGenerationFreedom = defineAction<
   name: 'deck.setGenerationFreedom',
   input: z.object({
     deckId: z.string().min(1),
-    freedom: z.number().int().min(1).max(10).nullable(),
+    freedom: z.number().int().min(1).max(5).nullable(),
   }),
   execute: async (ctx, input) => {
     const { deck, acl } = await loadEditableDeck(ctx, input.deckId)

@@ -140,17 +140,17 @@ describe('generation freedom resolution', () => {
       return original(request)
     }
     try {
-      // Nothing set anywhere: the server default (3) applies
+      // Nothing set anywhere: the server default (2) applies
       await act(ada, 'session.phrase', { deckId, phrase: 'one two three' })
-      expect(seen[0]!.freedom).toBe(3)
+      expect(seen[0]!.freedom).toBe(2)
       expect(
         (await DeckModel.findById(deckId))!.generationFreedom,
       ).toBeUndefined()
 
       // Project setting cascades to the inheriting lecture
-      await act(ada, 'project.update', { projectId, generationFreedom: 8 })
+      await act(ada, 'project.update', { projectId, generationFreedom: 4 })
       await act(ada, 'session.phrase', { deckId, phrase: 'four five six' })
-      expect(seen[1]!.freedom).toBe(8)
+      expect(seen[1]!.freedom).toBe(4)
       expect(
         (await DeckModel.findById(deckId))!.generationFreedom,
       ).toBeUndefined()
@@ -163,7 +163,7 @@ describe('generation freedom resolution', () => {
       // Clearing re-inherits the project's value
       await act(ada, 'deck.setGenerationFreedom', { deckId, freedom: null })
       await act(ada, 'session.phrase', { deckId, phrase: 'nine ten' })
-      expect(seen[3]!.freedom).toBe(8)
+      expect(seen[3]!.freedom).toBe(4)
       expect(
         (await DeckModel.findById(deckId))!.generationFreedom,
       ).toBeUndefined()
@@ -171,7 +171,7 @@ describe('generation freedom resolution', () => {
       // Clearing the project re-inherits the server default
       await act(ada, 'project.update', { projectId, generationFreedom: null })
       await act(ada, 'session.phrase', { deckId, phrase: 'eleven twelve' })
-      expect(seen[4]!.freedom).toBe(3)
+      expect(seen[4]!.freedom).toBe(2)
     } finally {
       provider.generateSlideContent = original
     }

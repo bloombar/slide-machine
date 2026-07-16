@@ -131,7 +131,7 @@ export const projectUpdate = defineAction<ProjectUpdateInput, Project>({
     course: z.string().optional(),
     description: z.string().optional(),
     seedContext: z.string().max(20_000).optional(),
-    generationFreedom: z.number().int().min(1).max(10).nullable().optional(),
+    generationFreedom: z.number().int().min(1).max(5).nullable().optional(),
     language: z.enum(LOCALES).nullable().optional(),
   }),
   execute: async (ctx, input) => {

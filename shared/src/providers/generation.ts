@@ -30,7 +30,7 @@ export interface SlideGenerationRequest {
   /** The active template's layouts — the option set the model must pick from (GEN-6). */
   layoutDescriptors: LayoutDescriptor[]
   seededImages?: SeededImageDescriptor[]
-  /** Content freedom 1-10: 1 = only what was said, 10 = free
+  /** Content freedom 1-5: 1 = only what was said, 5 = free
    * elaboration. Servers resolve it from lecture → project → config. */
   freedom?: number
   /** Language for generated slide text: the resolved lecture ??

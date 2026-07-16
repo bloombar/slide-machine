@@ -194,23 +194,23 @@ describe('GeminiGenerationProvider', () => {
     fetchMock.mockResolvedValue(
       geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
     )
-    await provider.generateSlideContent(request({ freedom: 2 }))
+    await provider.generateSlideContent(request({ freedom: 1 }))
     let prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
       .contents[0].parts[0].text as string
-    expect(prompt).toContain('CONTENT FREEDOM 2/10')
+    expect(prompt).toContain('CONTENT FREEDOM 1/5')
     expect(prompt).toContain('NEVER add topics')
 
     fetchMock.mockClear()
     fetchMock.mockResolvedValue(
       geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
     )
-    await provider.generateSlideContent(request({ freedom: 9 }))
+    await provider.generateSlideContent(request({ freedom: 5 }))
     prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body)).contents[0]
       .parts[0].text as string
-    expect(prompt).toContain('CONTENT FREEDOM 9/10')
+    expect(prompt).toContain('CONTENT FREEDOM 5/5')
     expect(prompt).toContain('elaborate freely')
 
-    // Default without a setting: 3/10
+    // Default without a setting: 2/5
     fetchMock.mockClear()
     fetchMock.mockResolvedValue(
       geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
@@ -218,7 +218,7 @@ describe('GeminiGenerationProvider', () => {
     await provider.generateSlideContent(request({ freedom: undefined }))
     prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body)).contents[0]
       .parts[0].text as string
-    expect(prompt).toContain('CONTENT FREEDOM 3/10')
+    expect(prompt).toContain('CONTENT FREEDOM 2/5')
   })
 
   it('parses a valid structured response', async () => {

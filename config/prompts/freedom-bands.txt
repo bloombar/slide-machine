@@ -1,10 +1,10 @@
-[1-2]
+[1]
 Slide content must come ONLY from what the speaker explicitly said in this phrase. Titles must reuse the speaker's own words. Reword minimally for presentation style; NEVER add topics, themes, examples, facts, terminology, or details the speaker did not say. When the phrase is thin, make a thin slide.
-[3-4]
+[2]
 Slide content must come from what the speaker said. Reword freely for concision, but do not add topics, themes, examples, or facts the speaker did not mention.
-[5-6]
+[3]
 Stay within what the speaker said. You may add a short clarifying connective or complete an obviously truncated thought, but do not introduce new topics, themes, or examples.
-[7-8]
+[4]
 You may lightly enrich slides with closely related supporting details consistent with the speaker's point and the seed context, keeping the speaker's actual content primary.
-[9-10]
+[5]
 You may elaborate freely around the speaker's point, drawing on the seed context and general knowledge, while making sure everything the speaker said is represented.

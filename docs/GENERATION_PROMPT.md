@@ -8,11 +8,11 @@ runtime copies `config/`).
 | File | Purpose |
 | --- | --- |
 | `generation.txt` | The master instruction template. `{{slot}}` placeholders are filled per request; an unknown placeholder fails loudly on first use. |
-| `freedom-bands.txt` | The 1–10 AI-freedom policy texts, one `[lo-hi]` section per band. |
+| `freedom-bands.txt` | The 1–5 AI-freedom policy texts, one `[n]` section per band. |
 
 Slots filled by [`gemini-generation.ts`](../server/src/providers/gemini-generation.ts):
 `outputShape` (the JSON contract — kept in code because zod enforces it),
-`freedomPolicy` (from the bands + the resolved 1–10 setting),
+`freedomPolicy` (from the bands + the resolved 1–5 setting),
 `layouts` (the template's layout descriptors and character budgets),
 `seededImages`, `projectSeed`, `deckSeed` (seed notes + extracted document
 text), `rolling` (recent slides), `capacity` (current-slide load),

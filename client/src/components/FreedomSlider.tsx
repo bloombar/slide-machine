@@ -1,6 +1,6 @@
 /**
- * AI content-freedom slider (GEN-1), 1-10: 1 keeps slides to exactly
- * what the speaker said, 10 lets the AI elaborate freely. Used at both
+ * AI content-freedom slider (GEN-1), 1-5: 1 keeps slides to exactly
+ * what the speaker said, 5 lets the AI elaborate freely. Used at both
  * levels — a lecture inherits its project's setting (and a project the
  * server default) until the slider is moved; "Reset to default"
  * appears only once a value is set here, and re-inherits (storing
@@ -65,7 +65,7 @@ export default function FreedomSlider({
             value={draft}
             onChange={e => slide(Number(e.target.value))}
             aria-label="AI freedom"
-            aria-valuetext={`${draft} of 10`}
+            aria-valuetext={`${draft} of 5`}
             className="w-full accent-indigo-600"
           />
           {/* Light tick scale; inset to sit under the thumb centers */}
