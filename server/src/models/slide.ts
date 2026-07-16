@@ -13,22 +13,15 @@ export interface SlideDb extends Omit<Slide, 'id' | 'deckId'> {
   deckId: Types.ObjectId
 }
 
-/** Source-agnostic image credit (IMG-5); _id disabled — it's owned data,
- * not a standalone document. */
-const attributionSchema = new Schema<ImageAttribution>(
-  {
-    caption: String,
-    title: String,
-    creator: String,
-    creatorUrl: String,
-    sourceUrl: String,
-    sourceName: String,
-    license: String,
-    licenseUrl: String,
-  },
-  { _id: false },
-)
-
+/**
+ * Source-agnostic image credit (IMG-5). Stored as Mixed rather than a
+ * strict subdocument on purpose: slides enriched before IMG-5 hold a
+ * plain STRING here (the old flat credit), and a subdocument schema
+ * throws an uncastable-value error the moment Mongoose hydrates such a
+ * row — crashing every read of that slide. Mixed hydrates any legacy
+ * value without casting; `toAttributionDto` normalizes it on the way out.
+ * All current writers produce a well-formed ImageAttribution object.
+ */
 const slideSchema = new Schema<SlideDb>({
   deckId: { type: Schema.Types.ObjectId, ref: 'Deck', required: true },
   index: { type: Number, required: true },
@@ -41,12 +34,35 @@ const slideSchema = new Schema<SlideDb>({
   imageKeywords: { type: [String], default: undefined },
   caption: String,
   sourceTranscript: String,
-  attribution: { type: attributionSchema, default: undefined },
+  attribution: { type: Schema.Types.Mixed, default: undefined },
 })
 
 slideSchema.index({ deckId: 1, index: 1 })
 
 export const SlideModel = model<SlideDb>('Slide', slideSchema)
+
+/**
+ * Normalizes a stored attribution value to the DTO shape. Legacy rows
+ * (pre-IMG-5) hold a plain string here; anything that isn't an object
+ * becomes undefined, so old slides surface with no structured credit
+ * rather than leaking a raw string into a typed field.
+ */
+export const toAttributionDto = (
+  value: unknown,
+): ImageAttribution | undefined => {
+  if (!value || typeof value !== 'object') return undefined
+  const a = value as Partial<ImageAttribution>
+  return {
+    caption: a.caption,
+    title: a.title,
+    creator: a.creator,
+    creatorUrl: a.creatorUrl,
+    sourceUrl: a.sourceUrl,
+    sourceName: a.sourceName,
+    license: a.license,
+    licenseUrl: a.licenseUrl,
+  }
+}
 
 export const toSlideDto = (doc: HydratedDocument<SlideDb>): Slide => ({
   id: doc._id.toString(),
@@ -61,16 +77,5 @@ export const toSlideDto = (doc: HydratedDocument<SlideDb>): Slide => ({
   imageKeywords: doc.imageKeywords,
   caption: doc.caption,
   sourceTranscript: doc.sourceTranscript,
-  attribution: doc.attribution
-    ? {
-        caption: doc.attribution.caption,
-        title: doc.attribution.title,
-        creator: doc.attribution.creator,
-        creatorUrl: doc.attribution.creatorUrl,
-        sourceUrl: doc.attribution.sourceUrl,
-        sourceName: doc.attribution.sourceName,
-        license: doc.attribution.license,
-        licenseUrl: doc.attribution.licenseUrl,
-      }
-    : undefined,
+  attribution: toAttributionDto(doc.attribution),
 })
