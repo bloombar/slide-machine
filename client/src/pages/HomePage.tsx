@@ -13,6 +13,7 @@ import type { Deck, Project } from '@slide-machine/shared'
 import { useAuth } from '../auth/AuthContext'
 import { dispatchAction } from '../api/actions'
 import { userHandle } from '../lib/handle'
+import { projectTitle } from '../lib/project'
 import LectureRow from '../components/LectureRow'
 import NewLectureZone from '../components/NewLectureZone'
 import ProjectRowMenu from '../components/ProjectRowMenu'
@@ -44,7 +45,7 @@ function ProjectSection({
             to={`/app/projects/${project.id}`}
             className="hover:text-indigo-600"
           >
-            {project.title}
+            {projectTitle(project)}
           </Link>
         </h2>
         <ProjectRowMenu project={project} onDeleted={onProjectDeleted} />
@@ -52,7 +53,7 @@ function ProjectSection({
       <ul className="flex flex-col gap-2">
         {/* Always first: a dashed zone to add a lecture */}
         <NewLectureZone
-          projectTitle={project.title}
+          projectTitle={projectTitle(project)}
           onStart={() => onStartLecture(project)}
         />
         {visible.map(d => (
@@ -159,6 +160,20 @@ export default function HomePage() {
     }
   }
 
+  /**
+   * The empty-state zone: the user has no project yet, so spin up a
+   * titleless default project on the fly and start the lecture in it.
+   */
+  const startFirstLecture = async () => {
+    setError(null)
+    try {
+      const project = await dispatchAction<Project>('project.create', {})
+      await startLecture(project)
+    } catch {
+      setError('Could not create the lecture')
+    }
+  }
+
   return (
     <div>
       <div className="mb-8 flex items-center justify-between gap-4">
@@ -183,9 +198,11 @@ export default function HomePage() {
         {projects === null ? (
           <p className="text-slate-500">Loading…</p>
         ) : projects.length === 0 ? (
-          <p className="text-slate-500">
-            No projects yet — create your first one above.
-          </p>
+          // No project yet: a dashed zone that creates a default project
+          // and starts the first lecture in one click.
+          <ul className="flex flex-col gap-2">
+            <NewLectureZone onStart={() => void startFirstLecture()} />
+          </ul>
         ) : (
           projects.map(p => (
             <ProjectSection

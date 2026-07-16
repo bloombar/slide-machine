@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router'
 import { MoreVertical } from 'lucide-react'
 import type { Project } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
+import { projectTitle } from '../lib/project'
 import ConfirmDialog from './ConfirmDialog'
 
 export default function ProjectRowMenu({
@@ -62,7 +63,7 @@ export default function ProjectRowMenu({
   return (
     <div ref={menuRef} className="relative">
       <button
-        aria-label={`Options for ${project.title}`}
+        aria-label={`Options for ${projectTitle(project)}`}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen(o => !o)}
@@ -73,7 +74,7 @@ export default function ProjectRowMenu({
       {open && (
         <div
           role="menu"
-          aria-label={`Options for ${project.title}`}
+          aria-label={`Options for ${projectTitle(project)}`}
           className="absolute right-0 z-10 mt-1 w-40 rounded-md border border-slate-200 bg-white py-1 shadow-lg"
         >
           <button

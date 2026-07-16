@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import type { Project, Template } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
+import { projectTitle } from '../lib/project'
 import SeedNotesEditor from './SeedNotesEditor'
 import SeedMaterial from './SeedMaterial'
 import ConfirmDialog from './ConfirmDialog'
@@ -173,7 +174,7 @@ export default function ProjectSettingsModal({
             entity="project"
             subject={{
               id: project.id,
-              name: project.title,
+              name: projectTitle(project),
               visibility: project.visibility,
             }}
             isOwner={isOwner}

@@ -7,7 +7,9 @@ import type { Visibility } from '../types/deck'
 import type { ProfileVisibility } from '../types/user'
 
 export interface ProjectCreateInput {
-  title: string
+  /** Optional: a blank title stores a titleless "default" project, which
+   * the client shows under a configurable placeholder name. */
+  title?: string
   course?: string
   description?: string
   seedContext?: string

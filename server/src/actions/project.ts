@@ -63,7 +63,9 @@ const loadEditableProject = async (
 export const projectCreate = defineAction<ProjectCreateInput, Project>({
   name: 'project.create',
   input: z.object({
-    title: z.string().trim().min(1),
+    // Blank is allowed: a titleless project is the "default" one created
+    // for a user's first lecture; the client shows a placeholder name.
+    title: z.string().trim().default(''),
     course: z.string().optional(),
     description: z.string().optional(),
     seedContext: z.string().optional(),

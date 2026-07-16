@@ -16,4 +16,8 @@ export const config = {
   /** Show the "Continue with Google" button (AUTH-1). Gated on the public
    * client id, so the button appears only once Google sign-in is set up. */
   googleAuthEnabled: Boolean(import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID),
+  /** Placeholder name shown for a titleless project (e.g. the default one
+   * created for a user's first lecture). Blank env falls back too. */
+  defaultProjectTitle:
+    import.meta.env.VITE_DEFAULT_PROJECT_TITLE || 'Default project',
 } as const

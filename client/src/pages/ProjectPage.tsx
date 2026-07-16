@@ -11,6 +11,8 @@ import { Settings } from 'lucide-react'
 import type { Deck, Project } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import { useAuth } from '../auth/AuthContext'
+import { projectTitle } from '../lib/project'
+import { config } from '../config'
 import LectureRow from '../components/LectureRow'
 import NewLectureZone from '../components/NewLectureZone'
 import EditableText from '../components/EditableText'
@@ -101,6 +103,7 @@ export default function ProjectPage() {
             <EditableText
               value={project.title}
               label="Project title"
+              emptyDisplay={config.defaultProjectTitle}
               onSave={renameProject}
             />
           ) : (
@@ -131,7 +134,7 @@ export default function ProjectPage() {
           {/* Always first: a dashed zone to add a lecture */}
           {project && (
             <NewLectureZone
-              projectTitle={project.title}
+              projectTitle={projectTitle(project)}
               onStart={() => void startLecture()}
             />
           )}

@@ -56,5 +56,8 @@ test('project kebab deep-links to settings tabs and deletes', async ({
     .click()
 
   await expect(page.getByRole('heading', { name: 'KebabProj' })).toHaveCount(0)
-  await expect(page.getByText(/no projects yet/i)).toBeVisible()
+  // With no projects left, the empty-state New lecture zone takes over
+  await expect(
+    page.getByRole('button', { name: 'Start a new lecture', exact: true }),
+  ).toBeVisible()
 })

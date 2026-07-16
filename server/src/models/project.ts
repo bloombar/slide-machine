@@ -27,7 +27,9 @@ const projectSchema = new Schema<ProjectDb>(
       required: true,
       index: true,
     },
-    title: { type: String, required: true, trim: true },
+    // Blank allowed: a titleless "default" project shows a placeholder
+    // name in the client (mirrors how untitled lectures are handled).
+    title: { type: String, default: '', trim: true },
     course: String,
     description: String,
     seedContext: String,

@@ -11,7 +11,11 @@ import HomePage from './HomePage'
 import { mockFetchRoutes } from '../test/fetch-mock'
 
 vi.mock('../config', () => ({
-  config: { apiBaseUrl: '', homeLecturesLimit: 2 },
+  config: {
+    apiBaseUrl: '',
+    homeLecturesLimit: 2,
+    defaultProjectTitle: 'Default project',
+  },
 }))
 
 const deck = (id: string, projectId: string, title: string) => ({
@@ -155,6 +159,42 @@ describe('HomePage', () => {
     await vi.waitFor(() => expect(sent).toEqual({ projectId: 'p1' }))
   })
 
+  it('the empty state creates a default project, then a lecture in it', async () => {
+    const calls: Record<string, unknown> = {}
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      // A brand-new user: no projects and no lectures at all
+      '/api/actions/project.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.list': () => ({ status: 200, body: [] }),
+      '/api/actions/project.create': init => {
+        calls.project = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: { id: 'p9', ownerId: 'u1', title: '', createdAt: '' },
+        }
+      },
+      '/api/actions/deck.create': init => {
+        calls.deck = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: { id: 'd9', title: '', permalinkSlug: 'untitled-fff000' },
+        }
+      },
+    })
+    renderHome()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Start a new lecture' }),
+    )
+
+    // A titleless default project is created first, then the lecture in it
+    await vi.waitFor(() => expect(calls.project).toEqual({}))
+    await vi.waitFor(() => expect(calls.deck).toEqual({ projectId: 'p9' }))
+  })
+
   it('creates a project from the New project modal, with an optional description', async () => {
     let sent: unknown
     mockFetchRoutes({
@@ -173,7 +213,8 @@ describe('HomePage', () => {
       },
     })
     renderHome()
-    await screen.findByText(/no projects yet/i)
+    // With no projects, the empty-state New lecture zone is shown
+    await screen.findByRole('button', { name: 'Start a new lecture' })
 
     // Modal is closed until the header button opens it
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
@@ -251,9 +292,7 @@ describe('HomePage', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }))
 
     const dialog = screen.getByRole('alertdialog', { name: 'Delete project?' })
-    fireEvent.click(
-      within(dialog).getByRole('button', { name: 'Delete', exact: true }),
-    )
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
     await vi.waitFor(() => expect(deleted).toEqual({ projectId: 'p1' }))
     await vi.waitFor(() =>
