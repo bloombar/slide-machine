@@ -83,6 +83,7 @@ import { getStorage } from '../storage'
 type SeedAssetDoc = HydratedDocument<SeedAssetDb>
 import { env } from '../config/env'
 import type {
+  ImageAttribution,
   ImageGuidance,
   SeededImageDescriptor,
 } from '@slide-machine/shared'
@@ -95,6 +96,15 @@ import { VOICE_COMMAND_DESCRIPTORS } from '@slide-machine/shared'
  * directly; otherwise seeded images join the search pool with the top
  * source prior (SEED-2).
  */
+/** Provenance credit for an instructor's own upload (IMG-5): the asset's
+ * caption/name and our own source label — seeded uploads carry no external
+ * license or creator to attribute. */
+const seededAttribution = (asset: SeedAssetDoc): ImageAttribution => ({
+  caption: asset.caption || undefined,
+  title: asset.caption || asset.name,
+  sourceName: 'Instructor upload',
+})
+
 const maybeEnrich = (
   slideId: string,
   guidance: ImageGuidance | undefined,
@@ -110,7 +120,11 @@ const maybeEnrich = (
   if (chosen?.imageUrl) {
     void SlideModel.updateOne(
       { _id: slideId, imageRef: { $exists: false } },
-      { imageRef: chosen.imageUrl, imageSource: 'seeded' },
+      {
+        imageRef: chosen.imageUrl,
+        imageSource: 'seeded',
+        attribution: seededAttribution(chosen),
+      },
     ).catch(() => undefined)
     return
   }
@@ -121,6 +135,7 @@ const maybeEnrich = (
     title: a.caption ?? a.name,
     tags: a.keywords,
     source: 'seeded',
+    attribution: seededAttribution(a),
   }))
   void enrichSlideImage(slideId, guidance.keywords, candidates)
 }

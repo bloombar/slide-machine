@@ -66,13 +66,16 @@ export interface SlideGenerationRequest {
   voiceCommands?: VoiceCommandDescriptor[]
 }
 
-/** The model's per-slide image recommendation (GEN-7). */
+/**
+ * The model's per-slide image recommendation (GEN-7). Image *generation*
+ * (IMG-4) is not supported yet: there is deliberately no `generate` field,
+ * so the model cannot instruct the app to generate an image. Reintroduce it
+ * together with the consumer that acts on it when generation lands.
+ */
 export interface ImageGuidance {
   keywords: string[]
   /** Set when the model selects a specific seeded image. */
   seededImageId?: string
-  /** True when the model recommends generating an image instead (IMG-4). */
-  generate?: boolean
   /** True when the slide warrants no image. */
   none?: boolean
 }

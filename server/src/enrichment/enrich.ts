@@ -39,6 +39,18 @@ export const enrichImage = async (
   return { url: best.url, source: best.source, attribution: best.attribution }
 }
 
+/** Drops undefined fields so a partially-populated credit doesn't persist
+ * a subdocument full of null keys; returns undefined when nothing is set. */
+const compactAttribution = (
+  attribution: EnrichedImage['attribution'],
+): EnrichedImage['attribution'] => {
+  if (!attribution) return undefined
+  const entries = Object.entries(attribution).filter(
+    ([, value]) => value != null && value !== '',
+  )
+  return entries.length ? Object.fromEntries(entries) : undefined
+}
+
 /**
  * Fire-and-forget enrichment for a persisted slide. Never throws; never
  * overwrites an existing image (IMG-3 stability). The client discovers
@@ -57,7 +69,7 @@ export const enrichSlideImage = async (
       {
         imageRef: image.url,
         imageSource: image.source === 'seeded' ? 'seeded' : 'stock',
-        attribution: image.attribution,
+        attribution: compactAttribution(image.attribution),
       },
     )
   } catch (error) {

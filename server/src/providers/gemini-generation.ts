@@ -76,6 +76,9 @@ const resultSchema = z.object({
       keywords: z.array(z.string()).default([]),
       seededImageId: z.string().optional(),
       none: z.boolean().optional(),
+      // Image generation (IMG-4) is not supported yet: the prompt never
+      // offers it, and any stray "generate" key the model invents is
+      // stripped here — so the app can never be told to generate an image.
     })
     .optional(),
   deckTitle: z.string().optional(),

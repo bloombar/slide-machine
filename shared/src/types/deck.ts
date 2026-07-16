@@ -60,6 +60,35 @@ export interface Deck {
 /** Where a slide's image came from, including AI-generated provenance (IMG-4). */
 export type ImageSource = 'seeded' | 'stock' | 'generated'
 
+/**
+ * A single, source-agnostic image credit (IMG-5). Every enrichment
+ * service (Wikimedia, Openverse, Flickr) and seeded uploads map their
+ * own metadata onto this common shape, following the Creative Commons
+ * TASL convention — Title, Author, Source, License — plus the image's
+ * own caption and a human label for the originating service. Every field
+ * is optional: a source supplies what it has, and attribution is only a
+ * legal requirement under some licenses. A missing field is simply absent
+ * rather than guessed.
+ */
+export interface ImageAttribution {
+  /** The image's own caption/description from the source, when supplied. */
+  caption?: string
+  /** Title of the work (TASL "T"). */
+  title?: string
+  /** Author/creator name (TASL "A"). */
+  creator?: string
+  /** Link to the creator's page, when the source supplies one. */
+  creatorUrl?: string
+  /** Link to the work at its source, e.g. the file or photo page (TASL "S"). */
+  sourceUrl?: string
+  /** Human label for the originating service, e.g. "Wikimedia Commons". */
+  sourceName?: string
+  /** Human-readable license name, e.g. "CC BY-SA 4.0" (TASL "L"). */
+  license?: string
+  /** Link to the license deed/text (TASL "L"). */
+  licenseUrl?: string
+}
+
 export interface Slide {
   id: string
   deckId: string
@@ -75,7 +104,8 @@ export interface Slide {
   imageKeywords?: string[]
   caption?: string
   sourceTranscript?: string
-  attribution?: string
+  /** Source-agnostic image credit captured at enrichment (IMG-5). */
+  attribution?: ImageAttribution
 }
 
 /** Cached on-demand translation of a deck's slide content (SHARE-2). */

@@ -52,7 +52,12 @@ describe('enrichImage', () => {
     expect(result).toMatchObject({
       url: 'http://wiki/photo.png',
       source: 'wikimedia',
-      attribution: 'Jane Doe (Wikimedia Commons)',
+      attribution: {
+        title: 'Photosynthesis diagram',
+        creator: 'Jane Doe',
+        license: 'CC BY-SA 4.0',
+        sourceName: 'Wikimedia Commons',
+      },
     })
   })
 

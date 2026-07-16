@@ -3,11 +3,31 @@
  * template's descriptors; imageSource records provenance (IMG-4).
  */
 import { Schema, model, Types, type HydratedDocument } from 'mongoose'
-import { LAYOUT_TYPES, type Slide } from '@slide-machine/shared'
+import {
+  LAYOUT_TYPES,
+  type ImageAttribution,
+  type Slide,
+} from '@slide-machine/shared'
 
 export interface SlideDb extends Omit<Slide, 'id' | 'deckId'> {
   deckId: Types.ObjectId
 }
+
+/** Source-agnostic image credit (IMG-5); _id disabled — it's owned data,
+ * not a standalone document. */
+const attributionSchema = new Schema<ImageAttribution>(
+  {
+    caption: String,
+    title: String,
+    creator: String,
+    creatorUrl: String,
+    sourceUrl: String,
+    sourceName: String,
+    license: String,
+    licenseUrl: String,
+  },
+  { _id: false },
+)
 
 const slideSchema = new Schema<SlideDb>({
   deckId: { type: Schema.Types.ObjectId, ref: 'Deck', required: true },
@@ -21,7 +41,7 @@ const slideSchema = new Schema<SlideDb>({
   imageKeywords: { type: [String], default: undefined },
   caption: String,
   sourceTranscript: String,
-  attribution: String,
+  attribution: { type: attributionSchema, default: undefined },
 })
 
 slideSchema.index({ deckId: 1, index: 1 })
@@ -41,5 +61,16 @@ export const toSlideDto = (doc: HydratedDocument<SlideDb>): Slide => ({
   imageKeywords: doc.imageKeywords,
   caption: doc.caption,
   sourceTranscript: doc.sourceTranscript,
-  attribution: doc.attribution,
+  attribution: doc.attribution
+    ? {
+        caption: doc.attribution.caption,
+        title: doc.attribution.title,
+        creator: doc.attribution.creator,
+        creatorUrl: doc.attribution.creatorUrl,
+        sourceUrl: doc.attribution.sourceUrl,
+        sourceName: doc.attribution.sourceName,
+        license: doc.attribution.license,
+        licenseUrl: doc.attribution.licenseUrl,
+      }
+    : undefined,
 })
