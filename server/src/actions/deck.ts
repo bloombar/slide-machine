@@ -77,14 +77,16 @@ import { getBuiltinTemplate, layoutDescriptors } from '../templates/builtin'
 import { registry } from '../providers/registry'
 import { permalinkSlug } from '../lib/slug'
 import { enrichSlideImage } from '../enrichment/enrich'
-import type { ImageCandidate } from '../enrichment/types'
-import { SeedAssetModel, type SeedAssetDb } from '../models/seed-asset'
+import { SeedAssetModel } from '../models/seed-asset'
+import {
+  seedAssetsFor,
+  seededAttribution,
+  seededImageCandidates,
+  type SeedAssetDoc,
+} from '../lib/seed-assets'
 import { getStorage } from '../storage'
-
-type SeedAssetDoc = HydratedDocument<SeedAssetDb>
 import { env } from '../config/env'
 import type {
-  ImageAttribution,
   ImageGuidance,
   SeededImageDescriptor,
 } from '@slide-machine/shared'
@@ -97,15 +99,6 @@ import { VOICE_COMMAND_DESCRIPTORS } from '@slide-machine/shared'
  * directly; otherwise seeded images join the search pool with the top
  * source prior (SEED-2).
  */
-/** Provenance credit for an instructor's own upload (IMG-5): the asset's
- * caption/name and our own source label — seeded uploads carry no external
- * license or creator to attribute. */
-const seededAttribution = (asset: SeedAssetDoc): ImageAttribution => ({
-  caption: asset.caption || undefined,
-  title: asset.caption || asset.name,
-  sourceName: 'Instructor upload',
-})
-
 const maybeEnrich = (
   slideId: string,
   guidance: ImageGuidance | undefined,
@@ -131,31 +124,11 @@ const maybeEnrich = (
   }
 
   if (!guidance.keywords.length) return
-  const candidates: ImageCandidate[] = images.map(a => ({
-    url: a.imageUrl!,
-    title: a.caption ?? a.name,
-    tags: a.keywords,
-    source: 'seeded',
-    attribution: seededAttribution(a),
-  }))
-  void enrichSlideImage(slideId, guidance.keywords, candidates)
-}
-
-/** Enabled, extracted seed assets that apply to a lecture: the
- * project's own plus the deck's (additive layering, SEED-1). */
-const seedAssetsFor = async (
-  deck: HydratedDocument<DeckDb>,
-): Promise<{ project: SeedAssetDoc[]; deck: SeedAssetDoc[] }> => {
-  const docs = await SeedAssetModel.find({
-    projectId: deck.projectId,
-    enabled: true,
-    status: 'ready',
-    $or: [{ deckId: { $exists: false } }, { deckId: deck._id }],
-  })
-  return {
-    project: docs.filter(a => !a.deckId),
-    deck: docs.filter(a => a.deckId),
-  }
+  void enrichSlideImage(
+    slideId,
+    guidance.keywords,
+    seededImageCandidates(images),
+  )
 }
 
 /** One seed-context layer: typed notes first, then extracted text. */

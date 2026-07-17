@@ -1237,6 +1237,97 @@ describe('DeckViewerPage settings modal', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('polls for a sourced image after switching onto an image layout', async () => {
+    let sent: unknown
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: {
+          ...deckView,
+          canEdit: true,
+          // s1 starts on a text layout with no image
+          slides: [
+            {
+              ...deckView.slides[0],
+              layoutType: 'content',
+              title: 'Mitochondria',
+            },
+          ],
+          template: {
+            ...deckView.template,
+            layouts: [
+              {
+                type: 'content',
+                label: 'Content',
+                purpose: 'Title and text',
+                slots: [],
+                elementPositions: {},
+              },
+              {
+                type: 'image-heavy',
+                label: 'Image heavy',
+                purpose: 'A striking image dominates',
+                slots: [{ name: 'image', kind: 'image' }],
+                elementPositions: {},
+              },
+            ],
+          },
+        },
+      }),
+      // The server derived keywords and moved the slide onto image-heavy,
+      // but the image itself arrives later via enrichment
+      '/api/actions/slide.setLayout': init => {
+        sent = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: {
+            ...deckView.slides[0],
+            layoutType: 'image-heavy',
+            title: 'Mitochondria',
+            imageKeywords: ['mitochondria'],
+          },
+        }
+      },
+      // The background poll picks the image up on its first read
+      '/api/actions/slide.get': () => ({
+        status: 200,
+        body: {
+          ...deckView.slides[0],
+          layoutType: 'image-heavy',
+          title: 'Mitochondria',
+          imageKeywords: ['mitochondria'],
+          imageRef: 'http://img/mito.png',
+        },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Change layout' }))
+    await screen.findByRole('dialog', { name: 'Change slide layout' })
+    fireEvent.click(screen.getByRole('radio', { name: /image heavy/i }))
+
+    await vi.waitFor(() =>
+      expect(sent).toEqual({ slideId: 's1', layoutType: 'image-heavy' }),
+    )
+    // The empty image slot shows a pending skeleton — proof the client
+    // started polling for the enrichment result
+    expect(await screen.findByTestId('image-skeleton')).toBeInTheDocument()
+  })
+
   it('flashes the blank-slot reveal for half a second on a page-background click', async () => {
     vi.useFakeTimers()
     withSettingsRoutes()

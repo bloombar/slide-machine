@@ -268,6 +268,9 @@ export default function DeckViewerPage() {
               }
             : v,
         )
+        // Switching onto an image layout sources an image server-side; the
+        // returned slide carries the search intent, so poll for it to land.
+        watchImage(updated)
         touchDeckLocally()
       })
       .catch(() => {
