@@ -18,12 +18,24 @@ See instructions for [using the Claude Code Extension in VS Code](https://code.c
 
 ## Setup
 
+### Linux
+
 ```sh
 npm ci
 cp server/.env.example server/.env
 cp client/.env.example client/.env.local
 openssl rand -base64 48                   # run twice → JWT_SECRET and JWT_REFRESH_SECRET in server/.env
 npm run dev                               # Express :3000 + Vite :5173
+```
+
+### Windows (PowerShell)
+
+```sh
+npm ci
+cp server/.env.example server/.env
+cp client/.env.example client/.env.local
+[Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(48))                   # run twice → JWT_SECRET and JWT_REFRESH_SECRET in server/.env
+npm run dev                                                                                                     # Express :3000 + Vite :5173
 ```
 
 Commands, configuration, and deployment are documented in the [README](../README.md); the system design is in [SPEC.md](SPEC.md) and the schedule in [ROADMAP.md](ROADMAP.md).
