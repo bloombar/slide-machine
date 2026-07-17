@@ -36,7 +36,7 @@ import { UserModel } from '../models/user'
 import { canEditAcl, isAclMember } from '../lib/access'
 import { sharesOfAcl } from '../lib/shares'
 import { getBuiltinTemplate } from '../templates/builtin'
-import type { HydratedDocument } from 'mongoose'
+import type { HydratedDocument, Types } from 'mongoose'
 import { DeckModel } from '../models/deck'
 import { SlideModel } from '../models/slide'
 import { SeedAssetModel } from '../models/seed-asset'
@@ -63,7 +63,9 @@ const loadEditableProject = async (
 export const projectCreate = defineAction<ProjectCreateInput, Project>({
   name: 'project.create',
   input: z.object({
-    title: z.string().trim().min(1),
+    // Blank is allowed: a titleless project is the "default" one created
+    // for a user's first lecture; the client shows a placeholder name.
+    title: z.string().trim().default(''),
     course: z.string().optional(),
     description: z.string().optional(),
     seedContext: z.string().optional(),
@@ -81,10 +83,27 @@ export const projectList = defineAction<Record<string, never>, Project[]>({
   name: 'project.list',
   input: z.object({}),
   execute: async ctx => {
-    const docs = await ProjectModel.find({ ownerId: requireUser(ctx) }).sort({
-      createdAt: -1,
-    })
-    return docs.map(toProjectDto)
+    const docs = await ProjectModel.find({ ownerId: requireUser(ctx) })
+    // A project is "modified" when its own settings change OR when any deck
+    // inside it changes; rank by whichever happened most recently. The newest
+    // deck edit per project (across all decks, not just the caller's) comes
+    // from a single grouped query.
+    const rows = await DeckModel.aggregate<{
+      _id: Types.ObjectId
+      updatedAt: Date
+    }>([
+      { $match: { projectId: { $in: docs.map(d => d._id) } } },
+      { $group: { _id: '$projectId', updatedAt: { $max: '$updatedAt' } } },
+    ])
+    const latestDeckEdit = new Map(
+      rows.map(r => [r._id.toString(), r.updatedAt.getTime()]),
+    )
+    const modifiedAt = (doc: HydratedDocument<ProjectDb>) =>
+      Math.max(
+        (doc.updatedAt ?? doc.createdAt).getTime(),
+        latestDeckEdit.get(doc._id.toString()) ?? 0,
+      )
+    return docs.sort((a, b) => modifiedAt(b) - modifiedAt(a)).map(toProjectDto)
   },
 })
 
@@ -114,7 +133,7 @@ export const projectUpdate = defineAction<ProjectUpdateInput, Project>({
     course: z.string().optional(),
     description: z.string().optional(),
     seedContext: z.string().max(20_000).optional(),
-    generationFreedom: z.number().int().min(1).max(10).nullable().optional(),
+    generationFreedom: z.number().int().min(1).max(5).nullable().optional(),
     language: z.enum(LOCALES).nullable().optional(),
   }),
   execute: async (ctx, input) => {

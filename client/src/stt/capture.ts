@@ -1,19 +1,21 @@
 /**
- * Client-side speech capture behind one seam (CAP-1), selected by
- * VITE_STT_PROVIDER:
+ * Client-side speech capture behind one seam (CAP-1). The engine is chosen
+ * at runtime by the server's TRANSCRIPTION_PROVIDER (read via /api/config),
+ * so one server flip switches the whole app — no client rebuild:
  *
  * - 'browser' — the Web Speech API (Chrome/Edge/Safari; Chrome relays
- *   audio to Google under the hood). Keyless bridge until Google Cloud
- *   STT credentials exist.
- * - 'google-cloud' — reserved: will stream audio to the server, which
- *   uses its TRANSCRIPTION_PROVIDER adapter. Flipping the env var is
- *   the whole switch; the UI stays identical.
+ *   audio to Google under the hood). Keyless.
+ * - 'google-cloud' — streams mic PCM to the server over a WebSocket, which
+ *   relays to Google Cloud STT and streams transcripts back. The UI is
+ *   identical to the browser engine.
  * - 'none' — capture disabled; the typed Speak bar remains.
  *
  * Finalized phrases feed the same session.phrase pipeline as typed
- * input, so generation behaves identically either way.
+ * input, so generation behaves identically for every engine.
  */
 import { config } from '../config'
+import { getAccessToken } from '../auth/token'
+import { getSttEngine } from '../runtime-config'
 
 export interface SpeechCaptureHandlers {
   /** One finalized phrase, ready for session.phrase. */
@@ -152,11 +154,151 @@ const unavailableCapture: SpeechCapture = {
   stop() {},
 }
 
+/** Builds the authenticated STT WebSocket URL. Browsers can't set an
+ * Authorization header on a WebSocket, so the access token rides in the
+ * query string; the server verifies it on the handshake. */
+const sttSocketUrl = (token: string): string => {
+  const httpBase = config.apiBaseUrl || window.location.origin
+  const wsBase = httpBase.replace(/^http/, 'ws')
+  return `${wsBase}/api/stt?token=${encodeURIComponent(token)}`
+}
+
+/**
+ * Streams mic audio to the server's Cloud STT adapter over a WebSocket and
+ * feeds transcripts through the same handlers as the browser engine, so the
+ * live-session UI is unchanged.
+ */
+const googleCloudCapture = (): SpeechCapture => {
+  let active = false
+  let ws: WebSocket | null = null
+  let audioContext: AudioContext | null = null
+  let mediaStream: MediaStream | null = null
+  let workletNode: AudioWorkletNode | null = null
+
+  const teardown = (): void => {
+    workletNode?.disconnect()
+    workletNode = null
+    if (audioContext && audioContext.state !== 'closed')
+      void audioContext.close()
+    audioContext = null
+    mediaStream?.getTracks().forEach(track => track.stop())
+    mediaStream = null
+    if (ws && ws.readyState <= WebSocket.OPEN) ws.close()
+    ws = null
+  }
+
+  return {
+    get available() {
+      return (
+        typeof window !== 'undefined' &&
+        window.isSecureContext &&
+        typeof WebSocket !== 'undefined' &&
+        typeof AudioContext !== 'undefined' &&
+        Boolean(navigator.mediaDevices?.getUserMedia)
+      )
+    },
+    start(handlers, lang) {
+      if (active) return
+      active = true
+
+      // Any fatal condition stops capture and surfaces once, so the mic never
+      // looks live while the stream is dead.
+      const fail = (message: string): void => {
+        if (!active) return
+        active = false
+        teardown()
+        handlers.onError?.(message)
+      }
+
+      void (async () => {
+        const token = getAccessToken()
+        if (!token) return fail('Sign in to use speech recognition')
+
+        let stream: MediaStream
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        } catch {
+          return fail('Microphone unavailable — check permissions')
+        }
+        if (!active) {
+          stream.getTracks().forEach(track => track.stop())
+          return
+        }
+        mediaStream = stream
+
+        try {
+          const ctx = new AudioContext()
+          audioContext = ctx
+          // Autoplay policy can start the context suspended; resume so the
+          // worklet actually pulls audio.
+          void ctx.resume?.()
+          await ctx.audioWorklet.addModule(
+            new URL('./pcm-worklet.js', import.meta.url).href,
+          )
+          if (!active) return teardown()
+
+          const source = ctx.createMediaStreamSource(stream)
+          const node = new AudioWorkletNode(ctx, 'pcm-processor')
+          workletNode = node
+          // A muted sink keeps the graph pulling audio without echoing to
+          // the speakers.
+          const sink = ctx.createGain()
+          sink.gain.value = 0
+          source.connect(node)
+          node.connect(sink)
+          sink.connect(ctx.destination)
+
+          const socket = new WebSocket(sttSocketUrl(token))
+          ws = socket
+          socket.binaryType = 'arraybuffer'
+          node.port.onmessage = event => {
+            if (socket.readyState === WebSocket.OPEN)
+              socket.send(event.data as ArrayBuffer)
+          }
+          socket.onopen = () => {
+            socket.send(
+              JSON.stringify({
+                type: 'start',
+                languageCode: lang,
+                sampleRate: ctx.sampleRate,
+              }),
+            )
+          }
+          socket.onmessage = event => {
+            let message: { type?: string; text?: string; message?: string }
+            try {
+              message = JSON.parse(event.data as string)
+            } catch {
+              return
+            }
+            if (message.type === 'interim') {
+              handlers.onInterim?.(message.text ?? '')
+            } else if (message.type === 'final') {
+              handlers.onInterim?.('')
+              if (message.text) handlers.onPhrase(message.text)
+            } else if (message.type === 'error') {
+              fail(message.message ?? 'Speech service unavailable')
+            }
+          }
+          socket.onerror = () => fail('Speech service unavailable')
+          socket.onclose = () => fail('Speech service disconnected')
+        } catch {
+          return fail('Speech recognition failed to start')
+        }
+      })()
+    },
+    stop() {
+      active = false
+      teardown()
+    },
+  }
+}
+
 export const createSpeechCapture = (
-  provider: string = config.sttProvider,
+  provider: string = getSttEngine(),
 ): SpeechCapture => {
   if (provider === 'browser') return browserCapture()
-  // 'google-cloud' arrives with the server streaming path; 'none' and
-  // unknown values disable capture, leaving the typed Speak bar
+  if (provider === 'google-cloud') return googleCloudCapture()
+  // 'none' and unknown values disable capture, leaving the typed Speak bar.
   return unavailableCapture
 }

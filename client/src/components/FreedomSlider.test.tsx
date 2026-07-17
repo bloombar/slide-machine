@@ -17,19 +17,19 @@ describe('FreedomSlider', () => {
     expect(
       screen.queryByRole('button', { name: 'Reset to default' }),
     ).not.toBeInTheDocument()
-    expect(screen.queryByText('3/10')).not.toBeInTheDocument()
+    expect(screen.queryByText('3/5')).not.toBeInTheDocument()
 
-    fireEvent.change(slider, { target: { value: '7' } })
+    fireEvent.change(slider, { target: { value: '4' } })
     expect(onChange).not.toHaveBeenCalled()
     vi.advanceTimersByTime(500)
-    expect(onChange).toHaveBeenCalledWith(7)
+    expect(onChange).toHaveBeenCalledWith(4)
     vi.useRealTimers()
   })
 
   it('offers Reset to default only when a value is set at this level', () => {
     const onChange = vi.fn()
-    render(<FreedomSlider value={9} inheritedValue={3} onChange={onChange} />)
-    expect(screen.getByRole('slider', { name: 'AI freedom' })).toHaveValue('9')
+    render(<FreedomSlider value={5} inheritedValue={3} onChange={onChange} />)
+    expect(screen.getByRole('slider', { name: 'AI freedom' })).toHaveValue('5')
     fireEvent.click(screen.getByRole('button', { name: 'Reset to default' }))
     expect(onChange).toHaveBeenCalledWith(null)
   })

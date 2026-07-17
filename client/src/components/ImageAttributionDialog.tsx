@@ -47,7 +47,7 @@ export default function ImageAttributionDialog({
   onClose,
 }: Props) {
   const [sourceUrl, setSourceUrl] = useState(attribution?.sourceUrl ?? '')
-  const [author, setAuthor] = useState(attribution?.author ?? '')
+  const [creator, setCreator] = useState(attribution?.creator ?? '')
   const [license, setLicense] = useState(attribution?.license ?? '')
 
   useEffect(() => {
@@ -59,14 +59,14 @@ export default function ImageAttributionDialog({
   }, [onClose])
 
   const hasAny = Boolean(
-    attribution?.sourceUrl || attribution?.author || attribution?.license,
+    attribution?.sourceUrl || attribution?.creator || attribution?.license,
   )
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault()
     onSave({
       sourceUrl: sourceUrl.trim() || undefined,
-      author: author.trim() || undefined,
+      creator: creator.trim() || undefined,
       license: license.trim() || undefined,
     })
   }
@@ -115,7 +115,7 @@ export default function ImageAttributionDialog({
         {editable ? (
           <form onSubmit={onSubmit} className="flex flex-col gap-3">
             {field('Source', sourceUrl, setSourceUrl, 'https://…')}
-            {field('Credit', author, setAuthor, 'Author or creator')}
+            {field('Credit', creator, setCreator, 'Author or creator')}
             {field('License', license, setLicense, 'e.g. CC BY 4.0')}
             <div className="mt-2 flex justify-end gap-2">
               <button
@@ -136,7 +136,7 @@ export default function ImageAttributionDialog({
         ) : hasAny ? (
           <div className="flex flex-col gap-3">
             <ReadRow label="Source" value={attribution?.sourceUrl} />
-            <ReadRow label="Credit" value={attribution?.author} />
+            <ReadRow label="Credit" value={attribution?.creator} />
             <ReadRow label="License" value={attribution?.license} />
           </div>
         ) : (

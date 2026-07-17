@@ -4,6 +4,7 @@
  * create project → logout → login → data still there.
  */
 import { test, expect, type Page } from '@playwright/test'
+import { createProject } from './helpers'
 
 const email = `e2e-${Date.now()}@example.com`
 const password = 'sturdy-passw0rd'
@@ -42,8 +43,7 @@ test('projects persist across logout and login', async ({ page }) => {
   await login(page)
   await expect(page).toHaveURL(/\/app$/)
 
-  await page.getByLabel('New project title').fill('Biology 101')
-  await page.getByRole('button', { name: 'Create' }).click()
+  await createProject(page, 'Biology 101')
   await expect(page.getByText('Biology 101')).toBeVisible()
 
   // Sign out lives at the bottom of the profile page

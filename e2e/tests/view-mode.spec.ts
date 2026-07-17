@@ -3,6 +3,7 @@
  * keeps whichever view the user was reading in.
  */
 import { test, expect } from '@playwright/test'
+import { createProject } from './helpers'
 
 test('the view mode is remembered across a refresh', async ({ page }) => {
   await page.goto('/register')
@@ -10,12 +11,13 @@ test('the view mode is remembered across a refresh', async ({ page }) => {
   await page.getByLabel('Email').fill(`viewmode-${Date.now()}@example.com`)
   await page.getByLabel('Password').fill('sturdy-passw0rd')
   await page.getByRole('button', { name: 'Create account' }).click()
-  await page.getByLabel('New project title').fill('ViewProj')
-  await page.getByRole('button', { name: 'Create' }).click()
-  await page.getByRole('link', { name: 'ViewProj', exact: true }).click()
+  await createProject(page, 'ViewProj')
 
-  await page.getByRole('button', { name: 'Start a new lecture' }).click()
+  await page
+    .getByRole('button', { name: 'Start a new lecture in ViewProj' })
+    .click()
   await expect(page).toHaveURL(/\/d\//)
+  // Dismiss the pre-lecture seed dialog to begin recording
   await page.getByRole('button', { name: 'Start lecture' }).click()
   await page.getByLabel('Spoken phrase').fill('Atomic structure')
   await page.getByRole('button', { name: 'Speak' }).click()

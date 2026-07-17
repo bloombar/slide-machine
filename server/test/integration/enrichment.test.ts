@@ -66,6 +66,8 @@ const stubImageApis = () => {
                     {
                       thumburl: 'http://wiki/mitochondria.png',
                       thumbwidth: 1024,
+                      descriptionurl:
+                        'https://commons.wikimedia.org/wiki/File:Mitochondria.png',
                       extmetadata: { Artist: { value: 'Jane' } },
                     },
                   ],
@@ -132,9 +134,10 @@ describe('enrichSlideImage', () => {
     expect(slide.body.imageRef).toBe('http://wiki/mitochondria.png')
     expect(slide.body.imageSource).toBe('stock')
     // AI-sourced images arrive with credit AND a source link pre-filled
-    // (IMG-5), the source built from the Commons file page
+    // (IMG-5): the creator, the originating service, and the Commons file page
     expect(slide.body.attribution).toMatchObject({
-      author: 'Jane (Wikimedia Commons)',
+      creator: 'Jane',
+      sourceName: 'Wikimedia Commons',
       sourceUrl: 'https://commons.wikimedia.org/wiki/File:Mitochondria.png',
     })
   })

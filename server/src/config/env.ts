@@ -55,8 +55,12 @@ const envSchema = z.object({
     .string()
     .default(path.join(serverRoot, 'config', 'templates')),
 
-  // Active AI adapter per capability (SPEC TECH-8)
-  TRANSCRIPTION_PROVIDER: z.string().default('google-cloud'),
+  // Active transcription adapter (SPEC TECH-8) — also drives the client STT
+  // engine via GET /api/config, so one server flip switches the whole app
+  // (no client rebuild). 'browser' = keyless Web Speech API, 'none' = typed
+  // Speak bar only; any other name ('google-cloud', 'mock', …) streams audio
+  // to that server-side adapter.
+  TRANSCRIPTION_PROVIDER: z.string().default('browser'),
   GENERATION_PROVIDER: z.string().default('gemini'),
   QUIZ_PROVIDER: z.string().default('gemini'),
   IMAGE_GEN_PROVIDER: z.string().default('gemini'),
@@ -80,9 +84,9 @@ const envSchema = z.object({
   // Chosen for phrase-to-slide latency: ~1s, no thinking overhead
   // (thinking models measured 10-30s; see docs/DECISIONS.md)
   GEMINI_MODEL: z.string().default('gemini-3.1-flash-lite-preview'),
-  // AI content freedom 1-10: 1 = slides contain only what the speaker
-  // said; 10 = free elaboration. Projects/lectures can override.
-  GENERATION_FREEDOM: z.coerce.number().int().min(1).max(10).default(3),
+  // AI content freedom 1-5: 1 = slides contain only what the speaker
+  // said; 5 = free elaboration. Projects/lectures can override.
+  GENERATION_FREEDOM: z.coerce.number().int().min(1).max(5).default(2),
   // Debug: dump each assembled prompt and raw model response to the
   // server log. Prompts include seed material — dev use only.
   GENERATION_LOG_PROMPTS: z.stringbool().default(false),
@@ -98,7 +102,14 @@ const envSchema = z.object({
   GENERATION_LAYOUT_REFIT: z.stringbool().default(true),
   /** Hard cap on one generation call — phrase-to-slide must stay live. */
   GEMINI_TIMEOUT_MS: z.coerce.number().default(12_000),
-  GOOGLE_CLOUD_STT_KEY: z.string().optional(),
+  // Service-account JSON for Cloud Speech-to-Text streaming (real-time STT).
+  // Relative values resolve against the server package root so a bare
+  // filename dropped in server/ works. Streaming needs a service account,
+  // not an API key — see docs/GOOGLE_API_KEYS.md.
+  GOOGLE_APPLICATION_CREDENTIALS: z
+    .string()
+    .transform(value => path.resolve(serverRoot, value))
+    .optional(),
   GOOGLE_CLOUD_TRANSLATION_KEY: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),

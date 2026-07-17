@@ -133,7 +133,7 @@ function ImageSlot({
 
   const attribution = slide.attribution
   const hasAttribution = Boolean(
-    attribution?.sourceUrl || attribution?.author || attribution?.license,
+    attribution?.sourceUrl || attribution?.creator || attribution?.license,
   )
   // AI-sourced images (web fetch or generated) carry credit the AI wrote,
   // so it is shown but not editable; the instructor's own images (seeded

@@ -6,6 +6,7 @@ import express, { Router, type Express } from 'express'
 import cookieParser from 'cookie-parser'
 import { env } from './config/env'
 import { healthRouter } from './routes/health'
+import { configRouter } from './routes/config'
 import { authRouter } from './routes/auth'
 import { actionsRouter } from './routes/actions'
 import { decksRouter } from './routes/decks'
@@ -24,6 +25,8 @@ import './actions/user'
 import './actions/seed-asset'
 import './providers/mock-generation'
 import './providers/gemini-generation'
+import './providers/google-cloud-transcription'
+import './providers/mock-transcription'
 
 export const createApp = (): Express => {
   const app = express()
@@ -32,6 +35,7 @@ export const createApp = (): Express => {
 
   const api = Router()
   api.use(healthRouter)
+  api.use(configRouter)
   api.use('/auth', authRouter)
   api.use(actionsRouter)
   api.use(decksRouter)

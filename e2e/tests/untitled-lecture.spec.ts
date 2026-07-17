@@ -5,6 +5,7 @@
  * keeps an empty title, and naming it later works in place.
  */
 import { test, expect } from '@playwright/test'
+import { createProject } from './helpers'
 
 const email = `untitled-${Date.now()}@example.com`
 
@@ -17,10 +18,9 @@ test('untitled lectures start from the + option and can be named later', async (
   await page.getByLabel('Password').fill('sturdy-passw0rd')
   await page.getByRole('button', { name: 'Create account' }).click()
 
-  await page.getByLabel('New project title').fill('QuickStart')
-  await page.getByRole('button', { name: 'Create' }).click()
+  await createProject(page, 'QuickStart')
 
-  // The + beside the project heading starts an untitled lecture directly
+  // New lecture starts an untitled lecture directly
   await page
     .getByRole('button', { name: 'Start a new lecture in QuickStart' })
     .click()

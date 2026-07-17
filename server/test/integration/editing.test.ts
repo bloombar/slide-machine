@@ -113,10 +113,10 @@ describe('slide.editContent', () => {
   it('saves image attribution and clears it when all fields go blank', async () => {
     const set = await act(ada, 'slide.editContent', {
       slideId: slideIds[0],
-      attribution: { author: 'Ada', license: 'CC BY 4.0' },
+      attribution: { creator: 'Ada', license: 'CC BY 4.0' },
     })
     expect(set.body.attribution).toMatchObject({
-      author: 'Ada',
+      creator: 'Ada',
       license: 'CC BY 4.0',
     })
 
@@ -249,7 +249,7 @@ describe('POST /slides/:slideId/image (EDIT-1)', () => {
     // Pre-seed an AI-sourced credit that the upload must clear
     await act(ada, 'slide.editContent', {
       slideId: slideIds[0],
-      attribution: { author: 'Someone (Wikimedia Commons)' },
+      attribution: { creator: 'Someone', sourceName: 'Wikimedia Commons' },
     })
     const res = await uploadImage(ada, slideIds[0]!)
     expect(res.status).toBe(201)

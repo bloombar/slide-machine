@@ -8,6 +8,7 @@ import { useParams } from 'react-router'
 import type { ProfileResponse } from '@slide-machine/shared'
 import { apiFetch } from '../api/http'
 import { useAuth } from '../auth/AuthContext'
+import { projectTitle } from '../lib/project'
 import LectureRow from '../components/LectureRow'
 
 /** The standard content container (mirrors AppShell's main wrapper —
@@ -71,7 +72,7 @@ export default function PublicProfilePage() {
         profile.projects.map(({ project, decks }) => (
           <section key={project.id} className="mt-8">
             <h2 className="mb-3 text-lg font-semibold text-slate-700">
-              {project.title}
+              {projectTitle(project)}
             </h2>
             <ul className="flex flex-col gap-2">
               {decks.map(deck => (

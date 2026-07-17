@@ -6,6 +6,7 @@
  * only what the viewer may see.
  */
 import { test, expect, type Browser, type Page } from '@playwright/test'
+import { createProject } from './helpers'
 
 const stamp = Date.now()
 const owner = { email: `owner-${stamp}@example.com`, name: 'Owner' }
@@ -38,10 +39,10 @@ test('sharing: view/edit grants, private no-leak, public profile', async ({
   const guestPage = await newUserPage(browser, guest)
 
   // Owner builds a one-slide lecture
-  await ownerPage.getByLabel('New project title').fill('ShareProj')
-  await ownerPage.getByRole('button', { name: 'Create' }).click()
-  await ownerPage.getByRole('link', { name: 'ShareProj', exact: true }).click()
-  await ownerPage.getByRole('button', { name: 'Start a new lecture' }).click()
+  await createProject(ownerPage, 'ShareProj')
+  await ownerPage
+    .getByRole('button', { name: 'Start a new lecture in ShareProj' })
+    .click()
   await expect(ownerPage).toHaveURL(/\/d\//)
   // Dismiss the pre-lecture seed dialog
   await ownerPage.getByRole('button', { name: 'Start lecture' }).click()

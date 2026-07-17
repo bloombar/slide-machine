@@ -78,7 +78,7 @@ const deckSchema = new Schema<DeckDb>(
     slideOrder: { type: [String], default: [] },
     seedContext: String,
     // Absent = inherit the project's setting; stored only when set
-    generationFreedom: { type: Number, min: 1, max: 10, default: undefined },
+    generationFreedom: { type: Number, min: 1, max: 5, default: undefined },
     // Explicit lecturing language only; absent = inherit (project, then
     // owner profile, then the speaker's browser)
     language: { type: String, enum: LOCALES, default: undefined },

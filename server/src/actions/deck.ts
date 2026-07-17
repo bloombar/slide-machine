@@ -69,6 +69,7 @@ import {
   refitPreservesContent,
   type SlideContentSnapshot,
 } from '../lib/layout-refit'
+import { layoutHasImageSlot, reconcileImageLayout } from '../lib/image-layout'
 import { UserModel } from '../models/user'
 import { SlideModel, toSlideDto } from '../models/slide'
 import { ProjectModel, projectAcl } from '../models/project'
@@ -83,6 +84,7 @@ import { getStorage } from '../storage'
 type SeedAssetDoc = HydratedDocument<SeedAssetDb>
 import { env } from '../config/env'
 import type {
+  ImageAttribution,
   ImageGuidance,
   SeededImageDescriptor,
 } from '@slide-machine/shared'
@@ -95,6 +97,15 @@ import { VOICE_COMMAND_DESCRIPTORS } from '@slide-machine/shared'
  * directly; otherwise seeded images join the search pool with the top
  * source prior (SEED-2).
  */
+/** Provenance credit for an instructor's own upload (IMG-5): the asset's
+ * caption/name and our own source label — seeded uploads carry no external
+ * license or creator to attribute. */
+const seededAttribution = (asset: SeedAssetDoc): ImageAttribution => ({
+  caption: asset.caption || undefined,
+  title: asset.caption || asset.name,
+  sourceName: 'Instructor upload',
+})
+
 const maybeEnrich = (
   slideId: string,
   guidance: ImageGuidance | undefined,
@@ -110,7 +121,11 @@ const maybeEnrich = (
   if (chosen?.imageUrl) {
     void SlideModel.updateOne(
       { _id: slideId, imageRef: { $exists: false } },
-      { imageRef: chosen.imageUrl, imageSource: 'seeded' },
+      {
+        imageRef: chosen.imageUrl,
+        imageSource: 'seeded',
+        attribution: seededAttribution(chosen),
+      },
     ).catch(() => undefined)
     return
   }
@@ -121,6 +136,7 @@ const maybeEnrich = (
     title: a.caption ?? a.name,
     tags: a.keywords,
     source: 'seeded',
+    attribution: seededAttribution(a),
   }))
   void enrichSlideImage(slideId, guidance.keywords, candidates)
 }
@@ -534,10 +550,13 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
       await lastSlide.save()
       await touchDeck(deck._id)
       if (!lastSlide.imageRef)
-        maybeEnrich(lastSlide._id.toString(), refit.imageGuidance, [
-          ...assets.project,
-          ...assets.deck,
-        ])
+        maybeEnrich(
+          lastSlide._id.toString(),
+          layoutHasImageSlot(refit.layoutType, descriptors)
+            ? refit.imageGuidance
+            : undefined,
+          [...assets.project, ...assets.deck],
+        )
       return event({ kind: 'slide.update', slide: toSlideDto(lastSlide) })
     }
 
@@ -587,7 +606,15 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
         },
       }
     }
-    if (result.action === 'new') result = clampToBudget(result, descriptors)
+    // Honor image intent by giving it a layout that can show the image
+    // (GEN-7): if the model asked for a photo on a layout without an
+    // image slot, upgrade to one that fits — or drop the image if none
+    // can, so no invisible, orphaned image is ever stored.
+    if (result.action === 'new')
+      result = clampToBudget(
+        reconcileImageLayout(result, descriptors),
+        descriptors,
+      )
     if (result.action === 'update' && lastSlide) {
       // Additive update (GEN-8): new bullets slot in, body extends,
       // layout may re-fit; committed text is never rewritten
@@ -609,10 +636,13 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
       await lastSlide.save()
       await touchDeck(deck._id)
       if (!lastSlide.imageRef)
-        maybeEnrich(lastSlide._id.toString(), result.imageGuidance, [
-          ...assets.project,
-          ...assets.deck,
-        ])
+        maybeEnrich(
+          lastSlide._id.toString(),
+          layoutHasImageSlot(lastSlide.layoutType, descriptors)
+            ? result.imageGuidance
+            : undefined,
+          [...assets.project, ...assets.deck],
+        )
       return event({ kind: 'slide.update', slide: toSlideDto(lastSlide) })
     }
 
@@ -630,10 +660,13 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
     deck.slideOrder.push(slide._id.toString())
     deck.transcript = [deck.transcript, input.phrase].filter(Boolean).join('\n')
     await deck.save()
-    maybeEnrich(slide._id.toString(), result.imageGuidance, [
-      ...assets.project,
-      ...assets.deck,
-    ])
+    maybeEnrich(
+      slide._id.toString(),
+      layoutHasImageSlot(slide.layoutType, descriptors)
+        ? result.imageGuidance
+        : undefined,
+      [...assets.project, ...assets.deck],
+    )
     return event({ kind: 'slide.new', slide: toSlideDto(slide) })
   },
 })
@@ -648,7 +681,7 @@ export const deckSetGenerationFreedom = defineAction<
   name: 'deck.setGenerationFreedom',
   input: z.object({
     deckId: z.string().min(1),
-    freedom: z.number().int().min(1).max(10).nullable(),
+    freedom: z.number().int().min(1).max(5).nullable(),
   }),
   execute: async (ctx, input) => {
     const { deck, acl } = await loadEditableDeck(ctx, input.deckId)

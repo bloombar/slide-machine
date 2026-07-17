@@ -18,6 +18,7 @@ const testEnv = vi.hoisted(() => ({
 vi.mock('../config/env', () => ({ env: testEnv }))
 
 import { GeminiGenerationProvider } from './gemini-generation'
+import { GenerationUnavailableError } from './errors'
 
 const provider = new GeminiGenerationProvider()
 
@@ -193,23 +194,23 @@ describe('GeminiGenerationProvider', () => {
     fetchMock.mockResolvedValue(
       geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
     )
-    await provider.generateSlideContent(request({ freedom: 2 }))
+    await provider.generateSlideContent(request({ freedom: 1 }))
     let prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
       .contents[0].parts[0].text as string
-    expect(prompt).toContain('CONTENT FREEDOM 2/10')
+    expect(prompt).toContain('CONTENT FREEDOM 1/5')
     expect(prompt).toContain('NEVER add topics')
 
     fetchMock.mockClear()
     fetchMock.mockResolvedValue(
       geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
     )
-    await provider.generateSlideContent(request({ freedom: 9 }))
+    await provider.generateSlideContent(request({ freedom: 5 }))
     prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body)).contents[0]
       .parts[0].text as string
-    expect(prompt).toContain('CONTENT FREEDOM 9/10')
+    expect(prompt).toContain('CONTENT FREEDOM 5/5')
     expect(prompt).toContain('elaborate freely')
 
-    // Default without a setting: 3/10
+    // Default without a setting: 2/5
     fetchMock.mockClear()
     fetchMock.mockResolvedValue(
       geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
@@ -217,7 +218,7 @@ describe('GeminiGenerationProvider', () => {
     await provider.generateSlideContent(request({ freedom: undefined }))
     prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body)).contents[0]
       .parts[0].text as string
-    expect(prompt).toContain('CONTENT FREEDOM 3/10')
+    expect(prompt).toContain('CONTENT FREEDOM 2/5')
   })
 
   it('parses a valid structured response', async () => {
@@ -398,14 +399,16 @@ describe('GeminiGenerationProvider', () => {
     expect(result.command).toBeUndefined()
   })
 
-  it('throws on API errors with the status attached', async () => {
+  it('throws on other API errors with the status attached', async () => {
+    // 429/503 map to friendly errors (covered below); other statuses keep
+    // the raw status for debugging.
     fetchMock.mockResolvedValue({
       ok: false,
-      status: 429,
-      text: async () => 'quota exceeded',
+      status: 400,
+      text: async () => 'bad request',
     })
     await expect(provider.generateSlideContent(request())).rejects.toThrow(
-      /429/,
+      /400/,
     )
   })
 
@@ -456,5 +459,27 @@ describe('GeminiGenerationProvider', () => {
     await expect(provider.generateSlideContent(request())).rejects.toThrow(
       /GEMINI_API_KEY/,
     )
+  })
+
+  it('maps quota/credit exhaustion (429) to a non-retryable friendly error', async () => {
+    fetchMock.mockResolvedValue(
+      geminiReply({ error: { code: 429, status: 'RESOURCE_EXHAUSTED' } }, 429),
+    )
+    const err = await provider
+      .generateSlideContent(request())
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(GenerationUnavailableError)
+    expect((err as GenerationUnavailableError).retryable).toBe(false)
+    expect((err as Error).message).toMatch(/quota or credits/)
+  })
+
+  it('maps provider overload (503) to a retryable friendly error', async () => {
+    fetchMock.mockResolvedValue(geminiReply({ error: { code: 503 } }, 503))
+    const err = await provider
+      .generateSlideContent(request())
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(GenerationUnavailableError)
+    expect((err as GenerationUnavailableError).retryable).toBe(true)
+    expect((err as Error).message).toMatch(/temporarily busy/)
   })
 })

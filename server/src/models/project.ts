@@ -10,12 +10,13 @@ import { env } from '../config/env'
 
 export interface ProjectDb extends Omit<
   Project,
-  'id' | 'ownerId' | 'createdAt' | 'viewers' | 'editors'
+  'id' | 'ownerId' | 'createdAt' | 'updatedAt' | 'viewers' | 'editors'
 > {
   ownerId: Types.ObjectId
   viewers: string[]
   editors: string[]
   createdAt: Date
+  updatedAt: Date
 }
 
 const projectSchema = new Schema<ProjectDb>(
@@ -26,7 +27,9 @@ const projectSchema = new Schema<ProjectDb>(
       required: true,
       index: true,
     },
-    title: { type: String, required: true, trim: true },
+    // Blank allowed: a titleless "default" project shows a placeholder
+    // name in the client (mirrors how untitled lectures are handled).
+    title: { type: String, default: '', trim: true },
     course: String,
     description: String,
     seedContext: String,
@@ -37,7 +40,7 @@ const projectSchema = new Schema<ProjectDb>(
     },
     templateId: { type: String, default: 'classic' },
     // Absent = server default; stored only when explicitly set
-    generationFreedom: { type: Number, min: 1, max: 10, default: undefined },
+    generationFreedom: { type: Number, min: 1, max: 5, default: undefined },
     // Explicit lecturing language only; absent = inherit (owner profile,
     // then the speaker's browser)
     language: { type: String, enum: LOCALES, default: undefined },
@@ -49,7 +52,9 @@ const projectSchema = new Schema<ProjectDb>(
       _id: false,
     },
   },
-  { timestamps: { createdAt: true, updatedAt: false } },
+  // updatedAt is bumped by any save to the project's settings; project.list
+  // combines it with the newest deck edit to rank projects by modification.
+  { timestamps: true },
 )
 
 export const ProjectModel = model<ProjectDb>('Project', projectSchema)
@@ -81,6 +86,8 @@ export const toProjectDto = (doc: HydratedDocument<ProjectDb>): Project => ({
   editors: doc.editors,
   settings: doc.settings,
   createdAt: doc.createdAt.toISOString(),
+  // Fall back for documents created before updatedAt was enabled.
+  updatedAt: (doc.updatedAt ?? doc.createdAt).toISOString(),
 })
 
 /** The project as shown to non-owners: share lists stay with the owner. */

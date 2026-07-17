@@ -6,6 +6,7 @@
 import { env } from './config/env'
 import { connectMongo } from './db/mongoose'
 import { createApp } from './app'
+import { attachAudioSocket } from './ws/audio-socket'
 
 const main = async (): Promise<void> => {
   try {
@@ -16,11 +17,13 @@ const main = async (): Promise<void> => {
   }
 
   const app = createApp()
-  app.listen(env.PORT, () => {
+  const server = app.listen(env.PORT, () => {
     console.log(
       `Slide Machine server listening on port ${env.PORT} (${env.NODE_ENV})`,
     )
   })
+  // Real-time STT rides a WebSocket on the same server (SPEC CAP-3).
+  attachAudioSocket(server)
 }
 
 main()

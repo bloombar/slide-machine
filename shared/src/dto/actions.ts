@@ -7,7 +7,9 @@ import type { ImageAttribution, Visibility } from '../types/deck'
 import type { ProfileVisibility } from '../types/user'
 
 export interface ProjectCreateInput {
-  title: string
+  /** Optional: a blank title stores a titleless "default" project, which
+   * the client shows under a configurable placeholder name. */
+  title?: string
   course?: string
   description?: string
   seedContext?: string
@@ -72,7 +74,7 @@ export interface SeedAssetDeleteInput {
   assetId: string
 }
 
-/** Lecture AI-freedom (1-10); null re-inherits the project's setting. */
+/** Lecture AI-freedom (1-5); null re-inherits the project's setting. */
 export interface DeckSetGenerationFreedomInput {
   deckId: string
   freedom: number | null

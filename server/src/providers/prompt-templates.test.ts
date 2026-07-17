@@ -1,7 +1,7 @@
 /**
  * Unit tests for the externalized prompt templates: the real files in
  * config/prompts load and render, every placeholder resolves, the
- * freedom bands cover 1-10, and template typos fail loudly.
+ * freedom bands cover 1-5, and template typos fail loudly.
  */
 import { describe, it, expect } from 'vitest'
 import {
@@ -47,17 +47,17 @@ describe('prompt templates', () => {
     )
   })
 
-  it('covers the whole 1-10 range with banded policies', () => {
+  it('covers the whole 1-5 range with banded policies', () => {
     resetPromptCache()
-    for (let n = 1; n <= 10; n++) {
+    for (let n = 1; n <= 5; n++) {
       const policy = freedomPolicy(n)
-      expect(policy).toContain(`CONTENT FREEDOM ${n}/10`)
+      expect(policy).toContain(`CONTENT FREEDOM ${n}/5`)
       expect(policy.length).toBeGreaterThan(60)
     }
     // Distinct bands at the extremes
-    expect(freedomPolicy(1)).not.toBe(freedomPolicy(10))
+    expect(freedomPolicy(1)).not.toBe(freedomPolicy(5))
     // Out-of-range values clamp
-    expect(freedomPolicy(0)).toContain('1/10')
-    expect(freedomPolicy(99)).toContain('10/10')
+    expect(freedomPolicy(0)).toContain('1/5')
+    expect(freedomPolicy(99)).toContain('5/5')
   })
 })

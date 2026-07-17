@@ -6,6 +6,7 @@
  * live session.
  */
 import { test, expect } from '@playwright/test'
+import { createProject } from './helpers'
 
 const email = `seeddialog-${Date.now()}@example.com`
 
@@ -22,12 +23,12 @@ test('seeding before and during a lecture, connected to settings', async ({
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill('sturdy-passw0rd')
   await page.getByRole('button', { name: 'Create account' }).click()
-  await page.getByLabel('New project title').fill('SeedProj')
-  await page.getByRole('button', { name: 'Create' }).click()
-  await page.getByRole('link', { name: 'SeedProj', exact: true }).click()
+  await createProject(page, 'SeedProj')
 
-  // The + opens the lecture and the seed dialog BEFORE recording begins
-  await page.getByRole('button', { name: 'Start a new lecture' }).click()
+  // New lecture opens the lecture and the seed dialog BEFORE recording begins
+  await page
+    .getByRole('button', { name: 'Start a new lecture in SeedProj' })
+    .click()
   await expect(page).toHaveURL(/\/d\//)
   const dialog = page.getByRole('dialog', { name: 'Add seed material' })
   await expect(dialog).toBeVisible()
@@ -89,11 +90,11 @@ test('skipping the seed dialog still starts the lecture', async ({ page }) => {
   await page.getByLabel('Email').fill(`skip-${Date.now()}@example.com`)
   await page.getByLabel('Password').fill('sturdy-passw0rd')
   await page.getByRole('button', { name: 'Create account' }).click()
-  await page.getByLabel('New project title').fill('SkipProj')
-  await page.getByRole('button', { name: 'Create' }).click()
-  await page.getByRole('link', { name: 'SkipProj', exact: true }).click()
+  await createProject(page, 'SkipProj')
 
-  await page.getByRole('button', { name: 'Start a new lecture' }).click()
+  await page
+    .getByRole('button', { name: 'Start a new lecture in SkipProj' })
+    .click()
   const dialog = page.getByRole('dialog', { name: 'Add seed material' })
   await expect(dialog).toBeVisible()
 

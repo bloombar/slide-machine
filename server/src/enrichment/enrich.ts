@@ -36,13 +36,19 @@ export const enrichImage = async (
 
   const best = pickBest(pool, keywords)
   if (!best) return null
-  return {
-    url: best.url,
-    source: best.source,
-    attribution: best.attribution,
-    license: best.license,
-    sourceUrl: best.sourceUrl,
-  }
+  return { url: best.url, source: best.source, attribution: best.attribution }
+}
+
+/** Drops undefined fields so a partially-populated credit doesn't persist
+ * a subdocument full of null keys; returns undefined when nothing is set. */
+const compactAttribution = (
+  attribution: EnrichedImage['attribution'],
+): EnrichedImage['attribution'] => {
+  if (!attribution) return undefined
+  const entries = Object.entries(attribution).filter(
+    ([, value]) => value != null && value !== '',
+  )
+  return entries.length ? Object.fromEntries(entries) : undefined
 }
 
 /**
@@ -63,16 +69,7 @@ export const enrichSlideImage = async (
       {
         imageRef: image.url,
         imageSource: image.source === 'seeded' ? 'seeded' : 'stock',
-        // Structured credit/licensing for the "i" dialog (IMG-5). AI-sourced
-        // images arrive pre-filled; the instructor's own uploads carry none.
-        attribution:
-          image.attribution || image.license || image.sourceUrl
-            ? {
-                author: image.attribution,
-                license: image.license,
-                sourceUrl: image.sourceUrl,
-              }
-            : undefined,
+        attribution: compactAttribution(image.attribution),
       },
     )
   } catch (error) {

@@ -42,6 +42,25 @@ export function useSlideNavigation(count: number, mode: ViewMode) {
       ?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
   }, [])
 
+  /**
+   * List view: the index of the slide the user is actually looking at —
+   * the registered item whose center is nearest the viewport center, or
+   * null when none is on screen. Used instead of `current` (which only
+   * moves on explicit navigation) so an action never targets a slide the
+   * user has scrolled away from.
+   */
+  const visibleIndex = useCallback((): number | null => {
+    const viewportCenter = window.innerHeight / 2
+    let best: { index: number; distance: number } | null = null
+    for (const [index, el] of itemsRef.current) {
+      const rect = el.getBoundingClientRect()
+      if (rect.bottom <= 0 || rect.top >= window.innerHeight) continue
+      const distance = Math.abs(rect.top + rect.height / 2 - viewportCenter)
+      if (!best || distance < best.distance) best = { index, distance }
+    }
+    return best ? best.index : null
+  }, [])
+
   /** Ref callback for list items so navigation can scroll to them. */
   const registerItem = useCallback(
     (index: number) =>
@@ -58,6 +77,7 @@ export function useSlideNavigation(count: number, mode: ViewMode) {
     goPrev,
     goNext,
     scrollTo,
+    visibleIndex,
     registerItem,
     hasPrev: current > 0,
     hasNext: current < count - 1,

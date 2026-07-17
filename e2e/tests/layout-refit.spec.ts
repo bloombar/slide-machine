@@ -5,6 +5,7 @@
  * per GEN-8 "re-fit the layout on update".
  */
 import { test, expect } from '@playwright/test'
+import { createProject } from './helpers'
 
 const email = `refit-${Date.now()}@example.com`
 const password = 'sturdy-passw0rd'
@@ -19,10 +20,10 @@ test('an enumerating update refits the slide from content to list', async ({
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Create account' }).click()
   await expect(page).toHaveURL(/\/app$/)
-  await page.getByLabel('New project title').fill('Biology 201')
-  await page.getByRole('button', { name: 'Create' }).click()
-  await page.getByRole('link', { name: 'Biology 201', exact: true }).click()
-  await page.getByRole('button', { name: 'Start a new lecture' }).click()
+  await createProject(page, 'Biology 201')
+  await page
+    .getByRole('button', { name: 'Start a new lecture in Biology 201' })
+    .click()
   await expect(page).toHaveURL(/\/d\/untitled-/)
   await page.getByRole('button', { name: 'Start lecture' }).click()
 

@@ -8,7 +8,7 @@ import ImageAttributionDialog from './ImageAttributionDialog'
 
 const attribution = {
   sourceUrl: 'https://commons.wikimedia.org/wiki/File:Cell.png',
-  author: 'Jane Doe (Wikimedia Commons)',
+  creator: 'Jane Doe (Wikimedia Commons)',
   license: 'CC BY 4.0',
 }
 
@@ -61,7 +61,7 @@ describe('ImageAttributionDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(onSave).toHaveBeenCalledWith({
       sourceUrl: 'https://example.com/photo',
-      author: 'Ada',
+      creator: 'Ada',
       license: 'CC0',
     })
   })
@@ -82,7 +82,7 @@ describe('ImageAttributionDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(onSave).toHaveBeenCalledWith({
       sourceUrl: undefined,
-      author: undefined,
+      creator: undefined,
       license: undefined,
     })
   })

@@ -6,6 +6,7 @@
  * control off-screen.
  */
 import { test, expect, type Page } from '@playwright/test'
+import { createProject } from './helpers'
 
 const GRIP = 'Drag to move the toolbar'
 
@@ -31,10 +32,10 @@ const buildDeck = async (page: Page, tag: string) => {
     .fill(`toolbar-${tag}-${Date.now()}@example.com`)
   await page.getByLabel('Password').fill('sturdy-passw0rd')
   await page.getByRole('button', { name: 'Create account' }).click()
-  await page.getByLabel('New project title').fill(project)
-  await page.getByRole('button', { name: 'Create' }).click()
-  await page.getByRole('link', { name: project, exact: true }).click()
-  await page.getByRole('button', { name: 'Start a new lecture' }).click()
+  await createProject(page, project)
+  await page
+    .getByRole('button', { name: `Start a new lecture in ${project}` })
+    .click()
   await expect(page).toHaveURL(/\/d\//)
   // Dismiss the pre-lecture seed dialog to begin recording
   await page.getByRole('button', { name: 'Start lecture' }).click()
@@ -253,7 +254,9 @@ test('a new lecture starts with its toolbar pinned', async ({ page }) => {
   // The position is remembered per lecture, so a fresh one has no entry
   await page.goto('/app')
   await page.getByRole('link', { name: project, exact: true }).click()
-  await page.getByRole('button', { name: 'Start a new lecture' }).click()
+  await page
+    .getByRole('button', { name: `Start a new lecture in ${project}` })
+    .click()
   await expect(page).toHaveURL(/\/d\//)
   await page.getByRole('button', { name: 'Start lecture' }).click()
 

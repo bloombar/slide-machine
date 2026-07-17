@@ -450,6 +450,52 @@ describe('DeckViewerPage microphone capture', () => {
     await vi.waitFor(() => expect(scrolled).toHaveBeenCalled())
   })
 
+  it('shows the server message when generation is unavailable (quota/credits)', async () => {
+    FakeRecognition.reset()
+    vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+      '/api/actions/session.phrase': () => ({
+        status: 503,
+        body: {
+          error: {
+            code: 'generation_unavailable',
+            message:
+              'Slide generation is unavailable — the AI provider is out of quota or credits.',
+          },
+        },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Live session' }))
+    act(() => {
+      FakeRecognition.last!.onresult?.({
+        resultIndex: 0,
+        results: [{ isFinal: true, 0: { transcript: 'photosynthesis' } }],
+      })
+    })
+    // The provider's user-facing message is shown, not a generic 500.
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /out of quota or credits/,
+    )
+  })
+
   it('wake-worded voice commands act locally and never reach generation', async () => {
     FakeRecognition.reset()
     vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)

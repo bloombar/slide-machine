@@ -5,6 +5,7 @@
  * the slide after a confirm.
  */
 import { test, expect, type Page } from '@playwright/test'
+import { createProject } from './helpers'
 
 const PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
@@ -15,6 +16,7 @@ const png = (name: string) => ({ name, mimeType: 'image/png', buffer: PNG })
 
 /** Registers a user and opens a new lecture with one dictated slide. */
 const newLectureWithSlide = async (page: Page, tag: string) => {
+  const project = `ImgProj-${tag}`
   await page.goto('/register')
   await page.getByLabel('Display name').fill('Imager')
   await page
@@ -22,11 +24,12 @@ const newLectureWithSlide = async (page: Page, tag: string) => {
     .fill(`imgedit-${tag}-${Date.now()}@example.com`)
   await page.getByLabel('Password').fill('sturdy-passw0rd')
   await page.getByRole('button', { name: 'Create account' }).click()
-  await page.getByLabel('New project title').fill(`ImgProj-${tag}`)
-  await page.getByRole('button', { name: 'Create' }).click()
-  await page.getByRole('link', { name: `ImgProj-${tag}`, exact: true }).click()
-  await page.getByRole('button', { name: 'Start a new lecture' }).click()
+  await createProject(page, project)
+  await page
+    .getByRole('button', { name: `Start a new lecture in ${project}` })
+    .click()
   await expect(page).toHaveURL(/\/d\//)
+  // Dismiss the pre-lecture seed dialog to begin recording
   await page.getByRole('button', { name: 'Start lecture' }).click()
   await page.getByLabel('Spoken phrase').fill('Cells are the unit of life')
   await page.getByRole('button', { name: 'Speak' }).click()

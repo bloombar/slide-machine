@@ -4,6 +4,7 @@
  * so later project changes never rewrite existing lectures.
  */
 import { test, expect } from '@playwright/test'
+import { createProject } from './helpers'
 
 const email = `ptmpl-${Date.now()}@example.com`
 
@@ -16,9 +17,7 @@ test('project template is the default for new lectures only', async ({
   await page.getByLabel('Password').fill('sturdy-passw0rd')
   await page.getByRole('button', { name: 'Create account' }).click()
 
-  await page.getByLabel('New project title').fill('TmplProj')
-  await page.getByRole('button', { name: 'Create' }).click()
-  await page.getByRole('link', { name: 'TmplProj', exact: true }).click()
+  await createProject(page, 'TmplProj')
 
   // Default the project to Midnight
   await page.getByRole('button', { name: 'Project settings' }).click()
@@ -31,7 +30,9 @@ test('project template is the default for new lectures only', async ({
   await page.getByRole('button', { name: 'Close settings' }).click()
 
   // A new lecture starts on Midnight
-  await page.getByRole('button', { name: 'Start a new lecture' }).click()
+  await page
+    .getByRole('button', { name: 'Start a new lecture in TmplProj' })
+    .click()
   await expect(page).toHaveURL(/\/d\/untitled-/)
   // Dismiss the pre-lecture seed dialog before reaching settings
   await page.getByRole('button', { name: 'Start lecture' }).click()

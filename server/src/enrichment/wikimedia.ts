@@ -1,8 +1,10 @@
 /**
- * Wikimedia Commons image search (keyless). Returns candidates with
- * license/attribution metadata; any failure returns [] — enrichment is
- * never allowed to break the pipeline (IMG-2).
+ * Wikimedia Commons image search (keyless). Maps the File page's
+ * imageinfo + extmetadata onto the shared ImageAttribution shape (IMG-5);
+ * any failure returns [] — enrichment is never allowed to break the
+ * pipeline (IMG-2).
  */
+import type { ImageAttribution } from '@slide-machine/shared'
 import type { ImageCandidate } from './types'
 
 const ENDPOINT = 'https://commons.wikimedia.org/w/api.php'
@@ -12,13 +14,14 @@ interface WikimediaPage {
   imageinfo?: Array<{
     thumburl?: string
     url?: string
-    /** The Commons file page, returned by the 'url' iiprop. */
     descriptionurl?: string
     thumbwidth?: number
     width?: number
     height?: number
     extmetadata?: {
+      ImageDescription?: { value?: string }
       LicenseShortName?: { value?: string }
+      LicenseUrl?: { value?: string }
       Artist?: { value?: string }
       Categories?: { value?: string }
     }
@@ -26,6 +29,16 @@ interface WikimediaPage {
 }
 
 const stripHtml = (html: string): string => html.replace(/<[^>]+>/g, '').trim()
+
+/** Wikimedia's Artist/description fields are HTML; pull the first link out
+ * for a creator URL, normalizing Commons' protocol-relative/relative hrefs. */
+const extractHref = (html: string): string | undefined => {
+  const href = html.match(/href="([^"]+)"/i)?.[1]
+  if (!href) return undefined
+  if (href.startsWith('//')) return `https:${href}`
+  if (href.startsWith('/')) return `https://commons.wikimedia.org${href}`
+  return href
+}
 
 export const searchWikimedia = async (
   keywords: string[],
@@ -55,30 +68,33 @@ export const searchWikimedia = async (
       const url = info?.thumburl ?? info?.url
       if (!url) return []
       const meta = info?.extmetadata
-      const artist = meta?.Artist?.value
-        ? stripHtml(meta.Artist.value)
-        : undefined
+      const artistHtml = meta?.Artist?.value
+      const title = (page.title ?? '')
+        .replace(/^File:/, '')
+        .replace(/\.[a-z]+$/i, '')
+      const attribution: ImageAttribution = {
+        caption: meta?.ImageDescription?.value
+          ? stripHtml(meta.ImageDescription.value)
+          : undefined,
+        title,
+        creator: artistHtml ? stripHtml(artistHtml) : undefined,
+        creatorUrl: artistHtml ? extractHref(artistHtml) : undefined,
+        sourceUrl: info?.descriptionurl,
+        sourceName: 'Wikimedia Commons',
+        license: meta?.LicenseShortName?.value,
+        licenseUrl: meta?.LicenseUrl?.value,
+      }
       return [
         {
           url,
-          title: (page.title ?? '')
-            .replace(/^File:/, '')
-            .replace(/\.[a-z]+$/i, ''),
+          title,
           tags: meta?.Categories?.value
             ? stripHtml(meta.Categories.value).split('|')
             : [],
           source: 'wikimedia' as const,
           width: info?.thumbwidth ?? info?.width,
           height: info?.height,
-          license: meta?.LicenseShortName?.value,
-          attribution: artist
-            ? `${artist} (Wikimedia Commons)`
-            : 'Wikimedia Commons',
-          sourceUrl:
-            info?.descriptionurl ??
-            (page.title
-              ? `https://commons.wikimedia.org/wiki/${encodeURI(page.title)}`
-              : undefined),
+          attribution,
         },
       ]
     })

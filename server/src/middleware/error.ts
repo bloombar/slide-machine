@@ -11,6 +11,7 @@ import {
   ActionNotFoundError,
   ActionValidationError,
 } from '../actions/dispatch'
+import { GenerationUnavailableError } from '../providers/errors'
 
 /** An error with an HTTP status and a stable machine-readable code. */
 export class HttpError extends Error {
@@ -47,6 +48,9 @@ export const errorHandler = (
     res.status(403).json(body('forbidden', err.message))
   } else if (err instanceof ActionNotFoundError) {
     res.status(404).json(body('unknown_action', err.message))
+  } else if (err instanceof GenerationUnavailableError) {
+    // 503: an upstream AI provider is out of quota/credits or overloaded.
+    res.status(503).json(body('generation_unavailable', err.message))
   } else {
     console.error('Unhandled error:', err)
     res.status(500).json(body('internal_error', 'Something went wrong'))

@@ -114,8 +114,23 @@ describe('POST /api/actions/:name', () => {
 
     expect((await act(ada, 'no.such.action')).status).toBe(404)
 
-    const bad = await act(ada, 'project.create', { title: '' })
+    // A non-string title fails the schema (empty is allowed — see below)
+    const bad = await act(ada, 'project.create', { title: 42 })
     expect(bad.status).toBe(400)
     expect(bad.body.error.code).toBe('invalid_input')
+  })
+
+  it('creates a titleless default project when no title is given', async () => {
+    const ada = await registerUser('ada@example.com')
+
+    // The client makes one of these on the fly for a user's first lecture;
+    // the empty title is shown under a placeholder name in the interface.
+    const created = await act(ada, 'project.create', {})
+    expect(created.status).toBe(200)
+    expect(created.body.title).toBe('')
+
+    const listed = await act(ada, 'project.list')
+    expect(listed.body).toHaveLength(1)
+    expect(listed.body[0].title).toBe('')
   })
 })

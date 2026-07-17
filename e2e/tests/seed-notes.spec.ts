@@ -4,6 +4,7 @@
  * modal, and both survive a reload.
  */
 import { test, expect } from '@playwright/test'
+import { createProject } from './helpers'
 
 const email = `seed-${Date.now()}@example.com`
 
@@ -17,9 +18,7 @@ test('project and lecture seed notes auto-save and persist', async ({
   await page.getByRole('button', { name: 'Create account' }).click()
 
   // Project-level notes save from the project settings modal (blur flushes)
-  await page.getByLabel('New project title').fill('SeedProj')
-  await page.getByRole('button', { name: 'Create' }).click()
-  await page.getByRole('link', { name: 'SeedProj', exact: true }).click()
+  await createProject(page, 'SeedProj')
   await page.getByRole('button', { name: 'Project settings' }).click()
   await page
     .getByRole('textbox', { name: 'Project seed notes' })
@@ -35,7 +34,9 @@ test('project and lecture seed notes auto-save and persist', async ({
   await page.getByRole('button', { name: 'Close settings' }).click()
 
   // Lecture-level notes save from the lecture settings modal
-  await page.getByRole('button', { name: 'Start a new lecture' }).click()
+  await page
+    .getByRole('button', { name: 'Start a new lecture in SeedProj' })
+    .click()
   await expect(page).toHaveURL(/\/d\//)
   // Dismiss the pre-lecture seed dialog before reaching settings
   await page.getByRole('button', { name: 'Start lecture' }).click()
@@ -55,11 +56,11 @@ test('project and lecture seed notes auto-save and persist', async ({
   // AI freedom: the lecture inherits until its slider moves; Reset to
   // default appears only once a value is set here
   const slider = page.getByRole('slider', { name: 'AI freedom' })
-  await expect(slider).toHaveValue('3')
+  await expect(slider).toHaveValue('2')
   await expect(
     page.getByRole('button', { name: 'Reset to default' }),
   ).toHaveCount(0)
-  await slider.fill('8')
+  await slider.fill('4')
   await expect(
     page.getByRole('button', { name: 'Reset to default' }),
   ).toBeVisible()
@@ -67,7 +68,7 @@ test('project and lecture seed notes auto-save and persist', async ({
   await page.reload()
   await page.getByRole('button', { name: 'Lecture settings' }).click()
   await expect(page.getByRole('slider', { name: 'AI freedom' })).toHaveValue(
-    '8',
+    '4',
   )
 
   // Reset re-inherits the project setting and hides itself again
@@ -76,7 +77,7 @@ test('project and lecture seed notes auto-save and persist', async ({
     page.getByRole('button', { name: 'Reset to default' }),
   ).toHaveCount(0)
   await expect(page.getByRole('slider', { name: 'AI freedom' })).toHaveValue(
-    '3',
+    '2',
   )
 
   // Language: nothing stored until chosen; an explicit choice persists

@@ -116,7 +116,9 @@ describe('ProjectPage', () => {
     renderPage()
 
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Start a new lecture' }),
+      await screen.findByRole('button', {
+        name: 'Start a new lecture in Physics',
+      }),
     )
 
     await vi.waitFor(() => expect(sent).toEqual({ projectId: 'p1' }))

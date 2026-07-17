@@ -24,6 +24,19 @@ All providers are queried in parallel and their results pooled, then
 - **Threshold** — the top candidate must score at least `0.3` or no image is
   used at all. A missing image beats a misleading one.
 
+## Metadata captured with each image
+
+Whatever wins, its credit is stored in one source-agnostic shape
+(`ImageAttribution`, `shared/src/types/deck.ts`) so a slide's attribution
+reads the same regardless of where the image came from. Each provider maps
+its own fields onto the Creative Commons **TASL** convention — **T**itle,
+**A**uthor (`creator`/`creatorUrl`), **S**ource (`sourceUrl` + a
+`sourceName` label), **L**icense (`license` name + `licenseUrl`) — plus the
+image's own `caption`. Flickr's numeric license ids are mapped to names and
+deed URLs; Wikimedia and Openverse supply license URLs directly. Fields a
+source doesn't provide are left absent, never guessed. This is what an
+attribution display/export (IMG-5) reads.
+
 The rest of this document covers the provider accounts and keys.
 
 Two providers are keyless; only Flickr needs an account and API key, and it
@@ -35,8 +48,9 @@ is optional — without a key the pipeline simply runs on the other two.
 | Openverse         | none               | —                |
 | Flickr            | optional API key   | `FLICKR_API_KEY` |
 
-This covers image *search* only. Image *generation* uses Gemini
-(`IMAGE_GEN_PROVIDER`) — see [GOOGLE_API_KEYS.md](GOOGLE_API_KEYS.md).
+This covers image *search* only. Image *generation* (IMG-4) is scaffolded
+(`IMAGE_GEN_PROVIDER`, unimplemented stub) but not yet supported: the model
+is never asked to generate an image and nothing consumes such an instruction.
 
 ## 1. Wikimedia Commons — nothing to do
 

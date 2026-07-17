@@ -4,6 +4,7 @@
  * slides live → end session → deck plays back at its permalink.
  */
 import { test, expect } from '@playwright/test'
+import { createProject } from './helpers'
 
 const email = `core-${Date.now()}@example.com`
 const password = 'sturdy-passw0rd'
@@ -19,15 +20,14 @@ test('speak-to-slides core loop, session to permalink playback', async ({
   await page.getByRole('button', { name: 'Create account' }).click()
   await expect(page).toHaveURL(/\/app$/)
 
-  // Create a project and open it
-  await page.getByLabel('New project title').fill('Biology 101')
-  await page.getByRole('button', { name: 'Create' }).click()
-  await page.getByRole('link', { name: 'Biology 101', exact: true }).click()
-  await expect(page).toHaveURL(/\/app\/projects\//)
+  // Create a project; the modal lands us on its page
+  await createProject(page, 'Biology 101')
 
-  // The + starts a new untitled lecture; the seed dialog opens first, and
-  // dismissing it drops into the live session
-  await page.getByRole('button', { name: 'Start a new lecture' }).click()
+  // New lecture opens an untitled lecture; the pre-lecture seed dialog
+  // shows first, and its "Start lecture" button drops into the live session
+  await page
+    .getByRole('button', { name: 'Start a new lecture in Biology 101' })
+    .click()
   await expect(page).toHaveURL(/\/d\/untitled-/)
   await page.getByRole('button', { name: 'Start lecture' }).click()
   await expect(

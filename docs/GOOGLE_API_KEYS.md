@@ -1,17 +1,20 @@
-# Google API keys (Gemini + Cloud Speech-to-Text + Cloud Translation)
+# Google credentials (Gemini + Cloud Speech-to-Text + Cloud Translation)
 
-The server reads three Google credentials from `server/.env` (see
+The server reads its Google credentials from `server/.env` (see
 [server/.env.example](../server/.env.example)):
 
 - `GEMINI_API_KEY` — Gemini API (generation, quizzes, images)
-- `GOOGLE_CLOUD_STT_KEY` — Cloud Speech-to-Text (live transcription)
+- `GOOGLE_APPLICATION_CREDENTIALS` — service-account JSON, for real-time
+  Speech-to-Text streaming (§3); optional — only when using Google STT
 - `GOOGLE_CLOUD_TRANSLATION_KEY` — Cloud Translation (on-demand deck
   translation, [SHARE-2](SPEC.md#share-2-post-lecture-translated-viewing))
 
-All are plain API keys, not service-account JSON. To keep them independent
-of any personal account, create them inside a dedicated Google Cloud project
-owned by a dedicated Google account (e.g. a `slide-machine-ops@...` account
-or your org's Workspace), never a personal one.
+Live transcription is optional — the app ships with a keyless browser engine
+(§3). Gemini and Translation use plain API keys; real-time STT uses a
+service-account JSON (§3). To keep credentials independent of any personal
+account, create them inside a dedicated Google Cloud project owned by a
+dedicated Google account (e.g. a `slide-machine-ops@...` account or your org's
+Workspace), never a personal one.
 
 ## 1. One-time project setup
 
@@ -40,16 +43,57 @@ or your org's Workspace), never a personal one.
 **Create credentials → API key**; AI Studio is just Google's canonical route
 and shows Gemini usage/quota in one place.)
 
-## 3. Speech-to-Text key (`GOOGLE_CLOUD_STT_KEY`)
+## 3. Speech-to-Text: choose an engine
 
-1. **Cloud Console → APIs & Services → Credentials** (same project) →
-   **+ Create credentials → API key**. Copy the key.
-2. Edit the key → rename it `slide-machine-stt` → **API restrictions →
-   Restrict key** → select only *Cloud Speech-to-Text API* → **Save**.
+Live lecture transcription has two interchangeable engines. The speech UI is
+identical either way, and the choice is a **single server variable** —
+`TRANSCRIPTION_PROVIDER` in `server/.env` — which the client learns at boot via
+`GET /api/config`. Flip it and restart the server; no client rebuild.
+
+- **`browser`** (default) — the Chrome/Edge/Safari Web Speech API. No Google
+  credential, no billing, nothing to set up here; the browser handles the
+  audio. Tradeoff: quality and language coverage vary by browser, and it only
+  runs in browsers that ship the API.
+- **`google-cloud`** — the browser streams mic audio to the server over a
+  WebSocket; the server relays it to Google Cloud Speech-to-Text's real-time
+  `streamingRecognize` and streams transcripts back. Consistent quality, full
+  language list, works in any browser — but billed per usage and needs the
+  service-account credential below.
+- **`none`** — capture disabled; only the typed Speak bar remains.
+
+```bash
+# server/.env
+TRANSCRIPTION_PROVIDER=google-cloud   # or: browser | none
+```
+
+Real-time streaming is gRPC-only and **rejects API keys**, so it authenticates
+with a service-account JSON key. Cloud STT has no keyless free tier — the
+project's billing account covers it (billed per minute of audio, with a
+monthly free allotment).
+
+### Create the service account (`GOOGLE_APPLICATION_CREDENTIALS`)
+
+1. **Cloud Console → IAM & Admin → Service Accounts** (same project) →
+   **+ Create service account**.
+2. Name it `slide-machine-stt` → **Create and continue**.
+3. Grant the role **Cloud Speech Client** (`roles/speech.client`) — the
+   least-privilege role for calling Speech-to-Text → **Continue → Done**.
+4. Open the new service account → **Keys → Add key → Create new key → JSON**
+   → **Create**. The JSON downloads once; treat it as a secret — it grants
+   API access without a password.
+5. Store it and point the server at it in `server/.env`. A bare filename
+   resolves against the `server/` directory; an absolute path works anywhere:
+
+   ```bash
+   GOOGLE_APPLICATION_CREDENTIALS=service-account.json
+   ```
+
+   In Docker/DigitalOcean, mount the file as a secret and set the variable to
+   its in-container path (or supply the JSON via a platform secret).
 
 ## 4. Translation key (`GOOGLE_CLOUD_TRANSLATION_KEY`)
 
-Same procedure as the STT key:
+An API key (unlike STT streaming, translation is a plain REST call):
 
 1. **Cloud Console → APIs & Services → Credentials** (same project) →
    **+ Create credentials → API key**. Copy the key.
@@ -57,9 +101,9 @@ Same procedure as the STT key:
    restrictions → Restrict key** → select only *Cloud Translation API* →
    **Save**.
 
-Like STT, Cloud Translation has no keyless free tier — the project's
-billing account covers it (Basic v2 is billed per character, with a
-monthly free allotment; see the current pricing page).
+Cloud Translation has no keyless free tier — the project's billing account
+covers it (Basic v2 is billed per character, with a monthly free allotment;
+see the current pricing page).
 
 Keep the keys separate (one per API) so any one can be rotated or
 revoked without touching the others.
@@ -70,9 +114,14 @@ In `server/.env`:
 
 ```bash
 GEMINI_API_KEY=<key from step 2>
-GOOGLE_CLOUD_STT_KEY=<key from step 3>
 GOOGLE_CLOUD_TRANSLATION_KEY=<key from step 4>
 GENERATION_PROVIDER=gemini   # switch off the mock once the key exists
+
+# Live transcription (§3): one flip switches the whole app.
+#  • browser (default): no credential needed
+#  • google-cloud: real-time streaming, plus the service account from §3
+TRANSCRIPTION_PROVIDER=google-cloud
+GOOGLE_APPLICATION_CREDENTIALS=service-account.json
 ```
 
 Restart the server; config is validated at boot by `server/src/config/env.ts`.

@@ -13,13 +13,14 @@ import type { LayoutType } from './template'
 export type Visibility = 'restricted' | 'public'
 
 /**
- * AI content freedom, 1-10 (GEN-1): 1 = slides contain only what the
- * speaker explicitly said; 10 = the AI may elaborate freely around it.
- * Stored per project/lecture only when explicitly set — lectures
- * inherit their project, projects inherit the server default.
+ * AI content freedom, 1-5 (GEN-1): 1 = slides contain only what the
+ * speaker explicitly said; 5 = the AI may elaborate freely around it.
+ * Each step selects one of five content-freedom policy bands. Stored
+ * per project/lecture only when explicitly set — lectures inherit their
+ * project, projects inherit the server default.
  */
 export const GENERATION_FREEDOM_MIN = 1
-export const GENERATION_FREEDOM_MAX = 10
+export const GENERATION_FREEDOM_MAX = 5
 
 export interface Deck {
   id: string
@@ -43,7 +44,7 @@ export interface Deck {
   slideOrder: string[]
   /** Lecture-level seed notes; stack on top of the project's (PROJ-1/SEED-1). */
   seedContext?: string
-  /** Own AI-freedom setting (1-10); absent = inherit the project's. */
+  /** Own AI-freedom setting (1-5); absent = inherit the project's. */
   generationFreedom?: number
   /** Lecturing/generation language, only when explicitly chosen; absent
    * = inherit (project, then owner profile, then browser default). */
@@ -60,17 +61,32 @@ export interface Deck {
 export type ImageSource = 'seeded' | 'stock' | 'generated'
 
 /**
- * Image credit/licensing shown behind the on-slide "i" icon (IMG-5).
- * A simplified subset of TASL: where the image came from, who to credit,
- * and the license. Any field may be absent.
+ * A single, source-agnostic image credit (IMG-5). Every enrichment
+ * service (Wikimedia, Openverse, Flickr) and seeded uploads map their
+ * own metadata onto this common shape, following the Creative Commons
+ * TASL convention — Title, Author, Source, License — plus the image's
+ * own caption and a human label for the originating service. Every field
+ * is optional: a source supplies what it has, and attribution is only a
+ * legal requirement under some licenses. A missing field is simply absent
+ * rather than guessed.
  */
 export interface ImageAttribution {
-  /** Where the image came from — a page URL, opened in a new tab. */
+  /** The image's own caption/description from the source, when supplied. */
+  caption?: string
+  /** Title of the work (TASL "T"). */
+  title?: string
+  /** Author/creator name (TASL "A"). */
+  creator?: string
+  /** Link to the creator's page, when the source supplies one. */
+  creatorUrl?: string
+  /** Link to the work at its source, e.g. the file or photo page (TASL "S"). */
   sourceUrl?: string
-  /** Who to credit (author/creator, often with the source name). */
-  author?: string
-  /** License name, e.g. "CC BY 4.0". */
+  /** Human label for the originating service, e.g. "Wikimedia Commons". */
+  sourceName?: string
+  /** Human-readable license name, e.g. "CC BY-SA 4.0" (TASL "L"). */
   license?: string
+  /** Link to the license deed/text (TASL "L"). */
+  licenseUrl?: string
 }
 
 export interface Slide {
@@ -88,7 +104,7 @@ export interface Slide {
   imageKeywords?: string[]
   caption?: string
   sourceTranscript?: string
-  /** Image credit/licensing behind the "i" icon (IMG-5). */
+  /** Source-agnostic image credit captured at enrichment (IMG-5). */
   attribution?: ImageAttribution
 }
 

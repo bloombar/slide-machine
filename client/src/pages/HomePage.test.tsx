@@ -3,7 +3,7 @@
  * lectures beneath, capped at the configured limit with an expander.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { AuthProvider } from '../auth/AuthContext'
 import { setAccessToken } from '../auth/token'
@@ -11,7 +11,11 @@ import HomePage from './HomePage'
 import { mockFetchRoutes } from '../test/fetch-mock'
 
 vi.mock('../config', () => ({
-  config: { apiBaseUrl: '', homeLecturesLimit: 2 },
+  config: {
+    apiBaseUrl: '',
+    homeLecturesLimit: 2,
+    defaultProjectTitle: 'Default project',
+  },
 }))
 
 const deck = (id: string, projectId: string, title: string) => ({
@@ -98,7 +102,33 @@ describe('HomePage', () => {
     ).toHaveAttribute('href', '/app/projects/p1')
   })
 
-  it('starts a new untitled lecture from the + beside a project', async () => {
+  it('renders projects in the order the server returns them', async () => {
+    // The server ranks projects by modification recency; the client must
+    // preserve that order rather than re-sort by anything of its own.
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/actions/project.list': () => ({
+        status: 200,
+        body: [
+          { id: 'p1', ownerId: 'u1', title: 'Biology', createdAt: '' },
+          { id: 'p2', ownerId: 'u1', title: 'Chemistry', createdAt: '' },
+        ],
+      }),
+      '/api/actions/deck.list': () => ({ status: 200, body: [] }),
+    })
+    renderHome()
+    await screen.findByRole('heading', { name: 'Biology' })
+
+    const headings = screen
+      .getAllByRole('heading', { level: 2 })
+      .map(h => h.textContent)
+    expect(headings).toEqual(['Biology', 'Chemistry'])
+  })
+
+  it('starts a new untitled lecture from the New lecture zone', async () => {
     let sent: unknown
     mockFetchRoutes({
       '/api/auth/refresh': () => ({
@@ -109,6 +139,7 @@ describe('HomePage', () => {
         status: 200,
         body: [{ id: 'p1', ownerId: 'u1', title: 'Biology', createdAt: '' }],
       }),
+      // Even with no lectures, the dashed New lecture zone is present
       '/api/actions/deck.list': () => ({ status: 200, body: [] }),
       '/api/actions/deck.create': init => {
         sent = JSON.parse(String(init?.body))
@@ -128,20 +159,25 @@ describe('HomePage', () => {
     await vi.waitFor(() => expect(sent).toEqual({ projectId: 'p1' }))
   })
 
-  it('starts a lecture straight from an empty project', async () => {
-    let sent: unknown
+  it('the empty state creates a default project, then a lecture in it', async () => {
+    const calls: Record<string, unknown> = {}
     mockFetchRoutes({
       '/api/auth/refresh': () => ({
         status: 200,
         body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
       }),
-      '/api/actions/project.list': () => ({
-        status: 200,
-        body: [{ id: 'p2', ownerId: 'u1', title: 'Chemistry', createdAt: '' }],
-      }),
+      // A brand-new user: no projects and no lectures at all
+      '/api/actions/project.list': () => ({ status: 200, body: [] }),
       '/api/actions/deck.list': () => ({ status: 200, body: [] }),
+      '/api/actions/project.create': init => {
+        calls.project = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: { id: 'p9', ownerId: 'u1', title: '', createdAt: '' },
+        }
+      },
       '/api/actions/deck.create': init => {
-        sent = JSON.parse(String(init?.body))
+        calls.deck = JSON.parse(String(init?.body))
         return {
           status: 200,
           body: { id: 'd9', title: '', permalinkSlug: 'untitled-fff000' },
@@ -149,10 +185,124 @@ describe('HomePage', () => {
       },
     })
     renderHome()
-    await screen.findByRole('heading', { name: 'Chemistry' })
-    expect(screen.getByText(/no lectures yet/i)).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'start one' }))
-    await vi.waitFor(() => expect(sent).toEqual({ projectId: 'p2' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Start a new lecture' }),
+    )
+
+    // A titleless default project is created first, then the lecture in it
+    await vi.waitFor(() => expect(calls.project).toEqual({}))
+    await vi.waitFor(() => expect(calls.deck).toEqual({ projectId: 'p9' }))
+  })
+
+  it('creates a project from the New project modal, with an optional description', async () => {
+    let sent: unknown
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/actions/project.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.list': () => ({ status: 200, body: [] }),
+      '/api/actions/project.create': init => {
+        sent = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: { id: 'p9', ownerId: 'u1', title: 'Physics', createdAt: '' },
+        }
+      },
+    })
+    renderHome()
+    // With no projects, the empty-state New lecture zone is shown
+    await screen.findByRole('button', { name: 'Start a new lecture' })
+
+    // Modal is closed until the header button opens it
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'New project' }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Title'), {
+      target: { value: 'Physics' },
+    })
+    fireEvent.change(screen.getByLabelText(/description/i), {
+      target: { value: 'Mechanics and beyond' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Create project' }))
+
+    await vi.waitFor(() =>
+      expect(sent).toEqual({
+        title: 'Physics',
+        description: 'Mechanics and beyond',
+      }),
+    )
+  })
+
+  it('cancelling the New project modal closes it without creating', async () => {
+    renderHome()
+    await screen.findByRole('heading', { name: 'Biology' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'New project' }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('the project kebab offers Settings, Share, and Delete', async () => {
+    renderHome()
+    await screen.findByRole('heading', { name: 'Biology' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Options for Biology' }))
+    const menu = screen.getByRole('menu', { name: 'Options for Biology' })
+    expect(
+      within(menu).getByRole('menuitem', { name: 'Settings' }),
+    ).toBeInTheDocument()
+    expect(
+      within(menu).getByRole('menuitem', { name: 'Share' }),
+    ).toBeInTheDocument()
+    expect(
+      within(menu).getByRole('menuitem', { name: 'Delete' }),
+    ).toBeInTheDocument()
+  })
+
+  it('deletes a project from the kebab after confirming', async () => {
+    let deleted: unknown
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/actions/project.list': () => ({
+        status: 200,
+        body: [
+          { id: 'p1', ownerId: 'u1', title: 'Biology', createdAt: '' },
+          { id: 'p2', ownerId: 'u1', title: 'Chemistry', createdAt: '' },
+        ],
+      }),
+      '/api/actions/deck.list': () => ({ status: 200, body: [] }),
+      '/api/actions/project.delete': init => {
+        deleted = JSON.parse(String(init?.body))
+        return { status: 200, body: { ok: true } }
+      },
+    })
+    renderHome()
+    await screen.findByRole('heading', { name: 'Biology' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Options for Biology' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }))
+
+    const dialog = screen.getByRole('alertdialog', { name: 'Delete project?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+    await vi.waitFor(() => expect(deleted).toEqual({ projectId: 'p1' }))
+    await vi.waitFor(() =>
+      expect(
+        screen.queryByRole('heading', { name: 'Biology' }),
+      ).not.toBeInTheDocument(),
+    )
+    // The other project is untouched
+    expect(
+      screen.getByRole('heading', { name: 'Chemistry' }),
+    ).toBeInTheDocument()
   })
 })

@@ -189,7 +189,7 @@ describe('SlideSlot', () => {
     expect(screen.getByTestId('image-skeleton')).toBeInTheDocument()
   })
 
-  const attributed = { author: 'Ada', license: 'CC BY 4.0' }
+  const attributed = { creator: 'Ada', license: 'CC BY 4.0' }
 
   it('shows the "i" icon to a viewer only when credit exists', () => {
     const { rerender } = render(
@@ -234,7 +234,7 @@ describe('SlideSlot', () => {
     expect(onEdit).toHaveBeenCalledWith({
       attribution: {
         sourceUrl: undefined,
-        author: 'Grace',
+        creator: 'Grace',
         license: undefined,
       },
     })
@@ -252,7 +252,7 @@ describe('SlideSlot', () => {
       <SlideSlot
         {...imageEditor({
           imageSource: 'stock',
-          attribution: { author: 'Jane', license: 'CC BY 4.0' },
+          attribution: { creator: 'Jane', license: 'CC BY 4.0' },
         })}
         onEdit={vi.fn()}
       />,
@@ -270,7 +270,7 @@ describe('SlideSlot', () => {
       <SlideSlot
         {...imageEditor({
           imageSource: 'seeded',
-          attribution: { author: 'Me' },
+          attribution: { creator: 'Me' },
         })}
         onEdit={vi.fn()}
       />,

@@ -65,9 +65,14 @@ export const slideEditContent = defineAction<SlideEditInput, Slide>({
     imageRef: z.string().optional(),
     attribution: z
       .object({
+        caption: z.string().optional(),
+        title: z.string().optional(),
+        creator: z.string().optional(),
+        creatorUrl: z.string().optional(),
         sourceUrl: z.string().optional(),
-        author: z.string().optional(),
+        sourceName: z.string().optional(),
         license: z.string().optional(),
+        licenseUrl: z.string().optional(),
       })
       .optional(),
   }),
@@ -82,7 +87,7 @@ export const slideEditContent = defineAction<SlideEditInput, Slide>({
     // Image credit/licensing from the "i" dialog (IMG-5); all-empty clears it
     if (input.attribution !== undefined) {
       const a = input.attribution
-      const any = a.sourceUrl || a.author || a.license
+      const any = Object.values(a).some(v => v != null && v !== '')
       slide.attribution = any ? a : undefined
     }
     await slide.save()
