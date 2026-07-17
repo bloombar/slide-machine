@@ -1,7 +1,7 @@
 /**
  * QuizGenerationProvider — slide text in, exit-ticket quiz definition out
- * (SPEC QUIZ-1 / TECH-8). Publishing is handled by the separate Quiz
- * Generator service; this capability only authors the definition.
+ * (SPEC QUIZ-1 / TECH-8). Publishing is handled by the imported Quiz
+ * Generator library (in-process); this capability only authors the definition.
  */
 import type { QuizDefinition } from '../types/quiz'
 

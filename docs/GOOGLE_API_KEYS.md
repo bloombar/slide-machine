@@ -1,13 +1,16 @@
-# Google credentials (Gemini + Cloud Speech-to-Text + Cloud Translation)
+# Google credentials (Gemini + Cloud Speech-to-Text + Cloud Translation + Forms/Drive OAuth)
 
 The server reads its Google credentials from `server/.env` (see
 [server/.env.example](../server/.env.example)):
 
-- `GEMINI_API_KEY` — Gemini API (generation, quizzes, images)
+- `GEMINI_API_KEY` — Gemini API (slide generation, quiz-question drafting, images)
 - `GOOGLE_APPLICATION_CREDENTIALS` — service-account JSON, for real-time
   Speech-to-Text streaming (§3); optional — only when using Google STT
 - `GOOGLE_CLOUD_TRANSLATION_KEY` — Cloud Translation (on-demand deck
   translation, [SHARE-2](SPEC.md#share-2-post-lecture-translated-viewing))
+- `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` — OAuth client for
+  Google sign-in (AUTH-1) and connected-account Drive/Forms access used by
+  quiz publishing (EXP-4); see §6
 
 Live transcription is optional — the app ships with a keyless browser engine
 (§3). Gemini and Translation use plain API keys; real-time STT uses a
@@ -126,7 +129,38 @@ GOOGLE_APPLICATION_CREDENTIALS=service-account.json
 
 Restart the server; config is validated at boot by `server/src/config/env.ts`.
 
-## 6. Share the project with coworkers
+## 6. Google Forms & Drive access for quiz publishing (EXP-4 connected accounts)
+
+Quiz publishing ([SPEC §17](SPEC.md#17-quiz-generator-integration)) creates a Google Form **in the instructor's own Drive**, so it does not use the ops account's API keys above. Instead it acts as the **instructor**, through the per-user Google account they connect ([EXP-4](SPEC.md#exp-4-connected-accounts-google-drive--github)) — the same OAuth client as Google sign-in, but with **broader scopes** and offline access.
+
+### Enable the APIs
+
+In the same Cloud project (§1), **APIs & Services → Library**, enable:
+
+- **Google Forms API**
+- **Google Drive API**
+
+### Scopes to request on the connect flow
+
+The connected-account consent must request these least-privilege scopes — they match what the imported Quiz Generator library uses (`src/lib/google-auth.ts` in that repo):
+
+| Scope                                            | Why                                                                          |
+| ------------------------------------------------ | --------------------------------------------------------------------------- |
+| `https://www.googleapis.com/auth/forms.body`     | Create and edit the quiz form's questions, settings, and metadata           |
+| `https://www.googleapis.com/auth/forms.body.readonly` | Read a form back (download / update flows)                             |
+| `https://www.googleapis.com/auth/drive.file`     | Place the created form into a chosen Drive folder — per-file access, limited to files this app creates |
+
+These are **separate from the Google sign-in scopes** (`openid`, `email`, `profile`) requested in [server/src/auth/google.ts](../server/src/auth/google.ts). Sign-in identifies the user; **connecting** a Google account for publishing is a second, broader consent (AUTH-1 vs EXP-4), and a user who signed in by email/GitHub can still connect Google here.
+
+### Offline access (refresh token)
+
+To publish later without the instructor present, the connect flow must obtain a **refresh token**: build the Google OAuth URL with **`access_type=offline`** and **`prompt=consent`** (the sign-in flow deliberately does not). The refresh token is stored **encrypted at rest** (`CONNECTED_ACCOUNT_TOKEN_ENC_KEY`, [P-9](SPEC.md#16-privacy-security--compliance)); at publish time the server builds an authorized client from it and injects it into the Quiz Generator library ([QUIZ-4](SPEC.md#quiz-4-delegated-google-access)).
+
+### OAuth consent screen
+
+`drive.file` and `forms.body` are **sensitive scopes**. While the OAuth consent screen is in **Testing**, add each pilot instructor as a **test user**; a published *external* consent screen using these scopes can require Google verification. For a single-institution pilot, scoping the OAuth client to the **NYU Workspace** organization and keeping instructors as known users avoids the public-verification path.
+
+## 7. Share the project with coworkers
 
 Access is granted per Google account via IAM — coworkers sign in with their
 own accounts; never share the dedicated account's password.
@@ -152,7 +186,7 @@ Notes:
   with the *Billing Account Administrator* role.
 - To revoke access, remove the principal on the same IAM page.
 
-## 7. Housekeeping
+## 8. Housekeeping
 
 - Never commit keys; `.env` is gitignored. In Docker/DigitalOcean, set them
   as environment variables or platform secrets instead.

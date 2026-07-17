@@ -124,8 +124,6 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   FLICKR_API_KEY: z.string().optional(),
-  QUIZ_GENERATOR_BASE_URL: z.string().optional(),
-  QUIZ_GENERATOR_TOKEN: z.string().optional(),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().optional(),
   SMTP_USER: z.string().optional(),

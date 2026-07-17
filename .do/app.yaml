@@ -51,9 +51,6 @@ services:
       #   type: SECRET
       # - key: FLICKR_API_KEY
       #   type: SECRET
-      # - key: QUIZ_GENERATOR_BASE_URL
-      # - key: QUIZ_GENERATOR_TOKEN
-      #   type: SECRET
       # - key: S3_ENDPOINT          # e.g. https://nyc3.digitaloceanspaces.com
       # - key: S3_REGION
       # - key: S3_BUCKET

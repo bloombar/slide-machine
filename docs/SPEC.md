@@ -10,7 +10,7 @@ Slide Machine V2 turns the relationship between lecturer and slides on its head:
 
 Where V1 was a single-page, vanilla-JS browser app with no server or accounts, **V2 is a full-stack web application**: a React front-end, an Express/JWT back-end, and a MongoDB database, shipped as a **modular monolith deployed on Digital Ocean App Platform** ([§13](#13-system-architecture)). This enables persistent user accounts, tiered subscription plans, saved slide projects and template libraries, shareable permalinks, and a lightweight social layer for browsing and rating others' work — in addition to the core speech-to-slides experience.
 
-V2 also relates to a second, deliberately **separate** project — **The Quiz Generator** ([github.com/bloombar/google-forms-quiz-generator](https://github.com/bloombar/google-forms-quiz-generator)) — which converts quiz definitions into Google Forms quizzes. Rather than merging the two codebases, V2 keeps them independent and has them communicate over simple HTTP APIs ([§17](#17-quiz-generator-integration)).
+V2 also relates to a second, deliberately **separate** project — **The Quiz Generator** ([github.com/bloombar/google-forms-quiz-generator](https://github.com/bloombar/google-forms-quiz-generator)) — which converts quiz definitions into Google Forms quizzes. Rather than merging the two codebases, V2 keeps them in **separate repositories** and consumes the Quiz Generator as a **versioned, in-process library** ([§17](#17-quiz-generator-integration)).
 
 This document specifies both the **functional** behavior (what the system does, for whom, under what rules) and the **technical** shape (stack, configuration, data models, testing) of V2.
 
@@ -36,7 +36,7 @@ This document specifies both the **functional** behavior (what the system does, 
 - A pixel-perfect general-purpose design tool (e.g., a full PowerPoint/Keynote competitor). Editing and templating are first-class, but the system optimizes for fast, structured, AI-assisted decks rather than freeform graphic design.
 - Real-time/live multilingual **translation** during the lecture (translating speech or generating translated slides on the fly). Post-lecture, on-demand translation of finished slides for viewing **is** supported ([SHARE-2](#share-2-post-lecture-translated-viewing)); only the live path is out of scope for the pilot ([§18](#18-future-work)).
 - Locally-hosted / in-house AI models. The proposal names this as a _future_ direction; V2 uses commercial NYU-provided models.
-- Hosting or proxying the Quiz Generator itself — V2 integrates with it as an external service.
+- Running the Quiz Generator as a separate hosted service — V2 imports it **in-process as a versioned library** ([§17](#17-quiz-generator-integration)); it does not deploy, host, or proxy a standalone Quiz Generator service.
 - Custom invoicing or purchase-order workflows — billing is subscription-based via the configured billing provider (Stripe by default; the provider is abstracted and swappable — [TECH-9](#tech-9-billing-provider-abstraction-layer)).
 
 ### 3. Personas & Roles
@@ -480,9 +480,9 @@ V2 ships as a **modular monolith** — a single deployable Express application (
 
 This is a deliberate "monolith-first" choice for the build team (PI + one grad student), a single-course Fall-2026 pilot, a tight Summer-2026 timeline, and a $2k services budget. Microservices' costs — independent deploys, inter-service auth, network-failure handling, distributed tracing, and Kubernetes operations — buy scaling and team-autonomy benefits this project does not yet need, while making the system harder for pilot students to run and extend. The monolith keeps **one deploy and one local `docker compose up`** ([TECH-10](#tech-10-deployment-topology-digital-ocean-app-platform), [TECH-11](#tech-11-local-dev--cicd)).
 
-Crucially, the existing **provider abstractions** (TECH-8 AI, TECH-9 billing) and **shared-types seams** (TECH-6) keep module boundaries explicit, so a module can later be extracted into its own service **if** load ever justifies it — with no rewrite. The **first extraction candidate** is the latency-sensitive real-time **STT → slide-generation pipeline** ([§18](#18-future-work)). The Quiz Generator already runs as the one **separate** service ([§17](#17-quiz-generator-integration)).
+Crucially, the existing **provider abstractions** (TECH-8 AI, TECH-9 billing) and **shared-types seams** (TECH-6) keep module boundaries explicit, so a module can later be extracted into its own service **if** load ever justifies it — with no rewrite. The **first extraction candidate** is the latency-sensitive real-time **STT → slide-generation pipeline** ([§18](#18-future-work)). The Quiz Generator is a **separate repository imported in-process** as a versioned library ([§17](#17-quiz-generator-integration)) — reusable on its own, but not a separate deployment.
 
-**Internal modules** of the Express monolith: `auth`, `billing`, `projects`, `seeding/ingest` (incl. Drive/GitHub connected accounts), `transcription` (STT adapter), `generation` (slide-gen), `enrichment` (images), `social` (votes/feed/search), `export/import`, `logging/metrics`, and a `quiz-bridge` to the external Quiz Generator. External engines (Google Cloud STT, Gemini, image APIs, Stripe, Google/GitHub APIs, Quiz Generator) sit behind the modules as the diagram shows.
+**Internal modules** of the Express monolith: `auth`, `billing`, `projects`, `seeding/ingest` (incl. Drive/GitHub connected accounts), `transcription` (STT adapter), `generation` (slide-gen), `enrichment` (images), `social` (votes/feed/search), `export/import`, `logging/metrics`, and a `quiz-bridge` that wraps the **imported Quiz Generator library** ([§17](#17-quiz-generator-integration)). External engines (Google Cloud STT, Gemini, image APIs, Stripe, Google/GitHub APIs, and the Google Forms/Drive API the imported library calls) sit behind the modules as the diagram shows.
 
 ```text
 ┌──────────────────────────── Client (browser) ────────────────────────────┐
@@ -510,12 +510,12 @@ Crucially, the existing **provider abstractions** (TECH-8 AI, TECH-9 billing) an
 ┌──────────────────────────────────┐   webhooks  ┌───────────┐ ┌───────────┐
 │ Stripe (payments/subscriptions)  │◀───────────▶│  Express  │ │  MongoDB  │
 └──────────────────────────────────┘             └───────────┘ └───────────┘
-┌──────────────────────────────────┐
-│ Quiz Generator (separate service)│◀── REST API ── Express
-└──────────────────────────────────┘
+┌──────────────────────────────────┐   quiz-bridge imports the Quiz
+│ Google Forms / Drive API         │◀── Generator library, which calls
+└──────────────────────────────────┘   Forms/Drive in-process (§17)
 ```
 
-The **Express.js API** box above is the **modular monolith** (its bulleted responsibilities are the internal modules listed earlier); everything outside it — Google Cloud STT, Gemini, image APIs, Stripe, Google/GitHub APIs, MongoDB, and the Quiz Generator — is an external dependency or a separate deployment. The two projects (Slide Machine, Quiz Generator) remain separate repositories and deployments, integrated only through documented HTTP APIs ([§17](#17-quiz-generator-integration)).
+The **Express.js API** box above is the **modular monolith** (its bulleted responsibilities are the internal modules listed earlier); everything outside it — Google Cloud STT, Gemini, image APIs, Stripe, Google/GitHub APIs, MongoDB, and the Google Forms/Drive API — is an external dependency or a separate deployment. The Quiz Generator remains a **separate repository** but is **imported in-process as a versioned library** (not a separate deployment); Slide Machine consumes it through its exported function contracts ([§17](#17-quiz-generator-integration)).
 
 ### 14. Technical Stack & Conventions
 
@@ -548,7 +548,6 @@ Server-side secrets and global settings live in a `.env` file (never committed),
 - Image-API keys/config (Flickr; Wikimedia and Openverse are keyless/optional).
 - Billing-provider credentials (adapter-specific; for the default Stripe adapter: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and per-tier price IDs) plus a `BILLING_PROVIDER` selector ([TECH-9](#tech-9-billing-provider-abstraction-layer)).
 - Object-storage credentials for **DO Spaces** (S3-compatible) used by uploads/exports (TECH-10).
-- `QUIZ_GENERATOR_BASE_URL` and any shared API token for the Quiz Generator.
 - SMTP / email-provider settings for verification and password-reset mail.
 
 **Plan definitions** — the Free/Pro/Max **prices and usage caps** (BILL-1, BILL-3) live in an adjustable server-side config (e.g., `config/plans.*`) so pricing and caps can be tuned **without code changes** (see BILL-6 and TECH-4). Illustrative shape:
@@ -600,7 +599,7 @@ Where feasible, front-end and back-end share **TypeScript** types and data-model
 - **100% code coverage** target across **unit**, **integration**, and **end-to-end** tests.
 - Unit/integration via a standard runner (e.g., Vitest/Jest) for both client and server; integration tests exercise the Express API against a test MongoDB instance.
 - **End-to-end tests use a Playwright harness** covering the critical user journeys (register → subscribe → create project → seed → live capture → edit → share → export → vote), including cap-enforcement and upgrade paths.
-- External services (Gemini, Google Cloud, image APIs, Stripe, Quiz Generator) are mocked/stubbed in CI; coverage gates block merges below target.
+- External services (Gemini, Google Cloud, image APIs, Stripe, Google Forms/Drive) are mocked/stubbed in CI; coverage gates block merges below target.
 
 #### TECH-8 AI-provider abstraction layer
 
@@ -610,7 +609,7 @@ The system implements GEN-2 with a **capability-based adapter layer** so the cor
 - **Adapters** implement those interfaces per engine — e.g. `GeminiGenerationProvider`, `GoogleCloudTranscriptionProvider`, and future `LocalLlmProvider` / `LocalWhisperProvider` for self-hosted models — with no other code aware of which is active.
 - A **provider registry** resolves the active adapter **per capability** from server config ([TECH-4](#tech-4-server-configuration)), so capabilities can mix sources (e.g., cloud STT + locally-hosted LLM) and a provider can be swapped by configuration alone, with no change to generator logic.
 - Usage metering (BILL-3) and cost accounting hook in at the adapter boundary, so caps and pricing remain consistent regardless of provider.
-- The separate Quiz Generator service follows the **same principle** internally ([§17](#17-quiz-generator-integration)): its quiz-authoring logic is decoupled from the AI engine it uses.
+- The imported Quiz Generator library follows the **same principle** ([§17](#17-quiz-generator-integration)): its Forms-publishing logic is **decoupled from auth** — the caller injects the authorized Google client — so, like the monolith's own adapters, it depends on an injected contract rather than a fixed environment.
 
 #### TECH-9 Billing-provider abstraction layer
 
@@ -630,7 +629,7 @@ The modular monolith ([§13](#13-system-architecture)) deploys to **Digital Ocea
 - **Database** — **DO Managed MongoDB** (automated backups, point-in-time restore) rather than self-hosted.
 - **Object storage** — **DO Spaces** (S3-compatible) for uploaded seed assets, cached enrichment images, and generated exports.
 - **Scaling** — the API is stateless (JWT), so App Platform can run multiple horizontal instances behind its load balancer. The one caveat is **real-time STT streaming**: a WebSocket pipeline needs sticky sessions, or the client streams audio **directly to Google Cloud STT** with the back-end only brokering credentials (see [§19](#19-open-questions)).
-- **Quiz Generator** — deployed as a **separate** App Platform service (or Google Apps Script), reached over HTTP per [§17](#17-quiz-generator-integration).
+- **Quiz Generator** — **not** a separate deployment: it is imported in-process as a versioned library ([§17](#17-quiz-generator-integration)); its Google Forms/Drive calls run inside the monolith using the instructor's connected-account token (EXP-4).
 
 #### TECH-11 Local dev & CI/CD
 
@@ -674,7 +673,7 @@ Indicative MongoDB collections, expressed as shared TypeScript types ([TECH-6](#
 - **SlideTranslation** — `{ id, deckId, locale: 'en'|'fr'|'es'|'ru'|'zh', perSlide: { slideId: { title?, body?, bullets[]?, caption? } }, createdAt }` (on-demand slide-content translation cache — SHARE-2)
 - **Template** — `{ id, ownerId, name, theme, layouts: Layout[], visibility, voteScore, createdAt }` where `Layout = { type, label, purpose, slots[], constraints?, elementPositions }` (`purpose`/`slots`/`constraints` are the AI-facing descriptor — TMPL-6 / GEN-6)
 - **Vote** — `{ id, userId, targetType: 'deck'|'template', targetId, value: 1|-1 }`
-- **QuizRef** — `{ id, deckId, quizGeneratorId, formUrl, status, publishConfig: { authMode, defaultPoints, driveFolderId, title } }` (link to the external Quiz Generator artifact + the publish config used — QUIZ-2/QUIZ-3)
+- **QuizRef** — `{ id, deckId, formId, formUrl, status, publishConfig: { authMode, defaultPoints, driveFolderId, title } }` (link to the published Google Form + the publish config used — QUIZ-2/QUIZ-3)
 
 The same definitions back API request/response DTOs and validation on both tiers.
 
@@ -684,7 +683,7 @@ The same definitions back API request/response DTOs and validation on both tiers
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **P-1** | All student data (rosters, quiz responses, scores) stays within NYU-approved, FERPA-compliant systems (NYU Google Workspace, NYU-provided models).                                                                                                                                                                      |
 | **P-2** | No student PII is sent to external AI models. Only de-identified lecture/slide/seed text drives slide and quiz generation.                                                                                                                                                                                              |
-| **P-3** | All secrets live in server-side `.env` (Gemini/OpenAI, Google Cloud, OAuth, JWT, SMTP, Stripe, Quiz Generator token) — never committed and never exposed to the client. (V1's committed `openai.key` and `localStorage` key storage are removed in V2.)                                                                 |
+| **P-3** | All secrets live in server-side `.env` (Gemini/OpenAI, Google Cloud, OAuth, JWT, SMTP, Stripe) — never committed and never exposed to the client. (V1's committed `openai.key` and `localStorage` key storage are removed in V2.)                                                                 |
 | **P-4** | Passwords hashed; JWTs signed with rotating secrets; reset/verification links time-limited and single-use; ownership/role checks on every mutating route.                                                                                                                                                               |
 | **P-5** | Google Drive/Docs/Slides access uses per-user OAuth consent and least-privilege scopes; imported content is the user's own.                                                                                                                                                                                             |
 | **P-6** | Microphone audio is used only for transcription and is not persisted; capture is bounded by explicit start/stop with clear UI state.                                                                                                                                                                                    |
@@ -694,22 +693,22 @@ The same definitions back API request/response DTOs and validation on both tiers
 
 ### 17. Quiz Generator Integration
 
-The Quiz Generator remains a **separate project/service**; the two communicate over simple, versioned HTTP APIs. Responsibilities are split by concern:
+The Quiz Generator remains a **separate repository** ([github.com/bloombar/google-forms-quiz-generator](https://github.com/bloombar/google-forms-quiz-generator)), but V2 consumes it as a **versioned, in-process library** (a pinned git dependency) rather than a separate HTTP service. Responsibilities are still split by concern:
 
 - **Slide Machine (monolith)** — **generates** the quiz definition, owns the instructor configuration UI, orchestrates publishing, and stores the result.
-- **Quiz Generator (separate service)** — **publishes**: it takes a quiz definition plus a publish configuration and creates the **Google Form** quiz, applies its settings, places it in Drive, and returns the link.
+- **Quiz Generator (imported library)** — **publishes**: given a quiz definition, a publish configuration, and an **authorized Google client**, it creates the **Google Form** quiz, applies its settings, places it in Drive, and returns the form's id and link.
 
-This keeps the sizeable Google Forms/Drive/Apps Script surface out of the core while leaving AI generation where the provider abstraction already lives (GEN-2 / [TECH-8](#tech-8-ai-provider-abstraction-layer)).
+Consuming it in-process (rather than over HTTP) means there is **no cross-service token handoff**: the monolith already holds the instructor's Google credentials (EXP-4) and passes an authorized client straight into the library. The Quiz Generator's Forms/Drive surface stays out of hand-written monolith code — it lives in the imported library behind a small `quiz-bridge` module — while AI generation stays where the provider abstraction already lives (GEN-2 / [TECH-8](#tech-8-ai-provider-abstraction-layer)).
 
 #### QUIZ-1 Quiz YAML generation (in the monolith)
 
-On session **Stop** (or on demand), the monolith's `QuizGenerationProvider` ([TECH-8](#tech-8-ai-provider-abstraction-layer)) turns finalized, de-identified slide text into an exit-ticket quiz definition in the **Quiz Generator's YAML format**. The user may review/edit the questions before publishing ([BILL-3](#bill-3-usage-caps--metering) metering applies).
+On session **Stop** (or on demand), the monolith's `QuizGenerationProvider` ([TECH-8](#tech-8-ai-provider-abstraction-layer)) turns finalized, de-identified slide text into an exit-ticket quiz definition in the **Quiz Generator library's quiz shape** (its YAML maps 1:1 to the in-memory object the library validates and publishes). The user may review/edit the questions before publishing ([BILL-3](#bill-3-usage-caps--metering) metering applies).
 
 #### QUIZ-2 Instructor publish configuration
 
-Before publishing, the instructor controls publish options, which are sent with the YAML as a structured **publish request**:
+Before publishing, the instructor controls publish options, passed with the quiz definition as a structured **publish request**:
 
-- **Authentication** — whether responding requires sign-in, and the **type** (e.g., open / restricted to the NYU Workspace domain / collect verified email / per-respondent limits).
+- **Authentication** — how responses are gated: **email collection** (verified / responder-entered / none). Restricting responses to the **NYU Workspace domain** is **not** settable through the Google Forms API (see the known limitation below); the pilot uses **verified-email** collection.
 - **Default point value** applied to each question (overridable per question).
 - **Drive destination** — the folder in the instructor's Google Drive where the Form is created/moved.
 - **Form metadata** — title, description, and grading/feedback release options.
@@ -718,11 +717,11 @@ Defaults for these are configurable and remembered per project.
 
 #### QUIZ-3 Publishing & link return
 
-The Quiz Generator receives the **{YAML + publish config}** request, creates the **Google Form** quiz, applies the auth/point/feedback settings, moves it to the specified Drive folder, and returns the **shareable link**. The monolith stores a `QuizRef` (form URL, status, and the config used) against the deck ([§15](#15-data-models)).
+The `quiz-bridge` calls the imported library with the **{quiz definition + publish config + authorized Google client}**; the library creates the **Google Form** quiz, applies the point/email/quiz settings, moves it to the specified Drive folder, and returns the **form id and shareable link**. The monolith stores a `QuizRef` (form id/URL, status, and the config used) against the deck ([§15](#15-data-models)).
 
 #### QUIZ-4 Delegated Google access
 
-Because the Form is created in the **instructor's** Drive, publishing uses the instructor's **connected Google account** ([EXP-4](#exp-4-connected-accounts-google-drive--github)) — the publisher acts with delegated, least-privilege Forms/Drive scopes. The token-sharing model between the two services is a security-sensitive integration point ([§19](#19-open-questions)); tokens remain encrypted and per-user ([P-9](#16-privacy-security--compliance)).
+Because the Form is created in the **instructor's** Drive, publishing uses the instructor's **connected Google account** ([EXP-4](#exp-4-connected-accounts-google-drive--github)): the monolith builds an authorized, least-privilege Forms/Drive client from the instructor's stored (encrypted, per-user — [P-9](#16-privacy-security--compliance)) refresh token and injects it into the library. Running in-process means the token **never leaves the monolith** — there is no second service to delegate to, which resolves the earlier cross-service token question ([§19](#19-open-questions)). **Prerequisite:** this depends on EXP-4's connected-account flow (offline Google OAuth with Forms/Drive scopes and an encrypted token store), a hard predecessor to publishing that is **not yet built**.
 
 #### QUIZ-5 Distribution & grading
 
@@ -730,7 +729,9 @@ The published Google Form is distributed to enrolled students within NYU Google 
 
 #### QUIZ-6 Loose coupling
 
-APIs are versioned and documented; neither project depends on the other's internals. The Quiz Generator base URL and any shared token are configured server-side ([TECH-4](#tech-4-server-configuration)). The Quiz Generator stays independently deployable and reusable, and its own quiz-authoring logic remains engine-agnostic if it generates any content itself.
+The two repositories stay decoupled: neither depends on the other's internals, and the contract is the library's **exported function signatures**, versioned by **semver and a pinned git ref** (not an HTTP API). The Quiz Generator stays independently usable as its own CLI and keeps its publishing logic **auth-agnostic** — the caller injects the authorized client — so it remains reusable outside Slide Machine.
+
+**Known limitation — domain restriction.** Restricting Form responses to the NYU Workspace organization is **not exposed by the Google Forms REST API** (only quiz settings and email-collection are); it is an admin/UI-level control. So `authMode: 'domain-restricted'` in the publish config is **not enforceable** by the library today. The pilot ships **verified-email** collection; true org-restriction is deferred ([§18](#18-future-work)) and would require the Workspace admin default and/or an Apps Script hop.
 
 ### 18. Future Work
 
@@ -759,5 +760,5 @@ Out of scope for the Fall 2026 pilot:
 9. **100% coverage feasibility** — which boundaries (third-party SDK glue, generated code) are excluded via documented ignore rules to keep the 100% gate realistic?
 10. **Speech-adaptation limits** ([PREP-3](#prep-3-use-of-the-honed-concept-set)) — how large a preflight concept set can be supplied to Google Cloud STT phrase hints/boost without latency or cost penalty, and how to prioritize terms if the set exceeds that limit.
 11. **MCP server auth & scope** ([§18](#18-future-work)) — for the future MCP server: the remote-OAuth model, tool granularity, FERPA boundaries on agent-driven edits, and how plan-cap metering applies to agent tool calls.
-12. **Quiz publishing token model** ([QUIZ-4](#quiz-4-delegated-google-access)) — how the Quiz Generator obtains delegated access to the instructor's Google Drive/Forms: a short-lived scoped token minted by the monolith per publish, vs. the QG holding its own OAuth grant. Affects scope blast-radius and whether the QG ever stores instructor tokens.
+12. **Quiz publishing token model** ([QUIZ-4](#quiz-4-delegated-google-access)) — **Resolved.** The Quiz Generator is imported **in-process as a library** rather than run as a separate service ([§17](#17-quiz-generator-integration)), so there is no cross-service delegation: the monolith builds an authorized Forms/Drive client from the instructor's own connected-account token (EXP-4) and injects it into the library. No token ever leaves the monolith, and the Quiz Generator never stores instructor tokens. (Remaining dependency: EXP-4's connected-account flow must be built first.)
 13. **AI-generated infographic accuracy** ([IMG-4](#img-4-ai-generated-imagery-optional)) — how much to rely on generated diagrams/infographics given factual/text-rendering errors: default off, require user confirmation before display, and/or prefer search-grounded generation where the provider supports it.
