@@ -24,6 +24,11 @@ import { SlideModel, toSlideDto, type SlideDb } from '../models/slide'
 import { DeckModel, loadDeckAcl, touchDeck, type DeckDb } from '../models/deck'
 import { getBuiltinTemplate } from '../templates/builtin'
 import { canEditAcl } from '../lib/access'
+import { layoutHasImageSlot } from '../lib/image-layout'
+import { enrichSlideImage } from '../enrichment/enrich'
+import { deriveImageKeywords } from '../enrichment/keywords'
+import { seedAssetsFor, seededImageCandidates } from '../lib/seed-assets'
+import { env } from '../config/env'
 
 interface OwnedSlide {
   slide: HydratedDocument<SlideDb>
@@ -76,7 +81,9 @@ export const slideEditContent = defineAction<SlideEditInput, Slide>({
 })
 
 /** Per-slide layout switch (EDIT-3): the target must be one of the
- * deck template's layouts; slot content is preserved as-is. */
+ * deck template's layouts; slot content is preserved as-is. Moving onto an
+ * image-capable layout with no image yet kicks off background enrichment
+ * (IMG-1) so the empty image slot fills itself. */
 export const slideSetLayout = defineAction<SlideSetLayoutInput, Slide>({
   name: 'slide.setLayout',
   input: z.object({
@@ -92,8 +99,38 @@ export const slideSetLayout = defineAction<SlideSetLayoutInput, Slide>({
       ])
     }
     slide.layoutType = input.layoutType as LayoutType
+
+    // Switching onto a layout with an image slot on a slide that has no
+    // image yet: source one via enrichment. Derive keywords from the
+    // slide's own text when the model left none, and persist them so the
+    // intent survives a reload and the client polls for the arriving image.
+    const shouldSource =
+      env.IMAGE_ENRICHMENT_ENABLED &&
+      !slide.imageRef &&
+      layoutHasImageSlot(input.layoutType, template.layouts)
+    if (shouldSource && !slide.imageKeywords?.length) {
+      const derived = deriveImageKeywords(slide)
+      if (derived.length) slide.imageKeywords = derived
+    }
+
     await slide.save()
     await touchDeck(slide.deckId)
+
+    if (shouldSource && slide.imageKeywords?.length) {
+      // Fire-and-forget, strictly off the response path (IMG-2): load the
+      // lecture's seeded uploads to prefer, then enrich in the background.
+      const keywords = slide.imageKeywords
+      const slideId = slide._id.toString()
+      void seedAssetsFor(deck)
+        .then(assets =>
+          enrichSlideImage(slideId, keywords, [
+            ...seededImageCandidates(assets.project),
+            ...seededImageCandidates(assets.deck),
+          ]),
+        )
+        .catch(() => undefined)
+    }
+
     return toSlideDto(slide)
   },
 })
