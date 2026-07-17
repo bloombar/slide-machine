@@ -282,12 +282,17 @@ function ImageSlot({
         // No image: owners always get an Add affordance, even while
         // enrichment is still pending — waiting for an image that may
         // never arrive must not block adding one by hand. Add opens the
-        // same dialog as Replace (upload, drop, or web search). The
-        // "generating" hint below keeps the pending state visible.
+        // same dialog as Replace (upload, drop, or web search). While an
+        // image is being sourced the affordance doubles as the pending
+        // skeleton (it pulses and carries the image-skeleton test id), so
+        // the sourcing state is visible without hiding the Add option.
         <button
           onClick={() => setImageDialogOpen(true)}
           aria-label="Add image"
-          className="flex h-full min-h-[16cqi] w-full flex-col items-center justify-center gap-1 rounded-lg text-slate-400 hover:text-slate-600"
+          data-testid={imagePending ? 'image-skeleton' : undefined}
+          className={`flex h-full min-h-[16cqi] w-full flex-col items-center justify-center gap-1 rounded-lg text-slate-400 hover:text-slate-600 ${
+            imagePending ? 'animate-pulse' : ''
+          }`}
           style={{ backgroundColor: colors.surface }}
         >
           <ImagePlus className="h-[6cqi] w-[6cqi]" aria-hidden />
