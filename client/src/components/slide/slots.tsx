@@ -7,12 +7,14 @@
  * extending SlotKind, describing the slot in shared, and registering
  * an editor here.
  */
-import { useRef, useState, type ComponentType } from 'react'
+import { useState, type ComponentType } from 'react'
 import { ImagePlus, ImageUp, Info, X } from 'lucide-react'
 import ImageAttributionDialog from '../ImageAttributionDialog'
+import ReplaceImageDialog from '../ReplaceImageDialog'
 import Tooltip from '../Tooltip'
 import {
   SLOT_DESCRIPTORS,
+  type ImageSearchCandidate,
   type LayoutSlot,
   type Slide,
   type SlideEditInput,
@@ -26,6 +28,13 @@ import type { ThemeColors } from './theme'
 
 /** Partial content update produced by in-place editing. */
 export type SlideContentPatch = Omit<SlideEditInput, 'slideId'>
+
+/**
+ * The default title a freshly-added slide gets (mirrors the server's
+ * deck.addSlide default). It is a placeholder, not real context, so it
+ * never seeds the replace/add dialog's image search.
+ */
+const PLACEHOLDER_SLIDE_TITLE = 'New slide'
 
 /** The slide field backing each slot (image edits will target imageRef). */
 const SLOT_FIELDS: Partial<Record<LayoutSlot, keyof Slide>> = {
@@ -50,6 +59,8 @@ export interface SlotEditorProps {
   imagePending?: boolean
   /** Owner-only: uploads a file to replace/set this slide's image. */
   onReplaceImage?: (file: File) => void
+  /** Owner-only: applies a web search result as this slide's image (EDIT-1). */
+  onPickImageCandidate?: (candidate: ImageSearchCandidate) => void
   /** Owner-only: removes this slide's image (may delete or re-layout the slide). */
   onRemoveImage?: () => void
 }
@@ -122,14 +133,25 @@ function ImageSlot({
   imagePending,
   onEdit,
   onReplaceImage,
+  onPickImageCandidate,
   onRemoveImage,
 }: SlotEditorProps) {
-  const [loadFailed, setLoadFailed] = useState(false)
+  // Track the URL that failed, not a boolean: when the image is replaced
+  // the imageRef changes, so a stale failure never suppresses the new
+  // picture — it renders live without needing a page reload.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [attrOpen, setAttrOpen] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const editable = Boolean(onReplaceImage && onRemoveImage)
-  const hasImage = Boolean(slide.imageRef) && !loadFailed
+  const hasImage = Boolean(slide.imageRef) && failedSrc !== slide.imageRef
+  // Seed the dialog's web search only from meaningful context: the AI's
+  // image keywords, or a real slide title. A fresh slide's placeholder
+  // title is not context, so its search starts blank and the user
+  // searches freely rather than on a meaningless default.
+  const titleSeed =
+    slide.title && slide.title !== PLACEHOLDER_SLIDE_TITLE ? slide.title : ''
+  const searchQuery = slide.imageKeywords?.join(' ') || titleSeed
 
   const attribution = slide.attribution
   const hasAttribution = Boolean(
@@ -149,7 +171,7 @@ function ImageSlot({
     <img
       src={slide.imageRef}
       alt={slide.caption ?? slide.title ?? 'Slide image'}
-      onError={() => setLoadFailed(true)}
+      onError={() => setFailedSrc(slide.imageRef ?? null)}
       className="h-full w-full object-cover transition-opacity duration-500"
     />
   )
@@ -173,7 +195,7 @@ function ImageSlot({
   // label opens upward so it is not clipped by the slide's rounded frame.
   const infoIcon = showInfo && (
     <div className="absolute right-2 bottom-2">
-      <Tooltip label="Image details" side="top">
+      <Tooltip label="Image details" side="top" align="end">
         <button
           aria-label="Image details"
           onClick={() => setAttrOpen(true)}
@@ -212,7 +234,7 @@ function ImageSlot({
     return imagePending ? skeleton : fallback
   }
 
-  const pickFile = () => inputRef.current?.click()
+  // A file dropped straight onto the slot uploads without the dialog
   const acceptFile = (file?: File | null) => {
     if (file) onReplaceImage!(file)
   }
@@ -231,33 +253,20 @@ function ImageSlot({
         acceptFile(e.dataTransfer.files?.[0])
       }}
     >
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/png,image/jpeg,image/webp"
-        aria-label="Upload image file"
-        className="hidden"
-        onChange={e => {
-          const file = e.target.files?.[0]
-          e.target.value = ''
-          acceptFile(file)
-        }}
-      />
-
       {hasImage ? (
         <>
           {image}
           <div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-            <Tooltip label="Replace image">
+            <Tooltip label="Replace image" align="end">
               <button
                 aria-label="Replace image"
-                onClick={pickFile}
+                onClick={() => setImageDialogOpen(true)}
                 className="rounded-md bg-white/90 p-1.5 text-slate-700 shadow hover:bg-white"
               >
                 <ImageUp className="h-4 w-4" aria-hidden />
               </button>
             </Tooltip>
-            <Tooltip label="Delete image">
+            <Tooltip label="Delete image" align="end">
               <button
                 aria-label="Remove image"
                 onClick={onRemoveImage}
@@ -270,12 +279,13 @@ function ImageSlot({
           {infoIcon}
         </>
       ) : (
-        // No image: owners always get an upload affordance, even while
+        // No image: owners always get an Add affordance, even while
         // enrichment is still pending — waiting for an image that may
-        // never arrive must not block adding one by hand. The "generating"
-        // hint below keeps the pending state visible.
+        // never arrive must not block adding one by hand. Add opens the
+        // same dialog as Replace (upload, drop, or web search). The
+        // "generating" hint below keeps the pending state visible.
         <button
-          onClick={pickFile}
+          onClick={() => setImageDialogOpen(true)}
           aria-label="Add image"
           className="flex h-full min-h-[16cqi] w-full flex-col items-center justify-center gap-1 rounded-lg text-slate-400 hover:text-slate-600"
           style={{ backgroundColor: colors.surface }}
@@ -294,6 +304,16 @@ function ImageSlot({
         />
       )}
       {infoDialog}
+      {imageDialogOpen && onReplaceImage && onPickImageCandidate && (
+        <ReplaceImageDialog
+          slideId={slide.id}
+          title={hasImage ? 'Replace image' : 'Add image'}
+          initialQuery={searchQuery}
+          onUpload={onReplaceImage}
+          onPickCandidate={onPickImageCandidate}
+          onClose={() => setImageDialogOpen(false)}
+        />
+      )}
     </div>
   )
 }

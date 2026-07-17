@@ -1688,6 +1688,7 @@ describe('DeckViewerPage image editing', () => {
         status: 200,
         body: imageDeck('two-column'),
       }),
+      '/api/slides/s1/image-candidates': () => ({ status: 200, body: [] }),
       '/api/slides/s1/image': () => ({ status: 500 }),
     })
     render(
@@ -1701,8 +1702,10 @@ describe('DeckViewerPage image editing', () => {
     )
     await screen.findByRole('button', { name: 'Remove image' })
 
+    // Replace opens the image dialog; uploading there hits the failing route
+    fireEvent.click(screen.getByRole('button', { name: 'Replace image' }))
     const file = new File(['x'], 'new.png', { type: 'image/png' })
-    fireEvent.change(screen.getByLabelText('Upload image file'), {
+    fireEvent.change(await screen.findByLabelText('Upload image file'), {
       target: { files: [file] },
     })
     expect(await screen.findByText(/could not upload the image/i)).toBeVisible()
@@ -1790,23 +1793,8 @@ describe('DeckViewerPage pre-lecture seeding', () => {
     ).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('reopens seeding from the toolbar mid-lecture, pausing and resuming the mic', async () => {
-    renderSpeaking()
-    await screen.findByRole('dialog', { name: 'Add seed material' })
-    fireEvent.click(screen.getByRole('button', { name: 'Start lecture' }))
-    const recording = FakeRecognition.last
-
-    // The toolbar's seed button pauses the mic while the dialog is up
-    fireEvent.click(screen.getByRole('button', { name: 'Add seed material' }))
-    expect(
-      await screen.findByRole('dialog', { name: 'Add seed material' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: 'Live session' }),
-    ).not.toHaveClass('bg-red-600')
-
-    // Done resumes recording with a fresh recognition instance
-    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
-    expect(FakeRecognition.last).not.toBe(recording)
-  })
+  // The mid-lecture toolbar seed button is hidden for now
+  // (SHOW_SEED_UPLOAD_IN_TOOLBAR), so there is no UI entry point to reopen
+  // seeding during a lecture; seeding happens from the pre-lecture dialog
+  // and Lecture settings. The wiring is retained for when it returns.
 })

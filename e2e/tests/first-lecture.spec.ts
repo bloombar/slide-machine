@@ -31,6 +31,8 @@ test('a new user starts a lecture with no project; a default project is created'
   await expect(
     page.getByRole('heading', { name: 'Untitled lecture' }),
   ).toBeVisible()
+  // Dismiss the pre-lecture seed dialog before navigating away
+  await page.getByRole('button', { name: 'Start lecture' }).click()
 
   // Home now shows the default project under its placeholder name, with the
   // lecture beneath it

@@ -43,15 +43,31 @@ const setLayout = async (page: Page, label: RegExp) => {
   await page.getByRole('radio', { name: label }).click()
 }
 
+/** Adds an image to the current empty slot via the Add → dialog flow. */
+const addImage = async (page: Page, file: ReturnType<typeof png>) => {
+  await page.getByRole('button', { name: 'Add image' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Add image' })
+  await dialog.getByLabel('Upload image file').setInputFiles(file)
+  await expect(dialog).not.toBeVisible()
+}
+
+/** Replaces the current image via the Replace → dialog upload flow. */
+const replaceImage = async (page: Page, file: ReturnType<typeof png>) => {
+  await page.getByRole('button', { name: 'Replace image' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Replace image' })
+  await dialog.getByLabel('Upload image file').setInputFiles(file)
+  await expect(dialog).not.toBeVisible()
+}
+
 test('add, replace, then remove an image on an image+text slide', async ({
   page,
 }) => {
   await newLectureWithSlide(page, 'twocol')
   await setLayout(page, /Two column/)
 
-  // The empty image slot offers Add; setting the hidden input uploads
+  // The empty image slot offers Add, which opens the image dialog
   await expect(page.getByRole('button', { name: 'Add image' })).toBeVisible()
-  await page.getByLabel('Upload image file').setInputFiles(png('cell.png'))
+  await addImage(page, png('cell.png'))
   // Once set, the image controls (Replace/Remove) appear
   await expect(page.getByRole('button', { name: 'Remove image' })).toBeVisible()
   const slideImg = page.getByTestId('slide').locator('img')
@@ -60,7 +76,7 @@ test('add, replace, then remove an image on an image+text slide', async ({
 
   // Replace with another upload — the image must actually change, not just
   // keep its controls (each upload gets a fresh unguessable URL)
-  await page.getByLabel('Upload image file').setInputFiles(png('cell2.png'))
+  await replaceImage(page, png('cell2.png'))
   await expect(page.getByRole('button', { name: 'Remove image' })).toBeVisible()
   await expect(async () => {
     expect(await slideImg.getAttribute('src')).not.toBe(firstSrc)
@@ -77,14 +93,36 @@ test('add, replace, then remove an image on an image+text slide', async ({
   )
 })
 
+test('the Replace control opens a dialog that swaps the image live', async ({
+  page,
+}) => {
+  await newLectureWithSlide(page, 'replacedialog')
+  await setLayout(page, /Two column/)
+  await addImage(page, png('first.png'))
+  await expect(page.getByRole('button', { name: 'Remove image' })).toBeVisible()
+  const slideImg = page.getByTestId('slide').locator('img')
+  const firstSrc = await slideImg.getAttribute('src')
+
+  // Replace opens a dialog offering upload AND a web search
+  await page.getByRole('button', { name: 'Replace image' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Replace image' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Search' })).toBeVisible()
+
+  // Uploading from the dialog replaces the image without a page reload
+  await dialog.getByLabel('Upload image file').setInputFiles(png('second.png'))
+  await expect(dialog).not.toBeVisible()
+  await expect(async () => {
+    expect(await slideImg.getAttribute('src')).not.toBe(firstSrc)
+  }).toPass()
+})
+
 test('image button labels stay hidden until the specific icon is hovered', async ({
   page,
 }) => {
   await newLectureWithSlide(page, 'tips')
   await setLayout(page, /Two column/)
-  await page
-    .getByLabel('Upload image file')
-    .setInputFiles({ name: 'x.png', mimeType: 'image/png', buffer: PNG })
+  await addImage(page, png('x.png'))
   await expect(page.getByRole('button', { name: 'Remove image' })).toBeVisible()
 
   const label = page.getByText('Replace image', { exact: true })
@@ -105,9 +143,7 @@ test('an uploaded slide image also appears in seed material', async ({
 }) => {
   await newLectureWithSlide(page, 'seedlink')
   await setLayout(page, /Two column/)
-  await page
-    .getByLabel('Upload image file')
-    .setInputFiles({ name: 'diagram.png', mimeType: 'image/png', buffer: PNG })
+  await addImage(page, png('diagram.png'))
   await expect(page.getByRole('button', { name: 'Remove image' })).toBeVisible()
 
   // The upload is registered as lecture seed material
@@ -124,7 +160,7 @@ test('image attribution: an owner sets it, it persists and shows via the i icon'
 }) => {
   await newLectureWithSlide(page, 'attr')
   await setLayout(page, /Two column/)
-  await page.getByLabel('Upload image file').setInputFiles(png('cell.png'))
+  await addImage(page, png('cell.png'))
   await expect(page.getByRole('button', { name: 'Remove image' })).toBeVisible()
 
   // The "i" icon opens the attribution dialog; fill in credit + license
@@ -153,7 +189,7 @@ test('removing the image from an image-only slide deletes it after a confirm', a
   await expect(page.getByTestId('slide')).toBeVisible()
 
   await setLayout(page, /^Image/)
-  await page.getByLabel('Upload image file').setInputFiles(png('whole.png'))
+  await addImage(page, png('whole.png'))
   await expect(page.getByRole('button', { name: 'Remove image' })).toBeVisible()
 
   await page.getByRole('button', { name: 'List view' }).click()

@@ -10,7 +10,12 @@
  * editable in place (EDIT-1), auto-saving via the debounced pattern.
  */
 import { createElement } from 'react'
-import type { LayoutSlot, Slide, Template } from '@slide-machine/shared'
+import type {
+  ImageSearchCandidate,
+  LayoutSlot,
+  Slide,
+  Template,
+} from '@slide-machine/shared'
 import SlideSlot, { type SlideContentPatch } from './slide/slots'
 import { themeColors } from './slide/theme'
 import { getLayoutRenderer } from './slide/layouts'
@@ -24,6 +29,7 @@ export default function SlideView({
   editable,
   onEdit,
   onReplaceImage,
+  onPickImageCandidate,
   onRemoveImage,
 }: {
   slide: Slide
@@ -35,6 +41,7 @@ export default function SlideView({
   onEdit?: (patch: SlideContentPatch) => void
   /** Owner-only image editing (EDIT-1), bound to this slide. */
   onReplaceImage?: (file: File) => void
+  onPickImageCandidate?: (candidate: ImageSearchCandidate) => void
   onRemoveImage?: () => void
 }) {
   const colors = themeColors(template.theme)
@@ -51,6 +58,7 @@ export default function SlideView({
       colors={colors}
       onEdit={editable ? onEdit : undefined}
       onReplaceImage={editable ? onReplaceImage : undefined}
+      onPickImageCandidate={editable ? onPickImageCandidate : undefined}
       onRemoveImage={editable ? onRemoveImage : undefined}
       imagePending={imagePending}
     />

@@ -282,7 +282,7 @@ export default function DeckPageHeader({
         // The whole pill is the drag surface, buttons included, so it is
         // grabbable wherever the pointer lands. touch-none: a touch drag
         // must move the pill, not scroll the page.
-        className={`pointer-events-auto flex touch-none cursor-grab items-center gap-1 rounded-full border border-slate-200 bg-white/95 px-2 py-1 shadow-lg backdrop-blur select-none active:cursor-grabbing ${
+        className={`pointer-events-auto flex touch-none cursor-grab items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-3 py-1.5 shadow-lg backdrop-blur select-none active:cursor-grabbing ${
           pos ? 'fixed z-30' : ''
         }`}
       >

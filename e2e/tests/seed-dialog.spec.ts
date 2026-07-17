@@ -15,7 +15,7 @@ const PNG = Buffer.from(
   'base64',
 )
 
-test('seeding before and during a lecture, connected to settings', async ({
+test('pre-lecture seeding is connected to lecture settings', async ({
   page,
 }) => {
   await page.goto('/register')
@@ -61,27 +61,6 @@ test('seeding before and during a lecture, connected to settings', async ({
   ).toHaveValue('Cell biology basics')
   await expect(settings.getByText('cell.png')).toBeVisible()
   await page.getByRole('button', { name: 'Close settings' }).click()
-
-  // The toolbar reopens the dialog mid-lecture to add more material
-  await page.getByRole('button', { name: 'Add seed material' }).click()
-  const midDialog = page.getByRole('dialog', { name: 'Add seed material' })
-  await expect(midDialog).toBeVisible()
-  await midDialog.getByLabel('Upload seed material').setInputFiles({
-    name: 'notes.pdf',
-    mimeType: 'application/pdf',
-    buffer: PNG,
-  })
-  await expect(midDialog.getByText('notes.pdf')).toBeVisible()
-  await midDialog.getByRole('button', { name: 'Done' }).click()
-  await expect(midDialog).not.toBeVisible()
-
-  // The mid-lecture upload also reached settings
-  await page.getByRole('button', { name: 'Lecture settings' }).click()
-  await expect(
-    page
-      .getByRole('dialog', { name: 'Lecture settings' })
-      .getByText('notes.pdf'),
-  ).toBeVisible()
 })
 
 test('skipping the seed dialog still starts the lecture', async ({ page }) => {

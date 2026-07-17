@@ -4,7 +4,11 @@
  * the image lands or the attempts run out. Failures are silent — the
  * slide simply resolves to its no-image fallback.
  */
-import type { Slide } from '@slide-machine/shared'
+import type {
+  ImageAttribution,
+  ImageSearchCandidate,
+  Slide,
+} from '@slide-machine/shared'
 import { apiFetch } from './http'
 import { dispatchAction } from './actions'
 
@@ -20,6 +24,31 @@ export const uploadSlideImage = (
     body: form,
   })
 }
+
+/**
+ * Searches permitted web sources for images to replace a slide's picture
+ * (EDIT-1). An empty query lets the server fall back to the slide's own
+ * keywords, so results relate to what the slide is about.
+ */
+export const searchSlideImages = (
+  slideId: string,
+  query = '',
+): Promise<ImageSearchCandidate[]> =>
+  apiFetch<ImageSearchCandidate[]>(`/api/slides/${slideId}/image-candidates`, {
+    method: 'POST',
+    body: JSON.stringify({ query }),
+  })
+
+/** Sets a slide's image to a chosen web search result (EDIT-1). */
+export const applySlideImageFromSource = (
+  slideId: string,
+  url: string,
+  attribution?: ImageAttribution,
+): Promise<Slide> =>
+  apiFetch<Slide>(`/api/slides/${slideId}/image-from-source`, {
+    method: 'POST',
+    body: JSON.stringify({ url, attribution }),
+  })
 
 interface PollOptions {
   attempts?: number

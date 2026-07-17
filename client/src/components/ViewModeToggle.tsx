@@ -38,8 +38,9 @@ export default function ViewModeToggle({ mode, onChange }: Props) {
             aria-pressed={mode === target}
             onClick={() => onChange(target)}
             // The active view lifts out of the well in white, the way a
-            // segmented control marks its selection
-            className={`rounded-full p-1.5 ${
+            // segmented control marks its selection. Kept a notch smaller
+            // than the page actions (settings/add/record), which use h-5.
+            className={`rounded-full p-1 ${
               mode === target
                 ? 'bg-white text-indigo-600 shadow-sm'
                 : 'text-slate-500 hover:text-slate-900'

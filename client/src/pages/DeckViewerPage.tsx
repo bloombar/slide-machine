@@ -13,12 +13,17 @@ import { Mic, Plus, Settings, UploadCloud } from 'lucide-react'
 import type {
   Deck,
   DeckViewResponse,
+  ImageSearchCandidate,
   Slide,
   SlideEvent,
 } from '@slide-machine/shared'
 import { apiFetch, ApiError } from '../api/http'
 import { dispatchAction } from '../api/actions'
-import { pollSlideImage, uploadSlideImage } from '../api/slides'
+import {
+  applySlideImageFromSource,
+  pollSlideImage,
+  uploadSlideImage,
+} from '../api/slides'
 import { useAuth } from '../auth/AuthContext'
 import { useTimeAgo } from '../hooks/useTimeAgo'
 import { useSlideNavigation } from '../hooks/useSlideNavigation'
@@ -49,6 +54,12 @@ import { lectureTitle, UNTITLED } from '../lib/lecture'
 // Layouts where the image is the whole slide; removing the image leaves
 // nothing, so the slide itself is deleted rather than left blank
 const IMAGE_ONLY_LAYOUTS = new Set(['image-heavy'])
+
+// The toolbar's "Seed material" upload button is hidden for now but its
+// wiring (openManualSeed, the SeedDialog) is kept so it can return by
+// flipping this to true — seeding still happens from the pre-lecture
+// dialog and Lecture settings in the meantime.
+const SHOW_SEED_UPLOAD_IN_TOOLBAR = false
 
 // Carousel/list is a display preference, remembered across reloads so a
 // refresh keeps whichever view the user was reading in
@@ -621,6 +632,15 @@ export default function DeckViewerPage() {
       .catch(() => setImageError('Could not upload the image — try again'))
   }
 
+  /** Applies a chosen web-search image to a slide (EDIT-1). */
+  const pickSlideImageCandidate =
+    (slideId: string) => (candidate: ImageSearchCandidate) => {
+      setImageError(null)
+      applySlideImageFromSource(slideId, candidate.url, candidate.attribution)
+        .then(applySlide)
+        .catch(() => setImageError('Could not set that image — try again'))
+    }
+
   /**
    * Removes a slide's image. On an image-only slide (image-heavy) the
    * whole slide would be left blank, so it is deleted after a confirm; on
@@ -761,29 +781,31 @@ export default function DeckViewerPage() {
                 <button
                   aria-label="Lecture settings"
                   onClick={() => openSettings()}
-                  className="rounded-md p-1.5 text-slate-500 hover:text-slate-900"
+                  className="rounded-md p-2 text-slate-500 hover:text-slate-900"
                 >
-                  <Settings className="h-4 w-4" aria-hidden />
+                  <Settings className="h-5 w-5" aria-hidden />
                 </button>
               </Tooltip>
               <Tooltip label="Add a slide">
                 <button
                   aria-label="Add slide"
                   onClick={() => void addSlide()}
-                  className="rounded-md p-1.5 text-slate-500 hover:text-slate-900"
+                  className="rounded-md p-2 text-slate-500 hover:text-slate-900"
                 >
-                  <Plus className="h-4 w-4" aria-hidden />
+                  <Plus className="h-5 w-5" aria-hidden />
                 </button>
               </Tooltip>
-              <Tooltip label="Seed material">
-                <button
-                  aria-label="Add seed material"
-                  onClick={openManualSeed}
-                  className="rounded-md p-1.5 text-slate-500 hover:text-slate-900"
-                >
-                  <UploadCloud className="h-4 w-4" aria-hidden />
-                </button>
-              </Tooltip>
+              {SHOW_SEED_UPLOAD_IN_TOOLBAR && (
+                <Tooltip label="Seed material">
+                  <button
+                    aria-label="Add seed material"
+                    onClick={openManualSeed}
+                    className="rounded-md p-2 text-slate-500 hover:text-slate-900"
+                  >
+                    <UploadCloud className="h-5 w-5" aria-hidden />
+                  </button>
+                </Tooltip>
+              )}
               <Tooltip
                 label={
                   listening
@@ -802,7 +824,7 @@ export default function DeckViewerPage() {
                   }}
                   // Recording fills solid red and pulses: the audience is
                   // live, so the state has to be unmissable at a glance
-                  className={`rounded-md p-1.5 ${
+                  className={`rounded-md p-2 ${
                     listening
                       ? 'animate-pulse bg-red-600 text-white ring-2 ring-red-300'
                       : speaking
@@ -810,7 +832,7 @@ export default function DeckViewerPage() {
                         : 'text-slate-500 hover:text-slate-900'
                   }`}
                 >
-                  <Mic className="h-4 w-4" aria-hidden />
+                  <Mic className="h-5 w-5" aria-hidden />
                 </button>
               </Tooltip>
             </>
@@ -851,6 +873,7 @@ export default function DeckViewerPage() {
                 editable={canEdit}
                 onEdit={editSlide(slide!.id)}
                 onReplaceImage={replaceSlideImage(slide!.id)}
+                onPickImageCandidate={pickSlideImageCandidate(slide!.id)}
                 onRemoveImage={removeSlideImage(slide!)}
                 imagePending={pendingImages.has(slide!.id)}
               />
@@ -886,6 +909,7 @@ export default function DeckViewerPage() {
                   editable
                   onEdit={editSlide(s.id)}
                   onReplaceImage={replaceSlideImage(s.id)}
+                  onPickImageCandidate={pickSlideImageCandidate(s.id)}
                   onRemoveImage={removeSlideImage(s)}
                   imagePending={pendingImages.has(s.id)}
                 />

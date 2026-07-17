@@ -2,7 +2,16 @@
  * Integration tests for EDIT-1 actions: partial content edits, delete
  * with reindexing, reorder validation, and ownership enforcement.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  afterAll,
+  afterEach,
+  beforeEach,
+} from 'vitest'
 import request from 'supertest'
 import { env } from '../../src/config/env'
 import { connectMongo, disconnectMongo } from '../../src/db/mongoose'
@@ -296,5 +305,108 @@ describe('POST /slides/:slideId/image (EDIT-1)', () => {
       .post(`/api/slides/${slideIds[0]}/image`)
       .set('Authorization', `Bearer ${ada}`)
     expect(res.status).toBe(400)
+  })
+})
+
+describe('POST /slides/:slideId/image-candidates (EDIT-1)', () => {
+  // Stub the web sources so search is deterministic and offline
+  const stubImageApis = () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('wikimedia')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              query: {
+                pages: {
+                  '1': {
+                    title: 'File:Cell.png',
+                    imageinfo: [
+                      {
+                        thumburl: 'http://wiki/cell.png',
+                        thumbwidth: 1024,
+                        descriptionurl: 'http://commons/cell',
+                        extmetadata: { Artist: { value: 'Ada' } },
+                      },
+                    ],
+                  },
+                },
+              },
+            }),
+          } as Response
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ results: [] }),
+        } as Response
+      }),
+    )
+  }
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('returns ranked candidates carrying source credit', async () => {
+    stubImageApis()
+    const res = await request(server)
+      .post(`/api/slides/${slideIds[0]}/image-candidates`)
+      .set('Authorization', `Bearer ${ada}`)
+      .send({ query: 'cell' })
+    expect(res.status).toBe(200)
+    expect(res.body.length).toBeGreaterThan(0)
+    expect(res.body[0]).toMatchObject({
+      url: 'http://wiki/cell.png',
+      source: 'wikimedia',
+    })
+    expect(res.body[0].attribution).toMatchObject({
+      creator: 'Ada',
+      sourceName: 'Wikimedia Commons',
+    })
+  })
+
+  it("403s searching for another user's slide", async () => {
+    const bob = await registerUser('bob-cand@example.com')
+    const res = await request(server)
+      .post(`/api/slides/${slideIds[0]}/image-candidates`)
+      .set('Authorization', `Bearer ${bob}`)
+      .send({ query: 'cell' })
+    expect(res.status).toBe(403)
+  })
+})
+
+describe('POST /slides/:slideId/image-from-source (EDIT-1)', () => {
+  it('sets a web image with read-only AI-sourced credit', async () => {
+    const res = await request(server)
+      .post(`/api/slides/${slideIds[0]}/image-from-source`)
+      .set('Authorization', `Bearer ${ada}`)
+      .send({
+        url: 'https://example.com/pic.jpg',
+        attribution: { creator: 'Ada', sourceName: 'Wikimedia Commons' },
+      })
+    expect(res.status).toBe(200)
+    expect(res.body.imageRef).toBe('https://example.com/pic.jpg')
+    // Marked AI-sourced 'stock' so its credit stays read-only (IMG-5)
+    expect(res.body.imageSource).toBe('stock')
+    expect(res.body.attribution).toMatchObject({ creator: 'Ada' })
+  })
+
+  it('rejects a value that is not a URL', async () => {
+    const res = await request(server)
+      .post(`/api/slides/${slideIds[0]}/image-from-source`)
+      .set('Authorization', `Bearer ${ada}`)
+      .send({ url: 'not-a-url' })
+    expect(res.status).toBe(400)
+  })
+
+  it("403s setting another user's slide", async () => {
+    const bob = await registerUser('bob-src@example.com')
+    const res = await request(server)
+      .post(`/api/slides/${slideIds[0]}/image-from-source`)
+      .set('Authorization', `Bearer ${bob}`)
+      .send({ url: 'https://example.com/pic.jpg' })
+    expect(res.status).toBe(403)
   })
 })

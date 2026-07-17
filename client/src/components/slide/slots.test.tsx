@@ -7,7 +7,14 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import type { LayoutSlot, Slide } from '@slide-machine/shared'
 import SlideSlot from './slots'
+import { searchSlideImages } from '../../api/slides'
 import type { ThemeColors } from './theme'
+
+// The replace dialog searches on open; keep it offline in slot tests.
+vi.mock('../../api/slides', () => ({
+  searchSlideImages: vi.fn(() => Promise.resolve([])),
+}))
+const mockedSearch = vi.mocked(searchSlideImages)
 
 const colors: ThemeColors = {
   background: '#000',
@@ -95,6 +102,7 @@ describe('SlideSlot', () => {
     slide: slide({ imageRef: 'http://img/x.png', ...over }),
     colors,
     onReplaceImage: vi.fn(),
+    onPickImageCandidate: vi.fn(),
     onRemoveImage: vi.fn(),
   })
 
@@ -108,11 +116,20 @@ describe('SlideSlot', () => {
     ).toBeInTheDocument()
   })
 
-  it('uploads a picked file to replace the image', () => {
+  it('opens the replace dialog from the Replace control', async () => {
+    render(<SlideSlot {...imageEditor()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Replace image' }))
+    expect(
+      await screen.findByRole('dialog', { name: 'Replace image' }),
+    ).toBeInTheDocument()
+  })
+
+  it('uploads a picked file from the replace dialog', async () => {
     const props = imageEditor()
     render(<SlideSlot {...props} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Replace image' }))
     const file = new File(['x'], 'new.png', { type: 'image/png' })
-    fireEvent.change(screen.getByLabelText('Upload image file'), {
+    fireEvent.change(await screen.findByLabelText('Upload image file'), {
       target: { files: [file] },
     })
     expect(props.onReplaceImage).toHaveBeenCalledWith(file)
@@ -134,17 +151,47 @@ describe('SlideSlot', () => {
     expect(props.onRemoveImage).toHaveBeenCalled()
   })
 
-  it('offers an Add affordance on an empty editable image slot', () => {
+  it('opens the same dialog from the Add affordance and uploads', async () => {
     const props = imageEditor({ imageRef: undefined })
     render(<SlideSlot {...props} />)
-    const add = screen.getByRole('button', { name: 'Add image' })
-    fireEvent.click(add)
-    // Add reuses the same upload path
+    fireEvent.click(screen.getByRole('button', { name: 'Add image' }))
+    // Empty slot: the dialog is titled "Add image", not "Replace image"
+    expect(
+      await screen.findByRole('dialog', { name: 'Add image' }),
+    ).toBeInTheDocument()
     const file = new File(['x'], 'add.png', { type: 'image/png' })
     fireEvent.change(screen.getByLabelText('Upload image file'), {
       target: { files: [file] },
     })
     expect(props.onReplaceImage).toHaveBeenCalledWith(file)
+  })
+
+  it('seeds the search from image keywords, not the "New slide" placeholder', async () => {
+    mockedSearch.mockClear()
+    render(
+      <SlideSlot
+        {...imageEditor({
+          imageRef: undefined,
+          title: 'New slide',
+          imageKeywords: ['mitochondria', 'cell'],
+        })}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Add image' }))
+    await screen.findByRole('dialog', { name: 'Add image' })
+    expect(mockedSearch).toHaveBeenCalledWith('s1', 'mitochondria cell')
+  })
+
+  it('starts the search blank on a fresh "New slide" with no keywords', async () => {
+    mockedSearch.mockClear()
+    render(
+      <SlideSlot
+        {...imageEditor({ imageRef: undefined, title: 'New slide' })}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Add image' }))
+    await screen.findByRole('dialog', { name: 'Add image' })
+    expect(mockedSearch).toHaveBeenCalledWith('s1', '')
   })
 
   it('highlights the slot while a file is dragged over it', () => {
