@@ -18,7 +18,7 @@ See instructions for [using the Claude Code Extension in VS Code](https://code.c
 
 ## Setup
 
-### Linux
+### Mac / UNIX / Linux
 
 ```sh
 npm ci
@@ -30,7 +30,7 @@ npm run dev                               # Express :3000 + Vite :5173
 
 ### Windows (PowerShell)
 
-```powershell
+```sh
 npm ci
 cp server/.env.example server/.env
 cp client/.env.example client/.env.local
