@@ -30,7 +30,7 @@ npm run dev                               # Express :3000 + Vite :5173
 
 ### Windows (PowerShell)
 
-```sh
+```powershell
 npm ci
 cp server/.env.example server/.env
 cp client/.env.example client/.env.local
