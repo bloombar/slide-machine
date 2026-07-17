@@ -1,0 +1,26 @@
+# Never copy host installs into the image — npm ci rebuilds them, and host
+# node_modules carry OS-specific symlinks (e.g. Windows workspace links) that
+# break resolution inside the Linux container.
+**/node_modules
+
+# Build outputs are produced inside the image
+**/dist
+client/dist
+server/dist
+
+# Local env and secrets (the image gets config via runtime env vars)
+**/.env
+**/.env.*
+!**/.env.example
+
+# VCS, editor, and OS cruft
+.git
+.gitignore
+.idea
+.vscode
+**/*.log
+
+# Test artifacts
+**/coverage
+e2e/test-results
+e2e/playwright-report
