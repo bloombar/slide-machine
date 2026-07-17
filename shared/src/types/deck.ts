@@ -59,6 +59,20 @@ export interface Deck {
 /** Where a slide's image came from, including AI-generated provenance (IMG-4). */
 export type ImageSource = 'seeded' | 'stock' | 'generated'
 
+/**
+ * Image credit/licensing shown behind the on-slide "i" icon (IMG-5).
+ * A simplified subset of TASL: where the image came from, who to credit,
+ * and the license. Any field may be absent.
+ */
+export interface ImageAttribution {
+  /** Where the image came from — a page URL, opened in a new tab. */
+  sourceUrl?: string
+  /** Who to credit (author/creator, often with the source name). */
+  author?: string
+  /** License name, e.g. "CC BY 4.0". */
+  license?: string
+}
+
 export interface Slide {
   id: string
   deckId: string
@@ -74,7 +88,8 @@ export interface Slide {
   imageKeywords?: string[]
   caption?: string
   sourceTranscript?: string
-  attribution?: string
+  /** Image credit/licensing behind the "i" icon (IMG-5). */
+  attribution?: ImageAttribution
 }
 
 /** Cached on-demand translation of a deck's slide content (SHARE-2). */

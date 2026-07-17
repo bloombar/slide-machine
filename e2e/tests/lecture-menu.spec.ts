@@ -20,6 +20,8 @@ test('kebab menu shares and deletes lectures from lists', async ({ page }) => {
     .getByRole('button', { name: 'Start a new lecture in MenuProj' })
     .click()
   await expect(page).toHaveURL(/\/d\/untitled-/)
+  // Dismiss the pre-lecture seed dialog
+  await page.getByRole('button', { name: 'Start lecture' }).click()
 
   // Back home: Settings opens the viewer on the General tab
   await page.getByRole('link', { name: 'The Slide Machine' }).click()

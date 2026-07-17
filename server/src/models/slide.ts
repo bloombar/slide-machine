@@ -21,7 +21,12 @@ const slideSchema = new Schema<SlideDb>({
   imageKeywords: { type: [String], default: undefined },
   caption: String,
   sourceTranscript: String,
-  attribution: String,
+  // Image credit/licensing behind the "i" icon (IMG-5)
+  attribution: {
+    type: { sourceUrl: String, author: String, license: String },
+    default: undefined,
+    _id: false,
+  },
 })
 
 slideSchema.index({ deckId: 1, index: 1 })

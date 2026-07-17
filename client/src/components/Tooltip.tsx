@@ -10,13 +10,21 @@ import type { ReactNode } from 'react'
 interface Props {
   /** Text shown on hover — keep it to a couple of words. */
   label: string
+  /** Which side the label appears on; 'top' avoids clipping near a bottom edge. */
+  side?: 'top' | 'bottom'
   /** The control being described. */
   children: ReactNode
 }
 
-export default function Tooltip({ label, children }: Props) {
+export default function Tooltip({ label, side = 'bottom', children }: Props) {
+  // Position the label above or below the trigger
+  const place = side === 'top' ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
   return (
-    <span className="group relative inline-flex">
+    // A NAMED group (group/tt): an unnamed group-hover uses a descendant
+    // selector, so a tooltip nested inside another `group` (e.g. the image
+    // slot) would light up whenever that outer group is hovered. Naming it
+    // scopes the reveal to this trigger alone.
+    <span className="group/tt relative inline-flex">
       {children}
       <span
         aria-hidden
@@ -24,7 +32,7 @@ export default function Tooltip({ label, children }: Props) {
         // and focus-within would leave the label pinned open afterwards.
         // focus-visible fires for keyboard arrival only, matching how
         // SlideNavZones reveals its hotspots.
-        className="pointer-events-none absolute top-full left-1/2 z-10 mt-1.5 -translate-x-1/2 rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap text-white opacity-0 transition-opacity group-hover:opacity-100 group-has-[:focus-visible]:opacity-100"
+        className={`pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap text-white opacity-0 transition-opacity group-hover/tt:opacity-100 group-has-[:focus-visible]/tt:opacity-100 ${place}`}
       >
         {label}
       </span>

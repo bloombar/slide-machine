@@ -24,6 +24,7 @@ test('AI-recognized commands act on the deck without generating slides', async (
   await page.getByRole('link', { name: 'Chemistry 101', exact: true }).click()
   await page.getByRole('button', { name: 'Start a new lecture' }).click()
   await expect(page).toHaveURL(/\/d\/untitled-/)
+  await page.getByRole('button', { name: 'Start lecture' }).click()
 
   // Two lecture phrases become two slides
   await page.getByLabel('Spoken phrase').fill('Chemical bonds')

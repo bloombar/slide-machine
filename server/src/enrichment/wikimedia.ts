@@ -12,6 +12,8 @@ interface WikimediaPage {
   imageinfo?: Array<{
     thumburl?: string
     url?: string
+    /** The Commons file page, returned by the 'url' iiprop. */
+    descriptionurl?: string
     thumbwidth?: number
     width?: number
     height?: number
@@ -72,6 +74,11 @@ export const searchWikimedia = async (
           attribution: artist
             ? `${artist} (Wikimedia Commons)`
             : 'Wikimedia Commons',
+          sourceUrl:
+            info?.descriptionurl ??
+            (page.title
+              ? `https://commons.wikimedia.org/wiki/${encodeURI(page.title)}`
+              : undefined),
         },
       ]
     })

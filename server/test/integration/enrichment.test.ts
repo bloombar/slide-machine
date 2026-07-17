@@ -131,7 +131,12 @@ describe('enrichSlideImage', () => {
     expect(slide.status).toBe(200)
     expect(slide.body.imageRef).toBe('http://wiki/mitochondria.png')
     expect(slide.body.imageSource).toBe('stock')
-    expect(slide.body.attribution).toBe('Jane (Wikimedia Commons)')
+    // AI-sourced images arrive with credit AND a source link pre-filled
+    // (IMG-5), the source built from the Commons file page
+    expect(slide.body.attribution).toMatchObject({
+      author: 'Jane (Wikimedia Commons)',
+      sourceUrl: 'https://commons.wikimedia.org/wiki/File:Mitochondria.png',
+    })
   })
 
   it('never overwrites an existing image (IMG-3 stability)', async () => {

@@ -25,6 +25,8 @@ test('untitled lectures start from the + option and can be named later', async (
     .getByRole('button', { name: 'Start a new lecture in QuickStart' })
     .click()
   await expect(page).toHaveURL(/\/d\/untitled-/)
+  // Dismiss the pre-lecture seed dialog
+  await page.getByRole('button', { name: 'Start lecture' }).click()
   await expect(
     page.getByRole('heading', { name: 'Untitled lecture' }),
   ).toBeVisible()

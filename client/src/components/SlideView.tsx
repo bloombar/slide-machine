@@ -23,6 +23,8 @@ export default function SlideView({
   imagePending,
   editable,
   onEdit,
+  onReplaceImage,
+  onRemoveImage,
 }: {
   slide: Slide
   template: Template
@@ -31,6 +33,9 @@ export default function SlideView({
   /** Owner-only: enables click-to-edit on every editable slot. */
   editable?: boolean
   onEdit?: (patch: SlideContentPatch) => void
+  /** Owner-only image editing (EDIT-1), bound to this slide. */
+  onReplaceImage?: (file: File) => void
+  onRemoveImage?: () => void
 }) {
   const colors = themeColors(template.theme)
   const layoutDef = template.layouts.find(l => l.type === slide.layoutType)
@@ -45,6 +50,8 @@ export default function SlideView({
       slide={slide}
       colors={colors}
       onEdit={editable ? onEdit : undefined}
+      onReplaceImage={editable ? onReplaceImage : undefined}
+      onRemoveImage={editable ? onRemoveImage : undefined}
       imagePending={imagePending}
     />
   )

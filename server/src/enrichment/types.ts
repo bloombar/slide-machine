@@ -14,11 +14,18 @@ export interface ImageCandidate {
   height?: number
   license?: string
   attribution?: string
+  /** The provider's page for this image, shown as "Source" (IMG-5). */
+  sourceUrl?: string
 }
 
 /** The selected image, ready to persist onto a slide. */
 export interface EnrichedImage {
   url: string
   source: EnrichmentSource
+  /** Credit line (author + provider), for the attribution dialog (IMG-5). */
   attribution?: string
+  /** License name, e.g. "CC BY 4.0" (IMG-5). */
+  license?: string
+  /** The provider's page for this image, shown as "Source" (IMG-5). */
+  sourceUrl?: string
 }

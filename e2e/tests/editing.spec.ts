@@ -21,6 +21,8 @@ const buildDeck = async (page: Page) => {
 
   await page.getByRole('button', { name: 'Start a new lecture' }).click()
   await expect(page).toHaveURL(/\/d\//)
+  // The pre-lecture seed dialog opens first; dismiss it to begin recording
+  await page.getByRole('button', { name: 'Start lecture' }).click()
   await page.getByTitle('Click to edit Lecture title').click()
   await page.getByRole('textbox', { name: 'Lecture title' }).fill('Atoms')
   await page.keyboard.press('Enter')
@@ -149,6 +151,10 @@ test('in-place editing in the viewer, including list view and bullets', async ({
   await page.getByRole('menuitem', { name: 'Delete slide' }).click()
   await expect(page.getByTestId('slide')).toHaveCount(1)
   await page.reload()
+  // The reload now preserves the view (list, from earlier); the rest of
+  // this test asserts carousel behaviour, so return to it explicitly —
+  // the choice then persists across the later reload too
+  await page.getByRole('button', { name: 'Carousel view' }).click()
   await expect(page.getByText('1 / 1')).toBeVisible()
   await expect(page.getByTestId('slide')).toHaveAttribute(
     'data-layout',

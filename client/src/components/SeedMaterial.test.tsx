@@ -67,6 +67,67 @@ describe('SeedMaterial', () => {
     expect((uploaded?.get('file') as File).name).toBe('cells.png')
   })
 
+  it('uploads a file dropped onto the drop zone', async () => {
+    let uploaded: FormData | undefined
+    mockFetchRoutes({
+      '/api/actions/seedAsset.list': () => ({ status: 200, body: [] }),
+      '/api/seed-assets': init => {
+        uploaded = init?.body as FormData
+        return {
+          status: 201,
+          body: asset({ status: 'processing', name: 'notes.pdf', type: 'pdf' }),
+        }
+      },
+    })
+    render(<SeedMaterial projectId="p1" deckId="d1" />)
+
+    const file = new File(['pdf'], 'notes.pdf', { type: 'application/pdf' })
+    // The drop zone is the dashed region wrapping the upload button
+    const zone = (await screen.findByText(/drag and drop/i)).closest('div')!
+    fireEvent.drop(zone, { dataTransfer: { files: [file] } })
+
+    expect(await screen.findByText('notes.pdf')).toBeInTheDocument()
+    expect(uploaded?.get('deckId')).toBe('d1')
+    expect((uploaded?.get('file') as File).name).toBe('notes.pdf')
+  })
+
+  it('shows an error when an upload fails', async () => {
+    mockFetchRoutes({
+      '/api/actions/seedAsset.list': () => ({ status: 200, body: [] }),
+      '/api/seed-assets': () => ({ status: 500 }),
+    })
+    render(<SeedMaterial projectId="p1" />)
+
+    const file = new File(['x'], 'bad.pdf', { type: 'application/pdf' })
+    fireEvent.change(screen.getByLabelText('Upload seed material'), {
+      target: { files: [file] },
+    })
+    expect(await screen.findByRole('alert')).toHaveTextContent('Upload failed')
+  })
+
+  it('ignores a drop that carries no file', async () => {
+    mockFetchRoutes({
+      '/api/actions/seedAsset.list': () => ({ status: 200, body: [] }),
+    })
+    render(<SeedMaterial projectId="p1" />)
+    const zone = (await screen.findByText(/drag and drop/i)).closest('div')!
+    fireEvent.drop(zone, { dataTransfer: { files: [] } })
+    expect(zone).not.toHaveClass('border-indigo-400')
+  })
+
+  it('highlights the drop zone while a file is dragged over it', async () => {
+    mockFetchRoutes({
+      '/api/actions/seedAsset.list': () => ({ status: 200, body: [] }),
+    })
+    render(<SeedMaterial projectId="p1" />)
+    const zone = (await screen.findByText(/drag and drop/i)).closest('div')!
+
+    fireEvent.dragOver(zone)
+    expect(zone).toHaveClass('border-indigo-400')
+    fireEvent.dragLeave(zone)
+    expect(zone).not.toHaveClass('border-indigo-400')
+  })
+
   it('toggles an asset out of generation', async () => {
     let sent: unknown
     mockFetchRoutes({

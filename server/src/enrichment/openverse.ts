@@ -13,6 +13,8 @@ interface OpenverseResult {
   tags?: Array<{ name?: string }>
   license?: string
   attribution?: string
+  /** The original source page for the image. */
+  foreign_landing_url?: string
   width?: number
   height?: number
 }
@@ -43,6 +45,7 @@ export const searchOpenverse = async (
           height: item.height,
           license: item.license,
           attribution: item.attribution,
+          sourceUrl: item.foreign_landing_url,
         },
       ]
     })

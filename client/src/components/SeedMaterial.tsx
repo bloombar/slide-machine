@@ -4,7 +4,13 @@
  * anything is processing); edit photo captions (which double as
  * enrichment keywords); toggle assets in or out of generation; delete.
  */
-import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type DragEvent as ReactDragEvent,
+} from 'react'
 import { FileText, Image as ImageIcon, Trash2, UploadCloud } from 'lucide-react'
 import type { SeedAsset } from '@slide-machine/shared'
 import {
@@ -76,6 +82,7 @@ interface Props {
 export default function SeedMaterial({ projectId, deckId }: Props) {
   const [assets, setAssets] = useState<SeedAsset[]>([])
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [dragOver, setDragOver] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const level = deckId ? { deckId } : { projectId }
 
@@ -116,10 +123,9 @@ export default function SeedMaterial({ projectId, deckId }: Props) {
       .catch(() => undefined)
   }
 
-  const onPick = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
+  /** Uploads one file and starts watching its extraction, shared by the
+   * file picker and drag-and-drop. */
+  const uploadFile = async (file: File) => {
     setUploadError(null)
     try {
       const asset = await uploadSeedAsset(file, { projectId, deckId })
@@ -128,6 +134,20 @@ export default function SeedMaterial({ projectId, deckId }: Props) {
     } catch {
       setUploadError('Upload failed — PDF, DOCX, or images up to 20 MB')
     }
+  }
+
+  const onPick = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (file) await uploadFile(file)
+  }
+
+  const onDrop = (e: ReactDragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setDragOver(false)
+    // One at a time, matching the picker; the rest are ignored
+    const file = e.dataTransfer.files?.[0]
+    if (file) void uploadFile(file)
   }
 
   const patch = (updated: SeedAsset) =>
@@ -159,13 +179,26 @@ export default function SeedMaterial({ projectId, deckId }: Props) {
         aria-label="Upload seed material"
         className="hidden"
       />
-      <button
-        onClick={() => inputRef.current?.click()}
-        className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+      <div
+        onDragOver={e => {
+          e.preventDefault()
+          setDragOver(true)
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={onDrop}
+        className={`flex flex-col items-center gap-2 rounded-md border border-dashed px-3 py-4 text-center ${
+          dragOver ? 'border-indigo-400 bg-indigo-50' : 'border-slate-300'
+        }`}
       >
-        <UploadCloud className="h-4 w-4" aria-hidden />
-        Upload PDF, DOCX, or photo
-      </button>
+        <button
+          onClick={() => inputRef.current?.click()}
+          className="flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          <UploadCloud className="h-4 w-4" aria-hidden />
+          Upload PDF, DOCX, or photo
+        </button>
+        <span className="text-xs text-slate-400">or drag and drop a file</span>
+      </div>
       {uploadError && (
         <p role="alert" className="mt-2 text-sm text-red-600">
           {uploadError}

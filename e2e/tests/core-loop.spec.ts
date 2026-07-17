@@ -25,9 +25,11 @@ test('speak-to-slides core loop, session to permalink playback', async ({
   await page.getByRole('link', { name: 'Biology 101', exact: true }).click()
   await expect(page).toHaveURL(/\/app\/projects\//)
 
-  // The + starts a new untitled lecture straight into the live session
+  // The + starts a new untitled lecture; the seed dialog opens first, and
+  // dismissing it drops into the live session
   await page.getByRole('button', { name: 'Start a new lecture' }).click()
   await expect(page).toHaveURL(/\/d\/untitled-/)
+  await page.getByRole('button', { name: 'Start lecture' }).click()
   await expect(
     page.getByRole('button', { name: 'Live session' }),
   ).toHaveAttribute('aria-pressed', 'true')

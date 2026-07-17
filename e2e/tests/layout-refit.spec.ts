@@ -24,6 +24,7 @@ test('an enumerating update refits the slide from content to list', async ({
   await page.getByRole('link', { name: 'Biology 201', exact: true }).click()
   await page.getByRole('button', { name: 'Start a new lecture' }).click()
   await expect(page).toHaveURL(/\/d\/untitled-/)
+  await page.getByRole('button', { name: 'Start lecture' }).click()
 
   // A prose phrase becomes a content slide
   await page

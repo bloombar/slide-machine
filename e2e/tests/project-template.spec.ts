@@ -33,6 +33,8 @@ test('project template is the default for new lectures only', async ({
   // A new lecture starts on Midnight
   await page.getByRole('button', { name: 'Start a new lecture' }).click()
   await expect(page).toHaveURL(/\/d\/untitled-/)
+  // Dismiss the pre-lecture seed dialog before reaching settings
+  await page.getByRole('button', { name: 'Start lecture' }).click()
   await page.getByRole('button', { name: 'Lecture settings' }).click()
   await page.getByRole('tab', { name: 'Design template' }).click()
   await expect(page.getByRole('radio', { name: /midnight/i })).toHaveAttribute(

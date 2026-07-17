@@ -8,6 +8,8 @@ import type { ImageCandidate } from './types'
 const ENDPOINT = 'https://api.flickr.com/services/rest/'
 
 interface FlickrPhoto {
+  id?: string
+  owner?: string
   title?: string
   tags?: string
   url_c?: string
@@ -51,6 +53,10 @@ export const searchFlickr = async (
           attribution: photo.ownername
             ? `${photo.ownername} (Flickr)`
             : 'Flickr',
+          sourceUrl:
+            photo.owner && photo.id
+              ? `https://www.flickr.com/photos/${photo.owner}/${photo.id}`
+              : undefined,
         },
       ]
     })

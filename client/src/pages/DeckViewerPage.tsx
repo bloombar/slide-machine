@@ -9,7 +9,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
-import { Mic, Plus, Settings } from 'lucide-react'
+import { Mic, Plus, Settings, UploadCloud } from 'lucide-react'
 import type {
   Deck,
   DeckViewResponse,
@@ -18,7 +18,7 @@ import type {
 } from '@slide-machine/shared'
 import { apiFetch, ApiError } from '../api/http'
 import { dispatchAction } from '../api/actions'
-import { pollSlideImage } from '../api/slides'
+import { pollSlideImage, uploadSlideImage } from '../api/slides'
 import { useAuth } from '../auth/AuthContext'
 import { useTimeAgo } from '../hooks/useTimeAgo'
 import { useSlideNavigation } from '../hooks/useSlideNavigation'
@@ -36,12 +36,39 @@ import DraggableListRow from '../components/DraggableListRow'
 import EditableText from '../components/EditableText'
 import DeckPageHeader from '../components/DeckPageHeader'
 import Tooltip from '../components/Tooltip'
+import SeedDialog from '../components/SeedDialog'
+import ConfirmDialog from '../components/ConfirmDialog'
 import DeckSettingsModal, {
   type SettingsTabId,
 } from '../components/DeckSettingsModal'
 import { ShellTitle } from '../components/layout/ShellTitle'
 import { type ViewMode } from '../components/ViewModeToggle'
 import { lectureTitle, UNTITLED } from '../lib/lecture'
+
+// Layouts where the image is the whole slide; removing the image leaves
+// nothing, so the slide itself is deleted rather than left blank
+const IMAGE_ONLY_LAYOUTS = new Set(['image-heavy'])
+
+// Carousel/list is a display preference, remembered across reloads so a
+// refresh keeps whichever view the user was reading in
+const VIEW_MODE_KEY = 'sm:view-mode'
+
+const readViewMode = (): ViewMode => {
+  try {
+    const stored = localStorage.getItem(VIEW_MODE_KEY)
+    return stored === 'list' || stored === 'carousel' ? stored : 'carousel'
+  } catch {
+    return 'carousel'
+  }
+}
+
+const writeViewMode = (mode: ViewMode): void => {
+  try {
+    localStorage.setItem(VIEW_MODE_KEY, mode)
+  } catch {
+    // Storage unavailable (private browsing): the mode just won't persist
+  }
+}
 
 /** Slide count and modification age, small beside the title in the nav. */
 function DeckTitleMeta({ deck, count }: { deck: Deck; count: number }) {
@@ -65,7 +92,11 @@ export default function DeckViewerPage() {
   useEffect(() => {
     viewRef.current = view
   }, [view])
-  const [mode, setMode] = useState<ViewMode>('carousel')
+  const [mode, setModeState] = useState<ViewMode>(readViewMode)
+  const setMode = (next: ViewMode) => {
+    setModeState(next)
+    writeViewMode(next)
+  }
   const [error, setError] = useState<string | null>(null)
   // A lecture list's Share option deep-links to the sharing tab; the
   // layout picker's "Change template" link deep-links to the design tab
@@ -77,27 +108,36 @@ export default function DeckViewerPage() {
   const [settingsOpen, setSettingsOpen] = useState(() => settingsTab !== null)
   // Which slide the layout picker is open for (EDIT-3)
   const [layoutPickerFor, setLayoutPickerFor] = useState<string | null>(null)
+  // Slide awaiting confirmation to delete after its only image is removed
+  const [confirmImageDeleteId, setConfirmImageDeleteId] = useState<
+    string | null
+  >(null)
   // Blank slots are invisible to the audience; clicking the page
   // background flashes a half-second skeleton reveal so editors can
   // find them
   const [revealBlanks, setRevealBlanks] = useState(false)
   const revealTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const [speaking, setSpeaking] = useState<boolean>(() =>
-    Boolean(
-      (location.state as { startSpeaking?: boolean } | null)?.startSpeaking,
-    ),
+  // "Start a new lecture" hands over startSpeaking. Recording no longer
+  // begins immediately: the pre-lecture seed dialog opens first, and the
+  // bar and microphone start only when it is dismissed.
+  const startRequested = Boolean(
+    (location.state as { startSpeaking?: boolean } | null)?.startSpeaking,
   )
+  const [speaking, setSpeaking] = useState(false)
   const [phrase, setPhrase] = useState('')
   const [busy, setBusy] = useState(false)
   const [speakError, setSpeakError] = useState<string | null>(null)
+  // Surfaced when a slide image upload/remove fails, so it is never silent
+  const [imageError, setImageError] = useState<string | null>(null)
   const capture = useMemo(() => createSpeechCapture(), [])
-  // Entering via "Start a new lecture" opens the bar AND the microphone
-  const [listening, setListening] = useState<boolean>(
-    () =>
-      Boolean(
-        (location.state as { startSpeaking?: boolean } | null)?.startSpeaking,
-      ) && capture.available,
+  const [listening, setListening] = useState(false)
+  // Seed dialog: 'prelecture' before recording begins, 'manual' from the
+  // toolbar during the lecture, null when closed
+  const [seedDialog, setSeedDialog] = useState<'prelecture' | 'manual' | null>(
+    startRequested ? 'prelecture' : null,
   )
+  // Whether a mid-lecture seed dialog should resume the mic on close
+  const resumeAfterSeedRef = useRef(false)
   const [interim, setInterim] = useState('')
   // Finalized phrases submit sequentially so rolling context stays sane
   const phraseQueueRef = useRef<Promise<void>>(Promise.resolve())
@@ -401,18 +441,31 @@ export default function DeckViewerPage() {
     }
   }
 
-  // "Start a new lecture" auto-opens the mic: the bar and the listening
-  // flag are already on (lazy init), so only the capture needs kicking —
-  // once the view arrives, so recognition starts in the resolved
-  // lecture language instead of the browser default
-  const autoStartedRef = useRef(false)
-  useEffect(() => {
-    if (listening && view && !autoStartedRef.current) {
-      autoStartedRef.current = true
-      beginCapture()
+  /** Opens the seed dialog mid-lecture, pausing the mic like settings does. */
+  const openManualSeed = () => {
+    resumeAfterSeedRef.current = listening
+    if (listening) stopListening()
+    setSeedDialog('manual')
+  }
+
+  /**
+   * Closes the seed dialog. Dismissing the pre-lecture dialog (Skip or
+   * Start lecture) is what actually begins the lecture — the bar opens and
+   * the mic starts; the mid-lecture dialog just resumes if it was
+   * recording. Runs once the view exists, so recognition starts in the
+   * resolved lecture language rather than the browser default.
+   */
+  const closeSeed = () => {
+    const mode = seedDialog
+    setSeedDialog(null)
+    if (mode === 'prelecture') {
+      setSpeaking(true)
+      startListening()
+    } else if (resumeAfterSeedRef.current) {
+      resumeAfterSeedRef.current = false
+      startListening()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view])
+  }
 
   // Switching the lecture language mid-recording: recognition holds its
   // language for the life of the instance, so restart it with the new
@@ -511,6 +564,52 @@ export default function DeckViewerPage() {
       .catch(() => {
         // Quiet failure: the on-screen text simply reverts to the saved value
       })
+  }
+
+  /** Replaces the slide in the local view with a freshly-returned one. */
+  const applySlide = (updated: Slide) => {
+    setView(v =>
+      v
+        ? {
+            ...v,
+            slides: v.slides.map(s => (s.id === updated.id ? updated : s)),
+          }
+        : v,
+    )
+    touchDeckLocally()
+  }
+
+  /** Uploads a file to replace (or set) a slide's image (EDIT-1). */
+  const replaceSlideImage = (slideId: string) => (file: File) => {
+    setImageError(null)
+    uploadSlideImage(slideId, file)
+      .then(applySlide)
+      .catch(() => setImageError('Could not upload the image — try again'))
+  }
+
+  /**
+   * Removes a slide's image. On an image-only slide (image-heavy) the
+   * whole slide would be left blank, so it is deleted after a confirm; on
+   * an image+text slide the picture is cleared and the layout drops to
+   * plain text, so nothing looks broken.
+   */
+  const removeSlideImage = (target: Slide) => () => {
+    if (IMAGE_ONLY_LAYOUTS.has(target.layoutType)) {
+      setConfirmImageDeleteId(target.id)
+      return
+    }
+    dispatchAction<Slide>('slide.editContent', {
+      slideId: target.id,
+      imageRef: '',
+    })
+      .then(() =>
+        dispatchAction<Slide>('slide.setLayout', {
+          slideId: target.id,
+          layoutType: 'content',
+        }),
+      )
+      .then(applySlide)
+      .catch(() => setImageError('Could not remove the image — try again'))
   }
 
   /** Renames the lecture through the action layer (owner only). */
@@ -642,6 +741,15 @@ export default function DeckViewerPage() {
                   <Plus className="h-4 w-4" aria-hidden />
                 </button>
               </Tooltip>
+              <Tooltip label="Seed material">
+                <button
+                  aria-label="Add seed material"
+                  onClick={openManualSeed}
+                  className="rounded-md p-1.5 text-slate-500 hover:text-slate-900"
+                >
+                  <UploadCloud className="h-4 w-4" aria-hidden />
+                </button>
+              </Tooltip>
               <Tooltip
                 label={
                   listening
@@ -708,6 +816,8 @@ export default function DeckViewerPage() {
                 template={view.template}
                 editable={canEdit}
                 onEdit={editSlide(slide!.id)}
+                onReplaceImage={replaceSlideImage(slide!.id)}
+                onRemoveImage={removeSlideImage(slide!)}
                 imagePending={pendingImages.has(slide!.id)}
               />
               {canEdit && (
@@ -741,6 +851,8 @@ export default function DeckViewerPage() {
                   template={view.template}
                   editable
                   onEdit={editSlide(s.id)}
+                  onReplaceImage={replaceSlideImage(s.id)}
+                  onRemoveImage={removeSlideImage(s)}
                   imagePending={pendingImages.has(s.id)}
                 />
                 <SlideMenu
@@ -770,6 +882,46 @@ export default function DeckViewerPage() {
             setLayoutPickerFor(null)
             openSettings('template')
           }}
+        />
+      )}
+
+      {canEdit && seedDialog && (
+        <SeedDialog
+          deck={view.deck}
+          mode={seedDialog}
+          onClose={closeSeed}
+          onDeckChange={deck => setView(v => (v ? { ...v, deck } : v))}
+        />
+      )}
+
+      {imageError && (
+        <div className="fixed inset-x-0 bottom-12 z-50 flex justify-center px-4">
+          <div
+            role="alert"
+            className="flex items-center gap-3 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-lg"
+          >
+            {imageError}
+            <button
+              aria-label="Dismiss"
+              onClick={() => setImageError(null)}
+              className="text-white/80 hover:text-white"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {canEdit && confirmImageDeleteId && (
+        <ConfirmDialog
+          title="Delete this slide?"
+          message="This slide is just an image. Removing it deletes the whole slide."
+          confirmLabel="Delete slide"
+          onConfirm={() => {
+            void deleteSlide(confirmImageDeleteId)
+            setConfirmImageDeleteId(null)
+          }}
+          onCancel={() => setConfirmImageDeleteId(null)}
         />
       )}
 

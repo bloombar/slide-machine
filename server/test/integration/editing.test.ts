@@ -96,6 +96,37 @@ describe('slide.editContent', () => {
     expect(bullets.body.caption).toBe('Sources')
   })
 
+  it('sets the image and clears it with an empty string', async () => {
+    const set = await act(ada, 'slide.editContent', {
+      slideId: slideIds[0],
+      imageRef: 'http://example.test/pic.png',
+    })
+    expect(set.body.imageRef).toBe('http://example.test/pic.png')
+
+    const cleared = await act(ada, 'slide.editContent', {
+      slideId: slideIds[0],
+      imageRef: '',
+    })
+    expect(cleared.body.imageRef).toBeFalsy()
+  })
+
+  it('saves image attribution and clears it when all fields go blank', async () => {
+    const set = await act(ada, 'slide.editContent', {
+      slideId: slideIds[0],
+      attribution: { author: 'Ada', license: 'CC BY 4.0' },
+    })
+    expect(set.body.attribution).toMatchObject({
+      author: 'Ada',
+      license: 'CC BY 4.0',
+    })
+
+    const cleared = await act(ada, 'slide.editContent', {
+      slideId: slideIds[0],
+      attribution: {},
+    })
+    expect(cleared.body.attribution).toBeFalsy()
+  })
+
   it("403s editing another user's slide", async () => {
     const bob = await registerUser('bob@example.com')
     const res = await act(bob, 'slide.editContent', {
@@ -196,5 +227,74 @@ describe('deck.reorderSlides', () => {
       slideOrder: [slideIds[0], slideIds[1], 'not-a-real-slide'],
     })
     expect(foreignId.status).toBe(400)
+  })
+})
+
+describe('POST /slides/:slideId/image (EDIT-1)', () => {
+  const PNG = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    'base64',
+  )
+  const uploadImage = (token: string, slideId: string, opts = {}) =>
+    request(server)
+      .post(`/api/slides/${slideId}/image`)
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', PNG, {
+        filename: 'pic.png',
+        contentType: 'image/png',
+        ...opts,
+      })
+
+  it('stores the upload as a user-provided image with editable credit', async () => {
+    // Pre-seed an AI-sourced credit that the upload must clear
+    await act(ada, 'slide.editContent', {
+      slideId: slideIds[0],
+      attribution: { author: 'Someone (Wikimedia Commons)' },
+    })
+    const res = await uploadImage(ada, slideIds[0]!)
+    expect(res.status).toBe(201)
+    expect(res.body.imageRef).toBeTruthy()
+    expect(res.body.id).toBe(slideIds[0])
+    // Marked user-provided (not AI 'stock') and old credit cleared
+    expect(res.body.imageSource).toBe('seeded')
+    expect(res.body.attribution).toBeFalsy()
+
+    // ...and the upload also shows up as lecture seed material (SEED-2)
+    const assets = await act(ada, 'seedAsset.list', { deckId })
+    expect(
+      assets.body.some(
+        (a: { type: string; imageUrl?: string }) =>
+          a.type === 'image' && a.imageUrl === res.body.imageRef,
+      ),
+    ).toBe(true)
+  })
+
+  it('rejects a non-image file', async () => {
+    const res = await request(server)
+      .post(`/api/slides/${slideIds[0]}/image`)
+      .set('Authorization', `Bearer ${ada}`)
+      .attach('file', Buffer.from('%PDF-1.4'), {
+        filename: 'doc.pdf',
+        contentType: 'application/pdf',
+      })
+    expect(res.status).toBe(400)
+  })
+
+  it("403s uploading to another user's slide", async () => {
+    const bob = await registerUser('bob@example.com')
+    const res = await uploadImage(bob, slideIds[0]!)
+    expect(res.status).toBe(403)
+  })
+
+  it('404s for an unknown slide', async () => {
+    const res = await uploadImage(ada, '0'.repeat(24))
+    expect(res.status).toBe(404)
+  })
+
+  it('400s when no file is attached', async () => {
+    const res = await request(server)
+      .post(`/api/slides/${slideIds[0]}/image`)
+      .set('Authorization', `Bearer ${ada}`)
+    expect(res.status).toBe(400)
   })
 })

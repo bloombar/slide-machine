@@ -5,7 +5,21 @@
  * slide simply resolves to its no-image fallback.
  */
 import type { Slide } from '@slide-machine/shared'
+import { apiFetch } from './http'
 import { dispatchAction } from './actions'
+
+/** Replaces (or sets) a slide's image from an uploaded file (EDIT-1). */
+export const uploadSlideImage = (
+  slideId: string,
+  file: File,
+): Promise<Slide> => {
+  const form = new FormData()
+  form.append('file', file)
+  return apiFetch<Slide>(`/api/slides/${slideId}/image`, {
+    method: 'POST',
+    body: form,
+  })
+}
 
 interface PollOptions {
   attempts?: number

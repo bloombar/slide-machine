@@ -11,6 +11,7 @@ import { actionsRouter } from './routes/actions'
 import { decksRouter } from './routes/decks'
 import { usersRouter } from './routes/users'
 import { seedAssetsRouter } from './routes/seed-assets'
+import { slidesRouter } from './routes/slides'
 import { filesRouter } from './routes/files'
 import { errorHandler } from './middleware/error'
 import { serveSpa } from './static'
@@ -36,6 +37,7 @@ export const createApp = (): Express => {
   api.use(decksRouter)
   api.use(usersRouter)
   api.use(seedAssetsRouter)
+  api.use(slidesRouter)
   api.use(filesRouter)
   app.use('/api', api)
 

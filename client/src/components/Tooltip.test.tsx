@@ -34,10 +34,10 @@ describe('Tooltip', () => {
     )
     const label = screen.getByText('Add a slide')
     expect(label).toHaveClass('opacity-0')
-    expect(label).toHaveClass('group-hover:opacity-100')
+    expect(label).toHaveClass('group-hover/tt:opacity-100')
     // focus-visible, not focus-within: a click focuses the button too, and
     // focus-within would leave the label pinned open after it. Whether the
     // CSS truly behaves is proved in e2e — jsdom does not match :focus-visible.
-    expect(label).toHaveClass('group-has-[:focus-visible]:opacity-100')
+    expect(label).toHaveClass('group-has-[:focus-visible]/tt:opacity-100')
   })
 })

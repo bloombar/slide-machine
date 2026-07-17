@@ -37,6 +37,8 @@ test('project and lecture seed notes auto-save and persist', async ({
   // Lecture-level notes save from the lecture settings modal
   await page.getByRole('button', { name: 'Start a new lecture' }).click()
   await expect(page).toHaveURL(/\/d\//)
+  // Dismiss the pre-lecture seed dialog before reaching settings
+  await page.getByRole('button', { name: 'Start lecture' }).click()
   await page.getByRole('button', { name: 'Lecture settings' }).click()
   await page
     .getByRole('textbox', { name: 'Lecture seed notes' })

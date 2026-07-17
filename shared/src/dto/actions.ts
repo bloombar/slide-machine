@@ -3,7 +3,7 @@
  * Results reuse the shared data-model types (e.g. Project).
  */
 import type { Locale } from '../types/locale'
-import type { Visibility } from '../types/deck'
+import type { ImageAttribution, Visibility } from '../types/deck'
 import type { ProfileVisibility } from '../types/user'
 
 export interface ProjectCreateInput {
@@ -202,6 +202,10 @@ export interface SlideEditInput {
   body?: string
   bullets?: string[]
   caption?: string
+  /** Set to a URL to change the image, or '' to remove it (EDIT-1). */
+  imageRef?: string
+  /** Image credit/licensing edited from the attribution dialog (IMG-5). */
+  attribution?: ImageAttribution
 }
 
 export interface SlideDeleteInput {

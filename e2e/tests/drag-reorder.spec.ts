@@ -31,6 +31,8 @@ const buildDeck = async (page: Page) => {
   await page.getByRole('link', { name: 'DragProj', exact: true }).click()
   await page.getByRole('button', { name: 'Start a new lecture' }).click()
   await expect(page).toHaveURL(/\/d\//)
+  // The pre-lecture seed dialog opens first; dismiss it to begin recording
+  await page.getByRole('button', { name: 'Start lecture' }).click()
   for (const phrase of ['Atomic structure', 'Protons, neutrons, electrons']) {
     await page.getByLabel('Spoken phrase').fill(phrase)
     await page.getByRole('button', { name: 'Speak' }).click()

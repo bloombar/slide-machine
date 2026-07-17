@@ -85,6 +85,9 @@ const renderViewer = (refreshStatus: number, ownerId = 'u1') => {
 
 beforeEach(() => {
   setAccessToken(null)
+  // The view mode now persists in localStorage; clear it so one test's
+  // choice does not leak into the next
+  localStorage.clear()
 })
 
 afterEach(() => {
@@ -136,6 +139,25 @@ describe('DeckViewerPage view modes', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Carousel view' }))
     expect(screen.getAllByTestId('slide')).toHaveLength(1)
+  })
+
+  it('restores the saved view mode on load, so a refresh keeps it', async () => {
+    localStorage.setItem('sm:view-mode', 'list')
+    renderViewer(401)
+    await screen.findByText('Shared Lecture')
+    // List view is active from the start — all slides stacked
+    expect(screen.getAllByTestId('slide')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'List view' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('remembers a switch to list view', async () => {
+    renderViewer(401)
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'List view' }))
+    expect(localStorage.getItem('sm:view-mode')).toBe('list')
   })
 })
 
@@ -1465,5 +1487,280 @@ describe('DeckViewerPage title in the primary nav', () => {
 
     // The local stamp lands as soon as the save resolves — no reload
     expect(await screen.findByText(/edited just now/)).toBeInTheDocument()
+  })
+})
+
+describe('DeckViewerPage image editing', () => {
+  const imageDeck = (layoutType: string) => ({
+    ...deckView,
+    deck: { ...deckView.deck, slideOrder: ['s1'] },
+    slides: [
+      {
+        id: 's1',
+        deckId: 'deck1',
+        index: 0,
+        layoutType,
+        title: 'Cell',
+        body: 'A cell',
+        imageRef: 'http://img/cell.png',
+      },
+    ],
+    canEdit: true,
+  })
+
+  const renderImageDeck = (layoutType: string) => {
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: imageDeck(layoutType),
+      }),
+    })
+    return render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+  }
+
+  it('removing the image from an image-only slide confirms, then deletes it', async () => {
+    let deleted: unknown
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: imageDeck('image-heavy'),
+      }),
+      '/api/actions/slide.delete': init => {
+        deleted = JSON.parse(String(init?.body))
+        return { status: 200, body: {} }
+      },
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove image' }))
+    // An image-only slide asks before it vanishes
+    expect(
+      await screen.findByRole('alertdialog', { name: 'Delete this slide?' }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete slide' }))
+
+    await vi.waitFor(() => expect(deleted).toEqual({ slideId: 's1' }))
+  })
+
+  it('removing the image from an image+text slide clears it and drops to text', async () => {
+    const calls: Array<{ url: string; body: unknown }> = []
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: imageDeck('two-column'),
+      }),
+      '/api/actions/slide.editContent': init => {
+        calls.push({ url: 'editContent', body: JSON.parse(String(init?.body)) })
+        return {
+          status: 200,
+          body: {
+            id: 's1',
+            deckId: 'deck1',
+            index: 0,
+            layoutType: 'two-column',
+          },
+        }
+      },
+      '/api/actions/slide.setLayout': init => {
+        calls.push({ url: 'setLayout', body: JSON.parse(String(init?.body)) })
+        return {
+          status: 200,
+          body: { id: 's1', deckId: 'deck1', index: 0, layoutType: 'content' },
+        }
+      },
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove image' }))
+    // No confirm dialog — it is non-destructive
+    expect(
+      screen.queryByRole('alertdialog', { name: 'Delete this slide?' }),
+    ).not.toBeInTheDocument()
+
+    await vi.waitFor(() =>
+      expect(calls).toEqual([
+        { url: 'editContent', body: { slideId: 's1', imageRef: '' } },
+        { url: 'setLayout', body: { slideId: 's1', layoutType: 'content' } },
+      ]),
+    )
+  })
+
+  it('cancelling the confirm keeps the image-only slide', async () => {
+    renderImageDeck('image-heavy')
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove image' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(
+      screen.queryByRole('alertdialog', { name: 'Delete this slide?' }),
+    ).not.toBeInTheDocument()
+    // The slide (and its image controls) are still there
+    expect(
+      screen.getByRole('button', { name: 'Remove image' }),
+    ).toBeInTheDocument()
+  })
+
+  it('surfaces an error when an image upload fails instead of failing silently', async () => {
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: imageDeck('two-column'),
+      }),
+      '/api/slides/s1/image': () => ({ status: 500 }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByRole('button', { name: 'Remove image' })
+
+    const file = new File(['x'], 'new.png', { type: 'image/png' })
+    fireEvent.change(screen.getByLabelText('Upload image file'), {
+      target: { files: [file] },
+    })
+    expect(await screen.findByText(/could not upload the image/i)).toBeVisible()
+  })
+})
+
+describe('DeckViewerPage pre-lecture seeding', () => {
+  class FakeRecognition {
+    static last: FakeRecognition | null = null
+    static reset() {
+      FakeRecognition.last = null
+    }
+    continuous = false
+    interimResults = false
+    lang = ''
+    onresult: ((e: unknown) => void) | null = null
+    onerror: ((e: unknown) => void) | null = null
+    onend: (() => void) | null = null
+    start() {}
+    stop() {
+      this.onend?.()
+    }
+    constructor() {
+      FakeRecognition.last = this
+    }
+  }
+
+  /** Renders the viewer as if entered via "Start a new lecture". */
+  const renderSpeaking = () => {
+    FakeRecognition.reset()
+    vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+      '/api/actions/seedAsset.list': () => ({ status: 200, body: [] }),
+    })
+    return render(
+      <MemoryRouter
+        initialEntries={[
+          { pathname: '/d/shared-abc123', state: { startSpeaking: true } },
+        ]}
+      >
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+  }
+
+  it('opens the seed dialog and holds off recording until it is dismissed', async () => {
+    renderSpeaking()
+    await screen.findByText('Shared Lecture')
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Add seed material' }),
+    ).toBeInTheDocument()
+    // Recording has NOT begun — the mic is untouched and the toggle is idle
+    expect(FakeRecognition.last).toBeNull()
+    expect(
+      screen.getByRole('button', { name: 'Live session' }),
+    ).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('begins recording when the pre-lecture dialog is dismissed', async () => {
+    renderSpeaking()
+    await screen.findByRole('dialog', { name: 'Add seed material' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start lecture' }))
+
+    // The dialog closes and the microphone starts
+    expect(
+      screen.queryByRole('dialog', { name: 'Add seed material' }),
+    ).not.toBeInTheDocument()
+    expect(FakeRecognition.last).not.toBeNull()
+    expect(
+      screen.getByRole('button', { name: 'Live session' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('reopens seeding from the toolbar mid-lecture, pausing and resuming the mic', async () => {
+    renderSpeaking()
+    await screen.findByRole('dialog', { name: 'Add seed material' })
+    fireEvent.click(screen.getByRole('button', { name: 'Start lecture' }))
+    const recording = FakeRecognition.last
+
+    // The toolbar's seed button pauses the mic while the dialog is up
+    fireEvent.click(screen.getByRole('button', { name: 'Add seed material' }))
+    expect(
+      await screen.findByRole('dialog', { name: 'Add seed material' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Live session' }),
+    ).not.toHaveClass('bg-red-600')
+
+    // Done resumes recording with a fresh recognition instance
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    expect(FakeRecognition.last).not.toBe(recording)
   })
 })

@@ -36,7 +36,13 @@ export const enrichImage = async (
 
   const best = pickBest(pool, keywords)
   if (!best) return null
-  return { url: best.url, source: best.source, attribution: best.attribution }
+  return {
+    url: best.url,
+    source: best.source,
+    attribution: best.attribution,
+    license: best.license,
+    sourceUrl: best.sourceUrl,
+  }
 }
 
 /**
@@ -57,7 +63,16 @@ export const enrichSlideImage = async (
       {
         imageRef: image.url,
         imageSource: image.source === 'seeded' ? 'seeded' : 'stock',
-        attribution: image.attribution,
+        // Structured credit/licensing for the "i" dialog (IMG-5). AI-sourced
+        // images arrive pre-filled; the instructor's own uploads carry none.
+        attribution:
+          image.attribution || image.license || image.sourceUrl
+            ? {
+                author: image.attribution,
+                license: image.license,
+                sourceUrl: image.sourceUrl,
+              }
+            : undefined,
       },
     )
   } catch (error) {

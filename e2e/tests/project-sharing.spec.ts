@@ -38,6 +38,8 @@ test('project privacy cascades to lectures; overrides detach and reset', async (
     .getByRole('button', { name: 'Start a new lecture in CascadeProj' })
     .click()
   await expect(ownerPage).toHaveURL(/\/d\/untitled-/)
+  // Dismiss the pre-lecture seed dialog
+  await ownerPage.getByRole('button', { name: 'Start lecture' }).click()
   const deckUrl = ownerPage.url()
 
   await anonPage.goto(deckUrl)

@@ -62,6 +62,14 @@ export const slideEditContent = defineAction<SlideEditInput, Slide>({
     body: z.string().optional(),
     bullets: z.array(z.string()).optional(),
     caption: z.string().optional(),
+    imageRef: z.string().optional(),
+    attribution: z
+      .object({
+        sourceUrl: z.string().optional(),
+        author: z.string().optional(),
+        license: z.string().optional(),
+      })
+      .optional(),
   }),
   execute: async (ctx, input) => {
     const { slide } = await loadOwnedSlide(ctx, input.slideId)
@@ -69,6 +77,14 @@ export const slideEditContent = defineAction<SlideEditInput, Slide>({
     if (input.body !== undefined) slide.body = input.body
     if (input.bullets !== undefined) slide.bullets = input.bullets
     if (input.caption !== undefined) slide.caption = input.caption
+    // '' removes the image; a URL sets it (EDIT-1)
+    if (input.imageRef !== undefined) slide.imageRef = input.imageRef
+    // Image credit/licensing from the "i" dialog (IMG-5); all-empty clears it
+    if (input.attribution !== undefined) {
+      const a = input.attribution
+      const any = a.sourceUrl || a.author || a.license
+      slide.attribution = any ? a : undefined
+    }
     await slide.save()
     await touchDeck(slide.deckId)
     return toSlideDto(slide)

@@ -36,6 +36,8 @@ const buildDeck = async (page: Page, tag: string) => {
   await page.getByRole('link', { name: project, exact: true }).click()
   await page.getByRole('button', { name: 'Start a new lecture' }).click()
   await expect(page).toHaveURL(/\/d\//)
+  // Dismiss the pre-lecture seed dialog to begin recording
+  await page.getByRole('button', { name: 'Start lecture' }).click()
 
   for (const phrase of [
     'Watermelons are warm season fruits',
@@ -253,6 +255,7 @@ test('a new lecture starts with its toolbar pinned', async ({ page }) => {
   await page.getByRole('link', { name: project, exact: true }).click()
   await page.getByRole('button', { name: 'Start a new lecture' }).click()
   await expect(page).toHaveURL(/\/d\//)
+  await page.getByRole('button', { name: 'Start lecture' }).click()
 
   // Parked up at the top, nowhere near where the other lecture's was left.
   // Not compared to `parked` exactly: that was measured on a scrolled page
