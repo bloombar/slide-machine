@@ -87,6 +87,48 @@ const resultSchema = z.object({
   deckTitle: z.string().optional(),
 })
 
+/**
+ * Known synonyms the live model reaches for instead of the contract's
+ * verbs — the only drift we will confidently remap to a supported action.
+ */
+const ACTION_SYNONYMS: Record<string, 'new' | 'update' | 'none' | 'command'> = {
+  new: 'new',
+  create: 'new',
+  add: 'new',
+  insert: 'new',
+  append: 'update',
+  update: 'update',
+  edit: 'update',
+  modify: 'update',
+  change: 'update',
+  revise: 'update',
+  none: 'none',
+  skip: 'none',
+  ignore: 'none',
+  noop: 'none',
+  command: 'command',
+}
+
+/**
+ * Maps a possibly-drifted action label onto the contract's vocabulary. The
+ * prompt already demands an exact value; this is the safety net for when
+ * the model still drifts (a synonym like "create"/"edit", or a "new slide"
+ * suffix). Only a confident remap is honored — anything we cannot map to a
+ * supported action falls back to "none" so a mislabeled phrase quietly does
+ * nothing rather than crashing the live session or guessing wrong.
+ */
+const normalizeAction = (
+  value: unknown,
+): 'new' | 'update' | 'none' | 'command' => {
+  if (typeof value !== 'string') return 'none'
+  const key = value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]*slide$/, '')
+    .trim()
+  return ACTION_SYNONYMS[key] ?? 'none'
+}
+
 const instructions = (req: SlideGenerationRequest): string => {
   const layouts = req.layoutDescriptors
     .map(d => {
@@ -253,6 +295,15 @@ export class GeminiGenerationProvider implements GenerationProvider {
     } catch {
       throw new Error('Gemini returned unparseable JSON')
     }
+    // Remap a drifted action label ("create", "add", "edit", "new slide")
+    // to a supported action before validating; an unmappable value becomes
+    // "none". Either way a mislabeled phrase never throws and 500s the live
+    // session (GEN "closest sane default, don't crash" philosophy).
+    if (raw && typeof raw === 'object') {
+      const obj = raw as { action?: unknown }
+      obj.action = normalizeAction(obj.action)
+    }
+
     // A "command" claim is validated on its own (the model may omit
     // content fields) and honored only when commands were offered AND
     // the id is one we listed; anything else is treated as filler —
@@ -266,7 +317,17 @@ export class GeminiGenerationProvider implements GenerationProvider {
         : { action: 'none', layoutType: 'content', slots: {} }
     }
 
-    const parsed = resultSchema.parse(raw)
+    // Any remaining drift (a malformed slot, a stray field type) degrades
+    // to a dropped phrase rather than crashing the session.
+    const result = resultSchema.safeParse(raw)
+    if (!result.success) {
+      console.warn(
+        'Generation output failed validation, dropping phrase:',
+        result.error.issues,
+      )
+      return { action: 'none', layoutType: 'content', slots: {} }
+    }
+    const parsed = result.data
 
     // The model must pick from the offered layouts; a missing or
     // drifted claim falls back to the closest sane default rather than

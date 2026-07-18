@@ -399,6 +399,85 @@ describe('GeminiGenerationProvider', () => {
     expect(result.command).toBeUndefined()
   })
 
+  it('salvages a drifted action label onto the contract vocabulary', async () => {
+    // The live model sometimes labels a create as "create"/"add" or
+    // suffixes it ("new slide"); these must resolve rather than 500 the
+    // session (regression: resultSchema.parse threw on the enum).
+    fetchMock.mockResolvedValue(
+      geminiReply({
+        action: 'create',
+        layoutType: 'content',
+        slots: { title: 'Chloroplasts', body: 'Site of photosynthesis' },
+      }),
+    )
+    let result = await provider.generateSlideContent(request())
+    expect(result.action).toBe('new')
+    expect(result.slots).toEqual({
+      title: 'Chloroplasts',
+      body: 'Site of photosynthesis',
+    })
+
+    fetchMock.mockClear()
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'new slide', slots: { title: 'X' } }),
+    )
+    result = await provider.generateSlideContent(request())
+    expect(result.action).toBe('new')
+
+    fetchMock.mockClear()
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'edit', slots: { bullets: ['more'] } }),
+    )
+    result = await provider.generateSlideContent(request())
+    expect(result.action).toBe('update')
+  })
+
+  it('falls back to none for an action it cannot confidently remap', async () => {
+    // An unknown verb is never guessed at — even with content present, a
+    // mislabeled phrase quietly does nothing rather than risk a wrong slide.
+    fetchMock.mockResolvedValue(
+      geminiReply({
+        action: 'zoop',
+        layoutType: 'content',
+        slots: { title: 'Ambiguous' },
+      }),
+    )
+    let result = await provider.generateSlideContent(request())
+    expect(result.action).toBe('none')
+
+    fetchMock.mockClear()
+    fetchMock.mockResolvedValue(geminiReply({ action: 'zoop', slots: {} }))
+    result = await provider.generateSlideContent(request())
+    expect(result.action).toBe('none')
+  })
+
+  it('instructs the model to use an exact action value, no synonyms', async () => {
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
+    )
+    await provider.generateSlideContent(request())
+    const prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+      .contents[0].parts[0].text as string
+    expect(prompt).toContain('EXACTLY one of the quoted values')
+    expect(prompt).toContain('never a synonym')
+  })
+
+  it('drops a phrase whose output is malformed rather than throwing', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    // bullets must be string[]; a number fails validation and once threw
+    fetchMock.mockResolvedValue(
+      geminiReply({
+        action: 'new',
+        layoutType: 'content',
+        slots: { bullets: 5 },
+      }),
+    )
+    const result = await provider.generateSlideContent(request())
+    expect(result.action).toBe('none')
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
   it('throws on other API errors with the status attached', async () => {
     // 429/503 map to friendly errors (covered below); other statuses keep
     // the raw status for debugging.
