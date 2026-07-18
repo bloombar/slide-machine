@@ -14,6 +14,7 @@
  * nested capture-phase dialog always wins.
  */
 import { useEffect, useRef, type ReactNode, type RefObject } from 'react'
+import Portal from './Portal'
 
 /** True when the event targets a text field, so Escape shouldn't close. */
 const isTypingTarget = (target: EventTarget | null): boolean =>
@@ -98,7 +99,7 @@ export default function Modal({
 
   if (variant === 'sheet') {
     return (
-      <>
+      <Portal>
         <div
           aria-hidden
           onClick={onClose}
@@ -110,23 +111,25 @@ export default function Modal({
         >
           <div className="mx-auto w-full max-w-5xl">{children}</div>
         </div>
-      </>
+      </Portal>
     )
   }
 
   return (
-    <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
-      <div
-        aria-hidden
-        onClick={onClose}
-        className="absolute inset-0 bg-black/40"
-      />
-      <div
-        {...panelProps}
-        className={`relative w-full ${SIZE_MAX_W[size]} rounded-lg bg-white p-6 shadow-2xl focus:outline-none ${className}`}
-      >
-        {children}
+    <Portal>
+      <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
+        <div
+          aria-hidden
+          onClick={onClose}
+          className="absolute inset-0 bg-black/40"
+        />
+        <div
+          {...panelProps}
+          className={`relative w-full ${SIZE_MAX_W[size]} rounded-lg bg-white p-6 shadow-2xl focus:outline-none ${className}`}
+        >
+          {children}
+        </div>
       </div>
-    </div>
+    </Portal>
   )
 }

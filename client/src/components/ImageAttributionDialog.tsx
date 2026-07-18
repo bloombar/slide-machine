@@ -8,6 +8,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { X } from 'lucide-react'
 import type { ImageAttribution } from '@slide-machine/shared'
+import Portal from './Portal'
 
 interface Props {
   attribution?: ImageAttribution
@@ -89,62 +90,64 @@ export default function ImageAttributionDialog({
   )
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div
-        aria-hidden
-        onClick={onClose}
-        className="absolute inset-0 bg-black/30"
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Image details"
-        className="relative w-full max-w-sm rounded-lg bg-white p-6 shadow-xl"
-      >
-        <header className="mb-4 flex items-start justify-between">
-          <h2 className="text-lg font-bold">Image details</h2>
-          <button
-            aria-label="Close"
-            onClick={onClose}
-            className="rounded p-1 text-slate-400 hover:text-slate-700"
-          >
-            <X className="h-5 w-5" aria-hidden />
-          </button>
-        </header>
+    <Portal>
+      <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
+        <div
+          aria-hidden
+          onClick={onClose}
+          className="absolute inset-0 bg-black/30"
+        />
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Image details"
+          className="relative w-full max-w-sm rounded-lg bg-white p-6 shadow-xl"
+        >
+          <header className="mb-4 flex items-start justify-between">
+            <h2 className="text-lg font-bold">Image details</h2>
+            <button
+              aria-label="Close"
+              onClick={onClose}
+              className="rounded p-1 text-slate-400 hover:text-slate-700"
+            >
+              <X className="h-5 w-5" aria-hidden />
+            </button>
+          </header>
 
-        {editable ? (
-          <form onSubmit={onSubmit} className="flex flex-col gap-3">
-            {field('Source', sourceUrl, setSourceUrl, 'https://…')}
-            {field('Credit', creator, setCreator, 'Author or creator')}
-            {field('License', license, setLicense, 'e.g. CC BY 4.0')}
-            <div className="mt-2 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-md px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white"
-              >
-                Save
-              </button>
+          {editable ? (
+            <form onSubmit={onSubmit} className="flex flex-col gap-3">
+              {field('Source', sourceUrl, setSourceUrl, 'https://…')}
+              {field('Credit', creator, setCreator, 'Author or creator')}
+              {field('License', license, setLicense, 'e.g. CC BY 4.0')}
+              <div className="mt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-md px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white"
+                >
+                  Save
+                </button>
+              </div>
+            </form>
+          ) : hasAny ? (
+            <div className="flex flex-col gap-3">
+              <ReadRow label="Source" value={attribution?.sourceUrl} />
+              <ReadRow label="Credit" value={attribution?.creator} />
+              <ReadRow label="License" value={attribution?.license} />
             </div>
-          </form>
-        ) : hasAny ? (
-          <div className="flex flex-col gap-3">
-            <ReadRow label="Source" value={attribution?.sourceUrl} />
-            <ReadRow label="Credit" value={attribution?.creator} />
-            <ReadRow label="License" value={attribution?.license} />
-          </div>
-        ) : (
-          <p className="text-sm text-slate-500">
-            No source or licensing information is recorded for this image.
-          </p>
-        )}
+          ) : (
+            <p className="text-sm text-slate-500">
+              No source or licensing information is recorded for this image.
+            </p>
+          )}
+        </div>
       </div>
-    </div>
+    </Portal>
   )
 }

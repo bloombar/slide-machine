@@ -14,22 +14,31 @@ Short records of non-obvious choices, for when we revisit them.
 
 Approximate scale used: title 7cqi, section heading 5.5cqi, content/list headings 4cqi, body 2.75cqi (2.5 in two-column), captions 2cqi, paddings 4–8cqi.
 
-## Z-index tiers (2026-07-11)
+## Z-index tiers (2026-07-11, modal tier 2026-07-18)
 
-Fixed tiers so page chrome always paints above slide content:
+Fixed tiers so each layer always paints above the ones below it:
 
 | Tier | z-index | Used by |
 | --- | --- | --- |
 | Slide content & nav hotspots | auto | SlideView, SlideNavZones zones |
-| In-slide controls | `z-10` | EditableText (display + field), SlideDeleteButton — must beat the nav hotspots only |
-| Sticky page chrome | `z-30` | HealthFooter, DeckPageHeader (the deck toolbar pill, pinned under the nav) |
+| In-slide controls | `z-10` | EditableText (display + field), SlideMenu, image-slot controls — must beat the nav hotspots only |
+| Sticky page chrome | `z-30` | HealthFooter, DeckPageHeader (the deck toolbar pill), the live-session pill |
+| Settings sheet & chrome popovers | `z-40` | Modal `sheet` variant (drops under the nav), HealthBadge panel |
 | Primary navigation | `z-50` | AppShell / PublicShell headers |
-| Confirmation dialogs | `z-60` | ConfirmDialog — must beat everything, including the nav |
+| Modal & confirmation dialogs | `z-60` | Modal `center` variant, ReplaceImageDialog, ImageAttributionDialog, SeedDialog, ConfirmDialog — full-screen overlays that must beat everything, including the nav |
 
-Rule of thumb: nothing inside a slide may exceed `z-10`; nothing outside
-page chrome may use `z-30`+. Previously the sticky header sat at `z-10`,
-tied with in-slide controls, so slide text could paint over the nav when
-scrolled beneath it.
+Two rules keep this working:
+
+1. **Nothing inside a slide may exceed `z-10`; nothing outside page chrome
+   may use `z-30`+.** Previously the sticky header sat at `z-10`, tied with
+   in-slide controls, so slide text could paint over the nav when scrolled
+   beneath it.
+2. **Full-screen modal overlays render through `<Portal>` (into
+   document.body), not inline.** A dialog's z-index only competes within its
+   nearest stacking-context ancestor, so a dialog mounted inside an in-slide
+   control (the image slot's `z-10` group) was trapped at `z-10` and painted
+   under the `z-30` deck toolbar no matter its own value. Portaling lifts
+   every modal to the document root so the `z-60` tier actually applies.
 
 ## Slide content slots: descriptor + editor registry (2026-07-11)
 
