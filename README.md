@@ -63,4 +63,4 @@ Note `S3_FORCE_PATH_STYLE=true` is required for MinIO; production Spaces uses vi
 
 ## Deployment
 
-Pushes to the default branch deploy via [.do/app.yaml](.do/app.yaml): a single Docker-built App Platform service running the Express monolith (API + SPA), health-checked at `/api/health`, backed by DO Managed MongoDB. CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs lint, typecheck, unit, integration, and e2e tests on every push.
+A single Docker-built App Platform service runs the Express monolith (API + SPA), health-checked at `/api/health`, backed by MongoDB Atlas and DO Spaces. The service is defined by [.do/app.yaml](.do/app.yaml); `deploy_on_push` on the configured branch controls whether pushes auto-deploy. Full step-by-step setup — Atlas, Spaces, environment variables, and teardown — is in [docs/DEPLOY.md](docs/DEPLOY.md). CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs lint, typecheck, unit, integration, and e2e tests on every push.

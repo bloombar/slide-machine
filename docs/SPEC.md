@@ -623,10 +623,10 @@ Billing is decoupled from any specific payment vendor, the same way AI is (TECH-
 
 #### TECH-10 Deployment topology (Digital Ocean App Platform)
 
-The modular monolith ([§13](#13-system-architecture)) deploys to **Digital Ocean App Platform** (PaaS), chosen for minimal operational overhead:
+The modular monolith ([§13](#13-system-architecture)) deploys to **Digital Ocean App Platform** (PaaS), chosen for minimal operational overhead (step-by-step setup: [DEPLOY.md](DEPLOY.md)):
 
 - **App components** — one **API service** (the Express monolith) plus a **static site** component for the built React/Vite SPA (or the API serves the static bundle). App Platform provides managed TLS, build-on-push, and rolling deploys. Secrets are set as App Platform env vars, mirroring [TECH-4](#tech-4-server-configuration).
-- **Database** — **DO Managed MongoDB** (automated backups, point-in-time restore) rather than self-hosted.
+- **Database** — **MongoDB Atlas** (automated backups, point-in-time restore) rather than self-hosted.
 - **Object storage** — **DO Spaces** (S3-compatible) for uploaded seed assets, cached enrichment images, and generated exports.
 - **Scaling** — the API is stateless (JWT), so App Platform can run multiple horizontal instances behind its load balancer. The one caveat is **real-time STT streaming**: a WebSocket pipeline needs sticky sessions, or the client streams audio **directly to Google Cloud STT** with the back-end only brokering credentials (see [§19](#19-open-questions)).
 - **Quiz Generator** — **not** a separate deployment: it is imported in-process as a versioned library ([§17](#17-quiz-generator-integration)); its Google Forms/Drive calls run inside the monolith using the instructor's connected-account token (EXP-4).

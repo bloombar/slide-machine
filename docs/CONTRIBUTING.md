@@ -26,7 +26,7 @@ openssl rand -base64 48                   # run twice → JWT_SECRET and JWT_REF
 npm run dev                               # Express :3000 + Vite :5173
 ```
 
-Commands, configuration, and deployment are documented in the [README](../README.md); the system design is in [SPEC.md](SPEC.md) and the schedule in [ROADMAP.md](ROADMAP.md).
+Commands and configuration are documented in the [README](../README.md); deployment (DO App Platform + Spaces + MongoDB Atlas) is in [DEPLOY.md](DEPLOY.md); the system design is in [SPEC.md](SPEC.md) and the schedule in [ROADMAP.md](ROADMAP.md).
 
 ## Configuration & API keys
 
