@@ -84,9 +84,9 @@ describe('gatherCandidates', () => {
 
   it('caps the number of phrases it fans out on', async () => {
     const { ovQueries } = stub()
-    await gatherCandidates(['a', 'b', 'c', 'd', 'e'], 1000)
-    // Only the first three phrases are searched
-    expect(ovQueries.sort()).toEqual(['a', 'b', 'c'])
+    await gatherCandidates(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'], 1000)
+    // Only the first six phrases are searched; the tail is trimmed
+    expect(ovQueries.sort()).toEqual(['a', 'b', 'c', 'd', 'e', 'f'])
   })
 
   it('returns nothing when given no usable phrases', async () => {

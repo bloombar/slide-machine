@@ -179,9 +179,9 @@ describe('SlideSlot', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Add image' }))
     await screen.findByRole('dialog', { name: 'Add image' })
-    // The lead phrase seeds the box — keywords are never concatenated into
-    // one over-specified query that the sources would match conjunctively.
-    expect(mockedSearch).toHaveBeenCalledWith('s1', 'mitochondria')
+    // The keywords seed the box as a COMMA-separated list — each phrase is
+    // searched and pooled, never space-joined into one conjunctive query.
+    expect(mockedSearch).toHaveBeenCalledWith('s1', 'mitochondria, cell')
   })
 
   it('starts the search blank on a fresh "New slide" with no keywords', async () => {

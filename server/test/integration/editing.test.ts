@@ -367,6 +367,53 @@ describe('POST /slides/:slideId/image-candidates (EDIT-1)', () => {
     })
   })
 
+  it('searches each comma-separated phrase separately and pools them', async () => {
+    // Record what each source was actually asked, and return a distinct
+    // image per query so pooling across phrases is observable.
+    const wikiQueries: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input))
+        if (url.hostname.includes('wikimedia')) {
+          const q = url.searchParams.get('gsrsearch') ?? ''
+          wikiQueries.push(q)
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              query: {
+                pages: {
+                  '1': {
+                    title: `File:${q}.png`,
+                    imageinfo: [
+                      { thumburl: `http://wiki/${q}.png`, thumbwidth: 1024 },
+                    ],
+                  },
+                },
+              },
+            }),
+          } as Response
+        }
+        return { ok: true, status: 200, json: async () => ({}) } as Response
+      }),
+    )
+
+    const res = await request(server)
+      .post(`/api/slides/${slideIds[0]}/image-candidates`)
+      .set('Authorization', `Bearer ${ada}`)
+      .send({ query: 'red cell, blue cell' })
+    expect(res.status).toBe(200)
+    // Each phrase queried on its own — never the joined "red cell, blue cell"
+    expect(wikiQueries).toContain('red cell')
+    expect(wikiQueries).toContain('blue cell')
+    expect(wikiQueries).not.toContain('red cell, blue cell')
+    // Results from both phrases are pooled
+    const urls = res.body.map((c: { url: string }) => c.url)
+    expect(urls).toContain('http://wiki/red cell.png')
+    expect(urls).toContain('http://wiki/blue cell.png')
+  })
+
   it("403s searching for another user's slide", async () => {
     const bob = await registerUser('bob-cand@example.com')
     const res = await request(server)

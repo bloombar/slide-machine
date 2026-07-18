@@ -151,11 +151,13 @@ function ImageSlot({
   // searches freely rather than on a meaningless default.
   const titleSeed =
     slide.title && slide.title !== PLACEHOLDER_SLIDE_TITLE ? slide.title : ''
-  // Seed the box with the AI's PRIMARY keyword phrase, not all of them
-  // joined: the sources match multi-term queries conjunctively, so a
-  // concatenation like "hobby horse hobby horsing competition toy horse on
-  // stick" finds nothing while the lead phrase ("hobby horse") finds plenty.
-  const searchQuery = slide.imageKeywords?.[0] || titleSeed
+  // Seed the box with the AI's keyword phrases separated by COMMAS. The
+  // search treats each comma-separated phrase as its own query and pools
+  // the results (scored across all phrases), so every phrase contributes —
+  // unlike a space-join, which the sources would match as one over-specified
+  // conjunctive query ("hobby horse hobby horsing competition …") and find
+  // nothing. The user can edit the comma-separated list to refine.
+  const searchQuery = slide.imageKeywords?.join(', ') || titleSeed
 
   const attribution = slide.attribution
   const hasAttribution = Boolean(

@@ -13,10 +13,12 @@ import type { ImageCandidate } from './types'
 
 /**
  * Most keyword phrases we fan out on. Each phrase fires all three sources,
- * so this bounds request volume (phrases × 3); the phrases are ordered
- * most-relevant-first, so the cap trims the tail, not the signal.
+ * so this bounds request volume (phrases × 3). It covers the full set the
+ * generator emits (deriveImageKeywords / imageGuidance cap at 6), so the
+ * default "search all the AI phrases" is honored; a longer hand-typed list
+ * has its tail trimmed. Phrases are ordered most-relevant-first.
  */
-const MAX_QUERY_PHRASES = 3
+const MAX_QUERY_PHRASES = 6
 
 /**
  * Queries every source once per keyword phrase and returns the pooled,

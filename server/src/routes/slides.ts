@@ -135,14 +135,18 @@ slidesRouter.post(
       String(req.params.slideId),
       req.userId,
     )
-    const query =
+    const query: string =
       typeof req.body?.query === 'string' ? req.body.query.trim() : ''
-    // A typed query is one coherent search intent — keep it whole so the
-    // sources match it conjunctively. With no query, fall back to the AI's
-    // own keyword phrases (each searched separately and pooled), then the
-    // title — so results relate to what the slide is about.
+    // A typed query is a COMMA-separated list of phrases: each phrase is
+    // searched on its own and the results are pooled and ranked (so one box
+    // can search several intents at once). A phrase with no comma is just a
+    // single conjunctive query. With no query at all, fall back to the AI's
+    // own keyword phrases, then the title — so results relate to the slide.
     const keywords = query
-      ? [query]
+      ? query
+          .split(',')
+          .map(phrase => phrase.trim())
+          .filter(Boolean)
       : slide.imageKeywords?.length
         ? slide.imageKeywords
         : [slide.title].filter((t): t is string => Boolean(t))
