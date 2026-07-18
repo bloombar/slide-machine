@@ -80,6 +80,13 @@ build, `http_port: 3000`, `basic-xxs`, health check `/api/health`, region
 doctl apps create --spec .do/app.yaml
 ```
 
+`doctl apps create` prints the new app's **ID** (a UUID). That value is the
+`<app-id>` every later `doctl apps …` command expects — grab it from the
+create output, or look it up anytime with `doctl apps list` (or
+`doctl apps list --format ID,Spec.Name,DefaultIngress`, which also shows each
+app's URL). In the dashboard it's the last path segment of the app's URL
+(`cloud.digitalocean.com/apps/<app-id>`).
+
 The same spec serves both cases; only a few fields differ:
 
 - **Permanent deployment** — keep the real `name`, point `github.branch` at
