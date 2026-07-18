@@ -47,6 +47,12 @@ services:
         type: SECRET
       - key: GOOGLE_OAUTH_CLIENT_SECRET
         type: SECRET
+      # The same client id, inlined into the SPA at BUILD time so the "Continue
+      # with Google" button renders (Vite reads VITE_* at build; .env files are
+      # not in the image). Public — it ships in the bundle — so not a SECRET.
+      - key: VITE_GOOGLE_OAUTH_CLIENT_ID
+        scope: BUILD_TIME
+        value: 86666154289-0sk4nhq0l7di9arfuecllhgpei0gga5b.apps.googleusercontent.com
       # Image enrichment (IMG-1)
       - key: FLICKR_API_KEY
         type: SECRET

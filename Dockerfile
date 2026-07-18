@@ -14,6 +14,13 @@ COPY e2e/package.json e2e/
 RUN npm ci
 
 COPY . .
+# Vite inlines VITE_* into the browser bundle at build time, and .env files are
+# kept out of the image (see .dockerignore), so public client build config must
+# be passed in explicitly. VITE_GOOGLE_OAUTH_CLIENT_ID gates the "Continue with
+# Google" button; it is public (it ships in the bundle), not a secret. On DO App
+# Platform declare it with scope BUILD_TIME (see .do/app.yaml).
+ARG VITE_GOOGLE_OAUTH_CLIENT_ID=""
+ENV VITE_GOOGLE_OAUTH_CLIENT_ID=$VITE_GOOGLE_OAUTH_CLIENT_ID
 RUN npm run build
 
 # --- Runtime stage ---
