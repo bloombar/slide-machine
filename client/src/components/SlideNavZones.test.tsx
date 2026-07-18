@@ -1,5 +1,6 @@
 /**
- * Unit tests for hover navigation zones: bounds and click behavior.
+ * Unit tests for pointer navigation zones: which chevron the cursor
+ * position reveals, bounds, and click behavior.
  */
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
@@ -11,7 +12,7 @@ const renderZones = (
   onPrev = vi.fn(),
   onNext = vi.fn(),
 ) => {
-  render(
+  const { container } = render(
     <SlideNavZones
       hasPrev={hasPrev}
       hasNext={hasNext}
@@ -21,7 +22,19 @@ const renderZones = (
       <div>SLIDE</div>
     </SlideNavZones>,
   )
-  return { onPrev, onNext }
+  // jsdom does no layout, so the root reports a zero-size rect; pin a known
+  // box so midpoint maths (clientX vs rect.left + width/2) is exercisable.
+  const root = container.firstChild as HTMLElement
+  root.getBoundingClientRect = () =>
+    ({
+      left: 0,
+      width: 100,
+      right: 100,
+      top: 0,
+      bottom: 100,
+      height: 100,
+    }) as DOMRect
+  return { root, onPrev, onNext }
 }
 
 describe('SlideNavZones', () => {
@@ -31,6 +44,31 @@ describe('SlideNavZones', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next slide' }))
     expect(onPrev).toHaveBeenCalledTimes(1)
     expect(onNext).toHaveBeenCalledTimes(1)
+  })
+
+  it('reveals the chevron for the side of the midpoint the cursor is on', () => {
+    const { root } = renderZones(true, true)
+    const prev = screen.getByRole('button', { name: 'Previous slide' })
+    const next = screen.getByRole('button', { name: 'Next slide' })
+
+    // Both hidden until the cursor is over the slide
+    expect(prev.className).toContain('opacity-0')
+    expect(next.className).toContain('opacity-0')
+
+    // Left of the 50px midpoint reveals previous, hides next
+    fireEvent.mouseMove(root, { clientX: 20 })
+    expect(prev.className).toContain('opacity-100')
+    expect(next.className).toContain('opacity-0')
+
+    // Right of the midpoint reveals next, hides previous
+    fireEvent.mouseMove(root, { clientX: 80 })
+    expect(next.className).toContain('opacity-100')
+    expect(prev.className).toContain('opacity-0')
+
+    // Leaving the slide hides both again
+    fireEvent.mouseLeave(root)
+    expect(prev.className).toContain('opacity-0')
+    expect(next.className).toContain('opacity-0')
   })
 
   it('omits the previous zone on the first slide', () => {
