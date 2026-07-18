@@ -8,8 +8,10 @@
  * with zod before it touches the pipeline — a confused model must never
  * produce a malformed slide.
  *
- * Selected via GENERATION_PROVIDER=gemini; the mock stays the default
- * for tests and CI.
+ * Active when GENERATION_PROVIDER=gemini, and the call requires
+ * GEMINI_API_KEY — without it each request throws rather than degrading.
+ * Other provider values select a different adapter (e.g. the mock used by
+ * tests and keyless runs).
  */
 import { z } from 'zod'
 import type {

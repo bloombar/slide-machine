@@ -1,8 +1,8 @@
 /**
  * Deck and live-session actions (PROJ-2, CAP-1, GEN-1/GEN-8, SHARE-1 via
  * TECH-13). session.phrase is the heart of the pipeline: one finalized
- * phrase in, one SlideEvent out — the same contract a streamed transport
- * will use once real STT lands.
+ * phrase in, one SlideEvent out — the same contract whether the phrase
+ * arrives from the typed Speak bar or a streamed STT transport.
  */
 import { z } from 'zod'
 import type {

@@ -3,9 +3,10 @@
  * capability; the active adapter is resolved by name from server config,
  * so engines are swapped via configuration alone.
  *
- * No real adapters exist yet — each capability's configured default name
- * maps to an "unimplemented" stub that throws on use, proving the wiring
- * without pretending to work.
+ * Any capability whose configured name has no adapter registered under it
+ * resolves to an "unimplemented" stub that throws a descriptive error on
+ * use, so a missing or not-yet-built adapter surfaces clearly at the call
+ * site instead of crashing at resolution.
  */
 import type { Capability } from '@slide-machine/shared'
 import { env } from '../config/env'
@@ -23,9 +24,9 @@ export const defaultSelectors: ProviderSelectors = {
 }
 
 /**
- * A placeholder provider whose every method throws. Registered under the
- * configured names until real adapters land, so resolution works end-to-end
- * and failures are descriptive rather than mysterious.
+ * A placeholder provider whose every method throws. Registered under every
+ * configured name as a fallback, so resolution works end-to-end and a name
+ * with no real adapter fails descriptively rather than mysteriously.
  */
 export const unimplementedProvider = (
   capability: Capability,
@@ -85,8 +86,10 @@ export class ProviderRegistry {
 /** The application-wide registry, wired to server config. */
 export const registry = new ProviderRegistry(defaultSelectors)
 
-// Placeholder registrations — replaced capability-by-capability as real
-// adapters (Google Cloud STT, Gemini, ...) are implemented.
+// Seed every configured selector with a stub fallback. Real adapters
+// register on import and overwrite the matching stub; any selector left
+// unbacked still resolves — to a descriptive throw, not a missing-provider
+// crash.
 for (const [capability, name] of Object.entries(defaultSelectors) as [
   Capability,
   string,

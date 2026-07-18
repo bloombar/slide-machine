@@ -2,9 +2,10 @@
  * Google OAuth 2.0 sign-in (SPEC AUTH-1), server-side Authorization Code
  * flow per docs/GOOGLE_SIGN_IN.md. The browser is sent to Google's
  * consent screen; Google returns a code to the backend callback, which
- * this module exchanges for tokens and verifies. Only the basic sign-in
- * scopes are requested (openid/email/profile) — Drive scopes for EXP-4
- * come later.
+ * this module exchanges for tokens and verifies. It requests only the
+ * basic sign-in scopes (openid/email/profile); the Forms/Drive scopes for
+ * connected accounts (EXP-4) belong to a separate offline-token flow, not
+ * this sign-in path.
  */
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { env } from '../config/env'
