@@ -1,33 +1,80 @@
 /**
- * Unit tests for the compact health bar.
+ * Unit tests for the expandable health bar.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import type { HealthResponse } from '@slide-machine/shared'
 import HealthBadge from './HealthBadge'
 
 const healthFixture: HealthResponse = {
   status: 'ok',
-  mongo: 'connected',
+  environment: 'development',
+  version: '2026.07.18+abc1234',
   uptime: 12.3,
-  version: '0.1.0',
+  components: {
+    mongo: { status: 'ok', detail: 'connected' },
+    storage: { status: 'ok', detail: 'local disk' },
+    gemini: { status: 'ok', detail: 'connected' },
+    stt: { status: 'disabled', detail: 'browser (client-side)' },
+  },
 }
 
 afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+const stubFetch = (body: HealthResponse) =>
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({ json: () => Promise.resolve(body) }),
+  )
+
 describe('HealthBadge', () => {
-  it('reports API and mongo status in the bar', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({ json: () => Promise.resolve(healthFixture) }),
-    )
+  it('shows the compact overall status collapsed', async () => {
+    stubFetch(healthFixture)
 
     render(<HealthBadge />)
 
     expect(await screen.findByText('API ok')).toBeInTheDocument()
-    expect(screen.getByText('· mongo connected')).toBeInTheDocument()
+    // The breakdown stays hidden until the badge is clicked.
+    expect(screen.queryByTestId('health-panel')).not.toBeInTheDocument()
+  })
+
+  it('expands to a per-component breakdown when clicked', async () => {
+    stubFetch(healthFixture)
+
+    render(<HealthBadge />)
+    await screen.findByText('API ok')
+    fireEvent.click(screen.getByRole('button'))
+
+    const panel = screen.getByTestId('health-panel')
+    expect(panel).toBeInTheDocument()
+    expect(panel).toHaveTextContent('development')
+    expect(panel).toHaveTextContent('2026.07.18+abc1234')
+    expect(screen.getByTestId('health-component-mongo')).toHaveTextContent(
+      'MongoDB',
+    )
+    expect(screen.getByTestId('health-component-gemini')).toHaveTextContent(
+      'Google Gemini',
+    )
+    expect(screen.getByTestId('health-component-stt')).toHaveTextContent(
+      'browser (client-side)',
+    )
+  })
+
+  it('surfaces a degraded overall status', async () => {
+    stubFetch({
+      ...healthFixture,
+      status: 'degraded',
+      components: {
+        ...healthFixture.components,
+        gemini: { status: 'down', detail: 'auth failed' },
+      },
+    })
+
+    render(<HealthBadge />)
+
+    expect(await screen.findByText('API degraded')).toBeInTheDocument()
   })
 
   it('shows unreachable when the API is down', async () => {

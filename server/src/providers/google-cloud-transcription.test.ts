@@ -8,51 +8,57 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // Hoisted so the vi.mock factory (which is lifted to the top of the file) can
 // reference the fake client without a temporal-dead-zone error.
-const { streams, streamingRecognize, SpeechClient } = vi.hoisted(() => {
-  /** A controllable stand-in for Google's streamingRecognize duplex. The
-   * config is captured from the constructor argument (the library sends it
-   * itself); writes are the raw audio chunks. */
-  class FakeRecognizeStream {
-    config: unknown
-    written: unknown[] = []
-    ended = false
-    private handlers: Record<string, ((arg: unknown) => void)[]> = {}
-    constructor(config: unknown) {
-      this.config = config
+const { streams, streamingRecognize, getAccessToken, close, SpeechClient } =
+  vi.hoisted(() => {
+    /** A controllable stand-in for Google's streamingRecognize duplex. The
+     * config is captured from the constructor argument (the library sends it
+     * itself); writes are the raw audio chunks. */
+    class FakeRecognizeStream {
+      config: unknown
+      written: unknown[] = []
+      ended = false
+      private handlers: Record<string, ((arg: unknown) => void)[]> = {}
+      constructor(config: unknown) {
+        this.config = config
+      }
+      write(chunk: unknown): void {
+        this.written.push(chunk)
+      }
+      end(): void {
+        this.ended = true
+      }
+      destroy(): void {}
+      on(event: string, handler: (arg: unknown) => void): this {
+        ;(this.handlers[event] ??= []).push(handler)
+        return this
+      }
+      emit(event: string, arg?: unknown): void {
+        ;(this.handlers[event] ?? []).forEach(handler => handler(arg))
+      }
     }
-    write(chunk: unknown): void {
-      this.written.push(chunk)
-    }
-    end(): void {
-      this.ended = true
-    }
-    destroy(): void {}
-    on(event: string, handler: (arg: unknown) => void): this {
-      ;(this.handlers[event] ??= []).push(handler)
-      return this
-    }
-    emit(event: string, arg?: unknown): void {
-      ;(this.handlers[event] ?? []).forEach(handler => handler(arg))
-    }
-  }
-  const streams: FakeRecognizeStream[] = []
-  const streamingRecognize = vi.fn((config: unknown) => {
-    const stream = new FakeRecognizeStream(config)
-    streams.push(stream)
-    return stream
+    const streams: FakeRecognizeStream[] = []
+    const streamingRecognize = vi.fn((config: unknown) => {
+      const stream = new FakeRecognizeStream(config)
+      streams.push(stream)
+      return stream
+    })
+    // Auth stub for the health probe: getAccessToken succeeds by default;
+    // tests override it to exercise the down path.
+    const getAccessToken = vi.fn(async () => 'token')
+    const close = vi.fn(async () => {})
+    // Regular function (not arrow) so the adapter can `new SpeechClient()`.
+    const SpeechClient = vi.fn(function () {
+      return { streamingRecognize, auth: { getAccessToken }, close }
+    })
+    return { streams, streamingRecognize, getAccessToken, close, SpeechClient }
   })
-  // Regular function (not arrow) so the adapter can `new SpeechClient()`.
-  const SpeechClient = vi.fn(function () {
-    return { streamingRecognize }
-  })
-  return { streams, streamingRecognize, SpeechClient }
-})
 vi.mock('@google-cloud/speech', () => ({ SpeechClient }))
 
-// The provider only reads the two credential vars from env; a mutable stub
-// lets each test pick the auth path (inline JSON / key file / none).
+// The provider reads the credential vars and the active provider name from
+// env; a mutable stub lets each test pick the auth path and STT engine.
 const mockEnv = vi.hoisted(() => ({
   env: {
+    TRANSCRIPTION_PROVIDER: 'google-cloud' as string,
     GOOGLE_APPLICATION_CREDENTIALS: undefined as string | undefined,
     GOOGLE_APPLICATION_CREDENTIALS_JSON: undefined as string | undefined,
   },
@@ -63,7 +69,10 @@ vi.mock('../config/env', () => mockEnv)
 const { readFileSync } = vi.hoisted(() => ({ readFileSync: vi.fn() }))
 vi.mock('node:fs', () => ({ readFileSync }))
 
-import { GoogleCloudTranscriptionProvider } from './google-cloud-transcription'
+import {
+  GoogleCloudTranscriptionProvider,
+  pingGoogleStt,
+} from './google-cloud-transcription'
 
 /** Builds a Google-shaped result response. */
 const dataEvent = (transcript: string, isFinal: boolean, confidence = 0) => ({
@@ -76,7 +85,11 @@ beforeEach(() => {
   streams.length = 0
   streamingRecognize.mockClear()
   SpeechClient.mockClear()
+  getAccessToken.mockClear()
+  getAccessToken.mockResolvedValue('token')
+  close.mockClear()
   readFileSync.mockReset()
+  mockEnv.env.TRANSCRIPTION_PROVIDER = 'google-cloud'
   mockEnv.env.GOOGLE_APPLICATION_CREDENTIALS = undefined
   mockEnv.env.GOOGLE_APPLICATION_CREDENTIALS_JSON = undefined
 })
@@ -267,5 +280,51 @@ describe('GoogleCloudTranscriptionProvider', () => {
     expect(() => provider.startStream({ languageCode: 'en-US' })).toThrow(
       /ENOENT/,
     )
+  })
+})
+
+describe('pingGoogleStt', () => {
+  it('reports disabled when the browser engine is active', async () => {
+    mockEnv.env.TRANSCRIPTION_PROVIDER = 'browser'
+    expect(await pingGoogleStt()).toEqual({
+      status: 'disabled',
+      detail: 'browser (client-side)',
+    })
+    expect(SpeechClient).not.toHaveBeenCalled()
+  })
+
+  it('reports disabled for a non-Google server engine', async () => {
+    mockEnv.env.TRANSCRIPTION_PROVIDER = 'mock'
+    expect(await pingGoogleStt()).toEqual({
+      status: 'disabled',
+      detail: 'mock',
+    })
+  })
+
+  it('reports down when google-cloud is active but has no credentials', async () => {
+    mockEnv.env.TRANSCRIPTION_PROVIDER = 'google-cloud'
+    expect(await pingGoogleStt()).toEqual({
+      status: 'down',
+      detail: 'no credentials',
+    })
+    expect(SpeechClient).not.toHaveBeenCalled()
+  })
+
+  it('reports ok when the service account yields an access token', async () => {
+    mockEnv.env.GOOGLE_APPLICATION_CREDENTIALS_JSON = JSON.stringify({
+      project_id: 'p',
+    })
+    expect(await pingGoogleStt()).toEqual({ status: 'ok', detail: 'connected' })
+    expect(getAccessToken).toHaveBeenCalled()
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('reports down when fetching an access token fails', async () => {
+    mockEnv.env.GOOGLE_APPLICATION_CREDENTIALS_JSON = JSON.stringify({
+      project_id: 'p',
+    })
+    getAccessToken.mockRejectedValue(new Error('invalid_grant'))
+    expect((await pingGoogleStt()).status).toBe('down')
+    expect(close).toHaveBeenCalled()
   })
 })

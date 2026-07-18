@@ -12,6 +12,7 @@
 import { readFileSync } from 'node:fs'
 import { SpeechClient } from '@google-cloud/speech'
 import type {
+  HealthComponent,
   TranscriptionEvent,
   TranscriptionProvider,
   TranscriptionStream,
@@ -183,3 +184,39 @@ registry.register(
   'google-cloud',
   () => new GoogleCloudTranscriptionProvider(),
 )
+
+/**
+ * Health probe for Google Cloud Speech-to-Text (used by GET /api/health).
+ * STT is only server-side when `google-cloud` is the active engine — the
+ * keyless 'browser'/'none'/'mock' modes report `disabled`. When active, we
+ * fetch an access token from the service account (free, no STT call), which
+ * verifies both the credentials and reachability.
+ */
+export const pingGoogleStt = async (): Promise<HealthComponent> => {
+  const provider = env.TRANSCRIPTION_PROVIDER
+  if (provider === 'browser')
+    return { status: 'disabled', detail: 'browser (client-side)' }
+  if (provider === 'none') return { status: 'disabled', detail: 'none' }
+  if (provider !== 'google-cloud')
+    return { status: 'disabled', detail: provider }
+
+  const hasCreds = Boolean(
+    env.GOOGLE_APPLICATION_CREDENTIALS_JSON ||
+    env.GOOGLE_APPLICATION_CREDENTIALS,
+  )
+  if (!hasCreds) return { status: 'down', detail: 'no credentials' }
+
+  let client: SpeechClient | undefined
+  try {
+    client = new SpeechClient(speechClientOptions())
+    await client.auth.getAccessToken()
+    return { status: 'ok', detail: 'connected' }
+  } catch (error) {
+    return {
+      status: 'down',
+      detail: error instanceof Error ? error.name : 'unreachable',
+    }
+  } finally {
+    await client?.close().catch(() => {})
+  }
+}

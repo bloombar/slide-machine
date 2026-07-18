@@ -1480,7 +1480,18 @@ describe('DeckViewerPage title in the primary nav', () => {
       }),
       '/api/health': () => ({
         status: 200,
-        body: { status: 'ok', mongo: 'connected', uptime: 1, version: '0' },
+        body: {
+          status: 'ok',
+          environment: 'test',
+          version: '0',
+          uptime: 1,
+          components: {
+            mongo: { status: 'ok', detail: 'connected' },
+            storage: { status: 'ok', detail: 'local disk' },
+            gemini: { status: 'disabled', detail: 'not configured' },
+            stt: { status: 'disabled', detail: 'browser (client-side)' },
+          },
+        },
       }),
     })
     render(

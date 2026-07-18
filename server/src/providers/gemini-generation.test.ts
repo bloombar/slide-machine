@@ -17,7 +17,7 @@ const testEnv = vi.hoisted(() => ({
 }))
 vi.mock('../config/env', () => ({ env: testEnv }))
 
-import { GeminiGenerationProvider } from './gemini-generation'
+import { GeminiGenerationProvider, pingGemini } from './gemini-generation'
 import { GenerationUnavailableError } from './errors'
 
 const provider = new GeminiGenerationProvider()
@@ -481,5 +481,41 @@ describe('GeminiGenerationProvider', () => {
     expect(err).toBeInstanceOf(GenerationUnavailableError)
     expect((err as GenerationUnavailableError).retryable).toBe(true)
     expect((err as Error).message).toMatch(/temporarily busy/)
+  })
+})
+
+describe('pingGemini', () => {
+  it('reports disabled when no API key is configured', async () => {
+    testEnv.GEMINI_API_KEY = undefined
+    const result = await pingGemini()
+    expect(result).toEqual({ status: 'disabled', detail: 'not configured' })
+    // A disabled provider must not make a network call.
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('reports ok when the models endpoint responds 200', async () => {
+    fetchMock.mockResolvedValue({ ok: true, status: 200 })
+    const result = await pingGemini()
+    expect(result).toEqual({ status: 'ok', detail: 'connected' })
+    const [url] = fetchMock.mock.calls[0]!
+    expect(String(url)).toMatch(/\/models$/)
+  })
+
+  it('reports auth failure on 401/403', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 403 })
+    expect(await pingGemini()).toEqual({
+      status: 'down',
+      detail: 'auth failed',
+    })
+  })
+
+  it('reports down with the status code on other errors', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 500 })
+    expect(await pingGemini()).toEqual({ status: 'down', detail: 'HTTP 500' })
+  })
+
+  it('reports down when the request throws', async () => {
+    fetchMock.mockRejectedValue(new Error('network'))
+    expect((await pingGemini()).status).toBe('down')
   })
 })

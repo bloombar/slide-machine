@@ -20,5 +20,14 @@ test('landing page shows the hero and a healthy API footer', async ({
 
   const bar = page.getByTestId('health-bar')
   await expect(bar).toContainText('API ok')
-  await expect(bar).toContainText('mongo connected')
+
+  // Clicking the bar expands the component breakdown: mode, version, and
+  // per-service status including a connected MongoDB.
+  await bar.getByRole('button').click()
+  const panel = page.getByTestId('health-panel')
+  await expect(panel).toBeVisible()
+  await expect(panel).toContainText('Version')
+  await expect(panel.getByTestId('health-component-mongo')).toContainText(
+    'connected',
+  )
 })

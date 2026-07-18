@@ -10,9 +10,11 @@ import { dirname, join, normalize } from 'node:path'
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadBucketCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
+import type { HealthComponent } from '@slide-machine/shared'
 import { env } from '../config/env'
 
 export interface FileStorage {
@@ -22,6 +24,8 @@ export interface FileStorage {
   /** URL the browser can load the file from. */
   publicUrl(key: string): string
   delete(key: string): Promise<void>
+  /** Liveness probe for the health endpoint. */
+  healthCheck(): Promise<HealthComponent>
 }
 
 /** Rejects traversal — keys are internal, but never trust a path. */
@@ -54,6 +58,10 @@ const localStorageProvider = (): FileStorage => {
     },
     async delete(key) {
       await rm(join(root, safeKey(key)), { force: true })
+    },
+    async healthCheck() {
+      // Local disk is always available to the running process; nothing to probe.
+      return { status: 'ok', detail: 'local disk' }
     },
   }
 }
@@ -101,6 +109,24 @@ const s3StorageProvider = (): FileStorage => {
       await client.send(
         new DeleteObjectCommand({ Bucket: bucket, Key: safeKey(key) }),
       )
+    },
+    async healthCheck() {
+      let host: string | undefined
+      try {
+        if (env.S3_ENDPOINT) host = new URL(env.S3_ENDPOINT).host
+      } catch {
+        host = env.S3_ENDPOINT
+      }
+      const label = host ? `s3 (${host})` : 's3'
+      try {
+        await client.send(new HeadBucketCommand({ Bucket: bucket }))
+        return { status: 'ok', detail: label }
+      } catch (error) {
+        return {
+          status: 'down',
+          detail: error instanceof Error ? error.name : label,
+        }
+      }
     },
   }
 }

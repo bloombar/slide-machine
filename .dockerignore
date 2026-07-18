@@ -30,6 +30,11 @@ blob-report/
 .git/
 .github/
 .gitignore
+# ...but keep the minimal git metadata the build needs to stamp the CalVer
+# app version (YYYY.MM.DD+<sha>, see server/src/lib/app-version.ts).
+!.git/HEAD
+!.git/refs
+!.git/packed-refs
 
 # Local tooling / editor / OS.
 .claude/

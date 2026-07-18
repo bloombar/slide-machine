@@ -19,6 +19,7 @@ import type {
   LayoutType,
 } from '@slide-machine/shared'
 import { isVoiceCommand } from '@slide-machine/shared'
+import type { HealthComponent } from '@slide-machine/shared'
 import { env } from '../config/env'
 import { registry } from './registry'
 import { GenerationUnavailableError } from './errors'
@@ -311,3 +312,28 @@ export class GeminiGenerationProvider implements GenerationProvider {
 }
 
 registry.register('generation', 'gemini', () => new GeminiGenerationProvider())
+
+/**
+ * Health probe for the Gemini API (used by GET /api/health). Lists models —
+ * a free, zero-token call that verifies both reachability and the API key.
+ * Missing key ⇒ disabled; 401/403 ⇒ auth failed; anything non-2xx ⇒ down.
+ */
+export const pingGemini = async (): Promise<HealthComponent> => {
+  if (!env.GEMINI_API_KEY)
+    return { status: 'disabled', detail: 'not configured' }
+  try {
+    const res = await fetch(`${API_BASE}/models`, {
+      headers: { 'x-goog-api-key': env.GEMINI_API_KEY },
+      signal: AbortSignal.timeout(2000),
+    })
+    if (res.ok) return { status: 'ok', detail: 'connected' }
+    if (res.status === 401 || res.status === 403)
+      return { status: 'down', detail: 'auth failed' }
+    return { status: 'down', detail: `HTTP ${res.status}` }
+  } catch (error) {
+    return {
+      status: 'down',
+      detail: error instanceof Error ? error.name : 'unreachable',
+    }
+  }
+}
