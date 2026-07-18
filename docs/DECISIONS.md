@@ -55,13 +55,13 @@ scrolled beneath it.
 
 ## Seed material: upload → keyless extraction → generation (2026-07-11)
 
-**Problem.** [SEED-1](SPEC.md#seed-1-document-seeding)/[2](SPEC.md#seed-2-image-seeding) need instructor documents (PDF/DOCX/photos) feeding slide generation and image enrichment, but every AI credential (Gemini) is still pending.
+**Problem.** [SEED-1](SPEC.md#seed-1-document-seeding)/[2](SPEC.md#seed-2-image-seeding) need instructor documents (PDF/DOCX/photos) feeding slide generation and image enrichment, and this had to work before any AI credential (Gemini) was guaranteed — so the baseline could not hard-depend on a key.
 
 **Choice.** A two-tier pipeline where the baseline needs no keys:
 
 - **Storage** behind a `FileStorage` seam ([storage/index.ts](../server/src/storage/index.ts)): `local` (disk + `GET /api/files/*`, the dev/test default) or `s3` (MinIO/DO Spaces), selected by `STORAGE_PROVIDER`.
 - **Upload** (`POST /api/seed-assets`, 20 MB, PDF/DOCX/PNG/JPEG/WebP) answers immediately with a `processing` asset; extraction runs fire-and-forget and settles to `ready`/`failed` — the same fault-tolerant background pattern as image enrichment. Project-level uploads are owner-only; lecture-level follow deck edit rights.
-- **Baseline extraction** ([seeding/extract.ts](../server/src/seeding/extract.ts)): PDF text via unpdf, DOCX text via mammoth plus embedded photos (≥10 KiB, ≤12) spun into their own image assets, uploaded photos used directly with caption-derived keywords. The **AI tier** (vision captions, OCR, summarization) plugs in behind `processSeedAsset` when `GEMINI_API_KEY` lands.
+- **Baseline extraction** ([seeding/extract.ts](../server/src/seeding/extract.ts)): PDF text via unpdf, DOCX text via mammoth plus embedded photos (≥10 KiB, ≤12) spun into their own image assets, uploaded photos used directly with caption-derived keywords. The **AI tier** ([seeding/ai-extract.ts](../server/src/seeding/ai-extract.ts) — vision captions, OCR, summarization) is implemented and layers on inside `processSeedAsset` automatically whenever `GEMINI_API_KEY` is present; it returns null (never throws) without a key, so the keyless baseline stands unchanged.
 - **Payoffs**: enabled assets' text joins the structured seed layers (`seedContext: { project, deck }`, additive, deck outranks project; 8k chars/layer). Seeded photos enter the enrichment pool with source prior **1.2 — above every web source** — and a model-selected `seededImageId` short-circuits search entirely (`imageSource: 'seeded'`, [IMG-1](SPEC.md#img-1-real-time-image-enrichment)).
 
 ## Access control: project-level ACLs with lecture inheritance (2026-07-12)
@@ -76,11 +76,25 @@ scrolled beneath it.
 
 ## Speech capture: browser bridge until Cloud STT (2026-07-12)
 
-**Problem.** Real speech capture ([CAP-1](SPEC.md#cap-1-session-lifecycle)) is blocked on Google Cloud STT credentials, but live demos shouldn't wait for them.
+**Problem.** Real speech capture ([CAP-1](SPEC.md#cap-1-session-lifecycle)) needed Google Cloud STT credentials that weren't yet in hand, but live demos shouldn't wait for them.
 
 **Choice.** Capture is a client-side seam ([stt/capture.ts](../client/src/stt/capture.ts)), but the engine is chosen by **one server variable**, `TRANSCRIPTION_PROVIDER`, reported to the client at boot via `GET /api/config` — so switching needs no client rebuild. `browser` (the default) uses the Web Speech API — keyless, Chrome/Edge/Safari, mic-permission gated. `none` disables capture. `google-cloud` streams mic PCM to the server over a WebSocket (`/api/stt`, auth'd on the handshake); the server relays to Google Cloud STT `streamingRecognize` via the [google-cloud-transcription](../server/src/providers/google-cloud-transcription.ts) adapter and streams transcripts back. Every engine's finalized phrases feed the same `session.phrase` pipeline as the typed Speak bar, with interim text shown live — the UI is identical. Real-time streaming requires a **service account** (`GOOGLE_APPLICATION_CREDENTIALS`); Google's streaming endpoint rejects API keys, so the earlier `GOOGLE_CLOUD_STT_KEY` (chunked REST) path was dropped.
 
-**Update (2026-07-16).** The `google-cloud` streaming path is implemented; the switch moved from two env vars (client `VITE_STT_PROVIDER` + server `TRANSCRIPTION_PROVIDER`) to the single server variable above, and `VITE_STT_PROVIDER` was removed.
+**Update (2026-07-16).** The `google-cloud` streaming path is now fully implemented and selectable ([google-cloud-transcription](../server/src/providers/google-cloud-transcription.ts) + the live `/api/stt` WebSocket); `browser` remains the default `TRANSCRIPTION_PROVIDER`, with `google-cloud` switched on by setting that one variable plus service-account credentials. The switch also moved from two env vars (client `VITE_STT_PROVIDER` + server `TRANSCRIPTION_PROVIDER`) to the single server variable above, and `VITE_STT_PROVIDER` was removed.
+
+## No speaker diarization: latency + single-provider (2026-07-18)
+
+**Problem.** In a live lecture the mic picks up the lecturer and, intermittently, students asking questions or commenting. Diarization (labelling *who* spoke) would let us treat student speech differently — skip it, tag it, or route it separately.
+
+**Choice.** Do **not** diarize. Keep transcription a single undifferentiated stream and stay on Google Cloud STT streaming. Two reasons: (1) we want interim/final transcripts as fast as possible, and Google returns speaker tags only in **batch** recognition, not the streaming path [CAP-1](SPEC.md#cap-1-session-lifecycle) depends on — real-time and diarization are mutually exclusive on Google today; (2) providers that *do* diarize live (Deepgram, AssemblyAI) would mean adding a second STT vendor, which we're declining. The `TranscriptionEvent` contract ([transcription.ts](../shared/src/providers/transcription.ts)) therefore carries only `text`/`isFinal`/`confidence` — no `speaker` field — and every phrase feeds the same `session.phrase` pipeline regardless of who spoke.
+
+**Consequences / limits.**
+
+- **Student speech is indistinguishable from the lecturer's.** A student question or comment enters generation as if the lecturer said it, and may spawn or update a slide. There is no automatic way to skip, quarantine, or attribute it.
+- Mitigations remain manual/deterministic: the lecturer can pause capture during Q&A, or use voice commands / the Speak bar to steer. The existing wake-word matcher ([stt/commands.ts](../client/src/stt/commands.ts)) is unaffected.
+- No per-speaker analytics or transcripts (e.g. "questions asked this lecture").
+
+**If we switch later.** Adding a `speaker` field to `TranscriptionEvent` and threading it through the phrase pipeline is the enabling change; the provider registry ([registry.ts](../server/src/providers/registry.ts)) already isolates the STT vendor, so a diarizing adapter (batch Google, or a live-diarization provider) drops in without touching capture or the UI. Speaker-aware handling (drop/tag/route student turns) would then be a pipeline policy on top.
 
 ## Gemini generation adapter: model + output strategy (2026-07-12)
 
