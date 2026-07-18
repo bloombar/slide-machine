@@ -1,8 +1,9 @@
 # Digital Ocean App Platform spec (SPEC TECH-10): one service — the Express
-# monolith serving both /api and the built React SPA. MongoDB is DO Managed
-# MongoDB, provisioned separately; its connection string binds MONGODB_URI.
+# monolith serving both /api and the built React SPA. MongoDB is a MongoDB
+# Atlas cluster, provisioned separately; its connection string binds MONGODB_URI.
 #
-# Set the real repo and secret values in the DO dashboard (or `doctl apps`).
+# Env keys mirror server/.env.example exactly. SECRET values and the bare
+# (value-less) keys are filled in the DO dashboard (or `doctl apps`).
 name: slide-machine
 region: nyc
 services:
@@ -11,7 +12,7 @@ services:
     source_dir: /
     github:
       repo: bloombar/slide-machine
-      branch: master
+      branch: better-faster
       deploy_on_push: true
     http_port: 3000
     instance_count: 1
@@ -23,21 +24,44 @@ services:
         value: production
       - key: MONGODB_URI
         type: SECRET
+      # Auth signing secrets — required at boot (min 32 chars each)
+      - key: JWT_SECRET
+        type: SECRET
+      - key: JWT_REFRESH_SECRET
+        type: SECRET
+      # Public origin, for the Google OAuth redirect URI (https, no trailing /)
+      - key: PUBLIC_BASE_URL
+      # AI generation (Gemini)
+      - key: GEMINI_API_KEY
+        type: SECRET
+      # Real-time speech-to-text (Google Cloud): switch the provider on, then
+      # supply the service-account JSON inline — no key file in the container.
+      - key: TRANSCRIPTION_PROVIDER
+        value: google-cloud
+      - key: GOOGLE_APPLICATION_CREDENTIALS_JSON
+        type: SECRET
+      - key: GOOGLE_CLOUD_TRANSLATION_KEY
+        type: SECRET
+      # Google sign-in (AUTH-1)
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        type: SECRET
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        type: SECRET
+      # Image enrichment (IMG-1)
+      - key: FLICKR_API_KEY
+        type: SECRET
+      # Uploads/exports on DO Spaces via the S3 adapter (TECH-10)
+      - key: STORAGE_PROVIDER
+        value: s3
+      - key: S3_ENDPOINT
+      - key: S3_REGION
+      - key: S3_BUCKET
+      - key: S3_ACCESS_KEY_ID
+        type: SECRET
+      - key: S3_SECRET_ACCESS_KEY
+        type: SECRET
+      - key: S3_PUBLIC_BASE_URL
       # --- Uncomment and set as features land (mirrors server/.env.example) ---
-      # - key: JWT_SECRET
-      #   type: SECRET
-      # - key: JWT_REFRESH_SECRET
-      #   type: SECRET
-      # - key: GEMINI_API_KEY
-      #   type: SECRET
-      # - key: GOOGLE_CLOUD_STT_KEY
-      #   type: SECRET
-      # - key: GOOGLE_CLOUD_TRANSLATION_KEY
-      #   type: SECRET
-      # - key: GOOGLE_OAUTH_CLIENT_ID
-      #   type: SECRET
-      # - key: GOOGLE_OAUTH_CLIENT_SECRET
-      #   type: SECRET
       # - key: GITHUB_OAUTH_CLIENT_ID
       #   type: SECRET
       # - key: GITHUB_OAUTH_CLIENT_SECRET
@@ -48,14 +72,9 @@ services:
       #   type: SECRET
       # - key: STRIPE_WEBHOOK_SECRET
       #   type: SECRET
-      # - key: FLICKR_API_KEY
+      # - key: SMTP_HOST
+      # - key: SMTP_PORT
+      # - key: SMTP_USER
       #   type: SECRET
-      # - key: QUIZ_GENERATOR_BASE_URL
-      # - key: QUIZ_GENERATOR_TOKEN
+      # - key: SMTP_PASSWORD
       #   type: SECRET
-      # - key: SPACES_KEY
-      #   type: SECRET
-      # - key: SPACES_SECRET
-      #   type: SECRET
-      # - key: SPACES_BUCKET
-      # - key: SPACES_REGION
