@@ -462,6 +462,19 @@ describe('GeminiGenerationProvider', () => {
     expect(prompt).toContain('never a synonym')
   })
 
+  it('asks for image keywords ordered by search relevance', async () => {
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
+    )
+    await provider.generateSlideContent(request())
+    const prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+      .contents[0].parts[0].text as string
+    // Keyword order matters downstream: the first phrase seeds the manual
+    // search box and each is searched independently and pooled.
+    expect(prompt).toContain('ORDERED from most to least likely')
+    expect(prompt).toContain('searched on its own')
+  })
+
   it('drops a phrase whose output is malformed rather than throwing', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     // bullets must be string[]; a number fails validation and once threw
