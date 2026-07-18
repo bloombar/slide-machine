@@ -8,7 +8,7 @@
  */
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { Plus } from 'lucide-react'
+import { FolderPlus } from 'lucide-react'
 import type { Deck, Project } from '@slide-machine/shared'
 import { useAuth } from '../auth/AuthContext'
 import { dispatchAction } from '../api/actions'
@@ -182,9 +182,9 @@ export default function HomePage() {
         </h1>
         <button
           onClick={() => setCreatingProject(true)}
-          className="flex shrink-0 items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 font-medium text-white hover:bg-indigo-500"
+          className="flex shrink-0 items-center gap-2 rounded-md border border-indigo-600 px-4 py-2 font-medium text-indigo-600 hover:bg-indigo-50"
         >
-          <Plus className="h-4 w-4" aria-hidden />
+          <FolderPlus className="h-4 w-4" aria-hidden />
           New project
         </button>
       </div>

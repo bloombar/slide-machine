@@ -143,7 +143,6 @@ export default function HealthBadge() {
           aria-hidden
         />
         <span>API {label}</span>
-        {health && <span aria-hidden>{open ? '▾' : '▸'}</span>}
       </button>
     </div>
   )
