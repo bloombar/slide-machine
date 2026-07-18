@@ -6,32 +6,26 @@
  * (if any) is persisted for the client to pick up.
  */
 import { SlideModel } from '../models/slide'
-import { searchWikimedia } from './wikimedia'
-import { searchOpenverse } from './openverse'
-import { searchFlickr } from './flickr'
+import { gatherCandidates } from './gather'
 import { pickBest } from './scoring'
 import type { EnrichedImage, ImageCandidate } from './types'
 
 /** Hard cap per source; the slowest source bounds total wall-clock. */
 const SOURCE_TIMEOUT_MS = 3000
 
-/** Queries all sources in parallel and picks one winner, or null.
- * Seeded candidates (the instructor's own uploads, SEED-2) join the
- * pool from the caller and carry the highest source prior. */
+/** Searches each keyword phrase, pools the candidates, and picks one
+ * winner, or null. Seeded candidates (the instructor's own uploads,
+ * SEED-2) join the pool from the caller and carry the highest source
+ * prior. */
 export const enrichImage = async (
   keywords: string[],
   seeded: ImageCandidate[] = [],
 ): Promise<EnrichedImage | null> => {
   if (!keywords.length) return null
 
-  const results = await Promise.allSettled([
-    searchWikimedia(keywords, AbortSignal.timeout(SOURCE_TIMEOUT_MS)),
-    searchOpenverse(keywords, AbortSignal.timeout(SOURCE_TIMEOUT_MS)),
-    searchFlickr(keywords, AbortSignal.timeout(SOURCE_TIMEOUT_MS)),
-  ])
   const pool = [
     ...seeded,
-    ...results.flatMap(r => (r.status === 'fulfilled' ? r.value : [])),
+    ...(await gatherCandidates(keywords, SOURCE_TIMEOUT_MS)),
   ]
 
   const best = pickBest(pool, keywords)

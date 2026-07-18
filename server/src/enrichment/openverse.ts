@@ -6,6 +6,7 @@
  */
 import type { ImageAttribution } from '@slide-machine/shared'
 import type { ImageCandidate } from './types'
+import { BROWSER_USER_AGENT } from './user-agent'
 
 const ENDPOINT = 'https://api.openverse.org/v1/images/'
 
@@ -64,7 +65,10 @@ export const searchOpenverse = async (
       q: keywords.join(' '),
       page_size: '8',
     })
-    const res = await fetch(`${ENDPOINT}?${params}`, { signal })
+    const res = await fetch(`${ENDPOINT}?${params}`, {
+      signal,
+      headers: { 'User-Agent': BROWSER_USER_AGENT },
+    })
     if (!res.ok) return []
     const data = (await res.json()) as { results?: OpenverseResult[] }
 

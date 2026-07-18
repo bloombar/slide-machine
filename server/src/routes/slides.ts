@@ -137,8 +137,12 @@ slidesRouter.post(
     )
     const query =
       typeof req.body?.query === 'string' ? req.body.query.trim() : ''
+    // A typed query is one coherent search intent — keep it whole so the
+    // sources match it conjunctively. With no query, fall back to the AI's
+    // own keyword phrases (each searched separately and pooled), then the
+    // title — so results relate to what the slide is about.
     const keywords = query
-      ? query.split(/\s+/).filter(Boolean)
+      ? [query]
       : slide.imageKeywords?.length
         ? slide.imageKeywords
         : [slide.title].filter((t): t is string => Boolean(t))

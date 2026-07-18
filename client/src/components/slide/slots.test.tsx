@@ -166,7 +166,7 @@ describe('SlideSlot', () => {
     expect(props.onReplaceImage).toHaveBeenCalledWith(file)
   })
 
-  it('seeds the search from image keywords, not the "New slide" placeholder', async () => {
+  it('seeds the search from the primary image keyword, not the "New slide" placeholder', async () => {
     mockedSearch.mockClear()
     render(
       <SlideSlot
@@ -179,7 +179,9 @@ describe('SlideSlot', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Add image' }))
     await screen.findByRole('dialog', { name: 'Add image' })
-    expect(mockedSearch).toHaveBeenCalledWith('s1', 'mitochondria cell')
+    // The lead phrase seeds the box — keywords are never concatenated into
+    // one over-specified query that the sources would match conjunctively.
+    expect(mockedSearch).toHaveBeenCalledWith('s1', 'mitochondria')
   })
 
   it('starts the search blank on a fresh "New slide" with no keywords', async () => {

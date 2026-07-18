@@ -7,6 +7,7 @@
 import { env } from '../config/env'
 import type { ImageAttribution } from '@slide-machine/shared'
 import type { ImageCandidate } from './types'
+import { BROWSER_USER_AGENT } from './user-agent'
 
 const ENDPOINT = 'https://api.flickr.com/services/rest/'
 
@@ -91,7 +92,10 @@ export const searchFlickr = async (
       license: '1,2,3,4,5,6,9,10',
       extras: 'url_c,tags,owner_name,license,description',
     })
-    const res = await fetch(`${ENDPOINT}?${params}`, { signal })
+    const res = await fetch(`${ENDPOINT}?${params}`, {
+      signal,
+      headers: { 'User-Agent': BROWSER_USER_AGENT },
+    })
     if (!res.ok) return []
     const data = (await res.json()) as { photos?: { photo?: FlickrPhoto[] } }
 

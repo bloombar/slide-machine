@@ -151,7 +151,11 @@ function ImageSlot({
   // searches freely rather than on a meaningless default.
   const titleSeed =
     slide.title && slide.title !== PLACEHOLDER_SLIDE_TITLE ? slide.title : ''
-  const searchQuery = slide.imageKeywords?.join(' ') || titleSeed
+  // Seed the box with the AI's PRIMARY keyword phrase, not all of them
+  // joined: the sources match multi-term queries conjunctively, so a
+  // concatenation like "hobby horse hobby horsing competition toy horse on
+  // stick" finds nothing while the lead phrase ("hobby horse") finds plenty.
+  const searchQuery = slide.imageKeywords?.[0] || titleSeed
 
   const attribution = slide.attribution
   const hasAttribution = Boolean(
