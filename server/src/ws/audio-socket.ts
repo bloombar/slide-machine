@@ -62,11 +62,20 @@ const handleConnection = (ws: WebSocket): void => {
       ws.close()
       return
     }
-    stream = provider.startStream({
-      languageCode: start.languageCode || 'en-US',
-      sampleRateHertz: start.sampleRate,
-      phraseHints: start.phraseHints,
-    })
+    try {
+      stream = provider.startStream({
+        languageCode: start.languageCode || 'en-US',
+        sampleRateHertz: start.sampleRate,
+        phraseHints: start.phraseHints,
+      })
+    } catch (error) {
+      // A misconfigured adapter (e.g. missing/invalid credentials) must fail
+      // this one connection, never crash the server for every other user.
+      console.error('Failed to start transcription stream:', error)
+      send({ type: 'error', message: 'Speech engine is not available' })
+      ws.close()
+      return
+    }
     // Drain transcription events to the client until the stream completes.
     // If it completes without the client stopping, the provider failed
     // (logged server-side) — tell the client so the mic never looks live

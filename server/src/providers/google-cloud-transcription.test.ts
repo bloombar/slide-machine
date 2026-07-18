@@ -49,6 +49,20 @@ const { streams, streamingRecognize, SpeechClient } = vi.hoisted(() => {
 })
 vi.mock('@google-cloud/speech', () => ({ SpeechClient }))
 
+// The provider only reads the two credential vars from env; a mutable stub
+// lets each test pick the auth path (inline JSON / key file / none).
+const mockEnv = vi.hoisted(() => ({
+  env: {
+    GOOGLE_APPLICATION_CREDENTIALS: undefined as string | undefined,
+    GOOGLE_APPLICATION_CREDENTIALS_JSON: undefined as string | undefined,
+  },
+}))
+vi.mock('../config/env', () => mockEnv)
+
+// Stub the key-file read so the file-path branch needs no real file on disk.
+const { readFileSync } = vi.hoisted(() => ({ readFileSync: vi.fn() }))
+vi.mock('node:fs', () => ({ readFileSync }))
+
 import { GoogleCloudTranscriptionProvider } from './google-cloud-transcription'
 
 /** Builds a Google-shaped result response. */
@@ -62,6 +76,9 @@ beforeEach(() => {
   streams.length = 0
   streamingRecognize.mockClear()
   SpeechClient.mockClear()
+  readFileSync.mockReset()
+  mockEnv.env.GOOGLE_APPLICATION_CREDENTIALS = undefined
+  mockEnv.env.GOOGLE_APPLICATION_CREDENTIALS_JSON = undefined
 })
 
 afterEach(() => {
@@ -187,5 +204,68 @@ describe('GoogleCloudTranscriptionProvider', () => {
     provider.startStream({ languageCode: 'en-US' })
     provider.startStream({ languageCode: 'en-US' })
     expect(SpeechClient).toHaveBeenCalledTimes(1)
+  })
+
+  it('passes inline JSON credentials in memory, never a key file', () => {
+    mockEnv.env.GOOGLE_APPLICATION_CREDENTIALS_JSON = JSON.stringify({
+      project_id: 'slide-machine',
+      client_email: 'stt@slide-machine.iam.gserviceaccount.com',
+      private_key: 'KEY',
+    })
+    const provider = new GoogleCloudTranscriptionProvider()
+    provider.startStream({ languageCode: 'en-US' })
+    // In-memory credentials mean the library never reads a file (the source
+    // of the ENOENT crash); projectId is lifted from the key.
+    expect(SpeechClient).toHaveBeenCalledWith({
+      credentials: {
+        project_id: 'slide-machine',
+        client_email: 'stt@slide-machine.iam.gserviceaccount.com',
+        private_key: 'KEY',
+      },
+      projectId: 'slide-machine',
+    })
+    expect(readFileSync).not.toHaveBeenCalled()
+  })
+
+  it('reads the key file itself and passes its contents as credentials', () => {
+    mockEnv.env.GOOGLE_APPLICATION_CREDENTIALS = '/secrets/key.json'
+    readFileSync.mockReturnValue(
+      JSON.stringify({ project_id: 'p', client_email: 'e', private_key: 'k' }),
+    )
+    const provider = new GoogleCloudTranscriptionProvider()
+    provider.startStream({ languageCode: 'en-US' })
+    expect(readFileSync).toHaveBeenCalledWith('/secrets/key.json', 'utf8')
+    expect(SpeechClient).toHaveBeenCalledWith({
+      credentials: { project_id: 'p', client_email: 'e', private_key: 'k' },
+      projectId: 'p',
+    })
+  })
+
+  it('falls back to ambient credentials when neither var is set', () => {
+    const provider = new GoogleCloudTranscriptionProvider()
+    provider.startStream({ languageCode: 'en-US' })
+    expect(SpeechClient).toHaveBeenCalledWith({})
+    expect(readFileSync).not.toHaveBeenCalled()
+  })
+
+  it('throws a clear, catchable error on malformed credentials JSON', () => {
+    mockEnv.env.GOOGLE_APPLICATION_CREDENTIALS_JSON = '{not json'
+    const provider = new GoogleCloudTranscriptionProvider()
+    // Synchronous throw (not an async rejection) so the socket layer can catch
+    // it and fail one connection instead of crashing the process.
+    expect(() => provider.startStream({ languageCode: 'en-US' })).toThrow(
+      /not valid JSON/,
+    )
+  })
+
+  it('surfaces a missing key file as a synchronous throw', () => {
+    mockEnv.env.GOOGLE_APPLICATION_CREDENTIALS = '/secrets/missing.json'
+    readFileSync.mockImplementation(() => {
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+    })
+    const provider = new GoogleCloudTranscriptionProvider()
+    expect(() => provider.startStream({ languageCode: 'en-US' })).toThrow(
+      /ENOENT/,
+    )
   })
 })

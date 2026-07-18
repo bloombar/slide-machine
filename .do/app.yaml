@@ -23,16 +23,15 @@ services:
         value: production
       - key: MONGODB_URI
         type: SECRET
-      - key: JWT_SECRET
-        type: SECRET
-      - key: JWT_REFRESH_SECRET
-        type: SECRET
       # --- Uncomment and set as features land (mirrors server/.env.example) ---
+      # - key: JWT_SECRET
+      #   type: SECRET
+      # - key: JWT_REFRESH_SECRET
+      #   type: SECRET
       # - key: GEMINI_API_KEY
       #   type: SECRET
-      # Real-time Cloud STT: mount the service-account JSON and point this at
-      # it (only when TRANSCRIPTION_PROVIDER=google-cloud).
-      # - key: GOOGLE_APPLICATION_CREDENTIALS
+      # - key: GOOGLE_CLOUD_STT_KEY
+      #   type: SECRET
       # - key: GOOGLE_CLOUD_TRANSLATION_KEY
       #   type: SECRET
       # - key: GOOGLE_OAUTH_CLIENT_ID
@@ -51,12 +50,12 @@ services:
       #   type: SECRET
       # - key: FLICKR_API_KEY
       #   type: SECRET
-      # - key: S3_ENDPOINT          # e.g. https://nyc3.digitaloceanspaces.com
-      # - key: S3_REGION
-      # - key: S3_BUCKET
-      # - key: S3_FORCE_PATH_STYLE  # false for Spaces (true only for MinIO)
-      # - key: S3_ACCESS_KEY_ID
+      # - key: QUIZ_GENERATOR_BASE_URL
+      # - key: QUIZ_GENERATOR_TOKEN
       #   type: SECRET
-      # - key: S3_SECRET_ACCESS_KEY
+      # - key: SPACES_KEY
       #   type: SECRET
-      # - key: S3_PUBLIC_BASE_URL   # the Spaces/CDN public URL
+      # - key: SPACES_SECRET
+      #   type: SECRET
+      # - key: SPACES_BUCKET
+      # - key: SPACES_REGION

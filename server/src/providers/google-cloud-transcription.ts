@@ -5,9 +5,11 @@
  * the WebSocket transport and the client stay engine-agnostic.
  *
  * Real-time streaming needs a service-account credential (an API key is
- * rejected by the streaming endpoint); it is read from
- * GOOGLE_APPLICATION_CREDENTIALS. See docs/GOOGLE_API_KEYS.md.
+ * rejected by the streaming endpoint): a key file via
+ * GOOGLE_APPLICATION_CREDENTIALS (local dev) or the key JSON supplied inline
+ * via GOOGLE_APPLICATION_CREDENTIALS_JSON (deployed). See docs/GOOGLE_API_KEYS.md.
  */
+import { readFileSync } from 'node:fs'
 import { SpeechClient } from '@google-cloud/speech'
 import type {
   TranscriptionEvent,
@@ -18,6 +20,33 @@ import type {
 import { env } from '../config/env'
 import { registry } from './registry'
 import { AsyncQueue } from './async-queue'
+
+/**
+ * SpeechClient auth options, resolved from config. We load the service
+ * account into memory ourselves — inline JSON preferred, else read the key
+ * file synchronously — and hand the client `credentials` rather than a
+ * `keyFilename`. That way the library never reads a file during a live gRPC
+ * call, so a missing or malformed key surfaces here as a synchronous, catchable
+ * error instead of an unhandled promise rejection that crashes the process.
+ * With neither var set we return {} so ambient credentials still work.
+ */
+const speechClientOptions = (): ConstructorParameters<
+  typeof SpeechClient
+>[0] => {
+  const raw =
+    env.GOOGLE_APPLICATION_CREDENTIALS_JSON ??
+    (env.GOOGLE_APPLICATION_CREDENTIALS
+      ? readFileSync(env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8')
+      : null)
+  if (!raw) return {}
+  let credentials: { project_id?: string }
+  try {
+    credentials = JSON.parse(raw)
+  } catch {
+    throw new Error('Google service-account credentials are not valid JSON')
+  }
+  return { credentials, projectId: credentials.project_id }
+}
 
 /** Google caps one streaming session at ~305s; restart well before that and
  * on the limit error so long lectures transcribe without interruption. */
@@ -61,12 +90,7 @@ export class GoogleCloudTranscriptionProvider implements TranscriptionProvider {
 
   /** Lazily created so `browser`/`none` modes never touch credentials. */
   private speechClient(): SpeechClient {
-    if (!this.client)
-      this.client = new SpeechClient(
-        env.GOOGLE_APPLICATION_CREDENTIALS
-          ? { keyFilename: env.GOOGLE_APPLICATION_CREDENTIALS }
-          : {},
-      )
+    if (!this.client) this.client = new SpeechClient(speechClientOptions())
     return this.client
   }
 

@@ -110,6 +110,10 @@ const envSchema = z.object({
     .string()
     .transform(value => path.resolve(serverRoot, value))
     .optional(),
+  // The same service-account JSON supplied inline instead of as a file, for
+  // hosts that expose env vars but no writable key file (e.g. DO App
+  // Platform). Takes precedence over GOOGLE_APPLICATION_CREDENTIALS.
+  GOOGLE_APPLICATION_CREDENTIALS_JSON: z.string().optional(),
   GOOGLE_CLOUD_TRANSLATION_KEY: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),

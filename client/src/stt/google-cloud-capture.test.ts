@@ -6,10 +6,29 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-// getAccessToken is mocked with a mutable token so the "signed out" path is
-// testable; hoisted so the vi.mock factory can read it.
-const auth = vi.hoisted(() => ({ token: 'tok' as string | null }))
-vi.mock('../auth/token', () => ({ getAccessToken: () => auth.token }))
+// The auth module is mocked with a mutable in-memory token plus a stubbed
+// refreshSession, so both the "signed out" and "stale token" paths are
+// testable. Hoisted so the vi.mock factory can read them. Tokens are minimal
+// URL-safe JWTs carrying only an `exp` claim — the capture reads exp to decide
+// whether to refresh before opening the socket.
+const auth = vi.hoisted(() => {
+  const b64url = (obj: unknown): string =>
+    btoa(JSON.stringify(obj))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
+  return {
+    jwt: (secondsAhead: number): string =>
+      `h.${b64url({ exp: Math.floor(Date.now() / 1000) + secondsAhead })}.s`,
+    token: null as string | null,
+    refreshed: null as string | null,
+  }
+})
+const refreshSession = vi.hoisted(() => vi.fn())
+vi.mock('../auth/token', () => ({
+  getAccessToken: () => auth.token,
+  refreshSession,
+}))
 
 import { createSpeechCapture } from './capture'
 
@@ -95,7 +114,13 @@ const flush = async () => {
 }
 
 beforeEach(() => {
-  auth.token = 'tok'
+  // A fresh token by default, so tests unrelated to refresh skip it.
+  auth.token = auth.jwt(3600)
+  auth.refreshed = auth.jwt(3600)
+  refreshSession.mockReset()
+  refreshSession.mockImplementation(() =>
+    Promise.resolve(auth.refreshed ? { accessToken: auth.refreshed } : null),
+  )
   FakeWebSocket.instances = []
   FakeAudioContext.instances = []
   FakeAudioWorkletNode.instances = []
@@ -128,7 +153,9 @@ describe('google cloud speech capture', () => {
     const ctx = FakeAudioContext.instances[0]!
     expect(ctx.audioWorklet.addModule).toHaveBeenCalledOnce()
     const socket = FakeWebSocket.instances[0]!
-    expect(socket.url).toContain('/api/stt?token=tok')
+    // A fresh token is used as-is, with no refresh round-trip.
+    expect(refreshSession).not.toHaveBeenCalled()
+    expect(socket.url).toContain(`/api/stt?token=${auth.token}`)
     expect(socket.binaryType).toBe('arraybuffer')
 
     // The socket opening triggers the start control message.
@@ -203,11 +230,55 @@ describe('google cloud speech capture', () => {
 
   it('reports when the user is signed out', async () => {
     stubMediaApis()
+    // No token and refresh can't renew one — a genuinely signed-out session.
     auth.token = null
+    auth.refreshed = null
     const onError = vi.fn()
     createSpeechCapture('google-cloud').start({ onPhrase: vi.fn(), onError })
     await flush()
     expect(onError).toHaveBeenCalledWith('Sign in to use speech recognition')
+    expect(getUserMedia).not.toHaveBeenCalled()
+  })
+
+  it('refreshes an expired token before opening the socket', async () => {
+    stubMediaApis()
+    // The in-memory token has expired (the tab sat idle past its TTL); the
+    // refresh yields a new one, which is what the handshake must carry.
+    auth.token = auth.jwt(-10)
+    auth.refreshed = auth.jwt(3600)
+    createSpeechCapture('google-cloud').start({ onPhrase: vi.fn() })
+    await flush()
+    expect(refreshSession).toHaveBeenCalledOnce()
+    const socket = FakeWebSocket.instances[0]!
+    // The fresh token rides the socket, never the stale one.
+    expect(socket.url).toContain(`/api/stt?token=${auth.refreshed}`)
+    expect(socket.url).not.toContain(auth.token as string)
+  })
+
+  it('refreshes when there is no token yet, then connects', async () => {
+    stubMediaApis()
+    auth.token = null
+    auth.refreshed = auth.jwt(3600)
+    createSpeechCapture('google-cloud').start({ onPhrase: vi.fn() })
+    await flush()
+    expect(refreshSession).toHaveBeenCalledOnce()
+    expect(FakeWebSocket.instances[0]!.url).toContain(
+      `/api/stt?token=${auth.refreshed}`,
+    )
+  })
+
+  it('fails without connecting when an expired token cannot be refreshed', async () => {
+    stubMediaApis()
+    // Expired token and a refresh that returns nothing (session truly gone).
+    auth.token = auth.jwt(-10)
+    auth.refreshed = null
+    const onError = vi.fn()
+    createSpeechCapture('google-cloud').start({ onPhrase: vi.fn(), onError })
+    await flush()
+    expect(refreshSession).toHaveBeenCalledOnce()
+    expect(onError).toHaveBeenCalledWith('Sign in to use speech recognition')
+    // A stale token must never reach the socket.
+    expect(FakeWebSocket.instances).toHaveLength(0)
     expect(getUserMedia).not.toHaveBeenCalled()
   })
 

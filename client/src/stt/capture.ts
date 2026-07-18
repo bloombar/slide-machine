@@ -14,7 +14,7 @@
  * input, so generation behaves identically for every engine.
  */
 import { config } from '../config'
-import { getAccessToken } from '../auth/token'
+import { getAccessToken, refreshSession } from '../auth/token'
 import { getSttEngine } from '../runtime-config'
 
 export interface SpeechCaptureHandlers {
@@ -163,6 +163,25 @@ const sttSocketUrl = (token: string): string => {
   return `${wsBase}/api/stt?token=${encodeURIComponent(token)}`
 }
 
+/** True when the access token can't be read or expires within the skew
+ * window. Unlike HTTP calls, the STT socket has no reactive 401-refresh
+ * (see api/http.ts), so we must hand the handshake a token that stays valid
+ * for its duration — an expired one is rejected on the upgrade and the mic
+ * dies with no server-side trace. Undecodable tokens are treated as stale. */
+const tokenExpiresSoon = (token: string, skewSeconds = 60): boolean => {
+  try {
+    const payload = token.split('.')[1]!
+    const { exp } = JSON.parse(
+      atob(payload.replace(/-/g, '+').replace(/_/g, '/')),
+    ) as { exp?: number }
+    return (
+      typeof exp !== 'number' || exp * 1000 - Date.now() < skewSeconds * 1000
+    )
+  } catch {
+    return true
+  }
+}
+
 /**
  * Streams mic audio to the server's Cloud STT adapter over a WebSocket and
  * feeds transcripts through the same handlers as the browser engine, so the
@@ -211,7 +230,16 @@ const googleCloudCapture = (): SpeechCapture => {
       }
 
       void (async () => {
-        const token = getAccessToken()
+        // Hand the handshake a token that will still be valid: refresh a
+        // missing or soon-to-expire one first, and trust only the refreshed
+        // value so a stale token is never sent (the server 401s it on the
+        // upgrade, killing the mic silently).
+        let token = getAccessToken()
+        if (!token || tokenExpiresSoon(token)) {
+          const refreshed = await refreshSession()
+          if (!active) return
+          token = refreshed?.accessToken ?? null
+        }
         if (!token) return fail('Sign in to use speech recognition')
 
         let stream: MediaStream

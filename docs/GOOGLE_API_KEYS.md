@@ -91,8 +91,9 @@ monthly free allotment).
    GOOGLE_APPLICATION_CREDENTIALS=service-account.json
    ```
 
-   In Docker/DigitalOcean, mount the file as a secret and set the variable to
-   its in-container path (or supply the JSON via a platform secret).
+   On hosts with no key file (e.g. DigitalOcean App Platform), skip the file
+   and set `GOOGLE_APPLICATION_CREDENTIALS_JSON` to the whole key JSON as a
+   platform secret instead — it takes precedence and is loaded in memory.
 
 ## 4. Translation key (`GOOGLE_CLOUD_TRANSLATION_KEY`)
 
