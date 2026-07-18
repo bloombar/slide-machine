@@ -62,6 +62,23 @@ describe('HealthBadge', () => {
     )
   })
 
+  it('closes the panel when clicking outside it', async () => {
+    stubFetch(healthFixture)
+
+    render(
+      <div>
+        <button type="button">outside</button>
+        <HealthBadge />
+      </div>,
+    )
+    await screen.findByText('API ok')
+    fireEvent.click(screen.getByRole('button', { name: /API ok/i }))
+    expect(screen.getByTestId('health-panel')).toBeInTheDocument()
+
+    fireEvent.mouseDown(screen.getByRole('button', { name: 'outside' }))
+    expect(screen.queryByTestId('health-panel')).not.toBeInTheDocument()
+  })
+
   it('surfaces a degraded overall status', async () => {
     stubFetch({
       ...healthFixture,

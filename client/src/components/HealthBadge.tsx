@@ -4,7 +4,7 @@
  * status down by component — deployment mode, MongoDB, object storage,
  * Google Gemini, Google Speech-to-Text — plus the app version and uptime.
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   ComponentStatus,
   HealthComponent,
@@ -47,6 +47,7 @@ export default function HealthBadge() {
   const [health, setHealth] = useState<HealthResponse | null>(null)
   const [error, setError] = useState(false)
   const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   const fetchHealth = useCallback(() => {
     fetch(`${config.apiBaseUrl}/api/health`)
@@ -59,6 +60,24 @@ export default function HealthBadge() {
   }, [])
 
   useEffect(fetchHealth, [fetchHealth])
+
+  // While the panel is open, a click anywhere outside it — or Escape —
+  // dismisses it, like any lightweight popover.
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
 
   // Re-probe when the user opens the panel so the breakdown is current.
   const toggle = () => {
@@ -81,6 +100,7 @@ export default function HealthBadge() {
 
   return (
     <div
+      ref={containerRef}
       role="status"
       data-testid="health-bar"
       className="relative flex w-full justify-center"
