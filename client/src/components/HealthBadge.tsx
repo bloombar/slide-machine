@@ -26,11 +26,13 @@ const dotStyles: Record<DisplayStatus | ComponentStatus, string> = {
 
 type ComponentKey = keyof HealthResponse['components']
 
+// Generic, vendor-neutral labels — the panel names capabilities, not the
+// specific services behind them.
 const componentLabels: Record<ComponentKey, string> = {
-  mongo: 'MongoDB',
+  mongo: 'Database',
   storage: 'Storage',
-  gemini: 'Google Gemini',
-  stt: 'Google Speech-to-Text',
+  gemini: 'Generative AI',
+  stt: 'Speech-to-Text',
 }
 
 /** Human-friendly uptime, e.g. "3h 12m", "5m 8s", "42s". */

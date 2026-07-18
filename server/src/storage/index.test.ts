@@ -53,7 +53,7 @@ describe('storage healthCheck', () => {
     })
   })
 
-  it('reports ok and the endpoint host when HeadBucket succeeds', async () => {
+  it('reports ok with a vendor-neutral detail when HeadBucket succeeds', async () => {
     mockEnv.env.STORAGE_PROVIDER = 's3'
     mockEnv.env.S3_ENDPOINT = 'https://nyc3.digitaloceanspaces.com'
     mockEnv.env.S3_BUCKET = 'slide-machine'
@@ -63,7 +63,8 @@ describe('storage healthCheck', () => {
     const res = await getStorage().healthCheck()
 
     expect(res.status).toBe('ok')
-    expect(res.detail).toBe('s3 (nyc3.digitaloceanspaces.com)')
+    // No provider/endpoint leaks into the detail.
+    expect(res.detail).toBe('connected')
     expect(send).toHaveBeenCalledTimes(1)
   })
 
@@ -78,6 +79,6 @@ describe('storage healthCheck', () => {
     const res = await getStorage().healthCheck()
 
     expect(res.status).toBe('down')
-    expect(res.detail).toBe('NotFound')
+    expect(res.detail).toBe('unreachable')
   })
 })

@@ -111,21 +111,13 @@ const s3StorageProvider = (): FileStorage => {
       )
     },
     async healthCheck() {
-      let host: string | undefined
-      try {
-        if (env.S3_ENDPOINT) host = new URL(env.S3_ENDPOINT).host
-      } catch {
-        host = env.S3_ENDPOINT
-      }
-      const label = host ? `s3 (${host})` : 's3'
+      // Vendor-neutral detail: the health panel names the capability, not
+      // the specific object-storage provider/endpoint behind it.
       try {
         await client.send(new HeadBucketCommand({ Bucket: bucket }))
-        return { status: 'ok', detail: label }
-      } catch (error) {
-        return {
-          status: 'down',
-          detail: error instanceof Error ? error.name : label,
-        }
+        return { status: 'ok', detail: 'connected' }
+      } catch {
+        return { status: 'down', detail: 'unreachable' }
       }
     },
   }

@@ -52,10 +52,10 @@ describe('HealthBadge', () => {
     expect(panel).toHaveTextContent('development')
     expect(panel).toHaveTextContent('2026.07.18+abc1234')
     expect(screen.getByTestId('health-component-mongo')).toHaveTextContent(
-      'MongoDB',
+      'Database',
     )
     expect(screen.getByTestId('health-component-gemini')).toHaveTextContent(
-      'Google Gemini',
+      'Generative AI',
     )
     expect(screen.getByTestId('health-component-stt')).toHaveTextContent(
       'browser (client-side)',
