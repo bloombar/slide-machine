@@ -194,7 +194,10 @@ function ImageSlot({
   // The discreet bottom-right "i" indicator and its dialog (IMG-5). The
   // label opens upward so it is not clipped by the slide's rounded frame.
   const infoIcon = showInfo && (
-    <div className="absolute right-2 bottom-2">
+    // z-10 lifts the control above SlideNavZones' click overlay, which
+    // otherwise sits on top and would trigger navigation (matches
+    // EditableText).
+    <div className="absolute right-2 bottom-2 z-10">
       <Tooltip label="Image details" side="top" align="end">
         <button
           aria-label="Image details"
@@ -241,7 +244,13 @@ function ImageSlot({
 
   return (
     <div
-      className="group relative h-full w-full"
+      // z-10 lifts the whole editable image above SlideNavZones' click
+      // overlay. Without it the overlay sits on top and swallows the
+      // pointer, so group-hover never fires and the Replace/Delete icons
+      // stay hidden except on the last slide (which has no next-slide
+      // zone). Elevating makes the editable image behave like other
+      // interactive slide content (cf. EditableText).
+      className="group relative z-10 h-full w-full"
       onDragOver={e => {
         e.preventDefault()
         setDragOver(true)
@@ -279,27 +288,43 @@ function ImageSlot({
           {infoIcon}
         </>
       ) : (
-        // No image: owners always get an Add affordance, even while
-        // enrichment is still pending — waiting for an image that may
-        // never arrive must not block adding one by hand. Add opens the
-        // same dialog as Replace (upload, drop, or web search). While an
-        // image is being sourced the affordance doubles as the pending
-        // skeleton (it pulses and carries the image-skeleton test id), so
-        // the sourcing state is visible without hiding the Add option.
-        <button
-          onClick={() => setImageDialogOpen(true)}
-          aria-label="Add image"
-          data-testid={imagePending ? 'image-skeleton' : undefined}
-          className={`flex h-full min-h-[16cqi] w-full flex-col items-center justify-center gap-1 rounded-lg text-slate-400 hover:text-slate-600 ${
-            imagePending ? 'animate-pulse' : ''
-          }`}
-          style={{ backgroundColor: colors.surface }}
-        >
-          <ImagePlus className="h-[6cqi] w-[6cqi]" aria-hidden />
-          <span className="text-[2.5cqi]">
-            {imagePending ? 'Finding an image… or add one' : 'Add image'}
-          </span>
-        </button>
+        // No image yet: a quiet reserved block that carries the same
+        // top-right hover controls as a populated image — Add (in place of
+        // Replace) and Delete — rather than a bulky centred call-to-action.
+        // Add opens the same dialog as Replace (upload, drop, or web
+        // search); Delete removes the image slot. While enrichment may
+        // still deliver an image the block pulses and carries the
+        // image-skeleton test id so the sourcing state stays visible.
+        <>
+          <div
+            aria-hidden
+            data-testid={imagePending ? 'image-skeleton' : 'image-fallback'}
+            className={`h-full min-h-[16cqi] w-full rounded-lg ${
+              imagePending ? 'animate-pulse' : ''
+            }`}
+            style={{ backgroundColor: colors.surface }}
+          />
+          <div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            <Tooltip label="Add image" align="end">
+              <button
+                aria-label="Add image"
+                onClick={() => setImageDialogOpen(true)}
+                className="rounded-md bg-white/90 p-1.5 text-slate-700 shadow hover:bg-white"
+              >
+                <ImagePlus className="h-4 w-4" aria-hidden />
+              </button>
+            </Tooltip>
+            <Tooltip label="Delete image" align="end">
+              <button
+                aria-label="Remove image"
+                onClick={onRemoveImage}
+                className="rounded-md bg-white/90 p-1.5 text-slate-700 shadow hover:bg-white hover:text-red-600"
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            </Tooltip>
+          </div>
+        </>
       )}
 
       {dragOver && (

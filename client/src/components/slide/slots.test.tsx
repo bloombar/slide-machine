@@ -220,13 +220,31 @@ describe('SlideSlot', () => {
     expect(props.onReplaceImage).not.toHaveBeenCalled()
   })
 
+  it('gives owners Add and Remove controls over an empty image slot', () => {
+    render(<SlideSlot {...imageEditor({ imageRef: undefined })} />)
+    expect(
+      screen.getByRole('button', { name: 'Add image' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Remove image' }),
+    ).toBeInTheDocument()
+  })
+
+  it('removes the image slot from the Remove control when empty', () => {
+    const props = imageEditor({ imageRef: undefined })
+    render(<SlideSlot {...props} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Remove image' }))
+    expect(props.onRemoveImage).toHaveBeenCalled()
+  })
+
   it('offers Add to an owner even while enrichment is pending', () => {
-    // Waiting on an image that may never arrive must not block adding one
+    // Waiting on an image that may never arrive must not block adding one;
+    // the reserved block pulses as the pending skeleton meanwhile
     render(<SlideSlot {...imageEditor({ imageRef: undefined })} imagePending />)
     expect(
       screen.getByRole('button', { name: 'Add image' }),
     ).toBeInTheDocument()
-    expect(screen.getByText(/Finding an image/)).toBeInTheDocument()
+    expect(screen.getByTestId('image-skeleton')).toBeInTheDocument()
   })
 
   it('still shows read-only viewers the pending skeleton', () => {
