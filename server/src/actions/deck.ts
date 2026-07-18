@@ -605,6 +605,13 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
           .join(' ')
       }
       lastSlide.layoutType = result.layoutType
+      // Keep the slide's image keywords current: a phrase that carries fresh
+      // image guidance replaces them, so the search seed and enrichment
+      // always reflect the slide's latest content. An update with no
+      // keywords leaves the existing ones intact.
+      if (result.imageGuidance?.keywords?.length) {
+        lastSlide.imageKeywords = result.imageGuidance.keywords
+      }
       lastSlide.sourceTranscript = [lastSlide.sourceTranscript, input.phrase]
         .filter(Boolean)
         .join(' ')

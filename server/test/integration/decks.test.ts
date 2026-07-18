@@ -205,6 +205,37 @@ describe('session.phrase', () => {
     expect(view.body.slides).toHaveLength(1)
   })
 
+  it('refreshes the slide image keywords on an update (latest wins)', async () => {
+    const first = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'photosynthesis needs chloroplasts',
+    })
+    expect(first.body.kind).toBe('slide.new')
+    expect(first.body.slide.imageKeywords).toEqual([
+      'photosynthesis',
+      'chloroplasts',
+    ])
+
+    // A continuation carries fresh image guidance; the slide's keywords
+    // must track the latest content, not stay pinned to the first phrase.
+    const update = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Also mitochondria produce respiration',
+    })
+    expect(update.body.kind).toBe('slide.update')
+    expect(update.body.slide.imageKeywords).toEqual([
+      'mitochondria',
+      'respiration',
+    ])
+
+    // Persisted, so the manual search seed stays current after a reload
+    const view = await act(ada, 'deck.get', { deckId })
+    expect(view.body.slides[0].imageKeywords).toEqual([
+      'mitochondria',
+      'respiration',
+    ])
+  })
+
   it("403s phrases against another user's deck", async () => {
     const bob = await registerUser('bob@example.com')
     const res = await act(bob, 'session.phrase', {
