@@ -172,6 +172,33 @@ describe('slide.setLayout image sourcing', () => {
     })
   })
 
+  it('sources an image when the slide has an empty-string imageRef', async () => {
+    // A removed image (or a placeholder left by a prior layout switch)
+    // leaves imageRef as '' rather than absent. That still means "no
+    // image", so moving back onto an image layout must fill it. Regression:
+    // the enrichment write once guarded on { $exists: false } only, so the
+    // sourced image was silently dropped whenever imageRef was ''.
+    const slideId = await makeSlide({
+      layoutType: 'content',
+      title: 'The Mitochondria',
+      imageRef: '',
+    })
+    stubImageApis()
+
+    const res = await act(ada, 'slide.setLayout', {
+      slideId,
+      layoutType: 'image-heavy',
+    })
+    expect(res.status).toBe(200)
+    expect(res.body.imageKeywords).toEqual(['mitochondria'])
+
+    await vi.waitFor(async () => {
+      const slide = await act(ada, 'slide.get', { slideId })
+      expect(slide.body.imageRef).toBe('http://wiki/mitochondria.png')
+      expect(slide.body.imageSource).toBe('stock')
+    })
+  })
+
   it('does not source an image for a text-only layout', async () => {
     const slideId = await makeSlide({
       layoutType: 'content',

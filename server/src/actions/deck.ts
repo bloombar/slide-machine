@@ -113,7 +113,9 @@ const maybeEnrich = (
     : undefined
   if (chosen?.imageUrl) {
     void SlideModel.updateOne(
-      { _id: slideId, imageRef: { $exists: false } },
+      // "No image yet" is an absent field OR an empty string (see
+      // enrichSlideImage); a real URL is never overwritten (IMG-3).
+      { _id: slideId, imageRef: { $in: [null, ''] } },
       {
         imageRef: chosen.imageUrl,
         imageSource: 'seeded',

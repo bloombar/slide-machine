@@ -64,8 +64,14 @@ export const enrichSlideImage = async (
   try {
     const image = await enrichImage(keywords, seeded)
     if (!image) return
+    // Fill only a slide that has no image yet. "No image" means the field
+    // is absent (never set) OR an empty string — the latter is a common,
+    // documented state (an image the user removed, or a placeholder left by
+    // a layout switch). Matching only { $exists: false } silently dropped
+    // the sourced image whenever imageRef was ''. A real URL is still never
+    // overwritten (IMG-3 stability).
     await SlideModel.updateOne(
-      { _id: slideId, imageRef: { $exists: false } },
+      { _id: slideId, imageRef: { $in: [null, ''] } },
       {
         imageRef: image.url,
         imageSource: image.source === 'seeded' ? 'seeded' : 'stock',
