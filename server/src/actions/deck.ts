@@ -514,7 +514,26 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
         : event({ kind: 'none' })
     }
 
-    if (rawResult.action === 'none') return event({ kind: 'none' })
+    // Every finalized phrase is part of the lecture record — even filler that
+    // changes no slide, and even a phrase whose slide update is later
+    // discarded — so the transcript stays complete for post-lecture
+    // reformatting (GEN-4). Persist it now, before any slide work, so no
+    // return path can drop it. Only voice commands (handled above) are
+    // excluded, being operation rather than lecture content.
+    deck.transcript = [deck.transcript, input.phrase].filter(Boolean).join('\n')
+    await deck.save()
+
+    if (rawResult.action === 'none') {
+      // Filler still belongs to whatever slide is on screen, so it joins that
+      // slide's own source transcript too (it just changes no content).
+      if (lastSlide) {
+        lastSlide.sourceTranscript = [lastSlide.sourceTranscript, input.phrase]
+          .filter(Boolean)
+          .join(' ')
+        await lastSlide.save()
+      }
+      return event({ kind: 'none' })
+    }
 
     // Full layout refit (GEN-8 / GENERATION_LAYOUT_REFIT): the model
     // returned the COMPLETE slide re-mapped to a new layout. Verified
@@ -690,7 +709,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
       sourceTranscript: input.phrase,
     })
     deck.slideOrder.push(slide._id.toString())
-    deck.transcript = [deck.transcript, input.phrase].filter(Boolean).join('\n')
+    // (transcript already appended above, for every phrase)
     await deck.save()
     maybeEnrich(
       slide._id.toString(),

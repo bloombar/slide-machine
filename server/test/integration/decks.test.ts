@@ -236,6 +236,40 @@ describe('session.phrase', () => {
     ])
   })
 
+  it('records new, update, and filler phrases in the transcript', async () => {
+    const first = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Plants convert light into chemical energy',
+    })
+    expect(first.body.kind).toBe('slide.new')
+
+    // A continuation updates the slide (no new slide)…
+    await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Also they store energy as glucose',
+    })
+
+    // …and filler changes nothing, but is still recorded.
+    const filler = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Um, where was I again',
+    })
+    expect(filler.body.kind).toBe('none')
+
+    const view = await act(ada, 'deck.get', { deckId })
+    // The full deck transcript keeps every finalized phrase, in order
+    const transcript = view.body.deck.transcript as string
+    expect(transcript).toContain('Plants convert light into chemical energy')
+    expect(transcript).toContain('Also they store energy as glucose')
+    expect(transcript).toContain('Um, where was I again')
+
+    // Filler added no slide and joined the current slide's own transcript
+    expect(view.body.slides).toHaveLength(1)
+    expect(view.body.slides[0].sourceTranscript).toContain(
+      'Um, where was I again',
+    )
+  })
+
   it("403s phrases against another user's deck", async () => {
     const bob = await registerUser('bob@example.com')
     const res = await act(bob, 'session.phrase', {

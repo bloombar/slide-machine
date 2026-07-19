@@ -30,6 +30,10 @@ import { registry } from './registry'
 
 const CONTINUATION = /^(also|and|plus|additionally|furthermore)\b/i
 
+/** Mock stand-in for the model judging a phrase to be filler (an aside or
+ * hesitation that changes no slide): a leading interjection → action "none". */
+const FILLER = /^(um+|uh+|er+m?|hmm+|erm+)\b/i
+
 /** Mock stand-in for AI command-intent recognition: "please <phrase>"
  * maps to a command id, honored only when the request offers commands. */
 const COMMAND_INTENTS: Record<string, VoiceCommand> = {
@@ -102,7 +106,7 @@ export class MockGenerationProvider implements GenerationProvider {
       .map(s => s.trim())
       .filter(Boolean)
 
-    if (!words.length)
+    if (!words.length || FILLER.test(phrase))
       return { action: 'none', layoutType: 'content', slots: {} }
 
     const command = commandIntent(phrase, req)
