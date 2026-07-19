@@ -67,6 +67,21 @@ const envSchema = z.object({
 
   // Image enrichment (IMG-1): background stock-image fetch for slides
   IMAGE_ENRICHMENT_ENABLED: z.stringbool().default(true),
+  // How many results each source (Wikimedia/Openverse/Flickr) returns per query.
+  IMAGE_SOURCE_RESULTS: z.coerce.number().int().positive().default(8),
+  // Most keyword phrases fanned out per search (each fires all sources).
+  IMAGE_MAX_QUERY_PHRASES: z.coerce.number().int().positive().default(6),
+  // AI re-rank (IMG-1): after gathering candidates, Gemini picks the best match
+  // for the slide and rewrites its caption to match. Shortlist bounds how many
+  // top-scored candidates are handed to the model.
+  IMAGE_RERANK_ENABLED: z.stringbool().default(true),
+  IMAGE_RERANK_SHORTLIST: z.coerce.number().int().positive().default(12),
+  // Vision mode: also send candidate thumbnails so the model judges visually.
+  // Slower (image fetches + multimodal payload) — off by default; metadata-only
+  // text re-rank still runs when this is off.
+  IMAGE_RERANK_VISION: z.stringbool().default(false),
+  // Hard cap on the re-rank call — enrichment must land inside the client poll.
+  IMAGE_RERANK_TIMEOUT_MS: z.coerce.number().default(6000),
 
   // Billing (SPEC TECH-9)
   BILLING_PROVIDER: z.string().default('stripe'),

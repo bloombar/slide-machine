@@ -86,7 +86,7 @@ export const searchFlickr = async (
       text: keywords.join(' '),
       format: 'json',
       nojsoncallback: '1',
-      per_page: '8',
+      per_page: String(env.IMAGE_SOURCE_RESULTS),
       content_type: '1',
       sort: 'relevance',
       license: '1,2,3,4,5,6,9,10',

@@ -7,6 +7,7 @@
 import type { ImageAttribution } from '@slide-machine/shared'
 import type { ImageCandidate } from './types'
 import { BROWSER_USER_AGENT } from './user-agent'
+import { env } from '../config/env'
 
 const ENDPOINT = 'https://commons.wikimedia.org/w/api.php'
 
@@ -53,7 +54,7 @@ export const searchWikimedia = async (
       generator: 'search',
       gsrsearch: keywords.join(' '),
       gsrnamespace: '6',
-      gsrlimit: '8',
+      gsrlimit: String(env.IMAGE_SOURCE_RESULTS),
       prop: 'imageinfo',
       iiprop: 'url|size|extmetadata',
       iiurlwidth: '1024',

@@ -23,9 +23,34 @@ export interface ImageCandidate {
   attribution?: ImageAttribution
 }
 
-/** The selected image, ready to persist onto a slide. */
+/** The selected image, ready to persist onto a slide. A `caption` is present
+ * only when the AI re-rank produced one to match the chosen image (IMG-1). */
 export interface EnrichedImage {
   url: string
   source: EnrichmentSource
   attribution?: ImageAttribution
+  caption?: string
+}
+
+/**
+ * Slide context handed to the AI re-rank so the model can (a) pick the
+ * candidate that best fits THIS slide/lecture and (b) write a caption that
+ * matches the chosen image. All fields optional except the layout — the more
+ * context, the better the choice.
+ */
+export interface SlideImageContext {
+  title?: string
+  body?: string
+  bullets?: string[]
+  /** The model's current caption (rewritten to match the chosen image). */
+  caption?: string
+  imageKeywords?: string[]
+  layoutType: string
+  /** Caption character budget from the template slot spec (e.g. 80). */
+  captionMaxChars?: number
+  /** Deck/project lecture background, for grounding the choice. */
+  seedContext?: string
+  /** 'replace' overwrites the caption (fresh slide); 'fill' only sets it when
+   * empty (manual layout switch — never clobber a user's edit). */
+  captionMode: 'replace' | 'fill'
 }

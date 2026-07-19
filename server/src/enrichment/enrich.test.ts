@@ -3,7 +3,13 @@
  * pooled parallel query, winner selection, and total fault tolerance.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
+// Control the AI re-rank directly; the network side is covered in ai-rank.test.
+vi.mock('./ai-rank', () => ({ rankAndCaption: vi.fn() }))
 import { enrichImage } from './enrich'
+import { rankAndCaption } from './ai-rank'
+import type { SlideImageContext } from './types'
+
+const mockedRank = vi.mocked(rankAndCaption)
 
 const wikimediaBody = {
   query: {
@@ -38,6 +44,7 @@ const jsonResponse = (body: unknown): Response =>
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  mockedRank.mockReset()
 })
 
 describe('enrichImage', () => {
@@ -98,5 +105,41 @@ describe('enrichImage', () => {
     vi.stubGlobal('fetch', fetchSpy)
     expect(await enrichImage([])).toBeNull()
     expect(fetchSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('enrichImage AI re-rank', () => {
+  const ctx: SlideImageContext = {
+    layoutType: 'image-heavy',
+    captionMode: 'replace',
+  }
+  const onlyWikimedia = () =>
+    stubFetch(url => {
+      if (url.includes('wikimedia')) return jsonResponse(wikimediaBody)
+      return jsonResponse({ results: [] })
+    })
+
+  it('uses the AI-chosen candidate and its caption when context is given', async () => {
+    onlyWikimedia()
+    mockedRank.mockResolvedValue({ index: 0, caption: 'A matched caption' })
+    const res = await enrichImage(['photosynthesis', 'diagram'], [], ctx)
+    expect(res?.url).toBe('http://wiki/photo.png')
+    expect(res?.caption).toBe('A matched caption')
+    expect(mockedRank).toHaveBeenCalledOnce()
+  })
+
+  it('falls back to heuristic scoring (no caption) when the AI declines', async () => {
+    onlyWikimedia()
+    mockedRank.mockResolvedValue(null)
+    const res = await enrichImage(['photosynthesis', 'diagram'], [], ctx)
+    expect(res?.url).toBe('http://wiki/photo.png')
+    expect(res?.caption).toBeUndefined()
+  })
+
+  it('never calls the re-rank when no context is supplied', async () => {
+    onlyWikimedia()
+    const res = await enrichImage(['photosynthesis', 'diagram'])
+    expect(res?.url).toBe('http://wiki/photo.png')
+    expect(mockedRank).not.toHaveBeenCalled()
   })
 })

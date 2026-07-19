@@ -26,6 +26,7 @@ import { getBuiltinTemplate } from '../templates/builtin'
 import { canEditAcl } from '../lib/access'
 import { layoutHasImageSlot } from '../lib/image-layout'
 import { enrichSlideImage } from '../enrichment/enrich'
+import type { SlideImageContext } from '../enrichment/types'
 import { deriveImageKeywords } from '../enrichment/keywords'
 import { seedAssetsFor, seededImageCandidates } from '../lib/seed-assets'
 import { env } from '../config/env'
@@ -142,12 +143,32 @@ export const slideSetLayout = defineAction<SlideSetLayoutInput, Slide>({
       // lecture's seeded uploads to prefer, then enrich in the background.
       const keywords = slide.imageKeywords
       const slideId = slide._id.toString()
+      // 'fill' captioning: this slide may already carry an edited caption, so
+      // only set one when it is empty (the AI re-rank still picks the image).
+      const context: SlideImageContext = {
+        title: slide.title,
+        body: slide.body,
+        bullets: slide.bullets,
+        caption: slide.caption,
+        imageKeywords: keywords,
+        layoutType: input.layoutType,
+        captionMaxChars: template.layouts
+          .find(l => l.type === input.layoutType)
+          ?.slots.find(s => s.name === 'caption')?.maxChars,
+        seedContext: deck.seedContext?.slice(0, 1500) || undefined,
+        captionMode: 'fill',
+      }
       void seedAssetsFor(deck)
         .then(assets =>
-          enrichSlideImage(slideId, keywords, [
-            ...seededImageCandidates(assets.project),
-            ...seededImageCandidates(assets.deck),
-          ]),
+          enrichSlideImage(
+            slideId,
+            keywords,
+            [
+              ...seededImageCandidates(assets.project),
+              ...seededImageCandidates(assets.deck),
+            ],
+            context,
+          ),
         )
         .catch(() => undefined)
     }

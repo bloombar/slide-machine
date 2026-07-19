@@ -20,12 +20,20 @@ import { Types } from 'mongoose'
 import type { LayoutType } from '@slide-machine/shared'
 
 // Same validated env, with image enrichment forced on (the suite pins it
-// off by default; this file exercises the enrichment path)
+// off by default; this file exercises the enrichment path). A stub key +
+// re-rank on lets the caption-reconciliation test drive the AI path
+// deterministically; the fetch stub returns the Gemini reply.
 vi.mock('../../src/config/env', async importOriginal => {
   const actual = await importOriginal<typeof import('../../src/config/env')>()
   return {
     ...actual,
-    env: { ...actual.env, IMAGE_ENRICHMENT_ENABLED: true },
+    env: {
+      ...actual.env,
+      IMAGE_ENRICHMENT_ENABLED: true,
+      GEMINI_API_KEY: 'test-key',
+      IMAGE_RERANK_ENABLED: true,
+      IMAGE_RERANK_VISION: false,
+    },
   }
 })
 
@@ -169,6 +177,85 @@ describe('slide.setLayout image sourcing', () => {
       const slide = await act(ada, 'slide.get', { slideId })
       expect(slide.body.imageRef).toBe('http://wiki/mitochondria.png')
       expect(slide.body.imageSource).toBe('stock')
+    })
+  })
+
+  it('reconciles the caption to match the AI-chosen image', async () => {
+    const slideId = await makeSlide({
+      layoutType: 'content',
+      title: 'The Mitochondria',
+    })
+    // Sources return an image; Gemini (generativelanguage) picks index 0 and
+    // captions it. The caption must land alongside the image on the same read.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('generativelanguage')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              candidates: [
+                {
+                  content: {
+                    parts: [
+                      {
+                        text: JSON.stringify({
+                          index: 0,
+                          caption:
+                            'A mitochondrion, the powerhouse of the cell',
+                        }),
+                      },
+                    ],
+                  },
+                },
+              ],
+            }),
+          } as Response
+        }
+        if (url.includes('wikimedia')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              query: {
+                pages: {
+                  '1': {
+                    title: 'File:Mitochondria.png',
+                    imageinfo: [
+                      {
+                        thumburl: 'http://wiki/mitochondria.png',
+                        thumbwidth: 1024,
+                      },
+                    ],
+                  },
+                },
+              },
+            }),
+          } as Response
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ results: [] }),
+        } as Response
+      }),
+    )
+
+    const res = await act(ada, 'slide.setLayout', {
+      slideId,
+      layoutType: 'image-heavy',
+    })
+    expect(res.status).toBe(200)
+
+    await vi.waitFor(async () => {
+      const slide = await act(ada, 'slide.get', { slideId })
+      expect(slide.body.imageRef).toBe('http://wiki/mitochondria.png')
+      // The blank slide's caption was filled to match the chosen image
+      expect(slide.body.caption).toBe(
+        'A mitochondrion, the powerhouse of the cell',
+      )
     })
   })
 

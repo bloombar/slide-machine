@@ -77,6 +77,7 @@ import { getBuiltinTemplate, layoutDescriptors } from '../templates/builtin'
 import { registry } from '../providers/registry'
 import { permalinkSlug } from '../lib/slug'
 import { enrichSlideImage } from '../enrichment/enrich'
+import type { SlideImageContext } from '../enrichment/types'
 import { SeedAssetModel } from '../models/seed-asset'
 import {
   seedAssetsFor,
@@ -103,6 +104,7 @@ const maybeEnrich = (
   slideId: string,
   guidance: ImageGuidance | undefined,
   seeded: SeedAssetDoc[] = [],
+  context?: SlideImageContext,
 ): void => {
   if (!env.IMAGE_ENRICHMENT_ENABLED) return
   if (!guidance || guidance.none) return
@@ -130,6 +132,7 @@ const maybeEnrich = (
     slideId,
     guidance.keywords,
     seededImageCandidates(images),
+    context,
   )
 }
 
@@ -476,6 +479,31 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
     const event = (e: SlideEvent): SlideEvent =>
       savedDeckTitle ? { ...e, deckTitle: savedDeckTitle } : e
 
+    // Slide context for the image AI re-rank (IMG-1): lets the model pick the
+    // candidate that best fits this slide/lecture and caption it to match.
+    const imageContext = (
+      fields: {
+        title?: string
+        body?: string
+        bullets?: string[]
+        caption?: string
+        imageKeywords?: string[]
+        layoutType: string
+      },
+      captionMode: 'replace' | 'fill',
+    ): SlideImageContext => ({
+      ...fields,
+      captionMaxChars: template?.layouts
+        .find(l => l.type === fields.layoutType)
+        ?.slots.find(s => s.name === 'caption')?.maxChars,
+      seedContext:
+        [project?.seedContext, deck.seedContext]
+          .filter(Boolean)
+          .join('\n\n')
+          .slice(0, 1500) || undefined,
+      captionMode,
+    })
+
     // AI-recognized voice command: nothing persists (no slide, no
     // transcript); the client executes it like a wake-worded command.
     // With the flag off nothing was offered, so a "command" claim is a
@@ -531,6 +559,17 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
             ? refit.imageGuidance
             : undefined,
           [...assets.project, ...assets.deck],
+          imageContext(
+            {
+              title: lastSlide.title,
+              body: lastSlide.body,
+              bullets: lastSlide.bullets,
+              caption: lastSlide.caption,
+              imageKeywords: lastSlide.imageKeywords,
+              layoutType: refit.layoutType,
+            },
+            'fill',
+          ),
         )
       return event({ kind: 'slide.update', slide: toSlideDto(lastSlide) })
     }
@@ -624,6 +663,17 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
             ? result.imageGuidance
             : undefined,
           [...assets.project, ...assets.deck],
+          imageContext(
+            {
+              title: lastSlide.title,
+              body: lastSlide.body,
+              bullets: lastSlide.bullets,
+              caption: lastSlide.caption,
+              imageKeywords: lastSlide.imageKeywords,
+              layoutType: lastSlide.layoutType,
+            },
+            'fill',
+          ),
         )
       return event({ kind: 'slide.update', slide: toSlideDto(lastSlide) })
     }
@@ -648,6 +698,17 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
         ? result.imageGuidance
         : undefined,
       [...assets.project, ...assets.deck],
+      imageContext(
+        {
+          title: result.slots.title,
+          body: result.slots.body,
+          bullets: result.slots.bullets,
+          caption: result.slots.caption,
+          imageKeywords: result.imageGuidance?.keywords,
+          layoutType: result.layoutType,
+        },
+        'replace',
+      ),
     )
     return event({ kind: 'slide.new', slide: toSlideDto(slide) })
   },

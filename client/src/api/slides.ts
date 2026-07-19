@@ -65,7 +65,10 @@ export const pollSlideImage = (
   onResolved: (slide: Slide | null) => void,
   options: PollOptions = {},
 ): (() => void) => {
-  const attempts = options.attempts ?? 8
+  // ~18s window: enrichment now includes an AI re-rank (and, when enabled, a
+  // vision pass), so the image + matched caption can take longer to land than
+  // a bare source search.
+  const attempts = options.attempts ?? 12
   const intervalMs = options.intervalMs ?? 1500
   let cancelled = false
 
