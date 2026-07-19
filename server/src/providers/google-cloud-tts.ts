@@ -26,6 +26,7 @@ export class GoogleCloudTtsProvider implements TtsProvider {
     text,
     languageCode,
     voiceName,
+    gender,
   }: TtsSynthesisInput): Promise<Uint8Array> {
     if (!env.GOOGLE_CLOUD_TTS_KEY) {
       throw new Error('Text-to-speech is not configured (no API key)')
@@ -38,10 +39,12 @@ export class GoogleCloudTtsProvider implements TtsProvider {
       },
       body: JSON.stringify({
         input: { text },
+        // A specific name wins; otherwise the gender selects a matching voice
+        // in the requested language, or Google's default when neither is set.
         voice: {
           languageCode,
           ...(voiceName ? { name: voiceName } : {}),
-          ssmlGender: 'NEUTRAL',
+          ...(gender ? { ssmlGender: gender.toUpperCase() } : {}),
         },
         audioConfig: { audioEncoding: 'MP3' },
       }),

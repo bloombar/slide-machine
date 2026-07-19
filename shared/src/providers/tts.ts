@@ -13,6 +13,9 @@ export interface TtsSynthesisInput {
   languageCode: string
   /** Optional explicit provider voice name; adapters may ignore it. */
   voiceName?: string
+  /** Preferred voice gender — used when no explicit voiceName fits the
+   * language, so the chosen persona's gender still carries across languages. */
+  gender?: 'female' | 'male'
 }
 
 export interface TtsProvider {

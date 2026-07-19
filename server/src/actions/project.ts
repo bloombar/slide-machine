@@ -34,6 +34,7 @@ import {
 } from '../models/project'
 import { UserModel } from '../models/user'
 import { canEditAcl, isAclMember } from '../lib/access'
+import { ttsVoiceIdSchema } from '../lib/tts-voice'
 import { sharesOfAcl } from '../lib/shares'
 import { getBuiltinTemplate } from '../templates/builtin'
 import type { HydratedDocument, Types } from 'mongoose'
@@ -135,6 +136,7 @@ export const projectUpdate = defineAction<ProjectUpdateInput, Project>({
     seedContext: z.string().max(20_000).optional(),
     generationFreedom: z.number().int().min(1).max(5).nullable().optional(),
     language: z.enum(LOCALES).nullable().optional(),
+    ttsVoice: ttsVoiceIdSchema.nullable().optional(),
   }),
   execute: async (ctx, input) => {
     const doc = await loadEditableProject(ctx, input.projectId)
@@ -149,6 +151,10 @@ export const projectUpdate = defineAction<ProjectUpdateInput, Project>({
     if (input.language !== undefined) {
       // null clears back to inherited (stores nothing)
       doc.language = input.language ?? undefined
+    }
+    if (input.ttsVoice !== undefined) {
+      // null clears back to the server default (stores nothing)
+      doc.ttsVoice = input.ttsVoice ?? undefined
     }
     await doc.save()
     return toProjectDto(doc)

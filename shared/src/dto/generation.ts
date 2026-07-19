@@ -38,4 +38,7 @@ export interface DeckViewResponse {
    * lecture language live (deck ?? this ?? viewer profile ?? browser)
    * even as settings change mid-session. */
   projectLanguage?: Locale
+  /** The project's own narration-voice setting, so a lecture with no voice of
+   * its own shows what it inherits. */
+  projectTtsVoice?: string
 }

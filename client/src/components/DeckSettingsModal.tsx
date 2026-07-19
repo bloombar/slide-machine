@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { X } from 'lucide-react'
-import type { Deck, Template } from '@slide-machine/shared'
+import { findTtsVoice, type Deck, type Template } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import TemplatePicker from './TemplatePicker'
 import AccessSettings from './AccessSettings'
@@ -17,8 +17,10 @@ import SeedNotesEditor from './SeedNotesEditor'
 import SeedMaterial from './SeedMaterial'
 import FreedomSlider from './FreedomSlider'
 import LanguageSelect from './LanguageSelect'
+import VoiceSelect from './VoiceSelect'
 import ConfirmDialog from './ConfirmDialog'
 import Modal from './Modal'
+import { getTtsEnabled } from '../runtime-config'
 import { lectureTitle } from '../lib/lecture'
 
 const TABS = [
@@ -34,6 +36,8 @@ interface Props {
   deck: Deck
   /** The project-level AI freedom this lecture inherits by default. */
   projectGenerationFreedom: number
+  /** The project-level narration voice this lecture inherits by default. */
+  projectTtsVoice?: string
   /** Which tab opens first (deep links, e.g. Share from a lecture list). */
   initialTab?: TabId
   /** Editors manage access too; only the owner can transfer ownership. */
@@ -50,6 +54,7 @@ interface Props {
 export default function DeckSettingsModal({
   deck,
   projectGenerationFreedom,
+  projectTtsVoice,
   initialTab = 'general',
   isOwner,
   onClose,
@@ -264,6 +269,33 @@ export default function DeckSettingsModal({
               }}
             />
           </div>
+          {getTtsEnabled() && (
+            <div>
+              <h3 className="mb-2 text-lg font-semibold text-slate-700">
+                Narration voice
+              </h3>
+              <p className="mb-3 text-sm text-slate-500">
+                The voice used to read this lecture aloud. It speaks in the
+                lecture&apos;s language.
+              </p>
+              <VoiceSelect
+                value={deck.ttsVoice}
+                defaultLabel={
+                  findTtsVoice(projectTtsVoice)?.label ?? 'system default'
+                }
+                onChange={ttsVoice => {
+                  dispatchAction<Deck>('deck.setTtsVoice', {
+                    deckId: deck.id,
+                    voice: ttsVoice,
+                  })
+                    .then(onDeckChange)
+                    .catch(() => {
+                      // Quiet failure: the select reverts on rerender
+                    })
+                }}
+              />
+            </div>
+          )}
           {isOwner && (
             <div className="rounded-md border border-red-200 p-4">
               <h3 className="mb-2 text-lg font-semibold text-red-700">

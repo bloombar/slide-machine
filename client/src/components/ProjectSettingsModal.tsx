@@ -18,6 +18,8 @@ import Modal from './Modal'
 import AccessSettings from './AccessSettings'
 import FreedomSlider from './FreedomSlider'
 import LanguageSelect from './LanguageSelect'
+import VoiceSelect from './VoiceSelect'
+import { getTtsEnabled } from '../runtime-config'
 import TemplatePicker from './TemplatePicker'
 
 const TABS = [
@@ -273,6 +275,31 @@ export default function ProjectSettingsModal({
               }}
             />
           </div>
+          {getTtsEnabled() && (
+            <div>
+              <h3 className="mb-2 text-lg font-semibold text-slate-700">
+                Narration voice
+              </h3>
+              <p className="mb-3 text-sm text-slate-500">
+                The voice used to read lectures in this project aloud, unless a
+                lecture sets its own. It speaks in the project's language.
+              </p>
+              <VoiceSelect
+                value={project.ttsVoice}
+                defaultLabel="system default"
+                onChange={ttsVoice => {
+                  dispatchAction<Project>('project.update', {
+                    projectId: project.id,
+                    ttsVoice,
+                  })
+                    .then(onProjectChange)
+                    .catch(() => {
+                      // Quiet failure: the select reverts on rerender
+                    })
+                }}
+              />
+            </div>
+          )}
           {isOwner && (
             <div className="rounded-md border border-red-200 p-4">
               <h3 className="mb-2 text-lg font-semibold text-red-700">

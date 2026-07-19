@@ -49,6 +49,8 @@ export interface Deck {
   /** Lecturing/generation language, only when explicitly chosen; absent
    * = inherit (project, then owner profile, then browser default). */
   language?: Locale
+  /** Own narration voice id (TTS_VOICES); absent = inherit the project's. */
+  ttsVoice?: string
   /** Finalized full lecture transcript, retained for post-lecture reformat (GEN-4). */
   transcript?: string
   voteScore: number

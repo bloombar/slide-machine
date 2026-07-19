@@ -27,6 +27,9 @@ export interface Project {
   /** Lecturing/generation language, only when explicitly chosen; absent
    * = inherit (owner profile, then browser default). */
   language?: Locale
+  /** Narration voice id (TTS_VOICES) for lectures in this project; absent =
+   * the server default. Lectures inherit unless they set their own. */
+  ttsVoice?: string
   /** User ids with view access. Owner-only surfaces. */
   viewers?: string[]
   /** User ids with edit access (can edit every lecture inside). Owner-only surfaces. */

@@ -44,6 +44,8 @@ const projectSchema = new Schema<ProjectDb>(
     // Explicit lecturing language only; absent = inherit (owner profile,
     // then the speaker's browser)
     language: { type: String, enum: LOCALES, default: undefined },
+    // Narration voice id (TTS_VOICES); absent = server default
+    ttsVoice: { type: String, default: undefined },
     viewers: { type: [String], default: [] },
     editors: { type: [String], default: [] },
     settings: {
@@ -81,6 +83,7 @@ export const toProjectDto = (doc: HydratedDocument<ProjectDb>): Project => ({
   templateId: doc.templateId,
   generationFreedom: doc.generationFreedom,
   language: doc.language,
+  ttsVoice: doc.ttsVoice,
   effectiveGenerationFreedom: doc.generationFreedom ?? env.GENERATION_FREEDOM,
   viewers: doc.viewers,
   editors: doc.editors,

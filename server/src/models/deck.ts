@@ -82,6 +82,8 @@ const deckSchema = new Schema<DeckDb>(
     // Explicit lecturing language only; absent = inherit (project, then
     // owner profile, then the speaker's browser)
     language: { type: String, enum: LOCALES, default: undefined },
+    // Narration voice id (TTS_VOICES); absent = inherit the project's
+    ttsVoice: { type: String, default: undefined },
     transcript: String,
     voteScore: { type: Number, default: 0 },
   },
@@ -180,6 +182,7 @@ export const toDeckDto = (
   seedContext: doc.seedContext,
   generationFreedom: doc.generationFreedom,
   language: doc.language,
+  ttsVoice: doc.ttsVoice,
   transcript: doc.transcript,
   voteScore: doc.voteScore,
   createdAt: doc.createdAt.toISOString(),

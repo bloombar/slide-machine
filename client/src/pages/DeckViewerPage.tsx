@@ -1049,6 +1049,7 @@ export default function DeckViewerPage() {
         <DeckSettingsModal
           deck={view.deck}
           projectGenerationFreedom={view.projectGenerationFreedom}
+          projectTtsVoice={view.projectTtsVoice}
           initialTab={settingsTab ?? 'general'}
           isOwner={isOwner}
           onClose={closeSettings}

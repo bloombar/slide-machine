@@ -47,6 +47,37 @@ describe('GoogleCloudTtsProvider.synthesize', () => {
     expect(body.audioConfig.audioEncoding).toBe('MP3')
   })
 
+  it('sends the voice name and gender when provided', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ audioContent: Buffer.from('x').toString('base64') }),
+    })
+    await new GoogleCloudTtsProvider().synthesize({
+      text: 'hi',
+      languageCode: 'fr-FR',
+      voiceName: 'fr-FR-Neural2-A',
+      gender: 'female',
+    })
+    const body = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+    expect(body.voice.name).toBe('fr-FR-Neural2-A')
+    expect(body.voice.ssmlGender).toBe('FEMALE')
+  })
+
+  it('sends gender only (no name) for a cross-language voice', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ audioContent: Buffer.from('x').toString('base64') }),
+    })
+    await new GoogleCloudTtsProvider().synthesize({
+      text: 'hi',
+      languageCode: 'de-DE',
+      gender: 'male',
+    })
+    const body = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+    expect(body.voice.name).toBeUndefined()
+    expect(body.voice.ssmlGender).toBe('MALE')
+  })
+
   it('throws without a key and on a non-200 response', async () => {
     testEnv.GOOGLE_CLOUD_TTS_KEY = undefined
     await expect(

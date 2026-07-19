@@ -13,6 +13,7 @@ import type {
   DeckSetAccessInput,
   DeckSetGenerationFreedomInput,
   DeckSetLanguageInput,
+  DeckSetTtsVoiceInput,
   DeckSetSeedNotesInput,
   DeckShare,
   DeckShareInput,
@@ -56,6 +57,7 @@ import {
   isAclMember,
   type ResolvedAcl,
 } from '../lib/access'
+import { ttsVoiceIdSchema } from '../lib/tts-voice'
 import { sharesOfAcl } from '../lib/shares'
 import {
   clampToBudget,
@@ -768,6 +770,21 @@ export const deckSetLanguage = defineAction<DeckSetLanguageInput, Deck>({
   },
 })
 
+/** Lecture-level narration voice; null re-inherits the project's. */
+export const deckSetTtsVoice = defineAction<DeckSetTtsVoiceInput, Deck>({
+  name: 'deck.setTtsVoice',
+  input: z.object({
+    deckId: z.string().min(1),
+    voice: ttsVoiceIdSchema.nullable(),
+  }),
+  execute: async (ctx, input) => {
+    const { deck, acl } = await loadEditableDeck(ctx, input.deckId)
+    deck.ttsVoice = input.voice ?? undefined
+    await deck.save()
+    return toDeckDto(deck, acl)
+  },
+})
+
 export const deckSetSeedNotes = defineAction<DeckSetSeedNotesInput, Deck>({
   name: 'deck.setSeedNotes',
   input: z.object({
@@ -955,6 +972,7 @@ registerAction(sessionPhrase)
 registerAction(deckSetSeedNotes)
 registerAction(deckSetGenerationFreedom)
 registerAction(deckSetLanguage)
+registerAction(deckSetTtsVoice)
 registerAction(deckSetAccess)
 registerAction(deckResetAccess)
 registerAction(deckShare)

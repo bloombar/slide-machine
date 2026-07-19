@@ -65,6 +65,7 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
     projectGenerationFreedom:
       project?.generationFreedom ?? env.GENERATION_FREEDOM,
     projectLanguage: project?.language ?? undefined,
+    projectTtsVoice: project?.ttsVoice ?? undefined,
   }
   res.json(body)
 })

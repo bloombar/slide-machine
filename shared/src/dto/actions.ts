@@ -30,6 +30,8 @@ export interface ProjectUpdateInput {
   generationFreedom?: number | null
   /** Explicit project language; null clears back to inherited. */
   language?: Locale | null
+  /** Narration voice id (TTS_VOICES); null clears back to the server default. */
+  ttsVoice?: string | null
 }
 
 export interface DeckCreateInput {
@@ -186,6 +188,12 @@ export interface UserSetLanguageInput {
 export interface DeckSetLanguageInput {
   deckId: string
   language: Locale | null
+}
+
+/** Lecture-level narration voice; null re-inherits the project's. */
+export interface DeckSetTtsVoiceInput {
+  deckId: string
+  voice: string | null
 }
 
 /** One finalized spoken (or typed, until STT lands) phrase for a live session. */

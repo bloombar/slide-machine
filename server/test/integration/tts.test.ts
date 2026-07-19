@@ -157,6 +157,24 @@ describe('POST /slides/:slideId/tts', () => {
     expect(res.body.url).toBeNull()
   })
 
+  it('caches per voice — a different voice yields a different url', async () => {
+    const slideId = await makeSlide({ title: 'Cells', body: 'Overview' })
+    await act(ada, 'deck.setTtsVoice', { deckId, voice: 'emma' })
+    const a = await tts(ada, slideId, 'content')
+    await act(ada, 'deck.setTtsVoice', { deckId, voice: 'james' })
+    const b = await tts(ada, slideId, 'content')
+    expect(a.body.url).toMatch(/\.wav$/)
+    expect(b.body.url).not.toBe(a.body.url)
+  })
+
+  it('rejects an unknown voice id', async () => {
+    const res = await act(ada, 'deck.setTtsVoice', {
+      deckId,
+      voice: 'not-a-voice',
+    })
+    expect(res.status).toBeGreaterThanOrEqual(400)
+  })
+
   it('403s for someone without view access', async () => {
     // Decks are public by default; restrict it so a stranger cannot listen.
     await act(ada, 'project.setAccess', { projectId, visibility: 'restricted' })
