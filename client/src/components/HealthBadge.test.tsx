@@ -16,6 +16,7 @@ const healthFixture: HealthResponse = {
     storage: { status: 'ok', detail: 'local disk' },
     gemini: { status: 'ok', detail: 'connected' },
     stt: { status: 'disabled', detail: 'browser (client-side)' },
+    tts: { status: 'ok', detail: 'ready' },
   },
 }
 

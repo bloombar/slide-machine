@@ -50,6 +50,21 @@ export const applySlideImageFromSource = (
     body: JSON.stringify({ url, attribution }),
   })
 
+/**
+ * Synthesizes speech for a slide and returns a playable audio URL (or null
+ * when there's nothing to say). `content` speaks the rendered slide;
+ * `transcript` speaks the stored lecture transcript (narrated from content by
+ * the server when the slide has none).
+ */
+export const synthesizeSlideTts = (
+  slideId: string,
+  mode: 'content' | 'transcript',
+): Promise<{ url: string | null }> =>
+  apiFetch<{ url: string | null }>(`/api/slides/${slideId}/tts`, {
+    method: 'POST',
+    body: JSON.stringify({ mode }),
+  })
+
 interface PollOptions {
   attempts?: number
   intervalMs?: number

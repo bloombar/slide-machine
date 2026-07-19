@@ -15,6 +15,7 @@ const selectors: ProviderSelectors = {
   generation: 'fake-llm',
   quizGeneration: 'gemini',
   imageGeneration: 'gemini',
+  tts: 'google-cloud',
 }
 
 describe('ProviderRegistry', () => {

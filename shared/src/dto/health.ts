@@ -21,6 +21,7 @@ export interface HealthComponents {
   storage: HealthComponent
   gemini: HealthComponent
   stt: HealthComponent
+  tts: HealthComponent
 }
 
 export interface HealthResponse {

@@ -1,4 +1,4 @@
-# Google credentials (Gemini + Cloud Speech-to-Text + Cloud Translation + Forms/Drive OAuth)
+# Google credentials (Gemini + Cloud Speech-to-Text + Cloud Text-to-Speech + Cloud Translation + Forms/Drive OAuth)
 
 The server reads its Google credentials from `server/.env` (see
 [server/.env.example](../server/.env.example)):
@@ -8,6 +8,9 @@ The server reads its Google credentials from `server/.env` (see
   Speech-to-Text streaming (§3); optional — only when using Google STT
 - `GOOGLE_CLOUD_TRANSLATION_KEY` — Cloud Translation (on-demand deck
   translation, [SHARE-2](SPEC.md#share-2-post-lecture-translated-viewing))
+- `GOOGLE_CLOUD_TTS_KEY` — Cloud Text-to-Speech (spoken slide/deck playback,
+  §5). Optional — without it, the play button and per-slide "Speak this
+  slide" simply don't appear
 - `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` — OAuth client for
   Google sign-in (AUTH-1) and connected-account Drive/Forms access used by
   quiz publishing (EXP-4); see §6
@@ -27,10 +30,11 @@ Workspace), never a personal one.
 3. Attach billing: <https://console.cloud.google.com/billing> →
    **Link a billing account**. STT has no keyless free tier; Gemini works
    unbilled at free-tier rate limits but needs billing for production quotas.
-4. Enable all three APIs at **APIs & Services → Library** (with the project
+4. Enable all four APIs at **APIs & Services → Library** (with the project
    selected), searching for and enabling:
    - **Generative Language API** (this is the Gemini API)
    - **Cloud Speech-to-Text API**
+   - **Cloud Text-to-Speech API**
    - **Cloud Translation API**
 
 ## 2. Gemini key (`GEMINI_API_KEY`)
@@ -109,6 +113,22 @@ Cloud Translation has no keyless free tier — the project's billing account
 covers it (Basic v2 is billed per character, with a monthly free allotment;
 see the current pricing page).
 
+### Text-to-Speech key (`GOOGLE_CLOUD_TTS_KEY`)
+
+Another plain-REST API key, exactly like Translation (Cloud Text-to-Speech
+does **not** use the STT service account):
+
+1. **Cloud Console → APIs & Services → Credentials** (same project) →
+   **+ Create credentials → API key**. Copy the key.
+2. Edit the key → rename it `slide-machine-tts` → **API restrictions →
+   Restrict key** → select only *Cloud Text-to-Speech API* → **Save**.
+
+Billed per character with a monthly free allotment (see the pricing page).
+Without this key the TTS feature is disabled end-to-end: the client's
+`/api/config` reports it off, so the play button and the per-slide "Speak this
+slide" option are not shown, and nothing else in the app is affected.
+`TTS_PROVIDER=none` disables it explicitly; `mock` is for tests.
+
 Keep the keys separate (one per API) so any one can be rotated or
 revoked without touching the others.
 
@@ -119,6 +139,7 @@ In `server/.env`:
 ```bash
 GEMINI_API_KEY=<key from step 2>
 GOOGLE_CLOUD_TRANSLATION_KEY=<key from step 4>
+GOOGLE_CLOUD_TTS_KEY=<key from the Text-to-Speech step in §4>
 GENERATION_PROVIDER=gemini   # switch off the mock once the key exists
 
 # Live transcription (§3): one flip switches the whole app.
@@ -126,6 +147,10 @@ GENERATION_PROVIDER=gemini   # switch off the mock once the key exists
 #  • google-cloud: real-time streaming, plus the service account from §3
 TRANSCRIPTION_PROVIDER=google-cloud
 GOOGLE_APPLICATION_CREDENTIALS=service-account.json
+
+# Spoken playback. Feature auto-enables when GOOGLE_CLOUD_TTS_KEY is set.
+TTS_PROVIDER=google-cloud   # or: none
+# TTS_LANGUAGE=en-US         # deck/project language overrides this per request
 ```
 
 Restart the server; config is validated at boot by `server/src/config/env.ts`.

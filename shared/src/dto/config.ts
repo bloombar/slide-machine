@@ -9,4 +9,8 @@ export type SttEngine = 'browser' | 'google-cloud' | 'none'
 
 export interface RuntimeConfig {
   sttEngine: SttEngine
+  /** Whether slide/deck text-to-speech playback is available (TTS provider
+   * configured with a usable key). When false the client hides the play
+   * button and the per-slide "Speak this slide" option. */
+  ttsEnabled: boolean
 }

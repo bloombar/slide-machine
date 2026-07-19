@@ -6,14 +6,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { HealthComponent, HealthComponents } from '@slide-machine/shared'
 
-const { pingMongo, storageHealthCheck, pingGemini, pingGoogleStt } = vi.hoisted(
-  () => ({
-    pingMongo: vi.fn(),
-    storageHealthCheck: vi.fn(),
-    pingGemini: vi.fn(),
-    pingGoogleStt: vi.fn(),
-  }),
-)
+const {
+  pingMongo,
+  storageHealthCheck,
+  pingGemini,
+  pingGoogleStt,
+  pingGoogleTts,
+} = vi.hoisted(() => ({
+  pingMongo: vi.fn(),
+  storageHealthCheck: vi.fn(),
+  pingGemini: vi.fn(),
+  pingGoogleStt: vi.fn(),
+  pingGoogleTts: vi.fn(),
+}))
 
 vi.mock('../db/mongoose', () => ({ pingMongo }))
 vi.mock('../storage', () => ({
@@ -21,8 +26,11 @@ vi.mock('../storage', () => ({
 }))
 vi.mock('../providers/gemini-generation', () => ({ pingGemini }))
 vi.mock('../providers/google-cloud-transcription', () => ({ pingGoogleStt }))
+vi.mock('../providers/google-cloud-tts', () => ({ pingGoogleTts }))
 vi.mock('./app-version', () => ({ APP_VERSION: '2026.07.18+testsha' }))
-vi.mock('../config/env', () => ({ env: { NODE_ENV: 'test' } }))
+vi.mock('../config/env', () => ({
+  env: { NODE_ENV: 'test', TTS_PROVIDER: 'google-cloud' },
+}))
 
 import { computeOverall, getHealth, resetHealthCache } from './health'
 
@@ -35,6 +43,7 @@ const components = (
   storage: ok,
   gemini: ok,
   stt: disabled,
+  tts: disabled,
   ...over,
 })
 
@@ -44,6 +53,7 @@ beforeEach(() => {
   storageHealthCheck.mockResolvedValue(ok)
   pingGemini.mockResolvedValue(ok)
   pingGoogleStt.mockResolvedValue(disabled)
+  pingGoogleTts.mockResolvedValue(disabled)
 })
 
 describe('computeOverall', () => {

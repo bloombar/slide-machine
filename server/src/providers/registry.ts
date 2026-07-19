@@ -21,6 +21,7 @@ export const defaultSelectors: ProviderSelectors = {
   generation: env.GENERATION_PROVIDER,
   quizGeneration: env.QUIZ_PROVIDER,
   imageGeneration: env.IMAGE_GEN_PROVIDER,
+  tts: env.TTS_PROVIDER,
 }
 
 /**

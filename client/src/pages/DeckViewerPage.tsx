@@ -9,7 +9,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
-import { Mic, Plus, Settings, UploadCloud } from 'lucide-react'
+import { Mic, Pause, Play, Plus, Settings, UploadCloud } from 'lucide-react'
 import type {
   Deck,
   DeckViewResponse,
@@ -37,6 +37,8 @@ import {
 import SlideView, { type SlideContentPatch } from '../components/SlideView'
 import SlideNavZones from '../components/SlideNavZones'
 import SlideMenu from '../components/SlideMenu'
+import { useTtsPlayback } from '../tts/playback'
+import { getTtsEnabled } from '../runtime-config'
 import LayoutPickerModal from '../components/LayoutPickerModal'
 import DraggableListRow from '../components/DraggableListRow'
 import EditableText from '../components/EditableText'
@@ -487,6 +489,29 @@ export default function DeckViewerPage() {
     setListening(true)
   }
 
+  // Text-to-speech playback (TECH-8). Starting playback stops the mic first so
+  // the app never records while it is speaking.
+  const ttsEnabled = getTtsEnabled()
+  const tts = useTtsPlayback({
+    getSlides: () => viewRef.current?.slides ?? [],
+    navigate: index => {
+      setCurrent(index)
+      requestAnimationFrame(() => nav.scrollTo(index))
+    },
+    stopMic: () => {
+      if (speaking || listening) {
+        stopListening()
+        setSpeaking(false)
+      }
+    },
+  })
+  /** The slide the deck play button starts from: the active one per mode. */
+  const activePlayIndex = (): number =>
+    mode === 'carousel' ? nav.current : (nav.visibleIndex() ?? nav.current)
+  const deckPlaying = tts.scope === 'deck' && tts.status === 'playing'
+  /** Speaks a slide's content (kebab option), stopping any current playback. */
+  const speakSlide = (slide: Slide) => tts.speakSlide(slide)
+
   // Settings is an aside, not part of the lecture: talking through it
   // must never reach generation. Opening pauses capture; closing resumes
   // it only when it was actually recording beforehand.
@@ -778,68 +803,95 @@ export default function DeckViewerPage() {
         onModeChange={setMode}
         deckId={view.deck.id}
         actions={
-          canEdit && (
-            <>
-              <Tooltip label="Lecture settings">
-                <button
-                  aria-label="Lecture settings"
-                  onClick={() => openSettings()}
-                  className="rounded-md p-2 text-slate-500 hover:text-slate-900"
-                >
-                  <Settings className="h-5 w-5" aria-hidden />
-                </button>
-              </Tooltip>
-              <Tooltip label="Add a slide">
-                <button
-                  aria-label="Add slide"
-                  onClick={() => void addSlide()}
-                  className="rounded-md p-2 text-slate-500 hover:text-slate-900"
-                >
-                  <Plus className="h-5 w-5" aria-hidden />
-                </button>
-              </Tooltip>
-              {SHOW_SEED_UPLOAD_IN_TOOLBAR && (
-                <Tooltip label="Seed material">
-                  <button
-                    aria-label="Add seed material"
-                    onClick={openManualSeed}
-                    className="rounded-md p-2 text-slate-500 hover:text-slate-900"
-                  >
-                    <UploadCloud className="h-5 w-5" aria-hidden />
-                  </button>
-                </Tooltip>
-              )}
+          <>
+            {ttsEnabled && (
               <Tooltip
-                label={
-                  listening
-                    ? 'Recording — click to stop'
-                    : 'Speak to add slides'
-                }
+                label={deckPlaying ? 'Pause playback' : 'Play deck aloud'}
               >
                 <button
-                  aria-label="Live session"
-                  aria-pressed={speaking}
-                  onClick={() => {
-                    // One toggle: the bar and the microphone together
-                    if (speaking) stopListening()
-                    else startListening()
-                    setSpeaking(s => !s)
-                  }}
-                  // Recording fills solid red and pulses: the audience is
-                  // live, so the state has to be unmissable at a glance
+                  aria-label={deckPlaying ? 'Pause playback' : 'Play deck'}
+                  aria-pressed={deckPlaying}
+                  onClick={() => tts.toggle(activePlayIndex())}
                   className={`rounded-md p-2 ${
-                    listening
-                      ? 'animate-pulse bg-red-600 text-white ring-2 ring-red-300'
-                      : speaking
-                        ? 'bg-indigo-50 text-indigo-600'
-                        : 'text-slate-500 hover:text-slate-900'
+                    deckPlaying
+                      ? 'bg-indigo-50 text-indigo-600'
+                      : 'text-slate-500 hover:text-slate-900'
                   }`}
                 >
-                  <Mic className="h-5 w-5" aria-hidden />
+                  {deckPlaying ? (
+                    <Pause className="h-5 w-5" aria-hidden />
+                  ) : (
+                    <Play className="h-5 w-5" aria-hidden />
+                  )}
                 </button>
               </Tooltip>
-            </>
-          )
+            )}
+            {canEdit && (
+              <>
+                <Tooltip label="Lecture settings">
+                  <button
+                    aria-label="Lecture settings"
+                    onClick={() => openSettings()}
+                    className="rounded-md p-2 text-slate-500 hover:text-slate-900"
+                  >
+                    <Settings className="h-5 w-5" aria-hidden />
+                  </button>
+                </Tooltip>
+                <Tooltip label="Add a slide">
+                  <button
+                    aria-label="Add slide"
+                    onClick={() => void addSlide()}
+                    className="rounded-md p-2 text-slate-500 hover:text-slate-900"
+                  >
+                    <Plus className="h-5 w-5" aria-hidden />
+                  </button>
+                </Tooltip>
+                {SHOW_SEED_UPLOAD_IN_TOOLBAR && (
+                  <Tooltip label="Seed material">
+                    <button
+                      aria-label="Add seed material"
+                      onClick={openManualSeed}
+                      className="rounded-md p-2 text-slate-500 hover:text-slate-900"
+                    >
+                      <UploadCloud className="h-5 w-5" aria-hidden />
+                    </button>
+                  </Tooltip>
+                )}
+                <Tooltip
+                  label={
+                    listening
+                      ? 'Recording — click to stop'
+                      : 'Speak to add slides'
+                  }
+                >
+                  <button
+                    aria-label="Live session"
+                    aria-pressed={speaking}
+                    onClick={() => {
+                      // One toggle: the bar and the microphone together
+                      if (speaking) stopListening()
+                      else {
+                        tts.stop() // never record while speaking (and vice-versa)
+                        startListening()
+                      }
+                      setSpeaking(s => !s)
+                    }}
+                    // Recording fills solid red and pulses: the audience is
+                    // live, so the state has to be unmissable at a glance
+                    className={`rounded-md p-2 ${
+                      listening
+                        ? 'animate-pulse bg-red-600 text-white ring-2 ring-red-300'
+                        : speaking
+                          ? 'bg-indigo-50 text-indigo-600'
+                          : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    <Mic className="h-5 w-5" aria-hidden />
+                  </button>
+                </Tooltip>
+              </>
+            )}
+          </>
         }
       />
 
@@ -880,13 +932,16 @@ export default function DeckViewerPage() {
                 onRemoveImage={removeSlideImage(slide!)}
                 imagePending={pendingImages.has(slide!.id)}
               />
-              {canEdit && (
-                <SlideMenu
-                  number={nav.current + 1}
-                  onChangeLayout={() => setLayoutPickerFor(slide!.id)}
-                  onDelete={() => void deleteSlide(slide!.id)}
-                />
-              )}
+              <SlideMenu
+                number={nav.current + 1}
+                onSpeak={ttsEnabled ? () => speakSlide(slide!) : undefined}
+                onChangeLayout={
+                  canEdit ? () => setLayoutPickerFor(slide!.id) : undefined
+                }
+                onDelete={
+                  canEdit ? () => void deleteSlide(slide!.id) : undefined
+                }
+              />
             </SlideNavZones>
           </div>
           <p className="mx-auto mt-4 text-sm text-slate-500">
@@ -918,6 +973,7 @@ export default function DeckViewerPage() {
                 />
                 <SlideMenu
                   number={i + 1}
+                  onSpeak={ttsEnabled ? () => speakSlide(s) : undefined}
                   onChangeLayout={() => setLayoutPickerFor(s.id)}
                   onDelete={() => void deleteSlide(s.id)}
                 />
@@ -925,6 +981,9 @@ export default function DeckViewerPage() {
             ) : (
               <li key={s.id} ref={nav.registerItem(i)} className="relative">
                 <SlideView slide={s} template={view.template} />
+                {ttsEnabled && (
+                  <SlideMenu number={i + 1} onSpeak={() => speakSlide(s)} />
+                )}
               </li>
             ),
           )}

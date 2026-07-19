@@ -19,6 +19,7 @@ import { pingMongo } from '../db/mongoose'
 import { getStorage } from '../storage'
 import { pingGemini } from '../providers/gemini-generation'
 import { pingGoogleStt } from '../providers/google-cloud-transcription'
+import { pingGoogleTts } from '../providers/google-cloud-tts'
 import { APP_VERSION } from './app-version'
 
 /** Per-probe deadline; the badge must never wait on a slow dependency. */
@@ -50,15 +51,25 @@ const mongoComponent = async (): Promise<HealthComponent> =>
     ? { status: 'ok', detail: 'connected' }
     : { status: 'down', detail: 'disconnected' }
 
+/** Text-to-speech status: which adapter is active decides how it's probed;
+ * an unconfigured feature reads as `disabled` (never counts against health). */
+const ttsComponent = async (): Promise<HealthComponent> => {
+  const provider = env.TTS_PROVIDER
+  if (provider === 'none') return { status: 'disabled', detail: 'off' }
+  if (provider === 'google-cloud') return pingGoogleTts()
+  return { status: 'ok', detail: provider }
+}
+
 /** Probes all components concurrently. */
 const runChecks = async (): Promise<HealthComponents> => {
-  const [mongo, storage, gemini, stt] = await Promise.all([
+  const [mongo, storage, gemini, stt, tts] = await Promise.all([
     withTimeout(mongoComponent()),
     withTimeout(getStorage().healthCheck()),
     withTimeout(pingGemini()),
     withTimeout(pingGoogleStt()),
+    withTimeout(ttsComponent()),
   ])
-  return { mongo, storage, gemini, stt }
+  return { mongo, storage, gemini, stt, tts }
 }
 
 let cache: { at: number; components: HealthComponents } | null = null

@@ -14,6 +14,7 @@ import { usersRouter } from './routes/users'
 import { seedAssetsRouter } from './routes/seed-assets'
 import { slidesRouter } from './routes/slides'
 import { filesRouter } from './routes/files'
+import { ttsRouter } from './routes/tts'
 import { errorHandler } from './middleware/error'
 import { serveSpa } from './static'
 import './actions/system'
@@ -27,6 +28,8 @@ import './providers/mock-generation'
 import './providers/gemini-generation'
 import './providers/google-cloud-transcription'
 import './providers/mock-transcription'
+import './providers/google-cloud-tts'
+import './providers/mock-tts'
 
 export const createApp = (): Express => {
   const app = express()
@@ -43,6 +46,7 @@ export const createApp = (): Express => {
   api.use(seedAssetsRouter)
   api.use(slidesRouter)
   api.use(filesRouter)
+  api.use(ttsRouter)
   app.use('/api', api)
 
   if (env.NODE_ENV === 'production') {

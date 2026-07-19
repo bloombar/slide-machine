@@ -33,6 +33,7 @@ const componentLabels: Record<ComponentKey, string> = {
   storage: 'Storage',
   gemini: 'Generative AI',
   stt: 'Speech-to-Text',
+  tts: 'Text-to-Speech',
 }
 
 /** Human-friendly uptime, e.g. "3h 12m", "5m 8s", "42s". */

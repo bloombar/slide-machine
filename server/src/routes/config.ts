@@ -20,7 +20,19 @@ const sttEngine = (): SttEngine => {
   return 'google-cloud'
 }
 
+/** TTS is usable when a provider is selected and (for Google) a key is set;
+ * false hides the play button and per-slide "Speak this slide" on the client. */
+const ttsEnabled = (): boolean => {
+  const provider = env.TTS_PROVIDER
+  if (provider === 'none') return false
+  if (provider === 'google-cloud') return Boolean(env.GOOGLE_CLOUD_TTS_KEY)
+  return true
+}
+
 configRouter.get('/config', (_req, res) => {
-  const body: RuntimeConfig = { sttEngine: sttEngine() }
+  const body: RuntimeConfig = {
+    sttEngine: sttEngine(),
+    ttsEnabled: ttsEnabled(),
+  }
   res.json(body)
 })

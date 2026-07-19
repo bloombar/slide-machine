@@ -10,7 +10,7 @@
 import type { RuntimeConfig, SttEngine } from '@slide-machine/shared'
 import { config } from './config'
 
-let runtime: RuntimeConfig = { sttEngine: 'browser' }
+let runtime: RuntimeConfig = { sttEngine: 'browser', ttsEnabled: false }
 let loaded: Promise<RuntimeConfig> | null = null
 
 /** Fetches runtime config once and caches it; safe to call repeatedly. */
@@ -27,3 +27,6 @@ export const loadRuntimeConfig = (): Promise<RuntimeConfig> => {
 
 /** The speech engine the client should use; 'browser' until config loads. */
 export const getSttEngine = (): SttEngine => runtime.sttEngine
+
+/** Whether TTS playback is available; false (feature hidden) until config loads. */
+export const getTtsEnabled = (): boolean => runtime.ttsEnabled

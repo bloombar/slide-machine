@@ -16,6 +16,8 @@ const CONTENT_TYPES: Record<string, string> = {
   webp: 'image/webp',
   pdf: 'application/pdf',
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
 }
 
 export const filesRouter = Router()

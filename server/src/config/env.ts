@@ -64,6 +64,10 @@ const envSchema = z.object({
   GENERATION_PROVIDER: z.string().default('gemini'),
   QUIZ_PROVIDER: z.string().default('gemini'),
   IMAGE_GEN_PROVIDER: z.string().default('gemini'),
+  // Text-to-speech (slide/deck playback). 'google-cloud' needs a key below;
+  // 'none' disables the feature; 'mock' is for tests. Without a usable key the
+  // client hides the play button and the per-slide "Speak this slide" option.
+  TTS_PROVIDER: z.string().default('google-cloud'),
 
   // Image enrichment (IMG-1): background stock-image fetch for slides
   IMAGE_ENRICHMENT_ENABLED: z.stringbool().default(true),
@@ -130,6 +134,14 @@ const envSchema = z.object({
   // Platform). Takes precedence over GOOGLE_APPLICATION_CREDENTIALS.
   GOOGLE_APPLICATION_CREDENTIALS_JSON: z.string().optional(),
   GOOGLE_CLOUD_TRANSLATION_KEY: z.string().optional(),
+  // Cloud Text-to-Speech is a plain REST API key (like Translation, unlike STT
+  // streaming). Absent → the TTS feature is disabled everywhere it appears.
+  GOOGLE_CLOUD_TTS_KEY: z.string().optional(),
+  // Default voice for synthesized speech; a deck's own language overrides the
+  // language at request time. Voice name is optional — the provider picks a
+  // default voice for the language when unset.
+  TTS_LANGUAGE: z.string().default('en-US'),
+  TTS_VOICE: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
   // Public origin the app is reached at, used to build the Google OAuth

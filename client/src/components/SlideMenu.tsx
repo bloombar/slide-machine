@@ -11,11 +11,19 @@ import { MoreVertical } from 'lucide-react'
 interface Props {
   /** 1-based slide number, for accessible names. */
   number: number
-  onChangeLayout: () => void
-  onDelete: () => void
+  /** Speaks this slide's content (TTS); omitted when TTS is unavailable. */
+  onSpeak?: () => void
+  /** Owner-only; omitted for read-only viewers. */
+  onChangeLayout?: () => void
+  onDelete?: () => void
 }
 
-export default function SlideMenu({ number, onChangeLayout, onDelete }: Props) {
+export default function SlideMenu({
+  number,
+  onSpeak,
+  onChangeLayout,
+  onDelete,
+}: Props) {
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -41,6 +49,9 @@ export default function SlideMenu({ number, onChangeLayout, onDelete }: Props) {
     action()
   }
 
+  // No actions available (e.g. a read-only viewer with TTS off) → no kebab.
+  if (!onSpeak && !onChangeLayout && !onDelete) return null
+
   return (
     <div ref={menuRef} className="absolute top-3 right-3 z-10">
       <button
@@ -58,20 +69,33 @@ export default function SlideMenu({ number, onChangeLayout, onDelete }: Props) {
           aria-label={`Options for slide ${number}`}
           className="absolute right-0 z-10 mt-1 w-44 rounded-md border border-slate-200 bg-white py-1 shadow-lg"
         >
-          <button
-            role="menuitem"
-            onClick={pick(onChangeLayout)}
-            className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
-          >
-            Change layout
-          </button>
-          <button
-            role="menuitem"
-            onClick={pick(onDelete)}
-            className="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50"
-          >
-            Delete slide
-          </button>
+          {onSpeak && (
+            <button
+              role="menuitem"
+              onClick={pick(onSpeak)}
+              className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+            >
+              Speak this slide
+            </button>
+          )}
+          {onChangeLayout && (
+            <button
+              role="menuitem"
+              onClick={pick(onChangeLayout)}
+              className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+            >
+              Change layout
+            </button>
+          )}
+          {onDelete && (
+            <button
+              role="menuitem"
+              onClick={pick(onDelete)}
+              className="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+            >
+              Delete slide
+            </button>
+          )}
         </div>
       )}
     </div>
