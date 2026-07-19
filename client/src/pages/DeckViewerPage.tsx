@@ -512,6 +512,25 @@ export default function DeckViewerPage() {
   /** Speaks a slide's content (kebab option), stopping any current playback. */
   const speakSlide = (slide: Slide) => tts.speakSlide(slide)
 
+  // A voice-setting change should be heard immediately. The server already
+  // picks up the new voice on the next synthesis, but the audio now playing was
+  // generated in the old voice — so re-trigger the current item instead of
+  // waiting for the next slide.
+  const deckVoice = view?.deck.ttsVoice
+  const lastVoiceRef = useRef(deckVoice)
+  useEffect(() => {
+    if (lastVoiceRef.current === deckVoice) return
+    lastVoiceRef.current = deckVoice
+    if (tts.status === 'idle') return // the next play already uses the new voice
+    const index = tts.activeIndex ?? activePlayIndex()
+    if (tts.scope === 'deck') tts.playDeck(index)
+    else {
+      const slide = viewRef.current?.slides[index]
+      if (slide) tts.speakSlide(slide)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deckVoice])
+
   // Settings is an aside, not part of the lecture: talking through it
   // must never reach generation. Opening pauses capture; closing resumes
   // it only when it was actually recording beforehand.
