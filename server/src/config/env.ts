@@ -137,11 +137,13 @@ const envSchema = z.object({
   // Cloud Text-to-Speech is a plain REST API key (like Translation, unlike STT
   // streaming). Absent → the TTS feature is disabled everywhere it appears.
   GOOGLE_CLOUD_TTS_KEY: z.string().optional(),
-  // Default voice for synthesized speech; a deck's own language overrides the
-  // language at request time. Voice name is optional — the provider picks a
-  // default voice for the language when unset.
+  // Default language for synthesized speech; a project/lecture's own language
+  // overrides it per request.
   TTS_LANGUAGE: z.string().default('en-US'),
-  TTS_VOICE: z.string().optional(),
+  // Default narration voice id (from the shared TTS_VOICES catalog, e.g.
+  // "nova") for projects/lectures with no voice of their own. Unset → the
+  // provider picks its own default voice for the language.
+  TTS_DEFAULT_VOICE: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
   // Public origin the app is reached at, used to build the Google OAuth

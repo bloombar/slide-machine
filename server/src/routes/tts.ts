@@ -46,7 +46,12 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
   // rest of the app uses).
   const project = await ProjectModel.findById(deck.projectId).catch(() => null)
   const languageCode = deck.language ?? project?.language ?? env.TTS_LANGUAGE
-  const voice = findTtsVoice(deck.ttsVoice ?? project?.ttsVoice ?? undefined)
+  // Voice cascade: the lecture's own setting wins, then its project's, then the
+  // server default (TTS_DEFAULT_VOICE); an unset default leaves `voice`
+  // undefined, so the provider uses its own default voice for the language.
+  const voice = findTtsVoice(
+    deck.ttsVoice ?? project?.ttsVoice ?? env.TTS_DEFAULT_VOICE,
+  )
   // Use the chosen voice by name only when it belongs to the lecture's
   // language; otherwise its gender carries across to a same-gender voice in
   // that language (the voice's gender was recorded with the selection).
@@ -55,9 +60,7 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
   const voiceName =
     voice && voiceLanguage?.toLowerCase() === languageCode.toLowerCase()
       ? voice.voiceName
-      : env.TTS_VOICE && !voice
-        ? env.TTS_VOICE
-        : undefined
+      : undefined
 
   const content = slideContentText(slide)
   const transcript = slide.sourceTranscript?.trim()

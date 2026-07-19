@@ -151,6 +151,7 @@ GOOGLE_APPLICATION_CREDENTIALS=service-account.json
 # Spoken playback. Feature auto-enables when GOOGLE_CLOUD_TTS_KEY is set.
 TTS_PROVIDER=google-cloud   # or: none
 # TTS_LANGUAGE=en-US         # deck/project language overrides this per request
+TTS_DEFAULT_VOICE=nova       # default catalog voice; blank = provider default
 ```
 
 Restart the server; config is validated at boot by `server/src/config/env.ts`.
