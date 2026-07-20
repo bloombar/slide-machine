@@ -1,6 +1,6 @@
 /**
- * Regression: the deck toolbar (view-mode toggle, settings, add-slide,
- * live-session) stays pinned and usable while the slide list scrolls, and
+ * Regression: the deck toolbar (add-slide, live-session, and the slide-
+ * editing controls) stays pinned and usable while the slide list scrolls, and
  * can be dragged anywhere in the window by its grip. It previously sat in
  * normal document flow, so scrolling down in list view carried every
  * control off-screen.
@@ -10,13 +10,9 @@ import { createProject } from './helpers'
 
 const GRIP = 'Drag to move the toolbar'
 
-const TOOLBAR_BUTTONS = [
-  'Carousel view',
-  'List view',
-  'Lecture settings',
-  'Add slide',
-  'Live session',
-]
+// The view-mode toggle and settings now live in the header; the pinned
+// pill carries the slide-editing controls, which is what this spec guards.
+const TOOLBAR_BUTTONS = ['Add slide', 'Live session']
 
 /**
  * Registers a fresh user and dictates a deck tall enough to need

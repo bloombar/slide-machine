@@ -136,18 +136,21 @@ export default function SeedMaterial({ projectId, deckId }: Props) {
     }
   }
 
+  // Upload every selected/dropped file, one after another
+  const uploadFiles = async (files: File[]) => {
+    for (const file of files) await uploadFile(file)
+  }
+
   const onPick = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
+    const files = Array.from(e.target.files ?? [])
     e.target.value = ''
-    if (file) await uploadFile(file)
+    await uploadFiles(files)
   }
 
   const onDrop = (e: ReactDragEvent<HTMLDivElement>) => {
     e.preventDefault()
     setDragOver(false)
-    // One at a time, matching the picker; the rest are ignored
-    const file = e.dataTransfer.files?.[0]
-    if (file) void uploadFile(file)
+    void uploadFiles(Array.from(e.dataTransfer.files ?? []))
   }
 
   const patch = (updated: SeedAsset) =>
@@ -174,6 +177,7 @@ export default function SeedMaterial({ projectId, deckId }: Props) {
       <input
         ref={inputRef}
         type="file"
+        multiple
         accept={ACCEPT}
         onChange={e => void onPick(e)}
         aria-label="Upload seed material"

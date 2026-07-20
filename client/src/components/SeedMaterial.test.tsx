@@ -67,6 +67,29 @@ describe('SeedMaterial', () => {
     expect((uploaded?.get('file') as File).name).toBe('cells.png')
   })
 
+  it('uploads every selected file when several are picked at once', async () => {
+    const names: string[] = []
+    mockFetchRoutes({
+      '/api/actions/seedAsset.list': () => ({ status: 200, body: [] }),
+      '/api/seed-assets': init => {
+        const name = ((init?.body as FormData).get('file') as File).name
+        names.push(name)
+        return { status: 201, body: asset({ id: name, name, status: 'ready' }) }
+      },
+    })
+    render(<SeedMaterial projectId="p1" />)
+
+    const a = new File(['a'], 'a.pdf', { type: 'application/pdf' })
+    const b = new File(['b'], 'b.pdf', { type: 'application/pdf' })
+    fireEvent.change(screen.getByLabelText('Upload seed material'), {
+      target: { files: [a, b] },
+    })
+
+    expect(await screen.findByText('a.pdf')).toBeInTheDocument()
+    expect(await screen.findByText('b.pdf')).toBeInTheDocument()
+    expect(names).toEqual(['a.pdf', 'b.pdf'])
+  })
+
   it('uploads a file dropped onto the drop zone', async () => {
     let uploaded: FormData | undefined
     mockFetchRoutes({

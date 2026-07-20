@@ -1,30 +1,30 @@
 /**
- * Public layout (landing, sign-in, register, permalink viewer): logo on
- * the left, profile icon on the right — the icon opens the profile when
- * signed in and the login screen otherwise.
+ * Public layout (landing, sign-in, register, permalink viewer): a
+ * hamburger menu on the left (Home, Profile / log out, or Log in when
+ * signed out) and a right-hand action area pages fill via ShellActions.
  */
 import { Link, Outlet } from 'react-router'
-import { Presentation, User } from 'lucide-react'
-import { useAuth } from '../../auth/AuthContext'
 import HealthFooter from './HealthFooter'
+import ShellMenu from './ShellMenu'
 import { useShellTitleSlot } from './ShellTitle'
+import { useShellActionsSlot } from './ShellActions'
 
 export default function PublicShell() {
-  const { status } = useAuth()
   const shellTitle = useShellTitleSlot()
+  const shellActions = useShellActionsSlot()
 
   return (
     <div className="flex min-h-screen flex-col bg-white text-slate-900">
       <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-4">
           <div className="flex min-w-0 flex-1 items-center gap-2">
+            <ShellMenu />
             <Link
               to="/"
               aria-label="The Slide Machine — home"
-              className="flex items-center gap-2 font-semibold"
+              className="font-semibold whitespace-nowrap"
             >
-              <Presentation className="h-5 w-5 text-indigo-600" aria-hidden />
-              {!shellTitle?.active && <span>The Slide Machine</span>}
+              The Slide Machine
             </Link>
             <div
               ref={el => shellTitle?.setSlot(el)}
@@ -35,13 +35,10 @@ export default function PublicShell() {
             aria-label="Primary"
             className="flex items-center gap-1 sm:gap-2"
           >
-            <Link
-              to={status === 'authenticated' ? '/app/profile' : '/login'}
-              aria-label="Profile"
-              className="flex items-center rounded-md px-3 py-2 text-slate-600 hover:text-slate-900"
-            >
-              <User className="h-5 w-5" aria-hidden />
-            </Link>
+            <div
+              ref={el => shellActions?.setSlot(el)}
+              className="flex items-center gap-1"
+            />
           </nav>
         </div>
       </header>

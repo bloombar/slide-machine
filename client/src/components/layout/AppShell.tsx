@@ -1,33 +1,31 @@
 /**
- * Authenticated app layout: sticky primary navigation (Lucide icons,
- * labels appear at the sm breakpoint) over a centered content column.
- * Presentation surfaces (live session, deck viewer) intentionally do
- * not use this shell.
+ * Authenticated app layout: sticky primary navigation over a centered
+ * content column. The left of the nav holds a hamburger menu (Home,
+ * Profile, log out); pages can place their own controls on the right via
+ * ShellActions. Presentation surfaces (live session, deck viewer)
+ * intentionally do not use this shell.
  */
-import { Link, NavLink, Outlet } from 'react-router'
-import { Presentation, User } from 'lucide-react'
+import { Link, Outlet } from 'react-router'
 import HealthFooter from './HealthFooter'
+import ShellMenu from './ShellMenu'
 import { useShellTitleSlot } from './ShellTitle'
-
-const navLinkClass = ({ isActive }: { isActive: boolean }): string =>
-  `flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium ${
-    isActive ? 'text-indigo-600' : 'text-slate-600 hover:text-slate-900'
-  }`
+import { useShellActionsSlot } from './ShellActions'
 
 export default function AppShell() {
   const shellTitle = useShellTitleSlot()
+  const shellActions = useShellActionsSlot()
   return (
     <div className="flex min-h-screen flex-col bg-white text-slate-900">
       <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-4">
           <div className="flex min-w-0 flex-1 items-center gap-2">
+            <ShellMenu />
             <Link
               to="/app"
               aria-label="The Slide Machine — home"
-              className="flex items-center gap-2 font-semibold"
+              className="font-semibold whitespace-nowrap"
             >
-              <Presentation className="h-5 w-5 text-indigo-600" aria-hidden />
-              {!shellTitle?.active && <span>The Slide Machine</span>}
+              The Slide Machine
             </Link>
             <div
               ref={el => shellTitle?.setSlot(el)}
@@ -38,13 +36,10 @@ export default function AppShell() {
             aria-label="Primary"
             className="flex items-center gap-1 sm:gap-2"
           >
-            <NavLink
-              to="/app/profile"
-              aria-label="Profile"
-              className={navLinkClass}
-            >
-              <User className="h-5 w-5" aria-hidden />
-            </NavLink>
+            <div
+              ref={el => shellActions?.setSlot(el)}
+              className="flex items-center gap-1"
+            />
           </nav>
         </div>
       </header>

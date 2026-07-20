@@ -9,13 +9,22 @@
  */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
-import { Mic, Pause, Play, Plus, Settings, UploadCloud } from 'lucide-react'
+import {
+  Mic,
+  Pause,
+  Play,
+  Plus,
+  Settings,
+  Share2,
+  UploadCloud,
+} from 'lucide-react'
 import type {
   Deck,
   DeckViewResponse,
   ImageSearchCandidate,
   Slide,
   SlideEvent,
+  SlotSpec,
 } from '@slide-machine/shared'
 import { apiFetch, ApiError } from '../api/http'
 import { dispatchAction } from '../api/actions'
@@ -50,12 +59,31 @@ import DeckSettingsModal, {
   type SettingsTabId,
 } from '../components/DeckSettingsModal'
 import { ShellTitle } from '../components/layout/ShellTitle'
-import { type ViewMode } from '../components/ViewModeToggle'
+import { ShellActions } from '../components/layout/ShellActions'
+import ViewModeToggle, { type ViewMode } from '../components/ViewModeToggle'
 import { lectureTitle, UNTITLED } from '../lib/lecture'
 
-// Layouts where the image is the whole slide; removing the image leaves
-// nothing, so the slide itself is deleted rather than left blank
-const IMAGE_ONLY_LAYOUTS = new Set(['image-heavy'])
+// Image/text detection derived from a layout's own slots, so the rules
+// below work for any template rather than hardcoding layout names.
+
+/** True when the layout has an image slot. */
+const layoutHasImage = (layout: { slots: SlotSpec[] }): boolean =>
+  layout.slots.some(s => s.kind === 'image')
+
+// Slot roles that only label or annotate a slide, never carry its substance.
+// An image slide paired only with one of these is still "image-only": removing
+// the image leaves nothing worth keeping.
+const ANCILLARY_TEXT_SLOTS = new Set(['title', 'caption', 'subtitle'])
+
+/** True when the layout carries substantial editable text (a body paragraph
+ * or bullets). A title or caption alone does not count, so an image-only
+ * layout (image + caption, or image + title) reads as false. */
+const layoutHasTextBody = (layout: { slots: SlotSpec[] }): boolean =>
+  layout.slots.some(
+    s =>
+      s.kind === 'bullets' ||
+      (s.kind === 'text' && !ANCILLARY_TEXT_SLOTS.has(s.name)),
+  )
 
 // The toolbar's "Seed material" upload button is hidden for now but its
 // wiring (openManualSeed, the SeedDialog) is kept so it can return by
@@ -689,26 +717,55 @@ export default function DeckViewerPage() {
     }
 
   /**
-   * Removes a slide's image. On an image-only slide (image-heavy) the
-   * whole slide would be left blank, so it is deleted after a confirm; on
-   * an image+text slide the picture is cleared and the layout drops to
-   * plain text, so nothing looks broken.
+   * Removes a slide's image. When the image is the whole slide (an image
+   * layout with no body/bullets text) removing it would leave nothing, so
+   * the slide is deleted after a confirm; otherwise the picture is cleared
+   * and the slide drops to a text-only layout from THIS template, so
+   * nothing looks broken. Both the image-only test and the target layout
+   * come from the template's slots — no layout names are hardcoded, so
+   * additional templates work without changes.
    */
   const removeSlideImage = (target: Slide) => () => {
-    if (IMAGE_ONLY_LAYOUTS.has(target.layoutType)) {
+    const layouts = view.template.layouts
+    const current = layouts.find(l => l.type === target.layoutType)
+    // Image-only: the image is the whole slide (no body/bullets text to
+    // keep). Removing it would leave a blank slide, so confirm + delete.
+    if (current && layoutHasImage(current) && !layoutHasTextBody(current)) {
       setConfirmImageDeleteId(target.id)
       return
     }
-    dispatchAction<Slide>('slide.editContent', {
+    // Image+text: clear the image and drop to a text-only layout from THIS
+    // template. Prefer the no-image layout that best preserves the current
+    // slide's non-image slots — i.e. the one whose slots overlap the current
+    // text slots most, breaking ties toward the closest-sized layout. This
+    // keeps a two-column slide on its content/body layout instead of falling
+    // back to a title-style layout, all without hardcoding any layout names.
+    const keepNames = new Set(
+      (current?.slots ?? []).filter(s => s.kind !== 'image').map(s => s.name),
+    )
+    const textLayout =
+      layouts
+        .filter(l => !layoutHasImage(l) && layoutHasTextBody(l))
+        .map(l => {
+          const names = l.slots.map(s => s.name)
+          const overlap = names.filter(n => keepNames.has(n)).length
+          return { layout: l, overlap, extra: names.length - overlap }
+        })
+        .sort((a, b) => b.overlap - a.overlap || a.extra - b.extra)[0]
+        ?.layout ?? layouts.find(l => !layoutHasImage(l))
+    const cleared = dispatchAction<Slide>('slide.editContent', {
       slideId: target.id,
       imageRef: '',
     })
-      .then(() =>
-        dispatchAction<Slide>('slide.setLayout', {
-          slideId: target.id,
-          layoutType: 'content',
-        }),
-      )
+    const done = textLayout
+      ? cleared.then(() =>
+          dispatchAction<Slide>('slide.setLayout', {
+            slideId: target.id,
+            layoutType: textLayout.type,
+          }),
+        )
+      : cleared
+    done
       .then(applySlide)
       .catch(() => setImageError('Could not remove the image — try again'))
   }
@@ -798,7 +855,7 @@ export default function DeckViewerPage() {
 
   return (
     <div
-      className="mx-auto flex w-full max-w-5xl flex-1 flex-col p-6"
+      className="relative mx-auto flex w-full max-w-5xl flex-1 flex-col p-6"
       data-reveal-blanks={revealBlanks ? 'true' : undefined}
     >
       <ShellTitle>
@@ -817,9 +874,38 @@ export default function DeckViewerPage() {
         <DeckTitleMeta deck={view.deck} count={view.slides.length} />
       </ShellTitle>
 
+      {/* View toggle + settings live in the primary nav (header), not the
+          floating pill; settings sits rightmost, after the view buttons. */}
+      <ShellActions>
+        <ViewModeToggle mode={mode} onChange={setMode} />
+        {canEdit && (
+          <Tooltip label="Lecture settings">
+            <button
+              aria-label="Lecture settings"
+              onClick={() => openSettings()}
+              className="rounded-md p-2 text-slate-500 hover:text-slate-900"
+            >
+              <Settings className="h-5 w-5" aria-hidden />
+            </button>
+          </Tooltip>
+        )}
+      </ShellActions>
+
+      {/* Opens the deck's privacy & sharing settings — sits at the deck's
+          top-right, separate from the floating pill and the header. */}
+      <div className="absolute top-6 right-6 z-20">
+        <Tooltip label="Share" align="end">
+          <button
+            aria-label="Share deck"
+            onClick={() => openSettings('sharing')}
+            className="rounded-full border border-slate-200 bg-white p-2 text-slate-600 shadow-sm hover:text-slate-900"
+          >
+            <Share2 className="h-5 w-5" aria-hidden />
+          </button>
+        </Tooltip>
+      </div>
+
       <DeckPageHeader
-        mode={mode}
-        onModeChange={setMode}
         deckId={view.deck.id}
         actions={
           <>
@@ -847,15 +933,6 @@ export default function DeckViewerPage() {
             )}
             {canEdit && (
               <>
-                <Tooltip label="Lecture settings">
-                  <button
-                    aria-label="Lecture settings"
-                    onClick={() => openSettings()}
-                    className="rounded-md p-2 text-slate-500 hover:text-slate-900"
-                  >
-                    <Settings className="h-5 w-5" aria-hidden />
-                  </button>
-                </Tooltip>
                 <Tooltip label="Add a slide">
                   <button
                     aria-label="Add slide"

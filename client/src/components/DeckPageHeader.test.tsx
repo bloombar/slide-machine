@@ -36,13 +36,7 @@ const setWindowSize = (width: number, height: number) => {
 }
 
 const renderToolbar = (props: Partial<{ deckId: string }> = {}): RenderResult =>
-  render(
-    <DeckPageHeader
-      mode="list"
-      onModeChange={() => {}}
-      deckId={props.deckId ?? DECK}
-    />,
-  )
+  render(<DeckPageHeader deckId={props.deckId ?? DECK} />)
 
 const grip = () =>
   screen.getByRole('button', { name: 'Drag to move the toolbar' })
@@ -85,37 +79,18 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('DeckPageHeader', () => {
-  it('reports view mode changes from the toggle', () => {
-    const onModeChange = vi.fn()
+  it('renders page actions', () => {
     render(
-      <DeckPageHeader
-        mode="carousel"
-        onModeChange={onModeChange}
-        deckId={DECK}
-      />,
-    )
-    fireEvent.click(screen.getByRole('button', { name: 'List view' }))
-    expect(onModeChange).toHaveBeenCalledWith('list')
-  })
-
-  it('renders page actions beside the toggle', () => {
-    render(
-      <DeckPageHeader
-        mode="list"
-        onModeChange={() => {}}
-        deckId={DECK}
-        actions={<button>Add slide</button>}
-      />,
+      <DeckPageHeader deckId={DECK} actions={<button>Add slide</button>} />,
     )
     expect(screen.getByRole('button', { name: 'Add slide' })).toBeVisible()
-    expect(screen.getByRole('button', { name: 'List view' })).toBeVisible()
   })
 
-  it('renders the grip and toggle alone when a viewer has no actions', () => {
+  it('renders just the grip when a viewer has no actions', () => {
     renderToolbar()
-    expect(screen.getByRole('group', { name: 'Slide view mode' })).toBeVisible()
-    // Grip plus the two toggle buttons — no action group
-    expect(screen.getAllByRole('button')).toHaveLength(3)
+    // Only the drag grip — the view toggle now lives in the header
+    expect(screen.getAllByRole('button')).toHaveLength(1)
+    expect(grip()).toBeVisible()
   })
 
   // Pinning and dragging are layout behaviours; jsdom cannot lay out
@@ -161,8 +136,6 @@ describe('DeckPageHeader', () => {
     const onAdd = vi.fn()
     render(
       <DeckPageHeader
-        mode="list"
-        onModeChange={() => {}}
         deckId={DECK}
         actions={<button onClick={onAdd}>Add slide</button>}
       />,
@@ -180,8 +153,6 @@ describe('DeckPageHeader', () => {
     const onAdd = vi.fn()
     render(
       <DeckPageHeader
-        mode="list"
-        onModeChange={() => {}}
         deckId={DECK}
         actions={<button onClick={onAdd}>Add slide</button>}
       />,

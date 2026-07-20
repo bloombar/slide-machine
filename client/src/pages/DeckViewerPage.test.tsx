@@ -111,6 +111,38 @@ describe('DeckViewerPage', () => {
     ).toBeInTheDocument()
   })
 
+  it('opens the privacy & sharing settings when Share is clicked', async () => {
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.shares': () => ({ status: 200, body: [] }),
+      '/api/actions/seedAsset.list': () => ({ status: 200, body: [] }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Share deck' }))
+    expect(
+      await screen.findByRole('dialog', { name: 'Lecture settings' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('tab', { name: 'Privacy & Sharing' }),
+    ).toHaveAttribute('aria-selected', 'true')
+  })
+
   it('hides the Live session toggle from anonymous viewers', async () => {
     renderViewer(401)
     expect(await screen.findByText('Shared Lecture')).toBeInTheDocument()
@@ -1468,7 +1500,7 @@ describe('DeckViewerPage settings modal', () => {
 })
 
 describe('DeckViewerPage title in the primary nav', () => {
-  it('teleports the deck title into the shell header in place of the brand', async () => {
+  it('teleports the deck title into the shell header alongside the brand', async () => {
     mockFetchRoutes({
       '/api/auth/refresh': () => ({
         status: 200,
@@ -1513,14 +1545,14 @@ describe('DeckViewerPage title in the primary nav', () => {
       name: 'Shared Lecture',
     })
     expect(heading.closest('header')).not.toBeNull()
-    // The brand text yields a commit after the portal lands, hence waitFor;
-    // the home icon link remains
-    await vi.waitFor(() =>
-      expect(screen.queryByText('The Slide Machine')).not.toBeInTheDocument(),
-    )
-    expect(
-      screen.getByRole('link', { name: /the slide machine — home/i }),
-    ).toBeInTheDocument()
+    // The brand wordmark stays visible as the always-clickable home link,
+    // now sitting alongside the teleported title rather than being replaced
+    // by it — an empty link would not be reachable to navigate home.
+    const brand = screen.getByRole('link', {
+      name: /the slide machine — home/i,
+    })
+    expect(brand).toBeInTheDocument()
+    expect(brand).toHaveTextContent('The Slide Machine')
     // Owners can still edit the title in place, now inside the nav
     expect(screen.getByTitle('Click to edit Lecture title')).toBeInTheDocument()
     // Slide count and modification age sit beside the title, outside
@@ -1642,6 +1674,61 @@ describe('DeckViewerPage image editing', () => {
   const imageDeck = (layoutType: string) => ({
     ...deckView,
     deck: { ...deckView.deck, slideOrder: ['s1'] },
+    // Layouts carry their slots so image-only vs image+text is derived from
+    // the template (not hardcoded names): title = title+caption (ancillary
+    // only), content = title+body (text-only), two-column = title+body+image,
+    // image-heavy = image+caption (image-only, since a caption is ancillary).
+    // The title layout comes first to prove removal preserves the two-column's
+    // body by choosing content, not the earlier title layout.
+    template: {
+      ...deckView.template,
+      layouts: [
+        {
+          type: 'title',
+          label: 'Title',
+          purpose: '',
+          slots: [
+            { name: 'title', kind: 'text', label: 'Title' },
+            { name: 'caption', kind: 'text', label: 'Caption' },
+          ],
+          elementPositions: {},
+        },
+        {
+          type: 'content',
+          label: 'Content',
+          purpose: '',
+          slots: [
+            { name: 'title', kind: 'text', label: 'Title' },
+            { name: 'body', kind: 'text', label: 'Body' },
+          ],
+          elementPositions: {},
+        },
+        {
+          type: 'two-column',
+          label: 'Two column',
+          purpose: '',
+          slots: [
+            { name: 'title', kind: 'text', label: 'Title' },
+            { name: 'body', kind: 'text', label: 'Body' },
+            { name: 'image', kind: 'image', label: 'Image' },
+          ],
+          elementPositions: {},
+        },
+        {
+          type: 'image-heavy',
+          label: 'Image heavy',
+          purpose: '',
+          // Image + caption, like the real template: a caption is ancillary,
+          // so this still counts as image-only (removing the image leaves
+          // nothing worth keeping).
+          slots: [
+            { name: 'image', kind: 'image', label: 'Image' },
+            { name: 'caption', kind: 'text', label: 'Caption' },
+          ],
+          elementPositions: {},
+        },
+      ],
+    },
     slides: [
       {
         id: 's1',

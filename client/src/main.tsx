@@ -6,6 +6,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
 import { AuthProvider } from './auth/AuthContext'
 import { ShellTitleProvider } from './components/layout/ShellTitle'
+import { ShellActionsProvider } from './components/layout/ShellActions'
 import { loadRuntimeConfig } from './runtime-config'
 import App from './App'
 import './index.css'
@@ -16,7 +17,9 @@ const render = (): void => {
       <BrowserRouter>
         <AuthProvider>
           <ShellTitleProvider>
-            <App />
+            <ShellActionsProvider>
+              <App />
+            </ShellActionsProvider>
           </ShellTitleProvider>
         </AuthProvider>
       </BrowserRouter>

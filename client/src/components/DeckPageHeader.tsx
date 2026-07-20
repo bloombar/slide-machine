@@ -10,11 +10,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { GripVertical } from 'lucide-react'
 import Tooltip from './Tooltip'
-import ViewModeToggle, { type ViewMode } from './ViewModeToggle'
 
 interface Props {
-  mode: ViewMode
-  onModeChange: (mode: ViewMode) => void
   actions?: ReactNode
   /** Scopes the remembered position; a lecture with no entry starts pinned. */
   deckId: string
@@ -104,12 +101,7 @@ const clampToViewport = (point: Point, size: DOMRect): Point => {
   }
 }
 
-export default function DeckPageHeader({
-  mode,
-  onModeChange,
-  actions,
-  deckId,
-}: Props) {
+export default function DeckPageHeader({ actions, deckId }: Props) {
   const pillRef = useRef<HTMLDivElement>(null)
   // null while parked in the default pinned spot; a point once dragged
   const [pos, setPos] = useState<Point | null>(() => readStored(deckId))
@@ -297,7 +289,6 @@ export default function DeckPageHeader({
             <GripVertical className="h-3 w-3" aria-hidden />
           </button>
         </Tooltip>
-        <ViewModeToggle mode={mode} onChange={onModeChange} />
         {actions && <div className="flex items-center gap-1">{actions}</div>}
       </div>
     </header>

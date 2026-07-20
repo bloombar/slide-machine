@@ -121,6 +121,15 @@ authRouter.get('/me', requireAuth, async (req, res) => {
 const requestOrigin = (req: Request): string =>
   env.PUBLIC_BASE_URL ?? `${req.protocol}://${req.get('host')}`
 
+/**
+ * Where to send the browser after sign-in. Defaults to the OAuth origin so
+ * production (one origin serves app + API) is unchanged; CLIENT_APP_URL
+ * overrides it so local dev can land on the Vite origin while the OAuth
+ * callback still runs on PUBLIC_BASE_URL.
+ */
+const appOrigin = (req: Request): string =>
+  env.CLIENT_APP_URL ?? requestOrigin(req)
+
 // The state cookie proves the callback answers a request we started
 // (CSRF). SameSite=Lax, not Strict: the callback arrives via Google's
 // top-level cross-site redirect, which Strict would drop.
@@ -153,7 +162,11 @@ authRouter.get('/google/start', (req, res) => {
  */
 authRouter.get('/google/callback', async (req, res) => {
   const origin = requestOrigin(req)
-  const fail = (code: string) => res.redirect(`${origin}/login?error=${code}`)
+  // User-facing landings go to the SPA origin (CLIENT_APP_URL in dev); the
+  // token exchange below keeps using `origin` so its redirect_uri matches
+  // the one registered with Google.
+  const landing = appOrigin(req)
+  const fail = (code: string) => res.redirect(`${landing}/login?error=${code}`)
 
   const { code, state } = req.query
   const cookieState = req.cookies?.[OAUTH_STATE_COOKIE]
@@ -177,7 +190,7 @@ authRouter.get('/google/callback', async (req, res) => {
     const result = await authService.loginWithGoogle(profile)
     setRefreshCookie(res, result.refreshRaw)
     // The SPA boots, its silent refresh reads the cookie, and the user is in
-    res.redirect(`${origin}/app`)
+    res.redirect(`${landing}/app`)
   } catch {
     fail('google_auth_failed')
   }

@@ -43,6 +43,10 @@ export default defineConfig({
       GOOGLE_OAUTH_CLIENT_ID: 'test-google-client-id',
       GOOGLE_OAUTH_CLIENT_SECRET: 'test-google-client-secret',
       PUBLIC_BASE_URL: 'http://localhost:3000',
+      // Empty (treated as unset) so a developer's CLIENT_APP_URL in .env
+      // does not leak in; the post-login landing falls back to
+      // PUBLIC_BASE_URL. Tests that need it set mock the env module.
+      CLIENT_APP_URL: '',
     },
     coverage: {
       provider: 'v8',

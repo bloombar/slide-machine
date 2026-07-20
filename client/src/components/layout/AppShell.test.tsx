@@ -38,13 +38,16 @@ const renderShell = () =>
   )
 
 describe('AppShell', () => {
-  it('renders primary navigation with an icon-only Profile link', () => {
+  it('renders the primary nav with a hamburger menu, not a standalone profile link', () => {
     renderShell()
-    const nav = screen.getByRole('navigation', { name: 'Primary' })
-    expect(nav).toBeInTheDocument()
-    const profile = screen.getByRole('link', { name: 'Profile' })
-    expect(profile).toHaveAttribute('href', '/app/profile')
-    expect(profile).not.toHaveTextContent('Profile')
+    expect(
+      screen.getByRole('navigation', { name: 'Primary' }),
+    ).toBeInTheDocument()
+    // The menu replaces the old standalone profile icon in the nav
+    expect(screen.getByRole('button', { name: 'Menu' })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'Profile' }),
+    ).not.toBeInTheDocument()
   })
 
   it('brands back to the app home and renders the page content', () => {
