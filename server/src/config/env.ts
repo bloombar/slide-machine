@@ -171,6 +171,15 @@ const envSchema = z.object({
   STORAGE_PROVIDER: z.enum(['local', 's3']).default('local'),
   STORAGE_LOCAL_DIR: z.string().default('.uploads'),
 
+  // Retain streamed lecture audio (google-cloud STT engine only) as a WAV in
+  // blob storage, for post-lecture batch diarization (GEN-4 Phase 2). Off by
+  // default — opt in once storage growth is acceptable. The GCS copy that the
+  // batch pass reads is added in Phase 3.
+  AUDIO_RETENTION_ENABLED: z.stringbool().default(false),
+  // Days to keep retained recordings before a daily sweep deletes the WAV and
+  // its deck reference (cost + student-voice privacy). 0 = keep forever.
+  AUDIO_RETENTION_DAYS: z.coerce.number().int().nonnegative().default(30),
+
   // S3-compatible object storage: MinIO in dev, DO Spaces in prod (TECH-10)
   S3_ENDPOINT: z.string().optional(),
   S3_REGION: z.string().optional(),

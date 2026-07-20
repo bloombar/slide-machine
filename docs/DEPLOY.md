@@ -51,6 +51,21 @@ objects with a `public-read` ACL and serves them from `S3_PUBLIC_BASE_URL`.
 3. These map to the `S3_*` env vars in §6 (`S3_ENDPOINT`, `S3_REGION`,
    `S3_BUCKET`, the key pair, and `S3_PUBLIC_BASE_URL`).
 
+### Optional: expire retained lecture audio (`audio/` prefix)
+
+If `AUDIO_RETENTION_ENABLED=true` (GEN-4), each live session's audio is stored
+as a WAV under the **`audio/`** key prefix — large (~5.7 MB/min) and containing
+student voices. The app already runs a daily sweep that deletes recordings past
+`AUDIO_RETENTION_DAYS` (default 30) along with their deck references, so no
+bucket rule is required. As a belt-and-suspenders guard you may **also** add a
+Spaces/S3 **lifecycle expiration rule scoped to the `audio/` prefix** (e.g. 30
+days) — dashboard → your Space → **Settings → Lifecycle rules**, or via
+`s3api put-bucket-lifecycle-configuration` with a `Filter.Prefix` of `audio/`.
+**Scope it to `audio/`** — an unprefixed rule would also expire slide images
+(`slides/`), TTS narration (`tts/`), and seed files (`seed/`). Note the bucket
+rule is blind to the app's DB, so it can leave a deck reference pointing at an
+already-expired object; the app tolerates a missing audio object on read.
+
 ## 3. Google Cloud credentials
 
 Follow [docs/GOOGLE_API_KEYS.md](GOOGLE_API_KEYS.md) to create each of:
@@ -140,6 +155,8 @@ value is baked into the SPA at build.
 | `S3_SECRET_ACCESS_KEY` | secret | Spaces secret (§2) |
 | `S3_PUBLIC_BASE_URL` | plain | `https://<bucket>.<region>.cdn.digitaloceanspaces.com` |
 | `S3_FORCE_PATH_STYLE` | plain | leave unset/`false` for Spaces (`true` is MinIO-only) |
+| `AUDIO_RETENTION_ENABLED` | plain | `true` to retain live-session audio for diarization (GEN-4); default off. Needs `TRANSCRIPTION_PROVIDER=google-cloud` |
+| `AUDIO_RETENTION_DAYS` | plain | days before the daily sweep deletes a recording; default `30`, `0` = keep forever (see §2 lifecycle note) |
 
 Optional, as features land: `GITHUB_OAUTH_CLIENT_ID` / `_SECRET`,
 `CONNECTED_ACCOUNT_TOKEN_ENC_KEY`, `STRIPE_SECRET_KEY` /
