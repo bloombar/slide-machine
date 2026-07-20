@@ -165,11 +165,13 @@ export class MockGenerationProvider implements GenerationProvider {
     }
 
     if (words.length <= 4 && req.rollingContext.length === 0) {
+      // A title card is text-only: it has no image slot, so — like a coherent
+      // model — the mock asks for no image, and image/layout reconciliation
+      // (GEN-7) leaves the layout as a title.
       return {
         action: 'new',
         layoutType: fitLayout('title', req.layoutDescriptors),
         slots: { title: titleCase(words) },
-        imageGuidance: { keywords: keywords(words) },
       }
     }
 
@@ -183,11 +185,13 @@ export class MockGenerationProvider implements GenerationProvider {
       }
     }
 
+    // A plain content slide (title + body) is text-only too — an image would
+    // have nowhere to render on this layout, so the mock requests none and the
+    // slide stays `content` (a phrase that wants an image takes two-column).
     return {
       action: 'new',
       layoutType: fitLayout('content', req.layoutDescriptors),
       slots: { title: titleCase(words.slice(0, 5)), body: phrase },
-      imageGuidance: { keywords: keywords(words) },
     }
   }
 }

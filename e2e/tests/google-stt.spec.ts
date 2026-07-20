@@ -24,12 +24,14 @@ test('streamed speech generates a slide via the STT WebSocket', async ({
   await expect(page).toHaveURL(/\/app$/)
 
   await createProject(page, 'Biology 101')
-  // "Start a new lecture" auto-opens the mic; the fake device feeds audio, the
+  // Starting a lecture shows the pre-lecture seed dialog; "Start lecture"
+  // dismisses it and opens the mic. The fake device then feeds audio and the
   // mock adapter returns the scripted final phrase "Photosynthesis basics".
   await page
     .getByRole('button', { name: 'Start a new lecture in Biology 101' })
     .click()
   await expect(page).toHaveURL(/\/d\/untitled-/)
+  await page.getByRole('button', { name: 'Start lecture' }).click()
 
   // The streamed phrase becomes a slide (mock generator title-cases it).
   await expect(
