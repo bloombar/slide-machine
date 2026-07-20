@@ -2,10 +2,11 @@
  * Carousel/list view switcher shared by every deck/slide surface
  * (viewer, editor, session): carousel shows one slide with prev/next
  * navigation; list stacks all slides vertically, visible up-front. The
- * two sit in a shared grey well, so they read as one control for
- * switching views rather than two loose icons.
+ * two sit inside one rounded rectangle, so they read as one control for
+ * switching views rather than two loose icons; the active view is
+ * highlighted.
  */
-import { GalleryHorizontal, LayoutList } from 'lucide-react'
+import { List, RectangleHorizontal } from 'lucide-react'
 import Tooltip from './Tooltip'
 
 export type ViewMode = 'carousel' | 'list'
@@ -18,10 +19,10 @@ interface Props {
 const OPTIONS: Array<{
   mode: ViewMode
   label: string
-  Icon: typeof LayoutList
+  Icon: typeof List
 }> = [
-  { mode: 'carousel', label: 'Carousel view', Icon: GalleryHorizontal },
-  { mode: 'list', label: 'List view', Icon: LayoutList },
+  { mode: 'carousel', label: 'Carousel view', Icon: RectangleHorizontal },
+  { mode: 'list', label: 'List view', Icon: List },
 ]
 
 export default function ViewModeToggle({ mode, onChange }: Props) {
@@ -29,7 +30,7 @@ export default function ViewModeToggle({ mode, onChange }: Props) {
     <div
       role="group"
       aria-label="Slide view mode"
-      className="flex items-center gap-0.5 rounded-full bg-slate-200 p-0.5"
+      className="flex items-center gap-0.5 rounded-lg border border-slate-200 p-0.5"
     >
       {OPTIONS.map(({ mode: target, label, Icon }) => (
         <Tooltip key={target} label={label}>
@@ -37,12 +38,12 @@ export default function ViewModeToggle({ mode, onChange }: Props) {
             aria-label={label}
             aria-pressed={mode === target}
             onClick={() => onChange(target)}
-            // The active view lifts out of the well in white, the way a
-            // segmented control marks its selection. Kept a notch smaller
+            // The two icons sit inside one rounded rectangle; the active
+            // view is simply highlighted in indigo. Kept a notch smaller
             // than the page actions (settings/add/record), which use h-5.
-            className={`rounded-full p-1 ${
+            className={`rounded-md p-1 ${
               mode === target
-                ? 'bg-white text-indigo-600 shadow-sm'
+                ? 'bg-indigo-50 text-indigo-600'
                 : 'text-slate-500 hover:text-slate-900'
             }`}
           >
