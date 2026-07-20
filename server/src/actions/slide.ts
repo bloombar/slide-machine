@@ -84,6 +84,16 @@ export const slideEditContent = defineAction<SlideEditInput, Slide>({
   }),
   execute: async (ctx, input) => {
     const { slide } = await loadOwnedSlide(ctx, input.slideId)
+    // A hand-edit of any text content marks the slide as manually edited, so
+    // the post-lecture reformat (GEN-4) won't overwrite it. Image-only changes
+    // (imageRef/attribution) don't count — the reformat regenerates text, not
+    // curated images.
+    const editedContent =
+      input.title !== undefined ||
+      input.body !== undefined ||
+      input.bullets !== undefined ||
+      input.caption !== undefined
+    if (editedContent) slide.manuallyEdited = true
     if (input.title !== undefined) slide.title = input.title
     if (input.body !== undefined) slide.body = input.body
     if (input.bullets !== undefined) slide.bullets = input.bullets

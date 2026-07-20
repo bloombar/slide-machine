@@ -190,7 +190,63 @@ describe('google cloud speech capture', () => {
       data: JSON.stringify({ type: 'final', text: 'hello' }),
     })
     expect(onInterim).toHaveBeenLastCalledWith('')
-    expect(onPhrase).toHaveBeenCalledWith('hello')
+    // A final with no timings still carries the recording session id.
+    expect(onPhrase).toHaveBeenCalledWith('hello', {
+      sessionId: expect.any(String),
+    })
+  })
+
+  it('forwards word timings and confidence, with a stable session id', async () => {
+    stubMediaApis()
+    const onPhrase = vi.fn()
+    createSpeechCapture('google-cloud').start({ onPhrase })
+    await flush()
+    const socket = FakeWebSocket.instances[0]!
+
+    const words = [{ word: 'hello', startMs: 0, endMs: 500, confidence: 0.9 }]
+    socket.onmessage?.({
+      data: JSON.stringify({
+        type: 'final',
+        text: 'hello',
+        confidence: 0.8,
+        words,
+      }),
+    })
+    socket.onmessage?.({
+      data: JSON.stringify({ type: 'final', text: 'world' }),
+    })
+
+    expect(onPhrase).toHaveBeenNthCalledWith(1, 'hello', {
+      sessionId: expect.any(String),
+      confidence: 0.8,
+      words,
+    })
+    // Same recording → the session id is stable across phrases.
+    const sessionOf = (i: number) =>
+      (onPhrase.mock.calls[i]![1] as { sessionId: string }).sessionId
+    expect(sessionOf(1)).toBe(sessionOf(0))
+  })
+
+  it('mints a new session id after stop() then start()', async () => {
+    stubMediaApis()
+    const onPhrase = vi.fn()
+    const capture = createSpeechCapture('google-cloud')
+    capture.start({ onPhrase })
+    await flush()
+    FakeWebSocket.instances[0]!.onmessage?.({
+      data: JSON.stringify({ type: 'final', text: 'one' }),
+    })
+
+    capture.stop()
+    capture.start({ onPhrase })
+    await flush()
+    FakeWebSocket.instances[1]!.onmessage?.({
+      data: JSON.stringify({ type: 'final', text: 'two' }),
+    })
+
+    const sessionOf = (i: number) =>
+      (onPhrase.mock.calls[i]![1] as { sessionId: string }).sessionId
+    expect(sessionOf(1)).not.toBe(sessionOf(0))
   })
 
   it('surfaces a server error message and stops', async () => {

@@ -103,16 +103,22 @@ test('speak-to-slides core loop, session to permalink playback', async ({
     page.getByRole('heading', { name: 'Photosynthesis 101' }),
   ).toBeVisible()
 
-  // Hover-zone navigation: half-slide hotspots (click implies hover).
-  // Clicks land near the zone's top corner — editable text sits above
-  // the hotspots by design, so center clicks would edit, not navigate.
-  const zoneClick = { position: { x: 20, y: 20 } }
-  await page.getByRole('button', { name: 'Next slide' }).click(zoneClick)
+  // Pointer-zone navigation (SlideNavZones): a chevron reveals only while the
+  // cursor is over that half of the slide, so we move the mouse to reveal it,
+  // then click. Mirrors a real cursor; a bare click would deadlock since the
+  // chevron is pointer-events-none until revealed.
+  const revealAndClick = async (name: 'Next slide' | 'Previous slide') => {
+    const box = (await page.getByTestId('slide').boundingBox())!
+    const x = box.x + box.width * (name === 'Next slide' ? 0.8 : 0.2)
+    await page.mouse.move(x, box.y + box.height / 2)
+    await page.getByRole('button', { name }).click()
+  }
+  await revealAndClick('Next slide')
   await expect(page.getByText('2 / 2')).toBeVisible()
   await expect(page.getByText('carbon dioxide')).toBeVisible()
-  await page.getByRole('button', { name: 'Previous slide' }).click(zoneClick)
+  await revealAndClick('Previous slide')
   await expect(page.getByText('1 / 2')).toBeVisible()
-  await page.getByRole('button', { name: 'Next slide' }).click(zoneClick)
+  await revealAndClick('Next slide')
 
   // Arrow keys navigate too (PLAY-1)
   await page.keyboard.press('ArrowLeft')

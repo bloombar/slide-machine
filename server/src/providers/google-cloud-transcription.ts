@@ -17,6 +17,7 @@ import type {
   TranscriptionProvider,
   TranscriptionStream,
   TranscriptionStreamOptions,
+  WordTiming,
 } from '@slide-machine/shared'
 import { env } from '../config/env'
 import { registry } from './registry'
@@ -77,11 +78,35 @@ interface RecognizeStream {
   on(event: 'error', handler: (error: { code?: number }) => void): void
 }
 
-/** Google's streaming response subset we read. */
+/** A protobuf Duration as the client library surfaces it: `seconds` may be a
+ * number, a string, or a Long-like object depending on the value's size. */
+interface GoogleDuration {
+  seconds?: number | string
+  nanos?: number
+}
+
+/** Converts a Google Duration to milliseconds, tolerating string seconds. */
+const durationToMs = (d?: GoogleDuration): number => {
+  if (!d) return 0
+  const seconds = typeof d.seconds === 'string' ? Number(d.seconds) : d.seconds
+  return (seconds ?? 0) * 1000 + (d.nanos ?? 0) / 1e6
+}
+
+/** Google's streaming response subset we read. `words` is present only when
+ * `enableWordTimeOffsets` is set and only on final results. */
 interface StreamingResponse {
   results?: {
     isFinal?: boolean
-    alternatives?: { transcript?: string; confidence?: number }[]
+    alternatives?: {
+      transcript?: string
+      confidence?: number
+      words?: {
+        word?: string
+        startTime?: GoogleDuration
+        endTime?: GoogleDuration
+        confidence?: number
+      }[]
+    }[]
   }[]
 }
 
@@ -98,6 +123,11 @@ export class GoogleCloudTranscriptionProvider implements TranscriptionProvider {
   startStream(options: TranscriptionStreamOptions): TranscriptionStream {
     const client = this.speechClient()
     const events = new AsyncQueue<TranscriptionEvent>()
+    // LINEAR16 mono: 2 bytes/sample, so this converts a byte count to the
+    // audio time it represents — the basis for session-absolute word offsets.
+    const sampleRateHertz = options.sampleRateHertz ?? 16_000
+    const bytesToMs = (bytes: number): number =>
+      (bytes / (sampleRateHertz * 2)) * 1000
 
     // The client library takes the streaming config as its argument and sends
     // it as the first request itself, then wraps every value written to the
@@ -107,8 +137,11 @@ export class GoogleCloudTranscriptionProvider implements TranscriptionProvider {
     const streamingConfig = {
       config: {
         encoding: 'LINEAR16' as const,
-        sampleRateHertz: options.sampleRateHertz ?? 16_000,
+        sampleRateHertz,
         languageCode: toBcp47(options.languageCode),
+        // Per-word timings + confidence power the GEN-4 diarization time-join.
+        enableWordTimeOffsets: true,
+        enableWordConfidence: true,
         ...(options.phraseHints?.length
           ? { speechContexts: [{ phrases: options.phraseHints }] }
           : {}),
@@ -119,22 +152,46 @@ export class GoogleCloudTranscriptionProvider implements TranscriptionProvider {
     let recognize: RecognizeStream | null = null
     let ended = false
     let restartTimer: ReturnType<typeof setTimeout> | null = null
+    // Word offsets from Google reset to 0 on every restart, so we keep the
+    // audio time already consumed by prior streams (`sessionByteOffset`) and
+    // the live stream's own bytes (`currentStreamBytes`), and add the former
+    // to each word so timings stay absolute to the whole recording session.
+    let sessionByteOffset = 0
+    let currentStreamBytes = 0
 
     // (Re)opens the underlying gRPC stream and re-arms the restart timer.
     const open = (): void => {
       if (ended) return
+      // Captured per stream at open time: data events fire after later writes
+      // have grown the accumulator, so the base must be frozen here.
+      const streamBaseMs = bytesToMs(sessionByteOffset)
       const stream = client.streamingRecognize(
         streamingConfig,
       ) as unknown as RecognizeStream
       stream.on('data', (response: unknown) => {
         const { results } = response as StreamingResponse
         const result = results?.[0]
-        const transcript = result?.alternatives?.[0]?.transcript
+        const alternative = result?.alternatives?.[0]
+        const transcript = alternative?.transcript
         if (!transcript) return
+        const isFinal = Boolean(result?.isFinal)
+        // Word timings are only stable (and only returned) on final results.
+        const words: WordTiming[] | undefined =
+          isFinal && alternative?.words?.length
+            ? alternative.words.map(w => ({
+                word: w.word ?? '',
+                startMs: streamBaseMs + durationToMs(w.startTime),
+                endMs: streamBaseMs + durationToMs(w.endTime),
+                ...(typeof w.confidence === 'number'
+                  ? { confidence: w.confidence }
+                  : {}),
+              }))
+            : undefined
         events.push({
           text: transcript,
-          isFinal: Boolean(result?.isFinal),
-          confidence: result?.alternatives?.[0]?.confidence ?? 0,
+          isFinal,
+          confidence: alternative?.confidence ?? 0,
+          ...(words ? { words } : {}),
         })
       })
       stream.on('error', (error: { code?: number }) => {
@@ -155,6 +212,10 @@ export class GoogleCloudTranscriptionProvider implements TranscriptionProvider {
     const restart = (): void => {
       if (restartTimer) clearTimeout(restartTimer)
       restartTimer = null
+      // Commit the outgoing stream's audio to the session offset before the
+      // new stream captures its (now higher) base — keeps word times absolute.
+      sessionByteOffset += currentStreamBytes
+      currentStreamBytes = 0
       const old = recognize
       recognize = null
       open()
@@ -165,8 +226,11 @@ export class GoogleCloudTranscriptionProvider implements TranscriptionProvider {
 
     return {
       write(chunk: Uint8Array) {
-        // Raw PCM; the client library wraps it as audioContent.
-        if (!ended) recognize?.write(chunk)
+        // Raw PCM; the client library wraps it as audioContent. Count the
+        // bytes so word offsets can be made session-absolute across restarts.
+        if (ended) return
+        currentStreamBytes += chunk.byteLength
+        recognize?.write(chunk)
       },
       end() {
         ended = true

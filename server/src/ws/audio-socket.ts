@@ -82,9 +82,17 @@ const handleConnection = (ws: WebSocket): void => {
     // while transcription is dead.
     void (async () => {
       for await (const event of stream.events) {
+        // Forward word timings + confidence on finals so the client can carry
+        // them into session.phrase (GEN-4 diarization groundwork). Include each
+        // only when present, so the browser engine's plainer events are
+        // unchanged and the wire stays minimal.
         send({
           type: event.isFinal ? 'final' : 'interim',
           text: event.text,
+          ...(event.isFinal && typeof event.confidence === 'number'
+            ? { confidence: event.confidence }
+            : {}),
+          ...(event.words?.length ? { words: event.words } : {}),
         })
       }
       if (!stopped) {

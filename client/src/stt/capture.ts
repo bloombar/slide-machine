@@ -13,17 +13,40 @@
  * Finalized phrases feed the same session.phrase pipeline as typed
  * input, so generation behaves identically for every engine.
  */
+import type { WordTiming } from '@slide-machine/shared'
 import { config } from '../config'
 import { getAccessToken, refreshSession } from '../auth/token'
 import { getSttEngine } from '../runtime-config'
 
+/**
+ * Metadata accompanying a finalized phrase (GEN-4 diarization groundwork).
+ * `sessionId` groups a recording's phrases (one per capture start); `words`
+ * and `confidence` come only from the google-cloud engine.
+ */
+export interface PhraseMeta {
+  sessionId: string
+  confidence?: number
+  words?: WordTiming[]
+}
+
 export interface SpeechCaptureHandlers {
-  /** One finalized phrase, ready for session.phrase. */
-  onPhrase: (phrase: string) => void
+  /** One finalized phrase, ready for session.phrase, with capture metadata. */
+  onPhrase: (phrase: string, meta?: PhraseMeta) => void
   /** Volatile in-progress transcript, for display only. */
   onInterim?: (text: string) => void
   /** Capture became unusable (permission denied, no service). */
   onError?: (message: string) => void
+}
+
+/** A fresh recording-session id, minted at each capture start. Falls back to a
+ * timestamp+random id where crypto.randomUUID is unavailable (older/insecure
+ * contexts, some test environments). */
+const newSessionId = (): string => {
+  try {
+    return crypto.randomUUID()
+  } catch {
+    return `sess-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  }
 }
 
 export interface SpeechCapture {
@@ -91,6 +114,9 @@ const browserCapture = (): SpeechCapture => {
       const Ctor = recognitionCtor()
       if (!Ctor || active) return
       active = true
+      // One id for this whole recording; the browser engine has no server-side
+      // timing, so phrases carry only the session id.
+      const sessionId = newSessionId()
       recognition = new Ctor()
       recognition.continuous = true
       recognition.interimResults = true
@@ -102,7 +128,7 @@ const browserCapture = (): SpeechCapture => {
           const transcript = result[0].transcript.trim()
           if (!transcript) continue
           if (result.isFinal) {
-            handlers.onPhrase(transcript)
+            handlers.onPhrase(transcript, { sessionId })
           } else {
             interim = transcript
           }
@@ -219,6 +245,9 @@ const googleCloudCapture = (): SpeechCapture => {
     start(handlers, lang) {
       if (active) return
       active = true
+      // One id for this whole recording (this WS = one server-side stream);
+      // a later stop→start mints a new one, marking a session boundary.
+      const sessionId = newSessionId()
 
       // Any fatal condition stops capture and surfaces once, so the mic never
       // looks live while the stream is dead.
@@ -293,7 +322,13 @@ const googleCloudCapture = (): SpeechCapture => {
             )
           }
           socket.onmessage = event => {
-            let message: { type?: string; text?: string; message?: string }
+            let message: {
+              type?: string
+              text?: string
+              message?: string
+              confidence?: number
+              words?: WordTiming[]
+            }
             try {
               message = JSON.parse(event.data as string)
             } catch {
@@ -303,7 +338,14 @@ const googleCloudCapture = (): SpeechCapture => {
               handlers.onInterim?.(message.text ?? '')
             } else if (message.type === 'final') {
               handlers.onInterim?.('')
-              if (message.text) handlers.onPhrase(message.text)
+              if (message.text)
+                handlers.onPhrase(message.text, {
+                  sessionId,
+                  ...(typeof message.confidence === 'number'
+                    ? { confidence: message.confidence }
+                    : {}),
+                  ...(message.words?.length ? { words: message.words } : {}),
+                })
             } else if (message.type === 'error') {
               fail(message.message ?? 'Speech service unavailable')
             }

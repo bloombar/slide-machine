@@ -4,11 +4,30 @@
  * Interface is minimal and expected to evolve with the first adapter.
  */
 
+/**
+ * One word with its timing, relative to the start of its recording session
+ * (see WordTiming below). Emitted only on final events by engines that
+ * support word offsets; carries the per-word confidence when available.
+ */
+export interface WordTiming {
+  word: string
+  /** Milliseconds from the recording session's start. */
+  startMs: number
+  /** Milliseconds from the recording session's start. */
+  endMs: number
+  confidence?: number
+}
+
 /** One transcription event; `isFinal` phrases drive slide generation. */
 export interface TranscriptionEvent {
   text: string
   isFinal: boolean
   confidence: number
+  /**
+   * Per-word timings for a final phrase, session-absolute (GEN-4 diarization
+   * groundwork). Present only from engines with word-offset support (Google
+   * Cloud); absent for the keyless browser engine. */
+  words?: WordTiming[]
 }
 
 export interface TranscriptionStreamOptions {

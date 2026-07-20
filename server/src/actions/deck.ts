@@ -31,9 +31,10 @@ import type {
   Slide,
   SlideAddInput,
   SlideEvent,
+  TranscriptSegmentAction,
 } from '@slide-machine/shared'
 import { LOCALES } from '@slide-machine/shared'
-import type { HydratedDocument } from 'mongoose'
+import type { HydratedDocument, Types } from 'mongoose'
 import { defineAction } from './define'
 import {
   registerAction,
@@ -74,6 +75,7 @@ import {
 import { layoutHasImageSlot, reconcileImageLayout } from '../lib/image-layout'
 import { UserModel } from '../models/user'
 import { SlideModel, toSlideDto } from '../models/slide'
+import { TranscriptSegmentModel } from '../models/transcript-segment'
 import { ProjectModel, projectAcl } from '../models/project'
 import { getBuiltinTemplate, layoutDescriptors } from '../templates/builtin'
 import { registry } from '../providers/registry'
@@ -378,6 +380,22 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
     deckId: z.string().min(1),
     phrase: z.string().trim().min(1).max(2000),
     browserLanguage: z.string().trim().max(35).optional(),
+    // Diarization groundwork (GEN-4): optional per-recording id and word
+    // timings/confidence stored on the phrase's TranscriptSegment. All
+    // optional so typed input and the browser engine still validate.
+    sessionId: z.string().trim().min(1).max(200).optional(),
+    confidence: z.number().min(0).max(1).optional(),
+    words: z
+      .array(
+        z.object({
+          word: z.string(),
+          startMs: z.number(),
+          endMs: z.number(),
+          confidence: z.number().optional(),
+        }),
+      )
+      .max(2000)
+      .optional(),
   }),
   execute: async (ctx, input) => {
     const { deck } = await loadEditableDeck(ctx, input.deckId)
@@ -525,6 +543,36 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
     deck.transcript = [deck.transcript, input.phrase].filter(Boolean).join('\n')
     await deck.save()
 
+    // Structured, timestamped counterpart to the flat append above (GEN-4
+    // diarization groundwork): one append-only segment per finalized phrase, in
+    // its own collection. Inserted now with action 'none' so no return path can
+    // drop it — exactly like the flat string — then refined with the slide
+    // linkage once the outcome is known. Voice commands are excluded
+    // automatically, having returned before the append above. `startMs`/`endMs`
+    // derive from the word timings (absent for browser/typed input).
+    const segmentWords = input.words?.length ? input.words : undefined
+    const segment = await TranscriptSegmentModel.create({
+      deckId: deck._id,
+      sessionId: input.sessionId,
+      text: input.phrase,
+      confidence: input.confidence,
+      words: segmentWords,
+      startMs: segmentWords ? segmentWords[0]!.startMs : undefined,
+      endMs: segmentWords
+        ? segmentWords[segmentWords.length - 1]!.endMs
+        : undefined,
+      action: 'none',
+    })
+    /** Refines the segment with how the phrase related to a slide, once known. */
+    const linkSegment = (
+      action: TranscriptSegmentAction,
+      slideId?: Types.ObjectId,
+    ): Promise<unknown> =>
+      TranscriptSegmentModel.updateOne(
+        { _id: segment._id },
+        slideId ? { action, slideId } : { action },
+      )
+
     if (rawResult.action === 'none') {
       // Filler still belongs to whatever slide is on screen, so it joins that
       // slide's own source transcript too (it just changes no content).
@@ -533,6 +581,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
           .filter(Boolean)
           .join(' ')
         await lastSlide.save()
+        await linkSegment('none', lastSlide._id)
       }
       return event({ kind: 'none' })
     }
@@ -572,6 +621,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
         .filter(Boolean)
         .join(' ')
       await lastSlide.save()
+      await linkSegment('refit', lastSlide._id)
       await touchDeck(deck._id)
       if (!lastSlide.imageRef)
         maybeEnrich(
@@ -676,6 +726,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
         .filter(Boolean)
         .join(' ')
       await lastSlide.save()
+      await linkSegment('update', lastSlide._id)
       await touchDeck(deck._id)
       if (!lastSlide.imageRef)
         maybeEnrich(
@@ -713,6 +764,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
     deck.slideOrder.push(slide._id.toString())
     // (transcript already appended above, for every phrase)
     await deck.save()
+    await linkSegment('new', slide._id)
     maybeEnrich(
       slide._id.toString(),
       layoutHasImageSlot(slide.layoutType, descriptors)

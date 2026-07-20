@@ -117,6 +117,75 @@ describe('STT audio socket', () => {
     ws.close()
 
     expect(received).toContainEqual({ type: 'interim', text: 'hel' })
-    expect(received).toContainEqual({ type: 'final', text: 'hello' })
+    // Finals now carry the phrase-level confidence (GEN-4 groundwork).
+    expect(received).toContainEqual({
+      type: 'final',
+      text: 'hello',
+      confidence: 0.9,
+    })
+  })
+
+  it('forwards word timings and confidence on final transcripts', async () => {
+    const token = await signAccessToken('user-2')
+    const ws = new WebSocket(url(token))
+    const received: {
+      type?: string
+      text?: string
+      confidence?: number
+      words?: unknown
+    }[] = []
+    ws.on('message', data => received.push(JSON.parse(data.toString())))
+
+    await new Promise<void>((resolve, reject) => {
+      ws.on('open', () => resolve())
+      ws.on('error', reject)
+    })
+    const index = streams.length
+    ws.send(JSON.stringify({ type: 'start', languageCode: 'en-US' }))
+    ws.send(new Uint8Array([1, 2, 3, 4]))
+
+    await waitForStream(index)
+    // Google-shaped final with word Durations; the real adapter converts them
+    // to session-absolute ms and the relay forwards them verbatim.
+    streams[index]!.emit('data', {
+      results: [
+        {
+          isFinal: true,
+          alternatives: [
+            {
+              transcript: 'hello world',
+              confidence: 0.8,
+              words: [
+                {
+                  word: 'hello',
+                  startTime: { seconds: 0, nanos: 0 },
+                  endTime: { seconds: 0, nanos: 500_000_000 },
+                  confidence: 0.9,
+                },
+                {
+                  word: 'world',
+                  startTime: { seconds: 0, nanos: 500_000_000 },
+                  endTime: { seconds: 1, nanos: 0 },
+                  confidence: 0.7,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    })
+
+    await new Promise(resolve => setTimeout(resolve, 30))
+    ws.close()
+
+    expect(received).toContainEqual({
+      type: 'final',
+      text: 'hello world',
+      confidence: 0.8,
+      words: [
+        { word: 'hello', startMs: 0, endMs: 500, confidence: 0.9 },
+        { word: 'world', startMs: 500, endMs: 1000, confidence: 0.7 },
+      ],
+    })
   })
 })

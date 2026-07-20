@@ -11,6 +11,7 @@ import { UserModel } from '../../src/models/user'
 import { ProjectModel } from '../../src/models/project'
 import { DeckModel } from '../../src/models/deck'
 import { SlideModel } from '../../src/models/slide'
+import { TranscriptSegmentModel } from '../../src/models/transcript-segment'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
 
 // One long-lived server per file: supertest's default per-request
@@ -55,6 +56,7 @@ beforeEach(async () => {
     ProjectModel.deleteMany({}),
     DeckModel.deleteMany({}),
     SlideModel.deleteMany({}),
+    TranscriptSegmentModel.deleteMany({}),
     RefreshTokenModel.deleteMany({}),
   ])
   ada = await registerUser('ada@example.com')
@@ -206,9 +208,11 @@ describe('session.phrase', () => {
   })
 
   it('refreshes the slide image keywords on an update (latest wins)', async () => {
+    // A descriptive sentence becomes a two-column slide that carries image
+    // keywords (a title/content card is text-only and requests no image).
     const first = await act(ada, 'session.phrase', {
       deckId,
-      phrase: 'photosynthesis needs chloroplasts',
+      phrase: 'photosynthesis in plant leaves needs sunlight and green chloroplasts to work well',
     })
     expect(first.body.kind).toBe('slide.new')
     expect(first.body.slide.imageKeywords).toEqual([
@@ -268,6 +272,81 @@ describe('session.phrase', () => {
     expect(view.body.slides[0].sourceTranscript).toContain(
       'Um, where was I again',
     )
+  })
+
+  it('persists a structured transcript segment per phrase (GEN-4)', async () => {
+    const sessionId = 'rec-abc'
+    const created = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Photosynthesis basics',
+      sessionId,
+      confidence: 0.92,
+      words: [
+        { word: 'Photosynthesis', startMs: 0, endMs: 800, confidence: 0.9 },
+        { word: 'basics', startMs: 800, endMs: 1200, confidence: 0.95 },
+      ],
+    })
+    expect(created.body.kind).toBe('slide.new')
+    const slideId = created.body.slide.id as string
+
+    // Filler on the same recording; links to the current slide with action 'none'.
+    const filler = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Um, where was I again',
+      sessionId,
+    })
+    expect(filler.body.kind).toBe('none')
+
+    const segments = await TranscriptSegmentModel.find({ deckId }).sort({
+      createdAt: 1,
+    })
+    expect(segments).toHaveLength(2)
+
+    // The phrase that created a slide: action 'new', linked, timings derived
+    // server-side from the word offsets.
+    const newSeg = segments[0]!
+    expect(newSeg.text).toBe('Photosynthesis basics')
+    expect(newSeg.sessionId).toBe(sessionId)
+    expect(newSeg.confidence).toBeCloseTo(0.92)
+    expect(newSeg.action).toBe('new')
+    expect(newSeg.slideId?.toString()).toBe(slideId)
+    expect(newSeg.startMs).toBe(0)
+    expect(newSeg.endMs).toBe(1200)
+    expect(newSeg.words).toHaveLength(2)
+    expect(newSeg.words?.[0]).toMatchObject({
+      word: 'Photosynthesis',
+      startMs: 0,
+      endMs: 800,
+    })
+
+    // The filler: action 'none', still linked to the on-screen slide; no audio
+    // timings were sent, so offsets/words are absent.
+    const fillerSeg = segments[1]!
+    expect(fillerSeg.text).toBe('Um, where was I again')
+    expect(fillerSeg.action).toBe('none')
+    expect(fillerSeg.slideId?.toString()).toBe(slideId)
+    expect(fillerSeg.startMs).toBeUndefined()
+    expect(fillerSeg.words).toBeUndefined()
+  })
+
+  it('records an update phrase as an update segment linked to the slide', async () => {
+    const create = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Plants need sunlight, water, carbon dioxide',
+    })
+    const slideId = create.body.slide.id as string
+    const update = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Also they need minerals from soil',
+    })
+    expect(update.body.kind).toBe('slide.update')
+
+    const segments = await TranscriptSegmentModel.find({ deckId }).sort({
+      createdAt: 1,
+    })
+    expect(segments.map(s => s.action)).toEqual(['new', 'update'])
+    // Both segments point at the same (only) slide.
+    expect(segments[1]!.slideId?.toString()).toBe(slideId)
   })
 
   it("403s phrases against another user's deck", async () => {

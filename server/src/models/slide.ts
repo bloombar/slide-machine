@@ -35,6 +35,7 @@ const slideSchema = new Schema<SlideDb>({
   caption: String,
   sourceTranscript: String,
   attribution: { type: Schema.Types.Mixed, default: undefined },
+  manuallyEdited: { type: Boolean, default: undefined },
 })
 
 slideSchema.index({ deckId: 1, index: 1 })
@@ -78,4 +79,5 @@ export const toSlideDto = (doc: HydratedDocument<SlideDb>): Slide => ({
   caption: doc.caption,
   sourceTranscript: doc.sourceTranscript,
   attribution: toAttributionDto(doc.attribution),
+  manuallyEdited: doc.manuallyEdited,
 })
