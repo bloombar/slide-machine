@@ -12,7 +12,11 @@ services:
       # Local-stack-only signing secrets — never reuse outside compose
       JWT_SECRET: compose-local-jwt-secret-32-chars-min!!
       JWT_REFRESH_SECRET: compose-local-refresh-secret-32-chars!!
-      GENERATION_PROVIDER: mock
+      # Real Gemini by default (matches the code default and the DO
+      # deployment). Requires GEMINI_API_KEY in the gitignored root .env;
+      # set GENERATION_PROVIDER=mock there to run offline without a key.
+      GENERATION_PROVIDER: ${GENERATION_PROVIDER:-gemini}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       # Google sign-in (AUTH-1). Values come from a gitignored root .env
       # via Compose substitution — no secret lives in this committed file.
       # Empty by default, so the sign-in button stays off until set.
