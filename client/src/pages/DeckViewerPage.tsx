@@ -911,17 +911,24 @@ export default function DeckViewerPage() {
           <>
             {ttsEnabled && (
               <Tooltip
-                label={deckPlaying ? 'Pause playback' : 'Play deck aloud'}
+                label={
+                  view.slides.length === 0
+                    ? 'Add a slide to play the deck'
+                    : deckPlaying
+                      ? 'Pause playback'
+                      : 'Play deck aloud'
+                }
               >
                 <button
                   aria-label={deckPlaying ? 'Pause playback' : 'Play deck'}
                   aria-pressed={deckPlaying}
+                  disabled={view.slides.length === 0}
                   onClick={() => tts.toggle(activePlayIndex())}
                   className={`rounded-md p-2 ${
                     deckPlaying
                       ? 'bg-indigo-50 text-indigo-600'
                       : 'text-slate-500 hover:text-slate-900'
-                  }`}
+                  } disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:text-slate-300`}
                 >
                   {deckPlaying ? (
                     <Pause className="h-5 w-5" aria-hidden />

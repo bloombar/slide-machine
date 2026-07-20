@@ -11,6 +11,7 @@ import DeckViewerPage from './DeckViewerPage'
 import PublicShell from '../components/layout/PublicShell'
 import { ShellTitleProvider } from '../components/layout/ShellTitle'
 import { mockFetchRoutes } from '../test/fetch-mock'
+import * as runtimeConfig from '../runtime-config'
 
 const deckView = {
   deck: {
@@ -92,6 +93,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 describe('DeckViewerPage', () => {
@@ -1627,6 +1629,43 @@ describe('DeckViewerPage title in the primary nav', () => {
     expect(screen.getByLabelText('plus')).toBeInTheDocument()
     expect(screen.getByLabelText('microphone')).toBeInTheDocument()
     expect(screen.queryByText('This deck has no slides.')).toBeNull()
+  })
+
+  it('disables the deck play button while the deck has no slides', async () => {
+    vi.spyOn(runtimeConfig, 'getTtsEnabled').mockReturnValue(true)
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: {
+          ...deckView,
+          slides: [],
+          deck: { ...deckView.deck, slideOrder: [] },
+          canEdit: true,
+        },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    const play = await screen.findByRole('button', { name: 'Play deck' })
+    expect(play).toBeDisabled()
+  })
+
+  it('enables the deck play button once the deck has slides', async () => {
+    vi.spyOn(runtimeConfig, 'getTtsEnabled').mockReturnValue(true)
+    renderViewer(200)
+    const play = await screen.findByRole('button', { name: 'Play deck' })
+    expect(play).toBeEnabled()
   })
 
   it('refreshes the edited age immediately after an auto-save', async () => {
