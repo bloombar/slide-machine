@@ -515,6 +515,7 @@ export default function DeckViewerPage() {
         },
       },
       sttLanguage(),
+      viewRef.current?.deck.id,
     )
   }
 

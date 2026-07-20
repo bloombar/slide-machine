@@ -53,8 +53,10 @@ export interface SpeechCapture {
   /** False when this provider can't run in the current browser. */
   readonly available: boolean
   /** `lang` is the resolved lecture language (lecture ?? project ??
-   * profile); omitted = the browser's own language. */
-  start(handlers: SpeechCaptureHandlers, lang?: string): void
+   * profile); omitted = the browser's own language. `deckId` lets the
+   * server attach retained audio to the lecture (google-cloud engine only,
+   * GEN-4 Phase 2). */
+  start(handlers: SpeechCaptureHandlers, lang?: string, deckId?: string): void
   stop(): void
 }
 
@@ -242,7 +244,7 @@ const googleCloudCapture = (): SpeechCapture => {
         Boolean(navigator.mediaDevices?.getUserMedia)
       )
     },
-    start(handlers, lang) {
+    start(handlers, lang, deckId) {
       if (active) return
       active = true
       // One id for this whole recording (this WS = one server-side stream);
@@ -318,6 +320,10 @@ const googleCloudCapture = (): SpeechCapture => {
                 type: 'start',
                 languageCode: lang,
                 sampleRate: ctx.sampleRate,
+                // For audio retention: the same sessionId the phrases carry,
+                // plus the deck to attach the recording to (GEN-4 Phase 2).
+                sessionId,
+                ...(deckId ? { deckId } : {}),
               }),
             )
           }

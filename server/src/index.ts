@@ -7,6 +7,7 @@ import { env } from './config/env'
 import { connectMongo } from './db/mongoose'
 import { createApp } from './app'
 import { attachAudioSocket } from './ws/audio-socket'
+import { startAudioRetentionSweep } from './jobs/audio-cleanup'
 
 const main = async (): Promise<void> => {
   try {
@@ -24,6 +25,8 @@ const main = async (): Promise<void> => {
   })
   // Real-time STT rides a WebSocket on the same server (SPEC CAP-3).
   attachAudioSocket(server)
+  // Daily purge of retained lecture audio past AUDIO_RETENTION_DAYS (GEN-4).
+  startAudioRetentionSweep()
 }
 
 main()

@@ -158,18 +158,36 @@ describe('google cloud speech capture', () => {
     expect(socket.url).toContain(`/api/stt?token=${auth.token}`)
     expect(socket.binaryType).toBe('arraybuffer')
 
-    // The socket opening triggers the start control message.
+    // The socket opening triggers the start control message; with no deckId
+    // it carries the session id (for audio retention) but no deck.
     socket.onopen?.()
     expect(JSON.parse(socket.sent[0] as string)).toEqual({
       type: 'start',
       languageCode: 'fr-FR',
       sampleRate: 48_000,
+      sessionId: expect.any(String),
     })
 
     // Worklet PCM buffers are forwarded as binary frames.
     const pcm = new ArrayBuffer(8)
     lastWorklet().port.onmessage?.({ data: pcm })
     expect(socket.sent).toContain(pcm)
+  })
+
+  it('includes the deck id in the start message for audio retention', async () => {
+    stubMediaApis()
+    createSpeechCapture('google-cloud').start(
+      { onPhrase: vi.fn() },
+      'en-US',
+      'deck-42',
+    )
+    await flush()
+    const socket = FakeWebSocket.instances[0]!
+    socket.onopen?.()
+    const start = JSON.parse(socket.sent[0] as string)
+    expect(start).toMatchObject({ type: 'start', deckId: 'deck-42' })
+    // The retention sessionId matches the one the phrases will carry.
+    expect(start.sessionId).toEqual(expect.any(String))
   })
 
   it('maps interim and final transcripts onto the handlers', async () => {

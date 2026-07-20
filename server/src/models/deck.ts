@@ -25,6 +25,23 @@ export interface DeckAccessOverride {
   editors: string[]
 }
 
+/**
+ * A retained recording of one live session's audio (GEN-4 Phase 2), keyed by
+ * the same `sessionId` its TranscriptSegments carry so the later diarization
+ * pass can join speaker turns to the transcript. Server-only: not surfaced in
+ * any DTO (the raw audio is not exposed to the client). `gcsUri` is set in
+ * Phase 3 when the WAV is copied to GCS for batch diarization.
+ */
+export interface DeckRecordingDb {
+  sessionId: string
+  /** Blob-storage key of the WAV. */
+  audioKey: string
+  sampleRate: number
+  durationMs: number
+  gcsUri?: string
+  createdAt: Date
+}
+
 export interface DeckDb extends Omit<
   Deck,
   | 'id'
@@ -40,9 +57,23 @@ export interface DeckDb extends Omit<
   projectId: Types.ObjectId
   ownerId: Types.ObjectId
   accessOverride?: DeckAccessOverride
+  recordings?: DeckRecordingDb[]
   createdAt: Date
   updatedAt: Date
 }
+
+/** Strict, id-less subdocument for one retained session recording. */
+const recordingSchema = new Schema<DeckRecordingDb>(
+  {
+    sessionId: { type: String, required: true },
+    audioKey: { type: String, required: true },
+    sampleRate: { type: Number, required: true },
+    durationMs: { type: Number, required: true },
+    gcsUri: String,
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: false },
+)
 
 const deckSchema = new Schema<DeckDb>(
   {
@@ -85,6 +116,9 @@ const deckSchema = new Schema<DeckDb>(
     // Narration voice id (TTS_VOICES); absent = inherit the project's
     ttsVoice: { type: String, default: undefined },
     transcript: String,
+    // Retained session-audio references (GEN-4 Phase 2); server-only, appended
+    // once per recording, never surfaced in a DTO.
+    recordings: { type: [recordingSchema], default: undefined },
     voteScore: { type: Number, default: 0 },
   },
   { timestamps: true },

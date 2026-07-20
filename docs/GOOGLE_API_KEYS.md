@@ -99,6 +99,42 @@ monthly free allotment).
    and set `GOOGLE_APPLICATION_CREDENTIALS_JSON` to the whole key JSON as a
    platform secret instead — it takes precedence and is loaded in memory.
 
+### Post-lecture diarization: a GCS bucket (Phase 3, GEN-4)
+
+Real-time streaming **can't** diarize (identify who spoke), so speaker
+attribution runs **after** the lecture as a Cloud Speech-to-Text **v2
+`BatchRecognize`** job (Chirp 3, `SpeakerDiarizationConfig`). That API reads its
+input audio from — and writes its results to — **Google Cloud Storage (`gs://`)
+only**, so a bucket is required. It reuses the **same `slide-machine-stt`
+service account** from above; no new key.
+
+This is only needed once you turn on Phase 3 (it is **not** used by Phase 2
+audio retention, which stores WAVs in your existing S3/Spaces bucket). You can
+provision it now to unblock that work:
+
+1. **Enable the Cloud Storage API**: Console → **APIs & Services → Library**
+   (same project) → search **Cloud Storage API** → **Enable**. (The
+   Speech-to-Text API enabled in §1 already covers the v2 batch calls.)
+2. **Create a private bucket**: Console → **Cloud Storage → Buckets → Create**.
+   Name it e.g. `slide-machine-audio` (globally unique — prefix with the
+   project if taken). **Keep it private** — it holds raw lecture audio with
+   student voices, so do NOT enable public access (unlike the Spaces image
+   bucket). A single-region location in/near your users is fine; confirm the
+   region supports Chirp 3 batch diarization when we wire the call (US regions
+   are the safe default).
+3. **Grant the service account access**: bucket → **Permissions → Grant
+   access** → principal = `slide-machine-stt@<project>.iam.gserviceaccount.com`
+   → role **Storage Object Admin** (`roles/storage.objectAdmin`). It needs to
+   upload the input WAV and read the batch output on the same bucket.
+4. **(Deployed hosts)** No extra credential — the batch client authenticates
+   with the same `GOOGLE_APPLICATION_CREDENTIALS[_JSON]` service account.
+
+That's all you need to do. When Phase 3 lands it will add a
+`GCS_AUDIO_BUCKET=<bucket-name>` variable to `server/.env` (and the deploy env),
+copy each retained recording to `gs://<bucket>/…`, run the diarization job, and
+delete the copy afterward. Lifecycle/retention for this bucket follows the same
+`AUDIO_RETENTION_DAYS` policy as the S3 audio (see docs/DEPLOY.md).
+
 ## 4. Translation key (`GOOGLE_CLOUD_TRANSLATION_KEY`)
 
 An API key (unlike STT streaming, translation is a plain REST call):
