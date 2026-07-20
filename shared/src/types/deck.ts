@@ -5,6 +5,7 @@
 import type { Locale } from './locale'
 import type { LayoutType } from './template'
 import type { WordTiming } from '../providers/transcription'
+import type { SpeakerRole } from '../providers/diarization'
 
 /**
  * General access (Google-Docs style): 'restricted' means only the owner
@@ -149,6 +150,12 @@ export interface TranscriptSegment {
   action: TranscriptSegmentAction
   /** The slide this phrase created or changed; absent for filler with none. */
   slideId?: string
+  /** Diarized speaker tag (session-scoped), written by the reconciliation pass
+   * (GEN-4 Phase 3); absent until diarization runs / when no timing to join. */
+  speaker?: number
+  /** The speaker's resolved role (lecturer = authoritative, student =
+   * question/feedback), from talk-time mapping. Absent until diarized. */
+  role?: SpeakerRole
   createdAt: string
 }
 

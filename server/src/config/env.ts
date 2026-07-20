@@ -61,6 +61,10 @@ const envSchema = z.object({
   // Speak bar only; any other name ('google-cloud', 'mock', …) streams audio
   // to that server-side adapter.
   TRANSCRIPTION_PROVIDER: z.string().default('browser'),
+  // Post-lecture speaker diarization (GEN-4 Phase 3): 'none' disables it,
+  // 'google-cloud' runs the v2 BatchRecognize job (needs GCS_AUDIO_BUCKET),
+  // 'mock' is for tests.
+  DIARIZATION_PROVIDER: z.string().default('none'),
   GENERATION_PROVIDER: z.string().default('gemini'),
   QUIZ_PROVIDER: z.string().default('gemini'),
   IMAGE_GEN_PROVIDER: z.string().default('gemini'),
@@ -179,6 +183,14 @@ const envSchema = z.object({
   // Days to keep retained recordings before a daily sweep deletes the WAV and
   // its deck reference (cost + student-voice privacy). 0 = keep forever.
   AUDIO_RETENTION_DAYS: z.coerce.number().int().nonnegative().default(30),
+  // GCS bucket the diarization pass copies audio into — Google BatchRecognize
+  // reads only from gs:// (GEN-4 Phase 3). Required for DIARIZATION_PROVIDER=
+  // google-cloud; unused otherwise.
+  GCS_AUDIO_BUCKET: z.string().optional(),
+  // Location for the v2 batch recognizer. Chirp 3 is only in the 'us' and 'eu'
+  // MULTI-REGIONS (not regional endpoints like us-central1) — verified live.
+  // Sets the {location}-speech.googleapis.com endpoint.
+  DIARIZATION_LOCATION: z.string().default('us'),
 
   // S3-compatible object storage: MinIO in dev, DO Spaces in prod (TECH-10)
   S3_ENDPOINT: z.string().optional(),

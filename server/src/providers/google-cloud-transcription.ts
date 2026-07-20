@@ -32,7 +32,7 @@ import { AsyncQueue } from './async-queue'
  * error instead of an unhandled promise rejection that crashes the process.
  * With neither var set we return {} so ambient credentials still work.
  */
-const speechClientOptions = (): ConstructorParameters<
+export const speechClientOptions = (): ConstructorParameters<
   typeof SpeechClient
 >[0] => {
   const raw =

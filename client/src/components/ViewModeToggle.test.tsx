@@ -24,20 +24,21 @@ describe('ViewModeToggle', () => {
     expect(onChange).toHaveBeenCalledWith('list')
   })
 
-  it('groups both views in one well, lifting the active one out of it', () => {
+  it('wraps both views in one bordered rectangle, highlighting the active one', () => {
     const { container } = render(
       <ViewModeToggle mode="list" onChange={() => {}} />,
     )
-    // The well is what says "these two icons are one control"
+    // The border is what says "these two icons are one control"
     expect(container.querySelector('[role="group"]')).toHaveClass(
-      'bg-slate-200',
+      'border',
+      'rounded-lg',
     )
     expect(screen.getByRole('button', { name: 'List view' })).toHaveClass(
-      'bg-white',
+      'bg-indigo-50',
     )
     expect(
       screen.getByRole('button', { name: 'Carousel view' }),
-    ).not.toHaveClass('bg-white')
+    ).not.toHaveClass('bg-indigo-50')
   })
 
   it('labels each view on hover', () => {

@@ -216,6 +216,20 @@ export interface SessionPhraseInput {
   words?: WordTiming[]
 }
 
+/** Run post-lecture speaker diarization on a deck's retained recordings and
+ * tag its transcript segments with speaker + role (GEN-4 Phase 3). */
+export interface DeckDiarizeInput {
+  deckId: string
+}
+
+/** Summary of a diarization run. */
+export interface DeckDiarizeResult {
+  /** Recording sessions that produced diarization output. */
+  sessionsProcessed: number
+  /** Transcript segments given a speaker + role. */
+  segmentsTagged: number
+}
+
 /** Partial slide-content update (EDIT-1); only provided fields change. */
 export interface SlideEditInput {
   slideId: string

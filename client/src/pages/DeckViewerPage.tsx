@@ -15,7 +15,7 @@ import {
   Play,
   Plus,
   Settings,
-  Share2,
+  Share,
   UploadCloud,
 } from 'lucide-react'
 import type {
@@ -883,8 +883,9 @@ export default function DeckViewerPage() {
         <DeckTitleMeta deck={view.deck} count={view.slides.length} />
       </ShellTitle>
 
-      {/* View toggle + settings live in the primary nav (header), not the
-          floating pill; settings sits rightmost, after the view buttons. */}
+      {/* View toggle, settings, and share live in the primary nav (header),
+          not the floating pill; settings sits after the view buttons, and
+          share sits rightmost, to the right of the settings icon. */}
       <ShellActions>
         <ViewModeToggle mode={mode} onChange={setMode} />
         {canEdit && (
@@ -898,21 +899,16 @@ export default function DeckViewerPage() {
             </button>
           </Tooltip>
         )}
-      </ShellActions>
-
-      {/* Opens the deck's privacy & sharing settings — sits at the deck's
-          top-right, separate from the floating pill and the header. */}
-      <div className="absolute top-6 right-6 z-20">
         <Tooltip label="Share" align="end">
           <button
             aria-label="Share deck"
             onClick={() => openSettings('sharing')}
-            className="rounded-full border border-slate-200 bg-white p-2 text-slate-600 shadow-sm hover:text-slate-900"
+            className="rounded-md p-2 text-slate-500 hover:text-slate-900"
           >
-            <Share2 className="h-5 w-5" aria-hidden />
+            <Share className="h-5 w-5" aria-hidden />
           </button>
         </Tooltip>
-      </div>
+      </ShellActions>
 
       <DeckPageHeader
         deckId={view.deck.id}

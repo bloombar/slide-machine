@@ -172,7 +172,7 @@ const loadOwnedDeck = async (
 
 /** Loads a deck the acting user may edit — the owner or an editor,
  * whether granted on the lecture itself or inherited from its project. */
-const loadEditableDeck = async (
+export const loadEditableDeck = async (
   ctx: ActionContext,
   deckId: string,
 ): Promise<{ deck: HydratedDocument<DeckDb>; acl: ResolvedAcl }> => {
