@@ -26,6 +26,14 @@ export default function PublicShell() {
             >
               The Slide Machine
             </Link>
+            {shellTitle?.active && (
+              <span
+                aria-hidden
+                className="font-semibold text-slate-300 select-none"
+              >
+                /
+              </span>
+            )}
             <div
               ref={el => shellTitle?.setSlot(el)}
               className="flex min-w-0 flex-1 items-baseline gap-2 text-base font-semibold text-slate-700"
