@@ -37,7 +37,7 @@ import { useAuth } from '../auth/AuthContext'
 import { useTimeAgo } from '../hooks/useTimeAgo'
 import { useSlideNavigation } from '../hooks/useSlideNavigation'
 import { useBracketKeys } from '../hooks/useBracketKeys'
-import { createSpeechCapture } from '../stt/capture'
+import { createSpeechCapture, type PhraseMeta } from '../stt/capture'
 import {
   COMMAND_LABELS,
   matchVoiceCommand,
@@ -381,7 +381,7 @@ export default function DeckViewerPage() {
     watchImage(next)
   }
 
-  const submitPhrase = async (text: string) => {
+  const submitPhrase = async (text: string, meta?: PhraseMeta) => {
     // Via the ref: mic phrases can arrive from long-lived callbacks
     const deckId = viewRef.current?.deck.id
     if (!deckId) return
@@ -394,6 +394,14 @@ export default function DeckViewerPage() {
         // Last fallback in the language cascade (lecture ?? project ??
         // profile ?? this) — only used when nothing is stored anywhere
         browserLanguage: navigator.language || undefined,
+        // Diarization groundwork (GEN-4): carry the recording session id and
+        // any word timings/confidence through to the stored transcript
+        // segment. Absent for typed input (no audio).
+        ...(meta?.sessionId ? { sessionId: meta.sessionId } : {}),
+        ...(typeof meta?.confidence === 'number'
+          ? { confidence: meta.confidence }
+          : {}),
+        ...(meta?.words?.length ? { words: meta.words } : {}),
       })
       applyEvent(event)
     } catch (err) {
@@ -488,7 +496,7 @@ export default function DeckViewerPage() {
   const beginCapture = () => {
     capture.start(
       {
-        onPhrase: text => {
+        onPhrase: (text, meta) => {
           setInterim('')
           const command = matchVoiceCommand(text)
           if (command) {
@@ -496,7 +504,7 @@ export default function DeckViewerPage() {
             return
           }
           phraseQueueRef.current = phraseQueueRef.current.then(() =>
-            submitPhrase(text),
+            submitPhrase(text, meta),
           )
         },
         onInterim: setInterim,

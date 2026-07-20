@@ -5,6 +5,7 @@
 import type { Locale } from '../types/locale'
 import type { ImageAttribution, Visibility } from '../types/deck'
 import type { ProfileVisibility } from '../types/user'
+import type { WordTiming } from '../providers/transcription'
 
 export interface ProjectCreateInput {
   /** Optional: a blank title stores a titleless "default" project, which
@@ -203,6 +204,16 @@ export interface SessionPhraseInput {
   /** The speaker's browser language tag (e.g. "fr-CA") — the last
    * fallback when no lecture/project/profile language is set. */
   browserLanguage?: string
+  /** Per-recording id the client mints at each capture start (GEN-4
+   * diarization groundwork). Groups a deck's phrases by recording session
+   * for the later time-join; absent for typed input (no audio). */
+  sessionId?: string
+  /** Phrase-level transcription confidence; absent for the browser engine. */
+  confidence?: number
+  /** Per-word timings, session-relative, from word-offset-capable engines
+   * (Google Cloud). `startMs`/`endMs` on the stored segment are derived from
+   * these server-side. Absent for the browser engine / typed input. */
+  words?: WordTiming[]
 }
 
 /** Partial slide-content update (EDIT-1); only provided fields change. */

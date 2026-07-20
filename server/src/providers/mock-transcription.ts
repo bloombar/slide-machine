@@ -29,7 +29,18 @@ export class MockTranscriptionProvider implements TranscriptionProvider {
         if (emitted) return
         emitted = true
         events.push({ text: 'Photosynthesis', isFinal: false, confidence: 0 })
-        events.push({ text: SCRIPTED_PHRASE, isFinal: true, confidence: 1 })
+        // Static word timings (no clock) give the diarization-groundwork path
+        // deterministic coverage through the WS relay and the session.phrase
+        // segment write.
+        events.push({
+          text: SCRIPTED_PHRASE,
+          isFinal: true,
+          confidence: 1,
+          words: [
+            { word: 'Photosynthesis', startMs: 0, endMs: 800, confidence: 1 },
+            { word: 'basics', startMs: 800, endMs: 1200, confidence: 1 },
+          ],
+        })
       },
       end() {
         events.close()

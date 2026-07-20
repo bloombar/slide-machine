@@ -752,6 +752,8 @@ describe('DeckViewerPage microphone capture', () => {
         phrase: 'photosynthesis basics',
         // The browser tag rides along as the cascade's last resort
         browserLanguage: navigator.language,
+        // The recording session id threads through to session.phrase (GEN-4)
+        sessionId: expect.any(String),
       }),
     )
 

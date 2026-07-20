@@ -4,6 +4,7 @@
  */
 import type { Locale } from './locale'
 import type { LayoutType } from './template'
+import type { WordTiming } from '../providers/transcription'
 
 /**
  * General access (Google-Docs style): 'restricted' means only the owner
@@ -108,6 +109,47 @@ export interface Slide {
   sourceTranscript?: string
   /** Source-agnostic image credit captured at enrichment (IMG-5). */
   attribution?: ImageAttribution
+  /** True once a user hand-edits the slide's content (EDIT-1). Lets the
+   * post-lecture reformat (GEN-4) protect manual edits from being
+   * overwritten. Absent = never manually edited. */
+  manuallyEdited?: boolean
+}
+
+/**
+ * How a finalized phrase related to slides when it was transcribed, captured
+ * on its TranscriptSegment for later reconciliation (GEN-4): 'new' created a
+ * slide, 'update'/'refit' changed the current slide, 'none' was filler.
+ */
+export type TranscriptSegmentAction = 'none' | 'update' | 'refit' | 'new'
+
+/**
+ * One finalized phrase of a lecture, with timing and its phrase→slide linkage
+ * (GEN-4 diarization groundwork). Stored append-only in its own collection —
+ * NOT embedded on the deck — and not surfaced in any DTO yet. The flat
+ * `deck.transcript` / `slide.sourceTranscript` strings remain the live record;
+ * segments add the structured, timestamped view a later diarization pass joins
+ * speaker tags onto. `startMs`/`endMs` are relative to the segment's recording
+ * `sessionId`; there is no global audio clock because recording can stop/start.
+ */
+export interface TranscriptSegment {
+  id: string
+  deckId: string
+  /** Per-recording id (one WS/stream); absent for typed input (no audio). */
+  sessionId?: string
+  /** Session-relative ms of the first word; absent when no word timings. */
+  startMs?: number
+  /** Session-relative ms of the last word; absent when no word timings. */
+  endMs?: number
+  /** The finalized phrase — identical to what joins the flat strings. */
+  text: string
+  /** Phrase-level confidence; absent for the keyless browser engine. */
+  confidence?: number
+  /** Per-word timings; absent for the browser engine / typed input. */
+  words?: WordTiming[]
+  action: TranscriptSegmentAction
+  /** The slide this phrase created or changed; absent for filler with none. */
+  slideId?: string
+  createdAt: string
 }
 
 /** Cached on-demand translation of a deck's slide content (SHARE-2). */

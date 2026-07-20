@@ -74,9 +74,48 @@ import {
   pingGoogleStt,
 } from './google-cloud-transcription'
 
-/** Builds a Google-shaped result response. */
-const dataEvent = (transcript: string, isFinal: boolean, confidence = 0) => ({
-  results: [{ isFinal, alternatives: [{ transcript, confidence }] }],
+/** A single word for {@link dataEvent}, in seconds (the adapter converts to ms). */
+interface TestWord {
+  word: string
+  startSec: number
+  endSec: number
+  confidence?: number
+}
+
+/** Converts fractional seconds to a protobuf Duration as Google returns it. */
+const googleDuration = (seconds: number) => ({
+  seconds: Math.floor(seconds),
+  nanos: Math.round((seconds - Math.floor(seconds)) * 1e9),
+})
+
+/** Builds a Google-shaped result response, optionally with word timings. */
+const dataEvent = (
+  transcript: string,
+  isFinal: boolean,
+  confidence = 0,
+  words?: TestWord[],
+) => ({
+  results: [
+    {
+      isFinal,
+      alternatives: [
+        {
+          transcript,
+          confidence,
+          ...(words
+            ? {
+                words: words.map(w => ({
+                  word: w.word,
+                  startTime: googleDuration(w.startSec),
+                  endTime: googleDuration(w.endSec),
+                  confidence: w.confidence,
+                })),
+              }
+            : {}),
+        },
+      ],
+    },
+  ],
 })
 
 beforeEach(() => {
@@ -112,10 +151,23 @@ describe('GoogleCloudTranscriptionProvider', () => {
         encoding: 'LINEAR16',
         sampleRateHertz: 44_100,
         languageCode: 'fr-FR',
+        enableWordTimeOffsets: true,
+        enableWordConfidence: true,
         speechContexts: [{ phrases: ['photosynthesis'] }],
       },
       interimResults: true,
     })
+  })
+
+  it('requests word time offsets and per-word confidence', () => {
+    const provider = new GoogleCloudTranscriptionProvider()
+    provider.startStream({ languageCode: 'en-US' })
+    const request = streams[0]!.config as {
+      config: { enableWordTimeOffsets?: boolean; enableWordConfidence?: boolean }
+    }
+    // These drive the GEN-4 diarization time-join.
+    expect(request.config.enableWordTimeOffsets).toBe(true)
+    expect(request.config.enableWordConfidence).toBe(true)
   })
 
   it('maps a bare locale to a region-qualified BCP-47 code for Google', () => {
@@ -177,6 +229,83 @@ describe('GoogleCloudTranscriptionProvider', () => {
       isFinal: true,
       confidence: 0,
     })
+  })
+
+  it('attaches session-absolute word timings to final results', async () => {
+    const provider = new GoogleCloudTranscriptionProvider()
+    const stream = provider.startStream({
+      languageCode: 'en-US',
+      sampleRateHertz: 16_000,
+    })
+    const iterator = stream.events[Symbol.asyncIterator]()
+
+    streams[0]!.emit(
+      'data',
+      dataEvent('hello world', true, 0.9, [
+        { word: 'hello', startSec: 0, endSec: 0.5, confidence: 0.9 },
+        { word: 'world', startSec: 0.5, endSec: 1, confidence: 0.8 },
+      ]),
+    )
+    expect((await iterator.next()).value).toEqual({
+      text: 'hello world',
+      isFinal: true,
+      confidence: 0.9,
+      words: [
+        { word: 'hello', startMs: 0, endMs: 500, confidence: 0.9 },
+        { word: 'world', startMs: 500, endMs: 1000, confidence: 0.8 },
+      ],
+    })
+    stream.end()
+  })
+
+  it('omits word timings on interim results', async () => {
+    const provider = new GoogleCloudTranscriptionProvider()
+    const stream = provider.startStream({ languageCode: 'en-US' })
+    const iterator = stream.events[Symbol.asyncIterator]()
+
+    // Even if the payload carried words, interim timings are volatile — dropped.
+    streams[0]!.emit(
+      'data',
+      dataEvent('hello', false, 0, [
+        { word: 'hello', startSec: 0, endSec: 0.3 },
+      ]),
+    )
+    expect((await iterator.next()).value).toEqual({
+      text: 'hello',
+      isFinal: false,
+      confidence: 0,
+    })
+    stream.end()
+  })
+
+  it('keeps word offsets session-absolute across a stream restart', async () => {
+    const provider = new GoogleCloudTranscriptionProvider()
+    const stream = provider.startStream({
+      languageCode: 'en-US',
+      sampleRateHertz: 16_000,
+    })
+    const iterator = stream.events[Symbol.asyncIterator]()
+
+    // 16000 bytes = 8000 samples at 16 kHz mono (2 bytes/sample) = 500 ms.
+    stream.write(new Uint8Array(16_000))
+    // Google reports the duration limit → the adapter cycles to a fresh stream.
+    streams[0]!.emit('error', { code: 11 })
+    expect(streams).toHaveLength(2)
+
+    // A word at 200 ms on the NEW stream is really 500 + 200 = 700 ms in.
+    streams[1]!.emit(
+      'data',
+      dataEvent('later', true, 0, [
+        { word: 'later', startSec: 0.2, endSec: 0.4, confidence: 1 },
+      ]),
+    )
+    expect((await iterator.next()).value).toEqual({
+      text: 'later',
+      isFinal: true,
+      confidence: 0,
+      words: [{ word: 'later', startMs: 700, endMs: 900, confidence: 1 }],
+    })
+    stream.end()
   })
 
   it('ends the underlying stream and completes the iterable', async () => {

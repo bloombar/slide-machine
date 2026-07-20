@@ -31,6 +31,7 @@ import { UserModel } from '../../src/models/user'
 import { ProjectModel } from '../../src/models/project'
 import { DeckModel } from '../../src/models/deck'
 import { SlideModel } from '../../src/models/slide'
+import { TranscriptSegmentModel } from '../../src/models/transcript-segment'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
 
 const server = createApp().listen(0)
@@ -72,6 +73,7 @@ beforeEach(async () => {
     ProjectModel.deleteMany({}),
     DeckModel.deleteMany({}),
     SlideModel.deleteMany({}),
+    TranscriptSegmentModel.deleteMany({}),
     RefreshTokenModel.deleteMany({}),
   ])
   ada = await registerUser('ada@example.com')
@@ -102,6 +104,11 @@ describe('session.phrase with GENERATION_VOICE_COMMANDS on', () => {
     const view = await act(ada, 'deck.get', { deckId })
     expect(view.body.slides).toHaveLength(1)
     expect(view.body.deck.transcript ?? '').not.toContain('Please next slide')
+
+    // …and no structured segment either: only the one lecture phrase persisted
+    const segments = await TranscriptSegmentModel.find({ deckId })
+    expect(segments).toHaveLength(1)
+    expect(segments[0]!.text).toBe('Photosynthesis basics')
   })
 
   it('maps each recognized intent to its command id', async () => {

@@ -67,9 +67,33 @@ describe('browser speech capture', () => {
     expect(onPhrase).not.toHaveBeenCalled()
 
     recognition.onresult?.(result('photosynthesis basics', true))
-    expect(onPhrase).toHaveBeenCalledWith('photosynthesis basics')
+    // The browser engine has no server-side timing, so a phrase carries only
+    // a recording session id (GEN-4 groundwork).
+    expect(onPhrase).toHaveBeenCalledWith('photosynthesis basics', {
+      sessionId: expect.any(String),
+    })
     // A final clears the interim line
     expect(onInterim).toHaveBeenLastCalledWith('')
+  })
+
+  it('keeps one session id per recording and mints a new one after restart', () => {
+    stubApi()
+    const capture = createSpeechCapture('browser')
+    const onPhrase = vi.fn()
+    capture.start({ onPhrase })
+    const first = FakeRecognition.instances[0]!
+    first.onresult?.(result('one', true))
+    first.onresult?.(result('two', true))
+
+    capture.stop()
+    capture.start({ onPhrase })
+    FakeRecognition.instances[1]!.onresult?.(result('three', true))
+
+    const sessionOf = (i: number) =>
+      (onPhrase.mock.calls[i]![1] as { sessionId: string }).sessionId
+    // Same recording → same id; a stop→start begins a new session.
+    expect(sessionOf(0)).toBe(sessionOf(1))
+    expect(sessionOf(2)).not.toBe(sessionOf(0))
   })
 
   it('recognizes in the requested language, browser default otherwise', () => {
