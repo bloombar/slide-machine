@@ -5,6 +5,7 @@
  */
 export const CAPABILITIES = [
   'transcription',
+  'diarization',
   'generation',
   'quizGeneration',
   'imageGeneration',

@@ -18,6 +18,7 @@ export type ProviderSelectors = Record<Capability, string>
 
 export const defaultSelectors: ProviderSelectors = {
   transcription: env.TRANSCRIPTION_PROVIDER,
+  diarization: env.DIARIZATION_PROVIDER,
   generation: env.GENERATION_PROVIDER,
   quizGeneration: env.QUIZ_PROVIDER,
   imageGeneration: env.IMAGE_GEN_PROVIDER,

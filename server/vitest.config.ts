@@ -25,6 +25,8 @@ export default defineConfig({
       JWT_SECRET: 'test-jwt-secret-at-least-32-characters!',
       JWT_REFRESH_SECRET: 'test-refresh-secret-at-least-32-chars!!',
       GENERATION_PROVIDER: 'mock',
+      // Post-lecture diarization runs against the deterministic mock in tests.
+      DIARIZATION_PROVIDER: 'mock',
       // Tests never call live image APIs; enrichment units stub fetch
       IMAGE_ENRICHMENT_ENABLED: 'false',
       // No grace window in tests: rotated-out tokens must die immediately

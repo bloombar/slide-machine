@@ -54,6 +54,9 @@ const transcriptSegmentSchema = new Schema<TranscriptSegmentDb>(
       default: 'none',
     },
     slideId: { type: Schema.Types.ObjectId, ref: 'Slide' },
+    // Diarization results (GEN-4 Phase 3), written by the reconciliation pass.
+    speaker: Number,
+    role: { type: String, enum: ['lecturer', 'student'], default: undefined },
   },
   // createdAt is the cross-session ordering key; segments are never updated.
   { timestamps: { createdAt: true, updatedAt: false } },
@@ -80,5 +83,7 @@ export const toTranscriptSegmentDto = (
   words: doc.words,
   action: doc.action,
   slideId: doc.slideId?.toString(),
+  speaker: doc.speaker,
+  role: doc.role,
   createdAt: doc.createdAt.toISOString(),
 })

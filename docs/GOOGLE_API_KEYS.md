@@ -129,11 +129,26 @@ provision it now to unblock that work:
 4. **(Deployed hosts)** No extra credential — the batch client authenticates
    with the same `GOOGLE_APPLICATION_CREDENTIALS[_JSON]` service account.
 
-That's all you need to do. When Phase 3 lands it will add a
-`GCS_AUDIO_BUCKET=<bucket-name>` variable to `server/.env` (and the deploy env),
-copy each retained recording to `gs://<bucket>/…`, run the diarization job, and
-delete the copy afterward. Lifecycle/retention for this bucket follows the same
-`AUDIO_RETENTION_DAYS` policy as the S3 audio (see docs/DEPLOY.md).
+Then turn it on in `server/.env` (and the deploy env):
+
+```bash
+# server/.env
+DIARIZATION_PROVIDER=google-cloud    # 'none' (default) | 'mock' (tests)
+GCS_AUDIO_BUCKET=slide-machine-audio # the bucket you created above
+DIARIZATION_LOCATION=us              # Chirp 3 is ONLY in the 'us' / 'eu' multi-regions
+```
+
+**Location matters:** Chirp 3 exists only in the **`us`** and **`eu`**
+multi-regions — a regional endpoint like `us-central1` or `us-east1` fails with
+`model "chirp_3" does not exist in the location`. A US *regional* bucket (e.g.
+`us-east1`) is fine to read from the `us` multi-region recognizer.
+
+The diarization pass (`deck.diarize`) then copies each retained recording to
+`gs://<bucket>/diarize/…`, runs a v2 `BatchRecognize` Chirp 3 job with speaker
+diarization + word time offsets, tags the transcript segments with speaker +
+lecturer/student role, and deletes the GCS copy. It reuses the same service
+account — no extra key. (Validated live: a batch job on ~23 s of two-speaker
+audio separated the speakers correctly in ~30 s.)
 
 ## 4. Translation key (`GOOGLE_CLOUD_TRANSLATION_KEY`)
 

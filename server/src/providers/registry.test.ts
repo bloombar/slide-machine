@@ -12,6 +12,7 @@ import type { GenerationProvider } from '@slide-machine/shared'
 
 const selectors: ProviderSelectors = {
   transcription: 'google-cloud',
+  diarization: 'mock',
   generation: 'fake-llm',
   quizGeneration: 'gemini',
   imageGeneration: 'gemini',
