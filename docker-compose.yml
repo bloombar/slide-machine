@@ -7,32 +7,24 @@ services:
     build: .
     ports:
       - '3000:3000'
+    # Single source of truth: load the full server config from the
+    # gitignored server/.env. The environment: block below overrides only
+    # the few values that must point at in-network compose services rather
+    # than the host — environment: takes precedence over env_file.
+    env_file:
+      - server/.env
     environment:
+      # server/.env points at a host mongod (with auth); reach the compose
+      # mongo service by name instead (it runs without auth).
       MONGODB_URI: mongodb://mongo:27017/slide-machine
-      # Local-stack-only signing secrets — never reuse outside compose
-      JWT_SECRET: compose-local-jwt-secret-32-chars-min!!
-      JWT_REFRESH_SECRET: compose-local-refresh-secret-32-chars!!
-      # Real Gemini by default (matches the code default and the DO
-      # deployment). Requires GEMINI_API_KEY in the gitignored root .env;
-      # set GENERATION_PROVIDER=mock there to run offline without a key.
-      GENERATION_PROVIDER: ${GENERATION_PROVIDER:-gemini}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      # Google sign-in (AUTH-1). Values come from a gitignored root .env
-      # via Compose substitution — no secret lives in this committed file.
-      # Empty by default, so the sign-in button stays off until set.
-      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
-      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
-      # In-network MinIO (storage profile). Using a MinIO on the host
-      # instead? Point S3_ENDPOINT at http://host.docker.internal:9000
+      # In-network MinIO (storage profile); server/.env points at the host.
+      # Using a MinIO on the host instead? Point S3_ENDPOINT at
+      # http://host.docker.internal:9000
       S3_ENDPOINT: http://minio:9000
-      S3_REGION: us-east-1
-      S3_BUCKET: slide-machine-dev
-      S3_FORCE_PATH_STYLE: 'true'
-      S3_ACCESS_KEY_ID: minioadmin
-      S3_SECRET_ACCESS_KEY: minioadmin
-      # Browser-facing URL, so host-mapped rather than in-network
-      S3_PUBLIC_BASE_URL: http://localhost:9000/slide-machine-dev
+      # Express serves the built SPA itself here on 3000, so the
+      # browser-facing origin is 3000 (server/.env uses the 5173 Vite dev
+      # server, which does not exist in this stack).
+      PUBLIC_BASE_URL: http://localhost:3000
     depends_on:
       - mongo
 
