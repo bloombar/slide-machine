@@ -117,18 +117,14 @@ authRouter.get('/me', requireAuth, async (req, res) => {
 
 // --- Google sign-in (AUTH-1), server-side Authorization Code flow ---
 
-/** The origin the app is served from, for building absolute redirect URLs. */
+/**
+ * The origin the app is served from, for building absolute redirect URLs.
+ * One origin serves both the SPA and the API: in production the real domain,
+ * in local dev the Vite dev server (:5173), which proxies /api to Express.
+ * The OAuth callback and the post-login landing therefore share this origin.
+ */
 const requestOrigin = (req: Request): string =>
   env.PUBLIC_BASE_URL ?? `${req.protocol}://${req.get('host')}`
-
-/**
- * Where to send the browser after sign-in. Defaults to the OAuth origin so
- * production (one origin serves app + API) is unchanged; CLIENT_APP_URL
- * overrides it so local dev can land on the Vite origin while the OAuth
- * callback still runs on PUBLIC_BASE_URL.
- */
-const appOrigin = (req: Request): string =>
-  env.CLIENT_APP_URL ?? requestOrigin(req)
 
 // The state cookie proves the callback answers a request we started
 // (CSRF). SameSite=Lax, not Strict: the callback arrives via Google's
@@ -161,12 +157,10 @@ authRouter.get('/google/start', (req, res) => {
  * user in; on any failure it lands on /login with an error code.
  */
 authRouter.get('/google/callback', async (req, res) => {
+  // User-facing landings and the OAuth token exchange share one origin, so
+  // the redirect_uri here matches the one registered with Google.
   const origin = requestOrigin(req)
-  // User-facing landings go to the SPA origin (CLIENT_APP_URL in dev); the
-  // token exchange below keeps using `origin` so its redirect_uri matches
-  // the one registered with Google.
-  const landing = appOrigin(req)
-  const fail = (code: string) => res.redirect(`${landing}/login?error=${code}`)
+  const fail = (code: string) => res.redirect(`${origin}/login?error=${code}`)
 
   const { code, state } = req.query
   const cookieState = req.cookies?.[OAUTH_STATE_COOKIE]
@@ -190,7 +184,7 @@ authRouter.get('/google/callback', async (req, res) => {
     const result = await authService.loginWithGoogle(profile)
     setRefreshCookie(res, result.refreshRaw)
     // The SPA boots, its silent refresh reads the cookie, and the user is in
-    res.redirect(`${landing}/app`)
+    res.redirect(`${origin}/app`)
   } catch {
     fail('google_auth_failed')
   }

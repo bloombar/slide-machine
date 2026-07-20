@@ -157,15 +157,6 @@ const envSchema = z.object({
     .string()
     .transform(value => value.replace(/\/+$/, ''))
     .optional(),
-  // Origin the browser reaches the SPA at, used only for the post-login
-  // landing redirect. Lets local dev serve the app from the Vite origin
-  // (e.g. http://localhost:5173) while OAuth callbacks stay on
-  // PUBLIC_BASE_URL. Unset = fall back to PUBLIC_BASE_URL / request origin,
-  // which is right for production where one origin serves both.
-  CLIENT_APP_URL: z
-    .string()
-    .optional()
-    .transform(value => (value ? value.replace(/\/+$/, '') : undefined)),
   GITHUB_OAUTH_CLIENT_ID: z.string().optional(),
   GITHUB_OAUTH_CLIENT_SECRET: z.string().optional(),
   CONNECTED_ACCOUNT_TOKEN_ENC_KEY: z.string().optional(),
