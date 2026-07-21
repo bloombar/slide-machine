@@ -5,15 +5,18 @@
  * canEdit tells the client whether to enable the editing surface.
  */
 import { Router, type NextFunction, type Request, type Response } from 'express'
+import type { HydratedDocument } from 'mongoose'
 import type { DeckViewResponse } from '@slide-machine/shared'
 import {
   DeckModel,
   loadDeckAcl,
   toDeckDto,
   toSharedDeckDto,
+  type DeckDb,
 } from '../models/deck'
 import { canEditAcl, canViewAcl } from '../lib/access'
 import { SlideModel, toSlideDto } from '../models/slide'
+import { TranscriptSegmentModel } from '../models/transcript-segment'
 import { getBuiltinTemplate } from '../templates/builtin'
 import { verifyAccessToken } from '../auth/tokens'
 import { ProjectModel } from '../models/project'
@@ -39,6 +42,26 @@ const optionalAuth = async (
   next()
 }
 
+/**
+ * Slide ids whose original lecture audio can be played back: a timed transcript
+ * segment of the slide belongs to a recording still retained on the deck.
+ * Returns [] for non-editors — the audio holds student voices.
+ */
+const playableAudioSlideIds = async (
+  deck: HydratedDocument<DeckDb>,
+  canEdit: boolean,
+): Promise<string[]> => {
+  const sessionIds = (deck.recordings ?? []).map(r => r.sessionId)
+  if (!canEdit || !sessionIds.length) return []
+  const ids = await TranscriptSegmentModel.find({
+    deckId: deck._id,
+    slideId: { $ne: null },
+    sessionId: { $in: sessionIds },
+    startMs: { $ne: null },
+  }).distinct('slideId')
+  return ids.map(id => String(id))
+}
+
 export const decksRouter = Router()
 
 decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
@@ -55,17 +78,22 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
   if (!template) throw notFound
 
   const isOwner = acl.ownerId === req.userId
+  const canEdit = canEditAcl(acl, req.userId)
   const slides = await SlideModel.find({ deckId: deck._id }).sort({ index: 1 })
   const project = await ProjectModel.findById(deck.projectId).catch(() => null)
   const body: DeckViewResponse = {
     deck: isOwner ? toDeckDto(deck, acl) : toSharedDeckDto(deck, acl),
     slides: slides.map(toSlideDto),
     template,
-    canEdit: canEditAcl(acl, req.userId),
+    canEdit,
     projectGenerationFreedom:
       project?.generationFreedom ?? env.GENERATION_FREEDOM,
     projectLanguage: project?.language ?? undefined,
     projectTtsVoice: project?.ttsVoice ?? undefined,
+    // Slides with playable retained audio (editors only — it holds student
+    // voices). A slide qualifies if a timed segment of it belongs to a
+    // recording that is still retained on the deck.
+    audioSlideIds: await playableAudioSlideIds(deck, canEdit),
   }
   res.json(body)
 })

@@ -56,6 +56,8 @@ describe('useTtsPlayback', () => {
     act(() => hook.result.current.speakSlide(slides[0]!))
     expect(stopMic).toHaveBeenCalled()
     await waitFor(() => expect(audios[0]?.src).toBe('u1'))
+    // Speaks the slide's stored narration/transcript, like deck playback.
+    expect(mockedSynth).toHaveBeenCalledWith(slides[0]!.id, 'transcript')
     expect(navigate).toHaveBeenCalledWith(0)
     await waitFor(() => expect(hook.result.current.status).toBe('playing'))
 

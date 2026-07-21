@@ -18,6 +18,9 @@ interface Props {
   /** Refine just this slide with the lecture's Refine settings (owner-only;
    * omitted when no applicable refine pass is enabled). */
   onRefine?: () => void
+  /** Play this slide's original lecture audio (owner-only; omitted when no
+   * retained audio is available for the slide). */
+  onPlayOriginalAudio?: () => void
   onDelete?: () => void
 }
 
@@ -26,6 +29,7 @@ export default function SlideMenu({
   onSpeak,
   onChangeLayout,
   onRefine,
+  onPlayOriginalAudio,
   onDelete,
 }: Props) {
   const [open, setOpen] = useState(false)
@@ -54,7 +58,14 @@ export default function SlideMenu({
   }
 
   // No actions available (e.g. a read-only viewer with TTS off) → no kebab.
-  if (!onSpeak && !onChangeLayout && !onRefine && !onDelete) return null
+  if (
+    !onSpeak &&
+    !onChangeLayout &&
+    !onRefine &&
+    !onPlayOriginalAudio &&
+    !onDelete
+  )
+    return null
 
   return (
     <div ref={menuRef} className="absolute top-3 right-3 z-10">
@@ -98,6 +109,15 @@ export default function SlideMenu({
               className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
             >
               Refine this slide
+            </button>
+          )}
+          {onPlayOriginalAudio && (
+            <button
+              role="menuitem"
+              onClick={pick(onPlayOriginalAudio)}
+              className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+            >
+              Play original audio
             </button>
           )}
           {onDelete && (

@@ -1,7 +1,8 @@
 /**
  * Text-to-speech playback controller. Owns a single HTMLAudioElement and drives
  * two flows through one "only one thing plays at a time" state machine:
- *  - speakSlide(slide): speak one slide's rendered content (kebab option).
+ *  - speakSlide(slide): speak one slide's stored narration/transcript (kebab
+ *    option) — the same source as deck playback, just for a single slide.
  *  - playDeck(fromIndex): read the whole deck's stored transcript aloud,
  *    auto-advancing to each slide as it's spoken; Play↔Pause via toggle().
  *
@@ -151,7 +152,10 @@ export function useTtsPlayback({
       const index = getSlides().findIndex(s => s.id === slide.id)
       setScope('slide')
       setStatus('playing')
-      void playAt(index >= 0 ? index : 0, 'content', token, stop)
+      // Speak the slide's stored narration/transcript (same as deck playback),
+      // not the rendered text — the server narrates from content when a slide
+      // has no transcript of its own.
+      void playAt(index >= 0 ? index : 0, 'transcript', token, stop)
     },
     [getSlides, halt, playAt, stop, stopMic],
   )
