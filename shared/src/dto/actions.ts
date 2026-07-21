@@ -191,6 +191,14 @@ export interface DeckSetLanguageInput {
   language: Locale | null
 }
 
+/** Per-lecture Refine slider levels (GEN-4): a number sets a level, null
+ * re-inherits the server default, absent leaves that level unchanged. */
+export interface DeckSetRefineLevelsInput {
+  deckId: string
+  slidesLevel?: number | null
+  transcriptLevel?: number | null
+}
+
 /** Lecture-level narration voice; null re-inherits the project's. */
 export interface DeckSetTtsVoiceInput {
   deckId: string
@@ -228,6 +236,62 @@ export interface DeckDiarizeResult {
   sessionsProcessed: number
   /** Transcript segments given a speaker + role. */
   segmentsTagged: number
+}
+
+/**
+ * Post-lecture refinement (GEN-4 "Refine"): any combination of the three
+ * passes, run as one background job. Sliders are 1 (light) – 5 (substantial).
+ */
+export interface DeckRefineInput {
+  deckId: string
+  /** Identify lecturer vs students and reframe student turns as questions. */
+  identifySpeakers?: boolean
+  /** Improve each slide's content/layout/image in place. */
+  refineSlides?: { level: number }
+  /** Rewrite each slide's spoken narration to describe concepts more eloquently. */
+  refineTranscript?: { level: number }
+}
+
+/** deck.refine kicks off a background job and returns its id to poll. */
+export interface DeckRefineResult {
+  jobId: string
+}
+
+export type RefineJobStatus = 'running' | 'done' | 'error'
+
+/** What a refine job changed, once done. */
+export interface RefineJobSummary {
+  /** Slides reframed to mark student turns as questions/feedback. */
+  reframed: number
+  /** Slides whose content was refined. */
+  slidesRefined: number
+  /** Slides whose spoken narration was updated (refinement + keeping TTS in-line). */
+  transcriptsUpdated: number
+}
+
+export interface DeckRefineStatusInput {
+  jobId: string
+}
+
+export interface DeckRefineStatusResult {
+  status: RefineJobStatus
+  summary?: RefineJobSummary
+  error?: string
+}
+
+/** Reformat a deck's slides now that speaker roles are known (GEN-4 Phase 4). */
+export interface DeckReformatInput {
+  deckId: string
+}
+
+/** Summary of a reformat run: how each slide was handled. */
+export interface DeckReformatResult {
+  /** Student/mixed slides regenerated with role context. */
+  reformatted: number
+  /** Lecturer-only slides left unchanged. */
+  kept: number
+  /** Hand-edited or manually-added slides protected from change. */
+  protectedCount: number
 }
 
 /** Partial slide-content update (EDIT-1); only provided fields change. */

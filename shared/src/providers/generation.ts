@@ -8,6 +8,7 @@ import type {
   VoiceCommand,
   VoiceCommandDescriptor,
 } from '../types/voice-commands'
+import type { SpeakerRole } from './diarization'
 
 /** A seeded image the model may select for a slide (SEED-2 / GEN-7). */
 export interface SeededImageDescriptor {
@@ -104,9 +105,115 @@ export interface SlideGenerationResult {
   deckTitle?: string
 }
 
+/** One role-annotated turn feeding a post-lecture reformat (GEN-4 Phase 4). */
+export interface ReformatTurn {
+  role: SpeakerRole
+  text: string
+}
+
+/**
+ * Reformat one slide with speaker roles known (GEN-4 Phase 4). The lecturer's
+ * turns are authoritative; students' turns are questions/feedback and must be
+ * rendered as such, not as fact. Only slides that mix in student speech are
+ * reformatted — lecturer-only, hand-edited, and manually-added slides are left
+ * alone by the caller.
+ */
+export interface SlideReformatRequest {
+  /** The slide's current content, to revise in place. */
+  current: {
+    layoutType: LayoutType
+    title?: string
+    body?: string
+    bullets?: string[]
+    caption?: string
+  }
+  /** The role-annotated transcript turns that produced this slide, in order. */
+  turns: ReformatTurn[]
+  /** The active template's layouts — the option set to pick from (GEN-6). */
+  layoutDescriptors: LayoutDescriptor[]
+  language?: string
+  seedContext?: {
+    project?: string
+    deck?: string
+  }
+}
+
+/** Revised slide content from a reformat. */
+export interface SlideReformatResult {
+  layoutType: LayoutType
+  slots: {
+    title?: string
+    body?: string
+    bullets?: string[]
+    caption?: string
+  }
+  imageGuidance?: ImageGuidance
+}
+
+/** The slide content the refine/narrate passes operate on. */
+export interface SlideContent {
+  layoutType: LayoutType
+  title?: string
+  body?: string
+  bullets?: string[]
+  caption?: string
+}
+
+/**
+ * Improve one slide's content/layout/image in place (GEN-4 "Refine all
+ * slides"). `level` 1 (light polish) – 5 (substantial rework) sets how much to
+ * change. Add/delete of slides is out of scope here — this refines existing
+ * slides only.
+ */
+export interface SlideRefineRequest {
+  current: SlideContent
+  level: number
+  layoutDescriptors: LayoutDescriptor[]
+  language?: string
+  seedContext?: {
+    project?: string
+    deck?: string
+  }
+}
+
+export interface SlideRefineResult {
+  layoutType: LayoutType
+  slots: {
+    title?: string
+    body?: string
+    bullets?: string[]
+    caption?: string
+  }
+  imageGuidance?: ImageGuidance
+}
+
+/**
+ * Produce the spoken narration for a slide (GEN-4 "Refine the spoken
+ * transcript", and to keep TTS playback in-line after content changes). The
+ * result is stored as the slide's narration transcript. `level` 1 (plain,
+ * faithful) – 5 (rich, eloquent). `studentContext` frames the narration as a
+ * student's question/comment when the slide represents student speech.
+ */
+export interface SlideNarrateRequest {
+  slide: SlideContent
+  level: number
+  studentContext?: boolean
+  language?: string
+}
+
+export interface SlideNarrateResult {
+  transcript: string
+}
+
 export interface GenerationProvider {
   readonly name: string
   generateSlideContent(
     request: SlideGenerationRequest,
   ): Promise<SlideGenerationResult>
+  /** Post-lecture reformat of one slide with speaker roles (GEN-4 Phase 4). */
+  reformatSlide(request: SlideReformatRequest): Promise<SlideReformatResult>
+  /** Improve one slide's content/layout/image (GEN-4 Refine). */
+  refineSlide(request: SlideRefineRequest): Promise<SlideRefineResult>
+  /** Spoken narration for a slide, kept in-line with its content (GEN-4 Refine). */
+  narrateSlide(request: SlideNarrateRequest): Promise<SlideNarrateResult>
 }

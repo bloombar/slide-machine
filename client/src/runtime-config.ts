@@ -10,7 +10,12 @@
 import type { RuntimeConfig, SttEngine } from '@slide-machine/shared'
 import { config } from './config'
 
-let runtime: RuntimeConfig = { sttEngine: 'browser', ttsEnabled: false }
+let runtime: RuntimeConfig = {
+  sttEngine: 'browser',
+  ttsEnabled: false,
+  refineSlidesDefaultLevel: 2,
+  refineTranscriptDefaultLevel: 2,
+}
 let loaded: Promise<RuntimeConfig> | null = null
 
 /** Fetches runtime config once and caches it; safe to call repeatedly. */
@@ -30,3 +35,11 @@ export const getSttEngine = (): SttEngine => runtime.sttEngine
 
 /** Whether TTS playback is available; false (feature hidden) until config loads. */
 export const getTtsEnabled = (): boolean => runtime.ttsEnabled
+
+/** Default strength (1–5) the "Refine all slides" slider starts at (GEN-4). */
+export const getRefineSlidesDefaultLevel = (): number =>
+  runtime.refineSlidesDefaultLevel
+
+/** Default strength (1–5) the "Refine the spoken transcript" slider starts at. */
+export const getRefineTranscriptDefaultLevel = (): number =>
+  runtime.refineTranscriptDefaultLevel

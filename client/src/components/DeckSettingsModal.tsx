@@ -9,7 +9,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { X } from 'lucide-react'
-import { findTtsVoice, type Deck, type Template } from '@slide-machine/shared'
+import {
+  findTtsVoice,
+  type Deck,
+  type DeckRefineResult,
+  type DeckRefineStatusResult,
+  type RefineJobSummary,
+  type Template,
+} from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import TemplatePicker from './TemplatePicker'
 import AccessSettings from './AccessSettings'
@@ -20,12 +27,17 @@ import LanguageSelect from './LanguageSelect'
 import VoiceSelect from './VoiceSelect'
 import ConfirmDialog from './ConfirmDialog'
 import Modal from './Modal'
-import { getTtsEnabled } from '../runtime-config'
+import {
+  getTtsEnabled,
+  getRefineSlidesDefaultLevel,
+  getRefineTranscriptDefaultLevel,
+} from '../runtime-config'
 import { lectureTitle } from '../lib/lecture'
 
 const TABS = [
   { id: 'general', label: 'General' },
   { id: 'template', label: 'Design template' },
+  { id: 'refine', label: 'Refine' },
   { id: 'sharing', label: 'Privacy & Sharing' },
 ] as const
 
@@ -49,6 +61,8 @@ interface Props {
   onDeckChange: (deck: Deck) => void
   /** Fired after the lecture is deleted; the viewer leaves the page. */
   onDeleted: () => void
+  /** Fired after a reformat so the viewer reloads its (now-revised) slides. */
+  onReformatted: () => void
 }
 
 export default function DeckSettingsModal({
@@ -61,10 +75,57 @@ export default function DeckSettingsModal({
   onTemplateChange,
   onDeckChange,
   onDeleted,
+  onReformatted,
 }: Props) {
   const [templates, setTemplates] = useState<Template[]>([])
   const [tab, setTab] = useState<TabId>(initialTab)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  // Post-lecture refinement (GEN-4): any of three passes, run as one job.
+  // Slider levels start at the lecture's own value if set, else the server
+  // default (from /api/config); a moved slider is saved to the lecture.
+  // All refinement options start checked; speaker ID only when there is audio
+  // to diarize (it is disabled otherwise).
+  const [identifySpeakers, setIdentifySpeakers] = useState(
+    deck.hasRecordings ?? false,
+  )
+  const [refineSlides, setRefineSlides] = useState(true)
+  const [refineSlidesLevel, setRefineSlidesLevel] = useState(
+    deck.refineSlidesLevel ?? getRefineSlidesDefaultLevel(),
+  )
+  const [refineTranscript, setRefineTranscript] = useState(true)
+  const [refineTranscriptLevel, setRefineTranscriptLevel] = useState(
+    deck.refineTranscriptLevel ?? getRefineTranscriptDefaultLevel(),
+  )
+  const [refining, setRefining] = useState(false)
+  const [refineMsg, setRefineMsg] = useState<string | null>(null)
+  const anySelected = identifySpeakers || refineSlides || refineTranscript
+  // Nothing to refine when the lecture has no slides — disable the whole form.
+  const hasSlides = (deck.slideOrder?.length ?? 0) > 0
+
+  // Persist a moved slider to the lecture (debounced). An untouched slider is
+  // never saved, so it keeps inheriting the server default.
+  const persistTimers = useRef<{ slides?: number; transcript?: number }>({})
+  const persistLevel = (
+    field: 'slidesLevel' | 'transcriptLevel',
+    level: number,
+  ) => {
+    const key = field === 'slidesLevel' ? 'slides' : 'transcript'
+    window.clearTimeout(persistTimers.current[key])
+    persistTimers.current[key] = window.setTimeout(() => {
+      dispatchAction<Deck>('deck.setRefineLevels', { deckId: deck.id, [field]: level })
+        .then(onDeckChange)
+        .catch(() => {
+          // Quiet failure: the level reverts on the next reload
+        })
+    }, 500)
+  }
+  useEffect(
+    () => () => {
+      window.clearTimeout(persistTimers.current.slides)
+      window.clearTimeout(persistTimers.current.transcript)
+    },
+    [],
+  )
   const closeRef = useRef<HTMLButtonElement>(null)
   const tabRefs = useRef(new Map<TabId, HTMLButtonElement>())
 
@@ -91,6 +152,60 @@ export default function DeckSettingsModal({
       .catch(() => {
         // Quiet failure: the picker stays on the saved template
       })
+  }
+
+  /** Human summary of what a finished refine job changed. */
+  const summaryMessage = (s: RefineJobSummary): string => {
+    const parts: string[] = []
+    if (s.reframed)
+      parts.push(`reframed ${s.reframed} student slide${s.reframed === 1 ? '' : 's'}`)
+    if (s.slidesRefined)
+      parts.push(`refined ${s.slidesRefined} slide${s.slidesRefined === 1 ? '' : 's'}`)
+    if (s.transcriptsUpdated)
+      parts.push(
+        `updated ${s.transcriptsUpdated} narration${s.transcriptsUpdated === 1 ? '' : 's'}`,
+      )
+    return parts.length ? `Done — ${parts.join(', ')}.` : 'Done — no changes were needed.'
+  }
+
+  /** Polls the job until it leaves 'running' (batch diarization can take
+   * minutes); returns the summary, or throws on error/timeout. */
+  const pollRefine = async (jobId: string): Promise<RefineJobSummary> => {
+    for (let i = 0; i < 300; i++) {
+      await new Promise(r => setTimeout(r, 2000))
+      const res = await dispatchAction<DeckRefineStatusResult>(
+        'deck.refineStatus',
+        { jobId },
+      )
+      if (res.status === 'done')
+        return res.summary ?? { reframed: 0, slidesRefined: 0, transcriptsUpdated: 0 }
+      if (res.status === 'error') throw new Error(res.error ?? 'refine failed')
+    }
+    throw new Error('refine timed out')
+  }
+
+  /** Starts the selected refinement passes as one background job, then reloads
+   * the viewer's slides when it finishes. */
+  const runRefine = async () => {
+    setRefining(true)
+    setRefineMsg(null)
+    try {
+      const { jobId } = await dispatchAction<DeckRefineResult>('deck.refine', {
+        deckId: deck.id,
+        ...(identifySpeakers ? { identifySpeakers: true } : {}),
+        ...(refineSlides ? { refineSlides: { level: refineSlidesLevel } } : {}),
+        ...(refineTranscript
+          ? { refineTranscript: { level: refineTranscriptLevel } }
+          : {}),
+      })
+      const summary = await pollRefine(jobId)
+      setRefineMsg(summaryMessage(summary))
+      onReformatted()
+    } catch {
+      setRefineMsg('Could not complete the refinement — please try again.')
+    } finally {
+      setRefining(false)
+    }
   }
 
   const deleteLecture = () => {
@@ -340,6 +455,149 @@ export default function DeckSettingsModal({
             value={deck.templateId}
             onChange={switchTemplate}
           />
+        </section>
+      )}
+
+      {tab === 'refine' && (
+        <section
+          role="tabpanel"
+          id="settings-panel-refine"
+          aria-labelledby="settings-tab-refine"
+          className="flex flex-col gap-6"
+        >
+          <div>
+            <h3 className="mb-2 text-lg font-semibold text-slate-700">
+              Refine this lecture
+            </h3>
+            <p className="text-sm text-slate-500">
+              Improve the text, images, and spoken version of the slides. This
+              can take a few minutes and runs in the background.
+            </p>
+            {!hasSlides && (
+              <p className="mt-2 text-sm text-amber-600">
+                This lecture has no slides yet, so there is nothing to refine.
+              </p>
+            )}
+          </div>
+
+          <fieldset disabled={!hasSlides} className="flex flex-col gap-5">
+            <div>
+              <label className="flex items-start gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={identifySpeakers}
+                  disabled={!deck.hasRecordings}
+                  onChange={e => setIdentifySpeakers(e.target.checked)}
+                  className="mt-1"
+                />
+                <span>
+                  <span className="font-medium text-slate-800">
+                    Identify multiple speakers
+                  </span>
+                  <span className="block text-slate-500">
+                    Detect who spoke — you versus students — and reframe student
+                    turns as questions, not fact.
+                    {!deck.hasRecordings &&
+                      ' (No lecture audio was recorded, so this is unavailable.)'}
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            <div>
+              <label className="flex items-start gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={refineSlides}
+                  onChange={e => setRefineSlides(e.target.checked)}
+                  className="mt-1"
+                />
+                <span>
+                  <span className="font-medium text-slate-800">
+                    Refine all slides
+                  </span>
+                  <span className="block text-slate-500">
+                    Improve each slide&apos;s text, imagery, and layout to
+                    present the content better.
+                  </span>
+                </span>
+              </label>
+              {refineSlides && (
+                <label className="mt-2 ml-7 flex items-center gap-3 text-sm text-slate-600">
+                  How much: {refineSlidesLevel}
+                  <input
+                    type="range"
+                    min={1}
+                    max={5}
+                    value={refineSlidesLevel}
+                    aria-label="How much to refine slides"
+                    onChange={e => {
+                      const v = Number(e.target.value)
+                      setRefineSlidesLevel(v)
+                      persistLevel('slidesLevel', v)
+                    }}
+                  />
+                </label>
+              )}
+            </div>
+
+            <div>
+              <label className="flex items-start gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={refineTranscript}
+                  onChange={e => setRefineTranscript(e.target.checked)}
+                  className="mt-1"
+                />
+                <span>
+                  <span className="font-medium text-slate-800">
+                    Refine the spoken transcript
+                  </span>
+                  <span className="block text-slate-500">
+                    Rewrite the read-aloud narration to describe the concepts
+                    more eloquently.
+                  </span>
+                </span>
+              </label>
+              {refineTranscript && (
+                <label className="mt-2 ml-7 flex items-center gap-3 text-sm text-slate-600">
+                  How much: {refineTranscriptLevel}
+                  <input
+                    type="range"
+                    min={1}
+                    max={5}
+                    value={refineTranscriptLevel}
+                    aria-label="How much to refine narration"
+                    onChange={e => {
+                      const v = Number(e.target.value)
+                      setRefineTranscriptLevel(v)
+                      persistLevel('transcriptLevel', v)
+                    }}
+                  />
+                </label>
+              )}
+            </div>
+          </fieldset>
+
+          <div>
+            <button
+              onClick={runRefine}
+              disabled={refining || !anySelected || !hasSlides}
+              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              {refining ? 'Refining…' : 'Refine'}
+            </button>
+            {refining && (
+              <p className="mt-3 text-sm text-slate-500">
+                Working in the background — this can take a few minutes.
+              </p>
+            )}
+            {refineMsg && (
+              <p role="status" className="mt-3 text-sm text-slate-700">
+                {refineMsg}
+              </p>
+            )}
+          </div>
         </section>
       )}
 
