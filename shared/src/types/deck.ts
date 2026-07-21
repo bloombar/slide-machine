@@ -48,6 +48,12 @@ export interface Deck {
   seedContext?: string
   /** Own AI-freedom setting (1-5); absent = inherit the project's. */
   generationFreedom?: number
+  /** Per-lecture "Refine all slides" strength (1-5); absent = inherit the
+   * server default (REFINE_SLIDES_DEFAULT_LEVEL). Stored only once moved. */
+  refineSlidesLevel?: number
+  /** Per-lecture "Refine the spoken transcript" strength (1-5); absent =
+   * inherit the server default. Stored only once moved. */
+  refineTranscriptLevel?: number
   /** Lecturing/generation language, only when explicitly chosen; absent
    * = inherit (project, then owner profile, then browser default). */
   language?: Locale
@@ -55,6 +61,9 @@ export interface Deck {
   ttsVoice?: string
   /** Finalized full lecture transcript, retained for post-lecture reformat (GEN-4). */
   transcript?: string
+  /** True when the lecture has retained audio to run speaker diarization on
+   * (GEN-4 Phase 4). Derived flag — the raw recordings stay server-side. */
+  hasRecordings?: boolean
   voteScore: number
   createdAt: string
   /** Bumped whenever the deck or its slides change; drives recency ordering. */

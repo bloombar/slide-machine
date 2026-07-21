@@ -18,6 +18,12 @@ import type {
   GenerationProvider,
   SlideGenerationRequest,
   SlideGenerationResult,
+  SlideReformatRequest,
+  SlideReformatResult,
+  SlideRefineRequest,
+  SlideRefineResult,
+  SlideNarrateRequest,
+  SlideNarrateResult,
   LayoutType,
 } from '@slide-machine/shared'
 import { isVoiceCommand } from '@slide-machine/shared'
@@ -220,6 +226,159 @@ Current slide content: ${JSON.stringify(req.currentSlide.content)}`
   })
 }
 
+/** Validates a reformat result (GEN-4 Phase 4); never trust the model. */
+const reformatResultSchema = z.object({
+  layoutType: z.string().optional(),
+  slots: z.object({
+    title: z.string().optional(),
+    body: z.string().optional(),
+    bullets: z.array(z.string()).optional(),
+    caption: z.string().optional(),
+  }),
+  imageGuidance: z
+    .object({ keywords: z.array(z.string()), none: z.boolean().optional() })
+    .optional(),
+})
+
+/** Builds the reformat prompt: the current slide plus its role-annotated
+ * transcript, with the lecturer authoritative and students' turns to be
+ * rendered as questions/feedback. */
+const reformatPrompt = (req: SlideReformatRequest): string => {
+  const transcript = req.turns
+    .map(t => `[${t.role.toUpperCase()}] ${t.text}`)
+    .join('\n')
+  const layouts = req.layoutDescriptors
+    .map(d => `- ${d.type}: ${d.purpose}`)
+    .join('\n')
+  const seed = [req.seedContext?.project, req.seedContext?.deck]
+    .filter(Boolean)
+    .join('\n')
+  return [
+    'You are refining ONE lecture slide now that the speakers are known.',
+    'The LECTURER is authoritative. STUDENT turns are questions, comments, or',
+    'critiques — render them clearly AS a question/feedback, never as fact.',
+    'Keep the lecturer content accurate; fold student turns in as questions.',
+    '',
+    'Current slide (JSON):',
+    JSON.stringify(req.current),
+    '',
+    'Role-annotated transcript that produced this slide:',
+    transcript,
+    seed ? `\nLecture context:\n${seed}` : '',
+    req.language ? `\nWrite the slide text in: ${req.language}` : '',
+    '',
+    'Available layouts (choose the best fit):',
+    layouts,
+    '',
+    'Return ONLY this JSON:',
+    '{ "layoutType": "<one of the layouts above>", "slots": { "title"?: string, "body"?: string, "bullets"?: string[], "caption"?: string }, "imageGuidance"?: { "keywords": string[], "none"?: boolean } }',
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+/** POSTs a JSON-output prompt to Gemini and returns the candidate text; maps
+ * quota (429) / overload (503) to a user-facing GenerationUnavailableError. */
+const callGemini = async (prompt: string, label: string): Promise<string> => {
+  if (!env.GEMINI_API_KEY)
+    throw new Error('GENERATION_PROVIDER=gemini requires GEMINI_API_KEY')
+  if (env.GENERATION_LOG_PROMPTS)
+    console.log(`\n===== ${label} PROMPT =====\n${prompt}\n===== END =====`)
+  const res = await fetch(
+    `${API_BASE}/models/${env.GEMINI_MODEL}:generateContent`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': env.GEMINI_API_KEY,
+      },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.4,
+          maxOutputTokens: 2048,
+        },
+      }),
+      signal: AbortSignal.timeout(env.GEMINI_TIMEOUT_MS),
+    },
+  )
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '')
+    if (res.status === 429 || res.status === 503) {
+      console.warn(`Gemini ${label} ${res.status}: ${detail.slice(0, 500)}`)
+      throw new GenerationUnavailableError(
+        `${label} is unavailable — the AI provider is out of quota or busy.`,
+        res.status === 503,
+      )
+    }
+    throw new Error(`Gemini ${label} failed (${res.status}): ${detail.slice(0, 500)}`)
+  }
+  const data = (await res.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+  }
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+  if (!text) throw new Error(`Gemini ${label} returned no candidate text`)
+  return text
+}
+
+/** Slide-refine prompt: improve the slide at a 1–5 strength. */
+const refinePrompt = (req: SlideRefineRequest): string => {
+  const layouts = req.layoutDescriptors
+    .map(d => `- ${d.type}: ${d.purpose}`)
+    .join('\n')
+  const seed = [req.seedContext?.project, req.seedContext?.deck]
+    .filter(Boolean)
+    .join('\n')
+  return [
+    `Improve this lecture slide. Refinement strength ${req.level} of 5`,
+    '(1 = light polish; 5 = substantial rework). Keep it factually faithful to',
+    'the original; sharpen wording, structure, and choose the best-fitting',
+    'layout and image guidance. Do not invent content not implied by the slide.',
+    '',
+    'Current slide (JSON):',
+    JSON.stringify(req.current),
+    seed ? `\nLecture context:\n${seed}` : '',
+    req.language ? `\nWrite the slide text in: ${req.language}` : '',
+    '',
+    'Available layouts (choose the best fit):',
+    layouts,
+    '',
+    'Return ONLY this JSON:',
+    '{ "layoutType": "<one of the layouts above>", "slots": { "title"?: string, "body"?: string, "bullets"?: string[], "caption"?: string }, "imageGuidance"?: { "keywords": string[], "none"?: boolean } }',
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+const narrateResultSchema = z.object({ transcript: z.string() })
+
+/** A plain narration built straight from the slide's text — the fallback when
+ * the model reply is unusable, and the shape the prompt asks for. */
+const plainNarration = (s: SlideNarrateRequest['slide']): string =>
+  [s.title, s.body, ...(s.bullets ?? [])].filter(Boolean).join('. ')
+
+/** Narration prompt: what the lecturer would say to present this slide. */
+const narratePrompt = (req: SlideNarrateRequest): string =>
+  [
+    'Write the spoken narration a lecturer would say to present this slide',
+    `aloud. Eloquence ${req.level} of 5 (1 = plain and faithful; 5 = rich and`,
+    'engaging). Describe the concepts clearly; do not read the slide verbatim.',
+    req.studentContext
+      ? 'This slide represents a STUDENT question or comment — narrate it as'
+        + ' presenting the student’s question/feedback, not as the lecturer’s'
+        + ' own assertion.'
+      : '',
+    req.language ? `Language: ${req.language}.` : '',
+    '',
+    'Slide (JSON):',
+    JSON.stringify(req.slide),
+    '',
+    'Return ONLY this JSON: { "transcript": string }',
+  ]
+    .filter(Boolean)
+    .join('\n')
+
 export class GeminiGenerationProvider implements GenerationProvider {
   readonly name = 'gemini'
 
@@ -371,6 +530,149 @@ export class GeminiGenerationProvider implements GenerationProvider {
           ? parsed.deckTitle.trim().slice(0, 80)
           : undefined,
     }
+  }
+
+  async reformatSlide(req: SlideReformatRequest): Promise<SlideReformatResult> {
+    if (!env.GEMINI_API_KEY)
+      throw new Error('GENERATION_PROVIDER=gemini requires GEMINI_API_KEY')
+    /** Falls back to the slide as-is, so a bad model reply never corrupts it. */
+    const unchanged: SlideReformatResult = {
+      layoutType: req.current.layoutType,
+      slots: {
+        title: req.current.title,
+        body: req.current.body,
+        bullets: req.current.bullets,
+        caption: req.current.caption,
+      },
+    }
+
+    const prompt = reformatPrompt(req)
+    if (env.GENERATION_LOG_PROMPTS)
+      console.log(`\n===== REFORMAT PROMPT =====\n${prompt}\n===== END =====`)
+
+    const res = await fetch(
+      `${API_BASE}/models/${env.GEMINI_MODEL}:generateContent`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': env.GEMINI_API_KEY,
+        },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            temperature: 0.4,
+            maxOutputTokens: 2048,
+          },
+        }),
+        signal: AbortSignal.timeout(env.GEMINI_TIMEOUT_MS),
+      },
+    )
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '')
+      if (res.status === 429 || res.status === 503) {
+        console.warn(`Gemini reformat ${res.status}: ${detail.slice(0, 500)}`)
+        throw new GenerationUnavailableError(
+          'Slide reformat is unavailable — the AI provider is out of quota or busy.',
+          res.status === 503,
+        )
+      }
+      throw new Error(
+        `Gemini reformat failed (${res.status}): ${detail.slice(0, 500)}`,
+      )
+    }
+
+    const data = (await res.json()) as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+    }
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+    if (!text) return unchanged
+    let raw: unknown
+    try {
+      raw = JSON.parse(text)
+    } catch {
+      return unchanged
+    }
+    const parsed = reformatResultSchema.safeParse(raw)
+    if (!parsed.success) {
+      console.warn(
+        'Reformat output failed validation, keeping slide:',
+        parsed.error.issues,
+      )
+      return unchanged
+    }
+
+    const allowed = new Set(req.layoutDescriptors.map(d => d.type))
+    const layoutType = (
+      parsed.data.layoutType && allowed.has(parsed.data.layoutType as LayoutType)
+        ? parsed.data.layoutType
+        : req.current.layoutType
+    ) as LayoutType
+    return {
+      layoutType,
+      slots: parsed.data.slots,
+      imageGuidance: parsed.data.imageGuidance
+        ? {
+            keywords: parsed.data.imageGuidance.keywords.slice(0, 6),
+            none: parsed.data.imageGuidance.none,
+          }
+        : undefined,
+    }
+  }
+
+  async refineSlide(req: SlideRefineRequest): Promise<SlideRefineResult> {
+    const unchanged: SlideRefineResult = {
+      layoutType: req.current.layoutType,
+      slots: {
+        title: req.current.title,
+        body: req.current.body,
+        bullets: req.current.bullets,
+        caption: req.current.caption,
+      },
+    }
+    let raw: unknown
+    try {
+      raw = JSON.parse(await callGemini(refinePrompt(req), 'Slide refine'))
+    } catch (error) {
+      // Quota/overload aborts the job; a bad JSON reply just keeps the slide.
+      if (error instanceof GenerationUnavailableError) throw error
+      return unchanged
+    }
+    // The refine output shape matches the reformat one (slots + layout + image).
+    const parsed = reformatResultSchema.safeParse(raw)
+    if (!parsed.success) return unchanged
+    const allowed = new Set(req.layoutDescriptors.map(d => d.type))
+    const layoutType = (
+      parsed.data.layoutType && allowed.has(parsed.data.layoutType as LayoutType)
+        ? parsed.data.layoutType
+        : req.current.layoutType
+    ) as LayoutType
+    return {
+      layoutType,
+      slots: parsed.data.slots,
+      imageGuidance: parsed.data.imageGuidance
+        ? {
+            keywords: parsed.data.imageGuidance.keywords.slice(0, 6),
+            none: parsed.data.imageGuidance.none,
+          }
+        : undefined,
+    }
+  }
+
+  async narrateSlide(req: SlideNarrateRequest): Promise<SlideNarrateResult> {
+    const fallback: SlideNarrateResult = { transcript: plainNarration(req.slide) }
+    let raw: unknown
+    try {
+      raw = JSON.parse(await callGemini(narratePrompt(req), 'Narration'))
+    } catch (error) {
+      if (error instanceof GenerationUnavailableError) throw error
+      return fallback
+    }
+    const parsed = narrateResultSchema.safeParse(raw)
+    return parsed.success && parsed.data.transcript.trim()
+      ? { transcript: parsed.data.transcript.trim() }
+      : fallback
   }
 }
 

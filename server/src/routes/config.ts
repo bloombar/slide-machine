@@ -33,6 +33,8 @@ configRouter.get('/config', (_req, res) => {
   const body: RuntimeConfig = {
     sttEngine: sttEngine(),
     ttsEnabled: ttsEnabled(),
+    refineSlidesDefaultLevel: env.REFINE_SLIDES_DEFAULT_LEVEL,
+    refineTranscriptDefaultLevel: env.REFINE_TRANSCRIPT_DEFAULT_LEVEL,
   }
   res.json(body)
 })

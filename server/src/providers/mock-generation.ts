@@ -24,6 +24,12 @@ import type {
   LayoutType,
   SlideGenerationRequest,
   SlideGenerationResult,
+  SlideReformatRequest,
+  SlideReformatResult,
+  SlideRefineRequest,
+  SlideRefineResult,
+  SlideNarrateRequest,
+  SlideNarrateResult,
   VoiceCommand,
 } from '@slide-machine/shared'
 import { registry } from './registry'
@@ -192,6 +198,53 @@ export class MockGenerationProvider implements GenerationProvider {
       action: 'new',
       layoutType: fitLayout('content', req.layoutDescriptors),
       slots: { title: titleCase(words.slice(0, 5)), body: phrase },
+    }
+  }
+
+  /**
+   * Deterministic reformat (GEN-4 Phase 4): keeps the lecturer's content as-is
+   * and appends each student turn as an explicit "Q:" bullet, so a student's
+   * question is clearly marked rather than left standing as authoritative fact.
+   */
+  async reformatSlide(req: SlideReformatRequest): Promise<SlideReformatResult> {
+    const questions = req.turns
+      .filter(t => t.role === 'student')
+      .map(t => `Q: ${t.text}`)
+    return {
+      layoutType: req.current.layoutType,
+      slots: {
+        title: req.current.title,
+        body: req.current.body,
+        bullets: [...(req.current.bullets ?? []), ...questions],
+        caption: req.current.caption,
+      },
+    }
+  }
+
+  /** Deterministic slide refine (GEN-4): preserves content and stamps the
+   * caption with the refinement level, so tests can assert a slide was
+   * refined at a chosen strength. */
+  async refineSlide(req: SlideRefineRequest): Promise<SlideRefineResult> {
+    return {
+      layoutType: req.current.layoutType,
+      slots: {
+        title: req.current.title,
+        body: req.current.body,
+        bullets: req.current.bullets,
+        caption: `Refined (level ${req.level})`,
+      },
+    }
+  }
+
+  /** Deterministic narration (GEN-4): joins the slide's content, prefixed as a
+   * student question when the slide represents student speech — so playback
+   * stays in-line with the (possibly reformatted) slide. */
+  async narrateSlide(req: SlideNarrateRequest): Promise<SlideNarrateResult> {
+    const content = [req.slide.title, req.slide.body, ...(req.slide.bullets ?? [])]
+      .filter(Boolean)
+      .join('. ')
+    return {
+      transcript: `${req.studentContext ? 'A student asked: ' : ''}${content}`.trim(),
     }
   }
 }

@@ -186,3 +186,32 @@ describe('MockGenerationProvider two-column heuristic', () => {
     expect(r.imageGuidance?.keywords.length).toBeGreaterThan(0)
   })
 })
+
+describe('MockGenerationProvider refine + narrate (GEN-4)', () => {
+  it('refine stamps the level on the caption and preserves content', async () => {
+    const r = await provider.refineSlide({
+      current: { layoutType: 'content', title: 'T', body: 'B', bullets: ['x'] },
+      level: 4,
+      layoutDescriptors: [],
+    })
+    expect(r.slots.title).toBe('T')
+    expect(r.slots.bullets).toEqual(['x'])
+    expect(r.slots.caption).toBe('Refined (level 4)')
+  })
+
+  it('narrates plainly, and frames a student slide as a question', async () => {
+    const plain = await provider.narrateSlide({
+      slide: { layoutType: 'content', title: 'Photosynthesis', body: 'Light energy' },
+      level: 2,
+    })
+    expect(plain.transcript).toBe('Photosynthesis. Light energy')
+
+    const student = await provider.narrateSlide({
+      slide: { layoutType: 'list', title: 'Q', bullets: ['Q: Is this on the exam?'] },
+      level: 1,
+      studentContext: true,
+    })
+    expect(student.transcript).toMatch(/^A student asked:/)
+    expect(student.transcript).toContain('Is this on the exam?')
+  })
+})

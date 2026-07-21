@@ -6,7 +6,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { Menu, Home, User, LogOut, LogIn } from 'lucide-react'
+import { Menu, LogOut, LogIn } from 'lucide-react'
 import { useAuth } from '../../auth/AuthContext'
 
 export default function ShellMenu() {
@@ -64,7 +64,6 @@ export default function ShellMenu() {
             onClick={() => setOpen(false)}
             className={item}
           >
-            <Home className="h-4 w-4" aria-hidden />
             Home
           </Link>
           {authed ? (
@@ -75,15 +74,14 @@ export default function ShellMenu() {
                 onClick={() => setOpen(false)}
                 className={item}
               >
-                <User className="h-4 w-4" aria-hidden />
                 Profile
               </Link>
               <button
                 role="menuitem"
                 onClick={() => void doLogout()}
-                className={item}
+                className="mt-1 flex w-full items-center gap-2 rounded-md bg-slate-50 px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-100 hover:text-slate-700"
               >
-                <LogOut className="h-4 w-4" aria-hidden />
+                <LogOut className="h-3.5 w-3.5" aria-hidden />
                 Log out
               </button>
             </>

@@ -13,6 +13,7 @@ import type {
   DeckSetAccessInput,
   DeckSetGenerationFreedomInput,
   DeckSetLanguageInput,
+  DeckSetRefineLevelsInput,
   DeckSetTtsVoiceInput,
   DeckSetSeedNotesInput,
   DeckShare,
@@ -807,6 +808,26 @@ export const deckSetGenerationFreedom = defineAction<
   },
 })
 
+/** Per-lecture Refine slider levels (GEN-4): a number pins a level for this
+ * lecture, null re-inherits the server default, absent leaves it unchanged. */
+export const deckSetRefineLevels = defineAction<DeckSetRefineLevelsInput, Deck>({
+  name: 'deck.setRefineLevels',
+  input: z.object({
+    deckId: z.string().min(1),
+    slidesLevel: z.number().int().min(1).max(5).nullable().optional(),
+    transcriptLevel: z.number().int().min(1).max(5).nullable().optional(),
+  }),
+  execute: async (ctx, input) => {
+    const { deck, acl } = await loadEditableDeck(ctx, input.deckId)
+    if (input.slidesLevel !== undefined)
+      deck.refineSlidesLevel = input.slidesLevel ?? undefined
+    if (input.transcriptLevel !== undefined)
+      deck.refineTranscriptLevel = input.transcriptLevel ?? undefined
+    await deck.save()
+    return toDeckDto(deck, acl)
+  },
+})
+
 /** Lecture-level language; null re-inherits project/profile/browser. */
 export const deckSetLanguage = defineAction<DeckSetLanguageInput, Deck>({
   name: 'deck.setLanguage',
@@ -1023,6 +1044,7 @@ registerAction(deckReorderSlides)
 registerAction(sessionPhrase)
 registerAction(deckSetSeedNotes)
 registerAction(deckSetGenerationFreedom)
+registerAction(deckSetRefineLevels)
 registerAction(deckSetLanguage)
 registerAction(deckSetTtsVoice)
 registerAction(deckSetAccess)

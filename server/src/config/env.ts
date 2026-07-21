@@ -191,6 +191,15 @@ const envSchema = z.object({
   // MULTI-REGIONS (not regional endpoints like us-central1) — verified live.
   // Sets the {location}-speech.googleapis.com endpoint.
   DIARIZATION_LOCATION: z.string().default('us'),
+  // Default strength (1–5) the Refine sliders start at; surfaced to the client
+  // via /api/config. The user can still move them per run.
+  REFINE_SLIDES_DEFAULT_LEVEL: z.coerce.number().int().min(1).max(5).default(2),
+  REFINE_TRANSCRIPT_DEFAULT_LEVEL: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(5)
+    .default(2),
 
   // S3-compatible object storage: MinIO in dev, DO Spaces in prod (TECH-10)
   S3_ENDPOINT: z.string().optional(),

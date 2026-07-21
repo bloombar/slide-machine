@@ -1166,6 +1166,14 @@ export default function DeckViewerPage() {
           onTemplateChange={(deck, template) =>
             setView(v => (v ? { ...v, deck, template } : v))
           }
+          onReformatted={() => {
+            // Reload the deck so the reformatted slides show behind the modal.
+            apiFetch<DeckViewResponse>(`/api/decks/${slug}`)
+              .then(setView)
+              .catch(() => {
+                // Quiet failure: the current view stays until the next load
+              })
+          }}
         />
       )}
 
