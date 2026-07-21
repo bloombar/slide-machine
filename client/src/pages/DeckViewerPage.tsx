@@ -50,7 +50,7 @@ import SlideView, { type SlideContentPatch } from '../components/SlideView'
 import SlideNavZones from '../components/SlideNavZones'
 import SlideMenu from '../components/SlideMenu'
 import { useTtsPlayback } from '../tts/playback'
-import { getTtsEnabled } from '../runtime-config'
+import { getSttEngine, getTtsEnabled } from '../runtime-config'
 import LayoutPickerModal from '../components/LayoutPickerModal'
 import DraggableListRow from '../components/DraggableListRow'
 import EditableText from '../components/EditableText'
@@ -449,6 +449,34 @@ export default function DeckViewerPage() {
     capture.stop()
     setListening(false)
     setInterim('')
+    // Ending a google-cloud recording makes the server flush its audio to
+    // storage and attach it to the deck — asynchronously, on socket close. The
+    // deck view computed audioSlideIds at load, so poll it for a short window
+    // to reveal the per-slide "Play original audio" option without a reload.
+    if (getSttEngine() === 'google-cloud') refreshAudioAvailability()
+  }
+
+  /** Polls the deck view until new retained audio appears (or the window
+   * elapses), merging only audioSlideIds so local slide state is untouched. */
+  const refreshAudioAvailability = () => {
+    const had = new Set(viewRef.current?.audioSlideIds ?? [])
+    let tries = 0
+    const poll = () => {
+      tries++
+      apiFetch<DeckViewResponse>(`/api/decks/${slug}`)
+        .then(fresh => {
+          const ids = fresh.audioSlideIds ?? []
+          setView(v => (v ? { ...v, audioSlideIds: ids } : v))
+          const grew = ids.some(id => !had.has(id))
+          if (!grew && tries < 24) window.setTimeout(poll, 5000)
+        })
+        .catch(() => {
+          if (tries < 24) window.setTimeout(poll, 5000)
+        })
+    }
+    // Give the flush (concat → WAV → upload) a moment to begin before the first
+    // check; a large lecture can take a while, so keep polling up to ~2 min.
+    window.setTimeout(poll, 3000)
   }
 
   /** Appends a starter slide at the end and navigates to it. Reads
