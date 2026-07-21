@@ -8,6 +8,7 @@ import type {
   ImageAttribution,
   ImageSearchCandidate,
   Slide,
+  Stroke,
 } from '@slide-machine/shared'
 import { apiFetch, ApiError } from './http'
 import { dispatchAction } from './actions'
@@ -53,6 +54,17 @@ export const applySlideImageFromSource = (
   })
 
 /**
+ * Persists a slide's whiteboard drawings wholesale (WB-1). Called after each
+ * draw or (timestamped) erase; erased strokes are kept so playback can replay
+ * the erasure. Returns the refreshed slide so the viewer can patch it in place.
+ */
+export const editSlideDrawings = (
+  slideId: string,
+  drawings: Stroke[],
+): Promise<Slide> =>
+  dispatchAction<Slide>('slide.editDrawings', { slideId, drawings })
+
+/**
  * Synthesizes speech for a slide and returns a playable audio URL (or null
  * when there's nothing to say). `content` speaks the rendered slide;
  * `transcript` speaks the stored lecture transcript (narrated from content by
@@ -79,9 +91,12 @@ export const fetchSlideOriginalAudioUrl = async (
 ): Promise<string> => {
   const request = async (retry: boolean): Promise<Response> => {
     const token = getAccessToken()
-    const res = await fetch(`${config.apiBaseUrl}/api/slides/${slideId}/audio`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
+    const res = await fetch(
+      `${config.apiBaseUrl}/api/slides/${slideId}/audio`,
+      {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      },
+    )
     if (res.status === 401 && retry && (await refreshSession()))
       return request(false)
     return res

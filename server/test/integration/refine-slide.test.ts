@@ -97,7 +97,9 @@ describe('deck.refineSlide', () => {
 
     // Target: content refined (caption) + narration in-line with its content.
     const t = await SlideModel.findById(target)
-    expect(t?.caption).toBe(`Refined (level ${env.REFINE_SLIDES_DEFAULT_LEVEL})`)
+    expect(t?.caption).toBe(
+      `Refined (level ${env.REFINE_SLIDES_DEFAULT_LEVEL})`,
+    )
     expect(t?.sourceTranscript).toContain('Photosynthesis')
 
     // The other slide is untouched.
@@ -212,6 +214,43 @@ describe('deck.refineSlide', () => {
     expect(after2?.sourceTranscript).toContain('The original spoken words.')
     expect(after2?.sourceTranscript).toMatch(/\(refined\).*\(refined\)/s)
     expect(after2?.sourceTranscript).not.toContain('Photosynthesis')
+  })
+
+  it('rescales whiteboard stroke anchors when the narration is rewritten (WB-2)', async () => {
+    const { target } = await seedSlides()
+    // A 20-char transcript with a stroke drawn at the halfway point and later
+    // erased at the end. The mock narrator appends " (refined)" → 30 chars.
+    await SlideModel.updateOne(
+      { _id: target },
+      {
+        sourceTranscript: 'Photosynthesis rocks', // 20 chars
+        drawings: [
+          {
+            id: 'd1',
+            tool: 'pen',
+            color: '#1e293b',
+            thickness: 0.01,
+            points: [
+              { x: 0.1, y: 0.1 },
+              { x: 0.2, y: 0.2 },
+            ],
+            startedAt: '2026-07-21T10:00:00.000Z',
+            endedAt: '2026-07-21T10:00:01.000Z',
+            anchor: { charAnchor: 10, source: 'appended' },
+            erasedAnchor: { charAnchor: 20, source: 'word' },
+            erasedAt: '2026-07-21T10:00:05.000Z',
+          },
+        ],
+      },
+    )
+
+    await act(ada, 'deck.refineSlide', { deckId, slideId: target })
+
+    const t = await SlideModel.findById(target)
+    expect(t?.sourceTranscript).toBe('Photosynthesis rocks (refined)') // 30 chars
+    // Anchors stay proportional: 10/20 → 15/30, 20/20 → 30/30.
+    expect(t?.drawings?.[0]?.anchor.charAnchor).toBe(15)
+    expect(t?.drawings?.[0]?.erasedAnchor?.charAnchor).toBe(30)
   })
 
   it('gates on edit access and slide ownership', async () => {

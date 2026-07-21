@@ -23,6 +23,8 @@ const colors: ThemeColors = {
   text: '#fff',
   muted: '#888',
   accent: '#0ff',
+  penColor: '#000',
+  highlighterColor: '#ff0',
 }
 
 /** Fully populated so conditional slots (captions etc.) all render. */

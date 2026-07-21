@@ -22,6 +22,12 @@ interface Props {
    * retained audio is available for the slide). */
   onPlayOriginalAudio?: () => void
   onDelete?: () => void
+  /** Lift the kebab above the whiteboard drawing overlay (z-20) so it stays
+   * clickable while a drawing tool is active (WB). */
+  elevated?: boolean
+  /** Called when the menu opens — used to drop out of drawing mode so the
+   * kebab and its actions behave normally (WB). */
+  onOpen?: () => void
 }
 
 export default function SlideMenu({
@@ -31,9 +37,18 @@ export default function SlideMenu({
   onRefine,
   onPlayOriginalAudio,
   onDelete,
+  elevated,
+  onOpen,
 }: Props) {
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+
+  /** Toggles the menu; opening also drops out of drawing mode (WB). */
+  const toggle = () =>
+    setOpen(o => {
+      if (!o) onOpen?.()
+      return !o
+    })
 
   // Outside clicks and Escape close the menu
   useEffect(() => {
@@ -68,12 +83,15 @@ export default function SlideMenu({
     return null
 
   return (
-    <div ref={menuRef} className="absolute top-3 right-3 z-10">
+    <div
+      ref={menuRef}
+      className={`absolute top-3 right-3 ${elevated ? 'z-30' : 'z-10'}`}
+    >
       <button
         aria-label={`Options for slide ${number}`}
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen(o => !o)}
+        onClick={toggle}
         className="rounded-full bg-black/30 p-2 text-white hover:bg-black/50"
       >
         <MoreVertical className="h-4 w-4" aria-hidden />

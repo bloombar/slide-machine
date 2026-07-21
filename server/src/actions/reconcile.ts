@@ -31,7 +31,9 @@ import type {
   ReformatTurn,
   SlideContent,
   SpeakerRole,
+  Stroke,
 } from '@slide-machine/shared'
+import { remapAnchor } from '@slide-machine/shared'
 import { defineAction } from './define'
 import { registerAction, ActionForbiddenError } from './dispatch'
 import { loadEditableDeck } from './deck'
@@ -69,7 +71,12 @@ const applyContent = (
   s: SlideDoc,
   result: {
     layoutType: LayoutType
-    slots: { title?: string; body?: string; bullets?: string[]; caption?: string }
+    slots: {
+      title?: string
+      body?: string
+      bullets?: string[]
+      caption?: string
+    }
   },
 ): void => {
   s.layoutType = result.layoutType
@@ -140,7 +147,9 @@ const enrichRefinedSlideImage = async (
 }
 
 /** Slide ids that any student-role segment points at — used to frame narration. */
-const studentSlideIds = async (deckId: DeckDoc['_id']): Promise<Set<string>> => {
+const studentSlideIds = async (
+  deckId: DeckDoc['_id'],
+): Promise<Set<string>> => {
   const segs = await TranscriptSegmentModel.find({ deckId, role: 'student' })
   return new Set(segs.filter(s => s.slideId).map(s => s.slideId!.toString()))
 }
@@ -220,10 +229,16 @@ const reformatStudentSlides = async (
     arr.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
 
   const rolesBySlide = new Map<string, SpeakerRole[]>(
-    [...bySlide].map(([sid, arr]) => [sid, arr.map(s => s.role as SpeakerRole)]),
+    [...bySlide].map(([sid, arr]) => [
+      sid,
+      arr.map(s => s.role as SpeakerRole),
+    ]),
   )
   const plan = planReformat(
-    slides.map(s => ({ id: s._id.toString(), manuallyEdited: s.manuallyEdited })),
+    slides.map(s => ({
+      id: s._id.toString(),
+      manuallyEdited: s.manuallyEdited,
+    })),
     rolesBySlide,
   )
   const slideById = new Map(slides.map(s => [s._id.toString(), s]))
@@ -276,22 +291,24 @@ export const deckDiarize = defineAction<DeckDiarizeInput, DeckDiarizeResult>({
 
 registerAction(deckDiarize)
 
-export const deckReformat = defineAction<DeckReformatInput, DeckReformatResult>({
-  name: 'deck.reformat',
-  input: z.object({ deckId: z.string().min(1) }),
-  execute: async (ctx, input) => {
-    const { deck } = await loadEditableDeck(ctx, input.deckId)
-    const template = getBuiltinTemplate(deck.templateId)
-    const descriptors = template ? layoutDescriptors(template) : []
-    const gen = registry.get<GenerationProvider>('generation')
-    const { reframed, kept, protectedCount } = await reformatStudentSlides(
-      deck,
-      descriptors,
-      gen,
-    )
-    return { reformatted: reframed, kept, protectedCount }
+export const deckReformat = defineAction<DeckReformatInput, DeckReformatResult>(
+  {
+    name: 'deck.reformat',
+    input: z.object({ deckId: z.string().min(1) }),
+    execute: async (ctx, input) => {
+      const { deck } = await loadEditableDeck(ctx, input.deckId)
+      const template = getBuiltinTemplate(deck.templateId)
+      const descriptors = template ? layoutDescriptors(template) : []
+      const gen = registry.get<GenerationProvider>('generation')
+      const { reframed, kept, protectedCount } = await reformatStudentSlides(
+        deck,
+        descriptors,
+        gen,
+      )
+      return { reformatted: reframed, kept, protectedCount }
+    },
   },
-})
+)
 
 registerAction(deckReformat)
 
@@ -351,9 +368,43 @@ const narrateOneSlide = async (
     // Refine the existing narration further, so repeated refines compound.
     transcript: slide.sourceTranscript,
   })
+  // Whiteboard stroke timing is anchored to the narration (WB-2); a wholesale
+  // rewrite would strand it, so rescale each stroke's draw + erase anchors to
+  // the new transcript length, keeping every mark at the same proportional
+  // point of the narration.
+  const oldLen = slide.sourceTranscript?.length ?? 0
   slide.sourceTranscript = result.transcript
+  remapSlideDrawings(slide, oldLen, slide.sourceTranscript.length)
   await slide.save()
   return true
+}
+
+/** Rescales a slide's stroke anchors when its transcript length changes (WB-2).
+ * A no-op when there are no drawings or the old transcript was empty. */
+const remapSlideDrawings = (
+  slide: SlideDoc,
+  oldLen: number,
+  newLen: number,
+): void => {
+  if (!slide.drawings?.length || oldLen <= 0) return
+  // toObject() yields plain strokes (safe to spread) rather than subdocuments.
+  const plain = (slide.toObject().drawings ?? []) as Stroke[]
+  const remapped = plain.map(s => ({
+    ...s,
+    anchor: {
+      ...s.anchor,
+      charAnchor: remapAnchor(s.anchor.charAnchor, oldLen, newLen),
+    },
+    ...(s.erasedAnchor
+      ? {
+          erasedAnchor: {
+            ...s.erasedAnchor,
+            charAnchor: remapAnchor(s.erasedAnchor.charAnchor, oldLen, newLen),
+          },
+        }
+      : {}),
+  }))
+  slide.set('drawings', remapped)
 }
 
 /**
@@ -391,7 +442,9 @@ const runRefine = async (
 
     // 2. Refine slide content in place (protect hand-edited slides).
     if (input.refineSlides) {
-      const slides = await SlideModel.find({ deckId: deck._id }).sort({ index: 1 })
+      const slides = await SlideModel.find({ deckId: deck._id }).sort({
+        index: 1,
+      })
       for (const slide of slides) {
         try {
           const refined = await refineOneSlide(
@@ -413,7 +466,9 @@ const runRefine = async (
 
     // 3 + TTS correctness: re-narrate every slide when the transcript pass is
     // on, otherwise just the slides whose content changed above.
-    const allSlides = await SlideModel.find({ deckId: deck._id }).sort({ index: 1 })
+    const allSlides = await SlideModel.find({ deckId: deck._id }).sort({
+      index: 1,
+    })
     const studentIds = await studentSlideIds(deck._id)
     const level = input.refineTranscript?.level ?? 1
     const targets = input.refineTranscript
@@ -434,10 +489,14 @@ const runRefine = async (
       }
     }
 
-    if (reframed || slidesRefined || transcriptsUpdated) await touchDeck(deck._id)
+    if (reframed || slidesRefined || transcriptsUpdated)
+      await touchDeck(deck._id)
     await RefineJobModel.updateOne(
       { _id: jobId },
-      { status: 'done', summary: { reframed, slidesRefined, transcriptsUpdated } },
+      {
+        status: 'done',
+        summary: { reframed, slidesRefined, transcriptsUpdated },
+      },
     )
   } catch (error) {
     console.error('Refine job failed:', error)
@@ -456,14 +515,19 @@ export const deckRefine = defineAction<DeckRefineInput, DeckRefineResult>({
   input: z.object({
     deckId: z.string().min(1),
     identifySpeakers: z.boolean().optional(),
-    refineSlides: z.object({ level: z.number().int().min(1).max(5) }).optional(),
+    refineSlides: z
+      .object({ level: z.number().int().min(1).max(5) })
+      .optional(),
     refineTranscript: z
       .object({ level: z.number().int().min(1).max(5) })
       .optional(),
   }),
   execute: async (ctx, input) => {
     const { deck } = await loadEditableDeck(ctx, input.deckId)
-    const job = await RefineJobModel.create({ deckId: deck._id, status: 'running' })
+    const job = await RefineJobModel.create({
+      deckId: deck._id,
+      status: 'running',
+    })
     // Fire-and-forget: the job runs in the background; the client polls status.
     void runRefine(job._id.toString(), deck._id.toString(), input)
     return { jobId: job._id.toString() }
@@ -525,7 +589,8 @@ export const deckRefineSlide = defineAction<
     // The lecture's persisted settings, each falling back to its default.
     const slidesEnabled = deck.refineSlidesEnabled ?? true
     const transcriptEnabled = deck.refineTranscriptEnabled ?? true
-    const slidesLevel = deck.refineSlidesLevel ?? env.REFINE_SLIDES_DEFAULT_LEVEL
+    const slidesLevel =
+      deck.refineSlidesLevel ?? env.REFINE_SLIDES_DEFAULT_LEVEL
     const transcriptLevel =
       deck.refineTranscriptLevel ?? env.REFINE_TRANSCRIPT_DEFAULT_LEVEL
 

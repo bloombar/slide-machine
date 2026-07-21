@@ -25,7 +25,13 @@ describe('externalized templates', () => {
     ])
     for (const template of templates) {
       expect(Object.keys(template.theme)).toEqual(
-        expect.arrayContaining(['background', 'text', 'accent']),
+        expect.arrayContaining([
+          'background',
+          'text',
+          'accent',
+          'penColor',
+          'highlighterColor',
+        ]),
       )
       // Every conventional layout is present with its budgets intact
       expect(template.layouts.map(l => l.type).sort()).toEqual(

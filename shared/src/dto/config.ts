@@ -17,4 +17,8 @@ export interface RuntimeConfig {
   refineSlidesDefaultLevel: number
   /** Default strength (1–5) the "Refine the spoken transcript" slider starts at. */
   refineTranscriptDefaultLevel: number
+  /** How long (ms) after the last drawing/erasing gesture the client keeps
+   * suppressing auto-slide-creation while recording (WB-3), so a pause to
+   * switch tools or reposition the cursor still counts as active use. */
+  whiteboardSuppressDebounceMs: number
 }

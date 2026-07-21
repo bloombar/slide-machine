@@ -25,12 +25,16 @@ import type {
   ImageSearchCandidate,
   Slide,
   SlideEvent,
-  SlotSpec,
+  Stroke,
+  StrokeAnchor,
+  WordTiming,
 } from '@slide-machine/shared'
+import { strokeVisible } from '../lib/drawing'
 import { apiFetch, ApiError } from '../api/http'
 import { dispatchAction } from '../api/actions'
 import {
   applySlideImageFromSource,
+  editSlideDrawings,
   fetchSlideOriginalAudioUrl,
   pollSlideImage,
   uploadSlideImage,
@@ -50,14 +54,21 @@ import SlideView, { type SlideContentPatch } from '../components/SlideView'
 import SlideNavZones from '../components/SlideNavZones'
 import SlideMenu from '../components/SlideMenu'
 import { useTtsPlayback } from '../tts/playback'
-import { getSttEngine, getTtsEnabled } from '../runtime-config'
+import {
+  getSttEngine,
+  getTtsEnabled,
+  getWhiteboardSuppressDebounceMs,
+} from '../runtime-config'
 import LayoutPickerModal from '../components/LayoutPickerModal'
 import DraggableListRow from '../components/DraggableListRow'
 import EditableText from '../components/EditableText'
 import DeckPageHeader from '../components/DeckPageHeader'
+import WhiteboardToolbar from '../components/whiteboard/WhiteboardToolbar'
+import DrawingLayer from '../components/whiteboard/DrawingLayer'
+import { useWhiteboard } from '../components/whiteboard/useWhiteboard'
+import { themeColors } from '../components/slide/theme'
 import Tooltip from '../components/Tooltip'
 import SeedDialog from '../components/SeedDialog'
-import ConfirmDialog from '../components/ConfirmDialog'
 import DeckSettingsModal, {
   type SettingsTabId,
 } from '../components/DeckSettingsModal'
@@ -65,28 +76,6 @@ import { ShellTitle } from '../components/layout/ShellTitle'
 import { ShellActions } from '../components/layout/ShellActions'
 import ViewModeToggle, { type ViewMode } from '../components/ViewModeToggle'
 import { lectureTitle, UNTITLED } from '../lib/lecture'
-
-// Image/text detection derived from a layout's own slots, so the rules
-// below work for any template rather than hardcoding layout names.
-
-/** True when the layout has an image slot. */
-const layoutHasImage = (layout: { slots: SlotSpec[] }): boolean =>
-  layout.slots.some(s => s.kind === 'image')
-
-// Slot roles that only label or annotate a slide, never carry its substance.
-// An image slide paired only with one of these is still "image-only": removing
-// the image leaves nothing worth keeping.
-const ANCILLARY_TEXT_SLOTS = new Set(['title', 'caption', 'subtitle'])
-
-/** True when the layout carries substantial editable text (a body paragraph
- * or bullets). A title or caption alone does not count, so an image-only
- * layout (image + caption, or image + title) reads as false. */
-const layoutHasTextBody = (layout: { slots: SlotSpec[] }): boolean =>
-  layout.slots.some(
-    s =>
-      s.kind === 'bullets' ||
-      (s.kind === 'text' && !ANCILLARY_TEXT_SLOTS.has(s.name)),
-  )
 
 // The toolbar's "Seed material" upload button is hidden for now but its
 // wiring (openManualSeed, the SeedDialog) is kept so it can return by
@@ -153,10 +142,6 @@ export default function DeckViewerPage() {
   const [settingsOpen, setSettingsOpen] = useState(() => settingsTab !== null)
   // Which slide the layout picker is open for (EDIT-3)
   const [layoutPickerFor, setLayoutPickerFor] = useState<string | null>(null)
-  // Slide awaiting confirmation to delete after its only image is removed
-  const [confirmImageDeleteId, setConfirmImageDeleteId] = useState<
-    string | null
-  >(null)
   // Blank slots are invisible to the audience; clicking the page
   // background flashes a half-second skeleton reveal so editors can
   // find them
@@ -196,6 +181,37 @@ export default function DeckViewerPage() {
   )
   const originalAudioRef = useRef<HTMLAudioElement | null>(null)
   const originalUrlRef = useRef<string | null>(null)
+
+  // Whiteboard drawing (WB-1): active tool + per-tool color/thickness. Default
+  // colors come from the deck's design template so marks suit the slides (WB-1).
+  const templateColors = view ? themeColors(view.template.theme) : undefined
+  const whiteboard = useWhiteboard({
+    penColor: templateColors?.penColor,
+    highlighterColor: templateColors?.highlighterColor,
+  })
+  // Wall-clock of the last drawing/erasing gesture (WB-3): while the user is
+  // actively marking up a slide — including a debounce grace after the last
+  // gesture so switching tools or repositioning still counts — speech folds
+  // into the current slide instead of spawning a new one.
+  const lastDrawActivityRef = useRef<number | null>(null)
+  const noteDrawActivity = () => {
+    lastDrawActivityRef.current = Date.now()
+  }
+  /** True while the user is actively marking up a slide (within the debounce
+   * grace after the last gesture). */
+  const isActivelyDrawing = (): boolean => {
+    const last = lastDrawActivityRef.current
+    return last != null && Date.now() - last < getWhiteboardSuppressDebounceMs()
+  }
+  // Anchoring (WB-2): wall-clock when recording began, and the latest phrase
+  // (with word timings) per slide, so a stroke can be pinned to the transcript
+  // position it was drawn at. Word timings exist for the google-cloud engine.
+  const sessionStartWallRef = useRef<number | null>(null)
+  const lastPhraseBySlideRef = useRef<
+    Record<string, { phrase: string; words?: WordTiming[]; sessionId?: string }>
+  >({})
+  // Debounce timers for persisting each slide's drawings after edits.
+  const drawingsSaveTimers = useRef<Record<string, number>>({})
   useEffect(
     () => () => {
       originalAudioRef.current?.pause()
@@ -421,8 +437,21 @@ export default function DeckViewerPage() {
           ? { confidence: meta.confidence }
           : {}),
         ...(meta?.words?.length ? { words: meta.words } : {}),
+        // Actively drawing (within the debounce grace) folds the phrase into
+        // the current slide instead of spawning one (WB-3). The "+" button and
+        // the "new slide" voice command bypass this path and still create.
+        ...(isActivelyDrawing() ? { suppressNewSlide: true } : {}),
       })
       applyEvent(event)
+      // Remember this phrase against the slide it landed on, with any word
+      // timings, so a stroke drawn now can be anchored to the transcript (WB-2).
+      if (event.slide?.id) {
+        lastPhraseBySlideRef.current[event.slide.id] = {
+          phrase: text,
+          words: meta?.words,
+          sessionId: meta?.sessionId,
+        }
+      }
     } catch (err) {
       // Show the server's message when generation is unavailable (quota/
       // credits exhausted or the provider is overloaded); otherwise a
@@ -569,6 +598,9 @@ export default function DeckViewerPage() {
   const startListening = () => {
     if (!capture.available) return
     setSpeakError(null)
+    // Mark the recording's wall-clock start so stroke draw-times can be turned
+    // into session-relative ms and matched to word timings (WB-2).
+    sessionStartWallRef.current = Date.now()
     beginCapture()
     setListening(true)
   }
@@ -761,6 +793,127 @@ export default function DeckViewerPage() {
     touchDeckLocally()
   }
 
+  // --- Whiteboard drawing (WB-1/WB-2) ---
+
+  /**
+   * Builds a stroke's transcript timing anchor for a draw/erase event on a
+   * slide (WB-2). The durable value is a character offset into the slide's
+   * narration; word timings (google-cloud) sharpen it to a position inside the
+   * latest phrase, otherwise it pins to the end of the transcript so far.
+   */
+  const buildAnchor = (slideId: string, atWallMs: number): StrokeAnchor => {
+    const slide = viewRef.current?.slides.find(s => s.id === slideId)
+    const len = slide?.sourceTranscript?.length ?? 0
+    // Mic off: the mark can't be tied to spoken words, so it's unsynced (WB-2)
+    // — always shown on its slide, in or out of playback, so flipping to that
+    // slide always reveals it. charAnchor 0 keeps it ordered at the start.
+    if (!listening) return { charAnchor: 0, source: 'unsynced' }
+    const info = lastPhraseBySlideRef.current[slideId]
+    const start = sessionStartWallRef.current
+    if (info?.words?.length && start != null) {
+      const drawMs = atWallMs - start
+      let best = info.words[0]!
+      let bestDiff = Infinity
+      for (const w of info.words) {
+        const diff = Math.abs(w.startMs - drawMs)
+        if (diff < bestDiff) {
+          bestDiff = diff
+          best = w
+        }
+      }
+      // Where the latest phrase starts within the transcript, plus the nearest
+      // word's offset inside it.
+      const phraseStart = Math.max(0, len - info.phrase.length)
+      const wordIdx = info.phrase.toLowerCase().indexOf(best.word.toLowerCase())
+      return {
+        charAnchor: phraseStart + (wordIdx >= 0 ? wordIdx : 0),
+        source: 'word',
+        sessionId: info.sessionId,
+        sessionMs: drawMs,
+      }
+    }
+    return { charAnchor: len, source: 'appended' }
+  }
+
+  /** Persists a slide's drawings (debounced), then patches in the saved copy. */
+  const persistDrawings = (slideId: string, drawings: Stroke[]) => {
+    const timers = drawingsSaveTimers.current
+    if (timers[slideId]) window.clearTimeout(timers[slideId])
+    timers[slideId] = window.setTimeout(() => {
+      delete timers[slideId]
+      editSlideDrawings(slideId, drawings)
+        .then(applySlide)
+        .catch(() => {
+          // Quiet: the on-screen drawing stays; a later edit retries the save.
+        })
+    }, 600)
+  }
+
+  /** Applies a change to one slide's drawings locally and schedules a save. */
+  const updateDrawings = (
+    slideId: string,
+    updater: (prev: Stroke[]) => Stroke[],
+  ) => {
+    setView(v => {
+      if (!v) return v
+      let next: Stroke[] | undefined
+      const slides = v.slides.map(s => {
+        if (s.id !== slideId) return s
+        next = updater(s.drawings ?? [])
+        return { ...s, drawings: next }
+      })
+      if (next) persistDrawings(slideId, next)
+      return { ...v, slides }
+    })
+    touchDeckLocally()
+  }
+
+  const onCommitStroke = (slideId: string, stroke: Stroke) =>
+    updateDrawings(slideId, prev => [...prev, stroke])
+
+  /** Whole-stroke erase as a timestamped event: the stroke is kept and stamped
+   * with an erase anchor so playback can replay its removal (WB-2). */
+  const onEraseStroke = (
+    slideId: string,
+    strokeId: string,
+    anchor: StrokeAnchor,
+  ) =>
+    updateDrawings(slideId, prev =>
+      prev.map(s =>
+        s.id === strokeId && !s.erasedAnchor
+          ? { ...s, erasedAnchor: anchor, erasedAt: new Date().toISOString() }
+          : s,
+      ),
+    )
+
+  /** Playback visibility for a stroke (WB-2): reveal by its draw anchor and
+   * hide again at its erase anchor, in step with the audio position — but
+   * unsynced (mic-off) marks always show. Delegates to the pure `strokeVisible`. */
+  const revealStroke = (slideId: string, stroke: Stroke): boolean => {
+    const slides = viewRef.current?.slides ?? []
+    const idx = slides.findIndex(s => s.id === slideId)
+    const len = slides[idx]?.sourceTranscript?.length ?? 0
+    return strokeVisible(stroke, idx, len, tts.getProgress())
+  }
+
+  // Saved strokes per slide, plus the shared DrawingLayer props (carousel +
+  // list). Placed after the handlers above so it can reference them.
+  const strokesById: Record<string, Stroke[]> = {}
+  for (const s of view.slides)
+    if (s.drawings?.length) strokesById[s.id] = s.drawings
+  const drawingLayerProps = {
+    tool: whiteboard.tool,
+    penStyle: whiteboard.penStyle,
+    highlighterStyle: whiteboard.highlighterStyle,
+    strokesById,
+    isPlaying: tts.status === 'playing',
+    reveal: revealStroke,
+    buildAnchor,
+    onCommitStroke,
+    onEraseStroke,
+    onActivity: noteDrawActivity,
+  }
+
   /** Uploads a file to replace (or set) a slide's image (EDIT-1). */
   const replaceSlideImage = (slideId: string) => (file: File) => {
     setImageError(null)
@@ -779,55 +932,16 @@ export default function DeckViewerPage() {
     }
 
   /**
-   * Removes a slide's image. When the image is the whole slide (an image
-   * layout with no body/bullets text) removing it would leave nothing, so
-   * the slide is deleted after a confirm; otherwise the picture is cleared
-   * and the slide drops to a text-only layout from THIS template, so
-   * nothing looks broken. Both the image-only test and the target layout
-   * come from the template's slots — no layout names are hardcoded, so
-   * additional templates work without changes.
+   * Removes a slide's image, keeping the slide's layout unchanged so the
+   * image slot simply becomes empty (an editor can drop a new image in). The
+   * layout is deliberately NOT switched and the slide is never deleted — even
+   * an image-only layout just shows its empty image slot.
    */
   const removeSlideImage = (target: Slide) => () => {
-    const layouts = view.template.layouts
-    const current = layouts.find(l => l.type === target.layoutType)
-    // Image-only: the image is the whole slide (no body/bullets text to
-    // keep). Removing it would leave a blank slide, so confirm + delete.
-    if (current && layoutHasImage(current) && !layoutHasTextBody(current)) {
-      setConfirmImageDeleteId(target.id)
-      return
-    }
-    // Image+text: clear the image and drop to a text-only layout from THIS
-    // template. Prefer the no-image layout that best preserves the current
-    // slide's non-image slots — i.e. the one whose slots overlap the current
-    // text slots most, breaking ties toward the closest-sized layout. This
-    // keeps a two-column slide on its content/body layout instead of falling
-    // back to a title-style layout, all without hardcoding any layout names.
-    const keepNames = new Set(
-      (current?.slots ?? []).filter(s => s.kind !== 'image').map(s => s.name),
-    )
-    const textLayout =
-      layouts
-        .filter(l => !layoutHasImage(l) && layoutHasTextBody(l))
-        .map(l => {
-          const names = l.slots.map(s => s.name)
-          const overlap = names.filter(n => keepNames.has(n)).length
-          return { layout: l, overlap, extra: names.length - overlap }
-        })
-        .sort((a, b) => b.overlap - a.overlap || a.extra - b.extra)[0]
-        ?.layout ?? layouts.find(l => !layoutHasImage(l))
-    const cleared = dispatchAction<Slide>('slide.editContent', {
+    dispatchAction<Slide>('slide.editContent', {
       slideId: target.id,
       imageRef: '',
     })
-    const done = textLayout
-      ? cleared.then(() =>
-          dispatchAction<Slide>('slide.setLayout', {
-            slideId: target.id,
-            layoutType: textLayout.type,
-          }),
-        )
-      : cleared
-    done
       .then(applySlide)
       .catch(() => setImageError('Could not remove the image — try again'))
   }
@@ -929,7 +1043,9 @@ export default function DeckViewerPage() {
         v
           ? {
               ...v,
-              slides: v.slides.map(s => (s.id === res.slide.id ? res.slide : s)),
+              slides: v.slides.map(s =>
+                s.id === res.slide.id ? res.slide : s,
+              ),
             }
           : v,
       )
@@ -1129,6 +1245,10 @@ export default function DeckViewerPage() {
         }
       />
 
+      {canEdit && view.slides.length > 0 && (
+        <WhiteboardToolbar deckId={view.deck.id} whiteboard={whiteboard} />
+      )}
+
       {view.slides.length === 0 ? (
         canEdit ? (
           <p className="text-center text-slate-400">
@@ -1185,7 +1305,10 @@ export default function DeckViewerPage() {
                 onDelete={
                   canEdit ? () => void deleteSlide(slide!.id) : undefined
                 }
+                elevated={whiteboard.tool != null}
+                onOpen={() => whiteboard.setTool(null)}
               />
+              <DrawingLayer {...drawingLayerProps} />
             </SlideNavZones>
           </div>
           <p className="mx-auto mt-4 text-sm text-slate-500">
@@ -1193,53 +1316,62 @@ export default function DeckViewerPage() {
           </p>
         </>
       ) : (
-        <ul className="flex w-full flex-col gap-6">
-          {view.slides.map((s, i) =>
-            canEdit ? (
-              <DraggableListRow
-                key={s.id}
-                id={s.id}
-                index={i}
-                label={`Slide ${i + 1}`}
-                onDropOn={moveSlideTo}
-                onKeyMove={moveSlideBy}
-                itemRef={nav.registerItem(i)}
-              >
-                <SlideView
-                  slide={s}
-                  template={view.template}
-                  editable
-                  onEdit={editSlide(s.id)}
-                  onReplaceImage={replaceSlideImage(s.id)}
-                  onPickImageCandidate={pickSlideImageCandidate(s.id)}
-                  onRemoveImage={removeSlideImage(s)}
-                  imagePending={pendingImages.has(s.id)}
-                />
-                <SlideMenu
-                  number={i + 1}
-                  onSpeak={ttsEnabled ? () => speakSlide(s) : undefined}
-                  onChangeLayout={() => setLayoutPickerFor(s.id)}
-                  onRefine={
-                    slideRefineEnabled ? () => void refineSlide(s.id) : undefined
-                  }
-                  onPlayOriginalAudio={
-                    audioSlideIds.has(s.id)
-                      ? () => void playOriginalAudio(s.id)
-                      : undefined
-                  }
-                  onDelete={() => void deleteSlide(s.id)}
-                />
-              </DraggableListRow>
-            ) : (
-              <li key={s.id} ref={nav.registerItem(i)} className="relative">
-                <SlideView slide={s} template={view.template} />
-                {ttsEnabled && (
-                  <SlideMenu number={i + 1} onSpeak={() => speakSlide(s)} />
-                )}
-              </li>
-            ),
-          )}
-        </ul>
+        <div className="relative w-full">
+          <ul className="flex w-full flex-col gap-6">
+            {view.slides.map((s, i) =>
+              canEdit ? (
+                <DraggableListRow
+                  key={s.id}
+                  id={s.id}
+                  index={i}
+                  label={`Slide ${i + 1}`}
+                  onDropOn={moveSlideTo}
+                  onKeyMove={moveSlideBy}
+                  itemRef={nav.registerItem(i)}
+                >
+                  <SlideView
+                    slide={s}
+                    template={view.template}
+                    editable
+                    onEdit={editSlide(s.id)}
+                    onReplaceImage={replaceSlideImage(s.id)}
+                    onPickImageCandidate={pickSlideImageCandidate(s.id)}
+                    onRemoveImage={removeSlideImage(s)}
+                    imagePending={pendingImages.has(s.id)}
+                  />
+                  <SlideMenu
+                    number={i + 1}
+                    onSpeak={ttsEnabled ? () => speakSlide(s) : undefined}
+                    onChangeLayout={() => setLayoutPickerFor(s.id)}
+                    onRefine={
+                      slideRefineEnabled
+                        ? () => void refineSlide(s.id)
+                        : undefined
+                    }
+                    onPlayOriginalAudio={
+                      audioSlideIds.has(s.id)
+                        ? () => void playOriginalAudio(s.id)
+                        : undefined
+                    }
+                    onDelete={() => void deleteSlide(s.id)}
+                    elevated={whiteboard.tool != null}
+                    onOpen={() => whiteboard.setTool(null)}
+                  />
+                </DraggableListRow>
+              ) : (
+                <li key={s.id} ref={nav.registerItem(i)} className="relative">
+                  <SlideView slide={s} template={view.template} />
+                  {ttsEnabled && (
+                    <SlideMenu number={i + 1} onSpeak={() => speakSlide(s)} />
+                  )}
+                </li>
+              ),
+            )}
+          </ul>
+          {/* One overlay spans the list; a stroke attaches to the slide whose
+              center is nearest its centroid (WB / list view). */}
+          <DrawingLayer {...drawingLayerProps} />
+        </div>
       )}
 
       {canEdit && layoutPickerFor && (
@@ -1310,19 +1442,6 @@ export default function DeckViewerPage() {
             </button>
           </div>
         </div>
-      )}
-
-      {canEdit && confirmImageDeleteId && (
-        <ConfirmDialog
-          title="Delete this slide?"
-          message="This slide is just an image. Removing it deletes the whole slide."
-          confirmLabel="Delete slide"
-          onConfirm={() => {
-            void deleteSlide(confirmImageDeleteId)
-            setConfirmImageDeleteId(null)
-          }}
-          onCancel={() => setConfirmImageDeleteId(null)}
-        />
       )}
 
       {canEdit && settingsOpen && (

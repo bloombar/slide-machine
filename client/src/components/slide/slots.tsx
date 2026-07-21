@@ -294,13 +294,12 @@ function ImageSlot({
           {infoIcon}
         </>
       ) : (
-        // No image yet: a quiet reserved block that carries the same
-        // top-right hover controls as a populated image — Add (in place of
-        // Replace) and Delete — rather than a bulky centred call-to-action.
-        // Add opens the same dialog as Replace (upload, drop, or web
-        // search); Delete removes the image slot. While enrichment may
-        // still deliver an image the block pulses and carries the
-        // image-skeleton test id so the sourcing state stays visible.
+        // No image yet: a quiet reserved block with an Add affordance (opening
+        // the same dialog as Replace — upload, drop, or web search). There is
+        // no Delete here: removing an image keeps the slide's layout and just
+        // empties this slot, so an already-empty slot has nothing to remove.
+        // While enrichment may still deliver an image the block pulses and
+        // carries the image-skeleton test id so the sourcing state stays visible.
         <>
           <div
             aria-hidden
@@ -318,15 +317,6 @@ function ImageSlot({
                 className="rounded-md bg-white/90 p-1.5 text-slate-700 shadow hover:bg-white"
               >
                 <ImagePlus className="h-4 w-4" aria-hidden />
-              </button>
-            </Tooltip>
-            <Tooltip label="Delete image" align="end">
-              <button
-                aria-label="Remove image"
-                onClick={onRemoveImage}
-                className="rounded-md bg-white/90 p-1.5 text-slate-700 shadow hover:bg-white hover:text-red-600"
-              >
-                <X className="h-4 w-4" aria-hidden />
               </button>
             </Tooltip>
           </div>

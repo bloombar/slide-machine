@@ -6,7 +6,9 @@
     "surface": "#ffffff",
     "text": "#14532d",
     "muted": "#4d7c0f",
-    "accent": "#16a34a"
+    "accent": "#16a34a",
+    "penColor": "#14532d",
+    "highlighterColor": "#4ade80"
   },
   "layouts": [
     {
