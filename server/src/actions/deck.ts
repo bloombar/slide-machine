@@ -480,8 +480,12 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
           }
         : undefined,
       // Feature flag (GENERATION_LAYOUT_REFIT): updates may switch the
-      // slide's layout, including a full refit (GEN-8)
-      allowLayoutRefit: env.GENERATION_LAYOUT_REFIT,
+      // slide's layout, including a full refit (GEN-8). Never while the user is
+      // hand-annotating the current slide (WB-3) — its layout must hold still.
+      allowLayoutRefit: env.GENERATION_LAYOUT_REFIT && !input.suppressNewSlide,
+      // The user is drawing on the current slide: tell the model to keep its
+      // layout (the server also enforces this below).
+      lockLayout: input.suppressNewSlide,
       // Feature flag (GENERATION_VOICE_COMMANDS): offer the CAP-4
       // command set so the model can flag operational phrases
       voiceCommands: env.GENERATION_VOICE_COMMANDS
@@ -599,7 +603,10 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
     if (
       rawResult.action === 'update' &&
       rawResult.updateMode === 'refit' &&
-      lastSlide
+      lastSlide &&
+      // Never refit (a layout change) while the user is drawing (WB-3): fall
+      // through to a plain delta update that keeps the current layout.
+      !input.suppressNewSlide
     ) {
       if (!env.GENERATION_LAYOUT_REFIT) return event({ kind: 'none' })
       const snapshot: SlideContentSnapshot = {
@@ -735,7 +742,10 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
           .filter(Boolean)
           .join(' ')
       }
-      lastSlide.layoutType = result.layoutType
+      // Keep the layout fixed while the user is drawing on this slide (WB-3),
+      // regardless of what the model returned — the slide must not be
+      // rearranged under their hand.
+      if (!input.suppressNewSlide) lastSlide.layoutType = result.layoutType
       // Keep the slide's image keywords current: a phrase that carries fresh
       // image guidance replaces them, so the search seed and enrichment
       // always reflect the slide's latest content. An update with no

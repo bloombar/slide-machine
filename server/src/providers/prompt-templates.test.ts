@@ -21,6 +21,7 @@ const allSlots = {
   capacity: '',
   voiceCommands: '',
   updateRules: '',
+  lockLayout: '',
   language: '',
   deckTitle: '',
   phrase: 'the phrase',

@@ -61,6 +61,10 @@ export interface SlideGenerationRequest {
    * updated slide's layout — including a full re-map of existing
    * content via updateMode 'refit' (GEN-8 "re-fit the layout"). */
   allowLayoutRefit?: boolean
+  /** The user is hand-annotating the current slide right now (WB-3): the model
+   * must NOT change its layout, so it isn't rearranged out from under the
+   * drawing. The server also enforces this regardless of the model's answer. */
+  lockLayout?: boolean
   /** The fixed CAP-4 command set the model may recognize as the intent
    * of a phrase. Present only when the server's GENERATION_VOICE_COMMANDS
    * feature flag is on; absent = command detection disabled. */

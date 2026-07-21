@@ -400,7 +400,15 @@ export default function DeckViewerPage() {
               : v.deck,
             slides: isNew
               ? [...v.slides, next]
-              : v.slides.map(s => (s.id === next.id ? next : s)),
+              : // session.phrase only changes content/transcript, never
+                // whiteboard drawings — those are saved on a separate debounced
+                // path (slide.editDrawings). The phrase response carries a
+                // possibly-stale drawings array, so keep the LOCAL drawings
+                // (which include just-drawn, not-yet-saved strokes) to avoid
+                // clobbering them mid-draw (WB-1).
+                v.slides.map(s =>
+                  s.id === next.id ? { ...next, drawings: s.drawings } : s,
+                ),
           }
         : v,
     )

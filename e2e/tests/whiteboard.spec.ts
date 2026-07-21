@@ -35,11 +35,12 @@ const buildDeck = async (page: Page) => {
   }
 }
 
-/** Drags the mouse across the current slide to draw a stroke. */
-const drawOnSlide = async (page: Page) => {
+/** Drags the mouse across the current slide to draw a stroke, at an optional
+ * vertical fraction of the slide so successive strokes stay distinct. */
+const drawOnSlide = async (page: Page, yFraction = 0.5) => {
   const box = await page.getByTestId('slide').boundingBox()
   if (!box) throw new Error('no slide box')
-  const y = box.y + box.height / 2
+  const y = box.y + box.height * yFraction
   await page.mouse.move(box.x + box.width * 0.3, y)
   await page.mouse.down()
   await page.mouse.move(box.x + box.width * 0.4, y)
@@ -122,6 +123,36 @@ test('active drawing suppresses auto-slide-creation; idle tool and "+" still add
   // The explicit "+" button bypasses suppression and adds a slide.
   await page.getByRole('button', { name: 'Add slide' }).click()
   await expect(page.getByText('4 / 4')).toBeVisible()
+})
+
+test('drawings are not lost when a mic phrase updates the slide mid-draw', async ({
+  page,
+}) => {
+  await buildDeck(page)
+  await page.getByRole('button', { name: 'Pen' }).click()
+
+  // Draw a first stroke, then immediately submit a phrase BEFORE the debounced
+  // drawing save lands — so the session.phrase response carries no drawings.
+  // Its update must not clobber the in-progress local strokes.
+  await drawOnSlide(page, 0.35)
+  await page.getByLabel('Spoken phrase').fill('More detail about this slide')
+  await page.getByRole('button', { name: 'Speak' }).click()
+  await expect(page.getByText('2 / 2')).toBeVisible() // folded in, no new slide
+
+  // Draw a second stroke; the save must contain BOTH, not just the second.
+  const saved = page.waitForResponse(
+    r => r.url().includes('/actions/slide.editDrawings') && r.status() === 200,
+  )
+  await drawOnSlide(page, 0.65)
+  await saved
+
+  const reloaded = page.waitForResponse(
+    r => /\/api\/decks\//.test(r.url()) && r.status() === 200,
+  )
+  await page.reload()
+  const view = await (await reloaded).json()
+  // Both strokes survive on the slide that was drawn on (the current one).
+  expect(view.slides[1].drawings).toHaveLength(2)
 })
 
 test('opening a slide kebab while drawing exits drawing mode', async ({

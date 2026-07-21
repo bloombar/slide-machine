@@ -198,6 +198,14 @@ Current slide content: ${JSON.stringify(req.currentSlide.content)}`
         .join('\n')}`
     : ''
 
+  // The user is drawing on the current slide right now (WB-3): it must not be
+  // rearranged under their hand. Keep its layout and prefer touching only the
+  // transcript over restructuring it. The server enforces this too.
+  const lockLayout =
+    req.lockLayout && req.currentSlide
+      ? `\nIMPORTANT: the user is annotating the CURRENT slide by hand right now. Do NOT change its layout — for any "update", keep layoutType EXACTLY "${req.currentSlide.layoutType}" and never "refit". Prefer "update" or "none" over "new" so the slide being drawn on is not replaced or restructured.`
+      : ''
+
   // Untitled lecture: ask for a title alongside the slide decision;
   // the server stops asking once one is saved
   const deckTitle = req.suggestDeckTitle
@@ -218,6 +226,7 @@ Current slide content: ${JSON.stringify(req.currentSlide.content)}`
     ),
     deckTitle,
     updateRules,
+    lockLayout,
     voiceCommands,
     freedomPolicy: freedomPolicy(req.freedom ?? 2),
     layouts,
@@ -246,14 +255,17 @@ const reformatResultSchema = z.object({
 })
 
 /** The `- type: purpose` layout menu shared by the refine/reformat prompts. */
-const layoutMenu = (descriptors: SlideReformatRequest['layoutDescriptors']): string =>
-  descriptors.map(d => `- ${d.type}: ${d.purpose}`).join('\n')
+const layoutMenu = (
+  descriptors: SlideReformatRequest['layoutDescriptors'],
+): string => descriptors.map(d => `- ${d.type}: ${d.purpose}`).join('\n')
 
 /** The optional "Lecture context" fragment (empty when there is no seed). */
 const contextFragment = (
   seedContext: SlideReformatRequest['seedContext'],
 ): string => {
-  const seed = [seedContext?.project, seedContext?.deck].filter(Boolean).join('\n')
+  const seed = [seedContext?.project, seedContext?.deck]
+    .filter(Boolean)
+    .join('\n')
   return seed ? `\n\nLecture context:\n${seed}` : ''
 }
 
@@ -314,7 +326,9 @@ const callGemini = async (prompt: string, label: string): Promise<string> => {
         res.status === 503,
       )
     }
-    throw new Error(`Gemini ${label} failed (${res.status}): ${detail.slice(0, 500)}`)
+    throw new Error(
+      `Gemini ${label} failed (${res.status}): ${detail.slice(0, 500)}`,
+    )
   }
   const data = (await res.json()) as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
@@ -586,7 +600,8 @@ export class GeminiGenerationProvider implements GenerationProvider {
 
     const allowed = new Set(req.layoutDescriptors.map(d => d.type))
     const layoutType = (
-      parsed.data.layoutType && allowed.has(parsed.data.layoutType as LayoutType)
+      parsed.data.layoutType &&
+      allowed.has(parsed.data.layoutType as LayoutType)
         ? parsed.data.layoutType
         : req.current.layoutType
     ) as LayoutType
@@ -625,7 +640,8 @@ export class GeminiGenerationProvider implements GenerationProvider {
     if (!parsed.success) return unchanged
     const allowed = new Set(req.layoutDescriptors.map(d => d.type))
     const layoutType = (
-      parsed.data.layoutType && allowed.has(parsed.data.layoutType as LayoutType)
+      parsed.data.layoutType &&
+      allowed.has(parsed.data.layoutType as LayoutType)
         ? parsed.data.layoutType
         : req.current.layoutType
     ) as LayoutType
@@ -642,7 +658,9 @@ export class GeminiGenerationProvider implements GenerationProvider {
   }
 
   async narrateSlide(req: SlideNarrateRequest): Promise<SlideNarrateResult> {
-    const fallback: SlideNarrateResult = { transcript: plainNarration(req.slide) }
+    const fallback: SlideNarrateResult = {
+      transcript: plainNarration(req.slide),
+    }
     let raw: unknown
     try {
       raw = JSON.parse(await callGemini(narratePrompt(req), 'Narration'))

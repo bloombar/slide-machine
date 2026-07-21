@@ -331,6 +331,33 @@ describe('session.phrase suppressNewSlide (WB-3)', () => {
     const view = await act(ada, 'deck.get', { deckId })
     expect(view.body.slides).toHaveLength(before + 1)
   })
+
+  it('does not change the current slide layout while drawing', async () => {
+    // Make the current (last) slide a content slide with prose.
+    const deck = await DeckModel.findById(deckId)
+    const slide = await SlideModel.create({
+      deckId,
+      index: deck!.slideOrder.length,
+      layoutType: 'content',
+      title: 'Topic',
+      body: 'Some prose',
+    })
+    deck!.slideOrder.push(slide._id.toString())
+    await deck!.save()
+
+    // A continuation phrase that the model would map onto a list layout must
+    // NOT switch the layout while the user is drawing — the update folds in
+    // and the slide keeps its content layout.
+    const ev = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'also another important point',
+      suppressNewSlide: true,
+    })
+    expect(ev.body.kind).toBe('slide.update')
+    expect(ev.body.slide.layoutType).toBe('content')
+    const after = await SlideModel.findById(slide._id)
+    expect(after?.layoutType).toBe('content')
+  })
 })
 
 describe('deck.reorderSlides', () => {
