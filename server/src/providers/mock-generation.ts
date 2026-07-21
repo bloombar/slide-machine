@@ -236,16 +236,21 @@ export class MockGenerationProvider implements GenerationProvider {
     }
   }
 
-  /** Deterministic narration (GEN-4): joins the slide's content, prefixed as a
-   * student question when the slide represents student speech — so playback
-   * stays in-line with the (possibly reformatted) slide. */
+  /** Deterministic narration (GEN-4): refines the slide's current narration
+   * further when one is supplied (marking each pass, so repeated refines
+   * compound), else builds one from the slide's content. Student speech is
+   * prefixed so playback stays in-line with the (possibly reformatted) slide. */
   async narrateSlide(req: SlideNarrateRequest): Promise<SlideNarrateResult> {
+    const prefix = req.studentContext ? 'A student asked: ' : ''
+    const prior = req.transcript?.trim()
+    if (prior) {
+      const base = prior.startsWith(prefix) ? prior : `${prefix}${prior}`
+      return { transcript: `${base} (refined)` }
+    }
     const content = [req.slide.title, req.slide.body, ...(req.slide.bullets ?? [])]
       .filter(Boolean)
       .join('. ')
-    return {
-      transcript: `${req.studentContext ? 'A student asked: ' : ''}${content}`.trim(),
-    }
+    return { transcript: `${prefix}${content}`.trim() }
   }
 }
 

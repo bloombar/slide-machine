@@ -174,6 +174,11 @@ export interface SlideRefineRequest {
     project?: string
     deck?: string
   }
+  /** The slide's current spoken transcript, used as source material so the
+   * refinement stays faithful to what was actually said. On the first refine
+   * this is the original spoken words; on later refines it is the previously
+   * refined narration, so refinement compounds. Absent = none available. */
+  transcript?: string
 }
 
 export interface SlideRefineResult {
@@ -199,6 +204,10 @@ export interface SlideNarrateRequest {
   level: number
   studentContext?: boolean
   language?: string
+  /** The slide's current narration/transcript. When present, the narration is
+   * refined further from it (incremental) rather than written from scratch, so
+   * repeated refines keep improving it. Absent = write fresh from the slide. */
+  transcript?: string
 }
 
 export interface SlideNarrateResult {

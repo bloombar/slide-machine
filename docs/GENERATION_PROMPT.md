@@ -9,6 +9,13 @@ runtime copies `config/`).
 | --- | --- |
 | `generation.txt` | The master instruction template. `{{slot}}` placeholders are filled per request; an unknown placeholder fails loudly on first use. |
 | `freedom-bands.txt` | The 1–5 AI-freedom policy texts, one `[n]` section per band. |
+| `refine.txt` | Post-lecture "Refine all slides": improve one slide at a 1–5 strength. |
+| `narrate.txt` | Rewrite a slide's spoken narration at a 1–5 eloquence (student slides framed as questions). |
+| `reformat.txt` | Reframe a slide once speakers are known — student turns as questions/feedback. |
+
+The three post-lecture templates (`refine`/`narrate`/`reformat`) are loaded by
+[`refine-prompts.ts`](../server/src/providers/refine-prompts.ts); their slots
+are computed in [`gemini-generation.ts`](../server/src/providers/gemini-generation.ts).
 
 Slots filled by [`gemini-generation.ts`](../server/src/providers/gemini-generation.ts):
 `outputShape` (the JSON contract — kept in code because zod enforces it),

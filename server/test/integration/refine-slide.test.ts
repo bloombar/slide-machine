@@ -191,6 +191,29 @@ describe('deck.refineSlide', () => {
     expect(t?.sourceTranscript).toMatch(/^A student asked:/)
   })
 
+  it('refines the existing narration further on each pass (incremental)', async () => {
+    const { target } = await seedSlides()
+    // Give the slide an original spoken transcript, as a live session would.
+    await SlideModel.updateOne(
+      { _id: target },
+      { sourceTranscript: 'The original spoken words.' },
+    )
+
+    // First refine builds on the original transcript.
+    await act(ada, 'deck.refineSlide', { deckId, slideId: target })
+    const after1 = await SlideModel.findById(target)
+    expect(after1?.sourceTranscript).toContain('The original spoken words.')
+    expect(after1?.sourceTranscript).toContain('(refined)')
+
+    // Second refine builds on the first refinement — it compounds, and never
+    // reverts to narrating from the slide's title/body.
+    await act(ada, 'deck.refineSlide', { deckId, slideId: target })
+    const after2 = await SlideModel.findById(target)
+    expect(after2?.sourceTranscript).toContain('The original spoken words.')
+    expect(after2?.sourceTranscript).toMatch(/\(refined\).*\(refined\)/s)
+    expect(after2?.sourceTranscript).not.toContain('Photosynthesis')
+  })
+
   it('gates on edit access and slide ownership', async () => {
     const { target } = await seedSlides()
     const bob = await registerUser('bob@example.com')

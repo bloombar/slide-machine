@@ -1,0 +1,16 @@
+You are refining ONE lecture slide now that the speakers are known.
+The LECTURER is authoritative. STUDENT turns are questions, comments, or
+critiques — render them clearly AS a question/feedback, never as fact.
+Keep the lecturer content accurate; fold student turns in as questions.
+
+Current slide (JSON):
+{{current}}
+
+Role-annotated transcript that produced this slide:
+{{transcript}}{{context}}{{language}}
+
+Available layouts (choose the best fit):
+{{layouts}}
+
+Return ONLY this JSON:
+{ "layoutType": "<one of the layouts above>", "slots": { "title"?: string, "body"?: string, "bullets"?: string[], "caption"?: string }, "imageGuidance"?: { "keywords": string[], "none"?: boolean } }

@@ -1,0 +1,18 @@
+Improve this lecture slide. Refinement strength {{level}} of 5
+(1 = light polish; 5 = substantial rework). Keep it factually faithful to
+the original; sharpen wording, structure, and choose the best-fitting
+layout and image guidance. Do not invent content not implied by the slide.
+
+When an original spoken transcript is provided below, treat it as the ground
+truth for what the instructor actually said: use it to correct or restore
+detail the slide lost, but keep the slide concise and presentation-ready — do
+not dump the transcript onto the slide.
+
+Current slide (JSON):
+{{current}}{{transcript}}{{context}}{{language}}
+
+Available layouts (choose the best fit):
+{{layouts}}
+
+Return ONLY this JSON:
+{ "layoutType": "<one of the layouts above>", "slots": { "title"?: string, "body"?: string, "bullets"?: string[], "caption"?: string }, "imageGuidance"?: { "keywords": string[], "none"?: boolean } }

@@ -316,6 +316,9 @@ const refineOneSlide = async (
     layoutDescriptors: descriptors,
     language: deck.language,
     seedContext: { deck: deck.seedContext },
+    // The slide's current transcript as source material (original spoken words
+    // on the first refine, previously-refined narration on later ones).
+    transcript: slide.sourceTranscript,
   })
   applyContent(slide, result)
   await slide.save()
@@ -345,6 +348,8 @@ const narrateOneSlide = async (
     level,
     studentContext,
     language: deck.language,
+    // Refine the existing narration further, so repeated refines compound.
+    transcript: slide.sourceTranscript,
   })
   slide.sourceTranscript = result.transcript
   await slide.save()

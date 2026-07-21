@@ -32,6 +32,11 @@ import { env } from '../config/env'
 import { registry } from './registry'
 import { GenerationUnavailableError } from './errors'
 import { freedomPolicy, renderGenerationPrompt } from './prompt-templates'
+import {
+  renderRefinePrompt,
+  renderNarratePrompt,
+  renderReformatPrompt,
+} from './refine-prompts'
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 
@@ -240,42 +245,39 @@ const reformatResultSchema = z.object({
     .optional(),
 })
 
+/** The `- type: purpose` layout menu shared by the refine/reformat prompts. */
+const layoutMenu = (descriptors: SlideReformatRequest['layoutDescriptors']): string =>
+  descriptors.map(d => `- ${d.type}: ${d.purpose}`).join('\n')
+
+/** The optional "Lecture context" fragment (empty when there is no seed). */
+const contextFragment = (
+  seedContext: SlideReformatRequest['seedContext'],
+): string => {
+  const seed = [seedContext?.project, seedContext?.deck].filter(Boolean).join('\n')
+  return seed ? `\n\nLecture context:\n${seed}` : ''
+}
+
+/** The optional "Write the slide text in" language fragment. */
+const languageFragment = (language: string | undefined): string =>
+  language ? `\n\nWrite the slide text in: ${language}` : ''
+
+/** An optional labelled source fragment (empty when the text is blank). */
+const sourceFragment = (label: string, text: string | undefined): string =>
+  text?.trim() ? `\n\n${label}\n${text.trim()}` : ''
+
 /** Builds the reformat prompt: the current slide plus its role-annotated
  * transcript, with the lecturer authoritative and students' turns to be
- * rendered as questions/feedback. */
-const reformatPrompt = (req: SlideReformatRequest): string => {
-  const transcript = req.turns
-    .map(t => `[${t.role.toUpperCase()}] ${t.text}`)
-    .join('\n')
-  const layouts = req.layoutDescriptors
-    .map(d => `- ${d.type}: ${d.purpose}`)
-    .join('\n')
-  const seed = [req.seedContext?.project, req.seedContext?.deck]
-    .filter(Boolean)
-    .join('\n')
-  return [
-    'You are refining ONE lecture slide now that the speakers are known.',
-    'The LECTURER is authoritative. STUDENT turns are questions, comments, or',
-    'critiques — render them clearly AS a question/feedback, never as fact.',
-    'Keep the lecturer content accurate; fold student turns in as questions.',
-    '',
-    'Current slide (JSON):',
-    JSON.stringify(req.current),
-    '',
-    'Role-annotated transcript that produced this slide:',
-    transcript,
-    seed ? `\nLecture context:\n${seed}` : '',
-    req.language ? `\nWrite the slide text in: ${req.language}` : '',
-    '',
-    'Available layouts (choose the best fit):',
-    layouts,
-    '',
-    'Return ONLY this JSON:',
-    '{ "layoutType": "<one of the layouts above>", "slots": { "title"?: string, "body"?: string, "bullets"?: string[], "caption"?: string }, "imageGuidance"?: { "keywords": string[], "none"?: boolean } }',
-  ]
-    .filter(Boolean)
-    .join('\n')
-}
+ * rendered as questions/feedback. Wording lives in config/prompts/reformat.txt. */
+const reformatPrompt = (req: SlideReformatRequest): string =>
+  renderReformatPrompt({
+    current: JSON.stringify(req.current),
+    transcript: req.turns
+      .map(t => `[${t.role.toUpperCase()}] ${t.text}`)
+      .join('\n'),
+    context: contextFragment(req.seedContext),
+    language: languageFragment(req.language),
+    layouts: layoutMenu(req.layoutDescriptors),
+  })
 
 /** POSTs a JSON-output prompt to Gemini and returns the candidate text; maps
  * quota (429) / overload (503) to a user-facing GenerationUnavailableError. */
@@ -323,33 +325,18 @@ const callGemini = async (prompt: string, label: string): Promise<string> => {
 }
 
 /** Slide-refine prompt: improve the slide at a 1–5 strength. */
-const refinePrompt = (req: SlideRefineRequest): string => {
-  const layouts = req.layoutDescriptors
-    .map(d => `- ${d.type}: ${d.purpose}`)
-    .join('\n')
-  const seed = [req.seedContext?.project, req.seedContext?.deck]
-    .filter(Boolean)
-    .join('\n')
-  return [
-    `Improve this lecture slide. Refinement strength ${req.level} of 5`,
-    '(1 = light polish; 5 = substantial rework). Keep it factually faithful to',
-    'the original; sharpen wording, structure, and choose the best-fitting',
-    'layout and image guidance. Do not invent content not implied by the slide.',
-    '',
-    'Current slide (JSON):',
-    JSON.stringify(req.current),
-    seed ? `\nLecture context:\n${seed}` : '',
-    req.language ? `\nWrite the slide text in: ${req.language}` : '',
-    '',
-    'Available layouts (choose the best fit):',
-    layouts,
-    '',
-    'Return ONLY this JSON:',
-    '{ "layoutType": "<one of the layouts above>", "slots": { "title"?: string, "body"?: string, "bullets"?: string[], "caption"?: string }, "imageGuidance"?: { "keywords": string[], "none"?: boolean } }',
-  ]
-    .filter(Boolean)
-    .join('\n')
-}
+const refinePrompt = (req: SlideRefineRequest): string =>
+  renderRefinePrompt({
+    level: String(req.level),
+    current: JSON.stringify(req.current),
+    transcript: sourceFragment(
+      'Original spoken transcript for this slide:',
+      req.transcript,
+    ),
+    context: contextFragment(req.seedContext),
+    language: languageFragment(req.language),
+    layouts: layoutMenu(req.layoutDescriptors),
+  })
 
 const narrateResultSchema = z.object({ transcript: z.string() })
 
@@ -358,26 +345,20 @@ const narrateResultSchema = z.object({ transcript: z.string() })
 const plainNarration = (s: SlideNarrateRequest['slide']): string =>
   [s.title, s.body, ...(s.bullets ?? [])].filter(Boolean).join('. ')
 
-/** Narration prompt: what the lecturer would say to present this slide. */
+/** Narration prompt: what the lecturer would say to present this slide.
+ * Wording lives in config/prompts/narrate.txt. */
 const narratePrompt = (req: SlideNarrateRequest): string =>
-  [
-    'Write the spoken narration a lecturer would say to present this slide',
-    `aloud. Eloquence ${req.level} of 5 (1 = plain and faithful; 5 = rich and`,
-    'engaging). Describe the concepts clearly; do not read the slide verbatim.',
-    req.studentContext
-      ? 'This slide represents a STUDENT question or comment — narrate it as'
-        + ' presenting the student’s question/feedback, not as the lecturer’s'
-        + ' own assertion.'
+  renderNarratePrompt({
+    level: String(req.level),
+    studentContext: req.studentContext
+      ? '\nThis slide represents a STUDENT question or comment — narrate it as' +
+        ' presenting the student’s question/feedback, not as the lecturer’s' +
+        ' own assertion.'
       : '',
-    req.language ? `Language: ${req.language}.` : '',
-    '',
-    'Slide (JSON):',
-    JSON.stringify(req.slide),
-    '',
-    'Return ONLY this JSON: { "transcript": string }',
-  ]
-    .filter(Boolean)
-    .join('\n')
+    language: req.language ? `\nLanguage: ${req.language}.` : '',
+    transcript: sourceFragment('Current narration to refine:', req.transcript),
+    slide: JSON.stringify(req.slide),
+  })
 
 export class GeminiGenerationProvider implements GenerationProvider {
   readonly name = 'gemini'
