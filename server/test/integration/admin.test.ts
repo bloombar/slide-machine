@@ -260,8 +260,9 @@ describe('GET /api/admin/users/:id/decks', () => {
       .set('Authorization', `Bearer ${admin}`)
     expect(all.status).toBe(200)
     expect(all.body.decks).toHaveLength(2)
-    expect(all.body.decks.map((d: { permalinkSlug: string }) => d.permalinkSlug))
-      .toEqual(expect.arrayContaining(['waves-abc123', 'limits-def456']))
+    expect(
+      all.body.decks.map((d: { permalinkSlug: string }) => d.permalinkSlug),
+    ).toEqual(expect.arrayContaining(['waves-abc123', 'limits-def456']))
 
     const filtered = await request(server)
       .get(`/api/admin/users/${user._id}/decks?projectId=${physics._id}`)

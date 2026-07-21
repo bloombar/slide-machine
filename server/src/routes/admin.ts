@@ -72,7 +72,9 @@ const toAdminUserSummary = (
   createdAt: doc.createdAt.toISOString(),
 })
 
-const toAdminDeckSummary = (doc: HydratedDocument<DeckDb>): AdminDeckSummary => ({
+const toAdminDeckSummary = (
+  doc: HydratedDocument<DeckDb>,
+): AdminDeckSummary => ({
   id: doc._id.toString(),
   projectId: doc.projectId.toString(),
   title: doc.title,
