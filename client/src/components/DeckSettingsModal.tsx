@@ -14,6 +14,7 @@ import {
   type Deck,
   type DeckRefineResult,
   type DeckRefineStatusResult,
+  type DeckSetRefineSettingsInput,
   type RefineJobSummary,
   type Template,
 } from '@slide-machine/shared'
@@ -81,18 +82,23 @@ export default function DeckSettingsModal({
   const [tab, setTab] = useState<TabId>(initialTab)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   // Post-lecture refinement (GEN-4): any of three passes, run as one job.
-  // Slider levels start at the lecture's own value if set, else the server
-  // default (from /api/config); a moved slider is saved to the lecture.
-  // All refinement options start checked; speaker ID only when there is audio
-  // to diarize (it is disabled otherwise).
+  // Every setting persists to the lecture so the single-slide "Refine this
+  // slide" kebab action reuses the same choices. Toggles start from the
+  // lecture's saved value, else the default (all on; speaker ID only when
+  // there is audio to diarize, and it is disabled otherwise). Slider levels
+  // start at the lecture's own value if set, else the server default.
   const [identifySpeakers, setIdentifySpeakers] = useState(
-    deck.hasRecordings ?? false,
+    deck.refineIdentifySpeakers ?? deck.hasRecordings ?? false,
   )
-  const [refineSlides, setRefineSlides] = useState(true)
+  const [refineSlides, setRefineSlides] = useState(
+    deck.refineSlidesEnabled ?? true,
+  )
   const [refineSlidesLevel, setRefineSlidesLevel] = useState(
     deck.refineSlidesLevel ?? getRefineSlidesDefaultLevel(),
   )
-  const [refineTranscript, setRefineTranscript] = useState(true)
+  const [refineTranscript, setRefineTranscript] = useState(
+    deck.refineTranscriptEnabled ?? true,
+  )
   const [refineTranscriptLevel, setRefineTranscriptLevel] = useState(
     deck.refineTranscriptLevel ?? getRefineTranscriptDefaultLevel(),
   )
@@ -102,8 +108,16 @@ export default function DeckSettingsModal({
   // Nothing to refine when the lecture has no slides — disable the whole form.
   const hasSlides = (deck.slideOrder?.length ?? 0) > 0
 
-  // Persist a moved slider to the lecture (debounced). An untouched slider is
-  // never saved, so it keeps inheriting the server default.
+  // Persist changed Refine settings to the lecture. Toggles save immediately;
+  // a dragged slider is debounced (it fires many changes). An untouched slider
+  // is never saved, so it keeps inheriting the server default.
+  const saveRefineSettings = (patch: Partial<DeckSetRefineSettingsInput>) => {
+    dispatchAction<Deck>('deck.setRefineSettings', { deckId: deck.id, ...patch })
+      .then(onDeckChange)
+      .catch(() => {
+        // Quiet failure: the setting reverts on the next reload
+      })
+  }
   const persistTimers = useRef<{ slides?: number; transcript?: number }>({})
   const persistLevel = (
     field: 'slidesLevel' | 'transcriptLevel',
@@ -111,13 +125,10 @@ export default function DeckSettingsModal({
   ) => {
     const key = field === 'slidesLevel' ? 'slides' : 'transcript'
     window.clearTimeout(persistTimers.current[key])
-    persistTimers.current[key] = window.setTimeout(() => {
-      dispatchAction<Deck>('deck.setRefineLevels', { deckId: deck.id, [field]: level })
-        .then(onDeckChange)
-        .catch(() => {
-          // Quiet failure: the level reverts on the next reload
-        })
-    }, 500)
+    persistTimers.current[key] = window.setTimeout(
+      () => saveRefineSettings({ [field]: level }),
+      500,
+    )
   }
   useEffect(
     () => () => {
@@ -487,7 +498,10 @@ export default function DeckSettingsModal({
                   type="checkbox"
                   checked={identifySpeakers}
                   disabled={!deck.hasRecordings}
-                  onChange={e => setIdentifySpeakers(e.target.checked)}
+                  onChange={e => {
+                    setIdentifySpeakers(e.target.checked)
+                    saveRefineSettings({ identifySpeakers: e.target.checked })
+                  }}
                   className="mt-1"
                 />
                 <span>
@@ -509,7 +523,10 @@ export default function DeckSettingsModal({
                 <input
                   type="checkbox"
                   checked={refineSlides}
-                  onChange={e => setRefineSlides(e.target.checked)}
+                  onChange={e => {
+                    setRefineSlides(e.target.checked)
+                    saveRefineSettings({ slidesEnabled: e.target.checked })
+                  }}
                   className="mt-1"
                 />
                 <span>
@@ -546,7 +563,10 @@ export default function DeckSettingsModal({
                 <input
                   type="checkbox"
                   checked={refineTranscript}
-                  onChange={e => setRefineTranscript(e.target.checked)}
+                  onChange={e => {
+                    setRefineTranscript(e.target.checked)
+                    saveRefineSettings({ transcriptEnabled: e.target.checked })
+                  }}
                   className="mt-1"
                 />
                 <span>

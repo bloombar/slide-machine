@@ -48,9 +48,18 @@ export interface Deck {
   seedContext?: string
   /** Own AI-freedom setting (1-5); absent = inherit the project's. */
   generationFreedom?: number
+  /** Per-lecture Refine toggle: identify speakers + reframe student turns.
+   * Absent = default (on only when the lecture has retained audio). */
+  refineIdentifySpeakers?: boolean
+  /** Per-lecture Refine toggle: refine slide content/layout/image.
+   * Absent = default on. */
+  refineSlidesEnabled?: boolean
   /** Per-lecture "Refine all slides" strength (1-5); absent = inherit the
    * server default (REFINE_SLIDES_DEFAULT_LEVEL). Stored only once moved. */
   refineSlidesLevel?: number
+  /** Per-lecture Refine toggle: rewrite the spoken narration.
+   * Absent = default on. */
+  refineTranscriptEnabled?: boolean
   /** Per-lecture "Refine the spoken transcript" strength (1-5); absent =
    * inherit the server default. Stored only once moved. */
   refineTranscriptLevel?: number
