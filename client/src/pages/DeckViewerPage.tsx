@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import type {
   Deck,
+  DeckRefineSlideResult,
   DeckViewResponse,
   ImageSearchCandidate,
   Slide,
@@ -37,6 +38,7 @@ import { useAuth } from '../auth/AuthContext'
 import { useTimeAgo } from '../hooks/useTimeAgo'
 import { useSlideNavigation } from '../hooks/useSlideNavigation'
 import { useBracketKeys } from '../hooks/useBracketKeys'
+import { useSpaceKey } from '../hooks/useSpaceKey'
 import { createSpeechCapture, type PhraseMeta } from '../stt/capture'
 import {
   COMMAND_LABELS,
@@ -184,6 +186,8 @@ export default function DeckViewerPage() {
   // Finalized phrases submit sequentially so rolling context stays sane
   const phraseQueueRef = useRef<Promise<void>>(Promise.resolve())
   const [pendingImages, setPendingImages] = useState<Set<string>>(new Set())
+  // The slide currently being refined via its kebab (drives a status toast)
+  const [refiningSlideId, setRefiningSlideId] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const pollCancelsRef = useRef<Map<string, () => void>>(new Map())
   const nav = useSlideNavigation(view?.slides.length ?? 0, mode)
@@ -548,6 +552,12 @@ export default function DeckViewerPage() {
   const deckPlaying = tts.scope === 'deck' && tts.status === 'playing'
   /** Speaks a slide's content (kebab option), stopping any current playback. */
   const speakSlide = (slide: Slide) => tts.speakSlide(slide)
+  // Space toggles deck narration play/pause, matching the toolbar button —
+  // active only when TTS is on and the deck has slides to play.
+  useSpaceKey(
+    () => tts.toggle(activePlayIndex()),
+    ttsEnabled && (view?.slides.length ?? 0) > 0,
+  )
 
   // A voice-setting change should be heard immediately. The server already
   // picks up the new voice on the next synthesis, but the audio now playing was
@@ -862,6 +872,38 @@ export default function DeckViewerPage() {
     }
   }
 
+  /** Refines one slide with the lecture's Refine settings, then patches it in
+   * place. Runs synchronously (one slide is quick); a toast shows progress. */
+  const refineSlide = async (slideId: string) => {
+    setRefiningSlideId(slideId)
+    setImageError(null)
+    try {
+      const res = await dispatchAction<DeckRefineSlideResult>(
+        'deck.refineSlide',
+        { deckId: view.deck.id, slideId },
+      )
+      setView(v =>
+        v
+          ? {
+              ...v,
+              slides: v.slides.map(s => (s.id === res.slide.id ? res.slide : s)),
+            }
+          : v,
+      )
+      touchDeckLocally()
+    } catch {
+      setImageError('Could not refine that slide — try again')
+    } finally {
+      setRefiningSlideId(null)
+    }
+  }
+
+  // The "Refine this slide" kebab item appears only when a slide-applicable
+  // refine pass is enabled in the lecture's Refine settings (defaults on).
+  const slideRefineEnabled =
+    (view.deck.refineSlidesEnabled ?? true) ||
+    (view.deck.refineTranscriptEnabled ?? true)
+
   return (
     <div
       className="relative mx-auto flex w-full max-w-5xl flex-1 flex-col p-6"
@@ -1046,6 +1088,11 @@ export default function DeckViewerPage() {
                 onChangeLayout={
                   canEdit ? () => setLayoutPickerFor(slide!.id) : undefined
                 }
+                onRefine={
+                  canEdit && slideRefineEnabled
+                    ? () => void refineSlide(slide!.id)
+                    : undefined
+                }
                 onDelete={
                   canEdit ? () => void deleteSlide(slide!.id) : undefined
                 }
@@ -1083,6 +1130,9 @@ export default function DeckViewerPage() {
                   number={i + 1}
                   onSpeak={ttsEnabled ? () => speakSlide(s) : undefined}
                   onChangeLayout={() => setLayoutPickerFor(s.id)}
+                  onRefine={
+                    slideRefineEnabled ? () => void refineSlide(s.id) : undefined
+                  }
                   onDelete={() => void deleteSlide(s.id)}
                 />
               </DraggableListRow>
@@ -1120,6 +1170,17 @@ export default function DeckViewerPage() {
           onClose={closeSeed}
           onDeckChange={deck => setView(v => (v ? { ...v, deck } : v))}
         />
+      )}
+
+      {refiningSlideId && (
+        <div className="fixed inset-x-0 bottom-12 z-50 flex justify-center px-4">
+          <div
+            role="status"
+            className="flex items-center gap-3 rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-white shadow-lg"
+          >
+            Refining this slide…
+          </div>
+        </div>
       )}
 
       {imageError && (

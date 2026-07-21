@@ -32,6 +32,7 @@ describe('SlideMenu', () => {
         number={2}
         onSpeak={vi.fn()}
         onChangeLayout={vi.fn()}
+        onRefine={vi.fn()}
         onDelete={vi.fn()}
       />,
     )
@@ -43,8 +44,21 @@ describe('SlideMenu', () => {
       screen.getByRole('menuitem', { name: 'Change layout' }),
     ).toBeInTheDocument()
     expect(
+      screen.getByRole('menuitem', { name: 'Refine this slide' }),
+    ).toBeInTheDocument()
+    expect(
       screen.getByRole('menuitem', { name: 'Delete slide' }),
     ).toBeInTheDocument()
+  })
+
+  it('fires onRefine from the "Refine this slide" item', () => {
+    const onRefine = vi.fn()
+    render(<SlideMenu number={1} onRefine={onRefine} />)
+    openMenu(1)
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Refine this slide' }),
+    )
+    expect(onRefine).toHaveBeenCalledOnce()
   })
 
   it('gives a read-only viewer only the speak item', () => {

@@ -15,6 +15,9 @@ interface Props {
   onSpeak?: () => void
   /** Owner-only; omitted for read-only viewers. */
   onChangeLayout?: () => void
+  /** Refine just this slide with the lecture's Refine settings (owner-only;
+   * omitted when no applicable refine pass is enabled). */
+  onRefine?: () => void
   onDelete?: () => void
 }
 
@@ -22,6 +25,7 @@ export default function SlideMenu({
   number,
   onSpeak,
   onChangeLayout,
+  onRefine,
   onDelete,
 }: Props) {
   const [open, setOpen] = useState(false)
@@ -50,7 +54,7 @@ export default function SlideMenu({
   }
 
   // No actions available (e.g. a read-only viewer with TTS off) → no kebab.
-  if (!onSpeak && !onChangeLayout && !onDelete) return null
+  if (!onSpeak && !onChangeLayout && !onRefine && !onDelete) return null
 
   return (
     <div ref={menuRef} className="absolute top-3 right-3 z-10">
@@ -85,6 +89,15 @@ export default function SlideMenu({
               className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
             >
               Change layout
+            </button>
+          )}
+          {onRefine && (
+            <button
+              role="menuitem"
+              onClick={pick(onRefine)}
+              className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+            >
+              Refine this slide
             </button>
           )}
           {onDelete && (

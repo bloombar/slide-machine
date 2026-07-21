@@ -93,7 +93,7 @@ describe('DeckSettingsModal — Refine tab', () => {
     let savedBody: unknown = null
     mockFetchRoutes({
       '/api/actions/template.list': () => ({ status: 200, body: [] }),
-      '/api/actions/deck.setRefineLevels': init => {
+      '/api/actions/deck.setRefineSettings': init => {
         savedBody = JSON.parse(String(init?.body))
         return { status: 200, body: { ...baseDeck, refineSlidesLevel: 4 } }
       },
@@ -111,6 +111,39 @@ describe('DeckSettingsModal — Refine tab', () => {
       () => expect(savedBody).toEqual({ deckId: 'd1', slidesLevel: 4 }),
       { timeout: 2000 },
     )
+  })
+
+  it('persists a toggled option to the lecture immediately', async () => {
+    let savedBody: unknown = null
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.setRefineSettings': init => {
+        savedBody = JSON.parse(String(init?.body))
+        return { status: 200, body: { ...baseDeck, refineSlidesEnabled: false } }
+      },
+    })
+    renderModal()
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine' }))
+    // Unchecking "Refine all slides" saves slidesEnabled:false right away.
+    fireEvent.click(screen.getByRole('checkbox', { name: /Refine all slides/ }))
+    await vi.waitFor(
+      () => expect(savedBody).toEqual({ deckId: 'd1', slidesEnabled: false }),
+      { timeout: 2000 },
+    )
+  })
+
+  it('starts toggles from the lecture-saved settings', () => {
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+    })
+    renderModal({ refineSlidesEnabled: false, refineTranscriptEnabled: true })
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine' }))
+    expect(
+      screen.getByRole('checkbox', { name: /Refine all slides/ }),
+    ).not.toBeChecked()
+    expect(
+      screen.getByRole('checkbox', { name: /Refine the spoken transcript/ }),
+    ).toBeChecked()
   })
 
   it('starts the slider at the lecture-saved level when set', () => {

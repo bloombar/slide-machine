@@ -110,8 +110,12 @@ const deckSchema = new Schema<DeckDb>(
     seedContext: String,
     // Absent = inherit the project's setting; stored only when set
     generationFreedom: { type: Number, min: 1, max: 5, default: undefined },
-    // Per-lecture Refine slider levels; absent = inherit the server default.
+    // Per-lecture Refine settings; toggles absent = default on (speakers only
+    // with audio), levels absent = inherit the server default.
+    refineIdentifySpeakers: { type: Boolean, default: undefined },
+    refineSlidesEnabled: { type: Boolean, default: undefined },
     refineSlidesLevel: { type: Number, min: 1, max: 5, default: undefined },
+    refineTranscriptEnabled: { type: Boolean, default: undefined },
     refineTranscriptLevel: { type: Number, min: 1, max: 5, default: undefined },
     // Explicit lecturing language only; absent = inherit (project, then
     // owner profile, then the speaker's browser)
@@ -218,7 +222,10 @@ export const toDeckDto = (
   slideOrder: doc.slideOrder,
   seedContext: doc.seedContext,
   generationFreedom: doc.generationFreedom,
+  refineIdentifySpeakers: doc.refineIdentifySpeakers,
+  refineSlidesEnabled: doc.refineSlidesEnabled,
   refineSlidesLevel: doc.refineSlidesLevel,
+  refineTranscriptEnabled: doc.refineTranscriptEnabled,
   refineTranscriptLevel: doc.refineTranscriptLevel,
   language: doc.language,
   ttsVoice: doc.ttsVoice,

@@ -13,7 +13,7 @@ import type {
   DeckSetAccessInput,
   DeckSetGenerationFreedomInput,
   DeckSetLanguageInput,
-  DeckSetRefineLevelsInput,
+  DeckSetRefineSettingsInput,
   DeckSetTtsVoiceInput,
   DeckSetSeedNotesInput,
   DeckShare,
@@ -808,19 +808,33 @@ export const deckSetGenerationFreedom = defineAction<
   },
 })
 
-/** Per-lecture Refine slider levels (GEN-4): a number pins a level for this
- * lecture, null re-inherits the server default, absent leaves it unchanged. */
-export const deckSetRefineLevels = defineAction<DeckSetRefineLevelsInput, Deck>({
-  name: 'deck.setRefineLevels',
+/** Per-lecture Refine settings (GEN-4): the on/off toggles and slider levels.
+ * For each field a value sets it, null re-inherits the default, and absent
+ * leaves it unchanged. These persist so the single-slide "Refine this slide"
+ * action can reuse the lecture's choices. */
+export const deckSetRefineSettings = defineAction<
+  DeckSetRefineSettingsInput,
+  Deck
+>({
+  name: 'deck.setRefineSettings',
   input: z.object({
     deckId: z.string().min(1),
+    identifySpeakers: z.boolean().nullable().optional(),
+    slidesEnabled: z.boolean().nullable().optional(),
     slidesLevel: z.number().int().min(1).max(5).nullable().optional(),
+    transcriptEnabled: z.boolean().nullable().optional(),
     transcriptLevel: z.number().int().min(1).max(5).nullable().optional(),
   }),
   execute: async (ctx, input) => {
     const { deck, acl } = await loadEditableDeck(ctx, input.deckId)
+    if (input.identifySpeakers !== undefined)
+      deck.refineIdentifySpeakers = input.identifySpeakers ?? undefined
+    if (input.slidesEnabled !== undefined)
+      deck.refineSlidesEnabled = input.slidesEnabled ?? undefined
     if (input.slidesLevel !== undefined)
       deck.refineSlidesLevel = input.slidesLevel ?? undefined
+    if (input.transcriptEnabled !== undefined)
+      deck.refineTranscriptEnabled = input.transcriptEnabled ?? undefined
     if (input.transcriptLevel !== undefined)
       deck.refineTranscriptLevel = input.transcriptLevel ?? undefined
     await deck.save()
@@ -1044,7 +1058,7 @@ registerAction(deckReorderSlides)
 registerAction(sessionPhrase)
 registerAction(deckSetSeedNotes)
 registerAction(deckSetGenerationFreedom)
-registerAction(deckSetRefineLevels)
+registerAction(deckSetRefineSettings)
 registerAction(deckSetLanguage)
 registerAction(deckSetTtsVoice)
 registerAction(deckSetAccess)
