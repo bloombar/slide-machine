@@ -31,6 +31,7 @@ import { apiFetch, ApiError } from '../api/http'
 import { dispatchAction } from '../api/actions'
 import {
   applySlideImageFromSource,
+  fetchSlideOriginalAudioUrl,
   pollSlideImage,
   uploadSlideImage,
 } from '../api/slides'
@@ -188,6 +189,20 @@ export default function DeckViewerPage() {
   const [pendingImages, setPendingImages] = useState<Set<string>>(new Set())
   // The slide currently being refined via its kebab (drives a status toast)
   const [refiningSlideId, setRefiningSlideId] = useState<string | null>(null)
+  // Original-audio playback (kebab "Play original audio"): the slide currently
+  // playing, plus the <audio> element and its blob URL to revoke afterwards.
+  const [playingOriginalId, setPlayingOriginalId] = useState<string | null>(
+    null,
+  )
+  const originalAudioRef = useRef<HTMLAudioElement | null>(null)
+  const originalUrlRef = useRef<string | null>(null)
+  useEffect(
+    () => () => {
+      originalAudioRef.current?.pause()
+      if (originalUrlRef.current) URL.revokeObjectURL(originalUrlRef.current)
+    },
+    [],
+  )
   const inputRef = useRef<HTMLInputElement>(null)
   const pollCancelsRef = useRef<Map<string, () => void>>(new Map())
   const nav = useSlideNavigation(view?.slides.length ?? 0, mode)
@@ -904,6 +919,47 @@ export default function DeckViewerPage() {
     (view.deck.refineSlidesEnabled ?? true) ||
     (view.deck.refineTranscriptEnabled ?? true)
 
+  // Slides whose original lecture audio the server said can be played back.
+  const audioSlideIds = new Set(view.audioSlideIds ?? [])
+
+  /** Stops original-audio playback and releases its blob URL. */
+  const stopOriginalAudio = () => {
+    originalAudioRef.current?.pause()
+    originalAudioRef.current = null
+    if (originalUrlRef.current) {
+      URL.revokeObjectURL(originalUrlRef.current)
+      originalUrlRef.current = null
+    }
+    setPlayingOriginalId(null)
+  }
+
+  /** Plays (or, if already playing this slide, stops) the slide's original
+   * lecture audio. Stops TTS first so the two never overlap. */
+  const playOriginalAudio = async (slideId: string) => {
+    if (playingOriginalId === slideId) {
+      stopOriginalAudio()
+      return
+    }
+    stopOriginalAudio()
+    tts.stop()
+    setImageError(null)
+    setPlayingOriginalId(slideId)
+    try {
+      const url = await fetchSlideOriginalAudioUrl(slideId)
+      const audio = new Audio(url)
+      originalAudioRef.current = audio
+      originalUrlRef.current = url
+      audio.onended = stopOriginalAudio
+      audio.onerror = stopOriginalAudio
+      await audio.play()
+    } catch {
+      stopOriginalAudio()
+      setImageError(
+        'Could not play the original audio — it may no longer be available',
+      )
+    }
+  }
+
   return (
     <div
       className="relative mx-auto flex w-full max-w-5xl flex-1 flex-col p-6"
@@ -1093,6 +1149,11 @@ export default function DeckViewerPage() {
                     ? () => void refineSlide(slide!.id)
                     : undefined
                 }
+                onPlayOriginalAudio={
+                  canEdit && audioSlideIds.has(slide!.id)
+                    ? () => void playOriginalAudio(slide!.id)
+                    : undefined
+                }
                 onDelete={
                   canEdit ? () => void deleteSlide(slide!.id) : undefined
                 }
@@ -1132,6 +1193,11 @@ export default function DeckViewerPage() {
                   onChangeLayout={() => setLayoutPickerFor(s.id)}
                   onRefine={
                     slideRefineEnabled ? () => void refineSlide(s.id) : undefined
+                  }
+                  onPlayOriginalAudio={
+                    audioSlideIds.has(s.id)
+                      ? () => void playOriginalAudio(s.id)
+                      : undefined
                   }
                   onDelete={() => void deleteSlide(s.id)}
                 />
@@ -1179,6 +1245,23 @@ export default function DeckViewerPage() {
             className="flex items-center gap-3 rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-white shadow-lg"
           >
             Refining this slide…
+          </div>
+        </div>
+      )}
+
+      {playingOriginalId && (
+        <div className="fixed inset-x-0 bottom-12 z-50 flex justify-center px-4">
+          <div
+            role="status"
+            className="flex items-center gap-3 rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-white shadow-lg"
+          >
+            Playing original audio…
+            <button
+              onClick={stopOriginalAudio}
+              className="text-white/80 hover:text-white"
+            >
+              Stop
+            </button>
           </div>
         </div>
       )}

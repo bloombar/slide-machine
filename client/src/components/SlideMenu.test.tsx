@@ -33,6 +33,7 @@ describe('SlideMenu', () => {
         onSpeak={vi.fn()}
         onChangeLayout={vi.fn()}
         onRefine={vi.fn()}
+        onPlayOriginalAudio={vi.fn()}
         onDelete={vi.fn()}
       />,
     )
@@ -47,6 +48,9 @@ describe('SlideMenu', () => {
       screen.getByRole('menuitem', { name: 'Refine this slide' }),
     ).toBeInTheDocument()
     expect(
+      screen.getByRole('menuitem', { name: 'Play original audio' }),
+    ).toBeInTheDocument()
+    expect(
       screen.getByRole('menuitem', { name: 'Delete slide' }),
     ).toBeInTheDocument()
   })
@@ -59,6 +63,25 @@ describe('SlideMenu', () => {
       screen.getByRole('menuitem', { name: 'Refine this slide' }),
     )
     expect(onRefine).toHaveBeenCalledOnce()
+  })
+
+  it('fires onPlayOriginalAudio, and omits the item when unavailable', () => {
+    const onPlayOriginalAudio = vi.fn()
+    const { rerender } = render(
+      <SlideMenu number={1} onPlayOriginalAudio={onPlayOriginalAudio} />,
+    )
+    openMenu(1)
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Play original audio' }),
+    )
+    expect(onPlayOriginalAudio).toHaveBeenCalledOnce()
+
+    // Without the callback (no retained audio), the item is not rendered.
+    rerender(<SlideMenu number={1} onSpeak={vi.fn()} />)
+    openMenu(1)
+    expect(
+      screen.queryByRole('menuitem', { name: 'Play original audio' }),
+    ).not.toBeInTheDocument()
   })
 
   it('gives a read-only viewer only the speak item', () => {

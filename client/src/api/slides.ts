@@ -9,8 +9,10 @@ import type {
   ImageSearchCandidate,
   Slide,
 } from '@slide-machine/shared'
-import { apiFetch } from './http'
+import { apiFetch, ApiError } from './http'
 import { dispatchAction } from './actions'
+import { config } from '../config'
+import { getAccessToken, refreshSession } from '../auth/token'
 
 /** Replaces (or sets) a slide's image from an uploaded file (EDIT-1). */
 export const uploadSlideImage = (
@@ -64,6 +66,30 @@ export const synthesizeSlideTts = (
     method: 'POST',
     body: JSON.stringify({ mode }),
   })
+
+/**
+ * Fetches a slide's original lecture audio (GEN-4) as an object URL for an
+ * <audio> element. The clip is access-gated (it holds student voices), so it
+ * can't be a plain <audio src>: we fetch the bytes with the Bearer token and
+ * wrap them in a blob URL the caller must revoke. Throws on 403/404 (no
+ * retained audio for the slide, e.g. the recording aged out).
+ */
+export const fetchSlideOriginalAudioUrl = async (
+  slideId: string,
+): Promise<string> => {
+  const request = async (retry: boolean): Promise<Response> => {
+    const token = getAccessToken()
+    const res = await fetch(`${config.apiBaseUrl}/api/slides/${slideId}/audio`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (res.status === 401 && retry && (await refreshSession()))
+      return request(false)
+    return res
+  }
+  const res = await request(true)
+  if (!res.ok) throw new ApiError(res.status, 'audio_error', res.statusText)
+  return URL.createObjectURL(await res.blob())
+}
 
 interface PollOptions {
   attempts?: number

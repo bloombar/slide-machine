@@ -41,4 +41,8 @@ export interface DeckViewResponse {
   /** The project's own narration-voice setting, so a lecture with no voice of
    * its own shows what it inherits. */
   projectTtsVoice?: string
+  /** Ids of slides that have playable retained lecture audio (a timed
+   * transcript segment belonging to a still-retained recording). Populated
+   * only for editors; drives the per-slide "Play original audio" option. */
+  audioSlideIds?: string[]
 }
