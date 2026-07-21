@@ -1,0 +1,214 @@
+diff --git a/client/src/App.tsx b/client/src/App.tsx
+index 2a33f62..0035a6b 100644
+--- a/client/src/App.tsx
++++ b/client/src/App.tsx
+@@ -14,7 +14,10 @@ import ProjectPage from './pages/ProjectPage'
+ import ProfilePage from './pages/ProfilePage'
+ import DeckViewerPage from './pages/DeckViewerPage'
+ import PublicProfilePage from './pages/PublicProfilePage'
++import AdminUsersPage from './pages/AdminUsersPage'
++import AdminUserDetailPage from './pages/AdminUserDetailPage'
+ import RequireAuth from './auth/RequireAuth'
++import RequireAdmin from './auth/RequireAdmin'
+ 
+ export default function App() {
+   return (
+@@ -36,6 +39,22 @@ export default function App() {
+         <Route path="/app" element={<HomePage />} />
+         <Route path="/app/projects/:projectId" element={<ProjectPage />} />
+         <Route path="/app/profile" element={<ProfilePage />} />
++        <Route
++          path="/app/admin"
++          element={
++            <RequireAdmin>
++              <AdminUsersPage />
++            </RequireAdmin>
++          }
++        />
++        <Route
++          path="/app/admin/users/:userId"
++          element={
++            <RequireAdmin>
++              <AdminUserDetailPage />
++            </RequireAdmin>
++          }
++        />
+       </Route>
+     </Routes>
+   )
+diff --git a/client/src/components/layout/ShellMenu.tsx b/client/src/components/layout/ShellMenu.tsx
+index 54e4313..c52d01f 100644
+--- a/client/src/components/layout/ShellMenu.tsx
++++ b/client/src/components/layout/ShellMenu.tsx
+@@ -8,6 +8,31 @@ import { useEffect, useRef, useState } from 'react'
+ import { Link, useNavigate } from 'react-router'
+ import { Menu, LogOut, LogIn } from 'lucide-react'
+ import { useAuth } from '../../auth/AuthContext'
++import { useIsAdmin } from '../../hooks/useIsAdmin'
++
++/** Admin entry, mounted only while the dropdown is open so the status
++ * check fires at most once per session and only for users who open the
++ * menu; non-admins render nothing. */
++function AdminMenuItem({
++  className,
++  onNavigate,
++}: {
++  className: string
++  onNavigate: () => void
++}) {
++  const isAdmin = useIsAdmin()
++  if (!isAdmin) return null
++  return (
++    <Link
++      to="/app/admin"
++      role="menuitem"
++      onClick={onNavigate}
++      className={className}
++    >
++      Admin
++    </Link>
++  )
++}
+ 
+ export default function ShellMenu() {
+   const { status, logout } = useAuth()
+@@ -76,6 +101,10 @@ export default function ShellMenu() {
+               >
+                 Profile
+               </Link>
++              <AdminMenuItem
++                className={item}
++                onNavigate={() => setOpen(false)}
++              />
+               <button
+                 role="menuitem"
+                 onClick={() => void doLogout()}
+diff --git a/e2e/playwright.config.ts b/e2e/playwright.config.ts
+index 44f79f9..b104cb4 100644
+--- a/e2e/playwright.config.ts
++++ b/e2e/playwright.config.ts
+@@ -25,6 +25,8 @@ const serverEnv = (over: Record<string, string>): Record<string, string> => ({
+     'mongodb://localhost:27017/slide-machine-test',
+   JWT_SECRET: 'e2e-jwt-secret-at-least-32-characters!!',
+   JWT_REFRESH_SECRET: 'e2e-refresh-secret-at-least-32-chars!!!',
++  // Grants the admin.spec account access to the /app/admin interface
++  ADMIN_EMAILS: 'e2e-admin@example.com',
+   GENERATION_PROVIDER: 'mock',
+   IMAGE_ENRICHMENT_ENABLED: 'false',
+   STORAGE_PROVIDER: 'local',
+diff --git a/e2e/tests/admin.spec.ts b/e2e/tests/admin.spec.ts
+new file mode 100644
+index 0000000..6cd8098
+--- /dev/null
++++ b/e2e/tests/admin.spec.ts
+@@ -0,0 +1,76 @@
++/**
++ * E2E admin interface journey against the built app: a regular user
++ * never sees the admin entry and is bounced from /app/admin; the
++ * allowlisted admin (ADMIN_EMAILS in playwright.config.ts) reaches the
++ * user directory from the menu and drills into a user's projects.
++ */
++import { test, expect, type Page } from '@playwright/test'
++import { createProject } from './helpers'
++
++const password = 'sturdy-passw0rd'
++// The admin email is fixed (it must match ADMIN_EMAILS); the account may
++// already exist from a previous local run, so creation tolerates 409.
++const admin = { email: 'e2e-admin@example.com', displayName: 'E2E Admin' }
++const run = Date.now()
++const user = { email: `e2e-plain-${run}@example.com`, displayName: 'Plain Jo' }
++
++/** Signs the account in, creating it via the API when it doesn't exist
++ * yet (registration also sets the session cookie), and lands on /app. */
++const ensureSignedIn = async (
++  page: Page,
++  account: { email: string; displayName: string },
++) => {
++  const res = await page.request.post('/api/auth/register', {
++    data: { ...account, password },
++  })
++  if (res.status() === 201) {
++    await page.goto('/app')
++  } else {
++    expect(res.status()).toBe(409)
++    await page.goto('/login')
++    await page.getByLabel('Email').fill(account.email)
++    await page.getByLabel('Password').fill(password)
++    await page.getByRole('button', { name: 'Sign in' }).click()
++  }
++  await expect(page).toHaveURL(/\/app$/)
++}
++
++test.describe.configure({ mode: 'serial' })
++
++test('a regular user has no admin entry and is bounced from /app/admin', async ({
++  page,
++}) => {
++  await ensureSignedIn(page, user)
++  await createProject(page, 'Admin E2E Project')
++
++  await page.goto('/app')
++  await page.getByRole('button', { name: 'Menu' }).click()
++  await expect(page.getByRole('menuitem', { name: 'Profile' })).toBeVisible()
++  await expect(page.getByRole('menuitem', { name: 'Admin' })).toHaveCount(0)
++
++  await page.goto('/app/admin')
++  await expect(page).toHaveURL(/\/app$/)
++})
++
++test('the allowlisted admin reaches the directory and a user drill-down', async ({
++  page,
++}) => {
++  await ensureSignedIn(page, admin)
++
++  await page.getByRole('button', { name: 'Menu' }).click()
++  await page.getByRole('menuitem', { name: 'Admin' }).click()
++  await expect(page).toHaveURL(/\/app\/admin$/)
++
++  // Newest-first: the account registered by the previous test is on page 1
++  await page.getByRole('link', { name: user.email }).click()
++  await expect(page).toHaveURL(/\/app\/admin\/users\//)
++  await expect(
++    page.getByRole('heading', { name: user.displayName }),
++  ).toBeVisible()
++  await expect(
++    page.getByRole('link', { name: 'View public profile' }),
++  ).toBeVisible()
++
++  await page.getByText('Admin E2E Project').click()
++  await expect(page.getByText('No lectures.')).toBeVisible()
++})
+diff --git a/server/.env.example b/server/.env.example
+index 6c2b86d..92f88e1 100644
+--- a/server/.env.example
++++ b/server/.env.example
+@@ -25,6 +25,9 @@ JWT_REFRESH_SECRET=
+ # JWT_REFRESH_TTL_SECONDS=2592000
+ # How long a rotated-out refresh token stays usable (two-tab race window)
+ # REFRESH_GRACE_SECONDS=60
++# Comma-separated account emails granted the read-only admin interface
++# (/app/admin). Unset = no admins.
++# ADMIN_EMAILS=you@example.com
+ 
+ # --- AI providers: active adapter per capability (GEN-2/TECH-8) ---
+ # Live-session speech engine (also drives the client via /api/config):
+diff --git a/server/src/app.ts b/server/src/app.ts
+index 841ec6c..b3a6a14 100644
+--- a/server/src/app.ts
++++ b/server/src/app.ts
+@@ -8,6 +8,7 @@ import { env } from './config/env'
+ import { healthRouter } from './routes/health'
+ import { configRouter } from './routes/config'
+ import { authRouter } from './routes/auth'
++import { adminRouter } from './routes/admin'
+ import { actionsRouter } from './routes/actions'
+ import { decksRouter } from './routes/decks'
+ import { usersRouter } from './routes/users'
+@@ -43,6 +44,7 @@ export const createApp = (): Express => {
+   api.use(healthRouter)
+   api.use(configRouter)
+   api.use('/auth', authRouter)
++  api.use('/admin', adminRouter)
+   api.use(actionsRouter)
+   api.use(decksRouter)
+   api.use(usersRouter)
