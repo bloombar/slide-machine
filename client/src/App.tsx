@@ -14,7 +14,10 @@ import ProjectPage from './pages/ProjectPage'
 import ProfilePage from './pages/ProfilePage'
 import DeckViewerPage from './pages/DeckViewerPage'
 import PublicProfilePage from './pages/PublicProfilePage'
+import AdminUsersPage from './pages/AdminUsersPage'
+import AdminUserDetailPage from './pages/AdminUserDetailPage'
 import RequireAuth from './auth/RequireAuth'
+import RequireAdmin from './auth/RequireAdmin'
 
 export default function App() {
   return (
@@ -36,6 +39,22 @@ export default function App() {
         <Route path="/app" element={<HomePage />} />
         <Route path="/app/projects/:projectId" element={<ProjectPage />} />
         <Route path="/app/profile" element={<ProfilePage />} />
+        <Route
+          path="/app/admin"
+          element={
+            <RequireAdmin>
+              <AdminUsersPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/app/admin/users/:userId"
+          element={
+            <RequireAdmin>
+              <AdminUserDetailPage />
+            </RequireAdmin>
+          }
+        />
       </Route>
     </Routes>
   )

@@ -8,6 +8,31 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { Menu, LogOut, LogIn } from 'lucide-react'
 import { useAuth } from '../../auth/AuthContext'
+import { useIsAdmin } from '../../hooks/useIsAdmin'
+
+/** Admin entry, mounted only while the dropdown is open so the status
+ * check fires at most once per session and only for users who open the
+ * menu; non-admins render nothing. */
+function AdminMenuItem({
+  className,
+  onNavigate,
+}: {
+  className: string
+  onNavigate: () => void
+}) {
+  const isAdmin = useIsAdmin()
+  if (!isAdmin) return null
+  return (
+    <Link
+      to="/app/admin"
+      role="menuitem"
+      onClick={onNavigate}
+      className={className}
+    >
+      Admin
+    </Link>
+  )
+}
 
 export default function ShellMenu() {
   const { status, logout } = useAuth()
@@ -76,6 +101,10 @@ export default function ShellMenu() {
               >
                 Profile
               </Link>
+              <AdminMenuItem
+                className={item}
+                onNavigate={() => setOpen(false)}
+              />
               <button
                 role="menuitem"
                 onClick={() => void doLogout()}

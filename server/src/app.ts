@@ -9,6 +9,7 @@ import { healthRouter } from './routes/health'
 import { configRouter } from './routes/config'
 import { authRouter } from './routes/auth'
 import { googleConnectRouter } from './routes/google-connect'
+import { adminRouter } from './routes/admin'
 import { actionsRouter } from './routes/actions'
 import { decksRouter } from './routes/decks'
 import { usersRouter } from './routes/users'
@@ -48,6 +49,7 @@ export const createApp = (): Express => {
   api.use(configRouter)
   api.use('/auth', authRouter)
   api.use('/auth', googleConnectRouter)
+  api.use('/admin', adminRouter)
   api.use(actionsRouter)
   api.use(decksRouter)
   api.use(usersRouter)
