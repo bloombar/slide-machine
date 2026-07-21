@@ -7,11 +7,54 @@ import {
   LAYOUT_TYPES,
   type ImageAttribution,
   type Slide,
+  type Stroke,
+  type StrokeAnchor,
+  type StrokePoint,
 } from '@slide-machine/shared'
 
 export interface SlideDb extends Omit<Slide, 'id' | 'deckId'> {
   deckId: Types.ObjectId
 }
+
+/** Id-less subdocuments for whiteboard strokes (WB-1). Strict schemas keep
+ * stored drawings well-formed; mirrors the transcript-segment wordSchema. */
+const pointSchema = new Schema<StrokePoint>(
+  { x: { type: Number, required: true }, y: { type: Number, required: true } },
+  { _id: false },
+)
+
+const STROKE_SOURCES: StrokeAnchor['source'][] = [
+  'word',
+  'appended',
+  'elapsed',
+  'unsynced',
+]
+
+const anchorSchema = new Schema<StrokeAnchor>(
+  {
+    charAnchor: { type: Number, required: true },
+    source: { type: String, enum: STROKE_SOURCES, required: true },
+    sessionId: String,
+    sessionMs: Number,
+  },
+  { _id: false },
+)
+
+const strokeSchema = new Schema<Stroke>(
+  {
+    id: { type: String, required: true },
+    tool: { type: String, enum: ['pen', 'highlighter'], required: true },
+    color: { type: String, required: true },
+    thickness: { type: Number, required: true },
+    points: { type: [pointSchema], required: true },
+    startedAt: { type: String, required: true },
+    endedAt: { type: String, required: true },
+    anchor: { type: anchorSchema, required: true },
+    erasedAnchor: { type: anchorSchema, default: undefined },
+    erasedAt: String,
+  },
+  { _id: false },
+)
 
 /**
  * Source-agnostic image credit (IMG-5). Stored as Mixed rather than a
@@ -36,6 +79,7 @@ const slideSchema = new Schema<SlideDb>({
   sourceTranscript: String,
   attribution: { type: Schema.Types.Mixed, default: undefined },
   manuallyEdited: { type: Boolean, default: undefined },
+  drawings: { type: [strokeSchema], default: undefined },
 })
 
 slideSchema.index({ deckId: 1, index: 1 })
@@ -80,4 +124,5 @@ export const toSlideDto = (doc: HydratedDocument<SlideDb>): Slide => ({
   sourceTranscript: doc.sourceTranscript,
   attribution: toAttributionDto(doc.attribution),
   manuallyEdited: doc.manuallyEdited,
+  drawings: doc.drawings,
 })

@@ -22,6 +22,8 @@ const colors: ThemeColors = {
   text: '#fff',
   muted: '#888',
   accent: '#0ff',
+  penColor: '#000',
+  highlighterColor: '#ff0',
 }
 
 const slide = (overrides: Partial<Slide>): Slide => ({
@@ -222,21 +224,16 @@ describe('SlideSlot', () => {
     expect(props.onReplaceImage).not.toHaveBeenCalled()
   })
 
-  it('gives owners Add and Remove controls over an empty image slot', () => {
+  it('gives owners only an Add control over an empty image slot', () => {
     render(<SlideSlot {...imageEditor({ imageRef: undefined })} />)
     expect(
       screen.getByRole('button', { name: 'Add image' }),
     ).toBeInTheDocument()
+    // No Remove on an empty slot: removing keeps the layout and just empties
+    // the slot, so there is nothing to remove once it is already empty.
     expect(
-      screen.getByRole('button', { name: 'Remove image' }),
-    ).toBeInTheDocument()
-  })
-
-  it('removes the image slot from the Remove control when empty', () => {
-    const props = imageEditor({ imageRef: undefined })
-    render(<SlideSlot {...props} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Remove image' }))
-    expect(props.onRemoveImage).toHaveBeenCalled()
+      screen.queryByRole('button', { name: 'Remove image' }),
+    ).not.toBeInTheDocument()
   })
 
   it('offers Add to an owner even while enrichment is pending', () => {

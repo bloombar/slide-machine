@@ -67,6 +67,7 @@ export default function SlideView({
   return (
     <div
       data-testid="slide"
+      data-slide-id={slide.id}
       data-layout={slide.layoutType}
       className="@container aspect-video w-full overflow-hidden rounded-xl shadow-2xl"
       style={{ backgroundColor: colors.background, color: colors.text }}

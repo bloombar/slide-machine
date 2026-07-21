@@ -26,6 +26,15 @@ interface Options {
   stopMic: () => void
 }
 
+/** A live read of where playback is: which slide, and how far through its audio
+ * (0..1), or null when the clip has no known duration. Read imperatively (e.g.
+ * from a requestAnimationFrame loop) so callers can sync to it without a React
+ * re-render every frame (WB-2). */
+export interface TtsProgress {
+  index: number
+  fraction: number | null
+}
+
 export interface TtsPlayback {
   status: TtsStatus
   scope: TtsScope
@@ -35,6 +44,8 @@ export interface TtsPlayback {
   /** Toolbar play/pause: start deck playback, or pause/resume it. */
   toggle: (activeIndex: number) => void
   stop: () => void
+  /** Live playback position for drawing-sync; null when nothing is playing. */
+  getProgress: () => TtsProgress | null
 }
 
 export function useTtsPlayback({
@@ -49,6 +60,9 @@ export function useTtsPlayback({
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const tokenRef = useRef(0) // bumped to cancel any in-flight sequence
   const pausedRef = useRef(false)
+  // Mirror of activeIndex for the imperative getProgress reader (WB-2), which
+  // must not depend on a re-render to see the current slide.
+  const activeIndexRef = useRef<number | null>(null)
 
   const ensureAudio = (): HTMLAudioElement => {
     if (!audioRef.current) audioRef.current = new Audio()
@@ -72,6 +86,7 @@ export function useTtsPlayback({
     setStatus('idle')
     setScope(null)
     setActiveIndex(null)
+    activeIndexRef.current = null
   }, [halt])
 
   /** Navigates to a slide, synthesizes its audio, and plays it; `onEnded`
@@ -85,6 +100,7 @@ export function useTtsPlayback({
     ) => {
       navigate(index)
       setActiveIndex(index)
+      activeIndexRef.current = index
       const slide = getSlides()[index]
       if (!slide) {
         stop()
@@ -178,8 +194,29 @@ export function useTtsPlayback({
     [scope, status, playDeck],
   )
 
+  const getProgress = useCallback((): TtsProgress | null => {
+    const audio = audioRef.current
+    const index = activeIndexRef.current
+    if (!audio || index == null) return null
+    const d = audio.duration
+    const fraction =
+      d && Number.isFinite(d) && d > 0
+        ? Math.min(1, Math.max(0, audio.currentTime / d))
+        : null
+    return { index, fraction }
+  }, [])
+
   // Stop + release on unmount.
   useEffect(() => () => halt(), [halt])
 
-  return { status, scope, activeIndex, playDeck, speakSlide, toggle, stop }
+  return {
+    status,
+    scope,
+    activeIndex,
+    playDeck,
+    speakSlide,
+    toggle,
+    stop,
+    getProgress,
+  }
 }

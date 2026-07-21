@@ -10,6 +10,7 @@ import type {
   LayoutType,
   Slide,
   SlideDeleteInput,
+  SlideEditDrawingsInput,
   SlideEditInput,
   SlideSetLayoutInput,
 } from '@slide-machine/shared'
@@ -187,6 +188,60 @@ export const slideSetLayout = defineAction<SlideSetLayoutInput, Slide>({
   },
 })
 
+// Defensive caps so a runaway client can't bloat a slide document (WB-1).
+const MAX_STROKES_PER_SLIDE = 2000
+const MAX_POINTS_PER_STROKE = 10000
+
+const anchorInput = z.object({
+  charAnchor: z.number().int().min(0),
+  source: z.enum(['word', 'appended', 'elapsed', 'unsynced']),
+  sessionId: z.string().optional(),
+  sessionMs: z.number().optional(),
+})
+
+const strokeInput = z.object({
+  id: z.string().min(1),
+  tool: z.enum(['pen', 'highlighter']),
+  color: z.string().regex(/^#[0-9a-fA-F]{3,8}$/, 'color must be a hex value'),
+  thickness: z.number().positive(),
+  points: z
+    .array(z.object({ x: z.number(), y: z.number() }))
+    .min(1)
+    .max(MAX_POINTS_PER_STROKE),
+  startedAt: z.string(),
+  endedAt: z.string(),
+  anchor: anchorInput,
+  erasedAnchor: anchorInput.optional(),
+  erasedAt: z.string().optional(),
+})
+
+/** Clamps a normalized coordinate into the slide box; strokes are stored 0..1. */
+const clamp01 = (n: number): number => (n < 0 ? 0 : n > 1 ? 1 : n)
+
+/**
+ * Replaces a slide's whiteboard drawings (WB-1). The client owns the full
+ * stroke set (draw + timestamped erase) and sends it wholesale after each
+ * change; this is last-write-wins like slide.editContent. Does NOT set
+ * manuallyEdited — that flag guards text against the reformat, not drawings.
+ */
+export const slideEditDrawings = defineAction<SlideEditDrawingsInput, Slide>({
+  name: 'slide.editDrawings',
+  input: z.object({
+    slideId: z.string().min(1),
+    drawings: z.array(strokeInput).max(MAX_STROKES_PER_SLIDE),
+  }),
+  execute: async (ctx, input) => {
+    const { slide } = await loadOwnedSlide(ctx, input.slideId)
+    slide.drawings = input.drawings.map(s => ({
+      ...s,
+      points: s.points.map(p => ({ x: clamp01(p.x), y: clamp01(p.y) })),
+    }))
+    await slide.save()
+    await touchDeck(slide.deckId)
+    return toSlideDto(slide)
+  },
+})
+
 export const slideDelete = defineAction<
   SlideDeleteInput,
   { deleted: true; slideOrder: string[] }
@@ -210,5 +265,6 @@ export const slideDelete = defineAction<
 
 registerAction(slideGet)
 registerAction(slideEditContent)
+registerAction(slideEditDrawings)
 registerAction(slideSetLayout)
 registerAction(slideDelete)

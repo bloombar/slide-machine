@@ -3,7 +3,7 @@
  * Results reuse the shared data-model types (e.g. Project).
  */
 import type { Locale } from '../types/locale'
-import type { ImageAttribution, Slide, Visibility } from '../types/deck'
+import type { ImageAttribution, Slide, Stroke, Visibility } from '../types/deck'
 import type { ProfileVisibility } from '../types/user'
 import type { WordTiming } from '../providers/transcription'
 
@@ -228,6 +228,11 @@ export interface SessionPhraseInput {
    * (Google Cloud). `startMs`/`endMs` on the stored segment are derived from
    * these server-side. Absent for the browser engine / typed input. */
   words?: WordTiming[]
+  /** True while a whiteboard tool is active during recording (WB-3): the
+   * server appends the phrase to the current slide instead of auto-creating a
+   * new one, so drawing never spawns slides. The "+" button and the "new
+   * slide" voice command bypass this path and still create slides. */
+  suppressNewSlide?: boolean
 }
 
 /** Run post-lecture speaker diarization on a deck's retained recordings and
@@ -329,6 +334,14 @@ export interface SlideEditInput {
   imageRef?: string
   /** Image credit/licensing edited from the attribution dialog (IMG-5). */
   attribution?: ImageAttribution
+}
+
+/** Replaces a slide's whiteboard drawings wholesale (WB-1). The client sends
+ * the full stroke set after each draw/erase; erased strokes are kept (with
+ * their `erasedAnchor`) so synced playback can replay the erasure. */
+export interface SlideEditDrawingsInput {
+  slideId: string
+  drawings: Stroke[]
 }
 
 export interface SlideDeleteInput {

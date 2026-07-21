@@ -397,6 +397,9 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
       )
       .max(2000)
       .optional(),
+    // Whiteboard drawing is active on the client (WB-3): don't auto-create a
+    // slide from this phrase; append it to the current slide instead.
+    suppressNewSlide: z.boolean().optional(),
   }),
   execute: async (ctx, input) => {
     const { deck } = await loadEditableDeck(ctx, input.deckId)
@@ -692,6 +695,23 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
         },
       }
     }
+    // Whiteboard drawing is active on the client (WB-3): a new slide would
+    // interrupt annotating, so append this phrase to the current slide as
+    // transcript only (no content change) rather than creating one. Keeps the
+    // slide's narration growing so stroke anchors stay correct. The "+" button
+    // and the "new slide" voice command bypass this action, so explicit slide
+    // creation still works. With no current slide there is nothing to append
+    // to, so a slide is created as usual.
+    if (input.suppressNewSlide && result.action === 'new' && lastSlide) {
+      lastSlide.sourceTranscript = [lastSlide.sourceTranscript, input.phrase]
+        .filter(Boolean)
+        .join(' ')
+      await lastSlide.save()
+      await linkSegment('update', lastSlide._id)
+      await touchDeck(deck._id)
+      return event({ kind: 'slide.update', slide: toSlideDto(lastSlide) })
+    }
+
     // Honor image intent by giving it a layout that can show the image
     // (GEN-7): if the model asked for a photo on a layout without an
     // image slot, upgrade to one that fits — or drop the image if none
