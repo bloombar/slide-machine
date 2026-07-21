@@ -26,7 +26,10 @@ text), `rolling` (recent slides), `capacity` (current-slide load),
 `voiceCommands` (the [CAP-4](SPEC.md#cap-4-voice-commands) command option set — empty unless
 `GENERATION_VOICE_COMMANDS=true`), `updateRules` (delta/refit update
 semantics plus the current slide's exact content — empty unless
-`GENERATION_LAYOUT_REFIT=true`, the default), `phrase`.
+`GENERATION_LAYOUT_REFIT=true`, the default), `lockLayout` (tells the model to
+keep the current slide's layout while the user is hand-annotating it —
+[EDIT-4](SPEC.md#edit-4-whiteboard-annotation); empty unless the phrase arrives
+mid-draw), `phrase`.
 
 `PROMPTS_DIR` overrides the directory (defaults to `config/prompts`).
 
