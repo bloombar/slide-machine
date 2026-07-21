@@ -6,32 +6,23 @@ showing account details and the user's projects, each expandable to its
 lectures with links to the live deck viewer (`/d/:slug`) and the user's
 public profile (`/u/:id`).
 
-## Status: built, not yet wired in
+## Status: wired in
 
-Everything ships in **new files only**; no existing route, model, DTO, or
-page changed. The five one-hunk edits that switch the feature on live in
-[admin-wiring.patch](./admin-wiring.patch) (131 added lines, nothing
-removed). Until it is applied, the admin code is dormant: the API router
-is never mounted and the pages are unreachable.
+The feature is live. The wiring lives in these files:
 
-```sh
-git apply docs/admin-wiring.patch
-```
-
-The patch touches:
-
-| File | Change |
+| File | Role |
 | --- | --- |
-| `server/src/app.ts` | mount `adminRouter` at `/api/admin` |
+| `server/src/app.ts` | mounts `adminRouter` at `/api/admin` |
 | `client/src/App.tsx` | `/app/admin` + `/app/admin/users/:userId` routes behind `RequireAdmin` |
 | `client/src/components/layout/ShellMenu.tsx` | "Admin" menu item, rendered only for admins |
-| `server/.env.example` | document `ADMIN_EMAILS` |
+| `server/.env.example` | documents `ADMIN_EMAILS` |
 | `e2e/playwright.config.ts` | `ADMIN_EMAILS` for the e2e server |
-| `e2e/tests/admin.spec.ts` | new e2e spec (admin journey + non-admin lockout) |
+| `e2e/tests/admin.spec.ts` | e2e spec (admin journey + non-admin lockout) |
 
-The whole wired state was validated before being captured as a patch:
-all three workspaces typecheck, the client suite passes, and the e2e
-spec passes against the built app.
+Everything else ships in new files; no existing model or DTO changed.
+
+To use it locally, set `ADMIN_EMAILS` in `server/.env` (see below) and
+restart the server — the Admin item then appears in the shell menu.
 
 ## Who is an admin
 
@@ -77,10 +68,10 @@ All routes sit under `/api/admin` and are read-only:
   pages and the `RequireAdmin` guard.
 - Integration (needs the test MongoDB):
   `npm run test:integration -w server -- test/integration/admin.test.ts`
-- E2E (after applying the wiring patch and `npm run build`):
+- E2E (after `npm run build`):
   `npx playwright test tests/admin.spec.ts` from `e2e/`.
 
-## Follow-ups once the wiring lands
+## Follow-ups
 
 - Move the admin wire types (duplicated between
   `server/src/routes/admin.ts` and `client/src/api/admin.ts`) into the
