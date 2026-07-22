@@ -1,6 +1,6 @@
 /**
  * Unit tests for the per-user admin view: account details, projects
- * expanding to lectures with viewer links, the "Other lectures" group
+ * linking to their admin project pages, the "Other lectures" group
  * for decks living outside the user's own projects, and the moderation
  * actions (delete user/project/lecture, ban email, reset password).
  */
@@ -69,7 +69,7 @@ const renderPage = (status = 200, detailBody: unknown = detail) => {
     '/api/admin/users/u1/password': () => ({ status: 204 }),
     '/api/admin/users/u1/private-access': () => ({ status: 204 }),
     '/api/admin/projects/p1': () => ({ status: 204 }),
-    '/api/admin/decks/d1': () => ({ status: 204 }),
+    '/api/admin/decks/d2': () => ({ status: 204 }),
     // Serves both GET (detail) and DELETE (delete user)
     '/api/admin/users/u1': init =>
       init?.method === 'DELETE'
@@ -112,25 +112,15 @@ describe('AdminUserDetailPage', () => {
     ).toHaveAttribute('href', '/u/u1')
   })
 
-  it('expands a project to its lectures, linked to the deck viewer', async () => {
+  it('links each project to its admin project page', async () => {
     renderPage()
-    const summary = await screen.findByText('Physics')
-    fireEvent.click(summary)
-    expect(screen.getByRole('link', { name: 'Waves' })).toHaveAttribute(
-      'href',
-      '/d/waves-abc123',
-    )
+    const link = await screen.findByRole('link', { name: /Physics/ })
+    expect(link).toHaveAttribute('href', '/app/admin/projects/p1')
   })
 
-  it("shows each lecture's visibility badge and slide count", async () => {
+  it("shows each other lecture's visibility badge and slide count", async () => {
     renderPage()
-    const physics = await screen.findByText('Physics')
-    fireEvent.click(physics)
-    const wavesRow = screen.getByRole('link', { name: 'Waves' }).closest('tr')!
-    expect(within(wavesRow).getByText('Public')).toBeVisible()
-    expect(within(wavesRow).getByText('5')).toBeVisible()
-
-    const other = screen.getByText('Other lectures')
+    const other = await screen.findByText('Other lectures')
     fireEvent.click(other)
     const untitledRow = screen
       .getByRole('link', { name: 'Untitled lecture' })
@@ -317,11 +307,11 @@ describe('AdminUserDetailPage', () => {
 
   it('deletes a lecture from its table row after a confirm', async () => {
     const { fetchMock } = renderPage()
-    const physics = await screen.findByText('Physics')
-    fireEvent.click(physics)
+    const other = await screen.findByText('Other lectures')
+    fireEvent.click(other)
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Delete lecture Waves' }),
+      screen.getByRole('button', { name: 'Delete lecture Untitled lecture' }),
     )
     const dialog = screen.getByRole('alertdialog', {
       name: 'Delete this lecture?',
@@ -332,7 +322,7 @@ describe('AdminUserDetailPage', () => {
 
     expect(await screen.findByText('Lecture deleted.')).toBeVisible()
     expect(requested(fetchMock)).toContainEqual(
-      expect.stringMatching(/DELETE .*\/api\/admin\/decks\/d1$/),
+      expect.stringMatching(/DELETE .*\/api\/admin\/decks\/d2$/),
     )
   })
 })

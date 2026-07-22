@@ -3,7 +3,8 @@
  * never sees the admin entries and is bounced from /app/admin and
  * /app/admin/logs; the allowlisted admin (ADMIN_EMAILS in
  * playwright.config.ts) reaches the user directory from the menu,
- * drills into a user's projects, and exports the audit log as CSV.
+ * drills into a user and through to a project's own admin page, and
+ * exports the audit log as CSV.
  */
 import { test, expect, type Page } from '@playwright/test'
 import { createProject } from './helpers'
@@ -80,8 +81,17 @@ test('the allowlisted admin reaches the directory and a user drill-down', async 
     page.getByRole('link', { name: 'View public profile' }),
   ).toBeVisible()
 
-  await page.getByText('Admin E2E Project').click()
+  // The project row links to the project's own admin page
+  await page.getByRole('link', { name: 'Admin E2E Project' }).click()
+  await expect(page).toHaveURL(/\/app\/admin\/projects\//)
+  await expect(
+    page.getByRole('heading', { name: 'Admin E2E Project' }),
+  ).toBeVisible()
   await expect(page.getByText('No lectures.')).toBeVisible()
+
+  // Its back link returns to the owner's admin page
+  await page.getByRole('link', { name: `← ${user.displayName}` }).click()
+  await expect(page).toHaveURL(/\/app\/admin\/users\//)
 })
 
 test('the admin reaches the audit log and downloads the CSV export', async ({

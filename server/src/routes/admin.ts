@@ -14,7 +14,7 @@
  * live there).
  */
 import { Router } from 'express'
-import { isValidObjectId, type HydratedDocument } from 'mongoose'
+import { isValidObjectId, type HydratedDocument, type Types } from 'mongoose'
 import { z } from 'zod'
 import type {
   AdminLogsResponse,
@@ -97,6 +97,18 @@ export interface AdminUserDecksResponse {
   decks: AdminDeckSummary[]
 }
 
+/** One project opened in the admin console, with its lectures. */
+export interface AdminProjectDetailResponse {
+  project: Project
+  /** The project's owner, for the back link and the page header. */
+  owner: { id: string; email: string; displayName: string }
+  decks: AdminDeckSummary[]
+  /** Whether the requesting admin's "show private lectures" toggle is
+   * on for the OWNER — private lectures are filtered out of `decks`
+   * while it is off, exactly like the per-user deck listing. */
+  privateAccess: boolean
+}
+
 const toAdminUserSummary = (
   doc: HydratedDocument<UserDb>,
 ): AdminUserSummary => ({
@@ -134,6 +146,14 @@ const SORTS = {
   oldest: { createdAt: 1 },
   email: { email: 1 },
 } as const
+
+/** Whether an admin's audited "show private lectures" toggle is on for
+ * a target user. Governs listings only, never viewer access. */
+const hasPrivateAccess = async (
+  adminId: string | undefined,
+  targetUserId: Types.ObjectId,
+): Promise<boolean> =>
+  (await AdminPrivateAccessModel.exists({ adminId, targetUserId })) !== null
 
 /** Resolves a :id route param to an existing user or 404s. */
 const loadUser = async (id: string): Promise<HydratedDocument<UserDb>> => {
@@ -315,11 +335,7 @@ adminRouter.get('/users/:id/decks', async (req, res) => {
   // "show private lectures" toggle on for this user; public ones always
   // show. (Opening a lecture in the viewer is a separate, always-allowed
   // admin bypass — this only governs the listing.)
-  const showPrivate =
-    (await AdminPrivateAccessModel.exists({
-      adminId: req.adminUser?.id,
-      targetUserId: user._id,
-    })) !== null
+  const showPrivate = await hasPrivateAccess(req.adminUser?.id, user._id)
 
   const body: AdminUserDecksResponse = {
     decks: decks
@@ -328,6 +344,42 @@ adminRouter.get('/users/:id/decks', async (req, res) => {
           showPrivate || acls.get(deck._id.toString())!.visibility === 'public',
       )
       .map(deck => toAdminDeckSummary(deck, acls.get(deck._id.toString())!)),
+  }
+  res.json(body)
+})
+
+adminRouter.get('/projects/:id', async (req, res) => {
+  const notFound = new HttpError(404, 'not_found', 'Project not found')
+  const id = String(req.params.id)
+  if (!isValidObjectId(id)) throw notFound
+  const project = await ProjectModel.findById(id)
+  if (!project) throw notFound
+  // Cascades keep projects ownerless-free, so a missing owner means the
+  // project is mid-deletion; treat it as gone.
+  const owner = await UserModel.findById(project.ownerId)
+  if (!owner) throw notFound
+
+  const decks = await DeckModel.find({ projectId: project._id }).sort({
+    updatedAt: -1,
+  })
+  const acls = await loadDeckAcls(decks)
+  // Same listing rule as /users/:id/decks, keyed on the project's owner
+  const showPrivate = await hasPrivateAccess(req.adminUser?.id, owner._id)
+
+  const body: AdminProjectDetailResponse = {
+    project: toProjectDto(project),
+    owner: {
+      id: owner._id.toString(),
+      email: owner.email,
+      displayName: owner.displayName,
+    },
+    decks: decks
+      .filter(
+        deck =>
+          showPrivate || acls.get(deck._id.toString())!.visibility === 'public',
+      )
+      .map(deck => toAdminDeckSummary(deck, acls.get(deck._id.toString())!)),
+    privateAccess: showPrivate,
   }
   res.json(body)
 })

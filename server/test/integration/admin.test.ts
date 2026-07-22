@@ -336,3 +336,79 @@ describe('GET /api/admin/users/:id/decks', () => {
     expect(res.status).toBe(400)
   })
 })
+
+describe('GET /api/admin/projects/:id', () => {
+  it('returns the project, its owner, and its lectures', async () => {
+    const admin = await asAdmin()
+    const { user } = await createUser('ada@example.com', 'Ada')
+    const project = await createProject(user._id, 'Physics')
+    await createDeck(user._id, project._id, 'Waves', 'waves-abc123', {
+      slideOrder: ['s1', 's2'],
+    })
+
+    const res = await request(server)
+      .get(`/api/admin/projects/${project._id}`)
+      .set('Authorization', `Bearer ${admin}`)
+    expect(res.status).toBe(200)
+    expect(res.body.project).toMatchObject({
+      id: project._id.toString(),
+      title: 'Physics',
+    })
+    expect(res.body.owner).toEqual({
+      id: user._id.toString(),
+      email: 'ada@example.com',
+      displayName: 'Ada',
+    })
+    expect(res.body.decks).toHaveLength(1)
+    expect(res.body.decks[0]).toMatchObject({
+      title: 'Waves',
+      permalinkSlug: 'waves-abc123',
+      visibility: 'public',
+      slideCount: 2,
+    })
+    expect(res.body.privateAccess).toBe(false)
+  })
+
+  it('hides private lectures until the audited toggle is on', async () => {
+    const admin = await asAdmin()
+    const { user } = await createUser('ada@example.com', 'Ada')
+    const project = await createProject(user._id, 'Private course', {
+      visibility: 'restricted',
+    })
+    await createDeck(user._id, project._id, 'Hidden', 'hidden-a1')
+
+    const before = await request(server)
+      .get(`/api/admin/projects/${project._id}`)
+      .set('Authorization', `Bearer ${admin}`)
+    expect(before.status).toBe(200)
+    expect(before.body.decks).toHaveLength(0)
+    expect(before.body.privateAccess).toBe(false)
+
+    await request(server)
+      .post(`/api/admin/users/${user._id}/private-access`)
+      .set('Authorization', `Bearer ${admin}`)
+
+    const after = await request(server)
+      .get(`/api/admin/projects/${project._id}`)
+      .set('Authorization', `Bearer ${admin}`)
+    expect(after.body.decks).toHaveLength(1)
+    expect(after.body.decks[0]).toMatchObject({
+      title: 'Hidden',
+      visibility: 'restricted',
+    })
+    expect(after.body.privateAccess).toBe(true)
+  })
+
+  it('404s for unknown and malformed ids', async () => {
+    const admin = await asAdmin()
+    const unknown = await request(server)
+      .get('/api/admin/projects/64b000000000000000000000')
+      .set('Authorization', `Bearer ${admin}`)
+    expect(unknown.status).toBe(404)
+
+    const malformed = await request(server)
+      .get('/api/admin/projects/not-an-id')
+      .set('Authorization', `Bearer ${admin}`)
+    expect(malformed.status).toBe(404)
+  })
+})

@@ -1,9 +1,9 @@
 /**
  * E2E private-lecture handling against the built app: the admin can
  * always open a private lecture directly in the viewer, but the admin
- * user page lists private lectures only after the audited "Show private
- * lectures" toggle (off by default) is enabled; the enablement lands in
- * the audit log.
+ * project page lists private lectures only after the audited "Show
+ * private lectures" toggle (off by default) is enabled; the enablement
+ * lands in the audit log.
  */
 import { test, expect, type Page } from '@playwright/test'
 
@@ -84,10 +84,12 @@ test('the viewer always opens for the admin; the listing needs the toggle', asyn
     page.getByRole('heading', { name: 'Secret Lecture' }),
   ).toBeVisible()
 
-  // On the user's admin page the private lecture is hidden by default
+  // The user's admin page links the project to its own admin page,
+  // where the private lecture is hidden by default
   await page.goto('/app/admin')
   await page.getByRole('link', { name: owner.email }).click()
-  await page.getByText('Secret Course').click()
+  await page.getByRole('link', { name: 'Secret Course' }).click()
+  await expect(page).toHaveURL(/\/app\/admin\/projects\//)
   await expect(page.getByText('No lectures.')).toBeVisible()
   await expect(page.getByRole('link', { name: 'Secret Lecture' })).toHaveCount(
     0,
@@ -104,8 +106,7 @@ test('the viewer always opens for the admin; the listing needs the toggle', asyn
   ).toBeVisible()
   await expect(toggle).toBeChecked()
 
-  // The project disclosure is still open from before, so the refetched
-  // list now shows the lecture directly
+  // The refetched list now shows the lecture
   await page.getByRole('link', { name: 'Secret Lecture' }).click()
   await expect(
     page.getByRole('heading', { name: 'Secret Lecture' }),

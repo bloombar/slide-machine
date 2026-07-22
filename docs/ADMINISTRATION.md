@@ -36,12 +36,13 @@ moderation actions for when the answer calls for one.
 - **User directory** — every account (email, handle, join date), paginated
   (10 / 25 / 50 / 100 per page) and sortable (newest, oldest, email A–Z).
 - **User drill-down** — account details (plan, email verification, locale,
-  profile visibility, project/lecture counts) plus the user's projects.
-  Each project expands to a table of its lectures with a **public/private
-  badge**, **slide count**, and **last-edited date** (the newest edit to
-  the project or any of its lectures); each lecture links to its viewer
-  (`/d/:slug`). Lectures the user owns inside someone else's project are
-  grouped under "Other lectures."
+  profile visibility, project/lecture counts) plus the user's projects,
+  each linking to its own **project page**. Lectures the user owns inside
+  someone else's project are grouped under "Other lectures."
+- **Project page** — the project's owner and a table of its lectures with
+  a **public/private badge**, **slide count**, and **last-edited date**;
+  each lecture links to its viewer (`/d/:slug`). Carries the same
+  private-lecture toggle and delete actions as the user page.
 
 ### Moderation
 
@@ -73,9 +74,11 @@ until the email is removed from `ADMIN_EMAILS`.
 An allowlisted admin can **always open any lecture in the viewer**
 (`/d/:slug`), private or not, read-only — like the admin API, the
 allowlist is the authorization. What is gated is the *listing*: on a
-user's admin page, private lectures are hidden from the project tables
-until the **"Show private lectures" toggle** (off by default, per admin,
-per user) is enabled. Flipping it is recorded in the audit log
+user's admin page and on the admin project pages, private lectures are
+hidden from the lecture tables until the **"Show private lectures"
+toggle** (off by default, per admin, per lecture owner) is enabled —
+the toggle appears on both pages and flips the same underlying
+setting. Flipping it is recorded in the audit log
 (`user.private_view_enabled` / `user.private_view_disabled`). The
 setting persists until toggled off (collection `adminprivateaccesses`);
 turn it off when the task that needed it is done. Individual viewer

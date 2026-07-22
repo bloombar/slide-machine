@@ -55,6 +55,18 @@ export interface AdminDeckSummary {
   updatedAt: string
 }
 
+/** One project opened in the admin console, with its lectures. */
+export interface AdminProjectDetailResponse {
+  project: Project
+  /** The project's owner, for the back link and the page header. */
+  owner: { id: string; email: string; displayName: string }
+  decks: AdminDeckSummary[]
+  /** Whether the requesting admin's "show private lectures" toggle is
+   * on for the owner — private lectures are filtered out of `decks`
+   * while it is off, exactly like the per-user deck listing. */
+  privateAccess: boolean
+}
+
 /** Selectable directory page sizes; the server caps `limit` at 100. */
 export const ADMIN_USERS_PAGE_SIZES = [10, 25, 50, 100] as const
 export const ADMIN_USERS_PAGE_SIZE = 25
@@ -86,6 +98,11 @@ export const fetchAdminUserDecks = (
   userId: string,
 ): Promise<{ decks: AdminDeckSummary[] }> =>
   apiFetch<{ decks: AdminDeckSummary[] }>(`/api/admin/users/${userId}/decks`)
+
+export const fetchAdminProject = (
+  projectId: string,
+): Promise<AdminProjectDetailResponse> =>
+  apiFetch<AdminProjectDetailResponse>(`/api/admin/projects/${projectId}`)
 
 /** Selectable audit-log page sizes; same cap as the user directory. */
 export const ADMIN_LOGS_PAGE_SIZES = ADMIN_USERS_PAGE_SIZES

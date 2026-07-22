@@ -1,18 +1,19 @@
 /**
  * Admin view of one user: account details, then their projects — each
- * expandable to its lectures, which link to the live deck viewer
- * (/d/:slug). Lectures owned by the user but living in someone else's
- * project are grouped under "Other lectures". Moderation lives here
- * too: per-project and per-lecture delete buttons plus a danger zone
- * (reset password, ban email, delete account) — every action confirms
- * first and is recorded in the admin audit log server-side. A
- * "Show private lectures" toggle (off by default, audited) controls
- * whether private lectures appear in the lists below; opening any
- * lecture in the viewer is always allowed for admins.
+ * linking to its own admin project page (/app/admin/projects/:id).
+ * Lectures owned by the user but living in someone else's project are
+ * grouped under "Other lectures", which link to the live deck viewer
+ * (/d/:slug). Moderation lives here too: per-project and per-lecture
+ * delete buttons plus a danger zone (reset password, ban email, delete
+ * account) — every action confirms first and is recorded in the admin
+ * audit log server-side. A "Show private lectures" toggle (off by
+ * default, audited) controls whether private lectures appear in the
+ * lists below; opening any lecture in the viewer is always allowed for
+ * admins.
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import type { Project, Visibility } from '@slide-machine/shared'
+import type { Project } from '@slide-machine/shared'
 import {
   banAdminUserEmail,
   deleteAdminDeck,
@@ -29,6 +30,7 @@ import {
 import { ApiError } from '../api/http'
 import ConfirmDialog from '../components/ConfirmDialog'
 import Modal from '../components/Modal'
+import LectureTable from '../components/admin/LectureTable'
 import { projectTitle } from '../lib/project'
 
 interface Loaded {
@@ -87,95 +89,8 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-/** Colour-coded pill for a lecture's effective visibility. */
-function VisibilityBadge({ visibility }: { visibility: Visibility }) {
-  const isPublic = visibility === 'public'
-  return (
-    <span
-      className={`inline-block rounded-full border px-2 py-0.5 text-xs font-medium ${
-        isPublic
-          ? 'border-green-200 bg-green-50 text-green-700'
-          : 'border-slate-200 bg-slate-100 text-slate-600'
-      }`}
-    >
-      {isPublic ? 'Public' : 'Private'}
-    </span>
-  )
-}
-
 const dangerMenuButton =
   'rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50'
-
-/** A project's lectures as a table: title, visibility, slide count,
- * last-edited date, and a delete action. */
-function LectureTable({
-  decks,
-  onDelete,
-}: {
-  decks: AdminDeckSummary[]
-  onDelete: (deck: AdminDeckSummary) => void
-}) {
-  if (decks.length === 0) {
-    return <p className="px-4 pb-3 text-sm text-slate-500">No lectures.</p>
-  }
-  return (
-    <div className="px-4 pb-3">
-      <table className="w-full text-left text-sm">
-        <thead className="text-xs text-slate-500 uppercase">
-          <tr>
-            <th scope="col" className="py-1 pr-3 font-medium">
-              Lecture
-            </th>
-            <th scope="col" className="py-1 pr-3 font-medium">
-              Visibility
-            </th>
-            <th scope="col" className="py-1 pr-3 text-right font-medium">
-              Slides
-            </th>
-            <th scope="col" className="py-1 pr-3 font-medium">
-              Updated
-            </th>
-            <th scope="col" className="py-1 font-medium">
-              <span className="sr-only">Actions</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {decks.map(deck => (
-            <tr key={deck.id} className="border-t border-slate-100">
-              <td className="py-1.5 pr-3">
-                <Link
-                  to={`/d/${deck.permalinkSlug}`}
-                  className="font-medium text-slate-900 hover:underline"
-                >
-                  {deck.title.trim() || 'Untitled lecture'}
-                </Link>
-              </td>
-              <td className="py-1.5 pr-3">
-                <VisibilityBadge visibility={deck.visibility} />
-              </td>
-              <td className="py-1.5 pr-3 text-right tabular-nums text-slate-600">
-                {deck.slideCount}
-              </td>
-              <td className="py-1.5 pr-3 text-slate-500">
-                {asDate(deck.updatedAt)}
-              </td>
-              <td className="py-1.5 text-right">
-                <button
-                  onClick={() => onDelete(deck)}
-                  aria-label={`Delete lecture ${deck.title.trim() || 'Untitled lecture'}`}
-                  className="rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
-                >
-                  Delete
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
 
 /** Dialog for setting a user's new password; submits on Enter, reports
  * inline errors, and reminds the admin every session gets signed out. */
@@ -482,34 +397,31 @@ export default function AdminUserDetailPage() {
             {projects.map(project => {
               const projectDecks = byProject.get(project.id) ?? []
               return (
-                <details
+                <div
                   key={project.id}
-                  className="rounded-lg border border-slate-200"
+                  className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3 hover:bg-slate-50"
                 >
-                  <summary className="flex cursor-pointer items-center justify-between px-4 py-3 font-medium text-slate-800 hover:bg-slate-50">
-                    <span>
-                      {projectTitle(project)}{' '}
-                      <span className="text-sm font-normal text-slate-400">
-                        {projectDecks.length}{' '}
-                        {projectDecks.length === 1 ? 'lecture' : 'lectures'} ·
-                        updated {asDate(lastActivity(project, projectDecks))}
-                      </span>
+                  <Link
+                    to={`/app/admin/projects/${project.id}`}
+                    className="font-medium text-slate-800 hover:underline"
+                  >
+                    {projectTitle(project)}{' '}
+                    <span className="text-sm font-normal text-slate-400">
+                      {projectDecks.length}{' '}
+                      {projectDecks.length === 1 ? 'lecture' : 'lectures'} ·
+                      updated {asDate(lastActivity(project, projectDecks))}
                     </span>
-                    <button
-                      onClick={e => {
-                        // A click on the button must not toggle the disclosure
-                        e.preventDefault()
-                        e.stopPropagation()
-                        setPending({ kind: 'delete-project', project })
-                      }}
-                      aria-label={`Delete project ${projectTitle(project)}`}
-                      className="rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
-                    >
-                      Delete
-                    </button>
-                  </summary>
-                  <LectureTable decks={projectDecks} onDelete={deleteDeck} />
-                </details>
+                  </Link>
+                  <button
+                    onClick={() =>
+                      setPending({ kind: 'delete-project', project })
+                    }
+                    aria-label={`Delete project ${projectTitle(project)}`}
+                    className="rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                  >
+                    Delete
+                  </button>
+                </div>
               )
             })}
             {otherDecks.length > 0 && (
