@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Stroke } from '@slide-machine/shared'
 import {
   denormalizePoint,
+  erasureReplays,
   hitTestStroke,
   nearestSlideToCentroid,
   normalizePoint,
@@ -178,6 +179,25 @@ describe('strokeVisible', () => {
     const s = synced({ erasedAnchor: { charAnchor: 80, source: 'appended' } })
     expect(strokeVisible(s, 1, 100, { index: 1, fraction: 0.7 })).toBe(true) // drawn, not yet erased
     expect(strokeVisible(s, 1, 100, { index: 1, fraction: 0.9 })).toBe(false) // erased
+  })
+})
+
+describe('erasureReplays', () => {
+  const at = (source: Stroke['anchor']['source']) => ({ charAnchor: 5, source })
+
+  it('retains only when the stroke and the erase are both transcript-synced', () => {
+    // Both synced (drawn + erased during recording): replay the removal.
+    expect(erasureReplays(stroke({ anchor: at('appended') }), at('word'))).toBe(
+      true,
+    )
+    // Unsynced mark (drawn mic-off): always shown, no timeline — delete.
+    expect(
+      erasureReplays(stroke({ anchor: at('unsynced') }), at('appended')),
+    ).toBe(false)
+    // Erase made mic-off: no transcript position for the removal — delete.
+    expect(erasureReplays(stroke({ anchor: at('word') }), at('unsynced'))).toBe(
+      false,
+    )
   })
 })
 

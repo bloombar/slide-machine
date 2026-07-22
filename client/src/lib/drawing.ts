@@ -5,7 +5,7 @@
  * slide a stroke belongs to in list view. Kept free of the DOM/React so they
  * can be unit-tested in isolation.
  */
-import type { Stroke, StrokePoint } from '@slide-machine/shared'
+import type { Stroke, StrokeAnchor, StrokePoint } from '@slide-machine/shared'
 import { anchorFraction } from '@slide-machine/shared'
 
 /** Live playback position: which slide, and how far through its audio (0..1, or
@@ -42,6 +42,20 @@ export const strokeVisible = (
     : false
   return drawn && !erased
 }
+
+/**
+ * Whether erasing this stroke should be RETAINED as a timestamped event (so
+ * playback can replay the removal in sync) rather than just deleted. That is
+ * only meaningful when BOTH the stroke's draw and the erase are tied to the
+ * transcript: an `unsynced` mark (drawn mic-off) is always shown with no
+ * timeline, and an erase made mic-off has no transcript position — either way
+ * there is nothing to replay, so the stroke is simply removed (WB-2).
+ */
+export const erasureReplays = (
+  stroke: Stroke,
+  eraseAnchor: StrokeAnchor,
+): boolean =>
+  stroke.anchor.source !== 'unsynced' && eraseAnchor.source !== 'unsynced'
 
 /** A rendered slide box in client (viewport) coordinates. */
 export interface Box {

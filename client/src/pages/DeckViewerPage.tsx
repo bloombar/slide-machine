@@ -33,7 +33,7 @@ import {
   WHITEBOARD_LAYOUT_TYPE,
   hasVisibleDrawings,
 } from '@slide-machine/shared'
-import { strokeVisible } from '../lib/drawing'
+import { strokeVisible, erasureReplays } from '../lib/drawing'
 import { apiFetch, ApiError } from '../api/http'
 import { dispatchAction } from '../api/actions'
 import {
@@ -1161,8 +1161,11 @@ export default function DeckViewerPage() {
     updateDrawings(slideId, prev => [...prev, stroke])
   }
 
-  /** Whole-stroke erase as a timestamped event: the stroke is kept and stamped
-   * with an erase anchor so playback can replay its removal (WB-2). */
+  /** Whole-stroke erase. When the erasure can replay in sync (the stroke and
+   * the erase are both transcript-tied), keep the stroke and stamp it with an
+   * erase anchor so playback replays its removal. Otherwise — an unsynced mark,
+   * or an erase made mic-off — there's no timeline to replay it on, so just
+   * remove the stroke outright (WB-2). */
   const onEraseStroke = (
     slideId: string,
     strokeId: string,
@@ -1170,11 +1173,12 @@ export default function DeckViewerPage() {
   ) => {
     recordDrawingHistory(slideId)
     updateDrawings(slideId, prev =>
-      prev.map(s =>
-        s.id === strokeId && !s.erasedAnchor
-          ? { ...s, erasedAnchor: anchor, erasedAt: new Date().toISOString() }
-          : s,
-      ),
+      prev.flatMap(s => {
+        if (s.id !== strokeId || s.erasedAnchor) return [s]
+        return erasureReplays(s, anchor)
+          ? [{ ...s, erasedAnchor: anchor, erasedAt: new Date().toISOString() }]
+          : []
+      }),
     )
   }
 
