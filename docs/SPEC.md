@@ -558,7 +558,7 @@ Server-side secrets and global settings live in a `.env` file (never committed),
 - `GOOGLE_APPLICATION_CREDENTIALS` (service account for real-time Speech-to-Text streaming) and `GOOGLE_CLOUD_TRANSLATION_KEY`.
 - `GOOGLE_OAUTH_CLIENT_ID/SECRET` — used both for **Google sign-in** (AUTH-1) and for **connected Google Drive** import/export with broader scopes (EXP-4); plus any service-account credentials for Docs/Slides.
 - `GITHUB_OAUTH_CLIENT_ID/SECRET` — used both for **GitHub sign-in** (AUTH-1) and for **connected GitHub** repo/gist import/export (EXP-4).
-- `CONNECTED_ACCOUNT_TOKEN_ENC_KEY` — key for encrypting stored connected-account OAuth tokens at rest (P-9).
+- `CONNECTED_ACCOUNT_TOKEN_ENC_KEY` — key for encrypting stored connected-account OAuth tokens at rest (P-9). App-generated (not a Google credential): 32 random bytes, base64-encoded — see [generating the key](GOOGLE_API_KEYS.md#encryption-key-for-stored-tokens-connected_account_token_enc_key).
 - `MONGODB_URI`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, token TTLs.
 - Image-API keys/config (Flickr; Wikimedia and Openverse are keyless/optional).
 - Billing-provider credentials (adapter-specific; for the default Stripe adapter: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and per-tier price IDs) plus a `BILLING_PROVIDER` selector ([TECH-9](#tech-9-billing-provider-abstraction-layer)).

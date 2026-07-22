@@ -29,6 +29,7 @@ import type {
   StrokeAnchor,
   WordTiming,
 } from '@slide-machine/shared'
+import { WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
 import { strokeVisible } from '../lib/drawing'
 import { apiFetch, ApiError } from '../api/http'
 import { dispatchAction } from '../api/actions'
@@ -69,6 +70,7 @@ import DrawingLayer from '../components/whiteboard/DrawingLayer'
 import { useWhiteboard } from '../components/whiteboard/useWhiteboard'
 import { themeColors } from '../components/slide/theme'
 import Tooltip from '../components/Tooltip'
+import NotificationPill from '../components/NotificationPill'
 import SeedDialog from '../components/SeedDialog'
 import DeckSettingsModal, {
   type SettingsTabId,
@@ -204,6 +206,13 @@ export default function DeckViewerPage() {
   const [pendingImages, setPendingImages] = useState<Set<string>>(new Set())
   // The slide currently being refined via its kebab (drives a status toast)
   const [refiningSlideId, setRefiningSlideId] = useState<string | null>(null)
+  // Content-generation pause pill (WB-3): 'paused' while the user is actively
+  // drawing during recording (with a Resume button to override), 'resumed' for
+  // a brief confirmation after the debounce elapses or the user resumes, and
+  // null when hidden.
+  const [generationPause, setGenerationPause] = useState<
+    'paused' | 'resumed' | null
+  >(null)
   // Original-audio playback (kebab "Play original audio"): the slide currently
   // playing, plus the <audio> element and its blob URL to revoke afterwards.
   const [playingOriginalId, setPlayingOriginalId] = useState<string | null>(
@@ -219,20 +228,125 @@ export default function DeckViewerPage() {
     penColor: templateColors?.penColor,
     highlighterColor: templateColors?.highlighterColor,
   })
-  // Wall-clock of the last drawing/erasing gesture (WB-3): while the user is
+  // Wall-clock of the last drawing/erasing gesture (WB-3). While the user is
   // actively marking up a slide — including a debounce grace after the last
-  // gesture so switching tools or repositioning still counts — speech folds
-  // into the current slide instead of spawning a new one.
+  // gesture so switching tools or repositioning still counts — content
+  // generation is paused: speech is still transcribed, but no slide is created
+  // or changed (see submitPhrase and the generation-pause pill).
   const lastDrawActivityRef = useRef<number | null>(null)
-  const noteDrawActivity = () => {
-    lastDrawActivityRef.current = Date.now()
-  }
   /** True while the user is actively marking up a slide (within the debounce
    * grace after the last gesture). */
   const isActivelyDrawing = (): boolean => {
     const last = lastDrawActivityRef.current
     return last != null && Date.now() - last < getWhiteboardSuppressDebounceMs()
   }
+  // Generation-pause pill timers: one auto-resumes when drawing goes idle past
+  // the debounce, one hides the "resumed" confirmation after a moment. A manual
+  // Resume sets an override so generation keeps running for the rest of the
+  // current drawing bout (a fresh bout, after going idle, pauses again).
+  const genPauseResumeTimerRef = useRef<number | null>(null)
+  const genPauseHideTimerRef = useRef<number | null>(null)
+  const genManuallyResumedRef = useRef(false)
+  // Which source is holding the pause pill open: the drawing-gesture debounce,
+  // or being on a whiteboard slide (manual-resume only). Lets the two sources
+  // hand the single pill off cleanly.
+  const pauseSourceRef = useRef<'drawing' | 'whiteboard' | null>(null)
+  // Whether the user clicked Resume on the current whiteboard slide; reset when
+  // the current slide changes so each whiteboard slide pauses afresh.
+  const whiteboardResumedRef = useRef(false)
+  /** How long the "Content generation resumed" confirmation stays up (ms). */
+  const GENERATION_RESUMED_PILL_MS = 3000
+  /** True while the current slide is a blank whiteboard canvas (read through
+   * refs so mic-queue closures see the live slide). */
+  const onWhiteboardSlideNow = (): boolean =>
+    viewRef.current?.slides[currentRef.current]?.layoutType ===
+    WHITEBOARD_LAYOUT_TYPE
+  /** Whether this phrase should skip generation. On a whiteboard slide,
+   * generation is paused until the user clicks Resume (no debounce); elsewhere,
+   * while actively drawing and not manually resumed for the current bout. */
+  const isGenerationPaused = (): boolean =>
+    onWhiteboardSlideNow()
+      ? !whiteboardResumedRef.current
+      : isActivelyDrawing() && !genManuallyResumedRef.current
+  const clearPauseTimers = () => {
+    if (genPauseResumeTimerRef.current) {
+      window.clearTimeout(genPauseResumeTimerRef.current)
+      genPauseResumeTimerRef.current = null
+    }
+    if (genPauseHideTimerRef.current) {
+      window.clearTimeout(genPauseHideTimerRef.current)
+      genPauseHideTimerRef.current = null
+    }
+  }
+  /** Resumes generation — from the idle debounce ('timeout') or the Resume
+   * button ('manual') — flips the pill to a brief confirmation, then hides it. */
+  const resumeGeneration = (reason: 'timeout' | 'manual') => {
+    if (genPauseResumeTimerRef.current) {
+      window.clearTimeout(genPauseResumeTimerRef.current)
+      genPauseResumeTimerRef.current = null
+    }
+    if (reason === 'manual') {
+      // Keep generating for the rest of this drawing bout / whiteboard slide.
+      genManuallyResumedRef.current = true
+      whiteboardResumedRef.current = true
+    }
+    pauseSourceRef.current = null
+    setGenerationPause('resumed')
+    if (genPauseHideTimerRef.current)
+      window.clearTimeout(genPauseHideTimerRef.current)
+    genPauseHideTimerRef.current = window.setTimeout(
+      () => setGenerationPause(null),
+      GENERATION_RESUMED_PILL_MS,
+    )
+  }
+  /** Shows/refreshes the paused pill and re-arms the idle auto-resume timer
+   * (the drawing-gesture debounce; whiteboard slides use manual resume only). */
+  const enterGenerationPause = () => {
+    if (genPauseHideTimerRef.current) {
+      window.clearTimeout(genPauseHideTimerRef.current)
+      genPauseHideTimerRef.current = null
+    }
+    pauseSourceRef.current = 'drawing'
+    setGenerationPause('paused')
+    if (genPauseResumeTimerRef.current)
+      window.clearTimeout(genPauseResumeTimerRef.current)
+    genPauseResumeTimerRef.current = window.setTimeout(
+      () => resumeGeneration('timeout'),
+      getWhiteboardSuppressDebounceMs(),
+    )
+  }
+  /** Clears the pause pill and its timers outright — no confirmation (used when
+   * the mic stops, where generation is moot). */
+  const clearGenerationPause = () => {
+    clearPauseTimers()
+    genManuallyResumedRef.current = false
+    whiteboardResumedRef.current = false
+    pauseSourceRef.current = null
+    setGenerationPause(null)
+  }
+  const noteDrawActivity = () => {
+    const wasActive = isActivelyDrawing()
+    lastDrawActivityRef.current = Date.now()
+    // Pausing only matters while recording; drawing on a static deck is free.
+    if (!listening) return
+    // Whiteboard slides run the manual-only pause (driven by the effect below),
+    // so drawing gestures there must not arm the debounce auto-resume.
+    if (onWhiteboardSlideNow()) return
+    // A fresh drawing bout (the previous debounce had elapsed) drops any manual
+    // Resume override, so the new markup session pauses generation again.
+    if (!wasActive) genManuallyResumedRef.current = false
+    if (!genManuallyResumedRef.current) enterGenerationPause()
+  }
+  // Never let a pause-pill timer fire after the page unmounts.
+  useEffect(
+    () => () => {
+      if (genPauseResumeTimerRef.current)
+        window.clearTimeout(genPauseResumeTimerRef.current)
+      if (genPauseHideTimerRef.current)
+        window.clearTimeout(genPauseHideTimerRef.current)
+    },
+    [],
+  )
   // Anchoring (WB-2): wall-clock when recording began, and the latest phrase
   // (with word timings) per slide, so a stroke can be pinned to the transcript
   // position it was drawn at. Word timings exist for the google-cloud engine.
@@ -259,6 +373,35 @@ export default function DeckViewerPage() {
   const pollCancelsRef = useRef<Map<string, () => void>>(new Map())
   const nav = useSlideNavigation(view?.slides.length ?? 0, mode)
   const { setCurrent } = nav
+  // Always-fresh mirror of the current slide index, so voice commands running
+  // from stale mic-queue closures can tell whether the deck is at its end.
+  const currentRef = useRef(nav.current)
+  useEffect(() => {
+    currentRef.current = nav.current
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nav.current])
+
+  // Whiteboard slide = a dedicated drawing canvas: while recording on one,
+  // content generation is paused until the user clicks Resume (no debounce).
+  const activeSlide = view?.slides[nav.current]
+  const onWhiteboardSlide = activeSlide?.layoutType === WHITEBOARD_LAYOUT_TYPE
+  // Each whiteboard slide the user lands on pauses afresh.
+  useEffect(() => {
+    whiteboardResumedRef.current = false
+  }, [activeSlide?.id])
+  useEffect(() => {
+    if (onWhiteboardSlide && listening && !whiteboardResumedRef.current) {
+      // Manual-only pause: cancel any debounce/hide timers so it never
+      // auto-resumes, and hold the paused pill open until the user resumes.
+      clearPauseTimers()
+      pauseSourceRef.current = 'whiteboard'
+      setGenerationPause('paused')
+    } else if (!onWhiteboardSlide && pauseSourceRef.current === 'whiteboard') {
+      // Left the canvas: end its manual pause (a shown 'resumed' pill fades).
+      pauseSourceRef.current = null
+      setGenerationPause(prev => (prev === 'paused' ? null : prev))
+    }
+  }, [onWhiteboardSlide, listening, activeSlide?.id])
 
   useEffect(() => {
     // Wait for session restore: a pasted permalink must send the owner's
@@ -481,10 +624,11 @@ export default function DeckViewerPage() {
           ? { confidence: meta.confidence }
           : {}),
         ...(meta?.words?.length ? { words: meta.words } : {}),
-        // Actively drawing (within the debounce grace) folds the phrase into
-        // the current slide instead of spawning one (WB-3). The "+" button and
-        // the "new slide" voice command bypass this path and still create.
-        ...(isActivelyDrawing() ? { suppressNewSlide: true } : {}),
+        // While generation is paused (actively drawing, not manually resumed),
+        // the server records this phrase to the transcript but skips slide
+        // generation entirely — no content or layout change (WB-3). The "+"
+        // button and the "new slide" voice command bypass this path.
+        ...(isGenerationPaused() ? { pauseGeneration: true } : {}),
       })
       applyEvent(event)
       // Remember this phrase against the slide it landed on, with any word
@@ -522,6 +666,9 @@ export default function DeckViewerPage() {
     capture.stop()
     setListening(false)
     setInterim('')
+    // Generation is moot with the mic off — drop the pause pill without a
+    // "resumed" flash.
+    clearGenerationPause()
     // Ending a google-cloud recording makes the server flush its audio to
     // storage and attach it to the deck — asynchronously, on socket close. The
     // deck view computed audioSlideIds at load, so poll it for a short window
@@ -554,13 +701,14 @@ export default function DeckViewerPage() {
 
   /** Appends a starter slide at the end and navigates to it. Reads
    * through the ref: voice commands call this from stale closures. */
-  const addSlide = async () => {
+  const addSlide = async (layoutType?: string): Promise<Slide | null> => {
     const current = viewRef.current
-    if (!current) return
+    if (!current) return null
     try {
       const nextIndex = current.slides.length
       const added = await dispatchAction<Slide>('slide.add', {
         deckId: current.deck.id,
+        ...(layoutType ? { layoutType } : {}),
       })
       setView(v =>
         v
@@ -573,22 +721,38 @@ export default function DeckViewerPage() {
       )
       touchDeckLocally()
       nav.setCurrent(nextIndex)
+      return added
     } catch {
       // Quiet failure
+      return null
     }
+  }
+
+  /** Appends a blank whiteboard slide and arms the pen, so the user can start
+   * drawing at once (the whiteboard toolbar's new-slide button). */
+  const addWhiteboardSlide = async () => {
+    const added = await addSlide(WHITEBOARD_LAYOUT_TYPE)
+    if (added) whiteboard.setTool('pen')
   }
 
   /** Executes a wake-worded voice command (CAP-4). Navigation goes
    * through functional setCurrent so stale closures stay correct. */
   const runVoiceCommand = (command: VoiceCommand) => {
     if (command === 'next' || command === 'previous') {
-      const delta = command === 'next' ? 1 : -1
-      setCurrent(c => {
-        const count = viewRef.current?.slides.length ?? 0
-        const target = Math.max(0, Math.min(count - 1, c + delta))
-        requestAnimationFrame(() => nav.scrollTo(target))
-        return target
-      })
+      const count = viewRef.current?.slides.length ?? 0
+      // "Next" past the last slide creates a new one (like the "+" button and
+      // the "new slide" command) rather than staying put, so the speaker can
+      // keep moving forward without breaking stride.
+      if (command === 'next' && currentRef.current >= count - 1) {
+        void addSlide()
+      } else {
+        const delta = command === 'next' ? 1 : -1
+        setCurrent(c => {
+          const target = Math.max(0, Math.min(count - 1, c + delta))
+          requestAnimationFrame(() => nav.scrollTo(target))
+          return target
+        })
+      }
     } else if (command === 'pause') {
       stopListening()
     } else if (command === 'newSlide') {
@@ -1358,7 +1522,11 @@ export default function DeckViewerPage() {
       />
 
       {canEdit && view.slides.length > 0 && (
-        <WhiteboardToolbar deckId={view.deck.id} whiteboard={whiteboard} />
+        <WhiteboardToolbar
+          deckId={view.deck.id}
+          whiteboard={whiteboard}
+          onNewWhiteboardSlide={() => void addWhiteboardSlide()}
+        />
       )}
 
       {view.slides.length === 0 ? (
@@ -1511,49 +1679,43 @@ export default function DeckViewerPage() {
       )}
 
       {refiningSlideId && (
-        <div className="fixed inset-x-0 bottom-12 z-50 flex justify-center px-4">
-          <div
-            role="status"
-            className="flex items-center gap-3 rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-white shadow-lg"
-          >
-            Refining this slide…
-          </div>
-        </div>
+        <NotificationPill>Refining this slide…</NotificationPill>
       )}
 
       {playingOriginalId && (
-        <div className="fixed inset-x-0 bottom-12 z-50 flex justify-center px-4">
-          <div
-            role="status"
-            className="flex items-center gap-3 rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-white shadow-lg"
-          >
-            Playing original audio…
-            <button
-              onClick={stopOriginalAudio}
-              className="text-white/80 hover:text-white"
-            >
-              Stop
-            </button>
-          </div>
-        </div>
+        <NotificationPill
+          action={{ label: 'Stop', onClick: stopOriginalAudio }}
+        >
+          Playing original audio…
+        </NotificationPill>
+      )}
+
+      {generationPause && (
+        <NotificationPill
+          action={
+            generationPause === 'paused'
+              ? { label: 'Resume', onClick: () => resumeGeneration('manual') }
+              : undefined
+          }
+        >
+          {generationPause === 'paused'
+            ? 'Content generation paused for drawing'
+            : 'Content generation resumed'}
+        </NotificationPill>
       )}
 
       {imageError && (
-        <div className="fixed inset-x-0 bottom-12 z-50 flex justify-center px-4">
-          <div
-            role="alert"
-            className="flex items-center gap-3 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-lg"
-          >
-            {imageError}
-            <button
-              aria-label="Dismiss"
-              onClick={() => setImageError(null)}
-              className="text-white/80 hover:text-white"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
+        <NotificationPill
+          tone="error"
+          role="alert"
+          action={{
+            label: '✕',
+            ariaLabel: 'Dismiss',
+            onClick: () => setImageError(null),
+          }}
+        >
+          {imageError}
+        </NotificationPill>
       )}
 
       {canEdit && settingsOpen && (

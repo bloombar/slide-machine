@@ -16,6 +16,7 @@ import { z } from 'zod'
 import {
   LAYOUT_TYPES,
   SLOT_DESCRIPTORS,
+  WHITEBOARD_LAYOUT_TYPE,
   type Layout,
   type LayoutDescriptor,
   type LayoutSlot,
@@ -67,30 +68,54 @@ const normalizeSlot = (raw: z.infer<typeof slotFileSchema>): SlotSpec => {
   }
 }
 
-const layoutSchema = z.object({
-  type: z.enum(LAYOUT_TYPES),
-  label: z.string().min(1),
-  purpose: z.string().min(1),
-  slots: z.array(slotFileSchema).min(1),
-  constraints: z
-    .object({
-      maxBullets: z.number().int().positive().optional(),
-      maxTitleChars: z.number().int().positive().optional(),
-      maxBodyChars: z.number().int().positive().optional(),
-      maxBulletChars: z.number().int().positive().optional(),
-      maxCaptionChars: z.number().int().positive().optional(),
-      imageRequired: z.boolean().optional(),
-    })
-    .optional(),
-  elementPositions: z.record(z.string(), z.unknown()).default({}),
-})
+const layoutSchema = z
+  .object({
+    type: z.enum(LAYOUT_TYPES),
+    label: z.string().min(1),
+    purpose: z.string().min(1),
+    // The whiteboard layout is a blank slate with no content slots; every
+    // other layout must expose at least one (enforced below).
+    slots: z.array(slotFileSchema),
+    constraints: z
+      .object({
+        maxBullets: z.number().int().positive().optional(),
+        maxTitleChars: z.number().int().positive().optional(),
+        maxBodyChars: z.number().int().positive().optional(),
+        maxBulletChars: z.number().int().positive().optional(),
+        maxCaptionChars: z.number().int().positive().optional(),
+        imageRequired: z.boolean().optional(),
+      })
+      .optional(),
+    elementPositions: z.record(z.string(), z.unknown()).default({}),
+  })
+  .superRefine((layout, ctx) => {
+    if (layout.type !== WHITEBOARD_LAYOUT_TYPE && layout.slots.length < 1) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'layout must declare at least one slot',
+        path: ['slots'],
+      })
+    }
+  })
 
-const templateFileSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  theme: z.record(z.string(), z.unknown()),
-  layouts: z.array(layoutSchema).min(1),
-})
+const templateFileSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    theme: z.record(z.string(), z.unknown()),
+    layouts: z.array(layoutSchema).min(1),
+  })
+  // Every template — built-in or user-authored — must provide the blank
+  // whiteboard slate so the drawing tools always have a canvas (WB-1).
+  .superRefine((template, ctx) => {
+    if (!template.layouts.some(l => l.type === WHITEBOARD_LAYOUT_TYPE)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `template must include a '${WHITEBOARD_LAYOUT_TYPE}' layout`,
+        path: ['layouts'],
+      })
+    }
+  })
 
 let cache: Template[] | undefined
 
@@ -139,15 +164,19 @@ export const listBuiltinTemplates = (): Template[] => templates()
 export const getBuiltinTemplate = (id: string): Template | undefined =>
   templates().find(t => t.id === id)
 
-/** The AI-facing option set for a template (GEN-6). */
+/** The AI-facing option set for a template (GEN-6). The whiteboard layout
+ * is a manual blank slate, so it is withheld from the model — generation
+ * never auto-selects it; users add it via the layout picker. */
 export const layoutDescriptors = (template: Template): LayoutDescriptor[] =>
-  template.layouts.map(({ type, label, purpose, slots, constraints }) => ({
-    type,
-    label,
-    purpose,
-    slots,
-    constraints,
-  }))
+  template.layouts
+    .filter(l => l.type !== WHITEBOARD_LAYOUT_TYPE)
+    .map(({ type, label, purpose, slots, constraints }) => ({
+      type,
+      label,
+      purpose,
+      slots,
+      constraints,
+    }))
 
 /** Test hook: re-read template files. */
 export const resetTemplateCache = (): void => {

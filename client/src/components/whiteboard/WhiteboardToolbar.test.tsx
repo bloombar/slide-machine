@@ -23,9 +23,15 @@ const setWindowSize = (width: number, height: number) => {
 
 // The toolbar owns its whiteboard state; tests assert the active tool through
 // the buttons' aria-pressed rather than reaching into the hook.
-function Harness() {
+function Harness({ onNew = () => {} }: { onNew?: () => void }) {
   const wb = useWhiteboard()
-  return <WhiteboardToolbar deckId={DECK} whiteboard={wb} />
+  return (
+    <WhiteboardToolbar
+      deckId={DECK}
+      whiteboard={wb}
+      onNewWhiteboardSlide={onNew}
+    />
+  )
 }
 
 const pill = () => screen.getByTestId('whiteboard-toolbar')
@@ -74,6 +80,16 @@ describe('WhiteboardToolbar', () => {
     fireEvent.click(toolBtn('Eraser'))
     expect(isActive('Eraser')).toBe(true)
     expect(isActive('Highlighter')).toBe(false)
+  })
+
+  it('invokes the new-whiteboard-slide callback and is not a selectable tool', () => {
+    const onNew = vi.fn()
+    render(<Harness onNew={onNew} />)
+    const btn = toolBtn('New whiteboard slide')
+    // It acts, it doesn't select — no aria-pressed state.
+    expect(btn).not.toHaveAttribute('aria-pressed')
+    fireEvent.click(btn)
+    expect(onNew).toHaveBeenCalledOnce()
   })
 
   it('selects the tool and opens its popover on press-and-hold', () => {

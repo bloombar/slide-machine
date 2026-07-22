@@ -167,6 +167,13 @@
         "maxCaptionChars": 60
       },
       "elementPositions": {}
+    },
+    {
+      "type": "whiteboard",
+      "label": "Whiteboard",
+      "purpose": "A blank slate for freehand drawing",
+      "slots": [],
+      "elementPositions": {}
     }
   ]
 }

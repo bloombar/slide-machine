@@ -233,6 +233,12 @@ export interface SessionPhraseInput {
    * new one, so drawing never spawns slides. The "+" button and the "new
    * slide" voice command bypass this path and still create slides. */
   suppressNewSlide?: boolean
+  /** True while content generation is paused because the user is actively
+   * marking up a slide (WB-3): the server records the phrase to the transcript
+   * (deck + segment + the current slide's source transcript) but skips slide
+   * generation entirely, so neither content nor layout changes while drawing.
+   * Stronger than `suppressNewSlide`, which still applies content updates. */
+  pauseGeneration?: boolean
 }
 
 /** Run post-lecture speaker diarization on a deck's retained recordings and
@@ -357,6 +363,10 @@ export interface SlideSetLayoutInput {
 /** Appends a blank starter slide at the end of the deck. */
 export interface SlideAddInput {
   deckId: string
+  /** Layout for the new slide; defaults to `content` with placeholder text.
+   * A `whiteboard` layout yields a truly blank canvas (no placeholder). Must
+   * be a layout of the deck's template. */
+  layoutType?: string
 }
 
 /** Full new ordering; must contain exactly the deck's current slide ids. */

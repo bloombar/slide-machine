@@ -234,6 +234,22 @@ These are **separate from the Google sign-in scopes** (`openid`, `email`, `profi
 
 To publish later without the instructor present, the connect flow must obtain a **refresh token**: build the Google OAuth URL with **`access_type=offline`** and **`prompt=consent`** (the sign-in flow deliberately does not). The refresh token is stored **encrypted at rest** (`CONNECTED_ACCOUNT_TOKEN_ENC_KEY`, [P-9](SPEC.md#16-privacy-security--compliance)); at publish time the server builds an authorized client from it and injects it into the Quiz Generator library ([QUIZ-4](SPEC.md#quiz-4-delegated-google-access)).
 
+### Encryption key for stored tokens (`CONNECTED_ACCOUNT_TOKEN_ENC_KEY`)
+
+This is **not** a Google credential — it is the app's own AES-256-GCM key ([server/src/lib/token-crypto.ts](../server/src/lib/token-crypto.ts)) that encrypts the refresh token above before it is written to the database. You generate it yourself; live quiz publishing (`QUIZ_PUBLISH_MODE=live`) needs it set.
+
+It must be **32 random bytes, base64-encoded** (a 44-character string ending in `=`) — anything else fails validation at first use. Generate one with either:
+
+```bash
+openssl rand -base64 32
+```
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+Paste the output into `CONNECTED_ACCOUNT_TOKEN_ENC_KEY` in `server/.env`. **Keep it stable:** tokens encrypted under one key can't be decrypted under another, so rotating it orphans every already-connected account (users must reconnect). A blank/unset key is fine until the first account is connected.
+
 ### OAuth consent screen
 
 `drive.file` and `forms.body` are **sensitive scopes**. While the OAuth consent screen is in **Testing**, add each pilot instructor as a **test user**; a published *external* consent screen using these scopes can require Google verification. For a single-institution pilot, scoping the OAuth client to the **NYU Workspace** organization and keeping instructors as known users avoids the public-verification path.

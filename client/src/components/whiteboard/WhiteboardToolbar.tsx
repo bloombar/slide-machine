@@ -11,7 +11,7 @@
  * keep their click + press-hold gestures.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Eraser, GripVertical, Highlighter, Pen } from 'lucide-react'
+import { Eraser, GripVertical, Highlighter, Pen, SquarePen } from 'lucide-react'
 import Tooltip from '../Tooltip'
 import ColorThicknessPopover from './ColorThicknessPopover'
 import {
@@ -25,6 +25,8 @@ import {
 interface Props {
   deckId: string
   whiteboard: Whiteboard
+  /** Appends a blank whiteboard slide and arms the pen for drawing. */
+  onNewWhiteboardSlide: () => void
 }
 
 interface Point {
@@ -84,7 +86,11 @@ const defaultPosition = (pill: DOMRect): Point => {
   return { x: MARGIN, y: NAV_HEIGHT + MARGIN }
 }
 
-export default function WhiteboardToolbar({ deckId, whiteboard }: Props) {
+export default function WhiteboardToolbar({
+  deckId,
+  whiteboard,
+  onNewWhiteboardSlide,
+}: Props) {
   const {
     tool,
     toggleTool,
@@ -294,6 +300,19 @@ export default function WhiteboardToolbar({ deckId, whiteboard }: Props) {
             onClick={() => toggleTool('eraser')}
           >
             <Eraser className="h-5 w-5" aria-hidden />
+          </button>
+        </Tooltip>
+
+        {/* New whiteboard slide: appends a blank canvas and arms the pen.
+            Separated from the tools by a divider — it acts, it doesn't select. */}
+        <div className="my-0.5 h-px w-6 bg-slate-200" />
+        <Tooltip label="New whiteboard slide" align="start">
+          <button
+            aria-label="New whiteboard slide"
+            className="rounded-md p-2 text-slate-500 hover:text-slate-900"
+            onClick={onNewWhiteboardSlide}
+          >
+            <SquarePen className="h-5 w-5" aria-hidden />
           </button>
         </Tooltip>
       </div>

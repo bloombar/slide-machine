@@ -34,7 +34,7 @@ import type {
   SlideEvent,
   TranscriptSegmentAction,
 } from '@slide-machine/shared'
-import { LOCALES } from '@slide-machine/shared'
+import { LOCALES, WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
 import type { HydratedDocument, Types } from 'mongoose'
 import { defineAction } from './define'
 import {
@@ -297,15 +297,33 @@ export const deckGet = defineAction<DeckGetInput, DeckViewResponse>({
 
 export const slideAdd = defineAction<SlideAddInput, Slide>({
   name: 'slide.add',
-  input: z.object({ deckId: z.string().min(1) }),
+  input: z.object({
+    deckId: z.string().min(1),
+    layoutType: z.string().min(1).optional(),
+  }),
   execute: async (ctx, input) => {
     const { deck } = await loadEditableDeck(ctx, input.deckId)
+    let layoutType = 'content'
+    if (input.layoutType) {
+      const template = getBuiltinTemplate(deck.templateId)
+      if (!template?.layouts.some(l => l.type === input.layoutType)) {
+        throw new ActionValidationError('slide.add', [
+          'layoutType: not a layout of this template',
+        ])
+      }
+      layoutType = input.layoutType
+    }
+    // A whiteboard slide is a blank drawing canvas — no placeholder text;
+    // every other layout gets the editable starter content.
+    const starter =
+      layoutType === WHITEBOARD_LAYOUT_TYPE
+        ? {}
+        : { title: 'New slide', body: 'Click to edit' }
     const slide = await SlideModel.create({
       deckId: deck._id,
       index: deck.slideOrder.length,
-      layoutType: 'content',
-      title: 'New slide',
-      body: 'Click to edit',
+      layoutType,
+      ...starter,
     })
     deck.slideOrder.push(slide._id.toString())
     await deck.save()
@@ -405,6 +423,10 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
     // Whiteboard drawing is active on the client (WB-3): don't auto-create a
     // slide from this phrase; append it to the current slide instead.
     suppressNewSlide: z.boolean().optional(),
+    // Content generation is paused on the client (WB-3): record this phrase to
+    // the transcript but skip slide generation entirely (no LLM call). Set
+    // while the user is actively marking up a slide, or until they resume.
+    pauseGeneration: z.boolean().optional(),
   }),
   execute: async (ctx, input) => {
     const { deck } = await loadEditableDeck(ctx, input.deckId)
@@ -418,6 +440,41 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
     const recent = await SlideModel.find({ deckId: deck._id })
       .sort({ index: -1 })
       .limit(3)
+
+    // Content generation is paused while the user marks up a slide, or until
+    // they resume it (WB-3): record this phrase to the transcript and the
+    // current slide's source transcript, then return without generating — no
+    // LLM call, no content or layout change. Drawings save on their own path
+    // (slide.editDrawings), so both speech and markup are kept for playback.
+    if (input.pauseGeneration) {
+      const current = recent.length ? recent[0] : undefined
+      deck.transcript = [deck.transcript, input.phrase]
+        .filter(Boolean)
+        .join('\n')
+      await deck.save()
+      const segmentWords = input.words?.length ? input.words : undefined
+      await TranscriptSegmentModel.create({
+        deckId: deck._id,
+        sessionId: input.sessionId,
+        text: input.phrase,
+        confidence: input.confidence,
+        words: segmentWords,
+        startMs: segmentWords ? segmentWords[0]!.startMs : undefined,
+        endMs: segmentWords
+          ? segmentWords[segmentWords.length - 1]!.endMs
+          : undefined,
+        action: 'none',
+        slideId: current?._id,
+      })
+      if (current) {
+        current.sourceTranscript = [current.sourceTranscript, input.phrase]
+          .filter(Boolean)
+          .join(' ')
+        await current.save()
+      }
+      return { kind: 'none' }
+    }
+
     const rollingContext = recent
       .reverse()
       .map(s =>
@@ -613,7 +670,10 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
       lastSlide &&
       // Never refit (a layout change) while the user is drawing (WB-3): fall
       // through to a plain delta update that keeps the current layout.
-      !input.suppressNewSlide
+      !input.suppressNewSlide &&
+      // A whiteboard slide is a blank drawing canvas — never convert it into a
+      // text layout; speech becomes a new slide instead (handled below).
+      lastSlide.layoutType !== WHITEBOARD_LAYOUT_TYPE
     ) {
       if (!env.GENERATION_LAYOUT_REFIT) return event({ kind: 'none' })
       const snapshot: SlideContentSnapshot = {
@@ -699,6 +759,23 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
         },
         descriptors,
       )
+    ) {
+      result = {
+        ...result,
+        action: 'new',
+        slots: {
+          ...result.slots,
+          title: result.slots.title || titleFromPhrase(input.phrase),
+        },
+      }
+    }
+    // The current slide is a blank whiteboard canvas (no text slots): folding
+    // content into it would be invisible, so a phrase that would update it
+    // becomes a new slide instead. Filler ('none', handled above) still just
+    // joins its transcript.
+    if (
+      result.action === 'update' &&
+      lastSlide?.layoutType === WHITEBOARD_LAYOUT_TYPE
     ) {
       result = {
         ...result,

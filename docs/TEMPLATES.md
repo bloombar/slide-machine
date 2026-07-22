@@ -22,7 +22,7 @@ Docker image ships `server/config/`.
 | --- | --- |
 | `id`, `name` | Stable id (referenced by decks/projects) and display name. |
 | `theme` | Renderer colors: `background`, `surface`, `text`, `muted`, `accent`. |
-| `layouts` | The layout set. Each layout: `type` (one of the seven conventional types, SPEC [TMPL-2](SPEC.md#tmpl-2-conventional-layout-types)), `label`, `purpose` (**read by the AI** when choosing layouts), `slots`, `constraints`, `elementPositions` (reserved — see the future section). |
+| `layouts` | The layout set. Each layout: `type` (one of the conventional types, SPEC [TMPL-2](SPEC.md#tmpl-2-conventional-layout-types)), `label`, `purpose` (**read by the AI** when choosing layouts), `slots`, `constraints`, `elementPositions` (reserved — see the future section). Every template **must** include a `whiteboard` layout — a blank slate (no slots) for freehand drawing (WB-1); the loader rejects a template that omits it. The whiteboard layout is withheld from the AI's option set (never auto-selected); users add it via the layout picker. |
 
 Slots use the WYSIWYG-ready object form — the same shape the future
 editor will author and MongoDB will store:
@@ -52,7 +52,7 @@ words, so budgets hold in unspaced languages like Mandarin), `maxBullets`, plus
 ### The code: `client/src/components/slide/layouts/`
 
 The one template-related thing that is not data: **presentation
-geometry**. Each of the seven layout types has a hand-tuned
+geometry**. Each layout type has a hand-tuned
 React/Tailwind component (grid vs. stack, `cqi` sizes, alignment)
 implementing the shared `LayoutProps { slide, colors, slot }` contract
 and registered by name in `layouts/index.tsx`.

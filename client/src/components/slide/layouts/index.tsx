@@ -15,6 +15,7 @@ import ListLayout from './ListLayout'
 import ImageHeavyLayout from './ImageHeavyLayout'
 import TwoColumnLayout from './TwoColumnLayout'
 import QuoteLayout from './QuoteLayout'
+import WhiteboardLayout from './WhiteboardLayout'
 import GenericLayout from './GenericLayout'
 
 export type { LayoutProps } from './types'
@@ -27,6 +28,7 @@ const LAYOUT_RENDERERS: Record<string, ComponentType<LayoutProps>> = {
   'image-heavy': ImageHeavyLayout,
   'two-column': TwoColumnLayout,
   quote: QuoteLayout,
+  whiteboard: WhiteboardLayout,
 }
 
 /** The renderer for a layout type; unknown types get the fallback. */

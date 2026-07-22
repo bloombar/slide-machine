@@ -4,7 +4,10 @@
  * selection (TMPL-6 / GEN-6).
  */
 
-/** Conventional layout types every template provides (TMPL-2). */
+/** Conventional layout types every template provides (TMPL-2). The
+ * `whiteboard` layout is a required blank slate — no slots, never
+ * auto-selected by generation — that the user draws on with the
+ * whiteboard tools (WB-1). */
 export const LAYOUT_TYPES = [
   'title',
   'section',
@@ -13,7 +16,12 @@ export const LAYOUT_TYPES = [
   'image-heavy',
   'two-column',
   'quote',
+  'whiteboard',
 ] as const
+
+/** The blank-slate layout every template must provide (a drawing canvas
+ * with no content slots); excluded from the AI's layout option set. */
+export const WHITEBOARD_LAYOUT_TYPE = 'whiteboard'
 
 export type LayoutType = (typeof LAYOUT_TYPES)[number]
 

@@ -1,7 +1,8 @@
 /**
  * Unit tests for the externalized template loader: the real files in
- * server/config/templates load and validate, all seven conventional
- * layouts carry word budgets, and malformed files fail loudly.
+ * server/config/templates load and validate, every conventional layout is
+ * present (including the required blank whiteboard slate), and malformed
+ * files fail loudly.
  */
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -47,8 +48,70 @@ describe('externalized templates', () => {
     expect(getBuiltinTemplate('midnight')?.name).toBe('Midnight')
     expect(getBuiltinTemplate('nope')).toBeUndefined()
     const descriptors = layoutDescriptors(getBuiltinTemplate('classic')!)
-    expect(descriptors).toHaveLength(7)
+    // The whiteboard layout is withheld from the AI, so descriptors cover
+    // every layout type except that one.
+    expect(descriptors).toHaveLength(LAYOUT_TYPES.length - 1)
+    expect(descriptors.some(d => d.type === 'whiteboard')).toBe(false)
     expect(descriptors[0]).not.toHaveProperty('elementPositions')
+  })
+
+  it('requires every template to include a whiteboard layout', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'tmpl-no-wb-'))
+    writeFileSync(
+      path.join(dir, 'nowb.json'),
+      JSON.stringify({
+        id: 'nowb',
+        name: 'No whiteboard',
+        theme: {},
+        layouts: [
+          {
+            type: 'content',
+            label: 'C',
+            purpose: 'p',
+            slots: ['title', 'body'],
+            elementPositions: {},
+          },
+        ],
+      }),
+    )
+    expect(() => loadBuiltinTemplates(dir)).toThrow(
+      /must include a 'whiteboard' layout/,
+    )
+  })
+
+  it('accepts a whiteboard layout with no slots', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'tmpl-wb-'))
+    writeFileSync(
+      path.join(dir, 'wb.json'),
+      JSON.stringify({
+        id: 'wb',
+        name: 'WB',
+        theme: {},
+        layouts: [
+          {
+            type: 'content',
+            label: 'C',
+            purpose: 'p',
+            slots: ['title'],
+            elementPositions: {},
+          },
+          {
+            type: 'whiteboard',
+            label: 'Whiteboard',
+            purpose: 'blank slate',
+            slots: [],
+            elementPositions: {},
+          },
+        ],
+      }),
+    )
+    const [template] = loadBuiltinTemplates(dir)
+    const whiteboard = template!.layouts.find(l => l.type === 'whiteboard')!
+    expect(whiteboard.slots).toEqual([])
+    // …but a non-whiteboard layout with no slots is still rejected.
+    expect(
+      layoutDescriptors(template!).some(d => d.type === 'whiteboard'),
+    ).toBe(false)
   })
 
   it('normalizes slots and accepts custom slots with explicit kinds', () => {
@@ -70,6 +133,14 @@ describe('externalized templates', () => {
               { name: 'body', maxChars: 70 },
               { name: 'pull-quote', kind: 'text', label: 'Pull quote' },
             ],
+            elementPositions: {},
+          },
+          // Required blank slate — keeps this a valid template.
+          {
+            type: 'whiteboard',
+            label: 'Whiteboard',
+            purpose: 'blank slate',
+            slots: [],
             elementPositions: {},
           },
         ],
@@ -105,6 +176,13 @@ describe('externalized templates', () => {
             label: 'C',
             purpose: 'p',
             slots: [{ name: 'mystery' }],
+            elementPositions: {},
+          },
+          {
+            type: 'whiteboard',
+            label: 'Whiteboard',
+            purpose: 'blank slate',
+            slots: [],
             elementPositions: {},
           },
         ],
