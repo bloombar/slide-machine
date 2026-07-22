@@ -61,8 +61,10 @@ test('the allowlisted admin reaches the directory and a user drill-down', async 
 }) => {
   await ensureSignedIn(page, admin)
 
+  // The Admin entry is a flyout submenu: hover reveals the sections
   await page.getByRole('button', { name: 'Menu' }).click()
-  await page.getByRole('menuitem', { name: 'Admin', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Admin', exact: true }).hover()
+  await page.getByRole('menuitem', { name: 'Users' }).click()
   await expect(page).toHaveURL(/\/app\/admin$/)
 
   // The directory offers a configurable page size.
@@ -88,7 +90,8 @@ test('the admin reaches the audit log and downloads the CSV export', async ({
   await ensureSignedIn(page, admin)
 
   await page.getByRole('button', { name: 'Menu' }).click()
-  await page.getByRole('menuitem', { name: 'Admin logs' }).click()
+  await page.getByRole('menuitem', { name: 'Admin', exact: true }).hover()
+  await page.getByRole('menuitem', { name: 'Logs' }).click()
   await expect(page).toHaveURL(/\/app\/admin\/logs$/)
   await expect(page.getByRole('heading', { name: /Audit log/ })).toBeVisible()
 

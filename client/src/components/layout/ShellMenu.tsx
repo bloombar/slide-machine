@@ -6,13 +6,21 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { Menu, LogOut, LogIn } from 'lucide-react'
+import { Menu, LogOut, LogIn, ChevronRight } from 'lucide-react'
 import { useAuth } from '../../auth/AuthContext'
 import { useIsAdmin } from '../../hooks/useIsAdmin'
 
-/** Admin entries, mounted only while the dropdown is open so the status
+/** The admin console's sections; extend this as admin pages are added. */
+const ADMIN_LINKS = [
+  { to: '/app/admin', label: 'Users' },
+  { to: '/app/admin/logs', label: 'Logs' },
+]
+
+/** Admin entry, mounted only while the dropdown is open so the status
  * check fires at most once per session and only for users who open the
- * menu; non-admins render nothing. */
+ * menu; non-admins render nothing. Admins get a single "Admin" item
+ * whose flyout submenu (hover, or click for keyboard/touch) lists every
+ * admin section. */
 function AdminMenuItem({
   className,
   onNavigate,
@@ -21,26 +29,44 @@ function AdminMenuItem({
   onNavigate: () => void
 }) {
   const isAdmin = useIsAdmin()
+  const [open, setOpen] = useState(false)
   if (!isAdmin) return null
   return (
-    <>
-      <Link
-        to="/app/admin"
+    <div
+      className="relative"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
         role="menuitem"
-        onClick={onNavigate}
-        className={className}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen(o => !o)}
+        className={`${className} justify-between`}
       >
         Admin
-      </Link>
-      <Link
-        to="/app/admin/logs"
-        role="menuitem"
-        onClick={onNavigate}
-        className={className}
-      >
-        Admin logs
-      </Link>
-    </>
+        <ChevronRight className="h-4 w-4" aria-hidden />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          aria-label="Admin"
+          className="absolute top-0 left-full z-50 ml-1 w-36 rounded-lg border border-slate-200 bg-white p-1 shadow-lg"
+        >
+          {ADMIN_LINKS.map(link => (
+            <Link
+              key={link.to}
+              to={link.to}
+              role="menuitem"
+              onClick={onNavigate}
+              className={className}
+            >
+              {link.label}
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
