@@ -196,7 +196,7 @@ Current slide content: ${JSON.stringify(req.currentSlide.content)}`
   // Untitled lecture: ask for a title alongside the slide decision;
   // the server stops asking once one is saved
   const deckTitle = req.suggestDeckTitle
-    ? '\nThe lecture itself has no title yet. Once — and ONLY once — the speech and context give you a clear sense of the lecture topic, ALSO set "deckTitle": a concise lecture title (under 60 characters, no quotes). If the topic is not yet clear, omit deckTitle; you will be asked again.'
+    ? '\nThe lecture\'s title is still auto-managed. ALSO set "deckTitle": a concise lecture title (under 60 characters, no quotes) that best captures everything covered so far. Refine it as the lecture broadens and the full range of topics becomes clear; omit deckTitle only while the topic is not yet clear enough to name.'
     : ''
 
   // Resolved language cascade (lecture ?? project ?? profile ??
@@ -312,7 +312,9 @@ const callGemini = async (prompt: string, label: string): Promise<string> => {
         res.status === 503,
       )
     }
-    throw new Error(`Gemini ${label} failed (${res.status}): ${detail.slice(0, 500)}`)
+    throw new Error(
+      `Gemini ${label} failed (${res.status}): ${detail.slice(0, 500)}`,
+    )
   }
   const data = (await res.json()) as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
@@ -365,9 +367,9 @@ const narratePrompt = (req: SlideNarrateRequest): string =>
     `aloud. Eloquence ${req.level} of 5 (1 = plain and faithful; 5 = rich and`,
     'engaging). Describe the concepts clearly; do not read the slide verbatim.',
     req.studentContext
-      ? 'This slide represents a STUDENT question or comment — narrate it as'
-        + ' presenting the student’s question/feedback, not as the lecturer’s'
-        + ' own assertion.'
+      ? 'This slide represents a STUDENT question or comment — narrate it as' +
+        ' presenting the student’s question/feedback, not as the lecturer’s' +
+        ' own assertion.'
       : '',
     req.language ? `Language: ${req.language}.` : '',
     '',
@@ -605,7 +607,8 @@ export class GeminiGenerationProvider implements GenerationProvider {
 
     const allowed = new Set(req.layoutDescriptors.map(d => d.type))
     const layoutType = (
-      parsed.data.layoutType && allowed.has(parsed.data.layoutType as LayoutType)
+      parsed.data.layoutType &&
+      allowed.has(parsed.data.layoutType as LayoutType)
         ? parsed.data.layoutType
         : req.current.layoutType
     ) as LayoutType
@@ -644,7 +647,8 @@ export class GeminiGenerationProvider implements GenerationProvider {
     if (!parsed.success) return unchanged
     const allowed = new Set(req.layoutDescriptors.map(d => d.type))
     const layoutType = (
-      parsed.data.layoutType && allowed.has(parsed.data.layoutType as LayoutType)
+      parsed.data.layoutType &&
+      allowed.has(parsed.data.layoutType as LayoutType)
         ? parsed.data.layoutType
         : req.current.layoutType
     ) as LayoutType
@@ -661,7 +665,9 @@ export class GeminiGenerationProvider implements GenerationProvider {
   }
 
   async narrateSlide(req: SlideNarrateRequest): Promise<SlideNarrateResult> {
-    const fallback: SlideNarrateResult = { transcript: plainNarration(req.slide) }
+    const fallback: SlideNarrateResult = {
+      transcript: plainNarration(req.slide),
+    }
     let raw: unknown
     try {
       raw = JSON.parse(await callGemini(narratePrompt(req), 'Narration'))

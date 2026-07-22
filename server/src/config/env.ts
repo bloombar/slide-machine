@@ -67,6 +67,9 @@ const envSchema = z.object({
   DIARIZATION_PROVIDER: z.string().default('none'),
   GENERATION_PROVIDER: z.string().default('gemini'),
   QUIZ_PROVIDER: z.string().default('gemini'),
+  // How the quiz publishes to Google Forms: 'mock' fabricates a Form URL
+  // (tests/dev), 'live' runs the real connected-account + Quiz Generator flow.
+  QUIZ_PUBLISH_MODE: z.enum(['mock', 'live']).default('mock'),
   IMAGE_GEN_PROVIDER: z.string().default('gemini'),
   // Text-to-speech (slide/deck playback). 'google-cloud' needs a key below;
   // 'none' disables the feature; 'mock' is for tests. Without a usable key the
@@ -160,6 +163,14 @@ const envSchema = z.object({
   PUBLIC_BASE_URL: z
     .string()
     .transform(value => value.replace(/\/+$/, ''))
+    .optional(),
+  // Origin the browser reaches the SPA at, used only for the post-login
+  // landing. In local dev the app runs on Vite (5173) while the OAuth
+  // callback stays on PUBLIC_BASE_URL (3000); set this to the Vite origin so
+  // sign-in lands on the running app. Unset in production (one origin).
+  CLIENT_APP_URL: z
+    .string()
+    .transform(value => (value ? value.replace(/\/+$/, '') : undefined))
     .optional(),
   GITHUB_OAUTH_CLIENT_ID: z.string().optional(),
   GITHUB_OAUTH_CLIENT_SECRET: z.string().optional(),

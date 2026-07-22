@@ -228,6 +228,8 @@ export const deckCreate = defineAction<DeckCreateInput, Deck>({
       projectId: input.projectId,
       ownerId: ctx.userId,
       title: input.title,
+      // A lecture named at creation is user-set; the AI must not retitle it.
+      titleLocked: Boolean(input.title?.trim()),
       templateId,
       permalinkSlug: permalinkSlug(input.title || 'untitled'),
     })
@@ -321,6 +323,9 @@ export const deckRename = defineAction<DeckRenameInput, Deck>({
   execute: async (ctx, input) => {
     const { deck, acl } = await loadEditableDeck(ctx, input.deckId)
     deck.title = input.title
+    // A hand-entered title locks out AI titling; clearing it back to empty
+    // hands control back to the auto-title refinement.
+    deck.titleLocked = Boolean(input.title.trim())
     await deck.save()
     return toDeckDto(deck, acl)
   },
@@ -484,17 +489,19 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
       voiceCommands: env.GENERATION_VOICE_COMMANDS
         ? VOICE_COMMAND_DESCRIPTORS
         : undefined,
-      // Untitled lecture: keep asking for a title until the model
-      // commits to one (it holds off until the topic is clear)
-      suggestDeckTitle: !deck.title,
+      // Ask the model to suggest/refine the title on every phrase until the
+      // user locks it by naming the lecture themselves (titleLocked).
+      suggestDeckTitle: !deck.titleLocked,
     })
 
-    // Save the first title the model offers; once stored, subsequent
-    // phrases stop asking. The event carries it so the header updates.
+    // Apply the model's latest title suggestion as long as the user has not
+    // locked the title, so an auto-title keeps refining as the topic
+    // clarifies. The event carries the new title so the header updates live.
     let savedDeckTitle: string | undefined
-    if (!deck.title && rawResult.deckTitle?.trim()) {
-      deck.title = rawResult.deckTitle.trim().slice(0, 80)
-      savedDeckTitle = deck.title
+    const suggestion = rawResult.deckTitle?.trim().slice(0, 80)
+    if (!deck.titleLocked && suggestion && suggestion !== deck.title) {
+      deck.title = suggestion
+      savedDeckTitle = suggestion
       await deck.save()
     }
     const event = (e: SlideEvent): SlideEvent =>
@@ -810,23 +817,25 @@ export const deckSetGenerationFreedom = defineAction<
 
 /** Per-lecture Refine slider levels (GEN-4): a number pins a level for this
  * lecture, null re-inherits the server default, absent leaves it unchanged. */
-export const deckSetRefineLevels = defineAction<DeckSetRefineLevelsInput, Deck>({
-  name: 'deck.setRefineLevels',
-  input: z.object({
-    deckId: z.string().min(1),
-    slidesLevel: z.number().int().min(1).max(5).nullable().optional(),
-    transcriptLevel: z.number().int().min(1).max(5).nullable().optional(),
-  }),
-  execute: async (ctx, input) => {
-    const { deck, acl } = await loadEditableDeck(ctx, input.deckId)
-    if (input.slidesLevel !== undefined)
-      deck.refineSlidesLevel = input.slidesLevel ?? undefined
-    if (input.transcriptLevel !== undefined)
-      deck.refineTranscriptLevel = input.transcriptLevel ?? undefined
-    await deck.save()
-    return toDeckDto(deck, acl)
+export const deckSetRefineLevels = defineAction<DeckSetRefineLevelsInput, Deck>(
+  {
+    name: 'deck.setRefineLevels',
+    input: z.object({
+      deckId: z.string().min(1),
+      slidesLevel: z.number().int().min(1).max(5).nullable().optional(),
+      transcriptLevel: z.number().int().min(1).max(5).nullable().optional(),
+    }),
+    execute: async (ctx, input) => {
+      const { deck, acl } = await loadEditableDeck(ctx, input.deckId)
+      if (input.slidesLevel !== undefined)
+        deck.refineSlidesLevel = input.slidesLevel ?? undefined
+      if (input.transcriptLevel !== undefined)
+        deck.refineTranscriptLevel = input.transcriptLevel ?? undefined
+      await deck.save()
+      return toDeckDto(deck, acl)
+    },
   },
-})
+)
 
 /** Lecture-level language; null re-inherits project/profile/browser. */
 export const deckSetLanguage = defineAction<DeckSetLanguageInput, Deck>({

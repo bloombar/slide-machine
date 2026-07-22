@@ -167,7 +167,7 @@ test('image attribution: an owner sets it, it persists and shows via the i icon'
   await page.getByRole('button', { name: 'Image details' }).click()
   const dialog = page.getByRole('dialog', { name: 'Image details' })
   await dialog.getByLabel('Credit').fill('Ada Lovelace')
-  await dialog.getByLabel('License').fill('CC BY 4.0')
+  await dialog.getByLabel('License', { exact: true }).fill('CC BY 4.0')
   await dialog.getByRole('button', { name: 'Save' }).click()
   await expect(dialog).not.toBeVisible()
 
@@ -176,7 +176,9 @@ test('image attribution: an owner sets it, it persists and shows via the i icon'
   await page.getByRole('button', { name: 'Image details' }).click()
   const reopened = page.getByRole('dialog', { name: 'Image details' })
   await expect(reopened.getByLabel('Credit')).toHaveValue('Ada Lovelace')
-  await expect(reopened.getByLabel('License')).toHaveValue('CC BY 4.0')
+  await expect(reopened.getByLabel('License', { exact: true })).toHaveValue(
+    'CC BY 4.0',
+  )
 })
 
 test('removing the image from an image-only slide deletes it after a confirm', async ({

@@ -41,3 +41,29 @@ export interface QuizRef {
   status: string
   publishConfig: QuizPublishConfig
 }
+
+/** A published quiz as surfaced to the Quiz-tab UI (QUIZ-3). */
+export interface PublishedQuiz {
+  formUrl: string
+  driveFolderName?: string
+  publishedAt: string
+}
+
+/** Quiz-tab state for one deck: whether Google is connected and the quiz, if any. */
+export interface QuizStatus {
+  googleConnected: boolean
+  quiz?: PublishedQuiz
+}
+
+/** A Google Drive folder offered in the publish-destination picker (QUIZ-2). */
+export interface DriveFolder {
+  id: string
+  name: string
+}
+
+/**
+ * Result of quiz.connectGoogle: mock mode connects immediately; live mode
+ * returns a Google consent URL the client must redirect the browser to.
+ */
+export type QuizConnectResult =
+  { status: 'connected' } | { status: 'redirect'; url: string }

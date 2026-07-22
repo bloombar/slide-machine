@@ -42,6 +42,15 @@ export interface DeckRecordingDb {
   createdAt: Date
 }
 
+/** The published exit-ticket quiz (Google Form) for a deck (QUIZ-3). */
+export interface DeckQuizDb {
+  formId: string
+  formUrl: string
+  driveFolderId: string
+  driveFolderName?: string
+  publishedAt: Date
+}
+
 export interface DeckDb extends Omit<
   Deck,
   | 'id'
@@ -58,6 +67,11 @@ export interface DeckDb extends Omit<
   ownerId: Types.ObjectId
   accessOverride?: DeckAccessOverride
   recordings?: DeckRecordingDb[]
+  // The published exit-ticket quiz, once generated (QUIZ-3). Absent until then.
+  quiz?: DeckQuizDb
+  // True once the user sets the title by hand: the AI then stops suggesting
+  // or refining it. False/absent = auto-titled, still open to AI refinement.
+  titleLocked?: boolean
   createdAt: Date
   updatedAt: Date
 }
@@ -71,6 +85,18 @@ const recordingSchema = new Schema<DeckRecordingDb>(
     durationMs: { type: Number, required: true },
     gcsUri: String,
     createdAt: { type: Date, default: Date.now },
+  },
+  { _id: false },
+)
+
+/** Strict, id-less subdocument for the published quiz Form (QUIZ-3). */
+const quizSchema = new Schema<DeckQuizDb>(
+  {
+    formId: { type: String, required: true },
+    formUrl: { type: String, required: true },
+    driveFolderId: { type: String, required: true },
+    driveFolderName: String,
+    publishedAt: { type: Date, default: Date.now },
   },
   { _id: false },
 )
@@ -91,6 +117,8 @@ const deckSchema = new Schema<DeckDb>(
     },
     // Empty allowed: the UI shows untitled lectures as 'Untitled lecture'
     title: { type: String, default: '', trim: true },
+    // Set when the user names the lecture by hand; the AI stops touching it.
+    titleLocked: { type: Boolean, default: false },
     templateId: { type: String, required: true },
     accessOverride: {
       type: {
@@ -122,6 +150,7 @@ const deckSchema = new Schema<DeckDb>(
     // Retained session-audio references (GEN-4 Phase 2); server-only, appended
     // once per recording, never surfaced in a DTO.
     recordings: { type: [recordingSchema], default: undefined },
+    quiz: { type: quizSchema, default: undefined },
     voteScore: { type: Number, default: 0 },
   },
   { timestamps: true },

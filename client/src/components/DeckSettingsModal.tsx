@@ -20,6 +20,7 @@ import {
 import { dispatchAction } from '../api/actions'
 import TemplatePicker from './TemplatePicker'
 import AccessSettings from './AccessSettings'
+import QuizPanel from './QuizPanel'
 import SeedNotesEditor from './SeedNotesEditor'
 import SeedMaterial from './SeedMaterial'
 import FreedomSlider from './FreedomSlider'
@@ -38,6 +39,7 @@ const TABS = [
   { id: 'general', label: 'General' },
   { id: 'template', label: 'Design template' },
   { id: 'refine', label: 'Refine' },
+  { id: 'quiz', label: 'Quiz' },
   { id: 'sharing', label: 'Privacy & Sharing' },
 ] as const
 
@@ -102,6 +104,22 @@ export default function DeckSettingsModal({
   // Nothing to refine when the lecture has no slides — disable the whole form.
   const hasSlides = (deck.slideOrder?.length ?? 0) > 0
 
+  // Editable lecture title. Saving a non-empty title locks out AI titling
+  // (deck.rename does this server-side); clearing it hands naming back to
+  // the AI. Only saved when it actually changed.
+  const [titleDraft, setTitleDraft] = useState(deck.title)
+  const saveTitle = () => {
+    if (titleDraft.trim() === deck.title.trim()) return
+    dispatchAction<Deck>('deck.rename', {
+      deckId: deck.id,
+      title: titleDraft.trim(),
+    })
+      .then(onDeckChange)
+      .catch(() => {
+        // Quiet failure: the field reverts to the saved title on re-render
+      })
+  }
+
   // Persist a moved slider to the lecture (debounced). An untouched slider is
   // never saved, so it keeps inheriting the server default.
   const persistTimers = useRef<{ slides?: number; transcript?: number }>({})
@@ -112,7 +130,10 @@ export default function DeckSettingsModal({
     const key = field === 'slidesLevel' ? 'slides' : 'transcript'
     window.clearTimeout(persistTimers.current[key])
     persistTimers.current[key] = window.setTimeout(() => {
-      dispatchAction<Deck>('deck.setRefineLevels', { deckId: deck.id, [field]: level })
+      dispatchAction<Deck>('deck.setRefineLevels', {
+        deckId: deck.id,
+        [field]: level,
+      })
         .then(onDeckChange)
         .catch(() => {
           // Quiet failure: the level reverts on the next reload
@@ -158,14 +179,20 @@ export default function DeckSettingsModal({
   const summaryMessage = (s: RefineJobSummary): string => {
     const parts: string[] = []
     if (s.reframed)
-      parts.push(`reframed ${s.reframed} student slide${s.reframed === 1 ? '' : 's'}`)
+      parts.push(
+        `reframed ${s.reframed} student slide${s.reframed === 1 ? '' : 's'}`,
+      )
     if (s.slidesRefined)
-      parts.push(`refined ${s.slidesRefined} slide${s.slidesRefined === 1 ? '' : 's'}`)
+      parts.push(
+        `refined ${s.slidesRefined} slide${s.slidesRefined === 1 ? '' : 's'}`,
+      )
     if (s.transcriptsUpdated)
       parts.push(
         `updated ${s.transcriptsUpdated} narration${s.transcriptsUpdated === 1 ? '' : 's'}`,
       )
-    return parts.length ? `Done — ${parts.join(', ')}.` : 'Done — no changes were needed.'
+    return parts.length
+      ? `Done — ${parts.join(', ')}.`
+      : 'Done — no changes were needed.'
   }
 
   /** Polls the job until it leaves 'running' (batch diarization can take
@@ -178,7 +205,13 @@ export default function DeckSettingsModal({
         { jobId },
       )
       if (res.status === 'done')
-        return res.summary ?? { reframed: 0, slidesRefined: 0, transcriptsUpdated: 0 }
+        return (
+          res.summary ?? {
+            reframed: 0,
+            slidesRefined: 0,
+            transcriptsUpdated: 0,
+          }
+        )
       if (res.status === 'error') throw new Error(res.error ?? 'refine failed')
     }
     throw new Error('refine timed out')
@@ -305,6 +338,26 @@ export default function DeckSettingsModal({
           aria-labelledby="settings-tab-general"
           className="flex flex-col gap-8"
         >
+          <div>
+            <h3 className="mb-2 text-lg font-semibold text-slate-700">
+              Lecture title
+            </h3>
+            <p className="mb-3 text-sm text-slate-500">
+              Name this lecture. Leave it blank to let the AI title it from your
+              speech as the lecture unfolds.
+            </p>
+            <input
+              aria-label="Lecture title"
+              value={titleDraft}
+              onChange={e => setTitleDraft(e.target.value)}
+              onBlur={saveTitle}
+              onKeyDown={e => {
+                if (e.key === 'Enter') e.currentTarget.blur()
+              }}
+              placeholder="Untitled lecture"
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
           <div>
             <h3 className="mb-2 text-lg font-semibold text-slate-700">
               Seed notes
@@ -598,6 +651,16 @@ export default function DeckSettingsModal({
               </p>
             )}
           </div>
+        </section>
+      )}
+
+      {tab === 'quiz' && (
+        <section
+          role="tabpanel"
+          id="settings-panel-quiz"
+          aria-labelledby="settings-tab-quiz"
+        >
+          <QuizPanel deckId={deck.id} />
         </section>
       )}
 

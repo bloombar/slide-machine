@@ -158,7 +158,8 @@ describe('GeminiGenerationProvider', () => {
     let prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
       .contents[0].parts[0].text as string
     expect(prompt).toContain('"deckTitle"?: string')
-    expect(prompt).toContain('no title yet')
+    // Prompt asks the model to keep refining the title, not set it once
+    expect(prompt).toContain('Refine it')
     expect(result.deckTitle).toBe('Photosynthesis 101')
 
     // Unrequested claims are dropped, and the prompt never mentions it

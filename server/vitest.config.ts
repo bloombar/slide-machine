@@ -25,6 +25,13 @@ export default defineConfig({
       JWT_SECRET: 'test-jwt-secret-at-least-32-characters!',
       JWT_REFRESH_SECRET: 'test-refresh-secret-at-least-32-chars!!',
       GENERATION_PROVIDER: 'mock',
+      QUIZ_PROVIDER: 'mock',
+      // Empty (treated as unset) so a developer's CLIENT_APP_URL in .env does
+      // not leak in and change the sign-in landing origin the tests assert.
+      CLIENT_APP_URL: '',
+      // Hermetic: a developer's live QUIZ_PUBLISH_MODE in .env must not leak
+      // in. Tests that need live mode mock the env module themselves.
+      QUIZ_PUBLISH_MODE: 'mock',
       // Post-lecture diarization runs against the deterministic mock in tests.
       DIARIZATION_PROVIDER: 'mock',
       // Tests never call live image APIs; enrichment units stub fetch

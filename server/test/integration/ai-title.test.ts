@@ -1,8 +1,9 @@
 /**
  * Integration tests for AI lecture titling: an untitled lecture keeps
- * requesting a title with each phrase until the provider commits to
- * one; the first title is saved and rides the SlideEvent; titled
- * lectures never ask and are never overwritten.
+ * requesting a title with each phrase and REFINES it as the topic broadens,
+ * until the user names the lecture by hand (which locks it). A lecture named
+ * at creation, or renamed by the user, is never retitled by the AI; clearing
+ * the title hands control back to the auto-titler.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import request from 'supertest'
@@ -70,7 +71,7 @@ beforeEach(async () => {
 })
 
 describe('AI lecture titling', () => {
-  it('keeps asking until the provider commits, then saves once', async () => {
+  it('refines the auto-title each phrase until the user locks it', async () => {
     const provider = registry.get<GenerationProvider>('generation')
     const original = provider.generateSlideContent.bind(provider)
     const seen: SlideGenerationRequest[] = []
@@ -79,8 +80,7 @@ describe('AI lecture titling', () => {
       return original(request)
     }
     try {
-      // First phrase: asked, but the mock holds off (no context yet) —
-      // the lecture stays untitled and the next phrase asks again
+      // First phrase: asked, but the mock holds off (no context yet)
       let res = await act(ada, 'session.phrase', {
         deckId,
         phrase: 'Photosynthesis basics',
@@ -89,34 +89,54 @@ describe('AI lecture titling', () => {
       expect(res.body.deckTitle).toBeUndefined()
       expect((await DeckModel.findById(deckId))!.title).toBe('')
 
-      // Second phrase: the topic is clear, the title lands and the
-      // event carries it for the live header
+      // Second phrase: the topic is clear, a title lands
       res = await act(ada, 'session.phrase', {
         deckId,
         phrase: 'Plants convert light into chemical energy',
       })
       expect(seen[1]!.suggestDeckTitle).toBe(true)
       expect(res.body.deckTitle).toBe('Plants Convert Light Into Chemical')
-      expect((await DeckModel.findById(deckId))!.title).toBe(
-        'Plants Convert Light Into Chemical',
-      )
 
-      // Titled now: no more asking, no overwriting
+      // Third phrase: still auto-managed, so the title REFINES rather than
+      // freezing at the early guess
       res = await act(ada, 'session.phrase', {
         deckId,
         phrase: 'Chlorophyll absorbs red and blue light',
       })
-      expect(seen[2]!.suggestDeckTitle).toBe(false)
+      expect(seen[2]!.suggestDeckTitle).toBe(true)
+      expect(res.body.deckTitle).toBe('Chlorophyll Absorbs Red And Blue')
+      expect((await DeckModel.findById(deckId))!.title).toBe(
+        'Chlorophyll Absorbs Red And Blue',
+      )
+
+      // A phrase yielding the same title is a no-op — no redundant re-save
+      res = await act(ada, 'session.phrase', {
+        deckId,
+        phrase: 'Chlorophyll absorbs red and blue wavelengths strongly',
+      })
       expect(res.body.deckTitle).toBeUndefined()
       expect((await DeckModel.findById(deckId))!.title).toBe(
-        'Plants Convert Light Into Chemical',
+        'Chlorophyll Absorbs Red And Blue',
+      )
+
+      // The user names the lecture: it locks and the AI stops asking
+      await act(ada, 'deck.rename', { deckId, title: 'My Photosynthesis Talk' })
+      res = await act(ada, 'session.phrase', {
+        deckId,
+        phrase: 'Water is split to release oxygen',
+      })
+      // seen[3] was the redundant phrase; this post-rename call is seen[4]
+      expect(seen[4]!.suggestDeckTitle).toBe(false)
+      expect(res.body.deckTitle).toBeUndefined()
+      expect((await DeckModel.findById(deckId))!.title).toBe(
+        'My Photosynthesis Talk',
       )
     } finally {
       provider.generateSlideContent = original
     }
   })
 
-  it('never asks for lectures that already have a title', async () => {
+  it('never retitles a lecture the user named at creation', async () => {
     const titled = await act(ada, 'deck.create', {
       projectId,
       title: 'Named Lecture',
@@ -133,12 +153,42 @@ describe('AI lecture titling', () => {
         deckId: titled.body.id,
         phrase: 'Cell membranes are bilayers',
       })
-      expect(seen[0]!.suggestDeckTitle).toBe(false)
+      await act(ada, 'session.phrase', {
+        deckId: titled.body.id,
+        phrase: 'Phospholipids form the bilayer core',
+      })
+      expect(seen.every(r => r.suggestDeckTitle === false)).toBe(true)
       expect((await DeckModel.findById(titled.body.id))!.title).toBe(
         'Named Lecture',
       )
     } finally {
       provider.generateSlideContent = original
     }
+  })
+
+  it('re-opens auto-titling when the user clears the title', async () => {
+    // Auto-title, then lock by renaming, then clear back to empty
+    await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Photosynthesis basics',
+    })
+    await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Plants convert light into chemical energy',
+    })
+    await act(ada, 'deck.rename', { deckId, title: 'Locked Title' })
+    expect((await DeckModel.findById(deckId))!.titleLocked).toBe(true)
+
+    await act(ada, 'deck.rename', { deckId, title: '' })
+    const cleared = await DeckModel.findById(deckId)
+    expect(cleared!.titleLocked).toBe(false)
+    expect(cleared!.title).toBe('')
+
+    // The AI titles it again on the next phrase
+    const res = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Oxygen is a byproduct of the reaction',
+    })
+    expect(res.body.deckTitle).toBe('Oxygen Is A Byproduct Of')
   })
 })

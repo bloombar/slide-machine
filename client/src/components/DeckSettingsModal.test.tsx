@@ -9,6 +9,7 @@ import {
   screen,
   fireEvent,
   cleanup,
+  waitFor,
 } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import type { Deck } from '@slide-machine/shared'
@@ -33,6 +34,7 @@ const baseDeck: Deck = {
 
 const renderModal = (over: Partial<Deck> = {}) => {
   const onReformatted = vi.fn()
+  const onDeckChange = vi.fn()
   render(
     <MemoryRouter>
       <DeckSettingsModal
@@ -41,13 +43,13 @@ const renderModal = (over: Partial<Deck> = {}) => {
         isOwner
         onClose={vi.fn()}
         onTemplateChange={vi.fn()}
-        onDeckChange={vi.fn()}
+        onDeckChange={onDeckChange}
         onDeleted={vi.fn()}
         onReformatted={onReformatted}
       />
     </MemoryRouter>,
   )
-  return { onReformatted }
+  return { onReformatted, onDeckChange }
 }
 
 afterEach(cleanup)
@@ -178,5 +180,65 @@ describe('DeckSettingsModal — Refine tab', () => {
       /Done — reframed 1 student slide, refined 2 slides, updated 2 narrations\./,
     )
     expect(onReformatted).toHaveBeenCalledOnce()
+  })
+})
+
+describe('DeckSettingsModal — lecture title', () => {
+  it('shows the current title and saves an edit via deck.rename', async () => {
+    const renamed = { ...baseDeck, title: 'Photosynthesis Deep Dive' }
+    mockFetchRoutes({
+      '/api/actions/deck.rename': () => ({ status: 200, body: renamed }),
+    })
+    const { onDeckChange } = renderModal()
+
+    const input = screen.getByRole('textbox', { name: 'Lecture title' })
+    expect(input).toHaveValue('Lecture')
+    fireEvent.change(input, {
+      target: { value: 'Photosynthesis Deep Dive' },
+    })
+    fireEvent.blur(input)
+    await waitFor(() => expect(onDeckChange).toHaveBeenCalledWith(renamed))
+  })
+
+  it('saves on Enter as well as blur', async () => {
+    const renamed = { ...baseDeck, title: 'Renamed' }
+    mockFetchRoutes({
+      '/api/actions/deck.rename': () => ({ status: 200, body: renamed }),
+    })
+    const { onDeckChange } = renderModal()
+    const input = screen.getByRole<HTMLInputElement>('textbox', {
+      name: 'Lecture title',
+    })
+    input.focus()
+    fireEvent.change(input, { target: { value: 'Renamed' } })
+    // Enter blurs the field, which triggers the save
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(onDeckChange).toHaveBeenCalledWith(renamed))
+  })
+
+  it('does not save when the title is unchanged', () => {
+    mockFetchRoutes({
+      '/api/actions/deck.rename': () => ({ status: 500, body: {} }),
+    })
+    const { onDeckChange } = renderModal()
+    fireEvent.blur(screen.getByRole('textbox', { name: 'Lecture title' }))
+    expect(onDeckChange).not.toHaveBeenCalled()
+  })
+
+  it('quietly ignores a rename failure', async () => {
+    const { fetchMock } = mockFetchRoutes({
+      '/api/actions/deck.rename': () => ({ status: 500, body: {} }),
+    })
+    const { onDeckChange } = renderModal()
+    const input = screen.getByRole('textbox', { name: 'Lecture title' })
+    fireEvent.change(input, { target: { value: 'Doomed rename' } })
+    fireEvent.blur(input)
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('deck.rename'),
+        expect.anything(),
+      ),
+    )
+    expect(onDeckChange).not.toHaveBeenCalled()
   })
 })

@@ -1,35 +1,60 @@
 /**
- * Unit tests for the image attribution dialog (IMG-5): read-only display,
- * the owner edit form, links, and the empty state.
+ * Unit tests for the image attribution dialog (IMG-5): the full TASL field
+ * set, the owner/editable form vs the read-only view, URL links, and the
+ * empty state. Editable (user-uploaded) images show every field; read-only
+ * (AI-sourced) images show only the fields that carry data.
  */
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import ImageAttributionDialog from './ImageAttributionDialog'
 
-const attribution = {
+const full = {
+  caption: 'A single plant cell',
+  title: 'Plant Cell',
+  creator: 'Jane Doe',
+  creatorUrl: 'https://commons.wikimedia.org/wiki/User:Jane',
   sourceUrl: 'https://commons.wikimedia.org/wiki/File:Cell.png',
-  creator: 'Jane Doe (Wikimedia Commons)',
+  sourceName: 'Wikimedia Commons',
   license: 'CC BY 4.0',
+  licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
 }
 
 describe('ImageAttributionDialog', () => {
-  it('shows credit and license, with the source as a new-tab link', () => {
+  it('read-only: shows only the fields that have data, including the license URL', () => {
+    // An AI-sourced image with partial credit: title, creator, license, and
+    // its URL, but no caption/creatorUrl/source.
     render(
       <ImageAttributionDialog
-        attribution={attribution}
+        attribution={{
+          title: 'Plant Cell',
+          creator: 'Jane Doe',
+          license: 'CC BY 4.0',
+          licenseUrl: full.licenseUrl,
+        }}
         editable={false}
         onSave={() => {}}
         onClose={() => {}}
       />,
     )
-    expect(screen.getByText('Jane Doe (Wikimedia Commons)')).toBeInTheDocument()
+    // Present fields render
+    expect(screen.getByText('Plant Cell')).toBeInTheDocument()
+    expect(screen.getByText('Jane Doe')).toBeInTheDocument()
     expect(screen.getByText('CC BY 4.0')).toBeInTheDocument()
-    const link = screen.getByRole('link', { name: attribution.sourceUrl })
-    expect(link).toHaveAttribute('href', attribution.sourceUrl)
-    expect(link).toHaveAttribute('target', '_blank')
+    // The license URL is a real new-tab link (copyright requirement)
+    const licenseLink = screen.getByRole('link', { name: full.licenseUrl })
+    expect(licenseLink).toHaveAttribute('href', full.licenseUrl)
+    expect(licenseLink).toHaveAttribute('target', '_blank')
+    // Absent fields are not shown at all — no empty rows
+    expect(screen.queryByText('Caption')).not.toBeInTheDocument()
+    expect(screen.queryByText('Source')).not.toBeInTheDocument()
+    expect(screen.queryByText('Creator URL')).not.toBeInTheDocument()
+    // Read-only: no form
+    expect(
+      screen.queryByRole('button', { name: 'Save' }),
+    ).not.toBeInTheDocument()
   })
 
-  it('tells a viewer when nothing is recorded', () => {
+  it('read-only: tells a viewer when nothing is recorded', () => {
     render(
       <ImageAttributionDialog
         editable={false}
@@ -38,53 +63,74 @@ describe('ImageAttributionDialog', () => {
       />,
     )
     expect(screen.getByText(/no source or licensing/i)).toBeInTheDocument()
-    // No form for a viewer
-    expect(
-      screen.queryByRole('button', { name: 'Save' }),
-    ).not.toBeInTheDocument()
   })
 
-  it('lets an owner edit and save the fields', () => {
+  it('editable: shows every attribution field as an input', () => {
+    render(
+      <ImageAttributionDialog editable onSave={() => {}} onClose={() => {}} />,
+    )
+    for (const label of [
+      'Title',
+      'Caption',
+      'Credit',
+      'Creator URL',
+      'Source',
+      'Source URL',
+      'License',
+      'License URL',
+    ]) {
+      expect(screen.getByLabelText(label)).toBeInTheDocument()
+    }
+  })
+
+  it('editable: an owner edits and saves all the fields', () => {
     const onSave = vi.fn()
     render(
       <ImageAttributionDialog editable onSave={onSave} onClose={() => {}} />,
     )
-    fireEvent.change(screen.getByLabelText('Source'), {
-      target: { value: 'https://example.com/photo' },
-    })
-    fireEvent.change(screen.getByLabelText('Credit'), {
-      target: { value: 'Ada' },
-    })
-    fireEvent.change(screen.getByLabelText('License'), {
-      target: { value: 'CC0' },
-    })
+    const set = (label: string, value: string) =>
+      fireEvent.change(screen.getByLabelText(label), { target: { value } })
+
+    set('Title', full.title)
+    set('Caption', full.caption)
+    set('Credit', full.creator)
+    set('Creator URL', full.creatorUrl)
+    set('Source', full.sourceName)
+    set('Source URL', full.sourceUrl)
+    set('License', full.license)
+    set('License URL', full.licenseUrl)
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    expect(onSave).toHaveBeenCalledWith({
-      sourceUrl: 'https://example.com/photo',
-      creator: 'Ada',
-      license: 'CC0',
-    })
+
+    expect(onSave).toHaveBeenCalledWith(full)
   })
 
-  it('saves empty fields as undefined so all-blank clears the credit', () => {
+  it('editable: pre-fills from existing attribution and clears blanked fields to undefined', () => {
     const onSave = vi.fn()
     render(
       <ImageAttributionDialog
-        attribution={attribution}
+        attribution={full}
         editable
         onSave={onSave}
         onClose={() => {}}
       />,
     )
-    for (const label of ['Source', 'Credit', 'License']) {
+    // The form is pre-populated from the passed attribution
+    expect(screen.getByLabelText('License URL')).toHaveValue(full.licenseUrl)
+    // Clearing every field saves an empty attribution (undefined throughout)
+    for (const label of [
+      'Title',
+      'Caption',
+      'Credit',
+      'Creator URL',
+      'Source',
+      'Source URL',
+      'License',
+      'License URL',
+    ]) {
       fireEvent.change(screen.getByLabelText(label), { target: { value: '' } })
     }
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    expect(onSave).toHaveBeenCalledWith({
-      sourceUrl: undefined,
-      creator: undefined,
-      license: undefined,
-    })
+    expect(onSave).toHaveBeenCalledWith({})
   })
 
   it('closes on Cancel and on Escape', () => {

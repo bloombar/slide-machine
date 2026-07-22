@@ -1,9 +1,13 @@
 /**
  * Image attribution dialog (IMG-5), opened by the on-slide "i" icon. It
- * shows where an image came from, who to credit, and its license. Viewers
- * see it read-only; owners/editors get a form to correct or supply the
- * details (crediting is often a license requirement). Source and license
- * links open in a new tab.
+ * shows where an image came from, who to credit, and its license — the full
+ * TASL set (Title, Author, Source, License) plus their links, to meet
+ * copyright-attribution requirements.
+ *
+ * Editable images (the instructor's own uploads/seeds) show every field as a
+ * form so full credit and license details can be supplied. Read-only images
+ * (AI-sourced) show only the fields that actually carry data. Source and
+ * license links open in a new tab.
  */
 import { useEffect, useState, type FormEvent } from 'react'
 import { X } from 'lucide-react'
@@ -12,11 +16,28 @@ import Portal from './Portal'
 
 interface Props {
   attribution?: ImageAttribution
-  /** Owners get the editable form; everyone else sees it read-only. */
+  /** True for the user's own images (uploaded/seeded): they get the editable
+   * form with all fields. AI-sourced images are read-only. */
   editable: boolean
   onSave: (attribution: ImageAttribution) => void
   onClose: () => void
 }
+
+/** Every attribution field, in display order, with its form label. */
+const FIELDS: {
+  key: keyof ImageAttribution
+  label: string
+  placeholder: string
+}[] = [
+  { key: 'title', label: 'Title', placeholder: 'Title of the work' },
+  { key: 'caption', label: 'Caption', placeholder: 'Short description' },
+  { key: 'creator', label: 'Credit', placeholder: 'Author or creator' },
+  { key: 'creatorUrl', label: 'Creator URL', placeholder: 'https://…' },
+  { key: 'sourceName', label: 'Source', placeholder: 'e.g. Wikimedia Commons' },
+  { key: 'sourceUrl', label: 'Source URL', placeholder: 'https://…' },
+  { key: 'license', label: 'License', placeholder: 'e.g. CC BY 4.0' },
+  { key: 'licenseUrl', label: 'License URL', placeholder: 'https://…' },
+]
 
 /** Shows a value, linking it when it looks like a URL. */
 function ReadRow({ label, value }: { label: string; value?: string }) {
@@ -47,9 +68,7 @@ export default function ImageAttributionDialog({
   onSave,
   onClose,
 }: Props) {
-  const [sourceUrl, setSourceUrl] = useState(attribution?.sourceUrl ?? '')
-  const [creator, setCreator] = useState(attribution?.creator ?? '')
-  const [license, setLicense] = useState(attribution?.license ?? '')
+  const [form, setForm] = useState<ImageAttribution>(() => ({ ...attribution }))
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -59,35 +78,18 @@ export default function ImageAttributionDialog({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const hasAny = Boolean(
-    attribution?.sourceUrl || attribution?.creator || attribution?.license,
-  )
+  // Read-only images with nothing recorded get a friendly note instead of
+  // a list of empty rows.
+  const hasAny = FIELDS.some(f => attribution?.[f.key])
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault()
-    onSave({
-      sourceUrl: sourceUrl.trim() || undefined,
-      creator: creator.trim() || undefined,
-      license: license.trim() || undefined,
-    })
+    const cleaned: ImageAttribution = {}
+    for (const { key } of FIELDS) {
+      cleaned[key] = form[key]?.trim() || undefined
+    }
+    onSave(cleaned)
   }
-
-  const field = (
-    label: string,
-    value: string,
-    setValue: (v: string) => void,
-    placeholder: string,
-  ) => (
-    <label className="flex flex-col gap-1 text-sm text-slate-700">
-      {label}
-      <input
-        value={value}
-        onChange={e => setValue(e.target.value)}
-        placeholder={placeholder}
-        className="rounded-md border border-slate-300 px-3 py-2"
-      />
-    </label>
-  )
 
   return (
     <Portal>
@@ -101,7 +103,7 @@ export default function ImageAttributionDialog({
           role="dialog"
           aria-modal="true"
           aria-label="Image details"
-          className="relative w-full max-w-sm rounded-lg bg-white p-6 shadow-xl"
+          className="relative max-h-[85vh] w-full max-w-sm overflow-y-auto rounded-lg bg-white p-6 shadow-xl"
         >
           <header className="mb-4 flex items-start justify-between">
             <h2 className="text-lg font-bold">Image details</h2>
@@ -116,9 +118,22 @@ export default function ImageAttributionDialog({
 
           {editable ? (
             <form onSubmit={onSubmit} className="flex flex-col gap-3">
-              {field('Source', sourceUrl, setSourceUrl, 'https://…')}
-              {field('Credit', creator, setCreator, 'Author or creator')}
-              {field('License', license, setLicense, 'e.g. CC BY 4.0')}
+              {FIELDS.map(({ key, label, placeholder }) => (
+                <label
+                  key={key}
+                  className="flex flex-col gap-1 text-sm text-slate-700"
+                >
+                  {label}
+                  <input
+                    value={form[key] ?? ''}
+                    onChange={e =>
+                      setForm(prev => ({ ...prev, [key]: e.target.value }))
+                    }
+                    placeholder={placeholder}
+                    className="rounded-md border border-slate-300 px-3 py-2"
+                  />
+                </label>
+              ))}
               <div className="mt-2 flex justify-end gap-2">
                 <button
                   type="button"
@@ -137,9 +152,9 @@ export default function ImageAttributionDialog({
             </form>
           ) : hasAny ? (
             <div className="flex flex-col gap-3">
-              <ReadRow label="Source" value={attribution?.sourceUrl} />
-              <ReadRow label="Credit" value={attribution?.creator} />
-              <ReadRow label="License" value={attribution?.license} />
+              {FIELDS.map(({ key, label }) => (
+                <ReadRow key={key} label={label} value={attribution?.[key]} />
+              ))}
             </div>
           ) : (
             <p className="text-sm text-slate-500">

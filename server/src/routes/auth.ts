@@ -157,10 +157,12 @@ authRouter.get('/google/start', (req, res) => {
  * user in; on any failure it lands on /login with an error code.
  */
 authRouter.get('/google/callback', async (req, res) => {
-  // User-facing landings and the OAuth token exchange share one origin, so
-  // the redirect_uri here matches the one registered with Google.
+  // The token exchange stays on `origin` (matches the registered redirect_uri),
+  // but user-facing landings go to the SPA origin — in dev the app runs on
+  // Vite (CLIENT_APP_URL), not the API port.
   const origin = requestOrigin(req)
-  const fail = (code: string) => res.redirect(`${origin}/login?error=${code}`)
+  const landing = env.CLIENT_APP_URL ?? origin
+  const fail = (code: string) => res.redirect(`${landing}/login?error=${code}`)
 
   const { code, state } = req.query
   const cookieState = req.cookies?.[OAUTH_STATE_COOKIE]
@@ -176,6 +178,12 @@ authRouter.get('/google/callback', async (req, res) => {
     !cookieState ||
     state !== cookieState
   ) {
+    console.warn('Google sign-in: state check failed', {
+      hasCode: typeof code === 'string',
+      hasState: typeof state === 'string',
+      hasCookie: Boolean(cookieState),
+      stateMatch: state === cookieState,
+    })
     return fail('google_auth_failed')
   }
 
@@ -184,8 +192,9 @@ authRouter.get('/google/callback', async (req, res) => {
     const result = await authService.loginWithGoogle(profile)
     setRefreshCookie(res, result.refreshRaw)
     // The SPA boots, its silent refresh reads the cookie, and the user is in
-    res.redirect(`${origin}/app`)
-  } catch {
+    res.redirect(`${landing}/app`)
+  } catch (err) {
+    console.warn('Google sign-in: exchange/login failed:', err)
     fail('google_auth_failed')
   }
 })

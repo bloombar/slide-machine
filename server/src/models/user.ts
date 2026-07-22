@@ -18,6 +18,14 @@ export interface UserDb extends Omit<User, 'id' | 'createdAt'> {
   // (AUTH-1). Kept out of the shared User type so it never crosses the
   // wire — it is an internal identity link, not client-facing.
   googleId?: string
+  // Whether the user has connected a Google account with Drive/Forms access
+  // for quiz publishing (EXP-4). Set in both mock and live modes. Internal,
+  // never sent to the client.
+  googleConnected?: boolean
+  // The connected account's Google refresh token, encrypted at rest (P-9).
+  // Present only in live mode after a successful connect. Never leaves the
+  // server except as an authorized client injected into the Quiz Generator.
+  googleQuizRefreshToken?: string
 }
 
 const userSchema = new Schema<UserDb>(
@@ -34,6 +42,9 @@ const userSchema = new Schema<UserDb>(
     // Sparse + unique: at most one account per Google identity, but the
     // many password-only users share the absent value without colliding
     googleId: { type: String, unique: true, sparse: true },
+    googleConnected: { type: Boolean, default: false },
+    // Encrypted (never selected by default, so it can't leak via list queries)
+    googleQuizRefreshToken: { type: String, select: false },
     emailVerified: { type: Boolean, default: false },
     profileVisibility: {
       type: String,
