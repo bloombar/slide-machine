@@ -10,7 +10,7 @@ import { Menu, LogOut, LogIn } from 'lucide-react'
 import { useAuth } from '../../auth/AuthContext'
 import { useIsAdmin } from '../../hooks/useIsAdmin'
 
-/** Admin entry, mounted only while the dropdown is open so the status
+/** Admin entries, mounted only while the dropdown is open so the status
  * check fires at most once per session and only for users who open the
  * menu; non-admins render nothing. */
 function AdminMenuItem({
@@ -23,14 +23,24 @@ function AdminMenuItem({
   const isAdmin = useIsAdmin()
   if (!isAdmin) return null
   return (
-    <Link
-      to="/app/admin"
-      role="menuitem"
-      onClick={onNavigate}
-      className={className}
-    >
-      Admin
-    </Link>
+    <>
+      <Link
+        to="/app/admin"
+        role="menuitem"
+        onClick={onNavigate}
+        className={className}
+      >
+        Admin
+      </Link>
+      <Link
+        to="/app/admin/logs"
+        role="menuitem"
+        onClick={onNavigate}
+        className={className}
+      >
+        Admin logs
+      </Link>
+    </>
   )
 }
 

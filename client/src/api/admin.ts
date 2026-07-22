@@ -3,8 +3,13 @@
  * server/src/routes/admin.ts (the server is the source of truth); move
  * both into the shared workspace once the admin surface is wired in.
  */
-import type { Project, SafeUser, Visibility } from '@slide-machine/shared'
-import { apiFetch } from './http'
+import type {
+  AdminLogsResponse,
+  Project,
+  SafeUser,
+  Visibility,
+} from '@slide-machine/shared'
+import { apiFetch, apiFetchBlob } from './http'
 
 /** One row of the admin user directory. */
 export interface AdminUserSummary {
@@ -75,3 +80,18 @@ export const fetchAdminUserDecks = (
   userId: string,
 ): Promise<{ decks: AdminDeckSummary[] }> =>
   apiFetch<{ decks: AdminDeckSummary[] }>(`/api/admin/users/${userId}/decks`)
+
+/** Selectable audit-log page sizes; same cap as the user directory. */
+export const ADMIN_LOGS_PAGE_SIZES = ADMIN_USERS_PAGE_SIZES
+export const ADMIN_LOGS_PAGE_SIZE = 25
+
+/** Newest-first page of the admin action audit log. */
+export const listAdminLogs = (
+  page = 1,
+  limit: number = ADMIN_LOGS_PAGE_SIZE,
+): Promise<AdminLogsResponse> =>
+  apiFetch<AdminLogsResponse>(`/api/admin/logs?page=${page}&limit=${limit}`)
+
+/** The full audit log as a CSV blob, for a client-side download. */
+export const downloadAdminLogsCsv = (): Promise<Blob> =>
+  apiFetchBlob('/api/admin/logs/export')

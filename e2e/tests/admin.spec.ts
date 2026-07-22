@@ -1,8 +1,9 @@
 /**
  * E2E admin interface journey against the built app: a regular user
- * never sees the admin entry and is bounced from /app/admin; the
- * allowlisted admin (ADMIN_EMAILS in playwright.config.ts) reaches the
- * user directory from the menu and drills into a user's projects.
+ * never sees the admin entries and is bounced from /app/admin and
+ * /app/admin/logs; the allowlisted admin (ADMIN_EMAILS in
+ * playwright.config.ts) reaches the user directory from the menu,
+ * drills into a user's projects, and exports the audit log as CSV.
  */
 import { test, expect, type Page } from '@playwright/test'
 import { createProject } from './helpers'
@@ -50,6 +51,9 @@ test('a regular user has no admin entry and is bounced from /app/admin', async (
 
   await page.goto('/app/admin')
   await expect(page).toHaveURL(/\/app$/)
+
+  await page.goto('/app/admin/logs')
+  await expect(page).toHaveURL(/\/app$/)
 })
 
 test('the allowlisted admin reaches the directory and a user drill-down', async ({
@@ -58,7 +62,7 @@ test('the allowlisted admin reaches the directory and a user drill-down', async 
   await ensureSignedIn(page, admin)
 
   await page.getByRole('button', { name: 'Menu' }).click()
-  await page.getByRole('menuitem', { name: 'Admin' }).click()
+  await page.getByRole('menuitem', { name: 'Admin', exact: true }).click()
   await expect(page).toHaveURL(/\/app\/admin$/)
 
   // The directory offers a configurable page size.
@@ -76,4 +80,31 @@ test('the allowlisted admin reaches the directory and a user drill-down', async 
 
   await page.getByText('Admin E2E Project').click()
   await expect(page.getByText('No lectures.')).toBeVisible()
+})
+
+test('the admin reaches the audit log and downloads the CSV export', async ({
+  page,
+}) => {
+  await ensureSignedIn(page, admin)
+
+  await page.getByRole('button', { name: 'Menu' }).click()
+  await page.getByRole('menuitem', { name: 'Admin logs' }).click()
+  await expect(page).toHaveURL(/\/app\/admin\/logs$/)
+  await expect(page.getByRole('heading', { name: /Audit log/ })).toBeVisible()
+
+  // Nothing in-app writes to the log yet (no admin mutations exist), but
+  // the test DB is shared with the integration suite, which may leave
+  // entries behind — so assert the table renders either rows or the
+  // empty state rather than assuming emptiness
+  await expect(
+    page.getByRole('row', { name: 'Time Admin Action Target Details' }),
+  ).toBeVisible()
+  const rows = page.getByRole('table').getByRole('row')
+  // Header plus at least one body row (an entry or the empty-state row)
+  expect(await rows.count()).toBeGreaterThanOrEqual(2)
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Download CSV' }).click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toBe('admin-audit-log.csv')
 })

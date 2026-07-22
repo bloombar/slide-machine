@@ -63,6 +63,12 @@ export default function AdminUsersPage() {
           </span>
         </h1>
         <div className="flex items-center gap-4">
+          <Link
+            to="/app/admin/logs"
+            className="text-sm text-slate-600 hover:underline"
+          >
+            Audit log
+          </Link>
           <label className="flex items-center gap-2 text-sm text-slate-600">
             Per page
             <select
