@@ -48,6 +48,23 @@ account or content — the router exposes only reads. Any operator-initiated
 change is a **direct database operation** today (see below); use the
 console to *find* the record, then act out of band.
 
+### Audit log (`/app/admin/logs`)
+
+The audit log records admin actions that change or expose user data. Each
+entry holds the acting admin (id + email snapshot), a namespaced action
+name (`user.delete`, `deck.delete`, …), an optional target (type + id),
+optional action-specific details, and a timestamp. The page lists entries
+newest first, paginated, with a **Download CSV** button that exports the
+whole log.
+
+Entries are **append-only**: they are written through one server module
+([server/src/audit/log.ts](../server/src/audit/log.ts)) into the
+`adminactionlogs` Mongo collection, and no API can edit or delete them.
+**Nothing writes to the log yet** — the console is still read-only, so the
+log fills in as admin mutation features land. It is the durable audit
+trail; a local CSV would not survive an App Platform redeploy, which is
+why the CSV is an on-demand export rather than the store.
+
 ## Changing how the app behaves
 
 Most behavior is set by environment variables, not code — full annotated
@@ -133,4 +150,9 @@ MongoDB today. It's an escape hatch:
 
 If a class of action becomes routine (bulk moderation, account deletion),
 that's the signal to add a real mutation endpoint behind `requireAdmin`
-with an audit trail rather than growing a habit of hand edits.
+rather than growing a habit of hand edits. The audit trail for that
+already exists: every admin mutation endpoint must record itself by
+calling `logAdminAction`
+([server/src/audit/log.ts](../server/src/audit/log.ts)), which feeds the
+console's audit log page. Hand edits made directly against MongoDB bypass
+it — one more reason to prefer real endpoints.
