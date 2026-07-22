@@ -1,6 +1,8 @@
 /**
- * Admin API: the read-only user directory (each user's projects and
- * lectures) plus the admin action audit log and its CSV export. Every
+ * Admin API: the user directory (each user's projects and lectures),
+ * the admin action audit log with its CSV export, and the moderation
+ * endpoints (delete user/project/lecture, ban an email, reset a
+ * password) — every mutation records itself in the audit log. Every
  * route is guarded inside the router by requireAuth + requireAdmin
  * (ADMIN_EMAILS allowlist), so mounting it is safe on its own. Intended
  * mount point: /api/admin — see docs/ADMINISTRATION.md.
@@ -27,7 +29,17 @@ import {
   AdminActionLogModel,
   toAdminLogEntryDto,
 } from '../models/admin-action-log'
+import { BannedEmailModel, isEmailBanned } from '../models/banned-email'
 import { csvRow } from '../audit/csv'
+import { logAdminAction } from '../audit/log'
+import {
+  deleteDeckCascade,
+  deleteProjectCascade,
+  deleteUserCascade,
+} from '../lib/cascade'
+import { revokeAllSessions } from '../auth/refresh-store'
+import { hashPassword } from '../auth/password'
+import { isAdminEmail } from '../config/admin'
 import type { ResolvedAcl } from '../lib/access'
 import { requireAuth } from '../middleware/auth'
 import { requireAdmin } from '../middleware/admin'
@@ -54,6 +66,8 @@ export interface AdminUserDetailResponse {
   user: SafeUser
   projectCount: number
   deckCount: number
+  /** Whether the account's email is on the banned list. */
+  banned: boolean
 }
 
 export interface AdminUserProjectsResponse {
@@ -245,15 +259,17 @@ adminRouter.get('/logs/export', async (_req, res) => {
 
 adminRouter.get('/users/:id', async (req, res) => {
   const user = await loadUser(String(req.params.id))
-  const [projectCount, deckCount] = await Promise.all([
+  const [projectCount, deckCount, banned] = await Promise.all([
     ProjectModel.countDocuments({ ownerId: user._id }),
     DeckModel.countDocuments({ ownerId: user._id }),
+    isEmailBanned(user.email),
   ])
 
   const body: AdminUserDetailResponse = {
     user: toUserDto(user),
     projectCount,
     deckCount,
+    banned,
   }
   res.json(body)
 })
@@ -291,4 +307,157 @@ adminRouter.get('/users/:id/decks', async (req, res) => {
     ),
   }
   res.json(body)
+})
+
+// ---------------------------------------------------------------------------
+// Moderation endpoints. Every mutation below records itself in the admin
+// action log (audit/log.ts) before responding; the allowlist gate on the
+// router is the authorization. All respond 204 on success.
+
+/** The acting admin, guaranteed by requireAdmin on this router. */
+const actor = (req: { adminUser?: { id: string; email: string } }) => {
+  const admin = req.adminUser
+  if (!admin) throw new HttpError(403, 'forbidden', 'Admin access required')
+  return admin
+}
+
+/** Admin accounts moderate; they are not moderated. Deleting, banning,
+ * or resetting an allowlisted account (including yourself) is refused —
+ * it would be a lockout, not moderation. */
+const rejectAdminTarget = (email: string) => {
+  if (isAdminEmail(email)) {
+    throw new HttpError(
+      400,
+      'target_is_admin',
+      'Admin accounts cannot be moderated; remove the email from ADMIN_EMAILS first',
+    )
+  }
+}
+
+adminRouter.delete('/users/:id', async (req, res) => {
+  const user = await loadUser(String(req.params.id))
+  const admin = actor(req)
+  rejectAdminTarget(user.email)
+
+  await deleteUserCascade(user._id.toString())
+  await logAdminAction({
+    actorId: admin.id,
+    actorEmail: admin.email,
+    action: 'user.delete',
+    targetType: 'user',
+    targetId: user._id.toString(),
+    details: { email: user.email },
+  })
+  res.status(204).end()
+})
+
+const banBodySchema = z.object({
+  reason: z.string().trim().max(500).optional(),
+})
+
+adminRouter.post('/users/:id/ban', async (req, res) => {
+  const user = await loadUser(String(req.params.id))
+  const admin = actor(req)
+  rejectAdminTarget(user.email)
+  const parsed = banBodySchema.safeParse(req.body ?? {})
+  if (!parsed.success) {
+    throw new HttpError(400, 'invalid_input', 'Invalid ban request')
+  }
+
+  // Upsert keeps the endpoint idempotent; the first ban's reason wins
+  await BannedEmailModel.updateOne(
+    { email: user.email },
+    {
+      $setOnInsert: {
+        email: user.email,
+        bannedBy: admin.id,
+        reason: parsed.data.reason,
+      },
+    },
+    { upsert: true },
+  )
+  await revokeAllSessions(user._id.toString())
+  await logAdminAction({
+    actorId: admin.id,
+    actorEmail: admin.email,
+    action: 'user.ban_email',
+    targetType: 'user',
+    targetId: user._id.toString(),
+    details: { email: user.email, reason: parsed.data.reason },
+  })
+  res.status(204).end()
+})
+
+const passwordBodySchema = z.object({
+  // Same floor as registration (routes/auth.ts registerSchema)
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+})
+
+adminRouter.post('/users/:id/password', async (req, res) => {
+  const user = await loadUser(String(req.params.id))
+  const admin = actor(req)
+  rejectAdminTarget(user.email)
+  const parsed = passwordBodySchema.safeParse(req.body)
+  if (!parsed.success) {
+    throw new HttpError(
+      400,
+      'invalid_input',
+      'Invalid password',
+      parsed.error.issues.map(i => i.message),
+    )
+  }
+
+  user.passwordHash = await hashPassword(parsed.data.password)
+  await user.save()
+  // Old sessions die with the old password
+  await revokeAllSessions(user._id.toString())
+  await logAdminAction({
+    actorId: admin.id,
+    actorEmail: admin.email,
+    action: 'user.password_reset',
+    targetType: 'user',
+    targetId: user._id.toString(),
+    details: { email: user.email },
+  })
+  res.status(204).end()
+})
+
+adminRouter.delete('/projects/:id', async (req, res) => {
+  const notFound = new HttpError(404, 'not_found', 'Project not found')
+  const id = String(req.params.id)
+  if (!isValidObjectId(id)) throw notFound
+  const project = await ProjectModel.findById(id)
+  if (!project) throw notFound
+  const admin = actor(req)
+
+  await deleteProjectCascade(project._id)
+  await logAdminAction({
+    actorId: admin.id,
+    actorEmail: admin.email,
+    action: 'project.delete',
+    targetType: 'project',
+    targetId: project._id.toString(),
+    details: { title: project.title, ownerId: project.ownerId.toString() },
+  })
+  res.status(204).end()
+})
+
+adminRouter.delete('/decks/:id', async (req, res) => {
+  const notFound = new HttpError(404, 'not_found', 'Lecture not found')
+  const id = String(req.params.id)
+  if (!isValidObjectId(id)) throw notFound
+  const deck = await DeckModel.findById(id)
+  if (!deck) throw notFound
+  const admin = actor(req)
+
+  await deleteDeckCascade(deck)
+  await logAdminAction({
+    actorId: admin.id,
+    actorEmail: admin.email,
+    action: 'deck.delete',
+    targetType: 'deck',
+    targetId: deck._id.toString(),
+    details: { title: deck.title, ownerId: deck.ownerId.toString() },
+  })
+  res.status(204).end()
 })
