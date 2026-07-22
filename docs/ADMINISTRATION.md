@@ -30,8 +30,8 @@ list short — an allowlisted account can read every user's data.
 
 ## The admin console (`/app/admin`)
 
-Read-only. It answers "who is using this and what have they made," not
-"change something."
+It answers "who is using this and what have they made," and carries the
+moderation actions for when the answer calls for one.
 
 - **User directory** — every account (email, handle, join date), paginated
   (10 / 25 / 50 / 100 per page) and sortable (newest, oldest, email A–Z).
@@ -43,10 +43,30 @@ Read-only. It answers "who is using this and what have they made," not
   (`/d/:slug`). Lectures the user owns inside someone else's project are
   grouped under "Other lectures."
 
-The console has no action to edit, suspend, or delete another user's
-account or content — the router exposes only reads. Any operator-initiated
-change is a **direct database operation** today (see below); use the
-console to *find* the record, then act out of band.
+### Moderation
+
+The user drill-down carries the mutation surface; every action asks for
+confirmation, is recorded in the audit log, and — except the password
+reset — cannot be undone from the app:
+
+- **Delete a project / lecture** — per-row Delete buttons. Cascades
+  through everything underneath: lectures, slides, seed material and its
+  stored files, transcripts, refine jobs, and retained recordings.
+- **Reset password** (danger zone) — sets a new password (min 8 chars)
+  and signs the user out everywhere. Tell the user their new password out
+  of band; the app does not email it.
+- **Ban email** (danger zone) — the email can no longer sign in (password
+  or Google) or register, and every session ends now. Content stays until
+  deleted separately; the account row shows a **Banned** badge. Unbanning
+  is a direct database operation: remove the row from `bannedemails`.
+- **Delete user** (danger zone) — deletes the account and all of its
+  data: their projects (and everything in them), lectures they own inside
+  other users' projects, their id in other users' sharing lists, and all
+  sessions. The audit log keeps its entries about them.
+
+Admin accounts moderate; they are not moderated: any of these against an
+allowlisted email (including your own) is refused with `target_is_admin`
+until the email is removed from `ADMIN_EMAILS`.
 
 ### Audit log (`/app/admin/logs`)
 
@@ -60,10 +80,11 @@ whole log.
 Entries are **append-only**: they are written through one server module
 ([server/src/audit/log.ts](../server/src/audit/log.ts)) into the
 `adminactionlogs` Mongo collection, and no API can edit or delete them.
-**Nothing writes to the log yet** — the console is still read-only, so the
-log fills in as admin mutation features land. It is the durable audit
-trail; a local CSV would not survive an App Platform redeploy, which is
-why the CSV is an on-demand export rather than the store.
+Every moderation action writes one (`user.delete`, `user.ban_email`,
+`user.password_reset`, `project.delete`, `deck.delete`). It is the
+durable audit trail; a local CSV would not survive an App Platform
+redeploy, which is why the CSV is an on-demand export rather than the
+store.
 
 ## Changing how the app behaves
 
@@ -114,7 +135,9 @@ project or lecture in the app cascades its stored files.
 ## Accounts and authentication
 
 - **Password reset / email verification** are user self-service and need
-  SMTP configured (`SMTP_*`); there is no admin "set this password" action.
+  SMTP configured (`SMTP_*`). An admin can also set a user's password from
+  the console's danger zone (see Moderation above); it signs the user out
+  everywhere and is recorded in the audit log.
 - **Rotating auth secrets** logs users out: changing `JWT_REFRESH_SECRET`
   invalidates every refresh token (all users out on next refresh) — do it
   deliberately, e.g. a suspected leak. Rotating `JWT_SECRET` only affects
@@ -136,23 +159,26 @@ project or lecture in the app cascades its stored files.
 
 ## Direct database operations
 
-Anything the console can't do — moderating content, deleting/merging
-accounts, correcting data, changing a `planTier` — is done directly against
-MongoDB today. It's an escape hatch:
+Anything the console can't do — merging accounts, correcting data,
+changing a `planTier`, lifting a ban — is done directly against MongoDB.
+It's an escape hatch:
 
-- Prefer the app's own cascades: deleting a **project** in-app removes its
-  decks, slides, and seed files (including stored objects); a raw
-  `deleteOne` orphans them.
+- Prefer the console's own actions where they exist (delete user /
+  project / lecture, ban, password reset): they cascade through stored
+  files and land in the audit log; a raw `deleteOne` orphans data and
+  leaves no trace.
 - Snapshot (Atlas) before a bulk or destructive change.
-- Collections `users`, `projects`, `decks`, `slides`, `seedassets` map to
+- Collections `users`, `projects`, `decks`, `slides`, `seedassets`,
+  `bannedemails` map to
   [server/src/models/](../server/src/models/); find ids via the console
   first.
 
-If a class of action becomes routine (bulk moderation, account deletion),
-that's the signal to add a real mutation endpoint behind `requireAdmin`
-rather than growing a habit of hand edits. The audit trail for that
-already exists: every admin mutation endpoint must record itself by
-calling `logAdminAction`
+If a class of action becomes routine, that's the signal to add a real
+mutation endpoint behind `requireAdmin` rather than growing a habit of
+hand edits. Every admin mutation endpoint must record itself by calling
+`logAdminAction`
 ([server/src/audit/log.ts](../server/src/audit/log.ts)), which feeds the
-console's audit log page. Hand edits made directly against MongoDB bypass
-it — one more reason to prefer real endpoints.
+console's audit log page — the existing moderation endpoints in
+[server/src/routes/admin.ts](../server/src/routes/admin.ts) are the
+pattern to copy. Hand edits made directly against MongoDB bypass the log
+— one more reason to prefer real endpoints.
