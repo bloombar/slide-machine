@@ -89,14 +89,13 @@ import { registry } from '../providers/registry'
 import { permalinkSlug } from '../lib/slug'
 import { enrichSlideImage } from '../enrichment/enrich'
 import type { SlideImageContext } from '../enrichment/types'
-import { SeedAssetModel } from '../models/seed-asset'
 import {
   seedAssetsFor,
   seededAttribution,
   seededImageCandidates,
   type SeedAssetDoc,
 } from '../lib/seed-assets'
-import { getStorage } from '../storage'
+import { deleteDeckCascade } from '../lib/cascade'
 import { env } from '../config/env'
 import type {
   ImageGuidance,
@@ -1198,23 +1197,9 @@ export const deckDelete = defineAction<DeckDeleteInput, { deleted: true }>({
     const deck = await loadOwnedDeck(ctx, input.deckId)
 
     // Cascade: slides, lecture-level seed assets (and their stored
-    // files), then the deck itself
-    const assets = await SeedAssetModel.find({ deckId: deck._id })
-    const storage = getStorage()
-    await Promise.all(
-      assets
-        .filter(a => a.storageKey)
-        .map(a =>
-          storage.delete(a.storageKey!).catch(() => {
-            // A dangling file is preferable to a failed delete
-          }),
-        ),
-    )
-    await Promise.all([
-      SlideModel.deleteMany({ deckId: deck._id }),
-      SeedAssetModel.deleteMany({ deckId: deck._id }),
-    ])
-    await deck.deleteOne()
+    // files), transcripts, refine jobs, retained recordings, then the
+    // deck itself
+    await deleteDeckCascade(deck)
     return { deleted: true }
   },
 })
