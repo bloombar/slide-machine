@@ -113,6 +113,25 @@ describe('WhiteboardToolbar', () => {
     expect(swatches[1]!.getAttribute('aria-pressed')).toBe('true')
   })
 
+  it('toggles the picker when the corner triangle is clicked directly', () => {
+    render(<Harness />)
+    const penHint = () =>
+      screen.getAllByRole('button', { name: 'Color and stroke options' })[0]!
+    expect(
+      screen.getAllByRole('button', { name: 'Color and stroke options' }),
+    ).toHaveLength(2) // pen + highlighter
+    // First click selects the pen and opens its picker (no toggle-off).
+    fireEvent.click(penHint())
+    expect(
+      screen.getByRole('dialog', { name: /pen color and thickness/i }),
+    ).toBeVisible()
+    expect(isActive('Pen')).toBe(true)
+    // Clicking the triangle again closes it; the pen stays selected.
+    fireEvent.click(penHint())
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(isActive('Pen')).toBe(true)
+  })
+
   it('treats a quick press as a tool selection, no popover', () => {
     render(<Harness />)
     const pen = toolBtn('Pen')

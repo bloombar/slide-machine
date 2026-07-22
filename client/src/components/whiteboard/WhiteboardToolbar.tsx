@@ -75,6 +75,34 @@ const clampToViewport = (point: Point, size: DOMRect): Point => {
   }
 }
 
+/** Small corner triangle marking a tool that reveals more on press-and-hold
+ * (its color/thickness picker). Clicking the triangle directly TOGGLES the same
+ * picker, without the hold. Propagation is stopped so the parent button's own
+ * click/hold don't fire, and — since the picker closes on an outside mousedown —
+ * so a toggle-close isn't undone by that outside-close. The button keeps its
+ * own label. */
+const HoldHint = ({ onToggle }: { onToggle: () => void }) => (
+  <span
+    aria-label="Color and stroke options"
+    role="button"
+    onPointerDown={e => e.stopPropagation()}
+    onMouseDown={e => e.stopPropagation()}
+    onClick={e => {
+      e.stopPropagation()
+      onToggle()
+    }}
+    className="absolute bottom-0 right-0 flex h-3 w-3 cursor-pointer items-end justify-end"
+  >
+    <svg
+      viewBox="0 0 4 4"
+      aria-hidden
+      className="h-1.5 w-1.5 fill-current opacity-50"
+    >
+      <polygon points="4,0 4,4 0,4" />
+    </svg>
+  </span>
+)
+
 /** Initial position: just left of the first slide, top-aligned with it. Falls
  * back to a top-left perch before slides have laid out. */
 const defaultPosition = (pill: DOMRect): Point => {
@@ -208,9 +236,17 @@ export default function WhiteboardToolbar({
     }
     toggleTool(kind)
   }
+  // The corner-triangle shortcut: toggle the tool's color/thickness picker.
+  // Opening it also selects the tool (like a press-and-hold); closing leaves
+  // the tool as-is.
+  const togglePicker = (kind: 'pen' | 'highlighter') => {
+    const willOpen = picker !== kind
+    if (willOpen) setTool(kind)
+    setPicker(willOpen ? kind : null)
+  }
 
   const buttonClass = (kind: 'pen' | 'highlighter' | 'eraser'): string =>
-    `rounded-md p-2 ${
+    `relative rounded-md p-2 ${
       tool === kind
         ? 'bg-indigo-50 text-indigo-600'
         : 'text-slate-500 hover:text-slate-900'
@@ -254,6 +290,7 @@ export default function WhiteboardToolbar({
               onClick={() => handleToolClick('pen')}
             >
               <Pen className="h-5 w-5" aria-hidden />
+              <HoldHint onToggle={() => togglePicker('pen')} />
             </button>
           </Tooltip>
           {picker === 'pen' && (
@@ -279,6 +316,7 @@ export default function WhiteboardToolbar({
               onClick={() => handleToolClick('highlighter')}
             >
               <Highlighter className="h-5 w-5" aria-hidden />
+              <HoldHint onToggle={() => togglePicker('highlighter')} />
             </button>
           </Tooltip>
           {picker === 'highlighter' && (
