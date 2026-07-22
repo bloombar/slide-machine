@@ -25,6 +25,14 @@ const VOCABULARY: Record<VoiceCommand, string[]> = {
   previous: ['previous slide', 'previous', 'back', 'go back', 'rewind'],
   pause: ['pause', 'stop', 'stop listening'],
   newSlide: ['new slide', 'add slide', 'add a slide', 'blank slide'],
+  newWhiteboardSlide: [
+    'new whiteboard',
+    'new whiteboard slide',
+    'whiteboard',
+    'new chalkboard',
+    'chalkboard',
+    'blank whiteboard',
+  ],
 }
 
 /** Human label for on-screen feedback. */
@@ -33,6 +41,7 @@ export const COMMAND_LABELS: Record<VoiceCommand, string> = {
   previous: 'Previous slide',
   pause: 'Paused listening',
   newSlide: 'New slide',
+  newWhiteboardSlide: 'New whiteboard',
 }
 
 const normalize = (text: string): string =>

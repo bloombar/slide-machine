@@ -51,6 +51,9 @@ const COMMAND_INTENTS: Record<string, VoiceCommand> = {
   'stop listening': 'pause',
   'new slide': 'newSlide',
   'blank slide': 'newSlide',
+  'new whiteboard': 'newWhiteboardSlide',
+  'new whiteboard slide': 'newWhiteboardSlide',
+  'new chalkboard': 'newWhiteboardSlide',
 }
 
 /** The offered command matching "please …", if any. */
@@ -247,7 +250,11 @@ export class MockGenerationProvider implements GenerationProvider {
       const base = prior.startsWith(prefix) ? prior : `${prefix}${prior}`
       return { transcript: `${base} (refined)` }
     }
-    const content = [req.slide.title, req.slide.body, ...(req.slide.bullets ?? [])]
+    const content = [
+      req.slide.title,
+      req.slide.body,
+      ...(req.slide.bullets ?? []),
+    ]
       .filter(Boolean)
       .join('. ')
     return { transcript: `${prefix}${content}`.trim() }

@@ -7,7 +7,13 @@
  * instead of lecture content.
  */
 
-export const VOICE_COMMANDS = ['next', 'previous', 'pause', 'newSlide'] as const
+export const VOICE_COMMANDS = [
+  'next',
+  'previous',
+  'pause',
+  'newSlide',
+  'newWhiteboardSlide',
+] as const
 
 export type VoiceCommand = (typeof VOICE_COMMANDS)[number]
 
@@ -23,6 +29,10 @@ export const VOICE_COMMAND_DESCRIPTORS: VoiceCommandDescriptor[] = [
   { id: 'previous', description: 'Go back to the previous slide' },
   { id: 'pause', description: 'Pause the session and stop listening' },
   { id: 'newSlide', description: 'Append a new blank slide' },
+  {
+    id: 'newWhiteboardSlide',
+    description: 'Append a new blank whiteboard slide to draw on',
+  },
 ]
 
 /** Type guard for command ids arriving from the model or the wire. */

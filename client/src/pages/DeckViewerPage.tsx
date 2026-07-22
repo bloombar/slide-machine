@@ -773,6 +773,9 @@ export default function DeckViewerPage() {
       stopListening()
     } else if (command === 'newSlide') {
       void addSlide()
+    } else if (command === 'newWhiteboardSlide') {
+      // Same as the whiteboard toolbar's new-slide button: blank canvas + pen.
+      void addWhiteboardSlide()
     }
     // Brief on-screen echo of the interpreted command
     setInterim(`✓ ${COMMAND_LABELS[command]}`)

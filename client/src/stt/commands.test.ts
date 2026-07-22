@@ -16,6 +16,12 @@ describe('matchVoiceCommand', () => {
     expect(matchVoiceCommand('slide machine stop listening')).toBe('pause')
     expect(matchVoiceCommand('slide machine new slide')).toBe('newSlide')
     expect(matchVoiceCommand('slide machine, add a slide')).toBe('newSlide')
+    expect(matchVoiceCommand('slide machine, new whiteboard')).toBe(
+      'newWhiteboardSlide',
+    )
+    expect(matchVoiceCommand('slide machine new chalkboard')).toBe(
+      'newWhiteboardSlide',
+    )
   })
 
   it('requires the wake word — commands without it are lecture content', () => {

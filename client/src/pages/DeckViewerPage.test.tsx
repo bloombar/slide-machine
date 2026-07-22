@@ -726,6 +726,59 @@ describe('DeckViewerPage microphone capture', () => {
     expect(addCalls).toBe(1)
   })
 
+  it('creates a whiteboard slide on a "new whiteboard" voice command', async () => {
+    FakeRecognition.reset()
+    vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
+    let addBody: Record<string, unknown> | null = null
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+      '/api/actions/slide.add': init => {
+        addBody = JSON.parse(String(init?.body)) as Record<string, unknown>
+        return {
+          status: 200,
+          body: {
+            id: 's3',
+            deckId: 'deck1',
+            index: 2,
+            layoutType: 'whiteboard',
+          },
+        }
+      },
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Live session' }))
+    const recognition = FakeRecognition.last!
+
+    // The wake-worded command creates a slide with the whiteboard layout —
+    // same as the toolbar's new-whiteboard button.
+    act(() => {
+      recognition.onresult?.({
+        resultIndex: 0,
+        results: [
+          { isFinal: true, 0: { transcript: 'slide machine, new whiteboard' } },
+        ],
+      })
+    })
+    await vi.waitFor(() => expect(addBody).not.toBeNull())
+    expect(addBody!.layoutType).toBe('whiteboard')
+  })
+
   it('pauses generation on a whiteboard slide, resuming only on click', async () => {
     FakeRecognition.reset()
     vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)

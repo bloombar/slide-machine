@@ -116,6 +116,8 @@ describe('session.phrase with GENERATION_VOICE_COMMANDS on', () => {
       ['Please go back', 'previous'],
       ['Please pause', 'pause'],
       ['Please new slide', 'newSlide'],
+      ['Please new whiteboard', 'newWhiteboardSlide'],
+      ['Please new chalkboard', 'newWhiteboardSlide'],
     ] as const) {
       const res = await act(ada, 'session.phrase', { deckId, phrase })
       expect(res.body).toEqual({ kind: 'command', command })

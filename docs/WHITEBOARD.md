@@ -20,8 +20,12 @@ generation interaction.
   ([ColorThicknessPopover](../client/src/components/whiteboard/ColorThicknessPopover.tsx)).
   A small **corner triangle** on those buttons marks the affordance and, clicked
   directly, **toggles** the same picker.
-- **New whiteboard slide** button (square-pen icon) appends a blank
-  [whiteboard-layout](#whiteboard-layout) slide and arms the pen.
+- **New whiteboard slide** — the toolbar's square-pen button, or the voice
+  command "slide machine, new whiteboard" (/ "new chalkboard"), appends a blank
+  [whiteboard-layout](#whiteboard-layout) slide and arms the pen. Both routes
+  are identical; the command follows the CAP-4 pattern (wake-word match +
+  AI-recognized intent), executed in `runVoiceCommand`
+  ([DeckViewerPage](../client/src/pages/DeckViewerPage.tsx)).
 - Default pen/highlighter colors come from the deck's design template theme
   (`penColor`/`highlighterColor`), so marks suit the slides.
 - The drawing surface is one [DrawingLayer](../client/src/components/whiteboard/DrawingLayer.tsx)
