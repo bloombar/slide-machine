@@ -3,10 +3,23 @@
  * (wordsToSpeakerSegments) and its no-op guard when GCS is unconfigured. The
  * live BatchRecognize/GCS round-trip is validated separately on a real run.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+
+// Pin the two env fields the probe reads so a developer's local .env (which may
+// set GCS_AUDIO_BUCKET) can't make these tests non-deterministic; everything
+// else stays real so getStorage and the Google clients behave normally.
+vi.mock('../config/env', async importActual => {
+  const actual = await importActual<typeof import('../config/env')>()
+  return {
+    ...actual,
+    env: { ...actual.env, GCS_AUDIO_BUCKET: undefined, STORAGE_PROVIDER: 'local' },
+  }
+})
+
 import {
   wordsToSpeakerSegments,
   GoogleCloudDiarizationProvider,
+  pingGcsAudioStorage,
 } from './google-cloud-diarization'
 
 /** A protobuf Duration for `seconds` seconds. */
@@ -61,5 +74,16 @@ describe('GoogleCloudDiarizationProvider.diarize', () => {
     expect(
       await provider.diarize({ audioKey: 'audio/x.wav', sampleRate: 16_000 }),
     ).toEqual([])
+  })
+})
+
+describe('pingGcsAudioStorage', () => {
+  it('reports disabled with the storage fallback when no GCS bucket is set', async () => {
+    // No GCS_AUDIO_BUCKET in the test env; the general store is the local disk,
+    // so the health item shows audio stays in local storage rather than GCS.
+    expect(await pingGcsAudioStorage()).toEqual({
+      status: 'disabled',
+      detail: 'local storage',
+    })
   })
 })

@@ -34,6 +34,7 @@ describe('GET /api/health', () => {
     // by local .env, so we don't pin them to a specific status here.)
     expect(res.body.components.mongo).toMatchObject({ status: 'ok' })
     expect(res.body.components).toHaveProperty('storage')
+    expect(res.body.components).toHaveProperty('audioStorage')
     expect(res.body.components).toHaveProperty('gemini')
     expect(res.body.components).toHaveProperty('stt')
     expect(res.body.status).not.toBe('down')

@@ -19,6 +19,9 @@ export interface HealthComponent {
 export interface HealthComponents {
   mongo: HealthComponent
   storage: HealthComponent
+  /** GCS bucket that retained lecture audio is staged in for batch diarization;
+   * `disabled` (falls back to local/blob storage) when no bucket is configured. */
+  audioStorage: HealthComponent
   gemini: HealthComponent
   stt: HealthComponent
   tts: HealthComponent

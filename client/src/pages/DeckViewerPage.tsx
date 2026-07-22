@@ -44,6 +44,7 @@ import { useTimeAgo } from '../hooks/useTimeAgo'
 import { useSlideNavigation } from '../hooks/useSlideNavigation'
 import { useBracketKeys } from '../hooks/useBracketKeys'
 import { useSpaceKey } from '../hooks/useSpaceKey'
+import { useUndoRedoKeys } from '../hooks/useUndoRedoKeys'
 import { createSpeechCapture, type PhraseMeta } from '../stt/capture'
 import {
   COMMAND_LABELS,
@@ -212,6 +213,12 @@ export default function DeckViewerPage() {
   >({})
   // Debounce timers for persisting each slide's drawings after edits.
   const drawingsSaveTimers = useRef<Record<string, number>>({})
+  // Per-slide whiteboard undo/redo history (Cmd/Ctrl-Z). Each entry keeps
+  // snapshots of that slide's `drawings` array before every mark, so undo/redo
+  // only ever affect the slide being drawn on — never text or other slides.
+  const drawingHistory = useRef<
+    Record<string, { undo: Stroke[][]; redo: Stroke[][] }>
+  >({})
   useEffect(
     () => () => {
       originalAudioRef.current?.pause()
@@ -642,6 +649,116 @@ export default function DeckViewerPage() {
     ttsEnabled && (view?.slides.length ?? 0) > 0,
   )
 
+  // --- Whiteboard drawing state (WB-1/WB-2) ---
+  // Defined above the early returns so undo/redo (below) and its keyboard hook
+  // are declared unconditionally (Rules of Hooks). None dereference the
+  // non-null `view` local — they go through setView/viewRef.
+
+  /** Replaces the slide in the local view with a freshly-returned one. */
+  const applySlide = (updated: Slide) => {
+    setView(v =>
+      v
+        ? {
+            ...v,
+            slides: v.slides.map(s => (s.id === updated.id ? updated : s)),
+          }
+        : v,
+    )
+    touchDeckLocally()
+  }
+
+  /** Persists a slide's drawings (debounced), then patches in the saved copy. */
+  const persistDrawings = (slideId: string, drawings: Stroke[]) => {
+    const timers = drawingsSaveTimers.current
+    if (timers[slideId]) window.clearTimeout(timers[slideId])
+    timers[slideId] = window.setTimeout(() => {
+      delete timers[slideId]
+      editSlideDrawings(slideId, drawings)
+        .then(applySlide)
+        .catch(() => {
+          // Quiet: the on-screen drawing stays; a later edit retries the save.
+        })
+    }, 600)
+  }
+
+  /** Applies a change to one slide's drawings locally and schedules a save. */
+  const updateDrawings = (
+    slideId: string,
+    updater: (prev: Stroke[]) => Stroke[],
+  ) => {
+    setView(v => {
+      if (!v) return v
+      let next: Stroke[] | undefined
+      const slides = v.slides.map(s => {
+        if (s.id !== slideId) return s
+        next = updater(s.drawings ?? [])
+        return { ...s, drawings: next }
+      })
+      if (next) persistDrawings(slideId, next)
+      return { ...v, slides }
+    })
+    touchDeckLocally()
+  }
+
+  // --- Whiteboard undo/redo (Cmd/Ctrl-Z, Cmd-Shift-Z, Ctrl-Y) ---
+
+  /** A slide's current drawings, read fresh through the ref. */
+  const currentDrawings = (slideId: string): Stroke[] =>
+    viewRef.current?.slides.find(s => s.id === slideId)?.drawings ?? []
+
+  /**
+   * Snapshots a slide's drawings before a whiteboard mark so it can be undone
+   * (Cmd/Ctrl-Z). Recording a fresh mark clears the redo stack — the usual
+   * undo-history behavior: a new edit forks history.
+   */
+  const recordDrawingHistory = (slideId: string) => {
+    const entry = drawingHistory.current[slideId] ?? { undo: [], redo: [] }
+    entry.undo.push(currentDrawings(slideId))
+    entry.redo = []
+    drawingHistory.current[slideId] = entry
+  }
+
+  /** The slide the whiteboard is editing right now: the displayed slide in
+   * carousel view, the one nearest the viewport center in list view. Undo/redo
+   * act on this slide alone (never text or an off-screen slide). */
+  const activeWhiteboardSlideId = (): string | undefined => {
+    const idx =
+      mode === 'carousel' ? nav.current : (nav.visibleIndex() ?? nav.current)
+    return viewRef.current?.slides[idx]?.id
+  }
+
+  /** Undoes the last whiteboard mark on the active slide; true if it did. */
+  const undoDrawing = (): boolean => {
+    const slideId = activeWhiteboardSlideId()
+    if (!slideId) return false
+    const entry = drawingHistory.current[slideId]
+    if (!entry?.undo.length) return false
+    entry.redo.push(currentDrawings(slideId))
+    const prev = entry.undo.pop()!
+    updateDrawings(slideId, () => prev)
+    return true
+  }
+
+  /** Redoes the last undone whiteboard mark on the active slide; true if it did. */
+  const redoDrawing = (): boolean => {
+    const slideId = activeWhiteboardSlideId()
+    if (!slideId) return false
+    const entry = drawingHistory.current[slideId]
+    if (!entry?.redo.length) return false
+    entry.undo.push(currentDrawings(slideId))
+    const next = entry.redo.pop()!
+    updateDrawings(slideId, () => next)
+    return true
+  }
+
+  // Enabled whenever the deck is editable and has slides to draw on; an empty
+  // history is a no-op that leaves the browser's native Cmd-Z untouched.
+  useUndoRedoKeys(
+    undoDrawing,
+    redoDrawing,
+    Boolean(view?.canEdit) && (view?.slides.length ?? 0) > 0,
+  )
+
   // A voice-setting change should be heard immediately. The server already
   // picks up the new voice on the next synthesis, but the audio now playing was
   // generated in the old voice — so re-trigger the current item instead of
@@ -788,19 +905,6 @@ export default function DeckViewerPage() {
       })
   }
 
-  /** Replaces the slide in the local view with a freshly-returned one. */
-  const applySlide = (updated: Slide) => {
-    setView(v =>
-      v
-        ? {
-            ...v,
-            slides: v.slides.map(s => (s.id === updated.id ? updated : s)),
-          }
-        : v,
-    )
-    touchDeckLocally()
-  }
-
   // --- Whiteboard drawing (WB-1/WB-2) ---
 
   /**
@@ -843,41 +947,10 @@ export default function DeckViewerPage() {
     return { charAnchor: len, source: 'appended' }
   }
 
-  /** Persists a slide's drawings (debounced), then patches in the saved copy. */
-  const persistDrawings = (slideId: string, drawings: Stroke[]) => {
-    const timers = drawingsSaveTimers.current
-    if (timers[slideId]) window.clearTimeout(timers[slideId])
-    timers[slideId] = window.setTimeout(() => {
-      delete timers[slideId]
-      editSlideDrawings(slideId, drawings)
-        .then(applySlide)
-        .catch(() => {
-          // Quiet: the on-screen drawing stays; a later edit retries the save.
-        })
-    }, 600)
-  }
-
-  /** Applies a change to one slide's drawings locally and schedules a save. */
-  const updateDrawings = (
-    slideId: string,
-    updater: (prev: Stroke[]) => Stroke[],
-  ) => {
-    setView(v => {
-      if (!v) return v
-      let next: Stroke[] | undefined
-      const slides = v.slides.map(s => {
-        if (s.id !== slideId) return s
-        next = updater(s.drawings ?? [])
-        return { ...s, drawings: next }
-      })
-      if (next) persistDrawings(slideId, next)
-      return { ...v, slides }
-    })
-    touchDeckLocally()
-  }
-
-  const onCommitStroke = (slideId: string, stroke: Stroke) =>
+  const onCommitStroke = (slideId: string, stroke: Stroke) => {
+    recordDrawingHistory(slideId)
     updateDrawings(slideId, prev => [...prev, stroke])
+  }
 
   /** Whole-stroke erase as a timestamped event: the stroke is kept and stamped
    * with an erase anchor so playback can replay its removal (WB-2). */
@@ -885,7 +958,8 @@ export default function DeckViewerPage() {
     slideId: string,
     strokeId: string,
     anchor: StrokeAnchor,
-  ) =>
+  ) => {
+    recordDrawingHistory(slideId)
     updateDrawings(slideId, prev =>
       prev.map(s =>
         s.id === strokeId && !s.erasedAnchor
@@ -893,6 +967,7 @@ export default function DeckViewerPage() {
           : s,
       ),
     )
+  }
 
   /** Playback visibility for a stroke (WB-2): reveal by its draw anchor and
    * hide again at its erase anchor, in step with the audio position — but

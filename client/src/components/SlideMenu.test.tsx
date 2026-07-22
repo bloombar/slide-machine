@@ -97,4 +97,27 @@ describe('SlideMenu', () => {
       screen.queryByRole('menuitem', { name: 'Delete slide' }),
     ).not.toBeInTheDocument()
   })
+
+  // The open menu must clear the whiteboard drawing overlay (z-20); otherwise
+  // strokes on the slide would render over it.
+  it('rises above the drawing overlay while its menu is open', () => {
+    render(<SlideMenu number={1} onDelete={vi.fn()} />)
+    const wrapper = screen
+      .getByRole('button', { name: 'Options for slide 1' })
+      .closest('div')!
+    // Closed and no active tool: sits in the base (z-10) tier.
+    expect(wrapper.className).toContain('z-10')
+    expect(wrapper.className).not.toContain('z-30')
+    // Opening lifts the whole kebab above the drawing canvas (z-30 > z-20).
+    openMenu(1)
+    expect(wrapper.className).toContain('z-30')
+  })
+
+  it('stays elevated while a drawing tool is active', () => {
+    render(<SlideMenu number={1} onDelete={vi.fn()} elevated />)
+    const wrapper = screen
+      .getByRole('button', { name: 'Options for slide 1' })
+      .closest('div')!
+    expect(wrapper.className).toContain('z-30')
+  })
 })

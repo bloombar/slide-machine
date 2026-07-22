@@ -22,6 +22,7 @@ import type {
   DiarizationInput,
   DiarizationProvider,
   DiarizedSpeakerSegment,
+  HealthComponent,
 } from '@slide-machine/shared'
 import { env } from '../config/env'
 import { getStorage } from '../storage'
@@ -175,6 +176,35 @@ export class GoogleCloudDiarizationProvider implements DiarizationProvider {
       // Best-effort cleanup of the transient GCS copy.
       await file.delete().catch(() => {})
     }
+  }
+}
+
+/**
+ * Health probe for the GCS bucket batch diarization stages audio in (GEN-4),
+ * shown beside the general Storage item in the footer badge. Without a bucket
+ * configured it reads `disabled` — retained audio simply stays in the general
+ * (local or blob) storage — mirroring how the Storage item names local vs
+ * connected. With one configured it's a cheap bucket-exists check; never throws,
+ * so a failure reads `down`.
+ */
+export const pingGcsAudioStorage = async (): Promise<HealthComponent> => {
+  const bucket = env.GCS_AUDIO_BUCKET
+  if (!bucket) {
+    return {
+      status: 'disabled',
+      detail: env.STORAGE_PROVIDER === 'local' ? 'local storage' : 'blob storage',
+    }
+  }
+  try {
+    const storage = new Storage(
+      speechClientOptions() as ConstructorParameters<typeof Storage>[0],
+    )
+    const [exists] = await storage.bucket(bucket).exists()
+    return exists
+      ? { status: 'ok', detail: 'connected' }
+      : { status: 'down', detail: 'bucket missing' }
+  } catch {
+    return { status: 'down', detail: 'unreachable' }
   }
 }
 

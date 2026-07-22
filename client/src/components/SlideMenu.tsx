@@ -82,10 +82,17 @@ export default function SlideMenu({
   )
     return null
 
+  // The kebab sits above the SlideNavZones hotspots (z-10). It must clear the
+  // whiteboard drawing overlay (z-20) both while a tool is active (so it stays
+  // clickable) AND whenever its menu is open — otherwise strokes on the slide
+  // would render over the open menu. Opening drops the active tool (onOpen),
+  // which would otherwise lower `elevated` mid-open, so `open` keeps it raised.
+  const raised = elevated || open
+
   return (
     <div
       ref={menuRef}
-      className={`absolute top-3 right-3 ${elevated ? 'z-30' : 'z-10'}`}
+      className={`absolute top-3 right-3 ${raised ? 'z-30' : 'z-10'}`}
     >
       <button
         aria-label={`Options for slide ${number}`}
