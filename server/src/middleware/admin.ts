@@ -9,6 +9,17 @@ import { UserModel } from '../models/user'
 import { isAdminEmail } from '../config/admin'
 import { HttpError } from './error'
 
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Express {
+    interface Request {
+      /** The acting admin, set by requireAdmin. Handlers pass it to
+       * logAdminAction without re-querying the user. */
+      adminUser?: { id: string; email: string }
+    }
+  }
+}
+
 export const requireAdmin = async (
   req: Request,
   _res: Response,
@@ -21,5 +32,6 @@ export const requireAdmin = async (
   if (!user || !isAdminEmail(user.email)) {
     throw new HttpError(403, 'forbidden', 'Admin access required')
   }
+  req.adminUser = { id: user._id.toString(), email: user.email }
   next()
 }

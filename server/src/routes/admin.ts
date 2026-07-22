@@ -1,21 +1,33 @@
 /**
- * Read-only admin API: the user directory plus each user's projects and
- * lectures. Every route is guarded inside the router by requireAuth +
- * requireAdmin (ADMIN_EMAILS allowlist), so mounting it is safe on its
- * own. Intended mount point: /api/admin — see docs/ADMINISTRATION.md.
+ * Admin API: the read-only user directory (each user's projects and
+ * lectures) plus the admin action audit log and its CSV export. Every
+ * route is guarded inside the router by requireAuth + requireAdmin
+ * (ADMIN_EMAILS allowlist), so mounting it is safe on its own. Intended
+ * mount point: /api/admin — see docs/ADMINISTRATION.md.
  *
  * Admin reads deliberately bypass lib/access.ts ACLs: the allowlist gate
  * is the authorization. The wire types below are the contract mirrored
  * by client/src/api/admin.ts; move them into the shared workspace once
- * the admin surface is wired into the apps.
+ * the admin surface is wired into the apps (the audit-log DTOs already
+ * live there).
  */
 import { Router } from 'express'
 import { isValidObjectId, type HydratedDocument } from 'mongoose'
 import { z } from 'zod'
-import type { Project, SafeUser, Visibility } from '@slide-machine/shared'
+import type {
+  AdminLogsResponse,
+  Project,
+  SafeUser,
+  Visibility,
+} from '@slide-machine/shared'
 import { UserModel, toUserDto, type UserDb } from '../models/user'
 import { ProjectModel, toProjectDto } from '../models/project'
 import { DeckModel, loadDeckAcls, type DeckDb } from '../models/deck'
+import {
+  AdminActionLogModel,
+  toAdminLogEntryDto,
+} from '../models/admin-action-log'
+import { csvRow } from '../audit/csv'
 import type { ResolvedAcl } from '../lib/access'
 import { requireAuth } from '../middleware/auth'
 import { requireAdmin } from '../middleware/admin'
@@ -149,6 +161,86 @@ adminRouter.get('/users', async (req, res) => {
     limit,
   }
   res.json(body)
+})
+
+// Audit-log listing query. Extension point for future filters
+// (action, actorId, date range): add optional fields here and fold
+// them into the Mongo filter below.
+const logsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  sort: z.enum(['newest', 'oldest']).default('newest'),
+})
+
+const LOG_SORTS = {
+  newest: { createdAt: -1 },
+  oldest: { createdAt: 1 },
+} as const
+
+adminRouter.get('/logs', async (req, res) => {
+  const parsed = logsQuerySchema.safeParse(req.query)
+  if (!parsed.success) {
+    throw new HttpError(
+      400,
+      'invalid_input',
+      'Invalid list query',
+      parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`),
+    )
+  }
+  const { page, limit, sort } = parsed.data
+
+  const [logs, total] = await Promise.all([
+    AdminActionLogModel.find()
+      .sort(LOG_SORTS[sort])
+      .skip((page - 1) * limit)
+      .limit(limit),
+    AdminActionLogModel.countDocuments(),
+  ])
+
+  const body: AdminLogsResponse = {
+    logs: logs.map(toAdminLogEntryDto),
+    total,
+    page,
+    limit,
+  }
+  res.json(body)
+})
+
+/** Streams the whole audit log, newest first, as a CSV download. A
+ * Mongoose cursor keeps memory flat however large the log grows. */
+adminRouter.get('/logs/export', async (_req, res) => {
+  const date = new Date().toISOString().slice(0, 10)
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="admin-audit-log-${date}.csv"`,
+  )
+  res.write(
+    csvRow([
+      'createdAt',
+      'actorEmail',
+      'actorId',
+      'action',
+      'targetType',
+      'targetId',
+      'details',
+    ]),
+  )
+  const cursor = AdminActionLogModel.find().sort({ createdAt: -1 }).cursor()
+  for await (const doc of cursor) {
+    res.write(
+      csvRow([
+        doc.createdAt.toISOString(),
+        doc.actorEmail,
+        doc.actorId.toString(),
+        doc.action,
+        doc.targetType,
+        doc.targetId,
+        doc.details === undefined ? undefined : JSON.stringify(doc.details),
+      ]),
+    )
+  }
+  res.end()
 })
 
 adminRouter.get('/users/:id', async (req, res) => {

@@ -58,11 +58,15 @@ describe('requireAdmin', () => {
     expect(next).not.toHaveBeenCalled()
   })
 
-  it('calls next for an allowlisted admin', async () => {
-    findById.mockResolvedValue({ email: 'Admin@Example.com' } as never)
-    const { next, done } = run('u1')
+  it('calls next for an allowlisted admin and stashes req.adminUser', async () => {
+    findById.mockResolvedValue({
+      _id: { toString: () => 'u1' },
+      email: 'Admin@Example.com',
+    } as never)
+    const { req, next, done } = run('u1')
     await done
     expect(findById).toHaveBeenCalledWith('u1')
     expect(next).toHaveBeenCalledOnce()
+    expect(req.adminUser).toEqual({ id: 'u1', email: 'Admin@Example.com' })
   })
 })
