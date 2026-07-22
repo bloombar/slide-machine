@@ -68,19 +68,18 @@ Admin accounts moderate; they are not moderated: any of these against an
 allowlisted email (including your own) is refused with `target_is_admin`
 until the email is removed from `ADMIN_EMAILS`.
 
-### Viewing private lectures
+### Private lectures
 
-Admin reads list a user's private lectures, but *opening* one in the
-viewer follows the normal ACLs — by default even an admin gets the same
-404 as any stranger. The **"View private lectures" toggle** on a user's
-admin page (off by default) grants *the admin who enabled it* access to
-*that user's* private lectures, read-only, through the normal viewer.
-Enabling and disabling are recorded in the audit log
-(`user.private_view_enabled` / `user.private_view_disabled`), and so is
-**every private lecture actually opened** under the grant
-(`deck.private_view`). The grant persists until toggled off (collection
-`adminprivateaccesses`); turn it off when the task that needed it is
-done.
+An allowlisted admin can **always open any lecture in the viewer**
+(`/d/:slug`), private or not, read-only — like the admin API, the
+allowlist is the authorization. What is gated is the *listing*: on a
+user's admin page, private lectures are hidden from the project tables
+until the **"Show private lectures" toggle** (off by default, per admin,
+per user) is enabled. Flipping it is recorded in the audit log
+(`user.private_view_enabled` / `user.private_view_disabled`). The
+setting persists until toggled off (collection `adminprivateaccesses`);
+turn it off when the task that needed it is done. Individual viewer
+opens are not logged.
 
 ### Audit log (`/app/admin/logs`)
 
@@ -96,11 +95,10 @@ Entries are **append-only**: they are written through one server module
 `adminactionlogs` Mongo collection, and no API can edit or delete them.
 Every moderation action writes one (`user.delete`, `user.ban_email`,
 `user.password_reset`, `project.delete`, `deck.delete`), as do the
-private-view grant transitions (`user.private_view_enabled` /
-`user.private_view_disabled`) and each private lecture opened under a
-grant (`deck.private_view`). It is the durable audit trail; a local CSV
-would not survive an App Platform redeploy, which is why the CSV is an
-on-demand export rather than the store.
+"show private lectures" toggle transitions (`user.private_view_enabled`
+/ `user.private_view_disabled`). It is the durable audit trail; a local
+CSV would not survive an App Platform redeploy, which is why the CSV is
+an on-demand export rather than the store.
 
 ## Changing how the app behaves
 
