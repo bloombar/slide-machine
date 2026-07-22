@@ -278,6 +278,16 @@ export default function DeckViewerPage() {
       genPauseHideTimerRef.current = null
     }
   }
+  /** Flips the pill to a brief "resumed" confirmation, then hides it. */
+  const showResumedConfirmation = () => {
+    setGenerationPause('resumed')
+    if (genPauseHideTimerRef.current)
+      window.clearTimeout(genPauseHideTimerRef.current)
+    genPauseHideTimerRef.current = window.setTimeout(
+      () => setGenerationPause(null),
+      GENERATION_RESUMED_PILL_MS,
+    )
+  }
   /** Resumes generation — from the idle debounce ('timeout') or the Resume
    * button ('manual') — flips the pill to a brief confirmation, then hides it. */
   const resumeGeneration = (reason: 'timeout' | 'manual') => {
@@ -291,13 +301,7 @@ export default function DeckViewerPage() {
       whiteboardResumedRef.current = true
     }
     pauseSourceRef.current = null
-    setGenerationPause('resumed')
-    if (genPauseHideTimerRef.current)
-      window.clearTimeout(genPauseHideTimerRef.current)
-    genPauseHideTimerRef.current = window.setTimeout(
-      () => setGenerationPause(null),
-      GENERATION_RESUMED_PILL_MS,
-    )
+    showResumedConfirmation()
   }
   /** Shows/refreshes the paused pill and re-arms the idle auto-resume timer
    * (the drawing-gesture debounce; whiteboard slides use manual resume only). */
@@ -397,9 +401,12 @@ export default function DeckViewerPage() {
       pauseSourceRef.current = 'whiteboard'
       setGenerationPause('paused')
     } else if (!onWhiteboardSlide && pauseSourceRef.current === 'whiteboard') {
-      // Left the canvas: end its manual pause (a shown 'resumed' pill fades).
+      // Left the canvas — e.g. the user made a new regular slide (toolbar +,
+      // or a "new slide" command), or navigated away: the whiteboard pause
+      // ends and generation resumes. Confirm it, then hide.
+      clearPauseTimers()
       pauseSourceRef.current = null
-      setGenerationPause(prev => (prev === 'paused' ? null : prev))
+      showResumedConfirmation()
     }
   }, [onWhiteboardSlide, listening, activeSlide?.id])
 

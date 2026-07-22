@@ -28,6 +28,7 @@ import type {
   DeckSwitchTemplateInput,
   DeckViewResponse,
   GenerationProvider,
+  LayoutType,
   SessionPhraseInput,
   Slide,
   SlideAddInput,
@@ -303,7 +304,7 @@ export const slideAdd = defineAction<SlideAddInput, Slide>({
   }),
   execute: async (ctx, input) => {
     const { deck } = await loadEditableDeck(ctx, input.deckId)
-    let layoutType = 'content'
+    let layoutType: LayoutType = 'content'
     if (input.layoutType) {
       const template = getBuiltinTemplate(deck.templateId)
       if (!template?.layouts.some(l => l.type === input.layoutType)) {
@@ -311,7 +312,7 @@ export const slideAdd = defineAction<SlideAddInput, Slide>({
           'layoutType: not a layout of this template',
         ])
       }
-      layoutType = input.layoutType
+      layoutType = input.layoutType as LayoutType
     }
     // A whiteboard slide is a blank drawing canvas — no placeholder text;
     // every other layout gets the editable starter content.
@@ -444,9 +445,15 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
     // Content generation is paused while the user marks up a slide, or until
     // they resume it (WB-3): record this phrase to the transcript and the
     // current slide's source transcript, then return without generating — no
-    // LLM call, no content or layout change. Drawings save on their own path
+    // content or layout change. Drawings save on their own path
     // (slide.editDrawings), so both speech and markup are kept for playback.
-    if (input.pauseGeneration) {
+    //
+    // Fast path taken only when AI voice commands are OFF: nothing to detect,
+    // so skip the LLM entirely. With the flag ON we fall through and run
+    // generation so the model can still flag operational phrases (CAP-4) even
+    // while paused — the pause guard below then records the transcript and
+    // skips all content, so voice commands keep working during drawing.
+    if (input.pauseGeneration && !env.GENERATION_VOICE_COMMANDS) {
       const current = recent.length ? recent[0] : undefined
       deck.transcript = [deck.transcript, input.phrase]
         .filter(Boolean)
@@ -563,7 +570,13 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
     // clarifies. The event carries the new title so the header updates live.
     let savedDeckTitle: string | undefined
     const suggestion = rawResult.deckTitle?.trim().slice(0, 80)
-    if (!deck.titleLocked && suggestion && suggestion !== deck.title) {
+    // No content changes while paused — that includes auto-titling the lecture.
+    if (
+      !input.pauseGeneration &&
+      !deck.titleLocked &&
+      suggestion &&
+      suggestion !== deck.title
+    ) {
       deck.title = suggestion
       savedDeckTitle = suggestion
       await deck.save()
@@ -644,6 +657,21 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
         { _id: segment._id },
         slideId ? { action, slideId } : { action },
       )
+
+    // Content generation is paused (drawing) but AI voice commands are on, so
+    // generation ran only to let the model flag a command (handled above). A
+    // non-command phrase records to the current slide's transcript and stops —
+    // no content or layout change, exactly like filler.
+    if (input.pauseGeneration) {
+      if (lastSlide) {
+        lastSlide.sourceTranscript = [lastSlide.sourceTranscript, input.phrase]
+          .filter(Boolean)
+          .join(' ')
+        await lastSlide.save()
+        await linkSegment('none', lastSlide._id)
+      }
+      return event({ kind: 'none' })
+    }
 
     if (rawResult.action === 'none') {
       // Filler still belongs to whatever slide is on screen, so it joins that

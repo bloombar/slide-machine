@@ -130,4 +130,39 @@ describe('session.phrase with GENERATION_VOICE_COMMANDS on', () => {
     expect(res.body.kind).toBe('slide.new')
     expect(res.body.slide.layoutType).toBe('list')
   })
+
+  it('still recognizes commands while generation is paused (drawing)', async () => {
+    await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Photosynthesis basics',
+    })
+
+    // Paused for drawing, a command is still recognized and returned…
+    const cmd = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Please next slide',
+      pauseGeneration: true,
+    })
+    expect(cmd.body).toEqual({ kind: 'command', command: 'next' })
+
+    // …while a non-command phrase is recorded but generates nothing.
+    const spoken = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Drawing a diagram of the leaf here',
+      pauseGeneration: true,
+    })
+    expect(spoken.body.kind).toBe('none')
+
+    const view = await act(ada, 'deck.get', { deckId })
+    // Only the first phrase made a slide; the paused phrase added none.
+    expect(view.body.slides).toHaveLength(1)
+    // The paused (non-command) phrase is still in the transcript…
+    expect(view.body.deck.transcript as string).toContain(
+      'Drawing a diagram of the leaf here',
+    )
+    // …but the recognized command left no trace.
+    expect(view.body.deck.transcript as string).not.toContain(
+      'Please next slide',
+    )
+  })
 })

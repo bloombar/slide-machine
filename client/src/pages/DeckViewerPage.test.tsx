@@ -713,6 +713,66 @@ describe('DeckViewerPage microphone capture', () => {
     expect(phrases[1]!.pauseGeneration).toBeUndefined()
   })
 
+  it('resumes the whiteboard pause when a new regular slide is made', async () => {
+    FakeRecognition.reset()
+    vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
+    const wbDeck = {
+      ...deckView,
+      deck: { ...deckView.deck, slideOrder: ['s1'] },
+      slides: [
+        { id: 's1', deckId: 'deck1', index: 0, layoutType: 'whiteboard' },
+      ],
+    }
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...wbDeck, canEdit: true },
+      }),
+      '/api/actions/slide.add': () => ({
+        status: 200,
+        body: {
+          id: 's2',
+          deckId: 'deck1',
+          index: 1,
+          layoutType: 'content',
+          title: 'New slide',
+          body: 'Click to edit',
+        },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Live session' }))
+    expect(
+      await screen.findByText('Content generation paused for drawing'),
+    ).toBeInTheDocument()
+    const recognition = FakeRecognition.last!
+    // A "new slide" command makes a regular slide, which resumes generation.
+    act(() => {
+      recognition.onresult?.({
+        resultIndex: 0,
+        results: [
+          { isFinal: true, 0: { transcript: 'slide machine, new slide' } },
+        ],
+      })
+    })
+    expect(
+      await screen.findByText('Content generation resumed'),
+    ).toBeInTheDocument()
+  })
+
   it('executes AI-recognized command events from session.phrase', async () => {
     FakeRecognition.reset()
     vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
