@@ -5,9 +5,15 @@
  * copyright-attribution requirements.
  *
  * Editable images (the instructor's own uploads/seeds) show every field as a
- * form so full credit and license details can be supplied. Read-only images
- * (AI-sourced) show only the fields that actually carry data. Source and
- * license links open in a new tab.
+ * form so full credit and license details can be supplied.
+ *
+ * Read-only images (AI-sourced) show three consolidated, clickable lines
+ * rather than separate URL fields:
+ *   - Source: links to sourceUrl, labelled by the first available of
+ *     title → caption → credit, falling back to the raw URL ("direct link").
+ *   - Credit: the creator's name, linking to creatorUrl.
+ *   - License: the license name, linking to licenseUrl.
+ * A line with no link renders as plain text; links open in a new tab.
  */
 import { useEffect, useState, type FormEvent } from 'react'
 import { X } from 'lucide-react'
@@ -39,24 +45,37 @@ const FIELDS: {
   { key: 'licenseUrl', label: 'License URL', placeholder: 'https://…' },
 ]
 
-/** Shows a value, linking it when it looks like a URL. */
-function ReadRow({ label, value }: { label: string; value?: string }) {
-  if (!value) return null
-  const isUrl = /^https?:\/\//i.test(value)
+/**
+ * A read-only row: its label plus a value. When `href` is given the value is
+ * a hyperlink to it (opening in a new tab); otherwise it is plain text. When
+ * only `href` is given, the URL itself is the visible text. Renders nothing
+ * when there is neither text nor link.
+ */
+function ReadRow({
+  label,
+  text,
+  href,
+}: {
+  label: string
+  text?: string
+  href?: string
+}) {
+  const content = text ?? href
+  if (!content) return null
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-xs font-medium text-slate-500">{label}</span>
-      {isUrl ? (
+      {href ? (
         <a
-          href={value}
+          href={href}
           target="_blank"
           rel="noreferrer noopener"
           className="text-sm break-all text-indigo-600 hover:underline"
         >
-          {value}
+          {content}
         </a>
       ) : (
-        <span className="text-sm text-slate-800">{value}</span>
+        <span className="text-sm text-slate-800">{content}</span>
       )}
     </div>
   )
@@ -78,9 +97,15 @@ export default function ImageAttributionDialog({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  // Read-only images with nothing recorded get a friendly note instead of
-  // a list of empty rows.
-  const hasAny = FIELDS.some(f => attribution?.[f.key])
+  // Read-only images with nothing displayable get a friendly note instead of
+  // a list of empty rows. Only the fields the read-only view can render count.
+  const hasAny = Boolean(
+    attribution?.title ||
+    attribution?.caption ||
+    attribution?.creator ||
+    attribution?.sourceUrl ||
+    attribution?.license,
+  )
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -152,9 +177,32 @@ export default function ImageAttributionDialog({
             </form>
           ) : hasAny ? (
             <div className="flex flex-col gap-3">
-              {FIELDS.map(({ key, label }) => (
-                <ReadRow key={key} label={label} value={attribution?.[key]} />
-              ))}
+              {/* Source: the best available label, linking to the source page.
+                  Falls back title → caption → credit → the raw URL itself.
+                  Credit is only borrowed as the label when there is a source
+                  URL to link it to — otherwise the Credit line already shows
+                  it, and it would appear twice. */}
+              <ReadRow
+                label="Source"
+                href={attribution?.sourceUrl}
+                text={
+                  attribution?.title ??
+                  attribution?.caption ??
+                  (attribution?.sourceUrl ? attribution?.creator : undefined)
+                }
+              />
+              {/* Credit: the creator's name, linking to their page. */}
+              <ReadRow
+                label="Credit"
+                href={attribution?.creatorUrl}
+                text={attribution?.creator}
+              />
+              {/* License: the license name, linking to its deed. */}
+              <ReadRow
+                label="License"
+                href={attribution?.licenseUrl}
+                text={attribution?.license}
+              />
             </div>
           ) : (
             <p className="text-sm text-slate-500">

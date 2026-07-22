@@ -36,7 +36,10 @@ export interface QuizPublishResult {
 export const publishQuiz = async (
   req: QuizPublishRequest,
 ): Promise<QuizPublishResult> => {
-  const seed = `${req.driveFolderId}:${req.quiz.title}:${req.quiz.questions.length}`
+  // Fold the question wording into the seed so a regenerated (reworded) quiz
+  // gets a fresh URL — mirroring live mode, which mints a new Form each time.
+  const fingerprint = req.quiz.questions.map(q => q.question).join('|')
+  const seed = `${req.driveFolderId}:${req.quiz.title}:${req.quiz.questions.length}:${fingerprint}`
   const digest = createHash('sha1').update(seed).digest('hex').slice(0, 32)
   const formId = `mock-${digest}`
   return {

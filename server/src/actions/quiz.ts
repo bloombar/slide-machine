@@ -4,7 +4,9 @@
  *   - quiz.status        — is Google connected, and is there a published quiz?
  *   - quiz.connectGoogle — connect a Google account for Drive/Forms access
  *   - quiz.driveFolders  — folders to choose as the Form's destination
+ *   - quiz.createFolder  — make a new Drive folder to save quizzes into
  *   - quiz.publish       — generate the quiz and create the Google Form
+ *   - quiz.delete        — remove the published quiz (regenerate yields new Qs)
  *
  * Two modes, selected by QUIZ_PUBLISH_MODE:
  *   - 'mock' (tests/dev): connect flips a flag, folders are a fixed list, and
@@ -33,11 +35,35 @@ import { UserModel } from '../models/user'
 import { SlideModel } from '../models/slide'
 import { registry } from '../providers/registry'
 import { publishQuiz } from '../lib/quiz-publish'
-import { listDriveFoldersLive, publishQuizLive } from '../lib/quiz-google'
+import {
+  createDriveFolderLive,
+  deleteQuizLive,
+  listDriveFoldersLive,
+  publishQuizLive,
+} from '../lib/quiz-google'
 import { buildConnectUrl, signConnectState } from '../auth/google-connect'
 import { decryptToken } from '../lib/token-crypto'
 
 const isLive = (): boolean => env.QUIZ_PUBLISH_MODE === 'live'
+
+/** Cap on remembered past questions, so the deck doc and the avoid-list
+ * prompt cannot grow without bound as an instructor keeps regenerating. */
+const MAX_PAST_QUESTIONS = 60
+
+/** Dedupes (case-insensitively) and keeps the most recent past questions. */
+const capPastQuestions = (questions: string[]): string[] => {
+  const seen = new Set<string>()
+  const kept: string[] = []
+  for (let i = questions.length - 1; i >= 0; i--) {
+    const q = questions[i]!.trim()
+    const key = q.toLowerCase()
+    if (!q || seen.has(key)) continue
+    seen.add(key)
+    kept.push(q)
+    if (kept.length >= MAX_PAST_QUESTIONS) break
+  }
+  return kept.reverse()
+}
 
 /** Loads the acting user (including the encrypted token), or throws if the
  * account no longer exists. The route's requireAuth guarantees a userId, so a
@@ -90,6 +116,7 @@ export const quizStatus = defineAction<{ deckId: string }, QuizStatus>({
     return {
       googleConnected: isConnected(user),
       quiz: toPublishedQuiz(deck.quiz),
+      hasTranscript: Boolean(deck.transcript?.trim()),
     }
   },
 })
@@ -117,42 +144,92 @@ export const quizConnectGoogle = defineAction<
       userId: user.id,
       returnTo: input.returnTo ?? env.PUBLIC_BASE_URL ?? '/',
     })
-    return { status: 'redirect', url: buildConnectUrl(state, '') }
+    // When they signed in with Google, pre-select that same account so the
+    // connect is one "Allow" click, not an account chooser. (Sign-in only
+    // grants identity scopes, so the Forms/Drive consent is still required.)
+    const loginHint = user.googleId ? user.email : undefined
+    return { status: 'redirect', url: buildConnectUrl(state, '', loginHint) }
   },
 })
 
-/** The mock Drive folders offered when not talking to Google. */
-const mockDriveFolders: DriveFolder[] = [
-  { id: 'root', name: 'My Drive' },
-  { id: 'folder-lectures', name: 'Lectures' },
-  { id: 'folder-quizzes', name: 'Quizzes' },
-  { id: 'folder-exit-tickets', name: 'Exit Tickets' },
-]
+/** A small nested folder tree for mock mode, keyed by parent id. Lets the
+ * finder UI be navigated without talking to Google. */
+const mockFolderTree: Record<string, DriveFolder[]> = {
+  root: [
+    { id: 'folder-lectures', name: 'Lectures' },
+    { id: 'folder-quizzes', name: 'Quizzes' },
+    { id: 'folder-exit-tickets', name: 'Exit Tickets' },
+  ],
+  'folder-lectures': [{ id: 'folder-week1', name: 'Week 1' }],
+}
 
+/** The sub-folders inside `parentId` (default My Drive root), for the picker's
+ * finder view. Navigating into a folder re-calls this with its id. */
 export const quizDriveFolders = defineAction<
-  Record<string, never>,
+  { parentId?: string },
   { folders: DriveFolder[] }
 >({
   name: 'quiz.driveFolders',
-  input: z.object({}).strict(),
-  execute: async ctx => {
+  input: z.object({ parentId: z.string().optional() }).strict(),
+  execute: async (ctx, input) => {
     const user = await requireUser(ctx)
     if (!isConnected(user)) {
       throw new ActionForbiddenError('Connect a Google account first')
     }
+    const parentId = input.parentId ?? 'root'
+    if (isLive()) {
+      const refreshToken = decryptToken(user.googleQuizRefreshToken!)
+      return { folders: await listDriveFoldersLive(refreshToken, parentId) }
+    }
+    return { folders: mockFolderTree[parentId] ?? [] }
+  },
+})
+
+/**
+ * Creates a new Drive folder to save quizzes into (QUIZ-2), returning it so the
+ * client can select it. Live: creates it in the instructor's Drive; mock:
+ * fabricates a folder id from the name.
+ */
+export const quizCreateFolder = defineAction<
+  { name: string; parentId?: string },
+  DriveFolder
+>({
+  name: 'quiz.createFolder',
+  input: z.object({
+    name: z.string().trim().min(1).max(120),
+    parentId: z.string().optional(),
+  }),
+  execute: async (ctx, input) => {
+    const user = await requireUser(ctx)
+    if (!isConnected(user)) {
+      throw new ActionForbiddenError('Connect a Google account first')
+    }
+    const parentId = input.parentId ?? 'root'
+    if (isLive()) {
+      const refreshToken = decryptToken(user.googleQuizRefreshToken!)
+      return createDriveFolderLive(refreshToken, input.name, parentId)
+    }
     return {
-      folders: isLive() ? await listDriveFoldersLive() : mockDriveFolders,
+      id: `folder-${input.name.toLowerCase().replace(/\s+/g, '-')}`,
+      name: input.name,
     }
   },
 })
 
 /**
- * Generates the exit-ticket quiz from the lecture's slides and publishes it
- * as a Google Form in the chosen Drive folder, returning the shareable URL.
+ * Generates the exit-ticket quiz from the lecture's slides — optionally
+ * folding in the spoken transcript (QUIZ-5) — and publishes it as a Google
+ * Form in the chosen Drive folder, returning the shareable URL. Questions from
+ * any prior quiz are avoided so a regeneration is genuinely different (QUIZ-6).
  * Generation is always real; the Form creation is mock or live per config.
  */
 export const quizPublish = defineAction<
-  { deckId: string; driveFolderId: string; driveFolderName?: string },
+  {
+    deckId: string
+    driveFolderId: string
+    driveFolderName?: string
+    includeTranscript?: boolean
+  },
   PublishedQuiz
 >({
   name: 'quiz.publish',
@@ -160,6 +237,7 @@ export const quizPublish = defineAction<
     deckId: z.string().min(1),
     driveFolderId: z.string().min(1),
     driveFolderName: z.string().optional(),
+    includeTranscript: z.boolean().optional(),
   }),
   execute: async (ctx, input) => {
     const user = await requireUser(ctx)
@@ -178,8 +256,25 @@ export const quizPublish = defineAction<
       bullets: s.bullets,
     }))
 
+    // The spoken transcript is folded in only when the instructor opts in.
+    const transcript =
+      input.includeTranscript && deck.transcript?.trim()
+        ? deck.transcript
+        : undefined
+
+    // Avoid repeating any question already asked (past deletions + the quiz
+    // currently on the deck, if we are replacing it).
+    const avoidQuestions = capPastQuestions([
+      ...(deck.quizPastQuestions ?? []),
+      ...(deck.quiz?.questions ?? []),
+    ])
+
     const provider = registry.get<QuizGenerationProvider>('quizGeneration')
-    const quiz = await provider.generateQuiz({ slides })
+    const quiz = await provider.generateQuiz({
+      slides,
+      transcript,
+      avoidQuestions,
+    })
 
     let published: { formId: string; formUrl: string }
     if (isLive()) {
@@ -199,6 +294,7 @@ export const quizPublish = defineAction<
       driveFolderId: input.driveFolderId,
       driveFolderName: input.driveFolderName,
       publishedAt: new Date(),
+      questions: quiz.questions.map(q => q.question),
     }
     await deck.save()
 
@@ -206,7 +302,42 @@ export const quizPublish = defineAction<
   },
 })
 
+/**
+ * Deletes the deck's published quiz (QUIZ-6). The question stems are remembered
+ * so a later regeneration avoids them, and in live mode the Google Form is
+ * removed from the instructor's Drive on a best-effort basis (a Drive failure
+ * must not block forgetting the quiz locally).
+ */
+export const quizDelete = defineAction<
+  { deckId: string },
+  { deleted: boolean }
+>({
+  name: 'quiz.delete',
+  input: z.object({ deckId: z.string().min(1) }),
+  execute: async (ctx, input) => {
+    const user = await requireUser(ctx)
+    const { deck } = await loadEditableDeck(ctx, input.deckId)
+    if (!deck.quiz) return { deleted: false }
+
+    deck.quizPastQuestions = capPastQuestions([
+      ...(deck.quizPastQuestions ?? []),
+      ...(deck.quiz.questions ?? []),
+    ])
+
+    if (isLive() && user.googleQuizRefreshToken) {
+      const refreshToken = decryptToken(user.googleQuizRefreshToken)
+      await deleteQuizLive(deck.quiz.formId, refreshToken).catch(() => {})
+    }
+
+    deck.set('quiz', undefined)
+    await deck.save()
+    return { deleted: true }
+  },
+})
+
 registerAction(quizStatus)
 registerAction(quizConnectGoogle)
 registerAction(quizDriveFolders)
+registerAction(quizCreateFolder)
 registerAction(quizPublish)
+registerAction(quizDelete)

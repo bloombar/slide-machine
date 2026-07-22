@@ -64,13 +64,21 @@ describe('buildConnectUrl', () => {
     expect(url.searchParams.get('prompt')).toBe('consent')
     expect(url.searchParams.get('state')).toBe('the-state')
     expect(url.searchParams.get('redirect_uri')).toBe(
-      'http://localhost:3000/api/auth/google/connect/callback',
+      'http://localhost:3000/api/auth/google/callback',
     )
+  })
+
+  it('adds login_hint only when a hint is given (pre-selects the account)', () => {
+    expect(
+      new URL(buildConnectUrl('s', '')).searchParams.get('login_hint'),
+    ).toBeNull()
+    const url = new URL(buildConnectUrl('s', '', 'ada@example.com'))
+    expect(url.searchParams.get('login_hint')).toBe('ada@example.com')
   })
 
   it('uses PUBLIC_BASE_URL for the redirect URI', () => {
     expect(connectRedirectUri('http://ignored')).toBe(
-      'http://localhost:3000/api/auth/google/connect/callback',
+      'http://localhost:3000/api/auth/google/callback',
     )
   })
 

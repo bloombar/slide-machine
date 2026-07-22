@@ -34,11 +34,18 @@ vi.mock('../../src/auth/google-connect', () => ({
   exchangeConnectCode: vi.fn(async () => 'refresh-token-123'),
 }))
 vi.mock('../../src/lib/quiz-google', () => ({
-  listDriveFoldersLive: vi.fn(async () => [{ id: 'root', name: 'My Drive' }]),
+  listDriveFoldersLive: vi.fn(async () => [{ id: 'f1', name: 'Quizzes' }]),
+  createDriveFolderLive: vi.fn(
+    async (_t: string, name: string, _parentId?: string) => ({
+      id: 'live-folder-1',
+      name,
+    }),
+  ),
   publishQuizLive: vi.fn(async () => ({
     formId: 'F1',
     formUrl: 'https://docs.google.com/forms/d/F1/viewform',
   })),
+  deleteQuizLive: vi.fn(async () => undefined),
 }))
 vi.mock('../../src/lib/token-crypto', () => ({
   encryptToken: vi.fn((t: string) => `enc:${t}`),
@@ -118,9 +125,43 @@ describe('quiz actions (live mode)', () => {
     expect(noReturn.body.status).toBe('redirect')
   })
 
+  it('pre-selects the account (login_hint) when the user signed in with Google', async () => {
+    const { buildConnectUrl } = await import('../../src/auth/google-connect')
+    const mock = buildConnectUrl as unknown as {
+      mockClear: () => void
+      mock: { calls: unknown[][] }
+    }
+    // A Google-signed-in user: their email is passed as the login hint.
+    await UserModel.updateOne({ _id: adaId }, { googleId: 'g-abc' })
+    mock.mockClear()
+    await act(ada, 'quiz.connectGoogle')
+    expect(mock.mock.calls.at(-1)![2]).toBe('ada@example.com')
+
+    // A password-only user (no googleId) gets no hint.
+    await UserModel.updateOne({ _id: adaId }, { $unset: { googleId: '' } })
+    mock.mockClear()
+    await act(ada, 'quiz.connectGoogle')
+    expect(mock.mock.calls.at(-1)![2]).toBeUndefined()
+  })
+
   it('the connect callback stores the encrypted token and connects the user', async () => {
     const res = await request(server).get(
       '/api/auth/google/connect/callback?code=abc&state=signed-state',
+    )
+    expect(res.status).toBe(302)
+    expect(res.headers.location).toBe('http://localhost:5173/d/x')
+    const user = await UserModel.findById(adaId).select(
+      '+googleQuizRefreshToken',
+    )
+    expect(user!.googleConnected).toBe(true)
+    expect(user!.googleQuizRefreshToken).toBe('enc:refresh-token-123')
+  })
+
+  it('completes the connect through the shared SIGN-IN callback URI', async () => {
+    // The connect reuses /api/auth/google/callback (already registered), and a
+    // connect state routes to the connect logic there — no dedicated URI.
+    const res = await request(server).get(
+      '/api/auth/google/callback?code=abc&state=signed-state',
     )
     expect(res.status).toBe(302)
     expect(res.headers.location).toBe('http://localhost:5173/d/x')
@@ -144,6 +185,19 @@ describe('quiz actions (live mode)', () => {
     expect(user!.googleConnected).toBeFalsy()
   })
 
+  it('creates a Drive folder in live mode', async () => {
+    await UserModel.updateOne(
+      { _id: adaId },
+      {
+        googleConnected: true,
+        googleQuizRefreshToken: 'enc:refresh-token-123',
+      },
+    )
+    const res = await act(ada, 'quiz.createFolder', { name: 'Week 5 quizzes' })
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ id: 'live-folder-1', name: 'Week 5 quizzes' })
+  })
+
   it('lists live folders and publishes through the library once connected', async () => {
     await UserModel.updateOne(
       { _id: adaId },
@@ -153,7 +207,7 @@ describe('quiz actions (live mode)', () => {
       },
     )
     const folders = await act(ada, 'quiz.driveFolders')
-    expect(folders.body.folders).toEqual([{ id: 'root', name: 'My Drive' }])
+    expect(folders.body.folders).toEqual([{ id: 'f1', name: 'Quizzes' }])
 
     const publish = await act(ada, 'quiz.publish', {
       deckId,

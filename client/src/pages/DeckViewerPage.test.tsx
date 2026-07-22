@@ -1192,6 +1192,48 @@ describe('DeckViewerPage settings modal', () => {
     ).toBeInTheDocument()
   })
 
+  it('opens the Quiz tab when returning from OAuth with ?settings=quiz', async () => {
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+      '/api/actions/template.list': () => ({
+        status: 200,
+        body: [deckView.template],
+      }),
+      '/api/actions/quiz.status': () => ({
+        status: 200,
+        body: { googleConnected: true, hasTranscript: false },
+      }),
+    })
+    // Simulate the OAuth return URL carrying the one-shot tab param.
+    window.history.replaceState({}, '', '/d/shared-abc123?settings=quiz')
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Lecture settings' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Quiz' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    // The one-shot param is stripped so a refresh won't reopen it.
+    expect(window.location.search).toBe('')
+  })
+
   it('changes a slide layout from the kebab via the picker modal', async () => {
     let sent: unknown
     mockFetchRoutes({

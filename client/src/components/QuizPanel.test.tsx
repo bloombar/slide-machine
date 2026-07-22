@@ -1,7 +1,8 @@
 /**
- * Unit tests for the Quiz tab (QUIZ-1..4): the connect → generate → folder
- * picker → shareable URL flow, and the copy-to-clipboard button. The Google
- * actions are stubbed at the fetch layer.
+ * Unit tests for the Quiz tab (QUIZ-1..6): the connect → generate → folder
+ * picker → shareable URL flow, the copy-to-clipboard button, the optional
+ * "include transcript" checkbox, creating a new Drive folder, and deleting a
+ * quiz. The Google actions are stubbed at the fetch layer.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
@@ -34,25 +35,28 @@ describe('QuizPanel', () => {
     ).toBeInTheDocument()
   })
 
-  it('redirects to Google consent in live mode', async () => {
+  it('redirects to Google consent in live mode, returning to the Quiz tab', async () => {
     const consent = 'https://accounts.google.com/o/oauth2/v2/auth?x=1'
     const loc = { href: 'http://localhost:5173/d/x' }
     Object.defineProperty(window, 'location', {
       configurable: true,
       value: loc,
     })
+    let connectBody: { returnTo?: string } = {}
     mockFetchRoutes({
       'quiz.status': () => ({ status: 200, body: { googleConnected: false } }),
-      'quiz.connectGoogle': () => ({
-        status: 200,
-        body: { status: 'redirect', url: consent },
-      }),
+      'quiz.connectGoogle': init => {
+        connectBody = JSON.parse(String(init?.body))
+        return { status: 200, body: { status: 'redirect', url: consent } }
+      },
     })
     render(<QuizPanel deckId="d1" />)
     fireEvent.click(
       await screen.findByRole('button', { name: 'Connect Google' }),
     )
     await waitFor(() => expect(loc.href).toBe(consent))
+    // The return URL asks the app to reopen the Quiz tab after connecting.
+    expect(connectBody.returnTo).toContain('settings=quiz')
   })
 
   it('shows an existing quiz URL and copies it to the clipboard', async () => {
@@ -92,18 +96,13 @@ describe('QuizPanel', () => {
     ).toBeInTheDocument()
   })
 
-  it('generates a quiz through the Drive folder picker', async () => {
+  it('generates a quiz, saving to My Drive by default', async () => {
     let published: unknown
     mockFetchRoutes({
       'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
       'quiz.driveFolders': () => ({
         status: 200,
-        body: {
-          folders: [
-            { id: 'root', name: 'My Drive' },
-            { id: 'folder-quizzes', name: 'Quizzes' },
-          ],
-        },
+        body: { folders: [{ id: 'folder-quizzes', name: 'Quizzes' }] },
       }),
       'quiz.publish': init => {
         published = JSON.parse(String(init?.body))
@@ -123,15 +122,15 @@ describe('QuizPanel', () => {
       await screen.findByRole('button', { name: 'Generate quiz' }),
     )
 
-    // The folder picker opens and lists folders; the first is preselected
+    // The finder opens at My Drive and lists its sub-folders
     const dialog = await screen.findByRole('dialog', {
       name: 'Choose a Drive folder',
     })
     expect(dialog).toBeInTheDocument()
-    await screen.findByText('Quizzes')
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await screen.findByRole('button', { name: 'Quizzes' })
+    // Save into the current folder (My Drive root)
+    fireEvent.click(screen.getByRole('button', { name: 'Save here' }))
 
-    // Publishing sends the chosen folder and the URL is then shown
     await waitFor(() =>
       expect(published).toMatchObject({
         deckId: 'd1',
@@ -142,19 +141,22 @@ describe('QuizPanel', () => {
     expect(await screen.findByText(FORM_URL)).toBeInTheDocument()
   })
 
-  it('lets the user choose a different destination folder', async () => {
+  it('navigates into a sub-folder and saves the quiz there', async () => {
     let published: unknown
     mockFetchRoutes({
       'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
-      'quiz.driveFolders': () => ({
-        status: 200,
-        body: {
-          folders: [
-            { id: 'root', name: 'My Drive' },
-            { id: 'folder-quizzes', name: 'Quizzes' },
-          ],
-        },
-      }),
+      'quiz.driveFolders': init => {
+        const { parentId } = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: {
+            folders:
+              parentId === 'root'
+                ? [{ id: 'folder-quizzes', name: 'Quizzes' }]
+                : [],
+          },
+        }
+      },
       'quiz.publish': init => {
         published = JSON.parse(String(init?.body))
         return {
@@ -167,15 +169,18 @@ describe('QuizPanel', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: 'Generate quiz' }),
     )
-    // Switch off the preselected first folder to the second
-    fireEvent.click(await screen.findByRole('radio', { name: 'Quizzes' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    // Open the folder, then save inside it
+    fireEvent.click(await screen.findByRole('button', { name: 'Quizzes' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Save here' }))
     await waitFor(() =>
-      expect(published).toMatchObject({ driveFolderId: 'folder-quizzes' }),
+      expect(published).toMatchObject({
+        driveFolderId: 'folder-quizzes',
+        driveFolderName: 'Quizzes',
+      }),
     )
   })
 
-  it('disables Continue when the account has no Drive folders', async () => {
+  it('shows an empty folder but still lets you save into it', async () => {
     mockFetchRoutes({
       'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
       'quiz.driveFolders': () => ({ status: 200, body: { folders: [] } }),
@@ -185,7 +190,9 @@ describe('QuizPanel', () => {
       await screen.findByRole('button', { name: 'Generate quiz' }),
     )
     await screen.findByRole('dialog', { name: 'Choose a Drive folder' })
-    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+    expect(await screen.findByText(/no sub-folders here/i)).toBeInTheDocument()
+    // Save-here is never disabled: you can always save to the current folder
+    expect(screen.getByRole('button', { name: 'Save here' })).toBeEnabled()
   })
 
   it('surfaces an error when the status fails to load', async () => {
@@ -237,8 +244,7 @@ describe('QuizPanel', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: 'Generate quiz' }),
     )
-    await screen.findByText('My Drive')
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Save here' }))
     expect(
       await screen.findByText(/could not generate the quiz/i),
     ).toBeInTheDocument()
@@ -265,14 +271,159 @@ describe('QuizPanel', () => {
     )
   })
 
-  it('reopens the picker to regenerate an existing quiz', async () => {
+  it('creates a new Drive folder in the picker and publishes to it', async () => {
+    let published: unknown
     mockFetchRoutes({
       'quiz.status': () => ({
         status: 200,
-        body: {
-          googleConnected: true,
-          quiz: { formUrl: FORM_URL, publishedAt: '2026-07-20T00:00:00.000Z' },
-        },
+        body: { googleConnected: true, hasTranscript: false },
+      }),
+      'quiz.driveFolders': () => ({
+        status: 200,
+        body: { folders: [{ id: 'root', name: 'My Drive' }] },
+      }),
+      'quiz.createFolder': init => {
+        const { name } = JSON.parse(String(init?.body))
+        return { status: 200, body: { id: 'folder-new', name } }
+      },
+      'quiz.publish': init => {
+        published = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: { formUrl: FORM_URL, publishedAt: '2026-07-20T00:00:00.000Z' },
+        }
+      },
+    })
+    render(<QuizPanel deckId="d1" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate quiz' }),
+    )
+    // Open the new-folder input, name it, create it
+    fireEvent.click(await screen.findByRole('button', { name: 'New folder' }))
+    fireEvent.change(screen.getByLabelText('New folder name'), {
+      target: { value: 'Week 5' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+    // Creating steps into the new folder (shown in the breadcrumb); save there
+    await screen.findByRole('button', { name: 'Week 5' })
+    fireEvent.click(screen.getByRole('button', { name: 'Save here' }))
+    await waitFor(() =>
+      expect(published).toMatchObject({
+        driveFolderId: 'folder-new',
+        driveFolderName: 'Week 5',
+      }),
+    )
+  })
+
+  it('navigates back up via the breadcrumb', async () => {
+    mockFetchRoutes({
+      'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
+      'quiz.driveFolders': init => {
+        const { parentId } = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: {
+            folders:
+              parentId === 'root'
+                ? [{ id: 'folder-quizzes', name: 'Quizzes' }]
+                : [{ id: 'folder-inner', name: 'Inner' }],
+          },
+        }
+      },
+    })
+    render(<QuizPanel deckId="d1" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate quiz' }),
+    )
+    // Into Quizzes → its child "Inner" shows
+    fireEvent.click(await screen.findByRole('button', { name: 'Quizzes' }))
+    await screen.findByRole('button', { name: 'Inner' })
+    // Click the "My Drive" crumb to go back up; the root list returns
+    fireEvent.click(screen.getByRole('button', { name: 'My Drive' }))
+    expect(
+      await screen.findByRole('button', { name: 'Quizzes' }),
+    ).toBeInTheDocument()
+  })
+
+  it('cancels creating a new folder', async () => {
+    mockFetchRoutes({
+      'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
+      'quiz.driveFolders': () => ({ status: 200, body: { folders: [] } }),
+    })
+    render(<QuizPanel deckId="d1" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate quiz' }),
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'New folder' }))
+    fireEvent.change(screen.getByLabelText('New folder name'), {
+      target: { value: 'Scratch' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel new folder' }))
+    expect(
+      screen.queryByLabelText('New folder name'),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'New folder' }),
+    ).toBeInTheDocument()
+  })
+
+  it('creates a folder with the Enter key, and shows an error if it fails', async () => {
+    mockFetchRoutes({
+      'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
+      'quiz.driveFolders': () => ({ status: 200, body: { folders: [] } }),
+      'quiz.createFolder': () => ({ status: 500, body: {} }),
+    })
+    render(<QuizPanel deckId="d1" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate quiz' }),
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'New folder' }))
+    const input = screen.getByLabelText('New folder name')
+    fireEvent.change(input, { target: { value: 'Week 9' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(
+      await screen.findByText(/could not create the folder/i),
+    ).toBeInTheDocument()
+  })
+
+  it('offers to include the transcript and sends it when checked', async () => {
+    let published: unknown
+    mockFetchRoutes({
+      'quiz.status': () => ({
+        status: 200,
+        body: { googleConnected: true, hasTranscript: true },
+      }),
+      'quiz.driveFolders': () => ({
+        status: 200,
+        body: { folders: [{ id: 'root', name: 'My Drive' }] },
+      }),
+      'quiz.publish': init => {
+        published = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: { formUrl: FORM_URL, publishedAt: '2026-07-20T00:00:00.000Z' },
+        }
+      },
+    })
+    render(<QuizPanel deckId="d1" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate quiz' }),
+    )
+    const checkbox = await screen.findByRole('checkbox', {
+      name: /include the spoken transcript/i,
+    })
+    fireEvent.click(checkbox)
+    fireEvent.click(screen.getByRole('button', { name: 'Save here' }))
+    await waitFor(() =>
+      expect(published).toMatchObject({ includeTranscript: true }),
+    )
+  })
+
+  it('hides the transcript option when the lecture has no transcript', async () => {
+    mockFetchRoutes({
+      'quiz.status': () => ({
+        status: 200,
+        body: { googleConnected: true, hasTranscript: false },
       }),
       'quiz.driveFolders': () => ({
         status: 200,
@@ -280,9 +431,57 @@ describe('QuizPanel', () => {
       }),
     })
     render(<QuizPanel deckId="d1" />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Regenerate' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate quiz' }),
+    )
+    await screen.findByRole('dialog', { name: 'Choose a Drive folder' })
     expect(
-      await screen.findByRole('dialog', { name: 'Choose a Drive folder' }),
+      screen.queryByRole('checkbox', {
+        name: /include the spoken transcript/i,
+      }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('deletes an existing quiz and returns to the generate state', async () => {
+    let deleted = false
+    mockFetchRoutes({
+      'quiz.status': () => ({
+        status: 200,
+        body: {
+          googleConnected: true,
+          quiz: { formUrl: FORM_URL, publishedAt: '2026-07-20T00:00:00.000Z' },
+          hasTranscript: false,
+        },
+      }),
+      'quiz.delete': () => {
+        deleted = true
+        return { status: 200, body: { deleted: true } }
+      },
+    })
+    render(<QuizPanel deckId="d1" />)
+    fireEvent.click(await screen.findByRole('button', { name: /delete quiz/i }))
+    await waitFor(() => expect(deleted).toBe(true))
+    expect(
+      await screen.findByRole('button', { name: 'Generate quiz' }),
+    ).toBeInTheDocument()
+  })
+
+  it('surfaces an error when deleting the quiz fails', async () => {
+    mockFetchRoutes({
+      'quiz.status': () => ({
+        status: 200,
+        body: {
+          googleConnected: true,
+          quiz: { formUrl: FORM_URL, publishedAt: '2026-07-20T00:00:00.000Z' },
+          hasTranscript: false,
+        },
+      }),
+      'quiz.delete': () => ({ status: 500, body: {} }),
+    })
+    render(<QuizPanel deckId="d1" />)
+    fireEvent.click(await screen.findByRole('button', { name: /delete quiz/i }))
+    expect(
+      await screen.findByText(/could not delete the quiz/i),
     ).toBeInTheDocument()
   })
 

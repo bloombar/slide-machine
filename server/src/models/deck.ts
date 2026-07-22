@@ -49,6 +49,9 @@ export interface DeckQuizDb {
   driveFolderId: string
   driveFolderName?: string
   publishedAt: Date
+  // The question stems of this quiz, kept so that regenerating after a delete
+  // can steer clear of them (QUIZ-6).
+  questions?: string[]
 }
 
 export interface DeckDb extends Omit<
@@ -69,6 +72,9 @@ export interface DeckDb extends Omit<
   recordings?: DeckRecordingDb[]
   // The published exit-ticket quiz, once generated (QUIZ-3). Absent until then.
   quiz?: DeckQuizDb
+  // Question stems from quizzes the instructor has since deleted/regenerated,
+  // so a fresh quiz avoids repeating them (QUIZ-6). Capped and most-recent.
+  quizPastQuestions?: string[]
   // True once the user sets the title by hand: the AI then stops suggesting
   // or refining it. False/absent = auto-titled, still open to AI refinement.
   titleLocked?: boolean
@@ -97,6 +103,7 @@ const quizSchema = new Schema<DeckQuizDb>(
     driveFolderId: { type: String, required: true },
     driveFolderName: String,
     publishedAt: { type: Date, default: Date.now },
+    questions: { type: [String], default: undefined },
   },
   { _id: false },
 )
@@ -155,6 +162,7 @@ const deckSchema = new Schema<DeckDb>(
     // once per recording, never surfaced in a DTO.
     recordings: { type: [recordingSchema], default: undefined },
     quiz: { type: quizSchema, default: undefined },
+    quizPastQuestions: { type: [String], default: undefined },
     voteScore: { type: Number, default: 0 },
   },
   { timestamps: true },

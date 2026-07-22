@@ -19,7 +19,12 @@ import type {
 import { env } from '../config/env'
 import { registry } from './registry'
 import { GenerationUnavailableError } from './errors'
-import { renderQuizPrompt, renderSlidesBlock } from './quiz-prompt'
+import {
+  renderAvoidBlock,
+  renderQuizPrompt,
+  renderSlidesBlock,
+  renderTranscriptBlock,
+} from './quiz-prompt'
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 
@@ -64,6 +69,8 @@ export class GeminiQuizProvider implements QuizGenerationProvider {
     const prompt = renderQuizPrompt({
       questionCount: String(clampCount(request.questionCount)),
       slides,
+      transcript: renderTranscriptBlock(request.transcript),
+      avoid: renderAvoidBlock(request.avoidQuestions),
     })
     if (env.GENERATION_LOG_PROMPTS) {
       console.log(

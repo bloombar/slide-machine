@@ -53,6 +53,9 @@ export interface PublishedQuiz {
 export interface QuizStatus {
   googleConnected: boolean
   quiz?: PublishedQuiz
+  /** True when the lecture has a spoken transcript that can be folded into
+   * generation (QUIZ-5); the UI shows the "include transcript" option only then. */
+  hasTranscript: boolean
 }
 
 /** A Google Drive folder offered in the publish-destination picker (QUIZ-2). */

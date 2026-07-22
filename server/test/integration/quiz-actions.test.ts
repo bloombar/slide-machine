@@ -70,10 +70,11 @@ beforeEach(async () => {
 })
 
 describe('quiz actions', () => {
-  it('starts disconnected with no quiz', async () => {
+  it('starts disconnected with no quiz, and sees the lecture has a transcript', async () => {
     const res = await act(ada, 'quiz.status', { deckId })
     expect(res.status).toBe(200)
-    expect(res.body).toEqual({ googleConnected: false })
+    // The three spoken phrases were appended to the deck transcript.
+    expect(res.body).toEqual({ googleConnected: false, hasTranscript: true })
   })
 
   it('blocks folder listing and publishing until Google is connected', async () => {
@@ -110,17 +111,107 @@ describe('quiz actions', () => {
     expect(status.body.quiz.formUrl).toBe(publish.body.formUrl)
   })
 
-  it('is deterministic: republishing to the same folder yields the same URL', async () => {
+  it('creates a new destination folder (mock)', async () => {
+    await act(ada, 'quiz.connectGoogle')
+    const res = await act(ada, 'quiz.createFolder', { name: 'Week 5' })
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ id: 'folder-week-5', name: 'Week 5' })
+  })
+
+  it('rejects folder creation until Google is connected', async () => {
+    expect((await act(ada, 'quiz.createFolder', { name: 'X' })).status).toBe(
+      403,
+    )
+  })
+
+  it('navigates into a sub-folder (mock finder tree)', async () => {
+    await act(ada, 'quiz.connectGoogle')
+    const root = await act(ada, 'quiz.driveFolders')
+    expect(root.body.folders).toContainEqual({
+      id: 'folder-lectures',
+      name: 'Lectures',
+    })
+    const sub = await act(ada, 'quiz.driveFolders', {
+      parentId: 'folder-lectures',
+    })
+    expect(sub.body.folders).toEqual([{ id: 'folder-week1', name: 'Week 1' }])
+  })
+
+  it('regenerating avoids the prior questions, yielding a different quiz', async () => {
     await act(ada, 'quiz.connectGoogle')
     const first = await act(ada, 'quiz.publish', {
       deckId,
       driveFolderId: 'root',
     })
+    // Republishing over the existing quiz steers clear of its questions, so
+    // the fabricated URL (derived from quiz content) changes (QUIZ-6).
     const second = await act(ada, 'quiz.publish', {
       deckId,
       driveFolderId: 'root',
     })
-    expect(second.body.formUrl).toBe(first.body.formUrl)
+    expect(second.body.formUrl).not.toBe(first.body.formUrl)
+  })
+
+  it('includes the spoken transcript in generation when asked', async () => {
+    await act(ada, 'quiz.connectGoogle')
+    const withoutTx = await act(ada, 'quiz.publish', {
+      deckId,
+      driveFolderId: 'root',
+    })
+    // A fresh deck to compare against, quizzed WITH the transcript folded in.
+    const project = await act(ada, 'project.create', { title: 'Bio2' })
+    const d2 = await act(ada, 'deck.create', {
+      projectId: project.body.id,
+      title: 'Photosynthesis',
+      templateId: 'classic',
+    })
+    for (const phrase of [
+      'Photosynthesis occurs in chloroplasts',
+      'It needs sunlight, water, and carbon dioxide',
+      'It produces glucose and oxygen',
+    ]) {
+      await act(ada, 'session.phrase', { deckId: d2.body.id, phrase })
+    }
+    const withTx = await act(ada, 'quiz.publish', {
+      deckId: d2.body.id,
+      driveFolderId: 'root',
+      includeTranscript: true,
+    })
+    // The transcript adds source material, so the generated Form differs.
+    expect(withTx.body.formUrl).not.toBe(withoutTx.body.formUrl)
+  })
+
+  it('deletes the quiz and forgets it, and regeneration differs afterwards', async () => {
+    await act(ada, 'quiz.connectGoogle')
+    const first = await act(ada, 'quiz.publish', {
+      deckId,
+      driveFolderId: 'root',
+    })
+    const del = await act(ada, 'quiz.delete', { deckId })
+    expect(del.status).toBe(200)
+    expect(del.body).toEqual({ deleted: true })
+
+    // Status no longer reports a quiz.
+    const status = await act(ada, 'quiz.status', { deckId })
+    expect(status.body.quiz).toBeUndefined()
+
+    // Deleting again is a no-op.
+    expect((await act(ada, 'quiz.delete', { deckId })).body).toEqual({
+      deleted: false,
+    })
+
+    // Regenerating avoids the deleted quiz's questions → a different Form.
+    const again = await act(ada, 'quiz.publish', {
+      deckId,
+      driveFolderId: 'root',
+    })
+    expect(again.body.formUrl).not.toBe(first.body.formUrl)
+  })
+
+  it('forbids a non-owner from deleting the quiz', async () => {
+    await act(ada, 'quiz.connectGoogle')
+    await act(ada, 'quiz.publish', { deckId, driveFolderId: 'root' })
+    expect((await act(bob, 'quiz.delete', { deckId })).status).toBe(403)
   })
 
   it('rejects a token whose account has been removed', async () => {

@@ -1,8 +1,9 @@
 /**
  * Unit tests for the deterministic mock quiz provider: one valid
  * single-correct question per eligible slide, correct-answer selection and
- * placement, distractor padding, questionCount clamping, and the throw on
- * contentless input. Every produced question must be serializable.
+ * placement, distractor padding, questionCount clamping, the throw on
+ * contentless input, optional transcript folding, and avoiding prior
+ * questions on regeneration. Every produced question must be serializable.
  */
 import { describe, it, expect } from 'vitest'
 import type { QuizGenerationRequest } from '@slide-machine/shared'
@@ -115,5 +116,31 @@ describe('MockQuizProvider', () => {
     )
     expect(quiz.title).toBe('Lecture Exit Ticket')
     expect(quiz.questions[0]!.choices).toContain('Only body content')
+  })
+
+  it('folds the transcript in as an extra source when provided', async () => {
+    const slides = [{ title: 'Solo', bullets: ['a slide detail'] }]
+    const base = await provider.generateQuiz(req({ slides }))
+    const withTx = await provider.generateQuiz(
+      req({
+        slides,
+        transcript: 'Mitochondria are the powerhouse. They make ATP.',
+      }),
+    )
+    // The transcript adds an eligible source, so more questions are possible.
+    expect(withTx.questions.length).toBeGreaterThan(base.questions.length)
+    // Its content surfaces among the choices.
+    const choices = withTx.questions.flatMap(q => q.choices)
+    expect(choices.some(c => /Mitochondria|ATP/.test(c))).toBe(true)
+  })
+
+  it('avoids repeating prior questions and differs from the previous run', async () => {
+    const first = await provider.generateQuiz(req())
+    const stems = first.questions.map(q => q.question)
+    const second = await provider.generateQuiz(req({ avoidQuestions: stems }))
+    // No regenerated question repeats an avoided one.
+    for (const q of second.questions) expect(stems).not.toContain(q.question)
+    // The two quizzes are not identical.
+    expect(second.questions.map(q => q.question)).not.toEqual(stems)
   })
 })

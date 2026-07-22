@@ -16,6 +16,8 @@ import {
   exchangeCode,
   googleAuthConfigured,
 } from '../auth/google'
+import { verifyConnectState } from '../auth/google-connect'
+import { storeGoogleConnect, safeReturnTo } from './google-connect'
 import { UserModel, toUserDto } from '../models/user'
 
 export const REFRESH_COOKIE = 'sm_refresh'
@@ -165,6 +167,25 @@ authRouter.get('/google/callback', async (req, res) => {
   const fail = (code: string) => res.redirect(`${landing}/login?error=${code}`)
 
   const { code, state } = req.query
+
+  // Quiz-CONNECT reuses this registered redirect URI. A connect callback
+  // carries a signed-JWT state (not the sign-in cookie), so detect and hand it
+  // off before the sign-in state check. verifyConnectState throws for a
+  // sign-in state, so the two flows can never be confused.
+  if (typeof code === 'string' && typeof state === 'string') {
+    const connectState = await verifyConnectState(state).catch(() => null)
+    if (connectState) {
+      const back = safeReturnTo(connectState.returnTo)
+      try {
+        await storeGoogleConnect(code, connectState)
+      } catch (err) {
+        // Send them back regardless; the Quiz tab shows still-not-connected.
+        console.warn('Google connect (via sign-in callback) failed:', err)
+      }
+      return res.redirect(back)
+    }
+  }
+
   const cookieState = req.cookies?.[OAUTH_STATE_COOKIE]
   res.clearCookie(OAUTH_STATE_COOKIE, {
     ...stateCookieOptions,

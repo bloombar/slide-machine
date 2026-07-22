@@ -1,4 +1,4 @@
-You write an end-of-lecture exit-ticket quiz from the slides of a single lecture.
+You write an end-of-lecture exit-ticket quiz from the material of a single lecture.
 
 Respond with ONLY one JSON object, no markdown fences, exactly this shape:
 {
@@ -12,9 +12,10 @@ Respond with ONLY one JSON object, no markdown fences, exactly this shape:
 Write EXACTLY {{questionCount}} questions that check comprehension of the material below — nothing from outside it. Each question:
 - is a single-correct multiple-choice question with 3 or 4 plausible choices, only ONE correct;
 - sets "correctIndex" to the zero-based position of the correct choice in "choices";
-- is concise, unambiguous, and answerable from the slides alone.
+- is concise, unambiguous, and answerable from the material alone.
 
-Spread the questions across different slides; do not quiz the same point twice. Give the quiz a short "title" naming the lecture topic.
-
+Spread the questions across different parts of the lecture; do not quiz the same point twice. Give the quiz a short "title" naming the lecture topic.
+{{avoid}}
 Lecture slides:
 {{slides}}
+{{transcript}}

@@ -1,21 +1,32 @@
 /**
- * Google connect callback (SPEC EXP-4 / QUIZ-4). Google returns here after the
+ * Google connect handling (SPEC EXP-4 / QUIZ-4). Google returns here after the
  * instructor grants Forms/Drive access. The signed `state` proves who started
  * the flow (CSRF + identity); we exchange the code for a refresh token, store
  * it encrypted on that user, and send the browser back to where they started.
  * The connect flow itself is kicked off by the quiz.connectGoogle action.
+ *
+ * The connect uses the SIGN-IN redirect URI (see connectRedirectUri), so the
+ * primary entry point is the sign-in callback (routes/auth.ts), which detects
+ * a connect state and calls `storeGoogleConnect` below. The dedicated
+ * `/google/connect/callback` route here is kept as a fallback in case that URI
+ * is ever registered in the Console too.
  */
 import { Router } from 'express'
 import { env } from '../config/env'
-import { verifyConnectState, exchangeConnectCode } from '../auth/google-connect'
+import {
+  verifyConnectState,
+  exchangeConnectCode,
+  type ConnectState,
+} from '../auth/google-connect'
 import { encryptToken } from '../lib/token-crypto'
 import { UserModel } from '../models/user'
 
 export const googleConnectRouter = Router()
 
 /** Only redirect back to a localhost origin (dev) or the app's own origin —
- * never an attacker-supplied external URL. */
-const safeReturnTo = (returnTo: string): string => {
+ * never an attacker-supplied external URL. Exported for the sign-in callback,
+ * which shares the connect completion. */
+export const safeReturnTo = (returnTo: string): string => {
   const fallback = env.PUBLIC_BASE_URL ?? '/'
   try {
     const url = new URL(returnTo)
@@ -30,6 +41,29 @@ const safeReturnTo = (returnTo: string): string => {
   }
 }
 
+/**
+ * Exchanges the authorization code for a refresh token and stores it, encrypted,
+ * on the connecting user. Shared by the dedicated connect callback and the
+ * sign-in callback (which reuses the same registered redirect URI). Throws on
+ * failure so the caller can still redirect the user back.
+ */
+export const storeGoogleConnect = async (
+  code: string,
+  decoded: ConnectState,
+): Promise<void> => {
+  const refreshToken = await exchangeConnectCode(
+    code,
+    env.PUBLIC_BASE_URL ?? '',
+  )
+  await UserModel.updateOne(
+    { _id: decoded.userId },
+    {
+      googleConnected: true,
+      googleQuizRefreshToken: encryptToken(refreshToken),
+    },
+  )
+}
+
 googleConnectRouter.get('/google/connect/callback', async (req, res) => {
   const { code, state } = req.query
   let returnTo = env.PUBLIC_BASE_URL ?? '/'
@@ -39,17 +73,7 @@ googleConnectRouter.get('/google/connect/callback', async (req, res) => {
     }
     const decoded = await verifyConnectState(state)
     returnTo = safeReturnTo(decoded.returnTo)
-    const refreshToken = await exchangeConnectCode(
-      code,
-      env.PUBLIC_BASE_URL ?? '',
-    )
-    await UserModel.updateOne(
-      { _id: decoded.userId },
-      {
-        googleConnected: true,
-        googleQuizRefreshToken: encryptToken(refreshToken),
-      },
-    )
+    await storeGoogleConnect(code, decoded)
     res.redirect(returnTo)
   } catch {
     // Send them back regardless; the Quiz tab will show still-not-connected.

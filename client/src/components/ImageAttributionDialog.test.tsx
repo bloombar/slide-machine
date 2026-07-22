@@ -1,8 +1,9 @@
 /**
- * Unit tests for the image attribution dialog (IMG-5): the full TASL field
- * set, the owner/editable form vs the read-only view, URL links, and the
- * empty state. Editable (user-uploaded) images show every field; read-only
- * (AI-sourced) images show only the fields that carry data.
+ * Unit tests for the image attribution dialog (IMG-5). Editable
+ * (user-uploaded) images show every TASL field as a form; read-only
+ * (AI-sourced) images show three consolidated clickable lines — Source,
+ * Credit, License — each linking its text to the matching URL, with the
+ * source label falling back title → caption → credit → the raw URL.
  */
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
@@ -20,38 +21,118 @@ const full = {
 }
 
 describe('ImageAttributionDialog', () => {
-  it('read-only: shows only the fields that have data, including the license URL', () => {
-    // An AI-sourced image with partial credit: title, creator, license, and
-    // its URL, but no caption/creatorUrl/source.
+  it('read-only: License name links to the license URL, with no separate URL row', () => {
+    render(
+      <ImageAttributionDialog
+        attribution={{ license: 'CC BY 4.0', licenseUrl: full.licenseUrl }}
+        editable={false}
+        onSave={() => {}}
+        onClose={() => {}}
+      />,
+    )
+    // The license NAME is the link (not the raw URL shown separately)
+    const licenseLink = screen.getByRole('link', { name: 'CC BY 4.0' })
+    expect(licenseLink).toHaveAttribute('href', full.licenseUrl)
+    expect(licenseLink).toHaveAttribute('target', '_blank')
+    // The URL itself is never printed as its own line
+    expect(screen.queryByText(full.licenseUrl)).not.toBeInTheDocument()
+    // Read-only: no form
+    expect(
+      screen.queryByRole('button', { name: 'Save' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('read-only: Source uses the title as the link text, pointing at the source URL', () => {
     render(
       <ImageAttributionDialog
         attribution={{
           title: 'Plant Cell',
-          creator: 'Jane Doe',
-          license: 'CC BY 4.0',
-          licenseUrl: full.licenseUrl,
+          caption: 'A single plant cell',
+          sourceUrl: full.sourceUrl,
         }}
         editable={false}
         onSave={() => {}}
         onClose={() => {}}
       />,
     )
-    // Present fields render
-    expect(screen.getByText('Plant Cell')).toBeInTheDocument()
+    const source = screen.getByRole('link', { name: 'Plant Cell' })
+    expect(source).toHaveAttribute('href', full.sourceUrl)
+    // The source URL is not printed separately
+    expect(screen.queryByText(full.sourceUrl)).not.toBeInTheDocument()
+  })
+
+  it('read-only: Source falls back title → caption → credit → the raw URL', () => {
+    const { rerender } = render(
+      <ImageAttributionDialog
+        attribution={{
+          caption: 'A single plant cell',
+          sourceUrl: full.sourceUrl,
+        }}
+        editable={false}
+        onSave={() => {}}
+        onClose={() => {}}
+      />,
+    )
+    // No title → caption is the source link text
+    expect(
+      screen.getByRole('link', { name: 'A single plant cell' }),
+    ).toHaveAttribute('href', full.sourceUrl)
+
+    // No title/caption → credit is the source link text
+    rerender(
+      <ImageAttributionDialog
+        attribution={{ creator: 'Jane Doe', sourceUrl: full.sourceUrl }}
+        editable={false}
+        onSave={() => {}}
+        onClose={() => {}}
+      />,
+    )
+    expect(screen.getByRole('link', { name: 'Jane Doe' })).toHaveAttribute(
+      'href',
+      full.sourceUrl,
+    )
+
+    // No title/caption/credit → the raw URL is the link text (direct link)
+    rerender(
+      <ImageAttributionDialog
+        attribution={{ sourceUrl: full.sourceUrl }}
+        editable={false}
+        onSave={() => {}}
+        onClose={() => {}}
+      />,
+    )
+    expect(screen.getByRole('link', { name: full.sourceUrl })).toHaveAttribute(
+      'href',
+      full.sourceUrl,
+    )
+  })
+
+  it('read-only: Credit uses the creator name as the link to the creator URL', () => {
+    render(
+      <ImageAttributionDialog
+        attribution={{ creator: 'Jane Doe', creatorUrl: full.creatorUrl }}
+        editable={false}
+        onSave={() => {}}
+        onClose={() => {}}
+      />,
+    )
+    const credit = screen.getByRole('link', { name: 'Jane Doe' })
+    expect(credit).toHaveAttribute('href', full.creatorUrl)
+    expect(screen.queryByText(full.creatorUrl)).not.toBeInTheDocument()
+  })
+
+  it('read-only: values with no URL render as plain text, not links', () => {
+    render(
+      <ImageAttributionDialog
+        attribution={{ creator: 'Jane Doe', license: 'CC BY 4.0' }}
+        editable={false}
+        onSave={() => {}}
+        onClose={() => {}}
+      />,
+    )
     expect(screen.getByText('Jane Doe')).toBeInTheDocument()
     expect(screen.getByText('CC BY 4.0')).toBeInTheDocument()
-    // The license URL is a real new-tab link (copyright requirement)
-    const licenseLink = screen.getByRole('link', { name: full.licenseUrl })
-    expect(licenseLink).toHaveAttribute('href', full.licenseUrl)
-    expect(licenseLink).toHaveAttribute('target', '_blank')
-    // Absent fields are not shown at all — no empty rows
-    expect(screen.queryByText('Caption')).not.toBeInTheDocument()
-    expect(screen.queryByText('Source')).not.toBeInTheDocument()
-    expect(screen.queryByText('Creator URL')).not.toBeInTheDocument()
-    // Read-only: no form
-    expect(
-      screen.queryByRole('button', { name: 'Save' }),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
   })
 
   it('read-only: tells a viewer when nothing is recorded', () => {

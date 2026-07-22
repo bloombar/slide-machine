@@ -33,6 +33,43 @@ export const renderSlidesBlock = (slides: SlideTextContent[]): string =>
     .map((block, i) => `Slide ${i + 1}:\n${block}`)
     .join('\n\n')
 
+/** Cap on how much transcript text is sent, so a long lecture cannot blow
+ * past the model's context or run up the token bill. */
+const MAX_TRANSCRIPT_CHARS = 12000
+
+/** Cap on how many prior questions are listed in the "avoid" block. */
+const MAX_AVOID_QUESTIONS = 40
+
+/**
+ * The optional spoken-transcript section of the prompt. Empty string when no
+ * transcript is supplied, so the `{{transcript}}` slot simply vanishes. A long
+ * transcript is truncated to keep the prompt (and cost) bounded.
+ */
+export const renderTranscriptBlock = (transcript?: string): string => {
+  const text = transcript?.trim()
+  if (!text) return ''
+  const clipped =
+    text.length > MAX_TRANSCRIPT_CHARS
+      ? `${text.slice(0, MAX_TRANSCRIPT_CHARS)}…`
+      : text
+  return `\nSpoken transcript (what the lecturer said aloud; it may contain detail not on the slides — you may quiz this too):\n${clipped}\n`
+}
+
+/**
+ * The optional "do not repeat" section listing previously asked questions.
+ * Empty string when there are none. Used so a regenerated quiz differs from
+ * the ones the instructor already discarded (QUIZ-6).
+ */
+export const renderAvoidBlock = (questions?: string[]): string => {
+  const list = (questions ?? []).map(q => q.trim()).filter(Boolean)
+  if (list.length === 0) return ''
+  const bullets = list
+    .slice(0, MAX_AVOID_QUESTIONS)
+    .map(q => `- ${q}`)
+    .join('\n')
+  return `\nDo NOT repeat or closely paraphrase any of these previously asked questions; write different ones:\n${bullets}\n`
+}
+
 /** Fills `{{slot}}` placeholders; an unknown placeholder throws so a
  * template typo fails loudly on the first request, not silently. */
 export const renderQuizPrompt = (slots: Record<string, string>): string => {

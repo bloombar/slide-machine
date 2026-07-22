@@ -80,6 +80,31 @@ describe('GeminiQuizProvider', () => {
     expect(body.generationConfig.responseMimeType).toBe('application/json')
   })
 
+  it('folds the transcript and avoid-list into the prompt when provided', async () => {
+    fetchMock.mockResolvedValue(reply(validQuiz))
+    await provider.generateQuiz(
+      req({
+        transcript: 'Spoken detail about mitosis phases.',
+        avoidQuestions: ['A previously asked question?'],
+      }),
+    )
+    const prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+      .contents[0].parts[0].text as string
+    expect(prompt).toContain('Spoken transcript')
+    expect(prompt).toContain('mitosis phases')
+    expect(prompt).toContain('Do NOT repeat')
+    expect(prompt).toContain('A previously asked question?')
+  })
+
+  it('omits the transcript and avoid sections when not provided', async () => {
+    fetchMock.mockResolvedValue(reply(validQuiz))
+    await provider.generateQuiz(req())
+    const prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+      .contents[0].parts[0].text as string
+    expect(prompt).not.toContain('Spoken transcript')
+    expect(prompt).not.toContain('Do NOT repeat')
+  })
+
   it('parses and returns a valid quiz definition', async () => {
     fetchMock.mockResolvedValue(reply(validQuiz))
     const quiz = await provider.generateQuiz(req())

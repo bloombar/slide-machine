@@ -1,9 +1,10 @@
 /**
- * Quiz tab end to end (QUIZ-1..4): an instructor opens a lecture's settings,
- * connects Google, generates a quiz, picks a Drive folder, and gets a
- * shareable Form URL with a working copy button. The Google side is
- * mock-backed (QUIZ_PROVIDER=mock), so the full flow runs with the live
- * front/back end and test DB.
+ * Quiz tab end to end (QUIZ-1..6): an instructor opens a lecture's settings,
+ * connects Google, generates a quiz (optionally folding in the transcript),
+ * creates a Drive folder to save it in, gets a shareable Form URL with a
+ * working copy button, and can delete the quiz. The Google side is mock-backed
+ * (QUIZ_PROVIDER=mock), so the full flow runs with the live front/back end and
+ * test DB.
  */
 import { test, expect } from '@playwright/test'
 import { createProject } from './helpers'
@@ -43,7 +44,22 @@ test('generate and publish a quiz from lecture settings', async ({ page }) => {
   // Pick a Drive folder and continue
   const picker = page.getByRole('dialog', { name: 'Choose a Drive folder' })
   await expect(picker).toBeVisible()
-  await picker.getByRole('button', { name: 'Continue' }).click()
+  // The spoken phrase gave the lecture a transcript, so the option is offered
+  const includeTranscript = picker.getByRole('checkbox', {
+    name: /include the spoken transcript/i,
+  })
+  await expect(includeTranscript).toBeVisible()
+  await includeTranscript.check()
+
+  // Create a new destination folder; the finder steps into it, and we save there
+  await picker.getByRole('button', { name: 'New folder' }).click()
+  await picker.getByLabel('New folder name').fill('E2E Quizzes')
+  await picker.getByRole('button', { name: 'Create' }).click()
+  await expect(
+    picker.getByRole('button', { name: 'E2E Quizzes' }),
+  ).toBeVisible()
+
+  await picker.getByRole('button', { name: 'Save here' }).click()
 
   // The shareable Form URL appears with a copy button
   const link = dialog.getByRole('link', { name: /forms/ })
@@ -59,4 +75,11 @@ test('generate and publish a quiz from lecture settings', async ({ page }) => {
   await page.getByRole('button', { name: 'Lecture settings' }).click()
   await dialog.getByRole('tab', { name: 'Quiz' }).click()
   await expect(dialog.getByRole('link', { name: /forms/ })).toBeVisible()
+
+  // Deleting the quiz returns the tab to its generate state
+  await dialog.getByRole('button', { name: /delete quiz/i }).click()
+  await expect(
+    dialog.getByRole('button', { name: 'Generate quiz' }),
+  ).toBeVisible()
+  await expect(dialog.getByRole('link', { name: /forms/ })).toBeHidden()
 })

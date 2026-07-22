@@ -42,7 +42,14 @@ export const verifyConnectState = async (
   return { userId: payload.userId, returnTo: payload.returnTo }
 }
 
-/** Least-privilege scopes (docs/GOOGLE_API_KEYS.md §6). */
+/**
+ * Least-privilege scopes (docs/GOOGLE_API_KEYS.md §6). `drive.file` only sees
+ * files this app created, so the Drive folder browser is limited to those.
+ * To let the picker browse the instructor's WHOLE Drive, add
+ * `'https://www.googleapis.com/auth/drive.readonly'` below once the professor
+ * has added it to the OAuth consent screen — then instructors reconnect once.
+ * No other code change is needed: the picker already browses per-folder.
+ */
 const CONNECT_SCOPES = [
   'https://www.googleapis.com/auth/forms.body',
   'https://www.googleapis.com/auth/forms.body.readonly',
@@ -64,16 +71,26 @@ const requireConfigured = (): { id: string; secret: string } => {
   }
 }
 
-/** The connect callback URI; must match a Cloud Console redirect URI exactly. */
+/**
+ * The connect callback URI; must match a Cloud Console redirect URI exactly.
+ * It deliberately reuses the SIGN-IN callback (`/api/auth/google/callback`)
+ * rather than a dedicated `/connect/callback`, so quiz-connect needs no extra
+ * redirect URI registered in the Console — the sign-in one already is. The
+ * sign-in callback tells the two flows apart by their state (see routes/auth).
+ */
 export const connectRedirectUri = (requestOrigin: string): string => {
   const base = env.PUBLIC_BASE_URL ?? requestOrigin
-  return `${base.replace(/\/$/, '')}/api/auth/google/connect/callback`
+  return `${base.replace(/\/$/, '')}/api/auth/google/callback`
 }
 
-/** The consent URL to send the browser to, requesting offline Forms/Drive access. */
+/** The consent URL to send the browser to, requesting offline Forms/Drive access.
+ * `loginHint` (the user's Google email, when they signed in with Google)
+ * pre-selects the account, so the connect is a single "Allow" rather than an
+ * account chooser. */
 export const buildConnectUrl = (
   state: string,
   requestOrigin: string,
+  loginHint?: string,
 ): string => {
   const { id } = requireConfigured()
   const params = new URLSearchParams({
@@ -87,6 +104,7 @@ export const buildConnectUrl = (
     prompt: 'consent',
     include_granted_scopes: 'true',
   })
+  if (loginHint) params.set('login_hint', loginHint)
   return `${AUTH_ENDPOINT}?${params.toString()}`
 }
 

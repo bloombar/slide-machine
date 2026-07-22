@@ -135,12 +135,41 @@ export default function DeckViewerPage() {
   const [error, setError] = useState<string | null>(null)
   // A lecture list's Share option deep-links to the sharing tab; the
   // layout picker's "Change template" link deep-links to the design tab
-  const [settingsTab, setSettingsTab] = useState<SettingsTabId | null>(
-    () =>
-      (location.state as { settingsTab?: SettingsTabId } | null)?.settingsTab ??
-      null,
-  )
+  const [settingsTab, setSettingsTab] = useState<SettingsTabId | null>(() => {
+    const fromState = (location.state as { settingsTab?: SettingsTabId } | null)
+      ?.settingsTab
+    if (fromState) return fromState
+    // OAuth flows (e.g. Google connect for quizzes) return via a full page
+    // load, which loses router state — they reopen the tab with a ?settings=
+    // param instead. Only known tab ids are honored.
+    const fromUrl = new URLSearchParams(window.location.search).get('settings')
+    const known: SettingsTabId[] = [
+      'general',
+      'template',
+      'refine',
+      'quiz',
+      'sharing',
+    ]
+    return fromUrl && known.includes(fromUrl as SettingsTabId)
+      ? (fromUrl as SettingsTabId)
+      : null
+  })
   const [settingsOpen, setSettingsOpen] = useState(() => settingsTab !== null)
+
+  // Strip the one-shot ?settings= param after using it, so a refresh doesn't
+  // reopen the modal and the URL stays clean.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.has('settings')) {
+      params.delete('settings')
+      const qs = params.toString()
+      window.history.replaceState(
+        {},
+        '',
+        window.location.pathname + (qs ? `?${qs}` : ''),
+      )
+    }
+  }, [])
   // Which slide the layout picker is open for (EDIT-3)
   const [layoutPickerFor, setLayoutPickerFor] = useState<string | null>(null)
   // Blank slots are invisible to the audience; clicking the page

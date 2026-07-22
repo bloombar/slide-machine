@@ -12,6 +12,8 @@ vi.mock('../config/env', () => ({ env: testEnv }))
 import {
   renderSlidesBlock,
   renderQuizPrompt,
+  renderTranscriptBlock,
+  renderAvoidBlock,
   resetQuizPromptCache,
 } from './quiz-prompt'
 
@@ -49,16 +51,76 @@ describe('renderSlidesBlock', () => {
   })
 })
 
+describe('renderTranscriptBlock', () => {
+  it('is empty when no transcript is supplied', () => {
+    expect(renderTranscriptBlock()).toBe('')
+    expect(renderTranscriptBlock('   ')).toBe('')
+  })
+
+  it('labels and includes the transcript text when supplied', () => {
+    const block = renderTranscriptBlock('Mitochondria make ATP.')
+    expect(block).toContain('Spoken transcript')
+    expect(block).toContain('Mitochondria make ATP.')
+  })
+
+  it('truncates a very long transcript to keep the prompt bounded', () => {
+    const long = 'a'.repeat(20000)
+    const block = renderTranscriptBlock(long)
+    expect(block.length).toBeLessThan(long.length)
+    expect(block).toContain('…')
+  })
+})
+
+describe('renderAvoidBlock', () => {
+  it('is empty when there are no prior questions', () => {
+    expect(renderAvoidBlock()).toBe('')
+    expect(renderAvoidBlock([])).toBe('')
+    expect(renderAvoidBlock(['   '])).toBe('')
+  })
+
+  it('lists prior questions under a do-not-repeat instruction', () => {
+    const block = renderAvoidBlock(['What is a cell?', 'Define osmosis.'])
+    expect(block).toContain('Do NOT repeat')
+    expect(block).toContain('- What is a cell?')
+    expect(block).toContain('- Define osmosis.')
+  })
+
+  it('caps the number of questions listed', () => {
+    const many = Array.from({ length: 100 }, (_, i) => `Q${i}?`)
+    const bullets = renderAvoidBlock(many)
+      .split('\n')
+      .filter(l => l.startsWith('- '))
+    expect(bullets.length).toBeLessThanOrEqual(40)
+  })
+})
+
 describe('renderQuizPrompt', () => {
-  it('fills the questionCount and slides placeholders from quiz.txt', () => {
+  it('fills every placeholder from quiz.txt', () => {
     const prompt = renderQuizPrompt({
       questionCount: '3',
       slides: 'Slide 1:\nPhotosynthesis',
+      transcript: renderTranscriptBlock('Spoken words here.'),
+      avoid: renderAvoidBlock(['An old question?']),
     })
     expect(prompt).toContain('EXACTLY 3 questions')
     expect(prompt).toContain('Photosynthesis')
     // The output contract is spelled out for the model
     expect(prompt).toContain('"correctIndex"')
+    // The optional sections land in the prompt
+    expect(prompt).toContain('Spoken words here.')
+    expect(prompt).toContain('An old question?')
+  })
+
+  it('leaves optional slots blank without error', () => {
+    const prompt = renderQuizPrompt({
+      questionCount: '3',
+      slides: 'Slide 1:\nPhotosynthesis',
+      transcript: '',
+      avoid: '',
+    })
+    expect(prompt).toContain('EXACTLY 3 questions')
+    expect(prompt).not.toContain('Spoken transcript')
+    expect(prompt).not.toContain('Do NOT repeat')
   })
 
   it('throws on an unknown placeholder rather than filling silently', () => {
