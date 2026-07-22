@@ -137,6 +137,10 @@ export const banAdminUserEmail = (
     body: JSON.stringify({ reason }),
   })
 
+/** Lifts an email ban so the account can sign in and register again. */
+export const unbanAdminUserEmail = (userId: string): Promise<void> =>
+  apiFetch<void>(`/api/admin/users/${userId}/ban`, { method: 'DELETE' })
+
 /** Sets a new password (min 8 chars) and ends all their sessions. */
 export const resetAdminUserPassword = (
   userId: string,

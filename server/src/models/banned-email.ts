@@ -1,9 +1,9 @@
 /**
  * Banned-email model. A listed email can neither register a new account
  * nor sign in to an existing one (password or Google) — the checks live
- * in auth/service.ts. Rows are written only by the admin ban endpoint,
- * which also records the actor in the admin action log; removing a ban
- * is a direct database operation today (docs/ADMINISTRATION.md).
+ * in auth/service.ts. Rows are written and removed only by the admin
+ * ban/unban endpoints, which also record the actor in the admin action
+ * log (docs/ADMINISTRATION.md).
  */
 import { Schema, model, Types } from 'mongoose'
 

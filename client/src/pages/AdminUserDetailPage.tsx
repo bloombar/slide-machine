@@ -4,8 +4,8 @@
  * Lectures owned by the user but living in someone else's project are
  * grouped under "Other lectures", which link to the live deck viewer
  * (/d/:slug). Moderation lives here too: per-project and per-lecture
- * delete buttons plus a danger zone (reset password, ban email, delete
- * account) — every action confirms first and is recorded in the admin
+ * delete buttons plus a danger zone (reset password, ban/unban email,
+ * delete account) — every action confirms first and is recorded in the admin
  * audit log server-side. A "Show private lectures" toggle (off by
  * default, audited) controls whether private lectures appear in the
  * lists below; opening any lecture in the viewer is always allowed for
@@ -24,6 +24,7 @@ import {
   fetchAdminUserProjects,
   resetAdminUserPassword,
   setAdminPrivateAccess,
+  unbanAdminUserEmail,
   type AdminDeckSummary,
   type AdminUserDetailResponse,
 } from '../api/admin'
@@ -43,6 +44,7 @@ interface Loaded {
 type PendingAction =
   | { kind: 'delete-user' }
   | { kind: 'ban' }
+  | { kind: 'unban' }
   | { kind: 'delete-project'; project: Project }
   | { kind: 'delete-deck'; deck: AdminDeckSummary }
 
@@ -196,6 +198,12 @@ const confirmCopy = (
         message: `${email} will be signed out everywhere and can no longer sign in or register. Their content stays until deleted separately.`,
         confirmLabel: 'Ban email',
       }
+    case 'unban':
+      return {
+        title: 'Unban this email?',
+        message: `${email} will be able to sign in and register again.`,
+        confirmLabel: 'Unban email',
+      }
     case 'delete-project':
       return {
         title: 'Delete this project?',
@@ -277,6 +285,10 @@ export default function AdminUserDetailPage() {
         case 'ban':
           await banAdminUserEmail(userId)
           setNotice('Email banned; all sessions signed out.')
+          break
+        case 'unban':
+          await unbanAdminUserEmail(userId)
+          setNotice('Email unbanned.')
           break
         case 'delete-project':
           await deleteAdminProject(action.project.id)
@@ -456,11 +468,12 @@ export default function AdminUserDetailPage() {
             Reset password
           </button>
           <button
-            onClick={() => setPending({ kind: 'ban' })}
-            disabled={detail.banned}
-            className={`${dangerMenuButton} disabled:opacity-40`}
+            onClick={() =>
+              setPending({ kind: detail.banned ? 'unban' : 'ban' })
+            }
+            className={dangerMenuButton}
           >
-            {detail.banned ? 'Email banned' : 'Ban email'}
+            {detail.banned ? 'Unban email' : 'Ban email'}
           </button>
           <button
             onClick={() => setPending({ kind: 'delete-user' })}

@@ -1,8 +1,8 @@
 /**
  * Integration tests for the admin moderation endpoints against a real
- * MongoDB: delete user (full cascade), ban email (with register/login
- * enforcement), reset password, delete project, delete lecture — plus
- * the audit-log entry each mutation must leave behind.
+ * MongoDB: delete user (full cascade), ban/unban email (with
+ * register/login enforcement), reset password, delete project, delete
+ * lecture — plus the audit-log entry each mutation must leave behind.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import express from 'express'
@@ -296,6 +296,55 @@ describe('POST /api/admin/users/:id/ban', () => {
       .send({})
     expect(res.status).toBe(400)
     expect(res.body.error.code).toBe('target_is_admin')
+  })
+})
+
+describe('DELETE /api/admin/users/:id/ban', () => {
+  it('lifts the ban, logs, and lets the user back in', async () => {
+    const { token } = await asAdmin()
+    await authService.register('banned@example.com', 'password123', 'Banned')
+    const user = await UserModel.findOne({ email: 'banned@example.com' })
+    await request(server)
+      .post(`/api/admin/users/${user!._id}/ban`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({})
+
+    const res = await request(server)
+      .delete(`/api/admin/users/${user!._id}/ban`)
+      .set('Authorization', `Bearer ${token}`)
+    expect(res.status).toBe(204)
+
+    expect(
+      await BannedEmailModel.countDocuments({ email: 'banned@example.com' }),
+    ).toBe(0)
+    const session = await authService.login('banned@example.com', 'password123')
+    expect(session.user.email).toBe('banned@example.com')
+    expect(
+      await AdminActionLogModel.findOne({ action: 'user.unban_email' }),
+    ).toMatchObject({
+      actorEmail: ADMIN_EMAIL,
+      targetType: 'user',
+      targetId: user!._id.toString(),
+      details: { email: 'banned@example.com' },
+    })
+
+    const detail = await request(server)
+      .get(`/api/admin/users/${user!._id}`)
+      .set('Authorization', `Bearer ${token}`)
+    expect(detail.body.banned).toBe(false)
+  })
+
+  it('is a 204 no-op without a ban and writes no audit entry', async () => {
+    const { token } = await asAdmin()
+    const { user } = await createUser('clean@example.com', 'Clean')
+
+    const res = await request(server)
+      .delete(`/api/admin/users/${user._id}/ban`)
+      .set('Authorization', `Bearer ${token}`)
+    expect(res.status).toBe(204)
+    expect(
+      await AdminActionLogModel.countDocuments({ action: 'user.unban_email' }),
+    ).toBe(0)
   })
 })
 

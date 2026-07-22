@@ -48,7 +48,7 @@ moderation actions for when the answer calls for one.
 
 The user drill-down carries the mutation surface; every action asks for
 confirmation, is recorded in the audit log, and — except the password
-reset — cannot be undone from the app:
+reset and the ban — cannot be undone from the app:
 
 - **Delete a project / lecture** — per-row Delete buttons. Cascades
   through everything underneath: lectures, slides, seed material and its
@@ -58,8 +58,9 @@ reset — cannot be undone from the app:
   of band; the app does not email it.
 - **Ban email** (danger zone) — the email can no longer sign in (password
   or Google) or register, and every session ends now. Content stays until
-  deleted separately; the account row shows a **Banned** badge. Unbanning
-  is a direct database operation: remove the row from `bannedemails`.
+  deleted separately; the account row shows a **Banned** badge and the
+  button becomes **Unban email**, which lifts the ban (also confirmed
+  and audited) so the account can sign in again.
 - **Delete user** (danger zone) — deletes the account and all of its
   data: their projects (and everything in them), lectures they own inside
   other users' projects, their id in other users' sharing lists, and all
@@ -97,7 +98,8 @@ Entries are **append-only**: they are written through one server module
 ([server/src/audit/log.ts](../server/src/audit/log.ts)) into the
 `adminactionlogs` Mongo collection, and no API can edit or delete them.
 Every moderation action writes one (`user.delete`, `user.ban_email`,
-`user.password_reset`, `project.delete`, `deck.delete`), as do the
+`user.unban_email`, `user.password_reset`, `project.delete`,
+`deck.delete`), as do the
 "show private lectures" toggle transitions (`user.private_view_enabled`
 / `user.private_view_disabled`). It is the durable audit trail; a local
 CSV would not survive an App Platform redeploy, which is why the CSV is
@@ -177,8 +179,8 @@ project or lecture in the app cascades its stored files.
 ## Direct database operations
 
 Anything the console can't do — merging accounts, correcting data,
-changing a `planTier`, lifting a ban — is done directly against MongoDB.
-It's an escape hatch:
+changing a `planTier` — is done directly against MongoDB. It's an
+escape hatch:
 
 - Prefer the console's own actions where they exist (delete user /
   project / lecture, ban, password reset): they cascade through stored

@@ -463,6 +463,26 @@ adminRouter.post('/users/:id/ban', async (req, res) => {
   res.status(204).end()
 })
 
+/** Lifts an email ban so the account can register and sign in again.
+ * Idempotent; only an actual removal is worth an audit entry. */
+adminRouter.delete('/users/:id/ban', async (req, res) => {
+  const user = await loadUser(String(req.params.id))
+  const admin = actor(req)
+
+  const removed = await BannedEmailModel.deleteOne({ email: user.email })
+  if (removed.deletedCount > 0) {
+    await logAdminAction({
+      actorId: admin.id,
+      actorEmail: admin.email,
+      action: 'user.unban_email',
+      targetType: 'user',
+      targetId: user._id.toString(),
+      details: { email: user.email },
+    })
+  }
+  res.status(204).end()
+})
+
 const passwordBodySchema = z.object({
   // Same floor as registration (routes/auth.ts registerSchema)
   password: z.string().min(8, 'Password must be at least 8 characters'),

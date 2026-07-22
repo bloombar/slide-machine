@@ -1,8 +1,8 @@
 /**
  * E2E admin moderation journey against the built app: the allowlisted
  * admin resets a user's password, deletes their project, bans their
- * email (login then fails), deletes the account, and finds every action
- * in the audit log.
+ * email (login then fails), unbans it (login works again), deletes the
+ * account, and finds every action in the audit log.
  */
 import {
   test,
@@ -105,6 +105,19 @@ test('the admin moderates: password, project, ban, delete, audit', async ({
     403,
   )
 
+  // Unban: the ban button flipped to Unban; the badge clears and the
+  // password works again
+  await page.getByRole('button', { name: 'Unban email' }).click()
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Unban email' })
+    .click()
+  await expect(page.getByText('Email unbanned.')).toBeVisible()
+  await expect(page.getByText('Banned', { exact: true })).toHaveCount(0)
+  expect((await apiLogin(request, victim.email, newPassword)).status()).toBe(
+    200,
+  )
+
   // Delete the account: back to the directory, the user is gone
   await page.getByRole('button', { name: 'Delete user' }).click()
   await page
@@ -118,6 +131,7 @@ test('the admin moderates: password, project, ban, delete, audit', async ({
   await page.goto('/app/admin/logs')
   for (const action of [
     'user.delete',
+    'user.unban_email',
     'user.ban_email',
     'project.delete',
     'user.password_reset',

@@ -2,7 +2,8 @@
  * Unit tests for the per-user admin view: account details, projects
  * linking to their admin project pages, the "Other lectures" group
  * for decks living outside the user's own projects, and the moderation
- * actions (delete user/project/lecture, ban email, reset password).
+ * actions (delete user/project/lecture, ban/unban email, reset
+ * password).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
@@ -171,11 +172,30 @@ describe('AdminUserDetailPage', () => {
     )
   })
 
-  it('shows the Banned badge and disables the ban button for a banned user', async () => {
+  it('shows the Banned badge and an Unban button for a banned user', async () => {
     renderPage(200, { ...detail, banned: true })
     await screen.findByRole('heading', { name: 'Ada' })
     expect(screen.getByText('Banned')).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Email banned' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Unban email' })).toBeEnabled()
+    expect(
+      screen.queryByRole('button', { name: 'Ban email' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('unbans the email after a confirm and reports it', async () => {
+    const { fetchMock } = renderPage(200, { ...detail, banned: true })
+    await screen.findByRole('heading', { name: 'Ada' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unban email' }))
+    const dialog = screen.getByRole('alertdialog', {
+      name: 'Unban this email?',
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Unban email' }))
+
+    expect(await screen.findByText('Email unbanned.')).toBeVisible()
+    expect(requested(fetchMock)).toContainEqual(
+      expect.stringMatching(/DELETE .*\/api\/admin\/users\/u1\/ban$/),
+    )
   })
 
   it('deletes the user after a confirm and returns to the list', async () => {
