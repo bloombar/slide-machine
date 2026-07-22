@@ -48,9 +48,18 @@ export interface Deck {
   seedContext?: string
   /** Own AI-freedom setting (1-5); absent = inherit the project's. */
   generationFreedom?: number
+  /** Per-lecture Refine toggle: identify speakers + reframe student turns.
+   * Absent = default (on only when the lecture has retained audio). */
+  refineIdentifySpeakers?: boolean
+  /** Per-lecture Refine toggle: refine slide content/layout/image.
+   * Absent = default on. */
+  refineSlidesEnabled?: boolean
   /** Per-lecture "Refine all slides" strength (1-5); absent = inherit the
    * server default (REFINE_SLIDES_DEFAULT_LEVEL). Stored only once moved. */
   refineSlidesLevel?: number
+  /** Per-lecture Refine toggle: rewrite the spoken narration.
+   * Absent = default on. */
+  refineTranscriptEnabled?: boolean
   /** Per-lecture "Refine the spoken transcript" strength (1-5); absent =
    * inherit the server default. Stored only once moved. */
   refineTranscriptLevel?: number
@@ -123,6 +132,69 @@ export interface Slide {
    * post-lecture reformat (GEN-4) protect manual edits from being
    * overwritten. Absent = never manually edited. */
   manuallyEdited?: boolean
+  /** Freehand whiteboard annotations drawn on the slide (WB-1), each
+   * timing-anchored to the narration for synced playback. Absent = none. */
+  drawings?: Stroke[]
+}
+
+/** A single point of a stroke, normalized 0..1 to the slide's rendered box
+ * so annotations survive layout/aspect changes. */
+export interface StrokePoint {
+  x: number
+  y: number
+}
+
+/** Drawing tools that persist a stroke. The eraser is not a tool kind — it
+ * stamps an existing stroke's `erasedAnchor` (whole-stroke, timestamped). */
+export type StrokeTool = 'pen' | 'highlighter'
+
+/**
+ * A stroke event's timing, anchored to the slide's narration so it survives
+ * transcript refinement and replays proportionally against TTS audio (WB-2).
+ * The durable field is `charAnchor`, a character offset into
+ * `slide.sourceTranscript`; playback uses `charAnchor / sourceTranscript.length`.
+ * `source` records how precisely it was placed:
+ *  - 'word'     nearest live word timing (google-cloud STT) — inside a phrase
+ *  - 'appended' end of the transcript at draw time — every engine, no timings
+ *  - 'elapsed'  playback-side fallback when TTS audio has no duration
+ *  - 'unsynced' drawn with the mic off — not tied to narration at all, so it
+ *               is ALWAYS shown on its slide (in or out of playback), never
+ *               gated by the audio position (WB-2)
+ */
+export interface StrokeAnchor {
+  charAnchor: number
+  source: 'word' | 'appended' | 'elapsed' | 'unsynced'
+  /** Recording session the event happened in; google-cloud STT only. */
+  sessionId?: string
+  /** Session-relative ms of the event; google-cloud STT only. */
+  sessionMs?: number
+}
+
+/**
+ * One freehand stroke on a slide (WB-1). Pen renders opaque; highlighter
+ * renders semi-transparent. Whole-stroke erase is a timestamped EVENT, not a
+ * deletion: once erased the stroke keeps its data and gains `erasedAnchor`, so
+ * synced playback shows it appear at `anchor` and disappear at `erasedAnchor`;
+ * the static/edit view hides an erased stroke.
+ */
+export interface Stroke {
+  /** Client-minted (crypto.randomUUID); stable for erase + replay keying. */
+  id: string
+  tool: StrokeTool
+  /** Hex color. Opacity comes from `tool`, not this value. */
+  color: string
+  /** Line width, normalized to slide width so it scales with the box. */
+  thickness: number
+  points: StrokePoint[]
+  /** ISO wall-clock the draw gesture began / ended. */
+  startedAt: string
+  endedAt: string
+  /** When the stroke was drawn, in transcript space. */
+  anchor: StrokeAnchor
+  /** Present once erased during a session; when it disappears in playback. */
+  erasedAnchor?: StrokeAnchor
+  /** ISO wall-clock of the erase gesture. */
+  erasedAt?: string
 }
 
 /**

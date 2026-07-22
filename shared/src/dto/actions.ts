@@ -3,7 +3,7 @@
  * Results reuse the shared data-model types (e.g. Project).
  */
 import type { Locale } from '../types/locale'
-import type { ImageAttribution, Visibility } from '../types/deck'
+import type { ImageAttribution, Slide, Stroke, Visibility } from '../types/deck'
 import type { ProfileVisibility } from '../types/user'
 import type { WordTiming } from '../providers/transcription'
 
@@ -191,11 +191,17 @@ export interface DeckSetLanguageInput {
   language: Locale | null
 }
 
-/** Per-lecture Refine slider levels (GEN-4): a number sets a level, null
- * re-inherits the server default, absent leaves that level unchanged. */
-export interface DeckSetRefineLevelsInput {
+/** Per-lecture Refine settings (GEN-4): which passes are on plus their slider
+ * levels. For a boolean, true/false sets it and null re-inherits the default;
+ * for a level a number sets it and null re-inherits the server default. Any
+ * field left absent is unchanged. These settings drive both the whole-lecture
+ * refine and the single-slide "Refine this slide" kebab action. */
+export interface DeckSetRefineSettingsInput {
   deckId: string
+  identifySpeakers?: boolean | null
+  slidesEnabled?: boolean | null
   slidesLevel?: number | null
+  transcriptEnabled?: boolean | null
   transcriptLevel?: number | null
 }
 
@@ -222,6 +228,11 @@ export interface SessionPhraseInput {
    * (Google Cloud). `startMs`/`endMs` on the stored segment are derived from
    * these server-side. Absent for the browser engine / typed input. */
   words?: WordTiming[]
+  /** True while a whiteboard tool is active during recording (WB-3): the
+   * server appends the phrase to the current slide instead of auto-creating a
+   * new one, so drawing never spawns slides. The "+" button and the "new
+   * slide" voice command bypass this path and still create slides. */
+  suppressNewSlide?: boolean
 }
 
 /** Run post-lecture speaker diarization on a deck's retained recordings and
@@ -279,6 +290,24 @@ export interface DeckRefineStatusResult {
   error?: string
 }
 
+/** Refine a single slide (the "Refine this slide" kebab action). Runs the same
+ * passes as the whole-lecture refine but scoped to one slide, using the
+ * lecture's persisted Refine settings. Diarization is deck-wide, so it never
+ * applies here; only the slide-content and narration passes do. */
+export interface DeckRefineSlideInput {
+  deckId: string
+  slideId: string
+}
+
+/** The refreshed slide plus what changed, so the viewer can patch it in place. */
+export interface DeckRefineSlideResult {
+  slide: Slide
+  /** The slide's content was refined (false if disabled or hand-edited). */
+  refined: boolean
+  /** The slide's narration was re-generated. */
+  narrationUpdated: boolean
+}
+
 /** Reformat a deck's slides now that speaker roles are known (GEN-4 Phase 4). */
 export interface DeckReformatInput {
   deckId: string
@@ -305,6 +334,14 @@ export interface SlideEditInput {
   imageRef?: string
   /** Image credit/licensing edited from the attribution dialog (IMG-5). */
   attribution?: ImageAttribution
+}
+
+/** Replaces a slide's whiteboard drawings wholesale (WB-1). The client sends
+ * the full stroke set after each draw/erase; erased strokes are kept (with
+ * their `erasedAnchor`) so synced playback can replay the erasure. */
+export interface SlideEditDrawingsInput {
+  slideId: string
+  drawings: Stroke[]
 }
 
 export interface SlideDeleteInput {

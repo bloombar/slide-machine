@@ -212,6 +212,15 @@ const envSchema = z.object({
     .max(5)
     .default(2),
 
+  // Whiteboard (WB-3): how long after the last drawing/erasing gesture the app
+  // keeps suppressing auto-slide-creation, so mid-annotation speech doesn't
+  // spawn a slide while the user pauses to switch tools or move the cursor.
+  WHITEBOARD_SUPPRESS_DEBOUNCE_MS: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .default(5000),
+
   // S3-compatible object storage: MinIO in dev, DO Spaces in prod (TECH-10)
   S3_ENDPOINT: z.string().optional(),
   S3_REGION: z.string().optional(),

@@ -13,7 +13,7 @@ import type {
   DeckSetAccessInput,
   DeckSetGenerationFreedomInput,
   DeckSetLanguageInput,
-  DeckSetRefineLevelsInput,
+  DeckSetRefineSettingsInput,
   DeckSetTtsVoiceInput,
   DeckSetSeedNotesInput,
   DeckShare,
@@ -402,6 +402,9 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
       )
       .max(2000)
       .optional(),
+    // Whiteboard drawing is active on the client (WB-3): don't auto-create a
+    // slide from this phrase; append it to the current slide instead.
+    suppressNewSlide: z.boolean().optional(),
   }),
   execute: async (ctx, input) => {
     const { deck } = await loadEditableDeck(ctx, input.deckId)
@@ -482,8 +485,12 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
           }
         : undefined,
       // Feature flag (GENERATION_LAYOUT_REFIT): updates may switch the
-      // slide's layout, including a full refit (GEN-8)
-      allowLayoutRefit: env.GENERATION_LAYOUT_REFIT,
+      // slide's layout, including a full refit (GEN-8). Never while the user is
+      // hand-annotating the current slide (WB-3) — its layout must hold still.
+      allowLayoutRefit: env.GENERATION_LAYOUT_REFIT && !input.suppressNewSlide,
+      // The user is drawing on the current slide: tell the model to keep its
+      // layout (the server also enforces this below).
+      lockLayout: input.suppressNewSlide,
       // Feature flag (GENERATION_VOICE_COMMANDS): offer the CAP-4
       // command set so the model can flag operational phrases
       voiceCommands: env.GENERATION_VOICE_COMMANDS
@@ -603,7 +610,10 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
     if (
       rawResult.action === 'update' &&
       rawResult.updateMode === 'refit' &&
-      lastSlide
+      lastSlide &&
+      // Never refit (a layout change) while the user is drawing (WB-3): fall
+      // through to a plain delta update that keeps the current layout.
+      !input.suppressNewSlide
     ) {
       if (!env.GENERATION_LAYOUT_REFIT) return event({ kind: 'none' })
       const snapshot: SlideContentSnapshot = {
@@ -699,6 +709,23 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
         },
       }
     }
+    // Whiteboard drawing is active on the client (WB-3): a new slide would
+    // interrupt annotating, so append this phrase to the current slide as
+    // transcript only (no content change) rather than creating one. Keeps the
+    // slide's narration growing so stroke anchors stay correct. The "+" button
+    // and the "new slide" voice command bypass this action, so explicit slide
+    // creation still works. With no current slide there is nothing to append
+    // to, so a slide is created as usual.
+    if (input.suppressNewSlide && result.action === 'new' && lastSlide) {
+      lastSlide.sourceTranscript = [lastSlide.sourceTranscript, input.phrase]
+        .filter(Boolean)
+        .join(' ')
+      await lastSlide.save()
+      await linkSegment('update', lastSlide._id)
+      await touchDeck(deck._id)
+      return event({ kind: 'slide.update', slide: toSlideDto(lastSlide) })
+    }
+
     // Honor image intent by giving it a layout that can show the image
     // (GEN-7): if the model asked for a photo on a layout without an
     // image slot, upgrade to one that fits — or drop the image if none
@@ -722,7 +749,10 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
           .filter(Boolean)
           .join(' ')
       }
-      lastSlide.layoutType = result.layoutType
+      // Keep the layout fixed while the user is drawing on this slide (WB-3),
+      // regardless of what the model returned — the slide must not be
+      // rearranged under their hand.
+      if (!input.suppressNewSlide) lastSlide.layoutType = result.layoutType
       // Keep the slide's image keywords current: a phrase that carries fresh
       // image guidance replaces them, so the search seed and enrichment
       // always reflect the slide's latest content. An update with no
@@ -815,27 +845,39 @@ export const deckSetGenerationFreedom = defineAction<
   },
 })
 
-/** Per-lecture Refine slider levels (GEN-4): a number pins a level for this
- * lecture, null re-inherits the server default, absent leaves it unchanged. */
-export const deckSetRefineLevels = defineAction<DeckSetRefineLevelsInput, Deck>(
-  {
-    name: 'deck.setRefineLevels',
-    input: z.object({
-      deckId: z.string().min(1),
-      slidesLevel: z.number().int().min(1).max(5).nullable().optional(),
-      transcriptLevel: z.number().int().min(1).max(5).nullable().optional(),
-    }),
-    execute: async (ctx, input) => {
-      const { deck, acl } = await loadEditableDeck(ctx, input.deckId)
-      if (input.slidesLevel !== undefined)
-        deck.refineSlidesLevel = input.slidesLevel ?? undefined
-      if (input.transcriptLevel !== undefined)
-        deck.refineTranscriptLevel = input.transcriptLevel ?? undefined
-      await deck.save()
-      return toDeckDto(deck, acl)
-    },
+/** Per-lecture Refine settings (GEN-4): the on/off toggles and slider levels.
+ * For each field a value sets it, null re-inherits the default, and absent
+ * leaves it unchanged. These persist so the single-slide "Refine this slide"
+ * action can reuse the lecture's choices. */
+export const deckSetRefineSettings = defineAction<
+  DeckSetRefineSettingsInput,
+  Deck
+>({
+  name: 'deck.setRefineSettings',
+  input: z.object({
+    deckId: z.string().min(1),
+    identifySpeakers: z.boolean().nullable().optional(),
+    slidesEnabled: z.boolean().nullable().optional(),
+    slidesLevel: z.number().int().min(1).max(5).nullable().optional(),
+    transcriptEnabled: z.boolean().nullable().optional(),
+    transcriptLevel: z.number().int().min(1).max(5).nullable().optional(),
+  }),
+  execute: async (ctx, input) => {
+    const { deck, acl } = await loadEditableDeck(ctx, input.deckId)
+    if (input.identifySpeakers !== undefined)
+      deck.refineIdentifySpeakers = input.identifySpeakers ?? undefined
+    if (input.slidesEnabled !== undefined)
+      deck.refineSlidesEnabled = input.slidesEnabled ?? undefined
+    if (input.slidesLevel !== undefined)
+      deck.refineSlidesLevel = input.slidesLevel ?? undefined
+    if (input.transcriptEnabled !== undefined)
+      deck.refineTranscriptEnabled = input.transcriptEnabled ?? undefined
+    if (input.transcriptLevel !== undefined)
+      deck.refineTranscriptLevel = input.transcriptLevel ?? undefined
+    await deck.save()
+    return toDeckDto(deck, acl)
   },
-)
+})
 
 /** Lecture-level language; null re-inherits project/profile/browser. */
 export const deckSetLanguage = defineAction<DeckSetLanguageInput, Deck>({
@@ -1053,7 +1095,7 @@ registerAction(deckReorderSlides)
 registerAction(sessionPhrase)
 registerAction(deckSetSeedNotes)
 registerAction(deckSetGenerationFreedom)
-registerAction(deckSetRefineLevels)
+registerAction(deckSetRefineSettings)
 registerAction(deckSetLanguage)
 registerAction(deckSetTtsVoice)
 registerAction(deckSetAccess)

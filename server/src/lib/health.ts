@@ -20,6 +20,7 @@ import { getStorage } from '../storage'
 import { pingGemini } from '../providers/gemini-generation'
 import { pingGoogleStt } from '../providers/google-cloud-transcription'
 import { pingGoogleTts } from '../providers/google-cloud-tts'
+import { pingGcsAudioStorage } from '../providers/google-cloud-diarization'
 import { APP_VERSION } from './app-version'
 
 /** Per-probe deadline; the badge must never wait on a slow dependency. */
@@ -62,14 +63,15 @@ const ttsComponent = async (): Promise<HealthComponent> => {
 
 /** Probes all components concurrently. */
 const runChecks = async (): Promise<HealthComponents> => {
-  const [mongo, storage, gemini, stt, tts] = await Promise.all([
+  const [mongo, storage, audioStorage, gemini, stt, tts] = await Promise.all([
     withTimeout(mongoComponent()),
     withTimeout(getStorage().healthCheck()),
+    withTimeout(pingGcsAudioStorage()),
     withTimeout(pingGemini()),
     withTimeout(pingGoogleStt()),
     withTimeout(ttsComponent()),
   ])
-  return { mongo, storage, gemini, stt, tts }
+  return { mongo, storage, audioStorage, gemini, stt, tts }
 }
 
 let cache: { at: number; components: HealthComponents } | null = null

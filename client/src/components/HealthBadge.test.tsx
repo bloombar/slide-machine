@@ -14,6 +14,7 @@ const healthFixture: HealthResponse = {
   components: {
     mongo: { status: 'ok', detail: 'connected' },
     storage: { status: 'ok', detail: 'local disk' },
+    audioStorage: { status: 'disabled', detail: 'local storage' },
     gemini: { status: 'ok', detail: 'connected' },
     stt: { status: 'disabled', detail: 'browser (client-side)' },
     tts: { status: 'ok', detail: 'ready' },
@@ -58,6 +59,13 @@ describe('HealthBadge', () => {
     expect(screen.getByTestId('health-component-gemini')).toHaveTextContent(
       'Generative AI',
     )
+    // The GCS audio-storage row sits beside the general Storage row.
+    expect(
+      screen.getByTestId('health-component-audioStorage'),
+    ).toHaveTextContent('Audio storage')
+    expect(
+      screen.getByTestId('health-component-audioStorage'),
+    ).toHaveTextContent('local storage')
     expect(screen.getByTestId('health-component-stt')).toHaveTextContent(
       'browser (client-side)',
     )

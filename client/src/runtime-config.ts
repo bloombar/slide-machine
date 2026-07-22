@@ -15,6 +15,7 @@ let runtime: RuntimeConfig = {
   ttsEnabled: false,
   refineSlidesDefaultLevel: 2,
   refineTranscriptDefaultLevel: 2,
+  whiteboardSuppressDebounceMs: 5000,
 }
 let loaded: Promise<RuntimeConfig> | null = null
 
@@ -43,3 +44,8 @@ export const getRefineSlidesDefaultLevel = (): number =>
 /** Default strength (1–5) the "Refine the spoken transcript" slider starts at. */
 export const getRefineTranscriptDefaultLevel = (): number =>
   runtime.refineTranscriptDefaultLevel
+
+/** How long (ms) after the last drawing gesture the client keeps suppressing
+ * auto-slide-creation while recording (WB-3). */
+export const getWhiteboardSuppressDebounceMs = (): number =>
+  runtime.whiteboardSuppressDebounceMs

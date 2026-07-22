@@ -157,6 +157,7 @@ value is baked into the SPA at build.
 | `S3_FORCE_PATH_STYLE` | plain | leave unset/`false` for Spaces (`true` is MinIO-only) |
 | `AUDIO_RETENTION_ENABLED` | plain | `true` to retain live-session audio for diarization (GEN-4); default off. Needs `TRANSCRIPTION_PROVIDER=google-cloud` |
 | `AUDIO_RETENTION_DAYS` | plain | days before the daily sweep deletes a recording; default `30`, `0` = keep forever (see §2 lifecycle note) |
+| `WHITEBOARD_SUPPRESS_DEBOUNCE_MS` | plain | grace (ms) after the last whiteboard gesture during which speech folds into the current slide instead of creating one (EDIT-4); default `5000`, `0` disables. Optional |
 
 Optional, as features land: `GITHUB_OAUTH_CLIENT_ID` / `_SECRET`,
 `CONNECTED_ACCOUNT_TOKEN_ENC_KEY`, `STRIPE_SECRET_KEY` /

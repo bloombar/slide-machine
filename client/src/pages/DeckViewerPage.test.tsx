@@ -1784,30 +1784,9 @@ describe('DeckViewerPage image editing', () => {
     canEdit: true,
   })
 
-  const renderImageDeck = (layoutType: string) => {
-    mockFetchRoutes({
-      '/api/auth/refresh': () => ({
-        status: 200,
-        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
-      }),
-      '/api/decks/shared-abc123': () => ({
-        status: 200,
-        body: imageDeck(layoutType),
-      }),
-    })
-    return render(
-      <MemoryRouter initialEntries={['/d/shared-abc123']}>
-        <AuthProvider>
-          <Routes>
-            <Route path="/d/:slug" element={<DeckViewerPage />} />
-          </Routes>
-        </AuthProvider>
-      </MemoryRouter>,
-    )
-  }
-
-  it('removing the image from an image-only slide confirms, then deletes it', async () => {
-    let deleted: unknown
+  it('removing the image from an image-only slide just empties the slot, no delete', async () => {
+    const calls: unknown[] = []
+    let deleted = false
     mockFetchRoutes({
       '/api/auth/refresh': () => ({
         status: 200,
@@ -1817,8 +1796,20 @@ describe('DeckViewerPage image editing', () => {
         status: 200,
         body: imageDeck('image-heavy'),
       }),
-      '/api/actions/slide.delete': init => {
-        deleted = JSON.parse(String(init?.body))
+      '/api/actions/slide.editContent': init => {
+        calls.push(JSON.parse(String(init?.body)))
+        return {
+          status: 200,
+          body: {
+            id: 's1',
+            deckId: 'deck1',
+            index: 0,
+            layoutType: 'image-heavy',
+          },
+        }
+      },
+      '/api/actions/slide.delete': () => {
+        deleted = true
         return { status: 200, body: {} }
       },
     })
@@ -1832,16 +1823,17 @@ describe('DeckViewerPage image editing', () => {
       </MemoryRouter>,
     )
     fireEvent.click(await screen.findByRole('button', { name: 'Remove image' }))
-    // An image-only slide asks before it vanishes
+    // No confirm dialog — the image is simply cleared and the slide stays.
     expect(
-      await screen.findByRole('alertdialog', { name: 'Delete this slide?' }),
-    ).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Delete slide' }))
-
-    await vi.waitFor(() => expect(deleted).toEqual({ slideId: 's1' }))
+      screen.queryByRole('alertdialog', { name: 'Delete this slide?' }),
+    ).not.toBeInTheDocument()
+    await vi.waitFor(() =>
+      expect(calls).toEqual([{ slideId: 's1', imageRef: '' }]),
+    )
+    expect(deleted).toBe(false)
   })
 
-  it('removing the image from an image+text slide clears it and drops to text', async () => {
+  it('removing the image from an image+text slide clears it and keeps the layout', async () => {
     const calls: Array<{ url: string; body: unknown }> = []
     mockFetchRoutes({
       '/api/auth/refresh': () => ({
@@ -1864,6 +1856,7 @@ describe('DeckViewerPage image editing', () => {
           },
         }
       },
+      // Registered but must NOT be called — the layout stays put.
       '/api/actions/slide.setLayout': init => {
         calls.push({ url: 'setLayout', body: JSON.parse(String(init?.body)) })
         return {
@@ -1882,30 +1875,18 @@ describe('DeckViewerPage image editing', () => {
       </MemoryRouter>,
     )
     fireEvent.click(await screen.findByRole('button', { name: 'Remove image' }))
-    // No confirm dialog — it is non-destructive
+    // No confirm dialog — it is non-destructive.
     expect(
       screen.queryByRole('alertdialog', { name: 'Delete this slide?' }),
     ).not.toBeInTheDocument()
 
+    // Only the image is cleared; the layout is NOT switched.
     await vi.waitFor(() =>
       expect(calls).toEqual([
         { url: 'editContent', body: { slideId: 's1', imageRef: '' } },
-        { url: 'setLayout', body: { slideId: 's1', layoutType: 'content' } },
       ]),
     )
-  })
-
-  it('cancelling the confirm keeps the image-only slide', async () => {
-    renderImageDeck('image-heavy')
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove image' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(
-      screen.queryByRole('alertdialog', { name: 'Delete this slide?' }),
-    ).not.toBeInTheDocument()
-    // The slide (and its image controls) are still there
-    expect(
-      screen.getByRole('button', { name: 'Remove image' }),
-    ).toBeInTheDocument()
+    expect(calls.some(c => c.url === 'setLayout')).toBe(false)
   })
 
   it('surfaces an error when an image upload fails instead of failing silently', async () => {

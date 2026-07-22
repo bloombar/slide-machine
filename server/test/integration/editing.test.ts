@@ -146,6 +146,96 @@ describe('slide.editContent', () => {
   })
 })
 
+describe('slide.editDrawings', () => {
+  const stroke = (over: object = {}) => ({
+    id: 'stroke-1',
+    tool: 'pen',
+    color: '#1e293b',
+    thickness: 0.01,
+    points: [
+      { x: 0.1, y: 0.1 },
+      { x: 0.5, y: 0.4 },
+    ],
+    startedAt: '2026-07-21T10:00:00.000Z',
+    endedAt: '2026-07-21T10:00:01.000Z',
+    anchor: { charAnchor: 12, source: 'appended' },
+    ...over,
+  })
+
+  it('saves and round-trips drawings, including a timestamped erase', async () => {
+    const erased = stroke({
+      id: 'stroke-2',
+      tool: 'highlighter',
+      color: '#fde047',
+      erasedAnchor: {
+        charAnchor: 40,
+        source: 'word',
+        sessionId: 's1',
+        sessionMs: 900,
+      },
+      erasedAt: '2026-07-21T10:00:05.000Z',
+    })
+    const res = await act(ada, 'slide.editDrawings', {
+      slideId: slideIds[0],
+      drawings: [stroke(), erased],
+    })
+    expect(res.status).toBe(200)
+    expect(res.body.drawings).toHaveLength(2)
+
+    const view = await act(ada, 'deck.get', { deckId })
+    const saved = view.body.slides[0].drawings
+    expect(saved).toHaveLength(2)
+    expect(saved[0]).toMatchObject({
+      id: 'stroke-1',
+      tool: 'pen',
+      color: '#1e293b',
+    })
+    expect(saved[0].anchor).toMatchObject({
+      charAnchor: 12,
+      source: 'appended',
+    })
+    // The erased stroke is kept (not deleted) with its erase anchor for replay
+    expect(saved[1].id).toBe('stroke-2')
+    expect(saved[1].erasedAnchor).toMatchObject({
+      charAnchor: 40,
+      source: 'word',
+    })
+  })
+
+  it('clamps out-of-range coordinates into the slide box', async () => {
+    const res = await act(ada, 'slide.editDrawings', {
+      slideId: slideIds[0],
+      drawings: [
+        stroke({
+          points: [
+            { x: -0.3, y: 1.8 },
+            { x: 0.5, y: 0.5 },
+          ],
+        }),
+      ],
+    })
+    expect(res.status).toBe(200)
+    expect(res.body.drawings[0].points[0]).toEqual({ x: 0, y: 1 })
+  })
+
+  it('rejects a non-hex color', async () => {
+    const res = await act(ada, 'slide.editDrawings', {
+      slideId: slideIds[0],
+      drawings: [stroke({ color: 'red' })],
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it("403s editing another user's drawings", async () => {
+    const bob = await registerUser('bob-draw@example.com')
+    const res = await act(bob, 'slide.editDrawings', {
+      slideId: slideIds[0],
+      drawings: [stroke()],
+    })
+    expect(res.status).toBe(403)
+  })
+})
+
 describe('slide.setLayout', () => {
   it('switches to another of the template layouts, keeping content', async () => {
     const res = await act(ada, 'slide.setLayout', {
@@ -207,6 +297,66 @@ describe('slide.delete', () => {
     expect(
       (await act(bob, 'slide.delete', { slideId: slideIds[0] })).status,
     ).toBe(403)
+  })
+})
+
+describe('session.phrase suppressNewSlide (WB-3)', () => {
+  it('appends to the current slide instead of creating one while drawing', async () => {
+    const before = (await act(ada, 'deck.get', { deckId })).body.slides.length
+
+    // A plain phrase would normally spawn a new slide; suppressed, it folds
+    // into the current (last) slide as transcript only.
+    const ev = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'An extra remark while annotating',
+      suppressNewSlide: true,
+    })
+    expect(ev.status).toBe(200)
+    expect(ev.body.kind).toBe('slide.update')
+
+    const view = await act(ada, 'deck.get', { deckId })
+    expect(view.body.slides).toHaveLength(before) // no new slide
+    expect(view.body.slides[before - 1].sourceTranscript).toContain(
+      'An extra remark while annotating',
+    )
+  })
+
+  it('still creates a slide for the same phrase without the flag', async () => {
+    const before = (await act(ada, 'deck.get', { deckId })).body.slides.length
+    const ev = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'A brand new topic entirely',
+    })
+    expect(ev.body.kind).toBe('slide.new')
+    const view = await act(ada, 'deck.get', { deckId })
+    expect(view.body.slides).toHaveLength(before + 1)
+  })
+
+  it('does not change the current slide layout while drawing', async () => {
+    // Make the current (last) slide a content slide with prose.
+    const deck = await DeckModel.findById(deckId)
+    const slide = await SlideModel.create({
+      deckId,
+      index: deck!.slideOrder.length,
+      layoutType: 'content',
+      title: 'Topic',
+      body: 'Some prose',
+    })
+    deck!.slideOrder.push(slide._id.toString())
+    await deck!.save()
+
+    // A continuation phrase that the model would map onto a list layout must
+    // NOT switch the layout while the user is drawing — the update folds in
+    // and the slide keeps its content layout.
+    const ev = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'also another important point',
+      suppressNewSlide: true,
+    })
+    expect(ev.body.kind).toBe('slide.update')
+    expect(ev.body.slide.layoutType).toBe('content')
+    const after = await SlideModel.findById(slide._id)
+    expect(after?.layoutType).toBe('content')
   })
 })
 

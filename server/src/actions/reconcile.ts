@@ -20,6 +20,8 @@ import type {
   DeckReformatResult,
   DeckRefineInput,
   DeckRefineResult,
+  DeckRefineSlideInput,
+  DeckRefineSlideResult,
   DeckRefineStatusInput,
   DeckRefineStatusResult,
   DiarizationProvider,
@@ -29,14 +31,16 @@ import type {
   ReformatTurn,
   SlideContent,
   SpeakerRole,
+  Stroke,
 } from '@slide-machine/shared'
+import { remapAnchor } from '@slide-machine/shared'
 import { defineAction } from './define'
 import { registerAction, ActionForbiddenError } from './dispatch'
 import { loadEditableDeck } from './deck'
 import { env } from '../config/env'
 import { registry } from '../providers/registry'
 import { TranscriptSegmentModel } from '../models/transcript-segment'
-import { SlideModel, type SlideDb } from '../models/slide'
+import { SlideModel, toSlideDto, type SlideDb } from '../models/slide'
 import { DeckModel, loadDeckAcl, touchDeck, type DeckDb } from '../models/deck'
 import { canEditAcl } from '../lib/access'
 import { RefineJobModel } from '../models/refine-job'
@@ -67,7 +71,12 @@ const applyContent = (
   s: SlideDoc,
   result: {
     layoutType: LayoutType
-    slots: { title?: string; body?: string; bullets?: string[]; caption?: string }
+    slots: {
+      title?: string
+      body?: string
+      bullets?: string[]
+      caption?: string
+    }
   },
 ): void => {
   s.layoutType = result.layoutType
@@ -138,7 +147,9 @@ const enrichRefinedSlideImage = async (
 }
 
 /** Slide ids that any student-role segment points at — used to frame narration. */
-const studentSlideIds = async (deckId: DeckDoc['_id']): Promise<Set<string>> => {
+const studentSlideIds = async (
+  deckId: DeckDoc['_id'],
+): Promise<Set<string>> => {
   const segs = await TranscriptSegmentModel.find({ deckId, role: 'student' })
   return new Set(segs.filter(s => s.slideId).map(s => s.slideId!.toString()))
 }
@@ -218,10 +229,16 @@ const reformatStudentSlides = async (
     arr.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
 
   const rolesBySlide = new Map<string, SpeakerRole[]>(
-    [...bySlide].map(([sid, arr]) => [sid, arr.map(s => s.role as SpeakerRole)]),
+    [...bySlide].map(([sid, arr]) => [
+      sid,
+      arr.map(s => s.role as SpeakerRole),
+    ]),
   )
   const plan = planReformat(
-    slides.map(s => ({ id: s._id.toString(), manuallyEdited: s.manuallyEdited })),
+    slides.map(s => ({
+      id: s._id.toString(),
+      manuallyEdited: s.manuallyEdited,
+    })),
     rolesBySlide,
   )
   const slideById = new Map(slides.map(s => [s._id.toString(), s]))
@@ -274,24 +291,121 @@ export const deckDiarize = defineAction<DeckDiarizeInput, DeckDiarizeResult>({
 
 registerAction(deckDiarize)
 
-export const deckReformat = defineAction<DeckReformatInput, DeckReformatResult>({
-  name: 'deck.reformat',
-  input: z.object({ deckId: z.string().min(1) }),
-  execute: async (ctx, input) => {
-    const { deck } = await loadEditableDeck(ctx, input.deckId)
-    const template = getBuiltinTemplate(deck.templateId)
-    const descriptors = template ? layoutDescriptors(template) : []
-    const gen = registry.get<GenerationProvider>('generation')
-    const { reframed, kept, protectedCount } = await reformatStudentSlides(
-      deck,
-      descriptors,
-      gen,
-    )
-    return { reformatted: reframed, kept, protectedCount }
+export const deckReformat = defineAction<DeckReformatInput, DeckReformatResult>(
+  {
+    name: 'deck.reformat',
+    input: z.object({ deckId: z.string().min(1) }),
+    execute: async (ctx, input) => {
+      const { deck } = await loadEditableDeck(ctx, input.deckId)
+      const template = getBuiltinTemplate(deck.templateId)
+      const descriptors = template ? layoutDescriptors(template) : []
+      const gen = registry.get<GenerationProvider>('generation')
+      const { reframed, kept, protectedCount } = await reformatStudentSlides(
+        deck,
+        descriptors,
+        gen,
+      )
+      return { reformatted: reframed, kept, protectedCount }
+    },
   },
-})
+)
 
 registerAction(deckReformat)
+
+/**
+ * Refines one slide's content in place — the shared body of both the
+ * whole-lecture refine loop and the single-slide "Refine this slide" action.
+ * Hand-edited slides are protected (returns false, untouched). On success it
+ * applies the new content, saves, and sources an image if the refined layout
+ * opened an empty image slot.
+ */
+const refineOneSlide = async (
+  slide: SlideDoc,
+  level: number,
+  deck: DeckDoc,
+  descriptors: LayoutDescriptor[],
+  gen: GenerationProvider,
+): Promise<boolean> => {
+  if (slide.manuallyEdited) return false
+  const result = await gen.refineSlide({
+    current: contentOf(slide),
+    level,
+    layoutDescriptors: descriptors,
+    language: deck.language,
+    seedContext: { deck: deck.seedContext },
+    // The slide's current transcript as source material (original spoken words
+    // on the first refine, previously-refined narration on later ones).
+    transcript: slide.sourceTranscript,
+  })
+  applyContent(slide, result)
+  await slide.save()
+  await enrichRefinedSlideImage(
+    slide,
+    result.imageGuidance?.keywords,
+    deck,
+    descriptors,
+  )
+  return true
+}
+
+/**
+ * Re-narrates one slide so TTS playback stays in-line with its content; student
+ * slides are framed as questions. Shared by the whole-lecture and single-slide
+ * passes. Returns true once the narration is saved.
+ */
+const narrateOneSlide = async (
+  slide: SlideDoc,
+  level: number,
+  studentContext: boolean,
+  deck: DeckDoc,
+  gen: GenerationProvider,
+): Promise<boolean> => {
+  const result = await gen.narrateSlide({
+    slide: contentOf(slide),
+    level,
+    studentContext,
+    language: deck.language,
+    // Refine the existing narration further, so repeated refines compound.
+    transcript: slide.sourceTranscript,
+  })
+  // Whiteboard stroke timing is anchored to the narration (WB-2); a wholesale
+  // rewrite would strand it, so rescale each stroke's draw + erase anchors to
+  // the new transcript length, keeping every mark at the same proportional
+  // point of the narration.
+  const oldLen = slide.sourceTranscript?.length ?? 0
+  slide.sourceTranscript = result.transcript
+  remapSlideDrawings(slide, oldLen, slide.sourceTranscript.length)
+  await slide.save()
+  return true
+}
+
+/** Rescales a slide's stroke anchors when its transcript length changes (WB-2).
+ * A no-op when there are no drawings or the old transcript was empty. */
+const remapSlideDrawings = (
+  slide: SlideDoc,
+  oldLen: number,
+  newLen: number,
+): void => {
+  if (!slide.drawings?.length || oldLen <= 0) return
+  // toObject() yields plain strokes (safe to spread) rather than subdocuments.
+  const plain = (slide.toObject().drawings ?? []) as Stroke[]
+  const remapped = plain.map(s => ({
+    ...s,
+    anchor: {
+      ...s.anchor,
+      charAnchor: remapAnchor(s.anchor.charAnchor, oldLen, newLen),
+    },
+    ...(s.erasedAnchor
+      ? {
+          erasedAnchor: {
+            ...s.erasedAnchor,
+            charAnchor: remapAnchor(s.erasedAnchor.charAnchor, oldLen, newLen),
+          },
+        }
+      : {}),
+  }))
+  slide.set('drawings', remapped)
+}
 
 /**
  * The background body of a refine job. Runs the selected passes in order —
@@ -328,28 +442,22 @@ const runRefine = async (
 
     // 2. Refine slide content in place (protect hand-edited slides).
     if (input.refineSlides) {
-      const slides = await SlideModel.find({ deckId: deck._id }).sort({ index: 1 })
+      const slides = await SlideModel.find({ deckId: deck._id }).sort({
+        index: 1,
+      })
       for (const slide of slides) {
-        if (slide.manuallyEdited) continue
         try {
-          const result = await gen.refineSlide({
-            current: contentOf(slide),
-            level: input.refineSlides.level,
-            layoutDescriptors: descriptors,
-            language: deck.language,
-            seedContext: { deck: deck.seedContext },
-          })
-          applyContent(slide, result)
-          await slide.save()
-          changed.add(slide._id.toString())
-          slidesRefined++
-          // Source an image if the refined layout has an empty image slot.
-          await enrichRefinedSlideImage(
+          const refined = await refineOneSlide(
             slide,
-            result.imageGuidance?.keywords,
+            input.refineSlides.level,
             deck,
             descriptors,
+            gen,
           )
+          if (refined) {
+            changed.add(slide._id.toString())
+            slidesRefined++
+          }
         } catch (error) {
           console.error('refineSlide failed for a slide:', error)
         }
@@ -358,7 +466,9 @@ const runRefine = async (
 
     // 3 + TTS correctness: re-narrate every slide when the transcript pass is
     // on, otherwise just the slides whose content changed above.
-    const allSlides = await SlideModel.find({ deckId: deck._id }).sort({ index: 1 })
+    const allSlides = await SlideModel.find({ deckId: deck._id }).sort({
+      index: 1,
+    })
     const studentIds = await studentSlideIds(deck._id)
     const level = input.refineTranscript?.level ?? 1
     const targets = input.refineTranscript
@@ -366,24 +476,27 @@ const runRefine = async (
       : allSlides.filter(s => changed.has(s._id.toString()))
     for (const slide of targets) {
       try {
-        const result = await gen.narrateSlide({
-          slide: contentOf(slide),
+        await narrateOneSlide(
+          slide,
           level,
-          studentContext: studentIds.has(slide._id.toString()),
-          language: deck.language,
-        })
-        slide.sourceTranscript = result.transcript
-        await slide.save()
+          studentIds.has(slide._id.toString()),
+          deck,
+          gen,
+        )
         transcriptsUpdated++
       } catch (error) {
         console.error('narrateSlide failed for a slide:', error)
       }
     }
 
-    if (reframed || slidesRefined || transcriptsUpdated) await touchDeck(deck._id)
+    if (reframed || slidesRefined || transcriptsUpdated)
+      await touchDeck(deck._id)
     await RefineJobModel.updateOne(
       { _id: jobId },
-      { status: 'done', summary: { reframed, slidesRefined, transcriptsUpdated } },
+      {
+        status: 'done',
+        summary: { reframed, slidesRefined, transcriptsUpdated },
+      },
     )
   } catch (error) {
     console.error('Refine job failed:', error)
@@ -402,14 +515,19 @@ export const deckRefine = defineAction<DeckRefineInput, DeckRefineResult>({
   input: z.object({
     deckId: z.string().min(1),
     identifySpeakers: z.boolean().optional(),
-    refineSlides: z.object({ level: z.number().int().min(1).max(5) }).optional(),
+    refineSlides: z
+      .object({ level: z.number().int().min(1).max(5) })
+      .optional(),
     refineTranscript: z
       .object({ level: z.number().int().min(1).max(5) })
       .optional(),
   }),
   execute: async (ctx, input) => {
     const { deck } = await loadEditableDeck(ctx, input.deckId)
-    const job = await RefineJobModel.create({ deckId: deck._id, status: 'running' })
+    const job = await RefineJobModel.create({
+      deckId: deck._id,
+      status: 'running',
+    })
     // Fire-and-forget: the job runs in the background; the client polls status.
     void runRefine(job._id.toString(), deck._id.toString(), input)
     return { jobId: job._id.toString() }
@@ -437,3 +555,68 @@ export const deckRefineStatus = defineAction<
 })
 
 registerAction(deckRefineStatus)
+
+/**
+ * deck.refineSlide — the "Refine this slide" kebab action. Refines a single
+ * slide using the lecture's persisted Refine settings: the content pass (at the
+ * lecture's slides level) and/or the narration pass (at its transcript level).
+ * Diarization is deck-wide, so the "identify speakers" pass never applies here.
+ * Runs synchronously (one slide is quick) and returns the refreshed slide.
+ * Whenever the content changes, the narration is re-generated too, so TTS
+ * playback stays in-line with the slide.
+ */
+export const deckRefineSlide = defineAction<
+  DeckRefineSlideInput,
+  DeckRefineSlideResult
+>({
+  name: 'deck.refineSlide',
+  input: z.object({
+    deckId: z.string().min(1),
+    slideId: z.string().min(1),
+  }),
+  execute: async (ctx, input) => {
+    const { deck } = await loadEditableDeck(ctx, input.deckId)
+    const slide = await SlideModel.findOne({
+      _id: input.slideId,
+      deckId: deck._id,
+    })
+    if (!slide) throw new ActionForbiddenError()
+
+    const template = getBuiltinTemplate(deck.templateId)
+    const descriptors = template ? layoutDescriptors(template) : []
+    const gen = registry.get<GenerationProvider>('generation')
+
+    // The lecture's persisted settings, each falling back to its default.
+    const slidesEnabled = deck.refineSlidesEnabled ?? true
+    const transcriptEnabled = deck.refineTranscriptEnabled ?? true
+    const slidesLevel =
+      deck.refineSlidesLevel ?? env.REFINE_SLIDES_DEFAULT_LEVEL
+    const transcriptLevel =
+      deck.refineTranscriptLevel ?? env.REFINE_TRANSCRIPT_DEFAULT_LEVEL
+
+    const refined = slidesEnabled
+      ? await refineOneSlide(slide, slidesLevel, deck, descriptors, gen)
+      : false
+
+    // Re-narrate when the transcript pass is on, or whenever the content
+    // changed, so TTS playback stays in-line with the slide.
+    let narrationUpdated = false
+    if (transcriptEnabled || refined) {
+      const studentIds = await studentSlideIds(deck._id)
+      narrationUpdated = await narrateOneSlide(
+        slide,
+        transcriptEnabled ? transcriptLevel : 1,
+        studentIds.has(slide._id.toString()),
+        deck,
+        gen,
+      )
+    }
+
+    if (refined || narrationUpdated) await touchDeck(deck._id)
+    // Re-read so the DTO reflects any image enrichment saved during the pass.
+    const fresh = (await SlideModel.findById(slide._id)) ?? slide
+    return { slide: toSlideDto(fresh), refined, narrationUpdated }
+  },
+})
+
+registerAction(deckRefineSlide)

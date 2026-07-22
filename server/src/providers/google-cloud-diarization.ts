@@ -22,6 +22,7 @@ import type {
   DiarizationInput,
   DiarizationProvider,
   DiarizedSpeakerSegment,
+  HealthComponent,
 } from '@slide-machine/shared'
 import { env } from '../config/env'
 import { getStorage } from '../storage'
@@ -175,6 +176,44 @@ export class GoogleCloudDiarizationProvider implements DiarizationProvider {
       // Best-effort cleanup of the transient GCS copy.
       await file.delete().catch(() => {})
     }
+  }
+}
+
+/**
+ * Health probe for the GCS bucket batch diarization stages audio in (GEN-4),
+ * shown beside the general Storage item in the footer badge. Without a bucket
+ * configured it reads `disabled` — retained audio simply stays in the general
+ * (local or blob) storage — mirroring how the Storage item names local vs
+ * connected. With one configured it's a cheap bucket-exists check; never throws,
+ * so a failure reads `down`.
+ */
+export const pingGcsAudioStorage = async (): Promise<HealthComponent> => {
+  const bucket = env.GCS_AUDIO_BUCKET
+  if (!bucket) {
+    return {
+      status: 'disabled',
+      detail: env.STORAGE_PROVIDER === 'local' ? 'local storage' : 'blob storage',
+    }
+  }
+  try {
+    const storage = new Storage(
+      speechClientOptions() as ConstructorParameters<typeof Storage>[0],
+    )
+    // Probe with an object list, NOT bucket.exists(): diarization only ever
+    // stages and deletes objects, and the staging service account typically has
+    // just object-level access — bucket.exists() needs storage.buckets.get,
+    // which such an account lacks, so it would 403 and read as a false
+    // 'unreachable' even though the bucket works. Listing one object exercises
+    // the access the app actually uses and stays read-only.
+    await storage.bucket(bucket).getFiles({ maxResults: 1, autoPaginate: false })
+    return { status: 'ok', detail: 'connected' }
+  } catch (err) {
+    // A missing bucket is a real misconfiguration; anything else (network, auth)
+    // is a generic outage. Both keep audio-only, so overall health is degraded.
+    const code = (err as { code?: number }).code
+    return code === 404
+      ? { status: 'down', detail: 'bucket missing' }
+      : { status: 'down', detail: 'unreachable' }
   }
 }
 

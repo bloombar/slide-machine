@@ -1,8 +1,9 @@
 /**
  * API health bar in the sticky footer. Collapsed, it shows the compact
  * overall status ("API ok"). Clicked, it expands into a panel breaking the
- * status down by component — deployment mode, MongoDB, object storage,
- * Google Gemini, Google Speech-to-Text — plus the app version and uptime.
+ * status down by component — deployment mode, MongoDB, object storage, GCS
+ * audio storage, Google Gemini, Google Speech-to-Text — plus the app version
+ * and uptime.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
@@ -31,6 +32,7 @@ type ComponentKey = keyof HealthResponse['components']
 const componentLabels: Record<ComponentKey, string> = {
   mongo: 'Database',
   storage: 'Storage',
+  audioStorage: 'Audio storage',
   gemini: 'Generative AI',
   stt: 'Speech-to-Text',
   tts: 'Text-to-Speech',

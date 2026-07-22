@@ -32,6 +32,8 @@ describe('SlideMenu', () => {
         number={2}
         onSpeak={vi.fn()}
         onChangeLayout={vi.fn()}
+        onRefine={vi.fn()}
+        onPlayOriginalAudio={vi.fn()}
         onDelete={vi.fn()}
       />,
     )
@@ -43,8 +45,43 @@ describe('SlideMenu', () => {
       screen.getByRole('menuitem', { name: 'Change layout' }),
     ).toBeInTheDocument()
     expect(
+      screen.getByRole('menuitem', { name: 'Refine this slide' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('menuitem', { name: 'Play original audio' }),
+    ).toBeInTheDocument()
+    expect(
       screen.getByRole('menuitem', { name: 'Delete slide' }),
     ).toBeInTheDocument()
+  })
+
+  it('fires onRefine from the "Refine this slide" item', () => {
+    const onRefine = vi.fn()
+    render(<SlideMenu number={1} onRefine={onRefine} />)
+    openMenu(1)
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Refine this slide' }),
+    )
+    expect(onRefine).toHaveBeenCalledOnce()
+  })
+
+  it('fires onPlayOriginalAudio, and omits the item when unavailable', () => {
+    const onPlayOriginalAudio = vi.fn()
+    const { rerender } = render(
+      <SlideMenu number={1} onPlayOriginalAudio={onPlayOriginalAudio} />,
+    )
+    openMenu(1)
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Play original audio' }),
+    )
+    expect(onPlayOriginalAudio).toHaveBeenCalledOnce()
+
+    // Without the callback (no retained audio), the item is not rendered.
+    rerender(<SlideMenu number={1} onSpeak={vi.fn()} />)
+    openMenu(1)
+    expect(
+      screen.queryByRole('menuitem', { name: 'Play original audio' }),
+    ).not.toBeInTheDocument()
   })
 
   it('gives a read-only viewer only the speak item', () => {
@@ -59,5 +96,28 @@ describe('SlideMenu', () => {
     expect(
       screen.queryByRole('menuitem', { name: 'Delete slide' }),
     ).not.toBeInTheDocument()
+  })
+
+  // The open menu must clear the whiteboard drawing overlay (z-20); otherwise
+  // strokes on the slide would render over it.
+  it('rises above the drawing overlay while its menu is open', () => {
+    render(<SlideMenu number={1} onDelete={vi.fn()} />)
+    const wrapper = screen
+      .getByRole('button', { name: 'Options for slide 1' })
+      .closest('div')!
+    // Closed and no active tool: sits in the base (z-10) tier.
+    expect(wrapper.className).toContain('z-10')
+    expect(wrapper.className).not.toContain('z-30')
+    // Opening lifts the whole kebab above the drawing canvas (z-30 > z-20).
+    openMenu(1)
+    expect(wrapper.className).toContain('z-30')
+  })
+
+  it('stays elevated while a drawing tool is active', () => {
+    render(<SlideMenu number={1} onDelete={vi.fn()} elevated />)
+    const wrapper = screen
+      .getByRole('button', { name: 'Options for slide 1' })
+      .closest('div')!
+    expect(wrapper.className).toContain('z-30')
   })
 })

@@ -1,0 +1,11 @@
+Write the spoken narration a lecturer would say to present this slide
+aloud. Eloquence {{level}} of 5 (1 = plain and faithful; 5 = rich and
+engaging). Describe the concepts clearly; do not read the slide verbatim.
+When a current narration is provided below, refine and improve THAT further
+rather than starting over — keep every point it makes, and keep it in-line
+with the slide. Otherwise write the narration fresh from the slide.{{studentContext}}{{language}}{{transcript}}
+
+Slide (JSON):
+{{slide}}
+
+Return ONLY this JSON: { "transcript": string }

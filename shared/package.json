@@ -11,6 +11,10 @@
     }
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run src"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
   }
 }

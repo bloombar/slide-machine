@@ -19,7 +19,10 @@ const renderZones = (
       onPrev={onPrev}
       onNext={onNext}
     >
-      <div>SLIDE</div>
+      <div data-testid="slide">
+        SLIDE
+        <button>inner control</button>
+      </div>
     </SlideNavZones>,
   )
   // jsdom does no layout, so the root reports a zero-size rect; pin a known
@@ -89,5 +92,83 @@ describe('SlideNavZones', () => {
     expect(
       screen.queryByRole('button', { name: 'Next slide' }),
     ).not.toBeInTheDocument()
+  })
+})
+
+/** Drives a pointerdown→pointerup drag across an element. */
+const swipe = (el: Element, from: [number, number], to: [number, number]) => {
+  fireEvent.pointerDown(el, { clientX: from[0], clientY: from[1], pointerId: 1 })
+  fireEvent.pointerUp(el, { clientX: to[0], clientY: to[1], pointerId: 1 })
+}
+
+describe('SlideNavZones swipe', () => {
+  it('advances on a leftward swipe past the threshold', () => {
+    const { onPrev, onNext } = renderZones(true, true)
+    swipe(screen.getByTestId('slide'), [200, 100], [120, 105])
+    expect(onNext).toHaveBeenCalledTimes(1)
+    expect(onPrev).not.toHaveBeenCalled()
+  })
+
+  it('goes back on a rightward swipe past the threshold', () => {
+    const { onPrev, onNext } = renderZones(true, true)
+    swipe(screen.getByTestId('slide'), [120, 100], [200, 95])
+    expect(onPrev).toHaveBeenCalledTimes(1)
+    expect(onNext).not.toHaveBeenCalled()
+  })
+
+  it('ignores travel below the threshold (a tap)', () => {
+    const { onPrev, onNext } = renderZones(true, true)
+    swipe(screen.getByTestId('slide'), [150, 100], [160, 100])
+    expect(onNext).not.toHaveBeenCalled()
+    expect(onPrev).not.toHaveBeenCalled()
+  })
+
+  it('ignores a vertical-dominant drag (a scroll)', () => {
+    const { onPrev, onNext } = renderZones(true, true)
+    swipe(screen.getByTestId('slide'), [150, 100], [110, 400])
+    expect(onNext).not.toHaveBeenCalled()
+    expect(onPrev).not.toHaveBeenCalled()
+  })
+
+  it('does not swipe past the last slide', () => {
+    const { onNext } = renderZones(true, false)
+    swipe(screen.getByTestId('slide'), [200, 100], [120, 100])
+    expect(onNext).not.toHaveBeenCalled()
+  })
+
+  it('leaves gestures that start on a control alone', () => {
+    const { onPrev, onNext } = renderZones(true, true)
+    swipe(screen.getByText('inner control'), [200, 100], [120, 100])
+    expect(onNext).not.toHaveBeenCalled()
+    expect(onPrev).not.toHaveBeenCalled()
+  })
+
+  it('ignores non-primary mouse buttons', () => {
+    const { onNext } = renderZones(true, true)
+    const slide = screen.getByTestId('slide')
+    fireEvent.pointerDown(slide, {
+      clientX: 200,
+      clientY: 100,
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 2,
+    })
+    fireEvent.pointerUp(slide, {
+      clientX: 120,
+      clientY: 100,
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 2,
+    })
+    expect(onNext).not.toHaveBeenCalled()
+  })
+
+  it('clears a tracked gesture on pointer cancel', () => {
+    const { onNext } = renderZones(true, true)
+    const slide = screen.getByTestId('slide')
+    fireEvent.pointerDown(slide, { clientX: 200, clientY: 100, pointerId: 1 })
+    fireEvent.pointerCancel(slide, { pointerId: 1 })
+    fireEvent.pointerUp(slide, { clientX: 120, clientY: 100, pointerId: 1 })
+    expect(onNext).not.toHaveBeenCalled()
   })
 })

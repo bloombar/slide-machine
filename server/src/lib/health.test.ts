@@ -9,12 +9,14 @@ import type { HealthComponent, HealthComponents } from '@slide-machine/shared'
 const {
   pingMongo,
   storageHealthCheck,
+  pingGcsAudioStorage,
   pingGemini,
   pingGoogleStt,
   pingGoogleTts,
 } = vi.hoisted(() => ({
   pingMongo: vi.fn(),
   storageHealthCheck: vi.fn(),
+  pingGcsAudioStorage: vi.fn(),
   pingGemini: vi.fn(),
   pingGoogleStt: vi.fn(),
   pingGoogleTts: vi.fn(),
@@ -27,6 +29,7 @@ vi.mock('../storage', () => ({
 vi.mock('../providers/gemini-generation', () => ({ pingGemini }))
 vi.mock('../providers/google-cloud-transcription', () => ({ pingGoogleStt }))
 vi.mock('../providers/google-cloud-tts', () => ({ pingGoogleTts }))
+vi.mock('../providers/google-cloud-diarization', () => ({ pingGcsAudioStorage }))
 vi.mock('./app-version', () => ({ APP_VERSION: '2026.07.18+testsha' }))
 vi.mock('../config/env', () => ({
   env: { NODE_ENV: 'test', TTS_PROVIDER: 'google-cloud' },
@@ -41,6 +44,7 @@ const components = (
 ): HealthComponents => ({
   mongo: ok,
   storage: ok,
+  audioStorage: disabled,
   gemini: ok,
   stt: disabled,
   tts: disabled,
@@ -51,6 +55,7 @@ beforeEach(() => {
   resetHealthCache()
   pingMongo.mockResolvedValue(true)
   storageHealthCheck.mockResolvedValue(ok)
+  pingGcsAudioStorage.mockResolvedValue(disabled)
   pingGemini.mockResolvedValue(ok)
   pingGoogleStt.mockResolvedValue(disabled)
   pingGoogleTts.mockResolvedValue(disabled)
@@ -86,6 +91,7 @@ describe('getHealth', () => {
     expect(res.version).toBe('2026.07.18+testsha')
     expect(res.uptime).toBeGreaterThan(0)
     expect(res.components.mongo).toEqual(ok)
+    expect(res.components.audioStorage).toEqual(disabled)
     expect(res.components.stt).toEqual(disabled)
   })
 

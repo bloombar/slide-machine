@@ -214,4 +214,17 @@ describe('MockGenerationProvider refine + narrate (GEN-4)', () => {
     expect(student.transcript).toMatch(/^A student asked:/)
     expect(student.transcript).toContain('Is this on the exam?')
   })
+
+  it('refines a prior narration further instead of rebuilding from content', async () => {
+    const refined = await provider.narrateSlide({
+      slide: { layoutType: 'content', title: 'Photosynthesis', body: 'Light energy' },
+      level: 3,
+      transcript: 'A polished earlier narration.',
+    })
+    // The prior narration is carried forward and marked as further refined —
+    // it is not regenerated from the slide's title/body.
+    expect(refined.transcript).toContain('A polished earlier narration.')
+    expect(refined.transcript).toContain('(refined)')
+    expect(refined.transcript).not.toContain('Photosynthesis')
+  })
 })

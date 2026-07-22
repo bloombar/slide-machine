@@ -1,8 +1,8 @@
 /**
  * Slide image editing end to end (EDIT-1): an owner adds, replaces, and
- * removes a slide's image. Removing the image from an image+text slide
- * drops it to a text layout; removing it from an image-only slide deletes
- * the slide after a confirm.
+ * removes a slide's image. Removing the image keeps the slide's layout
+ * unchanged and simply empties the image slot — no layout switch, and an
+ * image-only slide is not deleted.
  */
 import { test, expect, type Page } from '@playwright/test'
 import { createProject } from './helpers'
@@ -82,12 +82,17 @@ test('add, replace, then remove an image on an image+text slide', async ({
     expect(await slideImg.getAttribute('src')).not.toBe(firstSrc)
   }).toPass()
 
-  // Removing the image drops the slide to a plain text layout, no confirm
+  // Removing the image keeps the layout the same and empties the slot: the
+  // slot offers Add again, and Remove disappears — no layout switch, no confirm.
+  const layoutBefore = await page
+    .getByTestId('slide')
+    .getAttribute('data-layout')
   await page.getByRole('button', { name: 'Remove image' }).click()
   await expect(page.getByTestId('slide')).toHaveAttribute(
     'data-layout',
-    'content',
+    layoutBefore!,
   )
+  await expect(page.getByRole('button', { name: 'Add image' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Remove image' })).toHaveCount(
     0,
   )
@@ -181,11 +186,10 @@ test('image attribution: an owner sets it, it persists and shows via the i icon'
   )
 })
 
-test('removing the image from an image-only slide deletes it after a confirm', async ({
+test('removing the image from an image-only slide empties the slot, keeping the slide', async ({
   page,
 }) => {
   await newLectureWithSlide(page, 'imageonly')
-  // A second slide, so deleting the first leaves something behind
   await page.getByLabel('Spoken phrase').fill('Organelles do the work')
   await page.getByRole('button', { name: 'Speak' }).click()
   await expect(page.getByTestId('slide')).toBeVisible()
@@ -193,18 +197,23 @@ test('removing the image from an image-only slide deletes it after a confirm', a
   await setLayout(page, /^Image/)
   await addImage(page, png('whole.png'))
   await expect(page.getByRole('button', { name: 'Remove image' })).toBeVisible()
+  const layoutBefore = await page
+    .getByTestId('slide')
+    .getAttribute('data-layout')
 
   await page.getByRole('button', { name: 'List view' }).click()
   const before = await page.getByTestId('slide').count()
-
-  // Back to carousel, remove the image → confirm → the slide is deleted
   await page.getByRole('button', { name: 'Carousel view' }).click()
+
+  // Removing the image keeps the slide and its layout — the image slot just
+  // goes empty (offers Add again). No confirm, no deletion.
   await page.getByRole('button', { name: 'Remove image' }).click()
-  await expect(
-    page.getByRole('alertdialog', { name: 'Delete this slide?' }),
-  ).toBeVisible()
-  await page.getByRole('button', { name: 'Delete slide' }).click()
+  await expect(page.getByTestId('slide')).toHaveAttribute(
+    'data-layout',
+    layoutBefore!,
+  )
+  await expect(page.getByRole('button', { name: 'Add image' })).toBeVisible()
 
   await page.getByRole('button', { name: 'List view' }).click()
-  await expect(page.getByTestId('slide')).toHaveCount(before - 1)
+  await expect(page.getByTestId('slide')).toHaveCount(before)
 })
