@@ -36,6 +36,9 @@ export interface AdminUserDetailResponse {
   deckCount: number
   /** Whether the account's email is on the banned list. */
   banned: boolean
+  /** Whether the requesting admin has enabled viewing this user's
+   * private lectures (the audited private-view grant). */
+  privateAccess: boolean
 }
 
 /** A lecture as listed in the admin view; permalinkSlug links to /d/:slug. */
@@ -124,6 +127,17 @@ export const resetAdminUserPassword = (
   apiFetch<void>(`/api/admin/users/${userId}/password`, {
     method: 'POST',
     body: JSON.stringify({ password }),
+  })
+
+/** Turns the audited private-lecture viewing grant on or off for the
+ * requesting admin. Enabling (and disabling) is recorded in the audit
+ * log, as is every private lecture actually viewed under the grant. */
+export const setAdminPrivateAccess = (
+  userId: string,
+  enabled: boolean,
+): Promise<void> =>
+  apiFetch<void>(`/api/admin/users/${userId}/private-access`, {
+    method: enabled ? 'POST' : 'DELETE',
   })
 
 /** Deletes a project and everything in it. Irreversible. */

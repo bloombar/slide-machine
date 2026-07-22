@@ -5,7 +5,9 @@
  * project are grouped under "Other lectures". Moderation lives here
  * too: per-project and per-lecture delete buttons plus a danger zone
  * (reset password, ban email, delete account) — every action confirms
- * first and is recorded in the admin audit log server-side.
+ * first and is recorded in the admin audit log server-side. A
+ * "View private lectures" toggle (off by default, audited) grants this
+ * admin access to the user's private lectures in the deck viewer.
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
@@ -19,6 +21,7 @@ import {
   fetchAdminUserDecks,
   fetchAdminUserProjects,
   resetAdminUserPassword,
+  setAdminPrivateAccess,
   type AdminDeckSummary,
   type AdminUserDetailResponse,
 } from '../api/admin'
@@ -323,6 +326,24 @@ export default function AdminUserDetailPage() {
     }
   }, [userId, version])
 
+  /** Flips the audited private-lecture viewing grant for this admin. */
+  const togglePrivateAccess = async (enabled: boolean) => {
+    if (!userId) return
+    setNotice(null)
+    setActionError(null)
+    try {
+      await setAdminPrivateAccess(userId, enabled)
+      setNotice(
+        enabled
+          ? 'Private lecture viewing enabled — this and each private view are logged.'
+          : 'Private lecture viewing disabled.',
+      )
+      setVersion(v => v + 1)
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Action failed.')
+    }
+  }
+
   /** Runs the confirmed action; deleting the user leaves the page. */
   const runPending = async () => {
     if (!pending || !userId) return
@@ -438,7 +459,20 @@ export default function AdminUserDetailPage() {
       </section>
 
       <section className="mt-8">
-        <h2 className="mb-3 text-lg font-semibold text-slate-700">Projects</h2>
+        <div className="mb-3 flex items-center justify-between gap-4">
+          <h2 className="text-lg font-semibold text-slate-700">Projects</h2>
+          {/* Off by default; the grant and every private view it allows
+              are recorded in the audit log */}
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            <input
+              type="checkbox"
+              checked={detail.privateAccess}
+              onChange={e => void togglePrivateAccess(e.target.checked)}
+              className="h-4 w-4 accent-red-600"
+            />
+            View private lectures
+          </label>
+        </div>
         {projects.length === 0 && otherDecks.length === 0 ? (
           <p className="text-slate-500">No projects.</p>
         ) : (
