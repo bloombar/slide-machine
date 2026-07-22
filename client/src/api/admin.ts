@@ -34,6 +34,8 @@ export interface AdminUserDetailResponse {
   user: SafeUser
   projectCount: number
   deckCount: number
+  /** Whether the account's email is on the banned list. */
+  banned: boolean
 }
 
 /** A lecture as listed in the admin view; permalinkSlug links to /d/:slug. */
@@ -95,3 +97,39 @@ export const listAdminLogs = (
 /** The full audit log as a CSV blob, for a client-side download. */
 export const downloadAdminLogsCsv = (): Promise<Blob> =>
   apiFetchBlob('/api/admin/logs/export')
+
+// Moderation endpoints. All resolve on a 204; failures surface as
+// ApiError (e.g. 400 target_is_admin when moderating an allowlisted
+// account). Each is recorded in the admin audit log server-side.
+
+/** Deletes the account and all of its data. Irreversible. */
+export const deleteAdminUser = (userId: string): Promise<void> =>
+  apiFetch<void>(`/api/admin/users/${userId}`, { method: 'DELETE' })
+
+/** Bans the account's email from registering or signing in. */
+export const banAdminUserEmail = (
+  userId: string,
+  reason?: string,
+): Promise<void> =>
+  apiFetch<void>(`/api/admin/users/${userId}/ban`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
+
+/** Sets a new password (min 8 chars) and ends all their sessions. */
+export const resetAdminUserPassword = (
+  userId: string,
+  password: string,
+): Promise<void> =>
+  apiFetch<void>(`/api/admin/users/${userId}/password`, {
+    method: 'POST',
+    body: JSON.stringify({ password }),
+  })
+
+/** Deletes a project and everything in it. Irreversible. */
+export const deleteAdminProject = (projectId: string): Promise<void> =>
+  apiFetch<void>(`/api/admin/projects/${projectId}`, { method: 'DELETE' })
+
+/** Deletes a lecture and everything under it. Irreversible. */
+export const deleteAdminDeck = (deckId: string): Promise<void> =>
+  apiFetch<void>(`/api/admin/decks/${deckId}`, { method: 'DELETE' })

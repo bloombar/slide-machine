@@ -2,18 +2,29 @@
  * Admin view of one user: account details, then their projects — each
  * expandable to its lectures, which link to the live deck viewer
  * (/d/:slug). Lectures owned by the user but living in someone else's
- * project are grouped under "Other lectures".
+ * project are grouped under "Other lectures". Moderation lives here
+ * too: per-project and per-lecture delete buttons plus a danger zone
+ * (reset password, ban email, delete account) — every action confirms
+ * first and is recorded in the admin audit log server-side.
  */
-import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Link, useNavigate, useParams } from 'react-router'
 import type { Project, Visibility } from '@slide-machine/shared'
 import {
+  banAdminUserEmail,
+  deleteAdminDeck,
+  deleteAdminProject,
+  deleteAdminUser,
   fetchAdminUser,
   fetchAdminUserDecks,
   fetchAdminUserProjects,
+  resetAdminUserPassword,
   type AdminDeckSummary,
   type AdminUserDetailResponse,
 } from '../api/admin'
+import { ApiError } from '../api/http'
+import ConfirmDialog from '../components/ConfirmDialog'
+import Modal from '../components/Modal'
 import { projectTitle } from '../lib/project'
 
 interface Loaded {
@@ -21,6 +32,13 @@ interface Loaded {
   projects: Project[]
   decks: AdminDeckSummary[]
 }
+
+/** The moderation the admin has asked for but not yet confirmed. */
+type PendingAction =
+  | { kind: 'delete-user' }
+  | { kind: 'ban' }
+  | { kind: 'delete-project'; project: Project }
+  | { kind: 'delete-deck'; deck: AdminDeckSummary }
 
 const joinedAt = (iso: string): string =>
   new Date(iso).toLocaleString(undefined, {
@@ -81,9 +99,18 @@ function VisibilityBadge({ visibility }: { visibility: Visibility }) {
   )
 }
 
-/** A project's lectures as a table: title, visibility, slide count, and
- * last-edited date. */
-function LectureTable({ decks }: { decks: AdminDeckSummary[] }) {
+const dangerMenuButton =
+  'rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50'
+
+/** A project's lectures as a table: title, visibility, slide count,
+ * last-edited date, and a delete action. */
+function LectureTable({
+  decks,
+  onDelete,
+}: {
+  decks: AdminDeckSummary[]
+  onDelete: (deck: AdminDeckSummary) => void
+}) {
   if (decks.length === 0) {
     return <p className="px-4 pb-3 text-sm text-slate-500">No lectures.</p>
   }
@@ -101,8 +128,11 @@ function LectureTable({ decks }: { decks: AdminDeckSummary[] }) {
             <th scope="col" className="py-1 pr-3 text-right font-medium">
               Slides
             </th>
-            <th scope="col" className="py-1 font-medium">
+            <th scope="col" className="py-1 pr-3 font-medium">
               Updated
+            </th>
+            <th scope="col" className="py-1 font-medium">
+              <span className="sr-only">Actions</span>
             </th>
           </tr>
         </thead>
@@ -123,8 +153,17 @@ function LectureTable({ decks }: { decks: AdminDeckSummary[] }) {
               <td className="py-1.5 pr-3 text-right tabular-nums text-slate-600">
                 {deck.slideCount}
               </td>
-              <td className="py-1.5 text-slate-500">
+              <td className="py-1.5 pr-3 text-slate-500">
                 {asDate(deck.updatedAt)}
+              </td>
+              <td className="py-1.5 text-right">
+                <button
+                  onClick={() => onDelete(deck)}
+                  aria-label={`Delete lecture ${deck.title.trim() || 'Untitled lecture'}`}
+                  className="rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                >
+                  Delete
+                </button>
               </td>
             </tr>
           ))}
@@ -134,10 +173,136 @@ function LectureTable({ decks }: { decks: AdminDeckSummary[] }) {
   )
 }
 
+/** Dialog for setting a user's new password; submits on Enter, reports
+ * inline errors, and reminds the admin every session gets signed out. */
+function ResetPasswordDialog({
+  email,
+  onSubmit,
+  onCancel,
+}: {
+  email: string
+  onSubmit: (password: string) => Promise<void>
+  onCancel: () => void
+}) {
+  const [password, setPassword] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (saving) return
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters')
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      await onSubmit(password)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not set password')
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal
+      ariaLabelledBy="admin-reset-password-title"
+      size="sm"
+      onClose={onCancel}
+      initialFocusRef={inputRef}
+    >
+      <form onSubmit={submit}>
+        <h3 id="admin-reset-password-title" className="text-lg font-bold">
+          Reset password
+        </h3>
+        <p className="mt-2 text-sm text-slate-600">
+          Set a new password for {email}. They will be signed out everywhere.
+        </p>
+
+        <label
+          htmlFor="admin-new-password"
+          className="mt-4 block text-sm font-medium text-slate-700"
+        >
+          New password
+        </label>
+        <input
+          id="admin-new-password"
+          ref={inputRef}
+          type="text"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          placeholder="At least 8 characters"
+          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2"
+        />
+        {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+
+        <div className="mt-6 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-40"
+          >
+            Set password
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+/** The ConfirmDialog copy for each moderation action. */
+const confirmCopy = (
+  pending: PendingAction,
+  email: string,
+): { title: string; message: string; confirmLabel: string } => {
+  switch (pending.kind) {
+    case 'delete-user':
+      return {
+        title: 'Delete this user?',
+        message: `${email} and all of their projects, lectures, and files will be permanently deleted. This cannot be undone.`,
+        confirmLabel: 'Delete user',
+      }
+    case 'ban':
+      return {
+        title: 'Ban this email?',
+        message: `${email} will be signed out everywhere and can no longer sign in or register. Their content stays until deleted separately.`,
+        confirmLabel: 'Ban email',
+      }
+    case 'delete-project':
+      return {
+        title: 'Delete this project?',
+        message: `"${projectTitle(pending.project)}" and every lecture and file in it will be permanently deleted. This cannot be undone.`,
+        confirmLabel: 'Delete project',
+      }
+    case 'delete-deck':
+      return {
+        title: 'Delete this lecture?',
+        message: `"${pending.deck.title.trim() || 'Untitled lecture'}" and everything under it will be permanently deleted. This cannot be undone.`,
+        confirmLabel: 'Delete lecture',
+      }
+  }
+}
+
 export default function AdminUserDetailPage() {
   const { userId } = useParams<{ userId: string }>()
+  const navigate = useNavigate()
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [error, setError] = useState(false)
+  // Bumped after a mutation to refetch counts, projects, and lectures
+  const [version, setVersion] = useState(0)
+  const [pending, setPending] = useState<PendingAction | null>(null)
+  const [passwordOpen, setPasswordOpen] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!userId) return
@@ -156,7 +321,39 @@ export default function AdminUserDetailPage() {
     return () => {
       cancelled = true
     }
-  }, [userId])
+  }, [userId, version])
+
+  /** Runs the confirmed action; deleting the user leaves the page. */
+  const runPending = async () => {
+    if (!pending || !userId) return
+    const action = pending
+    setPending(null)
+    setNotice(null)
+    setActionError(null)
+    try {
+      switch (action.kind) {
+        case 'delete-user':
+          await deleteAdminUser(userId)
+          navigate('/app/admin')
+          return
+        case 'ban':
+          await banAdminUserEmail(userId)
+          setNotice('Email banned; all sessions signed out.')
+          break
+        case 'delete-project':
+          await deleteAdminProject(action.project.id)
+          setNotice('Project deleted.')
+          break
+        case 'delete-deck':
+          await deleteAdminDeck(action.deck.id)
+          setNotice('Lecture deleted.')
+          break
+      }
+      setVersion(v => v + 1)
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Action failed.')
+    }
+  }
 
   if (error) {
     return (
@@ -185,6 +382,8 @@ export default function AdminUserDetailPage() {
   }
   const ownProjectIds = new Set(projects.map(p => p.id))
   const otherDecks = decks.filter(d => !ownProjectIds.has(d.projectId))
+  const deleteDeck = (deck: AdminDeckSummary) =>
+    setPending({ kind: 'delete-deck', deck })
 
   return (
     <div>
@@ -198,7 +397,25 @@ export default function AdminUserDetailPage() {
           View public profile
         </Link>
       </div>
-      <p className="mb-6 text-slate-500">{user.email}</p>
+      <p className="mb-6 text-slate-500">
+        {user.email}
+        {detail.banned && (
+          <span className="ml-2 inline-block rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
+            Banned
+          </span>
+        )}
+      </p>
+
+      {notice && (
+        <p role="status" className="mb-4 text-sm text-green-700">
+          {notice}
+        </p>
+      )}
+      {actionError && (
+        <p role="alert" className="mb-4 text-sm text-red-600">
+          {actionError}
+        </p>
+      )}
 
       <section className="rounded-lg border border-slate-200 p-4">
         <h2 className="mb-2 text-lg font-semibold text-slate-700">Details</h2>
@@ -233,15 +450,29 @@ export default function AdminUserDetailPage() {
                   key={project.id}
                   className="rounded-lg border border-slate-200"
                 >
-                  <summary className="cursor-pointer px-4 py-3 font-medium text-slate-800 hover:bg-slate-50">
-                    {projectTitle(project)}{' '}
-                    <span className="text-sm font-normal text-slate-400">
-                      {projectDecks.length}{' '}
-                      {projectDecks.length === 1 ? 'lecture' : 'lectures'} ·
-                      updated {asDate(lastActivity(project, projectDecks))}
+                  <summary className="flex cursor-pointer items-center justify-between px-4 py-3 font-medium text-slate-800 hover:bg-slate-50">
+                    <span>
+                      {projectTitle(project)}{' '}
+                      <span className="text-sm font-normal text-slate-400">
+                        {projectDecks.length}{' '}
+                        {projectDecks.length === 1 ? 'lecture' : 'lectures'} ·
+                        updated {asDate(lastActivity(project, projectDecks))}
+                      </span>
                     </span>
+                    <button
+                      onClick={e => {
+                        // A click on the button must not toggle the disclosure
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setPending({ kind: 'delete-project', project })
+                      }}
+                      aria-label={`Delete project ${projectTitle(project)}`}
+                      className="rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
                   </summary>
-                  <LectureTable decks={projectDecks} />
+                  <LectureTable decks={projectDecks} onDelete={deleteDeck} />
                 </details>
               )
             })}
@@ -253,12 +484,64 @@ export default function AdminUserDetailPage() {
                     {otherDecks.length}
                   </span>
                 </summary>
-                <LectureTable decks={otherDecks} />
+                <LectureTable decks={otherDecks} onDelete={deleteDeck} />
               </details>
             )}
           </div>
         )}
       </section>
+
+      <section className="mt-8 rounded-lg border border-red-200 p-4">
+        <h2 className="mb-1 text-lg font-semibold text-red-700">Danger zone</h2>
+        <p className="mb-3 text-sm text-slate-600">
+          Every action here is recorded in the{' '}
+          <Link to="/app/admin/logs" className="underline">
+            audit log
+          </Link>
+          .
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setPasswordOpen(true)}
+            className={dangerMenuButton}
+          >
+            Reset password
+          </button>
+          <button
+            onClick={() => setPending({ kind: 'ban' })}
+            disabled={detail.banned}
+            className={`${dangerMenuButton} disabled:opacity-40`}
+          >
+            {detail.banned ? 'Email banned' : 'Ban email'}
+          </button>
+          <button
+            onClick={() => setPending({ kind: 'delete-user' })}
+            className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-500"
+          >
+            Delete user
+          </button>
+        </div>
+      </section>
+
+      {pending && (
+        <ConfirmDialog
+          {...confirmCopy(pending, user.email)}
+          onConfirm={() => void runPending()}
+          onCancel={() => setPending(null)}
+        />
+      )}
+      {passwordOpen && (
+        <ResetPasswordDialog
+          email={user.email}
+          onCancel={() => setPasswordOpen(false)}
+          onSubmit={async password => {
+            if (!userId) return
+            await resetAdminUserPassword(userId, password)
+            setPasswordOpen(false)
+            setNotice('Password updated; all sessions signed out.')
+          }}
+        />
+      )}
     </div>
   )
 }

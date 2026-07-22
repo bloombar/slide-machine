@@ -1,7 +1,8 @@
 /**
  * Unit tests for the per-user admin view: account details, projects
- * expanding to lectures with viewer links, and the "Other lectures"
- * group for decks living outside the user's own projects.
+ * expanding to lectures with viewer links, the "Other lectures" group
+ * for decks living outside the user's own projects, and the moderation
+ * actions (delete user/project/lecture, ban email, reset password).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
@@ -23,6 +24,7 @@ const detail = {
   },
   projectCount: 1,
   deckCount: 2,
+  banned: false,
 }
 
 const projects = [
@@ -57,12 +59,20 @@ const decks = [
   },
 ]
 
-const renderPage = (status = 200) => {
+const renderPage = (status = 200, detailBody: unknown = detail) => {
   // Keys ordered most-specific first: the fetch mock matches by substring
-  mockFetchRoutes({
+  const mocks = mockFetchRoutes({
     '/api/admin/users/u1/projects': () => ({ status, body: { projects } }),
     '/api/admin/users/u1/decks': () => ({ status, body: { decks } }),
-    '/api/admin/users/u1': () => ({ status, body: detail }),
+    '/api/admin/users/u1/ban': () => ({ status: 204 }),
+    '/api/admin/users/u1/password': () => ({ status: 204 }),
+    '/api/admin/projects/p1': () => ({ status: 204 }),
+    '/api/admin/decks/d1': () => ({ status: 204 }),
+    // Serves both GET (detail) and DELETE (delete user)
+    '/api/admin/users/u1': init =>
+      init?.method === 'DELETE'
+        ? { status: 204 }
+        : { status, body: detailBody },
   })
   render(
     <MemoryRouter initialEntries={['/app/admin/users/u1']}>
@@ -71,10 +81,18 @@ const renderPage = (status = 200) => {
           path="/app/admin/users/:userId"
           element={<AdminUserDetailPage />}
         />
+        <Route path="/app/admin" element={<p>users list</p>} />
       </Routes>
     </MemoryRouter>,
   )
+  return mocks
 }
+
+/** The method+url pairs fetched so far. */
+const requested = (
+  fetchMock: ReturnType<typeof mockFetchRoutes>['fetchMock'],
+) =>
+  fetchMock.mock.calls.map(([url, init]) => `${init?.method ?? 'GET'} ${url}`)
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -158,6 +176,125 @@ describe('AdminUserDetailPage', () => {
     expect(screen.getByRole('link', { name: '← All users' })).toHaveAttribute(
       'href',
       '/app/admin',
+    )
+  })
+
+  it('shows the Banned badge and disables the ban button for a banned user', async () => {
+    renderPage(200, { ...detail, banned: true })
+    await screen.findByRole('heading', { name: 'Ada' })
+    expect(screen.getByText('Banned')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Email banned' })).toBeDisabled()
+  })
+
+  it('deletes the user after a confirm and returns to the list', async () => {
+    const { fetchMock } = renderPage()
+    await screen.findByRole('heading', { name: 'Ada' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete user' }))
+    const dialog = screen.getByRole('alertdialog', {
+      name: 'Delete this user?',
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete user' }))
+
+    expect(await screen.findByText('users list')).toBeVisible()
+    expect(requested(fetchMock)).toContainEqual(
+      expect.stringMatching(/DELETE .*\/api\/admin\/users\/u1$/),
+    )
+  })
+
+  it('does nothing when the confirm dialog is cancelled', async () => {
+    const { fetchMock } = renderPage()
+    await screen.findByRole('heading', { name: 'Ada' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete user' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(
+      requested(fetchMock).filter(r => r.startsWith('DELETE')),
+    ).toHaveLength(0)
+  })
+
+  it('bans the email after a confirm and reports it', async () => {
+    const { fetchMock } = renderPage()
+    await screen.findByRole('heading', { name: 'Ada' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ban email' }))
+    const dialog = screen.getByRole('alertdialog', { name: 'Ban this email?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ban email' }))
+
+    expect(
+      await screen.findByText('Email banned; all sessions signed out.'),
+    ).toBeVisible()
+    expect(requested(fetchMock)).toContainEqual(
+      expect.stringMatching(/POST .*\/api\/admin\/users\/u1\/ban$/),
+    )
+  })
+
+  it('resets the password through the dialog, enforcing the length floor', async () => {
+    const { fetchMock } = renderPage()
+    await screen.findByRole('heading', { name: 'Ada' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset password' }))
+    const input = screen.getByLabelText('New password')
+
+    fireEvent.change(input, { target: { value: 'short' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Set password' }))
+    expect(
+      await screen.findByText('Password must be at least 8 characters'),
+    ).toBeVisible()
+    expect(
+      requested(fetchMock).filter(r => r.includes('/password')),
+    ).toHaveLength(0)
+
+    fireEvent.change(input, { target: { value: 'brand-new-password' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Set password' }))
+    expect(
+      await screen.findByText('Password updated; all sessions signed out.'),
+    ).toBeVisible()
+    expect(requested(fetchMock)).toContainEqual(
+      expect.stringMatching(/POST .*\/api\/admin\/users\/u1\/password$/),
+    )
+  })
+
+  it('deletes a project from its summary row after a confirm', async () => {
+    const { fetchMock } = renderPage()
+    await screen.findByText('Physics')
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Delete project Physics' }),
+    )
+    const dialog = screen.getByRole('alertdialog', {
+      name: 'Delete this project?',
+    })
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Delete project' }),
+    )
+
+    expect(await screen.findByText('Project deleted.')).toBeVisible()
+    expect(requested(fetchMock)).toContainEqual(
+      expect.stringMatching(/DELETE .*\/api\/admin\/projects\/p1$/),
+    )
+  })
+
+  it('deletes a lecture from its table row after a confirm', async () => {
+    const { fetchMock } = renderPage()
+    const physics = await screen.findByText('Physics')
+    fireEvent.click(physics)
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Delete lecture Waves' }),
+    )
+    const dialog = screen.getByRole('alertdialog', {
+      name: 'Delete this lecture?',
+    })
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Delete lecture' }),
+    )
+
+    expect(await screen.findByText('Lecture deleted.')).toBeVisible()
+    expect(requested(fetchMock)).toContainEqual(
+      expect.stringMatching(/DELETE .*\/api\/admin\/decks\/d1$/),
     )
   })
 })
