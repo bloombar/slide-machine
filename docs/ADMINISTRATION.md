@@ -68,6 +68,20 @@ Admin accounts moderate; they are not moderated: any of these against an
 allowlisted email (including your own) is refused with `target_is_admin`
 until the email is removed from `ADMIN_EMAILS`.
 
+### Viewing private lectures
+
+Admin reads list a user's private lectures, but *opening* one in the
+viewer follows the normal ACLs — by default even an admin gets the same
+404 as any stranger. The **"View private lectures" toggle** on a user's
+admin page (off by default) grants *the admin who enabled it* access to
+*that user's* private lectures, read-only, through the normal viewer.
+Enabling and disabling are recorded in the audit log
+(`user.private_view_enabled` / `user.private_view_disabled`), and so is
+**every private lecture actually opened** under the grant
+(`deck.private_view`). The grant persists until toggled off (collection
+`adminprivateaccesses`); turn it off when the task that needed it is
+done.
+
 ### Audit log (`/app/admin/logs`)
 
 The audit log records admin actions that change or expose user data. Each
@@ -81,10 +95,12 @@ Entries are **append-only**: they are written through one server module
 ([server/src/audit/log.ts](../server/src/audit/log.ts)) into the
 `adminactionlogs` Mongo collection, and no API can edit or delete them.
 Every moderation action writes one (`user.delete`, `user.ban_email`,
-`user.password_reset`, `project.delete`, `deck.delete`). It is the
-durable audit trail; a local CSV would not survive an App Platform
-redeploy, which is why the CSV is an on-demand export rather than the
-store.
+`user.password_reset`, `project.delete`, `deck.delete`), as do the
+private-view grant transitions (`user.private_view_enabled` /
+`user.private_view_disabled`) and each private lecture opened under a
+grant (`deck.private_view`). It is the durable audit trail; a local CSV
+would not survive an App Platform redeploy, which is why the CSV is an
+on-demand export rather than the store.
 
 ## Changing how the app behaves
 
