@@ -31,6 +31,18 @@ const joinedAt = (iso: string): string =>
     minute: '2-digit',
   })
 
+/** Link back to the admin users list, shown in every page state. */
+function BackToUsers() {
+  return (
+    <Link
+      to="/app/admin"
+      className="mb-3 inline-block text-sm text-slate-500 hover:underline"
+    >
+      &larr; All users
+    </Link>
+  )
+}
+
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex gap-2 py-1 text-sm">
@@ -88,10 +100,20 @@ export default function AdminUserDetailPage() {
   }, [userId])
 
   if (error) {
-    return <p className="text-red-600">Could not load this user.</p>
+    return (
+      <div>
+        <BackToUsers />
+        <p className="text-red-600">Could not load this user.</p>
+      </div>
+    )
   }
   if (!loaded) {
-    return <p className="text-slate-500">Loading…</p>
+    return (
+      <div>
+        <BackToUsers />
+        <p className="text-slate-500">Loading…</p>
+      </div>
+    )
   }
 
   const { detail, projects, decks } = loaded
@@ -107,6 +129,7 @@ export default function AdminUserDetailPage() {
 
   return (
     <div>
+      <BackToUsers />
       <div className="mb-1 flex items-baseline justify-between gap-4">
         <h1 className="text-2xl font-bold">{user.displayName}</h1>
         <Link

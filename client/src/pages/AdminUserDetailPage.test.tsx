@@ -104,4 +104,22 @@ describe('AdminUserDetailPage', () => {
     renderPage(500)
     expect(await screen.findByText('Could not load this user.')).toBeVisible()
   })
+
+  it('links back to the admin users list', async () => {
+    renderPage()
+    await screen.findByRole('heading', { name: 'Ada' })
+    expect(screen.getByRole('link', { name: '← All users' })).toHaveAttribute(
+      'href',
+      '/app/admin',
+    )
+  })
+
+  it('keeps the back link visible when the load fails', async () => {
+    renderPage(500)
+    await screen.findByText('Could not load this user.')
+    expect(screen.getByRole('link', { name: '← All users' })).toHaveAttribute(
+      'href',
+      '/app/admin',
+    )
+  })
 })
