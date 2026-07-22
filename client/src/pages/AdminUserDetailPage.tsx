@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
-import type { Project } from '@slide-machine/shared'
+import type { Project, Visibility } from '@slide-machine/shared'
 import {
   fetchAdminUser,
   fetchAdminUserDecks,
@@ -43,6 +43,19 @@ function BackToUsers() {
   )
 }
 
+const asDate = (iso: string): string => new Date(iso).toLocaleDateString()
+
+/** Newest of a project's own edit and any of its lectures' edits — so the
+ * date reflects editing the project OR one of its lectures. ISO strings
+ * sort chronologically, so a lexical max is a chronological one. */
+const lastActivity = (
+  project: Pick<Project, 'updatedAt'>,
+  decks: AdminDeckSummary[],
+): string =>
+  [project.updatedAt, ...decks.map(d => d.updatedAt)].reduce((a, b) =>
+    a > b ? a : b,
+  )
+
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex gap-2 py-1 text-sm">
@@ -52,26 +65,72 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-function LectureList({ decks }: { decks: AdminDeckSummary[] }) {
+/** Colour-coded pill for a lecture's effective visibility. */
+function VisibilityBadge({ visibility }: { visibility: Visibility }) {
+  const isPublic = visibility === 'public'
+  return (
+    <span
+      className={`inline-block rounded-full border px-2 py-0.5 text-xs font-medium ${
+        isPublic
+          ? 'border-green-200 bg-green-50 text-green-700'
+          : 'border-slate-200 bg-slate-100 text-slate-600'
+      }`}
+    >
+      {isPublic ? 'Public' : 'Private'}
+    </span>
+  )
+}
+
+/** A project's lectures as a table: title, visibility, slide count, and
+ * last-edited date. */
+function LectureTable({ decks }: { decks: AdminDeckSummary[] }) {
   if (decks.length === 0) {
     return <p className="px-4 pb-3 text-sm text-slate-500">No lectures.</p>
   }
   return (
-    <ul className="flex flex-col gap-1 px-4 pb-3">
-      {decks.map(deck => (
-        <li key={deck.id} className="flex items-baseline gap-3 text-sm">
-          <Link
-            to={`/d/${deck.permalinkSlug}`}
-            className="font-medium text-slate-900 hover:underline"
-          >
-            {deck.title.trim() || 'Untitled lecture'}
-          </Link>
-          <span className="text-xs text-slate-400">
-            updated {new Date(deck.updatedAt).toLocaleDateString()}
-          </span>
-        </li>
-      ))}
-    </ul>
+    <div className="px-4 pb-3">
+      <table className="w-full text-left text-sm">
+        <thead className="text-xs text-slate-500 uppercase">
+          <tr>
+            <th scope="col" className="py-1 pr-3 font-medium">
+              Lecture
+            </th>
+            <th scope="col" className="py-1 pr-3 font-medium">
+              Visibility
+            </th>
+            <th scope="col" className="py-1 pr-3 text-right font-medium">
+              Slides
+            </th>
+            <th scope="col" className="py-1 font-medium">
+              Updated
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {decks.map(deck => (
+            <tr key={deck.id} className="border-t border-slate-100">
+              <td className="py-1.5 pr-3">
+                <Link
+                  to={`/d/${deck.permalinkSlug}`}
+                  className="font-medium text-slate-900 hover:underline"
+                >
+                  {deck.title.trim() || 'Untitled lecture'}
+                </Link>
+              </td>
+              <td className="py-1.5 pr-3">
+                <VisibilityBadge visibility={deck.visibility} />
+              </td>
+              <td className="py-1.5 pr-3 text-right tabular-nums text-slate-600">
+                {deck.slideCount}
+              </td>
+              <td className="py-1.5 text-slate-500">
+                {asDate(deck.updatedAt)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
@@ -178,10 +237,11 @@ export default function AdminUserDetailPage() {
                     {projectTitle(project)}{' '}
                     <span className="text-sm font-normal text-slate-400">
                       {projectDecks.length}{' '}
-                      {projectDecks.length === 1 ? 'lecture' : 'lectures'}
+                      {projectDecks.length === 1 ? 'lecture' : 'lectures'} ·
+                      updated {asDate(lastActivity(project, projectDecks))}
                     </span>
                   </summary>
-                  <LectureList decks={projectDecks} />
+                  <LectureTable decks={projectDecks} />
                 </details>
               )
             })}
@@ -193,7 +253,7 @@ export default function AdminUserDetailPage() {
                     {otherDecks.length}
                   </span>
                 </summary>
-                <LectureList decks={otherDecks} />
+                <LectureTable decks={otherDecks} />
               </details>
             )}
           </div>

@@ -61,6 +61,9 @@ test('the allowlisted admin reaches the directory and a user drill-down', async 
   await page.getByRole('menuitem', { name: 'Admin' }).click()
   await expect(page).toHaveURL(/\/app\/admin$/)
 
+  // The directory offers a configurable page size.
+  await expect(page.getByLabel('Users per page')).toBeVisible()
+
   // Newest-first: the account registered by the previous test is on page 1
   await page.getByRole('link', { name: user.email }).click()
   await expect(page).toHaveURL(/\/app\/admin\/users\//)

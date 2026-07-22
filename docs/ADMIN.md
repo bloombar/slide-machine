@@ -1,10 +1,13 @@
 # Admin interface
 
 A read-only admin surface: a paginated, sortable directory of every
-account (email, handle, time of joining), and a per-user drill-down
-showing account details and the user's projects, each expandable to its
-lectures with links to the live deck viewer (`/d/:slug`) and the user's
-public profile (`/u/:id`).
+account (email, handle, time of joining) with a configurable page size,
+and a per-user drill-down showing account details and the user's
+projects, each expandable to a table of its lectures — effective
+visibility (public/private badge), slide count, and last-edited date —
+with links to the live deck viewer (`/d/:slug`) and the user's public
+profile (`/u/:id`). A project's date reflects the most recent edit to
+the project itself or any of its lectures.
 
 ## Status: wired in
 
@@ -55,11 +58,13 @@ All routes sit under `/api/admin` and are read-only:
   uses it (cached per account, fetched at most once per session, and
   only when an admin surface or the open menu needs it).
 - `GET /users?page=&limit=&sort=` — paginated directory
-  (`sort`: `newest` | `oldest` | `email`).
+  (`sort`: `newest` | `oldest` | `email`; `limit` is capped at 100 and
+  the client offers 10/25/50/100).
 - `GET /users/:id` — full `SafeUser` DTO plus project/lecture counts.
 - `GET /users/:id/projects` — the user's projects.
 - `GET /users/:id/decks?projectId=` — the user's lectures (with
-  `permalinkSlug` for viewer links), optionally filtered by project.
+  `permalinkSlug` for viewer links, `slideCount`, and effective
+  `visibility`), optionally filtered by project.
 
 ## Tests
 

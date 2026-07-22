@@ -12,10 +12,11 @@
 import { Router } from 'express'
 import { isValidObjectId, type HydratedDocument } from 'mongoose'
 import { z } from 'zod'
-import type { Project, SafeUser } from '@slide-machine/shared'
+import type { Project, SafeUser, Visibility } from '@slide-machine/shared'
 import { UserModel, toUserDto, type UserDb } from '../models/user'
 import { ProjectModel, toProjectDto } from '../models/project'
-import { DeckModel, type DeckDb } from '../models/deck'
+import { DeckModel, loadDeckAcls, type DeckDb } from '../models/deck'
+import type { ResolvedAcl } from '../lib/access'
 import { requireAuth } from '../middleware/auth'
 import { requireAdmin } from '../middleware/admin'
 import { HttpError } from '../middleware/error'
@@ -53,6 +54,10 @@ export interface AdminDeckSummary {
   projectId: string
   title: string
   permalinkSlug: string
+  // Effective visibility (the lecture's override, else its project's), so
+  // the admin table can badge each lecture without resolving ACLs itself.
+  visibility: Visibility
+  slideCount: number
   createdAt: string
   updatedAt: string
 }
@@ -74,11 +79,14 @@ const toAdminUserSummary = (
 
 const toAdminDeckSummary = (
   doc: HydratedDocument<DeckDb>,
+  acl: ResolvedAcl,
 ): AdminDeckSummary => ({
   id: doc._id.toString(),
   projectId: doc.projectId.toString(),
   title: doc.title,
   permalinkSlug: doc.permalinkSlug,
+  visibility: acl.visibility,
+  slideCount: doc.slideOrder.length,
   createdAt: doc.createdAt.toISOString(),
   // Fall back for documents created before updatedAt was enabled.
   updatedAt: (doc.updatedAt ?? doc.createdAt).toISOString(),
@@ -181,9 +189,14 @@ adminRouter.get('/users/:id/decks', async (req, res) => {
     filter.projectId = projectId
   }
   const decks = await DeckModel.find(filter).sort({ updatedAt: -1 })
+  // One batched project query resolves the effective visibility of every
+  // inheriting lecture; the rest read their own override.
+  const acls = await loadDeckAcls(decks)
 
   const body: AdminUserDecksResponse = {
-    decks: decks.map(toAdminDeckSummary),
+    decks: decks.map(deck =>
+      toAdminDeckSummary(deck, acls.get(deck._id.toString())!),
+    ),
   }
   res.json(body)
 })

@@ -4,7 +4,7 @@
  * group for decks living outside the user's own projects.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import AdminUserDetailPage from './AdminUserDetailPage'
 import { mockFetchRoutes } from '../test/fetch-mock'
@@ -25,7 +25,14 @@ const detail = {
   deckCount: 2,
 }
 
-const projects = [{ id: 'p1', title: 'Physics', ownerId: 'u1' }]
+const projects = [
+  {
+    id: 'p1',
+    title: 'Physics',
+    ownerId: 'u1',
+    updatedAt: '2026-07-01T00:00:00Z',
+  },
+]
 
 const decks = [
   {
@@ -33,6 +40,8 @@ const decks = [
     projectId: 'p1',
     title: 'Waves',
     permalinkSlug: 'waves-abc123',
+    visibility: 'public',
+    slideCount: 5,
     createdAt: '2026-07-02T00:00:00Z',
     updatedAt: '2026-07-03T00:00:00Z',
   },
@@ -41,6 +50,8 @@ const decks = [
     projectId: 'p-foreign',
     title: '',
     permalinkSlug: 'untitled-xyz789',
+    visibility: 'restricted',
+    slideCount: 0,
     createdAt: '2026-07-04T00:00:00Z',
     updatedAt: '2026-07-04T00:00:00Z',
   },
@@ -89,6 +100,33 @@ describe('AdminUserDetailPage', () => {
       'href',
       '/d/waves-abc123',
     )
+  })
+
+  it("shows each lecture's visibility badge and slide count", async () => {
+    renderPage()
+    const physics = await screen.findByText('Physics')
+    fireEvent.click(physics)
+    const wavesRow = screen.getByRole('link', { name: 'Waves' }).closest('tr')!
+    expect(within(wavesRow).getByText('Public')).toBeVisible()
+    expect(within(wavesRow).getByText('5')).toBeVisible()
+
+    const other = screen.getByText('Other lectures')
+    fireEvent.click(other)
+    const untitledRow = screen
+      .getByRole('link', { name: 'Untitled lecture' })
+      .closest('tr')!
+    expect(within(untitledRow).getByText('Private')).toBeVisible()
+    expect(within(untitledRow).getByText('0')).toBeVisible()
+  })
+
+  it('dates a project by its most recent lecture edit', async () => {
+    renderPage()
+    // The project itself last changed 2026-07-01, but its lecture was
+    // edited 2026-07-03 — the newer date wins.
+    const updated = new Date('2026-07-03T00:00:00Z').toLocaleDateString()
+    expect(
+      await screen.findByText(new RegExp(`updated ${updated}`)),
+    ).toBeVisible()
   })
 
   it('groups decks outside the user\'s projects under "Other lectures"', async () => {

@@ -57,14 +57,18 @@ const asAdmin = async () => {
   return token
 }
 
-const createProject = (ownerId: Types.ObjectId, title: string) =>
-  ProjectModel.create({ ownerId, title })
+const createProject = (
+  ownerId: Types.ObjectId,
+  title: string,
+  extra: Partial<Parameters<typeof ProjectModel.create>[0]> = {},
+) => ProjectModel.create({ ownerId, title, ...extra })
 
 const createDeck = (
   ownerId: Types.ObjectId,
   projectId: Types.ObjectId,
   title: string,
   slug: string,
+  extra: Partial<Parameters<typeof DeckModel.create>[0]> = {},
 ) =>
   DeckModel.create({
     ownerId,
@@ -72,6 +76,7 @@ const createDeck = (
     title,
     templateId: 'classic',
     permalinkSlug: slug,
+    ...extra,
   })
 
 describe('admin gating', () => {
@@ -272,6 +277,47 @@ describe('GET /api/admin/users/:id/decks', () => {
       title: 'Waves',
       projectId: physics._id.toString(),
       permalinkSlug: 'waves-abc123',
+      // Inherits the default project's public visibility.
+      visibility: 'public',
+      slideCount: 0,
+    })
+  })
+
+  it('reports slide count and effective visibility per lecture', async () => {
+    const admin = await asAdmin()
+    const { user } = await createUser('ada@example.com', 'Ada')
+    // A restricted project: its inheriting lecture reads as "restricted".
+    const restricted = await createProject(user._id, 'Private course', {
+      visibility: 'restricted',
+    })
+    // A public project whose lecture overrides itself back to restricted.
+    const open = await createProject(user._id, 'Open course', {
+      visibility: 'public',
+    })
+    await createDeck(user._id, restricted._id, 'Inherited', 'inherited-a1', {
+      slideOrder: ['s1', 's2', 's3'],
+    })
+    await createDeck(user._id, open._id, 'Overridden', 'overridden-b2', {
+      accessOverride: { visibility: 'restricted', viewers: [], editors: [] },
+    })
+
+    const res = await request(server)
+      .get(`/api/admin/users/${user._id}/decks`)
+      .set('Authorization', `Bearer ${admin}`)
+    expect(res.status).toBe(200)
+    const bySlug = Object.fromEntries(
+      res.body.decks.map((d: { permalinkSlug: string }) => [
+        d.permalinkSlug,
+        d,
+      ]),
+    )
+    expect(bySlug['inherited-a1']).toMatchObject({
+      slideCount: 3,
+      visibility: 'restricted',
+    })
+    expect(bySlug['overridden-b2']).toMatchObject({
+      slideCount: 0,
+      visibility: 'restricted',
     })
   })
 

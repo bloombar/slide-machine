@@ -6,6 +6,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import {
   listAdminUsers,
+  ADMIN_USERS_PAGE_SIZE,
+  ADMIN_USERS_PAGE_SIZES,
   type AdminUsersResponse,
   type AdminUsersSort,
 } from '../api/admin'
@@ -22,6 +24,7 @@ const joinedAt = (iso: string): string =>
 export default function AdminUsersPage() {
   const [page, setPage] = useState(1)
   const [sort, setSort] = useState<AdminUsersSort>('newest')
+  const [limit, setLimit] = useState(ADMIN_USERS_PAGE_SIZE)
   const [data, setData] = useState<AdminUsersResponse | null>(null)
   const [error, setError] = useState(false)
 
@@ -29,7 +32,7 @@ export default function AdminUsersPage() {
   // trigger one, so a stale error can never linger past a new response
   useEffect(() => {
     let cancelled = false
-    listAdminUsers(page, sort)
+    listAdminUsers(page, sort, limit)
       .then(res => {
         if (!cancelled) setData(res)
       })
@@ -39,7 +42,7 @@ export default function AdminUsersPage() {
     return () => {
       cancelled = true
     }
-  }, [page, sort])
+  }, [page, sort, limit])
 
   if (error) {
     return <p className="text-red-600">Could not load users.</p>
@@ -59,21 +62,42 @@ export default function AdminUsersPage() {
             ({data.total})
           </span>
         </h1>
-        <label className="flex items-center gap-2 text-sm text-slate-600">
-          Sort
-          <select
-            value={sort}
-            onChange={e => {
-              setSort(e.target.value as AdminUsersSort)
-              setPage(1)
-            }}
-            className="rounded-md border border-slate-300 px-2 py-1 text-sm"
-          >
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
-            <option value="email">Email A–Z</option>
-          </select>
-        </label>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            Per page
+            <select
+              aria-label="Users per page"
+              value={limit}
+              onChange={e => {
+                setLimit(Number(e.target.value))
+                setPage(1)
+              }}
+              className="rounded-md border border-slate-300 px-2 py-1 text-sm"
+            >
+              {ADMIN_USERS_PAGE_SIZES.map(size => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            Sort
+            <select
+              aria-label="Sort users"
+              value={sort}
+              onChange={e => {
+                setSort(e.target.value as AdminUsersSort)
+                setPage(1)
+              }}
+              className="rounded-md border border-slate-300 px-2 py-1 text-sm"
+            >
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="email">Email A–Z</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-slate-200">

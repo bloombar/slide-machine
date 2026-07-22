@@ -3,7 +3,7 @@
  * server/src/routes/admin.ts (the server is the source of truth); move
  * both into the shared workspace once the admin surface is wired in.
  */
-import type { Project, SafeUser } from '@slide-machine/shared'
+import type { Project, SafeUser, Visibility } from '@slide-machine/shared'
 import { apiFetch } from './http'
 
 /** One row of the admin user directory. */
@@ -37,10 +37,15 @@ export interface AdminDeckSummary {
   projectId: string
   title: string
   permalinkSlug: string
+  // Effective visibility (override, else inherited from the project).
+  visibility: Visibility
+  slideCount: number
   createdAt: string
   updatedAt: string
 }
 
+/** Selectable directory page sizes; the server caps `limit` at 100. */
+export const ADMIN_USERS_PAGE_SIZES = [10, 25, 50, 100] as const
 export const ADMIN_USERS_PAGE_SIZE = 25
 
 /** 200 only for admins; non-admins receive a 403 ApiError. */
@@ -50,9 +55,10 @@ export const fetchAdminStatus = (): Promise<{ isAdmin: boolean }> =>
 export const listAdminUsers = (
   page = 1,
   sort: AdminUsersSort = 'newest',
+  limit: number = ADMIN_USERS_PAGE_SIZE,
 ): Promise<AdminUsersResponse> =>
   apiFetch<AdminUsersResponse>(
-    `/api/admin/users?page=${page}&limit=${ADMIN_USERS_PAGE_SIZE}&sort=${sort}`,
+    `/api/admin/users?page=${page}&limit=${limit}&sort=${sort}`,
   )
 
 export const fetchAdminUser = (
