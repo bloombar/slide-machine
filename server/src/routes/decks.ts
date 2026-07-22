@@ -2,7 +2,10 @@
  * Public deck viewer route (SHARE-1): GET /api/decks/:slug. Access
  * follows the deck ACL (visibility + shared viewers/editors, optional
  * auth); missing and forbidden are both 404 so existence never leaks.
- * canEdit tells the client whether to enable the editing surface.
+ * The one exception is an allowlisted admin holding a private-view
+ * grant for the lecture's owner (the audited toggle on the admin user
+ * page) — each such view is recorded in the admin action log. canEdit
+ * tells the client whether to enable the editing surface.
  */
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import type { HydratedDocument } from 'mongoose'
@@ -14,6 +17,8 @@ import {
   toSharedDeckDto,
   type DeckDb,
 } from '../models/deck'
+import { privateViewGrantee } from '../models/admin-private-access'
+import { logAdminAction } from '../audit/log'
 import { canEditAcl, canViewAcl } from '../lib/access'
 import { SlideModel, toSlideDto } from '../models/slide'
 import { TranscriptSegmentModel } from '../models/transcript-segment'
@@ -72,7 +77,21 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
   })
   if (!deck) throw notFound
   const acl = await loadDeckAcl(deck)
-  if (!canViewAcl(acl, req.userId)) throw notFound
+  if (!canViewAcl(acl, req.userId)) {
+    // Admin private-view bypass: only for an allowlisted admin who has
+    // enabled the grant for this lecture's owner, and every use lands
+    // in the audit log
+    const admin = await privateViewGrantee(req.userId, acl.ownerId)
+    if (!admin) throw notFound
+    await logAdminAction({
+      actorId: admin.id,
+      actorEmail: admin.email,
+      action: 'deck.private_view',
+      targetType: 'deck',
+      targetId: deck._id.toString(),
+      details: { title: deck.title, ownerId: acl.ownerId },
+    })
+  }
 
   const template = getBuiltinTemplate(deck.templateId)
   if (!template) throw notFound

@@ -16,6 +16,7 @@ import { requireAuth } from '../middleware/auth'
 import { HttpError } from '../middleware/error'
 import { SlideModel } from '../models/slide'
 import { DeckModel, loadDeckAcl } from '../models/deck'
+import { privateViewGrantee } from '../models/admin-private-access'
 import { ProjectModel } from '../models/project'
 import { canViewAcl } from '../lib/access'
 import { slideContentText } from '../lib/speakable-text'
@@ -37,8 +38,13 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
   const slide = await SlideModel.findById(slideId).catch(() => null)
   if (!slide) throw new HttpError(404, 'not_found', 'Slide not found')
   const deck = await DeckModel.findById(slide.deckId).catch(() => null)
-  if (!deck || !canViewAcl(await loadDeckAcl(deck), req.userId)) {
-    throw new HttpError(403, 'forbidden', 'Not allowed')
+  if (!deck) throw new HttpError(403, 'forbidden', 'Not allowed')
+  const acl = await loadDeckAcl(deck)
+  if (!canViewAcl(acl, req.userId)) {
+    // Narration is part of viewing: honor the admin private-view grant
+    // (the deck view itself is what the audit log records)
+    const admin = await privateViewGrantee(req.userId, acl.ownerId)
+    if (!admin) throw new HttpError(403, 'forbidden', 'Not allowed')
   }
 
   // Language + voice cascade: the lecture's own setting wins, then its

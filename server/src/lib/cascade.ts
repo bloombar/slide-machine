@@ -15,6 +15,7 @@ import { SeedAssetModel } from '../models/seed-asset'
 import { TranscriptSegmentModel } from '../models/transcript-segment'
 import { RefineJobModel } from '../models/refine-job'
 import { RefreshTokenModel } from '../models/refresh-token'
+import { AdminPrivateAccessModel } from '../models/admin-private-access'
 import { UserModel } from '../models/user'
 import { getStorage } from '../storage'
 
@@ -111,6 +112,10 @@ export const deleteUserCascade = async (userId: string): Promise<void> => {
       },
     ),
     RefreshTokenModel.deleteMany({ userId }),
+    // Private-view grants they held or were the subject of
+    AdminPrivateAccessModel.deleteMany({
+      $or: [{ adminId: userId }, { targetUserId: userId }],
+    }),
   ])
   await UserModel.deleteOne({ _id: userId })
 }

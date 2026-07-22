@@ -30,6 +30,7 @@ import {
   toAdminLogEntryDto,
 } from '../models/admin-action-log'
 import { BannedEmailModel, isEmailBanned } from '../models/banned-email'
+import { AdminPrivateAccessModel } from '../models/admin-private-access'
 import { csvRow } from '../audit/csv'
 import { logAdminAction } from '../audit/log'
 import {
@@ -68,6 +69,9 @@ export interface AdminUserDetailResponse {
   deckCount: number
   /** Whether the account's email is on the banned list. */
   banned: boolean
+  /** Whether the REQUESTING admin has enabled viewing this user's
+   * private lectures (the audited private-view grant). */
+  privateAccess: boolean
 }
 
 export interface AdminUserProjectsResponse {
@@ -259,10 +263,14 @@ adminRouter.get('/logs/export', async (_req, res) => {
 
 adminRouter.get('/users/:id', async (req, res) => {
   const user = await loadUser(String(req.params.id))
-  const [projectCount, deckCount, banned] = await Promise.all([
+  const [projectCount, deckCount, banned, grant] = await Promise.all([
     ProjectModel.countDocuments({ ownerId: user._id }),
     DeckModel.countDocuments({ ownerId: user._id }),
     isEmailBanned(user.email),
+    AdminPrivateAccessModel.exists({
+      adminId: req.adminUser?.id,
+      targetUserId: user._id,
+    }),
   ])
 
   const body: AdminUserDetailResponse = {
@@ -270,6 +278,7 @@ adminRouter.get('/users/:id', async (req, res) => {
     projectCount,
     deckCount,
     banned,
+    privateAccess: grant !== null,
   }
   res.json(body)
 })
@@ -419,6 +428,55 @@ adminRouter.post('/users/:id/password', async (req, res) => {
     targetId: user._id.toString(),
     details: { email: user.email },
   })
+  res.status(204).end()
+})
+
+// The private-view toggle: enabling grants THIS admin access to the
+// target user's private lectures via the deck viewer (routes/decks.ts
+// honors the grant and logs each private view). Enabling and disabling
+// are both audited. Per-admin, per-user, off by default (no row).
+adminRouter.post('/users/:id/private-access', async (req, res) => {
+  const user = await loadUser(String(req.params.id))
+  const admin = actor(req)
+
+  // Idempotent enable; only an actual state change is worth an entry
+  const upserted = await AdminPrivateAccessModel.updateOne(
+    { adminId: admin.id, targetUserId: user._id },
+    { $setOnInsert: { adminId: admin.id, targetUserId: user._id } },
+    { upsert: true },
+  )
+  if (upserted.upsertedCount > 0) {
+    await logAdminAction({
+      actorId: admin.id,
+      actorEmail: admin.email,
+      action: 'user.private_view_enabled',
+      targetType: 'user',
+      targetId: user._id.toString(),
+      details: { email: user.email },
+    })
+  }
+  res.status(204).end()
+})
+
+adminRouter.delete('/users/:id/private-access', async (req, res) => {
+  const user = await loadUser(String(req.params.id))
+  const admin = actor(req)
+
+  const removed = await AdminPrivateAccessModel.deleteOne({
+    adminId: admin.id,
+    targetUserId: user._id,
+  })
+  // Only an actual state change is worth an audit entry
+  if (removed.deletedCount > 0) {
+    await logAdminAction({
+      actorId: admin.id,
+      actorEmail: admin.email,
+      action: 'user.private_view_disabled',
+      targetType: 'user',
+      targetId: user._id.toString(),
+      details: { email: user.email },
+    })
+  }
   res.status(204).end()
 })
 
