@@ -56,11 +56,20 @@ export interface SlideGenerationRequest {
       bullets?: string[]
       caption?: string
     }
+    /** Everything the speaker has said while on this slide (its raw
+     * `sourceTranscript`), so the model can judge what it already covers —
+     * distinct from the polished slot content above. */
+    sourceTranscript?: string
   }
   /** GENERATION_LAYOUT_REFIT feature flag: the model may switch an
    * updated slide's layout — including a full re-map of existing
    * content via updateMode 'refit' (GEN-8 "re-fit the layout"). */
   allowLayoutRefit?: boolean
+  /** GENERATION_LIVE_REPHRASE feature flag: a "refit" may also KEEP the
+   * layout and re-state existing content when clearer phrasing improves
+   * it (not only when the layout should change). Only meaningful when
+   * `allowLayoutRefit` is also true. */
+  allowRephrase?: boolean
   /** The user is hand-annotating the current slide right now (WB-3): the model
    * must NOT change its layout, so it isn't rearranged out from under the
    * drawing. The server also enforces this regardless of the model's answer. */

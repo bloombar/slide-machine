@@ -127,6 +127,50 @@ describe('GeminiGenerationProvider', () => {
     expect(init.headers['x-goog-api-key']).toBe('test-key')
   })
 
+  it('offers same-layout rephrasing and the slide transcript only when enabled', async () => {
+    fetchMock.mockResolvedValue(geminiReply({ action: 'none' }))
+    const promptFor = () =>
+      JSON.parse(String(fetchMock.mock.calls[0]![1].body)).contents[0].parts[0]
+        .text as string
+
+    // Rephrasing on: a refit may keep the same layout, and the slide's spoken
+    // transcript is passed for context.
+    await provider.generateSlideContent(
+      request({
+        allowLayoutRefit: true,
+        allowRephrase: true,
+        currentSlide: {
+          layoutType: 'list',
+          bulletCount: 2,
+          bodyChars: 0,
+          content: { title: 'T', bullets: ['a', 'b'] },
+          sourceTranscript: 'spoken words so far about the topic',
+        },
+      }),
+    )
+    let prompt = promptFor()
+    expect(prompt).toContain('keep the SAME layoutType')
+    expect(prompt).toContain('spoken words so far about the topic')
+
+    // Rephrasing off: a refit is strictly for genuine layout changes.
+    fetchMock.mockClear()
+    await provider.generateSlideContent(
+      request({
+        allowLayoutRefit: true,
+        allowRephrase: false,
+        currentSlide: {
+          layoutType: 'list',
+          bulletCount: 2,
+          bodyChars: 0,
+          content: { title: 'T', bullets: ['a', 'b'] },
+        },
+      }),
+    )
+    prompt = promptFor()
+    expect(prompt).toContain('the layoutType must actually change')
+    expect(prompt).not.toContain('keep the SAME layoutType')
+  })
+
   it('tolerates responses that omit layoutType (none / delta updates)', async () => {
     // A bare "none" — exactly what the live model returned mid-lecture
     fetchMock.mockResolvedValue(geminiReply({ action: 'none' }))

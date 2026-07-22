@@ -29,7 +29,10 @@ import type {
   StrokeAnchor,
   WordTiming,
 } from '@slide-machine/shared'
-import { WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
+import {
+  WHITEBOARD_LAYOUT_TYPE,
+  hasVisibleDrawings,
+} from '@slide-machine/shared'
 import { strokeVisible } from '../lib/drawing'
 import { apiFetch, ApiError } from '../api/http'
 import { dispatchAction } from '../api/actions'
@@ -71,6 +74,7 @@ import { useWhiteboard } from '../components/whiteboard/useWhiteboard'
 import { themeColors } from '../components/slide/theme'
 import Tooltip from '../components/Tooltip'
 import NotificationPill from '../components/NotificationPill'
+import ConfirmDialog from '../components/ConfirmDialog'
 import SeedDialog from '../components/SeedDialog'
 import DeckSettingsModal, {
   type SettingsTabId,
@@ -206,6 +210,11 @@ export default function DeckViewerPage() {
   const [pendingImages, setPendingImages] = useState<Set<string>>(new Set())
   // The slide currently being refined via its kebab (drives a status toast)
   const [refiningSlideId, setRefiningSlideId] = useState<string | null>(null)
+  // A marked-up slide the user asked to refine, pending confirmation — refining
+  // may reflow content out from under their annotations (WB-1).
+  const [confirmingRefineSlideId, setConfirmingRefineSlideId] = useState<
+    string | null
+  >(null)
   // Content-generation pause pill (WB-3): 'paused' while the user is actively
   // drawing during recording (with a Resume button to override), 'resumed' for
   // a brief confirmation after the debounce elapses or the user resumes, and
@@ -1340,6 +1349,17 @@ export default function DeckViewerPage() {
     }
   }
 
+  /** Kebab "Refine this slide": if the slide carries whiteboard marks, confirm
+   * first (refining may reflow content under the annotations); else refine. */
+  const requestRefineSlide = (slideId: string) => {
+    const slide = viewRef.current?.slides.find(s => s.id === slideId)
+    if (hasVisibleDrawings(slide?.drawings)) {
+      setConfirmingRefineSlideId(slideId)
+    } else {
+      void refineSlide(slideId)
+    }
+  }
+
   // The "Refine this slide" kebab item appears only when a slide-applicable
   // refine pass is enabled in the lecture's Refine settings (defaults on).
   const slideRefineEnabled =
@@ -1581,7 +1601,7 @@ export default function DeckViewerPage() {
                 }
                 onRefine={
                   canEdit && slideRefineEnabled
-                    ? () => void refineSlide(slide!.id)
+                    ? () => requestRefineSlide(slide!.id)
                     : undefined
                 }
                 onPlayOriginalAudio={
@@ -1632,7 +1652,7 @@ export default function DeckViewerPage() {
                     onChangeLayout={() => setLayoutPickerFor(s.id)}
                     onRefine={
                       slideRefineEnabled
-                        ? () => void refineSlide(s.id)
+                        ? () => requestRefineSlide(s.id)
                         : undefined
                     }
                     onPlayOriginalAudio={
@@ -1685,6 +1705,20 @@ export default function DeckViewerPage() {
         />
       )}
 
+      {confirmingRefineSlideId && (
+        <ConfirmDialog
+          title="Refine this marked-up slide?"
+          message="This slide has whiteboard markings. Refining may change its content or layout, so your highlights and annotations may no longer line up with what's underneath."
+          confirmLabel="Refine anyway"
+          onConfirm={() => {
+            const id = confirmingRefineSlideId
+            setConfirmingRefineSlideId(null)
+            void refineSlide(id)
+          }}
+          onCancel={() => setConfirmingRefineSlideId(null)}
+        />
+      )}
+
       {refiningSlideId && (
         <NotificationPill>Refining this slide…</NotificationPill>
       )}
@@ -1732,6 +1766,9 @@ export default function DeckViewerPage() {
           projectTtsVoice={view.projectTtsVoice}
           initialTab={settingsTab ?? 'general'}
           isOwner={isOwner}
+          slidesHaveDrawings={view.slides.some(s =>
+            hasVisibleDrawings(s.drawings),
+          )}
           onClose={closeSettings}
           onDeckChange={deck => setView(v => (v ? { ...v, deck } : v))}
           onDeleted={() => void navigate('/app')}

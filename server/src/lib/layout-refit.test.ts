@@ -8,6 +8,7 @@ import type { SlideGenerationResult } from '@slide-machine/shared'
 import { listBuiltinTemplates, layoutDescriptors } from '../templates/builtin'
 import {
   layoutDisplaysContent,
+  isHeaderLayout,
   refitPreservesContent,
   type SlideContentSnapshot,
 } from './layout-refit'
@@ -49,6 +50,17 @@ describe('layoutDisplaysContent (delta layout switches)', () => {
         descriptors,
       ),
     ).toBe(false)
+  })
+
+  it('identifies header layouts (title/section) with no body/bullets/image', () => {
+    expect(isHeaderLayout('title', descriptors)).toBe(true)
+    expect(isHeaderLayout('section', descriptors)).toBe(true)
+    // Anything that can hold real content is not a header.
+    expect(isHeaderLayout('content', descriptors)).toBe(false)
+    expect(isHeaderLayout('list', descriptors)).toBe(false)
+    expect(isHeaderLayout('image-heavy', descriptors)).toBe(false)
+    // Unknown layouts are not headers.
+    expect(isHeaderLayout('hologram', descriptors)).toBe(false)
   })
 
   it('rejects unknown layout types', () => {

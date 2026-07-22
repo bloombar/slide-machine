@@ -181,13 +181,25 @@ const instructions = (req: SlideGenerationRequest): string => {
   // layout re-fit is allowed (GEN-8): "delta" stays cheap (added
   // material only); "refit" pays for the complete re-mapped slide only
   // when the layout actually changes
+  // "refit" is the complete-slide mode. With rephrasing on it serves two
+  // purposes (change the layout, or re-state the same layout for clarity);
+  // with it off it is strictly for genuine layout changes.
+  const refitRule = req.allowRephrase
+    ? `- "refit": provide the COMPLETE slide (every existing point preserved plus any added material). Use it EITHER to (a) move to a layoutType that fits the combined content better (e.g. prose grown into an enumeration fits "list"), OR (b) keep the SAME layoutType but re-state the whole slide when a clearer, tighter phrasing would improve it.`
+    : `- "refit": ONLY when the slide's combined content now fits a DIFFERENT layout better (e.g. prose grown into an enumeration fits "list") — the layoutType must actually change; slots must contain the COMPLETE slide re-mapped to the new layout, every existing point preserved plus the added material, reworded only as the new slots require.`
   const updateRules =
     req.allowLayoutRefit && req.currentSlide?.content
       ? `\nFor "update", also set "updateMode":
 - "delta": adds a small amount; slots contain ONLY the added material. Keep layoutType "${req.currentSlide.layoutType}" unless another layout still displays every slot this slide uses.
-- "refit": the slide's combined content now fits a different layout better (e.g. prose grown into an enumeration fits "list"); slots must contain the COMPLETE slide re-mapped to the new layout — every existing point preserved plus the added material, reworded only as the new slots require.
+${refitRule}
 Current slide content: ${JSON.stringify(req.currentSlide.content)}`
       : ''
+
+  // The raw speech captured while on the current slide, so the model can judge
+  // what it already covers (distinct from the polished slot content above).
+  const currentTranscript = req.currentSlide?.sourceTranscript
+    ? `\nWhat the speaker has ALREADY said while on the current slide (its raw spoken transcript — use it to judge what the slide already covers and to avoid repeating points):\n"${req.currentSlide.sourceTranscript}"`
+    : ''
 
   // A fourth action bullet, present only when commands are offered:
   // the bar is deliberately high — a wrong "command" hijacks the deck
@@ -235,6 +247,7 @@ Current slide content: ${JSON.stringify(req.currentSlide.content)}`
     deckSeed,
     rolling,
     capacity,
+    currentTranscript,
     language,
     phrase: req.phrase,
   })

@@ -32,7 +32,10 @@ const baseDeck: Deck = {
   hasRecordings: true,
 }
 
-const renderModal = (over: Partial<Deck> = {}) => {
+const renderModal = (
+  over: Partial<Deck> = {},
+  opts: { slidesHaveDrawings?: boolean } = {},
+) => {
   const onReformatted = vi.fn()
   const onDeckChange = vi.fn()
   render(
@@ -41,6 +44,7 @@ const renderModal = (over: Partial<Deck> = {}) => {
         deck={{ ...baseDeck, ...over }}
         projectGenerationFreedom={2}
         isOwner
+        slidesHaveDrawings={opts.slidesHaveDrawings}
         onClose={vi.fn()}
         onTemplateChange={vi.fn()}
         onDeckChange={onDeckChange}
@@ -121,7 +125,10 @@ describe('DeckSettingsModal — Refine tab', () => {
       '/api/actions/template.list': () => ({ status: 200, body: [] }),
       '/api/actions/deck.setRefineSettings': init => {
         savedBody = JSON.parse(String(init?.body))
-        return { status: 200, body: { ...baseDeck, refineSlidesEnabled: false } }
+        return {
+          status: 200,
+          body: { ...baseDeck, refineSlidesEnabled: false },
+        }
       },
     })
     renderModal()
@@ -213,6 +220,65 @@ describe('DeckSettingsModal — Refine tab', () => {
       /Done — reframed 1 student slide, refined 2 slides, updated 2 narrations\./,
     )
     expect(onReformatted).toHaveBeenCalledOnce()
+  })
+
+  it('confirms before refining when slides carry whiteboard marks', async () => {
+    let refineCalled = false
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.refineStatus': () => ({
+        status: 200,
+        body: {
+          status: 'done',
+          summary: { reframed: 0, slidesRefined: 1, transcriptsUpdated: 0 },
+        },
+      }),
+      '/api/actions/deck.refine': () => {
+        refineCalled = true
+        return { status: 200, body: { jobId: 'job-1' } }
+      },
+    })
+    renderModal({}, { slidesHaveDrawings: true })
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine' }))
+    // Slide pass is on by default; with marks present, Refine prompts first.
+    fireEvent.click(screen.getByRole('button', { name: 'Refine' }))
+    expect(
+      screen.getByRole('alertdialog', { name: /refine marked-up slides/i }),
+    ).toBeInTheDocument()
+    expect(refineCalled).toBe(false)
+    // Confirming proceeds to the refine job.
+    fireEvent.click(screen.getByRole('button', { name: 'Refine anyway' }))
+    await vi.waitFor(() => expect(refineCalled).toBe(true), { timeout: 2000 })
+  })
+
+  it('does not prompt when the slide pass is off, even with marks', async () => {
+    let refineCalled = false
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.setRefineSettings': () => ({
+        status: 200,
+        body: { ...baseDeck, refineSlidesEnabled: false },
+      }),
+      '/api/actions/deck.refineStatus': () => ({
+        status: 200,
+        body: {
+          status: 'done',
+          summary: { reframed: 0, slidesRefined: 0, transcriptsUpdated: 1 },
+        },
+      }),
+      '/api/actions/deck.refine': () => {
+        refineCalled = true
+        return { status: 200, body: { jobId: 'job-2' } }
+      },
+    })
+    renderModal({}, { slidesHaveDrawings: true })
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine' }))
+    // Turn the slide pass off — only the transcript pass remains, which does
+    // not touch slide content, so no confirmation is needed.
+    fireEvent.click(screen.getByRole('checkbox', { name: /Refine all slides/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Refine' }))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    await vi.waitFor(() => expect(refineCalled).toBe(true), { timeout: 2000 })
   })
 })
 

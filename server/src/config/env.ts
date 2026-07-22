@@ -126,6 +126,12 @@ const envSchema = z.object({
   // slot re-map ("refit"). On by default; flip off to pin every slide's
   // layout from its creation.
   GENERATION_LAYOUT_REFIT: z.stringbool().default(true),
+  // Live rephrasing: allow a "refit" that KEEPS the layout but re-states the
+  // current slide's existing content when a clearer phrasing improves it (as
+  // opposed to a refit that changes the layout as content grows). On by
+  // default; flip off to keep committed slide text verbatim during a lecture.
+  // Only in effect while GENERATION_LAYOUT_REFIT is on (refit is the vehicle).
+  GENERATION_LIVE_REPHRASE: z.stringbool().default(true),
   /** Hard cap on one generation call — phrase-to-slide must stay live. */
   GEMINI_TIMEOUT_MS: z.coerce.number().default(12_000),
   // Service-account JSON for Cloud Speech-to-Text streaming (real-time STT).

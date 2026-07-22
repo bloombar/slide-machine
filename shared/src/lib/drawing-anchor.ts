@@ -5,6 +5,16 @@
  * transcript is rewritten by refinement. Shared by the server refine pass and
  * the client playback overlay so both agree on the math.
  */
+import type { Stroke } from '../types/deck'
+
+/**
+ * Whether a slide carries any *visible* whiteboard marks. Erased strokes stay
+ * in the array (flagged with `erasedAnchor`) for replay, so a plain length
+ * check would count marks the user has already removed; this ignores those.
+ * Used to guard content-reflowing generation/refinement on marked-up slides.
+ */
+export const hasVisibleDrawings = (drawings?: Stroke[]): boolean =>
+  (drawings ?? []).some(s => !s.erasedAnchor)
 
 /**
  * Position of an anchor within the narration, in [0, 1]. Uses transcript length

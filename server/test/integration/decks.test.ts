@@ -212,7 +212,8 @@ describe('session.phrase', () => {
     // keywords (a title/content card is text-only and requests no image).
     const first = await act(ada, 'session.phrase', {
       deckId,
-      phrase: 'photosynthesis in plant leaves needs sunlight and green chloroplasts to work well',
+      phrase:
+        'photosynthesis in plant leaves needs sunlight and green chloroplasts to work well',
     })
     expect(first.body.kind).toBe('slide.new')
     expect(first.body.slide.imageKeywords).toEqual([
@@ -385,6 +386,54 @@ describe('session.phrase', () => {
     expect(view.body.slides).toHaveLength(1)
   })
 
+  it('never refits (reformats) a slide the user has marked up (WB-1)', async () => {
+    // Same enumerating continuation that refits an unmarked slide to a list…
+    const first = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'The cell membrane is a strong protective barrier',
+    })
+    expect(first.body.slide.layoutType).toBe('content')
+    const slideId = first.body.slide.id as string
+    const originalBody = first.body.slide.body as string
+
+    // …but this slide now carries a whiteboard stroke.
+    const drawn = await act(ada, 'slide.editDrawings', {
+      slideId,
+      drawings: [
+        {
+          id: 'stroke-1',
+          tool: 'pen',
+          color: '#111111',
+          thickness: 0.01,
+          points: [
+            { x: 0.1, y: 0.1 },
+            { x: 0.4, y: 0.2 },
+          ],
+          startedAt: '2026-07-22T00:00:00.000Z',
+          endedAt: '2026-07-22T00:00:01.000Z',
+          anchor: { charAnchor: 0, source: 'appended' },
+        },
+      ],
+    })
+    expect(drawn.status).toBe(200)
+
+    // The continuation must NOT refit — it becomes a plain additive delta that
+    // keeps the layout and leaves the committed body untouched.
+    const update = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Also it contains cholesterol, embedded proteins, glycolipids',
+    })
+    expect(update.body.kind).toBe('slide.update')
+    expect(update.body.slide.layoutType).toBe('content')
+    expect(update.body.slide.body).toBe(originalBody)
+    // Additive: the continuation joins as a bullet rather than reformatting.
+    expect(update.body.slide.bullets).toEqual([
+      'it contains cholesterol, embedded proteins, glycolipids',
+    ])
+    // The stroke is untouched.
+    expect(update.body.slide.drawings).toHaveLength(1)
+  })
+
   it('keeps the layout on delta updates that would hide displayed content', async () => {
     await act(ada, 'session.phrase', {
       deckId,
@@ -409,6 +458,56 @@ describe('session.phrase', () => {
     })
     expect(res.body.kind).toBe('slide.new')
     expect(res.body.command).toBeUndefined()
+  })
+
+  it('spills content onto a new slide instead of folding it into a title slide', async () => {
+    // A short opener becomes a title slide (title/caption slots only).
+    const first = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Photosynthesis basics',
+    })
+    expect(first.body.slide.layoutType).toBe('title')
+    const titleId = first.body.slide.id as string
+
+    // A continuation would normally delta-update the current slide, but a title
+    // layout can't display a bullet — so it becomes a NEW slide, and the title
+    // slide is left untouched.
+    const next = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Also chlorophyll absorbs light energy',
+    })
+    expect(next.body.kind).toBe('slide.new')
+    expect(next.body.slide.id).not.toBe(titleId)
+
+    const view = await act(ada, 'deck.get', { deckId })
+    expect(view.body.slides).toHaveLength(2)
+    const title = view.body.slides.find((s: { id: string }) => s.id === titleId)
+    expect(title.layoutType).toBe('title')
+    expect(title.bullets ?? []).toHaveLength(0)
+  })
+
+  it('spills a refit off a title slide onto a new slide too', async () => {
+    const first = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Cell biology',
+    })
+    expect(first.body.slide.layoutType).toBe('title')
+    const titleId = first.body.slide.id as string
+
+    // An enumerating continuation refits an ordinary slide to a list; on a
+    // title slide it must instead spill to a new slide (the header is intact).
+    const next = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Also it contains cholesterol, embedded proteins, glycolipids',
+    })
+    expect(next.body.kind).toBe('slide.new')
+    expect(next.body.slide.id).not.toBe(titleId)
+
+    const view = await act(ada, 'deck.get', { deckId })
+    expect(view.body.slides).toHaveLength(2)
+    expect(
+      view.body.slides.find((s: { id: string }) => s.id === titleId).layoutType,
+    ).toBe('title')
   })
 })
 

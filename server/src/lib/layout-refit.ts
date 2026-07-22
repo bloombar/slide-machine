@@ -51,6 +51,25 @@ export const layoutDisplaysContent = (
   return true
 }
 
+/**
+ * A "header" layout introduces rather than accumulates: it has a title (and
+ * maybe a caption) but no body, bullets, or image slot — the title and section
+ * layouts. Real content the model tries to add to one can't be displayed, so
+ * it belongs on a NEW slide rather than folded in invisibly.
+ */
+export const isHeaderLayout = (
+  type: LayoutType | string,
+  descriptors: LayoutDescriptor[],
+): boolean => {
+  const names = slotNames(type, descriptors)
+  return (
+    names.size > 0 &&
+    !names.has('body') &&
+    !names.has('bullets') &&
+    !names.has('image')
+  )
+}
+
 /** Words that carry meaning, for the migration-overlap heuristic. */
 const significantWords = (text: string): string[] =>
   text

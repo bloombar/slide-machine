@@ -35,7 +35,11 @@ import type {
   SlideEvent,
   TranscriptSegmentAction,
 } from '@slide-machine/shared'
-import { LOCALES, WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
+import {
+  LOCALES,
+  WHITEBOARD_LAYOUT_TYPE,
+  hasVisibleDrawings,
+} from '@slide-machine/shared'
 import type { HydratedDocument, Types } from 'mongoose'
 import { defineAction } from './define'
 import {
@@ -71,6 +75,7 @@ import {
 } from '../lib/slide-fit'
 import {
   layoutDisplaysContent,
+  isHeaderLayout,
   refitPreservesContent,
   type SlideContentSnapshot,
 } from '../lib/layout-refit'
@@ -399,6 +404,11 @@ export const deckReorderSlides = defineAction<DeckReorderInput, Deck>({
   },
 })
 
+/** How much of the current slide's spoken transcript to send the model (the
+ * most recent characters), so it can see what the slide already covers without
+ * bloating the prompt on a long-dwelt slide. */
+const LIVE_TRANSCRIPT_CHARS = 4000
+
 export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
   name: 'session.phrase',
   input: z.object({
@@ -509,6 +519,14 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
     const lastSlide = recent.length ? recent[recent.length - 1] : undefined
     const descriptors = layoutDescriptors(template)
 
+    // A slide the user has marked up with the whiteboard must not shift under
+    // their strokes: updates to it are additive only — the layout is held fixed
+    // and no refit (which reformats/re-maps content) may run (WB-1). New
+    // content can still append; an overflowing update still spills to a new
+    // slide. Combined with active-drawing suppression into `keepLayout`.
+    const targetHasDrawings = hasVisibleDrawings(lastSlide?.drawings)
+    const keepLayout = Boolean(input.suppressNewSlide) || targetHasDrawings
+
     const provider = registry.get<GenerationProvider>('generation')
     const rawResult = await provider.generateSlideContent({
       phrase: input.phrase,
@@ -546,15 +564,28 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
                   caption: lastSlide.caption,
                 }
               : undefined,
+            // Everything spoken while on this slide, so the model can see what
+            // it already covers (kept to a recent window to bound the prompt).
+            sourceTranscript:
+              lastSlide.sourceTranscript?.slice(-LIVE_TRANSCRIPT_CHARS) ||
+              undefined,
           }
         : undefined,
       // Feature flag (GENERATION_LAYOUT_REFIT): updates may switch the
       // slide's layout, including a full refit (GEN-8). Never while the user is
-      // hand-annotating the current slide (WB-3) — its layout must hold still.
-      allowLayoutRefit: env.GENERATION_LAYOUT_REFIT && !input.suppressNewSlide,
-      // The user is drawing on the current slide: tell the model to keep its
-      // layout (the server also enforces this below).
-      lockLayout: input.suppressNewSlide,
+      // hand-annotating the current slide, nor on a slide that already carries
+      // whiteboard marks (WB-1/WB-3) — its layout must hold still.
+      allowLayoutRefit: env.GENERATION_LAYOUT_REFIT && !keepLayout,
+      // Feature flag (GENERATION_LIVE_REPHRASE): a refit may also keep the
+      // layout and re-state existing content for clearer phrasing. Needs refit
+      // enabled (its vehicle) and not while locking the layout for drawing.
+      allowRephrase:
+        env.GENERATION_LAYOUT_REFIT &&
+        env.GENERATION_LIVE_REPHRASE &&
+        !keepLayout,
+      // The slide is being drawn on or already has marks: tell the model to
+      // keep its layout (the server also enforces this below).
+      lockLayout: keepLayout,
       // Feature flag (GENERATION_VOICE_COMMANDS): offer the CAP-4
       // command set so the model can flag operational phrases
       voiceCommands: env.GENERATION_VOICE_COMMANDS
@@ -696,14 +727,27 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
       rawResult.action === 'update' &&
       rawResult.updateMode === 'refit' &&
       lastSlide &&
-      // Never refit (a layout change) while the user is drawing (WB-3): fall
-      // through to a plain delta update that keeps the current layout.
-      !input.suppressNewSlide &&
+      // Never refit (a layout change) while the user is drawing, nor on a slide
+      // that already has marks (WB-1/WB-3): fall through to a plain additive
+      // delta update that keeps the current layout.
+      !keepLayout &&
       // A whiteboard slide is a blank drawing canvas — never convert it into a
       // text layout; speech becomes a new slide instead (handled below).
-      lastSlide.layoutType !== WHITEBOARD_LAYOUT_TYPE
+      lastSlide.layoutType !== WHITEBOARD_LAYOUT_TYPE &&
+      // A header slide (title/section) is a standalone intro, not something to
+      // grow — its content becomes a new slide instead (handled below).
+      !isHeaderLayout(lastSlide.layoutType, descriptors)
     ) {
       if (!env.GENERATION_LAYOUT_REFIT) return event({ kind: 'none' })
+      // A refit that keeps the same layout is a pure rephrase of existing
+      // content. When live rephrasing is off, keep the committed slide text
+      // verbatim mid-lecture — drop this refit rather than rewrite the slide.
+      if (
+        rawResult.layoutType === lastSlide.layoutType &&
+        !env.GENERATION_LIVE_REPHRASE
+      ) {
+        return event({ kind: 'none' })
+      }
       const snapshot: SlideContentSnapshot = {
         title: lastSlide.title,
         body: lastSlide.body,
@@ -751,15 +795,40 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
       return event({ kind: 'slide.update', slide: toSlideDto(lastSlide) })
     }
 
+    let result = rawResult
+
+    // The current slide is a header (title/section): it introduces, it does not
+    // accumulate. An update carrying real content (body/bullets) — whether a
+    // plain delta or a refit that fell through above — would be invisible on
+    // the header, so it becomes a NEW slide, leaving the header intact. A
+    // title/caption-only update still refines the header in place.
+    if (
+      result.action === 'update' &&
+      lastSlide &&
+      isHeaderLayout(lastSlide.layoutType, descriptors) &&
+      (result.slots.body || result.slots.bullets?.length)
+    ) {
+      result = {
+        ...result,
+        action: 'new',
+        slots: {
+          ...result.slots,
+          title: result.slots.title || titleFromPhrase(input.phrase),
+        },
+      }
+    }
+
     // Capacity enforcement (never trust the model): an update that
     // would overflow the slide's word budget becomes a NEW slide, and
     // new-slide content is clamped to the budget
-    let result = rawResult
     if (
       result.action === 'update' &&
       lastSlide &&
       result.layoutType !== lastSlide.layoutType &&
-      (!env.GENERATION_LAYOUT_REFIT ||
+      // Marked slides pin their layout; otherwise a switch is only kept when
+      // it hides no displayed content (and refit is on).
+      (keepLayout ||
+        !env.GENERATION_LAYOUT_REFIT ||
         !layoutDisplaysContent(
           result.layoutType,
           {
@@ -773,7 +842,8 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
         ))
     ) {
       // Delta layout switches may not hide displayed content (and are
-      // disabled entirely when the flag is off): keep the layout
+      // disabled entirely when the flag is off or the slide is marked up):
+      // keep the layout
       result = { ...result, layoutType: lastSlide.layoutType }
     }
     if (
@@ -854,10 +924,10 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
           .filter(Boolean)
           .join(' ')
       }
-      // Keep the layout fixed while the user is drawing on this slide (WB-3),
-      // regardless of what the model returned — the slide must not be
-      // rearranged under their hand.
-      if (!input.suppressNewSlide) lastSlide.layoutType = result.layoutType
+      // Keep the layout fixed while the user is drawing on this slide, or if it
+      // already carries marks (WB-1/WB-3), regardless of what the model
+      // returned — the slide must not be rearranged under their strokes.
+      if (!keepLayout) lastSlide.layoutType = result.layoutType
       // Keep the slide's image keywords current: a phrase that carries fresh
       // image guidance replaces them, so the search seed and enrichment
       // always reflect the slide's latest content. An update with no

@@ -57,6 +57,9 @@ interface Props {
   initialTab?: TabId
   /** Editors manage access too; only the owner can transfer ownership. */
   isOwner: boolean
+  /** True when any slide carries whiteboard marks — refining slides then
+   * prompts a confirmation, since it may reflow content under the marks. */
+  slidesHaveDrawings?: boolean
   onClose: () => void
   /** Fired after a successful save so the viewer re-themes immediately. */
   onTemplateChange: (deck: Deck, template: Template) => void
@@ -74,6 +77,7 @@ export default function DeckSettingsModal({
   projectTtsVoice,
   initialTab = 'general',
   isOwner,
+  slidesHaveDrawings = false,
   onClose,
   onTemplateChange,
   onDeckChange,
@@ -106,6 +110,8 @@ export default function DeckSettingsModal({
   )
   const [refining, setRefining] = useState(false)
   const [refineMsg, setRefineMsg] = useState<string | null>(null)
+  // Confirm before refining slides that carry whiteboard marks (WB-1).
+  const [confirmingRefine, setConfirmingRefine] = useState(false)
   const anySelected = identifySpeakers || refineSlides || refineTranscript
   // Nothing to refine when the lecture has no slides — disable the whole form.
   const hasSlides = (deck.slideOrder?.length ?? 0) > 0
@@ -249,6 +255,16 @@ export default function DeckSettingsModal({
       setRefineMsg('Could not complete the refinement — please try again.')
     } finally {
       setRefining(false)
+    }
+  }
+
+  /** Refine button: warn first when the slide pass would run over marked-up
+   * slides (it may reflow content under the annotations); else refine now. */
+  const onRefineClick = () => {
+    if (refineSlides && slidesHaveDrawings) {
+      setConfirmingRefine(true)
+    } else {
+      void runRefine()
     }
   }
 
@@ -505,6 +521,19 @@ export default function DeckSettingsModal({
         />
       )}
 
+      {confirmingRefine && (
+        <ConfirmDialog
+          title="Refine marked-up slides?"
+          message="Some slides have whiteboard markings. Refining may change their content or layout, so highlights and annotations may no longer line up with what's underneath."
+          confirmLabel="Refine anyway"
+          onConfirm={() => {
+            setConfirmingRefine(false)
+            void runRefine()
+          }}
+          onCancel={() => setConfirmingRefine(false)}
+        />
+      )}
+
       {tab === 'template' && (
         <section
           role="tabpanel"
@@ -654,7 +683,7 @@ export default function DeckSettingsModal({
 
           <div>
             <button
-              onClick={runRefine}
+              onClick={onRefineClick}
               disabled={refining || !anySelected || !hasSlides}
               className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-300"
             >

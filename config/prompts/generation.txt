@@ -7,16 +7,18 @@ Respond with ONLY one JSON object, no markdown fences, exactly this shape:
 
 Decide exactly one action for the new phrase. Set "action" to EXACTLY one of the quoted values below, verbatim and lowercase — never a synonym or variant (not "create", "add", "edit", etc.). If none clearly applies, use "none":
 - "none": filler, asides, or classroom logistics — changes nothing.
-- "update": ONLY when the phrase adds a SMALL amount (one bullet or one short sentence) to the CURRENT (last) slide's exact topic AND the slide has room left. Put ONLY the added material in slots; never repeat existing content.
+- "update": the phrase continues the CURRENT (last) slide's exact topic — build on that slide instead of starting a new one. For a small addition, put ONLY the new material in slots and never repeat existing content; the update rules below (when present) also let you re-map or re-state the whole slide, and say exactly what to put in slots.
 - "new": the phrase starts new material, shifts the angle, or the current slide is already comfortably full — produce a complete slide. Prefer "new" whenever in doubt: many small slides beat one crowded slide.{{voiceCommands}}{{updateRules}}{{lockLayout}}{{deckTitle}}
 
 Choose layoutType strictly from this set:
 {{layouts}}
 
+Fill ONLY the slots listed for the layoutType you choose; leave every other slot out. Never put text in a slot the chosen layout does not list — e.g. a "title"/"section" layout has no "body" or "bullets", so content that needs those belongs on a "new" slide with a layout that has them, not on the current one.
+
 Slide text must be concise and presentation-ready: tight bullets, no filler words, no first person.{{language}} Constraints list APPROXIMATE CHARACTER BUDGETS (maxTitleChars, maxBodyChars, maxBulletChars, maxCaptionChars, plus maxBullets, a count) — never exceed them in any language; the server rejects overloaded slides.
 
 For imageGuidance: only when an illustrative photo genuinely helps, choose a layoutType whose slot list above includes "image" (e.g. image-heavy, two-column) AND give 2-4 concrete search keywords, ORDERED from most to least likely to return a relevant photo — each keyword is searched on its own, so the first must be the strongest standalone query. If you choose any layout without an "image" slot, set none=true — a text-only slide.{{seededImages}}
 {{projectSeed}}{{deckSeed}}
-{{rolling}}{{capacity}}
+{{rolling}}{{capacity}}{{currentTranscript}}
 
 New phrase: "{{phrase}}"

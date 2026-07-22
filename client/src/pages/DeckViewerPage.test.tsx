@@ -271,6 +271,86 @@ describe('DeckViewerPage slide deletion', () => {
   })
 })
 
+describe('DeckViewerPage refine confirmation (WB-1)', () => {
+  const refineRoutes = (body: object, onRefine?: () => void) => ({
+    '/api/auth/refresh': () => ({
+      status: 200,
+      body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+    }),
+    '/api/decks/shared-abc123': () => ({ status: 200, body }),
+    '/api/actions/deck.refineSlide': () => {
+      onRefine?.()
+      return {
+        status: 200,
+        body: {
+          slide: { id: 's1', deckId: 'deck1', index: 0, layoutType: 'content' },
+          refined: true,
+          narrationUpdated: false,
+        },
+      }
+    },
+  })
+
+  const renderDeck = () =>
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+  it('prompts before refining a slide that has whiteboard marks', async () => {
+    let refined = false
+    const marked = {
+      ...deckView,
+      deck: { ...deckView.deck, slideOrder: ['s1'] },
+      canEdit: true,
+      slides: [
+        {
+          id: 's1',
+          deckId: 'deck1',
+          index: 0,
+          layoutType: 'content',
+          title: 'Marked',
+          body: 'Body',
+          drawings: [{ id: 'st1', tool: 'pen' }],
+        },
+      ],
+    }
+    mockFetchRoutes(refineRoutes(marked, () => (refined = true)))
+    renderDeck()
+    await screen.findByText('Shared Lecture')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Refine this slide' }))
+    // The marked slide prompts first — nothing dispatched yet.
+    expect(
+      screen.getByRole('alertdialog', { name: /refine this marked-up slide/i }),
+    ).toBeInTheDocument()
+    expect(refined).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refine anyway' }))
+    await vi.waitFor(() => expect(refined).toBe(true))
+  })
+
+  it('refines directly when the slide has no marks', async () => {
+    let refined = false
+    const clean = { ...deckView, canEdit: true }
+    mockFetchRoutes(refineRoutes(clean, () => (refined = true)))
+    renderDeck()
+    await screen.findByText('Shared Lecture')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Refine this slide' }))
+    // No marks → no confirmation.
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    await vi.waitFor(() => expect(refined).toBe(true))
+  })
+})
+
 describe('DeckViewerPage lecture title editing', () => {
   it('lets the owner rename the lecture in place', async () => {
     mockFetchRoutes({
