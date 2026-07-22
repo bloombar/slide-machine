@@ -1,8 +1,8 @@
 /**
- * Integration tests for the admin private-view grant against a real
- * MongoDB: the toggle endpoints (audited enable/disable, off by
- * default), the deck-viewer bypass they unlock, and the audit entry
- * every private view leaves behind.
+ * Integration tests for admin private-lecture handling against a real
+ * MongoDB: allowlisted admins can always open a private lecture in the
+ * viewer, while the audited "show private lectures" toggle governs only
+ * whether the admin deck listing includes them.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import express from 'express'
@@ -62,26 +62,49 @@ const asAdmin = async () => {
   return { admin: user, token }
 }
 
-/** A user owning one private (restricted) lecture; returns its slug. */
-const createPrivateDeck = async (ownerId: Types.ObjectId, slug: string) => {
-  const project = await ProjectModel.create({
+/** A user owning one public and one private lecture; returns both. */
+const createMixedDecks = async (ownerId: Types.ObjectId, tag: string) => {
+  const openProject = await ProjectModel.create({
+    ownerId,
+    title: 'Open course',
+    visibility: 'public',
+  })
+  const secretProject = await ProjectModel.create({
     ownerId,
     title: 'Secret course',
     visibility: 'restricted',
   })
-  return DeckModel.create({
+  const publicDeck = await DeckModel.create({
     ownerId,
-    projectId: project._id,
+    projectId: openProject._id,
+    title: 'Open lecture',
+    templateId: 'classic',
+    permalinkSlug: `open-${tag}`,
+  })
+  const privateDeck = await DeckModel.create({
+    ownerId,
+    projectId: secretProject._id,
     title: 'Secret lecture',
     templateId: 'classic',
-    permalinkSlug: slug,
+    permalinkSlug: `secret-${tag}`,
   })
+  return { publicDeck, privateDeck }
 }
 
 const enableAccess = (token: string, userId: Types.ObjectId) =>
   request(server)
     .post(`/api/admin/users/${userId}/private-access`)
     .set('Authorization', `Bearer ${token}`)
+
+const listDeckSlugs = async (token: string, userId: Types.ObjectId) => {
+  const res = await request(server)
+    .get(`/api/admin/users/${userId}/decks`)
+    .set('Authorization', `Bearer ${token}`)
+  expect(res.status).toBe(200)
+  return (res.body.decks as { permalinkSlug: string }[]).map(
+    d => d.permalinkSlug,
+  )
+}
 
 const readDetail = async (token: string, userId: Types.ObjectId) =>
   (
@@ -90,7 +113,7 @@ const readDetail = async (token: string, userId: Types.ObjectId) =>
       .set('Authorization', `Bearer ${token}`)
   ).body as { privateAccess: boolean }
 
-describe('the private-view toggle endpoints', () => {
+describe('the show-private-lectures toggle endpoints', () => {
   it('is off by default and flips on/off with audited transitions', async () => {
     const { token } = await asAdmin()
     const { user } = await createUser('owner@example.com', 'Owner')
@@ -130,7 +153,7 @@ describe('the private-view toggle endpoints', () => {
       }),
     ).toBe(1)
 
-    // Disabling an already-off grant logs nothing new
+    // Disabling an already-off toggle logs nothing new
     await request(server)
       .delete(`/api/admin/users/${user._id}/private-access`)
       .set('Authorization', `Bearer ${token}`)
@@ -152,96 +175,73 @@ describe('the private-view toggle endpoints', () => {
   })
 })
 
-describe('the deck-viewer private-view bypass', () => {
-  it('404s private decks for an admin until the grant is enabled, then logs each view', async () => {
+describe('the admin deck listing', () => {
+  it('hides private lectures until the toggle is on', async () => {
     const { token } = await asAdmin()
     const { user: owner } = await createUser('owner@example.com', 'Owner')
-    const deck = await createPrivateDeck(owner._id, 'secret-abc123')
+    await createMixedDecks(owner._id, 'abc123')
 
-    // Without the grant: same 404 as any stranger
-    const before = await request(server)
-      .get('/api/decks/secret-abc123')
-      .set('Authorization', `Bearer ${token}`)
-    expect(before.status).toBe(404)
+    expect(await listDeckSlugs(token, owner._id)).toEqual(['open-abc123'])
 
     await enableAccess(token, owner._id)
-
-    const after = await request(server)
-      .get('/api/decks/secret-abc123')
-      .set('Authorization', `Bearer ${token}`)
-    expect(after.status).toBe(200)
-    expect(after.body.deck.title).toBe('Secret lecture')
-    // View-only: the grant never confers editing
-    expect(after.body.canEdit).toBe(false)
-
-    expect(
-      await AdminActionLogModel.findOne({ action: 'deck.private_view' }),
-    ).toMatchObject({
-      actorEmail: ADMIN_EMAIL,
-      targetType: 'deck',
-      targetId: deck._id.toString(),
-      details: { title: 'Secret lecture', ownerId: owner._id.toString() },
-    })
+    expect((await listDeckSlugs(token, owner._id)).sort()).toEqual([
+      'open-abc123',
+      'secret-abc123',
+    ])
   })
 
-  it('never admits a non-admin, even with a forged grant row', async () => {
-    const { user: owner } = await createUser('owner@example.com', 'Owner')
-    const { user: sneak, token } = await createUser(
-      'sneak@example.com',
-      'Sneak',
+  it("one admin's toggle never affects another admin's listing", async () => {
+    const { token } = await asAdmin()
+    const { user: second, token: secondToken } = await createUser(
+      'second-admin@example.com',
+      'Second',
     )
-    await createPrivateDeck(owner._id, 'secret-def456')
-    // A grant row without allowlist membership must be inert
-    await AdminPrivateAccessModel.create({
-      adminId: sneak._id,
-      targetUserId: owner._id,
-    })
+    process.env.ADMIN_EMAILS = `${ADMIN_EMAIL}, second-admin@example.com`
+    try {
+      const { user: owner } = await createUser('owner@example.com', 'Owner')
+      await createMixedDecks(owner._id, 'def456')
+      await enableAccess(token, owner._id)
 
-    const res = await request(server)
-      .get('/api/decks/secret-def456')
-      .set('Authorization', `Bearer ${token}`)
-    expect(res.status).toBe(404)
-    expect(
-      await AdminActionLogModel.countDocuments({ action: 'deck.private_view' }),
-    ).toBe(0)
+      expect((await listDeckSlugs(token, owner._id)).sort()).toEqual([
+        'open-def456',
+        'secret-def456',
+      ])
+      // The second admin left their toggle off
+      expect(await listDeckSlugs(secondToken, owner._id)).toEqual([
+        'open-def456',
+      ])
+      expect(second.email).toBe('second-admin@example.com')
+    } finally {
+      process.env.ADMIN_EMAILS = ADMIN_EMAIL
+    }
   })
+})
 
-  it('does not log admin views of public decks', async () => {
+describe('the deck-viewer admin bypass', () => {
+  it('always opens a private lecture read-only for an admin, toggle or not', async () => {
     const { token } = await asAdmin()
     const { user: owner } = await createUser('owner@example.com', 'Owner')
-    const project = await ProjectModel.create({
-      ownerId: owner._id,
-      title: 'Open course',
-      visibility: 'public',
-    })
-    await DeckModel.create({
-      ownerId: owner._id,
-      projectId: project._id,
-      title: 'Open lecture',
-      templateId: 'classic',
-      permalinkSlug: 'open-abc123',
-    })
-    await enableAccess(token, owner._id)
+    await createMixedDecks(owner._id, 'ghi789')
 
     const res = await request(server)
-      .get('/api/decks/open-abc123')
+      .get('/api/decks/secret-ghi789')
       .set('Authorization', `Bearer ${token}`)
     expect(res.status).toBe(200)
-    expect(
-      await AdminActionLogModel.countDocuments({ action: 'deck.private_view' }),
-    ).toBe(0)
+    expect(res.body.deck.title).toBe('Secret lecture')
+    // View-only: admin status never confers editing
+    expect(res.body.canEdit).toBe(false)
   })
 
-  it("a grant for one user never opens another user's lectures", async () => {
-    const { token } = await asAdmin()
-    const { user: granted } = await createUser('granted@example.com', 'A')
-    const { user: other } = await createUser('other@example.com', 'B')
-    await createPrivateDeck(other._id, 'other-abc123')
-    await enableAccess(token, granted._id)
+  it('still 404s private lectures for non-admins and anonymous visitors', async () => {
+    const { user: owner } = await createUser('owner@example.com', 'Owner')
+    const { token } = await createUser('stranger@example.com', 'Stranger')
+    await createMixedDecks(owner._id, 'jkl012')
 
-    const res = await request(server)
-      .get('/api/decks/other-abc123')
+    const anon = await request(server).get('/api/decks/secret-jkl012')
+    expect(anon.status).toBe(404)
+    const stranger = await request(server)
+      .get('/api/decks/secret-jkl012')
       .set('Authorization', `Bearer ${token}`)
-    expect(res.status).toBe(404)
+    expect(stranger.status).toBe(404)
   })
 })

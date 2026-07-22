@@ -16,7 +16,7 @@ import { requireAuth } from '../middleware/auth'
 import { HttpError } from '../middleware/error'
 import { SlideModel } from '../models/slide'
 import { DeckModel, loadDeckAcl } from '../models/deck'
-import { privateViewGrantee } from '../models/admin-private-access'
+import { isAllowlistedAdmin } from '../lib/admin-view'
 import { ProjectModel } from '../models/project'
 import { canViewAcl } from '../lib/access'
 import { slideContentText } from '../lib/speakable-text'
@@ -41,10 +41,11 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
   if (!deck) throw new HttpError(403, 'forbidden', 'Not allowed')
   const acl = await loadDeckAcl(deck)
   if (!canViewAcl(acl, req.userId)) {
-    // Narration is part of viewing: honor the admin private-view grant
-    // (the deck view itself is what the audit log records)
-    const admin = await privateViewGrantee(req.userId, acl.ownerId)
-    if (!admin) throw new HttpError(403, 'forbidden', 'Not allowed')
+    // Narration is part of viewing: admins may always listen, matching
+    // the viewer bypass in routes/decks.ts
+    if (!(await isAllowlistedAdmin(req.userId))) {
+      throw new HttpError(403, 'forbidden', 'Not allowed')
+    }
   }
 
   // Language + voice cascade: the lecture's own setting wins, then its

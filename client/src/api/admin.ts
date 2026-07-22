@@ -36,8 +36,9 @@ export interface AdminUserDetailResponse {
   deckCount: number
   /** Whether the account's email is on the banned list. */
   banned: boolean
-  /** Whether the requesting admin has enabled viewing this user's
-   * private lectures (the audited private-view grant). */
+  /** Whether the requesting admin has the audited "show private
+   * lectures" toggle on for this user (governs the deck listing only —
+   * admins can always open a lecture in the viewer). */
   privateAccess: boolean
 }
 
@@ -129,9 +130,10 @@ export const resetAdminUserPassword = (
     body: JSON.stringify({ password }),
   })
 
-/** Turns the audited private-lecture viewing grant on or off for the
- * requesting admin. Enabling (and disabling) is recorded in the audit
- * log, as is every private lecture actually viewed under the grant. */
+/** Turns the audited "show private lectures" toggle on or off for the
+ * requesting admin: it governs whether the user's private lectures
+ * appear in the admin listing. Both transitions are recorded in the
+ * audit log. */
 export const setAdminPrivateAccess = (
   userId: string,
   enabled: boolean,

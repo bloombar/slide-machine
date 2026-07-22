@@ -15,6 +15,7 @@ import { errorHandler } from '../../src/middleware/error'
 import { UserModel } from '../../src/models/user'
 import { ProjectModel } from '../../src/models/project'
 import { DeckModel } from '../../src/models/deck'
+import { AdminPrivateAccessModel } from '../../src/models/admin-private-access'
 import { signAccessToken } from '../../src/auth/tokens'
 
 const ADMIN_EMAIL = 'admin@example.com'
@@ -42,6 +43,7 @@ beforeEach(async () => {
     UserModel.deleteMany({}),
     ProjectModel.deleteMany({}),
     DeckModel.deleteMany({}),
+    AdminPrivateAccessModel.deleteMany({}),
   ])
 })
 
@@ -286,6 +288,10 @@ describe('GET /api/admin/users/:id/decks', () => {
   it('reports slide count and effective visibility per lecture', async () => {
     const admin = await asAdmin()
     const { user } = await createUser('ada@example.com', 'Ada')
+    // Private lectures only list while the audited toggle is on
+    await request(server)
+      .post(`/api/admin/users/${user._id}/private-access`)
+      .set('Authorization', `Bearer ${admin}`)
     // A restricted project: its inheriting lecture reads as "restricted".
     const restricted = await createProject(user._id, 'Private course', {
       visibility: 'restricted',

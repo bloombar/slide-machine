@@ -284,15 +284,13 @@ describe('AdminUserDetailPage', () => {
     await screen.findByRole('heading', { name: 'Ada' })
 
     const toggle = screen.getByRole('checkbox', {
-      name: 'View private lectures',
+      name: 'Show private lectures',
     })
     expect(toggle).not.toBeChecked()
 
     fireEvent.click(toggle)
     expect(
-      await screen.findByText(
-        'Private lecture viewing enabled — this and each private view are logged.',
-      ),
+      await screen.findByText('Private lectures shown — this is logged.'),
     ).toBeVisible()
     expect(requested(fetchMock)).toContainEqual(
       expect.stringMatching(/POST .*\/api\/admin\/users\/u1\/private-access$/),
@@ -304,14 +302,12 @@ describe('AdminUserDetailPage', () => {
     await screen.findByRole('heading', { name: 'Ada' })
 
     const toggle = screen.getByRole('checkbox', {
-      name: 'View private lectures',
+      name: 'Show private lectures',
     })
     expect(toggle).toBeChecked()
 
     fireEvent.click(toggle)
-    expect(
-      await screen.findByText('Private lecture viewing disabled.'),
-    ).toBeVisible()
+    expect(await screen.findByText('Private lectures hidden.')).toBeVisible()
     expect(requested(fetchMock)).toContainEqual(
       expect.stringMatching(
         /DELETE .*\/api\/admin\/users\/u1\/private-access$/,

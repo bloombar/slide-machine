@@ -69,8 +69,9 @@ export interface AdminUserDetailResponse {
   deckCount: number
   /** Whether the account's email is on the banned list. */
   banned: boolean
-  /** Whether the REQUESTING admin has enabled viewing this user's
-   * private lectures (the audited private-view grant). */
+  /** Whether the REQUESTING admin has the audited "show private
+   * lectures" toggle on for this user (governs the deck listing only —
+   * admins can always open a lecture in the viewer). */
   privateAccess: boolean
 }
 
@@ -310,10 +311,23 @@ adminRouter.get('/users/:id/decks', async (req, res) => {
   // inheriting lecture; the rest read their own override.
   const acls = await loadDeckAcls(decks)
 
+  // Private lectures are listed only while this admin has the audited
+  // "show private lectures" toggle on for this user; public ones always
+  // show. (Opening a lecture in the viewer is a separate, always-allowed
+  // admin bypass — this only governs the listing.)
+  const showPrivate =
+    (await AdminPrivateAccessModel.exists({
+      adminId: req.adminUser?.id,
+      targetUserId: user._id,
+    })) !== null
+
   const body: AdminUserDecksResponse = {
-    decks: decks.map(deck =>
-      toAdminDeckSummary(deck, acls.get(deck._id.toString())!),
-    ),
+    decks: decks
+      .filter(
+        deck =>
+          showPrivate || acls.get(deck._id.toString())!.visibility === 'public',
+      )
+      .map(deck => toAdminDeckSummary(deck, acls.get(deck._id.toString())!)),
   }
   res.json(body)
 })
@@ -431,10 +445,11 @@ adminRouter.post('/users/:id/password', async (req, res) => {
   res.status(204).end()
 })
 
-// The private-view toggle: enabling grants THIS admin access to the
-// target user's private lectures via the deck viewer (routes/decks.ts
-// honors the grant and logs each private view). Enabling and disabling
-// are both audited. Per-admin, per-user, off by default (no row).
+// The private-view toggle: enabling makes THIS admin's listing of the
+// target user's lectures include private ones (GET /users/:id/decks
+// filters otherwise). Viewer access is a separate, always-on admin
+// bypass (lib/admin-view.ts). Enabling and disabling are both audited.
+// Per-admin, per-user, off by default (no row).
 adminRouter.post('/users/:id/private-access', async (req, res) => {
   const user = await loadUser(String(req.params.id))
   const admin = actor(req)

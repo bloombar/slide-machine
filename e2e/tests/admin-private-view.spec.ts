@@ -1,8 +1,9 @@
 /**
- * E2E private-view grant journey against the built app: a user owns a
- * private lecture; the admin cannot open it until the "View private
- * lectures" toggle (off by default) is enabled on the user's admin
- * page; the enablement and the private view both land in the audit log.
+ * E2E private-lecture handling against the built app: the admin can
+ * always open a private lecture directly in the viewer, but the admin
+ * user page lists private lectures only after the audited "Show private
+ * lectures" toggle (off by default) is enabled; the enablement lands in
+ * the audit log.
  */
 import { test, expect, type Page } from '@playwright/test'
 
@@ -72,41 +73,47 @@ test('a user owns a private lecture', async ({ request }) => {
   expect(slug).toBeTruthy()
 })
 
-test('the admin needs the audited toggle to view it', async ({ page }) => {
+test('the viewer always opens for the admin; the listing needs the toggle', async ({
+  page,
+}) => {
   await ensureSignedIn(page, admin)
 
-  // Off by default: the private lecture is a 404 even for the admin
+  // Direct viewer access needs no toggle — admins always get read-only
   await page.goto(`/d/${slug}`)
   await expect(
-    page.getByText('This deck does not exist or is private'),
+    page.getByRole('heading', { name: 'Secret Lecture' }),
   ).toBeVisible()
 
-  // Enable the toggle on the owner's admin page
+  // On the user's admin page the private lecture is hidden by default
   await page.goto('/app/admin')
   await page.getByRole('link', { name: owner.email }).click()
-  const toggle = page.getByRole('checkbox', { name: 'View private lectures' })
+  await page.getByText('Secret Course').click()
+  await expect(page.getByText('No lectures.')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Secret Lecture' })).toHaveCount(
+    0,
+  )
+
+  // Enabling the audited toggle reveals it
+  const toggle = page.getByRole('checkbox', { name: 'Show private lectures' })
   await expect(toggle).not.toBeChecked()
   // click, not check(): the control is server-confirmed, so its state
-  // flips only after the grant round-trips
+  // flips only after the toggle round-trips
   await toggle.click()
   await expect(
-    page.getByText(
-      'Private lecture viewing enabled — this and each private view are logged.',
-    ),
+    page.getByText('Private lectures shown — this is logged.'),
   ).toBeVisible()
   await expect(toggle).toBeChecked()
 
-  // The lecture now opens read-only through its normal viewer link
-  await page.getByText('Secret Course').click()
+  // The project disclosure is still open from before, so the refetched
+  // list now shows the lecture directly
   await page.getByRole('link', { name: 'Secret Lecture' }).click()
   await expect(
     page.getByRole('heading', { name: 'Secret Lecture' }),
   ).toBeVisible()
 
-  // Both the enablement and the view are in the audit log
+  // The enablement is in the audit log
   await page.goto('/app/admin/logs')
   await expect(
     page.getByText('user.private_view_enabled').first(),
   ).toBeVisible()
-  await expect(page.getByText('deck.private_view').first()).toBeVisible()
 })

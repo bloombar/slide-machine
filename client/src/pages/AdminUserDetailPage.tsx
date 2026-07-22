@@ -6,8 +6,9 @@
  * too: per-project and per-lecture delete buttons plus a danger zone
  * (reset password, ban email, delete account) — every action confirms
  * first and is recorded in the admin audit log server-side. A
- * "View private lectures" toggle (off by default, audited) grants this
- * admin access to the user's private lectures in the deck viewer.
+ * "Show private lectures" toggle (off by default, audited) controls
+ * whether private lectures appear in the lists below; opening any
+ * lecture in the viewer is always allowed for admins.
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
@@ -326,7 +327,8 @@ export default function AdminUserDetailPage() {
     }
   }, [userId, version])
 
-  /** Flips the audited private-lecture viewing grant for this admin. */
+  /** Flips the audited "show private lectures" toggle for this admin;
+   * the refetch it triggers is what adds/removes them from the lists. */
   const togglePrivateAccess = async (enabled: boolean) => {
     if (!userId) return
     setNotice(null)
@@ -335,8 +337,8 @@ export default function AdminUserDetailPage() {
       await setAdminPrivateAccess(userId, enabled)
       setNotice(
         enabled
-          ? 'Private lecture viewing enabled — this and each private view are logged.'
-          : 'Private lecture viewing disabled.',
+          ? 'Private lectures shown — this is logged.'
+          : 'Private lectures hidden.',
       )
       setVersion(v => v + 1)
     } catch (err) {
@@ -461,8 +463,8 @@ export default function AdminUserDetailPage() {
       <section className="mt-8">
         <div className="mb-3 flex items-center justify-between gap-4">
           <h2 className="text-lg font-semibold text-slate-700">Projects</h2>
-          {/* Off by default; the grant and every private view it allows
-              are recorded in the audit log */}
+          {/* Off by default; whether this listing shows private
+              lectures. Both transitions are recorded in the audit log */}
           <label className="flex items-center gap-2 text-sm text-slate-600">
             <input
               type="checkbox"
@@ -470,7 +472,7 @@ export default function AdminUserDetailPage() {
               onChange={e => void togglePrivateAccess(e.target.checked)}
               className="h-4 w-4 accent-red-600"
             />
-            View private lectures
+            Show private lectures
           </label>
         </div>
         {projects.length === 0 && otherDecks.length === 0 ? (
