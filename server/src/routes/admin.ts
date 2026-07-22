@@ -2,7 +2,7 @@
  * Read-only admin API: the user directory plus each user's projects and
  * lectures. Every route is guarded inside the router by requireAuth +
  * requireAdmin (ADMIN_EMAILS allowlist), so mounting it is safe on its
- * own. Intended mount point: /api/admin — see docs/ADMIN.md.
+ * own. Intended mount point: /api/admin — see docs/ADMINISTRATION.md.
  *
  * Admin reads deliberately bypass lib/access.ts ACLs: the allowlist gate
  * is the authorization. The wire types below are the contract mirrored
