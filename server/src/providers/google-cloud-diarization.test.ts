@@ -3,24 +3,59 @@
  * (wordsToSpeakerSegments) and its no-op guard when GCS is unconfigured. The
  * live BatchRecognize/GCS round-trip is validated separately on a real run.
  */
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// Pin the two env fields the probe reads so a developer's local .env (which may
-// set GCS_AUDIO_BUCKET) can't make these tests non-deterministic; everything
-// else stays real so getStorage and the Google clients behave normally.
+// A developer's local .env may set GCS_AUDIO_BUCKET/credentials, so pin the env
+// fields the probe reads (mutable per test) and stub the GCS client — the probe
+// must be exercised deterministically without touching a real bucket.
+const { envOverride, getFilesMock } = vi.hoisted(() => ({
+  envOverride: {
+    GCS_AUDIO_BUCKET: undefined as string | undefined,
+    STORAGE_PROVIDER: 'local' as 'local' | 's3',
+  },
+  getFilesMock: vi.fn(),
+}))
+
 vi.mock('../config/env', async importActual => {
   const actual = await importActual<typeof import('../config/env')>()
+  // A plain copy with getters for the two overridden fields, so each test's
+  // mutation is read live (the real env object is frozen and can't be proxied).
   return {
     ...actual,
-    env: { ...actual.env, GCS_AUDIO_BUCKET: undefined, STORAGE_PROVIDER: 'local' },
+    env: {
+      ...actual.env,
+      get GCS_AUDIO_BUCKET() {
+        return envOverride.GCS_AUDIO_BUCKET
+      },
+      get STORAGE_PROVIDER() {
+        return envOverride.STORAGE_PROVIDER
+      },
+    },
   }
 })
+
+vi.mock('@google-cloud/storage', () => ({
+  Storage: class {
+    bucket() {
+      return {
+        getFiles: getFilesMock,
+        file: () => ({ save: vi.fn(), delete: vi.fn().mockResolvedValue(null) }),
+      }
+    }
+  },
+}))
 
 import {
   wordsToSpeakerSegments,
   GoogleCloudDiarizationProvider,
   pingGcsAudioStorage,
 } from './google-cloud-diarization'
+
+beforeEach(() => {
+  envOverride.GCS_AUDIO_BUCKET = undefined
+  envOverride.STORAGE_PROVIDER = 'local'
+  getFilesMock.mockReset()
+})
 
 /** A protobuf Duration for `seconds` seconds. */
 const dur = (seconds: number) => ({
@@ -79,11 +114,57 @@ describe('GoogleCloudDiarizationProvider.diarize', () => {
 
 describe('pingGcsAudioStorage', () => {
   it('reports disabled with the storage fallback when no GCS bucket is set', async () => {
-    // No GCS_AUDIO_BUCKET in the test env; the general store is the local disk,
-    // so the health item shows audio stays in local storage rather than GCS.
+    // No GCS_AUDIO_BUCKET: audio stays in the general store — the local disk
+    // here, or blob storage when that is the provider.
     expect(await pingGcsAudioStorage()).toEqual({
       status: 'disabled',
       detail: 'local storage',
+    })
+    envOverride.STORAGE_PROVIDER = 's3'
+    expect(await pingGcsAudioStorage()).toEqual({
+      status: 'disabled',
+      detail: 'blob storage',
+    })
+    expect(getFilesMock).not.toHaveBeenCalled()
+  })
+
+  it('reports connected when an object list succeeds', async () => {
+    envOverride.GCS_AUDIO_BUCKET = 'audio-bucket'
+    getFilesMock.mockResolvedValue([[]])
+    expect(await pingGcsAudioStorage()).toEqual({
+      status: 'ok',
+      detail: 'connected',
+    })
+    // Probes via a read-only object list, never bucket.exists().
+    expect(getFilesMock).toHaveBeenCalledWith({
+      maxResults: 1,
+      autoPaginate: false,
+    })
+  })
+
+  it('reports connected despite a bucket-metadata 403 (object access is enough)', async () => {
+    // The staging service account has object access but not storage.buckets.get;
+    // an object list still succeeds, so the bucket is usable and reads connected.
+    envOverride.GCS_AUDIO_BUCKET = 'audio-bucket'
+    getFilesMock.mockResolvedValue([[]])
+    expect((await pingGcsAudioStorage()).status).toBe('ok')
+  })
+
+  it('reports bucket missing on a 404', async () => {
+    envOverride.GCS_AUDIO_BUCKET = 'ghost-bucket'
+    getFilesMock.mockRejectedValue(Object.assign(new Error('no bucket'), { code: 404 }))
+    expect(await pingGcsAudioStorage()).toEqual({
+      status: 'down',
+      detail: 'bucket missing',
+    })
+  })
+
+  it('reports unreachable on any other failure', async () => {
+    envOverride.GCS_AUDIO_BUCKET = 'audio-bucket'
+    getFilesMock.mockRejectedValue(Object.assign(new Error('network'), { code: 500 }))
+    expect(await pingGcsAudioStorage()).toEqual({
+      status: 'down',
+      detail: 'unreachable',
     })
   })
 })

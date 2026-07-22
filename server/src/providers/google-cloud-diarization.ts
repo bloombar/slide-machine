@@ -199,12 +199,21 @@ export const pingGcsAudioStorage = async (): Promise<HealthComponent> => {
     const storage = new Storage(
       speechClientOptions() as ConstructorParameters<typeof Storage>[0],
     )
-    const [exists] = await storage.bucket(bucket).exists()
-    return exists
-      ? { status: 'ok', detail: 'connected' }
-      : { status: 'down', detail: 'bucket missing' }
-  } catch {
-    return { status: 'down', detail: 'unreachable' }
+    // Probe with an object list, NOT bucket.exists(): diarization only ever
+    // stages and deletes objects, and the staging service account typically has
+    // just object-level access — bucket.exists() needs storage.buckets.get,
+    // which such an account lacks, so it would 403 and read as a false
+    // 'unreachable' even though the bucket works. Listing one object exercises
+    // the access the app actually uses and stays read-only.
+    await storage.bucket(bucket).getFiles({ maxResults: 1, autoPaginate: false })
+    return { status: 'ok', detail: 'connected' }
+  } catch (err) {
+    // A missing bucket is a real misconfiguration; anything else (network, auth)
+    // is a generic outage. Both keep audio-only, so overall health is degraded.
+    const code = (err as { code?: number }).code
+    return code === 404
+      ? { status: 'down', detail: 'bucket missing' }
+      : { status: 'down', detail: 'unreachable' }
   }
 }
 
