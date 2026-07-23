@@ -23,6 +23,47 @@ const detail = {
   },
   project: { id: 'p1', title: 'Physics' },
   owner: { id: 'u1', email: 'ada@example.com', displayName: 'Ada' },
+  seed: { lecture: { assets: [] }, project: { assets: [] } },
+}
+
+/** Detail whose lecture and project both carry seed material. */
+const seededDetail = {
+  ...detail,
+  seed: {
+    lecture: {
+      notes: 'Cover diffraction first',
+      assets: [
+        {
+          id: 'a1',
+          projectId: 'p1',
+          deckId: 'd1',
+          type: 'pdf',
+          name: 'lecture-notes.pdf',
+          status: 'ready',
+          text: 'extracted lecture text',
+          keywords: [],
+          enabled: true,
+          createdAt: '2026-07-02T00:00:00Z',
+        },
+      ],
+    },
+    project: {
+      notes: 'Physics 101 syllabus',
+      assets: [
+        {
+          id: 'a2',
+          projectId: 'p1',
+          type: 'image',
+          name: 'diagram.png',
+          status: 'ready',
+          imageUrl: '/api/files/seed/xyz/diagram.png',
+          keywords: [],
+          enabled: true,
+          createdAt: '2026-07-01T00:00:00Z',
+        },
+      ],
+    },
+  },
 }
 
 const renderPage = (status = 200, detailBody: unknown = detail) => {
@@ -182,6 +223,57 @@ describe('AdminDeckPage', () => {
     expect(
       requested(fetchMock).filter(r => r.startsWith('DELETE')),
     ).toHaveLength(0)
+  })
+
+  it('marks seed material as None and hides the view button when there is none', async () => {
+    renderPage()
+    await screen.findByRole('heading', { name: 'Waves' })
+    expect(screen.getByText('None')).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: 'View seed material' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('marks seed material as Used and opens a grouped read-only view', async () => {
+    renderPage(200, seededDetail)
+    await screen.findByRole('heading', { name: 'Waves' })
+    expect(screen.getByText('Used')).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: 'View seed material' }))
+    const dialog = screen.getByRole('dialog', { name: 'Seed material' })
+
+    // Both levels are shown, grouped by lecture vs project.
+    expect(within(dialog).getByText('This lecture')).toBeVisible()
+    expect(within(dialog).getByText('From Physics')).toBeVisible()
+    // Notes and files from each level appear.
+    expect(within(dialog).getByText('Cover diffraction first')).toBeVisible()
+    expect(within(dialog).getByText('lecture-notes.pdf')).toBeVisible()
+    expect(within(dialog).getByText('Physics 101 syllabus')).toBeVisible()
+    expect(within(dialog).getByText('diagram.png')).toBeVisible()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+    expect(
+      screen.queryByRole('dialog', { name: 'Seed material' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('marks seed material Used when only the project supplies it', async () => {
+    renderPage(200, {
+      ...detail,
+      seed: {
+        lecture: { assets: [] },
+        project: { notes: 'Project-wide notes', assets: [] },
+      },
+    })
+    await screen.findByRole('heading', { name: 'Waves' })
+    expect(screen.getByText('Used')).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: 'View seed material' }))
+    const dialog = screen.getByRole('dialog', { name: 'Seed material' })
+    // The empty lecture level renders nothing; only the project group shows.
+    expect(within(dialog).queryByText('This lecture')).not.toBeInTheDocument()
+    expect(within(dialog).getByText('From Physics')).toBeVisible()
+    expect(within(dialog).getByText('Project-wide notes')).toBeVisible()
   })
 
   it('shows an error state with a directory back link when the load fails', async () => {

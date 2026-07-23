@@ -20,11 +20,17 @@ import type {
   AdminLogsResponse,
   Project,
   SafeUser,
+  SeedAsset,
   Visibility,
 } from '@slide-machine/shared'
 import { UserModel, toUserDto, type UserDb } from '../models/user'
 import { ProjectModel, toProjectDto, type ProjectDb } from '../models/project'
 import { DeckModel, loadDeckAcls, type DeckDb } from '../models/deck'
+import {
+  SeedAssetModel,
+  toSeedAssetDto,
+  type SeedAssetDb,
+} from '../models/seed-asset'
 import {
   AdminActionLogModel,
   toAdminLogEntryDto,
@@ -100,6 +106,15 @@ export interface AdminProjectDetailResponse {
   decks: AdminDeckSummary[]
 }
 
+/** Seed material at one level — the lecture's own, or its project's:
+ * the free-text seed notes plus the uploaded files/images. */
+export interface AdminSeedLevel {
+  /** Trimmed seed notes (seedContext); absent when empty. */
+  notes?: string
+  /** Uploaded seed assets at this level, newest first. */
+  assets: SeedAsset[]
+}
+
 /** One lecture opened in the admin console; every lecture, private or
  * not, is always listed and readable — the allowlist gate is the
  * authorization, mirroring the always-on admin viewer bypass. */
@@ -109,6 +124,10 @@ export interface AdminDeckDetailResponse {
   project: { id: string; title: string }
   /** The lecture's owner — not necessarily the project's owner. */
   owner: { id: string; email: string; displayName: string }
+  /** The seed material that fed this lecture's generation. The lecture's
+   * own material (deckId set) stacks on top of the project's (deckId
+   * absent), so both levels are surfaced. */
+  seed: { lecture: AdminSeedLevel; project: AdminSeedLevel }
 }
 
 /** One row of the site-wide admin project directory. */
@@ -174,6 +193,20 @@ const toAdminDeckSummary = (
   // Fall back for documents created before updatedAt was enabled.
   updatedAt: (doc.updatedAt ?? doc.createdAt).toISOString(),
 })
+
+/** Packs one level's seed material (notes + uploaded assets) into its
+ * wire shape; blank notes collapse to undefined so the client can test
+ * presence with a single check. */
+const toAdminSeedLevel = (
+  notes: string | undefined,
+  assets: Array<HydratedDocument<SeedAssetDb>>,
+): AdminSeedLevel => {
+  const trimmed = notes?.trim()
+  return {
+    notes: trimmed ? trimmed : undefined,
+    assets: assets.map(toSeedAssetDto),
+  }
+}
 
 const toAdminProjectSummary = (
   doc: HydratedDocument<ProjectDb>,
@@ -586,7 +619,16 @@ adminRouter.get('/decks/:id', async (req, res) => {
     UserModel.findById(deck.ownerId),
   ])
   if (!project || !owner) throw notFound
-  const acls = await loadDeckAcls([deck])
+  // Effective seed material: the lecture's own (deckId set) plus the
+  // project's (deckId absent), which stacks underneath it at generation.
+  const [acls, lectureAssets, projectAssets] = await Promise.all([
+    loadDeckAcls([deck]),
+    SeedAssetModel.find({ deckId: deck._id }).sort({ createdAt: -1 }),
+    SeedAssetModel.find({
+      projectId: project._id,
+      deckId: { $exists: false },
+    }).sort({ createdAt: -1 }),
+  ])
 
   const body: AdminDeckDetailResponse = {
     deck: toAdminDeckSummary(deck, acls.get(deck._id.toString())!),
@@ -595,6 +637,10 @@ adminRouter.get('/decks/:id', async (req, res) => {
       id: owner._id.toString(),
       email: owner.email,
       displayName: owner.displayName,
+    },
+    seed: {
+      lecture: toAdminSeedLevel(deck.seedContext, lectureAssets),
+      project: toAdminSeedLevel(project.seedContext, projectAssets),
     },
   }
   res.json(body)

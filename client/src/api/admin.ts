@@ -7,6 +7,7 @@ import type {
   AdminLogsResponse,
   Project,
   SafeUser,
+  SeedAsset,
   Visibility,
 } from '@slide-machine/shared'
 import { apiFetch, apiFetchBlob } from './http'
@@ -63,6 +64,15 @@ export interface AdminProjectDetailResponse {
   decks: AdminDeckSummary[]
 }
 
+/** Seed material at one level — the lecture's own, or its project's:
+ * the free-text seed notes plus the uploaded files/images. */
+export interface AdminSeedLevel {
+  /** Trimmed seed notes (seedContext); absent when empty. */
+  notes?: string
+  /** Uploaded seed assets at this level, newest first. */
+  assets: SeedAsset[]
+}
+
 /** One lecture opened in the admin console; every lecture, private or
  * not, is always listed and readable for an admin. */
 export interface AdminDeckDetailResponse {
@@ -71,6 +81,9 @@ export interface AdminDeckDetailResponse {
   project: { id: string; title: string }
   /** The lecture's owner — not necessarily the project's owner. */
   owner: { id: string; email: string; displayName: string }
+  /** The seed material that fed this lecture's generation. The lecture's
+   * own material stacks on top of the project's, so both are surfaced. */
+  seed: { lecture: AdminSeedLevel; project: AdminSeedLevel }
 }
 
 /** One row of the site-wide admin project directory. */

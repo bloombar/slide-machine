@@ -11,7 +11,9 @@ import { deleteAdminDeck, fetchAdminDeck, logAdminDeckView } from '../api/admin'
 import type { AdminDeckDetailResponse } from '../api/admin'
 import { ApiError } from '../api/http'
 import ConfirmDialog from '../components/ConfirmDialog'
+import Modal from '../components/Modal'
 import { VisibilityBadge } from '../components/admin/LectureTable'
+import SeedMaterialView from '../components/admin/SeedMaterialView'
 import { projectTitle } from '../lib/project'
 
 /** The action the admin has asked for but not yet confirmed. */
@@ -42,6 +44,7 @@ export default function AdminDeckPage() {
   const [error, setError] = useState(false)
   const [pending, setPending] = useState<PendingAction | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [showSeed, setShowSeed] = useState(false)
 
   useEffect(() => {
     if (!deckId) return
@@ -126,8 +129,14 @@ export default function AdminDeckPage() {
     )
   }
 
-  const { deck, project, owner } = loaded
+  const { deck, project, owner, seed } = loaded
   const title = deck.title.trim() || 'Untitled lecture'
+  // Any seed material at either level — the lecture's own or the project's.
+  const seedUsed =
+    Boolean(seed.lecture.notes) ||
+    seed.lecture.assets.length > 0 ||
+    Boolean(seed.project.notes) ||
+    seed.project.assets.length > 0
 
   /** Copy for the confirmation dialog of each pending action. */
   const confirmCopy = (action: PendingAction) =>
@@ -188,6 +197,38 @@ export default function AdminDeckPage() {
         </dl>
       </section>
 
+      <section className="mt-6 rounded-lg border border-slate-200 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-semibold text-slate-700">
+              Seed material
+            </h2>
+            <span
+              className={`inline-block rounded-full border px-2 py-0.5 text-xs font-medium ${
+                seedUsed
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : 'border-slate-200 bg-slate-100 text-slate-600'
+              }`}
+            >
+              {seedUsed ? 'Used' : 'None'}
+            </span>
+          </div>
+          {seedUsed && (
+            <button
+              onClick={() => setShowSeed(true)}
+              className="shrink-0 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              View seed material
+            </button>
+          )}
+        </div>
+        <p className="mt-1 text-sm text-slate-500">
+          {seedUsed
+            ? 'Source material fed this lecture’s generation, including any inherited from the project.'
+            : 'No source material fed this lecture’s generation.'}
+        </p>
+      </section>
+
       <section className="mt-8 rounded-lg border border-red-200 p-4">
         <h2 className="mb-1 text-lg font-semibold text-red-700">Danger zone</h2>
         <p className="mb-3 text-sm text-slate-600">
@@ -211,6 +252,28 @@ export default function AdminDeckPage() {
           onConfirm={() => void runPending()}
           onCancel={() => setPending(null)}
         />
+      )}
+
+      {showSeed && (
+        <Modal
+          onClose={() => setShowSeed(false)}
+          ariaLabel="Seed material"
+          size="lg"
+          className="max-h-[80vh] overflow-y-auto"
+        >
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-slate-800">
+              Seed material
+            </h2>
+            <button
+              onClick={() => setShowSeed(false)}
+              className="rounded-md px-2 py-1 text-sm text-slate-500 hover:bg-slate-100"
+            >
+              Close
+            </button>
+          </div>
+          <SeedMaterialView seed={seed} projectTitle={projectTitle(project)} />
+        </Modal>
       )}
     </div>
   )

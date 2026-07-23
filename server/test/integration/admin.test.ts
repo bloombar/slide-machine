@@ -15,6 +15,7 @@ import { errorHandler } from '../../src/middleware/error'
 import { UserModel } from '../../src/models/user'
 import { ProjectModel } from '../../src/models/project'
 import { DeckModel } from '../../src/models/deck'
+import { SeedAssetModel } from '../../src/models/seed-asset'
 import { signAccessToken } from '../../src/auth/tokens'
 
 const ADMIN_EMAIL = 'admin@example.com'
@@ -28,7 +29,12 @@ const server = app.listen(0)
 beforeAll(async () => {
   process.env.ADMIN_EMAILS = `${ADMIN_EMAIL}, second-admin@example.com`
   await connectMongo(env.MONGODB_URI)
-  await Promise.all([UserModel.init(), ProjectModel.init(), DeckModel.init()])
+  await Promise.all([
+    UserModel.init(),
+    ProjectModel.init(),
+    DeckModel.init(),
+    SeedAssetModel.init(),
+  ])
 })
 
 afterAll(async () => {
@@ -42,6 +48,7 @@ beforeEach(async () => {
     UserModel.deleteMany({}),
     ProjectModel.deleteMany({}),
     DeckModel.deleteMany({}),
+    SeedAssetModel.deleteMany({}),
   ])
 })
 
@@ -445,6 +452,83 @@ describe('GET /api/admin/decks/:id', () => {
       id: user._id.toString(),
       email: 'ada@example.com',
       displayName: 'Ada',
+    })
+    // No seed material: both levels come back empty.
+    expect(res.body.seed).toEqual({
+      lecture: { assets: [] },
+      project: { assets: [] },
+    })
+  })
+
+  it("includes effective seed material: the lecture's own and the project's", async () => {
+    const admin = await asAdmin()
+    const { user } = await createUser('ada@example.com', 'Ada')
+    const project = await createProject(user._id, 'Physics', {
+      // Whitespace trims away; blank notes would collapse to undefined.
+      seedContext: '  Project-wide notes  ',
+    })
+    const deck = await createDeck(
+      user._id,
+      project._id,
+      'Waves',
+      'waves-seed1',
+      { seedContext: 'Lecture notes' },
+    )
+    // A lecture-level file, a project-level image, and another lecture's
+    // file that must not leak into this response.
+    await SeedAssetModel.create({
+      projectId: project._id,
+      deckId: deck._id,
+      type: 'pdf',
+      name: 'lecture.pdf',
+      status: 'ready',
+      text: 'extracted lecture text',
+      storageKey: 'seed/abc/lecture.pdf',
+    })
+    await SeedAssetModel.create({
+      projectId: project._id,
+      type: 'image',
+      name: 'diagram.png',
+      status: 'ready',
+      imageUrl: '/api/files/seed/xyz/diagram.png',
+    })
+    const other = await createDeck(
+      user._id,
+      project._id,
+      'Other',
+      'other-seed1',
+    )
+    await SeedAssetModel.create({
+      projectId: project._id,
+      deckId: other._id,
+      type: 'pdf',
+      name: 'other.pdf',
+      status: 'ready',
+    })
+
+    const res = await request(server)
+      .get(`/api/admin/decks/${deck._id}`)
+      .set('Authorization', `Bearer ${admin}`)
+    expect(res.status).toBe(200)
+
+    // Lecture level: trimmed notes and only this deck's asset.
+    expect(res.body.seed.lecture.notes).toBe('Lecture notes')
+    expect(res.body.seed.lecture.assets).toHaveLength(1)
+    expect(res.body.seed.lecture.assets[0]).toMatchObject({
+      name: 'lecture.pdf',
+      type: 'pdf',
+      text: 'extracted lecture text',
+    })
+    // The server-only storage key is never exposed.
+    expect(res.body.seed.lecture.assets[0]).not.toHaveProperty('storageKey')
+
+    // Project level: trimmed notes and only the project-wide (deckId-less)
+    // asset — the other lecture's file stays out.
+    expect(res.body.seed.project.notes).toBe('Project-wide notes')
+    expect(res.body.seed.project.assets).toHaveLength(1)
+    expect(res.body.seed.project.assets[0]).toMatchObject({
+      name: 'diagram.png',
+      type: 'image',
     })
   })
 
