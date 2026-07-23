@@ -305,7 +305,10 @@ export const quizPublish = defineAction<
     // When a total is given, split it EQUALLY across the questions, so the
     // instructor's total holds regardless of what the provider chose (QUIZ-7).
     if (input.totalPoints && quiz.questions.length) {
-      const points = splitPointsEqually(quiz.questions.length, input.totalPoints)
+      const points = splitPointsEqually(
+        quiz.questions.length,
+        input.totalPoints,
+      )
       quiz.questions.forEach((q, i) => {
         q.points = points[i]
       })
