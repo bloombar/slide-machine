@@ -1,11 +1,9 @@
 /**
  * Admin view of one project: its owner, its lectures (each linking to
  * its own admin lecture page), and the project-level moderation
- * actions (delete a lecture, delete the whole project). The audited
- * "Show private lectures" toggle here is the same per-admin, per-owner
- * switch as on the owner's admin page: off by default, it hides private
- * lectures from the listing (opening one in the viewer is always
- * allowed for admins).
+ * actions (delete a lecture, delete the whole project). Every lecture,
+ * private or not, is listed; opening one in the viewer is always
+ * allowed for admins.
  */
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
@@ -13,7 +11,7 @@ import {
   deleteAdminDeck,
   deleteAdminProject,
   fetchAdminProject,
-  setAdminPrivateAccess,
+  logAdminProjectView,
   type AdminDeckSummary,
   type AdminProjectDetailResponse,
 } from '../api/admin'
@@ -24,7 +22,9 @@ import { projectTitle } from '../lib/project'
 
 /** The action the admin has asked for but not yet confirmed. */
 type PendingAction =
-  { kind: 'delete-project' } | { kind: 'delete-deck'; deck: AdminDeckSummary }
+  | { kind: 'delete-project' }
+  | { kind: 'delete-deck'; deck: AdminDeckSummary }
+  | { kind: 'view-private' }
 
 export default function AdminProjectPage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -52,26 +52,20 @@ export default function AdminProjectPage() {
     }
   }, [projectId, version])
 
-  /** Flips the audited "show private lectures" toggle for the owner;
-   * the refetch it triggers is what adds/removes them from the list. */
-  const togglePrivateAccess = async (enabled: boolean) => {
+  /** Opens the project's real (owner-facing) page. Public projects open
+   * straight away; opening a private one is confirmed first and recorded
+   * in the audit log, mirroring the always-on admin viewer bypass. */
+  const openProject = () => {
     if (!loaded) return
-    setNotice(null)
-    setActionError(null)
-    try {
-      await setAdminPrivateAccess(loaded.owner.id, enabled)
-      setNotice(
-        enabled
-          ? 'Private lectures shown — this is logged.'
-          : 'Private lectures hidden.',
-      )
-      setVersion(v => v + 1)
-    } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : 'Action failed.')
+    if (loaded.project.visibility === 'public') {
+      navigate(`/app/projects/${loaded.project.id}`)
+      return
     }
+    setPending({ kind: 'view-private' })
   }
 
-  /** Runs the confirmed action; deleting the project leaves the page. */
+  /** Runs the confirmed action; deleting the project or viewing it
+   * leaves this page. */
   const runPending = async () => {
     if (!pending || !projectId || !loaded) return
     const action = pending
@@ -79,6 +73,12 @@ export default function AdminProjectPage() {
     setNotice(null)
     setActionError(null)
     try {
+      if (action.kind === 'view-private') {
+        // Log the private-project access before handing over to it
+        await logAdminProjectView(projectId)
+        navigate(`/app/projects/${projectId}`)
+        return
+      }
       if (action.kind === 'delete-project') {
         await deleteAdminProject(projectId)
         navigate(`/app/admin/users/${loaded.owner.id}`)
@@ -129,6 +129,30 @@ export default function AdminProjectPage() {
 
   const { project, owner, decks } = loaded
 
+  /** Copy for the confirmation dialog of each pending action. */
+  const confirmCopy = (action: PendingAction) => {
+    switch (action.kind) {
+      case 'delete-project':
+        return {
+          title: 'Delete this project?',
+          message: `"${projectTitle(project)}" and every lecture and file in it will be permanently deleted. This cannot be undone.`,
+          confirmLabel: 'Delete project',
+        }
+      case 'delete-deck':
+        return {
+          title: 'Delete this lecture?',
+          message: `"${action.deck.title.trim() || 'Untitled lecture'}" and everything under it will be permanently deleted. This cannot be undone.`,
+          confirmLabel: 'Delete lecture',
+        }
+      case 'view-private':
+        return {
+          title: 'View this private project?',
+          message: `"${projectTitle(project)}" is a private project. Opening it as an admin is recorded in the audit log.`,
+          confirmLabel: 'View project',
+        }
+    }
+  }
+
   return (
     <div>
       {backLink}
@@ -155,20 +179,16 @@ export default function AdminProjectPage() {
         </p>
       )}
 
+      <button
+        onClick={openProject}
+        className="mb-6 inline-block rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+      >
+        View project
+      </button>
+
       <section>
-        <div className="mb-3 flex items-center justify-between gap-4">
+        <div className="mb-3">
           <h2 className="text-lg font-semibold text-slate-700">Lectures</h2>
-          {/* Off by default; whether this listing shows private
-              lectures. Both transitions are recorded in the audit log */}
-          <label className="flex items-center gap-2 text-sm text-slate-600">
-            <input
-              type="checkbox"
-              checked={loaded.privateAccess}
-              onChange={e => void togglePrivateAccess(e.target.checked)}
-              className="h-4 w-4 accent-red-600"
-            />
-            Show private lectures
-          </label>
         </div>
         <div className="rounded-lg border border-slate-200 pt-3">
           <LectureTable
@@ -197,17 +217,7 @@ export default function AdminProjectPage() {
 
       {pending && (
         <ConfirmDialog
-          {...(pending.kind === 'delete-project'
-            ? {
-                title: 'Delete this project?',
-                message: `"${projectTitle(project)}" and every lecture and file in it will be permanently deleted. This cannot be undone.`,
-                confirmLabel: 'Delete project',
-              }
-            : {
-                title: 'Delete this lecture?',
-                message: `"${pending.deck.title.trim() || 'Untitled lecture'}" and everything under it will be permanently deleted. This cannot be undone.`,
-                confirmLabel: 'Delete lecture',
-              })}
+          {...confirmCopy(pending)}
           onConfirm={() => void runPending()}
           onCancel={() => setPending(null)}
         />

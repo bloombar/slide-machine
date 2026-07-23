@@ -84,6 +84,7 @@ import { UserModel } from '../models/user'
 import { SlideModel, toSlideDto } from '../models/slide'
 import { TranscriptSegmentModel } from '../models/transcript-segment'
 import { ProjectModel, projectAcl } from '../models/project'
+import { isAllowlistedAdmin } from '../lib/admin-view'
 import { getBuiltinTemplate, layoutDescriptors } from '../templates/builtin'
 import { registry } from '../providers/registry'
 import { permalinkSlug } from '../lib/slug'
@@ -252,14 +253,19 @@ export const deckList = defineAction<DeckListInput, Deck[]>({
       const project = await ProjectModel.findById(input.projectId).catch(
         () => null,
       )
-      if (!project || !isAclMember(projectAcl(project), userId))
-        throw new ActionForbiddenError()
+      if (!project) throw new ActionForbiddenError()
+      const member = isAclMember(projectAcl(project), userId)
+      // Allowlisted admins get an always-on read bypass (lib/admin-view.ts).
+      // They can already open any lecture in the viewer, so listing the
+      // project's lectures here — private ones included — leaks nothing new.
+      const admin = !member && (await isAllowlistedAdmin(userId))
+      if (!member && !admin) throw new ActionForbiddenError()
       const docs = await DeckModel.find({ projectId: input.projectId }).sort({
         updatedAt: -1,
       })
       const acls = await loadDeckAcls(docs)
       return docs
-        .filter(d => canViewAcl(acls.get(d._id.toString())!, userId))
+        .filter(d => admin || canViewAcl(acls.get(d._id.toString())!, userId))
         .map(d => toDeckDto(d, acls.get(d._id.toString())!))
     }
     const docs = await DeckModel.find({ ownerId: userId }).sort({

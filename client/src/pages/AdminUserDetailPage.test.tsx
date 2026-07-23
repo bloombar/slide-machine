@@ -26,7 +26,6 @@ const detail = {
   projectCount: 1,
   deckCount: 2,
   banned: false,
-  privateAccess: false,
 }
 
 const projects = [
@@ -68,7 +67,6 @@ const renderPage = (status = 200, detailBody: unknown = detail) => {
     '/api/admin/users/u1/decks': () => ({ status, body: { decks } }),
     '/api/admin/users/u1/ban': () => ({ status: 204 }),
     '/api/admin/users/u1/password': () => ({ status: 204 }),
-    '/api/admin/users/u1/private-access': () => ({ status: 204 }),
     '/api/admin/projects/p1': () => ({ status: 204 }),
     '/api/admin/decks/d2': () => ({ status: 204 }),
     // Serves both GET (detail) and DELETE (delete user)
@@ -134,7 +132,13 @@ describe('AdminUserDetailPage', () => {
     renderPage()
     // The project itself last changed 2026-07-01, but its lecture was
     // edited 2026-07-03 — the newer date wins.
-    const updated = new Date('2026-07-03T00:00:00Z').toLocaleDateString()
+    const updated = new Date('2026-07-03T00:00:00Z').toLocaleString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
     expect(
       await screen.findByText(new RegExp(`updated ${updated}`)),
     ).toBeVisible()
@@ -286,42 +290,6 @@ describe('AdminUserDetailPage', () => {
     expect(await screen.findByText('Project deleted.')).toBeVisible()
     expect(requested(fetchMock)).toContainEqual(
       expect.stringMatching(/DELETE .*\/api\/admin\/projects\/p1$/),
-    )
-  })
-
-  it('renders the private-lecture toggle off by default and enables it', async () => {
-    const { fetchMock } = renderPage()
-    await screen.findByRole('heading', { name: 'Ada' })
-
-    const toggle = screen.getByRole('checkbox', {
-      name: 'Show private lectures',
-    })
-    expect(toggle).not.toBeChecked()
-
-    fireEvent.click(toggle)
-    expect(
-      await screen.findByText('Private lectures shown — this is logged.'),
-    ).toBeVisible()
-    expect(requested(fetchMock)).toContainEqual(
-      expect.stringMatching(/POST .*\/api\/admin\/users\/u1\/private-access$/),
-    )
-  })
-
-  it('shows the toggle on and disables it with a DELETE', async () => {
-    const { fetchMock } = renderPage(200, { ...detail, privateAccess: true })
-    await screen.findByRole('heading', { name: 'Ada' })
-
-    const toggle = screen.getByRole('checkbox', {
-      name: 'Show private lectures',
-    })
-    expect(toggle).toBeChecked()
-
-    fireEvent.click(toggle)
-    expect(await screen.findByText('Private lectures hidden.')).toBeVisible()
-    expect(requested(fetchMock)).toContainEqual(
-      expect.stringMatching(
-        /DELETE .*\/api\/admin\/users\/u1\/private-access$/,
-      ),
     )
   })
 

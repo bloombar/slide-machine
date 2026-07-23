@@ -217,6 +217,69 @@ describe('project entity surfaces stay member-only', () => {
     expect(list.body).toHaveLength(1)
   })
 
+  it('an allowlisted admin reads a restricted project read-only, without prep notes', async () => {
+    process.env.ADMIN_EMAILS = 'root@example.com'
+    try {
+      await act(ada, 'project.update', {
+        projectId,
+        seedContext: 'SECRET-PREP',
+      })
+      await act(ada, 'project.setAccess', {
+        projectId,
+        visibility: 'restricted',
+      })
+      const admin = await registerUser('root@example.com')
+
+      const res = await act(admin, 'project.get', { projectId })
+      expect(res.status).toBe(200)
+      expect(res.body.id).toBe(projectId)
+      // Read-only viewer shape: no instructor prep notes or member lists
+      expect(res.body.seedContext).toBeUndefined()
+      expect(res.body.viewers).toBeUndefined()
+      expect(res.body.editors).toBeUndefined()
+    } finally {
+      delete process.env.ADMIN_EMAILS
+    }
+  })
+
+  it('an allowlisted admin lists every lecture of a restricted project, private ones included', async () => {
+    process.env.ADMIN_EMAILS = 'root@example.com'
+    try {
+      // The seeded lecture inherits 'restricted'; add a public-override one
+      await act(ada, 'project.setAccess', {
+        projectId,
+        visibility: 'restricted',
+      })
+      const second = await act(ada, 'deck.create', {
+        projectId,
+        title: 'Intro',
+        templateId: 'classic',
+      })
+      await act(ada, 'deck.setAccess', {
+        deckId: second.body.id as string,
+        visibility: 'public',
+      })
+      const admin = await registerUser('root@example.com')
+
+      const list = await act(admin, 'deck.list', { projectId })
+      expect(list.status).toBe(200)
+      // Both show: the restricted-inherited lecture and the public one — a
+      // non-admin stranger would 403 outright, a member would hide the
+      // private one, so seeing both proves the always-on read bypass.
+      expect(
+        (list.body as { title: string }[]).map(d => d.title).sort(),
+      ).toEqual(['Intro', 'Waves'])
+    } finally {
+      delete process.env.ADMIN_EMAILS
+    }
+  })
+
+  it('a signed-in non-admin stranger stays locked out of a restricted project', async () => {
+    await act(ada, 'project.setAccess', { projectId, visibility: 'restricted' })
+    expect((await act(byron, 'project.get', { projectId })).status).toBe(403)
+    expect((await act(byron, 'deck.list', { projectId })).status).toBe(403)
+  })
+
   it('project.transferOwnership hands over; the old owner stays editor', async () => {
     const byronId = (await UserModel.findOne({
       email: 'byron@example.com',

@@ -1,9 +1,8 @@
 /**
  * Admin identity check for view-path bypasses. Allowlisted admins may
  * always open any lecture in the viewer (read-only) — the ADMIN_EMAILS
- * gate is the authorization, mirroring the admin API's ACL bypass. What
- * the toggle on the admin user page controls is only whether private
- * lectures are LISTED there (models/admin-private-access.ts).
+ * gate is the authorization, mirroring the admin API's ACL bypass. The
+ * admin console lists every lecture, private or not, on the same basis.
  */
 import { UserModel } from '../models/user'
 import { isAdminEmail } from '../config/admin'

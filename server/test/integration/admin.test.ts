@@ -15,7 +15,6 @@ import { errorHandler } from '../../src/middleware/error'
 import { UserModel } from '../../src/models/user'
 import { ProjectModel } from '../../src/models/project'
 import { DeckModel } from '../../src/models/deck'
-import { AdminPrivateAccessModel } from '../../src/models/admin-private-access'
 import { signAccessToken } from '../../src/auth/tokens'
 
 const ADMIN_EMAIL = 'admin@example.com'
@@ -43,7 +42,6 @@ beforeEach(async () => {
     UserModel.deleteMany({}),
     ProjectModel.deleteMany({}),
     DeckModel.deleteMany({}),
-    AdminPrivateAccessModel.deleteMany({}),
   ])
 })
 
@@ -288,10 +286,6 @@ describe('GET /api/admin/users/:id/decks', () => {
   it('reports slide count and effective visibility per lecture', async () => {
     const admin = await asAdmin()
     const { user } = await createUser('ada@example.com', 'Ada')
-    // Private lectures only list while the audited toggle is on
-    await request(server)
-      .post(`/api/admin/users/${user._id}/private-access`)
-      .set('Authorization', `Bearer ${admin}`)
     // A restricted project: its inheriting lecture reads as "restricted".
     const restricted = await createProject(user._id, 'Private course', {
       visibility: 'restricted',
@@ -366,10 +360,9 @@ describe('GET /api/admin/projects/:id', () => {
       visibility: 'public',
       slideCount: 2,
     })
-    expect(res.body.privateAccess).toBe(false)
   })
 
-  it('hides private lectures until the audited toggle is on', async () => {
+  it('always lists private lectures', async () => {
     const admin = await asAdmin()
     const { user } = await createUser('ada@example.com', 'Ada')
     const project = await createProject(user._id, 'Private course', {
@@ -377,26 +370,15 @@ describe('GET /api/admin/projects/:id', () => {
     })
     await createDeck(user._id, project._id, 'Hidden', 'hidden-a1')
 
-    const before = await request(server)
+    const res = await request(server)
       .get(`/api/admin/projects/${project._id}`)
       .set('Authorization', `Bearer ${admin}`)
-    expect(before.status).toBe(200)
-    expect(before.body.decks).toHaveLength(0)
-    expect(before.body.privateAccess).toBe(false)
-
-    await request(server)
-      .post(`/api/admin/users/${user._id}/private-access`)
-      .set('Authorization', `Bearer ${admin}`)
-
-    const after = await request(server)
-      .get(`/api/admin/projects/${project._id}`)
-      .set('Authorization', `Bearer ${admin}`)
-    expect(after.body.decks).toHaveLength(1)
-    expect(after.body.decks[0]).toMatchObject({
+    expect(res.status).toBe(200)
+    expect(res.body.decks).toHaveLength(1)
+    expect(res.body.decks[0]).toMatchObject({
       title: 'Hidden',
       visibility: 'restricted',
     })
-    expect(after.body.privateAccess).toBe(true)
   })
 
   it('404s for unknown and malformed ids', async () => {

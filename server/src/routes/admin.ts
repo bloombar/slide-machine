@@ -14,7 +14,7 @@
  * live there).
  */
 import { Router } from 'express'
-import { isValidObjectId, type HydratedDocument, type Types } from 'mongoose'
+import { isValidObjectId, type HydratedDocument } from 'mongoose'
 import { z } from 'zod'
 import type {
   AdminLogsResponse,
@@ -30,7 +30,6 @@ import {
   toAdminLogEntryDto,
 } from '../models/admin-action-log'
 import { BannedEmailModel, isEmailBanned } from '../models/banned-email'
-import { AdminPrivateAccessModel } from '../models/admin-private-access'
 import { csvRow } from '../audit/csv'
 import { logAdminAction } from '../audit/log'
 import {
@@ -69,10 +68,6 @@ export interface AdminUserDetailResponse {
   deckCount: number
   /** Whether the account's email is on the banned list. */
   banned: boolean
-  /** Whether the REQUESTING admin has the audited "show private
-   * lectures" toggle on for this user (governs the deck listing only —
-   * admins can always open a lecture in the viewer). */
-  privateAccess: boolean
 }
 
 export interface AdminUserProjectsResponse {
@@ -103,15 +98,11 @@ export interface AdminProjectDetailResponse {
   /** The project's owner, for the back link and the page header. */
   owner: { id: string; email: string; displayName: string }
   decks: AdminDeckSummary[]
-  /** Whether the requesting admin's "show private lectures" toggle is
-   * on for the OWNER — private lectures are filtered out of `decks`
-   * while it is off, exactly like the per-user deck listing. */
-  privateAccess: boolean
 }
 
-/** One lecture opened in the admin console. Direct reads are never
- * gated by the private-lecture toggle (that governs listings only),
- * mirroring the always-on admin viewer bypass. */
+/** One lecture opened in the admin console; every lecture, private or
+ * not, is always listed and readable — the allowlist gate is the
+ * authorization, mirroring the always-on admin viewer bypass. */
 export interface AdminDeckDetailResponse {
   deck: AdminDeckSummary
   /** The project the lecture lives in, for the back link. */
@@ -157,14 +148,6 @@ const SORTS = {
   oldest: { createdAt: 1 },
   email: { email: 1 },
 } as const
-
-/** Whether an admin's audited "show private lectures" toggle is on for
- * a target user. Governs listings only, never viewer access. */
-const hasPrivateAccess = async (
-  adminId: string | undefined,
-  targetUserId: Types.ObjectId,
-): Promise<boolean> =>
-  (await AdminPrivateAccessModel.exists({ adminId, targetUserId })) !== null
 
 /** Resolves a :id route param to an existing user or 404s. */
 const loadUser = async (id: string): Promise<HydratedDocument<UserDb>> => {
@@ -295,14 +278,10 @@ adminRouter.get('/logs/export', async (_req, res) => {
 
 adminRouter.get('/users/:id', async (req, res) => {
   const user = await loadUser(String(req.params.id))
-  const [projectCount, deckCount, banned, grant] = await Promise.all([
+  const [projectCount, deckCount, banned] = await Promise.all([
     ProjectModel.countDocuments({ ownerId: user._id }),
     DeckModel.countDocuments({ ownerId: user._id }),
     isEmailBanned(user.email),
-    AdminPrivateAccessModel.exists({
-      adminId: req.adminUser?.id,
-      targetUserId: user._id,
-    }),
   ])
 
   const body: AdminUserDetailResponse = {
@@ -310,7 +289,6 @@ adminRouter.get('/users/:id', async (req, res) => {
     projectCount,
     deckCount,
     banned,
-    privateAccess: grant !== null,
   }
   res.json(body)
 })
@@ -342,19 +320,12 @@ adminRouter.get('/users/:id/decks', async (req, res) => {
   // inheriting lecture; the rest read their own override.
   const acls = await loadDeckAcls(decks)
 
-  // Private lectures are listed only while this admin has the audited
-  // "show private lectures" toggle on for this user; public ones always
-  // show. (Opening a lecture in the viewer is a separate, always-allowed
-  // admin bypass — this only governs the listing.)
-  const showPrivate = await hasPrivateAccess(req.adminUser?.id, user._id)
-
+  // Every lecture is listed, private or not — the allowlist gate is the
+  // authorization, mirroring the always-on admin viewer bypass.
   const body: AdminUserDecksResponse = {
-    decks: decks
-      .filter(
-        deck =>
-          showPrivate || acls.get(deck._id.toString())!.visibility === 'public',
-      )
-      .map(deck => toAdminDeckSummary(deck, acls.get(deck._id.toString())!)),
+    decks: decks.map(deck =>
+      toAdminDeckSummary(deck, acls.get(deck._id.toString())!),
+    ),
   }
   res.json(body)
 })
@@ -374,8 +345,6 @@ adminRouter.get('/projects/:id', async (req, res) => {
     updatedAt: -1,
   })
   const acls = await loadDeckAcls(decks)
-  // Same listing rule as /users/:id/decks, keyed on the project's owner
-  const showPrivate = await hasPrivateAccess(req.adminUser?.id, owner._id)
 
   const body: AdminProjectDetailResponse = {
     project: toProjectDto(project),
@@ -384,15 +353,49 @@ adminRouter.get('/projects/:id', async (req, res) => {
       email: owner.email,
       displayName: owner.displayName,
     },
-    decks: decks
-      .filter(
-        deck =>
-          showPrivate || acls.get(deck._id.toString())!.visibility === 'public',
-      )
-      .map(deck => toAdminDeckSummary(deck, acls.get(deck._id.toString())!)),
-    privateAccess: showPrivate,
+    // Every lecture is listed, private or not (same always-on rule as
+    // /users/:id/decks).
+    decks: decks.map(deck =>
+      toAdminDeckSummary(deck, acls.get(deck._id.toString())!),
+    ),
   }
   res.json(body)
+})
+
+/**
+ * Records that an admin opened a PRIVATE project in the product view.
+ * The "View project" link on the project admin page calls this before
+ * navigating; public projects skip it (nothing to expose). Unlike the
+ * idempotent private-lecture toggle, every private view is its own audit
+ * entry — an access record, not a state change. A public project reaching
+ * here is a client bug, not an exposure, so it 400s rather than logging.
+ */
+adminRouter.post('/projects/:id/private-view', async (req, res) => {
+  const notFound = new HttpError(404, 'not_found', 'Project not found')
+  const id = String(req.params.id)
+  if (!isValidObjectId(id)) throw notFound
+  const project = await ProjectModel.findById(id)
+  if (!project) throw notFound
+  const admin = actor(req)
+  // Projects sit at the top of the ACL tree, so their stored visibility
+  // is the effective one (no inheritance to resolve).
+  if (project.visibility === 'public') {
+    throw new HttpError(400, 'not_private', 'Project is not private')
+  }
+
+  await logAdminAction({
+    actorId: admin.id,
+    actorEmail: admin.email,
+    action: 'project.private_view',
+    targetType: 'project',
+    targetId: project._id.toString(),
+    details: {
+      title: project.title,
+      ownerId: project.ownerId.toString(),
+      visibility: project.visibility,
+    },
+  })
+  res.status(204).end()
 })
 
 adminRouter.get('/decks/:id', async (req, res) => {
@@ -552,56 +555,6 @@ adminRouter.post('/users/:id/password', async (req, res) => {
     targetId: user._id.toString(),
     details: { email: user.email },
   })
-  res.status(204).end()
-})
-
-// The private-view toggle: enabling makes THIS admin's listing of the
-// target user's lectures include private ones (GET /users/:id/decks
-// filters otherwise). Viewer access is a separate, always-on admin
-// bypass (lib/admin-view.ts). Enabling and disabling are both audited.
-// Per-admin, per-user, off by default (no row).
-adminRouter.post('/users/:id/private-access', async (req, res) => {
-  const user = await loadUser(String(req.params.id))
-  const admin = actor(req)
-
-  // Idempotent enable; only an actual state change is worth an entry
-  const upserted = await AdminPrivateAccessModel.updateOne(
-    { adminId: admin.id, targetUserId: user._id },
-    { $setOnInsert: { adminId: admin.id, targetUserId: user._id } },
-    { upsert: true },
-  )
-  if (upserted.upsertedCount > 0) {
-    await logAdminAction({
-      actorId: admin.id,
-      actorEmail: admin.email,
-      action: 'user.private_view_enabled',
-      targetType: 'user',
-      targetId: user._id.toString(),
-      details: { email: user.email },
-    })
-  }
-  res.status(204).end()
-})
-
-adminRouter.delete('/users/:id/private-access', async (req, res) => {
-  const user = await loadUser(String(req.params.id))
-  const admin = actor(req)
-
-  const removed = await AdminPrivateAccessModel.deleteOne({
-    adminId: admin.id,
-    targetUserId: user._id,
-  })
-  // Only an actual state change is worth an audit entry
-  if (removed.deletedCount > 0) {
-    await logAdminAction({
-      actorId: admin.id,
-      actorEmail: admin.email,
-      action: 'user.private_view_disabled',
-      targetType: 'user',
-      targetId: user._id.toString(),
-      details: { email: user.email },
-    })
-  }
   res.status(204).end()
 })
 

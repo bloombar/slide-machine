@@ -78,16 +78,14 @@ until the email is removed from `ADMIN_EMAILS`.
 
 An allowlisted admin can **always open any lecture in the viewer**
 (`/d/:slug`), private or not, read-only — like the admin API, the
-allowlist is the authorization. What is gated is the *listing*: on a
-user's admin page and on the admin project pages, private lectures are
-hidden from the lecture tables until the **"Show private lectures"
-toggle** (off by default, per admin, per lecture owner) is enabled —
-the toggle appears on both pages and flips the same underlying
-setting. Flipping it is recorded in the audit log
-(`user.private_view_enabled` / `user.private_view_disabled`). The
-setting persists until toggled off (collection `adminprivateaccesses`);
-turn it off when the task that needed it is done. Individual viewer
-opens are not logged.
+allowlist is the authorization. The admin console lists **every
+lecture, private or not**, on the same basis: the lecture tables on a
+user's admin page and on the admin project pages always include private
+lectures, with no toggle. Individual viewer opens are not logged.
+
+Opening a private *project* in the product view is a separate step: the
+**"View project"** button on an admin project page confirms first and
+records the access in the audit log (`project.private_view`).
 
 ### Audit log (`/app/admin/logs`)
 
@@ -103,11 +101,10 @@ Entries are **append-only**: they are written through one server module
 `adminactionlogs` Mongo collection, and no API can edit or delete them.
 Every moderation action writes one (`user.delete`, `user.ban_email`,
 `user.unban_email`, `user.password_reset`, `project.delete`,
-`deck.delete`), as do the
-"show private lectures" toggle transitions (`user.private_view_enabled`
-/ `user.private_view_disabled`). It is the durable audit trail; a local
-CSV would not survive an App Platform redeploy, which is why the CSV is
-an on-demand export rather than the store.
+`deck.delete`), as does opening a private project in the product view
+(`project.private_view`). It is the durable audit trail; a local CSV
+would not survive an App Platform redeploy, which is why the CSV is an
+on-demand export rather than the store.
 
 ## Changing how the app behaves
 

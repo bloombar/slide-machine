@@ -1,8 +1,8 @@
 /**
  * Integration tests for admin private-lecture handling against a real
  * MongoDB: allowlisted admins can always open a private lecture in the
- * viewer, while the audited "show private lectures" toggle governs only
- * whether the admin deck listing includes them.
+ * viewer, the admin deck listing always includes private lectures, and
+ * opening a private project in the product view is audited.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import express from 'express'
@@ -16,7 +16,6 @@ import { errorHandler } from '../../src/middleware/error'
 import { UserModel } from '../../src/models/user'
 import { ProjectModel } from '../../src/models/project'
 import { DeckModel } from '../../src/models/deck'
-import { AdminPrivateAccessModel } from '../../src/models/admin-private-access'
 import { AdminActionLogModel } from '../../src/models/admin-action-log'
 import { signAccessToken } from '../../src/auth/tokens'
 
@@ -45,7 +44,6 @@ beforeEach(async () => {
     UserModel.deleteMany({}),
     ProjectModel.deleteMany({}),
     DeckModel.deleteMany({}),
-    AdminPrivateAccessModel.deleteMany({}),
     AdminActionLogModel.deleteMany({}),
   ])
 })
@@ -91,11 +89,6 @@ const createMixedDecks = async (ownerId: Types.ObjectId, tag: string) => {
   return { publicDeck, privateDeck }
 }
 
-const enableAccess = (token: string, userId: Types.ObjectId) =>
-  request(server)
-    .post(`/api/admin/users/${userId}/private-access`)
-    .set('Authorization', `Bearer ${token}`)
-
 const listDeckSlugs = async (token: string, userId: Types.ObjectId) => {
   const res = await request(server)
     .get(`/api/admin/users/${userId}/decks`)
@@ -106,114 +99,16 @@ const listDeckSlugs = async (token: string, userId: Types.ObjectId) => {
   )
 }
 
-const readDetail = async (token: string, userId: Types.ObjectId) =>
-  (
-    await request(server)
-      .get(`/api/admin/users/${userId}`)
-      .set('Authorization', `Bearer ${token}`)
-  ).body as { privateAccess: boolean }
-
-describe('the show-private-lectures toggle endpoints', () => {
-  it('is off by default and flips on/off with audited transitions', async () => {
-    const { token } = await asAdmin()
-    const { user } = await createUser('owner@example.com', 'Owner')
-
-    expect((await readDetail(token, user._id)).privateAccess).toBe(false)
-
-    expect((await enableAccess(token, user._id)).status).toBe(204)
-    expect((await readDetail(token, user._id)).privateAccess).toBe(true)
-    expect(
-      await AdminActionLogModel.findOne({
-        action: 'user.private_view_enabled',
-      }),
-    ).toMatchObject({
-      actorEmail: ADMIN_EMAIL,
-      targetType: 'user',
-      targetId: user._id.toString(),
-      details: { email: 'owner@example.com' },
-    })
-
-    // Re-enabling is idempotent: one grant, one enabled entry
-    expect((await enableAccess(token, user._id)).status).toBe(204)
-    expect(await AdminPrivateAccessModel.countDocuments()).toBe(1)
-    expect(
-      await AdminActionLogModel.countDocuments({
-        action: 'user.private_view_enabled',
-      }),
-    ).toBe(1)
-
-    const off = await request(server)
-      .delete(`/api/admin/users/${user._id}/private-access`)
-      .set('Authorization', `Bearer ${token}`)
-    expect(off.status).toBe(204)
-    expect((await readDetail(token, user._id)).privateAccess).toBe(false)
-    expect(
-      await AdminActionLogModel.countDocuments({
-        action: 'user.private_view_disabled',
-      }),
-    ).toBe(1)
-
-    // Disabling an already-off toggle logs nothing new
-    await request(server)
-      .delete(`/api/admin/users/${user._id}/private-access`)
-      .set('Authorization', `Bearer ${token}`)
-    expect(
-      await AdminActionLogModel.countDocuments({
-        action: 'user.private_view_disabled',
-      }),
-    ).toBe(1)
-  })
-
-  it('gates the endpoints to admins', async () => {
-    const { user, token } = await createUser('user@example.com', 'User')
-    const anon = await request(server).post(
-      `/api/admin/users/${user._id}/private-access`,
-    )
-    expect(anon.status).toBe(401)
-    const forbidden = await enableAccess(token, user._id)
-    expect(forbidden.status).toBe(403)
-  })
-})
-
 describe('the admin deck listing', () => {
-  it('hides private lectures until the toggle is on', async () => {
+  it('always lists private lectures alongside public ones', async () => {
     const { token } = await asAdmin()
     const { user: owner } = await createUser('owner@example.com', 'Owner')
     await createMixedDecks(owner._id, 'abc123')
 
-    expect(await listDeckSlugs(token, owner._id)).toEqual(['open-abc123'])
-
-    await enableAccess(token, owner._id)
     expect((await listDeckSlugs(token, owner._id)).sort()).toEqual([
       'open-abc123',
       'secret-abc123',
     ])
-  })
-
-  it("one admin's toggle never affects another admin's listing", async () => {
-    const { token } = await asAdmin()
-    const { user: second, token: secondToken } = await createUser(
-      'second-admin@example.com',
-      'Second',
-    )
-    process.env.ADMIN_EMAILS = `${ADMIN_EMAIL}, second-admin@example.com`
-    try {
-      const { user: owner } = await createUser('owner@example.com', 'Owner')
-      await createMixedDecks(owner._id, 'def456')
-      await enableAccess(token, owner._id)
-
-      expect((await listDeckSlugs(token, owner._id)).sort()).toEqual([
-        'open-def456',
-        'secret-def456',
-      ])
-      // The second admin left their toggle off
-      expect(await listDeckSlugs(secondToken, owner._id)).toEqual([
-        'open-def456',
-      ])
-      expect(second.email).toBe('second-admin@example.com')
-    } finally {
-      process.env.ADMIN_EMAILS = ADMIN_EMAIL
-    }
   })
 })
 
@@ -243,5 +138,89 @@ describe('the deck-viewer admin bypass', () => {
       .get('/api/decks/secret-jkl012')
       .set('Authorization', `Bearer ${token}`)
     expect(stranger.status).toBe(404)
+  })
+})
+
+describe('the private-project view log endpoint', () => {
+  const viewProject = (token: string, projectId: string) =>
+    request(server)
+      .post(`/api/admin/projects/${projectId}/private-view`)
+      .set('Authorization', `Bearer ${token}`)
+
+  it('records a distinct entry each time an admin opens a private project', async () => {
+    const { token } = await asAdmin()
+    const { user: owner } = await createUser('owner@example.com', 'Owner')
+    const project = await ProjectModel.create({
+      ownerId: owner._id,
+      title: 'Secret course',
+      visibility: 'restricted',
+    })
+
+    expect((await viewProject(token, project._id.toString())).status).toBe(204)
+    expect((await viewProject(token, project._id.toString())).status).toBe(204)
+
+    // Every view is its own access record (unlike the idempotent toggle)
+    expect(
+      await AdminActionLogModel.countDocuments({
+        action: 'project.private_view',
+      }),
+    ).toBe(2)
+    expect(
+      await AdminActionLogModel.findOne({ action: 'project.private_view' }),
+    ).toMatchObject({
+      actorEmail: ADMIN_EMAIL,
+      targetType: 'project',
+      targetId: project._id.toString(),
+      details: {
+        title: 'Secret course',
+        ownerId: owner._id.toString(),
+        visibility: 'restricted',
+      },
+    })
+  })
+
+  it('rejects a public project with 400 and logs nothing', async () => {
+    const { token } = await asAdmin()
+    const { user: owner } = await createUser('owner@example.com', 'Owner')
+    const project = await ProjectModel.create({
+      ownerId: owner._id,
+      title: 'Open course',
+      visibility: 'public',
+    })
+
+    const res = await viewProject(token, project._id.toString())
+    expect(res.status).toBe(400)
+    expect(res.body.error.code).toBe('not_private')
+    expect(
+      await AdminActionLogModel.countDocuments({
+        action: 'project.private_view',
+      }),
+    ).toBe(0)
+  })
+
+  it('404s an unknown or malformed project id', async () => {
+    const { token } = await asAdmin()
+    expect((await viewProject(token, '507f1f77bcf86cd799439011')).status).toBe(
+      404,
+    )
+    expect((await viewProject(token, 'not-an-id')).status).toBe(404)
+  })
+
+  it('gates the endpoint to admins', async () => {
+    const { user: owner } = await createUser('owner@example.com', 'Owner')
+    const { token } = await createUser('stranger@example.com', 'Stranger')
+    const project = await ProjectModel.create({
+      ownerId: owner._id,
+      title: 'Secret course',
+      visibility: 'restricted',
+    })
+
+    const anon = await request(server).post(
+      `/api/admin/projects/${project._id}/private-view`,
+    )
+    expect(anon.status).toBe(401)
+    const forbidden = await viewProject(token, project._id.toString())
+    expect(forbidden.status).toBe(403)
+    expect(await AdminActionLogModel.countDocuments()).toBe(0)
   })
 })

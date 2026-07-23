@@ -34,6 +34,7 @@ import {
 } from '../models/project'
 import { UserModel } from '../models/user'
 import { canEditAcl, isAclMember } from '../lib/access'
+import { isAllowlistedAdmin } from '../lib/admin-view'
 import { ttsVoiceIdSchema } from '../lib/tts-voice'
 import { sharesOfAcl } from '../lib/shares'
 import { getBuiltinTemplate } from '../templates/builtin'
@@ -113,9 +114,17 @@ export const projectGet = defineAction<{ projectId: string }, Project>({
     const userId = requireUser(ctx)
     const doc = await ProjectModel.findById(input.projectId).catch(() => null)
     const acl = doc ? projectAcl(doc) : null
-    // Member-only: 'public' opens the lectures, not the project page
-    if (!doc || !acl || !isAclMember(acl, userId))
-      throw new ActionForbiddenError()
+    if (!doc || !acl) throw new ActionForbiddenError()
+    // Member-only: 'public' opens the lectures, not the project page.
+    // Allowlisted admins get an always-on read-only bypass, mirroring the
+    // lecture-viewer bypass (lib/admin-view.ts): they see the shared view
+    // (lecture list, no instructor prep notes), never editing rights.
+    if (!isAclMember(acl, userId)) {
+      if (!(await isAllowlistedAdmin(userId))) throw new ActionForbiddenError()
+      const dto = toSharedProjectDto(doc)
+      delete dto.seedContext
+      return dto
+    }
     if (acl.ownerId === userId) return toProjectDto(doc)
     const dto = toSharedProjectDto(doc)
     // Viewers see the lecture list, not the instructor's prep notes

@@ -6,10 +6,8 @@
  * lecture page. Moderation lives here too: per-project and per-lecture
  * delete buttons plus a danger zone (reset password, ban/unban email,
  * delete account) — every action confirms first and is recorded in the admin
- * audit log server-side. A "Show private lectures" toggle (off by
- * default, audited) controls whether private lectures appear in the
- * lists below; opening any lecture in the viewer is always allowed for
- * admins.
+ * audit log server-side. Every lecture, private or not, is listed;
+ * admins can always open any lecture in the viewer.
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
@@ -23,7 +21,6 @@ import {
   fetchAdminUserDecks,
   fetchAdminUserProjects,
   resetAdminUserPassword,
-  setAdminPrivateAccess,
   unbanAdminUserEmail,
   type AdminDeckSummary,
   type AdminUserDetailResponse,
@@ -32,6 +29,7 @@ import { ApiError } from '../api/http'
 import ConfirmDialog from '../components/ConfirmDialog'
 import Modal from '../components/Modal'
 import LectureTable from '../components/admin/LectureTable'
+import { generatePassword } from '../lib/password'
 import { projectTitle } from '../lib/project'
 
 interface Loaded {
@@ -69,7 +67,14 @@ function BackToUsers() {
   )
 }
 
-const asDate = (iso: string): string => new Date(iso).toLocaleDateString()
+const asDate = (iso: string): string =>
+  new Date(iso).toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 
 /** Newest of a project's own edit and any of its lectures' edits — so the
  * date reflects editing the project OR one of its lectures. ISO strings
@@ -105,7 +110,9 @@ function ResetPasswordDialog({
   onSubmit: (password: string) => Promise<void>
   onCancel: () => void
 }) {
-  const [password, setPassword] = useState('')
+  // Prefill with a strong random password so the admin can hand one out
+  // immediately; they can edit it or regenerate before submitting.
+  const [password, setPassword] = useState(() => generatePassword())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -148,15 +155,30 @@ function ResetPasswordDialog({
         >
           New password
         </label>
-        <input
-          id="admin-new-password"
-          ref={inputRef}
-          type="text"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          placeholder="At least 8 characters"
-          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2"
-        />
+        <div className="mt-1 flex gap-2">
+          <input
+            id="admin-new-password"
+            ref={inputRef}
+            type="text"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            placeholder="At least 8 characters"
+            className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              setError(null)
+              setPassword(generatePassword())
+            }}
+            className="shrink-0 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Regenerate
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">
+          A strong password was generated. Copy it before saving.
+        </p>
         {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
 
         <div className="mt-6 flex justify-end gap-2">
@@ -249,25 +271,6 @@ export default function AdminUserDetailPage() {
       cancelled = true
     }
   }, [userId, version])
-
-  /** Flips the audited "show private lectures" toggle for this admin;
-   * the refetch it triggers is what adds/removes them from the lists. */
-  const togglePrivateAccess = async (enabled: boolean) => {
-    if (!userId) return
-    setNotice(null)
-    setActionError(null)
-    try {
-      await setAdminPrivateAccess(userId, enabled)
-      setNotice(
-        enabled
-          ? 'Private lectures shown — this is logged.'
-          : 'Private lectures hidden.',
-      )
-      setVersion(v => v + 1)
-    } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : 'Action failed.')
-    }
-  }
 
   /** Runs the confirmed action; deleting the user leaves the page. */
   const runPending = async () => {
@@ -388,19 +391,8 @@ export default function AdminUserDetailPage() {
       </section>
 
       <section className="mt-8">
-        <div className="mb-3 flex items-center justify-between gap-4">
+        <div className="mb-3">
           <h2 className="text-lg font-semibold text-slate-700">Projects</h2>
-          {/* Off by default; whether this listing shows private
-              lectures. Both transitions are recorded in the audit log */}
-          <label className="flex items-center gap-2 text-sm text-slate-600">
-            <input
-              type="checkbox"
-              checked={detail.privateAccess}
-              onChange={e => void togglePrivateAccess(e.target.checked)}
-              className="h-4 w-4 accent-red-600"
-            />
-            Show private lectures
-          </label>
         </div>
         {projects.length === 0 && otherDecks.length === 0 ? (
           <p className="text-slate-500">No projects.</p>

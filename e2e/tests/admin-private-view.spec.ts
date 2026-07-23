@@ -1,9 +1,8 @@
 /**
  * E2E private-lecture handling against the built app: the admin can
- * always open a private lecture directly in the viewer, but the admin
- * project page lists private lectures only after the audited "Show
- * private lectures" toggle (off by default) is enabled; the enablement
- * lands in the audit log.
+ * always open a private lecture directly in the viewer, and the admin
+ * project page lists private lectures with no toggle. Opening a private
+ * project in the product view is confirmed and lands in the audit log.
  */
 import { test, expect, type Page } from '@playwright/test'
 
@@ -73,7 +72,7 @@ test('a user owns a private lecture', async ({ request }) => {
   expect(slug).toBeTruthy()
 })
 
-test('the viewer always opens for the admin; the listing needs the toggle', async ({
+test('the viewer always opens for the admin; the listing shows private lectures', async ({
   page,
 }) => {
   await ensureSignedIn(page, admin)
@@ -85,29 +84,14 @@ test('the viewer always opens for the admin; the listing needs the toggle', asyn
   ).toBeVisible()
 
   // The user's admin page links the project to its own admin page,
-  // where the private lecture is hidden by default
+  // where the private lecture is listed with no toggle needed
   await page.goto('/app/admin')
   await page.getByRole('link', { name: owner.email }).click()
   await page.getByRole('link', { name: 'Secret Course' }).click()
   await expect(page).toHaveURL(/\/app\/admin\/projects\//)
-  await expect(page.getByText('No lectures.')).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Secret Lecture' })).toHaveCount(
-    0,
-  )
 
-  // Enabling the audited toggle reveals it
-  const toggle = page.getByRole('checkbox', { name: 'Show private lectures' })
-  await expect(toggle).not.toBeChecked()
-  // click, not check(): the control is server-confirmed, so its state
-  // flips only after the toggle round-trips
-  await toggle.click()
-  await expect(
-    page.getByText('Private lectures shown — this is logged.'),
-  ).toBeVisible()
-  await expect(toggle).toBeChecked()
-
-  // The refetched list links the lecture to its own admin page, which
-  // links on to the live slideshow
+  // The listed lecture links to its own admin page, which links on to
+  // the live slideshow
   await page.getByRole('link', { name: 'Secret Lecture' }).click()
   await expect(page).toHaveURL(/\/app\/admin\/decks\//)
   await page.getByRole('link', { name: 'View slideshow' }).click()
@@ -115,10 +99,33 @@ test('the viewer always opens for the admin; the listing needs the toggle', asyn
   await expect(
     page.getByRole('heading', { name: 'Secret Lecture' }),
   ).toBeVisible()
+})
 
-  // The enablement is in the audit log
+test('View project opens a private project after a logged confirm', async ({
+  page,
+}) => {
+  await ensureSignedIn(page, admin)
+
+  // Open the private project's admin page
+  await page.goto('/app/admin')
+  await page.getByRole('link', { name: owner.email }).click()
+  await page.getByRole('link', { name: 'Secret Course' }).click()
+  await expect(page).toHaveURL(/\/app\/admin\/projects\//)
+
+  // View project → private projects require a confirm that warns it is logged
+  await page.getByRole('button', { name: 'View project' }).click()
+  const dialog = page.getByRole('alertdialog', {
+    name: 'View this private project?',
+  })
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('button', { name: 'View project' }).click()
+
+  // The admin read bypass opens the real project page and lists its lectures
+  await expect(page).toHaveURL(/\/app\/projects\//)
+  await expect(page.getByText('Secret Course')).toBeVisible()
+  await expect(page.getByText('Secret Lecture')).toBeVisible()
+
+  // The private view is recorded in the audit log
   await page.goto('/app/admin/logs')
-  await expect(
-    page.getByText('user.private_view_enabled').first(),
-  ).toBeVisible()
+  await expect(page.getByText('project.private_view').first()).toBeVisible()
 })

@@ -1,8 +1,8 @@
 /**
  * Unit tests for the per-project admin view: project header with owner
- * and visibility, the lecture table with viewer links, the audited
- * "Show private lectures" toggle, and the delete actions (lecture,
- * whole project).
+ * and visibility, the lecture table with viewer links, the "View
+ * project" bypass (confirmed and logged for private projects), and the
+ * delete actions (lecture, whole project).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
@@ -30,14 +30,14 @@ const detail = {
       updatedAt: '2026-07-03T00:00:00Z',
     },
   ],
-  privateAccess: false,
 }
 
 const renderPage = (status = 200, detailBody: unknown = detail) => {
   // Keys ordered most-specific first: the fetch mock matches by substring
   const mocks = mockFetchRoutes({
-    '/api/admin/users/u1/private-access': () => ({ status: 204 }),
     '/api/admin/decks/d1': () => ({ status: 204 }),
+    // More specific than /projects/p1, so it must be matched first
+    '/api/admin/projects/p1/private-view': () => ({ status: 204 }),
     // Serves both GET (detail) and DELETE (delete project)
     '/api/admin/projects/p1': init =>
       init?.method === 'DELETE'
@@ -52,10 +52,17 @@ const renderPage = (status = 200, detailBody: unknown = detail) => {
           element={<AdminProjectPage />}
         />
         <Route path="/app/admin/users/:userId" element={<p>user page</p>} />
+        <Route path="/app/projects/:projectId" element={<p>project page</p>} />
       </Routes>
     </MemoryRouter>,
   )
   return mocks
+}
+
+/** Detail for a private (restricted) project. */
+const privateDetail = {
+  ...detail,
+  project: { ...detail.project, visibility: 'restricted' },
 }
 
 /** The method+url pairs fetched so far. */
@@ -99,42 +106,6 @@ describe('AdminProjectPage', () => {
     const row = link.closest('tr')!
     expect(within(row).getByText('Public')).toBeVisible()
     expect(within(row).getByText('5')).toBeVisible()
-  })
-
-  it('renders the private-lecture toggle off by default and enables it', async () => {
-    const { fetchMock } = renderPage()
-    await screen.findByRole('heading', { name: 'Physics' })
-
-    const toggle = screen.getByRole('checkbox', {
-      name: 'Show private lectures',
-    })
-    expect(toggle).not.toBeChecked()
-
-    fireEvent.click(toggle)
-    expect(
-      await screen.findByText('Private lectures shown — this is logged.'),
-    ).toBeVisible()
-    expect(requested(fetchMock)).toContainEqual(
-      expect.stringMatching(/POST .*\/api\/admin\/users\/u1\/private-access$/),
-    )
-  })
-
-  it('shows the toggle on and disables it with a DELETE', async () => {
-    const { fetchMock } = renderPage(200, { ...detail, privateAccess: true })
-    await screen.findByRole('heading', { name: 'Physics' })
-
-    const toggle = screen.getByRole('checkbox', {
-      name: 'Show private lectures',
-    })
-    expect(toggle).toBeChecked()
-
-    fireEvent.click(toggle)
-    expect(await screen.findByText('Private lectures hidden.')).toBeVisible()
-    expect(requested(fetchMock)).toContainEqual(
-      expect.stringMatching(
-        /DELETE .*\/api\/admin\/users\/u1\/private-access$/,
-      ),
-    )
   })
 
   it('deletes a lecture from its table row after a confirm', async () => {
@@ -186,6 +157,53 @@ describe('AdminProjectPage', () => {
     expect(
       requested(fetchMock).filter(r => r.startsWith('DELETE')),
     ).toHaveLength(0)
+  })
+
+  it('opens a public project straight away, with no confirm or view log', async () => {
+    const { fetchMock } = renderPage()
+    await screen.findByRole('heading', { name: 'Physics' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'View project' }))
+
+    // Public: navigates directly, no dialog and no private-view log
+    expect(await screen.findByText('project page')).toBeVisible()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(requested(fetchMock)).not.toContainEqual(
+      expect.stringMatching(/private-view/),
+    )
+  })
+
+  it('confirms and logs before opening a private project', async () => {
+    const { fetchMock } = renderPage(200, privateDetail)
+    await screen.findByRole('heading', { name: 'Physics' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'View project' }))
+    const dialog = screen.getByRole('alertdialog', {
+      name: 'View this private project?',
+    })
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'View project' }),
+    )
+
+    // The access is logged, then the project page opens
+    expect(await screen.findByText('project page')).toBeVisible()
+    expect(requested(fetchMock)).toContainEqual(
+      expect.stringMatching(/POST .*\/api\/admin\/projects\/p1\/private-view$/),
+    )
+  })
+
+  it('does not log or navigate when the private-view confirm is cancelled', async () => {
+    const { fetchMock } = renderPage(200, privateDetail)
+    await screen.findByRole('heading', { name: 'Physics' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'View project' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.queryByText('project page')).not.toBeInTheDocument()
+    expect(requested(fetchMock)).not.toContainEqual(
+      expect.stringMatching(/private-view/),
+    )
   })
 
   it('shows an error state with a directory back link when the load fails', async () => {

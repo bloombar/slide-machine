@@ -14,7 +14,14 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import { VisibilityBadge } from '../components/admin/LectureTable'
 import { projectTitle } from '../lib/project'
 
-const asDate = (iso: string): string => new Date(iso).toLocaleDateString()
+const asDate = (iso: string): string =>
+  new Date(iso).toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (

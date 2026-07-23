@@ -36,10 +36,6 @@ export interface AdminUserDetailResponse {
   deckCount: number
   /** Whether the account's email is on the banned list. */
   banned: boolean
-  /** Whether the requesting admin has the audited "show private
-   * lectures" toggle on for this user (governs the deck listing only —
-   * admins can always open a lecture in the viewer). */
-  privateAccess: boolean
 }
 
 /** A lecture as listed in the admin view; permalinkSlug links to /d/:slug. */
@@ -61,14 +57,10 @@ export interface AdminProjectDetailResponse {
   /** The project's owner, for the back link and the page header. */
   owner: { id: string; email: string; displayName: string }
   decks: AdminDeckSummary[]
-  /** Whether the requesting admin's "show private lectures" toggle is
-   * on for the owner — private lectures are filtered out of `decks`
-   * while it is off, exactly like the per-user deck listing. */
-  privateAccess: boolean
 }
 
-/** One lecture opened in the admin console. Direct reads are never
- * gated by the private-lecture toggle (that governs listings only). */
+/** One lecture opened in the admin console; every lecture, private or
+ * not, is always listed and readable for an admin. */
 export interface AdminDeckDetailResponse {
   deck: AdminDeckSummary
   /** The project the lecture lives in, for the back link. */
@@ -166,16 +158,12 @@ export const resetAdminUserPassword = (
     body: JSON.stringify({ password }),
   })
 
-/** Turns the audited "show private lectures" toggle on or off for the
- * requesting admin: it governs whether the user's private lectures
- * appear in the admin listing. Both transitions are recorded in the
- * audit log. */
-export const setAdminPrivateAccess = (
-  userId: string,
-  enabled: boolean,
-): Promise<void> =>
-  apiFetch<void>(`/api/admin/users/${userId}/private-access`, {
-    method: enabled ? 'POST' : 'DELETE',
+/** Records that this admin opened a private project in the product view.
+ * Every call writes its own audit entry; the "View project" link invokes
+ * it only for private projects (a public one rejects with 400). */
+export const logAdminProjectView = (projectId: string): Promise<void> =>
+  apiFetch<void>(`/api/admin/projects/${projectId}/private-view`, {
+    method: 'POST',
   })
 
 /** Deletes a project and everything in it. Irreversible. */

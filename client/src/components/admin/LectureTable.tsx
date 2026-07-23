@@ -8,7 +8,14 @@ import { Link } from 'react-router'
 import type { Visibility } from '@slide-machine/shared'
 import type { AdminDeckSummary } from '../../api/admin'
 
-const asDate = (iso: string): string => new Date(iso).toLocaleDateString()
+const asDate = (iso: string): string =>
+  new Date(iso).toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 
 /** Colour-coded pill for a lecture's effective visibility. */
 export function VisibilityBadge({ visibility }: { visibility: Visibility }) {
