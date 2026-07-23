@@ -693,7 +693,9 @@ export default function DeckViewerPage() {
   }
 
   /** Polls the deck view until new retained audio appears (or the window
-   * elapses), merging only audioSlideIds so local slide state is untouched. */
+   * elapses), merging only the recording-derived flags (audioSlideIds for the
+   * per-slide "Play original audio" option, and deck.hasRecordings for the
+   * Refine tab's speaker-ID toggle) so local slide/deck edits are untouched. */
   const refreshAudioAvailability = () => {
     const had = new Set(viewRef.current?.audioSlideIds ?? [])
     let tries = 0
@@ -702,7 +704,15 @@ export default function DeckViewerPage() {
       apiFetch<DeckViewResponse>(`/api/decks/${slug}`)
         .then(fresh => {
           const ids = fresh.audioSlideIds ?? []
-          setView(v => (v ? { ...v, audioSlideIds: ids } : v))
+          setView(v =>
+            v
+              ? {
+                  ...v,
+                  audioSlideIds: ids,
+                  deck: { ...v.deck, hasRecordings: fresh.deck.hasRecordings },
+                }
+              : v,
+          )
           const grew = ids.some(id => !had.has(id))
           if (!grew && tries < 24) window.setTimeout(poll, 5000)
         })

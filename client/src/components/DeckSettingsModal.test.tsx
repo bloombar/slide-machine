@@ -192,6 +192,72 @@ describe('DeckSettingsModal — Refine tab', () => {
     ).toBeDisabled()
   })
 
+  it('enables + checks speaker ID when recordings appear, without a remount', () => {
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+    })
+    const modal = (deck: Deck) => (
+      <MemoryRouter>
+        <DeckSettingsModal
+          deck={deck}
+          projectGenerationFreedom={2}
+          isOwner
+          onClose={vi.fn()}
+          onTemplateChange={vi.fn()}
+          onDeckChange={vi.fn()}
+          onDeleted={vi.fn()}
+          onReformatted={vi.fn()}
+        />
+      </MemoryRouter>
+    )
+    // Open with no audio yet: the toggle is disabled, unchecked, and explained.
+    const { rerender } = render(modal({ ...baseDeck, hasRecordings: false }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine' }))
+    const box = () =>
+      screen.getByRole('checkbox', { name: /Identify multiple speakers/ })
+    expect(box()).toBeDisabled()
+    expect(box()).not.toBeChecked()
+    expect(
+      screen.getByText(/No lecture audio was recorded/),
+    ).toBeInTheDocument()
+
+    // The lecture's audio finishes flushing and the deck now reports recordings
+    // (the viewer's poll updates the prop) — no reload, same mounted modal.
+    rerender(modal({ ...baseDeck, hasRecordings: true }))
+    expect(box()).toBeEnabled()
+    expect(box()).toBeChecked()
+    expect(screen.queryByText(/No lecture audio was recorded/)).toBeNull()
+  })
+
+  it('leaves speaker ID off when the lecture saved it off, even once audio lands', () => {
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+    })
+    const modal = (deck: Deck) => (
+      <MemoryRouter>
+        <DeckSettingsModal
+          deck={deck}
+          projectGenerationFreedom={2}
+          isOwner
+          onClose={vi.fn()}
+          onTemplateChange={vi.fn()}
+          onDeckChange={vi.fn()}
+          onDeleted={vi.fn()}
+          onReformatted={vi.fn()}
+        />
+      </MemoryRouter>
+    )
+    const deckOff = { ...baseDeck, refineIdentifySpeakers: false }
+    const { rerender } = render(modal({ ...deckOff, hasRecordings: false }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine' }))
+    rerender(modal({ ...deckOff, hasRecordings: true }))
+    const box = screen.getByRole('checkbox', {
+      name: /Identify multiple speakers/,
+    })
+    expect(box).toBeEnabled()
+    expect(box).not.toBeChecked() // respects the saved-off choice
+  })
+
   it('runs the selected passes and reports a summary', async () => {
     mockFetchRoutes({
       '/api/actions/template.list': () => ({ status: 200, body: [] }),

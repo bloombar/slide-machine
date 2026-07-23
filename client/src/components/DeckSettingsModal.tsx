@@ -96,6 +96,18 @@ export default function DeckSettingsModal({
   const [identifySpeakers, setIdentifySpeakers] = useState(
     deck.refineIdentifySpeakers ?? deck.hasRecordings ?? false,
   )
+  // A google-cloud recording's audio can finish flushing after this modal is
+  // already open (the viewer polls for it). When the lecture first reports
+  // recordings, the speaker-ID toggle was disabled — so the user couldn't have
+  // set it — so re-derive its default now (enable + check unless the lecture
+  // explicitly saved it off), matching what a reload would show.
+  const hadRecordingsRef = useRef(deck.hasRecordings ?? false)
+  useEffect(() => {
+    if (deck.hasRecordings && !hadRecordingsRef.current) {
+      setIdentifySpeakers(deck.refineIdentifySpeakers ?? true)
+    }
+    hadRecordingsRef.current = deck.hasRecordings ?? false
+  }, [deck.hasRecordings, deck.refineIdentifySpeakers])
   const [refineSlides, setRefineSlides] = useState(
     deck.refineSlidesEnabled ?? true,
   )
