@@ -209,18 +209,28 @@ export interface SlideRefineResult {
  * Produce the spoken narration for a slide (GEN-4 "Refine the spoken
  * transcript", and to keep TTS playback in-line after content changes). The
  * result is stored as the slide's narration transcript. `level` 1 (plain,
- * faithful) – 5 (rich, eloquent). `studentContext` frames the narration as a
- * student's question/comment when the slide represents student speech.
+ * faithful) – 5 (rich, eloquent).
+ *
+ * Two modes: with `turns` (the slide's role-tagged segments, in order) the
+ * narration is **regenerated from them** and a brief spoken attribution is
+ * woven in at each student turn while the lecturer stays authoritative —
+ * `transcript` is ignored, so repeated refines can't compound. Without `turns`,
+ * `studentContext` frames the whole slide as a student question/comment, and a
+ * present `transcript` is refined incrementally (legacy path).
  */
 export interface SlideNarrateRequest {
   slide: SlideContent
   level: number
   studentContext?: boolean
   language?: string
-  /** The slide's current narration/transcript. When present, the narration is
-   * refined further from it (incremental) rather than written from scratch, so
-   * repeated refines keep improving it. Absent = write fresh from the slide. */
+  /** The slide's current narration/transcript. When present (and `turns` is
+   * not), the narration is refined further from it (incremental) rather than
+   * written from scratch. Absent = write fresh from the slide. */
   transcript?: string
+  /** The slide's role-tagged speech turns, in order (diarized slides). When
+   * present, the narration is written fresh from these, attributing student
+   * turns at the exact points the speaker switched; `transcript` is ignored. */
+  turns?: ReformatTurn[]
 }
 
 export interface SlideNarrateResult {

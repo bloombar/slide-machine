@@ -244,6 +244,16 @@ export class MockGenerationProvider implements GenerationProvider {
    * compound), else builds one from the slide's content. Student speech is
    * prefixed so playback stays in-line with the (possibly reformatted) slide. */
   async narrateSlide(req: SlideNarrateRequest): Promise<SlideNarrateResult> {
+    // Role-tagged turns → regenerate fresh, attributing student turns at the
+    // point they occur (deterministic, so repeated refines are byte-identical).
+    if (req.turns?.length) {
+      const transcript = req.turns
+        .map(t =>
+          t.role === 'student' ? `A student asked: ${t.text}` : t.text,
+        )
+        .join('. ')
+      return { transcript }
+    }
     const prefix = req.studentContext ? 'A student asked: ' : ''
     const prior = req.transcript?.trim()
     if (prior) {

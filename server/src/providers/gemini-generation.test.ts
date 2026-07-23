@@ -619,6 +619,27 @@ describe('GeminiGenerationProvider', () => {
     expect((err as GenerationUnavailableError).retryable).toBe(true)
     expect((err as Error).message).toMatch(/temporarily busy/)
   })
+
+  it('narrates from role turns: includes the turn block and drops the prior-narration base', async () => {
+    fetchMock.mockResolvedValue(geminiReply({ transcript: 'narration' }))
+    await provider.narrateSlide({
+      slide: { layoutType: 'list', title: 'Osmosis', bullets: ['x'] },
+      level: 2,
+      turns: [
+        { role: 'lecturer', text: 'Water crosses membranes' },
+        { role: 'student', text: 'Does temperature affect it?' },
+      ],
+      transcript: 'A prior narration that must be ignored',
+    })
+    const prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+      .contents[0].parts[0].text as string
+    expect(prompt).toContain('[LECTURER] Water crosses membranes')
+    expect(prompt).toContain('[STUDENT] Does temperature affect it?')
+    expect(prompt).toContain('attribution')
+    // With turns, the prior narration is not fed back (so nothing compounds).
+    expect(prompt).not.toContain('A prior narration that must be ignored')
+    expect(prompt).not.toContain('Current narration to refine')
+  })
 })
 
 describe('pingGemini', () => {

@@ -201,13 +201,21 @@ describe('MockGenerationProvider refine + narrate (GEN-4)', () => {
 
   it('narrates plainly, and frames a student slide as a question', async () => {
     const plain = await provider.narrateSlide({
-      slide: { layoutType: 'content', title: 'Photosynthesis', body: 'Light energy' },
+      slide: {
+        layoutType: 'content',
+        title: 'Photosynthesis',
+        body: 'Light energy',
+      },
       level: 2,
     })
     expect(plain.transcript).toBe('Photosynthesis. Light energy')
 
     const student = await provider.narrateSlide({
-      slide: { layoutType: 'list', title: 'Q', bullets: ['Q: Is this on the exam?'] },
+      slide: {
+        layoutType: 'list',
+        title: 'Q',
+        bullets: ['Q: Is this on the exam?'],
+      },
       level: 1,
       studentContext: true,
     })
@@ -217,7 +225,11 @@ describe('MockGenerationProvider refine + narrate (GEN-4)', () => {
 
   it('refines a prior narration further instead of rebuilding from content', async () => {
     const refined = await provider.narrateSlide({
-      slide: { layoutType: 'content', title: 'Photosynthesis', body: 'Light energy' },
+      slide: {
+        layoutType: 'content',
+        title: 'Photosynthesis',
+        body: 'Light energy',
+      },
       level: 3,
       transcript: 'A polished earlier narration.',
     })
@@ -226,5 +238,33 @@ describe('MockGenerationProvider refine + narrate (GEN-4)', () => {
     expect(refined.transcript).toContain('A polished earlier narration.')
     expect(refined.transcript).toContain('(refined)')
     expect(refined.transcript).not.toContain('Photosynthesis')
+  })
+
+  it('weaves attribution at student turns from role turns, ignoring the prior narration', async () => {
+    const req = {
+      slide: {
+        layoutType: 'list' as const,
+        title: 'Osmosis',
+        bullets: ['Water crosses membranes'],
+      },
+      level: 2,
+      // lecturer → student → lecturer, with a prior narration that must be ignored
+      turns: [
+        { role: 'lecturer' as const, text: 'Water crosses membranes' },
+        { role: 'student' as const, text: 'Does temperature affect it?' },
+        { role: 'lecturer' as const, text: 'Yes, warmth speeds diffusion' },
+      ],
+      transcript: 'A polished earlier narration.',
+    }
+    const first = await provider.narrateSlide(req)
+    // Attribution lands only at the student turn; lecturer turns stay plain; the
+    // prior narration is not carried forward (regenerated, not compounded).
+    expect(first.transcript).toBe(
+      'Water crosses membranes. A student asked: Does temperature affect it?. Yes, warmth speeds diffusion',
+    )
+    expect(first.transcript).not.toContain('A polished earlier narration')
+    // Deterministic ⇒ idempotent across repeated refines.
+    const second = await provider.narrateSlide(req)
+    expect(second.transcript).toBe(first.transcript)
   })
 })

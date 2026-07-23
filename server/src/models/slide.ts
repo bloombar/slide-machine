@@ -14,6 +14,11 @@ import {
 
 export interface SlideDb extends Omit<Slide, 'id' | 'deckId'> {
   deckId: Types.ObjectId
+  /** Hash of the inputs that produced the current narration (role turns +
+   * level + language). Lets a diarized slide skip re-narration when nothing
+   * changed, so repeated Refines are idempotent. Server-internal — not in the
+   * Slide DTO. */
+  narrateInputHash?: string
 }
 
 /** Id-less subdocuments for whiteboard strokes (WB-1). Strict schemas keep
@@ -77,6 +82,7 @@ const slideSchema = new Schema<SlideDb>({
   imageKeywords: { type: [String], default: undefined },
   caption: String,
   sourceTranscript: String,
+  narrateInputHash: String,
   attribution: { type: Schema.Types.Mixed, default: undefined },
   manuallyEdited: { type: Boolean, default: undefined },
   drawings: { type: [strokeSchema], default: undefined },
