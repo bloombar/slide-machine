@@ -33,6 +33,21 @@ The PI reviews across every phase; the People column shows who builds.
 
 "Complete" = everything in the SDD **except** items already marked Future Work (SDD §18).
 
+### Current status (2026-07-23)
+
+Build-progress snapshot; the scope lists in [§5](#5-phase-1--mvp)–[§7](#7-phase-3--complete-all-non-future) define each item.
+
+**Phase 1 — MVP — ✅ complete.** Core loop shipped on DO (sign in → speak → AI slides → save/view).
+
+**Phase 2 — Fuller — 🟡 in progress.**
+
+- ✅ Done: `QUIZ-1..6`; `SEED-1/2/3` + `EXP-4` (Google); `GEN-7`/`IMG-3`; `GEN-8`; `CAP-4`; `EDIT-2/3` + `TMPL-5`; `AUTH-5`; `SOC-4` (profiles). Delivered early from Phase 3: `GEN-4` (reformat/diarization/narration refine), `PLAY-2` (TTS narration), `EDIT-4` (whiteboard).
+- ⬜ Outstanding: `TMPL-1/4` (library + custom editor); `EXP-1/2/3` (export/import); `AUTH-3/4` (email verify + password reset); `SOC-1/2/3` (voting, browse/search/sort, feeds); `GEN-9` (animated layout transitions).
+
+**Phase 3 — Complete — ⬜ not started** (its early-delivered items are in Phase 2 above).
+
+- ⬜ Outstanding: `BILL-1..6` + Stripe + metering; `PREP-1/2/3/4` (preflight + verbal); GitHub sign-in + connect; `TECH-12` (i18n) + `SHARE-2` (translation); `IMG-4` (AI imagery); `P-1..P-9` hardening, reduced-motion a11y, 100% coverage gate.
+
 ## 4. Foundations (start week 1, grow throughout)
 
 Not a phase — built first, then extended continuously:
