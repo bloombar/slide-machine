@@ -193,11 +193,36 @@ describe('QuizPanel', () => {
       await screen.findByRole('button', { name: 'Generate quiz' }),
     )
     await screen.findByRole('dialog', { name: 'Choose a Drive folder' })
-    expect(await screen.findByText(/no sub-folders here/i)).toBeInTheDocument()
-    // Save-here is never disabled: you can always save to the current folder
+    expect(await screen.findByText(/this folder is empty/i)).toBeInTheDocument()
+    // Save is never disabled: you can always save to the current folder
     expect(
       screen.getByRole('button', { name: 'Generate & save' }),
     ).toBeEnabled()
+  })
+
+  it('shows Drive files for context alongside folders', async () => {
+    mockFetchRoutes({
+      'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
+      'quiz.driveFolders': () => ({
+        status: 200,
+        body: {
+          folders: [{ id: 'folder-quizzes', name: 'Quizzes' }],
+          files: [{ id: 'file-1', name: 'Syllabus.pdf' }],
+        },
+      }),
+    })
+    render(<QuizPanel deckId="d1" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate quiz' }),
+    )
+    // The folder is a navigable button; the file is plain context (not a button)
+    expect(
+      await screen.findByRole('button', { name: 'Quizzes' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Syllabus.pdf')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Syllabus.pdf' }),
+    ).not.toBeInTheDocument()
   })
 
   it('surfaces an error when the status fails to load', async () => {

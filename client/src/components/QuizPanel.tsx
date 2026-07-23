@@ -18,6 +18,7 @@ import {
   ChevronRight,
   Copy,
   ExternalLink,
+  FileText,
   Folder,
   FolderPlus,
   Trash2,
@@ -70,6 +71,7 @@ function FolderPicker({
     { id: 'root', name: 'My Drive' },
   ])
   const [folders, setFolders] = useState<DriveFolder[]>([])
+  const [files, setFiles] = useState<DriveFolder[]>([])
   const [loadedFor, setLoadedFor] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [newFolderName, setNewFolderName] = useState('')
@@ -113,12 +115,14 @@ function FolderPicker({
   // synchronous reset (and no flash of the previous folder's contents).
   useEffect(() => {
     let ignore = false
-    dispatchAction<{ folders: DriveFolder[] }>('quiz.driveFolders', {
-      parentId: current.id,
-    })
+    dispatchAction<{ folders: DriveFolder[]; files: DriveFolder[] }>(
+      'quiz.driveFolders',
+      { parentId: current.id },
+    )
       .then(r => {
         if (ignore) return
         setFolders(r.folders)
+        setFiles(r.files ?? [])
         setLoadedFor(current.id)
         setError(null)
       })
@@ -212,15 +216,15 @@ function FolderPicker({
               ))}
             </nav>
 
-            {/* Finder body: the sub-folders of the current folder */}
+            {/* Finder body: sub-folders (click to open) and files (context) */}
             <div className="max-h-44 min-h-[6rem] overflow-y-auto rounded-md border border-slate-200">
               {error ? (
                 <p className="p-3 text-sm text-rose-600">{error}</p>
               ) : loading ? (
                 <p className="p-3 text-sm text-slate-500">Loading…</p>
-              ) : folders.length === 0 ? (
+              ) : folders.length === 0 && files.length === 0 ? (
                 <p className="p-3 text-sm text-slate-400">
-                  No sub-folders here. Save into this folder, or make a new one
+                  This folder is empty. Save the quiz here, or make a new folder
                   below.
                 </p>
               ) : (
@@ -242,6 +246,16 @@ function FolderPicker({
                           aria-hidden
                         />
                       </button>
+                    </li>
+                  ))}
+                  {/* Files are shown for context only — you save into folders */}
+                  {files.map(f => (
+                    <li
+                      key={f.id}
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-slate-400"
+                    >
+                      <FileText className="h-4 w-4 shrink-0" aria-hidden />
+                      <span className="flex-1 truncate">{f.name}</span>
                     </li>
                   ))}
                 </ul>
@@ -366,7 +380,7 @@ function FolderPicker({
 
                 <fieldset>
                   <legend className="text-sm text-slate-700">
-                    Question types (leave all 0 to let the AI decide)
+                    Question types (leave blank to let the AI decide)
                   </legend>
                   <div className="mt-1 grid grid-cols-2 gap-2">
                     {QUESTION_TYPE_FIELDS.map(({ key, label }) => (
@@ -380,7 +394,8 @@ function FolderPicker({
                           min={0}
                           max={50}
                           aria-label={label}
-                          value={types[key]}
+                          placeholder="0"
+                          value={types[key] || ''}
                           onChange={e =>
                             setTypes(t => ({
                               ...t,

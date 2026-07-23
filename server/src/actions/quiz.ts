@@ -36,10 +36,11 @@ import { UserModel } from '../models/user'
 import { SlideModel } from '../models/slide'
 import { registry } from '../providers/registry'
 import { publishQuiz } from '../lib/quiz-publish'
+import { splitPointsEqually } from '../lib/quiz-points'
 import {
   createDriveFolderLive,
   deleteQuizLive,
-  listDriveFoldersLive,
+  listDriveChildrenLive,
   publishQuizLive,
 } from '../lib/quiz-google'
 import { buildConnectUrl, signConnectState } from '../auth/google-connect'
@@ -153,8 +154,8 @@ export const quizConnectGoogle = defineAction<
   },
 })
 
-/** A small nested folder tree for mock mode, keyed by parent id. Lets the
- * finder UI be navigated without talking to Google. */
+/** A small nested Drive tree for mock mode, keyed by parent id. Lets the
+ * finder UI be navigated (folders + files) without talking to Google. */
 const mockFolderTree: Record<string, DriveFolder[]> = {
   root: [
     { id: 'folder-lectures', name: 'Lectures' },
@@ -163,12 +164,17 @@ const mockFolderTree: Record<string, DriveFolder[]> = {
   ],
   'folder-lectures': [{ id: 'folder-week1', name: 'Week 1' }],
 }
+const mockFileTree: Record<string, DriveFolder[]> = {
+  root: [{ id: 'file-syllabus', name: 'Syllabus.pdf' }],
+  'folder-lectures': [{ id: 'file-notes', name: 'Notes.docx' }],
+}
 
-/** The sub-folders inside `parentId` (default My Drive root), for the picker's
- * finder view. Navigating into a folder re-calls this with its id. */
+/** The contents inside `parentId` (default My Drive root) for the picker's
+ * finder view: sub-folders to navigate plus files shown for context.
+ * Navigating into a folder re-calls this with its id. */
 export const quizDriveFolders = defineAction<
   { parentId?: string },
-  { folders: DriveFolder[] }
+  { folders: DriveFolder[]; files: DriveFolder[] }
 >({
   name: 'quiz.driveFolders',
   input: z.object({ parentId: z.string().optional() }).strict(),
@@ -180,9 +186,12 @@ export const quizDriveFolders = defineAction<
     const parentId = input.parentId ?? 'root'
     if (isLive()) {
       const refreshToken = decryptToken(user.googleQuizRefreshToken!)
-      return { folders: await listDriveFoldersLive(refreshToken, parentId) }
+      return listDriveChildrenLive(refreshToken, parentId)
     }
-    return { folders: mockFolderTree[parentId] ?? [] }
+    return {
+      folders: mockFolderTree[parentId] ?? [],
+      files: mockFileTree[parentId] ?? [],
+    }
   },
 })
 
@@ -292,6 +301,15 @@ export const quizPublish = defineAction<
       typeCounts: input.typeCounts,
       customInstructions: input.customInstructions,
     })
+
+    // When a total is given, split it EQUALLY across the questions, so the
+    // instructor's total holds regardless of what the provider chose (QUIZ-7).
+    if (input.totalPoints && quiz.questions.length) {
+      const points = splitPointsEqually(quiz.questions.length, input.totalPoints)
+      quiz.questions.forEach((q, i) => {
+        q.points = points[i]
+      })
+    }
 
     // Require a verified respondent email unless explicitly turned off (QUIZ-7).
     const yamlOptions = {

@@ -32,22 +32,9 @@ import type {
   SlideTextContent,
 } from '@slide-machine/shared'
 import { registry } from './registry'
+import { splitPointsEqually } from '../lib/quiz-points'
 
 const GENERIC_DISTRACTORS = ['None of the above', 'All of the above']
-
-/** Splits `total` points over `n` questions as whole numbers, each ≥ 1
- * (front-loading any remainder). No total → 1 point each. */
-const distributePoints = (n: number, total?: number): number[] => {
-  if (!total || total <= 0) return Array<number>(n).fill(1)
-  const base = Math.max(1, Math.floor(total / n))
-  const pts = Array<number>(n).fill(base)
-  let remainder = total - base * n
-  for (let i = 0; remainder > 0 && i < n; i++) {
-    pts[i]!++
-    remainder--
-  }
-  return pts
-}
 
 /** The sequence of question types to produce: per-type counts when given
  * (their sum is the total), else `count` single_choice questions. */
@@ -188,7 +175,7 @@ export class MockQuizProvider implements QuizGenerationProvider {
       Math.max(1, request.questionCount ?? eligible.length),
     )
     const types = typeSequence(defaultCount, request.typeCounts)
-    const points = distributePoints(types.length, request.totalPoints)
+    const points = splitPointsEqually(types.length, request.totalPoints)
 
     const questions: QuizQuestion[] = types.map((type, i) => {
       const src = i % eligible.length
