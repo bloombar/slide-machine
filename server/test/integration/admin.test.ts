@@ -157,7 +157,7 @@ describe('GET /api/admin/users', () => {
     }
   })
 
-  it('sorts by join time (default newest) and by email', async () => {
+  it('sorts by join time (default newest), email, and handle', async () => {
     const admin = await asAdmin()
     const { user: older } = await createUser('zed@example.com', 'Zed')
     // createdAt is immutable under mongoose timestamps; backdating a
@@ -174,14 +174,30 @@ describe('GET /api/admin/users', () => {
     expect(newest.body.users.at(-1).email).toBe('zed@example.com')
 
     const oldest = await request(server)
-      .get('/api/admin/users?sort=oldest')
+      .get('/api/admin/users?sort=joined:asc')
       .set('Authorization', `Bearer ${admin}`)
     expect(oldest.body.users[0].email).toBe('zed@example.com')
 
-    const byEmail = await request(server)
-      .get('/api/admin/users?sort=email')
+    const byEmailAsc = await request(server)
+      .get('/api/admin/users?sort=email:asc')
       .set('Authorization', `Bearer ${admin}`)
-    expect(byEmail.body.users[0].email).toBe(ADMIN_EMAIL)
+    expect(byEmailAsc.body.users[0].email).toBe(ADMIN_EMAIL)
+
+    const byEmailDesc = await request(server)
+      .get('/api/admin/users?sort=email:desc')
+      .set('Authorization', `Bearer ${admin}`)
+    expect(byEmailDesc.body.users.at(-1).email).toBe(ADMIN_EMAIL)
+
+    // 'Zed' sorts last ascending by handle, first descending.
+    const byHandleAsc = await request(server)
+      .get('/api/admin/users?sort=handle:asc')
+      .set('Authorization', `Bearer ${admin}`)
+    expect(byHandleAsc.body.users.at(-1).displayName).toBe('Zed')
+
+    const byHandleDesc = await request(server)
+      .get('/api/admin/users?sort=handle:desc')
+      .set('Authorization', `Bearer ${admin}`)
+    expect(byHandleDesc.body.users[0].displayName).toBe('Zed')
   })
 
   it('400s on an invalid query', async () => {

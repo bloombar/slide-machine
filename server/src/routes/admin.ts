@@ -137,17 +137,24 @@ const toAdminDeckSummary = (
   updatedAt: (doc.updatedAt ?? doc.createdAt).toISOString(),
 })
 
+// Sort keys are `${field}:${dir}`: one per column, each direction. The
+// default (joined:desc) is newest-first, as the directory has always been.
+const SORTS = {
+  'email:asc': { email: 1 },
+  'email:desc': { email: -1 },
+  'handle:asc': { displayName: 1 },
+  'handle:desc': { displayName: -1 },
+  'joined:asc': { createdAt: 1 },
+  'joined:desc': { createdAt: -1 },
+} as const
+
 const listQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(25),
-  sort: z.enum(['newest', 'oldest', 'email']).default('newest'),
+  limit: z.coerce.number().int().min(1).max(250).default(25),
+  sort: z
+    .enum(Object.keys(SORTS) as [keyof typeof SORTS, ...(keyof typeof SORTS)[]])
+    .default('joined:desc'),
 })
-
-const SORTS = {
-  newest: { createdAt: -1 },
-  oldest: { createdAt: 1 },
-  email: { email: 1 },
-} as const
 
 /** Resolves a :id route param to an existing user or 404s. */
 const loadUser = async (id: string): Promise<HydratedDocument<UserDb>> => {
@@ -201,7 +208,7 @@ adminRouter.get('/users', async (req, res) => {
 // them into the Mongo filter below.
 const logsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(25),
+  limit: z.coerce.number().int().min(1).max(250).default(25),
   sort: z.enum(['newest', 'oldest']).default('newest'),
 })
 
@@ -365,10 +372,10 @@ adminRouter.get('/projects/:id', async (req, res) => {
 /**
  * Records that an admin opened a PRIVATE project in the product view.
  * The "View project" link on the project admin page calls this before
- * navigating; public projects skip it (nothing to expose). Unlike the
- * idempotent private-lecture toggle, every private view is its own audit
- * entry — an access record, not a state change. A public project reaching
- * here is a client bug, not an exposure, so it 400s rather than logging.
+ * navigating; public projects skip it (nothing to expose). Every private
+ * view is its own audit entry — an access record, one per opening. A
+ * public project reaching here is a client bug, not an exposure, so it
+ * 400s rather than logging.
  */
 adminRouter.post('/projects/:id/private-view', async (req, res) => {
   const notFound = new HttpError(404, 'not_found', 'Project not found')
@@ -423,6 +430,43 @@ adminRouter.get('/decks/:id', async (req, res) => {
     },
   }
   res.json(body)
+})
+
+/**
+ * Records that an admin opened a PRIVATE lecture in the live viewer. The
+ * "View slideshow" link on the lecture admin page calls this before
+ * navigating; public lectures skip it (nothing to expose). Like the
+ * project view log, every private view is its own audit entry — an access
+ * record, one per opening. Effective visibility is resolved through the
+ * ACL (the lecture's own override, else its project's), so a lecture that
+ * is only private by inheritance is logged too; a public one 400s.
+ */
+adminRouter.post('/decks/:id/private-view', async (req, res) => {
+  const notFound = new HttpError(404, 'not_found', 'Lecture not found')
+  const id = String(req.params.id)
+  if (!isValidObjectId(id)) throw notFound
+  const deck = await DeckModel.findById(id)
+  if (!deck) throw notFound
+  const admin = actor(req)
+  const acls = await loadDeckAcls([deck])
+  const visibility = acls.get(deck._id.toString())!.visibility
+  if (visibility === 'public') {
+    throw new HttpError(400, 'not_private', 'Lecture is not private')
+  }
+
+  await logAdminAction({
+    actorId: admin.id,
+    actorEmail: admin.email,
+    action: 'deck.private_view',
+    targetType: 'deck',
+    targetId: deck._id.toString(),
+    details: {
+      title: deck.title,
+      ownerId: deck.ownerId.toString(),
+      visibility,
+    },
+  })
+  res.status(204).end()
 })
 
 // ---------------------------------------------------------------------------

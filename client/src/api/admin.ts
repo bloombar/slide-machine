@@ -21,7 +21,11 @@ export interface AdminUserSummary {
   createdAt: string
 }
 
-export type AdminUsersSort = 'newest' | 'oldest' | 'email'
+/** A column the user directory can be ordered by. */
+export type AdminUsersSortField = 'email' | 'handle' | 'joined'
+export type AdminUsersSortDir = 'asc' | 'desc'
+/** Wire value for the `sort` query param: `${field}:${dir}`. */
+export type AdminUsersSort = `${AdminUsersSortField}:${AdminUsersSortDir}`
 
 export interface AdminUsersResponse {
   users: AdminUserSummary[]
@@ -69,9 +73,9 @@ export interface AdminDeckDetailResponse {
   owner: { id: string; email: string; displayName: string }
 }
 
-/** Selectable directory page sizes; the server caps `limit` at 100. */
-export const ADMIN_USERS_PAGE_SIZES = [10, 25, 50, 100] as const
-export const ADMIN_USERS_PAGE_SIZE = 25
+/** Selectable directory page sizes; the server caps `limit` at 250. */
+export const ADMIN_USERS_PAGE_SIZES = [10, 25, 50, 100, 250] as const
+export const ADMIN_USERS_PAGE_SIZE = 100
 
 /** 200 only for admins; non-admins receive a 403 ApiError. */
 export const fetchAdminStatus = (): Promise<{ isAdmin: boolean }> =>
@@ -79,7 +83,7 @@ export const fetchAdminStatus = (): Promise<{ isAdmin: boolean }> =>
 
 export const listAdminUsers = (
   page = 1,
-  sort: AdminUsersSort = 'newest',
+  sort: AdminUsersSort = 'joined:desc',
   limit: number = ADMIN_USERS_PAGE_SIZE,
 ): Promise<AdminUsersResponse> =>
   apiFetch<AdminUsersResponse>(
@@ -113,7 +117,7 @@ export const fetchAdminDeck = (
 
 /** Selectable audit-log page sizes; same cap as the user directory. */
 export const ADMIN_LOGS_PAGE_SIZES = ADMIN_USERS_PAGE_SIZES
-export const ADMIN_LOGS_PAGE_SIZE = 25
+export const ADMIN_LOGS_PAGE_SIZE = 100
 
 /** Newest-first page of the admin action audit log. */
 export const listAdminLogs = (
@@ -165,6 +169,12 @@ export const logAdminProjectView = (projectId: string): Promise<void> =>
   apiFetch<void>(`/api/admin/projects/${projectId}/private-view`, {
     method: 'POST',
   })
+
+/** Records that this admin opened a private lecture in the live viewer.
+ * Every call writes its own audit entry; the "View slideshow" link invokes
+ * it only for private lectures (a public one rejects with 400). */
+export const logAdminDeckView = (deckId: string): Promise<void> =>
+  apiFetch<void>(`/api/admin/decks/${deckId}/private-view`, { method: 'POST' })
 
 /** Deletes a project and everything in it. Irreversible. */
 export const deleteAdminProject = (projectId: string): Promise<void> =>

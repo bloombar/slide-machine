@@ -10,6 +10,7 @@ import {
   ADMIN_USERS_PAGE_SIZES,
   type AdminUsersResponse,
   type AdminUsersSort,
+  type AdminUsersSortField,
 } from '../api/admin'
 
 const joinedAt = (iso: string): string =>
@@ -21,9 +22,59 @@ const joinedAt = (iso: string): string =>
     minute: '2-digit',
   })
 
+/**
+ * A clickable column header that sorts the table by its column. Only one
+ * column sorts at a time: the active column shows a solid ↑/↓ arrow and
+ * clicking it flips the direction; an inactive column shows a faint ↕ and
+ * clicking it makes it the sole active sort (ascending first).
+ */
+function SortHeader({
+  label,
+  field,
+  sort,
+  onSort,
+}: {
+  label: string
+  field: AdminUsersSortField
+  sort: AdminUsersSort
+  onSort: (sort: AdminUsersSort) => void
+}) {
+  const [activeField, activeDir] = sort.split(':')
+  const active = activeField === field
+  return (
+    <th
+      scope="col"
+      className="px-4 py-3"
+      aria-sort={
+        active ? (activeDir === 'asc' ? 'ascending' : 'descending') : 'none'
+      }
+    >
+      <button
+        type="button"
+        onClick={() =>
+          onSort(`${field}:${active && activeDir === 'asc' ? 'desc' : 'asc'}`)
+        }
+        className="group flex items-center gap-1 uppercase hover:text-slate-700"
+      >
+        {label}
+        <span
+          aria-hidden="true"
+          className={
+            active
+              ? 'text-slate-700'
+              : 'text-slate-400 group-hover:text-slate-600'
+          }
+        >
+          {active ? (activeDir === 'asc' ? '↑' : '↓') : '↕'}
+        </span>
+      </button>
+    </th>
+  )
+}
+
 export default function AdminUsersPage() {
   const [page, setPage] = useState(1)
-  const [sort, setSort] = useState<AdminUsersSort>('newest')
+  const [sort, setSort] = useState<AdminUsersSort>('joined:desc')
   const [limit, setLimit] = useState(ADMIN_USERS_PAGE_SIZE)
   const [data, setData] = useState<AdminUsersResponse | null>(null)
   const [error, setError] = useState(false)
@@ -52,6 +103,12 @@ export default function AdminUsersPage() {
   }
 
   const pageCount = Math.max(1, Math.ceil(data.total / data.limit))
+
+  // Any sort change starts the listing over from the first page.
+  const changeSort = (next: AdminUsersSort) => {
+    setSort(next)
+    setPage(1)
+  }
 
   return (
     <div>
@@ -87,22 +144,6 @@ export default function AdminUsersPage() {
               ))}
             </select>
           </label>
-          <label className="flex items-center gap-2 text-sm text-slate-600">
-            Sort
-            <select
-              aria-label="Sort users"
-              value={sort}
-              onChange={e => {
-                setSort(e.target.value as AdminUsersSort)
-                setPage(1)
-              }}
-              className="rounded-md border border-slate-300 px-2 py-1 text-sm"
-            >
-              <option value="newest">Newest first</option>
-              <option value="oldest">Oldest first</option>
-              <option value="email">Email A–Z</option>
-            </select>
-          </label>
         </div>
       </div>
 
@@ -110,15 +151,24 @@ export default function AdminUsersPage() {
         <table className="w-full text-left text-sm">
           <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500 uppercase">
             <tr>
-              <th scope="col" className="px-4 py-3">
-                Email
-              </th>
-              <th scope="col" className="px-4 py-3">
-                Handle
-              </th>
-              <th scope="col" className="px-4 py-3">
-                Joined
-              </th>
+              <SortHeader
+                label="Email"
+                field="email"
+                sort={sort}
+                onSort={changeSort}
+              />
+              <SortHeader
+                label="Handle"
+                field="handle"
+                sort={sort}
+                onSort={changeSort}
+              />
+              <SortHeader
+                label="Joined"
+                field="joined"
+                sort={sort}
+                onSort={changeSort}
+              />
             </tr>
           </thead>
           <tbody>

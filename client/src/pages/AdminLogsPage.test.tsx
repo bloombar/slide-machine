@@ -93,17 +93,17 @@ describe('AdminLogsPage', () => {
   it('changing the page size refetches from page 1', async () => {
     const { calls } = renderPage(() => ({
       status: 200,
-      body: { logs, total: 60, page: 1, limit: 25 },
+      body: { logs, total: 60, page: 1, limit: 100 },
     }))
     await screen.findByText('user.ban')
-    expect(calls.at(-1)).toContain('limit=25')
+    expect(calls.at(-1)).toContain('limit=100')
 
     fireEvent.change(
       screen.getByRole('combobox', { name: 'Log entries per page' }),
-      { target: { value: '100' } },
+      { target: { value: '250' } },
     )
     await screen.findByText('user.ban')
-    expect(calls.at(-1)).toContain('limit=100')
+    expect(calls.at(-1)).toContain('limit=250')
     expect(calls.at(-1)).toContain('page=1')
   })
 

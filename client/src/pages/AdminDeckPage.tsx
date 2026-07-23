@@ -7,12 +7,15 @@
  */
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { deleteAdminDeck, fetchAdminDeck } from '../api/admin'
+import { deleteAdminDeck, fetchAdminDeck, logAdminDeckView } from '../api/admin'
 import type { AdminDeckDetailResponse } from '../api/admin'
 import { ApiError } from '../api/http'
 import ConfirmDialog from '../components/ConfirmDialog'
 import { VisibilityBadge } from '../components/admin/LectureTable'
 import { projectTitle } from '../lib/project'
+
+/** The action the admin has asked for but not yet confirmed. */
+type PendingAction = { kind: 'delete' } | { kind: 'view-private' }
 
 const asDate = (iso: string): string =>
   new Date(iso).toLocaleString(undefined, {
@@ -37,7 +40,7 @@ export default function AdminDeckPage() {
   const navigate = useNavigate()
   const [loaded, setLoaded] = useState<AdminDeckDetailResponse | null>(null)
   const [error, setError] = useState(false)
-  const [confirming, setConfirming] = useState(false)
+  const [pending, setPending] = useState<PendingAction | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -55,12 +58,32 @@ export default function AdminDeckPage() {
     }
   }, [deckId])
 
-  /** Deletes the lecture and returns to its project's admin page. */
-  const runDelete = async () => {
-    if (!deckId || !loaded) return
-    setConfirming(false)
+  /** Opens the live slideshow. Public lectures open straight away; opening
+   * a private one is confirmed first and recorded in the audit log,
+   * mirroring the always-on admin viewer bypass. */
+  const openSlideshow = () => {
+    if (!loaded) return
+    if (loaded.deck.visibility === 'public') {
+      navigate(`/d/${loaded.deck.permalinkSlug}`)
+      return
+    }
+    setPending({ kind: 'view-private' })
+  }
+
+  /** Runs the confirmed action; both viewing a private lecture and
+   * deleting one leave this page. */
+  const runPending = async () => {
+    if (!deckId || !loaded || !pending) return
+    const action = pending
+    setPending(null)
     setActionError(null)
     try {
+      if (action.kind === 'view-private') {
+        // Log the private-lecture access before handing over to the viewer
+        await logAdminDeckView(deckId)
+        navigate(`/d/${loaded.deck.permalinkSlug}`)
+        return
+      }
       await deleteAdminDeck(deckId)
       navigate(`/app/admin/projects/${loaded.project.id}`)
     } catch (err) {
@@ -106,6 +129,20 @@ export default function AdminDeckPage() {
   const { deck, project, owner } = loaded
   const title = deck.title.trim() || 'Untitled lecture'
 
+  /** Copy for the confirmation dialog of each pending action. */
+  const confirmCopy = (action: PendingAction) =>
+    action.kind === 'delete'
+      ? {
+          title: 'Delete this lecture?',
+          message: `"${title}" and everything under it will be permanently deleted. This cannot be undone.`,
+          confirmLabel: 'Delete lecture',
+        }
+      : {
+          title: 'View this private lecture?',
+          message: `"${title}" is a private lecture. Opening it as an admin is recorded in the audit log.`,
+          confirmLabel: 'View slideshow',
+        }
+
   return (
     <div>
       {backLink}
@@ -134,12 +171,12 @@ export default function AdminDeckPage() {
         </p>
       )}
 
-      <Link
-        to={`/d/${deck.permalinkSlug}`}
+      <button
+        onClick={openSlideshow}
         className="inline-block rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
       >
         View slideshow
-      </Link>
+      </button>
 
       <section className="mt-6 rounded-lg border border-slate-200 p-4">
         <h2 className="mb-2 text-lg font-semibold text-slate-700">Details</h2>
@@ -161,20 +198,18 @@ export default function AdminDeckPage() {
           .
         </p>
         <button
-          onClick={() => setConfirming(true)}
+          onClick={() => setPending({ kind: 'delete' })}
           className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-500"
         >
           Delete lecture
         </button>
       </section>
 
-      {confirming && (
+      {pending && (
         <ConfirmDialog
-          title="Delete this lecture?"
-          message={`"${title}" and everything under it will be permanently deleted. This cannot be undone.`}
-          confirmLabel="Delete lecture"
-          onConfirm={() => void runDelete()}
-          onCancel={() => setConfirming(false)}
+          {...confirmCopy(pending)}
+          onConfirm={() => void runPending()}
+          onCancel={() => setPending(null)}
         />
       )}
     </div>

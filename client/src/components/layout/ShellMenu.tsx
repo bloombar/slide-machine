@@ -48,22 +48,27 @@ function AdminMenuItem({
         <ChevronRight className="h-4 w-4" aria-hidden />
       </button>
       {open && (
-        <div
-          role="menu"
-          aria-label="Admin"
-          className="absolute top-0 left-full z-50 ml-1 w-36 rounded-lg border border-slate-200 bg-white p-1 shadow-lg"
-        >
-          {ADMIN_LINKS.map(link => (
-            <Link
-              key={link.to}
-              to={link.to}
-              role="menuitem"
-              onClick={onNavigate}
-              className={className}
-            >
-              {link.label}
-            </Link>
-          ))}
+        // Outer wrapper's left padding bridges the gap to the button so the
+        // mouse never crosses a non-hoverable dead zone (which would fire
+        // onMouseLeave and close the flyout mid-move).
+        <div className="absolute top-0 left-full z-50 pl-1">
+          <div
+            role="menu"
+            aria-label="Admin"
+            className="w-36 rounded-lg border border-slate-200 bg-white p-1 shadow-lg"
+          >
+            {ADMIN_LINKS.map(link => (
+              <Link
+                key={link.to}
+                to={link.to}
+                role="menuitem"
+                onClick={onNavigate}
+                className={className}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
         </div>
       )}
     </div>

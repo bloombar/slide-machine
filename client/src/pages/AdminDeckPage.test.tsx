@@ -1,7 +1,8 @@
 /**
  * Unit tests for the per-lecture admin view: lecture header with
- * visibility, project and owner links, the "View slideshow" link to the
- * live viewer, the detail rows, and the delete action.
+ * visibility, project and owner links, the "View slideshow" button (which
+ * confirms and logs before opening a private lecture), the detail rows,
+ * and the delete action.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
@@ -25,8 +26,11 @@ const detail = {
 }
 
 const renderPage = (status = 200, detailBody: unknown = detail) => {
-  // Serves both GET (detail) and DELETE (delete lecture)
+  // Keys ordered most-specific first: the fetch mock matches by substring
   const mocks = mockFetchRoutes({
+    // More specific than /decks/d1, so it must be matched first
+    '/api/admin/decks/d1/private-view': () => ({ status: 204 }),
+    // Serves both GET (detail) and DELETE (delete lecture)
     '/api/admin/decks/d1': init =>
       init?.method === 'DELETE'
         ? { status: 204 }
@@ -40,10 +44,17 @@ const renderPage = (status = 200, detailBody: unknown = detail) => {
           path="/app/admin/projects/:projectId"
           element={<p>project page</p>}
         />
+        <Route path="/d/:slug" element={<p>slideshow</p>} />
       </Routes>
     </MemoryRouter>,
   )
   return mocks
+}
+
+/** Detail for a public lecture, whose viewer opens without a confirm. */
+const publicDetail = {
+  ...detail,
+  deck: { ...detail.deck, visibility: 'public' },
 }
 
 /** The method+url pairs fetched so far. */
@@ -72,12 +83,51 @@ describe('AdminDeckPage', () => {
     expect(screen.getByText(/ada@example\.com/)).toBeVisible()
   })
 
-  it('links to the live slideshow', async () => {
-    renderPage()
+  it('opens a public lecture straight away, with no confirm or view log', async () => {
+    const { fetchMock } = renderPage(200, publicDetail)
     await screen.findByRole('heading', { name: 'Waves' })
-    expect(
-      screen.getByRole('link', { name: 'View slideshow' }),
-    ).toHaveAttribute('href', '/d/waves-abc123')
+
+    fireEvent.click(screen.getByRole('button', { name: 'View slideshow' }))
+
+    // Public: navigates directly to the viewer, no dialog and no log
+    expect(await screen.findByText('slideshow')).toBeVisible()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(requested(fetchMock)).not.toContainEqual(
+      expect.stringMatching(/private-view/),
+    )
+  })
+
+  it('confirms and logs before opening a private lecture', async () => {
+    const { fetchMock } = renderPage()
+    await screen.findByRole('heading', { name: 'Waves' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'View slideshow' }))
+    const dialog = screen.getByRole('alertdialog', {
+      name: 'View this private lecture?',
+    })
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'View slideshow' }),
+    )
+
+    // The access is logged, then the viewer opens
+    expect(await screen.findByText('slideshow')).toBeVisible()
+    expect(requested(fetchMock)).toContainEqual(
+      expect.stringMatching(/POST .*\/api\/admin\/decks\/d1\/private-view$/),
+    )
+  })
+
+  it('does not log or navigate when the private-view confirm is cancelled', async () => {
+    const { fetchMock } = renderPage()
+    await screen.findByRole('heading', { name: 'Waves' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'View slideshow' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.queryByText('slideshow')).not.toBeInTheDocument()
+    expect(requested(fetchMock)).not.toContainEqual(
+      expect.stringMatching(/private-view/),
+    )
   })
 
   it("links back to the project's admin page", async () => {

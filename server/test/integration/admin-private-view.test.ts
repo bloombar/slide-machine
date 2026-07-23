@@ -2,7 +2,7 @@
  * Integration tests for admin private-lecture handling against a real
  * MongoDB: allowlisted admins can always open a private lecture in the
  * viewer, the admin deck listing always includes private lectures, and
- * opening a private project in the product view is audited.
+ * opening a private project or lecture in the product view is audited.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import express from 'express'
@@ -220,6 +220,70 @@ describe('the private-project view log endpoint', () => {
     )
     expect(anon.status).toBe(401)
     const forbidden = await viewProject(token, project._id.toString())
+    expect(forbidden.status).toBe(403)
+    expect(await AdminActionLogModel.countDocuments()).toBe(0)
+  })
+})
+
+describe('the private-lecture view log endpoint', () => {
+  const viewDeck = (token: string, deckId: string) =>
+    request(server)
+      .post(`/api/admin/decks/${deckId}/private-view`)
+      .set('Authorization', `Bearer ${token}`)
+
+  it('records a distinct entry each time an admin opens a private lecture', async () => {
+    const { token } = await asAdmin()
+    const { user: owner } = await createUser('owner@example.com', 'Owner')
+    const { privateDeck } = await createMixedDecks(owner._id, 'mno345')
+
+    expect((await viewDeck(token, privateDeck._id.toString())).status).toBe(204)
+    expect((await viewDeck(token, privateDeck._id.toString())).status).toBe(204)
+
+    // Every view is its own access record
+    expect(
+      await AdminActionLogModel.countDocuments({ action: 'deck.private_view' }),
+    ).toBe(2)
+    expect(
+      await AdminActionLogModel.findOne({ action: 'deck.private_view' }),
+    ).toMatchObject({
+      actorEmail: ADMIN_EMAIL,
+      targetType: 'deck',
+      targetId: privateDeck._id.toString(),
+      // Private only by inheritance from its restricted project — the
+      // endpoint resolves effective visibility, so it is logged too
+      details: { title: 'Secret lecture', visibility: 'restricted' },
+    })
+  })
+
+  it('rejects a public lecture with 400 and logs nothing', async () => {
+    const { token } = await asAdmin()
+    const { user: owner } = await createUser('owner@example.com', 'Owner')
+    const { publicDeck } = await createMixedDecks(owner._id, 'pqr678')
+
+    const res = await viewDeck(token, publicDeck._id.toString())
+    expect(res.status).toBe(400)
+    expect(res.body.error.code).toBe('not_private')
+    expect(
+      await AdminActionLogModel.countDocuments({ action: 'deck.private_view' }),
+    ).toBe(0)
+  })
+
+  it('404s an unknown or malformed lecture id', async () => {
+    const { token } = await asAdmin()
+    expect((await viewDeck(token, '507f1f77bcf86cd799439011')).status).toBe(404)
+    expect((await viewDeck(token, 'not-an-id')).status).toBe(404)
+  })
+
+  it('gates the endpoint to admins', async () => {
+    const { user: owner } = await createUser('owner@example.com', 'Owner')
+    const { token } = await createUser('stranger@example.com', 'Stranger')
+    const { privateDeck } = await createMixedDecks(owner._id, 'stu901')
+
+    const anon = await request(server).post(
+      `/api/admin/decks/${privateDeck._id}/private-view`,
+    )
+    expect(anon.status).toBe(401)
+    const forbidden = await viewDeck(token, privateDeck._id.toString())
     expect(forbidden.status).toBe(403)
     expect(await AdminActionLogModel.countDocuments()).toBe(0)
   })

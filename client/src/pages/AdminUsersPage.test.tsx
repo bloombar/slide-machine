@@ -84,19 +84,19 @@ describe('AdminUsersPage', () => {
     expect(calls.at(-1)).toContain('page=1')
   })
 
-  it('defaults to a page size of 25 and changing it refetches from page 1', async () => {
+  it('defaults to a page size of 100 and changing it refetches from page 1', async () => {
     const { calls } = renderPage(() => ({
       status: 200,
-      body: { users, total: 60, page: 1, limit: 25 },
+      body: { users, total: 60, page: 1, limit: 100 },
     }))
     await screen.findByRole('link', { name: 'ada@example.com' })
-    expect(calls.at(-1)).toContain('limit=25')
+    expect(calls.at(-1)).toContain('limit=100')
 
     fireEvent.change(screen.getByRole('combobox', { name: 'Users per page' }), {
-      target: { value: '100' },
+      target: { value: '250' },
     })
     await screen.findByRole('link', { name: 'ada@example.com' })
-    expect(calls.at(-1)).toContain('limit=100')
+    expect(calls.at(-1)).toContain('limit=250')
     expect(calls.at(-1)).toContain('page=1')
   })
 
