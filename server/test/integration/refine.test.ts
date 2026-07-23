@@ -5,7 +5,15 @@
  * reframed, content is refined, and the spoken narration is updated in-line
  * (student slides framed as questions). MongoDB real; mock providers.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest'
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  vi,
+} from 'vitest'
 import request from 'supertest'
 import { env } from '../../src/config/env'
 import { connectMongo, disconnectMongo } from '../../src/db/mongoose'
@@ -158,11 +166,85 @@ describe('deck.refine', () => {
     expect(l?.sourceTranscript).toContain('Photosynthesis')
   })
 
+  it('attributes a student turn within a mixed slide, idempotently', async () => {
+    // Same recording script: speaker 1 lecturer (0–600s), speaker 2 student
+    // (600–620s).
+    await DeckModel.updateOne(
+      { _id: deckId },
+      {
+        $push: {
+          recordings: {
+            sessionId: 'rec-1',
+            audioKey: 'audio/x.wav',
+            sampleRate: 16_000,
+            durationMs: 620_000,
+            createdAt: new Date(),
+          },
+        },
+      },
+    )
+    // One slide that MIXES a lecturer turn and a later student turn.
+    const mixed = await SlideModel.create({
+      deckId,
+      index: 0,
+      layoutType: 'content',
+      title: 'Osmosis',
+      body: 'Water crosses membranes',
+    })
+    await TranscriptSegmentModel.create({
+      deckId,
+      sessionId: 'rec-1',
+      text: 'Water crosses membranes',
+      action: 'new',
+      slideId: mixed._id,
+      startMs: 0,
+      endMs: 1000,
+      words: [{ word: 'Water', startMs: 0, endMs: 1000 }],
+    })
+    await TranscriptSegmentModel.create({
+      deckId,
+      sessionId: 'rec-1',
+      text: 'Does temperature affect it?',
+      action: 'none',
+      slideId: mixed._id,
+      startMs: 600_500,
+      endMs: 601_000,
+      words: [{ word: 'Does', startMs: 600_500, endMs: 601_000 }],
+    })
+
+    const run = async () => {
+      const start = await act(ada, 'deck.refine', {
+        deckId,
+        identifySpeakers: true,
+        refineTranscript: { level: 2 },
+      })
+      return awaitJob(start.body.jobId as string)
+    }
+
+    await run()
+    const first = (await SlideModel.findById(mixed._id))?.sourceTranscript
+    // Attribution lands at the student turn; the lecturer span stays
+    // authoritative (it comes first, with no student prefix).
+    expect(first).toContain('Water crosses membranes')
+    expect(first).toContain('A student asked: Does temperature affect it?')
+    expect(first).not.toMatch(/^A student asked:/)
+
+    // Re-running Refine yields byte-identical narration — regenerated from the
+    // stable segments and short-circuited by the input-hash guard (no
+    // compounding double-attribution).
+    await run()
+    const second = (await SlideModel.findById(mixed._id))?.sourceTranscript
+    expect(second).toBe(first)
+  })
+
   it("403s refining another user's deck, and hides its job status", async () => {
     const bob = await registerUser('bob@example.com')
     expect((await act(bob, 'deck.refine', { deckId })).status).toBe(403)
 
-    const start = await act(ada, 'deck.refine', { deckId, refineTranscript: { level: 1 } })
+    const start = await act(ada, 'deck.refine', {
+      deckId,
+      refineTranscript: { level: 1 },
+    })
     const jobId = start.body.jobId as string
     expect((await act(bob, 'deck.refineStatus', { jobId })).status).toBe(403)
   })

@@ -374,18 +374,34 @@ const plainNarration = (s: SlideNarrateRequest['slide']): string =>
 
 /** Narration prompt: what the lecturer would say to present this slide.
  * Wording lives in config/prompts/narrate.txt. */
-const narratePrompt = (req: SlideNarrateRequest): string =>
-  renderNarratePrompt({
+const narratePrompt = (req: SlideNarrateRequest): string => {
+  // With role-tagged turns the narration is regenerated from them (span-level
+  // attribution woven at speaker switches); the whole-slide studentContext note
+  // and the prior-narration base are both dropped so nothing compounds.
+  const hasTurns = Boolean(req.turns?.length)
+  return renderNarratePrompt({
     level: String(req.level),
-    studentContext: req.studentContext
-      ? '\nThis slide represents a STUDENT question or comment — narrate it as' +
-        ' presenting the student’s question/feedback, not as the lecturer’s' +
-        ' own assertion.'
+    studentContext:
+      !hasTurns && req.studentContext
+        ? '\nThis slide represents a STUDENT question or comment — narrate it as' +
+          ' presenting the student’s question/feedback, not as the lecturer’s' +
+          ' own assertion.'
+        : '',
+    turns: hasTurns
+      ? '\nNarrate the discussion below in order. Present each [STUDENT] turn' +
+        ' with a brief, natural spoken attribution at that point (e.g. “A' +
+        ' student then asked, …” / “One student noted …”) — never as the' +
+        ' lecturer’s own assertion — and keep [LECTURER] turns authoritative.' +
+        ' Write the narration fresh from these turns:\n' +
+        req.turns!.map(t => `[${t.role.toUpperCase()}] ${t.text}`).join('\n')
       : '',
     language: req.language ? `\nLanguage: ${req.language}.` : '',
-    transcript: sourceFragment('Current narration to refine:', req.transcript),
+    transcript: hasTurns
+      ? ''
+      : sourceFragment('Current narration to refine:', req.transcript),
     slide: JSON.stringify(req.slide),
   })
+}
 
 export class GeminiGenerationProvider implements GenerationProvider {
   readonly name = 'gemini'

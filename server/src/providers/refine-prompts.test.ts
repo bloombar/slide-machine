@@ -23,7 +23,8 @@ describe('renderRefinePrompt', () => {
     const prompt = renderRefinePrompt({
       level: '4',
       current: '{"title":"Stars"}',
-      transcript: '\n\nOriginal spoken transcript for this slide:\nWHAT WAS SAID',
+      transcript:
+        '\n\nOriginal spoken transcript for this slide:\nWHAT WAS SAID',
       context: '\n\nLecture context:\nSEED',
       language: '\n\nWrite the slide text in: fr',
       layouts: '- content: General slide',
@@ -31,7 +32,9 @@ describe('renderRefinePrompt', () => {
     expect(prompt).toContain('Refinement strength 4 of 5')
     expect(prompt).toContain('{"title":"Stars"}')
     expect(prompt).toContain('what the instructor actually said')
-    expect(prompt).toContain('Original spoken transcript for this slide:\nWHAT WAS SAID')
+    expect(prompt).toContain(
+      'Original spoken transcript for this slide:\nWHAT WAS SAID',
+    )
     expect(prompt).toContain('Lecture context:\nSEED')
     expect(prompt).toContain('Write the slide text in: fr')
     expect(prompt).toContain('- content: General slide')
@@ -58,6 +61,7 @@ describe('renderNarratePrompt', () => {
     const prompt = renderNarratePrompt({
       level: '5',
       studentContext: '\nThis slide represents a STUDENT question or comment',
+      turns: '',
       language: '\nLanguage: es.',
       transcript: '\n\nCurrent narration to refine:\nPRIOR NARRATION',
       slide: '{"title":"Q"}',
@@ -74,6 +78,7 @@ describe('renderNarratePrompt', () => {
     const prompt = renderNarratePrompt({
       level: '1',
       studentContext: '',
+      turns: '',
       language: '',
       transcript: '',
       slide: '{}',

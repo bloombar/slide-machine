@@ -11,6 +11,7 @@
  *   slide content. Long jobs (diarization is a minutes-long batch) never block
  *   the request: deck.refine returns a jobId the client polls with refineStatus.
  */
+import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import type { HydratedDocument } from 'mongoose'
 import type {
@@ -200,6 +201,51 @@ const diarizeDeckRecordings = async (
   return { sessionsProcessed, segmentsTagged }
 }
 
+/** The role-tagged speech turns per slide (diarized segments only), ordered by
+ * capture time — the shared source for both the content reformat and the
+ * narration attribution. A slide with no role-tagged segments is absent. */
+const turnsBySlide = async (
+  deckId: DeckDoc['_id'],
+): Promise<Map<string, ReformatTurn[]>> => {
+  const segments = await TranscriptSegmentModel.find({ deckId })
+  const grouped = new Map<
+    string,
+    { role: SpeakerRole; text: string; at: number }[]
+  >()
+  for (const seg of segments) {
+    if (!seg.slideId || !seg.role) continue
+    const sid = seg.slideId.toString()
+    const arr = grouped.get(sid) ?? []
+    arr.push({
+      role: seg.role as SpeakerRole,
+      text: seg.text,
+      at: seg.createdAt.getTime(),
+    })
+    grouped.set(sid, arr)
+  }
+  const out = new Map<string, ReformatTurn[]>()
+  for (const [sid, arr] of grouped) {
+    arr.sort((a, b) => a.at - b.at)
+    out.set(
+      sid,
+      arr.map(({ role, text }) => ({ role, text })),
+    )
+  }
+  return out
+}
+
+/** Stable hash of the inputs that determine a slide's narration, so an
+ * unchanged diarized slide isn't re-narrated (and re-billed) on a repeated
+ * Refine — the source of the narration's idempotency. */
+const narrateHash = (
+  turns: ReformatTurn[],
+  level: number,
+  language: string | undefined,
+): string =>
+  createHash('sha256')
+    .update(JSON.stringify({ turns, level, language: language ?? '' }))
+    .digest('hex')
+
 /** Reformats student/mixed slides in place; returns counts + which slides now
  * represent student speech (so their narration is framed accordingly). */
 const reformatStudentSlides = async (
@@ -212,27 +258,13 @@ const reformatStudentSlides = async (
   protectedCount: number
   studentSlideIds: Set<string>
 }> => {
-  const [slides, segments] = await Promise.all([
+  const [slides, turnMap] = await Promise.all([
     SlideModel.find({ deckId: deck._id }).sort({ index: 1 }),
-    TranscriptSegmentModel.find({ deckId: deck._id }),
+    turnsBySlide(deck._id),
   ])
 
-  const bySlide = new Map<string, typeof segments>()
-  for (const seg of segments) {
-    if (!seg.slideId || !seg.role) continue
-    const sid = seg.slideId.toString()
-    const arr = bySlide.get(sid) ?? []
-    arr.push(seg)
-    bySlide.set(sid, arr)
-  }
-  for (const arr of bySlide.values())
-    arr.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
-
   const rolesBySlide = new Map<string, SpeakerRole[]>(
-    [...bySlide].map(([sid, arr]) => [
-      sid,
-      arr.map(s => s.role as SpeakerRole),
-    ]),
+    [...turnMap].map(([sid, ts]) => [sid, ts.map(t => t.role)]),
   )
   const plan = planReformat(
     slides.map(s => ({
@@ -256,10 +288,7 @@ const reformatStudentSlides = async (
       continue
     }
     const slide = slideById.get(p.slideId)!
-    const turns: ReformatTurn[] = (bySlide.get(p.slideId) ?? []).map(s => ({
-      role: s.role as SpeakerRole,
-      text: s.text,
-    }))
+    const turns = turnMap.get(p.slideId) ?? []
     const result = await gen.reformatSlide({
       current: contentOf(slide),
       turns,
@@ -359,14 +388,35 @@ const narrateOneSlide = async (
   studentContext: boolean,
   deck: DeckDoc,
   gen: GenerationProvider,
+  turns?: ReformatTurn[],
 ): Promise<boolean> => {
+  // Only a slide that actually mixes in student speech takes the turns path —
+  // there is nothing to attribute on a lecturer-only slide, so it keeps the
+  // legacy narration-refine behavior. The turns still include the lecturer's
+  // spans, so they stay authoritative around the attributed student ones.
+  const attributeTurns = turns?.some(t => t.role === 'student')
+    ? turns
+    : undefined
+  // Turns path is idempotent: the narration is a pure function of the role
+  // turns + level + language, so skip (and don't re-bill) when nothing changed
+  // since the last run. The legacy path always re-narrates.
+  const hash = attributeTurns
+    ? narrateHash(attributeTurns, level, deck.language)
+    : undefined
+  if (hash && slide.narrateInputHash === hash && slide.sourceTranscript)
+    return false
   const result = await gen.narrateSlide({
     slide: contentOf(slide),
     level,
     studentContext,
     language: deck.language,
-    // Refine the existing narration further, so repeated refines compound.
-    transcript: slide.sourceTranscript,
+    // With student turns, regenerate from the ordered turns (span-level
+    // attribution woven at speaker switches) so nothing compounds; otherwise
+    // refine the existing narration further, so repeated refines keep improving
+    // it.
+    ...(attributeTurns
+      ? { turns: attributeTurns }
+      : { transcript: slide.sourceTranscript }),
   })
   // Whiteboard stroke timing is anchored to the narration (WB-2); a wholesale
   // rewrite would strand it, so rescale each stroke's draw + erase anchors to
@@ -375,6 +425,7 @@ const narrateOneSlide = async (
   const oldLen = slide.sourceTranscript?.length ?? 0
   slide.sourceTranscript = result.transcript
   remapSlideDrawings(slide, oldLen, slide.sourceTranscript.length)
+  if (hash) slide.narrateInputHash = hash
   await slide.save()
   return true
 }
@@ -469,21 +520,30 @@ const runRefine = async (
     const allSlides = await SlideModel.find({ deckId: deck._id }).sort({
       index: 1,
     })
-    const studentIds = await studentSlideIds(deck._id)
+    const [studentIds, turnMap] = await Promise.all([
+      studentSlideIds(deck._id),
+      turnsBySlide(deck._id),
+    ])
     const level = input.refineTranscript?.level ?? 1
     const targets = input.refineTranscript
       ? allSlides
       : allSlides.filter(s => changed.has(s._id.toString()))
     for (const slide of targets) {
       try {
-        await narrateOneSlide(
-          slide,
-          level,
-          studentIds.has(slide._id.toString()),
-          deck,
-          gen,
+        const sid = slide._id.toString()
+        // Count only slides actually re-narrated — the idempotency guard skips
+        // diarized slides whose turns/level/language are unchanged.
+        if (
+          await narrateOneSlide(
+            slide,
+            level,
+            studentIds.has(sid),
+            deck,
+            gen,
+            turnMap.get(sid),
+          )
         )
-        transcriptsUpdated++
+          transcriptsUpdated++
       } catch (error) {
         console.error('narrateSlide failed for a slide:', error)
       }
@@ -602,13 +662,18 @@ export const deckRefineSlide = defineAction<
     // changed, so TTS playback stays in-line with the slide.
     let narrationUpdated = false
     if (transcriptEnabled || refined) {
-      const studentIds = await studentSlideIds(deck._id)
+      const [studentIds, turnMap] = await Promise.all([
+        studentSlideIds(deck._id),
+        turnsBySlide(deck._id),
+      ])
+      const sid = slide._id.toString()
       narrationUpdated = await narrateOneSlide(
         slide,
         transcriptEnabled ? transcriptLevel : 1,
-        studentIds.has(slide._id.toString()),
+        studentIds.has(sid),
         deck,
         gen,
+        turnMap.get(sid),
       )
     }
 
