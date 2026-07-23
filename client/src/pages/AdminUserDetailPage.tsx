@@ -2,8 +2,8 @@
  * Admin view of one user: account details, then their projects — each
  * linking to its own admin project page (/app/admin/projects/:id).
  * Lectures owned by the user but living in someone else's project are
- * grouped under "Other lectures", which link to the live deck viewer
- * (/d/:slug). Moderation lives here too: per-project and per-lecture
+ * grouped under "Other lectures", each linking to its own admin
+ * lecture page. Moderation lives here too: per-project and per-lecture
  * delete buttons plus a danger zone (reset password, ban/unban email,
  * delete account) — every action confirms first and is recorded in the admin
  * audit log server-side. A "Show private lectures" toggle (off by

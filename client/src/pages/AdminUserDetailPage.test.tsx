@@ -146,7 +146,7 @@ describe('AdminUserDetailPage', () => {
     fireEvent.click(other)
     expect(
       screen.getByRole('link', { name: 'Untitled lecture' }),
-    ).toHaveAttribute('href', '/d/untitled-xyz789')
+    ).toHaveAttribute('href', '/app/admin/decks/d2')
   })
 
   it('shows an error state when a request fails', async () => {

@@ -109,6 +109,17 @@ export interface AdminProjectDetailResponse {
   privateAccess: boolean
 }
 
+/** One lecture opened in the admin console. Direct reads are never
+ * gated by the private-lecture toggle (that governs listings only),
+ * mirroring the always-on admin viewer bypass. */
+export interface AdminDeckDetailResponse {
+  deck: AdminDeckSummary
+  /** The project the lecture lives in, for the back link. */
+  project: { id: string; title: string }
+  /** The lecture's owner — not necessarily the project's owner. */
+  owner: { id: string; email: string; displayName: string }
+}
+
 const toAdminUserSummary = (
   doc: HydratedDocument<UserDb>,
 ): AdminUserSummary => ({
@@ -380,6 +391,33 @@ adminRouter.get('/projects/:id', async (req, res) => {
       )
       .map(deck => toAdminDeckSummary(deck, acls.get(deck._id.toString())!)),
     privateAccess: showPrivate,
+  }
+  res.json(body)
+})
+
+adminRouter.get('/decks/:id', async (req, res) => {
+  const notFound = new HttpError(404, 'not_found', 'Lecture not found')
+  const id = String(req.params.id)
+  if (!isValidObjectId(id)) throw notFound
+  const deck = await DeckModel.findById(id)
+  if (!deck) throw notFound
+  // Cascades remove decks with their project and owner, so a missing
+  // parent means the lecture is mid-deletion; treat it as gone.
+  const [project, owner] = await Promise.all([
+    ProjectModel.findById(deck.projectId),
+    UserModel.findById(deck.ownerId),
+  ])
+  if (!project || !owner) throw notFound
+  const acls = await loadDeckAcls([deck])
+
+  const body: AdminDeckDetailResponse = {
+    deck: toAdminDeckSummary(deck, acls.get(deck._id.toString())!),
+    project: { id: project._id.toString(), title: project.title },
+    owner: {
+      id: owner._id.toString(),
+      email: owner.email,
+      displayName: owner.displayName,
+    },
   }
   res.json(body)
 })

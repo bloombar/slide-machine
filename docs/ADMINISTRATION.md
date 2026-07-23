@@ -41,8 +41,12 @@ moderation actions for when the answer calls for one.
   someone else's project are grouped under "Other lectures."
 - **Project page** — the project's owner and a table of its lectures with
   a **public/private badge**, **slide count**, and **last-edited date**;
-  each lecture links to its viewer (`/d/:slug`). Carries the same
+  each lecture links to its own **lecture page**. Carries the same
   private-lecture toggle and delete actions as the user page.
+- **Lecture page** — the lecture's project and owner, its details, a
+  **View slideshow** link to the live viewer (`/d/:slug`), and the
+  delete action. Opens for any lecture regardless of the
+  private-lecture toggle, mirroring the always-on viewer access.
 
 ### Moderation
 

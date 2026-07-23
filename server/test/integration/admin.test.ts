@@ -412,3 +412,74 @@ describe('GET /api/admin/projects/:id', () => {
     expect(malformed.status).toBe(404)
   })
 })
+
+describe('GET /api/admin/decks/:id', () => {
+  it('returns the lecture with its project and owner', async () => {
+    const admin = await asAdmin()
+    const { user } = await createUser('ada@example.com', 'Ada')
+    const project = await createProject(user._id, 'Physics')
+    const deck = await createDeck(
+      user._id,
+      project._id,
+      'Waves',
+      'waves-abc1',
+      {
+        slideOrder: ['s1', 's2', 's3'],
+      },
+    )
+
+    const res = await request(server)
+      .get(`/api/admin/decks/${deck._id}`)
+      .set('Authorization', `Bearer ${admin}`)
+    expect(res.status).toBe(200)
+    expect(res.body.deck).toMatchObject({
+      id: deck._id.toString(),
+      title: 'Waves',
+      permalinkSlug: 'waves-abc1',
+      visibility: 'public',
+      slideCount: 3,
+    })
+    expect(res.body.project).toEqual({
+      id: project._id.toString(),
+      title: 'Physics',
+    })
+    expect(res.body.owner).toEqual({
+      id: user._id.toString(),
+      email: 'ada@example.com',
+      displayName: 'Ada',
+    })
+  })
+
+  it('returns a private lecture without the listing toggle', async () => {
+    // Direct reads mirror the always-on admin viewer bypass: the
+    // private-lecture toggle governs listings only
+    const admin = await asAdmin()
+    const { user } = await createUser('ada@example.com', 'Ada')
+    const project = await createProject(user._id, 'Private course', {
+      visibility: 'restricted',
+    })
+    const deck = await createDeck(user._id, project._id, 'Hidden', 'hidden-b2')
+
+    const res = await request(server)
+      .get(`/api/admin/decks/${deck._id}`)
+      .set('Authorization', `Bearer ${admin}`)
+    expect(res.status).toBe(200)
+    expect(res.body.deck).toMatchObject({
+      title: 'Hidden',
+      visibility: 'restricted',
+    })
+  })
+
+  it('404s for unknown and malformed ids', async () => {
+    const admin = await asAdmin()
+    for (const path of [
+      '/api/admin/decks/64b000000000000000000000',
+      '/api/admin/decks/not-an-id',
+    ]) {
+      const res = await request(server)
+        .get(path)
+        .set('Authorization', `Bearer ${admin}`)
+      expect(res.status).toBe(404)
+    }
+  })
+})

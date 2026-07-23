@@ -17,6 +17,7 @@ import PublicProfilePage from './pages/PublicProfilePage'
 import AdminUsersPage from './pages/AdminUsersPage'
 import AdminUserDetailPage from './pages/AdminUserDetailPage'
 import AdminProjectPage from './pages/AdminProjectPage'
+import AdminDeckPage from './pages/AdminDeckPage'
 import AdminLogsPage from './pages/AdminLogsPage'
 import RequireAuth from './auth/RequireAuth'
 import RequireAdmin from './auth/RequireAdmin'
@@ -62,6 +63,14 @@ export default function App() {
           element={
             <RequireAdmin>
               <AdminProjectPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/app/admin/decks/:deckId"
+          element={
+            <RequireAdmin>
+              <AdminDeckPage />
             </RequireAdmin>
           }
         />

@@ -1,8 +1,8 @@
 /**
  * Admin lecture listing shared by the admin user and project pages: a
- * table of lectures (viewer link, visibility badge, slide count,
- * last-edited date) with a per-row delete action, plus the visibility
- * badge itself for standalone use.
+ * table of lectures (each linking to its own admin lecture page,
+ * visibility badge, slide count, last-edited date) with a per-row
+ * delete action, plus the visibility badge itself for standalone use.
  */
 import { Link } from 'react-router'
 import type { Visibility } from '@slide-machine/shared'
@@ -65,7 +65,7 @@ export default function LectureTable({
             <tr key={deck.id} className="border-t border-slate-100">
               <td className="py-1.5 pr-3">
                 <Link
-                  to={`/d/${deck.permalinkSlug}`}
+                  to={`/app/admin/decks/${deck.id}`}
                   className="font-medium text-slate-900 hover:underline"
                 >
                   {deck.title.trim() || 'Untitled lecture'}

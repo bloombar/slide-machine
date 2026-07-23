@@ -1,6 +1,6 @@
 /**
  * Admin view of one project: its owner, its lectures (each linking to
- * the live deck viewer at /d/:slug), and the project-level moderation
+ * its own admin lecture page), and the project-level moderation
  * actions (delete a lecture, delete the whole project). The audited
  * "Show private lectures" toggle here is the same per-admin, per-owner
  * switch as on the owner's admin page: off by default, it hides private

@@ -92,10 +92,10 @@ describe('AdminProjectPage', () => {
     )
   })
 
-  it('lists lectures linked to the deck viewer with badge and count', async () => {
+  it('lists lectures linked to their admin pages with badge and count', async () => {
     renderPage()
     const link = await screen.findByRole('link', { name: 'Waves' })
-    expect(link).toHaveAttribute('href', '/d/waves-abc123')
+    expect(link).toHaveAttribute('href', '/app/admin/decks/d1')
     const row = link.closest('tr')!
     expect(within(row).getByText('Public')).toBeVisible()
     expect(within(row).getByText('5')).toBeVisible()

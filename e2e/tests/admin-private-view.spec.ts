@@ -106,8 +106,12 @@ test('the viewer always opens for the admin; the listing needs the toggle', asyn
   ).toBeVisible()
   await expect(toggle).toBeChecked()
 
-  // The refetched list now shows the lecture
+  // The refetched list links the lecture to its own admin page, which
+  // links on to the live slideshow
   await page.getByRole('link', { name: 'Secret Lecture' }).click()
+  await expect(page).toHaveURL(/\/app\/admin\/decks\//)
+  await page.getByRole('link', { name: 'View slideshow' }).click()
+  await expect(page).toHaveURL(/\/d\//)
   await expect(
     page.getByRole('heading', { name: 'Secret Lecture' }),
   ).toBeVisible()
