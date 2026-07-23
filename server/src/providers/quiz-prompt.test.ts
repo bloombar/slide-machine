@@ -14,6 +14,9 @@ import {
   renderQuizPrompt,
   renderTranscriptBlock,
   renderAvoidBlock,
+  renderTypesBlock,
+  renderPointsBlock,
+  renderInstructionsBlock,
   resetQuizPromptCache,
 } from './quiz-prompt'
 
@@ -94,31 +97,67 @@ describe('renderAvoidBlock', () => {
   })
 })
 
+describe('renderTypesBlock', () => {
+  it('asks for N single_choice questions with no per-type counts', () => {
+    expect(renderTypesBlock(4)).toContain('EXACTLY 4 single_choice')
+  })
+
+  it('lists each type and its count when given', () => {
+    const block = renderTypesBlock(5, { single_choice: 1, short_text: 2 })
+    expect(block).toContain('1 single_choice')
+    expect(block).toContain('2 short_text')
+    // The total reflects the per-type sum, not the passed count
+    expect(block).toContain('EXACTLY these 3')
+  })
+})
+
+describe('renderPointsBlock / renderInstructionsBlock', () => {
+  it('are empty when not provided', () => {
+    expect(renderPointsBlock()).toBe('')
+    expect(renderPointsBlock(0)).toBe('')
+    expect(renderInstructionsBlock()).toBe('')
+    expect(renderInstructionsBlock('   ')).toBe('')
+  })
+
+  it('render a points budget and instructions when provided', () => {
+    expect(renderPointsBlock(10)).toContain('total 10')
+    expect(renderInstructionsBlock('focus on cells')).toContain(
+      'focus on cells',
+    )
+  })
+})
+
 describe('renderQuizPrompt', () => {
   it('fills every placeholder from quiz.txt', () => {
     const prompt = renderQuizPrompt({
-      questionCount: '3',
+      types: renderTypesBlock(3),
+      points: renderPointsBlock(9),
+      instructions: renderInstructionsBlock('cover mitosis'),
       slides: 'Slide 1:\nPhotosynthesis',
       transcript: renderTranscriptBlock('Spoken words here.'),
       avoid: renderAvoidBlock(['An old question?']),
     })
-    expect(prompt).toContain('EXACTLY 3 questions')
+    expect(prompt).toContain('EXACTLY 3 single_choice')
     expect(prompt).toContain('Photosynthesis')
     // The output contract is spelled out for the model
     expect(prompt).toContain('"correctIndex"')
     // The optional sections land in the prompt
+    expect(prompt).toContain('total 9')
+    expect(prompt).toContain('cover mitosis')
     expect(prompt).toContain('Spoken words here.')
     expect(prompt).toContain('An old question?')
   })
 
   it('leaves optional slots blank without error', () => {
     const prompt = renderQuizPrompt({
-      questionCount: '3',
+      types: renderTypesBlock(3),
+      points: '',
+      instructions: '',
       slides: 'Slide 1:\nPhotosynthesis',
       transcript: '',
       avoid: '',
     })
-    expect(prompt).toContain('EXACTLY 3 questions')
+    expect(prompt).toContain('EXACTLY 3 single_choice')
     expect(prompt).not.toContain('Spoken transcript')
     expect(prompt).not.toContain('Do NOT repeat')
   })
@@ -126,7 +165,7 @@ describe('renderQuizPrompt', () => {
   it('throws on an unknown placeholder rather than filling silently', () => {
     // The real template only uses known slots, so simulate a typo by
     // withholding a slot the template needs.
-    expect(() => renderQuizPrompt({ questionCount: '3' })).toThrow(
+    expect(() => renderQuizPrompt({ types: 'x' })).toThrow(
       /unknown placeholder/,
     )
   })

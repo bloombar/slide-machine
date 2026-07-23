@@ -43,17 +43,17 @@ export const verifyConnectState = async (
 }
 
 /**
- * Least-privilege scopes (docs/GOOGLE_API_KEYS.md §6). `drive.file` only sees
- * files this app created, so the Drive folder browser is limited to those.
- * To let the picker browse the instructor's WHOLE Drive, add
- * `'https://www.googleapis.com/auth/drive.readonly'` below once the professor
- * has added it to the OAuth consent screen — then instructors reconnect once.
- * No other code change is needed: the picker already browses per-folder.
+ * Least-privilege scopes (docs/GOOGLE_API_KEYS.md §6). `drive.file` grants
+ * write access to files this app creates (the Form + any folders it makes);
+ * `drive.readonly` lets the folder picker browse the instructor's existing
+ * Drive to choose a destination. Instructors must reconnect once after this
+ * scope is added so their stored token carries it.
  */
 const CONNECT_SCOPES = [
   'https://www.googleapis.com/auth/forms.body',
   'https://www.googleapis.com/auth/forms.body.readonly',
   'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/drive.readonly',
 ]
 
 /** Credentials or a clear 503 when the connect route runs unconfigured. */

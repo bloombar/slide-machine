@@ -18,6 +18,9 @@
  * - `avoidQuestions` drives a "round" that rotates question wording and answer
  *   selection, and no generated question text repeats one in that list — so a
  *   regenerated quiz differs from discarded ones (QUIZ-6).
+ * - `typeCounts` sets how many of each type (single/multiple choice, short/long
+ *   text); absent = all single_choice. `totalPoints` is split across questions
+ *   as whole numbers; absent = 1 each (QUIZ-7).
  * - Throws when no slide carries any text (nothing to quiz on).
  */
 import type {
@@ -25,11 +28,41 @@ import type {
   QuizGenerationProvider,
   QuizGenerationRequest,
   QuizQuestion,
+  QuizQuestionType,
   SlideTextContent,
 } from '@slide-machine/shared'
 import { registry } from './registry'
 
 const GENERIC_DISTRACTORS = ['None of the above', 'All of the above']
+
+/** Splits `total` points over `n` questions as whole numbers, each ≥ 1
+ * (front-loading any remainder). No total → 1 point each. */
+const distributePoints = (n: number, total?: number): number[] => {
+  if (!total || total <= 0) return Array<number>(n).fill(1)
+  const base = Math.max(1, Math.floor(total / n))
+  const pts = Array<number>(n).fill(base)
+  let remainder = total - base * n
+  for (let i = 0; remainder > 0 && i < n; i++) {
+    pts[i]!++
+    remainder--
+  }
+  return pts
+}
+
+/** The sequence of question types to produce: per-type counts when given
+ * (their sum is the total), else `count` single_choice questions. */
+const typeSequence = (
+  count: number,
+  typeCounts?: QuizGenerationRequest['typeCounts'],
+): QuizQuestionType[] => {
+  const entries = Object.entries(typeCounts ?? {}).filter(
+    ([, n]) => (n ?? 0) > 0,
+  ) as [QuizQuestionType, number][]
+  if (entries.length === 0) {
+    return Array<QuizQuestionType>(count).fill('single_choice')
+  }
+  return entries.flatMap(([type, n]) => Array<QuizQuestionType>(n).fill(type))
+}
 
 /** Question templates rotated by round so regeneration reads differently. */
 const QUESTION_TEMPLATES: ((subject: string) => string)[] = [
@@ -148,33 +181,70 @@ export class MockQuizProvider implements QuizGenerationProvider {
       return pick[round % pick.length]!
     })
 
-    const target = Math.min(
+    // The default count is one question per eligible slide (clamped by
+    // questionCount); per-type counts override the total.
+    const defaultCount = Math.min(
       eligible.length,
       Math.max(1, request.questionCount ?? eligible.length),
     )
+    const types = typeSequence(defaultCount, request.typeCounts)
+    const points = distributePoints(types.length, request.totalPoints)
 
-    const questions: QuizQuestion[] = []
-    for (let i = 0; i < target; i++) {
-      const { slide } = eligible[i]!
-      const correct = answers[i]!
+    const questions: QuizQuestion[] = types.map((type, i) => {
+      const src = i % eligible.length
+      const { slide } = eligible[src]!
+      const correct = answers[src]!
       const subject = slide.title?.trim()
+      const pts = points[i]!
 
-      // Pick the first template whose text does not repeat an avoided
-      // question, starting from the round-shifted position.
-      const question = pickQuestionText(subject, correct, i + round, avoid)
+      if (type === 'single_choice') {
+        // Pick the first template whose text does not repeat an avoided
+        // question, starting from the round-shifted position.
+        const question = pickQuestionText(subject, correct, i + round, avoid)
+        const pool = answers.filter((_, j) => j !== src)
+        const distractors = distractorsFor(correct, pool, 2)
+        const choices = [correct, ...distractors]
+        // Deterministically vary the correct answer's position.
+        const correctIndex = i % choices.length
+        ;[choices[0], choices[correctIndex]] = [
+          choices[correctIndex]!,
+          choices[0]!,
+        ]
+        return { type, question, choices, correctIndex, points: pts }
+      }
 
-      const pool = answers.filter((_, j) => j !== i)
-      const distractors = distractorsFor(correct, pool, 2)
-      const choices = [correct, ...distractors]
-      // Deterministically vary the correct answer's position.
-      const correctIndex = i % choices.length
-      ;[choices[0], choices[correctIndex]] = [
-        choices[correctIndex]!,
-        choices[0]!,
-      ]
+      if (type === 'multiple_choice') {
+        const second = answers[(src + 1) % eligible.length]!
+        const corrects = eq(second, correct) ? [correct] : [correct, second]
+        const pool = answers.filter(
+          (_, j) => j !== src && !eq(answers[j]!, second),
+        )
+        const distractors = distractorsFor(
+          correct,
+          pool,
+          Math.max(2, 4 - corrects.length),
+        )
+        const choices = [...corrects, ...distractors]
+        const correctIndexes = corrects.map((_, idx) => idx)
+        const question = subject
+          ? `Select everything that applies to "${subject}".`
+          : 'Select everything that was discussed in this lecture.'
+        return { type, question, choices, correctIndexes, points: pts }
+      }
 
-      questions.push({ question, choices, correctIndex, points: 1 })
-    }
+      if (type === 'short_text') {
+        const question = subject
+          ? `In a few words, what does the lecture say about "${subject}"?`
+          : 'In a few words, what did this lecture cover?'
+        return { type, question, correctAnswers: [correct], points: pts }
+      }
+
+      // long_text
+      const question = subject
+        ? `Explain "${subject}" in your own words.`
+        : 'Summarize this lecture in your own words.'
+      return { type, question, points: pts }
+    })
 
     const topic = eligible[0]!.slide.title?.trim()
     return {

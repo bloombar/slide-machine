@@ -15,15 +15,19 @@ import type {
   QuizDefinition,
   QuizGenerationProvider,
   QuizGenerationRequest,
+  QuizQuestion,
 } from '@slide-machine/shared'
 import { env } from '../config/env'
 import { registry } from './registry'
 import { GenerationUnavailableError } from './errors'
 import {
   renderAvoidBlock,
+  renderInstructionsBlock,
+  renderPointsBlock,
   renderQuizPrompt,
   renderSlidesBlock,
   renderTranscriptBlock,
+  renderTypesBlock,
 } from './quiz-prompt'
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
@@ -33,27 +37,89 @@ const DEFAULT_QUESTION_COUNT = 5
 /** Upper bound so a stray large request cannot balloon the output. */
 const MAX_QUESTION_COUNT = 20
 
+/** Loose per-question shape; each is validated per `type` after parsing. */
+const rawQuestionSchema = z.object({
+  type: z.enum(['single_choice', 'multiple_choice', 'short_text', 'long_text']),
+  question: z.string().min(1),
+  points: z.number().optional(),
+  choices: z.array(z.string().min(1)).optional(),
+  correctIndex: z.number().int().optional(),
+  correctIndexes: z.array(z.number().int()).optional(),
+  correctAnswers: z.array(z.string()).optional(),
+})
+
 /** Server-side validation of the model's claimed quiz (never trust it). */
 const quizSchema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
-  questions: z
-    .array(
-      z.object({
-        question: z.string().min(1),
-        choices: z.array(z.string().min(1)).min(2),
-        correctIndex: z.number().int(),
-        points: z.number().optional(),
-      }),
-    )
-    .min(1),
+  questions: z.array(rawQuestionSchema).min(1),
 })
 
-const clampCount = (n: number | undefined): number =>
-  Math.min(
-    MAX_QUESTION_COUNT,
-    Math.max(1, Math.round(n ?? DEFAULT_QUESTION_COUNT)),
+/**
+ * Validates one model question against its declared type and returns a clean
+ * QuizQuestion — or null to drop it (a choice question with too few choices or
+ * a drifted correct index would otherwise mark the wrong option correct).
+ */
+const toQuizQuestion = (
+  q: z.infer<typeof rawQuestionSchema>,
+): QuizQuestion | null => {
+  const base = { question: q.question, points: q.points }
+  const choices = q.choices ?? []
+  switch (q.type) {
+    case 'single_choice': {
+      if (
+        choices.length < 2 ||
+        q.correctIndex === undefined ||
+        q.correctIndex < 0 ||
+        q.correctIndex >= choices.length
+      ) {
+        return null
+      }
+      return {
+        ...base,
+        type: 'single_choice',
+        choices,
+        correctIndex: q.correctIndex,
+      }
+    }
+    case 'multiple_choice': {
+      const correct = (q.correctIndexes ?? []).filter(
+        i => i >= 0 && i < choices.length,
+      )
+      if (choices.length < 2 || correct.length === 0) return null
+      return {
+        ...base,
+        type: 'multiple_choice',
+        choices,
+        correctIndexes: correct,
+      }
+    }
+    case 'short_text':
+      return {
+        ...base,
+        type: 'short_text',
+        correctAnswers: (q.correctAnswers ?? [])
+          .map(a => a.trim())
+          .filter(Boolean),
+      }
+    case 'long_text':
+      return { ...base, type: 'long_text' }
+  }
+}
+
+/** The requested number of questions: the per-type total when given, else the
+ * clamped questionCount. */
+const requestedCount = (request: QuizGenerationRequest): number => {
+  const typeTotal = Object.values(request.typeCounts ?? {}).reduce(
+    (sum, n) => sum + (n ?? 0),
+    0,
   )
+  if (typeTotal > 0) return Math.min(MAX_QUESTION_COUNT, typeTotal)
+  return Math.min(
+    MAX_QUESTION_COUNT,
+    Math.max(1, Math.round(request.questionCount ?? DEFAULT_QUESTION_COUNT)),
+  )
+}
 
 export class GeminiQuizProvider implements QuizGenerationProvider {
   readonly name = 'gemini'
@@ -67,7 +133,9 @@ export class GeminiQuizProvider implements QuizGenerationProvider {
     if (!slides) throw new Error('No slide text to generate a quiz from')
 
     const prompt = renderQuizPrompt({
-      questionCount: String(clampCount(request.questionCount)),
+      types: renderTypesBlock(requestedCount(request), request.typeCounts),
+      points: renderPointsBlock(request.totalPoints),
+      instructions: renderInstructionsBlock(request.customInstructions),
       slides,
       transcript: renderTranscriptBlock(request.transcript),
       avoid: renderAvoidBlock(request.avoidQuestions),
@@ -138,11 +206,11 @@ export class GeminiQuizProvider implements QuizGenerationProvider {
       throw new Error('Gemini returned a malformed quiz')
     }
 
-    // Keep only questions whose correctIndex points at a real choice; a
-    // drifted index would otherwise mark the wrong option correct.
-    const questions = result.data.questions.filter(
-      q => q.correctIndex >= 0 && q.correctIndex < q.choices.length,
-    )
+    // Validate each question against its type; drop any that can't form a
+    // valid form field (e.g. a choice question with a drifted correct index).
+    const questions = result.data.questions
+      .map(toQuizQuestion)
+      .filter((q): q is QuizQuestion => q !== null)
     if (questions.length === 0) {
       throw new Error('Gemini returned no valid questions')
     }
@@ -150,12 +218,7 @@ export class GeminiQuizProvider implements QuizGenerationProvider {
     return {
       title: result.data.title.trim(),
       description: result.data.description?.trim() || undefined,
-      questions: questions.map(q => ({
-        question: q.question,
-        choices: q.choices,
-        correctIndex: q.correctIndex,
-        points: q.points,
-      })),
+      questions,
     }
   }
 }

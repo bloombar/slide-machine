@@ -60,6 +60,8 @@ describe('buildConnectUrl', () => {
     const scope = url.searchParams.get('scope')!
     expect(scope).toContain('auth/forms.body')
     expect(scope).toContain('auth/drive.file')
+    // Browsing the instructor's existing Drive folders (QUIZ-2 finder)
+    expect(scope).toContain('auth/drive.readonly')
     expect(url.searchParams.get('access_type')).toBe('offline')
     expect(url.searchParams.get('prompt')).toBe('consent')
     expect(url.searchParams.get('state')).toBe('the-state')

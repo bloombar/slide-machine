@@ -14,12 +14,14 @@ const def = (over: Partial<QuizDefinition> = {}): QuizDefinition => ({
   description: 'A check on today.',
   questions: [
     {
+      type: 'single_choice',
       question: 'Where does photosynthesis occur?',
       choices: ['Chloroplasts', 'Mitochondria', 'Nucleus'],
       correctIndex: 0,
       points: 2,
     },
     {
+      type: 'single_choice',
       question: 'What gas is released?',
       choices: ['Oxygen', 'Carbon dioxide'],
       correctIndex: 0,
@@ -46,7 +48,54 @@ describe('toQuizYamlObject', () => {
       { value: 'Nucleus' },
     ])
     // Exactly one option is flagged correct
-    expect(q1.options.filter(o => o.isCorrect)).toHaveLength(1)
+    expect(q1.options!.filter(o => o.isCorrect)).toHaveLength(1)
+  })
+
+  it('maps multiple_choice, short_text, and long_text questions (QUIZ-7)', () => {
+    const obj = toQuizYamlObject(
+      def({
+        questions: [
+          {
+            type: 'multiple_choice',
+            question: 'Select all gases involved.',
+            choices: ['Oxygen', 'CO2', 'Helium'],
+            correctIndexes: [0, 1],
+          },
+          {
+            type: 'short_text',
+            question: 'One-word product?',
+            correctAnswers: ['glucose'],
+          },
+          { type: 'long_text', question: 'Explain the process.' },
+        ],
+      }),
+    )
+    const [mc, short, long] = obj.questions
+    expect(mc!.type).toBe('multiple_choice')
+    expect(mc!.options!.filter(o => o.isCorrect)).toHaveLength(2)
+    expect(short!.type).toBe('short_text')
+    expect(short!.correctAnswers).toEqual(['glucose'])
+    expect(short!.options).toBeUndefined()
+    expect(long!.type).toBe('long_text')
+    expect(long!.options).toBeUndefined()
+    expect(long!.correctAnswers).toBeUndefined()
+  })
+
+  it('throws on multiple_choice with no correct answers', () => {
+    expect(() =>
+      toQuizYamlObject(
+        def({
+          questions: [
+            {
+              type: 'multiple_choice',
+              question: 'Q',
+              choices: ['a', 'b'],
+              correctIndexes: [],
+            },
+          ],
+        }),
+      ),
+    ).toThrow(/invalid correctIndexes/)
   })
 
   it('defaults points to 1 and honors overrides', () => {
@@ -76,7 +125,14 @@ describe('toQuizYamlObject', () => {
     expect(() =>
       toQuizYamlObject(
         def({
-          questions: [{ question: 'Q', choices: ['only'], correctIndex: 0 }],
+          questions: [
+            {
+              type: 'single_choice',
+              question: 'Q',
+              choices: ['only'],
+              correctIndex: 0,
+            },
+          ],
         }),
       ),
     ).toThrow(/fewer than two choices/)
@@ -86,7 +142,14 @@ describe('toQuizYamlObject', () => {
     expect(() =>
       toQuizYamlObject(
         def({
-          questions: [{ question: 'Q', choices: ['a', 'b'], correctIndex: 5 }],
+          questions: [
+            {
+              type: 'single_choice',
+              question: 'Q',
+              choices: ['a', 'b'],
+              correctIndex: 5,
+            },
+          ],
         }),
       ),
     ).toThrow(/out-of-range/)

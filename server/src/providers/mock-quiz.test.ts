@@ -29,9 +29,10 @@ describe('MockQuizProvider', () => {
     expect(quiz.questions).toHaveLength(3)
     expect(quiz.title).toBe('Exit Ticket: Photosynthesis')
     for (const q of quiz.questions) {
-      expect(q.choices.length).toBeGreaterThanOrEqual(3)
-      expect(q.correctIndex).toBeGreaterThanOrEqual(0)
-      expect(q.correctIndex).toBeLessThan(q.choices.length)
+      expect(q.type).toBe('single_choice')
+      expect(q.choices!.length).toBeGreaterThanOrEqual(3)
+      expect(q.correctIndex!).toBeGreaterThanOrEqual(0)
+      expect(q.correctIndex!).toBeLessThan(q.choices!.length)
       expect(q.points).toBe(1)
     }
     // The whole quiz maps cleanly to the library schema
@@ -41,7 +42,7 @@ describe('MockQuizProvider', () => {
   it('uses a slide detail (not the bare title) as the correct answer', async () => {
     const quiz = await provider.generateQuiz(req())
     const q1 = quiz.questions[0]!
-    expect(q1.choices[q1.correctIndex]).toBe('Occurs in chloroplasts')
+    expect(q1.choices![q1.correctIndex!]).toBe('Occurs in chloroplasts')
   })
 
   it('places the correct answer at index i % choices.length', async () => {
@@ -105,7 +106,7 @@ describe('MockQuizProvider', () => {
     const q0 = quiz.questions[0]!
     expect(q0.choices).toContain('X detail')
     // The two slides sharing "Y detail" contribute it only once
-    expect(q0.choices.filter(c => c === 'Y detail')).toHaveLength(1)
+    expect(q0.choices!.filter(c => c === 'Y detail')).toHaveLength(1)
     // The blank bullet never becomes a choice
     expect(q0.choices).not.toContain('  ')
   })
@@ -130,7 +131,7 @@ describe('MockQuizProvider', () => {
     // The transcript adds an eligible source, so more questions are possible.
     expect(withTx.questions.length).toBeGreaterThan(base.questions.length)
     // Its content surfaces among the choices.
-    const choices = withTx.questions.flatMap(q => q.choices)
+    const choices = withTx.questions.flatMap(q => q.choices ?? [])
     expect(choices.some(c => /Mitochondria|ATP/.test(c))).toBe(true)
   })
 
@@ -142,5 +143,41 @@ describe('MockQuizProvider', () => {
     for (const q of second.questions) expect(stems).not.toContain(q.question)
     // The two quizzes are not identical.
     expect(second.questions.map(q => q.question)).not.toEqual(stems)
+  })
+
+  it('honors per-type counts, producing each valid type (QUIZ-7)', async () => {
+    const quiz = await provider.generateQuiz(
+      req({ typeCounts: { single_choice: 1, short_text: 2 } }),
+    )
+    expect(quiz.questions).toHaveLength(3)
+    expect(quiz.questions.filter(q => q.type === 'single_choice')).toHaveLength(
+      1,
+    )
+    const shorts = quiz.questions.filter(q => q.type === 'short_text')
+    expect(shorts).toHaveLength(2)
+    // Short-text carries an accepted answer and no choices
+    expect(shorts[0]!.correctAnswers!.length).toBeGreaterThan(0)
+    expect(shorts[0]!.choices).toBeUndefined()
+    expect(() => toQuizYamlObject(quiz)).not.toThrow()
+  })
+
+  it('produces valid multiple_choice and long_text questions (QUIZ-7)', async () => {
+    const quiz = await provider.generateQuiz(
+      req({ typeCounts: { multiple_choice: 1, long_text: 1 } }),
+    )
+    const mc = quiz.questions.find(q => q.type === 'multiple_choice')!
+    expect(mc.choices!.length).toBeGreaterThanOrEqual(2)
+    expect(mc.correctIndexes!.length).toBeGreaterThanOrEqual(1)
+    const long = quiz.questions.find(q => q.type === 'long_text')!
+    expect(long.choices).toBeUndefined()
+    expect(long.correctAnswers).toBeUndefined()
+    expect(() => toQuizYamlObject(quiz)).not.toThrow()
+  })
+
+  it('spreads total points across the questions as whole numbers (QUIZ-7)', async () => {
+    const quiz = await provider.generateQuiz(req({ totalPoints: 10 }))
+    const sum = quiz.questions.reduce((s, q) => s + (q.points ?? 0), 0)
+    expect(sum).toBe(10)
+    for (const q of quiz.questions) expect(q.points!).toBeGreaterThanOrEqual(1)
   })
 })

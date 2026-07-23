@@ -181,6 +181,34 @@ describe('quiz actions', () => {
     expect(withTx.body.formUrl).not.toBe(withoutTx.body.formUrl)
   })
 
+  it('threads generation options: per-type counts set the question count', async () => {
+    await act(ada, 'quiz.connectGoogle')
+    const res = await act(ada, 'quiz.publish', {
+      deckId,
+      driveFolderId: 'root',
+      typeCounts: { single_choice: 1, short_text: 2 },
+    })
+    expect(res.status).toBe(200)
+    const deck = await DeckModel.findById(deckId)
+    // The per-type total (3) is the number of questions generated + stored.
+    expect(deck!.quiz!.questions).toHaveLength(3)
+  })
+
+  it('accepts all advanced options without error', async () => {
+    await act(ada, 'quiz.connectGoogle')
+    const res = await act(ada, 'quiz.publish', {
+      deckId,
+      driveFolderId: 'root',
+      questionCount: 2,
+      totalPoints: 6,
+      requireEmail: false,
+      customInstructions: 'focus on the light reactions',
+      includeTranscript: true,
+    })
+    expect(res.status).toBe(200)
+    expect(res.body.formUrl).toMatch(/forms/)
+  })
+
   it('deletes the quiz and forgets it, and regeneration differs afterwards', async () => {
     await act(ada, 'quiz.connectGoogle')
     const first = await act(ada, 'quiz.publish', {

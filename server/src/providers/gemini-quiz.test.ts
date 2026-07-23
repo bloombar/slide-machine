@@ -45,6 +45,7 @@ const validQuiz = {
   description: 'Exit ticket',
   questions: [
     {
+      type: 'single_choice',
       question: 'Where does it occur?',
       choices: ['Chloroplasts', 'Nucleus'],
       correctIndex: 0,
@@ -73,7 +74,7 @@ describe('GeminiQuizProvider', () => {
     expect(String(url)).toContain(':generateContent')
     const body = JSON.parse(String(init.body))
     const prompt = body.contents[0].parts[0].text as string
-    expect(prompt).toContain('EXACTLY 4 questions')
+    expect(prompt).toContain('EXACTLY 4 single_choice')
     expect(prompt).toContain('Photosynthesis')
     expect(prompt).toContain('Occurs in chloroplasts')
     // JSON output requested via mime type
@@ -105,6 +106,81 @@ describe('GeminiQuizProvider', () => {
     expect(prompt).not.toContain('Do NOT repeat')
   })
 
+  it('puts the type breakdown, points, and instructions in the prompt (QUIZ-7)', async () => {
+    fetchMock.mockResolvedValue(reply(validQuiz))
+    await provider.generateQuiz(
+      req({
+        typeCounts: { single_choice: 1, short_text: 2 },
+        totalPoints: 12,
+        customInstructions: 'focus on the water cycle',
+      }),
+    )
+    const prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+      .contents[0].parts[0].text as string
+    expect(prompt).toContain('1 single_choice')
+    expect(prompt).toContain('2 short_text')
+    expect(prompt).toContain('total 12')
+    expect(prompt).toContain('focus on the water cycle')
+  })
+
+  it('parses a mixed-type response (single/multiple/short/long)', async () => {
+    fetchMock.mockResolvedValue(
+      reply({
+        title: 'Mixed',
+        questions: [
+          {
+            type: 'single_choice',
+            question: 's',
+            choices: ['a', 'b'],
+            correctIndex: 1,
+          },
+          {
+            type: 'multiple_choice',
+            question: 'm',
+            choices: ['a', 'b', 'c'],
+            correctIndexes: [0, 2],
+          },
+          { type: 'short_text', question: 't', correctAnswers: ['x'] },
+          { type: 'long_text', question: 'l' },
+        ],
+      }),
+    )
+    const quiz = await provider.generateQuiz(req())
+    expect(quiz.questions.map(q => q.type)).toEqual([
+      'single_choice',
+      'multiple_choice',
+      'short_text',
+      'long_text',
+    ])
+    expect(quiz.questions[1]!.correctIndexes).toEqual([0, 2])
+    expect(quiz.questions[3]!.choices).toBeUndefined()
+  })
+
+  it('drops a multiple_choice question with no valid correct answers', async () => {
+    fetchMock.mockResolvedValue(
+      reply({
+        title: 'Q',
+        questions: [
+          {
+            type: 'multiple_choice',
+            question: 'bad',
+            choices: ['a', 'b'],
+            correctIndexes: [9],
+          },
+          {
+            type: 'single_choice',
+            question: 'good',
+            choices: ['a', 'b'],
+            correctIndex: 0,
+          },
+        ],
+      }),
+    )
+    const quiz = await provider.generateQuiz(req())
+    expect(quiz.questions).toHaveLength(1)
+    expect(quiz.questions[0]!.question).toBe('good')
+  })
+
   it('parses and returns a valid quiz definition', async () => {
     fetchMock.mockResolvedValue(reply(validQuiz))
     const quiz = await provider.generateQuiz(req())
@@ -119,8 +195,18 @@ describe('GeminiQuizProvider', () => {
       reply({
         title: 'Q',
         questions: [
-          { question: 'good', choices: ['a', 'b'], correctIndex: 1 },
-          { question: 'bad', choices: ['a', 'b'], correctIndex: 9 },
+          {
+            type: 'single_choice',
+            question: 'good',
+            choices: ['a', 'b'],
+            correctIndex: 1,
+          },
+          {
+            type: 'single_choice',
+            question: 'bad',
+            choices: ['a', 'b'],
+            correctIndex: 9,
+          },
         ],
       }),
     )
@@ -134,7 +220,7 @@ describe('GeminiQuizProvider', () => {
     await provider.generateQuiz(req())
     const prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
       .contents[0].parts[0].text as string
-    expect(prompt).toContain('EXACTLY 5 questions')
+    expect(prompt).toContain('EXACTLY 5 single_choice')
   })
 
   it('throws without an API key', async () => {
@@ -224,7 +310,14 @@ describe('GeminiQuizProvider', () => {
     fetchMock.mockResolvedValue(
       reply({
         title: 'Q',
-        questions: [{ question: 'bad', choices: ['a', 'b'], correctIndex: 9 }],
+        questions: [
+          {
+            type: 'single_choice',
+            question: 'bad',
+            choices: ['a', 'b'],
+            correctIndex: 9,
+          },
+        ],
       }),
     )
     await expect(provider.generateQuiz(req())).rejects.toThrow(

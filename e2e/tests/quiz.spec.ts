@@ -41,10 +41,15 @@ test('generate and publish a quiz from lecture settings', async ({ page }) => {
   await dialog.getByRole('button', { name: 'Connect Google' }).click()
   await dialog.getByRole('button', { name: 'Generate quiz' }).click()
 
-  // Pick a Drive folder and continue
+  // Pick a Drive folder and set options
   const picker = page.getByRole('dialog', { name: 'Choose a Drive folder' })
   await expect(picker).toBeVisible()
-  // The spoken phrase gave the lecture a transcript, so the option is offered
+
+  // Basic option: number of questions
+  await picker.getByLabel('Number of questions').fill('3')
+
+  // Advanced settings: the transcript option lives here (a phrase was spoken)
+  await picker.getByRole('button', { name: 'Advanced settings' }).click()
   const includeTranscript = picker.getByRole('checkbox', {
     name: /include the spoken transcript/i,
   })
@@ -59,7 +64,7 @@ test('generate and publish a quiz from lecture settings', async ({ page }) => {
     picker.getByRole('button', { name: 'E2E Quizzes' }),
   ).toBeVisible()
 
-  await picker.getByRole('button', { name: 'Save here' }).click()
+  await picker.getByRole('button', { name: 'Generate & save' }).click()
 
   // The shareable Form URL appears with a copy button
   const link = dialog.getByRole('link', { name: /forms/ })

@@ -5,17 +5,28 @@ Respond with ONLY one JSON object, no markdown fences, exactly this shape:
   "title": string,
   "description"?: string,
   "questions": [
-    { "question": string, "choices": string[], "correctIndex": number, "points"?: number }
+    {
+      "type": "single_choice" | "multiple_choice" | "short_text" | "long_text",
+      "question": string,
+      "points"?: number,
+      "choices"?: string[],
+      "correctIndex"?: number,
+      "correctIndexes"?: number[],
+      "correctAnswers"?: string[]
+    }
   ]
 }
 
-Write EXACTLY {{questionCount}} questions that check comprehension of the material below — nothing from outside it. Each question:
-- is a single-correct multiple-choice question with 3 or 4 plausible choices, only ONE correct;
-- sets "correctIndex" to the zero-based position of the correct choice in "choices";
-- is concise, unambiguous, and answerable from the material alone.
+How to write each type:
+- "single_choice": give 3-4 "choices" with exactly ONE correct; set "correctIndex" to the zero-based position of the correct choice. No other answer fields.
+- "multiple_choice": give 3-5 "choices" with ONE OR MORE correct; set "correctIndexes" to the zero-based positions of all correct choices. No "correctIndex".
+- "short_text": a question answerable in a few words; set "correctAnswers" to the accepted answer(s). No "choices".
+- "long_text": an open-ended question answered in a paragraph; no "choices" and no answer key.
 
-Spread the questions across different parts of the lecture; do not quiz the same point twice. Give the quiz a short "title" naming the lecture topic.
-{{avoid}}
+{{types}}
+
+Every question must be answerable from the material below — nothing from outside it — and be concise and unambiguous. Spread the questions across different parts of the lecture; do not quiz the same point twice. Give the quiz a short "title" naming the lecture topic.
+{{points}}{{instructions}}{{avoid}}
 Lecture slides:
 {{slides}}
 {{transcript}}

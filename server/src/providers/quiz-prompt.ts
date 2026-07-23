@@ -7,8 +7,20 @@
  */
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
-import type { SlideTextContent } from '@slide-machine/shared'
+import type {
+  QuizQuestionCounts,
+  QuizQuestionType,
+  SlideTextContent,
+} from '@slide-machine/shared'
 import { env } from '../config/env'
+
+/** Human labels for each type, used in the prompt's breakdown line. */
+const TYPE_LABELS: Record<QuizQuestionType, string> = {
+  single_choice: 'single_choice (one correct)',
+  multiple_choice: 'multiple_choice (one or more correct)',
+  short_text: 'short_text',
+  long_text: 'long_text',
+}
 
 let quizTemplate: string | undefined
 
@@ -68,6 +80,39 @@ export const renderAvoidBlock = (questions?: string[]): string => {
     .map(q => `- ${q}`)
     .join('\n')
   return `\nDo NOT repeat or closely paraphrase any of these previously asked questions; write different ones:\n${bullets}\n`
+}
+
+/**
+ * The `{{types}}` line: how many questions of each type to write. With per-type
+ * counts (QUIZ-7) it lists each; otherwise it asks for `count` single_choice
+ * questions.
+ */
+export const renderTypesBlock = (
+  count: number,
+  typeCounts?: QuizQuestionCounts,
+): string => {
+  const entries = Object.entries(typeCounts ?? {}).filter(
+    ([, n]) => (n ?? 0) > 0,
+  ) as [QuizQuestionType, number][]
+  if (entries.length === 0) {
+    return `Write EXACTLY ${count} single_choice questions.`
+  }
+  const parts = entries.map(([type, n]) => `${n} ${TYPE_LABELS[type]}`)
+  const total = entries.reduce((sum, [, n]) => sum + n, 0)
+  return `Write EXACTLY these ${total} questions, matching each type and count precisely: ${parts.join(', ')}.`
+}
+
+/** The optional `{{points}}` line asking the model to spread a points budget. */
+export const renderPointsBlock = (totalPoints?: number): string => {
+  if (!totalPoints || totalPoints <= 0) return ''
+  return `\nSet each question's "points" so they total ${Math.round(totalPoints)} across the quiz — whole numbers, each at least 1.\n`
+}
+
+/** The optional `{{instructions}}` block carrying the instructor's own steer. */
+export const renderInstructionsBlock = (instructions?: string): string => {
+  const text = instructions?.trim()
+  if (!text) return ''
+  return `\nExtra instructions from the instructor (follow these, but stay within the lecture material):\n${text}\n`
 }
 
 /** Fills `{{slot}}` placeholders; an unknown placeholder throws so a

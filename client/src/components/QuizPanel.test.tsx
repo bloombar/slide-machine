@@ -1,8 +1,9 @@
 /**
- * Unit tests for the Quiz tab (QUIZ-1..6): the connect → generate → folder
- * picker → shareable URL flow, the copy-to-clipboard button, the optional
- * "include transcript" checkbox, creating a new Drive folder, and deleting a
- * quiz. The Google actions are stubbed at the fetch layer.
+ * Unit tests for the Quiz tab (QUIZ-1..7): the connect → generate → folder
+ * picker → shareable URL flow, the copy-to-clipboard button, creating a new
+ * Drive folder, deleting a quiz, and the generation options — question count,
+ * points, per-type counts (with the mismatch warning), email, transcript, and
+ * AI instructions. The Google actions are stubbed at the fetch layer.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
@@ -129,7 +130,7 @@ describe('QuizPanel', () => {
     expect(dialog).toBeInTheDocument()
     await screen.findByRole('button', { name: 'Quizzes' })
     // Save into the current folder (My Drive root)
-    fireEvent.click(screen.getByRole('button', { name: 'Save here' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Generate & save' }))
 
     await waitFor(() =>
       expect(published).toMatchObject({
@@ -171,7 +172,9 @@ describe('QuizPanel', () => {
     )
     // Open the folder, then save inside it
     fireEvent.click(await screen.findByRole('button', { name: 'Quizzes' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Save here' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate & save' }),
+    )
     await waitFor(() =>
       expect(published).toMatchObject({
         driveFolderId: 'folder-quizzes',
@@ -192,7 +195,9 @@ describe('QuizPanel', () => {
     await screen.findByRole('dialog', { name: 'Choose a Drive folder' })
     expect(await screen.findByText(/no sub-folders here/i)).toBeInTheDocument()
     // Save-here is never disabled: you can always save to the current folder
-    expect(screen.getByRole('button', { name: 'Save here' })).toBeEnabled()
+    expect(
+      screen.getByRole('button', { name: 'Generate & save' }),
+    ).toBeEnabled()
   })
 
   it('surfaces an error when the status fails to load', async () => {
@@ -244,7 +249,9 @@ describe('QuizPanel', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: 'Generate quiz' }),
     )
-    fireEvent.click(await screen.findByRole('button', { name: 'Save here' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate & save' }),
+    )
     expect(
       await screen.findByText(/could not generate the quiz/i),
     ).toBeInTheDocument()
@@ -306,7 +313,7 @@ describe('QuizPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create' }))
     // Creating steps into the new folder (shown in the breadcrumb); save there
     await screen.findByRole('button', { name: 'Week 5' })
-    fireEvent.click(screen.getByRole('button', { name: 'Save here' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Generate & save' }))
     await waitFor(() =>
       expect(published).toMatchObject({
         driveFolderId: 'folder-new',
@@ -359,9 +366,7 @@ describe('QuizPanel', () => {
       target: { value: 'Scratch' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Cancel new folder' }))
-    expect(
-      screen.queryByLabelText('New folder name'),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('New folder name')).not.toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: 'New folder' }),
     ).toBeInTheDocument()
@@ -409,11 +414,15 @@ describe('QuizPanel', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: 'Generate quiz' }),
     )
+    // The transcript option lives under Advanced settings
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Advanced settings' }),
+    )
     const checkbox = await screen.findByRole('checkbox', {
       name: /include the spoken transcript/i,
     })
     fireEvent.click(checkbox)
-    fireEvent.click(screen.getByRole('button', { name: 'Save here' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Generate & save' }))
     await waitFor(() =>
       expect(published).toMatchObject({ includeTranscript: true }),
     )
@@ -435,11 +444,82 @@ describe('QuizPanel', () => {
       await screen.findByRole('button', { name: 'Generate quiz' }),
     )
     await screen.findByRole('dialog', { name: 'Choose a Drive folder' })
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced settings' }))
     expect(
       screen.queryByRole('checkbox', {
         name: /include the spoken transcript/i,
       }),
     ).not.toBeInTheDocument()
+  })
+
+  it('sets question count, points, types, and instructions from the options (QUIZ-7)', async () => {
+    let published: {
+      questionCount?: number
+      totalPoints?: number
+      requireEmail?: boolean
+      typeCounts?: Record<string, number>
+      customInstructions?: string
+    } = {}
+    mockFetchRoutes({
+      'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
+      'quiz.driveFolders': () => ({ status: 200, body: { folders: [] } }),
+      'quiz.publish': init => {
+        published = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: { formUrl: FORM_URL, publishedAt: '2026-07-20T00:00:00.000Z' },
+        }
+      },
+    })
+    render(<QuizPanel deckId="d1" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate quiz' }),
+    )
+    fireEvent.change(await screen.findByLabelText('Number of questions'), {
+      target: { value: '4' },
+    })
+    fireEvent.change(screen.getByLabelText('Total points'), {
+      target: { value: '8' },
+    })
+    // Advanced: per-type counts + email + instructions
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced settings' }))
+    fireEvent.click(screen.getByLabelText(/require a verified/i))
+    fireEvent.change(screen.getByLabelText('Single-choice (MCQ)'), {
+      target: { value: '1' },
+    })
+    fireEvent.change(screen.getByLabelText('Short answer'), {
+      target: { value: '3' },
+    })
+    fireEvent.change(screen.getByLabelText('AI instructions (optional)'), {
+      target: { value: 'focus on the water cycle' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Generate & save' }))
+    await waitFor(() =>
+      expect(published).toMatchObject({
+        questionCount: 4,
+        totalPoints: 8,
+        requireEmail: false,
+        typeCounts: { single_choice: 1, short_text: 3 },
+        customInstructions: 'focus on the water cycle',
+      }),
+    )
+  })
+
+  it('warns when the per-type counts do not match the question count', async () => {
+    mockFetchRoutes({
+      'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
+      'quiz.driveFolders': () => ({ status: 200, body: { folders: [] } }),
+    })
+    render(<QuizPanel deckId="d1" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate quiz' }),
+    )
+    // Default count is 5; set the types to sum to 2
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced settings' }))
+    fireEvent.change(screen.getByLabelText('Single-choice (MCQ)'), {
+      target: { value: '2' },
+    })
+    expect(await screen.findByText(/add up to 2, not 5/i)).toBeInTheDocument()
   })
 
   it('deletes an existing quiz and returns to the generate state', async () => {

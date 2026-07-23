@@ -28,6 +28,7 @@ const def: QuizDefinition = {
   title: 'Photosynthesis',
   questions: [
     {
+      type: 'single_choice',
       question: 'Where?',
       choices: ['Chloroplasts', 'Nucleus'],
       correctIndex: 0,

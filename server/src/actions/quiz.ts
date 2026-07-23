@@ -21,6 +21,7 @@ import { z } from 'zod'
 import type {
   DriveFolder,
   QuizConnectResult,
+  QuizGenerationOptions,
   QuizGenerationProvider,
   QuizStatus,
   PublishedQuiz,
@@ -228,8 +229,7 @@ export const quizPublish = defineAction<
     deckId: string
     driveFolderId: string
     driveFolderName?: string
-    includeTranscript?: boolean
-  },
+  } & QuizGenerationOptions,
   PublishedQuiz
 >({
   name: 'quiz.publish',
@@ -237,7 +237,20 @@ export const quizPublish = defineAction<
     deckId: z.string().min(1),
     driveFolderId: z.string().min(1),
     driveFolderName: z.string().optional(),
+    // Generation options (QUIZ-5/QUIZ-7)
+    questionCount: z.number().int().min(1).max(50).optional(),
+    totalPoints: z.number().int().min(1).max(1000).optional(),
+    requireEmail: z.boolean().optional(),
     includeTranscript: z.boolean().optional(),
+    typeCounts: z
+      .object({
+        single_choice: z.number().int().min(0).max(50).optional(),
+        multiple_choice: z.number().int().min(0).max(50).optional(),
+        short_text: z.number().int().min(0).max(50).optional(),
+        long_text: z.number().int().min(0).max(50).optional(),
+      })
+      .optional(),
+    customInstructions: z.string().max(2000).optional(),
   }),
   execute: async (ctx, input) => {
     const user = await requireUser(ctx)
@@ -274,13 +287,30 @@ export const quizPublish = defineAction<
       slides,
       transcript,
       avoidQuestions,
+      questionCount: input.questionCount,
+      totalPoints: input.totalPoints,
+      typeCounts: input.typeCounts,
+      customInstructions: input.customInstructions,
     })
+
+    // Require a verified respondent email unless explicitly turned off (QUIZ-7).
+    const yamlOptions = {
+      emailCollection:
+        input.requireEmail === false
+          ? ('none' as const)
+          : ('verified' as const),
+    }
 
     let published: { formId: string; formUrl: string }
     if (isLive()) {
       // isConnected guarantees a stored token in live mode.
       const refreshToken = decryptToken(user.googleQuizRefreshToken!)
-      published = await publishQuizLive(quiz, refreshToken, input.driveFolderId)
+      published = await publishQuizLive(
+        quiz,
+        refreshToken,
+        input.driveFolderId,
+        yamlOptions,
+      )
     } else {
       published = await publishQuiz({
         quiz,

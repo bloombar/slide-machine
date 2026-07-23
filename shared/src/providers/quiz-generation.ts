@@ -3,7 +3,7 @@
  * (SPEC QUIZ-1 / TECH-8). Publishing is handled by the imported Quiz
  * Generator library (in-process); this capability only authors the definition.
  */
-import type { QuizDefinition } from '../types/quiz'
+import type { QuizDefinition, QuizQuestionCounts } from '../types/quiz'
 
 /** De-identified slide text used as quiz source material (P-2). */
 export interface SlideTextContent {
@@ -26,6 +26,22 @@ export interface QuizGenerationRequest {
    * genuinely different quiz (QUIZ-6).
    */
   avoidQuestions?: string[]
+  /**
+   * How many questions of each type to produce (QUIZ-7). When given, its total
+   * is the number of questions (overriding questionCount); absent = all
+   * single_choice up to questionCount.
+   */
+  typeCounts?: QuizQuestionCounts
+  /**
+   * Total points to spread across the quiz (QUIZ-7). Each question gets a whole
+   * share; absent = the provider's default (1 point each).
+   */
+  totalPoints?: number
+  /**
+   * Free-text instructions from the instructor to steer generation (QUIZ-7):
+   * topics to focus on or avoid, difficulty, phrasing, etc.
+   */
+  customInstructions?: string
 }
 
 export interface QuizGenerationProvider {

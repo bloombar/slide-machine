@@ -3,18 +3,16 @@
  * and creates the real Google Form via the imported Quiz Generator library,
  * using an authorized client built from the instructor's stored refresh token.
  *
- * Scope note: the connected account grants `drive.file`, which covers only
- * files this app creates — so the folder browser currently shows just the
- * folders the app created (plus lets the instructor make new ones). The
- * browsing is written per-folder (by parentId) so it is forward-compatible:
- * once the connect also requests `drive.readonly` (see CONNECT_SCOPES in
- * auth/google-connect.ts) and the instructor reconnects, these same calls
- * return the user's entire Drive tree with no further change here.
+ * Scope note: the connected account grants `drive.readonly` (browse the whole
+ * Drive) plus `drive.file` (create the Form + app folders and place the Form in
+ * the chosen folder). The browser lists sub-folders per-parent, so it walks the
+ * instructor's real Drive tree; instructors who connected before the
+ * `drive.readonly` scope was added must reconnect once to gain it.
  */
 import { createGoogleFormFromQuiz, type QuizForm } from 'google-forms-quiz-tool'
 import type { DriveFolder, QuizDefinition } from '@slide-machine/shared'
 import { clientForRefreshToken } from '../auth/google-connect'
-import { toQuizYamlObject } from './quiz-yaml'
+import { toQuizYamlObject, type QuizYamlOptions } from './quiz-yaml'
 import type { QuizPublishResult } from './quiz-publish'
 
 const DRIVE_FILES = 'https://www.googleapis.com/drive/v3/files'
@@ -80,15 +78,17 @@ export const createDriveFolderLive = async (
   return { id: data.id, name: data.name }
 }
 
-/** Creates the real Google Form and returns its id and shareable URL. */
+/** Creates the real Google Form and returns its id and shareable URL. The YAML
+ * options carry publish settings such as email collection (QUIZ-7). */
 export const publishQuizLive = async (
   def: QuizDefinition,
   refreshToken: string,
   driveFolderId: string,
+  options: QuizYamlOptions = {},
 ): Promise<QuizPublishResult> => {
   const auth = clientForRefreshToken(refreshToken)
   // toQuizYamlObject produces exactly the library's QuizForm shape.
-  const quiz = toQuizYamlObject(def) as QuizForm
+  const quiz = toQuizYamlObject(def, options) as QuizForm
   const { formId, responderUri } = await createGoogleFormFromQuiz(quiz, {
     auth,
     // 'root' = My Drive: leave the Form where it is created (no move).

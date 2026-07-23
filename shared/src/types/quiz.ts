@@ -4,19 +4,62 @@
  * it published.
  */
 
-/** A single generated exit-ticket question; shape maps to the imported Quiz Generator library's quiz model. */
+/**
+ * The question types the Quiz Generator library supports (QUIZ-7):
+ *   - single_choice   — radio buttons, exactly one correct choice
+ *   - multiple_choice — checkboxes, any number of correct choices
+ *   - short_text      — one-line answer (optional accepted answers)
+ *   - long_text       — paragraph answer (manually graded)
+ */
+export type QuizQuestionType =
+  'single_choice' | 'multiple_choice' | 'short_text' | 'long_text'
+
+/**
+ * A single generated question. `type` selects which of the optional fields
+ * apply; the shape maps to the imported Quiz Generator library's model.
+ */
 export interface QuizQuestion {
+  type: QuizQuestionType
   question: string
-  choices: string[]
-  correctIndex: number
   points?: number
+  /** Choice text (single_choice, multiple_choice). */
+  choices?: string[]
+  /** single_choice: index of the one correct choice. */
+  correctIndex?: number
+  /** multiple_choice: indices of the correct choices. */
+  correctIndexes?: number[]
+  /** short_text: accepted answers for auto-grading (omit = manually graded). */
+  correctAnswers?: string[]
 }
+
+/** How many questions of each type to generate (advanced options, QUIZ-7). */
+export type QuizQuestionCounts = Partial<Record<QuizQuestionType, number>>
 
 /** A generated quiz definition, ready for review and publishing (QUIZ-1). */
 export interface QuizDefinition {
   title: string
   description?: string
   questions: QuizQuestion[]
+}
+
+/**
+ * Instructor-chosen generation options from the Quiz tab (QUIZ-7). Sent with
+ * quiz.publish. Basic: questionCount, totalPoints. Advanced: requireEmail,
+ * includeTranscript, per-type counts, and free-text AI instructions.
+ */
+export interface QuizGenerationOptions {
+  /** Basic count; used when no per-type counts are given (all single_choice). */
+  questionCount?: number
+  /** Total points spread across the quiz (each question gets a whole share). */
+  totalPoints?: number
+  /** Collect a verified respondent email (default true). */
+  requireEmail?: boolean
+  /** Fold the spoken transcript into the source material (default false). */
+  includeTranscript?: boolean
+  /** How many questions of each type; its sum overrides questionCount. */
+  typeCounts?: QuizQuestionCounts
+  /** Extra free-text instructions for the AI (topics to focus/avoid, etc.). */
+  customInstructions?: string
 }
 
 /** Instructor-controlled publish options sent with the quiz definition (QUIZ-2). */

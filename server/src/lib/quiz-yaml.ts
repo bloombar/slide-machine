@@ -1,16 +1,17 @@
 /**
- * Serializes a generated QuizDefinition (SPEC QUIZ-1) into the YAML format
- * the separate Quiz Generator library consumes
- * (github.com/bloombar/google-forms-quiz-generator, YAML_FORMAT.md). The
- * internal model holds single-correct multiple-choice questions, so each
- * maps to the library's `single_choice` type with one `isCorrect` option.
+ * Serializes a generated QuizDefinition (SPEC QUIZ-1/QUIZ-7) into the YAML
+ * format the separate Quiz Generator library consumes
+ * (github.com/bloombar/google-forms-quiz-generator, YAML_FORMAT.md). Each
+ * internal question maps to the matching library type: single_choice /
+ * multiple_choice (with isCorrect options), short_text / long_text (with
+ * optional correctAnswers).
  *
  * Output is produced with the `yaml` library (never hand-built) so it is
  * always valid and parses cleanly in the Quiz Generator. Object keys are
  * written in the library's documented order.
  */
 import YAML from 'yaml'
-import type { QuizDefinition } from '@slide-machine/shared'
+import type { QuizDefinition, QuizQuestion } from '@slide-machine/shared'
 
 /** How the published form collects respondent emails (library field). */
 export type EmailCollection = 'verified' | 'responder_input' | 'none'
@@ -30,12 +31,13 @@ interface YamlOption {
   isCorrect?: boolean
 }
 
-/** The library's per-question shape for a single-choice question. */
+/** The library's per-question shape (fields vary by type). */
 interface YamlQuestion {
   title: string
-  type: 'single_choice'
+  type: QuizQuestion['type']
   points: number
-  options: YamlOption[]
+  options?: YamlOption[]
+  correctAnswers?: string[]
 }
 
 /** The library's top-level quiz document shape. */
@@ -48,11 +50,74 @@ interface YamlQuiz {
   questions: YamlQuestion[]
 }
 
+/** Maps one internal question to its library YAML shape, validating per type. */
+const toYamlQuestion = (
+  q: QuizQuestion,
+  i: number,
+  defaultPoints: number,
+): YamlQuestion => {
+  const base = { title: q.question, points: q.points ?? defaultPoints }
+  const choices = q.choices ?? []
+
+  switch (q.type) {
+    case 'single_choice': {
+      if (choices.length < 2) {
+        throw new Error(`Question ${i + 1} has fewer than two choices`)
+      }
+      const correctIndex = q.correctIndex
+      if (
+        correctIndex === undefined ||
+        correctIndex < 0 ||
+        correctIndex >= choices.length
+      ) {
+        throw new Error(`Question ${i + 1} has an out-of-range correctIndex`)
+      }
+      return {
+        ...base,
+        type: 'single_choice',
+        options: choices.map((value, idx) =>
+          idx === correctIndex ? { value, isCorrect: true } : { value },
+        ),
+      }
+    }
+    case 'multiple_choice': {
+      if (choices.length < 2) {
+        throw new Error(`Question ${i + 1} has fewer than two choices`)
+      }
+      const correct = new Set(q.correctIndexes ?? [])
+      if (
+        correct.size === 0 ||
+        [...correct].some(idx => idx < 0 || idx >= choices.length)
+      ) {
+        throw new Error(`Question ${i + 1} has invalid correctIndexes`)
+      }
+      return {
+        ...base,
+        type: 'multiple_choice',
+        options: choices.map((value, idx) =>
+          correct.has(idx) ? { value, isCorrect: true } : { value },
+        ),
+      }
+    }
+    case 'short_text':
+    case 'long_text': {
+      const answers = (q.correctAnswers ?? [])
+        .map(a => a.trim())
+        .filter(Boolean)
+      return {
+        ...base,
+        type: q.type,
+        ...(answers.length ? { correctAnswers: answers } : {}),
+      }
+    }
+  }
+}
+
 /**
- * Builds the library-compatible quiz object. Throws on a definition that
- * could not produce a valid form — no questions, a question with fewer than
- * two choices, or a correctIndex outside its choices — so a malformed quiz
- * fails loudly here instead of at publish time.
+ * Builds the library-compatible quiz object. Throws on a definition that could
+ * not produce a valid form (no questions, or a choice question with too few
+ * choices / a bad correct index) so a malformed quiz fails loudly here instead
+ * of at publish time.
  */
 export const toQuizYamlObject = (
   def: QuizDefinition,
@@ -63,22 +128,9 @@ export const toQuizYamlObject = (
   }
   const defaultPoints = options.defaultPoints ?? 1
 
-  const questions = def.questions.map((q, i): YamlQuestion => {
-    if (q.choices.length < 2) {
-      throw new Error(`Question ${i + 1} has fewer than two choices`)
-    }
-    if (q.correctIndex < 0 || q.correctIndex >= q.choices.length) {
-      throw new Error(`Question ${i + 1} has an out-of-range correctIndex`)
-    }
-    return {
-      title: q.question,
-      type: 'single_choice',
-      points: q.points ?? defaultPoints,
-      options: q.choices.map((value, idx) =>
-        idx === q.correctIndex ? { value, isCorrect: true } : { value },
-      ),
-    }
-  })
+  const questions = def.questions.map((q, i) =>
+    toYamlQuestion(q, i, defaultPoints),
+  )
 
   return {
     version: 1,
