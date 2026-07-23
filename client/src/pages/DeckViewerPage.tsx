@@ -255,6 +255,9 @@ export default function DeckViewerPage() {
   // current drawing bout (a fresh bout, after going idle, pauses again).
   const genPauseResumeTimerRef = useRef<number | null>(null)
   const genPauseHideTimerRef = useRef<number | null>(null)
+  // Putting away an active drawing tool ends the markup bout: a short grace
+  // timer then resumes generation, the same as clicking Resume.
+  const toolDeselectResumeTimerRef = useRef<number | null>(null)
   const genManuallyResumedRef = useRef(false)
   // Which source is holding the pause pill open: the drawing-gesture debounce,
   // or being on a whiteboard slide (manual-resume only). Lets the two sources
@@ -265,6 +268,9 @@ export default function DeckViewerPage() {
   const whiteboardResumedRef = useRef(false)
   /** How long the "Content generation resumed" confirmation stays up (ms). */
   const GENERATION_RESUMED_PILL_MS = 3000
+  /** Grace after deselecting a drawing tool before generation resumes (ms) —
+   * long enough to ignore a quick tool switch, short enough to feel immediate. */
+  const TOOL_DESELECT_RESUME_MS = 600
   /** True while the current slide is a blank whiteboard canvas (read through
    * refs so mic-queue closures see the live slide). */
   const onWhiteboardSlideNow = (): boolean =>
@@ -286,6 +292,10 @@ export default function DeckViewerPage() {
       window.clearTimeout(genPauseHideTimerRef.current)
       genPauseHideTimerRef.current = null
     }
+    if (toolDeselectResumeTimerRef.current) {
+      window.clearTimeout(toolDeselectResumeTimerRef.current)
+      toolDeselectResumeTimerRef.current = null
+    }
   }
   /** Flips the pill to a brief "resumed" confirmation, then hides it. */
   const showResumedConfirmation = () => {
@@ -303,6 +313,10 @@ export default function DeckViewerPage() {
     if (genPauseResumeTimerRef.current) {
       window.clearTimeout(genPauseResumeTimerRef.current)
       genPauseResumeTimerRef.current = null
+    }
+    if (toolDeselectResumeTimerRef.current) {
+      window.clearTimeout(toolDeselectResumeTimerRef.current)
+      toolDeselectResumeTimerRef.current = null
     }
     if (reason === 'manual') {
       // Keep generating for the rest of this drawing bout / whiteboard slide.
@@ -357,6 +371,8 @@ export default function DeckViewerPage() {
         window.clearTimeout(genPauseResumeTimerRef.current)
       if (genPauseHideTimerRef.current)
         window.clearTimeout(genPauseHideTimerRef.current)
+      if (toolDeselectResumeTimerRef.current)
+        window.clearTimeout(toolDeselectResumeTimerRef.current)
     },
     [],
   )
@@ -418,6 +434,32 @@ export default function DeckViewerPage() {
       showResumedConfirmation()
     }
   }, [onWhiteboardSlide, listening, activeSlide?.id])
+
+  // Deselecting the active drawing tool ends the markup bout: if generation is
+  // paused for drawing (the debounce mode, not a whiteboard slide's manual-only
+  // pause), resume after a short grace via the Resume path. Re-arming a tool
+  // before the grace elapses cancels it — the user is still drawing.
+  const prevToolRef = useRef(whiteboard.tool)
+  useEffect(() => {
+    const deselected = prevToolRef.current != null && whiteboard.tool == null
+    prevToolRef.current = whiteboard.tool
+    if (whiteboard.tool != null) {
+      if (toolDeselectResumeTimerRef.current) {
+        window.clearTimeout(toolDeselectResumeTimerRef.current)
+        toolDeselectResumeTimerRef.current = null
+      }
+      return
+    }
+    if (deselected && pauseSourceRef.current === 'drawing') {
+      if (toolDeselectResumeTimerRef.current)
+        window.clearTimeout(toolDeselectResumeTimerRef.current)
+      toolDeselectResumeTimerRef.current = window.setTimeout(() => {
+        toolDeselectResumeTimerRef.current = null
+        resumeGeneration('manual')
+      }, TOOL_DESELECT_RESUME_MS)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [whiteboard.tool])
 
   useEffect(() => {
     // Wait for session restore: a pasted permalink must send the owner's

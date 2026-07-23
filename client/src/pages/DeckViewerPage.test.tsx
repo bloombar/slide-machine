@@ -906,6 +906,97 @@ describe('DeckViewerPage microphone capture', () => {
     ).toBeInTheDocument()
   })
 
+  it('resumes the drawing pause shortly after the tool is deselected', async () => {
+    FakeRecognition.reset()
+    vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
+    // Canvas/pointer stubs so the drawing layer accepts a gesture in jsdom.
+    Element.prototype.setPointerCapture = vi.fn()
+    Element.prototype.releasePointerCapture = vi.fn()
+    HTMLCanvasElement.prototype.getContext = vi.fn(() => ({
+      setTransform: vi.fn(),
+      clearRect: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      arc: vi.fn(),
+      fill: vi.fn(),
+      stroke: vi.fn(),
+    })) as unknown as HTMLCanvasElement['getContext']
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    )
+    // A single regular (content) slide: drawing here uses the debounce pause,
+    // not a whiteboard slide's manual-only pause.
+    const contentDeck = {
+      ...deckView,
+      deck: { ...deckView.deck, slideOrder: ['s2'] },
+      slides: [
+        {
+          id: 's2',
+          deckId: 'deck1',
+          index: 0,
+          layoutType: 'content',
+          title: 'Second',
+          body: 'More detail',
+        },
+      ],
+    }
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...contentDeck, canEdit: true },
+      }),
+      '/api/actions/session.phrase': () => ({
+        status: 200,
+        body: { kind: 'none' },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Live session' }))
+
+    // Arm the pen and draw: generation pauses (drawing mode).
+    fireEvent.click(screen.getByRole('button', { name: 'Pen' }))
+    fireEvent.pointerDown(screen.getAllByTestId('drawing-layer')[0]!, {
+      pointerId: 1,
+      button: 0,
+      clientX: 20,
+      clientY: 40,
+    })
+    fireEvent.pointerUp(screen.getAllByTestId('drawing-layer')[0]!, {
+      pointerId: 1,
+    })
+    expect(
+      await screen.findByText('Content generation paused for drawing'),
+    ).toBeInTheDocument()
+
+    // Putting the pen away (deselecting it) resumes after the short grace —
+    // well before the 5s draw-idle debounce would have.
+    fireEvent.click(screen.getByRole('button', { name: 'Pen' }))
+    expect(
+      await screen.findByText('Content generation resumed'),
+    ).toBeInTheDocument()
+  })
+
   it('executes AI-recognized command events from session.phrase', async () => {
     FakeRecognition.reset()
     vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
