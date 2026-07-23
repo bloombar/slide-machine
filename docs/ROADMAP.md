@@ -17,7 +17,7 @@ Companion to the [SDD](SPEC.md). It plans **how** the spec gets built with the t
 
 1. **Build the foundations first** (provider interfaces, shared types, action layer, deploy/CI) so features slot in later instead of forcing rewrites.
 2. **Run two streams in July, split by skill needed, not by frontend/backend.** RA1 owns everything hard on either side, including the parts of the UI that have to look right (slide renderer, layouts, design system). RA2 takes small, self-contained tasks RA1 can check at a glance.
-3. **Protect the pilot core.** The pilot needs **speak → slides → exit-ticket quiz**, plus editing, templates, and seeding — not billing, the social network, or i18n. Those are the first things to cut if time runs short ([§8](#8-risks--cut-line)).
+3. **Protect the pilot core.** The pilot needs **speak → slides → exit-ticket quiz**, plus editing, templates, and seeding — not billing, i18n, or AI imagery. Those are the first things to cut if time runs short ([§8](#8-risks--cut-line)). (The social layer is now **scheduled** in Phase 2 — see [§6](#6-phase-2--fuller-version) — because much of it landed early alongside profiles, but it is built opportunistically and **remains a cut candidate**: it's the first Phase-2 work to drop if the pilot core is ever at risk.)
 4. **Give solo-August only work that doesn't need a second person.** RA1 reviews and, if needed, rewrites RA2's work **during July** — no unchecked RA2 code goes into August, when there's no time to find out it's wrong.
 
 ## 3. Phase Overview
@@ -26,8 +26,8 @@ Companion to the [SDD](SPEC.md). It plans **how** the spec gets built with the t
 | --- | --- | --- | --- |
 | **Foundations** | Jul wk 1 (continuous after) | RA1 + RA2 | Scaffold, shared types, provider interfaces, deploy/CI |
 | **Phase 1 — MVP** | Jul wk 1–3 | RA1 + RA2 | Core loop: sign in → speak → AI slides → save/view |
-| **Phase 2 — Fuller** | Jul wk 4 → Aug wk 2 | RA2 (to Jul 31) + RA1 | Quizzes, seeding, templates, preflight, deeper editing |
-| **Phase 3 — Complete** | Aug wk 3–4 (+buffer) | RA1 (PI reviews) | Billing, social, i18n/translation, reformat, hardening |
+| **Phase 2 — Fuller** | Jul wk 4 → Aug wk 2 | RA2 (to Jul 31) + RA1 | Quizzes, seeding, templates, deeper editing, social, reformat/narration/whiteboard |
+| **Phase 3 — Complete** | Aug wk 3–4 (+buffer) | RA1 (PI reviews) | Billing, i18n/translation, preflight, GitHub, AI imagery, hardening |
 
 The PI reviews across every phase; the People column shows who builds.
 
@@ -78,23 +78,23 @@ Two streams joined by the **shared types**, split by how much skill the work nee
 
 ## 6. Phase 2 — Fuller Version
 
-**Goal:** the full pilot experience — quizzes, richer seeding, templates, preflight, deeper editing. Much of it overlaps RA2's last July week; give RA2 UI forms (seeding UI, export views) before RA1 continues alone.
+**Goal:** the full pilot experience — quizzes, richer seeding, templates, deeper editing, and the social layer — plus the reformat/narration/whiteboard work that was delivered ahead of its original Phase 3 slot. Much of it overlaps RA2's last July week; give RA2 UI forms (seeding UI, export views, social lists) before RA1 continues alone.
 
-**In scope:** [`QUIZ-1`](SPEC.md#quiz-1-quiz-yaml-generation-in-the-monolith)..[`6`](SPEC.md#quiz-6-loose-coupling) (generate quiz definition + publish via the **imported Quiz Generator library** + publish config + delegated Google access — **needs [`EXP-4`](SPEC.md#exp-4-connected-accounts-google-drive--github) Google connect first**; domain-restricted responses deferred); [`SEED-1`](SPEC.md#seed-1-document-seeding)/[`2`](SPEC.md#seed-2-image-seeding)/[`3`](SPEC.md#seed-3-seed-management) + [`EXP-4`](SPEC.md#exp-4-connected-accounts-google-drive--github) (Google Drive/Docs/Slides + uploads + seed images; GitHub connect if time); [`PREP-1`](SPEC.md#prep-1-preflight-concept-extraction)/[`2`](SPEC.md#prep-2-instructor-review--honing)/[`3`](SPEC.md#prep-3-use-of-the-honed-concept-set) (preflight extraction + honing UI); [`TMPL-1`](SPEC.md#tmpl-1-template-library--preview)/[`4`](SPEC.md#tmpl-4-custom-templates-create--edit--save)/[`5`](SPEC.md#tmpl-5-template-application) (library + custom template editor); [`GEN-7`](SPEC.md#gen-7-ai-image-guidance), [`IMG-3`](SPEC.md#img-3-image-disambiguation) (image guidance + disambiguation); [`GEN-8`](SPEC.md#gen-8-new-slide-vs-update-current) (new-vs-update + manual mode); [`GEN-9`](SPEC.md#gen-9-animated-layout-transitions) (animated transitions); [`EDIT-2`](SPEC.md#edit-2-deck-level-template-switch)/[`3`](SPEC.md#edit-3-per-slide-layout-switch); [`EXP-1`](SPEC.md#exp-1-deck-export)/[`2`](SPEC.md#exp-2-standards-based-data-export)/[`3`](SPEC.md#exp-3-round-trip-import) (export/import); [`CAP-4`](SPEC.md#cap-4-voice-commands) (voice commands); [`AUTH-3`](SPEC.md#auth-3-email-verification)/[`4`](SPEC.md#auth-4-password-reset)/[`5`](SPEC.md#auth-5-profile--ownership) + GitHub sign-in. Action layer fully built out; coverage rising.
+**In scope:** [`QUIZ-1`](SPEC.md#quiz-1-quiz-yaml-generation-in-the-monolith)..[`6`](SPEC.md#quiz-6-loose-coupling) (generate quiz definition + publish via the **imported Quiz Generator library** + publish config + delegated Google access — **needs [`EXP-4`](SPEC.md#exp-4-connected-accounts-google-drive--github) Google connect first**; domain-restricted responses deferred); [`SEED-1`](SPEC.md#seed-1-document-seeding)/[`2`](SPEC.md#seed-2-image-seeding)/[`3`](SPEC.md#seed-3-seed-management) + [`EXP-4`](SPEC.md#exp-4-connected-accounts-google-drive--github) (Google Drive/Docs/Slides + uploads + seed images); [`TMPL-1`](SPEC.md#tmpl-1-template-library--preview)/[`4`](SPEC.md#tmpl-4-custom-templates-create--edit--save)/[`5`](SPEC.md#tmpl-5-template-application) (library + custom template editor); [`GEN-7`](SPEC.md#gen-7-ai-image-guidance), [`IMG-3`](SPEC.md#img-3-image-disambiguation) (image guidance + disambiguation); [`GEN-8`](SPEC.md#gen-8-new-slide-vs-update-current) (new-vs-update + manual mode); [`GEN-9`](SPEC.md#gen-9-animated-layout-transitions) (animated transitions); [`EDIT-2`](SPEC.md#edit-2-deck-level-template-switch)/[`3`](SPEC.md#edit-3-per-slide-layout-switch); [`EXP-1`](SPEC.md#exp-1-deck-export)/[`2`](SPEC.md#exp-2-standards-based-data-export)/[`3`](SPEC.md#exp-3-round-trip-import) (export/import); [`CAP-4`](SPEC.md#cap-4-voice-commands) (voice commands); [`AUTH-3`](SPEC.md#auth-3-email-verification)/[`4`](SPEC.md#auth-4-password-reset)/[`5`](SPEC.md#auth-5-profile--ownership); [`SOC-1`](SPEC.md#soc-1-voting)..[`4`](SPEC.md#soc-4-user-profiles) (voting, browse/search/sort, feeds, profiles). **Delivered early** (built ahead of the original Phase 3 plan): [`GEN-4`](SPEC.md#gen-4-post-lecture-ai-reformat-holistic-regeneration) (post-lecture reformat + **speaker diarization** + **narration refine**), [`PLAY-2`](SPEC.md#play-2-narration-playback) (TTS **narration playback** + retained-audio playback), [`EDIT-4`](SPEC.md#edit-4-whiteboard-annotation) (**whiteboard annotation** with narration-synced replay). Action layer fully built out; coverage rising.
 
 ## 7. Phase 3 — Complete (all non-future)
 
 **Goal:** finish the rest of the SDD and harden. **RA1 solo, August** — the phase most at risk of not fitting.
 
-**In scope:** [`BILL-1`](SPEC.md#bill-1-subscription-tiers)..[`6`](SPEC.md#bill-6-configurable-pricing--caps) + Stripe + metering/enforcement ([`P-8`](SPEC.md#16-privacy-security--compliance)); [`SOC-1`](SPEC.md#soc-1-voting)..[`4`](SPEC.md#soc-4-user-profiles) (voting, browse/search/sort, feeds, profiles); [`TECH-12`](SPEC.md#tech-12-internationalization-i18n--localization) (i18n) + [`SHARE-2`](SPEC.md#share-2-post-lecture-translated-viewing) (translation); [`GEN-4`](SPEC.md#gen-4-post-lecture-ai-reformat-holistic-regeneration) (post-lecture reformat — including **speaker diarization** and **narration refine**); [`PLAY-2`](SPEC.md#play-2-narration-playback) (TTS **narration playback** + retained-audio playback); [`EDIT-4`](SPEC.md#edit-4-whiteboard-annotation) (**whiteboard annotation** with narration-synced replay); [`IMG-4`](SPEC.md#img-4-ai-generated-imagery-optional) (AI imagery); [`PREP-4`](SPEC.md#prep-4-verbal-interaction-with-the-preflight) (verbal preflight); full [`P-1..P-9`](SPEC.md#16-privacy-security--compliance) hardening, accessibility (reduced-motion), **100% coverage gate enforced**, and docs.
+**In scope:** [`BILL-1`](SPEC.md#bill-1-subscription-tiers)..[`6`](SPEC.md#bill-6-configurable-pricing--caps) + Stripe + metering/enforcement ([`P-8`](SPEC.md#16-privacy-security--compliance)); [`PREP-1`](SPEC.md#prep-1-preflight-concept-extraction)/[`2`](SPEC.md#prep-2-instructor-review--honing)/[`3`](SPEC.md#prep-3-use-of-the-honed-concept-set) (preflight extraction + honing UI) and [`PREP-4`](SPEC.md#prep-4-verbal-interaction-with-the-preflight) (verbal preflight); **GitHub sign-in** ([`AUTH-1`](SPEC.md#auth-1-registration--sign-in-methods)) and **GitHub connect** ([`EXP-4`](SPEC.md#exp-4-connected-accounts-google-drive--github)); [`TECH-12`](SPEC.md#tech-12-internationalization-i18n--localization) (i18n) + [`SHARE-2`](SPEC.md#share-2-post-lecture-translated-viewing) (translation); [`IMG-4`](SPEC.md#img-4-ai-generated-imagery-optional) (AI imagery); full [`P-1..P-9`](SPEC.md#16-privacy-security--compliance) hardening, accessibility (reduced-motion), **100% coverage gate enforced**, and docs.
 
 ## 8. Risks & Cut-Line
 
-- **August is one developer on the biggest, most integration-heavy slice** (Stripe, social, i18n, translation) plus the 100% coverage gate. The PI reviews but doesn't build, so this doesn't add capacity. **Phase 3 probably won't fully land.** Plan for it.
+- **August is one developer on the biggest, most integration-heavy slice** (Stripe, i18n, translation, preflight) plus the 100% coverage gate. The PI reviews but doesn't build, so this doesn't add capacity. **Phase 3 probably won't fully land.** Plan for it.
 - **RA2's unknown quality shifts load onto RA1.** Moving the renderer, layouts, and design system to RA1 (§5.1) means July's two developers don't produce 2×. The PI shares the review burden, but the rewrites still fall on RA1 — which is the main reason Phase 3 is at risk.
 - **RA2's work must be reviewed in July and owned by RA1.** RA1 and the PI review as it merges; if it isn't, RA1 loses August time fixing code no one checked. Make this an MVP exit criterion (§5.1).
 - **100% coverage across this surface in 9 weeks is a big cost on its own.** Enforce the gate only from Phase 3, with documented exclusions (SDD Open Q #9), or it drags every earlier phase.
-- **Cut order** if time runs short (cut from the top — none are needed for the pilot): [`IMG-4`](SPEC.md#img-4-ai-generated-imagery-optional) (AI imagery) → [`SHARE-2`](SPEC.md#share-2-post-lecture-translated-viewing) + non-English i18n → [`PREP-4`](SPEC.md#prep-4-verbal-interaction-with-the-preflight) (voice preflight) → [`SOC-3`](SPEC.md#soc-3-feeds)/[`4`](SPEC.md#soc-4-user-profiles) depth (keep [`SOC-1`](SPEC.md#soc-1-voting) voting) → reduce billing to simple tier-gating (defer full Stripe self-serve [`BILL-2`](SPEC.md#bill-2-billing-provider-stripe-integration)/[`5`](SPEC.md#bill-5-plan-management)).
+- **Cut order** if time runs short (cut from the top — none are needed for the pilot): [`IMG-4`](SPEC.md#img-4-ai-generated-imagery-optional) (AI imagery) → [`SHARE-2`](SPEC.md#share-2-post-lecture-translated-viewing) + non-English i18n → [`PREP-4`](SPEC.md#prep-4-verbal-interaction-with-the-preflight) (voice preflight), then preflight depth [`PREP-1`](SPEC.md#prep-1-preflight-concept-extraction)/[`2`](SPEC.md#prep-2-instructor-review--honing)/[`3`](SPEC.md#prep-3-use-of-the-honed-concept-set) (optional, non-blocking) → GitHub sign-in/connect → [`SOC-3`](SPEC.md#soc-3-feeds)/[`4`](SPEC.md#soc-4-user-profiles) depth (keep [`SOC-1`](SPEC.md#soc-1-voting) voting) — scheduled in Phase 2 but still first among Phase-2 work to drop → reduce billing to simple tier-gating (defer full Stripe self-serve [`BILL-2`](SPEC.md#bill-2-billing-provider-stripe-integration)/[`5`](SPEC.md#bill-5-plan-management)).
 - **Protect Phases 1–2.** They are the pilot. If the schedule slips, it slips into Phase 3 product features — never the core loop or quizzes.
 
 ## 9. Milestones
@@ -129,13 +129,14 @@ gantt
     MVP milestone                        :milestone, m1, 2026-07-21, 0d
 
     section Phase 2 — Fuller (RA1 + RA2 to Jul 31)
-    RA2 — seeding UI, export views       :p2b, 2026-07-22, 8d
-    RA1 — quizzes, seeding, templates, preflight, editing :crit, p2a, 2026-07-22, 15d
+    RA1 — reformat, narration, whiteboard (delivered early) :done, p2c, 2026-07-08, 12d
+    RA2 — seeding UI, export views, social lists :p2b, 2026-07-22, 8d
+    RA1 — quizzes, seeding, templates, social, editing :crit, p2a, 2026-07-22, 15d
     RA2 departs                          :milestone, m2, 2026-07-31, 0d
     Phase 2 complete                     :milestone, m3, 2026-08-11, 0d
 
     section Phase 3 — Complete (RA1 solo)
-    Billing, social, i18n, translation, reformat :p3, 2026-08-12, 12d
+    Billing, i18n, translation, preflight, GitHub, AI imagery :p3, 2026-08-12, 12d
     Hardening + 100% coverage gate       :2026-08-24, 5d
     Phase 3 as far as it goes            :milestone, m4, 2026-08-29, 0d
 
