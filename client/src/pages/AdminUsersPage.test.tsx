@@ -76,12 +76,17 @@ describe('AdminUsersPage', () => {
     }))
     await screen.findByRole('link', { name: 'ada@example.com' })
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Sort users' }), {
-      target: { value: 'email' },
-    })
+    // The arrow glyph is aria-hidden, so the header button's accessible
+    // name is exactly the column label.
+    fireEvent.click(screen.getByRole('button', { name: 'Email' }))
     await screen.findByRole('link', { name: 'ada@example.com' })
-    expect(calls.at(-1)).toContain('sort=email')
+    expect(calls.at(-1)).toContain('sort=email:asc')
     expect(calls.at(-1)).toContain('page=1')
+
+    // A second click on the active column flips the direction.
+    fireEvent.click(screen.getByRole('button', { name: 'Email' }))
+    await screen.findByRole('link', { name: 'ada@example.com' })
+    expect(calls.at(-1)).toContain('sort=email:desc')
   })
 
   it('defaults to a page size of 100 and changing it refetches from page 1', async () => {

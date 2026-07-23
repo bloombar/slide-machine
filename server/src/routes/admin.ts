@@ -14,7 +14,7 @@
  * live there).
  */
 import { Router } from 'express'
-import { isValidObjectId, type HydratedDocument } from 'mongoose'
+import { isValidObjectId, Types, type HydratedDocument } from 'mongoose'
 import { z } from 'zod'
 import type {
   AdminLogsResponse,
@@ -23,7 +23,7 @@ import type {
   Visibility,
 } from '@slide-machine/shared'
 import { UserModel, toUserDto, type UserDb } from '../models/user'
-import { ProjectModel, toProjectDto } from '../models/project'
+import { ProjectModel, toProjectDto, type ProjectDb } from '../models/project'
 import { DeckModel, loadDeckAcls, type DeckDb } from '../models/deck'
 import {
   AdminActionLogModel,
@@ -111,6 +111,44 @@ export interface AdminDeckDetailResponse {
   owner: { id: string; email: string; displayName: string }
 }
 
+/** One row of the site-wide admin project directory. */
+export interface AdminProjectSummary {
+  id: string
+  ownerId: string
+  /** Empty string while the owner is mid-cascade-deletion. */
+  ownerEmail: string
+  title: string
+  visibility: Visibility
+  /** Number of lectures in the project. */
+  deckCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AdminProjectsResponse {
+  projects: AdminProjectSummary[]
+  total: number
+  page: number
+  limit: number
+}
+
+/** One row of the site-wide admin lecture directory: the per-user row
+ * shape plus the owner and project context a global list needs. */
+export interface AdminDeckListItem extends AdminDeckSummary {
+  ownerId: string
+  /** Empty string while the owner is mid-cascade-deletion. */
+  ownerEmail: string
+  /** Empty string while the project is mid-cascade-deletion. */
+  projectTitle: string
+}
+
+export interface AdminDecksResponse {
+  decks: AdminDeckListItem[]
+  total: number
+  page: number
+  limit: number
+}
+
 const toAdminUserSummary = (
   doc: HydratedDocument<UserDb>,
 ): AdminUserSummary => ({
@@ -137,6 +175,49 @@ const toAdminDeckSummary = (
   updatedAt: (doc.updatedAt ?? doc.createdAt).toISOString(),
 })
 
+const toAdminProjectSummary = (
+  doc: HydratedDocument<ProjectDb>,
+  ownerEmail: string,
+  deckCount: number,
+): AdminProjectSummary => ({
+  id: doc._id.toString(),
+  ownerId: doc.ownerId.toString(),
+  ownerEmail,
+  title: doc.title,
+  // Projects sit at the top of the ACL tree, so their stored visibility
+  // is the effective one (no inheritance to resolve).
+  visibility: doc.visibility,
+  deckCount,
+  createdAt: doc.createdAt.toISOString(),
+  // Fall back for documents created before updatedAt was enabled.
+  updatedAt: (doc.updatedAt ?? doc.createdAt).toISOString(),
+})
+
+/** Builds the page/limit/sort query schema every listing route shares. */
+const listQuery = <K extends string>(sortKeys: K[], defaultSort: K) =>
+  z.object({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(250).default(25),
+    sort: z.enum(sortKeys as [K, ...K[]]).default(defaultSort),
+  })
+
+/** Parses a listing query or 400s with the offending fields listed. */
+const parseListQuery = <T extends z.ZodTypeAny>(
+  schema: T,
+  query: unknown,
+): z.output<T> => {
+  const parsed = schema.safeParse(query)
+  if (!parsed.success) {
+    throw new HttpError(
+      400,
+      'invalid_input',
+      'Invalid list query',
+      parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`),
+    )
+  }
+  return parsed.data
+}
+
 // Sort keys are `${field}:${dir}`: one per column, each direction. The
 // default (joined:desc) is newest-first, as the directory has always been.
 const SORTS = {
@@ -148,13 +229,28 @@ const SORTS = {
   'joined:desc': { createdAt: -1 },
 } as const
 
-const listQuerySchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(250).default(25),
-  sort: z
-    .enum(Object.keys(SORTS) as [keyof typeof SORTS, ...(keyof typeof SORTS)[]])
-    .default('joined:desc'),
-})
+const listQuerySchema = listQuery(
+  Object.keys(SORTS) as (keyof typeof SORTS)[],
+  'joined:desc',
+)
+
+// Projects and lectures share the same sortable columns; both directories
+// default to most-recently-edited first.
+const PROJECT_SORTS = {
+  'title:asc': { title: 1 },
+  'title:desc': { title: -1 },
+  'created:asc': { createdAt: 1 },
+  'created:desc': { createdAt: -1 },
+  'updated:asc': { updatedAt: 1 },
+  'updated:desc': { updatedAt: -1 },
+} as const
+const DECK_SORTS = PROJECT_SORTS
+
+const projectsQuerySchema = listQuery(
+  Object.keys(PROJECT_SORTS) as (keyof typeof PROJECT_SORTS)[],
+  'updated:desc',
+)
+const decksQuerySchema = projectsQuerySchema
 
 /** Resolves a :id route param to an existing user or 404s. */
 const loadUser = async (id: string): Promise<HydratedDocument<UserDb>> => {
@@ -175,16 +271,7 @@ adminRouter.get('/status', (_req, res) => {
 })
 
 adminRouter.get('/users', async (req, res) => {
-  const parsed = listQuerySchema.safeParse(req.query)
-  if (!parsed.success) {
-    throw new HttpError(
-      400,
-      'invalid_input',
-      'Invalid list query',
-      parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`),
-    )
-  }
-  const { page, limit, sort } = parsed.data
+  const { page, limit, sort } = parseListQuery(listQuerySchema, req.query)
 
   const [users, total] = await Promise.all([
     UserModel.find()
@@ -218,16 +305,7 @@ const LOG_SORTS = {
 } as const
 
 adminRouter.get('/logs', async (req, res) => {
-  const parsed = logsQuerySchema.safeParse(req.query)
-  if (!parsed.success) {
-    throw new HttpError(
-      400,
-      'invalid_input',
-      'Invalid list query',
-      parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`),
-    )
-  }
-  const { page, limit, sort } = parsed.data
+  const { page, limit, sort } = parseListQuery(logsQuerySchema, req.query)
 
   const [logs, total] = await Promise.all([
     AdminActionLogModel.find()
@@ -337,6 +415,52 @@ adminRouter.get('/users/:id/decks', async (req, res) => {
   res.json(body)
 })
 
+/** The site-wide project directory: every project on the platform,
+ * paginated and sortable, each row carrying its owner's email and its
+ * lecture count. Owner emails and lecture counts come from one batched
+ * query each — never one per row. */
+adminRouter.get('/projects', async (req, res) => {
+  const { page, limit, sort } = parseListQuery(projectsQuerySchema, req.query)
+
+  const [projects, total] = await Promise.all([
+    ProjectModel.find()
+      .sort(PROJECT_SORTS[sort])
+      .skip((page - 1) * limit)
+      .limit(limit),
+    ProjectModel.countDocuments(),
+  ])
+
+  const ownerIds = [...new Set(projects.map(p => p.ownerId.toString()))]
+  const projectIds = projects.map(p => p._id)
+  const [owners, deckCounts] = await Promise.all([
+    ownerIds.length ? UserModel.find({ _id: { $in: ownerIds } }) : [],
+    projectIds.length
+      ? DeckModel.aggregate<{ _id: Types.ObjectId; count: number }>([
+          { $match: { projectId: { $in: projectIds } } },
+          { $group: { _id: '$projectId', count: { $sum: 1 } } },
+        ])
+      : [],
+  ])
+  const emailById = new Map(owners.map(u => [u._id.toString(), u.email]))
+  const countById = new Map(deckCounts.map(c => [c._id.toString(), c.count]))
+
+  const body: AdminProjectsResponse = {
+    // A row with a missing owner (mid-cascade-deletion) is still listed,
+    // with a blank email — a directory never drops rows.
+    projects: projects.map(project =>
+      toAdminProjectSummary(
+        project,
+        emailById.get(project.ownerId.toString()) ?? '',
+        countById.get(project._id.toString()) ?? 0,
+      ),
+    ),
+    total,
+    page,
+    limit,
+  }
+  res.json(body)
+})
+
 adminRouter.get('/projects/:id', async (req, res) => {
   const notFound = new HttpError(404, 'not_found', 'Project not found')
   const id = String(req.params.id)
@@ -403,6 +527,50 @@ adminRouter.post('/projects/:id/private-view', async (req, res) => {
     },
   })
   res.status(204).end()
+})
+
+/** The site-wide lecture directory: every lecture on the platform,
+ * paginated and sortable, each row carrying its effective visibility,
+ * its owner's email, and its project's title. Three batched queries
+ * (ACLs, owners, projects) cover the whole page — never one per row. */
+adminRouter.get('/decks', async (req, res) => {
+  const { page, limit, sort } = parseListQuery(decksQuerySchema, req.query)
+
+  const [decks, total] = await Promise.all([
+    DeckModel.find()
+      .sort(DECK_SORTS[sort])
+      .skip((page - 1) * limit)
+      .limit(limit),
+    DeckModel.countDocuments(),
+  ])
+
+  const ownerIds = [...new Set(decks.map(d => d.ownerId.toString()))]
+  const projectIds = [...new Set(decks.map(d => d.projectId.toString()))]
+  // loadDeckAcls fetches projects internally but only for inheriting
+  // lectures, so project titles need their own batched lookup.
+  const [acls, owners, projects] = await Promise.all([
+    loadDeckAcls(decks),
+    ownerIds.length ? UserModel.find({ _id: { $in: ownerIds } }) : [],
+    projectIds.length ? ProjectModel.find({ _id: { $in: projectIds } }) : [],
+  ])
+  const emailById = new Map(owners.map(u => [u._id.toString(), u.email]))
+  const titleById = new Map(projects.map(p => [p._id.toString(), p.title]))
+
+  // Every lecture is listed, private or not — the allowlist gate is the
+  // authorization. Rows with a missing owner or project (mid-cascade-
+  // deletion) stay listed with blank fields.
+  const body: AdminDecksResponse = {
+    decks: decks.map(deck => ({
+      ...toAdminDeckSummary(deck, acls.get(deck._id.toString())!),
+      ownerId: deck.ownerId.toString(),
+      ownerEmail: emailById.get(deck.ownerId.toString()) ?? '',
+      projectTitle: titleById.get(deck.projectId.toString()) ?? '',
+    })),
+    total,
+    page,
+    limit,
+  }
+  res.json(body)
 })
 
 adminRouter.get('/decks/:id', async (req, res) => {

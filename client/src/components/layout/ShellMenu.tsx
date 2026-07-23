@@ -13,6 +13,8 @@ import { useIsAdmin } from '../../hooks/useIsAdmin'
 /** The admin console's sections; extend this as admin pages are added. */
 const ADMIN_LINKS = [
   { to: '/app/admin', label: 'Users' },
+  { to: '/app/admin/projects', label: 'Projects' },
+  { to: '/app/admin/decks', label: 'Lectures' },
   { to: '/app/admin/logs', label: 'Logs' },
 ]
 

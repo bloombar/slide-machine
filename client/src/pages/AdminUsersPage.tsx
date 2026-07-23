@@ -10,67 +10,9 @@ import {
   ADMIN_USERS_PAGE_SIZES,
   type AdminUsersResponse,
   type AdminUsersSort,
-  type AdminUsersSortField,
 } from '../api/admin'
-
-const joinedAt = (iso: string): string =>
-  new Date(iso).toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-
-/**
- * A clickable column header that sorts the table by its column. Only one
- * column sorts at a time: the active column shows a solid ↑/↓ arrow and
- * clicking it flips the direction; an inactive column shows a faint ↕ and
- * clicking it makes it the sole active sort (ascending first).
- */
-function SortHeader({
-  label,
-  field,
-  sort,
-  onSort,
-}: {
-  label: string
-  field: AdminUsersSortField
-  sort: AdminUsersSort
-  onSort: (sort: AdminUsersSort) => void
-}) {
-  const [activeField, activeDir] = sort.split(':')
-  const active = activeField === field
-  return (
-    <th
-      scope="col"
-      className="px-4 py-3"
-      aria-sort={
-        active ? (activeDir === 'asc' ? 'ascending' : 'descending') : 'none'
-      }
-    >
-      <button
-        type="button"
-        onClick={() =>
-          onSort(`${field}:${active && activeDir === 'asc' ? 'desc' : 'asc'}`)
-        }
-        className="group flex items-center gap-1 uppercase hover:text-slate-700"
-      >
-        {label}
-        <span
-          aria-hidden="true"
-          className={
-            active
-              ? 'text-slate-700'
-              : 'text-slate-400 group-hover:text-slate-600'
-          }
-        >
-          {active ? (activeDir === 'asc' ? '↑' : '↓') : '↕'}
-        </span>
-      </button>
-    </th>
-  )
-}
+import SortHeader from '../components/admin/SortHeader'
+import { formatAdminDate } from '../lib/date'
 
 export default function AdminUsersPage() {
   const [page, setPage] = useState(1)
@@ -189,7 +131,7 @@ export default function AdminUsersPage() {
                   {user.displayName}
                 </td>
                 <td className="px-4 py-2.5 text-slate-500">
-                  {joinedAt(user.createdAt)}
+                  {formatAdminDate(user.createdAt)}
                 </td>
               </tr>
             ))}

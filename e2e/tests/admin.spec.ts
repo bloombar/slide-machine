@@ -1,10 +1,10 @@
 /**
  * E2E admin interface journey against the built app: a regular user
- * never sees the admin entries and is bounced from /app/admin and
- * /app/admin/logs; the allowlisted admin (ADMIN_EMAILS in
- * playwright.config.ts) reaches the user directory from the menu,
- * drills into a user and through to a project's own admin page, and
- * exports the audit log as CSV.
+ * never sees the admin entries and is bounced from every admin URL;
+ * the allowlisted admin (ADMIN_EMAILS in playwright.config.ts) reaches
+ * the user directory from the menu, drills into a user and through to
+ * a project's own admin page, browses the site-wide project and
+ * lecture directories, and exports the audit log as CSV.
  */
 import { test, expect, type Page } from '@playwright/test'
 import { createProject } from './helpers'
@@ -53,6 +53,12 @@ test('a regular user has no admin entry and is bounced from /app/admin', async (
   await page.goto('/app/admin')
   await expect(page).toHaveURL(/\/app$/)
 
+  await page.goto('/app/admin/projects')
+  await expect(page).toHaveURL(/\/app$/)
+
+  await page.goto('/app/admin/decks')
+  await expect(page).toHaveURL(/\/app$/)
+
   await page.goto('/app/admin/logs')
   await expect(page).toHaveURL(/\/app$/)
 })
@@ -92,6 +98,45 @@ test('the allowlisted admin reaches the directory and a user drill-down', async 
   // Its back link returns to the owner's admin page
   await page.getByRole('link', { name: `← ${user.displayName}` }).click()
   await expect(page).toHaveURL(/\/app\/admin\/users\//)
+})
+
+test('the admin browses the project and lecture directories', async ({
+  page,
+}) => {
+  await ensureSignedIn(page, admin)
+
+  await page.getByRole('button', { name: 'Menu' }).click()
+  await page.getByRole('menuitem', { name: 'Admin', exact: true }).hover()
+  await page.getByRole('menuitem', { name: 'Projects' }).click()
+  await expect(page).toHaveURL(/\/app\/admin\/projects$/)
+  await expect(page.getByRole('heading', { name: /Projects/ })).toBeVisible()
+  await expect(page.getByLabel('Projects per page')).toBeVisible()
+
+  // The project created by the first test is on page 1 (last-edited
+  // first), in a row that also carries its owner's email
+  const row = page.getByRole('row').filter({ hasText: user.email })
+  await expect(
+    row.getByRole('link', { name: 'Admin E2E Project' }),
+  ).toBeVisible()
+
+  // Rows drill into the project's own admin page
+  await row.getByRole('link', { name: 'Admin E2E Project' }).click()
+  await expect(page).toHaveURL(/\/app\/admin\/projects\/[0-9a-f]+$/)
+  await expect(
+    page.getByRole('heading', { name: 'Admin E2E Project' }),
+  ).toBeVisible()
+
+  // The lecture directory renders its table; the test DB is shared, so
+  // assert rows or the empty state rather than specific contents
+  await page.getByRole('button', { name: 'Menu' }).click()
+  await page.getByRole('menuitem', { name: 'Admin', exact: true }).hover()
+  await page.getByRole('menuitem', { name: 'Lectures' }).click()
+  await expect(page).toHaveURL(/\/app\/admin\/decks$/)
+  await expect(page.getByRole('heading', { name: /Lectures/ })).toBeVisible()
+  await expect(page.getByLabel('Lectures per page')).toBeVisible()
+  const rows = page.getByRole('table').getByRole('row')
+  // Header plus at least one body row (a lecture or the empty-state row)
+  expect(await rows.count()).toBeGreaterThanOrEqual(2)
 })
 
 test('the admin reaches the audit log and downloads the CSV export', async ({

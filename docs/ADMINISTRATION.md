@@ -35,6 +35,14 @@ moderation actions for when the answer calls for one.
 
 - **User directory** — every account (email, handle, join date), paginated
   (10 / 25 / 50 / 100 per page) and sortable (newest, oldest, email A–Z).
+- **Project directory** (`/app/admin/projects`) — every project on the
+  platform (title, owner, visibility, lecture count, timestamps),
+  paginated and sortable (title, created, updated; last-edited first by
+  default). Rows link to the project page, owners to their user page.
+- **Lecture directory** (`/app/admin/decks`) — every lecture on the
+  platform (title, project, owner, effective visibility, slide count,
+  timestamps), paginated and sortable the same way. Rows link to the
+  lecture page, and the project and owner cells to theirs.
 - **User drill-down** — account details (plan, email verification, locale,
   profile visibility, project/lecture counts) plus the user's projects,
   each linking to its own **project page**. Lectures the user owns inside
@@ -79,9 +87,10 @@ until the email is removed from `ADMIN_EMAILS`.
 An allowlisted admin can **always open any lecture in the viewer**
 (`/d/:slug`), private or not, read-only — like the admin API, the
 allowlist is the authorization. The admin console lists **every
-lecture, private or not**, on the same basis: the lecture tables on a
-user's admin page and on the admin project pages always include private
-lectures, with no toggle. Individual viewer opens are not logged.
+lecture, private or not**, on the same basis: the site-wide lecture
+directory and the lecture tables on a user's admin page and on the admin
+project pages always include private lectures, with no toggle.
+Individual viewer opens are not logged.
 
 Opening a private *project* in the product view is a separate step: the
 **"View project"** button on an admin project page confirms first and

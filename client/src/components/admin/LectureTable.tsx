@@ -7,15 +7,7 @@
 import { Link } from 'react-router'
 import type { Visibility } from '@slide-machine/shared'
 import type { AdminDeckSummary } from '../../api/admin'
-
-const asDate = (iso: string): string =>
-  new Date(iso).toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+import { formatAdminDate } from '../../lib/date'
 
 /** Colour-coded pill for a lecture's effective visibility. */
 export function VisibilityBadge({ visibility }: { visibility: Visibility }) {
@@ -85,7 +77,7 @@ export default function LectureTable({
                 {deck.slideCount}
               </td>
               <td className="py-1.5 pr-3 text-slate-500">
-                {asDate(deck.updatedAt)}
+                {formatAdminDate(deck.updatedAt)}
               </td>
               <td className="py-1.5 text-right">
                 <button

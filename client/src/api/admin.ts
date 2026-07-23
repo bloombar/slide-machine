@@ -73,6 +73,53 @@ export interface AdminDeckDetailResponse {
   owner: { id: string; email: string; displayName: string }
 }
 
+/** One row of the site-wide admin project directory. */
+export interface AdminProjectSummary {
+  id: string
+  ownerId: string
+  /** Empty string while the owner is mid-cascade-deletion. */
+  ownerEmail: string
+  title: string
+  visibility: Visibility
+  /** Number of lectures in the project. */
+  deckCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+/** A column the project directory can be ordered by. */
+export type AdminProjectsSortField = 'title' | 'created' | 'updated'
+/** Wire value for the `sort` query param: `${field}:${dir}`. */
+export type AdminProjectsSort = `${AdminProjectsSortField}:${AdminUsersSortDir}`
+
+export interface AdminProjectsResponse {
+  projects: AdminProjectSummary[]
+  total: number
+  page: number
+  limit: number
+}
+
+/** One row of the site-wide admin lecture directory: the per-user row
+ * shape plus the owner and project context a global list needs. */
+export interface AdminDeckListItem extends AdminDeckSummary {
+  ownerId: string
+  /** Empty string while the owner is mid-cascade-deletion. */
+  ownerEmail: string
+  /** Empty string while the project is mid-cascade-deletion. */
+  projectTitle: string
+}
+
+/** The lecture directory sorts by the same columns as the project one. */
+export type AdminDecksSortField = AdminProjectsSortField
+export type AdminDecksSort = AdminProjectsSort
+
+export interface AdminDecksResponse {
+  decks: AdminDeckListItem[]
+  total: number
+  page: number
+  limit: number
+}
+
 /** Selectable directory page sizes; the server caps `limit` at 250. */
 export const ADMIN_USERS_PAGE_SIZES = [10, 25, 50, 100, 250] as const
 export const ADMIN_USERS_PAGE_SIZE = 100
@@ -104,6 +151,34 @@ export const fetchAdminUserDecks = (
   userId: string,
 ): Promise<{ decks: AdminDeckSummary[] }> =>
   apiFetch<{ decks: AdminDeckSummary[] }>(`/api/admin/users/${userId}/decks`)
+
+/** Selectable project-directory page sizes; same cap as users. */
+export const ADMIN_PROJECTS_PAGE_SIZES = ADMIN_USERS_PAGE_SIZES
+export const ADMIN_PROJECTS_PAGE_SIZE = 100
+
+/** One page of the site-wide project directory. */
+export const listAdminProjects = (
+  page = 1,
+  sort: AdminProjectsSort = 'updated:desc',
+  limit: number = ADMIN_PROJECTS_PAGE_SIZE,
+): Promise<AdminProjectsResponse> =>
+  apiFetch<AdminProjectsResponse>(
+    `/api/admin/projects?page=${page}&limit=${limit}&sort=${sort}`,
+  )
+
+/** Selectable lecture-directory page sizes; same cap as users. */
+export const ADMIN_DECKS_PAGE_SIZES = ADMIN_USERS_PAGE_SIZES
+export const ADMIN_DECKS_PAGE_SIZE = 100
+
+/** One page of the site-wide lecture directory. */
+export const listAdminDecks = (
+  page = 1,
+  sort: AdminDecksSort = 'updated:desc',
+  limit: number = ADMIN_DECKS_PAGE_SIZE,
+): Promise<AdminDecksResponse> =>
+  apiFetch<AdminDecksResponse>(
+    `/api/admin/decks?page=${page}&limit=${limit}&sort=${sort}`,
+  )
 
 export const fetchAdminProject = (
   projectId: string,
