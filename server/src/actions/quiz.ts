@@ -48,6 +48,9 @@ import { decryptToken } from '../lib/token-crypto'
 
 const isLive = (): boolean => env.QUIZ_PUBLISH_MODE === 'live'
 
+/** Total points for a quiz when the instructor doesn't enter one (QUIZ-7). */
+const DEFAULT_TOTAL_POINTS = 100
+
 /** Cap on remembered past questions, so the deck doc and the avoid-list
  * prompt cannot grow without bound as an instructor keeps regenerating. */
 const MAX_PAST_QUESTIONS = 60
@@ -291,24 +294,24 @@ export const quizPublish = defineAction<
       ...(deck.quiz?.questions ?? []),
     ])
 
+    // No total entered → a 100-point quiz by default (QUIZ-7).
+    const totalPoints = input.totalPoints ?? DEFAULT_TOTAL_POINTS
+
     const provider = registry.get<QuizGenerationProvider>('quizGeneration')
     const quiz = await provider.generateQuiz({
       slides,
       transcript,
       avoidQuestions,
       questionCount: input.questionCount,
-      totalPoints: input.totalPoints,
+      totalPoints,
       typeCounts: input.typeCounts,
       customInstructions: input.customInstructions,
     })
 
-    // When a total is given, split it EQUALLY across the questions, so the
-    // instructor's total holds regardless of what the provider chose (QUIZ-7).
-    if (input.totalPoints && quiz.questions.length) {
-      const points = splitPointsEqually(
-        quiz.questions.length,
-        input.totalPoints,
-      )
+    // Split the total EQUALLY across the questions, so it holds regardless of
+    // what the provider chose (QUIZ-7).
+    if (quiz.questions.length) {
+      const points = splitPointsEqually(quiz.questions.length, totalPoints)
       quiz.questions.forEach((q, i) => {
         q.points = points[i]
       })

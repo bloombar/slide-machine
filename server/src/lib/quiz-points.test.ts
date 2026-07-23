@@ -16,6 +16,12 @@ describe('splitPointsEqually', () => {
     expect(splitPointsEqually(4, 8)).toEqual([2, 2, 2, 2])
   })
 
+  it('splits the 100-point default across the questions', () => {
+    // The publish action defaults to 100 points when none is entered (QUIZ-7).
+    expect(splitPointsEqually(4, 100)).toEqual([25, 25, 25, 25])
+    expect(splitPointsEqually(3, 100)).toEqual([34, 33, 33])
+  })
+
   it('hands an indivisible remainder to the first questions', () => {
     expect(splitPointsEqually(3, 10)).toEqual([4, 3, 3])
     expect(splitPointsEqually(3, 5)).toEqual([2, 2, 1])

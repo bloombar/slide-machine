@@ -328,7 +328,7 @@ function FolderPicker({
                   type="number"
                   min={1}
                   value={totalPoints}
-                  placeholder="auto"
+                  placeholder="100"
                   onChange={e => setTotalPoints(e.target.value)}
                   className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
                 />
