@@ -60,27 +60,6 @@ describe('QuizPanel', () => {
     expect(connectBody.returnTo).toContain('settings=quiz')
   })
 
-  it('offers a Reconnect link when already connected (to grant new scopes)', async () => {
-    const consent = 'https://accounts.google.com/o/oauth2/v2/auth?y=1'
-    const loc = { href: 'http://localhost:5173/d/x' }
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      value: loc,
-    })
-    mockFetchRoutes({
-      'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
-      'quiz.connectGoogle': () => ({
-        status: 200,
-        body: { status: 'redirect', url: consent },
-      }),
-    })
-    render(<QuizPanel deckId="d1" />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Reconnect Google account' }),
-    )
-    await waitFor(() => expect(loc.href).toBe(consent))
-  })
-
   it('shows an existing quiz URL and copies it to the clipboard', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', {

@@ -624,19 +624,6 @@ export default function QuizPanel({ deckId }: Props) {
         </div>
       )}
 
-      {/* When already connected, allow re-consent — e.g. to grant a newly
-          added scope like browsing the whole Drive. */}
-      {connected && (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={connectGoogle}
-          className="self-start text-xs text-slate-500 hover:text-slate-700 hover:underline disabled:opacity-50"
-        >
-          Reconnect Google account
-        </button>
-      )}
-
       {picking && (
         <FolderPicker
           publishing={busy}
