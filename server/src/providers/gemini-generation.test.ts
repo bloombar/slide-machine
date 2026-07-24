@@ -171,6 +171,35 @@ describe('GeminiGenerationProvider', () => {
     expect(prompt).not.toContain('keep the SAME layoutType')
   })
 
+  it('forbids updating a whiteboard current slide and never surfaces its layout', async () => {
+    fetchMock.mockResolvedValue(geminiReply({ action: 'none' }))
+    await provider.generateSlideContent(
+      request({
+        allowLayoutRefit: true,
+        allowRephrase: true,
+        currentSlide: {
+          layoutType: 'whiteboard',
+          bulletCount: 0,
+          bodyChars: 0,
+          content: { title: undefined },
+          sourceTranscript: 'spoken words while annotating',
+        },
+      }),
+    )
+    const prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+      .contents[0].parts[0].text as string
+    // The model is told the canvas can't be updated and to go "new"...
+    expect(prompt).toContain('freehand whiteboard drawing canvas')
+    expect(prompt).toContain('NEVER output layoutType "whiteboard"')
+    // ...its "load" is never surfaced (that invited the update bug)...
+    expect(prompt).not.toContain('Current slide load')
+    // ...and no update/delta rules that reference its non-selectable layout
+    // (this text is unique to the updateRules fragment, unlike the "delta"
+    // token that always appears in the JSON output shape).
+    expect(prompt).not.toContain('keep the SAME layoutType')
+    expect(prompt).not.toContain('Current slide content:')
+  })
+
   it('tolerates responses that omit layoutType (none / delta updates)', async () => {
     // A bare "none" — exactly what the live model returned mid-lecture
     fetchMock.mockResolvedValue(geminiReply({ action: 'none' }))

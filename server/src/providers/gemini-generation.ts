@@ -26,7 +26,7 @@ import type {
   SlideNarrateResult,
   LayoutType,
 } from '@slide-machine/shared'
-import { isVoiceCommand } from '@slide-machine/shared'
+import { isVoiceCommand, WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
 import type { HealthComponent } from '@slide-machine/shared'
 import { env } from '../config/env'
 import { registry } from './registry'
@@ -173,8 +173,14 @@ const instructions = (req: SlideGenerationRequest): string => {
         .join('\n')}`
     : '\nNo slides exist yet.'
 
+  // The current slide's layout can be one that is NOT selectable — a freehand
+  // whiteboard canvas. It has no text slots and is absent from the set above, so
+  // the model must never "update" it or echo its layout; content goes to a "new"
+  // slide. Surfacing its "load" (as for a normal slide) invited exactly that bug.
   const capacity = req.currentSlide
-    ? `\nCurrent slide load: ${req.currentSlide.bulletCount} bullets, ~${req.currentSlide.bodyChars} body characters (layout "${req.currentSlide.layoutType}"). If adding this phrase's content would exceed the layout's limits, choose "new" instead of "update".`
+    ? req.currentSlide.layoutType === WHITEBOARD_LAYOUT_TYPE
+      ? `\nThe current slide is a freehand whiteboard drawing canvas: it has NO text slots and its layout ("${WHITEBOARD_LAYOUT_TYPE}") is NOT in the set above. NEVER choose "update" for it and NEVER output layoutType "${WHITEBOARD_LAYOUT_TYPE}". This phrase's content must go on a "new" slide (or "none" if it is filler).`
+      : `\nCurrent slide load: ${req.currentSlide.bulletCount} bullets, ~${req.currentSlide.bodyChars} body characters (layout "${req.currentSlide.layoutType}"). If adding this phrase's content would exceed the layout's limits, choose "new" instead of "update".`
     : ''
 
   // Update semantics + the slide's exact content, present only when
@@ -188,7 +194,11 @@ const instructions = (req: SlideGenerationRequest): string => {
     ? `- "refit": provide the COMPLETE slide (every existing point preserved plus any added material). Use it EITHER to (a) move to a layoutType that fits the combined content better (e.g. prose grown into an enumeration fits "list"), OR (b) keep the SAME layoutType but re-state the whole slide when a clearer, tighter phrasing would improve it.`
     : `- "refit": ONLY when the slide's combined content now fits a DIFFERENT layout better (e.g. prose grown into an enumeration fits "list") — the layoutType must actually change; slots must contain the COMPLETE slide re-mapped to the new layout, every existing point preserved plus the added material, reworded only as the new slots require.`
   const updateRules =
-    req.allowLayoutRefit && req.currentSlide?.content
+    req.allowLayoutRefit &&
+    req.currentSlide?.content &&
+    // A whiteboard canvas is never updated (see `capacity`); don't hand the
+    // model update rules that reference its non-selectable layout.
+    req.currentSlide.layoutType !== WHITEBOARD_LAYOUT_TYPE
       ? `\nFor "update", also set "updateMode":
 - "delta": adds a small amount; slots contain ONLY the added material. Keep layoutType "${req.currentSlide.layoutType}" unless another layout still displays every slot this slide uses.
 ${refitRule}
