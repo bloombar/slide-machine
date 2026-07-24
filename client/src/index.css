@@ -34,22 +34,54 @@ span.slot-blank:hover,
   animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
 
-/* Every named slot shares one transition class so the pair rules below
-   need not enumerate slot names. */
-.vt-slot {
-  view-transition-class: slot;
-}
-
 /* A slot present in BOTH layouts should morph, not cross-fade: the default
-   fade between differently-scaled snapshots reads as a blur/flash on top of
-   the move. Hide the old snapshot and let the new one ride the group's
-   move/scale at full opacity. Slots only entering or leaving a layout
-   (:only-child) keep the default fade in/out. */
-::view-transition-old(.slot):not(:only-child) {
+   fade between differently-scaled snapshots reads as a flash of oversized
+   content on top of the move. Hide the old snapshot and let the new one
+   ride the group's move/scale at full opacity. Slot names are enumerated
+   and only bare :only-child is used below, because view-transition-class
+   selectors and :not(:only-child) on these pseudo-elements are not matched
+   by all engines. */
+::view-transition-old(vt-title),
+::view-transition-old(vt-body),
+::view-transition-old(vt-bullets),
+::view-transition-old(vt-image),
+::view-transition-old(vt-caption),
+::view-transition-old(vt-columns) {
   display: none;
 }
-::view-transition-new(.slot):not(:only-child) {
+::view-transition-new(vt-title),
+::view-transition-new(vt-body),
+::view-transition-new(vt-bullets),
+::view-transition-new(vt-image),
+::view-transition-new(vt-caption),
+::view-transition-new(vt-columns) {
   animation: none;
+}
+
+/* A slot present in only ONE of the layouts keeps GEN-9's enter/exit
+   fades: restore the leaving snapshot (the browser's own fade-out still
+   animates it) and give the entering one an explicit fade-in. These
+   higher-specificity :only-child rules override the pair rules above. */
+::view-transition-old(vt-title):only-child,
+::view-transition-old(vt-body):only-child,
+::view-transition-old(vt-bullets):only-child,
+::view-transition-old(vt-image):only-child,
+::view-transition-old(vt-caption):only-child,
+::view-transition-old(vt-columns):only-child {
+  display: block;
+}
+@keyframes vt-slot-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+::view-transition-new(vt-title):only-child,
+::view-transition-new(vt-body):only-child,
+::view-transition-new(vt-bullets):only-child,
+::view-transition-new(vt-image):only-child,
+::view-transition-new(vt-caption):only-child,
+::view-transition-new(vt-columns):only-child {
+  animation: 250ms cubic-bezier(0.2, 0, 0, 1) both vt-slot-fade-in;
 }
 
 /* Reduced-motion backstop: runViewTransition already applies changes

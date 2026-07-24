@@ -248,9 +248,6 @@ describe('SlideView layout-transition names (GEN-9)', () => {
     expect(title.tagName).toBe('SPAN')
     expect(title).toHaveClass('inline-block')
     expect(title).not.toHaveClass('h-full')
-    // vt-slot carries the shared view-transition-class that suppresses the
-    // cross-fade for slots present in both layouts (index.css)
-    expect(title).toHaveClass('vt-slot')
 
     // A normal (non-transitioning) render adds no wrapper and no name, so
     // nothing collides across a multi-slide list view.
@@ -283,7 +280,7 @@ describe('SlideView layout-transition names (GEN-9)', () => {
     while (wrapper && !wrapper.style.viewTransitionName)
       wrapper = wrapper.parentElement
     expect(wrapper?.style.viewTransitionName).toBe('vt-image')
-    expect(wrapper).toHaveClass('vt-slot', 'h-full', 'w-full')
+    expect(wrapper).toHaveClass('h-full', 'w-full')
   })
 })
 
