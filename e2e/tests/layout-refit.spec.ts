@@ -2,18 +2,22 @@
  * Layout re-fit end to end (GENERATION_LAYOUT_REFIT on, mock provider):
  * a prose content slide that receives an enumerating continuation is
  * re-fitted to a list layout in place — same slide, migrated content —
- * per GEN-8 "re-fit the layout on update".
+ * per GEN-8 "re-fit the layout on update". The re-fit runs through the
+ * animated layout transition (GEN-9); both the animated path and the
+ * reduced-motion instant fallback must land on the same content-stable
+ * result.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 import { createProject } from './helpers'
 
-const email = `refit-${Date.now()}@example.com`
 const password = 'sturdy-passw0rd'
 
-test('an enumerating update refits the slide from content to list', async ({
-  page,
-}) => {
-  // Register, create a project, start a lecture
+/**
+ * Registers a fresh user, starts a lecture, and drives the two phrases
+ * that grow a `content` slide into a `list` — asserting the re-fit happens
+ * on the SAME slide with its content preserved across the transition.
+ */
+const refitContentToList = async (page: Page, email: string) => {
   await page.goto('/register')
   await page.getByLabel('Display name').fill('Refit Tester')
   await page.getByLabel('Email').fill(email)
@@ -52,6 +56,23 @@ test('an enumerating update refits the slide from content to list', async ({
   ).toBeVisible()
   await expect(page.getByText('glycolipids')).toBeVisible()
   await expect(page.getByText('1 / 1')).toBeVisible()
+}
+
+test('an enumerating update refits the slide from content to list', async ({
+  page,
+}) => {
+  // Default media: the browser supports view transitions, so the re-fit
+  // animates (GEN-9). The end state is still the migrated list slide.
+  await refitContentToList(page, `refit-${Date.now()}@example.com`)
+})
+
+test('the refit still applies content-stably under reduced motion', async ({
+  page,
+}) => {
+  // Reduced motion takes the instant fallback in runViewTransition (no view
+  // transition), which must reach the exact same content-stable result.
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await refitContentToList(page, `refit-rm-${Date.now()}@example.com`)
 })
 
 test('a refit never re-lays-out a header (title) slide; it spills to a new one', async ({

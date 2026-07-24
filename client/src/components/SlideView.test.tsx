@@ -229,6 +229,35 @@ describe('SlideView in-place editing', () => {
   })
 })
 
+describe('SlideView layout-transition names (GEN-9)', () => {
+  it('names its slots for the morph only while transitioning', () => {
+    const { rerender } = render(
+      <SlideView
+        slide={slide({ layoutType: 'content', title: 'Cells', body: 'Units' })}
+        template={template}
+        transitioning
+      />,
+    )
+    // The transitioning slide wraps each slot in a box carrying a per-slot
+    // view-transition-name, which the browser morphs between layouts.
+    const title = screen.getByRole('heading', { name: 'Cells' })
+      .firstElementChild as HTMLElement
+    expect(title.style.viewTransitionName).toBe('vt-title')
+
+    // A normal (non-transitioning) render adds no wrapper and no name, so
+    // nothing collides across a multi-slide list view.
+    rerender(
+      <SlideView
+        slide={slide({ layoutType: 'content', title: 'Cells', body: 'Units' })}
+        template={template}
+      />,
+    )
+    const heading = screen.getByRole('heading', { name: 'Cells' })
+      .firstElementChild as HTMLElement
+    expect(heading?.style.viewTransitionName ?? '').toBe('')
+  })
+})
+
 describe('SlideView markdown rendering', () => {
   it('renders inline markdown in the title for viewers', () => {
     render(

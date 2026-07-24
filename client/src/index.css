@@ -23,3 +23,24 @@ span.slot-blank:hover,
 [data-reveal-blanks] .slot-blank {
   background-color: rgb(148 163 184 / 0.35);
 }
+
+/* Animated layout transitions (GEN-9). When a slide changes layout, its
+   named slots (vt-title/body/image/…) carry a view-transition-name, so the
+   browser morphs each one from its old placement to its new one. A single
+   short, consistent duration keeps the change "brief and bounded"; entering
+   and leaving elements cross-fade by the API's default. */
+::view-transition-group(*) {
+  animation-duration: 250ms;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Reduced-motion backstop: runViewTransition already applies changes
+   instantly when this preference is set, but should any view transition
+   still fire, cut its animation to an imperceptible frame. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 1ms;
+  }
+}

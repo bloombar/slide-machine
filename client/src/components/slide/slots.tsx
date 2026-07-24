@@ -355,7 +355,16 @@ const EDITORS: Record<SlotKind, ComponentType<SlotEditorProps>> = {
  * nothing. The template's SlotSpec (when provided) takes precedence
  * over the conventional defaults, so template-declared kinds, labels,
  * and validation flow into the editor. */
-export default function SlideSlot(props: Omit<SlotEditorProps, 'descriptor'>) {
+export default function SlideSlot({
+  viewTransitionName,
+  ...props
+}: Omit<SlotEditorProps, 'descriptor'> & {
+  /** Set only while this slide is mid layout-change (GEN-9): wraps the slot
+   * in a full-size box carrying the shared-element name the View
+   * Transitions API morphs on. Undefined otherwise, so normal renders keep
+   * the original DOM with no extra wrapper. */
+  viewTransitionName?: string
+}) {
   const conventional = SLOT_DESCRIPTORS[props.slot] as
     SlotDescriptor | undefined
   const descriptor: SlotDescriptor | undefined = props.spec
@@ -367,5 +376,11 @@ export default function SlideSlot(props: Omit<SlotEditorProps, 'descriptor'>) {
     : conventional
   const Editor = descriptor && EDITORS[descriptor.kind]
   if (!Editor) return null
-  return <Editor {...props} descriptor={descriptor} />
+  const editor = <Editor {...props} descriptor={descriptor} />
+  if (!viewTransitionName) return editor
+  return (
+    <div className="h-full w-full" style={{ viewTransitionName }}>
+      {editor}
+    </div>
+  )
 }

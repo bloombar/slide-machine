@@ -31,6 +31,7 @@ export default function SlideView({
   onReplaceImage,
   onPickImageCandidate,
   onRemoveImage,
+  transitioning,
 }: {
   slide: Slide
   template: Template
@@ -43,6 +44,9 @@ export default function SlideView({
   onReplaceImage?: (file: File) => void
   onPickImageCandidate?: (candidate: ImageSearchCandidate) => void
   onRemoveImage?: () => void
+  /** True only for the one slide mid layout-change: names its slots so the
+   * View Transitions API morphs them between layouts (GEN-9). */
+  transitioning?: boolean
 }) {
   const colors = themeColors(template.theme)
   const layoutDef = template.layouts.find(l => l.type === slide.layoutType)
@@ -61,6 +65,9 @@ export default function SlideView({
       onPickImageCandidate={editable ? onPickImageCandidate : undefined}
       onRemoveImage={editable ? onRemoveImage : undefined}
       imagePending={imagePending}
+      // Names are per-slot and unique within a slide; only the transitioning
+      // slide sets them, so nothing collides across a multi-slide list view.
+      viewTransitionName={transitioning ? `vt-${name}` : undefined}
     />
   )
 
