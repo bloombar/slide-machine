@@ -355,16 +355,7 @@ const EDITORS: Record<SlotKind, ComponentType<SlotEditorProps>> = {
  * nothing. The template's SlotSpec (when provided) takes precedence
  * over the conventional defaults, so template-declared kinds, labels,
  * and validation flow into the editor. */
-export default function SlideSlot({
-  viewTransitionName,
-  ...props
-}: Omit<SlotEditorProps, 'descriptor'> & {
-  /** Set only while this slide is mid layout-change (GEN-9): wraps the slot
-   * in a box carrying the shared-element name the View Transitions API
-   * morphs on. Undefined otherwise, so normal renders keep the original
-   * DOM with no extra wrapper. */
-  viewTransitionName?: string
-}) {
+export default function SlideSlot(props: Omit<SlotEditorProps, 'descriptor'>) {
   const conventional = SLOT_DESCRIPTORS[props.slot] as
     SlotDescriptor | undefined
   const descriptor: SlotDescriptor | undefined = props.spec
@@ -376,22 +367,30 @@ export default function SlideSlot({
     : conventional
   const Editor = descriptor && EDITORS[descriptor.kind]
   if (!Editor) return null
+  // Every slot renders inside a permanent layout-neutral wrapper tagged
+  // for the GEN-9 layout transition (lib/layoutFlip): data-flip-slot
+  // finds the slots, data-flip-id matches a slot to itself across the
+  // layout swap. Image wrappers pass the container's size through (the
+  // img fills its parent chain); text wrappers stay inline-block so they
+  // never disturb the flow around them.
   const editor = <Editor {...props} descriptor={descriptor} />
-  if (!viewTransitionName) return editor
-  // The wrapper must not disturb the layout it is snapshotting: naming the
-  // slots visibly reflowed the OLD arrangement (text jumped to the top)
-  // when every wrapper was a full-size block. Image slots fill a sized
-  // container, so theirs passes the full size through; text slots keep
-  // inline flow via inline-block — which also keeps the box unfragmented,
-  // a View Transitions API requirement for capture.
+  const flipId = `${props.slide.id}:${props.slot}`
   if (descriptor.kind === 'image')
     return (
-      <div className="h-full w-full" style={{ viewTransitionName }}>
+      <div
+        className="h-full w-full"
+        data-flip-slot="image"
+        data-flip-id={flipId}
+      >
         {editor}
       </div>
     )
   return (
-    <span className="inline-block max-w-full" style={{ viewTransitionName }}>
+    <span
+      className="inline-block max-w-full"
+      data-flip-slot={props.slot}
+      data-flip-id={flipId}
+    >
       {editor}
     </span>
   )

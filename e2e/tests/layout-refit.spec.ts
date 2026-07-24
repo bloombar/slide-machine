@@ -69,8 +69,8 @@ test('an enumerating update refits the slide from content to list', async ({
 test('the refit still applies content-stably under reduced motion', async ({
   page,
 }) => {
-  // Reduced motion takes the instant fallback in runViewTransition (no view
-  // transition), which must reach the exact same content-stable result.
+  // Reduced motion takes the instant fallback in runLayoutFlip (no
+  // animation), which must reach the exact same content-stable result.
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await refitContentToList(page, `refit-rm-${Date.now()}@example.com`)
 })

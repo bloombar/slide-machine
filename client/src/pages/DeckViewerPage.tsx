@@ -34,7 +34,7 @@ import {
   hasVisibleDrawings,
 } from '@slide-machine/shared'
 import { strokeVisible, erasureReplays } from '../lib/drawing'
-import { runViewTransition } from '../lib/viewTransition'
+import { runLayoutFlip } from '../lib/layoutFlip'
 import { apiFetch, ApiError } from '../api/http'
 import { dispatchAction } from '../api/actions'
 import {
@@ -185,12 +185,6 @@ export default function DeckViewerPage() {
   const [transcriptEditorFor, setTranscriptEditorFor] = useState<string | null>(
     null,
   )
-  // The slide currently morphing between layouts (GEN-9): only its slots are
-  // named for the View Transitions API, so a multi-slide list view never has
-  // colliding view-transition-names. Cleared when the transition finishes.
-  const [transitioningSlideId, setTransitioningSlideId] = useState<
-    string | null
-  >(null)
   // Blank slots are invisible to the audience; clicking the page
   // background flashes a half-second skeleton reveal so editors can
   // find them
@@ -572,26 +566,23 @@ export default function DeckViewerPage() {
   }
 
   /** Per-slide layout switch (EDIT-3): content stays, arrangement changes.
-   * The swap runs through an animated view transition (GEN-9) so the shared
-   * elements morph into their new places rather than jumping. */
+   * The swap animates as a layout morph (GEN-9): the slots glide to their
+   * new places rather than jumping. */
   const setSlideLayout = (slideId: string, layoutType: string) => {
     dispatchAction<Slide>('slide.setLayout', { slideId, layoutType })
       .then(updated => {
-        runViewTransition(
-          () =>
-            setView(v =>
-              v
-                ? {
-                    ...v,
-                    slides: v.slides.map(s =>
-                      s.id === updated.id ? updated : s,
-                    ),
-                  }
-                : v,
-            ),
-          // Name the slots on the OLD layout before the browser snapshots it.
-          () => setTransitioningSlideId(updated.id),
-        ).finally(() => setTransitioningSlideId(null))
+        void runLayoutFlip(updated.id, () =>
+          setView(v =>
+            v
+              ? {
+                  ...v,
+                  slides: v.slides.map(s =>
+                    s.id === updated.id ? updated : s,
+                  ),
+                }
+              : v,
+          ),
+        )
         // Switching onto an image layout sources an image server-side; the
         // returned slide carries the search intent, so poll for it to land.
         watchImage(updated)
@@ -651,8 +642,8 @@ export default function DeckViewerPage() {
     // long after the render that created this callback
     const slides = viewRef.current?.slides ?? []
     // An AI re-fit that changes an already-displayed slide's layout morphs
-    // via a view transition (GEN-9); pure content updates stay instant to
-    // keep the live view stable (GEN-5).
+    // via an animated layout flip (GEN-9); pure content updates stay
+    // instant to keep the live view stable (GEN-5).
     const prior = isNew ? undefined : slides.find(s => s.id === next.id)
     const layoutChanged = Boolean(prior && prior.layoutType !== next.layoutType)
     const commit = () =>
@@ -678,9 +669,7 @@ export default function DeckViewerPage() {
           : v,
       )
     if (layoutChanged) {
-      runViewTransition(commit, () => setTransitioningSlideId(next.id)).finally(
-        () => setTransitioningSlideId(null),
-      )
+      void runLayoutFlip(next.id, commit)
     } else {
       commit()
     }
@@ -1701,7 +1690,6 @@ export default function DeckViewerPage() {
                 onPickImageCandidate={pickSlideImageCandidate(slide!.id)}
                 onRemoveImage={removeSlideImage(slide!)}
                 imagePending={pendingImages.has(slide!.id)}
-                transitioning={transitioningSlideId === slide!.id}
               />
               <SlideMenu
                 number={nav.current + 1}
@@ -1758,7 +1746,6 @@ export default function DeckViewerPage() {
                     onPickImageCandidate={pickSlideImageCandidate(s.id)}
                     onRemoveImage={removeSlideImage(s)}
                     imagePending={pendingImages.has(s.id)}
-                    transitioning={transitioningSlideId === s.id}
                   />
                   <SlideMenu
                     number={i + 1}
@@ -1782,11 +1769,7 @@ export default function DeckViewerPage() {
                 </DraggableListRow>
               ) : (
                 <li key={s.id} ref={nav.registerItem(i)} className="relative">
-                  <SlideView
-                    slide={s}
-                    template={view.template}
-                    transitioning={transitioningSlideId === s.id}
-                  />
+                  <SlideView slide={s} template={view.template} />
                   {ttsEnabled && (
                     <SlideMenu number={i + 1} onSpeak={() => speakSlide(s)} />
                   )}

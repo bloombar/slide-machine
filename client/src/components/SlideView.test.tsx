@@ -229,37 +229,25 @@ describe('SlideView in-place editing', () => {
   })
 })
 
-describe('SlideView layout-transition names (GEN-9)', () => {
-  it('names its slots for the morph only while transitioning', () => {
-    const { rerender } = render(
+describe('SlideView layout-flip slot tagging (GEN-9)', () => {
+  it('tags every text slot with a permanent flow-neutral wrapper', () => {
+    render(
       <SlideView
         slide={slide({ layoutType: 'content', title: 'Cells', body: 'Units' })}
         template={template}
-        transitioning
       />,
     )
-    // The transitioning slide wraps each slot in a box carrying a per-slot
-    // view-transition-name, which the browser morphs between layouts. Text
-    // wrappers stay inline-block so naming a slot never reflows the layout
-    // being snapshotted (a full-size block pushed text to the top).
+    // The wrapper is always present (no remount when a transition starts)
+    // and stays inline-block so it never disturbs the layout around it.
     const title = screen.getByRole('heading', { name: 'Cells' })
       .firstElementChild as HTMLElement
-    expect(title.style.viewTransitionName).toBe('vt-title')
     expect(title.tagName).toBe('SPAN')
     expect(title).toHaveClass('inline-block')
     expect(title).not.toHaveClass('h-full')
-
-    // A normal (non-transitioning) render adds no wrapper and no name, so
-    // nothing collides across a multi-slide list view.
-    rerender(
-      <SlideView
-        slide={slide({ layoutType: 'content', title: 'Cells', body: 'Units' })}
-        template={template}
-      />,
-    )
-    const heading = screen.getByRole('heading', { name: 'Cells' })
-      .firstElementChild as HTMLElement
-    expect(heading?.style.viewTransitionName ?? '').toBe('')
+    expect(title.dataset.flipSlot).toBe('title')
+    // The flip id is slide-scoped so a multi-slide list view never
+    // matches slots across different slides.
+    expect(title.dataset.flipId).toBe('s1:title')
   })
 
   it('keeps the full-size wrapper for image slots, which fill their frame', () => {
@@ -271,15 +259,14 @@ describe('SlideView layout-transition names (GEN-9)', () => {
           caption: 'A cell',
         })}
         template={template}
-        transitioning
       />,
     )
     // The image chain relies on h-full/w-full down from the layout's sized
-    // container, so its transition wrapper must pass the size through.
+    // container, so its wrapper must pass the size through.
     let wrapper: HTMLElement | null = screen.getByRole('img')
-    while (wrapper && !wrapper.style.viewTransitionName)
+    while (wrapper && wrapper.dataset.flipSlot !== 'image')
       wrapper = wrapper.parentElement
-    expect(wrapper?.style.viewTransitionName).toBe('vt-image')
+    expect(wrapper?.dataset.flipId).toBe('s1:image')
     expect(wrapper).toHaveClass('h-full', 'w-full')
   })
 })
