@@ -239,10 +239,15 @@ describe('SlideView layout-transition names (GEN-9)', () => {
       />,
     )
     // The transitioning slide wraps each slot in a box carrying a per-slot
-    // view-transition-name, which the browser morphs between layouts.
+    // view-transition-name, which the browser morphs between layouts. Text
+    // wrappers stay inline-block so naming a slot never reflows the layout
+    // being snapshotted (a full-size block pushed text to the top).
     const title = screen.getByRole('heading', { name: 'Cells' })
       .firstElementChild as HTMLElement
     expect(title.style.viewTransitionName).toBe('vt-title')
+    expect(title.tagName).toBe('SPAN')
+    expect(title).toHaveClass('inline-block')
+    expect(title).not.toHaveClass('h-full')
 
     // A normal (non-transitioning) render adds no wrapper and no name, so
     // nothing collides across a multi-slide list view.
@@ -255,6 +260,27 @@ describe('SlideView layout-transition names (GEN-9)', () => {
     const heading = screen.getByRole('heading', { name: 'Cells' })
       .firstElementChild as HTMLElement
     expect(heading?.style.viewTransitionName ?? '').toBe('')
+  })
+
+  it('keeps the full-size wrapper for image slots, which fill their frame', () => {
+    render(
+      <SlideView
+        slide={slide({
+          layoutType: 'image-heavy',
+          imageRef: 'http://img/x.jpg',
+          caption: 'A cell',
+        })}
+        template={template}
+        transitioning
+      />,
+    )
+    // The image chain relies on h-full/w-full down from the layout's sized
+    // container, so its transition wrapper must pass the size through.
+    let wrapper: HTMLElement | null = screen.getByRole('img')
+    while (wrapper && !wrapper.style.viewTransitionName)
+      wrapper = wrapper.parentElement
+    expect(wrapper?.style.viewTransitionName).toBe('vt-image')
+    expect(wrapper).toHaveClass('h-full', 'w-full')
   })
 })
 

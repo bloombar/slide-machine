@@ -360,9 +360,9 @@ export default function SlideSlot({
   ...props
 }: Omit<SlotEditorProps, 'descriptor'> & {
   /** Set only while this slide is mid layout-change (GEN-9): wraps the slot
-   * in a full-size box carrying the shared-element name the View
-   * Transitions API morphs on. Undefined otherwise, so normal renders keep
-   * the original DOM with no extra wrapper. */
+   * in a box carrying the shared-element name the View Transitions API
+   * morphs on. Undefined otherwise, so normal renders keep the original
+   * DOM with no extra wrapper. */
   viewTransitionName?: string
 }) {
   const conventional = SLOT_DESCRIPTORS[props.slot] as
@@ -378,9 +378,21 @@ export default function SlideSlot({
   if (!Editor) return null
   const editor = <Editor {...props} descriptor={descriptor} />
   if (!viewTransitionName) return editor
+  // The wrapper must not disturb the layout it is snapshotting: naming the
+  // slots visibly reflowed the OLD arrangement (text jumped to the top)
+  // when every wrapper was a full-size block. Image slots fill a sized
+  // container, so theirs passes the full size through; text slots keep
+  // inline flow via inline-block — which also keeps the box unfragmented,
+  // a View Transitions API requirement for capture.
+  if (descriptor.kind === 'image')
+    return (
+      <div className="h-full w-full" style={{ viewTransitionName }}>
+        {editor}
+      </div>
+    )
   return (
-    <div className="h-full w-full" style={{ viewTransitionName }}>
+    <span className="inline-block max-w-full" style={{ viewTransitionName }}>
       {editor}
-    </div>
+    </span>
   )
 }
