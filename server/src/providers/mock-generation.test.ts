@@ -29,6 +29,36 @@ describe('MockGenerationProvider', () => {
     expect(r.slots.title).toBe('Photosynthesis Basics')
   })
 
+  it('opens a section slide on a cue phrase once slides have accrued since a heading', async () => {
+    const r = await provider.generateSlideContent({
+      phrase: 'Next, subtracting fractions',
+      rollingContext: ['Adding fractions basics'],
+      layoutDescriptors: descriptors,
+      deckStructure: {
+        totalSlides: 3,
+        slidesSinceHeader: 2,
+        hasTitleSlide: true,
+        outline: [{ position: 1, layoutType: 'title', title: 'Fractions' }],
+      },
+    })
+    expect(r).toMatchObject({ action: 'new', layoutType: 'section' })
+  })
+
+  it('does not open a section right after the last heading', async () => {
+    const r = await provider.generateSlideContent({
+      phrase: 'Next, subtracting fractions',
+      rollingContext: ['Fractions'],
+      layoutDescriptors: descriptors,
+      deckStructure: {
+        totalSlides: 1,
+        slidesSinceHeader: 1,
+        hasTitleSlide: true,
+        outline: [{ position: 1, layoutType: 'title', title: 'Fractions' }],
+      },
+    })
+    expect(r.layoutType).not.toBe('section')
+  })
+
   it('makes a list slide from comma-separated points', async () => {
     const r = await gen('Plants need sunlight, water, carbon dioxide')
     expect(r).toMatchObject({ action: 'new', layoutType: 'list' })

@@ -22,6 +22,20 @@ export interface SlideGenerationRequest {
   phrase: string
   /** Short rolling context of recent phrases/slides for topic coherence. */
   rollingContext: string[]
+  /** Deck-level structure so the windowed model can make heading (title/section)
+   * decisions it otherwise couldn't: the running outline of heading slides plus
+   * a few positional signals. Absent for an empty deck or when the
+   * GENERATION_DECK_STRUCTURE flag is off. */
+  deckStructure?: {
+    /** Slides created so far. */
+    totalSlides: number
+    /** Slides since the last title/section heading. */
+    slidesSinceHeader: number
+    /** A title slide already opened the deck. */
+    hasTitleSlide: boolean
+    /** The heading (title/section) slides so far, in order. */
+    outline: { position: number; layoutType: LayoutType; title: string }[]
+  }
   /** Seed context layers (typed notes, imported docs, honed concepts).
    * Deck-level notes are more specific and outrank project-level ones. */
   seedContext?: {

@@ -173,6 +173,28 @@ const instructions = (req: SlideGenerationRequest): string => {
         .join('\n')}`
     : '\nNo slides exist yet.'
 
+  // Deck-structure context (GENERATION_DECK_STRUCTURE): the running outline of
+  // heading slides + positional signals AND the heading-decision instructions,
+  // so the model judges title/section slides from the deck's shape, not just the
+  // last few slides. One fragment carries both, so the server flag (which simply
+  // omits req.deckStructure) removes the data and its instructions together.
+  const deckStructure = req.deckStructure
+    ? `\nDeck structure so far: ${req.deckStructure.totalSlides} slide(s), ${
+        req.deckStructure.slidesSinceHeader
+      } since the last heading; the deck ${
+        req.deckStructure.hasTitleSlide ? 'HAS' : 'does NOT yet have'
+      } an opening title slide.${
+        req.deckStructure.outline.length
+          ? `\nHeadings so far (slide number, layout, title):\n${req.deckStructure.outline
+              .map(
+                h =>
+                  `${h.position}. [${h.layoutType}] ${h.title || '(untitled)'}`,
+              )
+              .join('\n')}`
+          : ''
+      }\nUse a "section" layout to open a NEW major topic when this phrase clearly shifts to one and several slides have accrued since the last heading; do not duplicate a section already in the outline. Use a "title" layout ONLY as the deck's opening slide. Otherwise prefer a content layout.`
+    : ''
+
   // The current slide's layout can be one that is NOT selectable — a freehand
   // whiteboard canvas. It has no text slots and is absent from the set above, so
   // the model must never "update" it or echo its layout; content goes to a "new"
@@ -256,6 +278,7 @@ Current slide content: ${JSON.stringify(req.currentSlide.content)}`
     projectSeed,
     deckSeed,
     rolling,
+    deckStructure,
     capacity,
     currentTranscript,
     language,

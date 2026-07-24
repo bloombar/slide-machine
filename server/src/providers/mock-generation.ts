@@ -36,6 +36,10 @@ import { registry } from './registry'
 
 const CONTINUATION = /^(also|and|plus|additionally|furthermore)\b/i
 
+/** Mock stand-in for a phrase that opens a new major topic (a section cue),
+ * used with GENERATION_DECK_STRUCTURE signals to emit a "section" heading. */
+const SECTION_CUE = /^(next|moving on|let's turn to|turning to|now on to)\b/i
+
 /** Mock stand-in for the model judging a phrase to be filler (an aside or
  * hesitation that changes no slide): a leading interjection → action "none". */
 const FILLER = /^(um+|uh+|er+m?|hmm+|erm+)\b/i
@@ -121,6 +125,20 @@ export class MockGenerationProvider implements GenerationProvider {
     const command = commandIntent(phrase, req)
     if (command)
       return { action: 'command', command, layoutType: 'content', slots: {} }
+
+    // A section-cue phrase, once a few slides have accrued since the last
+    // heading, opens a new section heading — the deterministic mirror of the
+    // real heading guidance driven by GENERATION_DECK_STRUCTURE.
+    if (
+      SECTION_CUE.test(phrase) &&
+      (req.deckStructure?.slidesSinceHeader ?? 0) >= 2
+    ) {
+      return {
+        action: 'new',
+        layoutType: fitLayout('section', req.layoutDescriptors),
+        slots: { title: titleCase(words.slice(0, 5)) },
+      }
+    }
 
     if (CONTINUATION.test(phrase) && req.rollingContext.length > 0) {
       const added = phrase.replace(CONTINUATION, '').replace(/^[,\s]+/, '')

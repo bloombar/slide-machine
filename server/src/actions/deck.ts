@@ -86,6 +86,7 @@ import { SlideModel, toSlideDto } from '../models/slide'
 import { TranscriptSegmentModel } from '../models/transcript-segment'
 import { ProjectModel, projectAcl } from '../models/project'
 import { getBuiltinTemplate, layoutDescriptors } from '../templates/builtin'
+import { buildDeckStructure, headerLayoutTypes } from '../lib/deck-structure'
 import { registry } from '../providers/registry'
 import { permalinkSlug } from '../lib/slug'
 import { enrichSlideImage } from '../enrichment/enrich'
@@ -528,6 +529,29 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
     const targetHasDrawings = hasVisibleDrawings(lastSlide?.drawings)
     const keepLayout = Boolean(input.suppressNewSlide) || targetHasDrawings
 
+    // Deck-structure context (GENERATION_DECK_STRUCTURE): a compact outline of
+    // the heading (title/section) slides so far plus positional signals, so the
+    // windowed model can judge title/section decisions from the deck's shape.
+    // Built only when the flag is on and the deck already has slides.
+    let deckStructure
+    if (env.GENERATION_DECK_STRUCTURE && deck.slideOrder.length) {
+      const headingDocs = await SlideModel.find(
+        {
+          deckId: deck._id,
+          layoutType: { $in: headerLayoutTypes(descriptors) },
+        },
+        { title: 1, layoutType: 1 },
+      )
+      deckStructure = buildDeckStructure(
+        headingDocs.map(s => ({
+          id: String(s._id),
+          layoutType: s.layoutType,
+          title: s.title,
+        })),
+        deck.slideOrder.map(String),
+      )
+    }
+
     const provider = registry.get<GenerationProvider>('generation')
     const generated = await provider.generateSlideContent({
       phrase: input.phrase,
@@ -537,6 +561,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
         deck: seedLayer(deck.seedContext, assets.deck),
       },
       layoutDescriptors: descriptors,
+      deckStructure,
       seededImages: seededImages.length ? seededImages : undefined,
       freedom:
         deck.generationFreedom ??

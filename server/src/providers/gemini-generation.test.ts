@@ -127,6 +127,41 @@ describe('GeminiGenerationProvider', () => {
     expect(init.headers['x-goog-api-key']).toBe('test-key')
   })
 
+  it('renders deck-structure outline + signals + heading guidance when present', async () => {
+    fetchMock.mockResolvedValue(geminiReply({ action: 'none' }))
+    await provider.generateSlideContent(
+      request({
+        deckStructure: {
+          totalSlides: 9,
+          slidesSinceHeader: 5,
+          hasTitleSlide: true,
+          outline: [
+            { position: 1, layoutType: 'title', title: 'Fractions' },
+            { position: 4, layoutType: 'section', title: 'Adding Fractions' },
+          ],
+        },
+      }),
+    )
+    const prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+      .contents[0].parts[0].text as string
+    expect(prompt).toContain('9 slide(s), 5 since the last heading')
+    expect(prompt).toContain('HAS an opening title slide')
+    expect(prompt).toContain('1. [title] Fractions')
+    expect(prompt).toContain('4. [section] Adding Fractions')
+    // The heading instructions ride with the data, so the flag toggles both.
+    expect(prompt).toContain('"section" layout to open a NEW major topic')
+  })
+
+  it('omits deck-structure data and instructions when absent (flag off / empty deck)', async () => {
+    fetchMock.mockResolvedValue(geminiReply({ action: 'none' }))
+    // request() has no deckStructure by default.
+    await provider.generateSlideContent(request())
+    const prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+      .contents[0].parts[0].text as string
+    expect(prompt).not.toContain('Deck structure so far')
+    expect(prompt).not.toContain('"section" layout to open a NEW major topic')
+  })
+
   it('offers same-layout rephrasing and the slide transcript only when enabled', async () => {
     fetchMock.mockResolvedValue(geminiReply({ action: 'none' }))
     const promptFor = () =>

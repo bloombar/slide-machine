@@ -18,6 +18,7 @@ const allSlots = {
   projectSeed: '',
   deckSeed: '',
   rolling: 'ROLLING',
+  deckStructure: '',
   capacity: '',
   currentTranscript: '',
   voiceCommands: '',

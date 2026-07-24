@@ -135,6 +135,12 @@ const envSchema = z.object({
   // default; flip off to keep committed slide text verbatim during a lecture.
   // Only in effect while GENERATION_LAYOUT_REFIT is on (refit is the vehicle).
   GENERATION_LIVE_REPHRASE: z.stringbool().default(true),
+  // Deck-structure context: send the running outline of heading (title/section)
+  // slides plus positional signals — and the matching heading-decision
+  // instructions — so the windowed model can judge title/section slides from
+  // the deck's structure, not just the last few slides. On by default; flip off
+  // to restore the pre-structure prompt exactly.
+  GENERATION_DECK_STRUCTURE: z.stringbool().default(true),
   /** Hard cap on one generation call — phrase-to-slide must stay live. */
   GEMINI_TIMEOUT_MS: z.coerce.number().default(12_000),
   // Service-account JSON for Cloud Speech-to-Text streaming (real-time STT).
