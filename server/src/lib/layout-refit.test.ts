@@ -10,6 +10,7 @@ import {
   layoutDisplaysContent,
   isHeaderLayout,
   refitPreservesContent,
+  safeLayoutType,
   type SlideContentSnapshot,
 } from './layout-refit'
 import { refitOverflows } from './slide-fit'
@@ -67,6 +68,31 @@ describe('layoutDisplaysContent (delta layout switches)', () => {
     expect(layoutDisplaysContent('hologram', contentSlide, descriptors)).toBe(
       false,
     )
+  })
+})
+
+describe('safeLayoutType (never persist a non-selectable layout)', () => {
+  it('keeps a layout that is in the pickable set', () => {
+    expect(safeLayoutType('list', descriptors, 'content')).toBe('list')
+  })
+
+  it('coerces the non-selectable whiteboard layout to the current slide layout', () => {
+    // The bug: model echoed the current slide's own "whiteboard" layout.
+    expect(safeLayoutType('whiteboard', descriptors, 'list')).toBe('list')
+  })
+
+  it('falls back to content when neither candidate nor current is selectable', () => {
+    // e.g. an update whose current slide is itself the whiteboard canvas.
+    expect(safeLayoutType('whiteboard', descriptors, 'whiteboard')).toBe(
+      'content',
+    )
+    // No current slide (a "new" action): a bad layout still coerces to content.
+    expect(safeLayoutType('hologram', descriptors)).toBe('content')
+  })
+
+  it('falls back to the first offered layout when there is no content layout', () => {
+    const noContent = descriptors.filter(d => d.type !== 'content')
+    expect(safeLayoutType('whiteboard', noContent)).toBe(noContent[0]!.type)
   })
 })
 

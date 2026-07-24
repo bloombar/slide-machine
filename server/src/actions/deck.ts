@@ -77,6 +77,7 @@ import {
   layoutDisplaysContent,
   isHeaderLayout,
   refitPreservesContent,
+  safeLayoutType,
   type SlideContentSnapshot,
 } from '../lib/layout-refit'
 import { layoutHasImageSlot, reconcileImageLayout } from '../lib/image-layout'
@@ -528,7 +529,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
     const keepLayout = Boolean(input.suppressNewSlide) || targetHasDrawings
 
     const provider = registry.get<GenerationProvider>('generation')
-    const rawResult = await provider.generateSlideContent({
+    const generated = await provider.generateSlideContent({
       phrase: input.phrase,
       rollingContext,
       seedContext: {
@@ -595,6 +596,20 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
       // user locks it by naming the lecture themselves (titleLocked).
       suggestDeckTitle: !deck.titleLocked,
     })
+
+    // Never trust the model's layoutType (belt-and-suspenders to the prompt):
+    // coerce anything outside the pickable set — e.g. it echoed the current
+    // slide's own non-selectable "whiteboard" layout — to a safe one, so an
+    // invalid layout can never be persisted.
+    const safeLayout = safeLayoutType(
+      generated.layoutType,
+      descriptors,
+      lastSlide?.layoutType,
+    )
+    const rawResult =
+      generated.layoutType === safeLayout
+        ? generated
+        : { ...generated, layoutType: safeLayout }
 
     // Apply the model's latest title suggestion as long as the user has not
     // locked the title, so an auto-title keeps refining as the topic

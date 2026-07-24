@@ -52,6 +52,27 @@ export const layoutDisplaysContent = (
 }
 
 /**
+ * Coerces a model-supplied layoutType to one the template actually offers
+ * (GEN-6). The model must pick from the pickable set, but can echo a
+ * non-selectable layout — most notably the current slide's own "whiteboard"
+ * canvas — which must never be persisted. Keeps the candidate when selectable,
+ * else falls back to the current slide's layout (stable updates) when that is
+ * selectable, else a "content" default, else the first offered layout.
+ */
+export const safeLayoutType = (
+  candidate: string,
+  descriptors: LayoutDescriptor[],
+  currentLayout?: string,
+): LayoutType => {
+  const allowed = new Set<string>(descriptors.map(d => d.type))
+  if (allowed.has(candidate)) return candidate as LayoutType
+  if (currentLayout && allowed.has(currentLayout))
+    return currentLayout as LayoutType
+  if (allowed.has('content')) return 'content'
+  return (descriptors[0]?.type ?? 'content') as LayoutType
+}
+
+/**
  * A "header" layout introduces rather than accumulates: it has a title (and
  * maybe a caption) but no body, bullets, or image slot — the title and section
  * layouts. Real content the model tries to add to one can't be displayed, so
