@@ -34,6 +34,24 @@ span.slot-blank:hover,
   animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
 
+/* Every named slot shares one transition class so the pair rules below
+   need not enumerate slot names. */
+.vt-slot {
+  view-transition-class: slot;
+}
+
+/* A slot present in BOTH layouts should morph, not cross-fade: the default
+   fade between differently-scaled snapshots reads as a blur/flash on top of
+   the move. Hide the old snapshot and let the new one ride the group's
+   move/scale at full opacity. Slots only entering or leaving a layout
+   (:only-child) keep the default fade in/out. */
+::view-transition-old(.slot):not(:only-child) {
+  display: none;
+}
+::view-transition-new(.slot):not(:only-child) {
+  animation: none;
+}
+
 /* Reduced-motion backstop: runViewTransition already applies changes
    instantly when this preference is set, but should any view transition
    still fire, cut its animation to an imperceptible frame. */

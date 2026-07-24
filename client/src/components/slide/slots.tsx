@@ -384,14 +384,19 @@ export default function SlideSlot({
   // container, so theirs passes the full size through; text slots keep
   // inline flow via inline-block — which also keeps the box unfragmented,
   // a View Transitions API requirement for capture.
+  // vt-slot tags the wrapper with a shared view-transition-class
+  // (index.css) so slot pairs morph without the default cross-fade.
   if (descriptor.kind === 'image')
     return (
-      <div className="h-full w-full" style={{ viewTransitionName }}>
+      <div className="vt-slot h-full w-full" style={{ viewTransitionName }}>
         {editor}
       </div>
     )
   return (
-    <span className="inline-block max-w-full" style={{ viewTransitionName }}>
+    <span
+      className="vt-slot inline-block max-w-full"
+      style={{ viewTransitionName }}
+    >
       {editor}
     </span>
   )
