@@ -1,10 +1,14 @@
 /**
  * Auth orchestration (SPEC AUTH-1/AUTH-2) used by the auth routes.
  * Wrong-password and unknown-email both yield the same invalid_credentials
- * error so login cannot be used to enumerate accounts.
+ * error so login cannot be used to enumerate accounts. Banned emails
+ * (admin moderation) can neither register nor sign in; the ban check on
+ * login runs only after credentials verify, so probing a third-party
+ * email never reveals its ban status.
  */
 import type { SafeUser } from '@slide-machine/shared'
 import { UserModel, toUserDto } from '../models/user'
+import { isEmailBanned } from '../models/banned-email'
 import { HttpError } from '../middleware/error'
 import type { GoogleProfile } from './google'
 import { hashPassword, verifyPassword } from './password'
@@ -21,11 +25,15 @@ export interface AuthResult {
   refreshRaw: string
 }
 
+const bannedError = () =>
+  new HttpError(403, 'account_banned', 'This account has been banned')
+
 export const register = async (
   email: string,
   password: string,
   displayName: string,
 ): Promise<AuthResult> => {
+  if (await isEmailBanned(email)) throw bannedError()
   const passwordHash = await hashPassword(password)
   try {
     const user = await UserModel.create({ email, displayName, passwordHash })
@@ -68,6 +76,7 @@ export const login = async (
       'Incorrect email or password',
     )
   }
+  if (await isEmailBanned(user.email)) throw bannedError()
   return {
     user: toUserDto(user),
     accessToken: await signAccessToken(user._id.toString()),
@@ -95,6 +104,7 @@ export const loginWithGoogle = async (
   }
 
   const email = profile.email.toLowerCase().trim()
+  if (await isEmailBanned(email)) throw bannedError()
   let user = await UserModel.findOne({ googleId: profile.googleId })
 
   if (!user) {

@@ -14,7 +14,15 @@ import ProjectPage from './pages/ProjectPage'
 import ProfilePage from './pages/ProfilePage'
 import DeckViewerPage from './pages/DeckViewerPage'
 import PublicProfilePage from './pages/PublicProfilePage'
+import AdminUsersPage from './pages/AdminUsersPage'
+import AdminUserDetailPage from './pages/AdminUserDetailPage'
+import AdminProjectsPage from './pages/AdminProjectsPage'
+import AdminProjectPage from './pages/AdminProjectPage'
+import AdminDecksPage from './pages/AdminDecksPage'
+import AdminDeckPage from './pages/AdminDeckPage'
+import AdminLogsPage from './pages/AdminLogsPage'
 import RequireAuth from './auth/RequireAuth'
+import RequireAdmin from './auth/RequireAdmin'
 
 export default function App() {
   return (
@@ -36,6 +44,62 @@ export default function App() {
         <Route path="/app" element={<HomePage />} />
         <Route path="/app/projects/:projectId" element={<ProjectPage />} />
         <Route path="/app/profile" element={<ProfilePage />} />
+        <Route
+          path="/app/admin"
+          element={
+            <RequireAdmin>
+              <AdminUsersPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/app/admin/users/:userId"
+          element={
+            <RequireAdmin>
+              <AdminUserDetailPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/app/admin/projects"
+          element={
+            <RequireAdmin>
+              <AdminProjectsPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/app/admin/projects/:projectId"
+          element={
+            <RequireAdmin>
+              <AdminProjectPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/app/admin/decks"
+          element={
+            <RequireAdmin>
+              <AdminDecksPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/app/admin/decks/:deckId"
+          element={
+            <RequireAdmin>
+              <AdminDeckPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/app/admin/logs"
+          element={
+            <RequireAdmin>
+              <AdminLogsPage />
+            </RequireAdmin>
+          }
+        />
       </Route>
     </Routes>
   )

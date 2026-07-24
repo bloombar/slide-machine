@@ -2,7 +2,10 @@
  * Public deck viewer route (SHARE-1): GET /api/decks/:slug. Access
  * follows the deck ACL (visibility + shared viewers/editors, optional
  * auth); missing and forbidden are both 404 so existence never leaks.
- * canEdit tells the client whether to enable the editing surface.
+ * The one exception is an allowlisted admin: admins may always open a
+ * lecture read-only (the ADMIN_EMAILS gate is the authorization, as on
+ * the admin API). canEdit tells the client whether to enable the
+ * editing surface.
  */
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import type { HydratedDocument } from 'mongoose'
@@ -14,6 +17,7 @@ import {
   toSharedDeckDto,
   type DeckDb,
 } from '../models/deck'
+import { isAllowlistedAdmin } from '../lib/admin-view'
 import { canEditAcl, canViewAcl } from '../lib/access'
 import { SlideModel, toSlideDto } from '../models/slide'
 import { TranscriptSegmentModel } from '../models/transcript-segment'
@@ -72,7 +76,11 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
   })
   if (!deck) throw notFound
   const acl = await loadDeckAcl(deck)
-  if (!canViewAcl(acl, req.userId)) throw notFound
+  if (!canViewAcl(acl, req.userId)) {
+    // Admin view bypass: allowlisted admins may always open a lecture
+    // (read-only — canEdit below still follows the ACL)
+    if (!(await isAllowlistedAdmin(req.userId))) throw notFound
+  }
 
   const template = getBuiltinTemplate(deck.templateId)
   if (!template) throw notFound

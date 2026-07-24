@@ -85,20 +85,20 @@ import { UserModel } from '../models/user'
 import { SlideModel, toSlideDto } from '../models/slide'
 import { TranscriptSegmentModel } from '../models/transcript-segment'
 import { ProjectModel, projectAcl } from '../models/project'
+import { isAllowlistedAdmin } from '../lib/admin-view'
 import { getBuiltinTemplate, layoutDescriptors } from '../templates/builtin'
 import { buildDeckStructure, headerLayoutTypes } from '../lib/deck-structure'
 import { registry } from '../providers/registry'
 import { permalinkSlug } from '../lib/slug'
 import { enrichSlideImage } from '../enrichment/enrich'
 import type { SlideImageContext } from '../enrichment/types'
-import { SeedAssetModel } from '../models/seed-asset'
 import {
   seedAssetsFor,
   seededAttribution,
   seededImageCandidates,
   type SeedAssetDoc,
 } from '../lib/seed-assets'
-import { getStorage } from '../storage'
+import { deleteDeckCascade } from '../lib/cascade'
 import { env } from '../config/env'
 import type {
   ImageGuidance,
@@ -255,14 +255,19 @@ export const deckList = defineAction<DeckListInput, Deck[]>({
       const project = await ProjectModel.findById(input.projectId).catch(
         () => null,
       )
-      if (!project || !isAclMember(projectAcl(project), userId))
-        throw new ActionForbiddenError()
+      if (!project) throw new ActionForbiddenError()
+      const member = isAclMember(projectAcl(project), userId)
+      // Allowlisted admins get an always-on read bypass (lib/admin-view.ts).
+      // They can already open any lecture in the viewer, so listing the
+      // project's lectures here — private ones included — leaks nothing new.
+      const admin = !member && (await isAllowlistedAdmin(userId))
+      if (!member && !admin) throw new ActionForbiddenError()
       const docs = await DeckModel.find({ projectId: input.projectId }).sort({
         updatedAt: -1,
       })
       const acls = await loadDeckAcls(docs)
       return docs
-        .filter(d => canViewAcl(acls.get(d._id.toString())!, userId))
+        .filter(d => admin || canViewAcl(acls.get(d._id.toString())!, userId))
         .map(d => toDeckDto(d, acls.get(d._id.toString())!))
     }
     const docs = await DeckModel.find({ ownerId: userId }).sort({
@@ -1246,23 +1251,9 @@ export const deckDelete = defineAction<DeckDeleteInput, { deleted: true }>({
     const deck = await loadOwnedDeck(ctx, input.deckId)
 
     // Cascade: slides, lecture-level seed assets (and their stored
-    // files), then the deck itself
-    const assets = await SeedAssetModel.find({ deckId: deck._id })
-    const storage = getStorage()
-    await Promise.all(
-      assets
-        .filter(a => a.storageKey)
-        .map(a =>
-          storage.delete(a.storageKey!).catch(() => {
-            // A dangling file is preferable to a failed delete
-          }),
-        ),
-    )
-    await Promise.all([
-      SlideModel.deleteMany({ deckId: deck._id }),
-      SeedAssetModel.deleteMany({ deckId: deck._id }),
-    ])
-    await deck.deleteOne()
+    // files), transcripts, refine jobs, retained recordings, then the
+    // deck itself
+    await deleteDeckCascade(deck)
     return { deleted: true }
   },
 })

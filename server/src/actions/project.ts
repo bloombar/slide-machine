@@ -34,14 +34,13 @@ import {
 } from '../models/project'
 import { UserModel } from '../models/user'
 import { canEditAcl, isAclMember } from '../lib/access'
+import { isAllowlistedAdmin } from '../lib/admin-view'
 import { ttsVoiceIdSchema } from '../lib/tts-voice'
 import { sharesOfAcl } from '../lib/shares'
 import { getBuiltinTemplate } from '../templates/builtin'
 import type { HydratedDocument, Types } from 'mongoose'
 import { DeckModel } from '../models/deck'
-import { SlideModel } from '../models/slide'
-import { SeedAssetModel } from '../models/seed-asset'
-import { getStorage } from '../storage'
+import { deleteProjectCascade } from '../lib/cascade'
 
 /** Returns the acting user's id or throws; actions requiring auth start here. */
 const requireUser = (ctx: ActionContext): string => {
@@ -115,9 +114,17 @@ export const projectGet = defineAction<{ projectId: string }, Project>({
     const userId = requireUser(ctx)
     const doc = await ProjectModel.findById(input.projectId).catch(() => null)
     const acl = doc ? projectAcl(doc) : null
-    // Member-only: 'public' opens the lectures, not the project page
-    if (!doc || !acl || !isAclMember(acl, userId))
-      throw new ActionForbiddenError()
+    if (!doc || !acl) throw new ActionForbiddenError()
+    // Member-only: 'public' opens the lectures, not the project page.
+    // Allowlisted admins get an always-on read-only bypass, mirroring the
+    // lecture-viewer bypass (lib/admin-view.ts): they see the shared view
+    // (lecture list, no instructor prep notes), never editing rights.
+    if (!isAclMember(acl, userId)) {
+      if (!(await isAllowlistedAdmin(userId))) throw new ActionForbiddenError()
+      const dto = toSharedProjectDto(doc)
+      delete dto.seedContext
+      return dto
+    }
     if (acl.ownerId === userId) return toProjectDto(doc)
     const dto = toSharedProjectDto(doc)
     // Viewers see the lecture list, not the instructor's prep notes
@@ -177,26 +184,9 @@ export const projectDelete = defineAction<
   },
   execute: async (_ctx, input) => {
     // Cascade: every deck in the project, their slides, all seed
-    // material at both levels (including stored files), then the project
-    const decks = await DeckModel.find({ projectId: input.projectId })
-    const deckIds = decks.map(d => d._id)
-    const assets = await SeedAssetModel.find({ projectId: input.projectId })
-    const storage = getStorage()
-    await Promise.all(
-      assets
-        .filter(a => a.storageKey)
-        .map(a =>
-          storage.delete(a.storageKey!).catch(() => {
-            // A dangling file is preferable to a failed delete
-          }),
-        ),
-    )
-    await Promise.all([
-      SlideModel.deleteMany({ deckId: { $in: deckIds } }),
-      SeedAssetModel.deleteMany({ projectId: input.projectId }),
-      DeckModel.deleteMany({ projectId: input.projectId }),
-    ])
-    await ProjectModel.deleteOne({ _id: input.projectId })
+    // material at both levels (including stored files), transcripts,
+    // refine jobs, retained recordings, then the project
+    await deleteProjectCascade(input.projectId)
     return { deleted: true }
   },
 })

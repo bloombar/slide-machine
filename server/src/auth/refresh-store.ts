@@ -49,3 +49,9 @@ export const rotateRefreshToken = async (
 export const revokeRefreshToken = async (raw: string): Promise<void> => {
   await RefreshTokenModel.deleteOne({ tokenHash: hashRefreshToken(raw) })
 }
+
+/** Ends every session a user holds, across all devices — used when an
+ * admin resets their password or bans their email. Idempotent. */
+export const revokeAllSessions = async (userId: string): Promise<void> => {
+  await RefreshTokenModel.deleteMany({ userId })
+}

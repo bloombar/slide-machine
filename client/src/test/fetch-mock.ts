@@ -19,6 +19,9 @@ export const mockFetchRoutes = (routes: Record<string, Handler>) => {
         ok: status >= 200 && status < 300,
         status,
         json: async () => body,
+        // Blob downloads (e.g. the audit-log CSV export)
+        blob: async () =>
+          new Blob([typeof body === 'string' ? body : JSON.stringify(body)]),
       } as Response
     },
   )

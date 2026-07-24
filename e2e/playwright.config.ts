@@ -25,6 +25,8 @@ const serverEnv = (over: Record<string, string>): Record<string, string> => ({
     'mongodb://localhost:27017/slide-machine-test',
   JWT_SECRET: 'e2e-jwt-secret-at-least-32-characters!!',
   JWT_REFRESH_SECRET: 'e2e-refresh-secret-at-least-32-chars!!!',
+  // Grants the admin.spec account access to the /app/admin interface
+  ADMIN_EMAILS: 'e2e-admin@example.com',
   GENERATION_PROVIDER: 'mock',
   QUIZ_PROVIDER: 'mock',
   QUIZ_PUBLISH_MODE: 'mock',

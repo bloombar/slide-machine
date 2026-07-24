@@ -6,8 +6,76 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { Menu, LogOut, LogIn } from 'lucide-react'
+import { Menu, LogOut, LogIn, ChevronRight } from 'lucide-react'
 import { useAuth } from '../../auth/AuthContext'
+import { useIsAdmin } from '../../hooks/useIsAdmin'
+
+/** The admin console's sections; extend this as admin pages are added. */
+const ADMIN_LINKS = [
+  { to: '/app/admin', label: 'Users' },
+  { to: '/app/admin/projects', label: 'Projects' },
+  { to: '/app/admin/decks', label: 'Lectures' },
+  { to: '/app/admin/logs', label: 'Logs' },
+]
+
+/** Admin entry, mounted only while the dropdown is open so the status
+ * check fires at most once per session and only for users who open the
+ * menu; non-admins render nothing. Admins get a single "Admin" item
+ * whose flyout submenu (hover, or click for keyboard/touch) lists every
+ * admin section. */
+function AdminMenuItem({
+  className,
+  onNavigate,
+}: {
+  className: string
+  onNavigate: () => void
+}) {
+  const isAdmin = useIsAdmin()
+  const [open, setOpen] = useState(false)
+  if (!isAdmin) return null
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        role="menuitem"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen(o => !o)}
+        className={`${className} justify-between`}
+      >
+        Admin
+        <ChevronRight className="h-4 w-4" aria-hidden />
+      </button>
+      {open && (
+        // Outer wrapper's left padding bridges the gap to the button so the
+        // mouse never crosses a non-hoverable dead zone (which would fire
+        // onMouseLeave and close the flyout mid-move).
+        <div className="absolute top-0 left-full z-50 pl-1">
+          <div
+            role="menu"
+            aria-label="Admin"
+            className="w-36 rounded-lg border border-slate-200 bg-white p-1 shadow-lg"
+          >
+            {ADMIN_LINKS.map(link => (
+              <Link
+                key={link.to}
+                to={link.to}
+                role="menuitem"
+                onClick={onNavigate}
+                className={className}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function ShellMenu() {
   const { status, logout } = useAuth()
@@ -76,6 +144,10 @@ export default function ShellMenu() {
               >
                 Profile
               </Link>
+              <AdminMenuItem
+                className={item}
+                onNavigate={() => setOpen(false)}
+              />
               <button
                 role="menuitem"
                 onClick={() => void doLogout()}
