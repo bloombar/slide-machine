@@ -269,6 +269,24 @@ export class MockGenerationProvider implements GenerationProvider {
       .join('. ')
     return { transcript: `${prefix}${content}`.trim() }
   }
+
+  /** Deterministic bag-of-words embedding: each lowercase word increments a
+   * hashed bucket, so texts sharing words score higher cosine similarity. No
+   * network, byte-stable — lets the refine remap be tested end to end. */
+  async embedTexts(texts: string[]): Promise<number[][]> {
+    const DIMS = 64
+    return texts.map(text => {
+      const vec = new Array<number>(DIMS).fill(0)
+      for (const word of text.toLowerCase().match(/[a-z0-9]+/g) ?? []) {
+        let hash = 0
+        for (let i = 0; i < word.length; i++)
+          hash = (hash * 31 + word.charCodeAt(i)) | 0
+        const bucket = Math.abs(hash) % DIMS
+        vec[bucket] = (vec[bucket] ?? 0) + 1
+      }
+      return vec
+    })
+  }
 }
 
 registry.register('generation', 'mock', () => new MockGenerationProvider())

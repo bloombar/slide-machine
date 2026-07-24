@@ -155,6 +155,28 @@ test('drawings are not lost when a mic phrase updates the slide mid-draw', async
   expect(view.slides[1].drawings).toHaveLength(2)
 })
 
+test('deck playback returns TTS marks for stroke sync (WB-2)', async ({
+  page,
+}) => {
+  await buildDeck(page)
+  await page.getByRole('button', { name: 'Pen' }).click()
+  const saved = page.waitForResponse(r =>
+    r.url().includes('/actions/slide.editDrawings'),
+  )
+  await drawOnSlide(page)
+  await saved
+
+  // Playing the deck synthesizes each slide; the response must now include the
+  // `marks` timepoint array the client resolves stroke reveal times against.
+  const ttsResponse = page.waitForResponse(
+    r => /\/api\/slides\/.+\/tts$/.test(r.url()) && r.status() === 200,
+  )
+  await page.getByRole('button', { name: 'Play deck' }).click()
+  const body = await (await ttsResponse).json()
+  expect(Array.isArray(body.marks)).toBe(true)
+  expect(body).toHaveProperty('url')
+})
+
 test('opening a slide kebab while drawing exits drawing mode', async ({
   page,
 }) => {

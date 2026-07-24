@@ -248,4 +248,9 @@ export interface GenerationProvider {
   refineSlide(request: SlideRefineRequest): Promise<SlideRefineResult>
   /** Spoken narration for a slide, kept in-line with its content (GEN-4 Refine). */
   narrateSlide(request: SlideNarrateRequest): Promise<SlideNarrateResult>
+  /** Embedding vectors for texts, used to semantically re-anchor whiteboard
+   * marks to the closest phrase after a transcript rewrite (WB-2). One vector
+   * per input, in order. Throwing is acceptable — callers fall back to a
+   * proportional remap when embeddings are unavailable. */
+  embedTexts(texts: string[]): Promise<number[][]>
 }

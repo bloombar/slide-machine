@@ -180,6 +180,36 @@ describe('strokeVisible', () => {
     expect(strokeVisible(s, 1, 100, { index: 1, fraction: 0.7 })).toBe(true) // drawn, not yet erased
     expect(strokeVisible(s, 1, 100, { index: 1, fraction: 0.9 })).toBe(false) // erased
   })
+
+  it('hides an orphaned mark throughout playback and on passed slides', () => {
+    const orphan = stroke({
+      anchor: { charAnchor: 50, source: 'word', orphaned: true },
+    })
+    // Active slide, fraction well past its anchor — still hidden.
+    expect(strokeVisible(orphan, 1, 100, { index: 1, fraction: 1 })).toBe(false)
+    // Already-narrated slide — still hidden (would otherwise show).
+    expect(strokeVisible(orphan, 0, 100, { index: 2, fraction: 0.1 })).toBe(
+      false,
+    )
+  })
+
+  it('reveals by real mark time, not proportional position, when marks exist', () => {
+    // Marks: char 0 → 0s, char 50 → 4s (anchor sits at char 50). At 3s the clock
+    // hasn't reached it; at 5s it has — independent of the 0.5 char-fraction.
+    const marks = [
+      { charOffset: 0, timeSeconds: 0 },
+      { charOffset: 50, timeSeconds: 4 },
+    ]
+    const progress = (currentTime: number) => ({
+      index: 1,
+      fraction: 1, // fraction would say "shown" — marks must override.
+      currentTime,
+      duration: 10,
+      marks,
+    })
+    expect(strokeVisible(synced(), 1, 100, progress(3))).toBe(false)
+    expect(strokeVisible(synced(), 1, 100, progress(5))).toBe(true)
+  })
 })
 
 describe('erasureReplays', () => {

@@ -6,6 +6,7 @@
  * the client playback overlay so both agree on the math.
  */
 import type { Stroke } from '../types/deck'
+import type { TtsMark } from '../providers/tts'
 
 /**
  * Whether a slide carries any *visible* whiteboard marks. Erased strokes stay
@@ -45,4 +46,45 @@ export const remapAnchor = (
 ): number => {
   if (oldLength <= 0) return 0
   return Math.round((charAnchor / oldLength) * newLength)
+}
+
+/**
+ * Real audio time (seconds) of a character position, from TTS `<mark>`
+ * timepoints. Marks give the true spoken time of sentence boundaries, so this
+ * interpolates linearly between the two marks bracketing `charAnchor` — a
+ * piecewise-linear char→time curve that tracks pauses and speech rate, unlike
+ * the flat `charAnchor / length` proxy. Marks must be sorted by `charOffset`.
+ *
+ * Falls back to `anchorFraction(charAnchor, textLength) * duration` when there
+ * are no marks (non-SSML voices, mock/browser engines), so playback still works
+ * everywhere. Before the first mark or after the last, it extrapolates from the
+ * clip's start (0) / end (`duration`) so early and late marks stay in sync.
+ */
+export const charTimeFromMarks = (
+  charAnchor: number,
+  marks: TtsMark[],
+  duration: number,
+  textLength: number,
+): number => {
+  if (!marks.length || duration <= 0) {
+    return anchorFraction(charAnchor, textLength) * Math.max(0, duration)
+  }
+  // Bracket the anchor: `lo` is the last mark at or before it, `hi` the first
+  // after. Endpoints outside the mark range anchor to clip start/end.
+  let lo: TtsMark | null = null
+  let hi: TtsMark | null = null
+  for (const m of marks) {
+    if (m.charOffset <= charAnchor) lo = m
+    else {
+      hi = m
+      break
+    }
+  }
+  const start = lo ?? { charOffset: 0, timeSeconds: 0 }
+  const end = hi ?? { charOffset: textLength, timeSeconds: duration }
+  const span = end.charOffset - start.charOffset
+  if (span <= 0) return start.timeSeconds
+  const t = (charAnchor - start.charOffset) / span
+  const clamped = t < 0 ? 0 : t > 1 ? 1 : t
+  return start.timeSeconds + clamped * (end.timeSeconds - start.timeSeconds)
 }

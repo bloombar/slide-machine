@@ -7,13 +7,17 @@
  */
 import type {
   HealthComponent,
+  TtsMark,
   TtsProvider,
   TtsSynthesisInput,
+  TtsSynthesisResult,
 } from '@slide-machine/shared'
 import { env } from '../config/env'
+import { buildMarkedSsml } from '../tts/ssml'
 import { registry } from './registry'
 
-const API_BASE = 'https://texttospeech.googleapis.com/v1'
+// v1beta1 is required for SSML `<mark>` timepoints (enableTimePointing).
+const API_BASE = 'https://texttospeech.googleapis.com/v1beta1'
 /** Bounded so a hung synth can't stall the request that awaits it. */
 const SYNTHESIZE_TIMEOUT_MS = 10_000
 const HEALTH_TIMEOUT_MS = 2000
@@ -27,40 +31,83 @@ export class GoogleCloudTtsProvider implements TtsProvider {
     languageCode,
     voiceName,
     gender,
-  }: TtsSynthesisInput): Promise<Uint8Array> {
+  }: TtsSynthesisInput): Promise<TtsSynthesisResult> {
     if (!env.GOOGLE_CLOUD_TTS_KEY) {
       throw new Error('Text-to-speech is not configured (no API key)')
     }
+    // A specific name wins; otherwise the gender selects a matching voice in
+    // the requested language, or Google's default when neither is set.
+    const voice = {
+      languageCode,
+      ...(voiceName ? { name: voiceName } : {}),
+      ...(gender ? { ssmlGender: gender.toUpperCase() } : {}),
+    }
+
+    // Preferred path: SSML with `<mark>`s + timepoints, so playback gets the
+    // real spoken time of each phrase boundary.
+    const { ssml, marks: markRefs } = buildMarkedSsml(text)
+    const ssmlResult = await this.request(
+      {
+        input: { ssml },
+        voice,
+        audioConfig: { audioEncoding: 'MP3' },
+        enableTimePointing: ['SSML_MARK'],
+      },
+      markRefs,
+    )
+    if (ssmlResult) return ssmlResult
+
+    // Fallback: some voices (e.g. Chirp/HD) reject SSML. Re-synthesize the
+    // plain text with no marks — playback degrades to the linear proxy.
+    const plainResult = await this.request(
+      { input: { text }, voice, audioConfig: { audioEncoding: 'MP3' } },
+      [],
+    )
+    if (!plainResult) throw new Error('Text-to-speech returned no audio')
+    return plainResult
+  }
+
+  /**
+   * POSTs one synthesize request. Returns null on a 400 (so the caller can try
+   * a simpler request — SSML voices vs. plain), throws on other failures.
+   * Joins the response `timepoints` to plain-text offsets via the mark refs.
+   */
+  private async request(
+    body: unknown,
+    markRefs: { name: string; charOffset: number }[],
+  ): Promise<TtsSynthesisResult | null> {
     const res = await fetch(`${API_BASE}/text:synthesize`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-goog-api-key': env.GOOGLE_CLOUD_TTS_KEY,
+        'x-goog-api-key': env.GOOGLE_CLOUD_TTS_KEY!,
       },
-      body: JSON.stringify({
-        input: { text },
-        // A specific name wins; otherwise the gender selects a matching voice
-        // in the requested language, or Google's default when neither is set.
-        voice: {
-          languageCode,
-          ...(voiceName ? { name: voiceName } : {}),
-          ...(gender ? { ssmlGender: gender.toUpperCase() } : {}),
-        },
-        audioConfig: { audioEncoding: 'MP3' },
-      }),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(SYNTHESIZE_TIMEOUT_MS),
     })
     if (!res.ok) {
       const detail = await res.text().catch(() => '')
+      // 400 usually means the voice rejected the SSML/timepointing; signal the
+      // caller to retry with a plainer request rather than failing outright.
+      if (res.status === 400) return null
       throw new Error(
         `Text-to-speech request failed (${res.status}): ${detail.slice(0, 500)}`,
       )
     }
-    const data = (await res.json()) as { audioContent?: string }
-    if (!data.audioContent) {
-      throw new Error('Text-to-speech returned no audio')
+    const data = (await res.json()) as {
+      audioContent?: string
+      timepoints?: Array<{ markName?: string; timeSeconds?: number }>
     }
-    return Buffer.from(data.audioContent, 'base64')
+    if (!data.audioContent) throw new Error('Text-to-speech returned no audio')
+    const offsetByName = new Map(markRefs.map(m => [m.name, m.charOffset]))
+    const marks: TtsMark[] = (data.timepoints ?? [])
+      .filter(t => t.markName != null && offsetByName.has(t.markName))
+      .map(t => ({
+        charOffset: offsetByName.get(t.markName!)!,
+        timeSeconds: t.timeSeconds ?? 0,
+      }))
+      .sort((a, b) => a.charOffset - b.charOffset)
+    return { audio: Buffer.from(data.audioContent, 'base64'), marks }
   }
 }
 

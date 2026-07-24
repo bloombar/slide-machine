@@ -16,6 +16,8 @@ const mockedSynth = vi.mocked(synthesizeSlideTts)
 const audios: FakeAudio[] = []
 class FakeAudio {
   src = ''
+  currentTime = 0
+  duration = 10
   onended: (() => void) | null = null
   play = vi.fn(async () => {})
   pause = vi.fn()
@@ -50,7 +52,7 @@ const setup = () => {
 
 describe('useTtsPlayback', () => {
   it('speaks a slide: stops the mic, plays, then idles when it ends', async () => {
-    mockedSynth.mockResolvedValue({ url: 'u1' })
+    mockedSynth.mockResolvedValue({ url: 'u1', marks: [] })
     const { hook, navigate, stopMic } = setup()
 
     act(() => hook.result.current.speakSlide(slides[0]!))
@@ -66,7 +68,10 @@ describe('useTtsPlayback', () => {
   })
 
   it('plays the deck and auto-advances on ended', async () => {
-    mockedSynth.mockImplementation(async (id: string) => ({ url: `url-${id}` }))
+    mockedSynth.mockImplementation(async (id: string) => ({
+      url: `url-${id}`,
+      marks: [],
+    }))
     const { hook, navigate, stopMic } = setup()
 
     act(() => hook.result.current.playDeck(0))
@@ -83,7 +88,7 @@ describe('useTtsPlayback', () => {
   })
 
   it('toggle pauses and resumes deck playback', async () => {
-    mockedSynth.mockResolvedValue({ url: 'u' })
+    mockedSynth.mockResolvedValue({ url: 'u', marks: [] })
     const { hook } = setup()
 
     act(() => hook.result.current.playDeck(0))
@@ -95,5 +100,24 @@ describe('useTtsPlayback', () => {
 
     act(() => hook.result.current.toggle(0))
     expect(hook.result.current.status).toBe('playing')
+  })
+
+  it('exposes the active clip marks + time through getProgress', async () => {
+    const marks = [
+      { charOffset: 0, timeSeconds: 0 },
+      { charOffset: 20, timeSeconds: 4 },
+    ]
+    mockedSynth.mockResolvedValue({ url: 'u1', marks })
+    const { hook } = setup()
+
+    act(() => hook.result.current.speakSlide(slides[0]!))
+    await waitFor(() => expect(hook.result.current.status).toBe('playing'))
+
+    audios[0]!.currentTime = 2.5
+    const progress = hook.result.current.getProgress()
+    expect(progress?.index).toBe(0)
+    expect(progress?.currentTime).toBe(2.5)
+    expect(progress?.duration).toBe(10)
+    expect(progress?.marks).toEqual(marks)
   })
 })

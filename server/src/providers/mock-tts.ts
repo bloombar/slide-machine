@@ -4,8 +4,18 @@
  * without calling a paid API. The audio is real (browsers can load and 'end'
  * it); only its content is silence.
  */
-import type { TtsProvider } from '@slide-machine/shared'
+import type {
+  TtsMark,
+  TtsProvider,
+  TtsSynthesisInput,
+  TtsSynthesisResult,
+} from '@slide-machine/shared'
+import { segmentPhrases } from '@slide-machine/shared'
 import { registry } from './registry'
+
+/** Estimated clip seconds the mock "spans" — evenly spread marks across it so
+ * the resolver has a monotonic timeline to interpolate over in tests. */
+const MOCK_DURATION_SECONDS = 5
 
 /** Builds a ~50ms silent 8 kHz 8-bit mono PCM WAV. */
 const buildSilentWav = (): Buffer => {
@@ -33,8 +43,15 @@ export class MockTtsProvider implements TtsProvider {
   readonly name = 'mock'
   readonly audioMimeType = 'audio/wav'
 
-  async synthesize(): Promise<Uint8Array> {
-    return buildSilentWav()
+  async synthesize({ text }: TtsSynthesisInput): Promise<TtsSynthesisResult> {
+    // Evenly-spaced synthetic timepoints at each phrase boundary, so tests
+    // exercise the mark-driven resolve path deterministically.
+    const phrases = segmentPhrases(text ?? '')
+    const marks: TtsMark[] = phrases.map((p, i) => ({
+      charOffset: p.start,
+      timeSeconds: (i / Math.max(1, phrases.length)) * MOCK_DURATION_SECONDS,
+    }))
+    return { audio: buildSilentWav(), marks }
   }
 }
 

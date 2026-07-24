@@ -150,9 +150,11 @@ export type StrokeTool = 'pen' | 'highlighter'
 
 /**
  * A stroke event's timing, anchored to the slide's narration so it survives
- * transcript refinement and replays proportionally against TTS audio (WB-2).
- * The durable field is `charAnchor`, a character offset into
- * `slide.sourceTranscript`; playback uses `charAnchor / sourceTranscript.length`.
+ * transcript refinement and replays against TTS audio (WB-2). The durable field
+ * is `charAnchor`, a character offset into `slide.sourceTranscript`. Playback
+ * turns `charAnchor` into a real audio time via TTS `<mark>` timepoints
+ * (`charTimeFromMarks`), falling back to the linear `charAnchor / length`
+ * proxy when no marks are available.
  * `source` records how precisely it was placed:
  *  - 'word'     nearest live word timing (google-cloud STT) — inside a phrase
  *  - 'appended' end of the transcript at draw time — every engine, no timings
@@ -160,6 +162,13 @@ export type StrokeTool = 'pen' | 'highlighter'
  *  - 'unsynced' drawn with the mic off — not tied to narration at all, so it
  *               is ALWAYS shown on its slide (in or out of playback), never
  *               gated by the audio position (WB-2)
+ *
+ * `phraseText`/`phraseOffset` are the durable *phrase* binding: a snapshot of
+ * the spoken phrase the mark was drawn over plus a 0..1 position within it. On
+ * transcript refinement the phrase is re-matched semantically to the closest
+ * phrase in the new narration and `charAnchor` re-derived, so the mark tracks
+ * its idea rather than a proportional point. When no acceptable match survives,
+ * `orphaned` is set and the mark is hidden at playback.
  */
 export interface StrokeAnchor {
   charAnchor: number
@@ -168,6 +177,14 @@ export interface StrokeAnchor {
   sessionId?: string
   /** Session-relative ms of the event; google-cloud STT only. */
   sessionMs?: number
+  /** Snapshot of the spoken phrase this mark was drawn over — the durable
+   * fingerprint re-matched on refinement. Set for 'word' anchors only. */
+  phraseText?: string
+  /** 0..1 position of the draw within `phraseText`, for intra-phrase precision. */
+  phraseOffset?: number
+  /** Set by the refine remap when the bound phrase no longer exists in the
+   * rewritten transcript; hides the mark at playback (WB-2 orphan policy). */
+  orphaned?: boolean
 }
 
 /**

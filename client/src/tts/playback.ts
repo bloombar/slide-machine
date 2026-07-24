@@ -11,7 +11,7 @@
  * stop/unmount — the same "start returns a cancel" shape as pollSlideImage.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Slide } from '@slide-machine/shared'
+import type { Slide, TtsMark } from '@slide-machine/shared'
 import { synthesizeSlideTts } from '../api/slides'
 
 export type TtsStatus = 'idle' | 'playing' | 'paused'
@@ -33,6 +33,13 @@ interface Options {
 export interface TtsProgress {
   index: number
   fraction: number | null
+  /** Seconds elapsed in the active clip, for mark-driven stroke sync (WB-2). */
+  currentTime: number
+  /** Total clip seconds, or null when unknown. */
+  duration: number | null
+  /** `<mark>` timepoints for the active slide's audio; empty when the voice /
+   * engine couldn't emit them, so consumers fall back to `fraction`. */
+  marks: TtsMark[]
 }
 
 export interface TtsPlayback {
@@ -63,6 +70,9 @@ export function useTtsPlayback({
   // Mirror of activeIndex for the imperative getProgress reader (WB-2), which
   // must not depend on a re-render to see the current slide.
   const activeIndexRef = useRef<number | null>(null)
+  // Marks for the active clip, mirrored (like activeIndex) for the imperative
+  // getProgress reader so stroke sync sees them without a re-render (WB-2).
+  const marksRef = useRef<TtsMark[]>([])
 
   const ensureAudio = (): HTMLAudioElement => {
     if (!audioRef.current) audioRef.current = new Audio()
@@ -87,6 +97,7 @@ export function useTtsPlayback({
     setScope(null)
     setActiveIndex(null)
     activeIndexRef.current = null
+    marksRef.current = []
   }, [halt])
 
   /** Navigates to a slide, synthesizes its audio, and plays it; `onEnded`
@@ -107,12 +118,16 @@ export function useTtsPlayback({
         return
       }
       let url: string | null
+      let marks: TtsMark[] = []
       try {
-        url = (await synthesizeSlideTts(slide.id, mode)).url
+        const res = await synthesizeSlideTts(slide.id, mode)
+        url = res.url
+        marks = res.marks ?? []
       } catch {
         url = null
       }
       if (token !== tokenRef.current) return
+      marksRef.current = marks
       if (!url) {
         onEnded() // nothing to speak → advance / finish
         return
@@ -199,11 +214,17 @@ export function useTtsPlayback({
     const index = activeIndexRef.current
     if (!audio || index == null) return null
     const d = audio.duration
-    const fraction =
-      d && Number.isFinite(d) && d > 0
-        ? Math.min(1, Math.max(0, audio.currentTime / d))
-        : null
-    return { index, fraction }
+    const known = d && Number.isFinite(d) && d > 0
+    const fraction = known
+      ? Math.min(1, Math.max(0, audio.currentTime / d))
+      : null
+    return {
+      index,
+      fraction,
+      currentTime: audio.currentTime,
+      duration: known ? d : null,
+      marks: marksRef.current,
+    }
   }, [])
 
   // Stop + release on unmount.

@@ -2,6 +2,26 @@
 
 Short records of non-obvious choices, for when we revisit them.
 
+## Whiteboard markup ↔ transcript sync: phrase anchoring (2026-07-23)
+
+**Problem.** A whiteboard stroke should appear in sync with the spoken phrase it was drawn over. Strokes stored only `charAnchor` (a char offset into `sourceTranscript`) and playback revealed them at `charAnchor / length ≤ audio.currentTime / duration`. That linear char↔time model drifted three ways: characters don't map to time uniformly (pauses, emphasis); a Gemini re-narration overwrote the transcript and only *proportionally* rescaled anchors, so inserted/removed text shoved a mark off its phrase; and faster/slower voices shifted real phrase times a char-fraction can't track.
+
+**Choice.** A three-layer model with `charAnchor` kept as the single bridge value:
+
+1. **Bind** — a `'word'` stroke anchor also snapshots the phrase it was drawn over (`phraseText`) plus a 0..1 position within it (`phraseOffset`). Set in `buildAnchor` ([DeckViewerPage.tsx](../client/src/pages/DeckViewerPage.tsx)); fields on `StrokeAnchor` ([deck.ts](../shared/src/types/deck.ts)).
+2. **Remap** — on re-narration, [`remapDrawingAnchors`](../server/src/actions/remap-drawings.ts) embeds each fingerprint and every phrase of the new transcript (Gemini `:embedContent`, `cosineSimilarity`) and re-points `charAnchor` to the best-matching phrase, placing within it by `phraseOffset`. Replaces the old proportional-only remap at the one site the transcript is overwritten ([reconcile.ts](../server/src/actions/reconcile.ts) `narrateOneSlide`).
+3. **Resolve** — TTS synthesizes SSML with a `<mark>` per phrase and `enableTimePointing`, so Google returns real spoken times; the route caches these as a `{charOffset,timeSeconds}[]` sidecar and playback converts `charAnchor` → time by interpolating between marks (`charTimeFromMarks`), honoring pauses and speech rate. Falls back to the linear fraction when a voice can't emit marks.
+
+The three locked sub-decisions:
+
+- **Binding unit** = phrase fingerprint + intra-phrase offset (not a bare word — a single word re-matches everywhere).
+- **Remap mechanism** = embeddings as the backbone (works for manual edits too, not only Gemini rewrites), with proportional `remapAnchor` as the guaranteed last-resort fallback for fingerprint-less marks or when embeddings are unavailable. Threshold `PHRASE_MATCH_THRESHOLD = 0.5`, empirical — tune with real embeddings.
+- **Orphan policy** = when the best match is below threshold the phrase is gone, so the mark is flagged `orphaned` and hidden during playback (`strokeVisible`), never silently mis-placed.
+
+**Anti-drift rule.** Remap always matches against the mark's *original* captured `phraseText`, never the previous refinement, so repeated refines don't accumulate error.
+
+**Why not the alternatives.** Inline sentinel markers that Gemini must preserve were rejected: LLMs drop/duplicate them and it pollutes the narration prose. Anchoring to the original recording's word timings was rejected because playback is TTS-regenerated (no original-audio timeline). Per-word `<mark>`s were rejected for the ~5000-char SSML input limit; sentence-level marks stay well under it. Marks are placed at text-derived sentence boundaries (not at markup positions) so the timepoint map is a pure function of (text, voice) and caches alongside the audio — whiteboard edits never force re-synthesis.
+
 ## Slide scaling: container-query units (2026-07-11)
 
 **Problem.** Slides render in an `aspect-video` box that tracks viewport width, but typography was fixed-size (`text-5xl` etc.), so decks looked different at every browser width and broke on mobile.

@@ -28,6 +28,9 @@ const serverEnv = (over: Record<string, string>): Record<string, string> => ({
   GENERATION_PROVIDER: 'mock',
   QUIZ_PROVIDER: 'mock',
   QUIZ_PUBLISH_MODE: 'mock',
+  // Mock TTS returns a silent WAV + synthetic `<mark>` timepoints, so deck
+  // playback (and the WB-2 stroke-sync marks) run without a Google key.
+  TTS_PROVIDER: 'mock',
   IMAGE_ENRICHMENT_ENABLED: 'false',
   STORAGE_PROVIDER: 'local',
   // Hermetic: the developer's local .env must not leak into e2e

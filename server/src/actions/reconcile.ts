@@ -34,7 +34,7 @@ import type {
   SpeakerRole,
   Stroke,
 } from '@slide-machine/shared'
-import { remapAnchor } from '@slide-machine/shared'
+import { remapDrawingAnchors } from './remap-drawings'
 import { defineAction } from './define'
 import { registerAction, ActionForbiddenError } from './dispatch'
 import { loadEditableDeck } from './deck'
@@ -419,42 +419,36 @@ const narrateOneSlide = async (
       : { transcript: slide.sourceTranscript }),
   })
   // Whiteboard stroke timing is anchored to the narration (WB-2); a wholesale
-  // rewrite would strand it, so rescale each stroke's draw + erase anchors to
-  // the new transcript length, keeping every mark at the same proportional
-  // point of the narration.
-  const oldLen = slide.sourceTranscript?.length ?? 0
+  // rewrite would strand it, so re-anchor each stroke's draw + erase anchors to
+  // the conceptually-closest phrase of the new narration.
+  const oldTranscript = slide.sourceTranscript ?? ''
   slide.sourceTranscript = result.transcript
-  remapSlideDrawings(slide, oldLen, slide.sourceTranscript.length)
+  await remapSlideDrawings(slide, oldTranscript, slide.sourceTranscript, gen)
   if (hash) slide.narrateInputHash = hash
   await slide.save()
   return true
 }
 
-/** Rescales a slide's stroke anchors when its transcript length changes (WB-2).
- * A no-op when there are no drawings or the old transcript was empty. */
-const remapSlideDrawings = (
+/**
+ * Re-anchors a slide's stroke marks when its transcript is rewritten (WB-2):
+ * thin adapter over `remapDrawingAnchors` (semantic phrase re-match, orphan on
+ * no-match, proportional fallback). A no-op when there are no drawings.
+ */
+const remapSlideDrawings = async (
   slide: SlideDoc,
-  oldLen: number,
-  newLen: number,
-): void => {
-  if (!slide.drawings?.length || oldLen <= 0) return
+  oldTranscript: string,
+  newTranscript: string,
+  gen: GenerationProvider,
+): Promise<void> => {
+  if (!slide.drawings?.length) return
   // toObject() yields plain strokes (safe to spread) rather than subdocuments.
   const plain = (slide.toObject().drawings ?? []) as Stroke[]
-  const remapped = plain.map(s => ({
-    ...s,
-    anchor: {
-      ...s.anchor,
-      charAnchor: remapAnchor(s.anchor.charAnchor, oldLen, newLen),
-    },
-    ...(s.erasedAnchor
-      ? {
-          erasedAnchor: {
-            ...s.erasedAnchor,
-            charAnchor: remapAnchor(s.erasedAnchor.charAnchor, oldLen, newLen),
-          },
-        }
-      : {}),
-  }))
+  const remapped = await remapDrawingAnchors(
+    plain,
+    oldTranscript,
+    newTranscript,
+    texts => gen.embedTexts(texts),
+  )
   slide.set('drawings', remapped)
 }
 

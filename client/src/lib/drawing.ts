@@ -5,14 +5,24 @@
  * slide a stroke belongs to in list view. Kept free of the DOM/React so they
  * can be unit-tested in isolation.
  */
-import type { Stroke, StrokeAnchor, StrokePoint } from '@slide-machine/shared'
-import { anchorFraction } from '@slide-machine/shared'
+import type {
+  Stroke,
+  StrokeAnchor,
+  StrokePoint,
+  TtsMark,
+} from '@slide-machine/shared'
+import { anchorFraction, charTimeFromMarks } from '@slide-machine/shared'
 
-/** Live playback position: which slide, and how far through its audio (0..1, or
- * null when the clip has no known duration). Null overall = nothing playing. */
+/** Live playback position: which slide, and how far through its audio. When the
+ * clip carries `<mark>` timepoints, strokes reveal by real elapsed time
+ * (`currentTime` vs. the mark-interpolated time); otherwise the linear
+ * `fraction` proxy is used. Null overall = nothing playing. */
 export interface PlaybackProgress {
   index: number
   fraction: number | null
+  currentTime?: number
+  duration?: number | null
+  marks?: TtsMark[]
 }
 
 /**
@@ -22,7 +32,12 @@ export interface PlaybackProgress {
  * at its draw anchor and disappears at its erase anchor; on a slide not yet
  * reached it is hidden — EXCEPT `unsynced` marks (drawn with the mic off),
  * which aren't tied to narration and are always shown unless erased, on any
- * slide, so flipping to that slide always reveals them.
+ * slide, so flipping to that slide always reveals them. An `orphaned` mark (its
+ * phrase was removed by a transcript refine) is hidden throughout playback.
+ *
+ * On the active slide, reveal time comes from the clip's `<mark>` timepoints
+ * (real spoken time of each phrase boundary) when present, so pauses and speech
+ * rate are honored; without marks it falls back to the linear char-fraction.
  */
 export const strokeVisible = (
   stroke: Stroke,
@@ -30,16 +45,27 @@ export const strokeVisible = (
   transcriptLength: number,
   progress: PlaybackProgress | null,
 ): boolean => {
+  if (stroke.anchor.orphaned) return false
   if (stroke.anchor.source === 'unsynced') return !stroke.erasedAnchor
   if (!progress || slideIndex < 0) return !stroke.erasedAnchor
   if (slideIndex < progress.index) return !stroke.erasedAnchor
   if (slideIndex > progress.index) return false
-  const frac = progress.fraction ?? 1
-  const drawn =
-    anchorFraction(stroke.anchor.charAnchor, transcriptLength) <= frac
-  const erased = stroke.erasedAnchor
-    ? anchorFraction(stroke.erasedAnchor.charAnchor, transcriptLength) <= frac
-    : false
+  // On the active slide, has the clock passed this anchor's time yet?
+  const reached = (anchor: StrokeAnchor): boolean => {
+    if (progress.marks?.length && progress.duration) {
+      const target = charTimeFromMarks(
+        anchor.charAnchor,
+        progress.marks,
+        progress.duration,
+        transcriptLength,
+      )
+      return (progress.currentTime ?? 0) >= target
+    }
+    const frac = progress.fraction ?? 1
+    return anchorFraction(anchor.charAnchor, transcriptLength) <= frac
+  }
+  const drawn = reached(stroke.anchor)
+  const erased = stroke.erasedAnchor ? reached(stroke.erasedAnchor) : false
   return drawn && !erased
 }
 

@@ -702,6 +702,40 @@ export class GeminiGenerationProvider implements GenerationProvider {
       ? { transcript: parsed.data.transcript.trim() }
       : fallback
   }
+
+  async embedTexts(texts: string[]): Promise<number[][]> {
+    if (!texts.length) return []
+    if (!env.GEMINI_API_KEY)
+      throw new Error('GENERATION_PROVIDER=gemini requires GEMINI_API_KEY')
+    const model = `models/${env.GEMINI_EMBED_MODEL}`
+    const res = await fetch(`${API_BASE}/${model}:batchEmbedContents`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': env.GEMINI_API_KEY,
+      },
+      body: JSON.stringify({
+        requests: texts.map(text => ({
+          model,
+          content: { parts: [{ text }] },
+        })),
+      }),
+      signal: AbortSignal.timeout(env.GEMINI_TIMEOUT_MS),
+    })
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '')
+      throw new Error(
+        `Gemini embed failed (${res.status}): ${detail.slice(0, 500)}`,
+      )
+    }
+    const data = (await res.json()) as {
+      embeddings?: Array<{ values?: number[] }>
+    }
+    const vectors = data.embeddings?.map(e => e.values ?? [])
+    if (!vectors || vectors.length !== texts.length)
+      throw new Error('Gemini embed returned an unexpected number of vectors')
+    return vectors
+  }
 }
 
 registry.register('generation', 'gemini', () => new GeminiGenerationProvider())

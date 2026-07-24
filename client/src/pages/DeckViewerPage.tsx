@@ -1201,11 +1201,17 @@ export default function DeckViewerPage() {
       // word's offset inside it.
       const phraseStart = Math.max(0, len - info.phrase.length)
       const wordIdx = info.phrase.toLowerCase().indexOf(best.word.toLowerCase())
+      const offset = wordIdx >= 0 ? wordIdx : 0
       return {
-        charAnchor: phraseStart + (wordIdx >= 0 ? wordIdx : 0),
+        charAnchor: phraseStart + offset,
         source: 'word',
         sessionId: info.sessionId,
         sessionMs: drawMs,
+        // Durable phrase fingerprint + intra-phrase position, so a transcript
+        // refine can re-anchor this mark to the conceptually-closest new phrase
+        // rather than a proportional point (WB-2).
+        phraseText: info.phrase,
+        phraseOffset: info.phrase.length ? offset / info.phrase.length : 0,
       }
     }
     return { charAnchor: len, source: 'appended' }

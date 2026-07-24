@@ -23,28 +23,55 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('GoogleCloudTtsProvider.synthesize', () => {
-  it('posts the synthesize request and decodes the base64 audio', async () => {
+  it('posts SSML with marks + timepointing and decodes the base64 audio', async () => {
     const audioContent = Buffer.from('hello-mp3').toString('base64')
     fetchMock.mockResolvedValue({
       ok: true,
-      json: async () => ({ audioContent }),
+      json: async () => ({ audioContent, timepoints: [] }),
     })
 
     const provider = new GoogleCloudTtsProvider()
-    const audio = await provider.synthesize({
-      text: 'Hello there',
+    const { audio } = await provider.synthesize({
+      text: 'Hello there. How are you?',
       languageCode: 'en-US',
     })
     expect(Buffer.from(audio).toString()).toBe('hello-mp3')
     expect(provider.audioMimeType).toBe('audio/mpeg')
 
     const [url, init] = fetchMock.mock.calls[0]!
+    expect(String(url)).toContain('v1beta1')
     expect(String(url)).toContain('text:synthesize')
     expect(init.headers['x-goog-api-key']).toBe('tts-key')
     const body = JSON.parse(String(init.body))
-    expect(body.input.text).toBe('Hello there')
+    // SSML (not plain text) with a <mark> per phrase, and timepointing on.
+    expect(body.input.ssml).toContain('<mark name="m0"/>')
+    expect(body.input.ssml).toContain('Hello there.')
+    expect(body.enableTimePointing).toEqual(['SSML_MARK'])
     expect(body.voice.languageCode).toBe('en-US')
     expect(body.audioConfig.audioEncoding).toBe('MP3')
+  })
+
+  it('maps returned timepoints to plain-text char offsets', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        audioContent: Buffer.from('x').toString('base64'),
+        // 'One. Two.' → phrase 'One.' at 0, phrase 'Two.' at 5.
+        timepoints: [
+          { markName: 'm1', timeSeconds: 1.5 },
+          { markName: 'm0', timeSeconds: 0.2 },
+        ],
+      }),
+    })
+    const { marks } = await new GoogleCloudTtsProvider().synthesize({
+      text: 'One. Two.',
+      languageCode: 'en-US',
+    })
+    // Sorted by charOffset, joined back to plain-text positions.
+    expect(marks).toEqual([
+      { charOffset: 0, timeSeconds: 0.2 },
+      { charOffset: 5, timeSeconds: 1.5 },
+    ])
   })
 
   it('sends the voice name and gender when provided', async () => {
@@ -78,7 +105,34 @@ describe('GoogleCloudTtsProvider.synthesize', () => {
     expect(body.voice.ssmlGender).toBe('MALE')
   })
 
-  it('throws without a key and on a non-200 response', async () => {
+  it('falls back to plain text with no marks when the voice rejects SSML', async () => {
+    // First (SSML) call 400s; provider retries with plain text.
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        text: async () => 'bad',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          audioContent: Buffer.from('plain').toString('base64'),
+        }),
+      })
+    const { audio, marks } = await new GoogleCloudTtsProvider().synthesize({
+      text: 'Hi there.',
+      languageCode: 'en-US',
+    })
+    expect(Buffer.from(audio).toString()).toBe('plain')
+    expect(marks).toEqual([])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    const second = JSON.parse(String(fetchMock.mock.calls[1]![1].body))
+    expect(second.input.text).toBe('Hi there.')
+    expect(second.input.ssml).toBeUndefined()
+    expect(second.enableTimePointing).toBeUndefined()
+  })
+
+  it('throws without a key and on a non-400 error response', async () => {
     testEnv.GOOGLE_CLOUD_TTS_KEY = undefined
     await expect(
       new GoogleCloudTtsProvider().synthesize({

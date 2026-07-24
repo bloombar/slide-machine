@@ -11,7 +11,11 @@
  */
 import { createHash } from 'node:crypto'
 import { Router } from 'express'
-import { findTtsVoice, type TtsProvider } from '@slide-machine/shared'
+import {
+  findTtsVoice,
+  type TtsMark,
+  type TtsProvider,
+} from '@slide-machine/shared'
 import { requireAuth } from '../middleware/auth'
 import { HttpError } from '../middleware/error'
 import { SlideModel } from '../models/slide'
@@ -73,41 +77,58 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
     seed = `transcript|${transcript}`
     resolveText = async () => transcript
   } else if (mode === 'transcript') {
-    if (!content) return res.json({ url: null })
+    if (!content) return res.json({ url: null, marks: [] })
     seed = `narrate|${content}`
     resolveText = async () =>
       (await narrateSlide(content, languageCode)) || content
   } else {
-    if (!content) return res.json({ url: null })
+    if (!content) return res.json({ url: null, marks: [] })
     seed = `content|${content}`
     resolveText = async () => content
   }
 
   const provider = registry.get<TtsProvider>('tts')
   const ext = extensionFor(provider.audioMimeType)
+  // `v2` bumps the cache namespace so entries synthesized before `<mark>`
+  // timepoints regenerate with a marks sidecar.
   const hash = createHash('sha256')
     .update(
-      [provider.name, languageCode, voiceName ?? '', gender ?? '', seed].join(
-        ' ',
-      ),
+      [
+        'v2',
+        provider.name,
+        languageCode,
+        voiceName ?? '',
+        gender ?? '',
+        seed,
+      ].join(' '),
     )
     .digest('hex')
   const storageKey = `tts/${hash}.${ext}`
+  const marksKey = `tts/${hash}.json`
   const storage = getStorage()
 
-  // Cache hit → serve the stored audio; no synthesis.
+  // Cache hit → serve the stored audio + its marks sidecar; no synthesis. Marks
+  // derive purely from (text, voice), so they cache alongside the audio and are
+  // never invalidated by whiteboard edits.
   if (await storage.get(storageKey)) {
-    return res.json({ url: storage.publicUrl(storageKey) })
+    const marksBuf = await storage.get(marksKey)
+    const marks: TtsMark[] = marksBuf ? JSON.parse(marksBuf.toString()) : []
+    return res.json({ url: storage.publicUrl(storageKey), marks })
   }
 
   const text = await resolveText()
-  if (!text.trim()) return res.json({ url: null })
-  const audio = await provider.synthesize({
+  if (!text.trim()) return res.json({ url: null, marks: [] })
+  const { audio, marks } = await provider.synthesize({
     text,
     languageCode,
     voiceName,
     gender,
   })
   await storage.put(storageKey, Buffer.from(audio), provider.audioMimeType)
-  res.json({ url: storage.publicUrl(storageKey) })
+  await storage.put(
+    marksKey,
+    Buffer.from(JSON.stringify(marks)),
+    'application/json',
+  )
+  res.json({ url: storage.publicUrl(storageKey), marks })
 })

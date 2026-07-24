@@ -9,6 +9,7 @@ import type {
   ImageSearchCandidate,
   Slide,
   Stroke,
+  TtsMark,
 } from '@slide-machine/shared'
 import { apiFetch, ApiError } from './http'
 import { dispatchAction } from './actions'
@@ -73,11 +74,14 @@ export const editSlideDrawings = (
 export const synthesizeSlideTts = (
   slideId: string,
   mode: 'content' | 'transcript',
-): Promise<{ url: string | null }> =>
-  apiFetch<{ url: string | null }>(`/api/slides/${slideId}/tts`, {
-    method: 'POST',
-    body: JSON.stringify({ mode }),
-  })
+): Promise<{ url: string | null; marks: TtsMark[] }> =>
+  apiFetch<{ url: string | null; marks: TtsMark[] }>(
+    `/api/slides/${slideId}/tts`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ mode }),
+    },
+  )
 
 /**
  * Fetches a slide's original lecture audio (GEN-4) as an object URL for an

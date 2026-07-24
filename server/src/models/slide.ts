@@ -41,6 +41,9 @@ const anchorSchema = new Schema<StrokeAnchor>(
     source: { type: String, enum: STROKE_SOURCES, required: true },
     sessionId: String,
     sessionMs: Number,
+    phraseText: String,
+    phraseOffset: Number,
+    orphaned: Boolean,
   },
   { _id: false },
 )
