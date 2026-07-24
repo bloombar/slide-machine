@@ -34,17 +34,17 @@ span.slot-blank:hover,
   animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
 
-/* A slot present in BOTH layouts should morph, not cross-fade: the default
-   fade between differently-scaled snapshots reads as a flash of oversized
-   content on top of the move. Hide the old snapshot and let the new one
-   ride the group's move/scale at full opacity. Slot names are enumerated
-   and only bare :only-child is used below, because view-transition-class
-   selectors and :not(:only-child) on these pseudo-elements are not matched
-   by all engines. */
+/* A TEXT slot present in BOTH layouts should morph, not cross-fade: the
+   default fade between differently-scaled snapshots reads as a flash of
+   oversized content on top of the move. Hide the old snapshot and let the
+   new one ride the group's move/scale at full opacity — same glyphs,
+   proportional scale, so one snapshot passes for both ends. Slot names are
+   enumerated and only bare :only-child is used below, because
+   view-transition-class selectors and :not(:only-child) on these
+   pseudo-elements are not matched by all engines. */
 ::view-transition-old(vt-title),
 ::view-transition-old(vt-body),
 ::view-transition-old(vt-bullets),
-::view-transition-old(vt-image),
 ::view-transition-old(vt-caption),
 ::view-transition-old(vt-columns) {
   display: none;
@@ -52,20 +52,18 @@ span.slot-blank:hover,
 ::view-transition-new(vt-title),
 ::view-transition-new(vt-body),
 ::view-transition-new(vt-bullets),
-::view-transition-new(vt-image),
 ::view-transition-new(vt-caption),
 ::view-transition-new(vt-columns) {
   animation: none;
 }
 
-/* A slot present in only ONE of the layouts keeps GEN-9's enter/exit
+/* A text slot present in only ONE of the layouts keeps GEN-9's enter/exit
    fades: restore the leaving snapshot (the browser's own fade-out still
    animates it) and give the entering one an explicit fade-in. These
    higher-specificity :only-child rules override the pair rules above. */
 ::view-transition-old(vt-title):only-child,
 ::view-transition-old(vt-body):only-child,
 ::view-transition-old(vt-bullets):only-child,
-::view-transition-old(vt-image):only-child,
 ::view-transition-old(vt-caption):only-child,
 ::view-transition-old(vt-columns):only-child {
   display: block;
@@ -78,18 +76,19 @@ span.slot-blank:hover,
 ::view-transition-new(vt-title):only-child,
 ::view-transition-new(vt-body):only-child,
 ::view-transition-new(vt-bullets):only-child,
-::view-transition-new(vt-image):only-child,
 ::view-transition-new(vt-caption):only-child,
 ::view-transition-new(vt-columns):only-child {
   animation: 250ms cubic-bezier(0.2, 0, 0, 1) both vt-slot-fade-in;
 }
 
-/* The image slot's box changes shape between layouts (image-heavy's wide
-   frame vs two-column's tall column). Default snapshot sizing (width 100%,
-   height auto) briefly renders the new crop oversized at the old box's
-   width until the box finishes morphing. Snapshots are replaced elements,
-   so pin them to the animating box and let object-fit re-crop — the
-   picture reframes smoothly, matching its object-cover rendering at rest. */
+/* The IMAGE slot is the exception: its box changes shape between layouts
+   (image-heavy's wide frame vs two-column's tall column), and each
+   snapshot is the photo at a different crop AND scale — showing either
+   one alone forces a visible zoom jump at one end of the morph. Keep the
+   browser's cross-fade for the pair, but pin both snapshots to the
+   animating box and let object-fit re-crop them: the start shows exactly
+   the old rendering, the end exactly the new one, and the blend in
+   between reads as the photo smoothly reframing, not a fade. */
 ::view-transition-old(vt-image),
 ::view-transition-new(vt-image) {
   width: 100%;
