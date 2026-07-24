@@ -53,3 +53,43 @@ test('an enumerating update refits the slide from content to list', async ({
   await expect(page.getByText('glycolipids')).toBeVisible()
   await expect(page.getByText('1 / 1')).toBeVisible()
 })
+
+test('a refit updates a header (title) slide in place, not a new slide', async ({
+  page,
+}) => {
+  const email2 = `refit-header-${Date.now()}@example.com`
+  await page.goto('/register')
+  await page.getByLabel('Display name').fill('Header Refit')
+  await page.getByLabel('Email').fill(email2)
+  await page.getByLabel('Password').fill(password)
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await createProject(page, 'Arithmetic')
+  await page
+    .getByRole('button', { name: 'Start a new lecture in Arithmetic' })
+    .click()
+  await expect(page).toHaveURL(/\/d\/untitled-/)
+  await page.getByRole('button', { name: 'Start lecture' }).click()
+
+  // A short opening phrase makes a title (header) slide.
+  await page.getByLabel('Spoken phrase').fill('Fractions')
+  await page.getByRole('button', { name: 'Speak' }).click()
+  await expect(page.getByTestId('slide')).toHaveAttribute(
+    'data-layout',
+    'title',
+  )
+
+  // An enumerating continuation refits the SAME header slide to a list in
+  // place — previously headers were excluded from refit and this spawned a new
+  // slide. The title is preserved and the deck still has ONE slide.
+  await page
+    .getByLabel('Spoken phrase')
+    .fill('Also halves, quarters, and thirds')
+  await page.getByRole('button', { name: 'Speak' }).click()
+  await expect(page.getByTestId('slide')).toHaveAttribute('data-layout', 'list')
+  // Still ONE slide (refit in place, not a new slide), the header's title is
+  // preserved, and the enumerated items migrated into the list. Scoped to the
+  // slide since the auto lecture-title in the header echoes the same words.
+  await expect(page.getByText('1 / 1')).toBeVisible()
+  await expect(page.getByTestId('slide').getByText('Fractions')).toBeVisible()
+  await expect(page.getByTestId('slide').getByText('halves')).toBeVisible()
+})

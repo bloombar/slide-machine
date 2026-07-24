@@ -733,10 +733,11 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
       !keepLayout &&
       // A whiteboard slide is a blank drawing canvas — never convert it into a
       // text layout; speech becomes a new slide instead (handled below).
-      lastSlide.layoutType !== WHITEBOARD_LAYOUT_TYPE &&
-      // A header slide (title/section) is a standalone intro, not something to
-      // grow — its content becomes a new slide instead (handled below).
-      !isHeaderLayout(lastSlide.layoutType, descriptors)
+      lastSlide.layoutType !== WHITEBOARD_LAYOUT_TYPE
+      // Header slides (title/section) ARE refit-eligible: a refit re-maps their
+      // slot content in place (e.g. a sharper title/caption). Only NON-refit
+      // updates that try to add body/bullets to a header spawn a new slide
+      // (handled below) — a header can't display that content.
     ) {
       if (!env.GENERATION_LAYOUT_REFIT) return event({ kind: 'none' })
       // A refit that keeps the same layout is a pure rephrase of existing
@@ -912,7 +913,8 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
       )
     if (result.action === 'update' && lastSlide) {
       // Additive update (GEN-8): new bullets slot in, body extends,
-      // layout may re-fit; committed text is never rewritten
+      // layout may re-fit. Body/bullets are the accumulating record and are
+      // never rewritten — only extended.
       if (result.slots.bullets?.length) {
         lastSlide.bullets = [
           ...(lastSlide.bullets ?? []),
@@ -924,6 +926,12 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
           .filter(Boolean)
           .join(' ')
       }
+      // Title/caption are headings, not accumulating content: a fresh value
+      // OVERWRITES in place (e.g. a sharper title as the topic clarifies), so a
+      // header slide's slot content stays current. Empty slots leave the
+      // existing heading intact.
+      if (result.slots.title) lastSlide.title = result.slots.title
+      if (result.slots.caption) lastSlide.caption = result.slots.caption
       // Keep the layout fixed while the user is drawing on this slide, or if it
       // already carries marks (WB-1/WB-3), regardless of what the model
       // returned — the slide must not be rearranged under their strokes.
