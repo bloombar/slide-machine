@@ -24,6 +24,11 @@ const MANIFEST = join(here, 'manifest.yaml')
 
 const familyOf = id => id.replace(/-\d+.*$/, '')
 
+// Requirements deliberately NOT tracked as their own board issues because they
+// are fully realized by another tracked requirement (avoids duplication).
+// P-12 = admin allowlist (ADMIN-1); P-13 = admin audit trail (ADMIN-7).
+const EXCLUDE = new Set(['P-12', 'P-13'])
+
 /** Trim to a word boundary with an ellipsis, for tidy issue titles. */
 const shorten = (s, max) => {
   s = s.replace(/\s+/g, ' ').trim()
@@ -220,23 +225,21 @@ const applyOverrides = byId => {
   // Delivered ahead of their planned Phase 3 slot.
   for (const id of ['GEN-4', 'PLAY-2', 'EDIT-4'])
     set(id, 2, 'Done', false, 'delivered early')
-  // No roadmap phase at all — best guesses, need a human call.
-  set('IMG-5', 2, 'Backlog', true, 'not scheduled in any roadmap phase')
-  set('TECH-4', 1, 'Done', true, 'foundations, implied not scoped')
-  set('TECH-9', 3, 'Backlog', true, 'inferred from Phase 3 billing')
-  set('P-12', 2, 'Done', true, 'realized via ADMIN-1; unphased')
-  set('P-13', 2, 'Done', true, 'realized via ADMIN-7; unphased')
-  // ADMIN family is unphased in the roadmap: done ones -> P2, outstanding -> P3.
+  // Placed in Phase 2 (ROADMAP §6); previously unmapped in the roadmap.
+  set('IMG-5', 2, 'Backlog', false, 'image attribution & licensing display')
+  set('TECH-4', 2, 'Done', false, 'server configuration')
+  set('TECH-9', 2, 'Backlog', false, 'billing-provider abstraction layer')
+  // ADMIN family is Phase 2 work (ROADMAP §6): done ones Done, rest Backlog.
   const adminDone = new Set(['ADMIN-1', 'ADMIN-2', 'ADMIN-4', 'ADMIN-7'])
   for (const e of byId.values()) {
     if (e.family !== 'ADMIN') continue
     const done = adminDone.has(e.id)
     set(
       e.id,
-      done ? 2 : 3,
+      2,
       done ? 'Done' : 'Backlog',
-      true,
-      'admin unphased in roadmap',
+      false,
+      'administration & moderation',
     )
   }
   // Split ids: base ships in an early phase; a suffixed entry tracks the GitHub
@@ -282,7 +285,9 @@ const run = () => {
   const specText = readFileSync(SPEC, 'utf8')
   const roadText = readFileSync(ROADMAP, 'utf8')
 
-  const specItems = [...parseSpec(specText), ...parseFuture(specText)]
+  const specItems = [...parseSpec(specText), ...parseFuture(specText)].filter(
+    i => !EXCLUDE.has(i.id),
+  )
   const byId = new Map(specItems.map(i => [i.id, { ...i }]))
   const road = parseRoadmap(roadText)
 

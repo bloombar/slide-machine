@@ -3,9 +3,9 @@
 # added→Backlog, merged/closed→Done, reopened). The card that moves is the
 # ISSUE the PR closes, so PRs must reference their issue with "Closes #N".
 #
-# Requires a repo secret PROJECTS_TOKEN: a fine-grained PAT with Projects
-# read/write on the `bloombar` account and Issues: read. The default
-# GITHUB_TOKEN cannot write user-level Projects v2.
+# Requires a repo secret GH_PROJECTS_TOKEN: a CLASSIC PAT with the `project`
+# scope (+ `public_repo` to read linked issues/PRs). Fine-grained PATs can't
+# access user-owned Projects v2, and the default GITHUB_TOKEN can't write them.
 name: Project board — PR status
 
 on:
@@ -21,7 +21,7 @@ jobs:
     steps:
       - name: Set linked issues' Status from PR state
         env:
-          GH_TOKEN: ${{ secrets.PROJECTS_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PROJECTS_TOKEN }}
           OWNER: bloombar
           PROJECT_NUMBER: '1'
           REPO_OWNER: ${{ github.event.repository.owner.login }}

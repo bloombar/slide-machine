@@ -8,7 +8,10 @@
 export const OWNER = 'bloombar'
 export const PROJECT_NUMBER = 1
 export const REPO = 'bloombar/slide-machine'
-export const DEFAULT_BRANCH = 'master'
+// Branch the issue bodies deep-link into for SPEC anchors. The SPEC lives on the
+// active feature branch until it merges; override with SPEC_BRANCH, and set this
+// to 'master' once merged. (A branch that lacks the anchors gives 404 links.)
+export const DEFAULT_BRANCH = process.env.SPEC_BRANCH || 'better-faster'
 
 // Phases are carried by repo Milestones; the project's built-in Milestone
 // field is what each phase tab filters on. Titles must match the milestones.

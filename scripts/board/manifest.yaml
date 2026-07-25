@@ -144,14 +144,6 @@
   phase: 1
   status: Done
   review: false
-- id: TECH-4
-  title: Server configuration
-  section: §14 Technical Stack & Conventions
-  family: TECH
-  phase: 1
-  status: Done
-  review: true
-  note: foundations, implied not scoped
 - id: TECH-5
   title: Client configuration
   section: §14 Technical Stack & Conventions
@@ -228,32 +220,56 @@
   family: ADMIN
   phase: 2
   status: Done
-  review: true
-  note: admin unphased in roadmap
+  review: false
+  note: administration & moderation
 - id: ADMIN-2
   title: Admin console
   section: §20 Administration, Operations & Moderation
   family: ADMIN
   phase: 2
   status: Done
-  review: true
-  note: admin unphased in roadmap
+  review: false
+  note: administration & moderation
+- id: ADMIN-3
+  title: Viewing user content & seed material
+  section: §20 Administration, Operations & Moderation
+  family: ADMIN
+  phase: 2
+  status: Backlog
+  review: false
+  note: administration & moderation
 - id: ADMIN-4
   title: Moderation actions
   section: §20 Administration, Operations & Moderation
   family: ADMIN
   phase: 2
   status: Done
-  review: true
-  note: admin unphased in roadmap
+  review: false
+  note: administration & moderation
+- id: ADMIN-5
+  title: Editing any entity's settings
+  section: §20 Administration, Operations & Moderation
+  family: ADMIN
+  phase: 2
+  status: Backlog
+  review: false
+  note: administration & moderation
+- id: ADMIN-6
+  title: Viewing soft-deleted content
+  section: §20 Administration, Operations & Moderation
+  family: ADMIN
+  phase: 2
+  status: Backlog
+  review: false
+  note: administration & moderation
 - id: ADMIN-7
   title: Audit log
   section: §20 Administration, Operations & Moderation
   family: ADMIN
   phase: 2
   status: Done
-  review: true
-  note: admin unphased in roadmap
+  review: false
+  note: administration & moderation
 - id: AUTH-3
   title: Email verification
   section: §4 Accounts & Authentication
@@ -375,8 +391,8 @@
   family: IMG
   phase: 2
   status: Backlog
-  review: true
-  note: not scheduled in any roadmap phase
+  review: false
+  note: image attribution & licensing display
 - id: P-10
   title: Deletion — user-initiated or admin-initiated (§20 ADMIN-4) — of any…
   section: §16 Privacy, Security & Compliance
@@ -384,22 +400,6 @@
   phase: 2
   status: Backlog
   review: false
-- id: P-12
-  title: Administrative access is an out-of-band email allowlist (ADMIN_EMAILS…
-  section: §16 Privacy, Security & Compliance
-  family: P
-  phase: 2
-  status: Done
-  review: true
-  note: realized via ADMIN-1; unphased
-- id: P-13
-  title: Admin audit trail.
-  section: §16 Privacy, Security & Compliance
-  family: P
-  phase: 2
-  status: Done
-  review: true
-  note: realized via ADMIN-7; unphased
 - id: PLAY-2
   title: Narration playback
   section: §10 Playback, Editing & Sharing
@@ -499,6 +499,22 @@
   phase: 2
   status: Done
   review: false
+- id: TECH-4
+  title: Server configuration
+  section: §14 Technical Stack & Conventions
+  family: TECH
+  phase: 2
+  status: Done
+  review: false
+  note: server configuration
+- id: TECH-9
+  title: Billing-provider abstraction layer
+  section: §14 Technical Stack & Conventions
+  family: TECH
+  phase: 2
+  status: Backlog
+  review: false
+  note: billing-provider abstraction layer
 - id: TMPL-1
   title: Template library & preview
   section: §7 Style Template Library
@@ -520,30 +536,6 @@
   phase: 2
   status: Done
   review: false
-- id: ADMIN-3
-  title: Viewing user content & seed material
-  section: §20 Administration, Operations & Moderation
-  family: ADMIN
-  phase: 3
-  status: Backlog
-  review: true
-  note: admin unphased in roadmap
-- id: ADMIN-5
-  title: Editing any entity's settings
-  section: §20 Administration, Operations & Moderation
-  family: ADMIN
-  phase: 3
-  status: Backlog
-  review: true
-  note: admin unphased in roadmap
-- id: ADMIN-6
-  title: Viewing soft-deleted content
-  section: §20 Administration, Operations & Moderation
-  family: ADMIN
-  phase: 3
-  status: Backlog
-  review: true
-  note: admin unphased in roadmap
 - id: AUTH-1a
   title: GitHub sign-in
   section: §4 Accounts & Authentication
@@ -714,14 +706,6 @@
   phase: 3
   status: Backlog
   review: false
-- id: TECH-9
-  title: Billing-provider abstraction layer
-  section: §14 Technical Stack & Conventions
-  family: TECH
-  phase: 3
-  status: Backlog
-  review: true
-  note: inferred from Phase 3 billing
 - id: TECH-12
   title: Internationalization (i18n) & localization
   section: §14 Technical Stack & Conventions

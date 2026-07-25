@@ -12,7 +12,13 @@
  *     creation from the manifest; thereafter left to the team + Actions
  *     automation. Pass --reconcile to force the manifest's status/state back on.
  *
- * Flags: --dry-run (no writes), --limit N (first N entries), --reconcile.
+ * Flags:
+ *   --dry-run     no writes; print intended actions
+ *   --limit N     only process the first N manifest entries
+ *   --reconcile   force manifest Status + open/closed onto the board (else the
+ *                 board owns Status after an issue's creation)
+ *   --prune       DELETE issues that carry our marker but are no longer in the
+ *                 manifest (removes their card too). Permanent; opt-in.
  * Requires: gh CLI authenticated with the `project` scope.
  */
 import { execFileSync } from 'node:child_process'
@@ -38,6 +44,7 @@ const MANIFEST = join(here, 'manifest.yaml')
 const args = process.argv.slice(2)
 const DRY = args.includes('--dry-run')
 const RECONCILE = args.includes('--reconcile')
+const PRUNE = args.includes('--prune')
 const LIMIT = (() => {
   const i = args.indexOf('--limit')
   return i >= 0 ? Number(args[i + 1]) : Infinity
@@ -51,6 +58,7 @@ const counts = {
   statusSet: 0,
   added: 0,
   unchanged: 0,
+  deleted: 0,
 }
 
 /** Run gh. Read-only calls always run; mutations are skipped under --dry-run. */
@@ -373,12 +381,25 @@ for (const e of manifest) {
 }
 
 // ---- Orphans: managed issues whose id left the manifest ----
-const orphans = [...issueByReq.keys()].filter(id => !manifestIds.has(id))
+// Only issues carrying our marker are considered — unmanaged issues are never
+// touched. With --prune, delete them (and thus their project card); otherwise
+// just report. Deleting an issue is permanent, so it is opt-in.
+const orphans = [...issueByReq.entries()].filter(([id]) => !manifestIds.has(id))
 if (orphans.length) {
-  console.log(
-    `\n  ! ${orphans.length} managed issue(s) no longer in the manifest: ${orphans.join(', ')}`,
-  )
-  console.log('    (left untouched — remove the issue by hand if intended)')
+  if (PRUNE) {
+    for (const [id, iss] of orphans) {
+      console.log(`  - delete #${iss.number} (${id})`)
+      gh(['issue', 'delete', String(iss.number), '-R', REPO, '--yes'], {
+        mutating: true,
+      })
+      counts.deleted++
+    }
+  } else {
+    console.log(
+      `\n  ! ${orphans.length} managed issue(s) no longer in the manifest: ${orphans.map(([id]) => id).join(', ')}`,
+    )
+    console.log('    (re-run with --prune to delete them, or remove by hand)')
+  }
 }
 
 // ---- Report ----
@@ -386,7 +407,7 @@ const review = manifest.filter(e => e.review).map(e => e.id)
 console.log(`\n${DRY ? '[dry-run] ' : ''}Done.`)
 console.log(
   `  created=${counts.created} updated=${counts.updated} unchanged=${counts.unchanged} ` +
-    `added=${counts.added} statusSeeded=${counts.statusSet} closed=${counts.closed} reopened=${counts.reopened}`,
+    `added=${counts.added} statusSeeded=${counts.statusSet} closed=${counts.closed} reopened=${counts.reopened} deleted=${counts.deleted}`,
 )
 if (review.length)
   console.log(

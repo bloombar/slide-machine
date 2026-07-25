@@ -57,9 +57,12 @@ Two small scripts:
    - *Item closed* → Status **Done**
    - *Pull request merged* → Status **Done**
    - *(optional)* *Auto-add to project* for `bloombar/slide-machine` issues.
-6. **PR automation secret** — create a repo secret **`PROJECTS_TOKEN`**: a
-   fine-grained PAT with **Projects: read/write** on `bloombar` and **Issues:
-   read**. This powers [`.github/workflows/project-board.yml`](../.github/workflows/project-board.yml),
+6. **PR automation secret** — create a repo secret **`GH_PROJECTS_TOKEN`**: a
+   **classic** PAT (Settings → Developer settings → Tokens (classic)) with the
+   **`project`** scope, plus **`public_repo`** to read the linked issues/PRs
+   (`repo` if the repo is ever made private). Fine-grained PATs **can't** access
+   user-owned Projects v2 yet, so a classic token is required here. This powers
+   [`.github/workflows/project-board.yml`](../.github/workflows/project-board.yml),
    which fills the two gaps the built-ins can't (In progress / Ready to review).
 
 That yields the full column flow: **Backlog** (added) → **In progress** (draft PR
