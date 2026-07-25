@@ -16,6 +16,15 @@ Leave standard docstring comments for all modules, functions, and for large bloc
 
 An initial specification is written into docs/SPEC.md. This is the general plan for the project, although we may decide to change it along the way.
 
+The project-board sync (`scripts/board`) parses docs/SPEC.md, so keep these formats when editing it:
+
+- **Requirements are `#### <ID> <Title>` subheadings** — `<ID>` is `FAMILY-N` (uppercase family letters, hyphen, number; e.g. `GEN-6`, `AUTH-1`). The prose beneath the heading, up to the next heading, becomes the issue body — put the requirement's description there.
+- **Sections are `### <N>. <Title>` headings** (e.g. `### 4. Accounts & Authentication`); they label a requirement's section.
+- **Privacy items (`P-N`) are rows in the §16 table** whose first cell is `**P-N**`.
+- **Future Work items are `-` bullets** under `### 18. Future Work`.
+- **Never change an existing ID** — it keys the issue; renaming or renumbering orphans the old issue and creates a new one.
+- docs/ROADMAP.md phase-scope lists seed each item's phase/status; they use the ID shorthand `FAMILY-1..6` (range) and `FAMILY-1/2/3` (list).
+
 ## Git & project-board workflow
 
 Changes are tracked on the GitHub project board and follow a branch → PR flow so the board automation works (details: docs/CONTRIBUTING.md, docs/PROJECT_BOARD.md). Follow this **by default**:
