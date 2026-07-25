@@ -5,6 +5,16 @@
 
 - id: AUTH-1
   title: Registration & sign-in methods
+  full: "Users can register and log in by either of two supported methods: Email +
+    password (with display name). Passwords are stored hashed (e.g.,
+    bcrypt/argon2); registration requires confirming an email verification link
+    (AUTH-3) before the account is fully enabled. Google sign-in (OAuth 2.0 /
+    OpenID Connect), which supports NYU Google accounts (NYU Workspace) as well
+    as standard Google accounts. Google-verified email needs no separate
+    verification step. GitHub sign-in (OAuth), for users who prefer their GitHub
+    identity (convenient for the pilot's student developers). A given verified
+    email maps to a single account: if a user who registered with a password
+    later signs in with Google or GitHub for…"
   section: §4 Accounts & Authentication
   family: AUTH
   phase: 1
@@ -13,6 +23,8 @@
   note: split id — GitHub part tracked separately
 - id: AUTH-2
   title: Login & sessions
+  full: Email/password login issues JWT access + refresh tokens. Sessions persist
+    across reloads; logout invalidates the refresh token.
   section: §4 Accounts & Authentication
   family: AUTH
   phase: 1
@@ -20,6 +32,9 @@
   review: false
 - id: CAP-1
   title: Session lifecycle
+  full: The user explicitly controls a live session with Start, Pause/Resume, and
+    Stop. Stop finalizes the deck and can trigger quiz generation (§17). Session
+    state (listening / paused / stopped) is clearly indicated.
   section: §8 Live Lecture Capture
   family: CAP
   phase: 1
@@ -27,6 +42,8 @@
   review: false
 - id: CAP-2
   title: Microphone & permissions
+  full: The app requires microphone access, prompts for and reports permission
+    state, and surfaces actionable errors rather than failing silently.
   section: §8 Live Lecture Capture
   family: CAP
   phase: 1
@@ -34,6 +51,16 @@
   review: false
 - id: CAP-3
   title: Speech-to-text transcription
+  full: "Uses Google Cloud Speech-to-Text for fast, accurate, low-latency
+    transcription (removing V1's Chrome-only constraint). Audio is streamed and
+    segmented into phrases on natural pauses; interim text may display as live
+    captions, finalized phrases drive generation. Speech adaptation — when a
+    preflight concept set exists (PREP-3), its terms, names, acronyms, and
+    synonyms are supplied to Google Cloud STT as phrase hints/boosts so domain
+    jargon and proper nouns transcribe correctly. Target: near-real-time latency
+    suitable for live lecture (a key evaluation metric — §12). Raw audio is not
+    retained by default; optional bounded retention (for diarization and
+    original-audio playback) is governed by…"
   section: §8 Live Lecture Capture
   family: CAP
   phase: 1
@@ -41,6 +68,9 @@
   review: false
 - id: EDIT-1
   title: Full content editing
+  full: "Users can add, edit, and delete all slide content: slide text
+    (title/body/bullets/caption), images (replace from seed, re-fetch, upload,
+    or remove), and slide order."
   section: §10 Playback, Editing & Sharing
   family: EDIT
   phase: 1
@@ -48,6 +78,13 @@
   review: false
 - id: GEN-1
   title: Speech-to-slide generation
+  full: Each finalized phrase, combined with project seed context, is sent to the
+    Gemini API, which identifies the topic, produces concise slide text, and
+    maintains short rolling context across recent phrases so slides cohere
+    across a topic. The model also selects the slide layout for each content
+    block from the active template's options (GEN-6), returning content already
+    mapped to the chosen layout's slots, and decides whether each phrase starts
+    a new slide or updates the current one (GEN-8).
   section: §9 Slide Generation & Enrichment
   family: GEN
   phase: 1
@@ -55,6 +92,16 @@
   review: false
 - id: GEN-2
   title: AI-provider abstraction
+  full: "The core logic of the slide generator (and quiz maker) is decoupled from
+    any specific LLM or AI engine. All AI calls — speech-to-text, slide-content
+    generation, and quiz generation — go through a provider-agnostic interface
+    so engines can be swapped in/out without touching the generation logic.
+    Gemini is the default provider for the pilot (migrating from V1's OpenAI
+    integration), but the system must support substituting other commercial
+    providers or a locally-hosted/in-house model purely via configuration and an
+    adapter — no changes to the core generator. The abstraction spans every
+    costly AI capability: transcription (CAP-3), text generation (GEN-1), and
+    quiz generation (QUIZ-1) each…"
   section: §9 Slide Generation & Enrichment
   family: GEN
   phase: 1
@@ -62,6 +109,9 @@
   review: false
 - id: GEN-3
   title: Live display
+  full: Generated slides render full-screen in real time as the user speaks,
+    advancing as new slides are produced, with a configurable minimum dwell time
+    per slide.
   section: §9 Slide Generation & Enrichment
   family: GEN
   phase: 1
@@ -69,6 +119,16 @@
   review: false
 - id: GEN-5
   title: Progressive slide rendering (skeleton loaders)
+  full: "Live generation has unavoidable lag: slide text trails the spoken phrase
+    (CAP-3), and an enriched image (IMG-1) may arrive later still. Slides
+    therefore render progressively, so the audience always sees forward motion
+    without being confused by constantly changing content. Render-as-ready — a
+    slide shows whatever parts are ready (e.g., title and body) immediately;
+    each part still pending shows a skeleton placeholder sized to the final
+    layout, so its space is reserved up front. Slot-in on arrival — slower
+    content (typically the image, occasionally a refined heading) fades into its
+    reserved slot when it arrives, without reflowing or reordering content
+    already on screen — no layout shift.…"
   section: §9 Slide Generation & Enrichment
   family: GEN
   phase: 1
@@ -76,6 +136,16 @@
   review: false
 - id: GEN-6
   title: AI layout selection
+  full: The AI does not only write slide text — it also chooses which layout each
+    content block uses. The active template's layout descriptors (TMPL-6) are
+    serialized into the generation request as the explicit option set the model
+    must select from. For each content block the model returns a chosen
+    layoutType plus the content mapped to that layout's slots
+    (title/body/bullets/image/caption/columns), so a list-like block becomes a
+    list layout, a single striking idea becomes a quote/callout, etc. The choice
+    is constrained to the template's available layouts; if the model returns an
+    unknown or ill-fitting type, the system falls back to a sensible default
+    layout (e.g., content). The user can always…
   section: §9 Slide Generation & Enrichment
   family: GEN
   phase: 1
@@ -83,6 +153,13 @@
   review: false
 - id: IMG-1
   title: Real-time image enrichment
+  full: "Slides are enriched with images using the AI's per-slide image guidance
+    (GEN-7), in priority order: 1. A seeded image the AI selected for the slide,
+    or whose caption/keywords match the slide topic (SEED-2). 2. An image
+    fetched in real time from Wikimedia, Flickr, and Openverse APIs using the
+    AI's recommended keywords (falling back to the slide topic if none). 3. A
+    graceful fallback (placeholder/solid layout) when no image is recommended or
+    found."
   section: §9 Slide Generation & Enrichment
   family: IMG
   phase: 1
@@ -90,6 +167,11 @@
   review: false
 - id: IMG-2
   title: Fault tolerance
+  full: "Image enrichment is fault-tolerant: any single image API may be slow,
+    rate-limited, or down without causing a hard failure. The system times out
+    per source, falls back across sources, and never blocks slide display on
+    image retrieval. Licensing/attribution metadata is captured where the source
+    requires it."
   section: §9 Slide Generation & Enrichment
   family: IMG
   phase: 1
@@ -97,6 +179,9 @@
   review: false
 - id: PLAY-1
   title: Playback controls
+  full: During and after a session, simple UI controls let the user start, pause,
+    stop, rewind (previous slide), and forward (next slide) through the deck.
+    The same actions are available hands-free via spoken commands (CAP-4).
   section: §10 Playback, Editing & Sharing
   family: PLAY
   phase: 1
@@ -104,6 +189,10 @@
   review: false
 - id: PROJ-1
   title: Pre-create a project
+  full: An instructor can create a slide project ahead of a lecture, with metadata
+    (title, course, description) and optional seed information that informs
+    later slide generation (topic outline, key terms, learning objectives,
+    tone/style notes).
   section: §6 Slide Projects & Seeding
   family: PROJ
   phase: 1
@@ -111,6 +200,11 @@
   review: false
 - id: PROJ-2
   title: Project lifecycle
+  full: Projects persist in MongoDB and can be reopened, duplicated, archived, and
+    deleted. Deletion is a soft delete — recoverable during a retention window
+    before a background sweep permanently purges it, and cascading to the
+    project's decks (P-10/P-11). A project may contain multiple decks (e.g., one
+    per lecture session).
   section: §6 Slide Projects & Seeding
   family: PROJ
   phase: 1
@@ -118,6 +212,9 @@
   review: false
 - id: SHARE-1
   title: Saved deck viewer & permalink
+  full: Saved decks have a deck viewer reachable via a stable permalink that can
+    be shared. Sharing visibility is controllable (private / unlisted-by-link /
+    public). Public/shared class artifacts respect §16.
   section: §10 Playback, Editing & Sharing
   family: SHARE
   phase: 1
@@ -125,6 +222,10 @@
   review: false
 - id: TECH-1
   title: Front-end
+  full: React (function components + hooks) built with Vite, styled with
+    TailwindCSS. Client-side routing for projects, deck viewer/permalinks,
+    template library, billing, social feed, and profiles. Real-time slide
+    rendering driven by streamed transcription/generation events.
   section: §14 Technical Stack & Conventions
   family: TECH
   phase: 1
@@ -132,6 +233,10 @@
   review: false
 - id: TECH-2
   title: Back-end
+  full: "Express.js (Node) REST API. JWT-based authentication: short-lived access
+    tokens + refresh, sent as Authorization: Bearer (or secure httpOnly cookie).
+    Protected routes enforce role/ownership checks. Stateless API layer; all
+    persistence in MongoDB. Billing state is reconciled from Stripe webhooks."
   section: §14 Technical Stack & Conventions
   family: TECH
   phase: 1
@@ -139,6 +244,9 @@
   review: false
 - id: TECH-3
   title: Database
+  full: MongoDB (via an ODM such as Mongoose). Collections defined in §15. Stores
+    users, subscriptions, usage records, projects, decks, slides, templates,
+    votes, and social/feed metadata. Raw lecture audio is not persisted.
   section: §14 Technical Stack & Conventions
   family: TECH
   phase: 1
@@ -146,6 +254,10 @@
   review: false
 - id: TECH-5
   title: Client configuration
+  full: Client build/runtime variables live in a Vite env file (.env.local,
+    VITE_-prefixed), e.g. VITE_API_BASE_URL, VITE_STRIPE_PUBLISHABLE_KEY, public
+    Google/GitHub OAuth client IDs (for sign-in and connect flows), feature
+    flags, and analytics toggles. No secrets are exposed to the client.
   section: §14 Technical Stack & Conventions
   family: TECH
   phase: 1
@@ -153,6 +265,10 @@
   review: false
 - id: TECH-6
   title: Shared types & data models
+  full: Where feasible, front-end and back-end share TypeScript types and
+    data-model definitions (e.g., a shared packages/types or shared/ module) so
+    DTOs, deck/slide/template/plan schemas, and API contracts have a single
+    source of truth. The codebase is TypeScript end-to-end.
   section: §14 Technical Stack & Conventions
   family: TECH
   phase: 1
@@ -160,6 +276,15 @@
   review: false
 - id: TECH-7
   title: Testing & coverage
+  full: 100% code coverage target across unit, integration, and end-to-end tests.
+    Unit/integration via a standard runner (e.g., Vitest/Jest) for both client
+    and server; integration tests exercise the Express API against a test
+    MongoDB instance. End-to-end tests use a Playwright harness covering the
+    critical user journeys (register → subscribe → create project → seed → live
+    capture → edit → share → export → vote), including cap-enforcement and
+    upgrade paths. External services (Gemini, Google Cloud, image APIs, Stripe,
+    Google Forms/Drive) are mocked/stubbed in CI; coverage gates block merges
+    below target.
   section: §14 Technical Stack & Conventions
   family: TECH
   phase: 1
@@ -167,6 +292,16 @@
   review: false
 - id: TECH-8
   title: AI-provider abstraction layer
+  full: "The system implements GEN-2 with a capability-based adapter layer so the
+    core slide-generation and quiz-generation logic depends only on interfaces,
+    never on a concrete AI vendor (dependency inversion): Capability interfaces
+    (defined once in the shared types module, TECH-6): TranscriptionProvider
+    (audio → text), GenerationProvider (speech + seed context + layout
+    descriptors + seeded-image descriptors → slide content with a chosen layout
+    and image guidance — GEN-6/GEN-7), QuizGenerationProvider (slide text → quiz
+    definition), and ImageGenerationProvider (prompt → generated image — IMG-4).
+    Each interface fixes the request/response contract independent of any
+    vendor. Adapters implement those…"
   section: §14 Technical Stack & Conventions
   family: TECH
   phase: 1
@@ -174,6 +309,16 @@
   review: false
 - id: TECH-10
   title: Deployment topology (Digital Ocean App Platform)
+  full: "The modular monolith (§13) deploys to Digital Ocean App Platform (PaaS),
+    chosen for minimal operational overhead (step-by-step setup: DEPLOY.md): App
+    components — one API service (the Express monolith) plus a static site
+    component for the built React/Vite SPA (or the API serves the static
+    bundle). App Platform provides managed TLS, build-on-push, and rolling
+    deploys. Secrets are set as App Platform env vars, mirroring TECH-4.
+    Database — MongoDB Atlas (automated backups, point-in-time restore) rather
+    than self-hosted. Object storage — DO Spaces (S3-compatible) for uploaded
+    seed assets, cached enrichment images, and generated exports. Scaling — the
+    API is stateless (JWT), so App Platform can…"
   section: §14 Technical Stack & Conventions
   family: TECH
   phase: 1
@@ -181,6 +326,14 @@
   review: false
 - id: TECH-11
   title: Local dev & CI/CD
+  full: Local dev — a Dockerfile plus docker compose (app + MongoDB, with Spaces
+    mockable via an S3-compatible local service) lets contributors — including
+    pilot students — run the whole stack with one command, and lets the
+    Playwright e2e harness (TECH-7) run against a realistic environment. CI/CD —
+    GitHub Actions runs unit + integration + e2e tests and enforces the 100%
+    coverage gate, then auto-deploys to App Platform on push to the default
+    branch (App Platform's GitHub integration), replacing V1's GitHub Pages
+    workflow (.github/workflows/static.yml). Failed gates block deploy.
   section: §14 Technical Stack & Conventions
   family: TECH
   phase: 1
@@ -188,6 +341,16 @@
   review: false
 - id: TECH-13
   title: Application action/command layer
+  full: "All operations that modify a project, concept set, or deck are exposed
+    through a single channel-agnostic action/command layer — a named set of
+    operations (e.g., concept.add, concept.disambiguate, slide.editContent,
+    slide.setLayout, deck.switchTemplate, deck.reformat, slide.setImageGuidance)
+    rather than logic embedded in individual UI handlers. Each action validates
+    input, enforces authorization/ownership and plan-cap metering (BILL-3), and
+    records the change once — so every channel behaves identically and securely.
+    The layer is consumed by multiple front ends: the React UI, the verbal
+    preflight loop (PREP-4), the post-lecture reformat (GEN-4), and any future
+    agent interface. This makes a…"
   section: §14 Technical Stack & Conventions
   family: TECH
   phase: 1
@@ -195,6 +358,11 @@
   review: false
 - id: TMPL-2
   title: Conventional layout types
+  full: "Each template provides multiple layout types, using conventional slide
+    conventions, including at minimum: Title / heading slide Section /
+    subheading slide Content (title + body) slide List / bullet slide
+    Image-heavy (full-bleed or image-dominant) slide Two-column (text + image)
+    slide Quote / callout slide"
   section: §7 Style Template Library
   family: TMPL
   phase: 1
@@ -202,6 +370,7 @@
   review: false
 - id: TMPL-3
   title: Pre-made templates
+  full: Ship several polished, ready-to-use templates covering common lecture styles.
   section: §7 Style Template Library
   family: TMPL
   phase: 1
@@ -209,6 +378,16 @@
   review: false
 - id: TMPL-6
   title: Layout descriptors (for AI selection)
+  full: 'Every layout in a template carries a machine-readable descriptor so the
+    AI can choose the right layout per slide (GEN-6). A descriptor includes: a
+    stable type/id and human label (e.g., title, section, content, list,
+    image-heavy, two-column, quote — TMPL-2); a short purpose / when-to-use
+    description the AI can reason over (e.g., "use for 3–6 parallel points");
+    the content slots the layout expects (e.g., title, body, bullets[], image,
+    caption, columns) and any constraints (max bullets, approximate text length,
+    whether an image is required/optional). Descriptors are authored as part of
+    the template (TMPL-3/TMPL-4), stored with it (§15), and serialized into the
+    generation request as the option…'
   section: §7 Style Template Library
   family: TMPL
   phase: 1
@@ -216,6 +395,16 @@
   review: false
 - id: ADMIN-1
   title: Admin identity & authorization
+  full: "Admin status is an email allowlist (ADMIN_EMAILS — TECH-4), not a role or
+    field on the account; there is deliberately no in-app way to grant it. The
+    list is read on every request, so access changes take effect without a code
+    deploy. Every /api/admin route is gated by requireAuth + requireAdmin; the
+    client menu and route guard are cosmetic — the allowlist is the real
+    security boundary. Admin reads bypass per-object ACLs (P-4): an allowlisted
+    account can read any user's projects, lectures, and seed material — so the
+    list is kept minimal (P-12; FERPA — P-1/P-2). Admins moderate but are not
+    moderated: any moderation, settings, or deletion action (ADMIN-4/ADMIN-5)
+    targeting an allowlisted email…"
   section: §20 Administration, Operations & Moderation
   family: ADMIN
   phase: 2
@@ -224,6 +413,16 @@
   note: administration & moderation
 - id: ADMIN-2
   title: Admin console
+  full: 'A read-mostly console (/app/admin) answers "who is using this and what
+    have they made," and carries the moderation surface. Secondary navigation —
+    every admin page shows a horizontal secondary nav bar, just below the
+    standard header, linking the four top-level sections: Users, Projects,
+    Lectures, and Logs. Site-wide directories, each paginated and sortable:
+    Users (email, handle, join date), Projects (title, owner, visibility,
+    lecture count, timestamps), and Lectures (title, project, owner, effective
+    visibility, slide count, timestamps). Private lectures are always listed
+    (ADMIN-3). Detail (drill-down) pages for each user (plan,
+    email-verification, locale, profile visibility, project/lecture…'
   section: §20 Administration, Operations & Moderation
   family: ADMIN
   phase: 2
@@ -232,6 +431,14 @@
   note: administration & moderation
 - id: ADMIN-3
   title: Viewing user content & seed material
+  full: An admin can open any lecture in the deck viewer (/d/:slug) and any
+    project in the product view, regardless of visibility, read-only, on the
+    allowlist's authority. Admin project and lecture detail pages surface the
+    seed material (SEED-1/SEED-2) — documents, seed text, and image captions —
+    so an operator can see what fed generation. Privacy-infringing views are
+    confirmed and audited — opening a private lecture or a private project
+    requires explicit confirmation and writes an audit-log entry (ADMIN-7);
+    routine viewing of already-public content is not logged.
   section: §20 Administration, Operations & Moderation
   family: ADMIN
   phase: 2
@@ -240,6 +447,16 @@
   note: administration & moderation
 - id: ADMIN-4
   title: Moderation actions
+  full: "Every action here asks for confirmation and writes an audit-log entry
+    (ADMIN-7): Delete a project / lecture / user — a soft delete (P-10): the
+    record is tombstoned and cascades to its children (a deleted project takes
+    its lectures, slides, seed material, transcripts, and retained audio),
+    recoverable during the retention window and purged by the same sweep (P-11)
+    as user-initiated deletion — not an immediate hard delete. Ban / unban an
+    email — a banned email can no longer sign in (password or OAuth) or
+    register, and its sessions end immediately; content persists until deleted
+    separately. Unban lifts it (also confirmed + audited). Reset a user's
+    password — sets a new password and signs the…"
   section: §20 Administration, Operations & Moderation
   family: ADMIN
   phase: 2
@@ -248,6 +465,11 @@
   note: administration & moderation
 - id: ADMIN-5
   title: Editing any entity's settings
+  full: An admin can modify the settings of any user, project, or lecture — e.g. a
+    lecture's/project's visibility or generation settings, or a user's
+    profile/account fields — even when not the owner. Every such edit requires
+    explicit confirmation and is audited (ADMIN-7), recording what changed.
+    (Billing state — plan tier — remains governed by §5.)
   section: §20 Administration, Operations & Moderation
   family: ADMIN
   phase: 2
@@ -256,6 +478,11 @@
   note: administration & moderation
 - id: ADMIN-6
   title: Viewing soft-deleted content
+  full: Soft-deleted records are hidden from all normal reads (P-10), but an admin
+    can view soft-deleted entities (users, projects, lectures, and other owned
+    records) in the console — for recovery or audit — until the retention sweep
+    purges them (P-11). Every access to soft-deleted content is audited
+    (ADMIN-7).
   section: §20 Administration, Operations & Moderation
   family: ADMIN
   phase: 2
@@ -264,6 +491,16 @@
   note: administration & moderation
 - id: ADMIN-7
   title: Audit log
+  full: "An append-only, immutable log of admin actions that change or expose user
+    data: private lecture/project views (ADMIN-3), password resets, bans/unbans,
+    deletes (ADMIN-4), settings edits (ADMIN-5), and views of soft-deleted
+    content (ADMIN-6). Each entry records the acting admin (id + email
+    snapshot), a namespaced action name (e.g. user.delete, deck.delete,
+    project.private_view), an optional target (type + id), optional
+    action-specific details, and a timestamp. Entries are written through one
+    server module into a dedicated collection and no API can edit or delete
+    them; every admin mutation endpoint must record itself. The Logs page
+    (ADMIN-2) lists them newest-first, paginated, with CSV export…"
   section: §20 Administration, Operations & Moderation
   family: ADMIN
   phase: 2
@@ -272,6 +509,8 @@
   note: administration & moderation
 - id: AUTH-3
   title: Email verification
+  full: Registration sends a verification link; unverified accounts have limited
+    capability (e.g., cannot publish publicly) until verified.
   section: §4 Accounts & Authentication
   family: AUTH
   phase: 2
@@ -279,6 +518,8 @@
   review: false
 - id: AUTH-4
   title: Password reset
+  full: 'Standard "forgot password" flow: time-limited, single-use reset link sent
+    by email; resets invalidate existing sessions.'
   section: §4 Accounts & Authentication
   family: AUTH
   phase: 2
@@ -286,6 +527,11 @@
   review: false
 - id: AUTH-5
   title: Profile & ownership
+  full: Each user has a profile (display name, bio, avatar, preferred locale) and
+    owns their projects, decks, and templates. The preferred locale drives the
+    UI language (TECH-12). Authorization enforces that users may only modify
+    their own resources (except admins — §20, whose authorization comes from the
+    allowlist, not ownership).
   section: §4 Accounts & Authentication
   family: AUTH
   phase: 2
@@ -293,6 +539,16 @@
   review: false
 - id: CAP-4
   title: Voice commands
+  full: The user can drive the slide generator hands-free by speaking commands —
+    at minimum start, stop, pause (and resume), rewind (previous slide), and
+    fast-forward (next slide) — mirroring the manual playback controls in
+    PLAY-1. Commands are recognized from the same Google Cloud Speech-to-Text
+    stream, using a small, configurable command vocabulary (with synonyms, e.g.
+    "go back" → rewind) so they are reliably transcribed and unambiguous. A
+    wake-word or command prefix (e.g., "slide machine, …") and/or a distinct
+    command mode keeps ordinary lecture speech from being misinterpreted as a
+    command; normal speech continues to drive slide generation (GEN-1).
+    Recognized commands are confirmed visually…
   section: §8 Live Lecture Capture
   family: CAP
   phase: 2
@@ -300,6 +556,8 @@
   review: false
 - id: EDIT-2
   title: Deck-level template switch
+  full: Users can switch the entire deck's style template, re-flowing all slides
+    into the new theme/layouts.
   section: §10 Playback, Editing & Sharing
   family: EDIT
   phase: 2
@@ -307,6 +565,8 @@
   review: false
 - id: EDIT-3
   title: Per-slide layout switch
+  full: Users can change the layout type of an individual slide (e.g., convert a
+    content slide to image-heavy or two-column) independent of the deck default.
   section: §10 Playback, Editing & Sharing
   family: EDIT
   phase: 2
@@ -314,6 +574,16 @@
   review: false
 - id: EDIT-4
   title: Whiteboard annotation
+  full: Users can draw on slides like a whiteboard — pen (opaque), highlighter
+    (semi-transparent), and eraser — from a floating, draggable tool palette.
+    Freehand strokes are stored per slide (§15), with coordinates normalized to
+    the slide so they survive layout/aspect changes; default colors come from
+    the deck's design template. Timed to the narration — each stroke (and each
+    erase, treated as a timestamped event, not a deletion) is anchored to a
+    position in the slide's transcript, so during narration playback (PLAY-2)
+    the marks appear and disappear in sync with the spoken words, and a GEN-4
+    narration refine re-anchors them proportionally. Marks made while not
+    recording aren't tied to speech and are…
   section: §10 Playback, Editing & Sharing
   family: EDIT
   phase: 2
@@ -322,6 +592,8 @@
   note: delivered early
 - id: EXP-1
   title: Deck export
+  full: Decks can be exported to PDF, Google Slides, and other easily supportable
+    common formats.
   section: §11 Export/Import, Voting & Social
   family: EXP
   phase: 2
@@ -329,6 +601,9 @@
   review: false
 - id: EXP-2
   title: Standards-based data export
+  full: Both slide decks and style templates can be exported to a standard,
+    human-readable format (YAML or equivalent) capturing structure, content, and
+    styling.
   section: §11 Export/Import, Voting & Social
   family: EXP
   phase: 2
@@ -336,6 +611,10 @@
   review: false
 - id: EXP-3
   title: Round-trip import
+  full: "The exported format is import-compatible: a user can re-import a
+    previously exported deck and/or template and restore it faithfully. Import
+    validates and reports errors without partial-corrupting existing data.
+    Imports may come from an upload or a connected account (EXP-4)."
   section: §11 Export/Import, Voting & Social
   family: EXP
   phase: 2
@@ -343,6 +622,16 @@
   review: false
 - id: EXP-4
   title: Connected accounts (Google Drive & GitHub)
+  full: "Users can connect their own Google Drive and/or GitHub accounts via OAuth
+    to import from and export to those resources: Import — pull source documents
+    and previously-exported decks/templates from Drive or a GitHub repo/gist
+    (SEED-1). Export — push outputs to the connected destination: PDF / Google
+    Slides / YAML to Google Drive, and YAML deck/template files to a GitHub repo
+    (round-trippable via EXP-3). Connecting an account is separate from sign-in
+    identity (AUTH-1): it grants broader, purpose-specific scopes (Drive files /
+    repo contents) and a user who signed in by email can still connect Drive and
+    GitHub. Connections are listed in the profile and are revocable at any time;
+    tokens are…"
   section: §11 Export/Import, Voting & Social
   family: EXP
   phase: 2
@@ -351,6 +640,16 @@
   note: split id — GitHub part tracked separately
 - id: GEN-4
   title: Post-lecture AI reformat (holistic regeneration)
+  full: 'Once a session ends (CAP-1 Stop) and the full transcript is available,
+    the user is offered a "Reformat with AI" option that regenerates the deck
+    holistically from the complete transcript plus project seed context —
+    something the live, phrase-by-phrase pipeline (GEN-1) cannot do because it
+    lacks the full picture. Delivered as a "Refine" action with three
+    independently-toggleable passes (identify speakers / refine slide content /
+    refine spoken narration), run together as one background job the client
+    polls; it can also be run per slide on demand. (Design: DECISIONS.md
+    "Refine: three opt-in passes".) Identifies speakers (diarization) —
+    post-hoc, the retained lecture audio (P-6) is grouped into…'
   section: §9 Slide Generation & Enrichment
   family: GEN
   phase: 2
@@ -359,6 +658,16 @@
   note: delivered early
 - id: GEN-7
   title: AI image guidance
+  full: "For each slide, the AI also recommends the supporting imagery, feeding
+    image enrichment (IMG-1): It returns search keywords / query terms to use
+    against the image-enrichment providers (Wikimedia / Flickr / Openverse),
+    context-qualified to disambiguate polysemous names (e.g., Prince (musician),
+    not bare Prince) — see IMG-3. When the project has teacher-supplied (seeded)
+    images (SEED-2), their captions/keywords are sent to the model as context
+    options, and the model may select a specific seeded image it deems the best
+    fit for a given slide (or indicate that no image is needed). For a slide
+    better served by a custom diagram/infographic than a stock photo, the model
+    may instead recommend…"
   section: §9 Slide Generation & Enrichment
   family: GEN
   phase: 2
@@ -366,6 +675,16 @@
   review: false
 - id: GEN-8
   title: New slide vs. update current
+  full: "Not every phrase deserves a brand-new slide. As each finalized phrase
+    arrives, the AI decides whether it continues the current slide or starts a
+    new one, rather than always emitting a fresh slide. The model classifies the
+    phrase against the currently displayed slide and rolling context and returns
+    a structured action: update current (append a bullet, extend/refine the
+    body, tighten the title), new slide (a topic shift), or no visible change
+    (filler/aside). Update operations are additive and contained to preserve
+    live stability (GEN-5): a new bullet slots into the reserved layout area,
+    but already-committed text is not rewritten on screen; a change too
+    disruptive to apply in place is…"
   section: §9 Slide Generation & Enrichment
   family: GEN
   phase: 2
@@ -373,6 +692,16 @@
   review: false
 - id: GEN-9
   title: Animated layout transitions
+  full: When an already-displayed slide changes layout — whether from an AI update
+    (GEN-8) or a user-driven template/layout change (EDIT-2 / EDIT-3) — the
+    change is animated so it looks deliberate, not like a technical glitch.
+    Morph, don't snap — shared elements (title, body, image, caption) move,
+    resize, and reflow from their old positions to the new layout using stable
+    element identity, animating smoothly between old and new placement rather
+    than jumping; entering elements fade/slide in, leaving elements fade out.
+    Brief and bounded — transitions use a short, consistent duration, and are
+    queued/debounced so updates never overlap or trigger rapid re-animation
+    (consistent with live stability…
   section: §9 Slide Generation & Enrichment
   family: GEN
   phase: 2
@@ -380,6 +709,16 @@
   review: false
 - id: IMG-3
   title: Image disambiguation
+  full: "Polysemous terms must not pull the wrong picture — speech about
+    \"Prince\" the musician must not surface Wikipedia's imagery for the royal
+    title. The system disambiguates both before and after fetching:
+    Disambiguated queries — the AI's recommended keywords (GEN-7) carry
+    qualifying context from the lecture so the query targets the intended sense
+    (e.g., Prince (musician) / Prince Rogers Nelson, not bare Prince). The model
+    has the full phrase, rolling context, and seed context needed to resolve it.
+    Entity resolution — for the Wikimedia path, the disambiguated term is
+    resolved to a specific Wikidata/Wikipedia entity (choosing among candidates
+    by best contextual match) and that entity's image is…"
   section: §9 Slide Generation & Enrichment
   family: IMG
   phase: 2
@@ -387,6 +726,16 @@
   review: false
 - id: IMG-5
   title: Image attribution & licensing display
+  full: "Every image can carry a caption and copyright/license attribution, and
+    this metadata is captured, displayed, and editable — regardless of source
+    (seeded uploads, enrichment fetches from Wikimedia/Flickr/Openverse — IMG-1,
+    or AI-generated — IMG-4). Attribution is frequently a legal requirement of
+    the image's license (e.g., Creative Commons BY clauses require crediting the
+    author), so the system must surface it on the slide, not merely store it.
+    Captured at enrichment — when an image is fetched, its licensing/attribution
+    metadata is recorded on the slide (IMG-2). The stored attribution follows
+    the TASL convention where available: Title of the work, Author/creator,
+    Source URL, and License name…"
   section: §9 Slide Generation & Enrichment
   family: IMG
   phase: 2
@@ -411,6 +760,14 @@
   review: false
 - id: PLAY-2
   title: Narration playback
+  full: "Saved decks can be spoken aloud: play the whole deck (auto-advancing
+    slide to slide) or a single slide from its menu, using text-to-speech of
+    each slide's stored narration (sourceTranscript, §15; the server narrates
+    from slide content when a slide has none). TTS runs behind a
+    provider-agnostic adapter (GEN-2 / TECH-8) and synthesized audio is cached
+    per slide; usage is metered (BILL-3). Where a lecture's original audio was
+    retained (P-6), the owner can also play a slide's original recording from
+    its menu."
   section: §10 Playback, Editing & Sharing
   family: PLAY
   phase: 2
@@ -419,6 +776,11 @@
   note: delivered early
 - id: QUIZ-1
   title: Quiz YAML generation (in the monolith)
+  full: On session Stop (or on demand), the monolith's QuizGenerationProvider
+    (TECH-8) turns finalized, de-identified slide text into an exit-ticket quiz
+    definition in the Quiz Generator library's quiz shape (its YAML maps 1:1 to
+    the in-memory object the library validates and publishes). The user may
+    review/edit the questions before publishing (BILL-3 metering applies).
   section: §17 Quiz Generator Integration
   family: QUIZ
   phase: 2
@@ -426,6 +788,16 @@
   review: false
 - id: QUIZ-2
   title: Instructor publish configuration
+  full: "Before publishing, the instructor controls publish options, passed with
+    the quiz definition as a structured publish request: Authentication — how
+    responses are gated: email collection (verified / responder-entered / none).
+    Restricting responses to the NYU Workspace domain is not settable through
+    the Google Forms API (see the known limitation below); the pilot uses
+    verified-email collection. Default point value applied to each question
+    (overridable per question). Drive destination — the folder in the
+    instructor's Google Drive where the Form is created/moved. Form metadata —
+    title, description, and grading/feedback release options. Defaults for these
+    are configurable and remembered per…"
   section: §17 Quiz Generator Integration
   family: QUIZ
   phase: 2
@@ -433,6 +805,12 @@
   review: false
 - id: QUIZ-3
   title: Publishing & link return
+  full: The quiz-bridge calls the imported library with the {quiz definition +
+    publish config + authorized Google client}; the library creates the Google
+    Form quiz, applies the point/email/quiz settings, moves it to the specified
+    Drive folder, and returns the form id and shareable link. The monolith
+    stores a QuizRef (form id/URL, status, and the config used) against the deck
+    (§15).
   section: §17 Quiz Generator Integration
   family: QUIZ
   phase: 2
@@ -440,6 +818,16 @@
   review: false
 - id: QUIZ-4
   title: Delegated Google access
+  full: "Because the Form is created in the instructor's Drive, publishing uses
+    the instructor's connected Google account (EXP-4): the monolith builds an
+    authorized, least-privilege Forms/Drive client from the instructor's stored
+    (encrypted, per-user — P-9) refresh token and injects it into the library.
+    Running in-process means the token never leaves the monolith — there is no
+    second service to delegate to, which resolves the earlier cross-service
+    token question (§19). Prerequisite: this depends on EXP-4's
+    connected-account flow (offline Google OAuth with Forms/Drive scopes and an
+    encrypted token store), a hard predecessor to publishing that is not yet
+    built."
   section: §17 Quiz Generator Integration
   family: QUIZ
   phase: 2
@@ -447,6 +835,9 @@
   review: false
 - id: QUIZ-5
   title: Distribution & grading
+  full: The published Google Form is distributed to enrolled students within NYU
+    Google Workspace and auto-graded via answer keys; per-lecture comprehension
+    is reported back for evaluation (§12).
   section: §17 Quiz Generator Integration
   family: QUIZ
   phase: 2
@@ -454,6 +845,16 @@
   review: false
 - id: QUIZ-6
   title: Loose coupling
+  full: "The two repositories stay decoupled: neither depends on the other's
+    internals, and the contract is the library's exported function signatures,
+    versioned by semver and a pinned git ref (not an HTTP API). The Quiz
+    Generator stays independently usable as its own CLI and keeps its publishing
+    logic auth-agnostic — the caller injects the authorized client — so it
+    remains reusable outside Slide Machine. Known limitation — domain
+    restriction. Restricting Form responses to the NYU Workspace organization is
+    not exposed by the Google Forms REST API (only quiz settings and
+    email-collection are); it is an admin/UI-level control. So authMode:
+    'domain-restricted' in the publish config is not enforceable…"
   section: §17 Quiz Generator Integration
   family: QUIZ
   phase: 2
@@ -461,6 +862,12 @@
   review: false
 - id: SEED-1
   title: Document seeding
+  full: "Users can seed a project by importing content from: Uploaded PDFs and
+    document files (e.g., .docx, .pptx, .txt, Markdown). A connected Google
+    Drive account — Google Docs, Drive files, and Google Slides (EXP-4). A
+    connected GitHub account — files from a repo or gist (e.g.,
+    previously-exported YAML decks/templates) (EXP-4). Imported text is parsed,
+    normalized, and stored as seed context for generation."
   section: §6 Slide Projects & Seeding
   family: SEED
   phase: 2
@@ -468,6 +875,9 @@
   review: false
 - id: SEED-2
   title: Image seeding
+  full: Users can upload seed images with captions/descriptions/keywords. Seeded
+    images are preferred during generation when their captions match a slide's
+    topic (see IMG-1).
   section: §6 Slide Projects & Seeding
   family: SEED
   phase: 2
@@ -475,6 +885,8 @@
   review: false
 - id: SEED-3
   title: Seed management
+  full: Users can view, edit captions for, reorder, enable/disable, and delete
+    seeded content and images before or between sessions.
   section: §6 Slide Projects & Seeding
   family: SEED
   phase: 2
@@ -482,6 +894,9 @@
   review: false
 - id: SOC-1
   title: Voting
+  full: Registered users can up/down-vote slide decks and style templates. Vote
+    tallies inform ranking and discovery; one vote per user per item,
+    changeable.
   section: §11 Export/Import, Voting & Social
   family: SOC
   phase: 2
@@ -489,6 +904,11 @@
   review: false
 - id: SOC-2
   title: Browse, search & sort
+  full: A simple social layer lets users browse and search others' public decks
+    and style templates, by title, author, tags, and content. Every browsable
+    list — decks and templates alike — is sortable by recency (most recently
+    published first) and by rank (highest net vote score first, from SOC-1), and
+    the chosen sort applies to search results as well.
   section: §11 Export/Import, Voting & Social
   family: SOC
   phase: 2
@@ -496,6 +916,10 @@
   review: false
 - id: SOC-3
   title: Feeds
+  full: 'Two default views surface public content, both searchable/filterable and
+    available for decks and templates: a "Latest" feed (sorted by recency) and a
+    "Top" feed (sorted by rank). These are the SOC-2 sorts applied to the global
+    public listing.'
   section: §11 Export/Import, Voting & Social
   family: SOC
   phase: 2
@@ -503,6 +927,9 @@
   review: false
 - id: SOC-4
   title: User profiles
+  full: Each user has a public profile page listing their published decks and
+    templates, with search and the same recency/rank sorting (SOC-2) within the
+    profile.
   section: §11 Export/Import, Voting & Social
   family: SOC
   phase: 2
@@ -510,6 +937,16 @@
   review: false
 - id: TECH-4
   title: Server configuration
+  full: "Server-side secrets and global settings live in a .env file (never
+    committed), including: OPENAI_API_KEY _(legacy)_ / GEMINI_API_KEY
+    _(post-migration)_ and model/endpoint settings.
+    GOOGLE_APPLICATION_CREDENTIALS (service account for real-time Speech-to-Text
+    streaming) and GOOGLE_CLOUD_TRANSLATION_KEY. GOOGLE_OAUTH_CLIENT_ID/SECRET —
+    used both for Google sign-in (AUTH-1) and for connected Google Drive
+    import/export with broader scopes (EXP-4); plus any service-account
+    credentials for Docs/Slides. GITHUB_OAUTH_CLIENT_ID/SECRET — used both for
+    GitHub sign-in (AUTH-1) and for connected GitHub repo/gist import/export
+    (EXP-4). CONNECTED_ACCOUNT_TOKEN_ENC_KEY — key for encrypting stored…"
   section: §14 Technical Stack & Conventions
   family: TECH
   phase: 2
@@ -518,6 +955,16 @@
   note: server configuration
 - id: TECH-9
   title: Billing-provider abstraction layer
+  full: "Billing is decoupled from any specific payment vendor, the same way AI is
+    (TECH-8), so the provider can change without touching application logic: A
+    single BillingProvider interface abstracts the operations the app needs —
+    create/checkout subscription, change tier, open billing portal, cancel, and
+    normalize provider webhooks into internal billing events
+    (subscription.active, subscription.past_due, subscription.canceled). A
+    StripeBillingProvider adapter implements it for the pilot; future adapters
+    (e.g., Paddle, Braintree, Chargebee) implement the same interface. Only the
+    adapter knows vendor-specific objects, API shapes, and webhook formats.
+    Application and UI logic deal exclusively in…"
   section: §14 Technical Stack & Conventions
   family: TECH
   phase: 2
@@ -526,6 +973,9 @@
   note: billing-provider abstraction layer
 - id: TMPL-1
   title: Template library & preview
+  full: A browsable template library lets users preview and select slide-style
+    templates. Each template defines a visual theme (colors, typography,
+    spacing) plus a set of layouts.
   section: §7 Style Template Library
   family: TMPL
   phase: 2
@@ -533,6 +983,10 @@
   review: false
 - id: TMPL-4
   title: Custom templates (create / edit / save)
+  full: Users can create, edit, save, and name their own templates — defining
+    layouts and the positioning of slide content elements (title, body, image,
+    caption) on each layout. Custom templates appear in the user's library and
+    may be shared/published.
   section: §7 Style Template Library
   family: TMPL
   phase: 2
@@ -540,6 +994,8 @@
   review: false
 - id: TMPL-5
   title: Template application
+  full: A template (and any specific layout) can be applied at deck level and
+    overridden per slide (see EDIT-3).
   section: §7 Style Template Library
   family: TMPL
   phase: 2
@@ -555,6 +1011,13 @@
   note: GitHub remainder of AUTH-1
 - id: BILL-1
   title: Subscription tiers
+  full: "The product offers three subscription tiers, each priced accordingly
+    (exact prices set in configuration — BILL-6): Free — basic level for
+    personal/occasional use; the default tier on registration. Pro — mid level
+    for professional / regular instructional use; higher caps and access to
+    paid-tier features. Max — highest tier; the largest usage caps and full
+    feature access. Each tier defines what features are available and the usage
+    caps that apply to costly services (BILL-3)."
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
@@ -562,6 +1025,16 @@
   review: false
 - id: BILL-2
   title: Billing provider (Stripe) integration
+  full: "Payments and subscription management run through a configured billing
+    provider — Stripe by default, integrated behind a provider-agnostic
+    abstraction (TECH-9) so a different provider can be adopted later without
+    reworking application logic: Checkout for new subscriptions and tier
+    upgrades/downgrades. A hosted customer/billing portal for managing payment
+    methods, invoices, and cancellation. Webhooks keep the user's subscription
+    status (active, past-due, canceled) in sync with the provider as the source
+    of truth for billing state; events are normalized to internal billing events
+    at the adapter boundary. The app never handles raw card data; the billing
+    provider is the system of record for…"
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
@@ -569,6 +1042,14 @@
   review: false
 - id: BILL-3
   title: Usage caps & metering
+  full: "Each tier carries usage caps on AI and other costly services, metered per
+    billing period and enforced server-side, including at minimum: AI generation
+    (e.g., Gemini tokens or number of slide generations). Speech-to-Text minutes
+    (Google Cloud). Image-enrichment API calls (Wikimedia/Flickr/Openverse). AI
+    image generation (IMG-4), typically a Pro/Max-tier capability.
+    Document/Drive import volume, storage, and export operations. Usage is
+    recorded against the user's current period; the user can view remaining
+    quota for each metered resource."
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
@@ -576,6 +1057,11 @@
   review: false
 - id: BILL-4
   title: Enforcement & upgrade prompts
+  full: "When a metered cap is reached, the system fails gracefully: the costly
+    operation is blocked (or degraded to a free alternative where one exists)
+    rather than silently incurring cost, and the user is shown a clear message
+    with an upgrade path. Caps reset at the start of each billing period. Higher
+    tiers raise or remove the relevant caps."
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
@@ -583,6 +1069,10 @@
   review: false
 - id: BILL-5
   title: Plan management
+  full: Users can upgrade, downgrade, or cancel at any time via Stripe Checkout /
+    the billing portal, with proration handled by Stripe. Feature access and
+    caps update to match the active tier; downgrades take effect per the
+    configured policy (immediately or at period end).
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
@@ -590,6 +1080,10 @@
   review: false
 - id: BILL-6
   title: Configurable pricing & caps
+  full: Tier definitions — price and per-tier usage caps — live in server-side
+    configuration (BILL config + Stripe price IDs in TECH-4) and are adjustable
+    without code changes. Exact prices and cap values are TBD and will be tuned
+    against real service costs (§19).
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
@@ -605,6 +1099,16 @@
   note: GitHub remainder of EXP-4
 - id: IMG-4
   title: AI-generated imagery (optional)
+  full: For slides that warrant a custom diagram or infographic rather than a
+    stock photo, an image can be AI-generated instead of fetched. This is an
+    optional, off-by-default enrichment source the AI may choose per slide
+    (GEN-7). Provider-agnostic — generation goes through an
+    ImageGenerationProvider adapter (TECH-8); most major engines support this
+    (e.g., Google's Gemini/Imagen "Nano Banana" family, OpenAI's image models),
+    so the engine is configurable/swappable like every other AI capability
+    (GEN-2). Best in the latency-tolerant paths — generation is slower and
+    costlier than a stock fetch, so it is favored in the post-lecture reformat
+    (GEN-4) and on demand; live use is optional and limited.…
   section: §9 Slide Generation & Enrichment
   family: IMG
   phase: 3
@@ -722,6 +1226,16 @@
   review: false
 - id: PREP-1
   title: Preflight concept extraction
+  full: 'When a project has been seeded (SEED-1/SEED-2), the system can run an
+    optional, pre-lecture "preflight": the AI analyzes the uploaded files, the
+    text description, and image captions to extract a ranked list of concepts
+    likely to come up — key terms, named entities (people/places/orgs/products),
+    jargon, and acronyms. Each candidate is presented with: a short gloss and
+    the source it came from (which seed document/image); a relevance score;
+    where a term is ambiguous, a resolved sense / entity suggestion (e.g.,
+    Prince → Prince (musician), with the candidate Wikidata entity) to pre-empt
+    mismatches (IMG-3). This is feasible with standard AI keyphrase/entity
+    extraction over content the project…'
   section: §6 Slide Projects & Seeding
   family: PREP
   phase: 3
@@ -729,6 +1243,16 @@
   review: false
 - id: PREP-2
   title: Instructor review & honing
+  full: 'The instructor refines the candidate set in an interactive back-and-forth
+    before speaking. The UI allows the instructor to: Add concepts the AI missed
+    (free text), remove irrelevant ones, and edit labels/glosses. Disambiguate
+    an ambiguous term by choosing the intended entity/sense from suggestions
+    (pre-resolving IMG-3 for the live run). Set importance/priority (e.g.,
+    "definitely cover" vs. "maybe") to weight downstream emphasis. Define
+    canonical names with synonyms/abbreviations (e.g., "NYU" ↔ "New York
+    University") so variants are recognized. Attach a preferred image per
+    concept (from seeded images SEED-2 or a quick search) to be used when the
+    concept arises. Iterate with the AI — ask it…'
   section: §6 Slide Projects & Seeding
   family: PREP
   phase: 3
@@ -736,6 +1260,15 @@
   review: false
 - id: PREP-3
   title: Use of the honed concept set
+  full: "The confirmed concept set is saved to the project (§15), reusable and
+    editable across sessions, and drives the live lecture: Generation bias —
+    supplied as part of seed context so slide generation (GEN-1) frames and
+    prioritizes these concepts correctly. Transcription accuracy — terms, names,
+    acronyms, and synonyms are passed to Google Cloud Speech-to-Text speech
+    adaptation / phrase hints (CAP-3) so jargon and proper nouns transcribe
+    correctly live. Image pre-resolution — disambiguated entities and preferred
+    images mean the right picture is chosen the moment a concept is spoken
+    (GEN-7 / IMG-3)."
   section: §6 Slide Projects & Seeding
   family: PREP
   phase: 3
@@ -743,6 +1276,16 @@
   review: false
 - id: PREP-4
   title: Verbal interaction with the preflight
+  full: The instructor can drive the preflight honing (PREP-2) by voice, not just
+    through the UI, using the existing speech-to-text (CAP-3) and gen-AI text
+    processing (GEN-2) to interpret intent. The process prompts the instructor
+    (e.g., "I found these 12 concepts — anything to add or remove?"), and the
+    instructor responds naturally by speaking ("drop the last two, add
+    photosynthesis, and Prince means the musician"). Spoken input is transcribed
+    (CAP-3) and parsed by the AI into concrete honing actions — add / remove /
+    rename / disambiguate / set importance / define synonyms / "suggest more" —
+    the same actions available in the PREP-2 UI. Unlike the fixed live command
+    vocabulary (CAP-4), this is…
   section: §6 Slide Projects & Seeding
   family: PREP
   phase: 3
@@ -750,6 +1293,16 @@
   review: false
 - id: SHARE-2
   title: Post-lecture translated viewing
+  full: When viewing a saved deck, students and instructors can switch the
+    displayed language of the slide content to any supported locale (English,
+    French, Spanish, Russian, Mandarin — TECH-12). This is an on-demand,
+    post-lecture viewing option — distinct from the out-of-scope live/real-time
+    translated generation (§2.2). Translation uses Google Cloud Translation (key
+    already provisioned — TECH-4), behind a provider-agnostic adapter consistent
+    with GEN-2. Non-destructive — the translated text is an alternate view
+    layered over the deck; the original authored/generated content is preserved
+    and remains authoritative (machine translation may be imperfect).
+    Translations are computed on demand and cached…
   section: §10 Playback, Editing & Sharing
   family: SHARE
   phase: 3
@@ -757,6 +1310,16 @@
   review: false
 - id: TECH-12
   title: Internationalization (i18n) & localization
+  full: "The application UI is fully internationalized — no hardcoded user-facing
+    strings. Supported locales at launch: English (en), French (fr), Spanish
+    (es), Russian (ru), and Mandarin Chinese (zh). All five are left-to-right;
+    the i18n layer should not preclude adding a right-to-left locale later (use
+    logical CSS properties and a per-document dir). Implementation — an i18n
+    library (e.g., react-i18next / FormatJS with ICU message format) with one
+    resource bundle per locale; pluralization and date/number/currency
+    formatting via the Intl API. Adding a locale is a resource-bundle addition,
+    not a code change. Locale selection — detected from the browser
+    (Accept-Language) on first visit, overridable by…"
   section: §14 Technical Stack & Conventions
   family: TECH
   phase: 3

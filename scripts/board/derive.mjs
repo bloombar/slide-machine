@@ -96,37 +96,66 @@ const sliceSection = (text, headingRe, stopRe = /^#{2,4}\s/m) => {
   return stop < 0 ? after : after.slice(0, stop)
 }
 
-// ---- Parse SPEC: id -> { title, section, family } in document order ----
+/** Flatten a chunk of markdown to plain prose for an issue body. */
+const cleanMd = s =>
+  s
+    .replace(/```[\s\S]*?```/g, ' ') // drop fenced code blocks
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') // links -> their label text
+    .replace(/^\s*[-+*]\s+/gm, ' ') // list bullet markers
+    .replace(/[*`>#|]/g, '') // emphasis / heading / quote / table pipes
+    .replace(/\s+/g, ' ')
+    .trim()
+
+// ---- Parse SPEC: id -> { title, full?, section, family } in document order ----
+// Two markdown shapes are handled structurally (not hard-coded per id): a
+// requirement SUBHEADING (`#### <ID> <title>` plus the prose beneath it, up to
+// the next heading) and a §16 TABLE ROW (`| **P-1** | cell |`). In both cases
+// `title` is the short label and `full` is the item's complete text, which sync
+// renders into the issue body.
 const parseSpec = text => {
   const items = []
   let section = ''
+  let cur = null // heading item currently collecting its body prose
+
+  const flush = () => {
+    if (!cur) return
+    const full = shorten(cleanMd(cur.body.join('\n')), 700)
+    if (full && full !== cur.item.title) cur.item.full = full
+    items.push(cur.item)
+    cur = null
+  }
+
   for (const line of text.split('\n')) {
     const sec = line.match(/^###\s+(\d+)\.\s+(.+?)\s*$/)
     if (sec) {
+      flush()
       section = `§${sec[1]} ${sec[2]}`
       continue
     }
     const head = line.match(/^####\s+([A-Z]+-\d+[a-z]?)\s+(.+?)\s*$/)
     if (head) {
-      items.push({
-        id: head[1],
-        title: head[2].trim(),
-        section,
-        family: familyOf(head[1]),
-      })
+      flush()
+      cur = {
+        item: {
+          id: head[1],
+          title: head[2].trim(),
+          section,
+          family: familyOf(head[1]),
+        },
+        body: [],
+      }
+      continue
+    }
+    if (/^#{1,6}\s/.test(line)) {
+      flush() // any other heading ends the current item's body
       continue
     }
     // §16 privacy table rows: | **P-1** | description ... |
     const prow = line.match(/^\|\s*\*\*(P-\d+)\*\*\s*\|\s*(.+?)\s*\|\s*$/)
     if (prow) {
-      const desc = prow[2]
-        .replace(/\*\*/g, '')
-        .replace(/`/g, '')
-        .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-        .replace(/\s+/g, ' ')
-        .trim()
-      const title = shorten(desc.split(/(?<=\.)\s/)[0], 72)
-      const full = shorten(desc, 800)
+      const cell = cleanMd(prow[2])
+      const title = shorten(cell.split(/(?<=\.)\s/)[0], 72)
+      const full = shorten(cell, 800)
       items.push({
         id: prow[1],
         title,
@@ -134,8 +163,11 @@ const parseSpec = text => {
         section: section || '§16 Privacy, Security & Compliance',
         family: 'P',
       })
+      continue
     }
+    if (cur) cur.body.push(line)
   }
+  flush()
   return items
 }
 
@@ -159,14 +191,7 @@ const parseFuture = text => {
       .slice(0, 40)
     if (!slug) continue
     const title = shorten(raw.replace(/\s+—.*$/, ''), 80)
-    const full = shorten(
-      b[1]
-        .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-        .replace(/[*`]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim(),
-      800,
-    )
+    const full = shorten(cleanMd(b[1]), 800)
     out.push({
       id: `FUTURE-${slug}`,
       title,
