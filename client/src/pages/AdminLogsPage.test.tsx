@@ -63,7 +63,11 @@ describe('AdminLogsPage', () => {
     // The acting admin links to their admin detail page
     const links = screen.getAllByRole('link', { name: 'admin@example.com' })
     expect(links[0]).toHaveAttribute('href', '/app/admin/users/a1')
-    expect(screen.getByText('user u9')).toBeVisible()
+    // Target is the kind only — ids stay out of the table
+    expect(screen.getByText('user')).toBeVisible()
+    expect(screen.queryByText(/u9/)).not.toBeInTheDocument()
+    // An entry with no target still gets a placeholder cell
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
     expect(screen.getByText('{"reason":"spam"}')).toBeVisible()
     // Locale-independent: the formatted time includes the year
     expect(screen.getAllByText(/2026/).length).toBeGreaterThan(0)

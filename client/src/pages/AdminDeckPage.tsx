@@ -1,6 +1,6 @@
 /**
  * Admin view of one lecture: its project and owner, its details
- * (visibility, slide count, dates), a link to the live slideshow at
+ * (id, visibility, slide count, dates), a link to the live slideshow at
  * /d/:slug (always openable for admins), and a danger zone for
  * deleting the lecture — confirmed first and recorded in the admin
  * audit log server-side.
@@ -12,6 +12,7 @@ import type { AdminDeckDetailResponse } from '../api/admin'
 import { ApiError } from '../api/http'
 import ConfirmDialog from '../components/ConfirmDialog'
 import Modal from '../components/Modal'
+import DetailRow from '../components/admin/DetailRow'
 import { VisibilityBadge } from '../components/admin/LectureTable'
 import SeedMaterialView from '../components/admin/SeedMaterialView'
 import { projectTitle } from '../lib/project'
@@ -27,15 +28,6 @@ const asDate = (iso: string): string =>
     hour: '2-digit',
     minute: '2-digit',
   })
-
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex gap-2 py-1 text-sm">
-      <dt className="w-36 shrink-0 text-slate-500">{label}</dt>
-      <dd className="text-slate-900">{value}</dd>
-    </div>
-  )
-}
 
 export default function AdminDeckPage() {
   const { deckId } = useParams<{ deckId: string }>()
@@ -190,6 +182,7 @@ export default function AdminDeckPage() {
       <section className="mt-6 rounded-lg border border-slate-200 p-4">
         <h2 className="mb-2 text-lg font-semibold text-slate-700">Details</h2>
         <dl>
+          <DetailRow label="ID" value={deck.id} mono />
           <DetailRow label="Slides" value={String(deck.slideCount)} />
           <DetailRow label="Created" value={asDate(deck.createdAt)} />
           <DetailRow label="Updated" value={asDate(deck.updatedAt)} />

@@ -28,6 +28,7 @@ import {
 import { ApiError } from '../api/http'
 import ConfirmDialog from '../components/ConfirmDialog'
 import Modal from '../components/Modal'
+import DetailRow from '../components/admin/DetailRow'
 import LectureTable from '../components/admin/LectureTable'
 import { generatePassword } from '../lib/password'
 import { projectTitle } from '../lib/project'
@@ -86,15 +87,6 @@ const lastActivity = (
   [project.updatedAt, ...decks.map(d => d.updatedAt)].reduce((a, b) =>
     a > b ? a : b,
   )
-
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex gap-2 py-1 text-sm">
-      <dt className="w-36 shrink-0 text-slate-500">{label}</dt>
-      <dd className="text-slate-900">{value}</dd>
-    </div>
-  )
-}
 
 const dangerMenuButton =
   'rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50'

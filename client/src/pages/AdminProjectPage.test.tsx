@@ -1,8 +1,8 @@
 /**
  * Unit tests for the per-project admin view: project header with owner
- * and visibility, the lecture table with viewer links, the "View
- * project" bypass (confirmed and logged for private projects), and the
- * delete actions (lecture, whole project).
+ * and visibility, the detail rows, the lecture table with viewer links,
+ * the "View project" bypass (confirmed and logged for private projects),
+ * and the delete actions (lecture, whole project).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
@@ -16,6 +16,8 @@ const detail = {
     ownerId: 'u1',
     title: 'Physics',
     visibility: 'public',
+    createdAt: '2026-07-01T00:00:00Z',
+    updatedAt: '2026-07-04T00:00:00Z',
   },
   owner: { id: 'u1', email: 'ada@example.com', displayName: 'Ada' },
   decks: [
@@ -88,6 +90,19 @@ describe('AdminProjectPage', () => {
       'href',
       '/app/admin/users/u1',
     )
+  })
+
+  it('shows the details, including the project id', async () => {
+    renderPage()
+    await screen.findByRole('heading', { name: 'Physics' })
+    const details = screen
+      .getByRole('heading', { name: 'Details' })
+      .closest('section')!
+    expect(within(details).getByText('ID')).toBeVisible()
+    expect(within(details).getByText('p1')).toBeVisible()
+    // Locale-independent: the formatted dates include the year
+    expect(within(details).getAllByText(/2026/).length).toBe(2)
+    expect(within(details).getByText('Lectures')).toBeVisible()
   })
 
   it("links back to the owner's admin page", async () => {

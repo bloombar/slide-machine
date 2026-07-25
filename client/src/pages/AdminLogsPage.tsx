@@ -168,12 +168,10 @@ export default function AdminLogsPage() {
                       {entry.action}
                     </span>
                   </td>
+                  {/* Kind only — the target's id is noise here; the
+                      record's own admin page shows it under Details. */}
                   <td className="px-4 py-2.5 text-slate-700">
-                    {entry.targetType || entry.targetId
-                      ? [entry.targetType, entry.targetId]
-                          .filter(Boolean)
-                          .join(' ')
-                      : '—'}
+                    {entry.targetType || '—'}
                   </td>
                   <td
                     title={details}

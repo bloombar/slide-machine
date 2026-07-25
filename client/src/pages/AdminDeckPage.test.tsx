@@ -124,6 +124,18 @@ describe('AdminDeckPage', () => {
     expect(screen.getByText(/ada@example\.com/)).toBeVisible()
   })
 
+  it('shows the details, including the lecture id', async () => {
+    renderPage()
+    await screen.findByRole('heading', { name: 'Waves' })
+    const details = screen
+      .getByRole('heading', { name: 'Details' })
+      .closest('section')!
+    expect(within(details).getByText('ID')).toBeVisible()
+    expect(within(details).getByText('d1')).toBeVisible()
+    expect(within(details).getByText('5')).toBeVisible()
+    expect(within(details).getByText('/d/waves-abc123')).toBeVisible()
+  })
+
   it('opens a public lecture straight away, with no confirm or view log', async () => {
     const { fetchMock } = renderPage(200, publicDetail)
     await screen.findByRole('heading', { name: 'Waves' })

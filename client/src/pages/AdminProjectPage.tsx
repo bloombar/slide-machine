@@ -1,9 +1,9 @@
 /**
- * Admin view of one project: its owner, its lectures (each linking to
- * its own admin lecture page), and the project-level moderation
- * actions (delete a lecture, delete the whole project). Every lecture,
- * private or not, is listed; opening one in the viewer is always
- * allowed for admins.
+ * Admin view of one project: its owner, its details (id, dates, lecture
+ * count), its lectures (each linking to its own admin lecture page), and
+ * the project-level moderation actions (delete a lecture, delete the
+ * whole project). Every lecture, private or not, is listed; opening one
+ * in the viewer is always allowed for admins.
  */
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
@@ -17,7 +17,9 @@ import {
 } from '../api/admin'
 import { ApiError } from '../api/http'
 import ConfirmDialog from '../components/ConfirmDialog'
+import DetailRow from '../components/admin/DetailRow'
 import LectureTable, { VisibilityBadge } from '../components/admin/LectureTable'
+import { formatAdminDate } from '../lib/date'
 import { projectTitle } from '../lib/project'
 
 /** The action the admin has asked for but not yet confirmed. */
@@ -181,10 +183,26 @@ export default function AdminProjectPage() {
 
       <button
         onClick={openProject}
-        className="mb-6 inline-block rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+        className="inline-block rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
       >
         View project
       </button>
+
+      <section className="mt-6 mb-6 rounded-lg border border-slate-200 p-4">
+        <h2 className="mb-2 text-lg font-semibold text-slate-700">Details</h2>
+        <dl>
+          <DetailRow label="ID" value={project.id} mono />
+          <DetailRow
+            label="Created"
+            value={formatAdminDate(project.createdAt)}
+          />
+          <DetailRow
+            label="Updated"
+            value={formatAdminDate(project.updatedAt)}
+          />
+          <DetailRow label="Lectures" value={String(decks.length)} />
+        </dl>
+      </section>
 
       <section>
         <div className="mb-3">
