@@ -8,10 +8,6 @@
 export const OWNER = 'bloombar'
 export const PROJECT_NUMBER = 1
 export const REPO = 'bloombar/slide-machine'
-// Branch the issue bodies deep-link into for SPEC anchors. The SPEC lives on the
-// active feature branch until it merges; override with SPEC_BRANCH, and set this
-// to 'master' once merged. (A branch that lacks the anchors gives 404 links.)
-export const DEFAULT_BRANCH = process.env.SPEC_BRANCH || 'better-faster'
 
 // Phases are carried by repo Milestones; the project's built-in Milestone
 // field is what each phase tab filters on. Titles must match the milestones.
@@ -151,6 +147,6 @@ export const anchorSlug = text =>
     .trim()
     .replace(/\s+/g, '-')
 
-/** Deep link to a requirement's section in the committed SPEC. */
-export const specLink = (id, title) =>
-  `https://github.com/${REPO}/blob/${DEFAULT_BRANCH}/docs/SPEC.md#${anchorSlug(`${id} ${title}`)}`
+/** Deep link to a requirement's section in the SPEC on the given branch. */
+export const specLink = (id, title, branch) =>
+  `https://github.com/${REPO}/blob/${branch}/docs/SPEC.md#${anchorSlug(`${id} ${title}`)}`

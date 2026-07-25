@@ -75,6 +75,26 @@ const [REPO_OWNER, REPO_NAME] = REPO.split('/')
 const norm = s => (s || '').replace(/\r\n/g, '\n').trim()
 const titleOf = e => `${e.id} — ${e.title}`
 
+// Branch the issue bodies deep-link into for SPEC anchors: the repo's GitHub
+// default branch (which holds the current SPEC), overridable with SPEC_BRANCH.
+const specBranch =
+  process.env.SPEC_BRANCH ||
+  (() => {
+    try {
+      return gh([
+        'repo',
+        'view',
+        REPO,
+        '--json',
+        'defaultBranchRef',
+        '-q',
+        '.defaultBranchRef.name',
+      ])
+    } catch {
+      return 'master'
+    }
+  })()
+
 /** The issue's item id within THIS project (for when auto-add already added it). */
 const itemIdForIssue = number => {
   const data = gh(
@@ -97,7 +117,7 @@ const itemIdForIssue = number => {
 }
 const bodyOf = e =>
   `${marker(e.id)}\n**${e.id}** — ${e.title}\n\n` +
-  `Spec: ${e.section} · [SPEC.md](${specLink(e.id, e.title)})\n` +
+  `Spec: ${e.section} · [SPEC.md](${specLink(e.id, e.title, specBranch)})\n` +
   `Phase ${e.phase} · managed by \`scripts/board\` — do not edit the marker line above.`
 
 // ---- Discover live project + repo state ----
