@@ -395,6 +395,15 @@
   note: image attribution & licensing display
 - id: P-10
   title: Deletion — user-initiated or admin-initiated (§20 ADMIN-4) — of any…
+  full: "Deletion — user-initiated or admin-initiated (§20 ADMIN-4) — of any
+    entity (user accounts, projects, decks, slides, templates, seed assets,
+    concepts, and other owned records — §15) is a soft delete: the record is
+    marked with a deletedAt tombstone rather than removed, is excluded from all
+    reads, queries, and shared surfaces (but stays visible to admins for
+    recovery/audit — ADMIN-6), and can be restored during the retention window.
+    Deleting a parent tombstones its children (a deleted project takes its decks
+    with it — PROJ-2), guarding against accidental, unrecoverable loss. Deletion
+    still enforces ownership/role checks (P-4)."
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 2
@@ -603,6 +612,9 @@
   review: false
 - id: P-1
   title: All student data (rosters, quiz responses, scores) stays within…
+  full: All student data (rosters, quiz responses, scores) stays within
+    NYU-approved, FERPA-compliant systems (NYU Google Workspace, NYU-provided
+    models).
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 3
@@ -610,6 +622,8 @@
   review: false
 - id: P-2
   title: No student PII is sent to external AI models.
+  full: No student PII is sent to external AI models. Only de-identified
+    lecture/slide/seed text drives slide and quiz generation.
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 3
@@ -617,6 +631,9 @@
   review: false
 - id: P-3
   title: All secrets live in server-side .env (Gemini/OpenAI, Google Cloud…
+  full: All secrets live in server-side .env (Gemini/OpenAI, Google Cloud, OAuth,
+    JWT, SMTP, Stripe) — never committed and never exposed to the client. (V1's
+    committed openai.key and localStorage key storage are removed in V2.)
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 3
@@ -624,6 +641,9 @@
   review: false
 - id: P-4
   title: Passwords hashed; JWTs signed with rotating secrets; reset/verification…
+  full: Passwords hashed; JWTs signed with rotating secrets; reset/verification
+    links time-limited and single-use; ownership/role checks on every mutating
+    route.
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 3
@@ -631,6 +651,8 @@
   review: false
 - id: P-5
   title: Google Drive/Docs/Slides access uses per-user OAuth consent and…
+  full: Google Drive/Docs/Slides access uses per-user OAuth consent and
+    least-privilege scopes; imported content is the user's own.
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 3
@@ -638,6 +660,14 @@
   review: false
 - id: P-6
   title: Microphone audio drives transcription; capture is bounded by explicit…
+  full: 'Microphone audio drives transcription; capture is bounded by explicit
+    start/stop with clear UI state. Audio is not retained by default. When
+    retention is explicitly enabled (for diarization — GEN-4 — and per-slide
+    original-audio playback — PLAY-2), it applies only to the server-proxied
+    engine, is gated on deck edit access, is server-only (never exposed in a DTO
+    or shared surface), and is auto-deleted after a bounded window (and as soon
+    as diarization consumes it). Retained student voices remain subject to
+    P-1/P-2. (Design: DECISIONS.md "Audio retention".)'
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 3
@@ -645,6 +675,9 @@
   review: false
 - id: P-7
   title: Evaluation data is anonymized before analysis and submitted for…
+  full: Evaluation data is anonymized before analysis and submitted for
+    IRB/program review; findings (positive or negative) shared with the NYU
+    community.
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 3
@@ -652,6 +685,10 @@
   review: false
 - id: P-8
   title: Payments are processed by the configured billing provider (Stripe by…
+  full: Payments are processed by the configured billing provider (Stripe by
+    default); the app stores no raw card data. Provider webhooks are
+    signature-verified; only minimal, provider-neutral billing references
+    (billingCustomerId, subscription status) are stored.
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 3
@@ -659,6 +696,10 @@
   review: false
 - id: P-9
   title: Connected-account (Google Drive / GitHub — EXP-4) OAuth tokens are…
+  full: Connected-account (Google Drive / GitHub — EXP-4) OAuth tokens are stored
+    encrypted at rest, request only least-privilege scopes, are per-user and
+    revocable, and are never exposed to the client. Exports that contain student
+    data must not be pushed to public GitHub/Drive locations (FERPA — P-1/P-2).
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 3
@@ -666,6 +707,14 @@
   review: false
 - id: P-11
   title: Soft-deleted records (P-10) are permanently purged by a scheduled daily…
+  full: Soft-deleted records (P-10) are permanently purged by a scheduled daily
+    background sweep once their deletedAt is older than a configurable window
+    (DELETED_DATA_RETENTION_DAYS, default 90 days — TECH-4). Purge is a hard
+    cascade delete that also removes owned children and stored blobs (seed
+    assets, exports, and any retained audio — P-6), so no orphaned data
+    survives. 0 disables the sweep (tombstones kept indefinitely). This bounds
+    storage cost and honors data-minimization, consistent with the
+    audio-retention sweep (P-6).
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 3
@@ -715,6 +764,13 @@
   review: false
 - id: FUTURE-a-remote-oauth-authenticated-multi-user-
   title: A remote, OAuth-authenticated, multi-user MCP server that exposes the…
+  full: A remote, OAuth-authenticated, multi-user MCP server that exposes the
+    action/command layer (TECH-13) as agent tools, letting users modify upcoming
+    or saved decks through back-and-forth with an external AI agent (preflight
+    and post-lecture). Built as a thin facade over existing actions — reusing
+    the same auth, ownership, and plan-cap metering — so it adds reach without
+    duplicating logic. Deferred from the pilot for scope/timeline; a good
+    student-contribution target.
   section: §18 Future Work
   family: FUTURE
   phase: 4
@@ -723,6 +779,10 @@
 - id: FUTURE-extracting-the-latency-sensitive-real-ti
   title: Extracting the latency-sensitive real-time STT → slide-generation
     pipeline into…
+  full: Extracting the latency-sensitive real-time STT → slide-generation pipeline
+    into its own Digital Ocean service (and, only if pilot scale demands, moving
+    from App Platform to DO Kubernetes/DOKS) — the modular-monolith seams (§13)
+    make this an extraction, not a rewrite.
   section: §18 Future Work
   family: FUTURE
   phase: 4
@@ -731,6 +791,10 @@
 - id: FUTURE-locally-hosted-in-house-ai-models
   title: Locally-hosted / in-house AI models for transcription and generation (the
     grant…
+  full: Locally-hosted / in-house AI models for transcription and generation (the
+    grant addendum's long-term thesis) — the provider abstraction (GEN-2 /
+    TECH-8) is built now so this is a configuration/adapter change later, not a
+    rewrite.
   section: §18 Future Work
   family: FUTURE
   phase: 4
@@ -738,6 +802,11 @@
   review: false
 - id: FUTURE-narrating-slides-in-the-students
   title: Narrating slides in the student's translated language
+  full: Narrating slides in the student's translated language — pairing
+    text-to-speech narration (PLAY-2) with the post-lecture translated viewing
+    (SHARE-2) so a student can hear a deck spoken in their own locale (the base
+    narration and translated viewing exist; synthesizing the translated text is
+    the remaining step).
   section: §18 Future Work
   family: FUTURE
   phase: 4
@@ -759,6 +828,8 @@
   review: false
 - id: FUTURE-real-time-multilingual-translation-of-sp
   title: Real-time multilingual translation of speech into translated slides (the…
+  full: Real-time multilingual translation of speech into translated slides (the
+    Translation key supports optional captions only for now).
   section: §18 Future Work
   family: FUTURE
   phase: 4
@@ -766,6 +837,8 @@
   review: false
 - id: FUTURE-richer-analytics-dashboards-and-recommen
   title: Richer analytics dashboards and recommendation/ranking beyond simple vote…
+  full: Richer analytics dashboards and recommendation/ranking beyond simple vote
+    tallies.
   section: §18 Future Work
   family: FUTURE
   phase: 4
@@ -773,6 +846,8 @@
   review: false
 - id: FUTURE-teamorganization-seat-based-billing-and-
   title: Team/organization (seat-based) billing and institutional licensing beyond…
+  full: Team/organization (seat-based) billing and institutional licensing beyond
+    individual Free/Pro/Max plans.
   section: §18 Future Work
   family: FUTURE
   phase: 4

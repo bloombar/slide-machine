@@ -116,7 +116,7 @@ const itemIdForIssue = number => {
   return nodes.find(x => x.project?.number === PROJECT_NUMBER)?.id || null
 }
 const bodyOf = e =>
-  `${marker(e.id)}\n**${e.id}** — ${e.title}\n\n` +
+  `${marker(e.id)}\n**${e.id}** — ${e.full || e.title}\n\n` +
   `Spec: ${e.section} · [SPEC.md](${specLink(e.id, e.title, specBranch)})\n` +
   `Phase ${e.phase} · managed by \`scripts/board\` — do not edit the marker line above.`
 
