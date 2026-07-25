@@ -126,9 +126,11 @@ const parseSpec = text => {
         .replace(/\s+/g, ' ')
         .trim()
       const title = shorten(desc.split(/(?<=\.)\s/)[0], 72)
+      const full = shorten(desc, 800)
       items.push({
         id: prow[1],
         title,
+        ...(full !== title ? { full } : {}),
         section: section || '§16 Privacy, Security & Compliance',
         family: 'P',
       })
@@ -157,9 +159,18 @@ const parseFuture = text => {
       .slice(0, 40)
     if (!slug) continue
     const title = shorten(raw.replace(/\s+—.*$/, ''), 80)
+    const full = shorten(
+      b[1]
+        .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+        .replace(/[*`]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim(),
+      800,
+    )
     out.push({
       id: `FUTURE-${slug}`,
       title,
+      ...(full !== title ? { full } : {}),
       section: '§18 Future Work',
       family: 'FUTURE',
     })
@@ -322,6 +333,9 @@ const run = () => {
     entries.push({
       id: e.id,
       title: e.title,
+      // `full` is the complete spec text (refreshed from the SPEC each run),
+      // shown in the issue body when the short title is a clipped version.
+      ...(e.full ? { full: e.full } : {}),
       section: e.section,
       family: e.family,
       phase: old ? old.phase : e._seedPhase,
