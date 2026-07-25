@@ -232,6 +232,10 @@ Every layout in a template carries a **machine-readable descriptor** so the AI c
 
 Descriptors are authored as part of the template (TMPL-3/TMPL-4), stored with it ([§15](#15-data-models)), and serialized into the generation request as the **option set** the AI must pick from.
 
+#### TMPL-7 Whiteboard layout
+
+Every design template **must** include a special **`whiteboard` layout** — a blank slate with **no content slots** — for freehand annotation ([EDIT-4](#edit-4-whiteboard-annotation) / [EDIT-5](#edit-5-whiteboard-tools)). Unlike the conventional layouts ([TMPL-2](#tmpl-2-conventional-layout-types)), it is **withheld from the AI's layout menu** ([GEN-6](#gen-6-ai-layout-selection)) — live generation never selects it. A user adds a whiteboard slide **explicitly**: the toolbar's new-whiteboard-slide button, the "new whiteboard" voice command ([CAP-4](#cap-4-voice-commands)), or the per-slide layout picker ([EDIT-3](#edit-3-per-slide-layout-switch)); the slide is created truly blank. (Behavior: [WHITEBOARD.md](WHITEBOARD.md); templates: [TEMPLATES.md](TEMPLATES.md).)
+
 ### 8. Live Lecture Capture
 
 #### CAP-1 Session lifecycle
@@ -382,6 +386,17 @@ When an **already-displayed** slide changes layout — whether from an AI update
 - **Opt-out setting** — animated transitions **default to on**, and can be turned off **per project** ([PROJ-1](#proj-1-pre-create-a-project)) or as a **user-settings default applied to all new projects** (the same default/override pattern as GEN-8's manual mode). When off, layout changes apply instantly.
 - One shared transition system covers live layout re-fits, new-slide advances, and post-lecture editing for a consistent feel.
 
+#### GEN-10 Whiteboard generation pause & resume
+
+While a live session is recording, whiteboard use ([EDIT-4](#edit-4-whiteboard-annotation) / [EDIT-5](#edit-5-whiteboard-tools)) **pauses slide generation** so the AI never shifts content out from under a mark. Two pause modes are surfaced by a single notification carrying a **Resume** control:
+
+- **Drawing debounce** — while the instructor is actively drawing on any slide, generation pauses and **auto-resumes** shortly after the last gesture (a configurable grace window — `WHITEBOARD_SUPPRESS_DEBOUNCE_MS`, [TECH-4](#tech-4-server-configuration); `0` disables the grace), or immediately on **Resume**.
+- **Whiteboard slide** — on a blank whiteboard-layout slide ([TMPL-7](#tmpl-7-whiteboard-layout)), generation pauses **manually** (no auto-resume): it stays paused until the user clicks **Resume** or **creates a new regular slide** (the **+** button or the "new slide" voice command — [CAP-4](#cap-4-voice-commands)), which navigates off the canvas.
+
+**While paused, nothing is lost:** speech is still **transcribed** and the transcript is **recorded** (deck transcript, timestamped segments, and the slide's `sourceTranscript` — [§15](#15-data-models)); strokes keep saving on their own pipeline; and **voice commands keep working**. Only the creation of new slides and any content/layout change is skipped, and generation resumes where it left off once the pause clears.
+
+A slide that already carries **visible** marks is further protected whenever it is the update target: updates are **additive only**, its layout is **pinned** (no refit/reformat), and an overflowing update spills to a **new** slide rather than reflowing the marked one ([GEN-8](#gen-8-new-slide-vs-update-current)). (Behavior: [WHITEBOARD.md](WHITEBOARD.md); design: [DECISIONS.md](DECISIONS.md) "Whiteboard ↔ live generation".)
+
 **Metering note.** Gemini, Speech-to-Text, and image-API usage in §8–§9 all count against the user's plan caps (BILL-3) and are subject to enforcement (BILL-4).
 
 ### 10. Playback, Editing & Sharing
@@ -411,7 +426,18 @@ Users can change the **layout type** of an individual slide (e.g., convert a con
 Users can **draw on slides like a whiteboard** — **pen** (opaque), **highlighter** (semi-transparent), and **eraser** — from a floating, draggable tool palette. Freehand strokes are stored **per slide** ([§15](#15-data-models)), with coordinates normalized to the slide so they survive layout/aspect changes; default colors come from the deck's design template.
 
 - **Timed to the narration** — each stroke (and each **erase**, treated as a timestamped event, not a deletion) is anchored to a position in the slide's transcript, so during narration playback ([PLAY-2](#play-2-narration-playback)) the marks **appear and disappear in sync with the spoken words**, and a [GEN-4](#gen-4-post-lecture-ai-reformat-holistic-regeneration) narration refine re-anchors them proportionally. Marks made while **not recording** aren't tied to speech and are **always shown** on their slide.
-- **Doesn't hijack live capture** — while the instructor is actively drawing (or on a blank whiteboard slide) during a live session, slide **generation pauses** — the speech is still transcribed but no slide is created or changed — with a Resume control and auto-resume after drawing stops; voice commands keep working. A slide that already carries marks stays additive-only (layout fixed, content never reformatted). Explicit new slides (the **+** button or the "new slide" voice command — [CAP-4](#cap-4-voice-commands)) still work. (Behavior: [WHITEBOARD.md](WHITEBOARD.md); design: [DECISIONS.md](DECISIONS.md) "Whiteboard drawings" and "Whiteboard ↔ live generation".)
+- **Doesn't hijack live capture** — while the instructor is actively drawing (or on a blank whiteboard slide) during a live session, slide **generation pauses** ([GEN-10](#gen-10-whiteboard-generation-pause--resume)) — the speech is still transcribed but no slide is created or changed — with a Resume control and auto-resume after drawing stops; voice commands keep working. A slide that already carries marks stays additive-only (layout fixed, content never reformatted). Explicit new slides (the **+** button or the "new slide" voice command — [CAP-4](#cap-4-voice-commands)) still work. (Behavior: [WHITEBOARD.md](WHITEBOARD.md); design: [DECISIONS.md](DECISIONS.md) "Whiteboard drawings" and "Whiteboard ↔ live generation".)
+
+#### EDIT-5 Whiteboard tools
+
+The whiteboard drawing surface ([EDIT-4](#edit-4-whiteboard-annotation)) is driven by a **floating, draggable tool palette** whose position is remembered per lecture. It captures pointer events only while a tool is active, so it never blocks normal slide interaction.
+
+- **Tools** — **pen** (opaque), **highlighter** (semi-transparent), and **eraser**.
+- **Per-tool color & thickness** — each pen/highlighter keeps its own color and stroke thickness. **Press-and-hold** (or a small corner-triangle affordance) opens a color + thickness picker; default colors come from the deck's design-template theme (`penColor` / `highlighterColor`).
+- **Undo / redo**, per slide.
+- **New whiteboard slide** — a dedicated toolbar button (and the "new whiteboard" voice command — [CAP-4](#cap-4-voice-commands)) appends a blank whiteboard-layout slide ([TMPL-7](#tmpl-7-whiteboard-layout)) and arms the pen.
+
+The tools write the per-slide stroke model ([§15](#15-data-models), `Slide.drawings`) that [EDIT-4](#edit-4-whiteboard-annotation) replays in sync with narration.
 
 #### SHARE-1 Saved deck viewer & permalink
 

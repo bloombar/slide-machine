@@ -590,6 +590,23 @@
   status: Done
   review: false
   note: delivered early
+- id: EDIT-5
+  title: Whiteboard tools
+  full: The whiteboard drawing surface (EDIT-4) is driven by a floating, draggable
+    tool palette whose position is remembered per lecture. It captures pointer
+    events only while a tool is active, so it never blocks normal slide
+    interaction. Tools — pen (opaque), highlighter (semi-transparent), and
+    eraser. Per-tool color & thickness — each pen/highlighter keeps its own
+    color and stroke thickness. Press-and-hold (or a small corner-triangle
+    affordance) opens a color + thickness picker; default colors come from the
+    deck's design-template theme (penColor / highlighterColor). Undo / redo, per
+    slide. New whiteboard slide — a dedicated toolbar button (and the "new
+    whiteboard" voice command — CAP-4) appends a…
+  section: §10 Playback, Editing & Sharing
+  family: EDIT
+  phase: 2
+  status: Done
+  review: false
 - id: EXP-1
   title: Deck export
   full: Decks can be exported to PDF, Google Slides, and other easily supportable
@@ -706,6 +723,23 @@
   family: GEN
   phase: 2
   status: Backlog
+  review: false
+- id: GEN-10
+  title: Whiteboard generation pause & resume
+  full: 'While a live session is recording, whiteboard use (EDIT-4 / EDIT-5)
+    pauses slide generation so the AI never shifts content out from under a
+    mark. Two pause modes are surfaced by a single notification carrying a
+    Resume control: Drawing debounce — while the instructor is actively drawing
+    on any slide, generation pauses and auto-resumes shortly after the last
+    gesture (a configurable grace window — WHITEBOARD_SUPPRESS_DEBOUNCE_MS,
+    TECH-4; 0 disables the grace), or immediately on Resume. Whiteboard slide —
+    on a blank whiteboard-layout slide (TMPL-7), generation pauses manually (no
+    auto-resume): it stays paused until the user clicks Resume or creates a new
+    regular slide (the + button or the "new…'
+  section: §9 Slide Generation & Enrichment
+  family: GEN
+  phase: 2
+  status: Done
   review: false
 - id: IMG-3
   title: Image disambiguation
@@ -996,6 +1030,21 @@
   title: Template application
   full: A template (and any specific layout) can be applied at deck level and
     overridden per slide (see EDIT-3).
+  section: §7 Style Template Library
+  family: TMPL
+  phase: 2
+  status: Done
+  review: false
+- id: TMPL-7
+  title: Whiteboard layout
+  full: "Every design template must include a special whiteboard layout — a blank
+    slate with no content slots — for freehand annotation (EDIT-4 / EDIT-5).
+    Unlike the conventional layouts (TMPL-2), it is withheld from the AI's
+    layout menu (GEN-6) — live generation never selects it. A user adds a
+    whiteboard slide explicitly: the toolbar's new-whiteboard-slide button, the
+    \"new whiteboard\" voice command (CAP-4), or the per-slide layout picker
+    (EDIT-3); the slide is created truly blank. (Behavior: WHITEBOARD.md;
+    templates: TEMPLATES.md.)"
   section: §7 Style Template Library
   family: TMPL
   phase: 2
