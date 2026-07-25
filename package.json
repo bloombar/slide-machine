@@ -21,6 +21,8 @@
     "test:integration": "npm run test:integration -w server",
     "e2e": "npm run test -w e2e",
     "lint": "eslint .",
+    "board:derive": "node scripts/board/derive.mjs",
+    "board:sync": "node scripts/board/sync.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

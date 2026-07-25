@@ -1,0 +1,81 @@
+# Moves a requirement's board card as its pull request progresses — the two
+# transitions the project's built-in workflows can't express (they cover
+# added→Backlog, merged/closed→Done, reopened). The card that moves is the
+# ISSUE the PR closes, so PRs must reference their issue with "Closes #N".
+#
+# Requires a repo secret PROJECTS_TOKEN: a fine-grained PAT with Projects
+# read/write on the `bloombar` account and Issues: read. The default
+# GITHUB_TOKEN cannot write user-level Projects v2.
+name: Project board — PR status
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, converted_to_draft, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  move-card:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set linked issues' Status from PR state
+        env:
+          GH_TOKEN: ${{ secrets.PROJECTS_TOKEN }}
+          OWNER: bloombar
+          PROJECT_NUMBER: '1'
+          REPO_OWNER: ${{ github.event.repository.owner.login }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          PR: ${{ github.event.pull_request.number }}
+          IS_DRAFT: ${{ github.event.pull_request.draft }}
+        run: |
+          set -euo pipefail
+
+          # Draft (or just converted to draft) => In progress; otherwise the PR
+          # is up for review => Ready to review.
+          if [ "${IS_DRAFT}" = "true" ] || [ "${{ github.event.action }}" = "converted_to_draft" ]; then
+            STATUS="In progress"
+          else
+            STATUS="Ready to review"
+          fi
+          echo "Target status: $STATUS"
+
+          # Resolve the project, the Status field, and the target option id.
+          PROJECT_JSON=$(gh api graphql -f owner="$OWNER" -F num="$PROJECT_NUMBER" -f query='
+            query($owner:String!,$num:Int!){
+              user(login:$owner){ projectV2(number:$num){
+                id
+                field(name:"Status"){ ... on ProjectV2SingleSelectField { id options { id name } } }
+              }}}')
+          PROJECT_ID=$(echo "$PROJECT_JSON" | jq -r '.data.user.projectV2.id')
+          FIELD_ID=$(echo "$PROJECT_JSON" | jq -r '.data.user.projectV2.field.id')
+          OPT_ID=$(echo "$PROJECT_JSON" | jq -r --arg n "$STATUS" '.data.user.projectV2.field.options[] | select(.name==$n) | .id')
+          if [ -z "$OPT_ID" ] || [ "$OPT_ID" = "null" ]; then
+            echo "No Status option named '$STATUS' — nothing to do."; exit 0
+          fi
+
+          # The issues this PR closes, and their item ids within THIS project.
+          PR_JSON=$(gh api graphql -f owner="$REPO_OWNER" -f repo="$REPO_NAME" -F pr="$PR" -f query='
+            query($owner:String!,$repo:String!,$pr:Int!){
+              repository(owner:$owner,name:$repo){ pullRequest(number:$pr){
+                closingIssuesReferences(first:20){ nodes {
+                  number
+                  projectItems(first:20){ nodes { id project { number } } }
+                }}}}}')
+
+          mapfile -t ITEMS < <(echo "$PR_JSON" | jq -r --argjson num "$PROJECT_NUMBER" \
+            '.data.repository.pullRequest.closingIssuesReferences.nodes[]?.projectItems.nodes[]? | select(.project.number==$num) | .id')
+
+          if [ "${#ITEMS[@]}" -eq 0 ]; then
+            echo "PR #$PR closes no board-tracked issues (use 'Closes #N'). Nothing to do."; exit 0
+          fi
+
+          for ITEM in "${ITEMS[@]}"; do
+            echo "Setting item $ITEM => $STATUS"
+            gh api graphql -f project="$PROJECT_ID" -f item="$ITEM" -f field="$FIELD_ID" -f opt="$OPT_ID" -f query='
+              mutation($project:ID!,$item:ID!,$field:ID!,$opt:String!){
+                updateProjectV2ItemFieldValue(input:{
+                  projectId:$project, itemId:$item, fieldId:$field,
+                  value:{ singleSelectOptionId:$opt }
+                }){ projectV2Item { id } }}' >/dev/null
+          done
