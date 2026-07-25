@@ -20,7 +20,7 @@ An initial specification is written into docs/SPEC.md. This is the general plan 
 
 Changes are tracked on the GitHub project board and follow a branch → PR flow so the board automation works (details: docs/CONTRIBUTING.md, docs/PROJECT_BOARD.md). Follow this **by default**:
 
-- **Do not commit directly to the default branch.** Create a feature branch named `feat/<REQ-ID>-<slug>` (e.g. `feat/AUTH-3-email-verification`; use a short descriptive slug when no requirement id applies).
+- **Do not commit code changes directly to the default branch.** Create a feature branch named `feat/<REQ-ID>-<slug>` (e.g. `feat/AUTH-3-email-verification`; use a short descriptive slug when no requirement id applies). **Exception:** documentation (Markdown and anything under `docs/`) and `.env.example` files may be committed directly to the default branch without a PR.
 - **Open a pull request** whose description includes `Closes #N` — `N` is the board issue's number — so the card links and advances to Done on merge. Commit and push only when asked, and run the pre-PR checks first (`npm run lint && npm run format:check && npm run typecheck && npm test`).
 - **Do not hand-create board issues.** The board is generated from the SPEC via `npm run board:derive` then `npm run board:sync` (see docs/PROJECT_BOARD.md).
 
