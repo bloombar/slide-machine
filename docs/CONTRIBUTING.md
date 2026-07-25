@@ -140,6 +140,11 @@ Two unrelated things share the word "seed":
 
 Work is tracked on the [Task Board](https://github.com/users/bloombar/projects/1): every [SPEC](SPEC.md) requirement is an issue, filed by phase and status. Pick one from your phase's **Backlog**, branch as `feat/<REQ-ID>-<slug>`, and reference it from your PR with **`Closes #N`** so its card advances as the PR opens, is reviewed, and merges.
 
+For example, say you grab the issue for [`AUTH-3`](SPEC.md#auth-3-email-verification) (email verification):
+
+- **Branch name** — `<REQ-ID>` is the requirement id and `<slug>` is a few dashed words describing the work, so: `feat/AUTH-3-email-verification`.
+- **`#N`** — `N` is that issue's **number**, shown as `#123` in the issue title on GitHub and in its URL (`.../issues/123`). Put `Closes #123` in your PR description; GitHub then links the PR to issue 123 and auto-closes it (moving its card to **Done**) when the PR merges. If your issue were number 123, the PR body would read `Closes #123`.
+
 Card movement is automated, and that automation has requirements (one-time, maintainer setup — full checklist and the team SOP are in [PROJECT_BOARD.md](PROJECT_BOARD.md)):
 
 - **`GH_PROJECTS_TOKEN` Actions secret** — a **classic** PAT with the `project` scope (+ `public_repo`); fine-grained PATs can't reach user-owned Projects. Set it under repo **Settings → Secrets and variables → Actions**.

@@ -15,3 +15,13 @@ Leave standard docstring comments for all modules, functions, and for large bloc
 ## Specification
 
 An initial specification is written into docs/SPEC.md. This is the general plan for the project, although we may decide to change it along the way.
+
+## Git & project-board workflow
+
+Changes are tracked on the GitHub project board and follow a branch → PR flow so the board automation works (details: docs/CONTRIBUTING.md, docs/PROJECT_BOARD.md). Follow this **by default**:
+
+- **Do not commit directly to the default branch.** Create a feature branch named `feat/<REQ-ID>-<slug>` (e.g. `feat/AUTH-3-email-verification`; use a short descriptive slug when no requirement id applies).
+- **Open a pull request** whose description includes `Closes #N` — `N` is the board issue's number — so the card links and advances to Done on merge. Commit and push only when asked, and run the pre-PR checks first (`npm run lint && npm run format:check && npm run typecheck && npm test`).
+- **Do not hand-create board issues.** The board is generated from the SPEC via `npm run board:derive` then `npm run board:sync` (see docs/PROJECT_BOARD.md).
+
+If asked to use a different workflow (e.g. commit straight to the default branch), **remind the user that it diverges from this flow and confirm before proceeding** — then honor the confirmed request.
