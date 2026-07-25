@@ -4,7 +4,8 @@
  * the allowlisted admin (ADMIN_EMAILS in playwright.config.ts) reaches
  * the user directory from the menu, drills into a user and through to
  * a project's own admin page, browses the site-wide project and
- * lecture directories, and exports the audit log as CSV.
+ * lecture directories, exports the audit log as CSV, and moves between
+ * sections with the admin nav bar.
  */
 import { test, expect, type Page } from '@playwright/test'
 import { createProject } from './helpers'
@@ -165,4 +166,41 @@ test('the admin reaches the audit log and downloads the CSV export', async ({
   await page.getByRole('button', { name: 'Download CSV' }).click()
   const download = await downloadPromise
   expect(download.suggestedFilename()).toBe('admin-audit-log.csv')
+})
+
+test('the admin nav bar moves between every section and marks the current one', async ({
+  page,
+}) => {
+  await ensureSignedIn(page, admin)
+  await page.goto('/app/admin')
+
+  const nav = page.getByRole('navigation', { name: 'Admin' })
+  await expect(nav.getByRole('link', { name: 'Users' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+
+  await nav.getByRole('link', { name: 'Projects' }).click()
+  await expect(page).toHaveURL(/\/app\/admin\/projects$/)
+  await expect(nav.getByRole('link', { name: 'Projects' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+
+  await nav.getByRole('link', { name: 'Lectures' }).click()
+  await expect(page).toHaveURL(/\/app\/admin\/decks$/)
+
+  await nav.getByRole('link', { name: 'Logs' }).click()
+  await expect(page).toHaveURL(/\/app\/admin\/logs$/)
+
+  await nav.getByRole('link', { name: 'Users' }).click()
+  await expect(page).toHaveURL(/\/app\/admin$/)
+
+  // A detail page keeps its section marked, and the bar stays available
+  await page.getByRole('link', { name: user.email }).click()
+  await expect(page).toHaveURL(/\/app\/admin\/users\//)
+  await expect(nav.getByRole('link', { name: 'Users' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
 })

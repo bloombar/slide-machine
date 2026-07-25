@@ -1,7 +1,8 @@
 /**
  * Route table. Every screen keeps the top navigation: public pages
  * (including the permalink viewer) use the PublicShell, authenticated
- * pages use the AppShell.
+ * pages use the AppShell. Admin pages nest one level deeper in the
+ * AdminShell, which guards them and adds the admin nav bar.
  */
 import { Routes, Route } from 'react-router'
 import PublicShell from './components/layout/PublicShell'
@@ -22,7 +23,7 @@ import AdminDecksPage from './pages/AdminDecksPage'
 import AdminDeckPage from './pages/AdminDeckPage'
 import AdminLogsPage from './pages/AdminLogsPage'
 import RequireAuth from './auth/RequireAuth'
-import RequireAdmin from './auth/RequireAdmin'
+import AdminShell from './components/layout/AdminShell'
 
 export default function App() {
   return (
@@ -44,62 +45,15 @@ export default function App() {
         <Route path="/app" element={<HomePage />} />
         <Route path="/app/projects/:projectId" element={<ProjectPage />} />
         <Route path="/app/profile" element={<ProfilePage />} />
-        <Route
-          path="/app/admin"
-          element={
-            <RequireAdmin>
-              <AdminUsersPage />
-            </RequireAdmin>
-          }
-        />
-        <Route
-          path="/app/admin/users/:userId"
-          element={
-            <RequireAdmin>
-              <AdminUserDetailPage />
-            </RequireAdmin>
-          }
-        />
-        <Route
-          path="/app/admin/projects"
-          element={
-            <RequireAdmin>
-              <AdminProjectsPage />
-            </RequireAdmin>
-          }
-        />
-        <Route
-          path="/app/admin/projects/:projectId"
-          element={
-            <RequireAdmin>
-              <AdminProjectPage />
-            </RequireAdmin>
-          }
-        />
-        <Route
-          path="/app/admin/decks"
-          element={
-            <RequireAdmin>
-              <AdminDecksPage />
-            </RequireAdmin>
-          }
-        />
-        <Route
-          path="/app/admin/decks/:deckId"
-          element={
-            <RequireAdmin>
-              <AdminDeckPage />
-            </RequireAdmin>
-          }
-        />
-        <Route
-          path="/app/admin/logs"
-          element={
-            <RequireAdmin>
-              <AdminLogsPage />
-            </RequireAdmin>
-          }
-        />
+        <Route path="/app/admin" element={<AdminShell />}>
+          <Route index element={<AdminUsersPage />} />
+          <Route path="users/:userId" element={<AdminUserDetailPage />} />
+          <Route path="projects" element={<AdminProjectsPage />} />
+          <Route path="projects/:projectId" element={<AdminProjectPage />} />
+          <Route path="decks" element={<AdminDecksPage />} />
+          <Route path="decks/:deckId" element={<AdminDeckPage />} />
+          <Route path="logs" element={<AdminLogsPage />} />
+        </Route>
       </Route>
     </Routes>
   )

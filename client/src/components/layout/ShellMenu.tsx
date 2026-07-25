@@ -9,14 +9,7 @@ import { Link, useNavigate } from 'react-router'
 import { Menu, LogOut, LogIn, ChevronRight } from 'lucide-react'
 import { useAuth } from '../../auth/AuthContext'
 import { useIsAdmin } from '../../hooks/useIsAdmin'
-
-/** The admin console's sections; extend this as admin pages are added. */
-const ADMIN_LINKS = [
-  { to: '/app/admin', label: 'Users' },
-  { to: '/app/admin/projects', label: 'Projects' },
-  { to: '/app/admin/decks', label: 'Lectures' },
-  { to: '/app/admin/logs', label: 'Logs' },
-]
+import { ADMIN_LINKS } from '../admin/AdminNav'
 
 /** Admin entry, mounted only while the dropdown is open so the status
  * check fires at most once per session and only for users who open the
