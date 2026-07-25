@@ -47,6 +47,7 @@ This document specifies both the **functional** behavior (what the system does, 
 | **Student**                         | Receives the exit-ticket quiz; may also be a registered author (pilot students extend the system). | Timely quiz access; auto-grading; ability to browse/learn from public decks. |
 | **Viewer (public/shared)**          | Anyone with a deck permalink.                                                                      | Read-only deck playback; optional voting if registered.                      |
 | **Researcher / evaluator**          | PI and collaborators evaluating the pilot.                                                         | Anonymized exit-ticket scores, latency/reliability metrics, quality ratings. |
+| **Administrator / operator**        | Allowlisted operator running the deployment ([§20](#20-administration-operations--moderation)).    | Oversight of users & content, audited moderation, health/config control.     |
 | **Contributor (student developer)** | Pilot students extending the codebase.                                                             | Clear module boundaries, shared types, documented APIs.                      |
 
 ### 4. Accounts & Authentication
@@ -75,7 +76,7 @@ Standard "forgot password" flow: time-limited, single-use reset link sent by ema
 
 #### AUTH-5 Profile & ownership
 
-Each user has a profile (display name, bio, avatar, **preferred locale**) and owns their projects, decks, and templates. The preferred locale drives the UI language ([TECH-12](#tech-12-internationalization-i18n--localization)). Authorization enforces that users may only modify their own resources (except admin).
+Each user has a profile (display name, bio, avatar, **preferred locale**) and owns their projects, decks, and templates. The preferred locale drives the UI language ([TECH-12](#tech-12-internationalization-i18n--localization)). Authorization enforces that users may only modify their own resources (except admins — [§20](#20-administration-operations--moderation), whose authorization comes from the allowlist, not ownership).
 
 ### 5. Plans, Billing & Usage Limits
 
@@ -130,7 +131,7 @@ An instructor can create a **slide project** ahead of a lecture, with metadata (
 
 #### PROJ-2 Project lifecycle
 
-Projects persist in MongoDB and can be reopened, duplicated, archived, and deleted. A project may contain multiple decks (e.g., one per lecture session).
+Projects persist in MongoDB and can be reopened, duplicated, archived, and deleted. Deletion is a **soft delete** — recoverable during a retention window before a background sweep permanently purges it, and cascading to the project's decks ([P-10](#16-privacy-security--compliance)/[P-11](#16-privacy-security--compliance)). A project may contain multiple decks (e.g., one per lecture session).
 
 #### SEED-1 Document seeding
 
@@ -564,6 +565,8 @@ Server-side secrets and global settings live in a `.env` file (never committed),
 - Billing-provider credentials (adapter-specific; for the default Stripe adapter: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and per-tier price IDs) plus a `BILLING_PROVIDER` selector ([TECH-9](#tech-9-billing-provider-abstraction-layer)).
 - Object-storage credentials for **DO Spaces** (S3-compatible) used by uploads/exports (TECH-10).
 - SMTP / email-provider settings for verification and password-reset mail.
+- `DELETED_DATA_RETENTION_DAYS` — days a soft-deleted record ([P-10](#16-privacy-security--compliance)) is retained before the daily background sweep permanently purges it (default **90**; `0` = keep tombstones indefinitely — [P-11](#16-privacy-security--compliance)).
+- `ADMIN_EMAILS` — comma-separated allowlist of account emails granted admin access ([§20](#20-administration-operations--moderation) ADMIN-1). Read on **every** request (not captured at import), so adding/removing an email takes effect without a code deploy or migration.
 
 **Plan definitions** — the Free/Pro/Max **prices and usage caps** (BILL-1, BILL-3) live in an adjustable server-side config (e.g., `config/plans.*`) so pricing and caps can be tuned **without code changes** (see BILL-6 and TECH-4). Illustrative shape:
 
@@ -691,6 +694,8 @@ Indicative MongoDB collections, expressed as shared TypeScript types ([TECH-6](#
 - **Vote** — `{ id, userId, targetType: 'deck'|'template', targetId, value: 1|-1 }`
 - **QuizRef** — `{ id, deckId, formId, formUrl, status, publishConfig: { authMode, defaultPoints, driveFolderId, title } }` (link to the published Google Form + the publish config used — QUIZ-2/QUIZ-3)
 
+**Soft delete** — deletable entities (`User`, `Project`, `Deck`, `Slide`, `Template`, `SeedAsset`, `Concept`, and other owned records above) carry an optional `deletedAt` tombstone. A set `deletedAt` hides the record from every read/query and shared surface and marks it for eventual purge; absent/`null` = live. This is the mechanism behind soft delete ([P-10](#16-privacy-security--compliance)) and the retention sweep ([P-11](#16-privacy-security--compliance)), and it backs **both** user-initiated deletion and admin moderation deletes ([§20](#20-administration-operations--moderation) ADMIN-4). Soft-deleted records stay readable to admins for recovery/audit (ADMIN-6) until the sweep purges them.
+
 The same definitions back API request/response DTOs and validation on both tiers.
 
 ### 16. Privacy, Security & Compliance
@@ -706,6 +711,10 @@ The same definitions back API request/response DTOs and validation on both tiers
 | **P-7** | Evaluation data is anonymized before analysis and submitted for IRB/program review; findings (positive or negative) shared with the NYU community.                                                                                                                                                                      |
 | **P-8** | Payments are processed by the configured billing provider (**Stripe** by default); the app stores no raw card data. Provider webhooks are signature-verified; only minimal, provider-neutral billing references (`billingCustomerId`, subscription status) are stored.                                                  |
 | **P-9** | Connected-account (Google Drive / GitHub — EXP-4) OAuth tokens are stored **encrypted at rest**, request only **least-privilege scopes**, are **per-user and revocable**, and are never exposed to the client. Exports that contain student data must not be pushed to public GitHub/Drive locations (FERPA — P-1/P-2). |
+| **P-10** | Deletion — **user-initiated or admin-initiated** ([§20](#20-administration-operations--moderation) ADMIN-4) — of any entity (user accounts, projects, decks, slides, templates, seed assets, concepts, and other owned records — [§15](#15-data-models)) is a **soft delete**: the record is marked with a `deletedAt` tombstone rather than removed, is excluded from all reads, queries, and shared surfaces (but stays visible to admins for recovery/audit — ADMIN-6), and can be **restored during the retention window**. Deleting a parent tombstones its children (a deleted project takes its decks with it — [PROJ-2](#proj-2-project-lifecycle)), guarding against accidental, unrecoverable loss. Deletion still enforces ownership/role checks (P-4). |
+| **P-11** | Soft-deleted records (P-10) are **permanently purged** by a scheduled daily background sweep once their `deletedAt` is older than a configurable window (`DELETED_DATA_RETENTION_DAYS`, **default 90 days** — [TECH-4](#tech-4-server-configuration)). Purge is a **hard cascade delete** that also removes owned children and stored blobs (seed assets, exports, and any retained audio — P-6), so no orphaned data survives. `0` disables the sweep (tombstones kept indefinitely). This bounds storage cost and honors data-minimization, consistent with the audio-retention sweep (P-6). |
+| **P-12** | **Administrative access** is an out-of-band **email allowlist** (`ADMIN_EMAILS` — [§20](#20-administration-operations--moderation) ADMIN-1), never a self-granted role. Admin reads **bypass per-object ACLs** and can reach student-derived content (P-1/P-2), so the allowlist is kept minimal, admins **cannot moderate other admins**, and any admin action that **exposes a user's private content or credentials** — viewing a private lecture/project, resetting/revealing a password (ADMIN-3) — requires **explicit confirmation** before it proceeds. |
+| **P-13** | **Admin audit trail.** Every admin action that **changes or exposes** user data — private lecture/project views, password resets, bans/unbans, deletes, settings edits, and views of soft-deleted content ([§20](#20-administration-operations--moderation) ADMIN-3..6) — is recorded in an **append-only** log (acting admin, action, target, details, timestamp) that **no API can edit or delete** (ADMIN-7). The log is the accountability control over the ACL bypass in P-12 and is exportable as CSV. |
 
 ### 17. Quiz Generator Integration
 
@@ -778,3 +787,57 @@ Out of scope for the Fall 2026 pilot:
 11. **MCP server auth & scope** ([§18](#18-future-work)) — for the future MCP server: the remote-OAuth model, tool granularity, FERPA boundaries on agent-driven edits, and how plan-cap metering applies to agent tool calls.
 12. **Quiz publishing token model** ([QUIZ-4](#quiz-4-delegated-google-access)) — **Resolved.** The Quiz Generator is imported **in-process as a library** rather than run as a separate service ([§17](#17-quiz-generator-integration)), so there is no cross-service delegation: the monolith builds an authorized Forms/Drive client from the instructor's own connected-account token (EXP-4) and injects it into the library. No token ever leaves the monolith, and the Quiz Generator never stores instructor tokens. (Remaining dependency: EXP-4's connected-account flow must be built first.)
 13. **AI-generated infographic accuracy** ([IMG-4](#img-4-ai-generated-imagery-optional)) — how much to rely on generated diagrams/infographics given factual/text-rendering errors: default off, require user confirmation before display, and/or prefer search-grounded generation where the provider supports it.
+
+### 20. Administration, Operations & Moderation
+
+Operator-facing capabilities for running the platform: who is an admin, a read-mostly console for seeing who uses the system and what they have made, and the tightly-audited actions that touch a user's private data. These are functional requirements (below) whose operational how-to lives in the operator's guide ([ADMINISTRATION.md](ADMINISTRATION.md)); they build on soft delete ([§15](#15-data-models)), privacy/security ([§16](#16-privacy-security--compliance), esp. P-12/P-13), and ownership/role checks ([AUTH-5](#auth-5-profile--ownership)).
+
+The governing principle: **admin power is broad but never silent.** Admin reads bypass per-object ACLs, so every action that **exposes** a user's private content or credentials, **deletes** data, or **changes** an entity's settings is **explicitly confirmed and written to an immutable audit log** ([ADMIN-7](#admin-7-audit-log)).
+
+#### ADMIN-1 Admin identity & authorization
+
+- Admin status is an **email allowlist** (`ADMIN_EMAILS` — [TECH-4](#tech-4-server-configuration)), **not** a role or field on the account; there is deliberately **no in-app way to grant it**. The list is read on **every** request, so access changes take effect without a code deploy.
+- Every `/api/admin` route is gated by `requireAuth` + `requireAdmin`; the client menu and route guard are **cosmetic** — the allowlist is the real security boundary.
+- Admin reads **bypass per-object ACLs** ([P-4](#16-privacy-security--compliance)): an allowlisted account can read any user's projects, lectures, and seed material — so the list is kept minimal ([P-12](#16-privacy-security--compliance); FERPA — [P-1](#16-privacy-security--compliance)/[P-2](#16-privacy-security--compliance)).
+- **Admins moderate but are not moderated:** any moderation, settings, or deletion action ([ADMIN-4](#admin-4-moderation-actions)/[ADMIN-5](#admin-5-editing-any-entitys-settings)) targeting an allowlisted email is **refused** (`target_is_admin`) until that email is removed from the allowlist.
+
+#### ADMIN-2 Admin console
+
+A read-mostly console (`/app/admin`) answers "who is using this and what have they made," and carries the moderation surface.
+
+- **Secondary navigation** — every admin page shows a horizontal secondary nav bar, **just below the standard header**, linking the four top-level sections: **Users**, **Projects**, **Lectures**, and **Logs**.
+- **Site-wide directories**, each **paginated and sortable**: **Users** (email, handle, join date), **Projects** (title, owner, visibility, lecture count, timestamps), and **Lectures** (title, project, owner, effective visibility, slide count, timestamps). Private lectures are **always listed** ([ADMIN-3](#admin-3-viewing-user-content--seed-material)).
+- **Detail (drill-down) pages** for each **user** (plan, email-verification, locale, profile visibility, project/lecture counts, and the user's projects/lectures), **project** (owner + a table of its lectures), and **lecture** (project, owner, details, and a link to the live viewer `/d/:slug`).
+- **Object identity** — every user, project, and lecture **detail page shows the entity's database `_id`**, so an operator can correlate console records with direct database operations.
+- **Consistent linking** — across **all** admin pages, every **username** links to that user's detail page, every **project title** to its project detail page, and every **lecture title** to its lecture detail page.
+- **Consistent "view in product" affordance** — each detail page carries, in the same style, a link to that entity's **public/product view**: the **user** detail page links to the user's **public profile** ([SOC-4](#soc-4-user-profiles)), the **project** detail page to the **product project view**, and the **lecture** detail page to the **live viewer** (`/d/:slug`). Where the target is private, following it is confirmed and audited ([ADMIN-3](#admin-3-viewing-user-content--seed-material)).
+
+#### ADMIN-3 Viewing user content & seed material
+
+- An admin can open **any lecture** in the deck viewer (`/d/:slug`) and **any project** in the product view, **regardless of visibility**, read-only, on the allowlist's authority.
+- Admin project and lecture detail pages **surface the seed material** ([SEED-1](#seed-1-document-seeding)/[SEED-2](#seed-2-image-seeding)) — documents, seed text, and image captions — so an operator can see what fed generation.
+- **Privacy-infringing views are confirmed and audited** — opening a **private** lecture or a **private** project requires **explicit confirmation** and writes an audit-log entry ([ADMIN-7](#admin-7-audit-log)); routine viewing of already-public content is not logged.
+
+#### ADMIN-4 Moderation actions
+
+Every action here **asks for confirmation and writes an audit-log entry** ([ADMIN-7](#admin-7-audit-log)):
+
+- **Delete a project / lecture / user** — a **soft delete** ([P-10](#16-privacy-security--compliance)): the record is tombstoned and cascades to its children (a deleted project takes its lectures, slides, seed material, transcripts, and retained audio), recoverable during the retention window and purged by the same sweep ([P-11](#16-privacy-security--compliance)) as user-initiated deletion — **not** an immediate hard delete.
+- **Ban / unban an email** — a banned email can no longer sign in (password or OAuth) or register, and its sessions end immediately; content persists until deleted separately. **Unban** lifts it (also confirmed + audited).
+- **Reset a user's password** — sets a new password and signs the user out everywhere. Because the new secret is **revealed to the operator**, this is treated as privacy-infringing ([ADMIN-3](#admin-3-viewing-user-content--seed-material)/[P-12](#16-privacy-security--compliance)) — confirmed + audited; the app does not email it.
+
+#### ADMIN-5 Editing any entity's settings
+
+- An admin can **modify the settings of any user, project, or lecture** — e.g. a lecture's/project's visibility or generation settings, or a user's profile/account fields — even when not the owner.
+- Every such edit **requires explicit confirmation and is audited** ([ADMIN-7](#admin-7-audit-log)), recording **what changed**. (Billing state — plan tier — remains governed by [§5](#5-plans-billing--usage-limits).)
+
+#### ADMIN-6 Viewing soft-deleted content
+
+- Soft-deleted records are hidden from all normal reads ([P-10](#16-privacy-security--compliance)), but an admin can **view soft-deleted entities** (users, projects, lectures, and other owned records) in the console — for recovery or audit — until the retention sweep purges them ([P-11](#16-privacy-security--compliance)).
+- **Every access to soft-deleted content is audited** ([ADMIN-7](#admin-7-audit-log)).
+
+#### ADMIN-7 Audit log
+
+- An **append-only, immutable** log of admin actions that **change or expose** user data: private lecture/project views ([ADMIN-3](#admin-3-viewing-user-content--seed-material)), password resets, bans/unbans, deletes ([ADMIN-4](#admin-4-moderation-actions)), settings edits ([ADMIN-5](#admin-5-editing-any-entitys-settings)), and views of soft-deleted content ([ADMIN-6](#admin-6-viewing-soft-deleted-content)).
+- Each entry records the **acting admin** (id + email snapshot), a **namespaced action name** (e.g. `user.delete`, `deck.delete`, `project.private_view`), an optional **target** (type + id), optional action-specific **details**, and a **timestamp**.
+- Entries are written through one server module into a dedicated collection and **no API can edit or delete them**; every admin mutation endpoint must record itself. The `Logs` page ([ADMIN-2](#admin-2-admin-console)) lists them newest-first, paginated, with **CSV export** of the whole log ([P-13](#16-privacy-security--compliance)).
