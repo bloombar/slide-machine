@@ -110,14 +110,22 @@ export const buildConnectUrl = (
   return `${AUTH_ENDPOINT}?${params.toString()}`
 }
 
+/** The refresh token plus the scopes Google actually granted (which can be
+ * fewer than requested — the consent screen lets users untick permissions). */
+export interface ConnectTokens {
+  refreshToken: string
+  scope: string
+}
+
 /**
- * Exchanges the authorization code for tokens and returns the refresh token.
- * Throws a 401 if the exchange fails or Google returns no refresh token.
+ * Exchanges the authorization code for tokens and returns the refresh token
+ * together with the granted scope string. Throws a 401 if the exchange fails or
+ * Google returns no refresh token.
  */
 export const exchangeConnectCode = async (
   code: string,
   requestOrigin: string,
-): Promise<string> => {
+): Promise<ConnectTokens> => {
   const { id, secret } = requireConfigured()
   const client = new OAuth2Client({
     clientId: id,
@@ -127,7 +135,7 @@ export const exchangeConnectCode = async (
   try {
     const { tokens } = await client.getToken(code)
     if (!tokens.refresh_token) throw new Error('no refresh token')
-    return tokens.refresh_token
+    return { refreshToken: tokens.refresh_token, scope: tokens.scope ?? '' }
   } catch {
     throw new HttpError(
       401,
@@ -135,6 +143,23 @@ export const exchangeConnectCode = async (
       'Could not connect the Google account',
     )
   }
+}
+
+/**
+ * The scopes a connection must carry to browse and save to Drive: `drive.file`
+ * (create/save) and `drive.readonly` (list the folder tree). Google's granular
+ * consent lets a user grant sign-in but untick these, yielding a token that
+ * 403s on every Drive call — so the connect flow verifies they are present.
+ */
+const REQUIRED_CONNECT_SCOPES = [
+  'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/drive.readonly',
+]
+
+/** Whether the granted scope string carries the Drive access the app needs. */
+export const grantedDriveAccess = (scope: string): boolean => {
+  const granted = new Set(scope.split(' ').filter(Boolean))
+  return REQUIRED_CONNECT_SCOPES.every(s => granted.has(s))
 }
 
 /** An authorized OAuth2 client for the connected account, for API/library calls. */

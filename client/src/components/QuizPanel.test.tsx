@@ -626,4 +626,34 @@ describe('QuizPanel', () => {
       await screen.findByRole('button', { name: 'Copy quiz link' }),
     ).toBeInTheDocument()
   })
+
+  it('offers to reconnect when the Drive folders fail to load', async () => {
+    mockFetchRoutes({
+      'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
+      'quiz.driveFolders': () => ({ status: 500, body: {} }),
+    })
+    render(<QuizPanel deckId="d1" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Generate quiz' }))
+    // The picker surfaces the failure with a reconnect path, not a dead end.
+    expect(
+      await screen.findByText(/may not have granted Drive access/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Reconnect Google' }),
+    ).toBeInTheDocument()
+  })
+
+  it('explains when a connect returned without Drive access (drive_denied)', async () => {
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { href: 'http://localhost/d/x', search: '?connect=drive_denied' },
+    })
+    mockFetchRoutes({
+      'quiz.status': () => ({ status: 200, body: { googleConnected: false } }),
+    })
+    render(<QuizPanel deckId="d1" />)
+    expect(
+      await screen.findByText(/Drive access wasn.t allowed/i),
+    ).toBeInTheDocument()
+  })
 })

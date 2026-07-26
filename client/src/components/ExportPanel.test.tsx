@@ -160,4 +160,40 @@ describe('ExportPanel', () => {
       await screen.findByText(/could not load the export status/i),
     ).toBeInTheDocument()
   })
+
+  it('offers to reconnect when the Drive folders fail to load', async () => {
+    mockFetchRoutes({
+      'export.status': () => ({
+        status: 200,
+        body: { googleConnected: true, deckTitle: 'Bio' },
+      }),
+      'quiz.driveFolders': () => ({ status: 500, body: {} }),
+    })
+    render(<ExportPanel deckId="d1" />)
+    fireEvent.click(await screen.findByRole('radio', { name: /Save to Google Drive/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save PDF to Drive' }))
+    expect(
+      await screen.findByText(/may not have granted Drive access/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Reconnect Google' }),
+    ).toBeInTheDocument()
+  })
+
+  it('explains when a connect returned without Drive access (drive_denied)', async () => {
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { href: 'http://localhost/d/x', search: '?connect=drive_denied' },
+    })
+    mockFetchRoutes({
+      'export.status': () => ({
+        status: 200,
+        body: { googleConnected: false, deckTitle: 'Bio' },
+      }),
+    })
+    render(<ExportPanel deckId="d1" />)
+    expect(
+      await screen.findByText(/Drive access wasn.t allowed/i),
+    ).toBeInTheDocument()
+  })
 })

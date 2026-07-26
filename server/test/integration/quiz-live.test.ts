@@ -31,7 +31,19 @@ vi.mock('../../src/auth/google-connect', () => ({
     userId: state.userId,
     returnTo: 'http://localhost:5173/d/x',
   })),
-  exchangeConnectCode: vi.fn(async () => 'refresh-token-123'),
+  exchangeConnectCode: vi.fn(async () => ({
+    refreshToken: 'refresh-token-123',
+    scope:
+      'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly',
+  })),
+  // The real predicate: Drive access requires both drive.file and drive.readonly.
+  grantedDriveAccess: vi.fn((scope: string) => {
+    const g = new Set(scope.split(' '))
+    return (
+      g.has('https://www.googleapis.com/auth/drive.file') &&
+      g.has('https://www.googleapis.com/auth/drive.readonly')
+    )
+  }),
 }))
 vi.mock('../../src/lib/quiz-google', () => ({
   listDriveFoldersLive: vi.fn(async () => [{ id: 'f1', name: 'Quizzes' }]),
@@ -170,6 +182,32 @@ describe('quiz actions (live mode)', () => {
     )
     expect(user!.googleConnected).toBe(true)
     expect(user!.googleQuizRefreshToken).toBe('enc:refresh-token-123')
+  })
+
+  it('does not connect, and flags drive_denied, when Drive access is unticked', async () => {
+    // The user granted sign-in but unticked the Drive permission (Google's
+    // granular consent) — the token would 403 on every Drive call.
+    const { exchangeConnectCode } = await import(
+      '../../src/auth/google-connect'
+    )
+    vi.mocked(exchangeConnectCode).mockResolvedValueOnce({
+      refreshToken: 'identity-only',
+      scope: 'openid https://www.googleapis.com/auth/userinfo.email',
+    })
+    const res = await request(server).get(
+      '/api/auth/google/callback?code=abc&state=signed-state',
+    )
+    expect(res.status).toBe(302)
+    // Sent back with the flag so the tab can prompt a reconnect…
+    expect(res.headers.location).toBe(
+      'http://localhost:5173/d/x?connect=drive_denied',
+    )
+    // …and no half-connection is recorded.
+    const user = await UserModel.findById(adaId).select(
+      '+googleQuizRefreshToken',
+    )
+    expect(user!.googleConnected).toBeFalsy()
+    expect(user!.googleQuizRefreshToken).toBeFalsy()
   })
 
   it('a bad callback state redirects without storing anything', async () => {

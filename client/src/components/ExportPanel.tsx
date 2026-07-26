@@ -97,11 +97,13 @@ function FolderPicker({
   saving,
   onCancel,
   onChoose,
+  onReconnect,
 }: {
   formatLabel: string
   saving: boolean
   onCancel: () => void
   onChoose: (folder: DriveFolder) => void
+  onReconnect: () => void
 }) {
   const [path, setPath] = useState<DriveFolder[]>([
     { id: 'root', name: 'My Drive' },
@@ -127,7 +129,11 @@ function FolderPicker({
         setError(null)
       })
       .catch(() => {
-        if (!ignore) setError('Could not load your Drive folders')
+        if (!ignore) {
+          setError(
+            'Could not load your Drive folders. Your Google account may not have granted Drive access.',
+          )
+        }
       })
     return () => {
       ignore = true
@@ -215,7 +221,16 @@ function FolderPicker({
 
             <div className="max-h-44 min-h-[6rem] overflow-y-auto rounded-md border border-slate-200">
               {error ? (
-                <p className="p-3 text-sm text-rose-600">{error}</p>
+                <div className="p-3">
+                  <p className="text-sm text-rose-600">{error}</p>
+                  <button
+                    type="button"
+                    onClick={onReconnect}
+                    className="mt-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-slate-50"
+                  >
+                    Reconnect Google
+                  </button>
+                </div>
               ) : loading ? (
                 <p className="p-3 text-sm text-slate-500">Loading…</p>
               ) : folders.length === 0 ? (
@@ -331,6 +346,13 @@ export default function ExportPanel({ deckId }: Props) {
   const [destination, setDestination] = useState<Destination>('download')
   const [picking, setPicking] = useState(false)
   const [saved, setSaved] = useState<ExportToDriveResult | null>(null)
+  // Set when the user returned from a connect that did not grant Drive access
+  // (Google's granular consent — the Drive permission was unticked).
+  const [driveDenied] = useState(
+    () =>
+      new URLSearchParams(window.location.search).get('connect') ===
+      'drive_denied',
+  )
 
   useEffect(() => {
     dispatchAction<ExportStatus>('export.status', { deckId })
@@ -429,6 +451,14 @@ export default function ExportPanel({ deckId }: Props) {
       </div>
 
       {error && <p className="text-sm text-rose-600">{error}</p>}
+
+      {driveDenied && (
+        <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          Your Google account connected, but Drive access wasn’t allowed. When
+          you reconnect, be sure to tick the Drive permission so exports can be
+          saved.
+        </p>
+      )}
 
       {/* Format */}
       <fieldset className="flex flex-col gap-2">
@@ -547,6 +577,7 @@ export default function ExportPanel({ deckId }: Props) {
           saving={busy}
           onCancel={() => setPicking(false)}
           onChoose={saveToDrive}
+          onReconnect={connectGoogle}
         />
       )}
     </div>

@@ -56,11 +56,13 @@ type TypeCounts = Record<(typeof QUESTION_TYPE_FIELDS)[number]['key'], number>
 function FolderPicker({
   onCancel,
   onPublish,
+  onReconnect,
   publishing,
   hasTranscript,
 }: {
   onCancel: () => void
   onPublish: (folder: DriveFolder, options: QuizGenerationOptions) => void
+  onReconnect: () => void
   publishing: boolean
   hasTranscript: boolean
 }) {
@@ -161,7 +163,11 @@ function FolderPicker({
         setError(null)
       })
       .catch(() => {
-        if (!ignore) setError('Could not load your Drive folders')
+        if (!ignore) {
+          setError(
+            'Could not load your Drive folders. Your Google account may not have granted Drive access.',
+          )
+        }
       })
     return () => {
       ignore = true
@@ -253,7 +259,16 @@ function FolderPicker({
             {/* Finder body: the sub-folders of the current folder */}
             <div className="max-h-44 min-h-[6rem] overflow-y-auto rounded-md border border-slate-200">
               {error ? (
-                <p className="p-3 text-sm text-rose-600">{error}</p>
+                <div className="p-3">
+                  <p className="text-sm text-rose-600">{error}</p>
+                  <button
+                    type="button"
+                    onClick={onReconnect}
+                    className="mt-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-slate-50"
+                  >
+                    Reconnect Google
+                  </button>
+                </div>
               ) : loading ? (
                 <p className="p-3 text-sm text-slate-500">Loading…</p>
               ) : folders.length === 0 ? (
@@ -487,6 +502,13 @@ export default function QuizPanel({ deckId }: Props) {
   const [busy, setBusy] = useState(false)
   const [picking, setPicking] = useState(false)
   const [copied, setCopied] = useState(false)
+  // Set when the user returned from a connect that did not grant Drive access
+  // (Google's granular consent — the Drive permission was unticked).
+  const [driveDenied] = useState(
+    () =>
+      new URLSearchParams(window.location.search).get('connect') ===
+      'drive_denied',
+  )
 
   useEffect(() => {
     dispatchAction<QuizStatus>('quiz.status', { deckId })
@@ -578,6 +600,14 @@ export default function QuizPanel({ deckId }: Props) {
 
       {error && <p className="text-sm text-rose-600">{error}</p>}
 
+      {driveDenied && (
+        <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          Your Google account connected, but Drive access wasn’t allowed. Click{' '}
+          <span className="font-medium">Connect Google</span> again and be sure
+          to tick the Drive permission so quizzes can be saved.
+        </p>
+      )}
+
       {quiz ? (
         <div className="flex flex-col gap-2 rounded-md border border-slate-200 bg-slate-50 p-4">
           <span className="text-sm font-medium text-slate-700">
@@ -648,6 +678,7 @@ export default function QuizPanel({ deckId }: Props) {
           publishing={busy}
           onCancel={() => setPicking(false)}
           onPublish={publish}
+          onReconnect={connectGoogle}
           hasTranscript={hasTranscript}
         />
       )}
