@@ -25,45 +25,30 @@ const driveAccessToken = async (refreshToken: string): Promise<string> => {
   return token
 }
 
-/** The folders (navigable) and files (shown for context) inside a folder. */
-export interface DriveChildren {
-  folders: DriveFolder[]
-  files: DriveFolder[]
-}
-
 /**
- * The contents directly inside `parentId` ('root' = My Drive): sub-folders and
- * files, so the picker looks like the real Drive. Under `drive.file` this only
- * covers items the app created; with `drive.readonly` it is the user's whole
- * Drive. Folders first, then by name.
+ * The sub-folders directly inside `parentId` ('root' = My Drive). Under
+ * `drive.file` this is only folders the app created; with `drive.readonly` it
+ * is the user's whole Drive tree. Files are intentionally NOT listed — the
+ * picker chooses a destination folder. Sorted by name.
  */
-export const listDriveChildrenLive = async (
+export const listDriveFoldersLive = async (
   refreshToken: string,
   parentId = 'root',
-): Promise<DriveChildren> => {
+): Promise<DriveFolder[]> => {
   const token = await driveAccessToken(refreshToken)
   const params = new URLSearchParams({
-    q: `'${parentId}' in parents and trashed=false`,
-    fields: 'files(id,name,mimeType)',
+    q: `'${parentId}' in parents and mimeType='${FOLDER_MIME}' and trashed=false`,
+    fields: 'files(id,name)',
     pageSize: '200',
-    orderBy: 'folder,name',
+    orderBy: 'name',
     spaces: 'drive',
   })
   const res = await fetch(`${DRIVE_FILES}?${params}`, {
     headers: { Authorization: `Bearer ${token}` },
   })
-  if (!res.ok) throw new Error(`Drive list failed (${res.status})`)
-  const data = (await res.json()) as {
-    files?: { id: string; name: string; mimeType: string }[]
-  }
-  const folders: DriveFolder[] = []
-  const files: DriveFolder[] = []
-  for (const f of data.files ?? []) {
-    const entry = { id: f.id, name: f.name }
-    if (f.mimeType === FOLDER_MIME) folders.push(entry)
-    else files.push(entry)
-  }
-  return { folders, files }
+  if (!res.ok) throw new Error(`Drive folder list failed (${res.status})`)
+  const data = (await res.json()) as { files?: { id: string; name: string }[] }
+  return (data.files ?? []).map(f => ({ id: f.id, name: f.name }))
 }
 
 /**

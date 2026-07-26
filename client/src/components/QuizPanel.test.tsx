@@ -1,9 +1,9 @@
 /**
  * Unit tests for the Quiz tab (QUIZ-1..7): the connect → generate → folder
  * picker → shareable URL flow, the copy-to-clipboard button, creating a new
- * Drive folder, deleting a quiz, and the generation options — question count,
- * points, per-type counts (with the mismatch warning), email, transcript, and
- * AI instructions. The Google actions are stubbed at the fetch layer.
+ * Drive folder, deleting a quiz, and the generation options — question count
+ * (kept in sync with the per-type counts), points, email, transcript, and AI
+ * instructions. The Google actions are stubbed at the fetch layer.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
@@ -193,36 +193,11 @@ describe('QuizPanel', () => {
       await screen.findByRole('button', { name: 'Generate quiz' }),
     )
     await screen.findByRole('dialog', { name: 'Choose a Drive folder' })
-    expect(await screen.findByText(/this folder is empty/i)).toBeInTheDocument()
+    expect(await screen.findByText(/no sub-folders here/i)).toBeInTheDocument()
     // Save is never disabled: you can always save to the current folder
     expect(
       screen.getByRole('button', { name: 'Generate & save' }),
     ).toBeEnabled()
-  })
-
-  it('shows Drive files for context alongside folders', async () => {
-    mockFetchRoutes({
-      'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
-      'quiz.driveFolders': () => ({
-        status: 200,
-        body: {
-          folders: [{ id: 'folder-quizzes', name: 'Quizzes' }],
-          files: [{ id: 'file-1', name: 'Syllabus.pdf' }],
-        },
-      }),
-    })
-    render(<QuizPanel deckId="d1" />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Generate quiz' }),
-    )
-    // The folder is a navigable button; the file is plain context (not a button)
-    expect(
-      await screen.findByRole('button', { name: 'Quizzes' }),
-    ).toBeInTheDocument()
-    expect(screen.getByText('Syllabus.pdf')).toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: 'Syllabus.pdf' }),
-    ).not.toBeInTheDocument()
   })
 
   it('surfaces an error when the status fails to load', async () => {
@@ -515,9 +490,10 @@ describe('QuizPanel', () => {
     fireEvent.change(screen.getByLabelText('Short answer'), {
       target: { value: '3' },
     })
-    fireEvent.change(screen.getByLabelText('AI instructions (optional)'), {
-      target: { value: 'focus on the water cycle' },
-    })
+    fireEvent.change(
+      screen.getByLabelText(/additional instructions for the ai/i),
+      { target: { value: 'focus on the water cycle' } },
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Generate & save' }))
     await waitFor(() =>
       expect(published).toMatchObject({
@@ -530,21 +506,38 @@ describe('QuizPanel', () => {
     )
   })
 
-  it('warns when the per-type counts do not match the question count', async () => {
+  it('keeps the question count in sync with the per-type counts', async () => {
+    let published: { questionCount?: number; typeCounts?: Record<string, number> } =
+      {}
     mockFetchRoutes({
       'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
       'quiz.driveFolders': () => ({ status: 200, body: { folders: [] } }),
+      'quiz.publish': init => {
+        published = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: { formUrl: FORM_URL, publishedAt: '2026-07-20T00:00:00.000Z' },
+        }
+      },
     })
     render(<QuizPanel deckId="d1" />)
     fireEvent.click(
       await screen.findByRole('button', { name: 'Generate quiz' }),
     )
-    // Default count is 5; set the types to sum to 2
     fireEvent.click(screen.getByRole('button', { name: 'Advanced settings' }))
-    fireEvent.change(screen.getByLabelText('Single-choice (MCQ)'), {
-      target: { value: '2' },
+    // Default is 5 single-choice; add 3 short-answer → total becomes 8
+    fireEvent.change(screen.getByLabelText('Short answer'), {
+      target: { value: '3' },
     })
-    expect(await screen.findByText(/add up to 2, not 5/i)).toBeInTheDocument()
+    // The "Number of questions" field reflects the new sum
+    expect(screen.getByLabelText('Number of questions')).toHaveValue(8)
+    fireEvent.click(screen.getByRole('button', { name: 'Generate & save' }))
+    await waitFor(() =>
+      expect(published).toMatchObject({
+        questionCount: 8,
+        typeCounts: { single_choice: 5, short_text: 3 },
+      }),
+    )
   })
 
   it('deletes an existing quiz and returns to the generate state', async () => {

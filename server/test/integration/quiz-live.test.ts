@@ -34,10 +34,7 @@ vi.mock('../../src/auth/google-connect', () => ({
   exchangeConnectCode: vi.fn(async () => 'refresh-token-123'),
 }))
 vi.mock('../../src/lib/quiz-google', () => ({
-  listDriveChildrenLive: vi.fn(async () => ({
-    folders: [{ id: 'f1', name: 'Quizzes' }],
-    files: [{ id: 'd1', name: 'Notes.pdf' }],
-  })),
+  listDriveFoldersLive: vi.fn(async () => [{ id: 'f1', name: 'Quizzes' }]),
   createDriveFolderLive: vi.fn(
     async (_t: string, name: string, _parentId?: string) => ({
       id: 'live-folder-1',

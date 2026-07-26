@@ -18,7 +18,6 @@ import {
   ChevronRight,
   Copy,
   ExternalLink,
-  FileText,
   Folder,
   FolderPlus,
   Trash2,
@@ -71,39 +70,46 @@ function FolderPicker({
     { id: 'root', name: 'My Drive' },
   ])
   const [folders, setFolders] = useState<DriveFolder[]>([])
-  const [files, setFiles] = useState<DriveFolder[]>([])
   const [loadedFor, setLoadedFor] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [newFolderName, setNewFolderName] = useState('')
   const [creatingNew, setCreatingNew] = useState(false)
   const [creating, setCreating] = useState(false)
 
-  // Generation options (QUIZ-5/QUIZ-7). Basic: count + points. Advanced:
-  // require email, transcript, per-type counts, and free-text AI instructions.
-  const [questionCount, setQuestionCount] = useState(5)
+  // Generation options (QUIZ-5/QUIZ-7). The per-type counts are the source of
+  // truth; "Number of questions" is simply their sum, defaulting to all
+  // single-choice, so the two can never disagree.
   const [totalPoints, setTotalPoints] = useState('')
   const [requireEmail, setRequireEmail] = useState(true)
   const [includeTranscript, setIncludeTranscript] = useState(false)
   const [advanced, setAdvanced] = useState(false)
   const [types, setTypes] = useState<TypeCounts>({
-    single_choice: 0,
+    single_choice: 5,
     multiple_choice: 0,
     short_text: 0,
     long_text: 0,
   })
   const [customInstructions, setCustomInstructions] = useState('')
 
-  const typeTotal = Object.values(types).reduce((sum, n) => sum + n, 0)
-  // Per-type counts only take effect when Advanced is open and any are set.
-  const typesUsed = advanced && typeTotal > 0
-  const mismatch = typesUsed && typeTotal !== questionCount
+  const questionCount = Object.values(types).reduce((sum, n) => sum + n, 0)
+
+  // Editing "Number of questions" fills the difference with single-choice, so
+  // the total always matches the per-type counts.
+  const setQuestionCount = (n: number) =>
+    setTypes(t => ({
+      ...t,
+      single_choice: Math.max(
+        0,
+        n - (t.multiple_choice + t.short_text + t.long_text),
+      ),
+    }))
 
   const buildOptions = (): QuizGenerationOptions => ({
     questionCount,
     totalPoints: totalPoints ? Number(totalPoints) : undefined,
     requireEmail,
     includeTranscript,
-    typeCounts: typesUsed ? types : undefined,
+    typeCounts: types,
     customInstructions: customInstructions.trim() || undefined,
   })
 
@@ -115,14 +121,12 @@ function FolderPicker({
   // synchronous reset (and no flash of the previous folder's contents).
   useEffect(() => {
     let ignore = false
-    dispatchAction<{ folders: DriveFolder[]; files: DriveFolder[] }>(
-      'quiz.driveFolders',
-      { parentId: current.id },
-    )
+    dispatchAction<{ folders: DriveFolder[] }>('quiz.driveFolders', {
+      parentId: current.id,
+    })
       .then(r => {
         if (ignore) return
         setFolders(r.folders)
-        setFiles(r.files ?? [])
         setLoadedFor(current.id)
         setError(null)
       })
@@ -216,16 +220,16 @@ function FolderPicker({
               ))}
             </nav>
 
-            {/* Finder body: sub-folders (click to open) and files (context) */}
+            {/* Finder body: the sub-folders of the current folder */}
             <div className="max-h-44 min-h-[6rem] overflow-y-auto rounded-md border border-slate-200">
               {error ? (
                 <p className="p-3 text-sm text-rose-600">{error}</p>
               ) : loading ? (
                 <p className="p-3 text-sm text-slate-500">Loading…</p>
-              ) : folders.length === 0 && files.length === 0 ? (
+              ) : folders.length === 0 ? (
                 <p className="p-3 text-sm text-slate-400">
-                  This folder is empty. Save the quiz here, or make a new folder
-                  below.
+                  No sub-folders here. Save the quiz into this folder, or make a
+                  new one below.
                 </p>
               ) : (
                 <ul className="divide-y divide-slate-100">
@@ -246,16 +250,6 @@ function FolderPicker({
                           aria-hidden
                         />
                       </button>
-                    </li>
-                  ))}
-                  {/* Files are shown for context only — you save into folders */}
-                  {files.map(f => (
-                    <li
-                      key={f.id}
-                      className="flex items-center gap-2 px-3 py-2 text-sm text-slate-400"
-                    >
-                      <FileText className="h-4 w-4 shrink-0" aria-hidden />
-                      <span className="flex-1 truncate">{f.name}</span>
                     </li>
                   ))}
                 </ul>
@@ -371,8 +365,8 @@ function FolderPicker({
                     <span>
                       Include the spoken transcript
                       <span className="block text-xs text-slate-500">
-                        Draw questions from what you said aloud too, not just
-                        the slides.
+                        Base questions on the full lecture transcript, not only
+                        the slide text.
                       </span>
                     </span>
                   </label>
@@ -380,7 +374,7 @@ function FolderPicker({
 
                 <fieldset>
                   <legend className="text-sm text-slate-700">
-                    Question types (leave blank to let the AI decide)
+                    Question types
                   </legend>
                   <div className="mt-1 grid grid-cols-2 gap-2">
                     {QUESTION_TYPE_FIELDS.map(({ key, label }) => (
@@ -407,17 +401,18 @@ function FolderPicker({
                       </label>
                     ))}
                   </div>
-                  {mismatch && (
-                    <p className="mt-1 text-xs text-amber-600">
-                      The type counts add up to {typeTotal}, not {questionCount}
-                      . The quiz will have {typeTotal} question
-                      {typeTotal === 1 ? '' : 's'}.
-                    </p>
-                  )}
+                  <p className="mt-1 text-xs text-slate-500">
+                    The number of questions above follows this breakdown.
+                  </p>
                 </fieldset>
 
                 <label className="text-sm text-slate-700">
-                  AI instructions (optional)
+                  Additional instructions for the AI
+                  <span className="block text-xs text-slate-500">
+                    Tell the AI how to write the quiz — e.g. focus on a topic,
+                    skip a section, set the difficulty, or match a question
+                    style.
+                  </span>
                   <textarea
                     value={customInstructions}
                     onChange={e => setCustomInstructions(e.target.value)}

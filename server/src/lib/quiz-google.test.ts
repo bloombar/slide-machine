@@ -18,13 +18,11 @@ vi.mock('../auth/google-connect', () => ({
 }))
 
 import {
-  listDriveChildrenLive,
+  listDriveFoldersLive,
   createDriveFolderLive,
   publishQuizLive,
   deleteQuizLive,
 } from './quiz-google'
-
-const FOLDER_MIME = 'application/vnd.google-apps.folder'
 
 const def: QuizDefinition = {
   title: 'Photosynthesis',
@@ -41,34 +39,30 @@ const def: QuizDefinition = {
 beforeEach(() => createForm.mockReset())
 
 describe('quiz-google (live)', () => {
-  it('splits the parent contents into folders and files', async () => {
+  it('lists the sub-folders inside the given parent (folders only)', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
       json: async () => ({
         files: [
-          { id: 'f1', name: 'Quizzes', mimeType: FOLDER_MIME },
-          { id: 'f2', name: 'Exit Tickets', mimeType: FOLDER_MIME },
-          { id: 'd1', name: 'Notes.pdf', mimeType: 'application/pdf' },
+          { id: 'f1', name: 'Quizzes' },
+          { id: 'f2', name: 'Exit Tickets' },
         ],
       }),
     })
     vi.stubGlobal('fetch', fetchMock)
     try {
-      const { folders, files } = await listDriveChildrenLive(
-        'refresh-tok',
-        'parent-1',
-      )
+      const folders = await listDriveFoldersLive('refresh-tok', 'parent-1')
       expect(folders).toEqual([
         { id: 'f1', name: 'Quizzes' },
         { id: 'f2', name: 'Exit Tickets' },
       ])
-      expect(files).toEqual([{ id: 'd1', name: 'Notes.pdf' }])
-      // The query scopes to that parent, with an access token.
+      // The query scopes to that parent and to folders, with an access token.
       const [url, init] = fetchMock.mock.calls[0]!
       const q = decodeURIComponent(String(url)).replace(/\+/g, ' ')
       expect(String(url)).toContain('/drive/v3/files')
       expect(q).toContain("'parent-1' in parents")
+      expect(q).toContain('folder')
       expect(init.headers.Authorization).toBe('Bearer access-refresh-tok')
     } finally {
       vi.unstubAllGlobals()
@@ -81,10 +75,7 @@ describe('quiz-google (live)', () => {
       .mockResolvedValue({ ok: true, status: 200, json: async () => ({}) })
     vi.stubGlobal('fetch', fetchMock)
     try {
-      expect(await listDriveChildrenLive('t')).toEqual({
-        folders: [],
-        files: [],
-      })
+      expect(await listDriveFoldersLive('t')).toEqual([])
       const q = decodeURIComponent(String(fetchMock.mock.calls[0]![0])).replace(
         /\+/g,
         ' ',
@@ -95,14 +86,14 @@ describe('quiz-google (live)', () => {
     }
   })
 
-  it('throws when the Drive list request fails', async () => {
+  it('throws when the Drive folder list request fails', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: false, status: 500 }),
     )
     try {
-      await expect(listDriveChildrenLive('t')).rejects.toThrow(
-        /Drive list failed \(500\)/,
+      await expect(listDriveFoldersLive('t')).rejects.toThrow(
+        /folder list failed \(500\)/,
       )
     } finally {
       vi.unstubAllGlobals()
