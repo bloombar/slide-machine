@@ -503,12 +503,27 @@ export default function QuizPanel({ deckId }: Props) {
   const [picking, setPicking] = useState(false)
   const [copied, setCopied] = useState(false)
   // Set when the user returned from a connect that did not grant Drive access
-  // (Google's granular consent — the Drive permission was unticked).
-  const [driveDenied] = useState(
+  // (Google's granular consent — the Drive permission was unticked). A one-shot
+  // signal: the flag is stripped from the URL so a refresh (or a later
+  // successful reconnect) doesn't keep showing the banner.
+  const [driveDenied, setDriveDenied] = useState(
     () =>
       new URLSearchParams(window.location.search).get('connect') ===
       'drive_denied',
   )
+  useEffect(() => {
+    if (!driveDenied) return
+    try {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('connect')
+      window.history.replaceState(window.history.state, '', url)
+    } catch {
+      // replaceState can throw in sandboxed/odd-origin contexts; the banner
+      // still works, it just won't be stripped from the address bar.
+    }
+    // Run once on mount; driveDenied is only ever set from the URL.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     dispatchAction<QuizStatus>('quiz.status', { deckId })
@@ -528,6 +543,9 @@ export default function QuizPanel({ deckId }: Props) {
     // page load, so we signal the tab via a URL param (router state is lost).
     const returnTo = new URL(window.location.href)
     returnTo.searchParams.set('settings', 'quiz')
+    // Don't carry a prior drive-denied flag back, or a SUCCESSFUL reconnect
+    // would return to a URL that still shows the banner.
+    returnTo.searchParams.delete('connect')
     dispatchAction<QuizConnectResult>('quiz.connectGoogle', {
       returnTo: returnTo.toString(),
     })
@@ -537,6 +555,7 @@ export default function QuizPanel({ deckId }: Props) {
           window.location.href = res.url
         } else {
           setConnected(true)
+          setDriveDenied(false)
           setBusy(false)
         }
       })

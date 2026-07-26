@@ -76,7 +76,9 @@ const base64ToBlob = (base64: string, mimeType: string): Blob => {
 
 /** Triggers a browser download of the file. */
 const saveToDisk = (file: ExportDownload): void => {
-  const url = URL.createObjectURL(base64ToBlob(file.contentBase64, file.mimeType))
+  const url = URL.createObjectURL(
+    base64ToBlob(file.contentBase64, file.mimeType),
+  )
   const link = document.createElement('a')
   link.href = url
   link.download = file.fileName
@@ -347,12 +349,27 @@ export default function ExportPanel({ deckId }: Props) {
   const [picking, setPicking] = useState(false)
   const [saved, setSaved] = useState<ExportToDriveResult | null>(null)
   // Set when the user returned from a connect that did not grant Drive access
-  // (Google's granular consent — the Drive permission was unticked).
-  const [driveDenied] = useState(
+  // (Google's granular consent — the Drive permission was unticked). A one-shot
+  // signal: the flag is stripped from the URL so a refresh (or a later
+  // successful reconnect) doesn't keep showing the banner.
+  const [driveDenied, setDriveDenied] = useState(
     () =>
       new URLSearchParams(window.location.search).get('connect') ===
       'drive_denied',
   )
+  useEffect(() => {
+    if (!driveDenied) return
+    try {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('connect')
+      window.history.replaceState(window.history.state, '', url)
+    } catch {
+      // replaceState can throw in sandboxed/odd-origin contexts; the banner
+      // still works, it just won't be stripped from the address bar.
+    }
+    // Run once on mount; driveDenied is only ever set from the URL.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     dispatchAction<ExportStatus>('export.status', { deckId })
@@ -375,6 +392,9 @@ export default function ExportPanel({ deckId }: Props) {
     // load, so signal the tab via a URL param — router state is lost).
     const returnTo = new URL(window.location.href)
     returnTo.searchParams.set('settings', 'export')
+    // Don't carry a prior drive-denied flag back, or a SUCCESSFUL reconnect
+    // would return to a URL that still shows the banner.
+    returnTo.searchParams.delete('connect')
     dispatchAction<QuizConnectResult>('quiz.connectGoogle', {
       returnTo: returnTo.toString(),
     })
@@ -383,6 +403,7 @@ export default function ExportPanel({ deckId }: Props) {
           window.location.href = res.url
         } else {
           setConnected(true)
+          setDriveDenied(false)
           setBusy(false)
         }
       })
@@ -483,7 +504,10 @@ export default function ExportPanel({ deckId }: Props) {
                 checked={format === f.id}
                 onChange={() => setFormat(f.id)}
               />
-              <Icon className="mt-0.5 h-5 w-5 shrink-0 text-indigo-500" aria-hidden />
+              <Icon
+                className="mt-0.5 h-5 w-5 shrink-0 text-indigo-500"
+                aria-hidden
+              />
               <span className="min-w-0">
                 <span className="block text-sm font-medium text-slate-900">
                   {f.label}

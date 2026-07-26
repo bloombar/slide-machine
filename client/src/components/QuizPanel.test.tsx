@@ -633,7 +633,9 @@ describe('QuizPanel', () => {
       'quiz.driveFolders': () => ({ status: 500, body: {} }),
     })
     render(<QuizPanel deckId="d1" />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Generate quiz' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate quiz' }),
+    )
     // The picker surfaces the failure with a reconnect path, not a dead end.
     expect(
       await screen.findByText(/may not have granted Drive access/i),
@@ -655,5 +657,31 @@ describe('QuizPanel', () => {
     expect(
       await screen.findByText(/Drive access wasn.t allowed/i),
     ).toBeInTheDocument()
+  })
+
+  it('does not carry the drive_denied flag into the reconnect return URL', async () => {
+    // Reconnecting from a drive_denied URL must return to a CLEAN url, so a
+    // successful reconnect doesn't land back on the banner.
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: {
+        href: 'http://localhost/d/x?connect=drive_denied',
+        search: '?connect=drive_denied',
+      },
+    })
+    let returnTo = ''
+    mockFetchRoutes({
+      'quiz.status': () => ({ status: 200, body: { googleConnected: false } }),
+      'quiz.connectGoogle': init => {
+        returnTo = JSON.parse(String(init?.body)).returnTo
+        return { status: 200, body: { status: 'redirect', url: 'https://g/x' } }
+      },
+    })
+    render(<QuizPanel deckId="d1" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Connect Google' }),
+    )
+    await waitFor(() => expect(returnTo).toContain('settings=quiz'))
+    expect(returnTo).not.toContain('connect=drive_denied')
   })
 })
