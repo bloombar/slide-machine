@@ -132,8 +132,19 @@ const drawSlide = (
 
   if (slide.title) {
     const size = 24
-    for (const line of wrapLines(slide.title, fonts.bold, size, CONTENT_WIDTH)) {
-      page.drawText(line, { x: MARGIN, y: y - size, size, font: fonts.bold, color: INK })
+    for (const line of wrapLines(
+      slide.title,
+      fonts.bold,
+      size,
+      CONTENT_WIDTH,
+    )) {
+      page.drawText(line, {
+        x: MARGIN,
+        y: y - size,
+        size,
+        font: fonts.bold,
+        color: INK,
+      })
       y -= size + 6
     }
     y -= 10
@@ -158,11 +169,22 @@ const drawSlide = (
 
   const bodySize = 14
   const drawParagraph = (text: string, prefix = '') => {
-    const lines = wrapLines(text, fonts.regular, bodySize, textWidth - (prefix ? 16 : 0))
+    const lines = wrapLines(
+      text,
+      fonts.regular,
+      bodySize,
+      textWidth - (prefix ? 16 : 0),
+    )
     lines.forEach((line, i) => {
       const label = i === 0 ? prefix : ''
       if (label) {
-        page.drawText(label, { x: MARGIN, y: y - bodySize, size: bodySize, font: fonts.bold, color: ACCENT })
+        page.drawText(label, {
+          x: MARGIN,
+          y: y - bodySize,
+          size: bodySize,
+          font: fonts.bold,
+          color: ACCENT,
+        })
       }
       page.drawText(line, {
         x: MARGIN + (prefix ? 16 : 0),
@@ -191,7 +213,13 @@ const drawSlide = (
   let fy = MARGIN + footerLines.length * 12
   for (const line of footerLines) {
     for (const wrapped of wrapLines(line, fonts.regular, 9, CONTENT_WIDTH)) {
-      page.drawText(wrapped, { x: MARGIN, y: fy, size: 9, font: fonts.regular, color: MUTED })
+      page.drawText(wrapped, {
+        x: MARGIN,
+        y: fy,
+        size: 9,
+        font: fonts.regular,
+        color: MUTED,
+      })
       fy -= 11
     }
   }
@@ -223,7 +251,13 @@ export const deckToPdf = async (deck: ExportDeck): Promise<Uint8Array> => {
     deck.slides.map(slide => embedImage(doc, slide.imageRef)),
   )
   deck.slides.forEach((slide, i) => {
-    drawSlide(doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]), slide, i, fonts, images[i])
+    drawSlide(
+      doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]),
+      slide,
+      i,
+      fonts,
+      images[i],
+    )
   })
 
   return doc.save()

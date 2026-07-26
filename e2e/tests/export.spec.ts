@@ -46,7 +46,9 @@ test('export a lecture to PDF download and Google Slides in Drive', async ({
     dialog.getByText(/always saved to your Google Drive/i),
   ).toBeVisible()
   await dialog.getByRole('button', { name: 'Connect Google' }).click()
-  await dialog.getByRole('button', { name: 'Save Google Slides to Drive' }).click()
+  await dialog
+    .getByRole('button', { name: 'Save Google Slides to Drive' })
+    .click()
 
   // Create a destination folder in the picker, then save into it
   const picker = page.getByRole('dialog', { name: 'Choose a Drive folder' })

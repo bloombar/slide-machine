@@ -4,7 +4,15 @@
  * this exercises the real action wiring — connection gating and dispatch to the
  * live service — without contacting Google. Direct downloads still run for real.
  */
-import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest'
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  afterAll,
+  beforeEach,
+} from 'vitest'
 import request from 'supertest'
 
 vi.mock('../../src/config/env', async importActual => {
@@ -109,9 +117,9 @@ describe('export actions (live mode)', () => {
   it('downloads a PDF for real even in live mode (no Google contact)', async () => {
     const res = await act(ada, 'export.download', { deckId, format: 'pdf' })
     expect(res.status).toBe(200)
-    expect(Buffer.from(res.body.contentBase64, 'base64').subarray(0, 5).toString()).toBe(
-      '%PDF-',
-    )
+    expect(
+      Buffer.from(res.body.contentBase64, 'base64').subarray(0, 5).toString(),
+    ).toBe('%PDF-')
     expect(uploadFileToDriveLive).not.toHaveBeenCalled()
   })
 

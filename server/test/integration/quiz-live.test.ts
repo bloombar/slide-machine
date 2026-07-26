@@ -187,9 +187,8 @@ describe('quiz actions (live mode)', () => {
   it('does not connect, and flags drive_denied, when Drive access is unticked', async () => {
     // The user granted sign-in but unticked the Drive permission (Google's
     // granular consent) — the token would 403 on every Drive call.
-    const { exchangeConnectCode } = await import(
-      '../../src/auth/google-connect'
-    )
+    const { exchangeConnectCode } =
+      await import('../../src/auth/google-connect')
     vi.mocked(exchangeConnectCode).mockResolvedValueOnce({
       refreshToken: 'identity-only',
       scope: 'openid https://www.googleapis.com/auth/userinfo.email',

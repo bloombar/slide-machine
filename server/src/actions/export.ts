@@ -59,7 +59,9 @@ const isConnected = (user: {
   googleConnected?: boolean
   googleQuizRefreshToken?: string
 }): boolean =>
-  isLive() ? Boolean(user.googleQuizRefreshToken) : Boolean(user.googleConnected)
+  isLive()
+    ? Boolean(user.googleQuizRefreshToken)
+    : Boolean(user.googleConnected)
 
 /** A filesystem-safe base name derived from the deck title. */
 const slugifyTitle = (title: string): string =>
@@ -178,7 +180,9 @@ export const exportToDrive = defineAction<
           ? `https://docs.google.com/presentation/d/mock-${base}/edit`
           : `https://drive.google.com/file/d/mock-${base}/view`
       const fileName =
-        input.format === 'google-slides' ? deck.title : `${base}.${input.format}`
+        input.format === 'google-slides'
+          ? deck.title
+          : `${base}.${input.format}`
       return {
         fileName,
         fileUrl,

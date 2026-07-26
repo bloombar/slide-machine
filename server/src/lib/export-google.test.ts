@@ -66,13 +66,16 @@ describe('uploadFileToDriveLive', () => {
     vi.stubGlobal('fetch', fetchMock)
     await uploadFileToDriveLive('t', {
       name: 'Deck',
-      mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      mimeType:
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
       data: new Uint8Array([1]),
       convertTo: 'application/vnd.google-apps.presentation',
     })
     const sent = await (fetchMock.mock.calls[0]![1].body as Blob).text()
     // Metadata declares the DESTINATION (converted) type…
-    expect(sent).toContain('"mimeType":"application/vnd.google-apps.presentation"')
+    expect(sent).toContain(
+      '"mimeType":"application/vnd.google-apps.presentation"',
+    )
     // …while the media part still carries the source .pptx type.
     expect(sent).toContain('presentationml.presentation')
   })
@@ -95,7 +98,10 @@ describe('uploadFileToDriveLive', () => {
   })
 
   it('throws when the upload fails', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 500 }),
+    )
     await expect(
       uploadFileToDriveLive('t', {
         name: 'd.pdf',
@@ -129,7 +135,9 @@ describe('createGoogleSlidesLive', () => {
     expect(String(url)).toContain('uploadType=multipart')
     const sent = await (init.body as Blob).text()
     expect(sent).toContain('"name":"Photosynthesis"')
-    expect(sent).toContain('"mimeType":"application/vnd.google-apps.presentation"')
+    expect(sent).toContain(
+      '"mimeType":"application/vnd.google-apps.presentation"',
+    )
     expect(sent).toContain('"parents":["folder-1"]')
   })
 
@@ -146,7 +154,10 @@ describe('createGoogleSlidesLive', () => {
   })
 
   it('throws when the Drive conversion upload fails', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 403 }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 403 }),
+    )
     await expect(createGoogleSlidesLive('t', deck, 'root')).rejects.toThrow(
       /Drive upload failed \(403\)/,
     )

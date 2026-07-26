@@ -48,7 +48,9 @@ const compact = <T extends Record<string, unknown>>(obj: T): Partial<T> => {
 
 /** Maps a slide's image (reference, caption, and TASL attribution) into the
  * export shape, or undefined when the slide carries no image. */
-const imageBlock = (slide: ExportSlide): Record<string, unknown> | undefined => {
+const imageBlock = (
+  slide: ExportSlide,
+): Record<string, unknown> | undefined => {
   const attribution = slide.attribution
     ? compact({ ...slide.attribution })
     : undefined

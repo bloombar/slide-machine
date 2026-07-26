@@ -34,7 +34,10 @@ describe('ExportPanel', () => {
         return el
       })
     mockFetchRoutes({
-      'export.status': () => ({ status: 200, body: { googleConnected: false, deckTitle: 'Bio' } }),
+      'export.status': () => ({
+        status: 200,
+        body: { googleConnected: false, deckTitle: 'Bio' },
+      }),
       'export.download': init => {
         downloadBody = JSON.parse(String(init?.body))
         return {
@@ -58,7 +61,10 @@ describe('ExportPanel', () => {
 
   it('switches the format to YAML and updates the button label', async () => {
     mockFetchRoutes({
-      'export.status': () => ({ status: 200, body: { googleConnected: false, deckTitle: 'Bio' } }),
+      'export.status': () => ({
+        status: 200,
+        body: { googleConnected: false, deckTitle: 'Bio' },
+      }),
     })
     render(<ExportPanel deckId="d1" />)
     fireEvent.click(await screen.findByRole('radio', { name: /YAML/ }))
@@ -69,7 +75,10 @@ describe('ExportPanel', () => {
 
   it('forces Drive for Google Slides and hides the destination choice', async () => {
     mockFetchRoutes({
-      'export.status': () => ({ status: 200, body: { googleConnected: true, deckTitle: 'Bio' } }),
+      'export.status': () => ({
+        status: 200,
+        body: { googleConnected: true, deckTitle: 'Bio' },
+      }),
     })
     render(<ExportPanel deckId="d1" />)
     fireEvent.click(await screen.findByRole('radio', { name: /Google Slides/ }))
@@ -86,7 +95,10 @@ describe('ExportPanel', () => {
   it('connects Google (returning to the Export tab) before saving to Drive', async () => {
     let connectBody: { returnTo?: string } = {}
     mockFetchRoutes({
-      'export.status': () => ({ status: 200, body: { googleConnected: false, deckTitle: 'Bio' } }),
+      'export.status': () => ({
+        status: 200,
+        body: { googleConnected: false, deckTitle: 'Bio' },
+      }),
       'quiz.connectGoogle': init => {
         connectBody = JSON.parse(String(init?.body))
         return { status: 200, body: { status: 'connected' } }
@@ -98,7 +110,9 @@ describe('ExportPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Connect Google' }))
     // Mock connect flips to connected; the button now offers the save.
     expect(
-      await screen.findByRole('button', { name: 'Save Google Slides to Drive' }),
+      await screen.findByRole('button', {
+        name: 'Save Google Slides to Drive',
+      }),
     ).toBeInTheDocument()
     expect(connectBody.returnTo).toContain('settings=export')
   })
@@ -106,9 +120,15 @@ describe('ExportPanel', () => {
   it('redirects to Google consent in live mode', async () => {
     const consent = 'https://accounts.google.com/o/oauth2/v2/auth?x=1'
     const loc = { href: 'http://localhost:5173/d/x' }
-    Object.defineProperty(window, 'location', { configurable: true, value: loc })
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: loc,
+    })
     mockFetchRoutes({
-      'export.status': () => ({ status: 200, body: { googleConnected: false, deckTitle: 'Bio' } }),
+      'export.status': () => ({
+        status: 200,
+        body: { googleConnected: false, deckTitle: 'Bio' },
+      }),
       'quiz.connectGoogle': () => ({
         status: 200,
         body: { status: 'redirect', url: consent },
@@ -123,7 +143,10 @@ describe('ExportPanel', () => {
   it('saves to a chosen Drive folder and shows the resulting link', async () => {
     let driveBody: { format?: string; driveFolderId?: string } = {}
     mockFetchRoutes({
-      'export.status': () => ({ status: 200, body: { googleConnected: true, deckTitle: 'Bio' } }),
+      'export.status': () => ({
+        status: 200,
+        body: { googleConnected: true, deckTitle: 'Bio' },
+      }),
       'quiz.driveFolders': () => ({
         status: 200,
         body: { folders: [{ id: 'folder-1', name: 'Lectures' }] },
@@ -142,13 +165,18 @@ describe('ExportPanel', () => {
     })
     render(<ExportPanel deckId="d1" />)
     // Switch to "Save to Google Drive" and open the picker.
-    fireEvent.click(await screen.findByRole('radio', { name: /Save to Google Drive/ }))
+    fireEvent.click(
+      await screen.findByRole('radio', { name: /Save to Google Drive/ }),
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Save PDF to Drive' }))
     await screen.findByRole('dialog', { name: 'Choose a Drive folder' })
     // Save into the current (root) folder.
     fireEvent.click(screen.getByRole('button', { name: 'Save here' }))
     const link = await screen.findByRole('link', { name: /bio\.pdf/ })
-    expect(link).toHaveAttribute('href', 'https://drive.google.com/file/d/x/view')
+    expect(link).toHaveAttribute(
+      'href',
+      'https://drive.google.com/file/d/x/view',
+    )
     expect(screen.getByText(/Saved to My Drive/)).toBeInTheDocument()
     expect(driveBody).toMatchObject({ format: 'pdf', driveFolderId: 'root' })
   })
@@ -170,7 +198,9 @@ describe('ExportPanel', () => {
       'quiz.driveFolders': () => ({ status: 500, body: {} }),
     })
     render(<ExportPanel deckId="d1" />)
-    fireEvent.click(await screen.findByRole('radio', { name: /Save to Google Drive/ }))
+    fireEvent.click(
+      await screen.findByRole('radio', { name: /Save to Google Drive/ }),
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Save PDF to Drive' }))
     expect(
       await screen.findByText(/may not have granted Drive access/i),
