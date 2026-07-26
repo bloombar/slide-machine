@@ -22,6 +22,7 @@ import { dispatchAction } from '../api/actions'
 import TemplatePicker from './TemplatePicker'
 import AccessSettings from './AccessSettings'
 import QuizPanel from './QuizPanel'
+import ExportPanel from './ExportPanel'
 import SeedNotesEditor from './SeedNotesEditor'
 import SeedMaterial from './SeedMaterial'
 import FreedomSlider from './FreedomSlider'
@@ -41,6 +42,7 @@ const TABS = [
   { id: 'template', label: 'Design template' },
   { id: 'refine', label: 'Refine' },
   { id: 'quiz', label: 'Quiz' },
+  { id: 'export', label: 'Export' },
   { id: 'sharing', label: 'Privacy & Sharing' },
 ] as const
 
@@ -722,6 +724,16 @@ export default function DeckSettingsModal({
           aria-labelledby="settings-tab-quiz"
         >
           <QuizPanel deckId={deck.id} />
+        </section>
+      )}
+
+      {tab === 'export' && (
+        <section
+          role="tabpanel"
+          id="settings-panel-export"
+          aria-labelledby="settings-tab-export"
+        >
+          <ExportPanel deckId={deck.id} />
         </section>
       )}
 

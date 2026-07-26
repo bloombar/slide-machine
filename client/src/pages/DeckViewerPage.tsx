@@ -154,6 +154,7 @@ export default function DeckViewerPage() {
       'template',
       'refine',
       'quiz',
+      'export',
       'sharing',
     ]
     return fromUrl && known.includes(fromUrl as SettingsTabId)

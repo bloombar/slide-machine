@@ -46,14 +46,16 @@ export const verifyConnectState = async (
  * Least-privilege scopes (docs/GOOGLE_API_KEYS.md §6). `drive.file` grants
  * write access to files this app creates (the Form + any folders it makes);
  * `drive.readonly` lets the folder picker browse the instructor's existing
- * Drive to choose a destination. Instructors must reconnect once after this
- * scope is added so their stored token carries it.
+ * Drive to choose a destination. `presentations` lets deck export build a
+ * native Google Slides file (EXP-1/EXP-4). Instructors must reconnect once
+ * after a scope is added so their stored token carries it.
  */
 const CONNECT_SCOPES = [
   'https://www.googleapis.com/auth/forms.body',
   'https://www.googleapis.com/auth/forms.body.readonly',
   'https://www.googleapis.com/auth/drive.file',
   'https://www.googleapis.com/auth/drive.readonly',
+  'https://www.googleapis.com/auth/presentations',
 ]
 
 /** Credentials or a clear 503 when the connect route runs unconfigured. */
