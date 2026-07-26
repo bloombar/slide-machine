@@ -89,20 +89,50 @@ function FolderPicker({
     short_text: 0,
     long_text: 0,
   })
+  // "Number of questions" is a free-text field so it can be cleared and
+  // retyped; it stays in step with the per-type counts (default all single).
+  const [countText, setCountText] = useState('5')
   const [customInstructions, setCustomInstructions] = useState('')
 
   const questionCount = Object.values(types).reduce((sum, n) => sum + n, 0)
 
-  // Editing "Number of questions" fills the difference with single-choice, so
-  // the total always matches the per-type counts.
-  const setQuestionCount = (n: number) =>
-    setTypes(t => ({
-      ...t,
-      single_choice: Math.max(
-        0,
-        n - (t.multiple_choice + t.short_text + t.long_text),
+  // Editing "Number of questions": fill the difference with single-choice.
+  // Empty is allowed while typing; onBlur snaps it back to the real total.
+  const onCountChange = (v: string) => {
+    setCountText(v)
+    const n = Number(v)
+    if (v.trim() !== '' && Number.isInteger(n) && n >= 0) {
+      setTypes(t => ({
+        ...t,
+        single_choice: Math.max(
+          0,
+          n - (t.multiple_choice + t.short_text + t.long_text),
+        ),
+      }))
+    }
+  }
+  const onCountBlur = () => {
+    if (questionCount < 1) {
+      setTypes(t => ({ ...t, single_choice: 1 }))
+      setCountText('1')
+    } else {
+      setCountText(String(questionCount))
+    }
+  }
+  // Editing a per-type count updates the "Number of questions" total to match.
+  const onTypeChange = (key: keyof TypeCounts, raw: string) => {
+    const val = Math.max(0, Number(raw) || 0)
+    const next = { ...types, [key]: val }
+    setTypes(next)
+    setCountText(
+      String(
+        next.single_choice +
+          next.multiple_choice +
+          next.short_text +
+          next.long_text,
       ),
-    }))
+    )
+  }
 
   const buildOptions = (): QuizGenerationOptions => ({
     questionCount,
@@ -309,10 +339,9 @@ function FolderPicker({
                   type="number"
                   min={1}
                   max={50}
-                  value={questionCount}
-                  onChange={e =>
-                    setQuestionCount(Math.max(1, Number(e.target.value) || 1))
-                  }
+                  value={countText}
+                  onChange={e => onCountChange(e.target.value)}
+                  onBlur={onCountBlur}
                   className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
                 />
               </label>
@@ -390,12 +419,7 @@ function FolderPicker({
                           aria-label={label}
                           placeholder="0"
                           value={types[key] || ''}
-                          onChange={e =>
-                            setTypes(t => ({
-                              ...t,
-                              [key]: Math.max(0, Number(e.target.value) || 0),
-                            }))
-                          }
+                          onChange={e => onTypeChange(key, e.target.value)}
                           className="w-16 rounded-md border border-slate-300 px-2 py-1 text-sm"
                         />
                       </label>
@@ -407,7 +431,7 @@ function FolderPicker({
                 </fieldset>
 
                 <label className="text-sm text-slate-700">
-                  Additional instructions for the AI
+                  Additional instructions (optional)
                   <span className="block text-xs text-slate-500">
                     Tell the AI how to write the quiz — e.g. focus on a topic,
                     skip a section, set the difficulty, or match a question

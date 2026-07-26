@@ -490,10 +490,9 @@ describe('QuizPanel', () => {
     fireEvent.change(screen.getByLabelText('Short answer'), {
       target: { value: '3' },
     })
-    fireEvent.change(
-      screen.getByLabelText(/additional instructions for the ai/i),
-      { target: { value: 'focus on the water cycle' } },
-    )
+    fireEvent.change(screen.getByLabelText(/additional instructions/i), {
+      target: { value: 'focus on the water cycle' },
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Generate & save' }))
     await waitFor(() =>
       expect(published).toMatchObject({
@@ -507,8 +506,10 @@ describe('QuizPanel', () => {
   })
 
   it('keeps the question count in sync with the per-type counts', async () => {
-    let published: { questionCount?: number; typeCounts?: Record<string, number> } =
-      {}
+    let published: {
+      questionCount?: number
+      typeCounts?: Record<string, number>
+    } = {}
     mockFetchRoutes({
       'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
       'quiz.driveFolders': () => ({ status: 200, body: { folders: [] } }),
@@ -538,6 +539,25 @@ describe('QuizPanel', () => {
         typeCounts: { single_choice: 5, short_text: 3 },
       }),
     )
+  })
+
+  it('lets the number-of-questions field be cleared and retyped', async () => {
+    mockFetchRoutes({
+      'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
+      'quiz.driveFolders': () => ({ status: 200, body: { folders: [] } }),
+    })
+    render(<QuizPanel deckId="d1" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate quiz' }),
+    )
+    const count = screen.getByLabelText('Number of questions')
+    expect(count).toHaveValue(5)
+    // Clearing stays empty — it must NOT snap back to 1 while typing
+    fireEvent.change(count, { target: { value: '' } })
+    expect(count).toHaveValue(null)
+    // Typing a fresh value works
+    fireEvent.change(count, { target: { value: '7' } })
+    expect(count).toHaveValue(7)
   })
 
   it('deletes an existing quiz and returns to the generate state', async () => {
