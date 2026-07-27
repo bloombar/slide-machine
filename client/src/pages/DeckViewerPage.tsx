@@ -1420,16 +1420,30 @@ export default function DeckViewerPage() {
         'deck.refineSlide',
         { deckId: view.deck.id, slideId },
       )
-      setView(v =>
-        v
-          ? {
-              ...v,
-              slides: v.slides.map(s =>
-                s.id === res.slide.id ? res.slide : s,
-              ),
-            }
-          : v,
+      // A refine that re-fits the slide onto a different layout morphs
+      // like a manual layout switch (GEN-9); content-only refines stay
+      // instant. Read through the ref: the closure view is stale after
+      // the await.
+      const prior = viewRef.current?.slides.find(s => s.id === res.slide.id)
+      const layoutChanged = Boolean(
+        prior && prior.layoutType !== res.slide.layoutType,
       )
+      const commit = () =>
+        setView(v =>
+          v
+            ? {
+                ...v,
+                slides: v.slides.map(s =>
+                  s.id === res.slide.id ? res.slide : s,
+                ),
+              }
+            : v,
+        )
+      if (layoutChanged) {
+        void runLayoutFlip(res.slide.id, commit)
+      } else {
+        commit()
+      }
       touchDeckLocally()
     } catch {
       setImageError('Could not refine that slide — try again')
