@@ -607,6 +607,23 @@
   phase: 2
   status: Done
   review: false
+- id: EDIT-6
+  title: Spoken transcript editing
+  full: Each slide's menu opens an editor for its spoken transcript
+    (sourceTranscript, §15) — the text read aloud during narration playback
+    (PLAY-2) — so a user can correct mis-transcribed speech or rewrite what the
+    deck says. Changes save or cancel outright. Whiteboard marks are preserved —
+    marks are timed by position within the transcript (EDIT-4), so a save
+    re-anchors them onto the edited text by the phrase each was drawn over,
+    exactly as a GEN-4 narration refine does; a mark whose phrase no longer
+    exists is orphaned — kept but hidden, in editing as well as playback —
+    rather than left pointing at unrelated words, and reappears if wording it
+    matches returns. The editor says so when the slide…
+  section: §10 Playback, Editing & Sharing
+  family: EDIT
+  phase: 2
+  status: Done
+  review: false
 - id: EXP-1
   title: Deck export
   full: Decks can be exported to PDF, Google Slides, and other easily supportable
