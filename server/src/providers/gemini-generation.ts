@@ -250,6 +250,15 @@ Current slide content: ${JSON.stringify(req.currentSlide.content)}`
       ? `\nIMPORTANT: the user is annotating the CURRENT slide by hand right now. Do NOT change its layout — for any "update", keep layoutType EXACTLY "${req.currentSlide.layoutType}" and never "refit". Prefer "update" or "none" over "new" so the slide being drawn on is not replaced or restructured.`
       : ''
 
+  // The current slide is a heading (title/section) slide — usually the deck's
+  // opening title card. It introduces rather than accumulates, so its layout is
+  // pinned: sharpening its title/caption is fine, converting it into a content
+  // slide mid-lecture is not. The server enforces this too.
+  const pinLayout =
+    req.pinLayout && req.currentSlide
+      ? `\nIMPORTANT: the current slide is a heading slide (layout "${req.currentSlide.layoutType}") that introduces a topic rather than accumulating content. Its layout is FIXED: for any "update", keep layoutType EXACTLY "${req.currentSlide.layoutType}" and never "refit" it to a different layout. Only a sharper title (or caption) may update it — anything needing body text or bullets must be a "new" slide.`
+      : ''
+
   // Untitled lecture: ask for a title alongside the slide decision;
   // the server stops asking once one is saved
   const deckTitle = req.suggestDeckTitle
@@ -271,6 +280,7 @@ Current slide content: ${JSON.stringify(req.currentSlide.content)}`
     deckTitle,
     updateRules,
     lockLayout,
+    pinLayout,
     voiceCommands,
     freedomPolicy: freedomPolicy(req.freedom ?? 2),
     layouts,

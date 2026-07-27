@@ -29,7 +29,9 @@ semantics plus the current slide's exact content — empty unless
 `GENERATION_LAYOUT_REFIT=true`, the default), `lockLayout` (tells the model to
 keep the current slide's layout while the user is hand-annotating it —
 [EDIT-4](SPEC.md#edit-4-whiteboard-annotation); empty unless the phrase arrives
-mid-draw), `phrase`.
+mid-draw), `pinLayout` (tells the model a heading — title/section — slide's
+layout is fixed and new content belongs on a new slide; empty unless the
+current slide is a heading), `phrase`.
 
 `PROMPTS_DIR` overrides the directory (defaults to `config/prompts`).
 

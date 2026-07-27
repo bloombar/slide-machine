@@ -88,6 +88,12 @@ export interface SlideGenerationRequest {
    * must NOT change its layout, so it isn't rearranged out from under the
    * drawing. The server also enforces this regardless of the model's answer. */
   lockLayout?: boolean
+  /** The current slide is a heading (title/section) slide — typically the
+   * deck's opening title card. Its layout is pinned for the whole lecture: the
+   * model may sharpen its title/caption in place, but must never re-fit it to
+   * a different layout; content that needs body text or bullets belongs on a
+   * NEW slide. The server enforces this regardless of the model's answer. */
+  pinLayout?: boolean
   /** The fixed CAP-4 command set the model may recognize as the intent
    * of a phrase. Present only when the server's GENERATION_VOICE_COMMANDS
    * feature flag is on; absent = command detection disabled. */

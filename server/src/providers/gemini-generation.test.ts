@@ -235,6 +235,39 @@ describe('GeminiGenerationProvider', () => {
     expect(prompt).not.toContain('Current slide content:')
   })
 
+  it("pins a heading slide's layout and sends new content to a new slide", async () => {
+    fetchMock.mockResolvedValue(geminiReply({ action: 'none' }))
+    const heading = {
+      layoutType: 'title' as const,
+      bulletCount: 0,
+      bodyChars: 0,
+      content: { title: 'Fractions' },
+    }
+    // Without the flag the fragment is absent, even on a title slide
+    await provider.generateSlideContent(
+      request({ allowLayoutRefit: true, currentSlide: heading }),
+    )
+    const unpinned = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+      .contents[0].parts[0].text as string
+    expect(unpinned).not.toContain('introduces a topic')
+
+    await provider.generateSlideContent(
+      request({
+        allowLayoutRefit: true,
+        pinLayout: true,
+        currentSlide: heading,
+      }),
+    )
+    const prompt = JSON.parse(String(fetchMock.mock.calls[1]![1].body))
+      .contents[0].parts[0].text as string
+    // The heading's layout is fixed, refit is off the table for it, and
+    // anything needing body/bullets must open a new slide
+    expect(prompt).toContain('introduces a topic rather than accumulating')
+    expect(prompt).toContain('keep layoutType EXACTLY "title"')
+    expect(prompt).toContain('never "refit" it to a different layout')
+    expect(prompt).toContain('must be a "new" slide')
+  })
+
   it('tolerates responses that omit layoutType (none / delta updates)', async () => {
     // A bare "none" — exactly what the live model returned mid-lecture
     fetchMock.mockResolvedValue(geminiReply({ action: 'none' }))

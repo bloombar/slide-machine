@@ -534,6 +534,17 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
     const targetHasDrawings = hasVisibleDrawings(lastSlide?.drawings)
     const keepLayout = Boolean(input.suppressNewSlide) || targetHasDrawings
 
+    // A heading slide (title/section) — most visibly the title card a lecture
+    // opens with — introduces rather than accumulates, so its layout is PINNED
+    // during live generation: the model may sharpen its title/caption in place,
+    // but must never convert it into a content layout while the speaker talks
+    // on. Added material spills to a new slide instead (the header rule below).
+    // Only automatic changes are blocked — the user can still switch a slide's
+    // layout by hand (slide.setLayout, EDIT-3).
+    const pinLayout = Boolean(
+      lastSlide && isHeaderLayout(lastSlide.layoutType, descriptors),
+    )
+
     // Deck-structure context (GENERATION_DECK_STRUCTURE): a compact outline of
     // the heading (title/section) slides so far plus positional signals, so the
     // windowed model can judge title/section decisions from the deck's shape.
@@ -617,6 +628,9 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
       // The slide is being drawn on or already has marks: tell the model to
       // keep its layout (the server also enforces this below).
       lockLayout: keepLayout,
+      // The current slide is a heading slide: tell the model its layout is
+      // fixed and new content belongs on a new slide (also enforced below).
+      pinLayout,
       // Feature flag (GENERATION_VOICE_COMMANDS): offer the CAP-4
       // command set so the model can flag operational phrases
       voiceCommands: env.GENERATION_VOICE_COMMANDS
@@ -778,11 +792,14 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
       !keepLayout &&
       // A whiteboard slide is a blank drawing canvas — never convert it into a
       // text layout; speech becomes a new slide instead (handled below).
-      lastSlide.layoutType !== WHITEBOARD_LAYOUT_TYPE
-      // Header slides (title/section) ARE refit-eligible: a refit re-maps their
-      // slot content in place (e.g. a sharper title/caption). Only NON-refit
-      // updates that try to add body/bullets to a header spawn a new slide
-      // (handled below) — a header can't display that content.
+      lastSlide.layoutType !== WHITEBOARD_LAYOUT_TYPE &&
+      // Header slides (title/section) are refit-eligible only WITHIN their own
+      // layout: a same-layout refit re-maps their slots in place (e.g. a
+      // sharper title/caption), but one that would switch the layout is
+      // refused here so the title card stays a title card mid-lecture
+      // (`pinLayout`). It falls through to the header rule below, which turns
+      // the added material into a new slide.
+      !(pinLayout && rawResult.layoutType !== lastSlide.layoutType)
     ) {
       if (!env.GENERATION_LAYOUT_REFIT) return event({ kind: 'none' })
       // A refit that keeps the same layout is a pure rephrase of existing
@@ -871,9 +888,10 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
       result.action === 'update' &&
       lastSlide &&
       result.layoutType !== lastSlide.layoutType &&
-      // Marked slides pin their layout; otherwise a switch is only kept when
-      // it hides no displayed content (and refit is on).
+      // Marked slides and heading slides pin their layout; otherwise a switch
+      // is only kept when it hides no displayed content (and refit is on).
       (keepLayout ||
+        pinLayout ||
         !env.GENERATION_LAYOUT_REFIT ||
         !layoutDisplaysContent(
           result.layoutType,
@@ -888,8 +906,8 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
         ))
     ) {
       // Delta layout switches may not hide displayed content (and are
-      // disabled entirely when the flag is off or the slide is marked up):
-      // keep the layout
+      // disabled entirely when the flag is off, the slide is marked up, or it
+      // is a heading slide): keep the layout
       result = { ...result, layoutType: lastSlide.layoutType }
     }
     if (

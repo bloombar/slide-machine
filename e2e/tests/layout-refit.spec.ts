@@ -54,7 +54,7 @@ test('an enumerating update refits the slide from content to list', async ({
   await expect(page.getByText('1 / 1')).toBeVisible()
 })
 
-test('a refit updates a header (title) slide in place, not a new slide', async ({
+test('a refit never re-lays-out a header (title) slide; it spills to a new one', async ({
   page,
 }) => {
   const email2 = `refit-header-${Date.now()}@example.com`
@@ -78,18 +78,28 @@ test('a refit updates a header (title) slide in place, not a new slide', async (
     'title',
   )
 
-  // An enumerating continuation refits the SAME header slide to a list in
-  // place — previously headers were excluded from refit and this spawned a new
-  // slide. The title is preserved and the deck still has ONE slide.
+  // An enumerating continuation would refit an ordinary slide to a list. A
+  // heading slide's layout is pinned, so the material opens a SECOND slide and
+  // the title card the lecture opened with is left standing.
   await page
     .getByLabel('Spoken phrase')
     .fill('Also halves, quarters, and thirds')
   await page.getByRole('button', { name: 'Speak' }).click()
+  await expect(page.getByText('2 / 2')).toBeVisible()
   await expect(page.getByTestId('slide')).toHaveAttribute('data-layout', 'list')
-  // Still ONE slide (refit in place, not a new slide), the header's title is
-  // preserved, and the enumerated items migrated into the list. Scoped to the
-  // slide since the auto lecture-title in the header echoes the same words.
-  await expect(page.getByText('1 / 1')).toBeVisible()
-  await expect(page.getByTestId('slide').getByText('Fractions')).toBeVisible()
   await expect(page.getByTestId('slide').getByText('halves')).toBeVisible()
+
+  // Back on slide 1: still a title slide, title intact. Scoped to the slide
+  // since the auto lecture-title in the header echoes the same words. The
+  // chevron is pointer-events-none until the cursor is over its half of the
+  // slide, so reveal it with a real mouse move first (see core-loop.spec).
+  const box = (await page.getByTestId('slide').boundingBox())!
+  await page.mouse.move(box.x + box.width * 0.2, box.y + box.height / 2)
+  await page.getByRole('button', { name: 'Previous slide' }).click()
+  await expect(page.getByText('1 / 2')).toBeVisible()
+  await expect(page.getByTestId('slide')).toHaveAttribute(
+    'data-layout',
+    'title',
+  )
+  await expect(page.getByTestId('slide').getByText('Fractions')).toBeVisible()
 })

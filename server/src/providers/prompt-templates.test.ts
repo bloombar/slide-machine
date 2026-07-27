@@ -24,6 +24,7 @@ const allSlots = {
   voiceCommands: '',
   updateRules: '',
   lockLayout: '',
+  pinLayout: '',
   language: '',
   deckTitle: '',
   phrase: 'the phrase',
