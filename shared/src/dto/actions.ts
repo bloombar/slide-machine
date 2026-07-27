@@ -342,6 +342,14 @@ export interface SlideEditInput {
   attribution?: ImageAttribution
 }
 
+/** Replaces a slide's spoken narration (EDIT-6). The transcript drives TTS
+ * playback and is the timeline whiteboard marks are anchored to, so the server
+ * re-anchors those marks onto the new text rather than stranding them. */
+export interface SlideEditTranscriptInput {
+  slideId: string
+  transcript: string
+}
+
 /** Replaces a slide's whiteboard drawings wholesale (WB-1). The client sends
  * the full stroke set after each draw/erase; erased strokes are kept (with
  * their `erasedAnchor`) so synced playback can replay the erasure. */

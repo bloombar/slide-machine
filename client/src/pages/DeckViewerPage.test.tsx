@@ -271,6 +271,122 @@ describe('DeckViewerPage slide deletion', () => {
   })
 })
 
+describe('DeckViewerPage spoken transcript editing (EDIT-6)', () => {
+  /** One whiteboard mark, timed to the narration below. */
+  const mark = {
+    id: 'stroke-1',
+    tool: 'pen',
+    color: '#1e293b',
+    thickness: 0.01,
+    points: [{ x: 0.2, y: 0.3 }],
+    startedAt: '2026-07-21T10:00:00.000Z',
+    endedAt: '2026-07-21T10:00:01.000Z',
+    anchor: {
+      charAnchor: 2,
+      source: 'word',
+      phraseText: 'A cell is the basic unit of life.',
+      phraseOffset: 0.06,
+    },
+  }
+
+  /** A deck whose first slide has a narration and that mark. */
+  const narratedSlide = {
+    ...deckView.slides[0],
+    sourceTranscript: 'A cell is the basic unit of life.',
+    drawings: [mark],
+  }
+  const narratedDeck = {
+    ...deckView,
+    slides: [narratedSlide, deckView.slides[1]],
+    canEdit: true,
+  }
+
+  it('edits and saves a slide transcript from the kebab', async () => {
+    const calls: unknown[] = []
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({ status: 200, body: narratedDeck }),
+      '/api/actions/slide.editTranscript': init => {
+        const body = JSON.parse(String(init?.body))
+        calls.push(body)
+        return {
+          status: 200,
+          body: {
+            ...narratedSlide,
+            sourceTranscript: body.transcript,
+            // The server re-anchors the mark onto the saved text (WB-2).
+            drawings: [{ ...mark, anchor: { ...mark.anchor, charAnchor: 0 } }],
+          },
+        }
+      },
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Edit spoken transcript' }),
+    )
+
+    const field = screen.getByRole('textbox', { name: 'Spoken transcript' })
+    expect(field).toHaveValue('A cell is the basic unit of life.')
+    // The slide carries a mark, so the re-anchoring note is shown.
+    expect(
+      screen.getByText(/whiteboard markings timed to the transcript/i),
+    ).toBeInTheDocument()
+
+    fireEvent.change(field, {
+      target: { value: 'Cells are the basic unit of life.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save transcript' }))
+
+    await vi.waitFor(() =>
+      expect(calls).toEqual([
+        { slideId: 's1', transcript: 'Cells are the basic unit of life.' },
+      ]),
+    )
+    // The dialog closes, and reopening shows the saved text.
+    await vi.waitFor(() =>
+      expect(
+        screen.queryByRole('textbox', { name: 'Spoken transcript' }),
+      ).not.toBeInTheDocument(),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Edit spoken transcript' }),
+    )
+    expect(
+      screen.getByRole('textbox', { name: 'Spoken transcript' }),
+    ).toHaveValue('Cells are the basic unit of life.')
+  })
+
+  it('hides the transcript editor from non-owners', async () => {
+    // TTS on, so a read-only viewer still gets a kebab — with Speak only.
+    vi.spyOn(runtimeConfig, 'getTtsEnabled').mockReturnValue(true)
+    renderViewer(401)
+    await screen.findByText('Shared Lecture')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
+    expect(
+      screen.getByRole('menuitem', { name: 'Speak this slide' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('menuitem', { name: 'Edit spoken transcript' }),
+    ).not.toBeInTheDocument()
+  })
+})
+
 describe('DeckViewerPage refine confirmation (WB-1)', () => {
   const refineRoutes = (body: object, onRefine?: () => void) => ({
     '/api/auth/refresh': () => ({

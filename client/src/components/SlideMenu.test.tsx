@@ -32,6 +32,7 @@ describe('SlideMenu', () => {
         number={2}
         onSpeak={vi.fn()}
         onChangeLayout={vi.fn()}
+        onEditTranscript={vi.fn()}
         onRefine={vi.fn()}
         onPlayOriginalAudio={vi.fn()}
         onDelete={vi.fn()}
@@ -45,6 +46,9 @@ describe('SlideMenu', () => {
       screen.getByRole('menuitem', { name: 'Change layout' }),
     ).toBeInTheDocument()
     expect(
+      screen.getByRole('menuitem', { name: 'Edit spoken transcript' }),
+    ).toBeInTheDocument()
+    expect(
       screen.getByRole('menuitem', { name: 'Refine this slide' }),
     ).toBeInTheDocument()
     expect(
@@ -53,16 +57,33 @@ describe('SlideMenu', () => {
     expect(
       screen.getByRole('menuitem', { name: 'Delete slide' }),
     ).toBeInTheDocument()
+    // Transcript editing sits next to Speak: both act on the spoken slide.
+    expect(screen.getAllByRole('menuitem').map(i => i.textContent)).toEqual([
+      'Speak this slide',
+      'Edit spoken transcript',
+      'Change layout',
+      'Refine this slide',
+      'Play original audio',
+      'Delete slide',
+    ])
   })
 
   it('fires onRefine from the "Refine this slide" item', () => {
     const onRefine = vi.fn()
     render(<SlideMenu number={1} onRefine={onRefine} />)
     openMenu(1)
-    fireEvent.click(
-      screen.getByRole('menuitem', { name: 'Refine this slide' }),
-    )
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Refine this slide' }))
     expect(onRefine).toHaveBeenCalledOnce()
+  })
+
+  it('fires onEditTranscript from the "Edit spoken transcript" item', () => {
+    const onEditTranscript = vi.fn()
+    render(<SlideMenu number={1} onEditTranscript={onEditTranscript} />)
+    openMenu(1)
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Edit spoken transcript' }),
+    )
+    expect(onEditTranscript).toHaveBeenCalledOnce()
   })
 
   it('fires onPlayOriginalAudio, and omits the item when unavailable', () => {
@@ -92,6 +113,9 @@ describe('SlideMenu', () => {
     ).toBeInTheDocument()
     expect(
       screen.queryByRole('menuitem', { name: 'Change layout' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('menuitem', { name: 'Edit spoken transcript' }),
     ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('menuitem', { name: 'Delete slide' }),

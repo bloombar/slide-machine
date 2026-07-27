@@ -33,7 +33,8 @@ export interface PlaybackProgress {
  * reached it is hidden — EXCEPT `unsynced` marks (drawn with the mic off),
  * which aren't tied to narration and are always shown unless erased, on any
  * slide, so flipping to that slide always reveals them. An `orphaned` mark (its
- * phrase was removed by a transcript refine) is hidden throughout playback.
+ * phrase was removed by a transcript refine or hand-edit) is hidden outright —
+ * in the editing view as well as during playback — but never deleted.
  *
  * On the active slide, reveal time comes from the clip's `<mark>` timepoints
  * (real spoken time of each phrase boundary) when present, so pauses and speech
