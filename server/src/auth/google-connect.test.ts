@@ -29,6 +29,7 @@ import {
   buildConnectUrl,
   connectRedirectUri,
   exchangeConnectCode,
+  grantedDriveAccess,
   clientForRefreshToken,
 } from './google-connect'
 
@@ -91,10 +92,20 @@ describe('buildConnectUrl', () => {
 })
 
 describe('exchangeConnectCode', () => {
-  it('returns the refresh token from a successful exchange', async () => {
-    getToken.mockResolvedValue({ tokens: { refresh_token: 'refresh-123' } })
-    expect(await exchangeConnectCode('code', '')).toBe('refresh-123')
+  it('returns the refresh token and granted scope from a successful exchange', async () => {
+    getToken.mockResolvedValue({
+      tokens: { refresh_token: 'refresh-123', scope: 'a b' },
+    })
+    expect(await exchangeConnectCode('code', '')).toEqual({
+      refreshToken: 'refresh-123',
+      scope: 'a b',
+    })
     expect(getToken).toHaveBeenCalledWith('code')
+  })
+
+  it('defaults the scope to empty when Google omits it', async () => {
+    getToken.mockResolvedValue({ tokens: { refresh_token: 'r' } })
+    expect((await exchangeConnectCode('code', '')).scope).toBe('')
   })
 
   it('throws when Google returns no refresh token', async () => {
@@ -109,6 +120,32 @@ describe('exchangeConnectCode', () => {
     await expect(exchangeConnectCode('code', '')).rejects.toThrow(
       /Could not connect/,
     )
+  })
+})
+
+describe('grantedDriveAccess', () => {
+  const DRIVE_FILE = 'https://www.googleapis.com/auth/drive.file'
+  const DRIVE_READONLY = 'https://www.googleapis.com/auth/drive.readonly'
+
+  it('is true when both Drive scopes are granted', () => {
+    expect(grantedDriveAccess(`openid ${DRIVE_FILE} ${DRIVE_READONLY}`)).toBe(
+      true,
+    )
+  })
+
+  it('is false when a Drive scope is missing (granular consent unticked)', () => {
+    // Identity-only grant — the exact shape that dead-ended the folder picker.
+    expect(
+      grantedDriveAccess(
+        'openid https://www.googleapis.com/auth/userinfo.email',
+      ),
+    ).toBe(false)
+    // Only one of the two Drive scopes is not enough.
+    expect(grantedDriveAccess(DRIVE_FILE)).toBe(false)
+  })
+
+  it('is false for an empty scope string', () => {
+    expect(grantedDriveAccess('')).toBe(false)
   })
 })
 

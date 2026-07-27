@@ -17,7 +17,11 @@ import {
   googleAuthConfigured,
 } from '../auth/google'
 import { verifyConnectState } from '../auth/google-connect'
-import { storeGoogleConnect, safeReturnTo } from './google-connect'
+import {
+  storeGoogleConnect,
+  safeReturnTo,
+  connectReturnUrl,
+} from './google-connect'
 import { UserModel, toUserDto } from '../models/user'
 
 export const REFRESH_COOKIE = 'sm_refresh'
@@ -176,13 +180,14 @@ authRouter.get('/google/callback', async (req, res) => {
     const connectState = await verifyConnectState(state).catch(() => null)
     if (connectState) {
       const back = safeReturnTo(connectState.returnTo)
+      let granted = false
       try {
-        await storeGoogleConnect(code, connectState)
+        granted = await storeGoogleConnect(code, connectState)
       } catch (err) {
         // Send them back regardless; the Quiz tab shows still-not-connected.
         console.warn('Google connect (via sign-in callback) failed:', err)
       }
-      return res.redirect(back)
+      return res.redirect(connectReturnUrl(back, granted))
     }
   }
 

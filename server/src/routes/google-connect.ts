@@ -16,6 +16,7 @@ import { env } from '../config/env'
 import {
   verifyConnectState,
   exchangeConnectCode,
+  grantedDriveAccess,
   type ConnectState,
 } from '../auth/google-connect'
 import { encryptToken } from '../lib/token-crypto'
@@ -46,15 +47,22 @@ export const safeReturnTo = (returnTo: string): string => {
  * on the connecting user. Shared by the dedicated connect callback and the
  * sign-in callback (which reuses the same registered redirect URI). Throws on
  * failure so the caller can still redirect the user back.
+ *
+ * Returns whether Drive access was actually granted. If the user connected but
+ * unticked the Drive permissions (Google's granular consent), the token would
+ * 403 on every Drive call, so we do NOT record it — any existing good
+ * connection is left intact — and report the shortfall so the UI can prompt a
+ * reconnect rather than dead-ending in the folder picker.
  */
 export const storeGoogleConnect = async (
   code: string,
   decoded: ConnectState,
-): Promise<void> => {
-  const refreshToken = await exchangeConnectCode(
+): Promise<boolean> => {
+  const { refreshToken, scope } = await exchangeConnectCode(
     code,
     env.PUBLIC_BASE_URL ?? '',
   )
+  if (!grantedDriveAccess(scope)) return false
   await UserModel.updateOne(
     { _id: decoded.userId },
     {
@@ -62,6 +70,26 @@ export const storeGoogleConnect = async (
       googleQuizRefreshToken: encryptToken(refreshToken),
     },
   )
+  return true
+}
+
+/**
+ * The URL to send the browser back to after connect. When Drive access was not
+ * granted, a `connect=drive_denied` flag is added so the Quiz/Export tab can
+ * explain what happened and offer to reconnect.
+ */
+export const connectReturnUrl = (
+  returnTo: string,
+  driveGranted: boolean,
+): string => {
+  if (driveGranted) return returnTo
+  try {
+    const url = new URL(returnTo)
+    url.searchParams.set('connect', 'drive_denied')
+    return url.toString()
+  } catch {
+    return returnTo
+  }
 }
 
 googleConnectRouter.get('/google/connect/callback', async (req, res) => {
@@ -73,8 +101,8 @@ googleConnectRouter.get('/google/connect/callback', async (req, res) => {
     }
     const decoded = await verifyConnectState(state)
     returnTo = safeReturnTo(decoded.returnTo)
-    await storeGoogleConnect(code, decoded)
-    res.redirect(returnTo)
+    const granted = await storeGoogleConnect(code, decoded)
+    res.redirect(connectReturnUrl(returnTo, granted))
   } catch {
     // Send them back regardless; the Quiz tab will show still-not-connected.
     res.redirect(returnTo)

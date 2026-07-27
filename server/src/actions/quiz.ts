@@ -40,7 +40,7 @@ import { splitPointsEqually } from '../lib/quiz-points'
 import {
   createDriveFolderLive,
   deleteQuizLive,
-  listDriveChildrenLive,
+  listDriveFoldersLive,
   publishQuizLive,
 } from '../lib/quiz-google'
 import { buildConnectUrl, signConnectState } from '../auth/google-connect'
@@ -157,8 +157,8 @@ export const quizConnectGoogle = defineAction<
   },
 })
 
-/** A small nested Drive tree for mock mode, keyed by parent id. Lets the
- * finder UI be navigated (folders + files) without talking to Google. */
+/** A small nested folder tree for mock mode, keyed by parent id. Lets the
+ * finder UI be navigated without talking to Google. */
 const mockFolderTree: Record<string, DriveFolder[]> = {
   root: [
     { id: 'folder-lectures', name: 'Lectures' },
@@ -167,17 +167,13 @@ const mockFolderTree: Record<string, DriveFolder[]> = {
   ],
   'folder-lectures': [{ id: 'folder-week1', name: 'Week 1' }],
 }
-const mockFileTree: Record<string, DriveFolder[]> = {
-  root: [{ id: 'file-syllabus', name: 'Syllabus.pdf' }],
-  'folder-lectures': [{ id: 'file-notes', name: 'Notes.docx' }],
-}
 
-/** The contents inside `parentId` (default My Drive root) for the picker's
- * finder view: sub-folders to navigate plus files shown for context.
- * Navigating into a folder re-calls this with its id. */
+/** The sub-folders inside `parentId` (default My Drive root) for the picker's
+ * finder view. Files are not listed — you save into a folder. Navigating into
+ * a folder re-calls this with its id. */
 export const quizDriveFolders = defineAction<
   { parentId?: string },
-  { folders: DriveFolder[]; files: DriveFolder[] }
+  { folders: DriveFolder[] }
 >({
   name: 'quiz.driveFolders',
   input: z.object({ parentId: z.string().optional() }).strict(),
@@ -189,12 +185,9 @@ export const quizDriveFolders = defineAction<
     const parentId = input.parentId ?? 'root'
     if (isLive()) {
       const refreshToken = decryptToken(user.googleQuizRefreshToken!)
-      return listDriveChildrenLive(refreshToken, parentId)
+      return { folders: await listDriveFoldersLive(refreshToken, parentId) }
     }
-    return {
-      folders: mockFolderTree[parentId] ?? [],
-      files: mockFileTree[parentId] ?? [],
-    }
+    return { folders: mockFolderTree[parentId] ?? [] }
   },
 })
 

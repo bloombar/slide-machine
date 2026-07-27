@@ -1,9 +1,9 @@
 /**
  * Unit tests for the Quiz tab (QUIZ-1..7): the connect → generate → folder
  * picker → shareable URL flow, the copy-to-clipboard button, creating a new
- * Drive folder, deleting a quiz, and the generation options — question count,
- * points, per-type counts (with the mismatch warning), email, transcript, and
- * AI instructions. The Google actions are stubbed at the fetch layer.
+ * Drive folder, deleting a quiz, and the generation options — question count
+ * (kept in sync with the per-type counts), points, email, transcript, and AI
+ * instructions. The Google actions are stubbed at the fetch layer.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
@@ -193,36 +193,11 @@ describe('QuizPanel', () => {
       await screen.findByRole('button', { name: 'Generate quiz' }),
     )
     await screen.findByRole('dialog', { name: 'Choose a Drive folder' })
-    expect(await screen.findByText(/this folder is empty/i)).toBeInTheDocument()
+    expect(await screen.findByText(/no sub-folders here/i)).toBeInTheDocument()
     // Save is never disabled: you can always save to the current folder
     expect(
       screen.getByRole('button', { name: 'Generate & save' }),
     ).toBeEnabled()
-  })
-
-  it('shows Drive files for context alongside folders', async () => {
-    mockFetchRoutes({
-      'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
-      'quiz.driveFolders': () => ({
-        status: 200,
-        body: {
-          folders: [{ id: 'folder-quizzes', name: 'Quizzes' }],
-          files: [{ id: 'file-1', name: 'Syllabus.pdf' }],
-        },
-      }),
-    })
-    render(<QuizPanel deckId="d1" />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Generate quiz' }),
-    )
-    // The folder is a navigable button; the file is plain context (not a button)
-    expect(
-      await screen.findByRole('button', { name: 'Quizzes' }),
-    ).toBeInTheDocument()
-    expect(screen.getByText('Syllabus.pdf')).toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: 'Syllabus.pdf' }),
-    ).not.toBeInTheDocument()
   })
 
   it('surfaces an error when the status fails to load', async () => {
@@ -515,7 +490,7 @@ describe('QuizPanel', () => {
     fireEvent.change(screen.getByLabelText('Short answer'), {
       target: { value: '3' },
     })
-    fireEvent.change(screen.getByLabelText('AI instructions (optional)'), {
+    fireEvent.change(screen.getByLabelText(/additional instructions/i), {
       target: { value: 'focus on the water cycle' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Generate & save' }))
@@ -530,7 +505,43 @@ describe('QuizPanel', () => {
     )
   })
 
-  it('warns when the per-type counts do not match the question count', async () => {
+  it('keeps the question count in sync with the per-type counts', async () => {
+    let published: {
+      questionCount?: number
+      typeCounts?: Record<string, number>
+    } = {}
+    mockFetchRoutes({
+      'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
+      'quiz.driveFolders': () => ({ status: 200, body: { folders: [] } }),
+      'quiz.publish': init => {
+        published = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: { formUrl: FORM_URL, publishedAt: '2026-07-20T00:00:00.000Z' },
+        }
+      },
+    })
+    render(<QuizPanel deckId="d1" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate quiz' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced settings' }))
+    // Default is 5 single-choice; add 3 short-answer → total becomes 8
+    fireEvent.change(screen.getByLabelText('Short answer'), {
+      target: { value: '3' },
+    })
+    // The "Number of questions" field reflects the new sum
+    expect(screen.getByLabelText('Number of questions')).toHaveValue(8)
+    fireEvent.click(screen.getByRole('button', { name: 'Generate & save' }))
+    await waitFor(() =>
+      expect(published).toMatchObject({
+        questionCount: 8,
+        typeCounts: { single_choice: 5, short_text: 3 },
+      }),
+    )
+  })
+
+  it('lets the number-of-questions field be cleared and retyped', async () => {
     mockFetchRoutes({
       'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
       'quiz.driveFolders': () => ({ status: 200, body: { folders: [] } }),
@@ -539,12 +550,14 @@ describe('QuizPanel', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: 'Generate quiz' }),
     )
-    // Default count is 5; set the types to sum to 2
-    fireEvent.click(screen.getByRole('button', { name: 'Advanced settings' }))
-    fireEvent.change(screen.getByLabelText('Single-choice (MCQ)'), {
-      target: { value: '2' },
-    })
-    expect(await screen.findByText(/add up to 2, not 5/i)).toBeInTheDocument()
+    const count = screen.getByLabelText('Number of questions')
+    expect(count).toHaveValue(5)
+    // Clearing stays empty — it must NOT snap back to 1 while typing
+    fireEvent.change(count, { target: { value: '' } })
+    expect(count).toHaveValue(null)
+    // Typing a fresh value works
+    fireEvent.change(count, { target: { value: '7' } })
+    expect(count).toHaveValue(7)
   })
 
   it('deletes an existing quiz and returns to the generate state', async () => {
@@ -612,5 +625,63 @@ describe('QuizPanel', () => {
     expect(
       await screen.findByRole('button', { name: 'Copy quiz link' }),
     ).toBeInTheDocument()
+  })
+
+  it('offers to reconnect when the Drive folders fail to load', async () => {
+    mockFetchRoutes({
+      'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
+      'quiz.driveFolders': () => ({ status: 500, body: {} }),
+    })
+    render(<QuizPanel deckId="d1" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate quiz' }),
+    )
+    // The picker surfaces the failure with a reconnect path, not a dead end.
+    expect(
+      await screen.findByText(/may not have granted Drive access/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Reconnect Google' }),
+    ).toBeInTheDocument()
+  })
+
+  it('explains when a connect returned without Drive access (drive_denied)', async () => {
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { href: 'http://localhost/d/x', search: '?connect=drive_denied' },
+    })
+    mockFetchRoutes({
+      'quiz.status': () => ({ status: 200, body: { googleConnected: false } }),
+    })
+    render(<QuizPanel deckId="d1" />)
+    expect(
+      await screen.findByText(/Drive access wasn.t allowed/i),
+    ).toBeInTheDocument()
+  })
+
+  it('does not carry the drive_denied flag into the reconnect return URL', async () => {
+    // Reconnecting from a drive_denied URL must return to a CLEAN url, so a
+    // successful reconnect doesn't land back on the banner.
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: {
+        href: 'http://localhost/d/x?connect=drive_denied',
+        search: '?connect=drive_denied',
+      },
+    })
+    let returnTo = ''
+    mockFetchRoutes({
+      'quiz.status': () => ({ status: 200, body: { googleConnected: false } }),
+      'quiz.connectGoogle': init => {
+        returnTo = JSON.parse(String(init?.body)).returnTo
+        return { status: 200, body: { status: 'redirect', url: 'https://g/x' } }
+      },
+    })
+    render(<QuizPanel deckId="d1" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Connect Google' }),
+    )
+    await waitFor(() => expect(returnTo).toContain('settings=quiz'))
+    expect(returnTo).not.toContain('connect=drive_denied')
   })
 })

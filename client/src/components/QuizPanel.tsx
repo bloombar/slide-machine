@@ -18,7 +18,6 @@ import {
   ChevronRight,
   Copy,
   ExternalLink,
-  FileText,
   Folder,
   FolderPlus,
   Trash2,
@@ -57,11 +56,13 @@ type TypeCounts = Record<(typeof QUESTION_TYPE_FIELDS)[number]['key'], number>
 function FolderPicker({
   onCancel,
   onPublish,
+  onReconnect,
   publishing,
   hasTranscript,
 }: {
   onCancel: () => void
   onPublish: (folder: DriveFolder, options: QuizGenerationOptions) => void
+  onReconnect: () => void
   publishing: boolean
   hasTranscript: boolean
 }) {
@@ -71,39 +72,76 @@ function FolderPicker({
     { id: 'root', name: 'My Drive' },
   ])
   const [folders, setFolders] = useState<DriveFolder[]>([])
-  const [files, setFiles] = useState<DriveFolder[]>([])
   const [loadedFor, setLoadedFor] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [newFolderName, setNewFolderName] = useState('')
   const [creatingNew, setCreatingNew] = useState(false)
   const [creating, setCreating] = useState(false)
 
-  // Generation options (QUIZ-5/QUIZ-7). Basic: count + points. Advanced:
-  // require email, transcript, per-type counts, and free-text AI instructions.
-  const [questionCount, setQuestionCount] = useState(5)
+  // Generation options (QUIZ-5/QUIZ-7). The per-type counts are the source of
+  // truth; "Number of questions" is simply their sum, defaulting to all
+  // single-choice, so the two can never disagree.
   const [totalPoints, setTotalPoints] = useState('')
   const [requireEmail, setRequireEmail] = useState(true)
   const [includeTranscript, setIncludeTranscript] = useState(false)
   const [advanced, setAdvanced] = useState(false)
   const [types, setTypes] = useState<TypeCounts>({
-    single_choice: 0,
+    single_choice: 5,
     multiple_choice: 0,
     short_text: 0,
     long_text: 0,
   })
+  // "Number of questions" is a free-text field so it can be cleared and
+  // retyped; it stays in step with the per-type counts (default all single).
+  const [countText, setCountText] = useState('5')
   const [customInstructions, setCustomInstructions] = useState('')
 
-  const typeTotal = Object.values(types).reduce((sum, n) => sum + n, 0)
-  // Per-type counts only take effect when Advanced is open and any are set.
-  const typesUsed = advanced && typeTotal > 0
-  const mismatch = typesUsed && typeTotal !== questionCount
+  const questionCount = Object.values(types).reduce((sum, n) => sum + n, 0)
+
+  // Editing "Number of questions": fill the difference with single-choice.
+  // Empty is allowed while typing; onBlur snaps it back to the real total.
+  const onCountChange = (v: string) => {
+    setCountText(v)
+    const n = Number(v)
+    if (v.trim() !== '' && Number.isInteger(n) && n >= 0) {
+      setTypes(t => ({
+        ...t,
+        single_choice: Math.max(
+          0,
+          n - (t.multiple_choice + t.short_text + t.long_text),
+        ),
+      }))
+    }
+  }
+  const onCountBlur = () => {
+    if (questionCount < 1) {
+      setTypes(t => ({ ...t, single_choice: 1 }))
+      setCountText('1')
+    } else {
+      setCountText(String(questionCount))
+    }
+  }
+  // Editing a per-type count updates the "Number of questions" total to match.
+  const onTypeChange = (key: keyof TypeCounts, raw: string) => {
+    const val = Math.max(0, Number(raw) || 0)
+    const next = { ...types, [key]: val }
+    setTypes(next)
+    setCountText(
+      String(
+        next.single_choice +
+          next.multiple_choice +
+          next.short_text +
+          next.long_text,
+      ),
+    )
+  }
 
   const buildOptions = (): QuizGenerationOptions => ({
     questionCount,
     totalPoints: totalPoints ? Number(totalPoints) : undefined,
     requireEmail,
     includeTranscript,
-    typeCounts: typesUsed ? types : undefined,
+    typeCounts: types,
     customInstructions: customInstructions.trim() || undefined,
   })
 
@@ -115,19 +153,21 @@ function FolderPicker({
   // synchronous reset (and no flash of the previous folder's contents).
   useEffect(() => {
     let ignore = false
-    dispatchAction<{ folders: DriveFolder[]; files: DriveFolder[] }>(
-      'quiz.driveFolders',
-      { parentId: current.id },
-    )
+    dispatchAction<{ folders: DriveFolder[] }>('quiz.driveFolders', {
+      parentId: current.id,
+    })
       .then(r => {
         if (ignore) return
         setFolders(r.folders)
-        setFiles(r.files ?? [])
         setLoadedFor(current.id)
         setError(null)
       })
       .catch(() => {
-        if (!ignore) setError('Could not load your Drive folders')
+        if (!ignore) {
+          setError(
+            'Could not load your Drive folders. Your Google account may not have granted Drive access.',
+          )
+        }
       })
     return () => {
       ignore = true
@@ -216,16 +256,25 @@ function FolderPicker({
               ))}
             </nav>
 
-            {/* Finder body: sub-folders (click to open) and files (context) */}
+            {/* Finder body: the sub-folders of the current folder */}
             <div className="max-h-44 min-h-[6rem] overflow-y-auto rounded-md border border-slate-200">
               {error ? (
-                <p className="p-3 text-sm text-rose-600">{error}</p>
+                <div className="p-3">
+                  <p className="text-sm text-rose-600">{error}</p>
+                  <button
+                    type="button"
+                    onClick={onReconnect}
+                    className="mt-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-slate-50"
+                  >
+                    Reconnect Google
+                  </button>
+                </div>
               ) : loading ? (
                 <p className="p-3 text-sm text-slate-500">Loading…</p>
-              ) : folders.length === 0 && files.length === 0 ? (
+              ) : folders.length === 0 ? (
                 <p className="p-3 text-sm text-slate-400">
-                  This folder is empty. Save the quiz here, or make a new folder
-                  below.
+                  No sub-folders here. Save the quiz into this folder, or make a
+                  new one below.
                 </p>
               ) : (
                 <ul className="divide-y divide-slate-100">
@@ -246,16 +295,6 @@ function FolderPicker({
                           aria-hidden
                         />
                       </button>
-                    </li>
-                  ))}
-                  {/* Files are shown for context only — you save into folders */}
-                  {files.map(f => (
-                    <li
-                      key={f.id}
-                      className="flex items-center gap-2 px-3 py-2 text-sm text-slate-400"
-                    >
-                      <FileText className="h-4 w-4 shrink-0" aria-hidden />
-                      <span className="flex-1 truncate">{f.name}</span>
                     </li>
                   ))}
                 </ul>
@@ -315,10 +354,9 @@ function FolderPicker({
                   type="number"
                   min={1}
                   max={50}
-                  value={questionCount}
-                  onChange={e =>
-                    setQuestionCount(Math.max(1, Number(e.target.value) || 1))
-                  }
+                  value={countText}
+                  onChange={e => onCountChange(e.target.value)}
+                  onBlur={onCountBlur}
                   className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
                 />
               </label>
@@ -371,8 +409,8 @@ function FolderPicker({
                     <span>
                       Include the spoken transcript
                       <span className="block text-xs text-slate-500">
-                        Draw questions from what you said aloud too, not just
-                        the slides.
+                        Base questions on the full lecture transcript, not only
+                        the slide text.
                       </span>
                     </span>
                   </label>
@@ -380,7 +418,7 @@ function FolderPicker({
 
                 <fieldset>
                   <legend className="text-sm text-slate-700">
-                    Question types (leave blank to let the AI decide)
+                    Question types
                   </legend>
                   <div className="mt-1 grid grid-cols-2 gap-2">
                     {QUESTION_TYPE_FIELDS.map(({ key, label }) => (
@@ -396,28 +434,24 @@ function FolderPicker({
                           aria-label={label}
                           placeholder="0"
                           value={types[key] || ''}
-                          onChange={e =>
-                            setTypes(t => ({
-                              ...t,
-                              [key]: Math.max(0, Number(e.target.value) || 0),
-                            }))
-                          }
+                          onChange={e => onTypeChange(key, e.target.value)}
                           className="w-16 rounded-md border border-slate-300 px-2 py-1 text-sm"
                         />
                       </label>
                     ))}
                   </div>
-                  {mismatch && (
-                    <p className="mt-1 text-xs text-amber-600">
-                      The type counts add up to {typeTotal}, not {questionCount}
-                      . The quiz will have {typeTotal} question
-                      {typeTotal === 1 ? '' : 's'}.
-                    </p>
-                  )}
+                  <p className="mt-1 text-xs text-slate-500">
+                    The number of questions above follows this breakdown.
+                  </p>
                 </fieldset>
 
                 <label className="text-sm text-slate-700">
-                  AI instructions (optional)
+                  Additional instructions (optional)
+                  <span className="block text-xs text-slate-500">
+                    Tell the AI how to write the quiz — e.g. focus on a topic,
+                    skip a section, set the difficulty, or match a question
+                    style.
+                  </span>
                   <textarea
                     value={customInstructions}
                     onChange={e => setCustomInstructions(e.target.value)}
@@ -468,6 +502,28 @@ export default function QuizPanel({ deckId }: Props) {
   const [busy, setBusy] = useState(false)
   const [picking, setPicking] = useState(false)
   const [copied, setCopied] = useState(false)
+  // Set when the user returned from a connect that did not grant Drive access
+  // (Google's granular consent — the Drive permission was unticked). A one-shot
+  // signal: the flag is stripped from the URL so a refresh (or a later
+  // successful reconnect) doesn't keep showing the banner.
+  const [driveDenied, setDriveDenied] = useState(
+    () =>
+      new URLSearchParams(window.location.search).get('connect') ===
+      'drive_denied',
+  )
+  useEffect(() => {
+    if (!driveDenied) return
+    try {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('connect')
+      window.history.replaceState(window.history.state, '', url)
+    } catch {
+      // replaceState can throw in sandboxed/odd-origin contexts; the banner
+      // still works, it just won't be stripped from the address bar.
+    }
+    // Run once on mount; driveDenied is only ever set from the URL.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     dispatchAction<QuizStatus>('quiz.status', { deckId })
@@ -487,6 +543,9 @@ export default function QuizPanel({ deckId }: Props) {
     // page load, so we signal the tab via a URL param (router state is lost).
     const returnTo = new URL(window.location.href)
     returnTo.searchParams.set('settings', 'quiz')
+    // Don't carry a prior drive-denied flag back, or a SUCCESSFUL reconnect
+    // would return to a URL that still shows the banner.
+    returnTo.searchParams.delete('connect')
     dispatchAction<QuizConnectResult>('quiz.connectGoogle', {
       returnTo: returnTo.toString(),
     })
@@ -496,6 +555,7 @@ export default function QuizPanel({ deckId }: Props) {
           window.location.href = res.url
         } else {
           setConnected(true)
+          setDriveDenied(false)
           setBusy(false)
         }
       })
@@ -558,6 +618,14 @@ export default function QuizPanel({ deckId }: Props) {
       </div>
 
       {error && <p className="text-sm text-rose-600">{error}</p>}
+
+      {driveDenied && (
+        <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          Your Google account connected, but Drive access wasn’t allowed. Click{' '}
+          <span className="font-medium">Connect Google</span> again and be sure
+          to tick the Drive permission so quizzes can be saved.
+        </p>
+      )}
 
       {quiz ? (
         <div className="flex flex-col gap-2 rounded-md border border-slate-200 bg-slate-50 p-4">
@@ -629,6 +697,7 @@ export default function QuizPanel({ deckId }: Props) {
           publishing={busy}
           onCancel={() => setPicking(false)}
           onPublish={publish}
+          onReconnect={connectGoogle}
           hasTranscript={hasTranscript}
         />
       )}

@@ -70,6 +70,10 @@ const envSchema = z.object({
   // How the quiz publishes to Google Forms: 'mock' fabricates a Form URL
   // (tests/dev), 'live' runs the real connected-account + Quiz Generator flow.
   QUIZ_PUBLISH_MODE: z.enum(['mock', 'live']).default('mock'),
+  // How a deck exports to Google Drive/Slides: 'mock' fabricates a file URL
+  // (tests/dev), 'live' uploads to the connected account's Drive and builds a
+  // real Google Slides presentation. Downloads (PDF/YAML bytes) work in both.
+  EXPORT_MODE: z.enum(['mock', 'live']).default('mock'),
   IMAGE_GEN_PROVIDER: z.string().default('gemini'),
   // Text-to-speech (slide/deck playback). 'google-cloud' needs a key below;
   // 'none' disables the feature; 'mock' is for tests. Without a usable key the
