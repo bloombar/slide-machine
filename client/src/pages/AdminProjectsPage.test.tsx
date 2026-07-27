@@ -105,6 +105,39 @@ describe('AdminProjectsPage', () => {
     expect(calls.at(-1)).toContain('sort=title:desc')
   })
 
+  it('sorts by every column, including the joined and computed ones', async () => {
+    const { calls } = renderPage()
+    await screen.findByRole('link', { name: 'Physics' })
+
+    const columns: Array<[string, string]> = [
+      ['Title', 'title'],
+      ['Owner', 'owner'],
+      ['Visibility', 'visibility'],
+      ['Lectures', 'lectures'],
+      ['Created', 'created'],
+      ['Updated', 'updated'],
+    ]
+    for (const [label, field] of columns) {
+      fireEvent.click(screen.getByRole('button', { name: label }))
+      await screen.findByRole('link', { name: 'Physics' })
+      expect(calls.at(-1)).toContain(`sort=${field}:asc`)
+    }
+  })
+
+  it('marks only the sorted column for assistive tech', async () => {
+    renderPage()
+    await screen.findByRole('link', { name: 'Physics' })
+    fireEvent.click(screen.getByRole('button', { name: 'Owner' }))
+    await screen.findByRole('link', { name: 'Physics' })
+
+    const sorted = screen
+      .getAllByRole('columnheader')
+      .filter(th => th.getAttribute('aria-sort') !== 'none')
+    expect(sorted).toHaveLength(1)
+    expect(sorted[0]).toHaveTextContent('Owner')
+    expect(sorted[0]).toHaveAttribute('aria-sort', 'ascending')
+  })
+
   it('defaults to a page size of 100 and changing it refetches from page 1', async () => {
     const { calls } = renderPage(() => ({
       status: 200,

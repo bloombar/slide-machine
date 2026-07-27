@@ -9,6 +9,7 @@ export default function SortHeader<F extends string>({
   field,
   sort,
   onSort,
+  align = 'left',
 }: {
   label: string
   field: F
@@ -16,13 +17,16 @@ export default function SortHeader<F extends string>({
   // are always `${field}:asc|desc`, which onSort accepts contravariantly.
   sort: `${string}:${'asc' | 'desc'}`
   onSort: (sort: `${F}:${'asc' | 'desc'}`) => void
+  /** Match the column's cells; numeric columns are right-aligned. */
+  align?: 'left' | 'right'
 }) {
   const [activeField, activeDir] = sort.split(':')
   const active = activeField === field
+  const right = align === 'right'
   return (
     <th
       scope="col"
-      className="px-4 py-3"
+      className={`px-4 py-3 ${right ? 'text-right' : ''}`}
       aria-sort={
         active ? (activeDir === 'asc' ? 'ascending' : 'descending') : 'none'
       }
@@ -32,7 +36,10 @@ export default function SortHeader<F extends string>({
         onClick={() =>
           onSort(`${field}:${active && activeDir === 'asc' ? 'desc' : 'asc'}`)
         }
-        className="group flex items-center gap-1 uppercase hover:text-slate-700"
+        // Right-aligned headers stretch so the label sits over its column
+        className={`group flex items-center gap-1 uppercase hover:text-slate-700 ${
+          right ? 'w-full justify-end' : ''
+        }`}
       >
         {label}
         <span

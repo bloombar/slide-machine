@@ -1,7 +1,8 @@
 /**
  * Admin project directory: every project on the platform in a table
  * (title, owner, visibility, lecture count, timestamps), paginated and
- * sortable. Rows link to the per-project admin view, owners to theirs.
+ * sortable by every column. Rows link to the per-project admin view,
+ * owners to theirs.
  */
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
@@ -93,15 +94,25 @@ export default function AdminProjectsPage() {
                 sort={sort}
                 onSort={changeSort}
               />
-              <th scope="col" className="px-4 py-3">
-                Owner
-              </th>
-              <th scope="col" className="px-4 py-3">
-                Visibility
-              </th>
-              <th scope="col" className="px-4 py-3 text-right">
-                Lectures
-              </th>
+              <SortHeader
+                label="Owner"
+                field="owner"
+                sort={sort}
+                onSort={changeSort}
+              />
+              <SortHeader
+                label="Visibility"
+                field="visibility"
+                sort={sort}
+                onSort={changeSort}
+              />
+              <SortHeader
+                label="Lectures"
+                field="lectures"
+                sort={sort}
+                onSort={changeSort}
+                align="right"
+              />
               <SortHeader
                 label="Created"
                 field="created"

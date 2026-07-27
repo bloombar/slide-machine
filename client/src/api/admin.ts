@@ -100,8 +100,10 @@ export interface AdminProjectSummary {
   updatedAt: string
 }
 
-/** A column the project directory can be ordered by. */
-export type AdminProjectsSortField = 'title' | 'created' | 'updated'
+/** A column the project directory can be ordered by — every column the
+ * table shows. Ordering happens server-side, over all projects. */
+export type AdminProjectsSortField =
+  'title' | 'owner' | 'visibility' | 'lectures' | 'created' | 'updated'
 /** Wire value for the `sort` query param: `${field}:${dir}`. */
 export type AdminProjectsSort = `${AdminProjectsSortField}:${AdminUsersSortDir}`
 
@@ -122,9 +124,18 @@ export interface AdminDeckListItem extends AdminDeckSummary {
   projectTitle: string
 }
 
-/** The lecture directory sorts by the same columns as the project one. */
-export type AdminDecksSortField = AdminProjectsSortField
-export type AdminDecksSort = AdminProjectsSort
+/** A column the lecture directory can be ordered by — every column the
+ * table shows, including the ones it borrows from the lecture's project
+ * and owner. */
+export type AdminDecksSortField =
+  | 'title'
+  | 'project'
+  | 'owner'
+  | 'visibility'
+  | 'slides'
+  | 'created'
+  | 'updated'
+export type AdminDecksSort = `${AdminDecksSortField}:${AdminUsersSortDir}`
 
 export interface AdminDecksResponse {
   decks: AdminDeckListItem[]

@@ -1,8 +1,8 @@
 /**
  * Admin lecture directory: every lecture on the platform in a table
  * (title, project, owner, effective visibility, slide count, timestamps),
- * paginated and sortable. Rows link to the per-lecture admin view, the
- * project and owner cells to theirs.
+ * paginated and sortable by every column. Rows link to the per-lecture
+ * admin view, the project and owner cells to theirs.
  */
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
@@ -94,18 +94,31 @@ export default function AdminDecksPage() {
                 sort={sort}
                 onSort={changeSort}
               />
-              <th scope="col" className="px-4 py-3">
-                Project
-              </th>
-              <th scope="col" className="px-4 py-3">
-                Owner
-              </th>
-              <th scope="col" className="px-4 py-3">
-                Visibility
-              </th>
-              <th scope="col" className="px-4 py-3 text-right">
-                Slides
-              </th>
+              <SortHeader
+                label="Project"
+                field="project"
+                sort={sort}
+                onSort={changeSort}
+              />
+              <SortHeader
+                label="Owner"
+                field="owner"
+                sort={sort}
+                onSort={changeSort}
+              />
+              <SortHeader
+                label="Visibility"
+                field="visibility"
+                sort={sort}
+                onSort={changeSort}
+              />
+              <SortHeader
+                label="Slides"
+                field="slides"
+                sort={sort}
+                onSort={changeSort}
+                align="right"
+              />
               <SortHeader
                 label="Created"
                 field="created"

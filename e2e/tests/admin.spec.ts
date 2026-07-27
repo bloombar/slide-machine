@@ -4,8 +4,8 @@
  * the allowlisted admin (ADMIN_EMAILS in playwright.config.ts) reaches
  * the user directory from the menu, drills into a user and through to
  * a project's own admin page, browses the site-wide project and
- * lecture directories, exports the audit log as CSV, and moves between
- * sections with the admin nav bar.
+ * lecture directories (sorting them by every column), exports the audit
+ * log as CSV, and moves between sections with the admin nav bar.
  */
 import { test, expect, type Page } from '@playwright/test'
 import { createProject } from './helpers'
@@ -166,6 +166,45 @@ test('the admin reaches the audit log and downloads the CSV export', async ({
   await page.getByRole('button', { name: 'Download CSV' }).click()
   const download = await downloadPromise
   expect(download.suggestedFilename()).toBe('admin-audit-log.csv')
+})
+
+test('every directory column sorts, including the joined ones', async ({
+  page,
+}) => {
+  await ensureSignedIn(page, admin)
+
+  // Each directory: its columns, and the row-count assertion that proves
+  // the re-sorted page still loaded (the test DB is shared, so assert
+  // "renders rows", not specific contents)
+  const directories = [
+    {
+      url: '/app/admin/projects',
+      columns: ['Title', 'Owner', 'Visibility', 'Lectures', 'Created'],
+    },
+    {
+      url: '/app/admin/decks',
+      columns: ['Lecture', 'Project', 'Owner', 'Visibility', 'Slides'],
+    },
+  ]
+
+  for (const directory of directories) {
+    await page.goto(directory.url)
+    const table = page.getByRole('table')
+    for (const column of directory.columns) {
+      await table.getByRole('button', { name: column }).click()
+      // The clicked column becomes the only sorted one, ascending first
+      await expect(
+        page.getByRole('columnheader', { name: column }),
+      ).toHaveAttribute('aria-sort', 'ascending')
+      expect(await table.getByRole('row').count()).toBeGreaterThanOrEqual(2)
+
+      // Clicking again flips the direction rather than re-sorting ascending
+      await table.getByRole('button', { name: column }).click()
+      await expect(
+        page.getByRole('columnheader', { name: column }),
+      ).toHaveAttribute('aria-sort', 'descending')
+    }
+  }
 })
 
 test('the admin nav bar moves between every section and marks the current one', async ({

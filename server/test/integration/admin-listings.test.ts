@@ -235,6 +235,53 @@ describe('GET /api/admin/projects', () => {
       .set('Authorization', `Bearer ${admin}`)
     expect(byCreatedAsc.body.projects[0].id).toBe(zulu._id.toString())
   })
+
+  it('sorts by owner email, visibility, and lecture count', async () => {
+    const admin = await asAdmin()
+    const { user: ada } = await createUser('ada@example.com', 'Ada')
+    const { user: zoe } = await createUser('zoe@example.com', 'Zoe')
+    // Ada's project is public with two lectures; Zoe's is restricted with none
+    const adas = await createProject(ada._id, 'Alpha')
+    const zoes = await createProject(zoe._id, 'Beta', {
+      visibility: 'restricted',
+    })
+    await createDeck(ada._id, adas._id, 'Waves', 'waves-abc')
+    await createDeck(ada._id, adas._id, 'Optics', 'optics-abc')
+
+    const order = async (sort: string): Promise<string[]> => {
+      const res = await request(server)
+        .get(`/api/admin/projects?sort=${sort}`)
+        .set('Authorization', `Bearer ${admin}`)
+      expect(res.status).toBe(200)
+      return res.body.projects.map((p: { id: string }) => p.id)
+    }
+
+    const [ada1, zoe1] = [adas._id.toString(), zoes._id.toString()]
+    expect(await order('owner:asc')).toEqual([ada1, zoe1])
+    expect(await order('owner:desc')).toEqual([zoe1, ada1])
+    // 'public' sorts before 'restricted'
+    expect(await order('visibility:asc')).toEqual([ada1, zoe1])
+    expect(await order('visibility:desc')).toEqual([zoe1, ada1])
+    // 0 lectures before 2
+    expect(await order('lectures:asc')).toEqual([zoe1, ada1])
+    expect(await order('lectures:desc')).toEqual([ada1, zoe1])
+  })
+
+  it('keeps a low-cardinality sort stable across pages', async () => {
+    const admin = await asAdmin()
+    const { user } = await createUser('ada@example.com', 'Ada')
+    // Every project shares a visibility, so only the id tiebreak orders them
+    for (let i = 0; i < 6; i++) await createProject(user._id, `Project ${i}`)
+
+    const ids = async (page: number): Promise<string[]> => {
+      const res = await request(server)
+        .get(`/api/admin/projects?sort=visibility:asc&page=${page}&limit=3`)
+        .set('Authorization', `Bearer ${admin}`)
+      return res.body.projects.map((p: { id: string }) => p.id)
+    }
+    const [first, second] = [await ids(1), await ids(2)]
+    expect(new Set([...first, ...second]).size).toBe(6)
+  })
 })
 
 describe('GET /api/admin/decks', () => {
@@ -349,5 +396,87 @@ describe('GET /api/admin/decks', () => {
     expect(
       byTitleDesc.body.decks.map((d: { title: string }) => d.title),
     ).toEqual(['Zulu', 'Alpha'])
+  })
+
+  it('sorts by project title, owner email, and slide count', async () => {
+    const admin = await asAdmin()
+    const { user: ada } = await createUser('ada@example.com', 'Ada')
+    const { user: zoe } = await createUser('zoe@example.com', 'Zoe')
+    const alphaProject = await createProject(ada._id, 'Alpha Course')
+    const zuluProject = await createProject(zoe._id, 'Zulu Course')
+    // Ada's lecture: earlier project and owner, but more slides
+    const adas = await createDeck(ada._id, alphaProject._id, 'One', 'one-abc', {
+      slideOrder: ['s1', 's2', 's3'],
+    })
+    const zoes = await createDeck(zoe._id, zuluProject._id, 'Two', 'two-abc')
+
+    const order = async (sort: string): Promise<string[]> => {
+      const res = await request(server)
+        .get(`/api/admin/decks?sort=${sort}`)
+        .set('Authorization', `Bearer ${admin}`)
+      expect(res.status).toBe(200)
+      return res.body.decks.map((d: { id: string }) => d.id)
+    }
+
+    const [adaDeck, zoeDeck] = [adas._id.toString(), zoes._id.toString()]
+    expect(await order('project:asc')).toEqual([adaDeck, zoeDeck])
+    expect(await order('project:desc')).toEqual([zoeDeck, adaDeck])
+    expect(await order('owner:asc')).toEqual([adaDeck, zoeDeck])
+    expect(await order('owner:desc')).toEqual([zoeDeck, adaDeck])
+    // 0 slides before 3
+    expect(await order('slides:asc')).toEqual([zoeDeck, adaDeck])
+    expect(await order('slides:desc')).toEqual([adaDeck, zoeDeck])
+  })
+
+  it('sorts by effective visibility, override and inherited alike', async () => {
+    const admin = await asAdmin()
+    const { user } = await createUser('ada@example.com', 'Ada')
+    const open = await createProject(user._id, 'Open')
+    const closed = await createProject(user._id, 'Closed', {
+      visibility: 'restricted',
+    })
+    // Public only by inheritance; restricted only by override — so a sort
+    // on the stored field alone would put these in the wrong order
+    const inheritsPublic = await createDeck(
+      user._id,
+      open._id,
+      'Waves',
+      'waves-abc',
+    )
+    const overridesPrivate = await createDeck(
+      user._id,
+      open._id,
+      'Drafts',
+      'drafts-abc',
+      {
+        accessOverride: { visibility: 'restricted', viewers: [], editors: [] },
+      },
+    )
+    const inheritsPrivate = await createDeck(
+      user._id,
+      closed._id,
+      'Hidden',
+      'hidden-abc',
+    )
+
+    const res = await request(server)
+      .get('/api/admin/decks?sort=visibility:asc')
+      .set('Authorization', `Bearer ${admin}`)
+    expect(res.status).toBe(200)
+    const rows = res.body.decks as Array<{ id: string; visibility: string }>
+    expect(rows.map(d => d.visibility)).toEqual([
+      'public',
+      'restricted',
+      'restricted',
+    ])
+    expect(rows[0]!.id).toBe(inheritsPublic._id.toString())
+    expect(
+      rows
+        .slice(1)
+        .map(d => d.id)
+        .sort(),
+    ).toEqual(
+      [overridesPrivate._id.toString(), inheritsPrivate._id.toString()].sort(),
+    )
   })
 })

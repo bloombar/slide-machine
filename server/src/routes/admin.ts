@@ -14,7 +14,12 @@
  * live there).
  */
 import { Router } from 'express'
-import { isValidObjectId, Types, type HydratedDocument } from 'mongoose'
+import {
+  isValidObjectId,
+  Types,
+  type HydratedDocument,
+  type PipelineStage,
+} from 'mongoose'
 import { z } from 'zod'
 import type {
   AdminLogsResponse,
@@ -267,23 +272,141 @@ const listQuerySchema = listQuery(
   'joined:desc',
 )
 
-// Projects and lectures share the same sortable columns; both directories
-// default to most-recently-edited first.
-const PROJECT_SORTS = {
-  'title:asc': { title: 1 },
-  'title:desc': { title: -1 },
-  'created:asc': { createdAt: 1 },
-  'created:desc': { createdAt: -1 },
-  'updated:asc': { updatedAt: 1 },
-  'updated:desc': { updatedAt: -1 },
-} as const
-const DECK_SORTS = PROJECT_SORTS
+/**
+ * How one directory column is ordered: the aggregation expression that
+ * produces its value, plus any $lookup stages that expression needs.
+ * Every column the client shows is sortable, including ones not stored
+ * on the row's own document (owner email, lecture counts, a lecture's
+ * inherited visibility) — those join first, so the order covers the
+ * whole collection rather than the page that happens to be loaded.
+ */
+interface SortColumn {
+  value: PipelineStage.Project['$project'][string]
+  stages?: PipelineStage[]
+}
 
-const projectsQuerySchema = listQuery(
-  Object.keys(PROJECT_SORTS) as (keyof typeof PROJECT_SORTS)[],
-  'updated:desc',
-)
-const decksQuerySchema = projectsQuerySchema
+/** Joins each row to its owner as `sortOwner` (Owner columns). */
+const ownerLookup: PipelineStage = {
+  $lookup: {
+    from: UserModel.collection.name,
+    localField: 'ownerId',
+    foreignField: '_id',
+    as: 'sortOwner',
+  },
+}
+
+/** Joins each lecture to its project as `sortProject` (Project column,
+ * and the inherited half of the Visibility column). */
+const deckProjectLookup: PipelineStage = {
+  $lookup: {
+    from: ProjectModel.collection.name,
+    localField: 'projectId',
+    foreignField: '_id',
+    as: 'sortProject',
+  },
+}
+
+/** Counts each project's lectures as `sortDeckCount`. Counting inside
+ * the join keeps whole lecture documents out of the pipeline. */
+const deckCountLookup: PipelineStage = {
+  $lookup: {
+    from: DeckModel.collection.name,
+    let: { projectId: '$_id' },
+    pipeline: [
+      { $match: { $expr: { $eq: ['$projectId', '$$projectId'] } } },
+      { $count: 'count' },
+    ],
+    as: 'sortDeckCount',
+  },
+}
+
+/** An owner's email, blank while the owner is mid-cascade-deletion —
+ * matching the blank the row itself carries. */
+const ownerEmailValue = { $ifNull: [{ $first: '$sortOwner.email' }, ''] }
+
+/** Ordering that mirrors the displayed timestamp: rows predating the
+ * updatedAt field fall back to createdAt, exactly as the row DTO does. */
+const updatedValue = { $ifNull: ['$updatedAt', '$createdAt'] }
+
+// Both directories default to most-recently-edited first.
+const PROJECT_COLUMNS: Record<string, SortColumn> = {
+  title: { value: '$title' },
+  owner: { value: ownerEmailValue, stages: [ownerLookup] },
+  visibility: { value: '$visibility' },
+  lectures: {
+    value: { $ifNull: [{ $first: '$sortDeckCount.count' }, 0] },
+    stages: [deckCountLookup],
+  },
+  created: { value: '$createdAt' },
+  updated: { value: updatedValue },
+}
+
+const DECK_COLUMNS: Record<string, SortColumn> = {
+  title: { value: '$title' },
+  project: {
+    value: { $ifNull: [{ $first: '$sortProject.title' }, ''] },
+    stages: [deckProjectLookup],
+  },
+  owner: { value: ownerEmailValue, stages: [ownerLookup] },
+  // Effective visibility: the lecture's own override, else its project's
+  // — and a dangling project reads as restricted, as resolveDeckAcl does.
+  visibility: {
+    value: {
+      $ifNull: [
+        '$accessOverride.visibility',
+        { $ifNull: [{ $first: '$sortProject.visibility' }, 'restricted'] },
+      ],
+    },
+    stages: [deckProjectLookup],
+  },
+  slides: { value: { $size: { $ifNull: ['$slideOrder', []] } } },
+  created: { value: '$createdAt' },
+  updated: { value: updatedValue },
+}
+
+/** Every `${column}:${dir}` key a directory accepts, for its query schema. */
+const sortKeys = (columns: Record<string, SortColumn>): string[] =>
+  Object.keys(columns).flatMap(field => [`${field}:asc`, `${field}:desc`])
+
+const projectsQuerySchema = listQuery(sortKeys(PROJECT_COLUMNS), 'updated:desc')
+const decksQuerySchema = listQuery(sortKeys(DECK_COLUMNS), 'updated:desc')
+
+/**
+ * The pipeline that orders a whole collection by one column and cuts out
+ * a page, returning ids only — the caller hydrates them. Everything is
+ * reduced to a single `sortKey` before the sort, so only that key and an
+ * id are held in memory. `_id` breaks ties, without which a low-cardinality
+ * column (visibility) could repeat or skip rows across pages.
+ */
+const pageIdPipeline = (
+  columns: Record<string, SortColumn>,
+  sort: string,
+  page: number,
+  limit: number,
+): PipelineStage[] => {
+  const [field = '', dir] = sort.split(':')
+  // The query schema only admits known columns, so this always resolves.
+  const column = columns[field]!
+  const order = dir === 'asc' ? 1 : -1
+  return [
+    ...(column.stages ?? []),
+    { $project: { sortKey: column.value } },
+    { $sort: { sortKey: order, _id: 1 } },
+    { $skip: (page - 1) * limit },
+    { $limit: limit },
+    { $project: { _id: 1 } },
+  ]
+}
+
+/** Restores the pipeline's order over documents fetched by id, which
+ * come back in whatever order the database found them. */
+const inIdOrder = <T extends { _id: Types.ObjectId }>(
+  ids: Types.ObjectId[],
+  docs: T[],
+): T[] => {
+  const byId = new Map(docs.map(doc => [doc._id.toString(), doc]))
+  return ids.flatMap(id => byId.get(id.toString()) ?? [])
+}
 
 /** Resolves a :id route param to an existing user or 404s. */
 const loadUser = async (id: string): Promise<HydratedDocument<UserDb>> => {
@@ -449,19 +572,20 @@ adminRouter.get('/users/:id/decks', async (req, res) => {
 })
 
 /** The site-wide project directory: every project on the platform,
- * paginated and sortable, each row carrying its owner's email and its
- * lecture count. Owner emails and lecture counts come from one batched
- * query each — never one per row. */
+ * paginated and sortable by any column, each row carrying its owner's
+ * email and its lecture count. Owner emails and lecture counts come from
+ * one batched query each — never one per row. */
 adminRouter.get('/projects', async (req, res) => {
   const { page, limit, sort } = parseListQuery(projectsQuerySchema, req.query)
 
-  const [projects, total] = await Promise.all([
-    ProjectModel.find()
-      .sort(PROJECT_SORTS[sort])
-      .skip((page - 1) * limit)
-      .limit(limit),
+  const pageIds = await ProjectModel.aggregate<{ _id: Types.ObjectId }>(
+    pageIdPipeline(PROJECT_COLUMNS, sort, page, limit),
+  ).then(rows => rows.map(row => row._id))
+  const [found, total] = await Promise.all([
+    ProjectModel.find({ _id: { $in: pageIds } }),
     ProjectModel.countDocuments(),
   ])
+  const projects = inIdOrder(pageIds, found)
 
   const ownerIds = [...new Set(projects.map(p => p.ownerId.toString()))]
   const projectIds = projects.map(p => p._id)
@@ -563,19 +687,21 @@ adminRouter.post('/projects/:id/private-view', async (req, res) => {
 })
 
 /** The site-wide lecture directory: every lecture on the platform,
- * paginated and sortable, each row carrying its effective visibility,
- * its owner's email, and its project's title. Three batched queries
- * (ACLs, owners, projects) cover the whole page — never one per row. */
+ * paginated and sortable by any column, each row carrying its effective
+ * visibility, its owner's email, and its project's title. Three batched
+ * queries (ACLs, owners, projects) cover the whole page — never one per
+ * row. */
 adminRouter.get('/decks', async (req, res) => {
   const { page, limit, sort } = parseListQuery(decksQuerySchema, req.query)
 
-  const [decks, total] = await Promise.all([
-    DeckModel.find()
-      .sort(DECK_SORTS[sort])
-      .skip((page - 1) * limit)
-      .limit(limit),
+  const pageIds = await DeckModel.aggregate<{ _id: Types.ObjectId }>(
+    pageIdPipeline(DECK_COLUMNS, sort, page, limit),
+  ).then(rows => rows.map(row => row._id))
+  const [found, total] = await Promise.all([
+    DeckModel.find({ _id: { $in: pageIds } }),
     DeckModel.countDocuments(),
   ])
+  const decks = inIdOrder(pageIds, found)
 
   const ownerIds = [...new Set(decks.map(d => d.ownerId.toString()))]
   const projectIds = [...new Set(decks.map(d => d.projectId.toString()))]
