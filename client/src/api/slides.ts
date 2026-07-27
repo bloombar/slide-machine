@@ -66,6 +66,18 @@ export const editSlideDrawings = (
   dispatchAction<Slide>('slide.editDrawings', { slideId, drawings })
 
 /**
+ * Saves a hand-edited spoken transcript for a slide (EDIT-6). The server
+ * re-anchors the slide's whiteboard marks onto the new text, so the refreshed
+ * slide it returns carries the updated `drawings` and must replace the local
+ * copy wholesale.
+ */
+export const editSlideTranscript = (
+  slideId: string,
+  transcript: string,
+): Promise<Slide> =>
+  dispatchAction<Slide>('slide.editTranscript', { slideId, transcript })
+
+/**
  * Synthesizes speech for a slide and returns a playable audio URL (or null
  * when there's nothing to say). `content` speaks the rendered slide;
  * `transcript` speaks the stored lecture transcript (narrated from content by

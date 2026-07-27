@@ -440,6 +440,13 @@ The whiteboard drawing surface ([EDIT-4](#edit-4-whiteboard-annotation)) is driv
 
 The tools write the per-slide stroke model ([§15](#15-data-models), `Slide.drawings`) that [EDIT-4](#edit-4-whiteboard-annotation) replays in sync with narration.
 
+#### EDIT-6 Spoken transcript editing
+
+Each slide's menu opens an editor for its **spoken transcript** (`sourceTranscript`, [§15](#15-data-models)) — the text read aloud during narration playback ([PLAY-2](#play-2-narration-playback)) — so a user can correct mis-transcribed speech or rewrite what the deck says. Changes save or cancel outright.
+
+- **Whiteboard marks are preserved** — marks are timed by position within the transcript ([EDIT-4](#edit-4-whiteboard-annotation)), so a save **re-anchors** them onto the edited text by the phrase each was drawn over, exactly as a [GEN-4](#gen-4-post-lecture-ai-reformat-holistic-regeneration) narration refine does; a mark whose phrase no longer exists is orphaned — kept but hidden, in editing as well as playback — rather than left pointing at unrelated words, and reappears if wording it matches returns. The editor says so when the slide carries marks.
+- **Clearing it is allowed** — an empty transcript returns the slide to being narrated from its own content ([PLAY-2](#play-2-narration-playback)).
+
 #### SHARE-1 Saved deck viewer & permalink
 
 Saved decks have a **deck viewer** reachable via a stable **permalink** that can be shared. Sharing visibility is controllable (private / unlisted-by-link / public). Public/shared class artifacts respect [§16](#16-privacy-security--compliance).

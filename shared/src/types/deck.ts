@@ -168,7 +168,8 @@ export type StrokeTool = 'pen' | 'highlighter'
  * transcript refinement the phrase is re-matched semantically to the closest
  * phrase in the new narration and `charAnchor` re-derived, so the mark tracks
  * its idea rather than a proportional point. When no acceptable match survives,
- * `orphaned` is set and the mark is hidden at playback.
+ * `orphaned` is set and the mark is hidden — in the editing view as well as at
+ * playback — but kept, so a later remap that finds its phrase restores it.
  */
 export interface StrokeAnchor {
   charAnchor: number
@@ -183,7 +184,8 @@ export interface StrokeAnchor {
   /** 0..1 position of the draw within `phraseText`, for intra-phrase precision. */
   phraseOffset?: number
   /** Set by the refine remap when the bound phrase no longer exists in the
-   * rewritten transcript; hides the mark at playback (WB-2 orphan policy). */
+   * rewritten transcript; hides the mark everywhere it renders, without
+   * deleting it (WB-2 orphan policy). Cleared by a later matching remap. */
   orphaned?: boolean
 }
 

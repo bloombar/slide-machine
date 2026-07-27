@@ -1,8 +1,10 @@
 /**
  * Per-slide kebab superimposed over the slide's top-right corner
- * (replacing the old bare delete icon): a context menu with Change
- * layout (EDIT-3, opens the layout picker) and Delete slide (immediate,
- * no confirmation). Sits above the SlideNavZones hotspots (z-10, see
+ * (replacing the old bare delete icon): a context menu with Edit spoken
+ * transcript (EDIT-6, opens the transcript editor, next to Speak since
+ * both act on the spoken slide), Change layout (EDIT-3, opens the layout
+ * picker) and Delete slide (immediate, no confirmation). Sits above the
+ * SlideNavZones hotspots (z-10, see
  * the z-index tiers) so clicks act on the menu instead of navigating.
  */
 import { useEffect, useRef, useState } from 'react'
@@ -13,6 +15,8 @@ interface Props {
   number: number
   /** Speaks this slide's content (TTS); omitted when TTS is unavailable. */
   onSpeak?: () => void
+  /** Opens the spoken-transcript editor (EDIT-6); owner-only. */
+  onEditTranscript?: () => void
   /** Owner-only; omitted for read-only viewers. */
   onChangeLayout?: () => void
   /** Refine just this slide with the lecture's Refine settings (owner-only;
@@ -33,6 +37,7 @@ interface Props {
 export default function SlideMenu({
   number,
   onSpeak,
+  onEditTranscript,
   onChangeLayout,
   onRefine,
   onPlayOriginalAudio,
@@ -76,6 +81,7 @@ export default function SlideMenu({
   if (
     !onSpeak &&
     !onChangeLayout &&
+    !onEditTranscript &&
     !onRefine &&
     !onPlayOriginalAudio &&
     !onDelete
@@ -107,7 +113,7 @@ export default function SlideMenu({
         <div
           role="menu"
           aria-label={`Options for slide ${number}`}
-          className="absolute right-0 z-10 mt-1 w-44 rounded-md border border-slate-200 bg-white py-1 shadow-lg"
+          className="absolute right-0 z-10 mt-1 w-52 rounded-md border border-slate-200 bg-white py-1 shadow-lg"
         >
           {onSpeak && (
             <button
@@ -116,6 +122,16 @@ export default function SlideMenu({
               className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
             >
               Speak this slide
+            </button>
+          )}
+          {/* Sits next to Speak: both act on what the slide says aloud. */}
+          {onEditTranscript && (
+            <button
+              role="menuitem"
+              onClick={pick(onEditTranscript)}
+              className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+            >
+              Edit spoken transcript
             </button>
           )}
           {onChangeLayout && (

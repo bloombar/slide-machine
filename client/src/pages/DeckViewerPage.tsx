@@ -65,6 +65,7 @@ import {
   getWhiteboardSuppressDebounceMs,
 } from '../runtime-config'
 import LayoutPickerModal from '../components/LayoutPickerModal'
+import TranscriptEditorModal from '../components/TranscriptEditorModal'
 import DraggableListRow from '../components/DraggableListRow'
 import EditableText from '../components/EditableText'
 import DeckPageHeader from '../components/DeckPageHeader'
@@ -179,6 +180,10 @@ export default function DeckViewerPage() {
   }, [])
   // Which slide the layout picker is open for (EDIT-3)
   const [layoutPickerFor, setLayoutPickerFor] = useState<string | null>(null)
+  // Which slide the spoken-transcript editor is open for (EDIT-6)
+  const [transcriptEditorFor, setTranscriptEditorFor] = useState<string | null>(
+    null,
+  )
   // Blank slots are invisible to the audience; clicking the page
   // background flashes a half-second skeleton reveal so editors can
   // find them
@@ -1435,6 +1440,15 @@ export default function DeckViewerPage() {
   // Slides whose original lecture audio the server said can be played back.
   const audioSlideIds = new Set(view.audioSlideIds ?? [])
 
+  // The slide whose spoken transcript is being edited (EDIT-6), plus its
+  // 1-based number for the dialog heading. Missing (e.g. deleted meanwhile)
+  // simply renders no dialog.
+  const transcriptEditIndex = view.slides.findIndex(
+    s => s.id === transcriptEditorFor,
+  )
+  const transcriptEditSlide =
+    transcriptEditIndex >= 0 ? view.slides[transcriptEditIndex] : undefined
+
   /** Stops original-audio playback and releases its blob URL. */
   const stopOriginalAudio = () => {
     originalAudioRef.current?.pause()
@@ -1665,6 +1679,9 @@ export default function DeckViewerPage() {
                 onChangeLayout={
                   canEdit ? () => setLayoutPickerFor(slide!.id) : undefined
                 }
+                onEditTranscript={
+                  canEdit ? () => setTranscriptEditorFor(slide!.id) : undefined
+                }
                 onRefine={
                   canEdit && slideRefineEnabled
                     ? () => requestRefineSlide(slide!.id)
@@ -1716,6 +1733,7 @@ export default function DeckViewerPage() {
                     number={i + 1}
                     onSpeak={ttsEnabled ? () => speakSlide(s) : undefined}
                     onChangeLayout={() => setLayoutPickerFor(s.id)}
+                    onEditTranscript={() => setTranscriptEditorFor(s.id)}
                     onRefine={
                       slideRefineEnabled
                         ? () => requestRefineSlide(s.id)
@@ -1759,6 +1777,15 @@ export default function DeckViewerPage() {
             setLayoutPickerFor(null)
             openSettings('template')
           }}
+        />
+      )}
+
+      {canEdit && transcriptEditSlide && (
+        <TranscriptEditorModal
+          slide={transcriptEditSlide}
+          number={transcriptEditIndex + 1}
+          onSaved={applySlide}
+          onClose={() => setTranscriptEditorFor(null)}
         />
       )}
 

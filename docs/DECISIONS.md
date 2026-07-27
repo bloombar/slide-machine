@@ -16,7 +16,7 @@ The three locked sub-decisions:
 
 - **Binding unit** = phrase fingerprint + intra-phrase offset (not a bare word — a single word re-matches everywhere).
 - **Remap mechanism** = embeddings as the backbone (works for manual edits too, not only Gemini rewrites), with proportional `remapAnchor` as the guaranteed last-resort fallback for fingerprint-less marks or when embeddings are unavailable. Threshold `PHRASE_MATCH_THRESHOLD = 0.5`, empirical — tune with real embeddings.
-- **Orphan policy** = when the best match is below threshold the phrase is gone, so the mark is flagged `orphaned` and hidden during playback (`strokeVisible`), never silently mis-placed.
+- **Orphan policy** = when the best match is below threshold the phrase is gone, so the mark is flagged `orphaned` and hidden (`strokeVisible` — in the editing view as well as during playback), never silently mis-placed. The stroke is kept, and a later remap that re-matches its phrase clears the flag.
 
 **Anti-drift rule.** Remap always matches against the mark's *original* captured `phraseText`, never the previous refinement, so repeated refines don't accumulate error.
 

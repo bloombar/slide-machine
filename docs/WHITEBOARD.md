@@ -119,6 +119,14 @@ slide is the update target, generation is **additive only**: layout pinned, **no
 refit** (no reformat/re-map), content only appended; an overflowing update still
 spills to a **new** slide. (`keepLayout` in [deck.ts](../server/src/actions/deck.ts).)
 
+### Hand-edited transcripts
+
+The kebab's **"Edit spoken transcript"** (EDIT-6,
+[TranscriptEditorModal](../client/src/components/TranscriptEditorModal.tsx))
+rewrites the very text marks are anchored to, so `slide.editTranscript` runs the
+same re-anchoring as a refine (`remapDrawingAnchors`, semantic phrase re-match →
+orphan → proportional fallback). The dialog says so when the slide has marks.
+
 ### Refine confirmation
 
 Because refine _can_ reflow content, refining a marked-up slide prompts first

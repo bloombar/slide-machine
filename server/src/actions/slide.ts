@@ -1,18 +1,22 @@
 /**
  * Slide actions (TECH-13). slide.get lets the client pick up
  * asynchronously-enriched images (IMG-1); slide.editContent and
- * slide.delete are the first EDIT-1 operations. Ownership is enforced
- * through the slide's deck; missing and foreign both read as forbidden.
+ * slide.delete are the first EDIT-1 operations; slide.editTranscript edits the
+ * spoken narration TTS reads (EDIT-6). Ownership is enforced through the
+ * slide's deck; missing and foreign both read as forbidden.
  */
 import { z } from 'zod'
 import type { HydratedDocument } from 'mongoose'
 import type {
+  GenerationProvider,
   LayoutType,
   Slide,
   SlideDeleteInput,
   SlideEditDrawingsInput,
   SlideEditInput,
+  SlideEditTranscriptInput,
   SlideSetLayoutInput,
+  Stroke,
 } from '@slide-machine/shared'
 import { defineAction } from './define'
 import {
@@ -30,6 +34,8 @@ import { enrichSlideImage } from '../enrichment/enrich'
 import type { SlideImageContext } from '../enrichment/types'
 import { deriveImageKeywords } from '../enrichment/keywords'
 import { seedAssetsFor, seededImageCandidates } from '../lib/seed-assets'
+import { registry } from '../providers/registry'
+import { remapDrawingAnchors } from './remap-drawings'
 import { env } from '../config/env'
 
 interface OwnedSlide {
@@ -192,11 +198,18 @@ export const slideSetLayout = defineAction<SlideSetLayoutInput, Slide>({
 const MAX_STROKES_PER_SLIDE = 2000
 const MAX_POINTS_PER_STROKE = 10000
 
+// The phrase fingerprint (`phraseText`/`phraseOffset`) and `orphaned` are part
+// of the durable anchor (WB-2) and MUST round-trip: the client re-sends the
+// whole stroke set on every draw, so anything missing here is silently stripped
+// and a later transcript rewrite loses its semantic re-anchoring.
 const anchorInput = z.object({
   charAnchor: z.number().int().min(0),
   source: z.enum(['word', 'appended', 'elapsed', 'unsynced']),
   sessionId: z.string().optional(),
   sessionMs: z.number().optional(),
+  phraseText: z.string().optional(),
+  phraseOffset: z.number().min(0).max(1).optional(),
+  orphaned: z.boolean().optional(),
 })
 
 const strokeInput = z.object({
@@ -242,6 +255,61 @@ export const slideEditDrawings = defineAction<SlideEditDrawingsInput, Slide>({
   },
 })
 
+/** Generous cap on a hand-written narration, so one slide can't be turned into
+ * an unbounded document. A spoken narration is a handful of sentences. */
+const MAX_TRANSCRIPT_CHARS = 20000
+
+/**
+ * Replaces a slide's spoken narration — the text TTS reads during playback
+ * (EDIT-6, kebab "Edit spoken transcript").
+ *
+ * Whiteboard marks are timed by character offsets into this very text (WB-2),
+ * so overwriting it blind would strand every mark. The edit therefore runs the
+ * same re-anchoring the refine pass uses: each mark's stored phrase fingerprint
+ * is semantically re-matched to the closest phrase of the edited transcript
+ * (proportional fallback when there is no fingerprint or embeddings are
+ * unavailable), so annotations keep pointing at the words they were drawn over.
+ */
+export const slideEditTranscript = defineAction<
+  SlideEditTranscriptInput,
+  Slide
+>({
+  name: 'slide.editTranscript',
+  input: z.object({
+    slideId: z.string().min(1),
+    // Empty is allowed: it clears the stored narration, so playback falls back
+    // to narrating the slide's own content (PLAY-2).
+    transcript: z.string().max(MAX_TRANSCRIPT_CHARS),
+  }),
+  execute: async (ctx, input) => {
+    const { slide } = await loadOwnedSlide(ctx, input.slideId)
+    const oldTranscript = slide.sourceTranscript ?? ''
+    const newTranscript = input.transcript
+    if (oldTranscript === newTranscript) return toSlideDto(slide)
+
+    // `narrateInputHash` is deliberately left alone: on a diarized slide it
+    // makes the next refine skip re-narration, so the hand-written text is
+    // protected the way `manuallyEdited` protects hand-edited content (GEN-4).
+    slide.sourceTranscript = newTranscript
+
+    if (slide.drawings?.length) {
+      // toObject() yields plain strokes (safe to spread) rather than subdocuments.
+      const plain = (slide.toObject().drawings ?? []) as Stroke[]
+      const gen = registry.get<GenerationProvider>('generation')
+      slide.set(
+        'drawings',
+        await remapDrawingAnchors(plain, oldTranscript, newTranscript, texts =>
+          gen.embedTexts(texts),
+        ),
+      )
+    }
+
+    await slide.save()
+    await touchDeck(slide.deckId)
+    return toSlideDto(slide)
+  },
+})
+
 export const slideDelete = defineAction<
   SlideDeleteInput,
   { deleted: true; slideOrder: string[] }
@@ -266,5 +334,6 @@ export const slideDelete = defineAction<
 registerAction(slideGet)
 registerAction(slideEditContent)
 registerAction(slideEditDrawings)
+registerAction(slideEditTranscript)
 registerAction(slideSetLayout)
 registerAction(slideDelete)

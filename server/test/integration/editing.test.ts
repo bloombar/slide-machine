@@ -234,6 +234,171 @@ describe('slide.editDrawings', () => {
     })
     expect(res.status).toBe(403)
   })
+
+  // The client re-sends the whole stroke set on every draw, so a field the
+  // input schema omits is silently dropped — and the phrase fingerprint is
+  // what lets a transcript rewrite re-anchor the mark semantically (WB-2).
+  it('round-trips the phrase fingerprint and orphan flag', async () => {
+    const res = await act(ada, 'slide.editDrawings', {
+      slideId: slideIds[0],
+      drawings: [
+        stroke({
+          anchor: {
+            charAnchor: 12,
+            source: 'word',
+            sessionId: 's1',
+            sessionMs: 400,
+            phraseText: 'Photosynthesis converts sunlight.',
+            phraseOffset: 0.25,
+            orphaned: false,
+          },
+        }),
+      ],
+    })
+    expect(res.status).toBe(200)
+
+    const view = await act(ada, 'deck.get', { deckId })
+    expect(view.body.slides[0].drawings[0].anchor).toMatchObject({
+      phraseText: 'Photosynthesis converts sunlight.',
+      phraseOffset: 0.25,
+      orphaned: false,
+    })
+  })
+})
+
+describe('slide.editTranscript', () => {
+  /** The transcript's two sentences; the second starts at index 47. */
+  const ORIGINAL =
+    'The mitochondria is the powerhouse of the cell. Photosynthesis converts sunlight into sugar.'
+  const SECOND_PHRASE = 'Photosynthesis converts sunlight into sugar.'
+
+  /** A single mark on slide 0, anchored where the caller says. */
+  const mark = (anchor: object) =>
+    act(ada, 'slide.editDrawings', {
+      slideId: slideIds[0],
+      drawings: [
+        {
+          id: 'stroke-1',
+          tool: 'pen',
+          color: '#1e293b',
+          thickness: 0.01,
+          points: [{ x: 0.2, y: 0.3 }],
+          startedAt: '2026-07-21T10:00:00.000Z',
+          endedAt: '2026-07-21T10:00:01.000Z',
+          anchor,
+        },
+      ],
+    })
+
+  /** The saved slide's only stroke anchor, read back through deck.get. */
+  const savedAnchor = async () => {
+    const view = await act(ada, 'deck.get', { deckId })
+    return view.body.slides[0].drawings[0].anchor
+  }
+
+  it('saves the edited transcript and serves it back', async () => {
+    const res = await act(ada, 'slide.editTranscript', {
+      slideId: slideIds[0],
+      transcript: 'A corrected narration for this slide.',
+    })
+    expect(res.status).toBe(200)
+    expect(res.body.sourceTranscript).toBe(
+      'A corrected narration for this slide.',
+    )
+
+    const view = await act(ada, 'deck.get', { deckId })
+    expect(view.body.slides[0].sourceTranscript).toBe(
+      'A corrected narration for this slide.',
+    )
+  })
+
+  it('clears the transcript with an empty string', async () => {
+    const res = await act(ada, 'slide.editTranscript', {
+      slideId: slideIds[0],
+      transcript: '',
+    })
+    expect(res.status).toBe(200)
+    expect(res.body.sourceTranscript).toBeFalsy()
+  })
+
+  it('re-anchors a mark to the phrase it was drawn over', async () => {
+    await act(ada, 'slide.editTranscript', {
+      slideId: slideIds[0],
+      transcript: ORIGINAL,
+    })
+    await mark({
+      charAnchor: ORIGINAL.indexOf(SECOND_PHRASE),
+      source: 'word',
+      phraseText: SECOND_PHRASE,
+      phraseOffset: 0,
+    })
+
+    // Same two sentences, order swapped: the fingerprinted phrase now starts
+    // the transcript, so a proportional remap would leave the mark at ~47.
+    await act(ada, 'slide.editTranscript', {
+      slideId: slideIds[0],
+      transcript:
+        'Photosynthesis converts sunlight into sugar. The mitochondria is the powerhouse of the cell.',
+    })
+    expect(await savedAnchor()).toMatchObject({
+      charAnchor: 0,
+      orphaned: false,
+    })
+  })
+
+  it('orphans a mark whose phrase is gone from the new transcript', async () => {
+    await act(ada, 'slide.editTranscript', {
+      slideId: slideIds[0],
+      transcript: ORIGINAL,
+    })
+    await mark({
+      charAnchor: ORIGINAL.indexOf(SECOND_PHRASE),
+      source: 'word',
+      phraseText: SECOND_PHRASE,
+      phraseOffset: 0,
+    })
+
+    await act(ada, 'slide.editTranscript', {
+      slideId: slideIds[0],
+      transcript: 'Baroque counterpoint uses independent melodic lines.',
+    })
+    expect(await savedAnchor()).toMatchObject({ orphaned: true })
+  })
+
+  it('rescales a fingerprint-less mark proportionally', async () => {
+    await act(ada, 'slide.editTranscript', {
+      slideId: slideIds[0],
+      transcript: ORIGINAL,
+    })
+    await mark({ charAnchor: 46, source: 'appended' })
+
+    // Half the length ⇒ half the offset (46 → 23); no fingerprint to match.
+    const shorter = ORIGINAL.slice(0, Math.round(ORIGINAL.length / 2))
+    await act(ada, 'slide.editTranscript', {
+      slideId: slideIds[0],
+      transcript: shorter,
+    })
+    expect((await savedAnchor()).charAnchor).toBe(
+      Math.round((46 / ORIGINAL.length) * shorter.length),
+    )
+  })
+
+  it('rejects an oversized transcript', async () => {
+    const res = await act(ada, 'slide.editTranscript', {
+      slideId: slideIds[0],
+      transcript: 'x'.repeat(20001),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it("403s editing another user's transcript", async () => {
+    const bob = await registerUser('bob-transcript@example.com')
+    const res = await act(bob, 'slide.editTranscript', {
+      slideId: slideIds[0],
+      transcript: 'Hijack',
+    })
+    expect(res.status).toBe(403)
+  })
 })
 
 describe('slide.setLayout', () => {
