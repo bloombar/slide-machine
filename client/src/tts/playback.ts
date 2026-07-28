@@ -14,6 +14,11 @@
  * All stop the live mic first (never record while playing). A monotonically
  * increasing token cancels any in-flight sequence when a new one starts or on
  * stop/unmount — the same "start returns a cancel" shape as pollSlideImage.
+ *
+ * Deck playback prefetches: as soon as a slide's narration starts, the next
+ * slide's clip is synthesized and downloaded into memory, so the hand-off at
+ * the end of a slide is a memory read instead of a server round trip plus a
+ * download (PLAY-1) — that wait was audible as a gap between slides.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Slide, TtsMark } from '@slide-machine/shared'
@@ -47,6 +52,62 @@ export interface TtsProgress {
   /** `<mark>` timepoints for the active slide's audio; empty when the voice /
    * engine couldn't emit them, so consumers fall back to `fraction`. */
   marks: TtsMark[]
+}
+
+/** A synthesized clip that is ready to play. `playUrl` is what the element
+ * gets: a blob URL when the bytes were pulled into memory first, otherwise the
+ * server URL (the element then downloads it itself, as before). */
+interface Clip {
+  playUrl: string | null
+  /** The in-memory blob URL, when one was made — revoked once it's spent. */
+  objectUrl: string | null
+  marks: TtsMark[]
+}
+
+/** Stands in for a clip with nothing to speak (or one that failed to load). */
+const EMPTY_CLIP: Clip = { playUrl: null, objectUrl: null, marks: [] }
+
+/** Cache key for a slide's clip: the same words are the same audio. */
+const clipKey = (slideId: string, mode: 'content' | 'transcript'): string =>
+  `${slideId}|${mode}`
+
+/**
+ * Downloads a clip's bytes and wraps them in an object URL so playing it costs
+ * no network. Returns null when that isn't possible (fetch blocked by CORS on
+ * an off-origin bucket, or no Blob URL support), leaving the caller with the
+ * plain URL — the audio still plays, just without the head start.
+ */
+const toObjectUrl = async (url: string): Promise<string | null> => {
+  if (typeof URL?.createObjectURL !== 'function') return null
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    return URL.createObjectURL(await res.blob())
+  } catch {
+    return null
+  }
+}
+
+/** Synthesizes a clip and pulls its audio into memory. */
+const loadClip = async (
+  slideId: string,
+  mode: 'content' | 'transcript',
+  text?: string,
+): Promise<Clip> => {
+  const { url, marks } =
+    text === undefined
+      ? await synthesizeSlideTts(slideId, mode)
+      : await synthesizeSlideTts(slideId, mode, text)
+  if (!url) return EMPTY_CLIP
+  const objectUrl = await toObjectUrl(url)
+  return { playUrl: objectUrl ?? url, objectUrl, marks: marks ?? [] }
+}
+
+/** Frees a clip's in-memory bytes once nothing can play them. */
+const releaseClip = (clip: Clip): void => {
+  if (clip.objectUrl && typeof URL?.revokeObjectURL === 'function') {
+    URL.revokeObjectURL(clip.objectUrl)
+  }
 }
 
 export interface TtsPlayback {
@@ -87,13 +148,38 @@ export function useTtsPlayback({
   // Marks for the active clip, mirrored (like activeIndex) for the imperative
   // getProgress reader so stroke sync sees them without a re-render (WB-2).
   const marksRef = useRef<TtsMark[]>([])
+  // The next slide's clip, loading or loaded ahead of time (deck playback).
+  const prefetchRef = useRef<{ key: string; clip: Promise<Clip> } | null>(null)
+  // Blob URL backing whatever is on the element now, so it can be freed when
+  // the next clip takes its place.
+  const activeObjectUrlRef = useRef<string | null>(null)
 
   const ensureAudio = (): HTMLAudioElement => {
     if (!audioRef.current) audioRef.current = new Audio()
     return audioRef.current
   }
 
-  /** Cancels any pending step and silences the element (no state reset). */
+  /** Frees the bytes of the clip that was playing. */
+  const releaseActive = () => {
+    if (
+      activeObjectUrlRef.current &&
+      typeof URL?.revokeObjectURL === 'function'
+    ) {
+      URL.revokeObjectURL(activeObjectUrlRef.current)
+    }
+    activeObjectUrlRef.current = null
+  }
+
+  /** Throws away a prefetched clip nothing is going to play. */
+  const dropPrefetch = useCallback(() => {
+    const pending = prefetchRef.current
+    prefetchRef.current = null
+    if (pending) void pending.clip.then(releaseClip, () => {})
+  }, [])
+
+  /** Cancels any pending step and silences the element (no state reset). A
+   * prefetched clip survives: skipping slides mid-deck restarts the sequence,
+   * and the slide skipped to may well be the one already warmed. */
   const halt = useCallback(() => {
     tokenRef.current++
     const audio = audioRef.current
@@ -102,44 +188,48 @@ export function useTtsPlayback({
       audio.onended = null
       audio.removeAttribute('src')
     }
+    releaseActive()
   }, [])
 
   const stop = useCallback(() => {
     halt()
+    dropPrefetch()
     pausedRef.current = false
     setStatus('idle')
     setScope(null)
     setActiveIndex(null)
     activeIndexRef.current = null
     marksRef.current = []
-  }, [halt])
+  }, [dropPrefetch, halt])
 
-  /** Synthesizes via `fetchAudio`, then plays the clip on the shared element;
+  /** Loads the clip via `getClip`, then plays it on the shared element;
    * `onEnded` runs when it finishes (or there was nothing to play). Every flow
    * goes through here, so they cannot overlap or diverge in behavior. */
   const playSynthesized = useCallback(
     async (
-      fetchAudio: () => Promise<{ url: string | null; marks?: TtsMark[] }>,
+      getClip: () => Promise<Clip>,
       token: number,
       onEnded: () => void,
     ) => {
-      let url: string | null
-      let marks: TtsMark[] = []
+      let clip: Clip
       try {
-        const res = await fetchAudio()
-        url = res.url
-        marks = res.marks ?? []
+        clip = await getClip()
       } catch {
-        url = null
+        clip = EMPTY_CLIP
       }
-      if (token !== tokenRef.current) return
-      marksRef.current = marks
-      if (!url) {
+      if (token !== tokenRef.current) {
+        releaseClip(clip) // superseded before it could play
+        return
+      }
+      marksRef.current = clip.marks
+      releaseActive() // the previous clip is done with
+      activeObjectUrlRef.current = clip.objectUrl
+      if (!clip.playUrl) {
         onEnded() // nothing to speak → advance / finish
         return
       }
       const audio = ensureAudio()
-      audio.src = url
+      audio.src = clip.playUrl
       audio.onended = () => {
         if (token === tokenRef.current) onEnded()
       }
@@ -156,6 +246,46 @@ export function useTtsPlayback({
       if (token === tokenRef.current) setStatus('playing')
     },
     [],
+  )
+
+  /**
+   * Uses the prefetched clip when it is the one about to play; otherwise the
+   * prefetch was for a slide we're no longer heading to, so it is discarded
+   * and the clip loads normally.
+   */
+  const takeClip = useCallback(
+    (key: string, load: () => Promise<Clip>): Promise<Clip> => {
+      const pending = prefetchRef.current
+      if (pending?.key === key) {
+        prefetchRef.current = null
+        return pending.clip
+      }
+      dropPrefetch()
+      return load()
+    },
+    [dropPrefetch],
+  )
+
+  /**
+   * Starts synthesizing and downloading a slide's narration before it is its
+   * turn, so deck playback doesn't stall at the transition. Cheap to repeat:
+   * a clip already warmed for that slide is left alone, and the server caches
+   * synthesis by content hash, so nothing is paid for twice.
+   */
+  const prefetch = useCallback(
+    (index: number) => {
+      const slide = getSlides()[index]
+      if (!slide) return
+      const key = clipKey(slide.id, 'transcript')
+      if (prefetchRef.current?.key === key) return
+      dropPrefetch()
+      const clip = loadClip(slide.id, 'transcript')
+      // Failures are handled where the clip is played (it advances instead);
+      // this keeps the wait from looking like an unhandled rejection.
+      clip.catch(() => {})
+      prefetchRef.current = { key, clip }
+    },
+    [dropPrefetch, getSlides],
   )
 
   /** Navigates to a slide and speaks its stored narration. */
@@ -175,12 +305,12 @@ export function useTtsPlayback({
         return
       }
       await playSynthesized(
-        () => synthesizeSlideTts(slide.id, mode),
+        () => takeClip(clipKey(slide.id, mode), () => loadClip(slide.id, mode)),
         token,
         onEnded,
       )
     },
-    [getSlides, navigate, playSynthesized, stop],
+    [getSlides, navigate, playSynthesized, stop, takeClip],
   )
 
   /** Runs the deck from `fromIndex`, speaking each slide in turn. `keepPaused`
@@ -201,11 +331,15 @@ export function useTtsPlayback({
           stop()
           return
         }
-        void playAt(i, 'transcript', token, () => step(i + 1))
+        // Once this slide is actually speaking, warm the next one so the
+        // hand-off doesn't wait on the network.
+        void playAt(i, 'transcript', token, () => step(i + 1)).then(() => {
+          if (token === tokenRef.current && i + 1 < count) prefetch(i + 1)
+        })
       }
       step(Math.max(0, fromIndex))
     },
-    [getSlides, halt, playAt, stop, stopMic],
+    [getSlides, halt, playAt, prefetch, stop, stopMic],
   )
 
   const playDeck = useCallback(
@@ -263,7 +397,7 @@ export function useTtsPlayback({
       setScope('text')
       setStatus('playing')
       void playSynthesized(
-        () => synthesizeSlideTts(slide.id, 'transcript', text),
+        () => loadClip(slide.id, 'transcript', text),
         token,
         stop,
       )
@@ -310,8 +444,14 @@ export function useTtsPlayback({
     }
   }, [])
 
-  // Stop + release on unmount.
-  useEffect(() => () => halt(), [halt])
+  // Stop + release on unmount, including any clip warmed but never played.
+  useEffect(
+    () => () => {
+      halt()
+      dropPrefetch()
+    },
+    [dropPrefetch, halt],
+  )
 
   return {
     status,
