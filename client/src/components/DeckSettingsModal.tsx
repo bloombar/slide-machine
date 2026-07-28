@@ -8,10 +8,11 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
-import { X } from 'lucide-react'
+import { Download, X } from 'lucide-react'
 import {
   findTtsVoice,
   type Deck,
+  type ExportDownload,
   type DeckRefineResult,
   type DeckRefineStatusResult,
   type DeckSetRefineSettingsInput,
@@ -20,6 +21,7 @@ import {
   type Template,
 } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
+import { downloadExport } from '../lib/download'
 import TemplatePicker from './TemplatePicker'
 import AccessSettings from './AccessSettings'
 import QuizPanel from './QuizPanel'
@@ -205,6 +207,17 @@ export default function DeckSettingsModal({
       })
       .catch(() => {
         // Quiet failure: the picker stays on the saved template
+      })
+  }
+
+  // Export the lecture's current template as a re-importable YAML file (EXP-2).
+  const exportTemplate = () => {
+    dispatchAction<ExportDownload>('template.export', {
+      templateId: deck.templateId,
+    })
+      .then(downloadExport)
+      .catch(() => {
+        // Quiet failure: nothing downloads
       })
   }
 
@@ -562,6 +575,20 @@ export default function DeckSettingsModal({
             value={deck.templateId}
             onChange={switchTemplate}
           />
+          <div className="mt-6 border-t border-slate-100 pt-4">
+            <button
+              type="button"
+              onClick={exportTemplate}
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              <Download className="h-4 w-4" aria-hidden />
+              Export template as YAML
+            </button>
+            <p className="mt-1 text-xs text-slate-500">
+              Download this template’s style and layouts as a re-importable YAML
+              file.
+            </p>
+          </div>
         </section>
       )}
 

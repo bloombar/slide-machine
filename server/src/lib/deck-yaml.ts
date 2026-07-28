@@ -79,7 +79,10 @@ export const deckToYaml = (deck: ExportDeck): string => {
     version: DECK_YAML_VERSION,
     kind: 'deck',
     title: deck.title,
+    // The template it was built from, plus its resolved styling inline so the
+    // file captures the look even without that template (EXP-2 "styling").
     templateId: deck.templateId,
+    ...(deck.theme ? { styling: { ...deck.theme } } : {}),
     ...(deck.visibility ? { visibility: deck.visibility } : {}),
     slides: deck.slides.map(slide =>
       compact({

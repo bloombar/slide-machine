@@ -30,6 +30,29 @@ const deck: ExportDeck = {
 }
 
 describe('deckToYaml', () => {
+  it('captures the template id and inline styling (EXP-2)', () => {
+    const parsed = YAML.parse(
+      deckToYaml({
+        title: 'T',
+        templateId: 'classic',
+        theme: {
+          background: '#fefce8',
+          text: '#1c1917',
+          accent: '#b45309',
+          muted: '#78716c',
+        },
+        slides: [],
+      }),
+    )
+    expect(parsed.templateId).toBe('classic')
+    expect(parsed.styling).toEqual({
+      background: '#fefce8',
+      text: '#1c1917',
+      accent: '#b45309',
+      muted: '#78716c',
+    })
+  })
+
   it('emits a versioned deck document that parses back to the content', () => {
     const yaml = deckToYaml(deck)
     const parsed = YAML.parse(yaml)
