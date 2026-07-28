@@ -26,18 +26,18 @@ const deck: ExportDeck = {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('deckToPdf', () => {
-  it('produces a valid PDF: a cover page plus one page per slide', async () => {
+  it('produces a valid PDF: exactly one page per slide (no cover page)', async () => {
     const bytes = await deckToPdf(deck)
     // A real PDF starts with the %PDF- header.
     expect(Buffer.from(bytes.slice(0, 5)).toString()).toBe('%PDF-')
     const doc = await PDFDocument.load(bytes)
-    expect(doc.getPageCount()).toBe(deck.slides.length + 1)
+    expect(doc.getPageCount()).toBe(deck.slides.length)
     expect(doc.getTitle()).toBe('Photosynthesis')
   })
 
   it('uses a 16:9 landscape slide page (matches the Google Slides shape)', async () => {
     const doc = await PDFDocument.load(await deckToPdf(deck))
-    const { width, height } = doc.getPage(1).getSize()
+    const { width, height } = doc.getPage(0).getSize()
     expect(width).toBeGreaterThan(height) // landscape
     expect(width / height).toBeCloseTo(16 / 9, 2)
   })
@@ -81,7 +81,7 @@ describe('deckToPdf', () => {
       ],
     })
     const doc = await PDFDocument.load(bytes)
-    expect(doc.getPageCount()).toBe(2)
+    expect(doc.getPageCount()).toBe(1)
   })
 
   it('embeds a slide image when one is fetchable', async () => {
@@ -107,7 +107,7 @@ describe('deckToPdf', () => {
       ],
     })
     const doc = await PDFDocument.load(bytes)
-    expect(doc.getPageCount()).toBe(2)
+    expect(doc.getPageCount()).toBe(1)
   })
 
   it('skips an image that fails to fetch without failing the export', async () => {
@@ -119,12 +119,42 @@ describe('deckToPdf', () => {
         { layoutType: 'image', title: 'Pic', imageRef: 'https://img/x.png' },
       ],
     })
-    // Still a valid two-page PDF (cover + slide), just without the image.
+    // Still a valid one-page PDF (the slide), just without the image.
     const doc = await PDFDocument.load(bytes)
-    expect(doc.getPageCount()).toBe(2)
+    expect(doc.getPageCount()).toBe(1)
   })
 
-  it('handles a deck with no slides (just a cover)', async () => {
+  it('retries a rate-limited (429) image before giving up', async () => {
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      'base64',
+    )
+    // First call 429s, the retry succeeds — the image still embeds.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 429 })
+      .mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: { get: () => 'image/png' },
+        arrayBuffer: async () =>
+          png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+    const doc = await PDFDocument.load(
+      await deckToPdf({
+        title: 'Rate limited',
+        templateId: 'classic',
+        slides: [
+          { layoutType: 'image', title: 'Pic', imageRef: 'https://img/x.png' },
+        ],
+      }),
+    )
+    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2)
+    expect(doc.getPageCount()).toBe(1)
+  })
+
+  it('handles a deck with no slides (one blank page, valid PDF)', async () => {
     const doc = await PDFDocument.load(
       await deckToPdf({ title: 'Empty', templateId: 'c', slides: [] }),
     )

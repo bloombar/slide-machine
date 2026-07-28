@@ -14,6 +14,7 @@
 import PptxGenJSImport from 'pptxgenjs'
 import type { ExportDeck, ExportSlide } from './deck-yaml'
 import { visibleStrokes, hexForPptx, HIGHLIGHTER_ALPHA } from './deck-drawings'
+import { fetchSlideImages, toDataUri } from './deck-image'
 
 // pptxgenjs ships as CommonJS; the interop default differs across runtimes
 // (bundled vs tsx/native ESM), so resolve the constructor from either shape.
@@ -21,10 +22,15 @@ const PptxGenJS = ((
   PptxGenJSImport as unknown as { default?: typeof PptxGenJSImport }
 ).default ?? PptxGenJSImport) as typeof PptxGenJSImport
 
-// 16:9 layout in inches (pptxgenjs default LAYOUT_16x9 = 10 x 5.625).
+// 16:9 layout in inches (pptxgenjs default LAYOUT_16x9 = 10 x 5.625). These
+// bands are mirrored 1:1 (×96px) by the PDF export so the two look identical.
 const SLIDE_W = 10
 const SLIDE_H = 5.625
 const MARGIN = 0.5
+const BODY_TOP = 1.5
+const BODY_HEIGHT = SLIDE_H - 2.2
+const IMAGE_X = 5.8
+const IMAGE_W = 3.8
 
 /** Assembles the one-line TASL attribution/license credit, or ''. */
 const attributionLine = (slide: ExportSlide): string => {
@@ -38,29 +44,6 @@ const attributionLine = (slide: ExportSlide): string => {
   return parts.join(' ').trim()
 }
 
-/** Fetches a slide image and returns a pptxgenjs data URI, or undefined when it
- * is missing, unfetchable, or an unsupported type. Best-effort. */
-const imageData = async (url?: string): Promise<string | undefined> => {
-  if (!url || !/^https?:\/\//i.test(url)) return undefined
-  try {
-    const res = await fetch(url)
-    if (!res.ok) return undefined
-    const type = res.headers.get('content-type') ?? ''
-    const mime = /png/i.test(type)
-      ? 'image/png'
-      : /jpe?g/i.test(type)
-        ? 'image/jpeg'
-        : /gif/i.test(type)
-          ? 'image/gif'
-          : ''
-    if (!mime) return undefined
-    const base64 = Buffer.from(await res.arrayBuffer()).toString('base64')
-    return `data:${mime};base64,${base64}`
-  } catch {
-    return undefined
-  }
-}
-
 /**
  * Builds the deck's .pptx and returns its bytes. Pages are one per deck slide;
  * text flows on the left, with the image (when present) on the right.
@@ -70,13 +53,16 @@ export const deckToPptx = async (deck: ExportDeck): Promise<Uint8Array> => {
   pptx.title = deck.title
   pptx.layout = 'LAYOUT_16x9'
 
-  // Fetch images up front (concurrently).
-  const images = await Promise.all(deck.slides.map(s => imageData(s.imageRef)))
+  // Fetch images up front (bounded concurrency + retry, shared with the PDF
+  // export) and turn each into a data URI for addImage. Missing = skipped.
+  const fetched = await fetchSlideImages(deck.slides.map(s => s.imageRef))
+  const images = fetched.map(img => (img ? toDataUri(img) : undefined))
 
   deck.slides.forEach((slide, i) => {
     const s = pptx.addSlide()
     const hasImage = Boolean(images[i])
-    const textWidth = hasImage ? SLIDE_W * 0.55 - MARGIN : SLIDE_W - MARGIN * 2
+    // Layout bands, kept identical to the PDF export (deck-pdf).
+    const textWidth = hasImage ? IMAGE_X - MARGIN - 0.125 : SLIDE_W - MARGIN * 2
 
     if (slide.title) {
       s.addText(slide.title, {
@@ -84,7 +70,7 @@ export const deckToPptx = async (deck: ExportDeck): Promise<Uint8Array> => {
         y: MARGIN,
         w: SLIDE_W - MARGIN * 2,
         h: 0.9,
-        fontSize: 28,
+        fontSize: 26,
         bold: true,
         color: '1C2230',
       })
@@ -94,19 +80,19 @@ export const deckToPptx = async (deck: ExportDeck): Promise<Uint8Array> => {
     // inferred and checked for assignability where it is passed to addText.
     const runs = [
       ...(slide.body
-        ? [{ text: slide.body, options: { fontSize: 14, breakLine: true } }]
+        ? [{ text: slide.body, options: { fontSize: 15, breakLine: true } }]
         : []),
       ...(slide.bullets ?? []).map(bullet => ({
         text: bullet,
-        options: { fontSize: 14, bullet: true, breakLine: true },
+        options: { fontSize: 15, bullet: true, breakLine: true },
       })),
     ]
     if (runs.length) {
       s.addText(runs, {
         x: MARGIN,
-        y: 1.5,
+        y: BODY_TOP,
         w: textWidth,
-        h: SLIDE_H - 2.2,
+        h: BODY_HEIGHT,
         color: '1C2230',
         valign: 'top',
       })
@@ -115,11 +101,11 @@ export const deckToPptx = async (deck: ExportDeck): Promise<Uint8Array> => {
     if (hasImage) {
       s.addImage({
         data: images[i]!,
-        x: SLIDE_W * 0.58,
-        y: 1.5,
-        w: SLIDE_W * 0.38,
-        h: SLIDE_H - 2.2,
-        sizing: { type: 'contain', w: SLIDE_W * 0.38, h: SLIDE_H - 2.2 },
+        x: IMAGE_X,
+        y: BODY_TOP,
+        w: IMAGE_W,
+        h: BODY_HEIGHT,
+        sizing: { type: 'contain', w: IMAGE_W, h: BODY_HEIGHT },
       })
     }
 

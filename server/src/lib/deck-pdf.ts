@@ -1,15 +1,13 @@
 /**
  * Renders a slide deck to a PDF slide deck (SPEC EXP-1): each page is one 16:9
- * landscape slide — the same widescreen shape as the Google Slides export — so
- * the PDF reads as a real deck, one slide per sheet. Each page carries the
- * slide's title, body, and bullet points; when the slide has an image it is
- * embedded (best-effort) with its caption, and the image's TASL attribution/
- * license text is printed at the foot so downstream copies stay license-
- * compliant. Freehand whiteboard marks (WB-1) are drawn on top when included.
+ * landscape slide — one sheet per slide, no cover page — using the SAME layout
+ * as the Google Slides export (deck-pptx) so the two match: title top-left,
+ * image on the right, body/bullets on the left, caption + image attribution/
+ * license at the foot, and any freehand whiteboard marks (WB-1) drawn on top.
  *
- * The PDF is built with `pdf-lib` — pure JS, no native deps — so generation is
- * deterministic and unit-testable. Remote image fetches are best-effort: a
- * failed or unsupported image is skipped rather than failing the whole export.
+ * The PDF is built with `pdf-lib` — pure JS, no native deps. Images are fetched
+ * (shared with the Slides export) with bounded concurrency + retry so bulk
+ * exports don't rate-limit the image hosts; a still-missing image is skipped.
  */
 import {
   PDFDocument,
@@ -17,20 +15,36 @@ import {
   LineCapStyle,
   rgb,
   type PDFFont,
+  type PDFImage,
   type PDFPage,
 } from 'pdf-lib'
 import type { ExportDeck, ExportSlide } from './deck-yaml'
 import { visibleStrokes, hexToRgb01, HIGHLIGHTER_ALPHA } from './deck-drawings'
+import { fetchSlideImages } from './deck-image'
 
-// 16:9 widescreen slide (13.33in x 7.5in at 72dpi), matching Google Slides.
-const PAGE_WIDTH = 960
-const PAGE_HEIGHT = 540
-const MARGIN = 56
+// 16:9 widescreen slide at 96px/inch, so positions map 1:1 from the Slides
+// export's inches (10 x 5.625in) — keeping the two layouts identical.
+const PX = 96
+const PAGE_WIDTH = 10 * PX // 960
+const PAGE_HEIGHT = 5.625 * PX // 540
+const MARGIN = 0.5 * PX // 48
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2
+
+// Layout bands (in px), mirroring deck-pptx exactly.
+const TITLE_TOP = 0.5 * PX
+const BODY_TOP = 1.5 * PX
+const BODY_HEIGHT = PAGE_HEIGHT - 2.2 * PX
+const IMAGE_X = 5.8 * PX
+const IMAGE_W = 3.8 * PX
 
 const INK = rgb(0.11, 0.13, 0.16)
 const MUTED = rgb(0.42, 0.45, 0.5)
 const ACCENT = rgb(0.29, 0.33, 0.82)
+
+interface Fonts {
+  regular: PDFFont
+  bold: PDFFont
+}
 
 /** Breaks text into lines that fit `maxWidth` at the given font size, honoring
  * any explicit newlines in the source. */
@@ -76,53 +90,6 @@ const attributionLine = (slide: ExportSlide): string | undefined => {
   return credit || undefined
 }
 
-/** Fetches and embeds a slide's image into the document, returning the embedded
- * image, or undefined if it is missing, unfetchable, or an unsupported type. */
-const embedImage = async (doc: PDFDocument, url?: string) => {
-  if (!url || !/^https?:\/\//i.test(url)) return undefined
-  try {
-    const res = await fetch(url)
-    if (!res.ok) return undefined
-    const type = res.headers.get('content-type') ?? ''
-    const bytes = new Uint8Array(await res.arrayBuffer())
-    if (/png/i.test(type)) return await doc.embedPng(bytes)
-    if (/jpe?g/i.test(type)) return await doc.embedJpg(bytes)
-    return undefined
-  } catch {
-    return undefined
-  }
-}
-
-/** Draws the deck's cover page: its title, centered, over an accent rule. */
-const drawCover = (page: PDFPage, title: string, fonts: Fonts): void => {
-  const size = 40
-  const lines = wrapLines(title, fonts.bold, size, CONTENT_WIDTH)
-  let y = PAGE_HEIGHT / 2 + (lines.length * (size + 8)) / 2
-  for (const line of lines) {
-    const width = fonts.bold.widthOfTextAtSize(line, size)
-    page.drawText(line, {
-      x: (PAGE_WIDTH - width) / 2,
-      y,
-      size,
-      font: fonts.bold,
-      color: INK,
-    })
-    y -= size + 8
-  }
-  page.drawRectangle({
-    x: (PAGE_WIDTH - 140) / 2,
-    y: y - 10,
-    width: 140,
-    height: 3,
-    color: ACCENT,
-  })
-}
-
-interface Fonts {
-  regular: PDFFont
-  bold: PDFFont
-}
-
 /**
  * Draws the slide's freehand whiteboard marks on top of its content. Stroke
  * points are normalized 0..1 to the slide box, so they map onto the full page
@@ -166,14 +133,15 @@ const drawStrokes = (page: PDFPage, slide: ExportSlide): void => {
 const drawSlide = (
   page: PDFPage,
   slide: ExportSlide,
-  index: number,
   fonts: Fonts,
-  image?: Awaited<ReturnType<typeof embedImage>>,
+  image?: PDFImage,
 ): void => {
-  let y = PAGE_HEIGHT - MARGIN
+  // The image sits on the right; text flows in the remaining column.
+  const textWidth = image ? IMAGE_X - MARGIN - 12 : CONTENT_WIDTH
 
   if (slide.title) {
-    const size = 30
+    const size = 26
+    let ty = PAGE_HEIGHT - TITLE_TOP - size
     for (const line of wrapLines(
       slide.title,
       fonts.bold,
@@ -182,104 +150,90 @@ const drawSlide = (
     )) {
       page.drawText(line, {
         x: MARGIN,
-        y: y - size,
+        y: ty,
         size,
         font: fonts.bold,
         color: INK,
       })
-      y -= size + 8
+      ty -= size + 6
     }
-    y -= 14
   }
 
-  // The image sits on the right; text flows in the remaining column.
-  let textWidth = CONTENT_WIDTH
   if (image) {
-    const maxW = CONTENT_WIDTH * 0.42
-    const maxH = y - MARGIN - 48
-    const scale = Math.min(maxW / image.width, maxH / image.height, 1)
+    const scale = Math.min(IMAGE_W / image.width, BODY_HEIGHT / image.height, 1)
     const w = image.width * scale
     const h = image.height * scale
     page.drawImage(image, {
-      x: PAGE_WIDTH - MARGIN - w,
-      y: y - h,
+      x: IMAGE_X + (IMAGE_W - w) / 2,
+      y: PAGE_HEIGHT - BODY_TOP - h,
       width: w,
       height: h,
     })
-    textWidth = CONTENT_WIDTH - w - 28
   }
 
-  const bodySize = 16
+  const bodySize = 15
+  let y = PAGE_HEIGHT - BODY_TOP - bodySize
   const drawParagraph = (text: string, prefix = '') => {
-    const lines = wrapLines(
+    for (const [i, line] of wrapLines(
       text,
       fonts.regular,
       bodySize,
-      textWidth - (prefix ? 20 : 0),
-    )
-    lines.forEach((line, i) => {
-      const label = i === 0 ? prefix : ''
-      if (label) {
-        page.drawText(label, {
+      textWidth - (prefix ? 18 : 0),
+    ).entries()) {
+      if (i === 0 && prefix) {
+        page.drawText(prefix, {
           x: MARGIN,
-          y: y - bodySize,
+          y,
           size: bodySize,
           font: fonts.bold,
           color: ACCENT,
         })
       }
       page.drawText(line, {
-        x: MARGIN + (prefix ? 20 : 0),
-        y: y - bodySize,
+        x: MARGIN + (prefix ? 18 : 0),
+        y,
         size: bodySize,
         font: fonts.regular,
         color: INK,
       })
-      y -= bodySize + 8
-    })
+      y -= bodySize + 7
+    }
   }
 
   if (slide.body) {
     drawParagraph(slide.body)
-    y -= 8
+    y -= 6
   }
   for (const bullet of slide.bullets ?? []) {
     drawParagraph(bullet, '•')
   }
 
-  // Footer: caption + image attribution/license, then the slide number.
+  // Footer: caption + image attribution/license.
   const footerLines: string[] = []
   if (slide.caption) footerLines.push(slide.caption)
   const credit = attributionLine(slide)
   if (credit) footerLines.push(credit)
-  let fy = MARGIN + footerLines.length * 13
+  let fy = MARGIN + footerLines.length * 12
   for (const line of footerLines) {
-    for (const wrapped of wrapLines(line, fonts.regular, 9, CONTENT_WIDTH)) {
+    for (const wrapped of wrapLines(line, fonts.regular, 8, CONTENT_WIDTH)) {
       page.drawText(wrapped, {
         x: MARGIN,
         y: fy,
-        size: 9,
+        size: 8,
         font: fonts.regular,
         color: MUTED,
       })
-      fy -= 12
+      fy -= 11
     }
   }
-  page.drawText(String(index + 1), {
-    x: PAGE_WIDTH - MARGIN - 10,
-    y: MARGIN - 22,
-    size: 9,
-    font: fonts.regular,
-    color: MUTED,
-  })
 
   // Whiteboard marks last, so they sit on top of the slide content.
   drawStrokes(page, slide)
 }
 
 /**
- * Builds the deck's PDF and returns its bytes. Pages are: a cover naming the
- * deck, then one 16:9 slide per page in display order.
+ * Builds the deck's PDF and returns its bytes: one 16:9 page per slide, in
+ * display order (no cover page — one sheet per slide).
  */
 export const deckToPdf = async (deck: ExportDeck): Promise<Uint8Array> => {
   const doc = await PDFDocument.create()
@@ -289,21 +243,24 @@ export const deckToPdf = async (deck: ExportDeck): Promise<Uint8Array> => {
     bold: await doc.embedFont(StandardFonts.HelveticaBold),
   }
 
-  drawCover(doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]), deck.title, fonts)
-
-  // Embed images up front (concurrently) so page drawing stays synchronous.
+  // Fetch every slide image up front (bounded concurrency + retry), then embed
+  // them (local, fast). Missing/failed images are simply skipped.
+  const fetched = await fetchSlideImages(deck.slides.map(s => s.imageRef))
   const images = await Promise.all(
-    deck.slides.map(slide => embedImage(doc, slide.imageRef)),
+    fetched.map(img =>
+      img
+        ? img.kind === 'png'
+          ? doc.embedPng(img.data)
+          : doc.embedJpg(img.data)
+        : undefined,
+    ),
   )
+
   deck.slides.forEach((slide, i) => {
-    drawSlide(
-      doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]),
-      slide,
-      i,
-      fonts,
-      images[i],
-    )
+    drawSlide(doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]), slide, fonts, images[i])
   })
+  // A valid PDF needs at least one page; an empty deck gets a blank one.
+  if (doc.getPageCount() === 0) doc.addPage([PAGE_WIDTH, PAGE_HEIGHT])
 
   return doc.save()
 }
