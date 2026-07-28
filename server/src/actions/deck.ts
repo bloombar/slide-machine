@@ -50,6 +50,7 @@ import {
 import type { ActionContext } from './context'
 import {
   DeckModel,
+  ensureDeckOverride,
   loadDeckAcl,
   resolveDeckAcl,
   loadDeckAcls,
@@ -191,23 +192,6 @@ export const loadEditableDeck = async (
   const acl = await loadDeckAcl(deck)
   if (!canEditAcl(acl, userId)) throw new ActionForbiddenError()
   return { deck, acl }
-}
-
-/**
- * Copy-on-write: the first explicit change to a lecture's privacy
- * settings snapshots the effective (inherited) ACL as the lecture's own
- * override; from then on the lecture stops following its project.
- */
-const ensureOverride = (
-  deck: HydratedDocument<DeckDb>,
-  acl: ResolvedAcl,
-): void => {
-  if (deck.accessOverride) return
-  deck.accessOverride = {
-    visibility: acl.visibility,
-    viewers: [...acl.viewers],
-    editors: [...acl.editors],
-  }
 }
 
 export const deckCreate = defineAction<DeckCreateInput, Deck>({
@@ -1177,7 +1161,7 @@ export const deckSetAccess = defineAction<DeckSetAccessInput, Deck>({
   }),
   execute: async (ctx, input) => {
     const { deck, acl } = await loadEditableDeck(ctx, input.deckId)
-    ensureOverride(deck, acl)
+    ensureDeckOverride(deck, acl)
     deck.accessOverride!.visibility = input.visibility
     deck.markModified('accessOverride')
     await deck.save()
@@ -1221,7 +1205,7 @@ export const deckShare = defineAction<DeckShareInput, DeckShare[]>({
         'email: that user owns this lecture',
       ])
     }
-    ensureOverride(deck, acl)
+    ensureDeckOverride(deck, acl)
     const override = deck.accessOverride!
     const list = input.role === 'editor' ? override.editors : override.viewers
     if (!list.includes(userId)) list.push(userId)
@@ -1244,7 +1228,7 @@ export const deckUnshare = defineAction<DeckUnshareInput, DeckShare[]>({
   }),
   execute: async (ctx, input) => {
     const { deck, acl } = await loadEditableDeck(ctx, input.deckId)
-    ensureOverride(deck, acl)
+    ensureDeckOverride(deck, acl)
     const override = deck.accessOverride!
     const list = input.role === 'editor' ? override.editors : override.viewers
     const index = list.indexOf(input.userId)
@@ -1301,7 +1285,7 @@ export const deckTransferOwnership = defineAction<
     }
     // Transfers pin an override: the old owner's continued edit access
     // must not depend on the project's (their own) settings
-    ensureOverride(deck, await loadDeckAcl(deck))
+    ensureDeckOverride(deck, await loadDeckAcl(deck))
     const override = deck.accessOverride!
     // The new owner leaves the people list; the old owner stays an editor
     override.viewers = override.viewers.filter(id => id !== targetId)
