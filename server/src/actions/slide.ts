@@ -8,15 +8,15 @@
 import { z } from 'zod'
 import type { HydratedDocument } from 'mongoose'
 import type {
-  GenerationProvider,
   LayoutType,
   Slide,
   SlideDeleteInput,
   SlideEditDrawingsInput,
   SlideEditInput,
   SlideEditTranscriptInput,
+  SlideRegenerateTranscriptInput,
+  SlideRegenerateTranscriptResult,
   SlideSetLayoutInput,
-  Stroke,
 } from '@slide-machine/shared'
 import { defineAction } from './define'
 import {
@@ -34,8 +34,10 @@ import { enrichSlideImage } from '../enrichment/enrich'
 import type { SlideImageContext } from '../enrichment/types'
 import { deriveImageKeywords } from '../enrichment/keywords'
 import { seedAssetsFor, seededImageCandidates } from '../lib/seed-assets'
-import { registry } from '../providers/registry'
-import { remapDrawingAnchors } from './remap-drawings'
+import {
+  applySlideTranscript,
+  regenerateSlideTranscript,
+} from '../lib/slide-transcript'
 import { env } from '../config/env'
 
 interface OwnedSlide {
@@ -264,11 +266,9 @@ const MAX_TRANSCRIPT_CHARS = 20000
  * (EDIT-6, kebab "Edit spoken transcript").
  *
  * Whiteboard marks are timed by character offsets into this very text (WB-2),
- * so overwriting it blind would strand every mark. The edit therefore runs the
- * same re-anchoring the refine pass uses: each mark's stored phrase fingerprint
- * is semantically re-matched to the closest phrase of the edited transcript
- * (proportional fallback when there is no fingerprint or embeddings are
- * unavailable), so annotations keep pointing at the words they were drawn over.
+ * so overwriting it blind would strand every mark. The write therefore goes
+ * through the shared `applySlideTranscript`, which re-anchors each mark onto the
+ * new wording (see lib/slide-transcript).
  */
 export const slideEditTranscript = defineAction<
   SlideEditTranscriptInput,
@@ -283,30 +283,36 @@ export const slideEditTranscript = defineAction<
   }),
   execute: async (ctx, input) => {
     const { slide } = await loadOwnedSlide(ctx, input.slideId)
-    const oldTranscript = slide.sourceTranscript ?? ''
-    const newTranscript = input.transcript
-    if (oldTranscript === newTranscript) return toSlideDto(slide)
-
-    // `narrateInputHash` is deliberately left alone: on a diarized slide it
-    // makes the next refine skip re-narration, so the hand-written text is
-    // protected the way `manuallyEdited` protects hand-edited content (GEN-4).
-    slide.sourceTranscript = newTranscript
-
-    if (slide.drawings?.length) {
-      // toObject() yields plain strokes (safe to spread) rather than subdocuments.
-      const plain = (slide.toObject().drawings ?? []) as Stroke[]
-      const gen = registry.get<GenerationProvider>('generation')
-      slide.set(
-        'drawings',
-        await remapDrawingAnchors(plain, oldTranscript, newTranscript, texts =>
-          gen.embedTexts(texts),
-        ),
-      )
-    }
-
-    await slide.save()
-    await touchDeck(slide.deckId)
+    await applySlideTranscript(slide, input.transcript)
     return toSlideDto(slide)
+  },
+})
+
+/**
+ * slide.regenerateTranscript — re-transcribes a slide from the lecture audio
+ * retained for it (GEN-4), the "Regenerate from spoken audio" action in the
+ * transcript editor. By default the text is only returned, so the user reviews
+ * it in the editor and saves (or discards) it themselves; `save: true` writes it
+ * straight to the slide, which is what a regenerate-every-slide pass wants.
+ *
+ * The work itself lives in lib/slide-transcript so both callers — and any
+ * future bulk pass — share one implementation.
+ */
+export const slideRegenerateTranscript = defineAction<
+  SlideRegenerateTranscriptInput,
+  SlideRegenerateTranscriptResult
+>({
+  name: 'slide.regenerateTranscript',
+  input: z.object({
+    slideId: z.string().min(1),
+    save: z.boolean().optional(),
+  }),
+  execute: async (ctx, input) => {
+    const { slide, deck } = await loadOwnedSlide(ctx, input.slideId)
+    const { transcript, saved } = await regenerateSlideTranscript(deck, slide, {
+      save: input.save,
+    })
+    return { transcript, ...(saved ? { slide: toSlideDto(slide) } : {}) }
   },
 })
 
@@ -335,5 +341,6 @@ registerAction(slideGet)
 registerAction(slideEditContent)
 registerAction(slideEditDrawings)
 registerAction(slideEditTranscript)
+registerAction(slideRegenerateTranscript)
 registerAction(slideSetLayout)
 registerAction(slideDelete)

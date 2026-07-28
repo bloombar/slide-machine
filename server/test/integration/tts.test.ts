@@ -53,11 +53,11 @@ const act = (token: string, name: string, input: object = {}) =>
     .set('Authorization', `Bearer ${token}`)
     .send(input)
 
-const tts = (token: string, slideId: string, mode: string) =>
+const tts = (token: string, slideId: string, mode: string, text?: string) =>
   request(server)
     .post(`/api/slides/${slideId}/tts`)
     .set('Authorization', `Bearer ${token}`)
-    .send({ mode })
+    .send(text === undefined ? { mode } : { mode, text })
 
 let ada: string
 let deckId: string
@@ -173,6 +173,66 @@ describe('POST /slides/:slideId/tts', () => {
       voice: 'not-a-voice',
     })
     expect(res.status).toBeGreaterThanOrEqual(400)
+  })
+
+  // The transcript editor previews unsaved narration through this same
+  // endpoint (EDIT-6).
+  it('speaks supplied text instead of what the slide stores', async () => {
+    const uniq = Math.random().toString(36).slice(2)
+    const slideId = await makeSlide({
+      title: 'X',
+      sourceTranscript: `The stored narration ${uniq}.`,
+    })
+    const stored = await tts(ada, slideId, 'transcript')
+    const preview = await tts(
+      ada,
+      slideId,
+      'transcript',
+      `An unsaved rewrite ${uniq}.`,
+    )
+    expect(preview.status).toBe(200)
+    expect(preview.body.url).toMatch(/\.wav$/)
+    // Different words, different audio — the preview is of what was typed.
+    expect(preview.body.url).not.toBe(stored.body.url)
+
+    // Saving those words and playing them back reuses the preview's audio, so
+    // the preview costs nothing the eventual playback wouldn't have.
+    await act(ada, 'slide.editTranscript', {
+      slideId,
+      transcript: `An unsaved rewrite ${uniq}.`,
+    })
+    const afterSave = await tts(ada, slideId, 'transcript')
+    expect(afterSave.body.url).toBe(preview.body.url)
+  })
+
+  it('returns a null url for text with nothing to say', async () => {
+    const slideId = await makeSlide({ title: 'X', body: 'Has content' })
+    const res = await tts(ada, slideId, 'transcript', '   ')
+    expect(res.status).toBe(200)
+    // Not a fallback to the slide's content: an empty preview speaks nothing.
+    expect(res.body.url).toBeNull()
+  })
+
+  it('rejects narration longer than a transcript could ever be', async () => {
+    const slideId = await makeSlide({ title: 'X' })
+    const res = await tts(ada, slideId, 'transcript', 'a'.repeat(20001))
+    expect(res.status).toBe(400)
+  })
+
+  // Speaking supplied words spends a paid API call on text the caller wrote,
+  // so it takes edit rights — unlike listening to what a lecture already says.
+  it('403s a viewer who supplies text, while still letting them listen', async () => {
+    const slideId = await makeSlide({
+      title: 'Public',
+      sourceTranscript: 'Anyone may hear this.',
+    })
+    const bob = await registerUser('viewer@example.com')
+
+    const listening = await tts(bob, slideId, 'transcript')
+    expect(listening.status).toBe(200)
+
+    const supplying = await tts(bob, slideId, 'transcript', 'My own words.')
+    expect(supplying.status).toBe(403)
   })
 
   it('403s for someone without view access', async () => {

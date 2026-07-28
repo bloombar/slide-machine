@@ -21,7 +21,7 @@ test('project template is the default for new lectures only', async ({
 
   // Default the project to Midnight
   await page.getByRole('button', { name: 'Project settings' }).click()
-  await page.getByRole('tab', { name: 'Design template' }).click()
+  await page.getByRole('tab', { name: 'Design' }).click()
   await page.getByRole('radio', { name: /midnight/i }).click()
   await expect(page.getByRole('radio', { name: /midnight/i })).toHaveAttribute(
     'aria-checked',
@@ -37,7 +37,7 @@ test('project template is the default for new lectures only', async ({
   // Dismiss the pre-lecture seed dialog before reaching settings
   await page.getByRole('button', { name: 'Start lecture' }).click()
   await page.getByRole('button', { name: 'Lecture settings' }).click()
-  await page.getByRole('tab', { name: 'Design template' }).click()
+  await page.getByRole('tab', { name: 'Design' }).click()
   await expect(page.getByRole('radio', { name: /midnight/i })).toHaveAttribute(
     'aria-checked',
     'true',
@@ -55,7 +55,7 @@ test('project template is the default for new lectures only', async ({
   await page.getByRole('link', { name: 'The Slide Machine' }).click()
   await page.getByRole('link', { name: 'TmplProj', exact: true }).click()
   await page.getByRole('button', { name: 'Project settings' }).click()
-  await page.getByRole('tab', { name: 'Design template' }).click()
+  await page.getByRole('tab', { name: 'Design' }).click()
   await page.getByRole('radio', { name: /classic/i }).click()
   await expect(page.getByRole('radio', { name: /classic/i })).toHaveAttribute(
     'aria-checked',
@@ -65,7 +65,7 @@ test('project template is the default for new lectures only', async ({
 
   await page.getByRole('link', { name: /Untitled lecture/ }).click()
   await page.getByRole('button', { name: 'Lecture settings' }).click()
-  await page.getByRole('tab', { name: 'Design template' }).click()
+  await page.getByRole('tab', { name: 'Design' }).click()
   await expect(page.getByRole('radio', { name: /seminar/i })).toHaveAttribute(
     'aria-checked',
     'true',

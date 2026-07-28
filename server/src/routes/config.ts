@@ -6,17 +6,20 @@
 import { Router } from 'express'
 import type { RuntimeConfig, SttEngine } from '@slide-machine/shared'
 import { env } from '../config/env'
+import { serverTranscriptionAvailable } from '../lib/transcribe-audio'
 
 export const configRouter = Router()
 
 /**
  * Maps the transcription adapter name to the client's capture engine:
  * 'browser' and 'none' pass through; any other adapter ('google-cloud',
- * 'mock', a future 'whisper', …) uses the WebSocket streaming path.
+ * 'mock', a future 'whisper', …) uses the WebSocket streaming path — the same
+ * ones that can transcribe a finished recording server-side, which is why the
+ * client reads this to decide whether re-transcribing a slide is offered.
  */
 const sttEngine = (): SttEngine => {
-  const provider = env.TRANSCRIPTION_PROVIDER
-  if (provider === 'browser' || provider === 'none') return provider
+  if (!serverTranscriptionAvailable())
+    return env.TRANSCRIPTION_PROVIDER as SttEngine
   return 'google-cloud'
 }
 

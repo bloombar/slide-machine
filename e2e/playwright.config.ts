@@ -46,7 +46,7 @@ const serverEnv = (over: Record<string, string>): Record<string, string> => ({
   ...over,
 })
 
-const STT_SPEC = /google-stt\.spec\.ts/
+const STT_SPEC = /(google-stt|regenerate-transcript)\.spec\.ts/
 
 export default defineConfig({
   testDir: './tests',
@@ -99,6 +99,9 @@ export default defineConfig({
         PORT: String(STT_PORT),
         STORAGE_LOCAL_DIR: '.uploads-e2e-stt',
         TRANSCRIPTION_PROVIDER: 'mock',
+        // Keeps each session's audio, which is what a slide is re-transcribed
+        // from (regenerate-transcript.spec).
+        AUDIO_RETENTION_ENABLED: 'true',
       }),
     },
   ],

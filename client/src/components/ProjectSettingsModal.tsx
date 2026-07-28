@@ -24,7 +24,7 @@ import TemplatePicker from './TemplatePicker'
 
 const TABS = [
   { id: 'general', label: 'General' },
-  { id: 'template', label: 'Design template' },
+  { id: 'template', label: 'Design' },
   { id: 'sharing', label: 'Privacy & Sharing' },
 ] as const
 

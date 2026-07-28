@@ -256,6 +256,24 @@ export interface DeckDiarizeResult {
 }
 
 /**
+ * Which aspects of a slide the content pass may change. Refining a slide is one
+ * generation call whose result has three separable parts, so a caller can ask
+ * for any subset: the per-slide Refine dialog exposes all three, while the
+ * lecture-wide pass currently asks for all of them (its UI has no split yet —
+ * when it grows one, it passes this same shape).
+ *
+ * Absent fields mean "yes": omitting the object entirely refines everything.
+ */
+export interface SlideRefineParts {
+  /** Rewrite the slide's words, within its current layout. */
+  text?: boolean
+  /** Let the pass move the slide onto a layout that presents it better. */
+  layout?: boolean
+  /** Source an image when the layout has an empty image slot. */
+  imagery?: boolean
+}
+
+/**
  * Post-lecture refinement (GEN-4 "Refine"): any combination of the three
  * passes, run as one background job. Sliders are 1 (light) – 5 (substantial).
  */
@@ -263,8 +281,9 @@ export interface DeckRefineInput {
   deckId: string
   /** Identify lecturer vs students and reframe student turns as questions. */
   identifySpeakers?: boolean
-  /** Improve each slide's content/layout/image in place. */
-  refineSlides?: { level: number }
+  /** Improve each slide's content/layout/image in place. `parts` narrows what
+   * may change; absent = all of them. */
+  refineSlides?: { level: number; parts?: SlideRefineParts }
   /** Rewrite each slide's spoken narration to describe concepts more eloquently. */
   refineTranscript?: { level: number }
 }
@@ -296,13 +315,30 @@ export interface DeckRefineStatusResult {
   error?: string
 }
 
+/** What one run of the per-slide Refine dialog should do. Every field is
+ * optional; `options` as a whole may be omitted, which falls back to the
+ * lecture's persisted Refine settings (how the kebab behaved before the dialog
+ * existed, and how a scripted caller gets "the usual"). */
+export interface SlideRefineOptions {
+  /** Diarize the recording this slide's speech came from and reframe the slide
+   * if students spoke on it. Needs retained audio for the slide. */
+  identifySpeakers?: boolean
+  /** Which aspects of the slide the content pass may change; absent = all. */
+  parts?: SlideRefineParts
+  /** Rewrite the slide's spoken narration too. */
+  refineTranscript?: boolean
+  /** 1 (light) – 5 (substantial), applied to BOTH the content and narration
+   * passes of this run. Absent = the lecture's saved levels. */
+  level?: number
+}
+
 /** Refine a single slide (the "Refine this slide" kebab action). Runs the same
- * passes as the whole-lecture refine but scoped to one slide, using the
- * lecture's persisted Refine settings. Diarization is deck-wide, so it never
- * applies here; only the slide-content and narration passes do. */
+ * passes as the whole-lecture refine but scoped to one slide. Without
+ * `options` it uses the lecture's persisted Refine settings. */
 export interface DeckRefineSlideInput {
   deckId: string
   slideId: string
+  options?: SlideRefineOptions
 }
 
 /** The refreshed slide plus what changed, so the viewer can patch it in place. */
@@ -312,6 +348,26 @@ export interface DeckRefineSlideResult {
   refined: boolean
   /** The slide's narration was re-generated. */
   narrationUpdated: boolean
+  /** Speakers were identified for this slide's audio (absent when not asked
+   * for); true only when the slide was actually reframed as student speech. */
+  reframed?: boolean
+}
+
+/** Refine just one slide's spoken narration (EDIT-6 "Refine" in the transcript
+ * editor). Runs the same narration pass, at the same strength, as the kebab
+ * "Refine this slide" and the lecture-wide Refine tab. Without `save` the text
+ * is only returned, for the user to review before committing. */
+export interface DeckRefineSlideTranscriptInput {
+  deckId: string
+  slideId: string
+  save?: boolean
+}
+
+export interface DeckRefineSlideTranscriptResult {
+  /** The refined narration. */
+  transcript: string
+  /** The refreshed slide — present only when it was saved. */
+  slide?: Slide
 }
 
 /** Reformat a deck's slides now that speaker roles are known (GEN-4 Phase 4). */
@@ -348,6 +404,21 @@ export interface SlideEditInput {
 export interface SlideEditTranscriptInput {
   slideId: string
   transcript: string
+}
+
+/** Re-transcribes one slide from its retained lecture audio (GEN-4/EDIT-6).
+ * Without `save` the text is only returned — the transcript editor shows it for
+ * the user to accept or discard; a bulk pass sets `save` to write each slide. */
+export interface SlideRegenerateTranscriptInput {
+  slideId: string
+  save?: boolean
+}
+
+export interface SlideRegenerateTranscriptResult {
+  /** What the speech engine heard in the slide's recorded audio. */
+  transcript: string
+  /** The refreshed slide — present only when it was saved. */
+  slide?: Slide
 }
 
 /** Replaces a slide's whiteboard drawings wholesale (WB-1). The client sends

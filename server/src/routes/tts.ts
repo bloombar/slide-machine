@@ -4,10 +4,16 @@
  *  - mode 'content'    → speaks the slide's rendered content (kebab "Speak this slide")
  *  - mode 'transcript' → speaks the slide's stored transcript (whole-deck play);
  *    when the slide has no transcript, Gemini narrates its content first.
+ *  - `text` supplied  → speaks exactly that instead, so the transcript editor can
+ *    preview an unsaved narration (EDIT-6). This one needs EDIT access: it
+ *    synthesizes caller-supplied words rather than what the lecture already
+ *    says, and only someone who could save those words may spend the API call
+ *    on them.
  *
  * Synthesized audio is cached in object storage under a content hash, so
  * replays are free and never re-call the paid APIs. View access (not edit) is
- * enough to listen. Synthesis is behind the vendor-neutral TtsProvider.
+ * enough to listen to what a lecture already says. Synthesis is behind the
+ * vendor-neutral TtsProvider.
  */
 import { createHash } from 'node:crypto'
 import { Router } from 'express'
@@ -22,7 +28,7 @@ import { SlideModel } from '../models/slide'
 import { DeckModel, loadDeckAcl } from '../models/deck'
 import { isAllowlistedAdmin } from '../lib/admin-view'
 import { ProjectModel } from '../models/project'
-import { canViewAcl } from '../lib/access'
+import { canEditAcl, canViewAcl } from '../lib/access'
 import { slideContentText } from '../lib/speakable-text'
 import { narrateSlide } from '../tts/narrate'
 import { registry } from '../providers/registry'
@@ -35,16 +41,35 @@ export const ttsRouter = Router()
 const extensionFor = (mimeType: string): string =>
   mimeType === 'audio/wav' ? 'wav' : 'mp3'
 
+/** Cap on previewed text, matching slide.editTranscript's transcript cap: a
+ * preview can never be longer than the narration it is a preview of. */
+const MAX_PREVIEW_CHARS = 20000
+
 ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
   const slideId = String(req.params.slideId)
   const mode = req.body?.mode === 'transcript' ? 'transcript' : 'content'
+  // Caller-supplied narration to speak instead of the slide's own (EDIT-6).
+  const supplied = typeof req.body?.text === 'string' ? req.body.text : null
+  if (supplied !== null && supplied.length > MAX_PREVIEW_CHARS) {
+    throw new HttpError(
+      400,
+      'bad_request',
+      'That narration is too long to speak',
+    )
+  }
 
   const slide = await SlideModel.findById(slideId).catch(() => null)
   if (!slide) throw new HttpError(404, 'not_found', 'Slide not found')
   const deck = await DeckModel.findById(slide.deckId).catch(() => null)
   if (!deck) throw new HttpError(403, 'forbidden', 'Not allowed')
   const acl = await loadDeckAcl(deck)
-  if (!canViewAcl(acl, req.userId)) {
+  // Speaking supplied words is an edit-side preview, so it takes edit rights —
+  // no admin/view bypass. Everything else is part of viewing the lecture.
+  if (supplied !== null) {
+    if (!canEditAcl(acl, req.userId)) {
+      throw new HttpError(403, 'forbidden', 'Not allowed')
+    }
+  } else if (!canViewAcl(acl, req.userId)) {
     // Narration is part of viewing: admins may always listen, matching
     // the viewer bypass in routes/decks.ts
     if (!(await isAllowlistedAdmin(req.userId))) {
@@ -80,7 +105,17 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
   // a lazy text resolver, so a cache hit never re-narrates or re-synthesizes.
   let seed: string
   let resolveText: () => Promise<string>
-  if (mode === 'transcript' && transcript) {
+  if (supplied !== null) {
+    // Exactly what the caller typed — no narration, no fallback to content: a
+    // preview that spoke something else would be worthless.
+    const preview = supplied.trim()
+    if (!preview) return res.json({ url: null, marks: [] })
+    // Same seed shape as a stored transcript, on purpose: previewing text and
+    // then saving and playing it share one cache entry, so the preview costs
+    // the paid API nothing the eventual playback wasn't going to cost anyway.
+    seed = `transcript|${preview}`
+    resolveText = async () => preview
+  } else if (mode === 'transcript' && transcript) {
     seed = `transcript|${transcript}`
     resolveText = async () => transcript
   } else if (mode === 'transcript') {
