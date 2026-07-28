@@ -8,17 +8,35 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import {
+  findTtsVoice,
+  LOCALE_LABELS,
+  type AdminProjectSettingsPatch,
+  type Locale,
+  type Visibility,
+} from '@slide-machine/shared'
+import {
   deleteAdminDeck,
   deleteAdminProject,
   fetchAdminProject,
   logAdminProjectView,
+  updateAdminProjectSettings,
   type AdminDeckSummary,
   type AdminProjectDetailResponse,
 } from '../api/admin'
 import { ApiError } from '../api/http'
 import ConfirmDialog from '../components/ConfirmDialog'
+import FreedomSlider from '../components/FreedomSlider'
+import LanguageSelect from '../components/LanguageSelect'
+import VoiceSelect from '../components/VoiceSelect'
 import DetailRow from '../components/admin/DetailRow'
 import LectureTable, { VisibilityBadge } from '../components/admin/LectureTable'
+import SettingsPanel from '../components/admin/SettingsPanel'
+import { getTtsEnabled } from '../runtime-config'
+import {
+  formatValue,
+  type FieldLabels,
+  type FieldLabel,
+} from '../lib/admin-changes'
 import { formatAdminDate } from '../lib/date'
 import { projectTitle } from '../lib/project'
 
@@ -27,6 +45,44 @@ type PendingAction =
   | { kind: 'delete-project' }
   | { kind: 'delete-deck'; deck: AdminDeckSummary }
   | { kind: 'view-private' }
+
+/** A project's admin-editable settings. An absent value at this level
+ * means the setting is inherited (server default, or the owner's
+ * profile for the language). */
+interface ProjectSettingsDraft {
+  visibility: Visibility
+  generationFreedom?: number
+  language?: Locale
+  ttsVoice?: string
+}
+
+const languageField: FieldLabel = {
+  label: 'Language',
+  format: value =>
+    value ? LOCALE_LABELS[value as Locale] : formatValue(undefined),
+}
+
+const voiceField: FieldLabel = {
+  label: 'Narration voice',
+  format: value =>
+    value
+      ? (findTtsVoice(String(value))?.label ?? String(value))
+      : formatValue(undefined),
+}
+
+const PROJECT_FIELDS: FieldLabels<ProjectSettingsDraft> = {
+  visibility: {
+    label: 'Visibility',
+    format: value => (value === 'public' ? 'Public' : 'Private'),
+  },
+  generationFreedom: 'AI freedom',
+  language: languageField,
+  ttsVoice: voiceField,
+}
+
+const fieldLabelClass = 'block text-sm font-medium text-slate-700'
+const selectClass =
+  'mt-1 block w-fit rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700'
 
 export default function AdminProjectPage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -130,6 +186,12 @@ export default function AdminProjectPage() {
   }
 
   const { project, owner, decks } = loaded
+  const settings: ProjectSettingsDraft = {
+    visibility: project.visibility,
+    generationFreedom: project.generationFreedom,
+    language: project.language,
+    ttsVoice: project.ttsVoice,
+  }
 
   /** Copy for the confirmation dialog of each pending action. */
   const confirmCopy = (action: PendingAction) => {
@@ -204,7 +266,80 @@ export default function AdminProjectPage() {
         </dl>
       </section>
 
-      <section>
+      <SettingsPanel
+        value={settings}
+        labels={PROJECT_FIELDS}
+        confirmTitle="Save these project settings?"
+        description="Editing another user's project. Visibility applies to every lecture that still follows this project."
+        onSave={async patch => {
+          if (!projectId) return
+          // The panel's patch type allows null on every field; the wire
+          // type is narrower (visibility never clears).
+          await updateAdminProjectSettings(
+            projectId,
+            patch as AdminProjectSettingsPatch,
+          )
+          setVersion(v => v + 1)
+        }}
+      >
+        {(draft, set) => (
+          <>
+            <div>
+              <label
+                htmlFor="admin-project-visibility"
+                className={fieldLabelClass}
+              >
+                Visibility
+              </label>
+              <select
+                id="admin-project-visibility"
+                value={draft.visibility}
+                onChange={e => set('visibility', e.target.value as Visibility)}
+                className={selectClass}
+              >
+                <option value="public">Public</option>
+                <option value="restricted">Private</option>
+              </select>
+            </div>
+            <div>
+              <p className={fieldLabelClass}>AI freedom</p>
+              <p className="mt-1 mb-2 text-sm text-slate-500">
+                How much the AI may add beyond what the speaker actually says.
+              </p>
+              <FreedomSlider
+                value={draft.generationFreedom}
+                inheritedValue={project.effectiveGenerationFreedom}
+                // No debounce: nothing saves until Save changes, and a
+                // pending timer would drop the last drag on click.
+                debounceMs={0}
+                onChange={freedom =>
+                  set('generationFreedom', freedom ?? undefined)
+                }
+              />
+            </div>
+            <div>
+              <p className={fieldLabelClass}>Language</p>
+              <LanguageSelect
+                value={draft.language}
+                defaultLabel="owner's profile setting"
+                onChange={language => set('language', language ?? undefined)}
+              />
+            </div>
+            {getTtsEnabled() && (
+              <div>
+                <p className={fieldLabelClass}>Narration voice</p>
+                <VoiceSelect
+                  value={draft.ttsVoice}
+                  defaultLabel="system default"
+                  onChange={voice => set('ttsVoice', voice ?? undefined)}
+                />
+              </div>
+            )}
+          </>
+        )}
+      </SettingsPanel>
+
+      <section className="mt-8">
         <div className="mb-3">
           <h2 className="text-lg font-semibold text-slate-700">Lectures</h2>
         </div>

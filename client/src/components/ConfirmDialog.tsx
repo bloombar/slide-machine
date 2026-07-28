@@ -3,12 +3,13 @@
  * Cancel (the safe default); Escape cancels and, via Modal's capture-phase
  * handling, is captured before any underlying modal's own Escape handling.
  */
-import { useRef } from 'react'
+import { useRef, type ReactNode } from 'react'
 import Modal from './Modal'
 
 interface Props {
   title: string
-  message: string
+  /** Plain text, or any node — a settings confirm lists its changes. */
+  message: ReactNode
   confirmLabel: string
   onConfirm: () => void
   onCancel: () => void
@@ -32,7 +33,8 @@ export default function ConfirmDialog({
       initialFocusRef={cancelRef}
     >
       <h3 className="text-lg font-bold">{title}</h3>
-      <p className="mt-2 text-sm text-slate-600">{message}</p>
+      {/* A div, not a p: a change list renders a <ul> in here. */}
+      <div className="mt-2 text-sm text-slate-600">{message}</div>
       <div className="mt-6 flex justify-end gap-2">
         <button
           ref={cancelRef}

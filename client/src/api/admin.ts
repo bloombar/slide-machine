@@ -4,7 +4,11 @@
  * both into the shared workspace once the admin surface is wired in.
  */
 import type {
+  AdminDeckSettingsPatch,
+  AdminDeckSettingsView,
   AdminLogsResponse,
+  AdminProjectSettingsPatch,
+  AdminUserSettingsPatch,
   Project,
   SafeUser,
   SeedAsset,
@@ -77,6 +81,9 @@ export interface AdminSeedLevel {
  * not, is always listed and readable for an admin. */
 export interface AdminDeckDetailResponse {
   deck: AdminDeckSummary
+  /** The lecture's editable settings, plus the project-level AI freedom
+   * it inherits while unset. */
+  settings: AdminDeckSettingsView
   /** The project the lecture lives in, for the back link. */
   project: { id: string; title: string }
   /** The lecture's owner — not necessarily the project's owner. */
@@ -282,3 +289,42 @@ export const deleteAdminProject = (projectId: string): Promise<void> =>
 /** Deletes a lecture and everything under it. Irreversible. */
 export const deleteAdminDeck = (deckId: string): Promise<void> =>
   apiFetch<void>(`/api/admin/decks/${deckId}`, { method: 'DELETE' })
+
+// Settings editors (ADMIN-5). Each sends only the fields that changed:
+// JSON.stringify drops `undefined`, so an absent field means "unchanged"
+// and an explicit `null` means "clear this level so it inherits again".
+// All resolve on a 204 and are recorded in the audit log with the exact
+// before/after of every field, so pages refetch after saving.
+
+/** Updates a user's profile settings (not the plan tier, email, or
+ * password — those are governed elsewhere). */
+export const updateAdminUserSettings = (
+  userId: string,
+  patch: AdminUserSettingsPatch,
+): Promise<void> =>
+  apiFetch<void>(`/api/admin/users/${userId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })
+
+/** Updates a project's visibility and generation settings. */
+export const updateAdminProjectSettings = (
+  projectId: string,
+  patch: AdminProjectSettingsPatch,
+): Promise<void> =>
+  apiFetch<void>(`/api/admin/projects/${projectId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })
+
+/** Updates a lecture's visibility and generation settings. Sending
+ * `visibility: null` drops its own access override so it follows its
+ * project again; any other value detaches it from the project. */
+export const updateAdminDeckSettings = (
+  deckId: string,
+  patch: AdminDeckSettingsPatch,
+): Promise<void> =>
+  apiFetch<void>(`/api/admin/decks/${deckId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })

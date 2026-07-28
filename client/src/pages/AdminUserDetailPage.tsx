@@ -11,7 +11,14 @@
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import type { Project } from '@slide-machine/shared'
+import {
+  LOCALES,
+  LOCALE_LABELS,
+  type AdminUserSettingsPatch,
+  type Locale,
+  type ProfileVisibility,
+  type Project,
+} from '@slide-machine/shared'
 import {
   banAdminUserEmail,
   deleteAdminDeck,
@@ -22,16 +29,45 @@ import {
   fetchAdminUserProjects,
   resetAdminUserPassword,
   unbanAdminUserEmail,
+  updateAdminUserSettings,
   type AdminDeckSummary,
   type AdminUserDetailResponse,
 } from '../api/admin'
 import { ApiError } from '../api/http'
 import ConfirmDialog from '../components/ConfirmDialog'
+import LanguageSelect from '../components/LanguageSelect'
 import Modal from '../components/Modal'
 import DetailRow from '../components/admin/DetailRow'
 import LectureTable from '../components/admin/LectureTable'
+import SettingsPanel from '../components/admin/SettingsPanel'
+import type { FieldLabels } from '../lib/admin-changes'
 import { generatePassword } from '../lib/password'
 import { projectTitle } from '../lib/project'
+
+/** The account's admin-editable profile fields, as edited on this page.
+ * An absent language means "inherit the browser's". */
+interface UserSettingsDraft {
+  displayName: string
+  bio: string
+  profileVisibility: ProfileVisibility
+  locale: Locale
+  language?: Locale
+}
+
+const localeLabel = (value: unknown): string =>
+  value ? LOCALE_LABELS[value as Locale] : 'Default (browser setting)'
+
+const USER_FIELDS: FieldLabels<UserSettingsDraft> = {
+  displayName: 'Display name',
+  bio: { label: 'Bio', format: value => (value ? String(value) : 'Empty') },
+  profileVisibility: 'Profile visibility',
+  locale: { label: 'Interface locale', format: localeLabel },
+  language: { label: 'Lecturing language', format: localeLabel },
+}
+
+const fieldLabelClass = 'block text-sm font-medium text-slate-700'
+const textInputClass =
+  'mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm'
 
 interface Loaded {
   detail: AdminUserDetailResponse
@@ -329,6 +365,13 @@ export default function AdminUserDetailPage() {
   const otherDecks = decks.filter(d => !ownProjectIds.has(d.projectId))
   const deleteDeck = (deck: AdminDeckSummary) =>
     setPending({ kind: 'delete-deck', deck })
+  const settings: UserSettingsDraft = {
+    displayName: user.displayName,
+    bio: user.bio ?? '',
+    profileVisibility: user.profileVisibility,
+    locale: user.locale,
+    language: user.language,
+  }
 
   return (
     <div>
@@ -381,6 +424,96 @@ export default function AdminUserDetailPage() {
           <DetailRow label="Lectures" value={String(detail.deckCount)} />
         </dl>
       </section>
+
+      <SettingsPanel
+        value={settings}
+        labels={USER_FIELDS}
+        confirmTitle="Save these profile settings?"
+        description="Editing another account's profile. Plan tier, email, and password are set elsewhere."
+        onSave={async patch => {
+          if (!userId) return
+          // The panel's patch type allows null on every field; the wire
+          // type is narrower (only language clears to inherited).
+          await updateAdminUserSettings(userId, patch as AdminUserSettingsPatch)
+          setVersion(v => v + 1)
+        }}
+      >
+        {(draft, set) => (
+          <>
+            <div>
+              <label htmlFor="admin-display-name" className={fieldLabelClass}>
+                Display name
+              </label>
+              <input
+                id="admin-display-name"
+                value={draft.displayName}
+                onChange={e => set('displayName', e.target.value)}
+                className={textInputClass}
+              />
+            </div>
+            <div>
+              <label htmlFor="admin-bio" className={fieldLabelClass}>
+                Bio
+              </label>
+              <textarea
+                id="admin-bio"
+                rows={3}
+                value={draft.bio}
+                onChange={e => set('bio', e.target.value)}
+                className={textInputClass}
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="admin-profile-visibility"
+                className={fieldLabelClass}
+              >
+                Profile visibility
+              </label>
+              <select
+                id="admin-profile-visibility"
+                value={draft.profileVisibility}
+                onChange={e =>
+                  set('profileVisibility', e.target.value as ProfileVisibility)
+                }
+                className={textInputClass}
+              >
+                <option value="public">public</option>
+                <option value="private">private</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="admin-locale" className={fieldLabelClass}>
+                Interface locale
+              </label>
+              <select
+                id="admin-locale"
+                value={draft.locale}
+                onChange={e => set('locale', e.target.value as Locale)}
+                className={textInputClass}
+              >
+                {LOCALES.map(locale => (
+                  <option key={locale} value={locale}>
+                    {LOCALE_LABELS[locale]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <p className={fieldLabelClass}>Lecturing language</p>
+              <p className="mt-1 mb-2 text-sm text-slate-500">
+                Speech recognition and generated slide text, unless a project or
+                lecture overrides it.
+              </p>
+              <LanguageSelect
+                value={draft.language}
+                defaultLabel="browser setting"
+                onChange={language => set('language', language ?? undefined)}
+              />
+            </div>
+          </>
+        )}
+      </SettingsPanel>
 
       <section className="mt-8">
         <div className="mb-3">

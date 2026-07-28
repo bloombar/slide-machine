@@ -1,9 +1,9 @@
 /**
  * Unit tests for the per-user admin view: account details, projects
  * linking to their admin project pages, the "Other lectures" group
- * for decks living outside the user's own projects, and the moderation
- * actions (delete user/project/lecture, ban/unban email, reset
- * password).
+ * for decks living outside the user's own projects, the settings editor
+ * (ADMIN-5), and the moderation actions (delete user/project/lecture,
+ * ban/unban email, reset password).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
@@ -60,7 +60,11 @@ const decks = [
   },
 ]
 
-const renderPage = (status = 200, detailBody: unknown = detail) => {
+const renderPage = (
+  status = 200,
+  detailBody: unknown = detail,
+  patchResult: { status: number; body?: unknown } = { status: 204 },
+) => {
   // Keys ordered most-specific first: the fetch mock matches by substring
   const mocks = mockFetchRoutes({
     '/api/admin/users/u1/projects': () => ({ status, body: { projects } }),
@@ -69,11 +73,12 @@ const renderPage = (status = 200, detailBody: unknown = detail) => {
     '/api/admin/users/u1/password': () => ({ status: 204 }),
     '/api/admin/projects/p1': () => ({ status: 204 }),
     '/api/admin/decks/d2': () => ({ status: 204 }),
-    // Serves both GET (detail) and DELETE (delete user)
-    '/api/admin/users/u1': init =>
-      init?.method === 'DELETE'
-        ? { status: 204 }
-        : { status, body: detailBody },
+    // Serves GET (detail), PATCH (settings), and DELETE (delete user)
+    '/api/admin/users/u1': init => {
+      if (init?.method === 'DELETE') return { status: 204 }
+      if (init?.method === 'PATCH') return patchResult
+      return { status, body: detailBody }
+    },
   })
   render(
     <MemoryRouter initialEntries={['/app/admin/users/u1']}>
@@ -105,7 +110,11 @@ describe('AdminUserDetailPage', () => {
     expect(await screen.findByRole('heading', { name: 'Ada' })).toBeVisible()
     expect(screen.getByText('ada@example.com')).toBeVisible()
     expect(screen.getByText('pro')).toBeVisible()
-    expect(screen.getByText('Lecturer')).toBeVisible()
+    // Scoped to Details: the settings editor holds the bio too
+    const details = screen
+      .getByRole('heading', { name: 'Details' })
+      .closest('section')!
+    expect(within(details).getByText('Lecturer')).toBeVisible()
     expect(
       screen.getByRole('link', { name: 'View public profile' }),
     ).toHaveAttribute('href', '/u/u1')
@@ -311,6 +320,89 @@ describe('AdminUserDetailPage', () => {
     expect(await screen.findByText('Lecture deleted.')).toBeVisible()
     expect(requested(fetchMock)).toContainEqual(
       expect.stringMatching(/DELETE .*\/api\/admin\/decks\/d2$/),
+    )
+  })
+})
+
+describe('AdminUserDetailPage settings', () => {
+  /** The bodies of the PATCHes sent so far, as raw JSON strings. */
+  const patchBodies = (
+    fetchMock: ReturnType<typeof mockFetchRoutes>['fetchMock'],
+  ) =>
+    fetchMock.mock.calls
+      .filter(([, init]) => init?.method === 'PATCH')
+      .map(([, init]) => String(init?.body))
+
+  it('prefills from the detail response and disables Save while clean', async () => {
+    renderPage()
+    await screen.findByRole('heading', { name: 'Ada' })
+    expect(screen.getByLabelText('Display name')).toHaveValue('Ada')
+    expect(screen.getByLabelText('Bio')).toHaveValue('Lecturer')
+    expect(screen.getByLabelText('Profile visibility')).toHaveValue('public')
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+  })
+
+  it('confirms with the change list, then PATCHes only what changed', async () => {
+    const { fetchMock } = renderPage()
+    await screen.findByRole('heading', { name: 'Ada' })
+
+    fireEvent.change(screen.getByLabelText('Profile visibility'), {
+      target: { value: 'private' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    const dialog = screen.getByRole('alertdialog', {
+      name: 'Save these profile settings?',
+    })
+    expect(
+      within(dialog).getByText('Profile visibility: public → private'),
+    ).toBeVisible()
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Save changes' }),
+    )
+
+    expect(await screen.findByText('Settings saved.')).toBeVisible()
+    expect(patchBodies(fetchMock)).toEqual(['{"profileVisibility":"private"}'])
+  })
+
+  it('sends nothing when the confirm is cancelled', async () => {
+    const { fetchMock } = renderPage()
+    await screen.findByRole('heading', { name: 'Ada' })
+
+    fireEvent.change(screen.getByLabelText('Display name'), {
+      target: { value: 'Ada Lovelace' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(patchBodies(fetchMock)).toHaveLength(0)
+  })
+
+  it('reports a refused edit through an alert', async () => {
+    renderPage(200, detail, {
+      status: 400,
+      body: {
+        error: {
+          code: 'target_is_admin',
+          message: 'Admin accounts cannot be moderated',
+        },
+      },
+    })
+    await screen.findByRole('heading', { name: 'Ada' })
+
+    fireEvent.change(screen.getByLabelText('Display name'), {
+      target: { value: 'Ada Lovelace' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Save changes',
+      }),
+    )
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Admin accounts cannot be moderated',
     )
   })
 })

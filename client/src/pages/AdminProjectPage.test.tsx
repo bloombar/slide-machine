@@ -2,7 +2,8 @@
  * Unit tests for the per-project admin view: project header with owner
  * and visibility, the detail rows, the lecture table with viewer links,
  * the "View project" bypass (confirmed and logged for private projects),
- * and the delete actions (lecture, whole project).
+ * the settings editor (ADMIN-5), and the delete actions (lecture, whole
+ * project).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
@@ -16,6 +17,7 @@ const detail = {
     ownerId: 'u1',
     title: 'Physics',
     visibility: 'public',
+    effectiveGenerationFreedom: 2,
     createdAt: '2026-07-01T00:00:00Z',
     updatedAt: '2026-07-04T00:00:00Z',
   },
@@ -34,17 +36,22 @@ const detail = {
   ],
 }
 
-const renderPage = (status = 200, detailBody: unknown = detail) => {
+const renderPage = (
+  status = 200,
+  detailBody: unknown = detail,
+  patchResult: { status: number; body?: unknown } = { status: 204 },
+) => {
   // Keys ordered most-specific first: the fetch mock matches by substring
   const mocks = mockFetchRoutes({
     '/api/admin/decks/d1': () => ({ status: 204 }),
     // More specific than /projects/p1, so it must be matched first
     '/api/admin/projects/p1/private-view': () => ({ status: 204 }),
-    // Serves both GET (detail) and DELETE (delete project)
-    '/api/admin/projects/p1': init =>
-      init?.method === 'DELETE'
-        ? { status: 204 }
-        : { status, body: detailBody },
+    // Serves GET (detail), PATCH (settings), and DELETE (delete project)
+    '/api/admin/projects/p1': init => {
+      if (init?.method === 'DELETE') return { status: 204 }
+      if (init?.method === 'PATCH') return patchResult
+      return { status, body: detailBody }
+    },
   })
   render(
     <MemoryRouter initialEntries={['/app/admin/projects/p1']}>
@@ -236,5 +243,93 @@ describe('AdminProjectPage', () => {
     renderPage(200, { ...detail, decks: [] })
     await screen.findByRole('heading', { name: 'Physics' })
     expect(screen.getByText('No lectures.')).toBeVisible()
+  })
+})
+
+describe('AdminProjectPage settings', () => {
+  it('prefills from the detail response and disables Save while clean', async () => {
+    renderPage()
+    await screen.findByRole('heading', { name: 'Physics' })
+    expect(screen.getByLabelText('Visibility')).toHaveValue('public')
+    expect(screen.getByLabelText('Language')).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+  })
+
+  it('confirms with the change list, then PATCHes only what changed', async () => {
+    const { fetchMock } = renderPage()
+    await screen.findByRole('heading', { name: 'Physics' })
+
+    fireEvent.change(screen.getByLabelText('Visibility'), {
+      target: { value: 'restricted' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    const dialog = screen.getByRole('alertdialog', {
+      name: 'Save these project settings?',
+    })
+    expect(
+      within(dialog).getByText('Visibility: Public → Private'),
+    ).toBeVisible()
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Save changes' }),
+    )
+
+    expect(await screen.findByText('Settings saved.')).toBeVisible()
+    expect(
+      fetchMock.mock.calls
+        .filter(([, init]) => init?.method === 'PATCH')
+        .map(([, init]) => String(init?.body)),
+    ).toEqual(['{"visibility":"restricted"}'])
+    // The page refetches so it shows what the server actually stored
+    expect(
+      fetchMock.mock.calls.filter(
+        ([url, init]) =>
+          (init?.method ?? 'GET') === 'GET' &&
+          String(url).endsWith('/api/admin/projects/p1'),
+      ),
+    ).toHaveLength(2)
+  })
+
+  it('sends nothing when the confirm is cancelled', async () => {
+    const { fetchMock } = renderPage()
+    await screen.findByRole('heading', { name: 'Physics' })
+
+    fireEvent.change(screen.getByLabelText('Language'), {
+      target: { value: 'fr' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.filter(([, init]) => init?.method === 'PATCH'),
+    ).toHaveLength(0)
+  })
+
+  it('reports a refused edit through an alert', async () => {
+    renderPage(200, detail, {
+      status: 400,
+      body: {
+        error: {
+          code: 'target_is_admin',
+          message: 'Admin accounts cannot be moderated',
+        },
+      },
+    })
+    await screen.findByRole('heading', { name: 'Physics' })
+
+    fireEvent.change(screen.getByLabelText('Visibility'), {
+      target: { value: 'restricted' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Save changes',
+      }),
+    )
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Admin accounts cannot be moderated',
+    )
   })
 })

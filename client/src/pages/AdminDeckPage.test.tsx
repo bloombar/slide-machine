@@ -2,7 +2,7 @@
  * Unit tests for the per-lecture admin view: lecture header with
  * visibility, project and owner links, the "View slideshow" button (which
  * confirms and logs before opening a private lecture), the detail rows,
- * and the delete action.
+ * the settings editor (ADMIN-5), and the delete action.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
@@ -21,9 +21,26 @@ const detail = {
     createdAt: '2026-07-02T00:00:00Z',
     updatedAt: '2026-07-03T00:00:00Z',
   },
+  // A lecture with nothing of its own: everything inherited
+  settings: {
+    visibility: 'restricted',
+    accessInherited: true,
+    effectiveGenerationFreedom: 2,
+  },
   project: { id: 'p1', title: 'Physics' },
   owner: { id: 'u1', email: 'ada@example.com', displayName: 'Ada' },
   seed: { lecture: { assets: [] }, project: { assets: [] } },
+}
+
+/** The 400 an edit aimed at an allowlisted owner comes back with. */
+const targetIsAdmin = {
+  status: 400,
+  body: {
+    error: {
+      code: 'target_is_admin',
+      message: 'Admin accounts cannot be moderated',
+    },
+  },
 }
 
 /** Detail whose lecture and project both carry seed material. */
@@ -66,16 +83,21 @@ const seededDetail = {
   },
 }
 
-const renderPage = (status = 200, detailBody: unknown = detail) => {
+const renderPage = (
+  status = 200,
+  detailBody: unknown = detail,
+  patchResult: { status: number; body?: unknown } = { status: 204 },
+) => {
   // Keys ordered most-specific first: the fetch mock matches by substring
   const mocks = mockFetchRoutes({
     // More specific than /decks/d1, so it must be matched first
     '/api/admin/decks/d1/private-view': () => ({ status: 204 }),
-    // Serves both GET (detail) and DELETE (delete lecture)
-    '/api/admin/decks/d1': init =>
-      init?.method === 'DELETE'
-        ? { status: 204 }
-        : { status, body: detailBody },
+    // Serves GET (detail), PATCH (settings), and DELETE (delete lecture)
+    '/api/admin/decks/d1': init => {
+      if (init?.method === 'DELETE') return { status: 204 }
+      if (init?.method === 'PATCH') return patchResult
+      return { status, body: detailBody }
+    },
   })
   render(
     <MemoryRouter initialEntries={['/app/admin/decks/d1']}>
@@ -104,6 +126,14 @@ const requested = (
 ) =>
   fetchMock.mock.calls.map(([url, init]) => `${init?.method ?? 'GET'} ${url}`)
 
+/** The bodies of the PATCHes sent so far, as raw JSON strings. */
+const patchBodies = (
+  fetchMock: ReturnType<typeof mockFetchRoutes>['fetchMock'],
+) =>
+  fetchMock.mock.calls
+    .filter(([, init]) => init?.method === 'PATCH')
+    .map(([, init]) => String(init?.body))
+
 afterEach(() => {
   vi.unstubAllGlobals()
 })
@@ -111,8 +141,10 @@ afterEach(() => {
 describe('AdminDeckPage', () => {
   it('shows the lecture title, its visibility, project, and owner', async () => {
     renderPage()
-    expect(await screen.findByRole('heading', { name: 'Waves' })).toBeVisible()
-    expect(screen.getByText('Private')).toBeVisible()
+    const heading = await screen.findByRole('heading', { name: 'Waves' })
+    expect(heading).toBeVisible()
+    // Scoped to the header: the settings editor offers "Private" too
+    expect(within(heading.closest('div')!).getByText('Private')).toBeVisible()
     expect(screen.getByRole('link', { name: 'Physics' })).toHaveAttribute(
       'href',
       '/app/admin/projects/p1',
@@ -195,8 +227,12 @@ describe('AdminDeckPage', () => {
   it('shows the detail rows', async () => {
     renderPage()
     await screen.findByRole('heading', { name: 'Waves' })
-    expect(screen.getByText('5')).toBeVisible()
-    expect(screen.getByText('/d/waves-abc123')).toBeVisible()
+    // Scoped to Details: the refine level pickers also offer a "5"
+    const details = screen
+      .getByRole('heading', { name: 'Details' })
+      .closest('section')!
+    expect(within(details).getByText('5')).toBeVisible()
+    expect(within(details).getByText('/d/waves-abc123')).toBeVisible()
   })
 
   it('falls back to "Untitled lecture" for a blank title', async () => {
@@ -296,6 +332,117 @@ describe('AdminDeckPage', () => {
     expect(screen.getByRole('link', { name: '← All users' })).toHaveAttribute(
       'href',
       '/app/admin',
+    )
+  })
+})
+
+describe('AdminDeckPage settings', () => {
+  /** A lecture with its own pinned settings rather than inherited ones. */
+  const ownSettings = {
+    ...detail,
+    settings: {
+      visibility: 'public',
+      accessInherited: false,
+      generationFreedom: 4,
+      refineSlidesEnabled: false,
+      effectiveGenerationFreedom: 2,
+    },
+  }
+
+  it('prefills from the detail response and disables Save while clean', async () => {
+    renderPage()
+    await screen.findByRole('heading', { name: 'Waves' })
+    // An inheriting lecture shows "follow the project", not a pinned value
+    expect(screen.getByLabelText('Visibility')).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+  })
+
+  it("prefills a lecture's own pinned settings", async () => {
+    renderPage(200, ownSettings)
+    await screen.findByRole('heading', { name: 'Waves' })
+    expect(screen.getByLabelText('Visibility')).toHaveValue('public')
+    expect(screen.getByLabelText('AI freedom')).toHaveValue('4')
+    expect(screen.getByLabelText('Refine all slides')).toHaveValue('false')
+  })
+
+  it('confirms with the change list, then PATCHes only what changed', async () => {
+    const { fetchMock } = renderPage()
+    await screen.findByRole('heading', { name: 'Waves' })
+
+    fireEvent.change(screen.getByLabelText('Visibility'), {
+      target: { value: 'public' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    const dialog = screen.getByRole('alertdialog', {
+      name: 'Save these lecture settings?',
+    })
+    expect(
+      within(dialog).getByText(
+        "Visibility: Follows the project's settings → Public",
+      ),
+    ).toBeVisible()
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Save changes' }),
+    )
+
+    expect(await screen.findByText('Settings saved.')).toBeVisible()
+    expect(patchBodies(fetchMock)).toEqual(['{"visibility":"public"}'])
+    // The page refetches so it shows what the server actually stored
+    expect(
+      requested(fetchMock).filter(r => r === 'GET /api/admin/decks/d1'),
+    ).toHaveLength(2)
+  })
+
+  it('sends null to hand a pinned setting back to the project', async () => {
+    const { fetchMock } = renderPage(200, ownSettings)
+    await screen.findByRole('heading', { name: 'Waves' })
+
+    // FreedomSlider only offers the reset once the level has its own value
+    fireEvent.click(screen.getByRole('button', { name: 'Reset to default' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Save changes',
+      }),
+    )
+
+    expect(await screen.findByText('Settings saved.')).toBeVisible()
+    expect(patchBodies(fetchMock)).toEqual(['{"generationFreedom":null}'])
+  })
+
+  it('sends nothing when the confirm is cancelled', async () => {
+    const { fetchMock } = renderPage()
+    await screen.findByRole('heading', { name: 'Waves' })
+
+    fireEvent.change(screen.getByLabelText('Visibility'), {
+      target: { value: 'restricted' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(patchBodies(fetchMock)).toHaveLength(0)
+    // The edit is still pending, so Save is still offered
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
+  })
+
+  it('reports a refused edit through an alert', async () => {
+    renderPage(200, detail, targetIsAdmin)
+    await screen.findByRole('heading', { name: 'Waves' })
+
+    fireEvent.change(screen.getByLabelText('Visibility'), {
+      target: { value: 'public' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Save changes',
+      }),
+    )
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Admin accounts cannot be moderated',
     )
   })
 })
