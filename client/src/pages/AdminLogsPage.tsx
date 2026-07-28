@@ -3,16 +3,21 @@
  * (time, acting admin, action, target, details), paginated, with a
  * Download CSV button that exports the whole log. Entries appear as
  * admin mutation features call logAdminAction on the server.
+ *
+ * The acting admin and the target (user, project, or lecture) both link
+ * to their admin detail pages, so any entry is one click from the record
+ * it describes.
  */
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import type { AdminLogsResponse } from '@slide-machine/shared'
+import type { AdminLogEntry, AdminLogsResponse } from '@slide-machine/shared'
 import {
   listAdminLogs,
   downloadAdminLogsCsv,
   ADMIN_LOGS_PAGE_SIZE,
   ADMIN_LOGS_PAGE_SIZES,
 } from '../api/admin'
+import { config } from '../config'
 
 const loggedAt = (iso: string): string =>
   new Date(iso).toLocaleString(undefined, {
@@ -22,6 +27,74 @@ const loggedAt = (iso: string): string =>
     hour: '2-digit',
     minute: '2-digit',
   })
+
+/** Admin detail route for each kind of target an action can name. Kinds
+ * missing from this map (future action families) render unlinked. */
+const TARGET_ROUTES: Record<string, string> = {
+  user: 'users',
+  project: 'projects',
+  deck: 'decks',
+}
+
+/** Reads a string field out of an entry's details, ignoring blanks. */
+const detail = (entry: AdminLogEntry, key: string): string | undefined => {
+  const value = entry.details?.[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+/** Display name for a target, taken from the details snapshotted when the
+ * action happened: an email for users, a title for projects and lectures.
+ * Untitled records fall back to the same placeholders their own admin
+ * pages use. Returns undefined when nothing was recorded. */
+const targetName = (entry: AdminLogEntry): string | undefined => {
+  switch (entry.targetType) {
+    case 'user':
+      return detail(entry, 'email')
+    case 'project':
+      return detail(entry, 'title') ?? config.defaultProjectTitle
+    case 'deck':
+      return detail(entry, 'title') ?? 'Untitled lecture'
+    default:
+      return detail(entry, 'title') ?? detail(entry, 'email')
+  }
+}
+
+/**
+ * The Target column: the kind of record acted on plus its name, linked to
+ * that record's admin page. Deletions stay unlinked — the record is gone,
+ * so its page would only 404. Ids stay out of the table; the linked page
+ * shows them.
+ */
+function TargetCell({ entry }: { entry: AdminLogEntry }) {
+  const { targetType, targetId } = entry
+  if (!targetType) return <>—</>
+
+  const route = TARGET_ROUTES[targetType]
+  const name = targetName(entry)
+  const deleted = entry.action.endsWith('.delete')
+  const label = name ?? targetType
+
+  return (
+    <span className="inline-flex items-baseline gap-1.5">
+      {/* Only worth a kind prefix when the name itself is shown */}
+      {name && (
+        <span className="text-xs text-slate-400 uppercase">{targetType}</span>
+      )}
+      {route && targetId && !deleted ? (
+        <Link
+          to={`/app/admin/${route}/${targetId}`}
+          className="font-medium text-slate-900 hover:underline"
+        >
+          {label}
+        </Link>
+      ) : (
+        <span className={deleted ? 'text-slate-400 line-through' : undefined}>
+          {label}
+        </span>
+      )}
+    </span>
+  )
+}
 
 /** Fetches the CSV export and hands it to the browser as a download.
  * A plain <a href> can't send the Bearer token, so the bytes arrive as
@@ -168,10 +241,8 @@ export default function AdminLogsPage() {
                       {entry.action}
                     </span>
                   </td>
-                  {/* Kind only — the target's id is noise here; the
-                      record's own admin page shows it under Details. */}
                   <td className="px-4 py-2.5 text-slate-700">
-                    {entry.targetType || '—'}
+                    <TargetCell entry={entry} />
                   </td>
                   <td
                     title={details}

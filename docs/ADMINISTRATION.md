@@ -105,6 +105,12 @@ optional action-specific details, and a timestamp. The page lists entries
 newest first, paginated, with a **Download CSV** button that exports the
 whole log.
 
+Both the acting admin and the target link to their admin detail pages, so
+an entry is one click from the record it describes. The target shows its
+kind plus the name snapshotted at the time (the user's email, the project
+or lecture title). Deletions are the exception: the record is gone, so
+the name is struck through rather than linked.
+
 Entries are **append-only**: they are written through one server module
 ([server/src/audit/log.ts](../server/src/audit/log.ts)) into the
 `adminactionlogs` Mongo collection, and no API can edit or delete them.
