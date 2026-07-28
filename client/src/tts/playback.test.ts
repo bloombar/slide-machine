@@ -102,6 +102,66 @@ describe('useTtsPlayback', () => {
     expect(hook.result.current.status).toBe('playing')
   })
 
+  // The transcript editor's preview (EDIT-6) runs on this same controller, so
+  // it cannot play over a slide or the deck.
+  it('speaks supplied text without navigating, and idles when it ends', async () => {
+    mockedSynth.mockResolvedValue({ url: 'preview', marks: [] })
+    const { hook, navigate, stopMic } = setup()
+
+    act(() => hook.result.current.speakText(slides[0]!, 'Unsaved words.'))
+    expect(stopMic).toHaveBeenCalled()
+    await waitFor(() => expect(audios[0]?.src).toBe('preview'))
+    expect(mockedSynth).toHaveBeenCalledWith(
+      slides[0]!.id,
+      'transcript',
+      'Unsaved words.',
+    )
+    // The editor is open over the slide; the preview is about the words.
+    expect(navigate).not.toHaveBeenCalled()
+    expect(hook.result.current.scope).toBe('text')
+    // No active slide, so whiteboard stroke sync never runs off a preview.
+    expect(hook.result.current.getProgress()).toBeNull()
+
+    act(() => audios[0]!.end())
+    expect(hook.result.current.status).toBe('idle')
+  })
+
+  it('ignores a request to speak nothing', () => {
+    const { hook, stopMic } = setup()
+    act(() => hook.result.current.speakText(slides[0]!, '   '))
+    expect(mockedSynth).not.toHaveBeenCalled()
+    expect(stopMic).not.toHaveBeenCalled()
+    expect(hook.result.current.status).toBe('idle')
+  })
+
+  it('a preview silences whatever was already speaking', async () => {
+    mockedSynth.mockResolvedValue({ url: 'u', marks: [] })
+    const { hook } = setup()
+
+    act(() => hook.result.current.playDeck(0))
+    await waitFor(() => expect(hook.result.current.status).toBe('playing'))
+
+    act(() => hook.result.current.speakText(slides[0]!, 'Unsaved words.'))
+    expect(audios[0]!.pause).toHaveBeenCalled()
+    await waitFor(() => expect(hook.result.current.scope).toBe('text'))
+  })
+
+  it('pauseResume pauses and resumes a preview', async () => {
+    mockedSynth.mockResolvedValue({ url: 'preview', marks: [] })
+    const { hook } = setup()
+
+    act(() => hook.result.current.speakText(slides[0]!, 'Unsaved words.'))
+    await waitFor(() => expect(hook.result.current.status).toBe('playing'))
+
+    act(() => hook.result.current.pauseResume())
+    expect(hook.result.current.status).toBe('paused')
+    expect(audios[0]!.pause).toHaveBeenCalled()
+
+    act(() => hook.result.current.pauseResume())
+    expect(hook.result.current.status).toBe('playing')
+    expect(hook.result.current.scope).toBe('text')
+  })
+
   it('exposes the active clip marks + time through getProgress', async () => {
     const marks = [
       { charOffset: 0, timeSeconds: 0 },

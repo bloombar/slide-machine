@@ -25,6 +25,7 @@ import type {
   ImageSearchCandidate,
   Slide,
   SlideEvent,
+  SlideRefineOptions,
   Stroke,
   StrokeAnchor,
   WordTiming,
@@ -61,6 +62,7 @@ import SlideNavZones from '../components/SlideNavZones'
 import SlideMenu from '../components/SlideMenu'
 import { useTtsPlayback } from '../tts/playback'
 import {
+  getRefineSlidesDefaultLevel,
   getSttEngine,
   getTtsEnabled,
   getWhiteboardSuppressDebounceMs,
@@ -76,7 +78,7 @@ import { useWhiteboard } from '../components/whiteboard/useWhiteboard'
 import { themeColors } from '../components/slide/theme'
 import Tooltip from '../components/Tooltip'
 import NotificationPill from '../components/NotificationPill'
-import ConfirmDialog from '../components/ConfirmDialog'
+import SlideRefineModal from '../components/SlideRefineModal'
 import SeedDialog from '../components/SeedDialog'
 import DeckSettingsModal, {
   type SettingsTabId,
@@ -217,11 +219,8 @@ export default function DeckViewerPage() {
   const [pendingImages, setPendingImages] = useState<Set<string>>(new Set())
   // The slide currently being refined via its kebab (drives a status toast)
   const [refiningSlideId, setRefiningSlideId] = useState<string | null>(null)
-  // A marked-up slide the user asked to refine, pending confirmation — refining
-  // may reflow content out from under their annotations (WB-1).
-  const [confirmingRefineSlideId, setConfirmingRefineSlideId] = useState<
-    string | null
-  >(null)
+  // The slide whose "Refine this slide with AI" dialog is open (GEN-4).
+  const [refineSlideFor, setRefineSlideFor] = useState<string | null>(null)
   // Content-generation pause pill (WB-3): 'paused' while the user is actively
   // drawing during recording (with a Resume button to override), 'resumed' for
   // a brief confirmation after the debounce elapses or the user resumes, and
@@ -1412,13 +1411,13 @@ export default function DeckViewerPage() {
 
   /** Refines one slide with the lecture's Refine settings, then patches it in
    * place. Runs synchronously (one slide is quick); a toast shows progress. */
-  const refineSlide = async (slideId: string) => {
+  const refineSlide = async (slideId: string, options?: SlideRefineOptions) => {
     setRefiningSlideId(slideId)
     setImageError(null)
     try {
       const res = await dispatchAction<DeckRefineSlideResult>(
         'deck.refineSlide',
-        { deckId: view.deck.id, slideId },
+        { deckId: view.deck.id, slideId, options },
       )
       // A refine that re-fits the slide onto a different layout morphs
       // like a manual layout switch (GEN-9); content-only refines stay
@@ -1445,21 +1444,12 @@ export default function DeckViewerPage() {
         commit()
       }
       touchDeckLocally()
-    } catch {
+    } catch (error) {
       setImageError('Could not refine that slide — try again')
+      // The dialog reports its own failure and stays open to retry.
+      throw error
     } finally {
       setRefiningSlideId(null)
-    }
-  }
-
-  /** Kebab "Refine this slide": if the slide carries whiteboard marks, confirm
-   * first (refining may reflow content under the annotations); else refine. */
-  const requestRefineSlide = (slideId: string) => {
-    const slide = viewRef.current?.slides.find(s => s.id === slideId)
-    if (hasVisibleDrawings(slide?.drawings)) {
-      setConfirmingRefineSlideId(slideId)
-    } else {
-      void refineSlide(slideId)
     }
   }
 
@@ -1471,6 +1461,13 @@ export default function DeckViewerPage() {
 
   // Slides whose original lecture audio the server said can be played back.
   const audioSlideIds = new Set(view.audioSlideIds ?? [])
+
+  /** Whether a slide's transcript can be re-transcribed from its recorded
+   * audio: the audio has to still be there AND the server has to hold the
+   * speech engine (the keyless browser engine only runs during a live
+   * session, so there is nothing to transcribe a recording with). */
+  const canRegenerateTranscript = (slideId: string): boolean =>
+    audioSlideIds.has(slideId) && getSttEngine() === 'google-cloud'
 
   // The slide whose spoken transcript is being edited (EDIT-6), plus its
   // 1-based number for the dialog heading. Missing (e.g. deleted meanwhile)
@@ -1716,7 +1713,7 @@ export default function DeckViewerPage() {
                 }
                 onRefine={
                   canEdit && slideRefineEnabled
-                    ? () => requestRefineSlide(slide!.id)
+                    ? () => setRefineSlideFor(slide!.id)
                     : undefined
                 }
                 onPlayOriginalAudio={
@@ -1768,7 +1765,7 @@ export default function DeckViewerPage() {
                     onEditTranscript={() => setTranscriptEditorFor(s.id)}
                     onRefine={
                       slideRefineEnabled
-                        ? () => requestRefineSlide(s.id)
+                        ? () => setRefineSlideFor(s.id)
                         : undefined
                     }
                     onPlayOriginalAudio={
@@ -1816,6 +1813,12 @@ export default function DeckViewerPage() {
         <TranscriptEditorModal
           slide={transcriptEditSlide}
           number={transcriptEditIndex + 1}
+          canRegenerate={canRegenerateTranscript(transcriptEditSlide.id)}
+          // Same gate the lecture's Refine settings put on the narration pass.
+          canRefine={view.deck.refineTranscriptEnabled ?? true}
+          // The app's one TTS controller, so previewing the edited text and
+          // "Speak this slide" can never play at once.
+          tts={ttsEnabled ? tts : undefined}
           onSaved={applySlide}
           onClose={() => setTranscriptEditorFor(null)}
         />
@@ -1830,17 +1833,18 @@ export default function DeckViewerPage() {
         />
       )}
 
-      {confirmingRefineSlideId && (
-        <ConfirmDialog
-          title="Refine this marked-up slide?"
-          message="This slide has whiteboard markings. Refining may change its content or layout, so your highlights and annotations may no longer line up with what's underneath."
-          confirmLabel="Refine anyway"
-          onConfirm={() => {
-            const id = confirmingRefineSlideId
-            setConfirmingRefineSlideId(null)
-            void refineSlide(id)
-          }}
-          onCancel={() => setConfirmingRefineSlideId(null)}
+      {canEdit && refineSlideFor && (
+        <SlideRefineModal
+          number={view.slides.findIndex(s => s.id === refineSlideFor) + 1 || 1}
+          marked={hasVisibleDrawings(
+            view.slides.find(s => s.id === refineSlideFor)?.drawings,
+          )}
+          hasAudio={audioSlideIds.has(refineSlideFor)}
+          defaultLevel={
+            view.deck.refineSlidesLevel ?? getRefineSlidesDefaultLevel()
+          }
+          onRefine={options => refineSlide(refineSlideFor, options)}
+          onClose={() => setRefineSlideFor(null)}
         />
       )}
 

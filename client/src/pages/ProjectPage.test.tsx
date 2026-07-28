@@ -163,7 +163,7 @@ describe('ProjectPage', () => {
     vi.useRealTimers()
   })
 
-  it('sets the project default template from the Design template tab', async () => {
+  it('sets the project default template from the Design tab', async () => {
     let sent: unknown
     mockFetchRoutes({
       ...baseRoutes,
@@ -205,7 +205,7 @@ describe('ProjectPage', () => {
         screen.getByRole('button', { name: 'Project settings' }),
       ),
     )
-    fireEvent.click(await screen.findByRole('tab', { name: 'Design template' }))
+    fireEvent.click(await screen.findByRole('tab', { name: 'Design' }))
     fireEvent.click(await screen.findByRole('radio', { name: /midnight/i }))
 
     await vi.waitFor(() =>

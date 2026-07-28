@@ -401,7 +401,7 @@ describe('DeckViewerPage spoken transcript editing (EDIT-6)', () => {
   })
 })
 
-describe('DeckViewerPage refine confirmation (WB-1)', () => {
+describe('DeckViewerPage per-slide refine (GEN-4/WB-1)', () => {
   const refineRoutes = (body: object, onRefine?: () => void) => ({
     '/api/auth/refresh': () => ({
       status: 200,
@@ -432,8 +432,34 @@ describe('DeckViewerPage refine confirmation (WB-1)', () => {
       </MemoryRouter>,
     )
 
-  it('prompts before refining a slide that has whiteboard marks', async () => {
+  /** Opens the kebab's refine dialog for slide 1. */
+  const openRefineDialog = () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Refine this slide with AI' }),
+    )
+  }
+
+  it('opens the options dialog instead of refining straight away', async () => {
     let refined = false
+    mockFetchRoutes(
+      refineRoutes({ ...deckView, canEdit: true }, () => (refined = true)),
+    )
+    renderDeck()
+    await screen.findByText('Shared Lecture')
+
+    openRefineDialog()
+    expect(
+      screen.getByRole('dialog', { name: /Refine this slide with AI/i }),
+    ).toBeInTheDocument()
+    // Nothing runs until the user picks what to do and confirms.
+    expect(refined).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refine' }))
+    await vi.waitFor(() => expect(refined).toBe(true))
+  })
+
+  it('warns when the slide carries whiteboard marks', async () => {
     const marked = {
       ...deckView,
       deck: { ...deckView.deck, slideOrder: ['s1'] },
@@ -450,34 +476,13 @@ describe('DeckViewerPage refine confirmation (WB-1)', () => {
         },
       ],
     }
-    mockFetchRoutes(refineRoutes(marked, () => (refined = true)))
+    mockFetchRoutes(refineRoutes(marked))
     renderDeck()
     await screen.findByText('Shared Lecture')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Refine this slide' }))
-    // The marked slide prompts first — nothing dispatched yet.
-    expect(
-      screen.getByRole('alertdialog', { name: /refine this marked-up slide/i }),
-    ).toBeInTheDocument()
-    expect(refined).toBe(false)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Refine anyway' }))
-    await vi.waitFor(() => expect(refined).toBe(true))
-  })
-
-  it('refines directly when the slide has no marks', async () => {
-    let refined = false
-    const clean = { ...deckView, canEdit: true }
-    mockFetchRoutes(refineRoutes(clean, () => (refined = true)))
-    renderDeck()
-    await screen.findByText('Shared Lecture')
-
-    fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Refine this slide' }))
-    // No marks → no confirmation.
-    expect(screen.queryByRole('alertdialog')).toBeNull()
-    await vi.waitFor(() => expect(refined).toBe(true))
+    openRefineDialog()
+    // Refining can reflow content out from under the annotations (WB-1).
+    expect(screen.getByText(/whiteboard markings/i)).toBeInTheDocument()
   })
 
   it('morphs the layout when the AI refine lands on a new one (GEN-9)', async () => {
@@ -488,8 +493,8 @@ describe('DeckViewerPage refine confirmation (WB-1)', () => {
     renderDeck()
     await screen.findByText('Shared Lecture')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Refine this slide' }))
+    openRefineDialog()
+    fireEvent.click(screen.getByRole('button', { name: 'Refine' }))
 
     await vi.waitFor(() => expect(flip.calls).toEqual(['s1']))
     expect(screen.getByTestId('slide')).toHaveAttribute(
@@ -513,8 +518,8 @@ describe('DeckViewerPage refine confirmation (WB-1)', () => {
     renderDeck()
     await screen.findByText('Shared Lecture')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Refine this slide' }))
+    openRefineDialog()
+    fireEvent.click(screen.getByRole('button', { name: 'Refine' }))
 
     // The refined slide (no title) replaces s1 — the commit landed…
     await vi.waitFor(() =>
@@ -2069,7 +2074,7 @@ describe('DeckViewerPage settings modal', () => {
     vi.useRealTimers()
   })
 
-  it('jumps from the layout picker to the Design template settings tab', async () => {
+  it('jumps from the layout picker to the Design settings tab', async () => {
     withSettingsRoutes()
     renderWithSettings()
     await screen.findByText('Shared Lecture')
@@ -2087,9 +2092,10 @@ describe('DeckViewerPage settings modal', () => {
     expect(
       screen.queryByRole('dialog', { name: 'Change slide layout' }),
     ).not.toBeInTheDocument()
-    expect(
-      screen.getByRole('tab', { name: 'Design template' }),
-    ).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Design' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
     expect(
       await screen.findByRole('radio', { name: /midnight/i }),
     ).toBeInTheDocument()
@@ -2148,7 +2154,7 @@ describe('DeckViewerPage settings modal', () => {
     expect(
       await screen.findByRole('dialog', { name: 'Lecture settings' }),
     ).toBeInTheDocument()
-    fireEvent.click(await screen.findByRole('tab', { name: 'Design template' }))
+    fireEvent.click(await screen.findByRole('tab', { name: 'Design' }))
 
     fireEvent.click(await screen.findByRole('radio', { name: /midnight/i }))
     await vi.waitFor(() =>

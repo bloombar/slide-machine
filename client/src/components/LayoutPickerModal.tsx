@@ -14,7 +14,7 @@ interface Props {
   current: string
   onPick: (layoutType: string) => void
   onClose: () => void
-  /** Closes the picker and opens the Design template settings tab. */
+  /** Closes the picker and opens the Design settings tab. */
   onChangeTemplate: () => void
 }
 

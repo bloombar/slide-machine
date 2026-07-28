@@ -167,7 +167,7 @@ test('in-place editing in the viewer, including list view and bullets', async ({
   await expect(
     page.getByRole('dialog', { name: 'Lecture settings' }),
   ).toBeVisible()
-  await page.getByRole('tab', { name: 'Design template' }).click()
+  await page.getByRole('tab', { name: 'Design' }).click()
   await expect(page.getByRole('radio', { name: /classic/i })).toHaveAttribute(
     'aria-checked',
     'true',
@@ -186,7 +186,7 @@ test('in-place editing in the viewer, including list view and bullets', async ({
   // The switch persisted: reopen after a reload and check
   await page.reload()
   await page.getByRole('button', { name: 'Lecture settings' }).click()
-  await page.getByRole('tab', { name: 'Design template' }).click()
+  await page.getByRole('tab', { name: 'Design' }).click()
   await expect(page.getByRole('radio', { name: /seminar/i })).toHaveAttribute(
     'aria-checked',
     'true',

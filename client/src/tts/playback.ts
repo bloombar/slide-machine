@@ -1,12 +1,16 @@
 /**
  * Text-to-speech playback controller. Owns a single HTMLAudioElement and drives
- * two flows through one "only one thing plays at a time" state machine:
+ * three flows through one "only one thing plays at a time" state machine:
  *  - speakSlide(slide): speak one slide's stored narration/transcript (kebab
  *    option) — the same source as deck playback, just for a single slide.
  *  - playDeck(fromIndex): read the whole deck's stored transcript aloud,
  *    auto-advancing to each slide as it's spoken; Play↔Pause via toggle().
+ *  - speakText(slide, text): speak words that are not saved yet, so the
+ *    transcript editor can preview a narration before committing it (EDIT-6).
  *
- * Both stop the live mic first (never record while playing). A monotonically
+ * They share one element deliberately: starting any of them silences the
+ * others, so a preview can never play over "Speak this slide" or deck playback.
+ * All stop the live mic first (never record while playing). A monotonically
  * increasing token cancels any in-flight sequence when a new one starts or on
  * stop/unmount — the same "start returns a cancel" shape as pollSlideImage.
  */
@@ -15,7 +19,9 @@ import type { Slide, TtsMark } from '@slide-machine/shared'
 import { synthesizeSlideTts } from '../api/slides'
 
 export type TtsStatus = 'idle' | 'playing' | 'paused'
-export type TtsScope = 'deck' | 'slide' | null
+/** What the active audio is: whole-deck playback, one slide's stored narration,
+ * or a preview of unsaved text (EDIT-6). */
+export type TtsScope = 'deck' | 'slide' | 'text' | null
 
 interface Options {
   /** Current slides, read live (survives re-renders) — e.g. from a ref. */
@@ -48,8 +54,12 @@ export interface TtsPlayback {
   activeIndex: number | null
   playDeck: (fromIndex: number) => void
   speakSlide: (slide: Slide) => void
+  /** Speak text that is not saved yet, as a preview (EDIT-6). */
+  speakText: (slide: Slide, text: string) => void
   /** Toolbar play/pause: start deck playback, or pause/resume it. */
   toggle: (activeIndex: number) => void
+  /** Pause or resume whatever is speaking, whichever flow started it. */
+  pauseResume: () => void
   stop: () => void
   /** Live playback position for drawing-sync; null when nothing is playing. */
   getProgress: () => TtsProgress | null
@@ -100,27 +110,19 @@ export function useTtsPlayback({
     marksRef.current = []
   }, [halt])
 
-  /** Navigates to a slide, synthesizes its audio, and plays it; `onEnded`
-   * runs when the clip finishes (or there was nothing to play). */
-  const playAt = useCallback(
+  /** Synthesizes via `fetchAudio`, then plays the clip on the shared element;
+   * `onEnded` runs when it finishes (or there was nothing to play). Every flow
+   * goes through here, so they cannot overlap or diverge in behavior. */
+  const playSynthesized = useCallback(
     async (
-      index: number,
-      mode: 'content' | 'transcript',
+      fetchAudio: () => Promise<{ url: string | null; marks?: TtsMark[] }>,
       token: number,
       onEnded: () => void,
     ) => {
-      navigate(index)
-      setActiveIndex(index)
-      activeIndexRef.current = index
-      const slide = getSlides()[index]
-      if (!slide) {
-        stop()
-        return
-      }
       let url: string | null
       let marks: TtsMark[] = []
       try {
-        const res = await synthesizeSlideTts(slide.id, mode)
+        const res = await fetchAudio()
         url = res.url
         marks = res.marks ?? []
       } catch {
@@ -149,7 +151,32 @@ export function useTtsPlayback({
       }
       if (token === tokenRef.current) setStatus('playing')
     },
-    [getSlides, navigate, stop],
+    [],
+  )
+
+  /** Navigates to a slide and speaks its stored narration. */
+  const playAt = useCallback(
+    async (
+      index: number,
+      mode: 'content' | 'transcript',
+      token: number,
+      onEnded: () => void,
+    ) => {
+      navigate(index)
+      setActiveIndex(index)
+      activeIndexRef.current = index
+      const slide = getSlides()[index]
+      if (!slide) {
+        stop()
+        return
+      }
+      await playSynthesized(
+        () => synthesizeSlideTts(slide.id, mode),
+        token,
+        onEnded,
+      )
+    },
+    [getSlides, navigate, playSynthesized, stop],
   )
 
   const playDeck = useCallback(
@@ -191,22 +218,52 @@ export function useTtsPlayback({
     [getSlides, halt, playAt, stop, stopMic],
   )
 
+  /**
+   * Speaks text the user has not saved yet — the transcript editor's preview
+   * (EDIT-6). Unlike the other flows it does not navigate: the editor is open
+   * over the slide, and the preview is about the words, not where the deck is.
+   * It also clears the active index, so whiteboard stroke sync (WB-2), which is
+   * timed to a slide's real narration, never runs off a preview.
+   */
+  const speakText = useCallback(
+    (slide: Slide, text: string) => {
+      if (!text.trim()) return
+      stopMic()
+      halt()
+      pausedRef.current = false
+      const token = ++tokenRef.current
+      setActiveIndex(null)
+      activeIndexRef.current = null
+      setScope('text')
+      setStatus('playing')
+      void playSynthesized(
+        () => synthesizeSlideTts(slide.id, 'transcript', text),
+        token,
+        stop,
+      )
+    },
+    [halt, playSynthesized, stop, stopMic],
+  )
+
+  const pauseResume = useCallback(() => {
+    const audio = audioRef.current
+    if (status === 'playing') {
+      pausedRef.current = true
+      audio?.pause()
+      setStatus('paused')
+    } else if (status === 'paused') {
+      pausedRef.current = false
+      void audio?.play()
+      setStatus('playing')
+    }
+  }, [status])
+
   const toggle = useCallback(
     (idx: number) => {
-      const audio = audioRef.current
-      if (scope === 'deck' && status === 'playing') {
-        pausedRef.current = true
-        audio?.pause()
-        setStatus('paused')
-      } else if (scope === 'deck' && status === 'paused') {
-        pausedRef.current = false
-        void audio?.play()
-        setStatus('playing')
-      } else {
-        playDeck(idx)
-      }
+      if (scope === 'deck' && status !== 'idle') pauseResume()
+      else playDeck(idx)
     },
-    [scope, status, playDeck],
+    [scope, status, pauseResume, playDeck],
   )
 
   const getProgress = useCallback((): TtsProgress | null => {
@@ -236,7 +293,9 @@ export function useTtsPlayback({
     activeIndex,
     playDeck,
     speakSlide,
+    speakText,
     toggle,
+    pauseResume,
     stop,
     getProgress,
   }

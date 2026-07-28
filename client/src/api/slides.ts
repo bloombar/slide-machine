@@ -5,9 +5,11 @@
  * slide simply resolves to its no-image fallback.
  */
 import type {
+  DeckRefineSlideTranscriptResult,
   ImageAttribution,
   ImageSearchCandidate,
   Slide,
+  SlideRegenerateTranscriptResult,
   Stroke,
   TtsMark,
 } from '@slide-machine/shared'
@@ -78,20 +80,60 @@ export const editSlideTranscript = (
   dispatchAction<Slide>('slide.editTranscript', { slideId, transcript })
 
 /**
+ * Re-transcribes a slide from its retained lecture audio (GEN-4) and returns
+ * what the speech engine heard. By default nothing is written — the transcript
+ * editor shows the text for the user to accept or discard. Pass `save` to write
+ * it straight to the slide (with its whiteboard marks re-anchored), which is how
+ * a regenerate-every-slide pass would call this, one slide at a time.
+ */
+export const regenerateSlideTranscript = (
+  slideId: string,
+  save = false,
+): Promise<SlideRegenerateTranscriptResult> =>
+  dispatchAction<SlideRegenerateTranscriptResult>(
+    'slide.regenerateTranscript',
+    { slideId, save },
+  )
+
+/**
+ * Refines one slide's spoken narration (EDIT-6) and returns the rewritten text.
+ * This is the same narration pass, at the same strength, that "Refine this
+ * slide" and the lecture-wide Refine run. By default nothing is written — the
+ * transcript editor shows the result for review; pass `save` to apply it.
+ */
+export const refineSlideTranscript = (
+  deckId: string,
+  slideId: string,
+  save = false,
+): Promise<DeckRefineSlideTranscriptResult> =>
+  dispatchAction<DeckRefineSlideTranscriptResult>(
+    'deck.refineSlideTranscript',
+    {
+      deckId,
+      slideId,
+      save,
+    },
+  )
+
+/**
  * Synthesizes speech for a slide and returns a playable audio URL (or null
  * when there's nothing to say). `content` speaks the rendered slide;
  * `transcript` speaks the stored lecture transcript (narrated from content by
- * the server when the slide has none).
+ * the server when the slide has none). Passing `text` speaks exactly that
+ * instead — how the transcript editor previews a narration before it is saved
+ * (EDIT-6); it needs edit rights and shares the audio cache with playing the
+ * same words back once saved.
  */
 export const synthesizeSlideTts = (
   slideId: string,
   mode: 'content' | 'transcript',
+  text?: string,
 ): Promise<{ url: string | null; marks: TtsMark[] }> =>
   apiFetch<{ url: string | null; marks: TtsMark[] }>(
     `/api/slides/${slideId}/tts`,
     {
       method: 'POST',
-      body: JSON.stringify({ mode }),
+      body: JSON.stringify(text === undefined ? { mode } : { mode, text }),
     },
   )
 

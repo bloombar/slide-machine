@@ -54,9 +54,10 @@ test('edits a slide transcript from the kebab, and cancels without saving', asyn
   let field = await openEditor(page)
   await expect(field).toHaveValue(PHRASE)
 
-  // Cancel discards the edit
+  // Cancel discards the edit — after confirming, since it is unsaved work
   await field.fill('Discarded rewrite')
-  await page.getByRole('button', { name: 'Cancel' }).click()
+  await page.getByRole('button', { name: 'Cancel' }).first().click()
+  await page.getByRole('button', { name: 'Discard changes' }).click()
   await expect(field).toBeHidden()
   field = await openEditor(page)
   await expect(field).toHaveValue(PHRASE)
@@ -70,6 +71,73 @@ test('edits a slide transcript from the kebab, and cancels without saving', asyn
   field = await openEditor(page)
   await expect(field).toHaveValue('Mitochondria are the cell’s power plants.')
   await page.getByRole('button', { name: 'Cancel' }).click()
+})
+
+test('previews the edited transcript aloud before saving', async ({ page }) => {
+  await buildDeck(page, 'preview')
+  const field = await openEditor(page)
+
+  // The preview speaks the FIELD, so it synthesizes the unsaved text.
+  await field.fill('A rewrite, heard before it is saved.')
+  const spoken = page.waitForResponse(
+    r => r.url().includes('/tts') && r.status() === 200,
+  )
+  await page.getByRole('button', { name: 'Play the spoken transcript' }).click()
+  expect((await (await spoken).request().postDataJSON()).text).toBe(
+    'A rewrite, heard before it is saved.',
+  )
+
+  // Playing flips the control to Pause…
+  const pause = page.getByRole('button', {
+    name: 'Pause the spoken transcript',
+  })
+  await expect(pause).toBeVisible()
+  await pause.click()
+  await expect(
+    page.getByRole('button', { name: 'Play the spoken transcript' }),
+  ).toBeVisible()
+
+  // …and editing the text stops the preview of the words it replaced.
+  await page.getByRole('button', { name: 'Play the spoken transcript' }).click()
+  await expect(pause).toBeVisible()
+  await field.fill('Different words entirely.')
+  await expect(
+    page.getByRole('button', { name: 'Play the spoken transcript' }),
+  ).toBeVisible()
+})
+
+test('refines the transcript into the field, saving only on request', async ({
+  page,
+}) => {
+  await buildDeck(page, 'refine')
+  const field = await openEditor(page)
+  await expect(field).toHaveValue(PHRASE)
+
+  // Refine runs the narration pass and shows the result for review; the mock
+  // generator marks each pass, so the rewrite is visible.
+  const refined = page.waitForResponse(
+    r =>
+      r.url().includes('/actions/deck.refineSlideTranscript') &&
+      r.status() === 200,
+  )
+  await page.getByRole('button', { name: 'Refine with AI' }).click()
+  expect((await (await refined).json()).transcript).toBe(`${PHRASE} (refined)`)
+  await expect(field).toHaveValue(`${PHRASE} (refined)`)
+
+  // Nothing is stored yet: discarding leaves the original narration in place.
+  await page.getByRole('button', { name: 'Cancel' }).first().click()
+  await page.getByRole('button', { name: 'Discard changes' }).click()
+  await page.reload()
+  await expect(await openEditor(page)).toHaveValue(PHRASE)
+
+  // Refining again and saving does persist it.
+  await page.getByRole('button', { name: 'Refine with AI' }).click()
+  await expect(
+    page.getByRole('textbox', { name: 'Spoken transcript' }),
+  ).toHaveValue(`${PHRASE} (refined)`)
+  await page.getByRole('button', { name: 'Save transcript' }).click()
+  await page.reload()
+  await expect(await openEditor(page)).toHaveValue(`${PHRASE} (refined)`)
 })
 
 test('keeps whiteboard marks on a slide whose transcript is rewritten', async ({

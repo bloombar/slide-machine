@@ -59,43 +59,102 @@ const renderModal = (
 afterEach(cleanup)
 
 describe('DeckSettingsModal — Refine tab', () => {
-  it('starts with every option checked and gates the button when all are cleared', () => {
+  it('opens on the same defaults as the per-slide dialog', () => {
     mockFetchRoutes({
       '/api/actions/template.list': () => ({ status: 200, body: [] }),
     })
     renderModal()
-    fireEvent.click(screen.getByRole('tab', { name: 'Refine' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
 
-    // All three options default to checked, so the button is enabled and the
-    // "Refine all slides" slider is already revealed.
-    const refine = screen.getByRole('button', { name: 'Refine' })
-    expect(refine).toBeEnabled()
+    // The three slide aspects and (with audio) speaker ID start on; the
+    // narration starts off — exactly like "Refine this slide with AI".
+    expect(screen.getByRole('button', { name: 'Refine' })).toBeEnabled()
     expect(
       screen.getByRole('checkbox', { name: /Identify multiple speakers/ }),
     ).toBeChecked()
     expect(
-      screen.getByRole('checkbox', { name: /Refine all slides/ }),
+      screen.getByRole('checkbox', { name: /Refine slide text/ }),
+    ).toBeChecked()
+    expect(
+      screen.getByRole('checkbox', { name: /Refine slide layout/ }),
+    ).toBeChecked()
+    expect(
+      screen.getByRole('checkbox', { name: /Refine slide imagery/ }),
     ).toBeChecked()
     expect(
       screen.getByRole('checkbox', { name: /Refine the spoken transcript/ }),
-    ).toBeChecked()
-    expect(
-      screen.getByLabelText('How much to refine slides'),
-    ).toBeInTheDocument()
-
-    // Clearing every option disables the button and hides the slider.
-    fireEvent.click(
-      screen.getByRole('checkbox', { name: /Identify multiple speakers/ }),
-    )
-    fireEvent.click(screen.getByRole('checkbox', { name: /Refine all slides/ }))
-    fireEvent.click(
-      screen.getByRole('checkbox', { name: /Refine the spoken transcript/ }),
-    )
-    expect(refine).toBeDisabled()
-    expect(screen.queryByLabelText('How much to refine slides')).toBeNull()
+    ).not.toBeChecked()
   })
 
-  it('saves a moved slider to the lecture (debounced), inheriting otherwise', async () => {
+  it('gates the button when every option is cleared', () => {
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.setRefineSettings': () => ({
+        status: 200,
+        body: baseDeck,
+      }),
+    })
+    renderModal()
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
+    const refine = screen.getByRole('button', { name: 'Refine' })
+
+    for (const name of [
+      /Identify multiple speakers/,
+      /Refine slide text/,
+      /Refine slide layout/,
+      /Refine slide imagery/,
+    ])
+      fireEvent.click(screen.getByRole('checkbox', { name }))
+    expect(refine).toBeDisabled()
+  })
+
+  it('sends the chosen aspects and one strength for the whole lecture', async () => {
+    let refineBody: { refineSlides?: unknown; refineTranscript?: unknown } = {}
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.setRefineSettings': () => ({
+        status: 200,
+        body: baseDeck,
+      }),
+      '/api/actions/deck.refine': init => {
+        refineBody = JSON.parse(String(init?.body))
+        return { status: 200, body: { jobId: 'j1' } }
+      },
+      '/api/actions/deck.refineStatus': () => ({
+        status: 200,
+        body: {
+          status: 'done',
+          summary: { reframed: 0, slidesRefined: 1, transcriptsUpdated: 1 },
+        },
+      }),
+    })
+    renderModal()
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
+
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /Refine slide imagery/ }),
+    )
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /Refine the spoken transcript/ }),
+    )
+    fireEvent.change(screen.getByLabelText('How much to refine this lecture'), {
+      target: { value: '5' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Refine' }))
+
+    await vi.waitFor(() =>
+      // One slider drives both passes; the aspects ride along with the slides one.
+      expect(refineBody).toMatchObject({
+        refineSlides: {
+          level: 5,
+          parts: { text: true, layout: true, imagery: false },
+        },
+        refineTranscript: { level: 5 },
+      }),
+    )
+  })
+
+  it('saves a moved slider to both stored levels (debounced)', async () => {
     let savedBody: unknown = null
     mockFetchRoutes({
       '/api/actions/template.list': () => ({ status: 200, body: [] }),
@@ -105,16 +164,22 @@ describe('DeckSettingsModal — Refine tab', () => {
       },
     })
     renderModal()
-    fireEvent.click(screen.getByRole('tab', { name: 'Refine' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
 
-    // "Refine all slides" is checked by default, so its slider is visible;
-    // it starts at the config default (2) until moved.
-    const slider = screen.getByLabelText('How much to refine slides')
+    // The single slider starts at the config default (2) until moved.
+    const slider = screen.getByLabelText('How much to refine this lecture')
     expect(slider).toHaveValue('2')
 
     fireEvent.change(slider, { target: { value: '4' } })
+    // It governs both passes, so both stored levels follow it — keeping the
+    // per-slide dialog and transcript editor in step.
     await vi.waitFor(
-      () => expect(savedBody).toEqual({ deckId: 'd1', slidesLevel: 4 }),
+      () =>
+        expect(savedBody).toEqual({
+          deckId: 'd1',
+          slidesLevel: 4,
+          transcriptLevel: 4,
+        }),
       { timeout: 2000 },
     )
   })
@@ -132,9 +197,15 @@ describe('DeckSettingsModal — Refine tab', () => {
       },
     })
     renderModal()
-    fireEvent.click(screen.getByRole('tab', { name: 'Refine' }))
-    // Unchecking "Refine all slides" saves slidesEnabled:false right away.
-    fireEvent.click(screen.getByRole('checkbox', { name: /Refine all slides/ }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
+    // The lecture stores the slide pass as one flag: clearing every aspect
+    // saves slidesEnabled:false right away.
+    for (const name of [
+      /Refine slide text/,
+      /Refine slide layout/,
+      /Refine slide imagery/,
+    ])
+      fireEvent.click(screen.getByRole('checkbox', { name }))
     await vi.waitFor(
       () => expect(savedBody).toEqual({ deckId: 'd1', slidesEnabled: false }),
       { timeout: 2000 },
@@ -146,9 +217,13 @@ describe('DeckSettingsModal — Refine tab', () => {
       '/api/actions/template.list': () => ({ status: 200, body: [] }),
     })
     renderModal({ refineSlidesEnabled: false, refineTranscriptEnabled: true })
-    fireEvent.click(screen.getByRole('tab', { name: 'Refine' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
+    // A lecture with the slide pass saved off opens with no aspect selected.
     expect(
-      screen.getByRole('checkbox', { name: /Refine all slides/ }),
+      screen.getByRole('checkbox', { name: /Refine slide text/ }),
+    ).not.toBeChecked()
+    expect(
+      screen.getByRole('checkbox', { name: /Refine slide imagery/ }),
     ).not.toBeChecked()
     expect(
       screen.getByRole('checkbox', { name: /Refine the spoken transcript/ }),
@@ -160,8 +235,10 @@ describe('DeckSettingsModal — Refine tab', () => {
       '/api/actions/template.list': () => ({ status: 200, body: [] }),
     })
     renderModal({ refineSlidesLevel: 5 })
-    fireEvent.click(screen.getByRole('tab', { name: 'Refine' }))
-    expect(screen.getByLabelText('How much to refine slides')).toHaveValue('5')
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
+    expect(
+      screen.getByLabelText('How much to refine this lecture'),
+    ).toHaveValue('5')
   })
 
   it('disables the whole form when the lecture has no slides', () => {
@@ -169,10 +246,10 @@ describe('DeckSettingsModal — Refine tab', () => {
       '/api/actions/template.list': () => ({ status: 200, body: [] }),
     })
     renderModal({ slideOrder: [] })
-    fireEvent.click(screen.getByRole('tab', { name: 'Refine' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
 
     expect(
-      screen.getByRole('checkbox', { name: /Refine all slides/ }),
+      screen.getByRole('checkbox', { name: /Refine slide text/ }),
     ).toBeDisabled()
     expect(
       screen.getByRole('checkbox', { name: /Refine the spoken transcript/ }),
@@ -186,7 +263,7 @@ describe('DeckSettingsModal — Refine tab', () => {
       '/api/actions/template.list': () => ({ status: 200, body: [] }),
     })
     renderModal({ hasRecordings: false })
-    fireEvent.click(screen.getByRole('tab', { name: 'Refine' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
     expect(
       screen.getByRole('checkbox', { name: /Identify multiple speakers/ }),
     ).toBeDisabled()
@@ -212,7 +289,7 @@ describe('DeckSettingsModal — Refine tab', () => {
     )
     // Open with no audio yet: the toggle is disabled, unchecked, and explained.
     const { rerender } = render(modal({ ...baseDeck, hasRecordings: false }))
-    fireEvent.click(screen.getByRole('tab', { name: 'Refine' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
     const box = () =>
       screen.getByRole('checkbox', { name: /Identify multiple speakers/ })
     expect(box()).toBeDisabled()
@@ -249,7 +326,7 @@ describe('DeckSettingsModal — Refine tab', () => {
     )
     const deckOff = { ...baseDeck, refineIdentifySpeakers: false }
     const { rerender } = render(modal({ ...deckOff, hasRecordings: false }))
-    fireEvent.click(screen.getByRole('tab', { name: 'Refine' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
     rerender(modal({ ...deckOff, hasRecordings: true }))
     const box = screen.getByRole('checkbox', {
       name: /Identify multiple speakers/,
@@ -276,7 +353,7 @@ describe('DeckSettingsModal — Refine tab', () => {
       }),
     })
     const { onReformatted } = renderModal()
-    fireEvent.click(screen.getByRole('tab', { name: 'Refine' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
     // All options are checked by default; just submit.
     fireEvent.click(screen.getByRole('button', { name: 'Refine' }))
 
@@ -305,7 +382,7 @@ describe('DeckSettingsModal — Refine tab', () => {
       },
     })
     renderModal({}, { slidesHaveDrawings: true })
-    fireEvent.click(screen.getByRole('tab', { name: 'Refine' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
     // Slide pass is on by default; with marks present, Refine prompts first.
     fireEvent.click(screen.getByRole('button', { name: 'Refine' }))
     expect(
@@ -338,10 +415,18 @@ describe('DeckSettingsModal — Refine tab', () => {
       },
     })
     renderModal({}, { slidesHaveDrawings: true })
-    fireEvent.click(screen.getByRole('tab', { name: 'Refine' }))
-    // Turn the slide pass off — only the transcript pass remains, which does
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
+    // Clear every slide aspect — only the transcript pass remains, which does
     // not touch slide content, so no confirmation is needed.
-    fireEvent.click(screen.getByRole('checkbox', { name: /Refine all slides/ }))
+    for (const name of [
+      /Refine slide text/,
+      /Refine slide layout/,
+      /Refine slide imagery/,
+    ])
+      fireEvent.click(screen.getByRole('checkbox', { name }))
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /Refine the spoken transcript/ }),
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Refine' }))
     expect(screen.queryByRole('alertdialog')).toBeNull()
     await vi.waitFor(() => expect(refineCalled).toBe(true), { timeout: 2000 })

@@ -49,7 +49,7 @@ describe('SlideMenu', () => {
       screen.getByRole('menuitem', { name: 'Edit spoken transcript' }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('menuitem', { name: 'Refine this slide' }),
+      screen.getByRole('menuitem', { name: 'Refine this slide with AI' }),
     ).toBeInTheDocument()
     expect(
       screen.getByRole('menuitem', { name: 'Play original audio' }),
@@ -57,13 +57,14 @@ describe('SlideMenu', () => {
     expect(
       screen.getByRole('menuitem', { name: 'Delete slide' }),
     ).toBeInTheDocument()
-    // Transcript editing sits next to Speak: both act on the spoken slide.
+    // Grouped by what they act on: what the slide says, then how it is
+    // improved or edited.
     expect(screen.getAllByRole('menuitem').map(i => i.textContent)).toEqual([
       'Speak this slide',
+      'Play original audio',
+      'Refine this slide with AI',
       'Edit spoken transcript',
       'Change layout',
-      'Refine this slide',
-      'Play original audio',
       'Delete slide',
     ])
   })
@@ -72,7 +73,9 @@ describe('SlideMenu', () => {
     const onRefine = vi.fn()
     render(<SlideMenu number={1} onRefine={onRefine} />)
     openMenu(1)
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Refine this slide' }))
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Refine this slide with AI' }),
+    )
     expect(onRefine).toHaveBeenCalledOnce()
   })
 
