@@ -367,5 +367,31 @@ export default function SlideSlot(props: Omit<SlotEditorProps, 'descriptor'>) {
     : conventional
   const Editor = descriptor && EDITORS[descriptor.kind]
   if (!Editor) return null
-  return <Editor {...props} descriptor={descriptor} />
+  // Every slot renders inside a permanent layout-neutral wrapper tagged
+  // for the GEN-9 layout transition (lib/layoutFlip): data-flip-slot
+  // finds the slots, data-flip-id matches a slot to itself across the
+  // layout swap. Image wrappers pass the container's size through (the
+  // img fills its parent chain); text wrappers stay inline-block so they
+  // never disturb the flow around them.
+  const editor = <Editor {...props} descriptor={descriptor} />
+  const flipId = `${props.slide.id}:${props.slot}`
+  if (descriptor.kind === 'image')
+    return (
+      <div
+        className="h-full w-full"
+        data-flip-slot="image"
+        data-flip-id={flipId}
+      >
+        {editor}
+      </div>
+    )
+  return (
+    <span
+      className="inline-block max-w-full"
+      data-flip-slot={props.slot}
+      data-flip-id={flipId}
+    >
+      {editor}
+    </span>
+  )
 }

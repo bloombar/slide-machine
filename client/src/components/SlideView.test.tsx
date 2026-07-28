@@ -229,6 +229,48 @@ describe('SlideView in-place editing', () => {
   })
 })
 
+describe('SlideView layout-flip slot tagging (GEN-9)', () => {
+  it('tags every text slot with a permanent flow-neutral wrapper', () => {
+    render(
+      <SlideView
+        slide={slide({ layoutType: 'content', title: 'Cells', body: 'Units' })}
+        template={template}
+      />,
+    )
+    // The wrapper is always present (no remount when a transition starts)
+    // and stays inline-block so it never disturbs the layout around it.
+    const title = screen.getByRole('heading', { name: 'Cells' })
+      .firstElementChild as HTMLElement
+    expect(title.tagName).toBe('SPAN')
+    expect(title).toHaveClass('inline-block')
+    expect(title).not.toHaveClass('h-full')
+    expect(title.dataset.flipSlot).toBe('title')
+    // The flip id is slide-scoped so a multi-slide list view never
+    // matches slots across different slides.
+    expect(title.dataset.flipId).toBe('s1:title')
+  })
+
+  it('keeps the full-size wrapper for image slots, which fill their frame', () => {
+    render(
+      <SlideView
+        slide={slide({
+          layoutType: 'image-heavy',
+          imageRef: 'http://img/x.jpg',
+          caption: 'A cell',
+        })}
+        template={template}
+      />,
+    )
+    // The image chain relies on h-full/w-full down from the layout's sized
+    // container, so its wrapper must pass the size through.
+    let wrapper: HTMLElement | null = screen.getByRole('img')
+    while (wrapper && wrapper.dataset.flipSlot !== 'image')
+      wrapper = wrapper.parentElement
+    expect(wrapper?.dataset.flipId).toBe('s1:image')
+    expect(wrapper).toHaveClass('h-full', 'w-full')
+  })
+})
+
 describe('SlideView markdown rendering', () => {
   it('renders inline markdown in the title for viewers', () => {
     render(

@@ -34,6 +34,7 @@ import {
   hasVisibleDrawings,
 } from '@slide-machine/shared'
 import { strokeVisible, erasureReplays } from '../lib/drawing'
+import { runLayoutFlip } from '../lib/layoutFlip'
 import { apiFetch, ApiError } from '../api/http'
 import { dispatchAction } from '../api/actions'
 import {
@@ -564,17 +565,23 @@ export default function DeckViewerPage() {
     )
   }
 
-  /** Per-slide layout switch (EDIT-3): content stays, arrangement changes. */
+  /** Per-slide layout switch (EDIT-3): content stays, arrangement changes.
+   * The swap animates as a layout morph (GEN-9): the slots glide to their
+   * new places rather than jumping. */
   const setSlideLayout = (slideId: string, layoutType: string) => {
     dispatchAction<Slide>('slide.setLayout', { slideId, layoutType })
       .then(updated => {
-        setView(v =>
-          v
-            ? {
-                ...v,
-                slides: v.slides.map(s => (s.id === updated.id ? updated : s)),
-              }
-            : v,
+        void runLayoutFlip(updated.id, () =>
+          setView(v =>
+            v
+              ? {
+                  ...v,
+                  slides: v.slides.map(s =>
+                    s.id === updated.id ? updated : s,
+                  ),
+                }
+              : v,
+          ),
         )
         // Switching onto an image layout sources an image server-side; the
         // returned slide carries the search intent, so poll for it to land.
@@ -634,27 +641,38 @@ export default function DeckViewerPage() {
     // Read through the ref, not the closure: mic-queued phrases arrive
     // long after the render that created this callback
     const slides = viewRef.current?.slides ?? []
-    setView(v =>
-      v
-        ? {
-            ...v,
-            deck: isNew
-              ? { ...v.deck, slideOrder: [...v.deck.slideOrder, next.id] }
-              : v.deck,
-            slides: isNew
-              ? [...v.slides, next]
-              : // session.phrase only changes content/transcript, never
-                // whiteboard drawings — those are saved on a separate debounced
-                // path (slide.editDrawings). The phrase response carries a
-                // possibly-stale drawings array, so keep the LOCAL drawings
-                // (which include just-drawn, not-yet-saved strokes) to avoid
-                // clobbering them mid-draw (WB-1).
-                v.slides.map(s =>
-                  s.id === next.id ? { ...next, drawings: s.drawings } : s,
-                ),
-          }
-        : v,
-    )
+    // An AI re-fit that changes an already-displayed slide's layout morphs
+    // via an animated layout flip (GEN-9); pure content updates stay
+    // instant to keep the live view stable (GEN-5).
+    const prior = isNew ? undefined : slides.find(s => s.id === next.id)
+    const layoutChanged = Boolean(prior && prior.layoutType !== next.layoutType)
+    const commit = () =>
+      setView(v =>
+        v
+          ? {
+              ...v,
+              deck: isNew
+                ? { ...v.deck, slideOrder: [...v.deck.slideOrder, next.id] }
+                : v.deck,
+              slides: isNew
+                ? [...v.slides, next]
+                : // session.phrase only changes content/transcript, never
+                  // whiteboard drawings — those are saved on a separate debounced
+                  // path (slide.editDrawings). The phrase response carries a
+                  // possibly-stale drawings array, so keep the LOCAL drawings
+                  // (which include just-drawn, not-yet-saved strokes) to avoid
+                  // clobbering them mid-draw (WB-1).
+                  v.slides.map(s =>
+                    s.id === next.id ? { ...next, drawings: s.drawings } : s,
+                  ),
+            }
+          : v,
+      )
+    if (layoutChanged) {
+      void runLayoutFlip(next.id, commit)
+    } else {
+      commit()
+    }
     const target = isNew
       ? slides.length
       : slides.findIndex(s => s.id === next.id)
@@ -1402,16 +1420,30 @@ export default function DeckViewerPage() {
         'deck.refineSlide',
         { deckId: view.deck.id, slideId },
       )
-      setView(v =>
-        v
-          ? {
-              ...v,
-              slides: v.slides.map(s =>
-                s.id === res.slide.id ? res.slide : s,
-              ),
-            }
-          : v,
+      // A refine that re-fits the slide onto a different layout morphs
+      // like a manual layout switch (GEN-9); content-only refines stay
+      // instant. Read through the ref: the closure view is stale after
+      // the await.
+      const prior = viewRef.current?.slides.find(s => s.id === res.slide.id)
+      const layoutChanged = Boolean(
+        prior && prior.layoutType !== res.slide.layoutType,
       )
+      const commit = () =>
+        setView(v =>
+          v
+            ? {
+                ...v,
+                slides: v.slides.map(s =>
+                  s.id === res.slide.id ? res.slide : s,
+                ),
+              }
+            : v,
+        )
+      if (layoutChanged) {
+        void runLayoutFlip(res.slide.id, commit)
+      } else {
+        commit()
+      }
       touchDeckLocally()
     } catch {
       setImageError('Could not refine that slide — try again')

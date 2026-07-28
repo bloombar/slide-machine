@@ -13,6 +13,19 @@ import { ShellTitleProvider } from '../components/layout/ShellTitle'
 import { mockFetchRoutes } from '../test/fetch-mock'
 import * as runtimeConfig from '../runtime-config'
 
+// The GSAP layout flip is unit-tested in lib/layoutFlip.test.ts; here it
+// is replaced by an instant apply that records which slides requested a
+// morph, so page tests can assert WHEN a transition happens without
+// animating in jsdom.
+const flip = vi.hoisted(() => ({ calls: [] as string[] }))
+vi.mock('../lib/layoutFlip', () => ({
+  runLayoutFlip: (slideId: string, update: () => void) => {
+    flip.calls.push(slideId)
+    update()
+    return Promise.resolve()
+  },
+}))
+
 const deckView = {
   deck: {
     id: 'deck1',
@@ -86,6 +99,7 @@ const renderViewer = (refreshStatus: number, ownerId = 'u1') => {
 
 beforeEach(() => {
   setAccessToken(null)
+  flip.calls.length = 0
   // The view mode now persists in localStorage; clear it so one test's
   // choice does not leak into the next
   localStorage.clear()
@@ -464,6 +478,103 @@ describe('DeckViewerPage refine confirmation (WB-1)', () => {
     // No marks → no confirmation.
     expect(screen.queryByRole('alertdialog')).toBeNull()
     await vi.waitFor(() => expect(refined).toBe(true))
+  })
+
+  it('morphs the layout when the AI refine lands on a new one (GEN-9)', async () => {
+    // s1 starts on the title layout and the refine response moves it to
+    // content — the swap must go through the animated layout flip, just
+    // like a manual layout switch.
+    mockFetchRoutes(refineRoutes({ ...deckView, canEdit: true }))
+    renderDeck()
+    await screen.findByText('Shared Lecture')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Refine this slide' }))
+
+    await vi.waitFor(() => expect(flip.calls).toEqual(['s1']))
+    expect(screen.getByTestId('slide')).toHaveAttribute(
+      'data-layout',
+      'content',
+    )
+  })
+
+  it('applies a same-layout refine instantly — no morph', async () => {
+    // s1 is already on the layout the refine returns, so the patch must
+    // commit without requesting a transition.
+    const sameLayout = {
+      ...deckView,
+      canEdit: true,
+      slides: [
+        { ...deckView.slides[0]!, layoutType: 'content' },
+        deckView.slides[1]!,
+      ],
+    }
+    mockFetchRoutes(refineRoutes(sameLayout))
+    renderDeck()
+    await screen.findByText('Shared Lecture')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Refine this slide' }))
+
+    // The refined slide (no title) replaces s1 — the commit landed…
+    await vi.waitFor(() =>
+      expect(screen.queryByRole('heading', { name: 'Hello' })).toBeNull(),
+    )
+    // …without a flip.
+    expect(flip.calls).toEqual([])
+  })
+})
+
+describe('DeckViewerPage AI layout refit (GEN-9)', () => {
+  it('morphs when a session.phrase update changes the slide layout', async () => {
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+      '/api/actions/session.phrase': () => ({
+        status: 200,
+        body: {
+          kind: 'slide.update',
+          slide: {
+            id: 's1',
+            deckId: 'deck1',
+            index: 0,
+            layoutType: 'content',
+            title: 'Hello',
+            body: 'Refit body',
+          },
+        },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+
+    // Type a phrase into the Speak bar: the AI re-fits s1 from the title
+    // layout onto content — an animated morph, not a snap (GEN-9).
+    fireEvent.click(screen.getByRole('button', { name: 'Live session' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Spoken phrase' }), {
+      target: { value: 'more about this' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Speak' }))
+
+    await vi.waitFor(() => expect(flip.calls).toEqual(['s1']))
+    expect(screen.getByTestId('slide')).toHaveAttribute(
+      'data-layout',
+      'content',
+    )
   })
 })
 
