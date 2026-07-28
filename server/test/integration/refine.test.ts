@@ -15,7 +15,9 @@ import {
   vi,
 } from 'vitest'
 import request from 'supertest'
+import type { GenerationProvider } from '@slide-machine/shared'
 import { env } from '../../src/config/env'
+import { registry } from '../../src/providers/registry'
 import { connectMongo, disconnectMongo } from '../../src/db/mongoose'
 import { createApp } from '../../src/app'
 import { UserModel } from '../../src/models/user'
@@ -235,6 +237,37 @@ describe('deck.refine', () => {
     await run()
     const second = (await SlideModel.findById(mixed._id))?.sourceTranscript
     expect(second).toBe(first)
+  })
+
+  // The lecture-wide pass takes the same text/layout/imagery split the
+  // per-slide dialog sends, so a UI for it here is a UI change only.
+  it('honors a narrowed slide pass across every slide', async () => {
+    const gen = registry.get<GenerationProvider>('generation')
+    const refine = vi.spyOn(gen, 'refineSlide')
+    for (const [index, title] of ['One', 'Two'].entries())
+      await SlideModel.create({
+        deckId,
+        index,
+        layoutType: 'content',
+        title,
+        body: 'Body',
+      })
+
+    const { body } = await act(ada, 'deck.refine', {
+      deckId,
+      refineSlides: {
+        level: 3,
+        parts: { text: true, layout: false, imagery: false },
+      },
+    })
+    const done = await awaitJob(body.jobId)
+    expect(done.summary.slidesRefined).toBe(2)
+
+    // Every slide was refined, and none was offered a layout to move to.
+    expect(refine).toHaveBeenCalledTimes(2)
+    for (const [request] of refine.mock.calls)
+      expect(request.layoutDescriptors.map(d => d.type)).toEqual(['content'])
+    refine.mockRestore()
   })
 
   it("403s refining another user's deck, and hides its job status", async () => {
