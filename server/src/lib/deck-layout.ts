@@ -79,8 +79,29 @@ const bodyRuns = (slide: ExportSlide, sizeFrac: number): LayoutRun[] => {
   return runs
 }
 
+/** The image's TASL attribution/license credit as one line, or '' — embedded
+ * in exports so downstream copies stay license-compliant (IMG-5). */
+const attributionCredit = (slide: ExportSlide): string => {
+  const a = slide.attribution
+  if (!a) return ''
+  const parts: string[] = []
+  if (a.title) parts.push(`"${a.title}"`)
+  if (a.creator) parts.push(`by ${a.creator}`)
+  if (a.sourceName) parts.push(`via ${a.sourceName}`)
+  if (a.license) parts.push(`— ${a.license}`)
+  return parts.join(' ').trim()
+}
+
+/** Caption + image attribution/license, joined into one muted footer line
+ * (IMG-5 requires the attribution to appear on exported slides). */
+const footerText = (slide: ExportSlide): string =>
+  [slide.caption, attributionCredit(slide)].filter(Boolean).join('  ·  ')
+
+/** Whether a slide has any caption/attribution footer to show. */
+const hasFooter = (slide: ExportSlide): boolean => footerText(slide).length > 0
+
 const captionBox = (slide: ExportSlide, y: number): LayoutBox[] =>
-  slide.caption
+  hasFooter(slide)
     ? [
         {
           kind: 'text',
@@ -90,7 +111,7 @@ const captionBox = (slide: ExportSlide, y: number): LayoutBox[] =>
           h: 1 - y - 0.02,
           align: 'center',
           valign: 'top',
-          runs: [{ text: slide.caption, sizeFrac: 0.022, color: 'muted' }],
+          runs: [{ text: footerText(slide), sizeFrac: 0.02, color: 'muted' }],
         },
       ]
     : []
@@ -182,7 +203,7 @@ export const computeLayout = (slide: ExportSlide): LayoutBox[] => {
           x: 0.04,
           y: 0.04,
           w: 0.92,
-          h: slide.caption ? 0.82 : 0.9,
+          h: hasFooter(slide) ? 0.82 : 0.9,
         },
         ...captionBox(slide, 0.88),
       ]
@@ -199,7 +220,8 @@ export const computeLayout = (slide: ExportSlide): LayoutBox[] => {
           valign: 'middle',
           runs: [...titleRun(slide, 0.04, 'accent'), ...bodyRuns(slide, 0.025)],
         },
-        { kind: 'image', x: 0.52, y: 0.13, w: 0.42, h: 0.74 },
+        { kind: 'image', x: 0.52, y: 0.1, w: 0.42, h: 0.72 },
+        ...captionBox(slide, 0.88),
       ]
 
     case 'list':

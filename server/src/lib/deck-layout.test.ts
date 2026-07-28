@@ -60,6 +60,23 @@ describe('computeLayout', () => {
     }
   })
 
+  it('embeds the image attribution/license in the footer (IMG-5)', () => {
+    const s = slide({
+      layoutType: 'image-heavy',
+      imageRef: 'https://img/x',
+      caption: 'A leaf',
+      attribution: {
+        creator: 'Ada',
+        sourceName: 'Openverse',
+        license: 'CC BY 4.0',
+      },
+    })
+    const footer = textRuns(s).join(' ')
+    expect(footer).toContain('A leaf')
+    expect(footer).toContain('by Ada')
+    expect(footer).toContain('CC BY 4.0')
+  })
+
   it('two-column: text plus an image box', () => {
     const s = slide({
       layoutType: 'two-column',
