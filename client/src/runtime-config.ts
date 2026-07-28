@@ -15,6 +15,7 @@ let runtime: RuntimeConfig = {
   ttsEnabled: false,
   refineSlidesDefaultLevel: 2,
   refineTranscriptDefaultLevel: 2,
+  simulatedSpeechEnabled: false,
   whiteboardSuppressDebounceMs: 5000,
 }
 let loaded: Promise<RuntimeConfig> | null = null
@@ -44,6 +45,13 @@ export const getRefineSlidesDefaultLevel = (): number =>
 /** Default strength (1–5) the "Refine the spoken transcript" slider starts at. */
 export const getRefineTranscriptDefaultLevel = (): number =>
   runtime.refineTranscriptDefaultLevel
+
+/** Debug aid: whether the live session shows the "simulated speech" text box
+ * for typing phrases instead of speaking them; false (hidden) until config
+ * loads. Real STT is the normal path — this is for driving a session without a
+ * microphone. */
+export const getSimulatedSpeechEnabled = (): boolean =>
+  runtime.simulatedSpeechEnabled
 
 /** How long (ms) after the last drawing gesture the client keeps suppressing
  * auto-slide-creation while recording (WB-3). */

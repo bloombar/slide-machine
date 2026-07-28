@@ -38,6 +38,7 @@ configRouter.get('/config', (_req, res) => {
     ttsEnabled: ttsEnabled(),
     refineSlidesDefaultLevel: env.REFINE_SLIDES_DEFAULT_LEVEL,
     refineTranscriptDefaultLevel: env.REFINE_TRANSCRIPT_DEFAULT_LEVEL,
+    simulatedSpeechEnabled: env.SIMULATED_SPEECH_ENABLED,
     whiteboardSuppressDebounceMs: env.WHITEBOARD_SUPPRESS_DEBOUNCE_MS,
   }
   res.json(body)

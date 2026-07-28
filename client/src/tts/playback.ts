@@ -4,7 +4,8 @@
  *  - speakSlide(slide): speak one slide's stored narration/transcript (kebab
  *    option) — the same source as deck playback, just for a single slide.
  *  - playDeck(fromIndex): read the whole deck's stored transcript aloud,
- *    auto-advancing to each slide as it's spoken; Play↔Pause via toggle().
+ *    auto-advancing to each slide as it's spoken; Play↔Pause via toggle(), and
+ *    skipTo(index) to follow the user's own slide navigation.
  *  - speakText(slide, text): speak words that are not saved yet, so the
  *    transcript editor can preview a narration before committing it (EDIT-6).
  *
@@ -53,6 +54,9 @@ export interface TtsPlayback {
   scope: TtsScope
   activeIndex: number | null
   playDeck: (fromIndex: number) => void
+  /** Move deck playback to another slide (arrow-key navigation), continuing
+   * from there. No-op unless deck playback is active. */
+  skipTo: (index: number) => void
   speakSlide: (slide: Slide) => void
   /** Speak text that is not saved yet, as a preview (EDIT-6). */
   speakText: (slide: Slide, text: string) => void
@@ -179,14 +183,17 @@ export function useTtsPlayback({
     [getSlides, navigate, playSynthesized, stop],
   )
 
-  const playDeck = useCallback(
-    (fromIndex: number) => {
+  /** Runs the deck from `fromIndex`, speaking each slide in turn. `keepPaused`
+   * leaves an already-paused deck paused (arrow-key skipping while paused):
+   * the new slide's audio is fetched and cued, but waits for resume. */
+  const runDeck = useCallback(
+    (fromIndex: number, keepPaused: boolean) => {
       stopMic()
       halt()
-      pausedRef.current = false
+      if (!keepPaused) pausedRef.current = false
       const token = ++tokenRef.current
       setScope('deck')
-      setStatus('playing')
+      setStatus(pausedRef.current ? 'paused' : 'playing')
       const count = getSlides().length
       const step = (i: number) => {
         if (token !== tokenRef.current) return
@@ -199,6 +206,25 @@ export function useTtsPlayback({
       step(Math.max(0, fromIndex))
     },
     [getSlides, halt, playAt, stop, stopMic],
+  )
+
+  const playDeck = useCallback(
+    (fromIndex: number) => runDeck(fromIndex, false),
+    [runDeck],
+  )
+
+  /**
+   * Follows arrow-key navigation while the deck is being read aloud: the
+   * narration jumps to the slide the user moved to instead of finishing the
+   * one it was on. Ignored for the other flows (a single slide or an unsaved
+   * preview isn't tied to where the deck is) and when nothing is playing.
+   */
+  const skipTo = useCallback(
+    (index: number) => {
+      if (scope !== 'deck' || status === 'idle') return
+      runDeck(index, true)
+    },
+    [runDeck, scope, status],
   )
 
   const speakSlide = useCallback(
@@ -292,6 +318,7 @@ export function useTtsPlayback({
     scope,
     activeIndex,
     playDeck,
+    skipTo,
     speakSlide,
     speakText,
     toggle,

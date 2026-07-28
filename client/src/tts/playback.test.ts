@@ -87,6 +87,70 @@ describe('useTtsPlayback', () => {
     await waitFor(() => expect(hook.result.current.status).toBe('idle'))
   })
 
+  it('skipTo moves deck playback to the navigated slide', async () => {
+    mockedSynth.mockImplementation(async (id: string) => ({
+      url: `url-${id}`,
+      marks: [],
+    }))
+    const { hook, navigate } = setup()
+
+    act(() => hook.result.current.playDeck(0))
+    await waitFor(() => expect(audios[0]?.src).toBe('url-s1'))
+
+    // Arrow key forward: the narration jumps rather than finishing slide 1.
+    act(() => hook.result.current.skipTo(1))
+    await waitFor(() => expect(audios[0]!.src).toBe('url-s2'))
+    expect(hook.result.current.activeIndex).toBe(1)
+    await waitFor(() => expect(hook.result.current.status).toBe('playing'))
+
+    // ...and back again, so arrowing left replays the previous transcript.
+    act(() => hook.result.current.skipTo(0))
+    await waitFor(() => expect(audios[0]!.src).toBe('url-s1'))
+    expect(navigate).toHaveBeenLastCalledWith(0)
+
+    // Playback continues from the slide skipped to.
+    act(() => audios[0]!.end())
+    await waitFor(() => expect(audios[0]!.src).toBe('url-s2'))
+  })
+
+  it('skipTo keeps a paused deck paused, cueing the new slide', async () => {
+    mockedSynth.mockImplementation(async (id: string) => ({
+      url: `url-${id}`,
+      marks: [],
+    }))
+    const { hook } = setup()
+
+    act(() => hook.result.current.playDeck(0))
+    await waitFor(() => expect(hook.result.current.status).toBe('playing'))
+    act(() => hook.result.current.pauseResume())
+    expect(hook.result.current.status).toBe('paused')
+
+    act(() => hook.result.current.skipTo(1))
+    await waitFor(() => expect(audios[0]!.src).toBe('url-s2'))
+    expect(hook.result.current.status).toBe('paused')
+
+    act(() => hook.result.current.pauseResume())
+    expect(hook.result.current.status).toBe('playing')
+  })
+
+  it('skipTo is ignored unless the deck is playing', async () => {
+    mockedSynth.mockResolvedValue({ url: 'u1', marks: [] })
+    const { hook, navigate } = setup()
+
+    // Nothing playing at all.
+    act(() => hook.result.current.skipTo(1))
+    expect(mockedSynth).not.toHaveBeenCalled()
+    expect(navigate).not.toHaveBeenCalled()
+
+    // A single slide's narration is not tied to where the deck is.
+    act(() => hook.result.current.speakSlide(slides[0]!))
+    await waitFor(() => expect(hook.result.current.status).toBe('playing'))
+    mockedSynth.mockClear()
+    act(() => hook.result.current.skipTo(1))
+    expect(mockedSynth).not.toHaveBeenCalled()
+    expect(hook.result.current.scope).toBe('slide')
+  })
+
   it('toggle pauses and resumes deck playback', async () => {
     mockedSynth.mockResolvedValue({ url: 'u', marks: [] })
     const { hook } = setup()

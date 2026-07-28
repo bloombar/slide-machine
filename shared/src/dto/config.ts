@@ -17,6 +17,10 @@ export interface RuntimeConfig {
   refineSlidesDefaultLevel: number
   /** Default strength (1–5) the "Refine the spoken transcript" slider starts at. */
   refineTranscriptDefaultLevel: number
+  /** Debug aid: whether the live session shows the "simulated speech" text box
+   * that feeds typed phrases through the spoken-phrase pipeline. Off unless a
+   * server sets SIMULATED_SPEECH_ENABLED. */
+  simulatedSpeechEnabled: boolean
   /** How long (ms) after the last drawing/erasing gesture the client keeps
    * suppressing auto-slide-creation while recording (WB-3), so a pause to
    * switch tools or reposition the cursor still counts as active use. */
