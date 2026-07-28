@@ -36,6 +36,9 @@ interface Props {
   defaultLevel: number
   /** Runs the refine; resolves when it finishes (the dialog closes itself). */
   onRefine: (options: SlideRefineOptions) => Promise<void>
+  /** Leaves for the lecture's own Refine settings, for refining every slide;
+   * without it the blurb just names them instead of linking. */
+  onOpenLectureRefine?: () => void
   onClose: () => void
 }
 
@@ -45,6 +48,7 @@ export default function SlideRefineModal({
   hasAudio,
   defaultLevel,
   onRefine,
+  onOpenLectureRefine,
   onClose,
 }: Props) {
   // On whenever there is audio to read, matching the lecture-wide tab (whose
@@ -90,8 +94,21 @@ export default function SlideRefineModal({
         Refine this slide with AI — slide {number}
       </h3>
       <p className="mt-1 text-sm text-slate-500">
-        Choose what to improve on this slide. These choices apply to this run
-        only; the lecture&apos;s own Refine settings are left alone.
+        Improve this slide. Any changes will apply to this slide only. To
+        perform refinement across all slides, use the{' '}
+        {onOpenLectureRefine ? (
+          <button
+            type="button"
+            onClick={onOpenLectureRefine}
+            disabled={running}
+            className="font-medium text-indigo-600 underline underline-offset-2 hover:text-indigo-500 disabled:opacity-50"
+          >
+            lecture-wide options
+          </button>
+        ) : (
+          'lecture-wide options'
+        )}{' '}
+        instead.
       </p>
 
       <fieldset disabled={running} className="mt-5 flex flex-col gap-5">
