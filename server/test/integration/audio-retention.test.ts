@@ -140,7 +140,13 @@ describe('STT audio retention', () => {
     // 32000 bytes of LINEAR16 mono @ 16kHz = 1000 ms of audio.
     await streamAudio(
       ada,
-      { type: 'start', languageCode: 'en-US', sampleRate: 16_000, deckId, sessionId: 'rec-1' },
+      {
+        type: 'start',
+        languageCode: 'en-US',
+        sampleRate: 16_000,
+        deckId,
+        sessionId: 'rec-1',
+      },
       new Uint8Array(32_000),
     )
 
@@ -177,7 +183,13 @@ describe('STT audio retention', () => {
     // ada streams audio naming bob's deck — she can't edit it, so nothing sticks.
     await streamAudio(
       ada,
-      { type: 'start', languageCode: 'en-US', sampleRate: 16_000, deckId: bobDeckId, sessionId: 'rec-x' },
+      {
+        type: 'start',
+        languageCode: 'en-US',
+        sampleRate: 16_000,
+        deckId: bobDeckId,
+        sessionId: 'rec-x',
+      },
       new Uint8Array(16_000),
     )
 

@@ -3,7 +3,7 @@
  * deck's owner only.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, act } from '@testing-library/react'
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router'
 import { AuthProvider } from '../auth/AuthContext'
 import { setAccessToken } from '../auth/token'
@@ -100,6 +100,9 @@ const renderViewer = (refreshStatus: number, ownerId = 'u1') => {
 beforeEach(() => {
   setAccessToken(null)
   flip.calls.length = 0
+  // Most specs drive a live session by typing phrases, which is the debug-only
+  // simulated-speech box; the gate itself is covered by its own tests below.
+  vi.spyOn(runtimeConfig, 'getSimulatedSpeechEnabled').mockReturnValue(true)
   // The view mode now persists in localStorage; clear it so one test's
   // choice does not leak into the next
   localStorage.clear()
@@ -125,6 +128,21 @@ describe('DeckViewerPage', () => {
     expect(
       screen.getByRole('textbox', { name: 'Spoken phrase' }),
     ).toBeInTheDocument()
+  })
+
+  // The typed-phrase box is a debugging aid for driving a session without a
+  // microphone; real STT is what users get, so a live session shows nothing
+  // extra unless the server turns the flag on.
+  it('hides the simulated-speech box unless the debug flag is on', async () => {
+    vi.spyOn(runtimeConfig, 'getSimulatedSpeechEnabled').mockReturnValue(false)
+    renderViewer(200)
+    fireEvent.click(await screen.findByRole('button', { name: 'Live session' }))
+    expect(
+      screen.queryByRole('textbox', { name: 'Spoken phrase' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Speak' }),
+    ).not.toBeInTheDocument()
   })
 
   it('opens the privacy & sharing settings when Share is clicked', async () => {
@@ -2319,6 +2337,49 @@ describe('DeckViewerPage title in the primary nav', () => {
     expect(screen.queryByText('This deck has no slides.')).toBeNull()
   })
 
+  // Once the live session is on, the icon hint is stale advice — the mic is
+  // already open, so the empty deck asks for speech instead.
+  it('asks an empty deck for speech while the live session is on', async () => {
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: {
+          ...deckView,
+          slides: [],
+          deck: { ...deckView.deck, slideOrder: [] },
+          canEdit: true,
+        },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    const toggle = await screen.findByRole('button', { name: 'Live session' })
+
+    fireEvent.click(toggle)
+    expect(
+      screen.getByText('Start speaking to generate slides'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/icons to start adding content/)).toBeNull()
+
+    // Switching the mic back off with nothing generated restores the hint.
+    fireEvent.click(toggle)
+    expect(
+      screen.getByText(/icons to start adding content/),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Start speaking to generate slides')).toBeNull()
+  })
+
   it('disables the deck play button while the deck has no slides', async () => {
     vi.spyOn(runtimeConfig, 'getTtsEnabled').mockReturnValue(true)
     mockFetchRoutes({
@@ -2354,6 +2415,56 @@ describe('DeckViewerPage title in the primary nav', () => {
     renderViewer(200)
     const play = await screen.findByRole('button', { name: 'Play deck' })
     expect(play).toBeEnabled()
+  })
+
+  // Arrow keys move the deck AND the narration: the spoken transcript follows
+  // the user to the slide they navigated to.
+  it('skips deck narration to the slide the arrow keys move to', async () => {
+    vi.spyOn(runtimeConfig, 'getTtsEnabled').mockReturnValue(true)
+    // jsdom has no media playback; a stub element keeps the clip "playing".
+    class FakeAudio {
+      src = ''
+      onended: (() => void) | null = null
+      play = vi.fn(async () => {})
+      pause = vi.fn()
+      removeAttribute = vi.fn()
+    }
+    vi.stubGlobal('Audio', FakeAudio)
+    const { calls } = mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({ status: 200, body: deckView }),
+      '/tts': () => ({ status: 200, body: { url: 'clip', marks: [] } }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Play deck' }))
+    await waitFor(() =>
+      expect(calls.some(u => u.includes('/api/slides/s1/tts'))).toBe(true),
+    )
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' })
+    await waitFor(() =>
+      expect(calls.some(u => u.includes('/api/slides/s2/tts'))).toBe(true),
+    )
+
+    // ...and back: arrowing left re-speaks the previous slide.
+    fireEvent.keyDown(window, { key: 'ArrowLeft' })
+    await waitFor(() =>
+      expect(calls.filter(u => u.includes('/api/slides/s1/tts'))).toHaveLength(
+        2,
+      ),
+    )
   })
 
   it('refreshes the edited age immediately after an auto-save', async () => {

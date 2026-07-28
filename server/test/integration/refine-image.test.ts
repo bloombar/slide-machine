@@ -73,14 +73,21 @@ const stubImageApis = () => {
                 '1': {
                   title: 'File:Mitochondria.png',
                   imageinfo: [
-                    { thumburl: 'http://wiki/mitochondria.png', thumbwidth: 1024 },
+                    {
+                      thumburl: 'http://wiki/mitochondria.png',
+                      thumbwidth: 1024,
+                    },
                   ],
                 },
               },
             },
           }),
         } as Response
-      return { ok: true, status: 200, json: async () => ({ results: [] }) } as Response
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ results: [] }),
+      } as Response
     }),
   )
 }

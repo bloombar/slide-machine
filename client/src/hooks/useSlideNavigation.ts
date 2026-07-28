@@ -2,15 +2,31 @@
  * Shared slide navigation — ONE codebase for every deck/slide view
  * (viewer, editor, live session). Arrow keys and the chevron zones move
  * the current slide; in carousel mode that swaps the displayed slide,
- * in list mode the current slide scrolls into view.
+ * in list mode the current slide scrolls into view. An optional `onNavigate`
+ * is called with the new index whenever such a move happens, so callers can
+ * follow along — deck TTS uses it to skip the narration to that slide.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useArrowKeys } from './useArrowKeys'
 import type { ViewMode } from '../components/ViewModeToggle'
 
-export function useSlideNavigation(count: number, mode: ViewMode) {
+export function useSlideNavigation(
+  count: number,
+  mode: ViewMode,
+  onNavigate?: (index: number) => void,
+) {
   const [current, setCurrent] = useState(0)
   const itemsRef = useRef(new Map<number, HTMLElement>())
+  // Always-fresh mirror of `current` (goPrev/goNext report the index they land
+  // on) and of the callback, so neither goes stale in the key handler.
+  const currentRef = useRef(0)
+  const countRef = useRef(count)
+  const onNavigateRef = useRef(onNavigate)
+  useEffect(() => {
+    currentRef.current = current
+    countRef.current = count
+    onNavigateRef.current = onNavigate
+  })
   // Mode via ref: scrollTo is called from queued callbacks (mic-driven
   // generation) that may hold a closure from an earlier view mode
   const modeRef = useRef(mode)
@@ -18,11 +34,19 @@ export function useSlideNavigation(count: number, mode: ViewMode) {
     modeRef.current = mode
   }, [mode])
 
-  const goPrev = useCallback(() => setCurrent(c => Math.max(0, c - 1)), [])
-  const goNext = useCallback(
-    () => setCurrent(c => (count ? Math.min(count - 1, c + 1) : 0)),
-    [count],
-  )
+  /** Moves one slide and reports the landing index; a move that would run past
+   * either end changes nothing, so nothing is reported. */
+  const step = useCallback((delta: number) => {
+    const last = countRef.current ? countRef.current - 1 : 0
+    const next = Math.max(0, Math.min(last, currentRef.current + delta))
+    if (next === currentRef.current) return
+    currentRef.current = next
+    setCurrent(next)
+    onNavigateRef.current?.(next)
+  }, [])
+
+  const goPrev = useCallback(() => step(-1), [step])
+  const goNext = useCallback(() => step(1), [step])
   useArrowKeys(goPrev, goNext)
 
   // List view: prev/next navigation centers the now-current slide

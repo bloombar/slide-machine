@@ -60,9 +60,10 @@ import {
 import SlideView, { type SlideContentPatch } from '../components/SlideView'
 import SlideNavZones from '../components/SlideNavZones'
 import SlideMenu from '../components/SlideMenu'
-import { useTtsPlayback } from '../tts/playback'
+import { useTtsPlayback, type TtsPlayback } from '../tts/playback'
 import {
   getRefineSlidesDefaultLevel,
+  getSimulatedSpeechEnabled,
   getSttEngine,
   getTtsEnabled,
   getWhiteboardSuppressDebounceMs,
@@ -406,7 +407,13 @@ export default function DeckViewerPage() {
   )
   const inputRef = useRef<HTMLInputElement>(null)
   const pollCancelsRef = useRef<Map<string, () => void>>(new Map())
-  const nav = useSlideNavigation(view?.slides.length ?? 0, mode)
+  // Deck narration follows the user: moving slides (arrow keys or the chevron
+  // zones) while the deck is playing skips the TTS to that slide. Held in a ref
+  // because the playback controller is created below, from this nav.
+  const ttsRef = useRef<TtsPlayback | null>(null)
+  const nav = useSlideNavigation(view?.slides.length ?? 0, mode, index =>
+    ttsRef.current?.skipTo(index),
+  )
   const { setCurrent } = nav
   // Always-fresh mirror of the current slide index, so voice commands running
   // from stale mic-queue closures can tell whether the deck is at its end.
@@ -498,7 +505,11 @@ export default function DeckViewerPage() {
     }
   }, [])
 
-  // Opening the live session focuses the phrase input
+  // Debug flag: the simulated-speech box is rendered only when a server turns
+  // it on (SIMULATED_SPEECH_ENABLED), so typed phrases stay a dev affordance.
+  const simulatedSpeechEnabled = getSimulatedSpeechEnabled()
+
+  // Opening the live session focuses the phrase input (when it is shown)
   useEffect(() => {
     if (speaking) inputRef.current?.focus()
   }, [speaking])
@@ -922,6 +933,10 @@ export default function DeckViewerPage() {
         setSpeaking(false)
       }
     },
+  })
+  // Keep the mirror current so slide navigation always skips the live playback.
+  useEffect(() => {
+    ttsRef.current = tts
   })
   /** The slide the deck play button starts from: the active one per mode. */
   const activePlayIndex = (): number =>
@@ -1667,19 +1682,27 @@ export default function DeckViewerPage() {
 
       {view.slides.length === 0 ? (
         canEdit ? (
-          <p className="text-center text-slate-400">
-            Click the{' '}
-            <Plus
-              className="inline h-4 w-4 align-text-bottom"
-              aria-label="plus"
-            />{' '}
-            or{' '}
-            <Mic
-              className="inline h-4 w-4 align-text-bottom"
-              aria-label="microphone"
-            />{' '}
-            icons to start adding content.
-          </p>
+          // With the live session open the mic is the next step, so the empty
+          // deck says so; closing it again restores the "how to start" hint.
+          speaking ? (
+            <p className="text-center text-slate-400">
+              Start speaking to generate slides
+            </p>
+          ) : (
+            <p className="text-center text-slate-400">
+              Click the{' '}
+              <Plus
+                className="inline h-4 w-4 align-text-bottom"
+                aria-label="plus"
+              />{' '}
+              or{' '}
+              <Mic
+                className="inline h-4 w-4 align-text-bottom"
+                aria-label="microphone"
+              />{' '}
+              icons to start adding content.
+            </p>
+          )
         ) : (
           <p className="text-center text-slate-400">This deck has no slides.</p>
         )
@@ -1917,31 +1940,36 @@ export default function DeckViewerPage() {
 
       {canEdit && speaking && (
         <>
-          <form
-            onSubmit={onSpeak}
-            aria-label="Live session"
-            className="mt-6 flex w-full gap-2"
-          >
-            <input
-              ref={inputRef}
-              value={phrase}
-              onChange={e => setPhrase(e.target.value)}
-              placeholder={
-                listening
-                  ? 'Listening… (you can still type)'
-                  : 'Say something about your topic…'
-              }
-              aria-label="Spoken phrase"
-              className="flex-1 rounded-lg border border-slate-300 px-4 py-3"
-            />
-            <button
-              type="submit"
-              disabled={busy}
-              className="rounded-lg bg-indigo-600 px-6 py-3 font-medium text-white disabled:opacity-50"
+          {/* Debug-only: typing phrases instead of speaking them. Hidden unless
+              the server sets SIMULATED_SPEECH_ENABLED — real STT is the path
+              users take. */}
+          {simulatedSpeechEnabled && (
+            <form
+              onSubmit={onSpeak}
+              aria-label="Live session"
+              className="mt-6 flex w-full gap-2"
             >
-              {busy ? 'Generating…' : 'Speak'}
-            </button>
-          </form>
+              <input
+                ref={inputRef}
+                value={phrase}
+                onChange={e => setPhrase(e.target.value)}
+                placeholder={
+                  listening
+                    ? 'Listening… (you can still type)'
+                    : 'Say something about your topic…'
+                }
+                aria-label="Spoken phrase"
+                className="flex-1 rounded-lg border border-slate-300 px-4 py-3"
+              />
+              <button
+                type="submit"
+                disabled={busy}
+                className="rounded-lg bg-indigo-600 px-6 py-3 font-medium text-white disabled:opacity-50"
+              >
+                {busy ? 'Generating…' : 'Speak'}
+              </button>
+            </form>
+          )}
           {interim && (
             <p
               aria-live="polite"

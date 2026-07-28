@@ -231,6 +231,11 @@ const envSchema = z.object({
     .max(5)
     .default(2),
 
+  // Debug aid: show the live session's "simulated speech" text box, which feeds
+  // typed phrases through the same pipeline as spoken ones. Off by default now
+  // that real STT works — turn it on to drive a session without a microphone.
+  SIMULATED_SPEECH_ENABLED: z.stringbool().default(false),
+
   // Whiteboard (WB-3): how long after the last drawing/erasing gesture the app
   // keeps suppressing auto-slide-creation, so mid-annotation speech doesn't
   // spawn a slide while the user pauses to switch tools or move the cursor.

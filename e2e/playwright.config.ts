@@ -43,6 +43,9 @@ const serverEnv = (over: Record<string, string>): Record<string, string> => ({
   GENERATION_VOICE_COMMANDS: 'true',
   // Layout re-fit on updates (layout-refit.spec), pinned hermetically
   GENERATION_LAYOUT_REFIT: 'true',
+  // The simulated-speech box is a debug affordance, off for real users; specs
+  // type phrases into it instead of speaking, so e2e turns it on.
+  SIMULATED_SPEECH_ENABLED: 'true',
   ...over,
 })
 

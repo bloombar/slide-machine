@@ -37,7 +37,8 @@ export const assignSpeakers = (
   if (!diarized.length) return result
 
   for (const seg of segments) {
-    const intervals: ReadonlyArray<readonly [number, number]> = seg.words?.length
+    const intervals: ReadonlyArray<readonly [number, number]> = seg.words
+      ?.length
       ? seg.words.map(w => [w.startMs, w.endMs] as const)
       : seg.startMs != null && seg.endMs != null
         ? [[seg.startMs, seg.endMs] as const]

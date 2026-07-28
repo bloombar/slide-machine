@@ -27,7 +27,12 @@ const summarySchema = new Schema<RefineJobSummary>(
 
 const refineJobSchema = new Schema<RefineJobDb>(
   {
-    deckId: { type: Schema.Types.ObjectId, ref: 'Deck', required: true, index: true },
+    deckId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Deck',
+      required: true,
+      index: true,
+    },
     status: {
       type: String,
       enum: ['running', 'done', 'error'],

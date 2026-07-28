@@ -15,11 +15,17 @@ describe('planReformat', () => {
       [{ id: 's1' }],
       roles({ s1: ['lecturer', 'student', 'lecturer'] }),
     )
-    expect(plan[0]).toMatchObject({ decision: 'reformat', reason: 'has-student' })
+    expect(plan[0]).toMatchObject({
+      decision: 'reformat',
+      reason: 'has-student',
+    })
   })
 
   it('keeps a lecturer-only slide', () => {
-    const plan = planReformat([{ id: 's1' }], roles({ s1: ['lecturer', 'lecturer'] }))
+    const plan = planReformat(
+      [{ id: 's1' }],
+      roles({ s1: ['lecturer', 'lecturer'] }),
+    )
     expect(plan[0]).toMatchObject({ decision: 'keep', reason: 'lecturer-only' })
   })
 
