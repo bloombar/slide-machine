@@ -9,7 +9,11 @@
  * absent rather than emitted as an empty key.
  */
 import YAML from 'yaml'
-import type { ImageAttribution } from '@slide-machine/shared'
+import type {
+  ExportedDeckSettings,
+  ExportedSeedMaterial,
+  ImageAttribution,
+} from '@slide-machine/shared'
 
 /** Format marker written at the top of every export, so an importer can
  * recognize the shape and its version (EXP-3). */
@@ -26,11 +30,15 @@ export interface ExportSlide {
   attribution?: ImageAttribution
 }
 
-/** The deck-level fields captured in the export. */
+/** The deck-level fields captured in the export. `settings` and `seedMaterial`
+ * make the file import-compatible (EXP-3): the General-tab lecture settings and
+ * the extracted seed content travel with the deck so a re-import is faithful. */
 export interface ExportDeck {
   title: string
   templateId: string
   visibility?: string
+  settings?: ExportedDeckSettings
+  seedMaterial?: ExportedSeedMaterial[]
   slides: ExportSlide[]
 }
 
@@ -63,17 +71,46 @@ const imageBlock = (
   return Object.keys(block).length ? block : undefined
 }
 
+/** Maps the General-tab settings into the export shape, or undefined when none
+ * are set (so no empty `settings:` key is emitted). */
+const settingsBlock = (
+  settings: ExportDeck['settings'],
+): Record<string, unknown> | undefined => {
+  if (!settings) return undefined
+  const block = compact({ ...settings })
+  return Object.keys(block).length ? block : undefined
+}
+
+/** Maps one seed-material item into the export shape (extracted content only). */
+const seedMaterialItem = (
+  item: ExportedSeedMaterial,
+): Record<string, unknown> =>
+  compact({
+    name: item.name,
+    type: item.type,
+    text: item.text,
+    caption: item.caption,
+    keywords: item.keywords,
+    // `enabled` defaults to true; only carry it when explicitly disabled.
+    enabled: item.enabled === false ? false : undefined,
+  })
+
 /**
  * Renders the deck to a YAML string. Slides are written in display order with
- * their layout, text content, and image (including attribution).
+ * their layout, text content, and image (including attribution). The lecture
+ * settings and extracted seed material are written when present (EXP-3).
  */
 export const deckToYaml = (deck: ExportDeck): string => {
+  const settings = settingsBlock(deck.settings)
+  const seedMaterial = (deck.seedMaterial ?? []).map(seedMaterialItem)
   const doc = {
     version: DECK_YAML_VERSION,
     kind: 'deck',
     title: deck.title,
     templateId: deck.templateId,
     ...(deck.visibility ? { visibility: deck.visibility } : {}),
+    ...(settings ? { settings } : {}),
+    ...(seedMaterial.length ? { seedMaterial } : {}),
     slides: deck.slides.map(slide =>
       compact({
         layout: slide.layoutType,

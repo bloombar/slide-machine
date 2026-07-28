@@ -8,8 +8,9 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
 import { Settings } from 'lucide-react'
-import type { Deck, Project } from '@slide-machine/shared'
+import type { Deck, DeckImportResult, Project } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
+import { ApiError } from '../api/http'
 import { useAuth } from '../auth/AuthContext'
 import { projectTitle } from '../lib/project'
 import { config } from '../config'
@@ -40,6 +41,8 @@ export default function ProjectPage() {
     () => navState?.settingsTab ?? 'general',
   )
   const [error, setError] = useState<string | null>(null)
+  // A success/warning notice after importing a lecture (EXP-3).
+  const [notice, setNotice] = useState<string | null>(null)
 
   // Scrub the deep-link state so a reload doesn't re-open settings
   useEffect(() => {
@@ -95,6 +98,44 @@ export default function ProjectPage() {
     }
   }
 
+  /**
+   * Imports a previously exported deck YAML as a new lecture (EXP-3). The
+   * created lecture is added to the top of the list; validation errors and
+   * non-fatal warnings (e.g. a substituted template) are surfaced in place.
+   */
+  const importLecture = async (file: File) => {
+    setError(null)
+    setNotice(null)
+    let content: string
+    try {
+      content = await file.text()
+    } catch {
+      setError('Could not read that file')
+      return
+    }
+    try {
+      const result = await dispatchAction<DeckImportResult>('deck.import', {
+        projectId,
+        content,
+      })
+      setDecks(prev => [result.deck, ...prev])
+      const name = result.deck.title || 'Untitled lecture'
+      setNotice(
+        result.warnings.length
+          ? `Imported "${name}". ${result.warnings.join(' ')}`
+          : `Imported "${name}".`,
+      )
+    } catch (err) {
+      // A validation failure lists the specific problems; anything else is a
+      // generic message. Nothing was created either way.
+      if (err instanceof ApiError && err.details?.length) {
+        setError(`Could not import this file: ${err.details.join(' ')}`)
+      } else {
+        setError('Could not import this file')
+      }
+    }
+  }
+
   return (
     <div>
       <header className="mb-8 flex items-center justify-between gap-4">
@@ -130,12 +171,18 @@ export default function ProjectPage() {
             {error}
           </p>
         )}
+        {notice && (
+          <p role="status" className="mb-4 text-sm text-slate-600">
+            {notice}
+          </p>
+        )}
         <ul className="flex flex-col gap-2">
-          {/* Always first: a dashed zone to add a lecture */}
+          {/* Always first: a dashed zone to add or import a lecture */}
           {project && (
             <NewLectureZone
               projectTitle={projectTitle(project)}
               onStart={() => void startLecture()}
+              onImport={file => void importLecture(file)}
             />
           )}
           {decks.map(d => (

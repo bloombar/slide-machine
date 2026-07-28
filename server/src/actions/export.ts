@@ -28,6 +28,7 @@ import { loadEditableDeck } from './deck'
 import { env } from '../config/env'
 import { UserModel } from '../models/user'
 import { SlideModel } from '../models/slide'
+import { SeedAssetModel } from '../models/seed-asset'
 import { deckToYaml, type ExportDeck, type ExportSlide } from '../lib/deck-yaml'
 import { deckToPdf } from '../lib/deck-pdf'
 import {
@@ -90,9 +91,32 @@ const loadExportDeck = async (
     caption: s.caption,
     attribution: s.attribution,
   }))
+  // General-tab settings and the extracted seed material make the export
+  // import-compatible (EXP-3). Only ready assets contribute, and only their
+  // pulled-out content — never the original binary file.
+  const assets = await SeedAssetModel.find({
+    deckId: deck._id,
+    status: 'ready',
+  }).sort({ createdAt: 1 })
+  const settings = {
+    language: deck.language,
+    generationFreedom: deck.generationFreedom,
+    ttsVoice: deck.ttsVoice,
+    seedNotes: deck.seedContext,
+  }
+  const hasSettings = Object.values(settings).some(v => v !== undefined)
   return {
     title: deck.title,
     templateId: deck.templateId,
+    ...(hasSettings ? { settings } : {}),
+    seedMaterial: assets.map(a => ({
+      name: a.name,
+      type: a.type,
+      text: a.text,
+      caption: a.caption,
+      keywords: a.keywords,
+      enabled: a.enabled,
+    })),
     slides,
   }
 }

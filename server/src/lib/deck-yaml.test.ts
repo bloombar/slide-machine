@@ -84,4 +84,74 @@ describe('deckToYaml', () => {
     expect(parsed.visibility).toBeUndefined()
     expect(parsed.slides).toEqual([])
   })
+
+  it('carries General-tab settings for round-trip import (EXP-3)', () => {
+    const parsed = YAML.parse(
+      deckToYaml({
+        title: 'T',
+        templateId: 'classic',
+        settings: {
+          language: 'fr',
+          generationFreedom: 4,
+          ttsVoice: 'emma',
+          seedNotes: 'Key points about the topic.',
+        },
+        slides: [],
+      }),
+    )
+    expect(parsed.settings).toEqual({
+      language: 'fr',
+      generationFreedom: 4,
+      ttsVoice: 'emma',
+      seedNotes: 'Key points about the topic.',
+    })
+  })
+
+  it('omits the settings block entirely when nothing is set', () => {
+    const parsed = YAML.parse(
+      deckToYaml({ title: 'T', templateId: 'c', settings: {}, slides: [] }),
+    )
+    expect(parsed.settings).toBeUndefined()
+  })
+
+  it('carries extracted seed material but only disabled flags', () => {
+    const parsed = YAML.parse(
+      deckToYaml({
+        title: 'T',
+        templateId: 'classic',
+        seedMaterial: [
+          {
+            name: 'syllabus.pdf',
+            type: 'pdf',
+            text: 'Week 1: cells',
+            keywords: ['cells', 'mitosis'],
+            enabled: true,
+          },
+          { name: 'notes.doc', type: 'doc', enabled: false },
+        ],
+        slides: [],
+      }),
+    )
+    expect(parsed.seedMaterial).toHaveLength(2)
+    // enabled=true is the default, so it is not written…
+    expect(parsed.seedMaterial[0]).toEqual({
+      name: 'syllabus.pdf',
+      type: 'pdf',
+      text: 'Week 1: cells',
+      keywords: ['cells', 'mitosis'],
+    })
+    // …while an explicit disable is preserved.
+    expect(parsed.seedMaterial[1]).toEqual({
+      name: 'notes.doc',
+      type: 'doc',
+      enabled: false,
+    })
+  })
+
+  it('omits the seedMaterial list when there is none', () => {
+    const parsed = YAML.parse(
+      deckToYaml({ title: 'T', templateId: 'c', seedMaterial: [], slides: [] }),
+    )
+    expect(parsed.seedMaterial).toBeUndefined()
+  })
 })
