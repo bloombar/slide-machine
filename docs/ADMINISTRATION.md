@@ -46,14 +46,17 @@ moderation actions for when the answer calls for one.
 - **User drill-down** — account details (plan, email verification, locale,
   profile visibility, project/lecture counts) plus the user's projects,
   each linking to its own **project page**. Lectures the user owns inside
-  someone else's project are grouped under "Other lectures."
+  someone else's project are grouped under "Other lectures." Carries a
+  **Settings** section for the account's profile fields.
 - **Project page** — the project's owner and a table of its lectures with
   a **public/private badge**, **slide count**, and **last-edited date**;
   each lecture links to its own **lecture page**. Carries the same
-  private-lecture toggle and delete actions as the user page.
+  private-lecture toggle and delete actions as the user page, plus a
+  **Settings** section for the project's visibility and generation
+  settings.
 - **Lecture page** — the lecture's project and owner, its details, a
-  **View slideshow** link to the live viewer (`/d/:slug`), and the
-  delete action. Opens for any lecture regardless of the
+  **View slideshow** link to the live viewer (`/d/:slug`), a **Settings**
+  section, and the delete action. Opens for any lecture regardless of the
   private-lecture toggle, mirroring the always-on viewer access.
 
 ### Moderation
@@ -80,7 +83,36 @@ reset and the ban — cannot be undone from the app:
 
 Admin accounts moderate; they are not moderated: any of these against an
 allowlisted email (including your own) is refused with `target_is_admin`
-until the email is removed from `ADMIN_EMAILS`.
+until the email is removed from `ADMIN_EMAILS`. The settings editors below
+extend that to **content**: editing a project or lecture whose *owner* is
+allowlisted is refused the same way.
+
+### Editing settings
+
+Each detail page carries a **Settings** section that edits the entity even
+when the admin does not own it. Nothing is sent while you type: the form
+holds a draft, **Save changes** stays disabled until something differs, and
+confirming shows the exact `old → new` of every field before one request
+goes out. The audit entry records the same set as
+`{field: {from, to}}` — it, not the dialog, is the authoritative record.
+
+| Entity | Editable | Not editable here |
+| --- | --- | --- |
+| User | Display name, bio, profile visibility, interface locale, lecturing language | Plan tier (see Plans below), email, password (its own danger-zone action), email verification |
+| Project | Visibility, AI freedom, language, narration voice | Title, description, seed material, template, owner, sharing lists |
+| Lecture | Visibility, AI freedom, language, narration voice, the five Refine settings | Title, template, seed material, permalink, owner, sharing lists, slides |
+
+Two things to know before saving:
+
+- **Unset means inherited.** Every generation setting can be handed back
+  to the level above it ("Default (inherited)" / "Reset to default"),
+  which stores nothing at this level rather than storing a copy.
+- **A lecture's visibility is one-way.** A lecture normally follows its
+  project; choosing *any* visibility on it — even the one it already
+  inherits — copies the project's current people lists onto the lecture
+  and stops it following the project. **"Follow the project's settings"**
+  undoes that. The confirm dialog and the audit entry both spell it out
+  as `Follows the project's settings → …`.
 
 ### Private lectures
 
@@ -117,7 +149,11 @@ Entries are **append-only**: they are written through one server module
 Every moderation action writes one (`user.delete`, `user.ban_email`,
 `user.unban_email`, `user.password_reset`, `project.delete`,
 `deck.delete`), as does opening a private project in the product view
-(`project.private_view`). It is the durable audit trail; a local CSV
+(`project.private_view`). Every settings edit writes one too
+(`user.settings_update`, `project.settings_update`,
+`deck.settings_update`), whose details carry a `changes` object holding
+each edited field's `from` and `to` — an edit that changes nothing saves
+nothing and writes no entry. It is the durable audit trail; a local CSV
 would not survive an App Platform redeploy, which is why the CSV is an
 on-demand export rather than the store.
 
@@ -148,7 +184,9 @@ Stripe `priceId` and caps for `geminiTokens`, `sttMinutes`, `imageCalls`,
 and `exports` (`null` = unlimited). Edit and redeploy to change what a plan
 includes; the `priceId`s must match real Stripe prices for billing to work
 (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`). A user's `planTier` shows
-read-only in the console; changing it is a database operation.
+read-only in the console: the settings editor excludes it by design —
+billing state is governed by [SPEC §5](SPEC.md#5-plans-billing--usage-limits),
+not by moderation — so changing it is a database operation.
 
 ## Data retention and privacy
 
