@@ -163,7 +163,10 @@ describe('GoogleCloudTranscriptionProvider', () => {
     const provider = new GoogleCloudTranscriptionProvider()
     provider.startStream({ languageCode: 'en-US' })
     const request = streams[0]!.config as {
-      config: { enableWordTimeOffsets?: boolean; enableWordConfidence?: boolean }
+      config: {
+        enableWordTimeOffsets?: boolean
+        enableWordConfidence?: boolean
+      }
     }
     // These drive the GEN-4 diarization time-join.
     expect(request.config.enableWordTimeOffsets).toBe(true)
@@ -308,12 +311,59 @@ describe('GoogleCloudTranscriptionProvider', () => {
     stream.end()
   })
 
-  it('ends the underlying stream and completes the iterable', async () => {
+  it('ends the underlying stream and completes when Google closes it', async () => {
     const provider = new GoogleCloudTranscriptionProvider()
     const stream = provider.startStream({ languageCode: 'en-US' })
     const iterator = stream.events[Symbol.asyncIterator]()
     stream.end()
     expect(streams[0]!.ended).toBe(true)
+
+    // Google delivers the finals for trailing audio only after the request
+    // stream is half-closed, so the iterable stays open until it says so.
+    streams[0]!.emit('data', dataEvent('the last words', true))
+    expect((await iterator.next()).value).toMatchObject({
+      text: 'the last words',
+      isFinal: true,
+    })
+    streams[0]!.emit('end')
+    expect(await iterator.next()).toEqual({ value: undefined, done: true })
+  })
+
+  it('completes anyway when a closed stream never ends', async () => {
+    vi.useFakeTimers()
+    const provider = new GoogleCloudTranscriptionProvider()
+    const stream = provider.startStream({ languageCode: 'en-US' })
+    const iterator = stream.events[Symbol.asyncIterator]()
+    stream.end()
+    // No 'end' from Google — the grace window is the backstop, so a consumer
+    // is never left waiting forever.
+    vi.advanceTimersByTime(15_000)
+    expect(await iterator.next()).toEqual({ value: undefined, done: true })
+  })
+
+  it('completes when a closed stream errors instead of ending', async () => {
+    const provider = new GoogleCloudTranscriptionProvider()
+    const stream = provider.startStream({ languageCode: 'en-US' })
+    const iterator = stream.events[Symbol.asyncIterator]()
+    stream.end()
+    streams[0]!.emit('error', { code: 13 })
+    expect(await iterator.next()).toEqual({ value: undefined, done: true })
+  })
+
+  it('keeps the iterable open when a retired stream ends after a restart', async () => {
+    const provider = new GoogleCloudTranscriptionProvider()
+    const stream = provider.startStream({ languageCode: 'en-US' })
+    const iterator = stream.events[Symbol.asyncIterator]()
+    // Cycle to a fresh stream, then end: the retired stream closing must not
+    // cut off the live one's remaining results.
+    streams[0]!.emit('error', { code: 11 })
+    stream.end()
+    streams[0]!.emit('end')
+    streams[1]!.emit('data', dataEvent('still listening', true))
+    expect((await iterator.next()).value).toMatchObject({
+      text: 'still listening',
+    })
+    streams[1]!.emit('end')
     expect(await iterator.next()).toEqual({ value: undefined, done: true })
   })
 

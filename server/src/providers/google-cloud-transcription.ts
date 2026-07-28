@@ -53,6 +53,13 @@ export const speechClientOptions = (): ConstructorParameters<
 /** Google caps one streaming session at ~305s; restart well before that and
  * on the limit error so long lectures transcribe without interruption. */
 const STREAM_RESTART_MS = 240_000
+/** How long we keep the event stream open after the write side closes, waiting
+ * for Google's last results. Google returns the finals for trailing audio only
+ * after the request stream is half-closed, so cutting the iterable off at end()
+ * would drop the tail of the transcript — which matters most when the audio is
+ * a finished recording fed in all at once. The timer is only a backstop for a
+ * stream that never ends cleanly. */
+const FINAL_GRACE_MS = 15_000
 /** gRPC status code Google returns when a stream outlives its max duration. */
 const OUT_OF_RANGE = 11
 
@@ -76,6 +83,9 @@ interface RecognizeStream {
   destroy(): void
   on(event: 'data', handler: (response: unknown) => void): void
   on(event: 'error', handler: (error: { code?: number }) => void): void
+  /** Fires when Google closes the response side — i.e. everything it will say
+   * about the audio has been said. */
+  on(event: 'end', handler: () => void): void
 }
 
 /** A protobuf Duration as the client library surfaces it: `seconds` may be a
@@ -152,6 +162,8 @@ export class GoogleCloudTranscriptionProvider implements TranscriptionProvider {
     let recognize: RecognizeStream | null = null
     let ended = false
     let restartTimer: ReturnType<typeof setTimeout> | null = null
+    // Armed by end(); cleared once Google closes the response side.
+    let graceTimer: ReturnType<typeof setTimeout> | null = null
     // Word offsets from Google reset to 0 on every restart, so we keep the
     // audio time already consumed by prior streams (`sessionByteOffset`) and
     // the live stream's own bytes (`currentStreamBytes`), and add the former
@@ -202,10 +214,23 @@ export class GoogleCloudTranscriptionProvider implements TranscriptionProvider {
         else if (!ended) {
           console.error('Google Cloud STT stream error:', error)
           events.close()
-        }
+        } else finishGrace()
+      })
+      // Only the stream still current when the caller ended completes the
+      // iterable: a stream retired by a restart ends later and must not.
+      stream.on('end', () => {
+        if (ended && recognize === stream) finishGrace()
       })
       recognize = stream
       restartTimer = setTimeout(restart, STREAM_RESTART_MS)
+    }
+
+    // Completes the iterable once Google has had its last word (or the grace
+    // window lapsed), so consumers stop waiting.
+    const finishGrace = (): void => {
+      if (graceTimer) clearTimeout(graceTimer)
+      graceTimer = null
+      events.close()
     }
 
     // Swaps to a fresh stream so audio keeps flowing past Google's limit.
@@ -233,10 +258,19 @@ export class GoogleCloudTranscriptionProvider implements TranscriptionProvider {
         recognize?.write(chunk)
       },
       end() {
+        if (ended) return
         ended = true
         if (restartTimer) clearTimeout(restartTimer)
-        recognize?.end()
-        events.close()
+        restartTimer = null
+        if (!recognize) {
+          events.close()
+          return
+        }
+        // Half-close the request stream, then wait for Google's remaining
+        // finals (see FINAL_GRACE_MS) rather than dropping them.
+        recognize.end()
+        graceTimer = setTimeout(finishGrace, FINAL_GRACE_MS)
+        graceTimer.unref?.()
       },
       events,
     }
