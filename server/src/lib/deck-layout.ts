@@ -1,0 +1,248 @@
+/**
+ * Shared slide-layout model for the deck exports (PDF, Google Slides). Given a
+ * slide, it returns positioned boxes in normalized 0..1 slide coordinates that
+ * mirror how the app's viewer arranges each layout type (client
+ * components/slide/layouts): title/section/quote centered, content/list as
+ * left-aligned text with NO image, image-heavy as a dominant image + caption,
+ * and two-column as text beside an image. Both renderers draw from this, so the
+ * PDF and the Slides output match each other AND the live viewer.
+ *
+ * Font sizes are a fraction of the slide WIDTH (the app uses `cqi` = %-of-width
+ * container units), so each renderer multiplies by its own page width and the
+ * relative sizes come out the same.
+ */
+import type { ExportSlide } from './deck-yaml'
+
+export type ColorRole = 'ink' | 'accent' | 'muted'
+
+/** One paragraph within a text box. */
+export interface LayoutRun {
+  text: string
+  /** Font size as a fraction of slide width. */
+  sizeFrac: number
+  bold?: boolean
+  italic?: boolean
+  color?: ColorRole
+  bullet?: boolean
+  /** Extra gap after this paragraph, as a fraction of slide width. */
+  spaceAfterFrac?: number
+}
+
+export interface TextBox {
+  kind: 'text'
+  x: number
+  y: number
+  w: number
+  h: number
+  align: 'left' | 'center'
+  valign: 'top' | 'middle'
+  runs: LayoutRun[]
+}
+export interface ImageBox {
+  kind: 'image'
+  x: number
+  y: number
+  w: number
+  h: number
+}
+export interface RuleBox {
+  kind: 'rule'
+  x: number
+  y: number
+  w: number
+  h: number
+  color: ColorRole
+}
+export type LayoutBox = TextBox | ImageBox | RuleBox
+
+/** The image slot only appears in these layouts (matching the app: content/
+ * list/title/etc. never render an image, even if the slide carries one). */
+export const LAYOUT_HAS_IMAGE = new Set(['image-heavy', 'two-column'])
+
+const titleRun = (
+  slide: ExportSlide,
+  sizeFrac: number,
+  color: ColorRole,
+  spaceAfterFrac = 0.03,
+): LayoutRun[] =>
+  slide.title
+    ? [{ text: slide.title, sizeFrac, bold: true, color, spaceAfterFrac }]
+    : []
+
+const bodyRuns = (slide: ExportSlide, sizeFrac: number): LayoutRun[] => {
+  const runs: LayoutRun[] = []
+  if (slide.body)
+    runs.push({ text: slide.body, sizeFrac, spaceAfterFrac: 0.02 })
+  for (const bullet of slide.bullets ?? []) {
+    runs.push({ text: bullet, sizeFrac, bullet: true, spaceAfterFrac: 0.012 })
+  }
+  return runs
+}
+
+const captionBox = (slide: ExportSlide, y: number): LayoutBox[] =>
+  slide.caption
+    ? [
+        {
+          kind: 'text',
+          x: 0.06,
+          y,
+          w: 0.88,
+          h: 1 - y - 0.02,
+          align: 'center',
+          valign: 'top',
+          runs: [{ text: slide.caption, sizeFrac: 0.022, color: 'muted' }],
+        },
+      ]
+    : []
+
+/**
+ * Computes the layout boxes for a slide. `hasImage` says whether an image was
+ * actually fetched, so image-only layouts still reserve space but skip drawing.
+ */
+export const computeLayout = (slide: ExportSlide): LayoutBox[] => {
+  switch (slide.layoutType) {
+    case 'title':
+      return [
+        {
+          kind: 'text',
+          x: 0.08,
+          y: 0,
+          w: 0.84,
+          h: 1,
+          align: 'center',
+          valign: 'middle',
+          runs: [
+            ...titleRun(slide, 0.072, 'ink', slide.caption ? 0.03 : 0),
+            ...(slide.caption
+              ? [
+                  {
+                    text: slide.caption,
+                    sizeFrac: 0.03,
+                    color: 'muted' as const,
+                  },
+                ]
+              : []),
+          ],
+        },
+      ]
+
+    case 'section':
+      return [
+        { kind: 'rule', x: 0.46, y: 0.4, w: 0.08, h: 0.008, color: 'accent' },
+        {
+          kind: 'text',
+          x: 0.1,
+          y: 0.02,
+          w: 0.8,
+          h: 1,
+          align: 'center',
+          valign: 'middle',
+          runs: titleRun(slide, 0.055, 'ink', 0),
+        },
+      ]
+
+    case 'quote':
+      return [
+        {
+          kind: 'text',
+          x: 0.08,
+          y: 0,
+          w: 0.84,
+          h: 1,
+          align: 'center',
+          valign: 'middle',
+          runs: [
+            ...(slide.body
+              ? [
+                  {
+                    text: `“${slide.body}”`,
+                    sizeFrac: 0.04,
+                    italic: true,
+                    spaceAfterFrac: slide.caption ? 0.03 : 0,
+                  },
+                ]
+              : []),
+            ...(slide.caption
+              ? [
+                  {
+                    text: slide.caption,
+                    sizeFrac: 0.028,
+                    color: 'muted' as const,
+                  },
+                ]
+              : []),
+          ],
+        },
+      ]
+
+    case 'image-heavy':
+      return [
+        {
+          kind: 'image',
+          x: 0.04,
+          y: 0.04,
+          w: 0.92,
+          h: slide.caption ? 0.82 : 0.9,
+        },
+        ...captionBox(slide, 0.88),
+      ]
+
+    case 'two-column':
+      return [
+        {
+          kind: 'text',
+          x: 0.06,
+          y: 0,
+          w: 0.4,
+          h: 1,
+          align: 'left',
+          valign: 'middle',
+          runs: [...titleRun(slide, 0.04, 'accent'), ...bodyRuns(slide, 0.025)],
+        },
+        { kind: 'image', x: 0.52, y: 0.13, w: 0.42, h: 0.74 },
+      ]
+
+    case 'list':
+    case 'content':
+      return [
+        {
+          kind: 'text',
+          x: 0.06,
+          y: 0,
+          w: 0.88,
+          h: 1,
+          align: 'left',
+          valign: 'middle',
+          runs: [
+            ...titleRun(slide, 0.04, 'accent'),
+            ...bodyRuns(slide, 0.0275),
+          ],
+        },
+      ]
+
+    default: {
+      // Unknown layout: a safe general arrangement — title, then body/bullets,
+      // with the image on the right if the slide has one.
+      const hasImg = Boolean(slide.imageRef)
+      return [
+        {
+          kind: 'text',
+          x: 0.06,
+          y: 0.08,
+          w: hasImg ? 0.5 : 0.88,
+          h: 0.84,
+          align: 'left',
+          valign: 'top',
+          runs: [
+            ...titleRun(slide, 0.045, 'accent'),
+            ...bodyRuns(slide, 0.028),
+          ],
+        },
+        ...(hasImg
+          ? [{ kind: 'image' as const, x: 0.58, y: 0.13, w: 0.36, h: 0.74 }]
+          : []),
+        ...captionBox(slide, 0.9),
+      ]
+    }
+  }
+}
