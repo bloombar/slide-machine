@@ -419,7 +419,7 @@ describe('QuizPanel', () => {
       await screen.findByRole('button', { name: 'Advanced settings' }),
     )
     const checkbox = await screen.findByRole('checkbox', {
-      name: /include the spoken transcript/i,
+      name: /include spoken transcript/i,
     })
     fireEvent.click(checkbox)
     fireEvent.click(screen.getByRole('button', { name: 'Generate & save' }))
@@ -447,7 +447,7 @@ describe('QuizPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Advanced settings' }))
     expect(
       screen.queryByRole('checkbox', {
-        name: /include the spoken transcript/i,
+        name: /include spoken transcript/i,
       }),
     ).not.toBeInTheDocument()
   })

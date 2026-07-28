@@ -54,6 +54,18 @@ export interface DeckQuizDb {
   questions?: string[]
 }
 
+/** A deck export saved to the instructor's Google Drive (EXP-4), tracked so it
+ * can be listed and deleted later (mirrors the quiz record). */
+export interface DeckExportDb {
+  fileId: string
+  fileUrl: string
+  fileName: string
+  format: 'pdf' | 'yaml' | 'google-slides'
+  driveFolderId: string
+  driveFolderName?: string
+  exportedAt: Date
+}
+
 export interface DeckDb extends Omit<
   Deck,
   | 'id'
@@ -75,6 +87,8 @@ export interface DeckDb extends Omit<
   // Question stems from quizzes the instructor has since deleted/regenerated,
   // so a fresh quiz avoids repeating them (QUIZ-6). Capped and most-recent.
   quizPastQuestions?: string[]
+  // Exports saved to Google Drive (EXP-4), newest last; absent until the first.
+  exports?: DeckExportDb[]
   // True once the user sets the title by hand: the AI then stops suggesting
   // or refining it. False/absent = auto-titled, still open to AI refinement.
   titleLocked?: boolean
@@ -104,6 +118,24 @@ const quizSchema = new Schema<DeckQuizDb>(
     driveFolderName: String,
     publishedAt: { type: Date, default: Date.now },
     questions: { type: [String], default: undefined },
+  },
+  { _id: false },
+)
+
+/** Strict, id-less subdocument for a Drive-saved export (EXP-4). */
+const exportSchema = new Schema<DeckExportDb>(
+  {
+    fileId: { type: String, required: true },
+    fileUrl: { type: String, required: true },
+    fileName: { type: String, required: true },
+    format: {
+      type: String,
+      enum: ['pdf', 'yaml', 'google-slides'],
+      required: true,
+    },
+    driveFolderId: { type: String, required: true },
+    driveFolderName: String,
+    exportedAt: { type: Date, default: Date.now },
   },
   { _id: false },
 )
@@ -163,6 +195,7 @@ const deckSchema = new Schema<DeckDb>(
     recordings: { type: [recordingSchema], default: undefined },
     quiz: { type: quizSchema, default: undefined },
     quizPastQuestions: { type: [String], default: undefined },
+    exports: { type: [exportSchema], default: undefined },
     voteScore: { type: Number, default: 0 },
   },
   { timestamps: true },

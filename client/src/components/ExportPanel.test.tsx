@@ -36,7 +36,12 @@ describe('ExportPanel', () => {
     mockFetchRoutes({
       'export.status': () => ({
         status: 200,
-        body: { googleConnected: false, deckTitle: 'Bio' },
+        body: {
+          googleConnected: false,
+          deckTitle: 'Bio',
+          hasWhiteboard: false,
+          exports: [],
+        },
       }),
       'export.download': init => {
         downloadBody = JSON.parse(String(init?.body))
@@ -63,7 +68,12 @@ describe('ExportPanel', () => {
     mockFetchRoutes({
       'export.status': () => ({
         status: 200,
-        body: { googleConnected: false, deckTitle: 'Bio' },
+        body: {
+          googleConnected: false,
+          deckTitle: 'Bio',
+          hasWhiteboard: false,
+          exports: [],
+        },
       }),
     })
     render(<ExportPanel deckId="d1" />)
@@ -77,7 +87,12 @@ describe('ExportPanel', () => {
     mockFetchRoutes({
       'export.status': () => ({
         status: 200,
-        body: { googleConnected: true, deckTitle: 'Bio' },
+        body: {
+          googleConnected: true,
+          deckTitle: 'Bio',
+          hasWhiteboard: false,
+          exports: [],
+        },
       }),
     })
     render(<ExportPanel deckId="d1" />)
@@ -97,7 +112,12 @@ describe('ExportPanel', () => {
     mockFetchRoutes({
       'export.status': () => ({
         status: 200,
-        body: { googleConnected: false, deckTitle: 'Bio' },
+        body: {
+          googleConnected: false,
+          deckTitle: 'Bio',
+          hasWhiteboard: false,
+          exports: [],
+        },
       }),
       'quiz.connectGoogle': init => {
         connectBody = JSON.parse(String(init?.body))
@@ -127,7 +147,12 @@ describe('ExportPanel', () => {
     mockFetchRoutes({
       'export.status': () => ({
         status: 200,
-        body: { googleConnected: false, deckTitle: 'Bio' },
+        body: {
+          googleConnected: false,
+          deckTitle: 'Bio',
+          hasWhiteboard: false,
+          exports: [],
+        },
       }),
       'quiz.connectGoogle': () => ({
         status: 200,
@@ -145,7 +170,12 @@ describe('ExportPanel', () => {
     mockFetchRoutes({
       'export.status': () => ({
         status: 200,
-        body: { googleConnected: true, deckTitle: 'Bio' },
+        body: {
+          googleConnected: true,
+          deckTitle: 'Bio',
+          hasWhiteboard: false,
+          exports: [],
+        },
       }),
       'quiz.driveFolders': () => ({
         status: 200,
@@ -156,9 +186,12 @@ describe('ExportPanel', () => {
         return {
           status: 200,
           body: {
+            fileId: 'x',
             fileName: 'bio.pdf',
             fileUrl: 'https://drive.google.com/file/d/x/view',
+            format: 'pdf',
             driveFolderName: 'My Drive',
+            exportedAt: '2026-01-01T00:00:00.000Z',
           },
         }
       },
@@ -172,13 +205,91 @@ describe('ExportPanel', () => {
     await screen.findByRole('dialog', { name: 'Choose a Drive folder' })
     // Save into the current (root) folder.
     fireEvent.click(screen.getByRole('button', { name: 'Save here' }))
-    const link = await screen.findByRole('link', { name: /bio\.pdf/ })
-    expect(link).toHaveAttribute(
+    // The file appears both in the confirmation and the "Saved to Drive" list.
+    const links = await screen.findAllByRole('link', { name: /bio\.pdf/ })
+    expect(links[0]).toHaveAttribute(
       'href',
       'https://drive.google.com/file/d/x/view',
     )
-    expect(screen.getByText(/Saved to My Drive/)).toBeInTheDocument()
+    expect(screen.getByText('Saved to Drive')).toBeInTheDocument()
     expect(driveBody).toMatchObject({ format: 'pdf', driveFolderId: 'root' })
+  })
+
+  it('shows the whiteboard option only for PDF/Slides when the deck has marks', async () => {
+    let downloadBody: { includeWhiteboard?: boolean } = {}
+    mockFetchRoutes({
+      'export.status': () => ({
+        status: 200,
+        body: {
+          googleConnected: false,
+          deckTitle: 'Bio',
+          hasWhiteboard: true,
+          exports: [],
+        },
+      }),
+      'export.download': init => {
+        downloadBody = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: {
+            fileName: 'bio.pdf',
+            mimeType: 'application/pdf',
+            contentBase64: CONTENT_B64,
+          },
+        }
+      },
+    })
+    render(<ExportPanel deckId="d1" />)
+    // PDF (default): the checkbox is shown and checked by default.
+    const checkbox = await screen.findByRole('checkbox', {
+      name: /include whiteboard markups/i,
+    })
+    expect(checkbox).toBeChecked()
+    // YAML: no visual surface → the option disappears.
+    fireEvent.click(screen.getByRole('radio', { name: /YAML/ }))
+    expect(
+      screen.queryByRole('checkbox', { name: /include whiteboard markups/i }),
+    ).toBeNull()
+    // Back to PDF, untick, and download — the flag rides along.
+    fireEvent.click(screen.getByRole('radio', { name: /PDF/ }))
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /include whiteboard markups/i }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Download PDF' }))
+    await waitFor(() => expect(downloadBody.includeWhiteboard).toBe(false))
+  })
+
+  it('lists a saved Drive export and deletes it', async () => {
+    let deleteBody: { fileId?: string } = {}
+    mockFetchRoutes({
+      'export.status': () => ({
+        status: 200,
+        body: {
+          googleConnected: true,
+          deckTitle: 'Bio',
+          hasWhiteboard: false,
+          exports: [
+            {
+              fileId: 'file-9',
+              fileUrl: 'https://drive/9',
+              fileName: 'bio.pdf',
+              format: 'pdf',
+              exportedAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+        },
+      }),
+      'export.delete': init => {
+        deleteBody = JSON.parse(String(init?.body))
+        return { status: 200, body: { deleted: true } }
+      },
+    })
+    render(<ExportPanel deckId="d1" />)
+    expect(await screen.findByText('Saved to Drive')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete bio.pdf' }))
+    await waitFor(() => expect(deleteBody.fileId).toBe('file-9'))
+    // The row is removed from the list.
+    await waitFor(() => expect(screen.queryByText('Saved to Drive')).toBeNull())
   })
 
   it('surfaces an error when the status fails to load', async () => {
@@ -193,7 +304,12 @@ describe('ExportPanel', () => {
     mockFetchRoutes({
       'export.status': () => ({
         status: 200,
-        body: { googleConnected: true, deckTitle: 'Bio' },
+        body: {
+          googleConnected: true,
+          deckTitle: 'Bio',
+          hasWhiteboard: false,
+          exports: [],
+        },
       }),
       'quiz.driveFolders': () => ({ status: 500, body: {} }),
     })
@@ -218,7 +334,12 @@ describe('ExportPanel', () => {
     mockFetchRoutes({
       'export.status': () => ({
         status: 200,
-        body: { googleConnected: false, deckTitle: 'Bio' },
+        body: {
+          googleConnected: false,
+          deckTitle: 'Bio',
+          hasWhiteboard: false,
+          exports: [],
+        },
       }),
     })
     render(<ExportPanel deckId="d1" />)

@@ -13,6 +13,7 @@
  */
 import PptxGenJSImport from 'pptxgenjs'
 import type { ExportDeck, ExportSlide } from './deck-yaml'
+import { visibleStrokes, hexForPptx, HIGHLIGHTER_ALPHA } from './deck-drawings'
 
 // pptxgenjs ships as CommonJS; the interop default differs across runtimes
 // (bundled vs tsx/native ESM), so resolve the constructor from either shape.
@@ -135,6 +136,50 @@ export const deckToPptx = async (deck: ExportDeck): Promise<Uint8Array> => {
         fontSize: 8,
         color: '6B7280',
         valign: 'bottom',
+      })
+    }
+
+    // Freehand whiteboard marks (WB-1) as native freeform lines, on top of the
+    // content. Points are normalized 0..1 to the slide, so they scale to inches
+    // within the slide (pptx y-axis is top-down, so no flip). Highlighter =
+    // partial transparency; a single-point tap = a small filled dot.
+    for (const stroke of visibleStrokes(slide.drawings)) {
+      const pts = stroke.points
+      if (!pts.length) continue
+      const color = hexForPptx(stroke.color)
+      const widthPt = Math.max(1, stroke.thickness * SLIDE_W * 72)
+      const transparency =
+        stroke.tool === 'highlighter'
+          ? Math.round((1 - HIGHLIGHTER_ALPHA) * 100)
+          : 0
+      if (pts.length === 1) {
+        const d = widthPt / 72
+        s.addShape(pptx.ShapeType.ellipse, {
+          x: pts[0]!.x * SLIDE_W - d / 2,
+          y: pts[0]!.y * SLIDE_H - d / 2,
+          w: d,
+          h: d,
+          fill: { color, transparency },
+          line: { type: 'none' },
+        })
+        continue
+      }
+      // pptxgenjs 4.x renders custom-geometry freeform lines at runtime, but its
+      // type declarations omit the enum member — read the value and cast.
+      const customGeom = (pptx.ShapeType as unknown as Record<string, string>)
+        .custGeom as Parameters<typeof s.addShape>[0]
+      s.addShape(customGeom, {
+        x: 0,
+        y: 0,
+        w: SLIDE_W,
+        h: SLIDE_H,
+        fill: { type: 'none' },
+        line: { color, width: widthPt, transparency },
+        points: pts.map((p, i) => ({
+          x: p.x * SLIDE_W,
+          y: p.y * SLIDE_H,
+          ...(i === 0 ? { moveTo: true } : {}),
+        })),
       })
     }
   })

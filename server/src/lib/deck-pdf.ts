@@ -1,28 +1,31 @@
 /**
- * Renders a slide deck to a PDF document, one slide per page (SPEC EXP-1). Each
- * page carries the slide's title, body, and bullet points; when the slide has
- * an image it is embedded (best-effort) with its caption, and the image's TASL
- * attribution/license text is printed at the foot of the page so downstream
- * copies stay license-compliant (EXP-1). A cover page names the deck.
+ * Renders a slide deck to a PDF slide deck (SPEC EXP-1): each page is one 16:9
+ * landscape slide — the same widescreen shape as the Google Slides export — so
+ * the PDF reads as a real deck, one slide per sheet. Each page carries the
+ * slide's title, body, and bullet points; when the slide has an image it is
+ * embedded (best-effort) with its caption, and the image's TASL attribution/
+ * license text is printed at the foot so downstream copies stay license-
+ * compliant. Freehand whiteboard marks (WB-1) are drawn on top when included.
  *
- * The PDF is built with `pdf-lib` — a pure-JS library with no native
- * dependencies — so generation is deterministic and unit-testable. Remote image
- * fetches are best-effort: a failed or unsupported image is skipped rather than
- * failing the whole export.
+ * The PDF is built with `pdf-lib` — pure JS, no native deps — so generation is
+ * deterministic and unit-testable. Remote image fetches are best-effort: a
+ * failed or unsupported image is skipped rather than failing the whole export.
  */
 import {
   PDFDocument,
   StandardFonts,
+  LineCapStyle,
   rgb,
   type PDFFont,
   type PDFPage,
 } from 'pdf-lib'
 import type { ExportDeck, ExportSlide } from './deck-yaml'
+import { visibleStrokes, hexToRgb01, HIGHLIGHTER_ALPHA } from './deck-drawings'
 
-/** US-Letter landscape, a natural slide aspect ratio. */
-const PAGE_WIDTH = 792
-const PAGE_HEIGHT = 612
-const MARGIN = 48
+// 16:9 widescreen slide (13.33in x 7.5in at 72dpi), matching Google Slides.
+const PAGE_WIDTH = 960
+const PAGE_HEIGHT = 540
+const MARGIN = 56
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2
 
 const INK = rgb(0.11, 0.13, 0.16)
@@ -92,9 +95,9 @@ const embedImage = async (doc: PDFDocument, url?: string) => {
 
 /** Draws the deck's cover page: its title, centered, over an accent rule. */
 const drawCover = (page: PDFPage, title: string, fonts: Fonts): void => {
-  const size = 34
+  const size = 40
   const lines = wrapLines(title, fonts.bold, size, CONTENT_WIDTH)
-  let y = PAGE_HEIGHT / 2 + (lines.length * (size + 6)) / 2
+  let y = PAGE_HEIGHT / 2 + (lines.length * (size + 8)) / 2
   for (const line of lines) {
     const width = fonts.bold.widthOfTextAtSize(line, size)
     page.drawText(line, {
@@ -104,12 +107,12 @@ const drawCover = (page: PDFPage, title: string, fonts: Fonts): void => {
       font: fonts.bold,
       color: INK,
     })
-    y -= size + 6
+    y -= size + 8
   }
   page.drawRectangle({
-    x: (PAGE_WIDTH - 120) / 2,
-    y: y - 8,
-    width: 120,
+    x: (PAGE_WIDTH - 140) / 2,
+    y: y - 10,
+    width: 140,
     height: 3,
     color: ACCENT,
   })
@@ -120,7 +123,46 @@ interface Fonts {
   bold: PDFFont
 }
 
-/** Draws a single slide onto its page: title, image, bullets/body, footer. */
+/**
+ * Draws the slide's freehand whiteboard marks on top of its content. Stroke
+ * points are normalized 0..1 to the slide box, so they map onto the full page
+ * (PDF's y-axis is bottom-up, hence `PAGE_HEIGHT - ny*PAGE_HEIGHT`).
+ */
+const drawStrokes = (page: PDFPage, slide: ExportSlide): void => {
+  for (const stroke of visibleStrokes(slide.drawings)) {
+    const pts = stroke.points
+    if (!pts.length) continue
+    const c = hexToRgb01(stroke.color)
+    const color = rgb(c.r, c.g, c.b)
+    const opacity = stroke.tool === 'highlighter' ? HIGHLIGHTER_ALPHA : 1
+    const thickness = Math.max(0.75, stroke.thickness * PAGE_WIDTH)
+    const px = (nx: number) => nx * PAGE_WIDTH
+    const py = (ny: number) => PAGE_HEIGHT - ny * PAGE_HEIGHT
+    if (pts.length === 1) {
+      page.drawCircle({
+        x: px(pts[0]!.x),
+        y: py(pts[0]!.y),
+        size: thickness / 2,
+        color,
+        opacity,
+      })
+      continue
+    }
+    for (let i = 1; i < pts.length; i++) {
+      page.drawLine({
+        start: { x: px(pts[i - 1]!.x), y: py(pts[i - 1]!.y) },
+        end: { x: px(pts[i]!.x), y: py(pts[i]!.y) },
+        thickness,
+        color,
+        opacity,
+        lineCap: LineCapStyle.Round,
+      })
+    }
+  }
+}
+
+/** Draws a single slide onto its page: title, image, bullets/body, footer, and
+ * any whiteboard marks on top. */
 const drawSlide = (
   page: PDFPage,
   slide: ExportSlide,
@@ -131,7 +173,7 @@ const drawSlide = (
   let y = PAGE_HEIGHT - MARGIN
 
   if (slide.title) {
-    const size = 24
+    const size = 30
     for (const line of wrapLines(
       slide.title,
       fonts.bold,
@@ -145,16 +187,16 @@ const drawSlide = (
         font: fonts.bold,
         color: INK,
       })
-      y -= size + 6
+      y -= size + 8
     }
-    y -= 10
+    y -= 14
   }
 
   // The image sits on the right; text flows in the remaining column.
   let textWidth = CONTENT_WIDTH
   if (image) {
     const maxW = CONTENT_WIDTH * 0.42
-    const maxH = y - MARGIN - 40
+    const maxH = y - MARGIN - 48
     const scale = Math.min(maxW / image.width, maxH / image.height, 1)
     const w = image.width * scale
     const h = image.height * scale
@@ -164,16 +206,16 @@ const drawSlide = (
       width: w,
       height: h,
     })
-    textWidth = CONTENT_WIDTH - w - 24
+    textWidth = CONTENT_WIDTH - w - 28
   }
 
-  const bodySize = 14
+  const bodySize = 16
   const drawParagraph = (text: string, prefix = '') => {
     const lines = wrapLines(
       text,
       fonts.regular,
       bodySize,
-      textWidth - (prefix ? 16 : 0),
+      textWidth - (prefix ? 20 : 0),
     )
     lines.forEach((line, i) => {
       const label = i === 0 ? prefix : ''
@@ -187,19 +229,19 @@ const drawSlide = (
         })
       }
       page.drawText(line, {
-        x: MARGIN + (prefix ? 16 : 0),
+        x: MARGIN + (prefix ? 20 : 0),
         y: y - bodySize,
         size: bodySize,
         font: fonts.regular,
         color: INK,
       })
-      y -= bodySize + 6
+      y -= bodySize + 8
     })
   }
 
   if (slide.body) {
     drawParagraph(slide.body)
-    y -= 6
+    y -= 8
   }
   for (const bullet of slide.bullets ?? []) {
     drawParagraph(bullet, '•')
@@ -210,7 +252,7 @@ const drawSlide = (
   if (slide.caption) footerLines.push(slide.caption)
   const credit = attributionLine(slide)
   if (credit) footerLines.push(credit)
-  let fy = MARGIN + footerLines.length * 12
+  let fy = MARGIN + footerLines.length * 13
   for (const line of footerLines) {
     for (const wrapped of wrapLines(line, fonts.regular, 9, CONTENT_WIDTH)) {
       page.drawText(wrapped, {
@@ -220,21 +262,24 @@ const drawSlide = (
         font: fonts.regular,
         color: MUTED,
       })
-      fy -= 11
+      fy -= 12
     }
   }
   page.drawText(String(index + 1), {
     x: PAGE_WIDTH - MARGIN - 10,
-    y: MARGIN - 18,
+    y: MARGIN - 22,
     size: 9,
     font: fonts.regular,
     color: MUTED,
   })
+
+  // Whiteboard marks last, so they sit on top of the slide content.
+  drawStrokes(page, slide)
 }
 
 /**
  * Builds the deck's PDF and returns its bytes. Pages are: a cover naming the
- * deck, then one page per slide in display order.
+ * deck, then one 16:9 slide per page in display order.
  */
 export const deckToPdf = async (deck: ExportDeck): Promise<Uint8Array> => {
   const doc = await PDFDocument.create()

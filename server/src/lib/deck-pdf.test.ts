@@ -35,6 +35,55 @@ describe('deckToPdf', () => {
     expect(doc.getTitle()).toBe('Photosynthesis')
   })
 
+  it('uses a 16:9 landscape slide page (matches the Google Slides shape)', async () => {
+    const doc = await PDFDocument.load(await deckToPdf(deck))
+    const { width, height } = doc.getPage(1).getSize()
+    expect(width).toBeGreaterThan(height) // landscape
+    expect(width / height).toBeCloseTo(16 / 9, 2)
+  })
+
+  it('draws whiteboard marks on the slide without failing', async () => {
+    const bytes = await deckToPdf({
+      title: 'Marked',
+      templateId: 'classic',
+      slides: [
+        {
+          layoutType: 'list',
+          title: 'Annotated',
+          bullets: ['a point'],
+          drawings: [
+            {
+              id: 's1',
+              tool: 'pen',
+              color: '#e11d48',
+              thickness: 0.006,
+              points: [
+                { x: 0.1, y: 0.2 },
+                { x: 0.5, y: 0.4 },
+                { x: 0.8, y: 0.3 },
+              ],
+              startedAt: '',
+              endedAt: '',
+              anchor: { charAnchor: 0, source: 'unsynced' },
+            },
+            {
+              id: 's2',
+              tool: 'highlighter',
+              color: '#facc15',
+              thickness: 0.02,
+              points: [{ x: 0.5, y: 0.5 }], // single-point tap → a dot
+              startedAt: '',
+              endedAt: '',
+              anchor: { charAnchor: 0, source: 'unsynced' },
+            },
+          ],
+        },
+      ],
+    })
+    const doc = await PDFDocument.load(bytes)
+    expect(doc.getPageCount()).toBe(2)
+  })
+
   it('embeds a slide image when one is fetchable', async () => {
     // A 1x1 PNG.
     const png = Buffer.from(

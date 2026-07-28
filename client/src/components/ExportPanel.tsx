@@ -19,16 +19,19 @@ import {
   Folder,
   FolderPlus,
   Presentation,
+  Trash2,
   X,
 } from 'lucide-react'
 import type {
   DeckExportFormat,
   DriveFolder,
   ExportDownload,
+  ExportedFile,
   ExportStatus,
   ExportToDriveResult,
   QuizConnectResult,
 } from '@slide-machine/shared'
+import { WHITEBOARD_EXPORT_FORMATS } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import Portal from './Portal'
 
@@ -348,6 +351,12 @@ export default function ExportPanel({ deckId }: Props) {
   const [destination, setDestination] = useState<Destination>('download')
   const [picking, setPicking] = useState(false)
   const [saved, setSaved] = useState<ExportToDriveResult | null>(null)
+  // Whether the deck has any freehand whiteboard marks, and whether to include
+  // them in the export (default on; only offered for the visual formats).
+  const [hasWhiteboard, setHasWhiteboard] = useState(false)
+  const [includeWhiteboard, setIncludeWhiteboard] = useState(true)
+  // Exports already saved to Drive, so they can be reopened or deleted.
+  const [exports, setExports] = useState<ExportedFile[]>([])
   // Set when the user returned from a connect that did not grant Drive access
   // (Google's granular consent — the Drive permission was unticked). A one-shot
   // signal: the flag is stripped from the URL so a refresh (or a later
@@ -373,7 +382,11 @@ export default function ExportPanel({ deckId }: Props) {
 
   useEffect(() => {
     dispatchAction<ExportStatus>('export.status', { deckId })
-      .then(s => setConnected(s.googleConnected))
+      .then(s => {
+        setConnected(s.googleConnected)
+        setHasWhiteboard(s.hasWhiteboard)
+        setExports(s.exports)
+      })
       .catch(() => setError('Could not load the export status'))
       .finally(() => setLoading(false))
   }, [deckId])
@@ -384,6 +397,11 @@ export default function ExportPanel({ deckId }: Props) {
     ? 'drive'
     : destination
   const formatLabel = chosen.label
+
+  // The include-whiteboard option is offered only when the deck actually has
+  // marks AND the chosen format can render them (PDF, Google Slides — not YAML).
+  const showWhiteboardOption =
+    hasWhiteboard && WHITEBOARD_EXPORT_FORMATS.includes(format)
 
   const connectGoogle = () => {
     setBusy(true)
@@ -419,6 +437,7 @@ export default function ExportPanel({ deckId }: Props) {
     dispatchAction<ExportDownload>('export.download', {
       deckId,
       format: format as 'pdf' | 'yaml',
+      includeWhiteboard,
     })
       .then(saveToDisk)
       .catch(() => setError('Could not export the deck — please try again'))
@@ -433,12 +452,26 @@ export default function ExportPanel({ deckId }: Props) {
       format,
       driveFolderId: folder.id,
       driveFolderName: folder.name,
+      includeWhiteboard,
     })
       .then(res => {
         setSaved(res)
+        setExports(prev => [...prev, res])
         setPicking(false)
       })
       .catch(() => setError('Could not save to Drive — please try again'))
+      .finally(() => setBusy(false))
+  }
+
+  const deleteExport = (fileId: string) => {
+    setBusy(true)
+    setError(null)
+    dispatchAction<{ deleted: boolean }>('export.delete', { deckId, fileId })
+      .then(() => {
+        setExports(prev => prev.filter(e => e.fileId !== fileId))
+        setSaved(prev => (prev?.fileId === fileId ? null : prev))
+      })
+      .catch(() => setError('Could not delete the export — please try again'))
       .finally(() => setBusy(false))
   }
 
@@ -550,6 +583,24 @@ export default function ExportPanel({ deckId }: Props) {
         </fieldset>
       )}
 
+      {/* Whiteboard marks — only when the deck has any AND the format shows them */}
+      {showWhiteboardOption && (
+        <label className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={includeWhiteboard}
+            onChange={e => setIncludeWhiteboard(e.target.checked)}
+          />
+          <span>
+            Include whiteboard markups
+            <span className="block text-xs text-slate-500">
+              Draw the freehand marks on the exported slides.
+            </span>
+          </span>
+        </label>
+      )}
+
       {saved && (
         <div className="flex flex-col gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-4">
           <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-800">
@@ -594,6 +645,39 @@ export default function ExportPanel({ deckId }: Props) {
           </p>
         )}
       </div>
+
+      {exports.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <h4 className="text-sm font-medium text-slate-700">Saved to Drive</h4>
+          <ul className="divide-y divide-slate-100 rounded-md border border-slate-200">
+            {exports.map(e => (
+              <li key={e.fileId} className="flex items-center gap-2 px-3 py-2">
+                <a
+                  href={e.fileUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="flex min-w-0 flex-1 items-center gap-1 truncate text-sm text-indigo-600 hover:underline"
+                >
+                  <span className="truncate">{e.fileName}</span>
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                </a>
+                <span className="shrink-0 text-xs uppercase text-slate-400">
+                  {e.format === 'google-slides' ? 'slides' : e.format}
+                </span>
+                <button
+                  type="button"
+                  aria-label={`Delete ${e.fileName}`}
+                  disabled={busy}
+                  onClick={() => deleteExport(e.fileId)}
+                  className="shrink-0 rounded p-1 text-slate-400 hover:text-rose-600 disabled:opacity-50"
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {picking && (
         <FolderPicker

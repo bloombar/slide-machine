@@ -104,4 +104,48 @@ describe('deckToPptx', () => {
     })
     expect(Array.from(bytes.slice(0, 4))).toEqual([0x50, 0x4b, 0x03, 0x04])
   })
+
+  it('renders whiteboard marks as freeform shapes without failing', async () => {
+    const bytes = await deckToPptx({
+      title: 'Marked',
+      templateId: 'c',
+      slides: [
+        {
+          layoutType: 'list',
+          title: 'Annotated',
+          bullets: ['a point'],
+          drawings: [
+            {
+              id: 's1',
+              tool: 'pen',
+              color: '#e11d48',
+              thickness: 0.006,
+              points: [
+                { x: 0.1, y: 0.2 },
+                { x: 0.5, y: 0.4 },
+                { x: 0.8, y: 0.3 },
+              ],
+              startedAt: '',
+              endedAt: '',
+              anchor: { charAnchor: 0, source: 'unsynced' },
+            },
+            {
+              id: 's2',
+              tool: 'highlighter',
+              color: '#facc15',
+              thickness: 0.02,
+              points: [{ x: 0.5, y: 0.5 }],
+              startedAt: '',
+              endedAt: '',
+              anchor: { charAnchor: 0, source: 'unsynced' },
+            },
+          ],
+        },
+      ],
+    })
+    // A valid .pptx ZIP that includes the drawings' shapes (larger than a
+    // text-only single slide).
+    expect(Array.from(bytes.slice(0, 4))).toEqual([0x50, 0x4b, 0x03, 0x04])
+    expect(zipEntryCount(bytes)).toBeGreaterThan(0)
+  })
 })

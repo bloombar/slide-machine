@@ -61,8 +61,12 @@ test('export a lecture to PDF download and Google Slides in Drive', async ({
   ).toBeVisible()
   await picker.getByRole('button', { name: 'Save here' }).click()
 
-  // The resulting Google Slides link appears
-  const link = dialog.locator('a[href*="docs.google.com/presentation"]')
-  await expect(link).toBeVisible()
+  // The resulting Google Slides link appears (in the confirmation and the
+  // "Saved to Drive" list), and the confirmation names the destination folder.
+  await expect(
+    dialog.locator('a[href*="docs.google.com/presentation"]').first(),
+  ).toBeVisible()
   await expect(dialog.getByText(/Saved to E2E Exports/)).toBeVisible()
+  // The saved export is listed and can be deleted.
+  await expect(dialog.getByText('Saved to Drive')).toBeVisible()
 })

@@ -9,13 +9,16 @@
  * absent rather than emitted as an empty key.
  */
 import YAML from 'yaml'
-import type { ImageAttribution } from '@slide-machine/shared'
+import type { ImageAttribution, Stroke } from '@slide-machine/shared'
 
 /** Format marker written at the top of every export, so an importer can
  * recognize the shape and its version (EXP-3). */
 export const DECK_YAML_VERSION = 1
 
-/** One slide's exportable content — a de-serialized view of the stored slide. */
+/** One slide's exportable content — a de-serialized view of the stored slide.
+ * `drawings` (freehand whiteboard marks) are carried for the visual formats
+ * (PDF, Google Slides); the YAML serializer deliberately omits them (see
+ * deckToYaml). */
 export interface ExportSlide {
   layoutType: string
   title?: string
@@ -24,6 +27,7 @@ export interface ExportSlide {
   imageRef?: string
   caption?: string
   attribution?: ImageAttribution
+  drawings?: Stroke[]
 }
 
 /** The deck-level fields captured in the export. */
