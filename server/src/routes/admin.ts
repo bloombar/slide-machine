@@ -22,6 +22,7 @@ import {
 } from 'mongoose'
 import { z } from 'zod'
 import type {
+  AdminDeckSettingsView,
   AdminLogsResponse,
   Project,
   SafeUser,
@@ -61,6 +62,7 @@ import {
   loadUser,
   rejectAdminTarget,
 } from './admin-targets'
+import { adminSettingsRouter, deckSettingsView } from './admin-settings'
 
 /** One row of the admin user directory. */
 export interface AdminUserSummary {
@@ -131,6 +133,10 @@ export interface AdminSeedLevel {
  * authorization, mirroring the always-on admin viewer bypass. */
 export interface AdminDeckDetailResponse {
   deck: AdminDeckSummary
+  /** The lecture's editable settings (ADMIN-5), kept beside the summary
+   * rather than inside it — the summary is the row type of two paginated
+   * directories, which have no use for generation settings. */
+  settings: AdminDeckSettingsView
   /** The project the lecture lives in, for the back link. */
   project: { id: string; title: string }
   /** The lecture's owner — not necessarily the project's owner. */
@@ -416,6 +422,10 @@ const inIdOrder = <T extends { _id: Types.ObjectId }>(
 
 export const adminRouter = Router()
 adminRouter.use(requireAuth, requireAdmin)
+
+// The audited settings-editing endpoints (ADMIN-5) mount here, after the
+// guards above, so they are covered by exactly the same authorization.
+adminRouter.use(adminSettingsRouter)
 
 /** Reachable only through the guards above, so 200 means "is an admin";
  * the client uses it to decide whether to show admin navigation. */
@@ -742,8 +752,10 @@ adminRouter.get('/decks/:id', async (req, res) => {
     }).sort({ createdAt: -1 }),
   ])
 
+  const acl = acls.get(deck._id.toString())!
   const body: AdminDeckDetailResponse = {
-    deck: toAdminDeckSummary(deck, acls.get(deck._id.toString())!),
+    deck: toAdminDeckSummary(deck, acl),
+    settings: deckSettingsView(deck, acl, project),
     project: { id: project._id.toString(), title: project.title },
     owner: {
       id: owner._id.toString(),
