@@ -201,12 +201,50 @@ describe('quiz actions', () => {
       driveFolderId: 'root',
       questionCount: 2,
       totalPoints: 6,
-      requireEmail: false,
+      emailCollection: 'none',
       customInstructions: 'focus on the light reactions',
       includeTranscript: true,
     })
     expect(res.status).toBe(200)
     expect(res.body.formUrl).toMatch(/forms/)
+  })
+
+  it('previews questions, publishes reviewed points, and remembers project defaults (QUIZ-2)', async () => {
+    await act(ada, 'quiz.connectGoogle')
+    // Preview: generate the questions without publishing.
+    const gen = await act(ada, 'quiz.generate', {
+      deckId,
+      questionCount: 2,
+      totalPoints: 10,
+    })
+    expect(gen.status).toBe(200)
+    expect(gen.body.questions.length).toBeGreaterThan(0)
+
+    // Publish the reviewed questions with per-question point overrides.
+    const reviewed = gen.body.questions.map(
+      (q: { points?: number }, i: number) => ({
+        ...q,
+        points: i === 0 ? 7 : 3,
+      }),
+    )
+    const pub = await act(ada, 'quiz.publish', {
+      deckId,
+      driveFolderId: 'root',
+      questionCount: 2,
+      totalPoints: 10,
+      emailCollection: 'responder_input',
+      questions: reviewed,
+    })
+    expect(pub.status).toBe(200)
+    expect(pub.body.formUrl).toMatch(/forms/)
+
+    // The used options are remembered on the project and returned by status.
+    const status = await act(ada, 'quiz.status', { deckId })
+    expect(status.body.defaults).toMatchObject({
+      questionCount: 2,
+      totalPoints: 10,
+      emailCollection: 'responder_input',
+    })
   })
 
   it('deletes the quiz and forgets it, and regeneration differs afterwards', async () => {

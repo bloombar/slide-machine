@@ -66,6 +66,12 @@ test('generate and publish a quiz from lecture settings', async ({ page }) => {
 
   await picker.getByRole('button', { name: 'Generate & save' }).click()
 
+  // Review step (QUIZ-2): the generated questions appear with editable points;
+  // publish from here.
+  const review = page.getByRole('dialog', { name: 'Review quiz questions' })
+  await expect(review).toBeVisible()
+  await review.getByRole('button', { name: 'Publish quiz' }).click()
+
   // The shareable Form URL appears with a copy button
   const link = dialog.getByRole('link', { name: /forms/ })
   await expect(link).toBeVisible()

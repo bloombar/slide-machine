@@ -3,7 +3,7 @@
  * projectDefaults per GEN-8/GEN-9.
  */
 import { Schema, model, Types, type HydratedDocument } from 'mongoose'
-import type { Project } from '@slide-machine/shared'
+import type { Project, QuizGenerationOptions } from '@slide-machine/shared'
 import { LOCALES } from '@slide-machine/shared'
 import type { ResolvedAcl } from '../lib/access'
 import { env } from '../config/env'
@@ -15,6 +15,9 @@ export interface ProjectDb extends Omit<
   ownerId: Types.ObjectId
   viewers: string[]
   editors: string[]
+  // Last-used quiz generation options, remembered so a new quiz in this
+  // project pre-fills them (QUIZ-2). Server-only; not in the Project DTO.
+  quizDefaults?: QuizGenerationOptions
   createdAt: Date
   updatedAt: Date
 }
@@ -53,6 +56,8 @@ const projectSchema = new Schema<ProjectDb>(
       default: undefined,
       _id: false,
     },
+    // Remembered quiz options (QUIZ-2); free-form, mirrors QuizGenerationOptions.
+    quizDefaults: { type: Schema.Types.Mixed, default: undefined },
   },
   // updatedAt is bumped by any save to the project's settings; project.list
   // combines it with the newest deck edit to rank projects by modification.

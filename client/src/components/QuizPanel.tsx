@@ -27,7 +27,9 @@ import type {
   DriveFolder,
   PublishedQuiz,
   QuizConnectResult,
+  QuizEmailCollection,
   QuizGenerationOptions,
+  QuizQuestion,
   QuizStatus,
 } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
@@ -53,18 +55,40 @@ const QUESTION_TYPE_FIELDS = [
 
 type TypeCounts = Record<(typeof QUESTION_TYPE_FIELDS)[number]['key'], number>
 
+/** The per-type counts to start from: the project's remembered breakdown, else
+ * its remembered count as all single-choice, else five single-choice (QUIZ-2). */
+const initialTypeCounts = (defaults?: QuizGenerationOptions): TypeCounts => {
+  const tc = defaults?.typeCounts
+  if (
+    tc &&
+    (tc.single_choice || tc.multiple_choice || tc.short_text || tc.long_text)
+  ) {
+    return {
+      single_choice: tc.single_choice ?? 0,
+      multiple_choice: tc.multiple_choice ?? 0,
+      short_text: tc.short_text ?? 0,
+      long_text: tc.long_text ?? 0,
+    }
+  }
+  const n = defaults?.questionCount ?? 5
+  return { single_choice: n, multiple_choice: 0, short_text: 0, long_text: 0 }
+}
+
 function FolderPicker({
   onCancel,
   onPublish,
   onReconnect,
   publishing,
   hasTranscript,
+  defaults,
 }: {
   onCancel: () => void
   onPublish: (folder: DriveFolder, options: QuizGenerationOptions) => void
   onReconnect: () => void
   publishing: boolean
   hasTranscript: boolean
+  /** The project's remembered quiz options, pre-filled into the form (QUIZ-2). */
+  defaults?: QuizGenerationOptions
 }) {
   // The breadcrumb; the last entry is the folder currently open (the one a
   // quiz would be saved into). Always rooted at My Drive.
@@ -81,20 +105,29 @@ function FolderPicker({
   // Generation options (QUIZ-5/QUIZ-7). The per-type counts are the source of
   // truth; "Number of questions" is simply their sum, defaulting to all
   // single-choice, so the two can never disagree.
-  const [totalPoints, setTotalPoints] = useState('')
-  const [requireEmail, setRequireEmail] = useState(true)
-  const [includeTranscript, setIncludeTranscript] = useState(false)
+  const [totalPoints, setTotalPoints] = useState(
+    defaults?.totalPoints ? String(defaults.totalPoints) : '',
+  )
+  const [emailCollection, setEmailCollection] = useState<QuizEmailCollection>(
+    defaults?.emailCollection ?? 'verified',
+  )
+  const [includeTranscript, setIncludeTranscript] = useState(
+    defaults?.includeTranscript ?? false,
+  )
   const [advanced, setAdvanced] = useState(false)
-  const [types, setTypes] = useState<TypeCounts>({
-    single_choice: 5,
-    multiple_choice: 0,
-    short_text: 0,
-    long_text: 0,
-  })
+  const [types, setTypes] = useState<TypeCounts>(() =>
+    initialTypeCounts(defaults),
+  )
   // "Number of questions" is a free-text field so it can be cleared and
   // retyped; it stays in step with the per-type counts (default all single).
-  const [countText, setCountText] = useState('5')
-  const [customInstructions, setCustomInstructions] = useState('')
+  const [countText, setCountText] = useState(() =>
+    String(
+      Object.values(initialTypeCounts(defaults)).reduce((a, b) => a + b, 0),
+    ),
+  )
+  const [customInstructions, setCustomInstructions] = useState(
+    defaults?.customInstructions ?? '',
+  )
 
   const questionCount = Object.values(types).reduce((sum, n) => sum + n, 0)
 
@@ -139,7 +172,7 @@ function FolderPicker({
   const buildOptions = (): QuizGenerationOptions => ({
     questionCount,
     totalPoints: totalPoints ? Number(totalPoints) : undefined,
-    requireEmail,
+    emailCollection,
     includeTranscript,
     typeCounts: types,
     customInstructions: customInstructions.trim() || undefined,
@@ -389,13 +422,25 @@ function FolderPicker({
 
             {advanced && (
               <div className="mt-2 flex flex-col gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={requireEmail}
-                    onChange={e => setRequireEmail(e.target.checked)}
-                  />
-                  Require a verified respondent email
+                <label className="text-sm text-slate-700">
+                  Collect respondent email
+                  <select
+                    value={emailCollection}
+                    onChange={e =>
+                      setEmailCollection(
+                        e.target.value as typeof emailCollection,
+                      )
+                    }
+                    className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
+                  >
+                    <option value="verified">
+                      Verified email (Google-checked)
+                    </option>
+                    <option value="responder_input">
+                      Responder types their email
+                    </option>
+                    <option value="none">Don’t collect email</option>
+                  </select>
                 </label>
 
                 {hasTranscript && (
@@ -493,15 +538,145 @@ function FolderPicker({
   )
 }
 
+/** Human label for a question type in the preview. */
+const TYPE_LABEL: Record<string, string> = {
+  single_choice: 'Single choice',
+  multiple_choice: 'Multiple answer',
+  short_text: 'Short answer',
+  long_text: 'Long answer',
+}
+
+/**
+ * Review-before-publish step (QUIZ-2): shows the generated questions and lets
+ * the instructor override each one's points before the Form is created.
+ */
+function QuizPreview({
+  questions,
+  folderName,
+  publishing,
+  onPublish,
+  onCancel,
+}: {
+  questions: QuizQuestion[]
+  folderName: string
+  publishing: boolean
+  onPublish: (reviewed: QuizQuestion[]) => void
+  onCancel: () => void
+}) {
+  const [edited, setEdited] = useState<QuizQuestion[]>(questions)
+  const total = edited.reduce((sum, q) => sum + (q.points ?? 0), 0)
+
+  const setPoints = (index: number, raw: string) => {
+    const points = Math.max(0, Number(raw) || 0)
+    setEdited(qs => qs.map((q, i) => (i === index ? { ...q, points } : q)))
+  }
+
+  return (
+    <Portal>
+      <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
+        <div
+          aria-hidden
+          onClick={onCancel}
+          className="absolute inset-0 bg-black/30"
+        />
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Review quiz questions"
+          className="relative flex max-h-[85vh] w-full max-w-lg flex-col rounded-lg bg-white p-6 shadow-xl"
+        >
+          <header className="mb-1 flex items-start justify-between">
+            <h2 className="text-lg font-bold">Review &amp; set points</h2>
+            <button
+              aria-label="Close"
+              onClick={onCancel}
+              className="rounded p-1 text-slate-400 hover:text-slate-700"
+            >
+              <X className="h-5 w-5" aria-hidden />
+            </button>
+          </header>
+          <p className="mb-3 text-sm text-slate-600">
+            Adjust each question’s points, then publish. Total:{' '}
+            <span className="font-medium text-slate-800">{total}</span>
+          </p>
+
+          <ol className="flex-1 space-y-3 overflow-y-auto pr-1">
+            {edited.map((q, i) => (
+              <li
+                key={i}
+                className="flex items-start gap-3 rounded-md border border-slate-200 p-3"
+              >
+                <span className="mt-0.5 text-sm font-semibold text-slate-400">
+                  {i + 1}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-slate-800">{q.question}</p>
+                  <span className="text-xs uppercase tracking-wide text-slate-400">
+                    {TYPE_LABEL[q.type] ?? q.type}
+                  </span>
+                </div>
+                <label className="shrink-0 text-xs text-slate-500">
+                  Points
+                  <input
+                    type="number"
+                    min={0}
+                    aria-label={`Points for question ${i + 1}`}
+                    value={q.points ?? 0}
+                    onChange={e => setPoints(i, e.target.value)}
+                    className="mt-0.5 w-16 rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-800"
+                  />
+                </label>
+              </li>
+            ))}
+          </ol>
+
+          <div className="mt-4 flex items-center justify-between gap-2 border-t border-slate-100 pt-4">
+            <span className="min-w-0 truncate text-xs text-slate-500">
+              Saving to:{' '}
+              <span className="font-medium text-slate-700">{folderName}</span>
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="rounded-md px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={publishing}
+                onClick={() => onPublish(edited)}
+                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              >
+                {publishing ? 'Publishing…' : 'Publish quiz'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Portal>
+  )
+}
+
 export default function QuizPanel({ deckId }: Props) {
   const [loading, setLoading] = useState(true)
   const [connected, setConnected] = useState(false)
   const [quiz, setQuiz] = useState<PublishedQuiz | undefined>(undefined)
   const [hasTranscript, setHasTranscript] = useState(false)
+  const [defaults, setDefaults] = useState<QuizGenerationOptions | undefined>(
+    undefined,
+  )
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [picking, setPicking] = useState(false)
   const [copied, setCopied] = useState(false)
+  // The generated quiz awaiting review (points editing) before it's published.
+  const [preview, setPreview] = useState<{
+    folder: DriveFolder
+    options: QuizGenerationOptions
+    questions: QuizQuestion[]
+  } | null>(null)
   // Set when the user returned from a connect that did not grant Drive access
   // (Google's granular consent — the Drive permission was unticked). A one-shot
   // signal: the flag is stripped from the URL so a refresh (or a later
@@ -531,6 +706,7 @@ export default function QuizPanel({ deckId }: Props) {
         setConnected(s.googleConnected)
         setQuiz(s.quiz)
         setHasTranscript(s.hasTranscript)
+        setDefaults(s.defaults)
       })
       .catch(() => setError('Could not load the quiz status'))
       .finally(() => setLoading(false))
@@ -565,20 +741,43 @@ export default function QuizPanel({ deckId }: Props) {
       })
   }
 
-  const publish = (folder: DriveFolder, options: QuizGenerationOptions) => {
+  // Step 1: generate the quiz (no publish yet) and open the review step so the
+  // instructor can override per-question points (QUIZ-2).
+  const startPreview = (
+    folder: DriveFolder,
+    options: QuizGenerationOptions,
+  ) => {
+    setBusy(true)
+    setError(null)
+    dispatchAction<{ questions: QuizQuestion[] }>('quiz.generate', {
+      deckId,
+      ...options,
+    })
+      .then(({ questions }) => {
+        setPreview({ folder, options, questions })
+        setPicking(false)
+      })
+      .catch(() => setError('Could not generate the quiz — please try again'))
+      .finally(() => setBusy(false))
+  }
+
+  // Step 2: publish the reviewed questions (with any point overrides) as a Form.
+  const publishReviewed = (reviewed: QuizQuestion[]) => {
+    if (!preview) return
     setBusy(true)
     setError(null)
     dispatchAction<PublishedQuiz>('quiz.publish', {
       deckId,
-      driveFolderId: folder.id,
-      driveFolderName: folder.name,
-      ...options,
+      driveFolderId: preview.folder.id,
+      driveFolderName: preview.folder.name,
+      ...preview.options,
+      questions: reviewed,
     })
       .then(q => {
         setQuiz(q)
-        setPicking(false)
+        setPreview(null)
       })
-      .catch(() => setError('Could not generate the quiz — please try again'))
+      .catch(() => setError('Could not publish the quiz — please try again'))
       .finally(() => setBusy(false))
   }
 
@@ -696,9 +895,20 @@ export default function QuizPanel({ deckId }: Props) {
         <FolderPicker
           publishing={busy}
           onCancel={() => setPicking(false)}
-          onPublish={publish}
+          onPublish={startPreview}
           onReconnect={connectGoogle}
           hasTranscript={hasTranscript}
+          defaults={defaults}
+        />
+      )}
+
+      {preview && (
+        <QuizPreview
+          questions={preview.questions}
+          folderName={preview.folder.name}
+          publishing={busy}
+          onPublish={publishReviewed}
+          onCancel={() => setPreview(null)}
         />
       )}
     </div>
