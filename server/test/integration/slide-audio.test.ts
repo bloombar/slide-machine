@@ -35,7 +35,10 @@ const act = (token: string, name: string, input: object = {}) =>
     .send(input)
 
 /** supertest parser that collects a binary response body into a Buffer. */
-const binary = (res: request.Response, cb: (err: Error | null, body: Buffer) => void) => {
+const binary = (
+  res: request.Response,
+  cb: (err: Error | null, body: Buffer) => void,
+) => {
   const chunks: Buffer[] = []
   res.on('data', (c: Buffer) => chunks.push(c))
   res.on('end', () => cb(null, Buffer.concat(chunks)))
@@ -141,7 +144,8 @@ describe('per-slide original audio', () => {
     expect(res.headers['content-type']).toMatch(/audio\/wav/)
     // The segment is [0, 500] ms, plus a 400 ms tail pad so the last word is
     // not clipped → 900 ms at 16 kHz mono 16-bit, plus the 44-byte header.
-    const expectedPcm = Math.floor((900 / 1000) * SAMPLE_RATE) * BYTES_PER_SAMPLE
+    const expectedPcm =
+      Math.floor((900 / 1000) * SAMPLE_RATE) * BYTES_PER_SAMPLE
     expect(res.body.length).toBe(44 + expectedPcm)
   })
 

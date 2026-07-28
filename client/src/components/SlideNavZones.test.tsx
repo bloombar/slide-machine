@@ -97,7 +97,11 @@ describe('SlideNavZones', () => {
 
 /** Drives a pointerdown→pointerup drag across an element. */
 const swipe = (el: Element, from: [number, number], to: [number, number]) => {
-  fireEvent.pointerDown(el, { clientX: from[0], clientY: from[1], pointerId: 1 })
+  fireEvent.pointerDown(el, {
+    clientX: from[0],
+    clientY: from[1],
+    pointerId: 1,
+  })
   fireEvent.pointerUp(el, { clientX: to[0], clientY: to[1], pointerId: 1 })
 }
 

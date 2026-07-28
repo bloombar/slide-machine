@@ -29,7 +29,9 @@ vi.mock('../storage', () => ({
 vi.mock('../providers/gemini-generation', () => ({ pingGemini }))
 vi.mock('../providers/google-cloud-transcription', () => ({ pingGoogleStt }))
 vi.mock('../providers/google-cloud-tts', () => ({ pingGoogleTts }))
-vi.mock('../providers/google-cloud-diarization', () => ({ pingGcsAudioStorage }))
+vi.mock('../providers/google-cloud-diarization', () => ({
+  pingGcsAudioStorage,
+}))
 vi.mock('./app-version', () => ({ APP_VERSION: '2026.07.18+testsha' }))
 vi.mock('../config/env', () => ({
   env: { NODE_ENV: 'test', TTS_PROVIDER: 'google-cloud' },

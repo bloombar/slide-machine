@@ -90,24 +90,36 @@ const makeSlide = async (
 
 describe('deck.reformat', () => {
   it('reformats student/mixed slides, keeps lecturer-only, protects the rest', async () => {
-    const lecturerOnly = await makeSlide(0, {
-      title: 'Photosynthesis',
-      bullets: ['Plants convert light to energy'],
-    }, [{ role: 'lecturer', text: 'Plants convert light to energy' }])
+    const lecturerOnly = await makeSlide(
+      0,
+      {
+        title: 'Photosynthesis',
+        bullets: ['Plants convert light to energy'],
+      },
+      [{ role: 'lecturer', text: 'Plants convert light to energy' }],
+    )
 
-    const mixed = await makeSlide(1, {
-      title: 'Chloroplasts',
-      bullets: ['Chloroplasts capture light'],
-    }, [
-      { role: 'lecturer', text: 'Chloroplasts capture light' },
-      { role: 'student', text: 'Is that on the exam?' },
-    ])
+    const mixed = await makeSlide(
+      1,
+      {
+        title: 'Chloroplasts',
+        bullets: ['Chloroplasts capture light'],
+      },
+      [
+        { role: 'lecturer', text: 'Chloroplasts capture light' },
+        { role: 'student', text: 'Is that on the exam?' },
+      ],
+    )
 
-    const edited = await makeSlide(2, {
-      title: 'Edited',
-      bullets: ['hand written'],
-      manuallyEdited: true,
-    }, [{ role: 'student', text: 'A question here' }])
+    const edited = await makeSlide(
+      2,
+      {
+        title: 'Edited',
+        bullets: ['hand written'],
+        manuallyEdited: true,
+      },
+      [{ role: 'student', text: 'A question here' }],
+    )
 
     // A slide with no role-tagged segments (e.g. manually added).
     const added = await SlideModel.create({
@@ -133,7 +145,9 @@ describe('deck.reformat', () => {
     expect(l?.bullets).toEqual(['Plants convert light to energy'])
 
     // Protected slides untouched.
-    expect((await SlideModel.findById(edited))?.bullets).toEqual(['hand written'])
+    expect((await SlideModel.findById(edited))?.bullets).toEqual([
+      'hand written',
+    ])
     expect((await SlideModel.findById(added))?.title).toBe('Added by hand')
   })
 

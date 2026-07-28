@@ -13,8 +13,10 @@ import type {
   WordTiming,
 } from '@slide-machine/shared'
 
-export interface TranscriptSegmentDb
-  extends Omit<TranscriptSegment, 'id' | 'deckId' | 'slideId' | 'createdAt'> {
+export interface TranscriptSegmentDb extends Omit<
+  TranscriptSegment,
+  'id' | 'deckId' | 'slideId' | 'createdAt'
+> {
   deckId: Types.ObjectId
   slideId?: Types.ObjectId
   createdAt: Date
