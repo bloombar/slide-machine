@@ -17,6 +17,7 @@ import type { ExportDeck, ExportSlide } from './deck-yaml'
 import { visibleStrokes, hexForPptx, HIGHLIGHTER_ALPHA } from './deck-drawings'
 import { fetchSlideImages, toDataUri } from './deck-image'
 import { computeLayout, type ColorRole } from './deck-layout'
+import { DEFAULT_THEME } from './deck-theme'
 
 // pptxgenjs ships as CommonJS; the interop default differs across runtimes
 // (bundled vs tsx/native ESM), so resolve the constructor from either shape.
@@ -30,11 +31,8 @@ const SLIDE_H = 5.625
 // Font sizes are a fraction of slide width; ×72pt/in × 10in = 720 gives points.
 const WIDTH_PT = SLIDE_W * 72
 
-const HEX: Record<ColorRole, string> = {
-  ink: '1C2230',
-  accent: '4A54D1',
-  muted: '6B7280',
-}
+/** A pptxgenjs hex color (no leading #, uppercase). */
+const noHash = (s: string): string => s.replace(/^#/, '').toUpperCase()
 
 type Pptx = InstanceType<typeof PptxGenJS>
 type Slide = ReturnType<Pptx['addSlide']>
@@ -44,6 +42,7 @@ const renderSlide = (
   pptx: Pptx,
   s: Slide,
   slide: ExportSlide,
+  hex: Record<ColorRole, string>,
   image?: string,
 ): void => {
   for (const box of computeLayout(slide)) {
@@ -54,7 +53,7 @@ const renderSlide = (
           fontSize: r.sizeFrac * WIDTH_PT,
           bold: r.bold,
           italic: r.italic,
-          color: HEX[r.color ?? 'ink'],
+          color: hex[r.color ?? 'ink'],
           bullet: r.bullet,
           breakLine: true,
           paraSpaceAfter: (r.spaceAfterFrac ?? 0) * WIDTH_PT,
@@ -75,7 +74,7 @@ const renderSlide = (
         y: box.y * SLIDE_H,
         w: box.w * SLIDE_W,
         h: box.h * SLIDE_H,
-        fill: { color: HEX[box.color] },
+        fill: { color: hex[box.color] },
         line: { type: 'none' },
       })
     } else if (box.kind === 'image' && image) {
@@ -149,6 +148,15 @@ export const deckToPptx = async (deck: ExportDeck): Promise<Uint8Array> => {
   pptx.title = deck.title
   pptx.layout = 'LAYOUT_16x9'
 
+  // Apply the template theme: text/accent/muted colors and the slide background.
+  const theme = deck.theme ?? DEFAULT_THEME
+  const hex: Record<ColorRole, string> = {
+    ink: noHash(theme.text),
+    accent: noHash(theme.accent),
+    muted: noHash(theme.muted),
+  }
+  const background = { color: noHash(theme.background) }
+
   // Only fetch images for slides whose layout shows one; then to data URIs.
   const layouts = deck.slides.map(computeLayout)
   const urls = deck.slides.map((slide, i) =>
@@ -158,7 +166,9 @@ export const deckToPptx = async (deck: ExportDeck): Promise<Uint8Array> => {
   const images = fetched.map(img => (img ? toDataUri(img) : undefined))
 
   deck.slides.forEach((slide, i) => {
-    renderSlide(pptx, pptx.addSlide(), slide, images[i])
+    const s = pptx.addSlide()
+    s.background = background
+    renderSlide(pptx, s, slide, hex, images[i])
   })
 
   // pptxgenjs returns a Node Buffer for the 'nodebuffer' output type.

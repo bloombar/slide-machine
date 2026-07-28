@@ -42,6 +42,8 @@ import { type DeckExportDb } from '../models/deck'
 import { deckToYaml, type ExportDeck, type ExportSlide } from '../lib/deck-yaml'
 import { deckToPdf } from '../lib/deck-pdf'
 import { visibleStrokes } from '../lib/deck-drawings'
+import { resolveTemplateTheme } from '../lib/deck-theme'
+import { getBuiltinTemplate } from '../templates/builtin'
 import {
   uploadFileToDriveLive,
   createGoogleSlidesLive,
@@ -109,9 +111,13 @@ const loadExportDeck = async (
     attribution: s.attribution,
     drawings: includeWhiteboard ? visibleStrokes(s.drawings) : undefined,
   }))
+  // Resolve the template's theme so the export carries the same colors the
+  // viewer shows (background, text, accent, muted).
+  const template = getBuiltinTemplate(deck.templateId)
   return {
     title: deck.title,
     templateId: deck.templateId,
+    theme: resolveTemplateTheme(template?.theme),
     slides,
   }
 }

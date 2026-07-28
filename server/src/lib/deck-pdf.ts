@@ -24,6 +24,7 @@ import {
 import type { ExportDeck, ExportSlide } from './deck-yaml'
 import { visibleStrokes, hexToRgb01, HIGHLIGHTER_ALPHA } from './deck-drawings'
 import { fetchSlideImages } from './deck-image'
+import { DEFAULT_THEME, type ExportTheme } from './deck-theme'
 import {
   computeLayout,
   type ColorRole,
@@ -35,11 +36,18 @@ const PX = 96
 const PAGE_WIDTH = 10 * PX // 960
 const PAGE_HEIGHT = 5.625 * PX // 540
 
-const COLORS: Record<ColorRole, Color> = {
-  ink: rgb(0.11, 0.13, 0.16),
-  accent: rgb(0.29, 0.33, 0.82),
-  muted: rgb(0.42, 0.45, 0.5),
+/** A pdf-lib color from a #hex string. */
+const hex = (s: string): Color => {
+  const c = hexToRgb01(s)
+  return rgb(c.r, c.g, c.b)
 }
+
+/** The layout color roles resolved to pdf-lib colors for a template theme. */
+const themeColors = (theme: ExportTheme): Record<ColorRole, Color> => ({
+  ink: hex(theme.text),
+  accent: hex(theme.accent),
+  muted: hex(theme.muted),
+})
 
 interface Fonts {
   regular: PDFFont
@@ -100,7 +108,7 @@ const drawTextBox = (page: PDFPage, box: TextBox): void => {
   for (const run of box.runs) {
     const size = run.sizeFrac * PAGE_WIDTH
     const font = fontFor(fonts, run)
-    const color = COLORS[run.color ?? 'ink']
+    const color = colors[run.color ?? 'ink']
     const text = (run.bullet ? '•  ' : '') + run.text
     const lineH = size * 1.32
     const wrapped = wrapLines(text, font, size, bw)
@@ -134,8 +142,9 @@ const drawTextBox = (page: PDFPage, box: TextBox): void => {
   }
 }
 
-// Set per document (embedded fonts are document-scoped).
+// Set per document (embedded fonts are document-scoped; colors are per deck).
 let fonts: Fonts
+let colors: Record<ColorRole, Color> = themeColors(DEFAULT_THEME)
 
 /** Draws a slide's boxes (image, rule, text) then its whiteboard marks. */
 const drawSlide = (
@@ -152,7 +161,7 @@ const drawSlide = (
         y: PAGE_HEIGHT - box.y * PAGE_HEIGHT - box.h * PAGE_HEIGHT,
         width: box.w * PAGE_WIDTH,
         height: box.h * PAGE_HEIGHT,
-        color: COLORS[box.color],
+        color: colors[box.color],
       })
     } else if (box.kind === 'image' && image) {
       const bw = box.w * PAGE_WIDTH
@@ -216,6 +225,10 @@ export const deckToPdf = async (deck: ExportDeck): Promise<Uint8Array> => {
     bold: await doc.embedFont(StandardFonts.HelveticaBold),
     italic: await doc.embedFont(StandardFonts.HelveticaOblique),
   }
+  // Apply the template theme: text/accent/muted colors and the page background.
+  const theme = deck.theme ?? DEFAULT_THEME
+  colors = themeColors(theme)
+  const background = hex(theme.background)
 
   // Only fetch images for slides whose layout actually shows one (content/list
   // etc. never display an image), then embed the fetched bytes.
@@ -235,9 +248,25 @@ export const deckToPdf = async (deck: ExportDeck): Promise<Uint8Array> => {
   )
 
   deck.slides.forEach((slide, i) => {
-    drawSlide(doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]), slide, images[i])
+    const page = doc.addPage([PAGE_WIDTH, PAGE_HEIGHT])
+    page.drawRectangle({
+      x: 0,
+      y: 0,
+      width: PAGE_WIDTH,
+      height: PAGE_HEIGHT,
+      color: background,
+    })
+    drawSlide(page, slide, images[i])
   })
-  if (doc.getPageCount() === 0) doc.addPage([PAGE_WIDTH, PAGE_HEIGHT])
+  if (doc.getPageCount() === 0) {
+    doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]).drawRectangle({
+      x: 0,
+      y: 0,
+      width: PAGE_WIDTH,
+      height: PAGE_HEIGHT,
+      color: background,
+    })
+  }
 
   return doc.save()
 }

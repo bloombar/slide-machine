@@ -10,6 +10,7 @@
  */
 import YAML from 'yaml'
 import type { ImageAttribution, Stroke } from '@slide-machine/shared'
+import type { ExportTheme } from './deck-theme'
 
 /** Format marker written at the top of every export, so an importer can
  * recognize the shape and its version (EXP-3). */
@@ -30,11 +31,13 @@ export interface ExportSlide {
   drawings?: Stroke[]
 }
 
-/** The deck-level fields captured in the export. */
+/** The deck-level fields captured in the export. `theme` (the template's
+ * resolved colors) drives the PDF/Slides look; the YAML serializer ignores it. */
 export interface ExportDeck {
   title: string
   templateId: string
   visibility?: string
+  theme?: ExportTheme
   slides: ExportSlide[]
 }
 
