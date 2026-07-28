@@ -1867,6 +1867,12 @@ export default function DeckViewerPage() {
             view.deck.refineSlidesLevel ?? getRefineSlidesDefaultLevel()
           }
           onRefine={options => refineSlide(refineSlideFor, options)}
+          // Refining every slide is a lecture setting, so the blurb's link
+          // swaps this dialog for the lecture's own Refine tab.
+          onOpenLectureRefine={() => {
+            setRefineSlideFor(null)
+            openSettings('refine')
+          }}
           onClose={() => setRefineSlideFor(null)}
         />
       )}

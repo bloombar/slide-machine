@@ -128,6 +128,23 @@ describe('SlideRefineModal', () => {
     expect(screen.queryByText(note)).toBeNull()
   })
 
+  it('sends the blurb link to the lecture-wide Refine settings', () => {
+    const onOpenLectureRefine = vi.fn()
+    setup({ onOpenLectureRefine })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'lecture-wide options' }),
+    )
+    expect(onOpenLectureRefine).toHaveBeenCalled()
+  })
+
+  it('names the lecture-wide options without a link when there is nowhere to go', () => {
+    setup()
+    expect(
+      screen.queryByRole('button', { name: 'lecture-wide options' }),
+    ).toBeNull()
+    expect(screen.getByText(/lecture-wide options/)).toBeInTheDocument()
+  })
+
   it('stays open and reports a failed refine', async () => {
     const onClose = vi.fn()
     render(
