@@ -1,9 +1,9 @@
 /**
  * Per-slide kebab superimposed over the slide's top-right corner
- * (replacing the old bare delete icon): a context menu with Edit spoken
- * transcript (EDIT-6, opens the transcript editor, next to Speak since
- * both act on the spoken slide), Change layout (EDIT-3, opens the layout
- * picker) and Delete slide (immediate, no confirmation). Sits above the
+ * (replacing the old bare delete icon). The items are grouped by what they act
+ * on: what the slide SAYS (Speak, Play original audio), then how it is
+ * improved or edited (Refine this slide with AI, Edit spoken transcript,
+ * Change layout), then Delete slide (immediate, no confirmation). Sits above the
  * SlideNavZones hotspots (z-10, see
  * the z-index tiers) so clicks act on the menu instead of navigating.
  */
@@ -19,7 +19,7 @@ interface Props {
   onEditTranscript?: () => void
   /** Owner-only; omitted for read-only viewers. */
   onChangeLayout?: () => void
-  /** Refine just this slide with the lecture's Refine settings (owner-only;
+  /** Open the per-slide "Refine this slide with AI" dialog (owner-only;
    * omitted when no applicable refine pass is enabled). */
   onRefine?: () => void
   /** Play this slide's original lecture audio (owner-only; omitted when no
@@ -124,7 +124,25 @@ export default function SlideMenu({
               Speak this slide
             </button>
           )}
-          {/* Sits next to Speak: both act on what the slide says aloud. */}
+          {onPlayOriginalAudio && (
+            <button
+              role="menuitem"
+              onClick={pick(onPlayOriginalAudio)}
+              className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+            >
+              Play original audio
+            </button>
+          )}
+          {onRefine && (
+            <button
+              role="menuitem"
+              onClick={pick(onRefine)}
+              className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+            >
+              Refine this slide with AI
+            </button>
+          )}
+
           {onEditTranscript && (
             <button
               role="menuitem"
@@ -141,24 +159,6 @@ export default function SlideMenu({
               className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
             >
               Change layout
-            </button>
-          )}
-          {onRefine && (
-            <button
-              role="menuitem"
-              onClick={pick(onRefine)}
-              className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
-            >
-              Refine this slide
-            </button>
-          )}
-          {onPlayOriginalAudio && (
-            <button
-              role="menuitem"
-              onClick={pick(onPlayOriginalAudio)}
-              className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
-            >
-              Play original audio
             </button>
           )}
           {onDelete && (

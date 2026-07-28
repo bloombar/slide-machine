@@ -25,6 +25,7 @@ import type {
   ImageSearchCandidate,
   Slide,
   SlideEvent,
+  SlideRefineOptions,
   Stroke,
   StrokeAnchor,
   WordTiming,
@@ -59,8 +60,10 @@ import {
 import SlideView, { type SlideContentPatch } from '../components/SlideView'
 import SlideNavZones from '../components/SlideNavZones'
 import SlideMenu from '../components/SlideMenu'
-import { useTtsPlayback } from '../tts/playback'
+import { useTtsPlayback, type TtsPlayback } from '../tts/playback'
 import {
+  getRefineSlidesDefaultLevel,
+  getSimulatedSpeechEnabled,
   getSttEngine,
   getTtsEnabled,
   getWhiteboardSuppressDebounceMs,
@@ -76,7 +79,7 @@ import { useWhiteboard } from '../components/whiteboard/useWhiteboard'
 import { themeColors } from '../components/slide/theme'
 import Tooltip from '../components/Tooltip'
 import NotificationPill from '../components/NotificationPill'
-import ConfirmDialog from '../components/ConfirmDialog'
+import SlideRefineModal from '../components/SlideRefineModal'
 import SeedDialog from '../components/SeedDialog'
 import DeckSettingsModal, {
   type SettingsTabId,
@@ -217,11 +220,8 @@ export default function DeckViewerPage() {
   const [pendingImages, setPendingImages] = useState<Set<string>>(new Set())
   // The slide currently being refined via its kebab (drives a status toast)
   const [refiningSlideId, setRefiningSlideId] = useState<string | null>(null)
-  // A marked-up slide the user asked to refine, pending confirmation — refining
-  // may reflow content out from under their annotations (WB-1).
-  const [confirmingRefineSlideId, setConfirmingRefineSlideId] = useState<
-    string | null
-  >(null)
+  // The slide whose "Refine this slide with AI" dialog is open (GEN-4).
+  const [refineSlideFor, setRefineSlideFor] = useState<string | null>(null)
   // Content-generation pause pill (WB-3): 'paused' while the user is actively
   // drawing during recording (with a Resume button to override), 'resumed' for
   // a brief confirmation after the debounce elapses or the user resumes, and
@@ -407,7 +407,13 @@ export default function DeckViewerPage() {
   )
   const inputRef = useRef<HTMLInputElement>(null)
   const pollCancelsRef = useRef<Map<string, () => void>>(new Map())
-  const nav = useSlideNavigation(view?.slides.length ?? 0, mode)
+  // Deck narration follows the user: moving slides (arrow keys or the chevron
+  // zones) while the deck is playing skips the TTS to that slide. Held in a ref
+  // because the playback controller is created below, from this nav.
+  const ttsRef = useRef<TtsPlayback | null>(null)
+  const nav = useSlideNavigation(view?.slides.length ?? 0, mode, index =>
+    ttsRef.current?.skipTo(index),
+  )
   const { setCurrent } = nav
   // Always-fresh mirror of the current slide index, so voice commands running
   // from stale mic-queue closures can tell whether the deck is at its end.
@@ -499,7 +505,11 @@ export default function DeckViewerPage() {
     }
   }, [])
 
-  // Opening the live session focuses the phrase input
+  // Debug flag: the simulated-speech box is rendered only when a server turns
+  // it on (SIMULATED_SPEECH_ENABLED), so typed phrases stay a dev affordance.
+  const simulatedSpeechEnabled = getSimulatedSpeechEnabled()
+
+  // Opening the live session focuses the phrase input (when it is shown)
   useEffect(() => {
     if (speaking) inputRef.current?.focus()
   }, [speaking])
@@ -923,6 +933,10 @@ export default function DeckViewerPage() {
         setSpeaking(false)
       }
     },
+  })
+  // Keep the mirror current so slide navigation always skips the live playback.
+  useEffect(() => {
+    ttsRef.current = tts
   })
   /** The slide the deck play button starts from: the active one per mode. */
   const activePlayIndex = (): number =>
@@ -1412,13 +1426,13 @@ export default function DeckViewerPage() {
 
   /** Refines one slide with the lecture's Refine settings, then patches it in
    * place. Runs synchronously (one slide is quick); a toast shows progress. */
-  const refineSlide = async (slideId: string) => {
+  const refineSlide = async (slideId: string, options?: SlideRefineOptions) => {
     setRefiningSlideId(slideId)
     setImageError(null)
     try {
       const res = await dispatchAction<DeckRefineSlideResult>(
         'deck.refineSlide',
-        { deckId: view.deck.id, slideId },
+        { deckId: view.deck.id, slideId, options },
       )
       // A refine that re-fits the slide onto a different layout morphs
       // like a manual layout switch (GEN-9); content-only refines stay
@@ -1445,21 +1459,12 @@ export default function DeckViewerPage() {
         commit()
       }
       touchDeckLocally()
-    } catch {
+    } catch (error) {
       setImageError('Could not refine that slide — try again')
+      // The dialog reports its own failure and stays open to retry.
+      throw error
     } finally {
       setRefiningSlideId(null)
-    }
-  }
-
-  /** Kebab "Refine this slide": if the slide carries whiteboard marks, confirm
-   * first (refining may reflow content under the annotations); else refine. */
-  const requestRefineSlide = (slideId: string) => {
-    const slide = viewRef.current?.slides.find(s => s.id === slideId)
-    if (hasVisibleDrawings(slide?.drawings)) {
-      setConfirmingRefineSlideId(slideId)
-    } else {
-      void refineSlide(slideId)
     }
   }
 
@@ -1471,6 +1476,13 @@ export default function DeckViewerPage() {
 
   // Slides whose original lecture audio the server said can be played back.
   const audioSlideIds = new Set(view.audioSlideIds ?? [])
+
+  /** Whether a slide's transcript can be re-transcribed from its recorded
+   * audio: the audio has to still be there AND the server has to hold the
+   * speech engine (the keyless browser engine only runs during a live
+   * session, so there is nothing to transcribe a recording with). */
+  const canRegenerateTranscript = (slideId: string): boolean =>
+    audioSlideIds.has(slideId) && getSttEngine() === 'google-cloud'
 
   // The slide whose spoken transcript is being edited (EDIT-6), plus its
   // 1-based number for the dialog heading. Missing (e.g. deleted meanwhile)
@@ -1670,19 +1682,27 @@ export default function DeckViewerPage() {
 
       {view.slides.length === 0 ? (
         canEdit ? (
-          <p className="text-center text-slate-400">
-            Click the{' '}
-            <Plus
-              className="inline h-4 w-4 align-text-bottom"
-              aria-label="plus"
-            />{' '}
-            or{' '}
-            <Mic
-              className="inline h-4 w-4 align-text-bottom"
-              aria-label="microphone"
-            />{' '}
-            icons to start adding content.
-          </p>
+          // With the live session open the mic is the next step, so the empty
+          // deck says so; closing it again restores the "how to start" hint.
+          speaking ? (
+            <p className="text-center text-slate-400">
+              Start speaking to generate slides
+            </p>
+          ) : (
+            <p className="text-center text-slate-400">
+              Click the{' '}
+              <Plus
+                className="inline h-4 w-4 align-text-bottom"
+                aria-label="plus"
+              />{' '}
+              or{' '}
+              <Mic
+                className="inline h-4 w-4 align-text-bottom"
+                aria-label="microphone"
+              />{' '}
+              icons to start adding content.
+            </p>
+          )
         ) : (
           <p className="text-center text-slate-400">This deck has no slides.</p>
         )
@@ -1716,7 +1736,7 @@ export default function DeckViewerPage() {
                 }
                 onRefine={
                   canEdit && slideRefineEnabled
-                    ? () => requestRefineSlide(slide!.id)
+                    ? () => setRefineSlideFor(slide!.id)
                     : undefined
                 }
                 onPlayOriginalAudio={
@@ -1768,7 +1788,7 @@ export default function DeckViewerPage() {
                     onEditTranscript={() => setTranscriptEditorFor(s.id)}
                     onRefine={
                       slideRefineEnabled
-                        ? () => requestRefineSlide(s.id)
+                        ? () => setRefineSlideFor(s.id)
                         : undefined
                     }
                     onPlayOriginalAudio={
@@ -1816,6 +1836,12 @@ export default function DeckViewerPage() {
         <TranscriptEditorModal
           slide={transcriptEditSlide}
           number={transcriptEditIndex + 1}
+          canRegenerate={canRegenerateTranscript(transcriptEditSlide.id)}
+          // Same gate the lecture's Refine settings put on the narration pass.
+          canRefine={view.deck.refineTranscriptEnabled ?? true}
+          // The app's one TTS controller, so previewing the edited text and
+          // "Speak this slide" can never play at once.
+          tts={ttsEnabled ? tts : undefined}
           onSaved={applySlide}
           onClose={() => setTranscriptEditorFor(null)}
         />
@@ -1830,17 +1856,24 @@ export default function DeckViewerPage() {
         />
       )}
 
-      {confirmingRefineSlideId && (
-        <ConfirmDialog
-          title="Refine this marked-up slide?"
-          message="This slide has whiteboard markings. Refining may change its content or layout, so your highlights and annotations may no longer line up with what's underneath."
-          confirmLabel="Refine anyway"
-          onConfirm={() => {
-            const id = confirmingRefineSlideId
-            setConfirmingRefineSlideId(null)
-            void refineSlide(id)
+      {canEdit && refineSlideFor && (
+        <SlideRefineModal
+          number={view.slides.findIndex(s => s.id === refineSlideFor) + 1 || 1}
+          marked={hasVisibleDrawings(
+            view.slides.find(s => s.id === refineSlideFor)?.drawings,
+          )}
+          hasAudio={audioSlideIds.has(refineSlideFor)}
+          defaultLevel={
+            view.deck.refineSlidesLevel ?? getRefineSlidesDefaultLevel()
+          }
+          onRefine={options => refineSlide(refineSlideFor, options)}
+          // Refining every slide is a lecture setting, so the blurb's link
+          // swaps this dialog for the lecture's own Refine tab.
+          onOpenLectureRefine={() => {
+            setRefineSlideFor(null)
+            openSettings('refine')
           }}
-          onCancel={() => setConfirmingRefineSlideId(null)}
+          onClose={() => setRefineSlideFor(null)}
         />
       )}
 
@@ -1913,31 +1946,36 @@ export default function DeckViewerPage() {
 
       {canEdit && speaking && (
         <>
-          <form
-            onSubmit={onSpeak}
-            aria-label="Live session"
-            className="mt-6 flex w-full gap-2"
-          >
-            <input
-              ref={inputRef}
-              value={phrase}
-              onChange={e => setPhrase(e.target.value)}
-              placeholder={
-                listening
-                  ? 'Listening… (you can still type)'
-                  : 'Say something about your topic…'
-              }
-              aria-label="Spoken phrase"
-              className="flex-1 rounded-lg border border-slate-300 px-4 py-3"
-            />
-            <button
-              type="submit"
-              disabled={busy}
-              className="rounded-lg bg-indigo-600 px-6 py-3 font-medium text-white disabled:opacity-50"
+          {/* Debug-only: typing phrases instead of speaking them. Hidden unless
+              the server sets SIMULATED_SPEECH_ENABLED — real STT is the path
+              users take. */}
+          {simulatedSpeechEnabled && (
+            <form
+              onSubmit={onSpeak}
+              aria-label="Live session"
+              className="mt-6 flex w-full gap-2"
             >
-              {busy ? 'Generating…' : 'Speak'}
-            </button>
-          </form>
+              <input
+                ref={inputRef}
+                value={phrase}
+                onChange={e => setPhrase(e.target.value)}
+                placeholder={
+                  listening
+                    ? 'Listening… (you can still type)'
+                    : 'Say something about your topic…'
+                }
+                aria-label="Spoken phrase"
+                className="flex-1 rounded-lg border border-slate-300 px-4 py-3"
+              />
+              <button
+                type="submit"
+                disabled={busy}
+                className="rounded-lg bg-indigo-600 px-6 py-3 font-medium text-white disabled:opacity-50"
+              >
+                {busy ? 'Generating…' : 'Speak'}
+              </button>
+            </form>
+          )}
           {interim && (
             <p
               aria-live="polite"

@@ -39,7 +39,10 @@ vi.mock('@google-cloud/storage', () => ({
     bucket() {
       return {
         getFiles: getFilesMock,
-        file: () => ({ save: vi.fn(), delete: vi.fn().mockResolvedValue(null) }),
+        file: () => ({
+          save: vi.fn(),
+          delete: vi.fn().mockResolvedValue(null),
+        }),
       }
     }
   },
@@ -152,7 +155,9 @@ describe('pingGcsAudioStorage', () => {
 
   it('reports bucket missing on a 404', async () => {
     envOverride.GCS_AUDIO_BUCKET = 'ghost-bucket'
-    getFilesMock.mockRejectedValue(Object.assign(new Error('no bucket'), { code: 404 }))
+    getFilesMock.mockRejectedValue(
+      Object.assign(new Error('no bucket'), { code: 404 }),
+    )
     expect(await pingGcsAudioStorage()).toEqual({
       status: 'down',
       detail: 'bucket missing',
@@ -161,7 +166,9 @@ describe('pingGcsAudioStorage', () => {
 
   it('reports unreachable on any other failure', async () => {
     envOverride.GCS_AUDIO_BUCKET = 'audio-bucket'
-    getFilesMock.mockRejectedValue(Object.assign(new Error('network'), { code: 500 }))
+    getFilesMock.mockRejectedValue(
+      Object.assign(new Error('network'), { code: 500 }),
+    )
     expect(await pingGcsAudioStorage()).toEqual({
       status: 'down',
       detail: 'unreachable',

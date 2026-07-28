@@ -17,8 +17,7 @@ import { requireAuth } from '../middleware/auth'
 import { HttpError } from '../middleware/error'
 import { SlideModel, toSlideDto } from '../models/slide'
 import { DeckModel, loadDeckAcl } from '../models/deck'
-import { TranscriptSegmentModel } from '../models/transcript-segment'
-import { pcmToWav } from '../lib/wav'
+import { buildSlideAudio, slideAudioWav } from '../lib/slide-audio'
 import { SeedAssetModel } from '../models/seed-asset'
 import { keywordsFromName } from '../seeding/extract'
 import { searchImageCandidates } from '../enrichment/search'
@@ -192,69 +191,22 @@ slidesRouter.post(
   },
 )
 
-// A retained session WAV is exactly pcmToWav(pcm, rate): a canonical 44-byte
-// header followed by 16-bit mono little-endian PCM (2 bytes/sample).
-const WAV_HEADER_BYTES = 44
-const BYTES_PER_SAMPLE = 2
-// Word-end timestamps tend to land slightly before the sound actually stops, so
-// each segment's tail is extended by this much (clamped to the recording) to
-// avoid clipping the last word.
-const TAIL_PAD_MS = 400
-
 /**
- * Plays back a slide's original lecture audio (GEN-4): stitches the retained
- * recording audio for each of the slide's timed transcript segments, in speech
- * order, into one WAV. Edit access only — it holds student voices. Segments
- * whose recording has aged out are skipped; a 404 means none remain.
+ * Plays back a slide's original lecture audio (GEN-4): the slide's retained
+ * segments stitched into one WAV (see lib/slide-audio, shared with
+ * re-transcription). Edit access only — it holds student voices. A 404 means no
+ * audio remains for the slide.
  */
 slidesRouter.get('/slides/:slideId/audio', requireAuth, async (req, res) => {
   const { slide, deck } = await loadEditableSlide(
     String(req.params.slideId),
     req.userId,
   )
-  // The recording (audio blob) still retained for each session, by sessionId.
-  const recBySession = new Map(
-    (deck.recordings ?? []).map(r => [r.sessionId, r]),
-  )
-  const segments = await TranscriptSegmentModel.find({
-    deckId: deck._id,
-    slideId: slide._id,
-    startMs: { $ne: null },
-  }).sort({ createdAt: 1 })
-
-  const storage = getStorage()
-  const wavCache = new Map<string, Buffer | null>()
-  const slices: Buffer[] = []
-  let sampleRate = 0
-  for (const seg of segments) {
-    const rec = seg.sessionId ? recBySession.get(seg.sessionId) : undefined
-    if (!rec) continue
-    if (!wavCache.has(rec.audioKey))
-      wavCache.set(rec.audioKey, await storage.get(rec.audioKey))
-    const wav = wavCache.get(rec.audioKey)
-    if (!wav) continue
-
-    // Segment times are session-absolute ms into this recording's PCM body.
-    const pcm = wav.subarray(WAV_HEADER_BYTES)
-    const toByte = (ms: number): number =>
-      Math.max(
-        0,
-        Math.min(Math.floor((ms / 1000) * rec.sampleRate) * BYTES_PER_SAMPLE, pcm.length),
-      )
-    const start = toByte(seg.startMs as number)
-    // Pad the tail so the last word is never cut off (clamped in toByte).
-    const end =
-      seg.endMs != null ? toByte(seg.endMs + TAIL_PAD_MS) : pcm.length
-    if (end > start) {
-      slices.push(pcm.subarray(start, end))
-      if (!sampleRate) sampleRate = rec.sampleRate
-    }
-  }
-
-  if (!slices.length) {
+  const audio = await buildSlideAudio(deck, slide)
+  if (!audio) {
     throw new HttpError(404, 'not_found', 'No original audio for this slide')
   }
   res.setHeader('Content-Type', 'audio/wav')
   res.setHeader('Cache-Control', 'private, no-store')
-  res.send(pcmToWav(Buffer.concat(slices), sampleRate))
+  res.send(slideAudioWav(audio))
 })

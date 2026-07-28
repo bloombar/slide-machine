@@ -12,11 +12,7 @@ export interface SlideReformatPlan {
   slideId: string
   decision: ReformatDecision
   /** Why — for logging and the run summary. */
-  reason:
-    | 'lecturer-only'
-    | 'has-student'
-    | 'manually-edited'
-    | 'no-transcript'
+  reason: 'lecturer-only' | 'has-student' | 'manually-edited' | 'no-transcript'
 }
 
 /** The slide fields the plan needs. */
@@ -40,11 +36,19 @@ export const planReformat = (
 ): SlideReformatPlan[] =>
   slides.map(slide => {
     if (slide.manuallyEdited)
-      return { slideId: slide.id, decision: 'protected', reason: 'manually-edited' }
+      return {
+        slideId: slide.id,
+        decision: 'protected',
+        reason: 'manually-edited',
+      }
 
     const roles = rolesBySlide.get(slide.id) ?? []
     if (!roles.length)
-      return { slideId: slide.id, decision: 'protected', reason: 'no-transcript' }
+      return {
+        slideId: slide.id,
+        decision: 'protected',
+        reason: 'no-transcript',
+      }
 
     if (roles.includes('student'))
       return { slideId: slide.id, decision: 'reformat', reason: 'has-student' }

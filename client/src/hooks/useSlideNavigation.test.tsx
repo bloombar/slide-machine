@@ -24,8 +24,16 @@ const placeRect = (el: HTMLElement, top: number, height: number) => {
     }) as DOMRect
 }
 
-function Harness({ mode, count = 3 }: { mode: ViewMode; count?: number }) {
-  const nav = useSlideNavigation(count, mode)
+function Harness({
+  mode,
+  count = 3,
+  onNavigate,
+}: {
+  mode: ViewMode
+  count?: number
+  onNavigate?: (index: number) => void
+}) {
+  const nav = useSlideNavigation(count, mode, onNavigate)
   return (
     <div>
       <span data-testid="current">{nav.current}</span>
@@ -67,6 +75,29 @@ describe('useSlideNavigation', () => {
     fireEvent.keyDown(window, { key: 'ArrowRight' })
 
     expect(scrolled).toHaveBeenCalled()
+  })
+
+  // Deck TTS listens here to skip the narration along with the slides.
+  it('reports the index each move lands on', () => {
+    const onNavigate = vi.fn()
+    render(<Harness mode="carousel" onNavigate={onNavigate} />)
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' })
+    expect(onNavigate).toHaveBeenLastCalledWith(1)
+    fireEvent.click(screen.getByText('next'))
+    expect(onNavigate).toHaveBeenLastCalledWith(2)
+    fireEvent.keyDown(window, { key: 'ArrowLeft' })
+    expect(onNavigate).toHaveBeenLastCalledWith(1)
+    expect(onNavigate).toHaveBeenCalledTimes(3)
+  })
+
+  it('reports nothing when a move is clamped at a bound', () => {
+    const onNavigate = vi.fn()
+    render(<Harness mode="carousel" count={1} onNavigate={onNavigate} />)
+
+    fireEvent.keyDown(window, { key: 'ArrowLeft' })
+    fireEvent.keyDown(window, { key: 'ArrowRight' })
+    expect(onNavigate).not.toHaveBeenCalled()
   })
 
   it('does not scroll in carousel mode', () => {

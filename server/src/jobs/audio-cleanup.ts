@@ -35,7 +35,9 @@ export const sweepExpiredRecordings = async (
   const cutoff = new Date(now - olderThanDays * DAY_MS)
   const storage = getStorage()
 
-  const decks = await DeckModel.find({ 'recordings.createdAt': { $lt: cutoff } })
+  const decks = await DeckModel.find({
+    'recordings.createdAt': { $lt: cutoff },
+  })
   let removed = 0
   for (const deck of decks) {
     const expired = (deck.recordings ?? []).filter(r => r.createdAt < cutoff)
@@ -43,10 +45,7 @@ export const sweepExpiredRecordings = async (
       try {
         await storage.delete(rec.audioKey)
       } catch (error) {
-        console.error(
-          `Audio cleanup: failed to delete ${rec.audioKey}:`,
-          error,
-        )
+        console.error(`Audio cleanup: failed to delete ${rec.audioKey}:`, error)
       }
     }
     await DeckModel.updateOne(
@@ -55,7 +54,8 @@ export const sweepExpiredRecordings = async (
     )
     removed += expired.length
   }
-  if (removed) console.log(`Audio cleanup: removed ${removed} expired recording(s)`)
+  if (removed)
+    console.log(`Audio cleanup: removed ${removed} expired recording(s)`)
   return removed
 }
 

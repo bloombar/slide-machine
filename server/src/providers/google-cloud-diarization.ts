@@ -90,7 +90,8 @@ export const wordsToSpeakerSegments = (
   const out: DiarizedSpeakerSegment[] = []
   for (const w of timed) {
     const last = out[out.length - 1]
-    if (last && last.speaker === w.speaker) last.endMs = Math.max(last.endMs, w.endMs)
+    if (last && last.speaker === w.speaker)
+      last.endMs = Math.max(last.endMs, w.endMs)
     else out.push({ speaker: w.speaker, startMs: w.startMs, endMs: w.endMs })
   }
   return out
@@ -192,7 +193,8 @@ export const pingGcsAudioStorage = async (): Promise<HealthComponent> => {
   if (!bucket) {
     return {
       status: 'disabled',
-      detail: env.STORAGE_PROVIDER === 'local' ? 'local storage' : 'blob storage',
+      detail:
+        env.STORAGE_PROVIDER === 'local' ? 'local storage' : 'blob storage',
     }
   }
   try {
@@ -205,7 +207,9 @@ export const pingGcsAudioStorage = async (): Promise<HealthComponent> => {
     // which such an account lacks, so it would 403 and read as a false
     // 'unreachable' even though the bucket works. Listing one object exercises
     // the access the app actually uses and stays read-only.
-    await storage.bucket(bucket).getFiles({ maxResults: 1, autoPaginate: false })
+    await storage
+      .bucket(bucket)
+      .getFiles({ maxResults: 1, autoPaginate: false })
     return { status: 'ok', detail: 'connected' }
   } catch (err) {
     // A missing bucket is a real misconfiguration; anything else (network, auth)

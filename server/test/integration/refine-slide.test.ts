@@ -3,11 +3,23 @@
  * (deck.refineSlide, GEN-4): it refines one slide using the lecture's persisted
  * Refine settings (which passes are on + their levels), leaves every other
  * slide untouched, keeps TTS narration in-line, protects hand-edited slides,
- * and gates on edit access. MongoDB real; mock providers.
+ * and gates on edit access. Also covers deck.refineSlideTranscript, the
+ * transcript editor's narration-only refine, which shares that pass and level.
+ * MongoDB real; mock providers.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  vi,
+} from 'vitest'
 import request from 'supertest'
+import type { GenerationProvider } from '@slide-machine/shared'
 import { env } from '../../src/config/env'
+import { registry } from '../../src/providers/registry'
 import { connectMongo, disconnectMongo } from '../../src/db/mongoose'
 import { createApp } from '../../src/app'
 import { UserModel } from '../../src/models/user'
@@ -253,6 +265,154 @@ describe('deck.refineSlide', () => {
     expect(t?.drawings?.[0]?.erasedAnchor?.charAnchor).toBe(30)
   })
 
+  // The per-slide dialog sends what THIS run should do; the lecture's saved
+  // settings only apply when it sends nothing.
+  describe('with per-run options', () => {
+    it('refines only the parts asked for', async () => {
+      const { target } = await seedSlides()
+      const gen = registry.get<GenerationProvider>('generation')
+      const refine = vi.spyOn(gen, 'refineSlide')
+
+      await act(ada, 'deck.refineSlide', {
+        deckId,
+        slideId: target,
+        options: { parts: { text: true, layout: false, imagery: false } },
+      })
+
+      // Text without layout: the model is offered only the slide's current
+      // layout, so it writes into the slots that slide actually has.
+      const offered = refine.mock.calls[0]![0].layoutDescriptors
+      expect(offered.map(d => d.type)).toEqual(['content'])
+      const t = await SlideModel.findById(target)
+      expect(t?.caption).toBe(
+        `Refined (level ${env.REFINE_SLIDES_DEFAULT_LEVEL})`,
+      )
+      expect(t?.layoutType).toBe('content')
+      refine.mockRestore()
+    })
+
+    it('never calls the model when only imagery is asked for', async () => {
+      const { target } = await seedSlides()
+      const gen = registry.get<GenerationProvider>('generation')
+      const refine = vi.spyOn(gen, 'refineSlide')
+
+      const res = await act(ada, 'deck.refineSlide', {
+        deckId,
+        slideId: target,
+        options: { parts: { text: false, layout: false, imagery: true } },
+      })
+
+      expect(res.status).toBe(200)
+      // Enrichment falls back to the slide's own keywords, so nothing is
+      // billed for text that would be discarded.
+      expect(refine).not.toHaveBeenCalled()
+      const t = await SlideModel.findById(target)
+      expect(t?.caption).toBeUndefined() // words untouched
+      refine.mockRestore()
+    })
+
+    it('applies one slider to both the content and narration passes', async () => {
+      const { target } = await seedSlides()
+      const gen = registry.get<GenerationProvider>('generation')
+      const refine = vi.spyOn(gen, 'refineSlide')
+      const narrate = vi.spyOn(gen, 'narrateSlide')
+
+      await act(ada, 'deck.refineSlide', {
+        deckId,
+        slideId: target,
+        options: { refineTranscript: true, level: 5 },
+      })
+
+      expect(refine).toHaveBeenLastCalledWith(
+        expect.objectContaining({ level: 5 }),
+      )
+      expect(narrate).toHaveBeenLastCalledWith(
+        expect.objectContaining({ level: 5 }),
+      )
+      refine.mockRestore()
+      narrate.mockRestore()
+    })
+
+    it('skips the content pass when no part is selected', async () => {
+      const { target } = await seedSlides()
+      const res = await act(ada, 'deck.refineSlide', {
+        deckId,
+        slideId: target,
+        options: {
+          parts: { text: false, layout: false, imagery: false },
+          refineTranscript: true,
+        },
+      })
+
+      expect(res.body.refined).toBe(false)
+      expect(res.body.narrationUpdated).toBe(true)
+      const t = await SlideModel.findById(target)
+      expect(t?.caption).toBeUndefined()
+    })
+
+    it('identifies speakers from this slide’s own recording and reframes it', async () => {
+      const { target, other } = await seedSlides()
+      // A recording plus a student turn on the target slide only.
+      await DeckModel.updateOne(
+        { _id: deckId },
+        {
+          $push: {
+            recordings: {
+              sessionId: 'rec-1',
+              audioKey: `audio/${deckId}/rec-1.wav`,
+              sampleRate: 16_000,
+              durationMs: 620_000,
+              createdAt: new Date(),
+            },
+          },
+        },
+      )
+      // The mock diarizer puts speaker 2 (a student) in the 600–620s window.
+      await TranscriptSegmentModel.create({
+        deckId,
+        sessionId: 'rec-1',
+        text: 'Is this on the exam?',
+        action: 'none',
+        slideId: target,
+        startMs: 605_000,
+        endMs: 610_000,
+        words: [{ word: 'Is', startMs: 605_000, endMs: 610_000 }],
+      })
+
+      const res = await act(ada, 'deck.refineSlide', {
+        deckId,
+        slideId: target,
+        options: {
+          identifySpeakers: true,
+          parts: { text: false, layout: false, imagery: false },
+        },
+      })
+
+      expect(res.status).toBe(200)
+      expect(res.body.reframed).toBe(true)
+      // The slide's segment is now tagged, and its narration attributes the
+      // student rather than stating it as fact.
+      const seg = await TranscriptSegmentModel.findOne({ slideId: target })
+      expect(seg?.role).toBe('student')
+      const t = await SlideModel.findById(target)
+      expect(t?.sourceTranscript).toMatch(/^A student asked:/)
+      // Only this slide was touched.
+      const o = await SlideModel.findById(other)
+      expect(o?.sourceTranscript).toBeUndefined()
+    })
+
+    it('reports no reframing when the slide has no retained audio', async () => {
+      const { target } = await seedSlides()
+      const res = await act(ada, 'deck.refineSlide', {
+        deckId,
+        slideId: target,
+        options: { identifySpeakers: true },
+      })
+      expect(res.status).toBe(200)
+      expect(res.body.reframed).toBe(false)
+    })
+  })
+
   it('gates on edit access and slide ownership', async () => {
     const { target } = await seedSlides()
     const bob = await registerUser('bob@example.com')
@@ -280,5 +440,155 @@ describe('deck.refineSlide', () => {
         })
       ).status,
     ).toBe(403)
+  })
+})
+
+/**
+ * The transcript editor's "Refine" button runs the same narration pass, at the
+ * same strength, but hands the text back instead of writing it.
+ */
+describe('deck.refineSlideTranscript', () => {
+  it('returns the refined narration without touching the slide', async () => {
+    const { target } = await seedSlides()
+    await SlideModel.updateOne(
+      { _id: target },
+      { sourceTranscript: 'The original spoken words.' },
+    )
+
+    const res = await act(ada, 'deck.refineSlideTranscript', {
+      deckId,
+      slideId: target,
+    })
+    expect(res.status).toBe(200)
+    expect(res.body.transcript).toBe('The original spoken words. (refined)')
+    // Nothing is saved until the user accepts it in the editor.
+    expect(res.body.slide).toBeUndefined()
+    const t = await SlideModel.findById(target)
+    expect(t?.sourceTranscript).toBe('The original spoken words.')
+    // And the content pass never runs — this refines the narration only.
+    expect(t?.caption).toBeUndefined()
+  })
+
+  it('writes it, and re-anchors whiteboard marks, when asked to save', async () => {
+    const { target } = await seedSlides()
+    await SlideModel.updateOne(
+      { _id: target },
+      {
+        sourceTranscript: 'Photosynthesis rocks', // 20 chars → 30 refined
+        drawings: [
+          {
+            id: 'stroke-1',
+            tool: 'pen',
+            color: '#1e293b',
+            thickness: 0.01,
+            points: [{ x: 0.2, y: 0.3 }],
+            startedAt: '2026-07-21T10:00:00.000Z',
+            endedAt: '2026-07-21T10:00:01.000Z',
+            anchor: { charAnchor: 10, source: 'word' },
+          },
+        ],
+      },
+    )
+
+    const res = await act(ada, 'deck.refineSlideTranscript', {
+      deckId,
+      slideId: target,
+      save: true,
+    })
+    expect(res.body.slide.sourceTranscript).toBe(
+      'Photosynthesis rocks (refined)',
+    )
+    const t = await SlideModel.findById(target)
+    expect(t?.sourceTranscript).toBe('Photosynthesis rocks (refined)')
+    // Proportional re-anchor, as on every other transcript rewrite: 10/20 → 15/30.
+    expect(t?.drawings?.[0]?.anchor.charAnchor).toBe(15)
+  })
+
+  // The strength comes from the lecture's transcript slider, else the server
+  // default — there is no project tier for refine settings.
+  it("refines at the lecture's saved transcript level, else the default", async () => {
+    const { target } = await seedSlides()
+    const gen = registry.get<GenerationProvider>('generation')
+    const narrate = vi.spyOn(gen, 'narrateSlide')
+
+    await act(ada, 'deck.refineSlideTranscript', { deckId, slideId: target })
+    expect(narrate).toHaveBeenLastCalledWith(
+      expect.objectContaining({ level: env.REFINE_TRANSCRIPT_DEFAULT_LEVEL }),
+    )
+
+    await act(ada, 'deck.setRefineSettings', { deckId, transcriptLevel: 4 })
+    await act(ada, 'deck.refineSlideTranscript', { deckId, slideId: target })
+    expect(narrate).toHaveBeenLastCalledWith(
+      expect.objectContaining({ level: 4 }),
+    )
+
+    // The same level the kebab "Refine this slide" narrates at.
+    await act(ada, 'deck.refineSlide', { deckId, slideId: target })
+    expect(narrate).toHaveBeenLastCalledWith(
+      expect.objectContaining({ level: 4 }),
+    )
+    narrate.mockRestore()
+  })
+
+  it('frames the narration as a question for a student slide', async () => {
+    const { target } = await seedSlides()
+    await TranscriptSegmentModel.create({
+      deckId,
+      sessionId: 'rec-1',
+      text: 'Is this on the exam?',
+      action: 'none',
+      slideId: target,
+      role: 'student',
+      startMs: 0,
+      endMs: 1000,
+      words: [{ word: 'Is', startMs: 0, endMs: 1000 }],
+    })
+
+    const res = await act(ada, 'deck.refineSlideTranscript', {
+      deckId,
+      slideId: target,
+    })
+    expect(res.body.transcript).toMatch(/^A student asked:/)
+  })
+
+  it('always produces a rewrite, even when the background pass would skip', async () => {
+    const { target } = await seedSlides()
+    await TranscriptSegmentModel.create({
+      deckId,
+      sessionId: 'rec-1',
+      text: 'Is this on the exam?',
+      action: 'none',
+      slideId: target,
+      role: 'student',
+      startMs: 0,
+      endMs: 1000,
+      words: [{ word: 'Is', startMs: 0, endMs: 1000 }],
+    })
+    // A full refine records the idempotency hash, which makes the background
+    // pass skip this slide next time.
+    await act(ada, 'deck.refineSlide', { deckId, slideId: target })
+    const second = await act(ada, 'deck.refineSlide', {
+      deckId,
+      slideId: target,
+    })
+    expect(second.body.narrationUpdated).toBe(false)
+
+    // The user clicked Refine, so they get text back regardless.
+    const res = await act(ada, 'deck.refineSlideTranscript', {
+      deckId,
+      slideId: target,
+    })
+    expect(res.status).toBe(200)
+    expect(res.body.transcript).toMatch(/^A student asked:/)
+  })
+
+  it('gates on edit access', async () => {
+    const { target } = await seedSlides()
+    const bob = await registerUser('bob@example.com')
+    const res = await act(bob, 'deck.refineSlideTranscript', {
+      deckId,
+      slideId: target,
+    })
+    expect(res.status).toBe(403)
   })
 })

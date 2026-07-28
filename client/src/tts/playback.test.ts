@@ -1,7 +1,8 @@
 /**
  * Unit tests for the TTS playback controller with a fake Audio element and a
  * mocked synth call: starting playback stops the mic, the deck auto-advances
- * when a clip ends, and the toolbar toggle pauses/resumes.
+ * when a clip ends, the toolbar toggle pauses/resumes, and the next slide's
+ * audio is prefetched into memory so transitions don't stall.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
@@ -34,12 +35,39 @@ class FakeAudio {
 
 const slides = [{ id: 's1' }, { id: 's2' }] as Slide[]
 
+/** Blob URLs the fake object-URL factory has handed out, newest last. */
+let created: string[] = []
+let revoked: string[] = []
+const realCreate = URL.createObjectURL
+const realRevoke = URL.revokeObjectURL
+
+/** Makes downloading a clip into memory work, as it does in a browser: fetch
+ * returns bytes and object URLs are handed out as `blob:1`, `blob:2`, ... */
+const stubBlobUrls = () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => ({ ok: true, blob: async () => new Blob(['audio']) })),
+  )
+  URL.createObjectURL = vi.fn(() => {
+    const url = `blob:${created.length + 1}`
+    created.push(url)
+    return url
+  })
+  URL.revokeObjectURL = vi.fn((url: string) => void revoked.push(url))
+}
+
 beforeEach(() => {
   audios.length = 0
+  created = []
+  revoked = []
   mockedSynth.mockReset()
   vi.stubGlobal('Audio', FakeAudio)
 })
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  URL.createObjectURL = realCreate
+  URL.revokeObjectURL = realRevoke
+})
 
 const setup = () => {
   const navigate = vi.fn()
@@ -87,6 +115,70 @@ describe('useTtsPlayback', () => {
     await waitFor(() => expect(hook.result.current.status).toBe('idle'))
   })
 
+  it('skipTo moves deck playback to the navigated slide', async () => {
+    mockedSynth.mockImplementation(async (id: string) => ({
+      url: `url-${id}`,
+      marks: [],
+    }))
+    const { hook, navigate } = setup()
+
+    act(() => hook.result.current.playDeck(0))
+    await waitFor(() => expect(audios[0]?.src).toBe('url-s1'))
+
+    // Arrow key forward: the narration jumps rather than finishing slide 1.
+    act(() => hook.result.current.skipTo(1))
+    await waitFor(() => expect(audios[0]!.src).toBe('url-s2'))
+    expect(hook.result.current.activeIndex).toBe(1)
+    await waitFor(() => expect(hook.result.current.status).toBe('playing'))
+
+    // ...and back again, so arrowing left replays the previous transcript.
+    act(() => hook.result.current.skipTo(0))
+    await waitFor(() => expect(audios[0]!.src).toBe('url-s1'))
+    expect(navigate).toHaveBeenLastCalledWith(0)
+
+    // Playback continues from the slide skipped to.
+    act(() => audios[0]!.end())
+    await waitFor(() => expect(audios[0]!.src).toBe('url-s2'))
+  })
+
+  it('skipTo keeps a paused deck paused, cueing the new slide', async () => {
+    mockedSynth.mockImplementation(async (id: string) => ({
+      url: `url-${id}`,
+      marks: [],
+    }))
+    const { hook } = setup()
+
+    act(() => hook.result.current.playDeck(0))
+    await waitFor(() => expect(hook.result.current.status).toBe('playing'))
+    act(() => hook.result.current.pauseResume())
+    expect(hook.result.current.status).toBe('paused')
+
+    act(() => hook.result.current.skipTo(1))
+    await waitFor(() => expect(audios[0]!.src).toBe('url-s2'))
+    expect(hook.result.current.status).toBe('paused')
+
+    act(() => hook.result.current.pauseResume())
+    expect(hook.result.current.status).toBe('playing')
+  })
+
+  it('skipTo is ignored unless the deck is playing', async () => {
+    mockedSynth.mockResolvedValue({ url: 'u1', marks: [] })
+    const { hook, navigate } = setup()
+
+    // Nothing playing at all.
+    act(() => hook.result.current.skipTo(1))
+    expect(mockedSynth).not.toHaveBeenCalled()
+    expect(navigate).not.toHaveBeenCalled()
+
+    // A single slide's narration is not tied to where the deck is.
+    act(() => hook.result.current.speakSlide(slides[0]!))
+    await waitFor(() => expect(hook.result.current.status).toBe('playing'))
+    mockedSynth.mockClear()
+    act(() => hook.result.current.skipTo(1))
+    expect(mockedSynth).not.toHaveBeenCalled()
+    expect(hook.result.current.scope).toBe('slide')
+  })
+
   it('toggle pauses and resumes deck playback', async () => {
     mockedSynth.mockResolvedValue({ url: 'u', marks: [] })
     const { hook } = setup()
@@ -100,6 +192,66 @@ describe('useTtsPlayback', () => {
 
     act(() => hook.result.current.toggle(0))
     expect(hook.result.current.status).toBe('playing')
+  })
+
+  // The transcript editor's preview (EDIT-6) runs on this same controller, so
+  // it cannot play over a slide or the deck.
+  it('speaks supplied text without navigating, and idles when it ends', async () => {
+    mockedSynth.mockResolvedValue({ url: 'preview', marks: [] })
+    const { hook, navigate, stopMic } = setup()
+
+    act(() => hook.result.current.speakText(slides[0]!, 'Unsaved words.'))
+    expect(stopMic).toHaveBeenCalled()
+    await waitFor(() => expect(audios[0]?.src).toBe('preview'))
+    expect(mockedSynth).toHaveBeenCalledWith(
+      slides[0]!.id,
+      'transcript',
+      'Unsaved words.',
+    )
+    // The editor is open over the slide; the preview is about the words.
+    expect(navigate).not.toHaveBeenCalled()
+    expect(hook.result.current.scope).toBe('text')
+    // No active slide, so whiteboard stroke sync never runs off a preview.
+    expect(hook.result.current.getProgress()).toBeNull()
+
+    act(() => audios[0]!.end())
+    expect(hook.result.current.status).toBe('idle')
+  })
+
+  it('ignores a request to speak nothing', () => {
+    const { hook, stopMic } = setup()
+    act(() => hook.result.current.speakText(slides[0]!, '   '))
+    expect(mockedSynth).not.toHaveBeenCalled()
+    expect(stopMic).not.toHaveBeenCalled()
+    expect(hook.result.current.status).toBe('idle')
+  })
+
+  it('a preview silences whatever was already speaking', async () => {
+    mockedSynth.mockResolvedValue({ url: 'u', marks: [] })
+    const { hook } = setup()
+
+    act(() => hook.result.current.playDeck(0))
+    await waitFor(() => expect(hook.result.current.status).toBe('playing'))
+
+    act(() => hook.result.current.speakText(slides[0]!, 'Unsaved words.'))
+    expect(audios[0]!.pause).toHaveBeenCalled()
+    await waitFor(() => expect(hook.result.current.scope).toBe('text'))
+  })
+
+  it('pauseResume pauses and resumes a preview', async () => {
+    mockedSynth.mockResolvedValue({ url: 'preview', marks: [] })
+    const { hook } = setup()
+
+    act(() => hook.result.current.speakText(slides[0]!, 'Unsaved words.'))
+    await waitFor(() => expect(hook.result.current.status).toBe('playing'))
+
+    act(() => hook.result.current.pauseResume())
+    expect(hook.result.current.status).toBe('paused')
+    expect(audios[0]!.pause).toHaveBeenCalled()
+
+    act(() => hook.result.current.pauseResume())
+    expect(hook.result.current.status).toBe('playing')
+    expect(hook.result.current.scope).toBe('text')
   })
 
   it('exposes the active clip marks + time through getProgress', async () => {
@@ -119,5 +271,114 @@ describe('useTtsPlayback', () => {
     expect(progress?.currentTime).toBe(2.5)
     expect(progress?.duration).toBe(10)
     expect(progress?.marks).toEqual(marks)
+  })
+
+  // The gap between slides was a synth round trip plus a download, both
+  // starting only once the previous clip ended. They now happen during it.
+  describe('prefetching the next slide', () => {
+    const deckSynth = () =>
+      mockedSynth.mockImplementation(async (id: string) => ({
+        url: `url-${id}`,
+        marks: [],
+      }))
+
+    it('synthesizes the next slide while the current one plays', async () => {
+      deckSynth()
+      const { hook } = setup()
+
+      act(() => hook.result.current.playDeck(0))
+      await waitFor(() => expect(audios[0]?.src).toBe('url-s1'))
+      // Slide 2 is fetched without waiting for slide 1 to finish.
+      await waitFor(() =>
+        expect(mockedSynth).toHaveBeenCalledWith('s2', 'transcript'),
+      )
+
+      mockedSynth.mockClear()
+      act(() => audios[0]!.end())
+      await waitFor(() => expect(audios[0]!.src).toBe('url-s2'))
+      // ...and the transition plays it rather than fetching it again.
+      expect(mockedSynth).not.toHaveBeenCalled()
+    })
+
+    it('stops prefetching at the last slide', async () => {
+      deckSynth()
+      const { hook } = setup()
+
+      act(() => hook.result.current.playDeck(0))
+      await waitFor(() => expect(audios[0]?.src).toBe('url-s1'))
+      await waitFor(() => expect(mockedSynth).toHaveBeenCalledTimes(2))
+
+      act(() => audios[0]!.end())
+      await waitFor(() => expect(audios[0]!.src).toBe('url-s2'))
+      // Two slides, two synth calls — nothing fetched past the end.
+      expect(mockedSynth).toHaveBeenCalledTimes(2)
+
+      act(() => audios[0]!.end())
+      await waitFor(() => expect(hook.result.current.status).toBe('idle'))
+      expect(mockedSynth).toHaveBeenCalledTimes(2)
+    })
+
+    it('plays clips from memory and frees them as it goes', async () => {
+      deckSynth()
+      stubBlobUrls()
+      const { hook } = setup()
+
+      act(() => hook.result.current.playDeck(0))
+      // The element plays the downloaded bytes, not the server URL.
+      await waitFor(() => expect(audios[0]?.src).toBe('blob:1'))
+      expect(fetch).toHaveBeenCalledWith('url-s1')
+      await waitFor(() => expect(created).toHaveLength(2)) // slide 2 warmed
+
+      act(() => audios[0]!.end())
+      await waitFor(() => expect(audios[0]!.src).toBe('blob:2'))
+      expect(revoked).toContain('blob:1') // the spent clip is released
+
+      act(() => audios[0]!.end())
+      await waitFor(() => expect(hook.result.current.status).toBe('idle'))
+      expect(revoked).toContain('blob:2')
+    })
+
+    it('frees a prefetched clip that never gets played', async () => {
+      deckSynth()
+      stubBlobUrls()
+      const { hook } = setup()
+
+      act(() => hook.result.current.playDeck(0))
+      await waitFor(() => expect(created).toHaveLength(2))
+
+      act(() => hook.result.current.stop())
+      await waitFor(() => expect(revoked).toContain('blob:2'))
+    })
+
+    it('reuses the warmed clip when the user skips to that slide', async () => {
+      deckSynth()
+      const { hook } = setup()
+
+      act(() => hook.result.current.playDeck(0))
+      await waitFor(() =>
+        expect(mockedSynth).toHaveBeenCalledWith('s2', 'transcript'),
+      )
+
+      mockedSynth.mockClear()
+      act(() => hook.result.current.skipTo(1))
+      await waitFor(() => expect(audios[0]!.src).toBe('url-s2'))
+      expect(mockedSynth).not.toHaveBeenCalled()
+    })
+
+    it('falls back to the server URL when the bytes cannot be fetched', async () => {
+      deckSynth()
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => {
+          throw new Error('blocked')
+        }),
+      )
+      const { hook } = setup()
+
+      act(() => hook.result.current.playDeck(0))
+      // The element downloads it itself, as before — playback still works.
+      await waitFor(() => expect(audios[0]?.src).toBe('url-s1'))
+      await waitFor(() => expect(hook.result.current.status).toBe('playing'))
+    })
   })
 })

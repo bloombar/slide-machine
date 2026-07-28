@@ -23,6 +23,8 @@ import type {
   DeckRefineResult,
   DeckRefineSlideInput,
   DeckRefineSlideResult,
+  DeckRefineSlideTranscriptInput,
+  DeckRefineSlideTranscriptResult,
   DeckRefineStatusInput,
   DeckRefineStatusResult,
   DiarizationProvider,
@@ -31,10 +33,12 @@ import type {
   LayoutType,
   ReformatTurn,
   SlideContent,
+  SlideRefineParts,
   SpeakerRole,
   Stroke,
 } from '@slide-machine/shared'
 import { remapDrawingAnchors } from './remap-drawings'
+import { applySlideTranscript } from '../lib/slide-transcript'
 import { defineAction } from './define'
 import { registerAction, ActionForbiddenError } from './dispatch'
 import { loadEditableDeck } from './deck'
@@ -50,6 +54,7 @@ import { assignSpeakers } from '../lib/diarization-join'
 import { mapSpeakerRoles } from '../lib/speaker-roles'
 import { planReformat } from '../lib/reformat-plan'
 import { layoutHasImageSlot } from '../lib/image-layout'
+import { layoutDisplaysContent } from '../lib/layout-refit'
 import { enrichSlideImage } from '../enrichment/enrich'
 import type { SlideImageContext } from '../enrichment/types'
 import { deriveImageKeywords } from '../enrichment/keywords'
@@ -155,11 +160,22 @@ const studentSlideIds = async (
   return new Set(segs.filter(s => s.slideId).map(s => s.slideId!.toString()))
 }
 
-/** Diarizes each retained recording and tags its segments with speaker + role. */
+/**
+ * Diarizes retained recordings and tags their segments with speaker + role.
+ * `onlySessions` narrows the work to the recordings a single slide's speech
+ * came from (the per-slide dialog); roles are still decided from each WHOLE
+ * recording's talk-time, which is what makes "the lecturer is whoever talks
+ * most" hold — on one slide's audio alone a student could out-talk the
+ * lecturer. Tagging is idempotent, so a later deck-wide run costs nothing extra.
+ */
 const diarizeDeckRecordings = async (
   deck: DeckDoc,
+  onlySessions?: Set<string>,
 ): Promise<DeckDiarizeResult> => {
-  const recordings = deck.recordings ?? []
+  const all = deck.recordings ?? []
+  const recordings = onlySessions
+    ? all.filter(r => onlySessions.has(r.sessionId))
+    : all
   if (!recordings.length) return { sessionsProcessed: 0, segmentsTagged: 0 }
 
   const provider = registry.get<DiarizationProvider>('diarization')
@@ -247,21 +263,27 @@ const narrateHash = (
     .digest('hex')
 
 /** Reformats student/mixed slides in place; returns counts + which slides now
- * represent student speech (so their narration is framed accordingly). */
+ * represent student speech (so their narration is framed accordingly).
+ * `onlySlideId` scopes the pass to one slide for the per-slide dialog — the
+ * planning and reformatting are identical, just over a shorter list. */
 const reformatStudentSlides = async (
   deck: DeckDoc,
   descriptors: LayoutDescriptor[],
   gen: GenerationProvider,
+  onlySlideId?: string,
 ): Promise<{
   reframed: number
   kept: number
   protectedCount: number
   studentSlideIds: Set<string>
 }> => {
-  const [slides, turnMap] = await Promise.all([
+  const [allSlides, turnMap] = await Promise.all([
     SlideModel.find({ deckId: deck._id }).sort({ index: 1 }),
     turnsBySlide(deck._id),
   ])
+  const slides = onlySlideId
+    ? allSlides.filter(s => s._id.toString() === onlySlideId)
+    : allSlides
 
   const rolesBySlide = new Map<string, SpeakerRole[]>(
     [...turnMap].map(([sid, ts]) => [sid, ts.map(t => t.role)]),
@@ -341,12 +363,37 @@ export const deckReformat = defineAction<DeckReformatInput, DeckReformatResult>(
 
 registerAction(deckReformat)
 
+/** Refine everything about a slide — what an unqualified content pass means. */
+const ALL_PARTS: Required<SlideRefineParts> = {
+  text: true,
+  layout: true,
+  imagery: true,
+}
+
+/** Fills in the omitted parts as "yes", so callers can pass a partial (or
+ * nothing) and get the whole-slide behavior. */
+const resolveParts = (
+  parts?: SlideRefineParts,
+): Required<SlideRefineParts> => ({
+  text: parts?.text ?? ALL_PARTS.text,
+  layout: parts?.layout ?? ALL_PARTS.layout,
+  imagery: parts?.imagery ?? ALL_PARTS.imagery,
+})
+
 /**
- * Refines one slide's content in place — the shared body of both the
- * whole-lecture refine loop and the single-slide "Refine this slide" action.
- * Hand-edited slides are protected (returns false, untouched). On success it
- * applies the new content, saves, and sources an image if the refined layout
- * opened an empty image slot.
+ * Refines one slide's content in place — the shared body of the whole-lecture
+ * refine loop, the "Refine this slide" dialog, and anything later that refines
+ * a slide. Hand-edited slides are protected (returns false, untouched).
+ *
+ * `parts` narrows what may change, and each part is honored at the point it can
+ * be honored honestly:
+ *  - text without layout: the model is offered ONLY the slide's current layout,
+ *    so it writes to the slots (and budgets) the slide actually has.
+ *  - layout without text: the model's layout is taken only if it still displays
+ *    every populated slot (the same guard delta updates use, GEN-8) — a layout
+ *    switch must never make committed content vanish.
+ *  - imagery alone needs no generation call: enrichment falls back to the
+ *    slide's own keywords, so nothing is billed for text that is discarded.
  */
 const refineOneSlide = async (
   slide: SlideDoc,
@@ -354,27 +401,119 @@ const refineOneSlide = async (
   deck: DeckDoc,
   descriptors: LayoutDescriptor[],
   gen: GenerationProvider,
+  parts?: SlideRefineParts,
 ): Promise<boolean> => {
   if (slide.manuallyEdited) return false
-  const result = await gen.refineSlide({
-    current: contentOf(slide),
-    level,
-    layoutDescriptors: descriptors,
-    language: deck.language,
-    seedContext: { deck: deck.seedContext },
-    // The slide's current transcript as source material (original spoken words
-    // on the first refine, previously-refined narration on later ones).
-    transcript: slide.sourceTranscript,
-  })
-  applyContent(slide, result)
-  await slide.save()
-  await enrichRefinedSlideImage(
-    slide,
-    result.imageGuidance?.keywords,
-    deck,
-    descriptors,
-  )
+  const want = resolveParts(parts)
+  if (!want.text && !want.layout && !want.imagery) return false
+
+  // Only the text/layout passes need the model; imagery-only skips the call.
+  const offered = want.layout
+    ? descriptors
+    : descriptors.filter(d => d.type === slide.layoutType)
+  const result =
+    want.text || want.layout
+      ? await gen.refineSlide({
+          current: contentOf(slide),
+          level,
+          layoutDescriptors: offered,
+          language: deck.language,
+          seedContext: { deck: deck.seedContext },
+          // The slide's current transcript as source material (original spoken
+          // words on the first refine, previously-refined narration on later
+          // ones).
+          transcript: slide.sourceTranscript,
+        })
+      : null
+
+  if (result) {
+    if (want.text && want.layout) {
+      applyContent(slide, result)
+    } else if (want.text) {
+      // Layout is the user's; only the words change.
+      applyContent(slide, { ...result, layoutType: slide.layoutType })
+    } else if (
+      layoutDisplaysContent(
+        result.layoutType,
+        // The image counts: a layout with no image slot would hide it.
+        { ...contentOf(slide), hasImage: Boolean(slide.imageRef) },
+        descriptors,
+      )
+    ) {
+      // Layout only: keep every word, move the slide to the better layout.
+      slide.layoutType = result.layoutType
+    }
+    await slide.save()
+  }
+
+  if (want.imagery)
+    await enrichRefinedSlideImage(
+      slide,
+      result?.imageGuidance?.keywords,
+      deck,
+      descriptors,
+    )
   return true
+}
+
+/**
+ * How strongly a lecture's spoken narration is refined: its own slider when
+ * set, else the server default. There is no project-level refine setting, so
+ * these are the only two tiers.
+ */
+const transcriptRefineLevel = (deck: DeckDoc): number =>
+  deck.refineTranscriptLevel ?? env.REFINE_TRANSCRIPT_DEFAULT_LEVEL
+
+/**
+ * Generates one slide's refined narration WITHOUT writing it — the single place
+ * the narration prompt is built, shared by the whole-lecture pass, the
+ * single-slide refine, and the transcript editor's preview. Returns null when
+ * the idempotency guard says nothing changed (unless `force`, i.e. a user asked
+ * for this refine outright and expects a result).
+ */
+const refinedNarration = async (
+  slide: SlideDoc,
+  level: number,
+  studentContext: boolean,
+  deck: DeckDoc,
+  gen: GenerationProvider,
+  turns?: ReformatTurn[],
+  force = false,
+): Promise<{ transcript: string; hash?: string } | null> => {
+  // Only a slide that actually mixes in student speech takes the turns path —
+  // there is nothing to attribute on a lecturer-only slide, so it keeps the
+  // legacy narration-refine behavior. The turns still include the lecturer's
+  // spans, so they stay authoritative around the attributed student ones.
+  const attributeTurns = turns?.some(t => t.role === 'student')
+    ? turns
+    : undefined
+  // Turns path is idempotent: the narration is a pure function of the role
+  // turns + level + language, so skip (and don't re-bill) when nothing changed
+  // since the last run. The legacy path always re-narrates.
+  const hash = attributeTurns
+    ? narrateHash(attributeTurns, level, deck.language)
+    : undefined
+  if (
+    !force &&
+    hash &&
+    slide.narrateInputHash === hash &&
+    slide.sourceTranscript
+  )
+    return null
+  const result = await gen.narrateSlide({
+    slide: contentOf(slide),
+    level,
+    studentContext,
+    language: deck.language,
+    // With student turns, regenerate from the ordered turns (span-level
+    // attribution woven at speaker switches) so nothing compounds; otherwise
+    // refine the existing narration further, so repeated refines keep improving
+    // it.
+    ...(attributeTurns
+      ? { turns: attributeTurns }
+      : { transcript: slide.sourceTranscript }),
+  })
+  return { transcript: result.transcript, ...(hash ? { hash } : {}) }
 }
 
 /**
@@ -390,41 +529,22 @@ const narrateOneSlide = async (
   gen: GenerationProvider,
   turns?: ReformatTurn[],
 ): Promise<boolean> => {
-  // Only a slide that actually mixes in student speech takes the turns path —
-  // there is nothing to attribute on a lecturer-only slide, so it keeps the
-  // legacy narration-refine behavior. The turns still include the lecturer's
-  // spans, so they stay authoritative around the attributed student ones.
-  const attributeTurns = turns?.some(t => t.role === 'student')
-    ? turns
-    : undefined
-  // Turns path is idempotent: the narration is a pure function of the role
-  // turns + level + language, so skip (and don't re-bill) when nothing changed
-  // since the last run. The legacy path always re-narrates.
-  const hash = attributeTurns
-    ? narrateHash(attributeTurns, level, deck.language)
-    : undefined
-  if (hash && slide.narrateInputHash === hash && slide.sourceTranscript)
-    return false
-  const result = await gen.narrateSlide({
-    slide: contentOf(slide),
+  const narration = await refinedNarration(
+    slide,
     level,
     studentContext,
-    language: deck.language,
-    // With student turns, regenerate from the ordered turns (span-level
-    // attribution woven at speaker switches) so nothing compounds; otherwise
-    // refine the existing narration further, so repeated refines keep improving
-    // it.
-    ...(attributeTurns
-      ? { turns: attributeTurns }
-      : { transcript: slide.sourceTranscript }),
-  })
+    deck,
+    gen,
+    turns,
+  )
+  if (!narration) return false
   // Whiteboard stroke timing is anchored to the narration (WB-2); a wholesale
   // rewrite would strand it, so re-anchor each stroke's draw + erase anchors to
   // the conceptually-closest phrase of the new narration.
   const oldTranscript = slide.sourceTranscript ?? ''
-  slide.sourceTranscript = result.transcript
+  slide.sourceTranscript = narration.transcript
   await remapSlideDrawings(slide, oldTranscript, slide.sourceTranscript, gen)
-  if (hash) slide.narrateInputHash = hash
+  if (narration.hash) slide.narrateInputHash = narration.hash
   await slide.save()
   return true
 }
@@ -498,6 +618,10 @@ const runRefine = async (
             deck,
             descriptors,
             gen,
+            // The lecture-wide UI has no text/layout/imagery split yet, so this
+            // is normally absent (= refine everything); the pass is ready for
+            // one the day it grows the checkboxes.
+            input.refineSlides.parts,
           )
           if (refined) {
             changed.add(slide._id.toString())
@@ -570,7 +694,16 @@ export const deckRefine = defineAction<DeckRefineInput, DeckRefineResult>({
     deckId: z.string().min(1),
     identifySpeakers: z.boolean().optional(),
     refineSlides: z
-      .object({ level: z.number().int().min(1).max(5) })
+      .object({
+        level: z.number().int().min(1).max(5),
+        parts: z
+          .object({
+            text: z.boolean().optional(),
+            layout: z.boolean().optional(),
+            imagery: z.boolean().optional(),
+          })
+          .optional(),
+      })
       .optional(),
     refineTranscript: z
       .object({ level: z.number().int().min(1).max(5) })
@@ -610,11 +743,54 @@ export const deckRefineStatus = defineAction<
 
 registerAction(deckRefineStatus)
 
+/** The recording sessions a slide's speech came from, for per-slide
+ * diarization. Empty when the slide has no timed segments. */
+const slideSessionIds = async (
+  deck: DeckDoc,
+  slide: SlideDoc,
+): Promise<Set<string>> => {
+  const segments = await TranscriptSegmentModel.find({
+    deckId: deck._id,
+    slideId: slide._id,
+    startMs: { $ne: null },
+  })
+  return new Set(
+    segments.map(s => s.sessionId).filter((id): id is string => Boolean(id)),
+  )
+}
+
 /**
- * deck.refineSlide — the "Refine this slide" kebab action. Refines a single
- * slide using the lecture's persisted Refine settings: the content pass (at the
- * lecture's slides level) and/or the narration pass (at its transcript level).
- * Diarization is deck-wide, so the "identify speakers" pass never applies here.
+ * Identifies who spoke on ONE slide: diarizes the recording(s) its speech came
+ * from, then reframes just that slide if students spoke on it. Roles come from
+ * whole-recording talk-time (see diarizeDeckRecordings), so the lecturer is
+ * still identified correctly even on a slide a student dominated. Returns
+ * whether the slide was reframed; false when it has no retained audio.
+ */
+const identifySpeakersForSlide = async (
+  deck: DeckDoc,
+  slide: SlideDoc,
+  descriptors: LayoutDescriptor[],
+  gen: GenerationProvider,
+): Promise<boolean> => {
+  const sessions = await slideSessionIds(deck, slide)
+  if (!sessions.size) return false
+  await diarizeDeckRecordings(deck, sessions)
+  const { reframed } = await reformatStudentSlides(
+    deck,
+    descriptors,
+    gen,
+    slide._id.toString(),
+  )
+  return reframed > 0
+}
+
+/**
+ * deck.refineSlide — the "Refine this slide with AI" kebab action, driven by
+ * that dialog's options: identify speakers, the content pass narrowed to any of
+ * text/layout/imagery, the narration pass, all at one chosen strength. Omitting
+ * `options` falls back to the lecture's persisted Refine settings, which is how
+ * the kebab behaved before the dialog existed.
+ *
  * Runs synchronously (one slide is quick) and returns the refreshed slide.
  * Whenever the content changes, the narration is re-generated too, so TTS
  * playback stays in-line with the slide.
@@ -627,10 +803,24 @@ export const deckRefineSlide = defineAction<
   input: z.object({
     deckId: z.string().min(1),
     slideId: z.string().min(1),
+    options: z
+      .object({
+        identifySpeakers: z.boolean().optional(),
+        parts: z
+          .object({
+            text: z.boolean().optional(),
+            layout: z.boolean().optional(),
+            imagery: z.boolean().optional(),
+          })
+          .optional(),
+        refineTranscript: z.boolean().optional(),
+        level: z.number().int().min(1).max(5).optional(),
+      })
+      .optional(),
   }),
   execute: async (ctx, input) => {
     const { deck } = await loadEditableDeck(ctx, input.deckId)
-    const slide = await SlideModel.findOne({
+    let slide = await SlideModel.findOne({
       _id: input.slideId,
       deckId: deck._id,
     })
@@ -640,22 +830,38 @@ export const deckRefineSlide = defineAction<
     const descriptors = template ? layoutDescriptors(template) : []
     const gen = registry.get<GenerationProvider>('generation')
 
-    // The lecture's persisted settings, each falling back to its default.
-    const slidesEnabled = deck.refineSlidesEnabled ?? true
-    const transcriptEnabled = deck.refineTranscriptEnabled ?? true
+    // This run's choices, each falling back to the lecture's saved setting.
+    const options = input.options
+    const parts = options?.parts
+    const contentEnabled = options
+      ? Object.values(resolveParts(parts)).some(Boolean)
+      : (deck.refineSlidesEnabled ?? true)
+    const transcriptEnabled =
+      options?.refineTranscript ?? deck.refineTranscriptEnabled ?? true
+    // One slider drives both passes when the dialog sets it.
     const slidesLevel =
-      deck.refineSlidesLevel ?? env.REFINE_SLIDES_DEFAULT_LEVEL
-    const transcriptLevel =
-      deck.refineTranscriptLevel ?? env.REFINE_TRANSCRIPT_DEFAULT_LEVEL
+      options?.level ??
+      deck.refineSlidesLevel ??
+      env.REFINE_SLIDES_DEFAULT_LEVEL
+    const transcriptLevel = options?.level ?? transcriptRefineLevel(deck)
 
-    const refined = slidesEnabled
-      ? await refineOneSlide(slide, slidesLevel, deck, descriptors, gen)
+    // Speakers first: reframing rewrites the slide's content, so the content
+    // and narration passes below should act on the reframed version.
+    let reframed: boolean | undefined
+    if (options?.identifySpeakers) {
+      reframed = await identifySpeakersForSlide(deck, slide, descriptors, gen)
+      // Reformatting saved through its own document; re-read before refining.
+      slide = (await SlideModel.findById(slide._id)) ?? slide
+    }
+
+    const refined = contentEnabled
+      ? await refineOneSlide(slide, slidesLevel, deck, descriptors, gen, parts)
       : false
 
     // Re-narrate when the transcript pass is on, or whenever the content
     // changed, so TTS playback stays in-line with the slide.
     let narrationUpdated = false
-    if (transcriptEnabled || refined) {
+    if (transcriptEnabled || refined || reframed) {
       const [studentIds, turnMap] = await Promise.all([
         studentSlideIds(deck._id),
         turnsBySlide(deck._id),
@@ -671,11 +877,72 @@ export const deckRefineSlide = defineAction<
       )
     }
 
-    if (refined || narrationUpdated) await touchDeck(deck._id)
+    if (refined || narrationUpdated || reframed) await touchDeck(deck._id)
     // Re-read so the DTO reflects any image enrichment saved during the pass.
     const fresh = (await SlideModel.findById(slide._id)) ?? slide
-    return { slide: toSlideDto(fresh), refined, narrationUpdated }
+    return {
+      slide: toSlideDto(fresh),
+      refined,
+      narrationUpdated,
+      ...(reframed === undefined ? {} : { reframed }),
+    }
   },
 })
 
 registerAction(deckRefineSlide)
+
+/**
+ * deck.refineSlideTranscript — refines ONE slide's spoken narration and hands
+ * the text back, the transcript editor's "Refine" button (EDIT-6). It runs the
+ * same narration pass as the kebab "Refine this slide" and the lecture-wide
+ * Refine tab, at the same strength (the lecture's transcript slider, else the
+ * server default), so all three produce the same kind of rewrite.
+ *
+ * By default nothing is written: the user reviews the result in the editor and
+ * saves it themselves. `save: true` applies it (re-anchoring whiteboard marks),
+ * which is what a refine-every-transcript pass would want. Unlike the
+ * background pass this never skips on the idempotency guard — the user asked
+ * for a rewrite and must get one.
+ */
+export const deckRefineSlideTranscript = defineAction<
+  DeckRefineSlideTranscriptInput,
+  DeckRefineSlideTranscriptResult
+>({
+  name: 'deck.refineSlideTranscript',
+  input: z.object({
+    deckId: z.string().min(1),
+    slideId: z.string().min(1),
+    save: z.boolean().optional(),
+  }),
+  execute: async (ctx, input) => {
+    const { deck } = await loadEditableDeck(ctx, input.deckId)
+    const slide = await SlideModel.findOne({
+      _id: input.slideId,
+      deckId: deck._id,
+    })
+    if (!slide) throw new ActionForbiddenError()
+
+    const gen = registry.get<GenerationProvider>('generation')
+    const [studentIds, turnMap] = await Promise.all([
+      studentSlideIds(deck._id),
+      turnsBySlide(deck._id),
+    ])
+    const sid = slide._id.toString()
+    const narration = await refinedNarration(
+      slide,
+      transcriptRefineLevel(deck),
+      studentIds.has(sid),
+      deck,
+      gen,
+      turnMap.get(sid),
+      true,
+    )
+    const transcript = narration?.transcript ?? slide.sourceTranscript ?? ''
+    const saved = input.save
+      ? await applySlideTranscript(slide, transcript)
+      : false
+    return { transcript, ...(saved ? { slide: toSlideDto(slide) } : {}) }
+  },
+})
+
+registerAction(deckRefineSlideTranscript)

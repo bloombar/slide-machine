@@ -41,7 +41,7 @@ test('speak-to-slides core loop, session to permalink playback', async ({
     .fill('Photosynthesis')
   await page.keyboard.press('Enter')
   await page.getByRole('button', { name: 'Lecture settings' }).click()
-  await page.getByRole('tab', { name: 'Design template' }).click()
+  await page.getByRole('tab', { name: 'Design' }).click()
   await page.getByRole('radio', { name: /midnight/i }).click()
   await page.getByRole('button', { name: 'Close settings' }).click()
 

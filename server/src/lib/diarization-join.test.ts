@@ -49,7 +49,9 @@ describe('assignSpeakers', () => {
   })
 
   it('returns nothing when there is no diarization', () => {
-    expect(assignSpeakers([{ id: 'a', startMs: 0, endMs: 10 }], []).size).toBe(0)
+    expect(assignSpeakers([{ id: 'a', startMs: 0, endMs: 10 }], []).size).toBe(
+      0,
+    )
   })
 
   it('breaks an exact overlap tie toward the lowest speaker id', () => {

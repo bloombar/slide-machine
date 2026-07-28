@@ -253,9 +253,7 @@ export const attachAudioSocket = (server: Server): WebSocketServer => {
 
     void verifyAccessToken(token)
       .then(({ userId }) => {
-        wss.handleUpgrade(req, socket, head, ws =>
-          handleConnection(ws, userId),
-        )
+        wss.handleUpgrade(req, socket, head, ws => handleConnection(ws, userId))
       })
       .catch(() => rejectUpgrade(socket, 401, 'Unauthorized'))
   })

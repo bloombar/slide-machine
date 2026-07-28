@@ -46,10 +46,13 @@ const serverEnv = (over: Record<string, string>): Record<string, string> => ({
   GENERATION_VOICE_COMMANDS: 'true',
   // Layout re-fit on updates (layout-refit.spec), pinned hermetically
   GENERATION_LAYOUT_REFIT: 'true',
+  // The simulated-speech box is a debug affordance, off for real users; specs
+  // type phrases into it instead of speaking, so e2e turns it on.
+  SIMULATED_SPEECH_ENABLED: 'true',
   ...over,
 })
 
-const STT_SPEC = /google-stt\.spec\.ts/
+const STT_SPEC = /(google-stt|regenerate-transcript)\.spec\.ts/
 
 export default defineConfig({
   testDir: './tests',
@@ -102,6 +105,9 @@ export default defineConfig({
         PORT: String(STT_PORT),
         STORAGE_LOCAL_DIR: '.uploads-e2e-stt',
         TRANSCRIPTION_PROVIDER: 'mock',
+        // Keeps each session's audio, which is what a slide is re-transcribed
+        // from (regenerate-transcript.spec).
+        AUDIO_RETENTION_ENABLED: 'true',
       }),
     },
   ],
