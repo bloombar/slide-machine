@@ -100,21 +100,28 @@ const footerText = (slide: ExportSlide): string =>
 /** Whether a slide has any caption/attribution footer to show. */
 const hasFooter = (slide: ExportSlide): boolean => footerText(slide).length > 0
 
-const captionBox = (slide: ExportSlide, y: number): LayoutBox[] =>
-  hasFooter(slide)
-    ? [
-        {
-          kind: 'text',
-          x: 0.06,
-          y,
-          w: 0.88,
-          h: 1 - y - 0.02,
-          align: 'center',
-          valign: 'top',
-          runs: [{ text: footerText(slide), sizeFrac: 0.02, color: 'muted' }],
-        },
-      ]
-    : []
+/** The caption + attribution as a small, muted line tucked directly beneath the
+ * image (matching the image's column, not the whole slide), so it reads as a
+ * figure credit rather than a banner across the bottom (IMG-5). */
+const captionBox = (
+  slide: ExportSlide,
+  img: { x: number; y: number; w: number; h: number },
+): LayoutBox[] => {
+  if (!hasFooter(slide)) return []
+  const y = img.y + img.h + 0.015
+  return [
+    {
+      kind: 'text',
+      x: img.x,
+      y,
+      w: img.w,
+      h: Math.max(0, 1 - y - 0.01),
+      align: 'center',
+      valign: 'top',
+      runs: [{ text: footerText(slide), sizeFrac: 0.011, color: 'muted' }],
+    },
+  ]
+}
 
 /**
  * Computes the layout boxes for a slide. `hasImage` says whether an image was
@@ -196,19 +203,19 @@ export const computeLayout = (slide: ExportSlide): LayoutBox[] => {
         },
       ]
 
-    case 'image-heavy':
-      return [
-        {
-          kind: 'image',
-          x: 0.04,
-          y: 0.04,
-          w: 0.92,
-          h: hasFooter(slide) ? 0.82 : 0.9,
-        },
-        ...captionBox(slide, 0.88),
-      ]
+    case 'image-heavy': {
+      const img = {
+        x: 0.04,
+        y: 0.04,
+        w: 0.92,
+        h: hasFooter(slide) ? 0.82 : 0.9,
+      }
+      return [{ kind: 'image', ...img }, ...captionBox(slide, img)]
+    }
 
-    case 'two-column':
+    case 'two-column': {
+      // Image size is fixed; the tiny credit line tucks in the space beneath.
+      const img = { x: 0.52, y: 0.1, w: 0.42, h: 0.72 }
       return [
         {
           kind: 'text',
@@ -220,9 +227,10 @@ export const computeLayout = (slide: ExportSlide): LayoutBox[] => {
           valign: 'middle',
           runs: [...titleRun(slide, 0.04, 'accent'), ...bodyRuns(slide, 0.025)],
         },
-        { kind: 'image', x: 0.52, y: 0.1, w: 0.42, h: 0.72 },
-        ...captionBox(slide, 0.88),
+        { kind: 'image', ...img },
+        ...captionBox(slide, img),
       ]
+    }
 
     case 'list':
     case 'content':
@@ -246,6 +254,7 @@ export const computeLayout = (slide: ExportSlide): LayoutBox[] => {
       // Unknown layout: a safe general arrangement — title, then body/bullets,
       // with the image on the right if the slide has one.
       const hasImg = Boolean(slide.imageRef)
+      const img = { x: 0.58, y: 0.13, w: 0.36, h: 0.74 }
       return [
         {
           kind: 'text',
@@ -260,10 +269,10 @@ export const computeLayout = (slide: ExportSlide): LayoutBox[] => {
             ...bodyRuns(slide, 0.028),
           ],
         },
+        // The image and its credit only when the slide actually has one.
         ...(hasImg
-          ? [{ kind: 'image' as const, x: 0.58, y: 0.13, w: 0.36, h: 0.74 }]
+          ? [{ kind: 'image' as const, ...img }, ...captionBox(slide, img)]
           : []),
-        ...captionBox(slide, 0.9),
       ]
     }
   }
