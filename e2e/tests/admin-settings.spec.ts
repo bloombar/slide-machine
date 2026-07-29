@@ -1,10 +1,10 @@
 /**
  * E2E settings editing against the built app (ADMIN-5): the allowlisted
- * admin opens another user's project and lecture in the product view and
- * edits their settings in the owner's own settings modal — confirmed
- * once, banner shown, values surviving a reload, and both edits landing
- * in the audit log. The admin console pages themselves no longer carry a
- * settings editor.
+ * admin edits another user's account details in the console, and their
+ * project and lecture settings in the product view, in the owner's own
+ * settings modal — each confirmed once, banner shown, values surviving a
+ * reload, and every edit landing in the audit log. The console's project
+ * and lecture pages carry no settings editor of their own.
  */
 import { test, expect, type Page } from '@playwright/test'
 import { createProject } from './helpers'
@@ -105,6 +105,40 @@ test('the admin console has no settings editor of its own', async ({
   ).toBeVisible()
 })
 
+test("the admin edits another user's account details", async ({ page }) => {
+  await ensureSignedIn(page, admin)
+  await page.goto('/app/admin')
+  await page.getByRole('link', { name: owner.email }).click()
+  await expect(page).toHaveURL(/\/app\/admin\/users\//)
+
+  // The details open read-only: no controls, no Save
+  await expect(page.getByLabel('Display name')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(
+    0,
+  )
+
+  await page.getByRole('button', { name: 'Edit' }).click()
+  const ask = page.getByRole('alertdialog')
+  await expect(ask).toContainText('recorded in the audit log')
+  await ask.getByRole('button', { name: 'Edit settings' }).click()
+
+  await page.getByLabel('Display name').fill('Settings Target Renamed')
+  await page.getByRole('button', { name: 'Save changes' }).click()
+  const confirm = page.getByRole('alertdialog')
+  await expect(confirm).toContainText(
+    'Display name: Settings Target → Settings Target Renamed',
+  )
+  await confirm.getByRole('button', { name: 'Save changes' }).click()
+  await expect(page.getByText('Settings saved.')).toBeVisible()
+
+  // The value survives a reload, and the list is locked again
+  await page.reload()
+  await expect(
+    page.getByRole('heading', { name: 'Settings Target Renamed' }),
+  ).toBeVisible()
+  await expect(page.getByLabel('Display name')).toHaveCount(0)
+})
+
 test("the admin edits another user's project settings", async ({ page }) => {
   await ensureSignedIn(page, admin)
   await page.goto('/app/admin')
@@ -158,10 +192,14 @@ test("the admin edits another user's lecture settings", async ({ page }) => {
   await expect(page.getByLabel('AI freedom')).toHaveValue('4')
 })
 
-test('both edits are recorded in the audit log', async ({ page }) => {
+test('every edit is recorded in the audit log', async ({ page }) => {
   await ensureSignedIn(page, admin)
   await page.goto('/app/admin/logs')
-  for (const action of ['deck.settings_update', 'project.settings_update']) {
+  for (const action of [
+    'deck.settings_update',
+    'project.settings_update',
+    'user.settings_update',
+  ]) {
     await expect(page.getByText(action).first()).toBeVisible()
   }
 })

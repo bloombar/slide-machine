@@ -1,9 +1,9 @@
 /**
- * Unit tests for the per-user admin view: account details, projects
- * linking to their admin project pages, the "Other lectures" group
- * for decks living outside the user's own projects, the settings editor
- * (ADMIN-5), and the moderation actions (delete user/project/lecture,
- * ban/unban email, reset password).
+ * Unit tests for the per-user admin view: account details and editing the
+ * profile fields among them (ADMIN-5), projects linking to their admin
+ * project pages, the "Other lectures" group for decks living outside the
+ * user's own projects, and the moderation actions (delete
+ * user/project/lecture, ban/unban email, reset password).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
@@ -110,11 +110,13 @@ describe('AdminUserDetailPage', () => {
     expect(await screen.findByRole('heading', { name: 'Ada' })).toBeVisible()
     expect(screen.getByText('ada@example.com')).toBeVisible()
     expect(screen.getByText('pro')).toBeVisible()
-    // Scoped to Details: the settings editor holds the bio too
     const details = screen
       .getByRole('heading', { name: 'Details' })
       .closest('section')!
     expect(within(details).getByText('Lecturer')).toBeVisible()
+    // The profile fields live in the same list, read-only until Edit
+    expect(within(details).getByText('English')).toBeVisible()
+    expect(within(details).getByText('Ada')).toBeVisible()
     expect(
       screen.getByRole('link', { name: 'View public profile' }),
     ).toHaveAttribute('href', '/u/u1')
@@ -324,7 +326,7 @@ describe('AdminUserDetailPage', () => {
   })
 })
 
-describe('AdminUserDetailPage settings', () => {
+describe('AdminUserDetailPage details editing', () => {
   /** The bodies of the PATCHes sent so far, as raw JSON strings. */
   const patchBodies = (
     fetchMock: ReturnType<typeof mockFetchRoutes>['fetchMock'],
@@ -333,9 +335,35 @@ describe('AdminUserDetailPage settings', () => {
       .filter(([, init]) => init?.method === 'PATCH')
       .map(([, init]) => String(init?.body))
 
+  /** Clicks Edit and accepts the audit confirmation. */
+  const startEditing = () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    const ask = screen.getByRole('alertdialog', {
+      name: "Edit this user's details?",
+    })
+    fireEvent.click(within(ask).getByRole('button', { name: 'Edit settings' }))
+  }
+
+  it('shows the details read-only until the admin asks to edit', async () => {
+    renderPage()
+    await screen.findByRole('heading', { name: 'Ada' })
+
+    expect(screen.queryByLabelText('Display name')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Save changes' }),
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(
+      screen.getByRole('alertdialog', { name: "Edit this user's details?" }),
+    ).toHaveTextContent('recorded in the audit log')
+  })
+
   it('prefills from the detail response and disables Save while clean', async () => {
     renderPage()
     await screen.findByRole('heading', { name: 'Ada' })
+    startEditing()
+
     expect(screen.getByLabelText('Display name')).toHaveValue('Ada')
     expect(screen.getByLabelText('Bio')).toHaveValue('Lecturer')
     expect(screen.getByLabelText('Profile visibility')).toHaveValue('public')
@@ -345,6 +373,7 @@ describe('AdminUserDetailPage settings', () => {
   it('confirms with the change list, then PATCHes only what changed', async () => {
     const { fetchMock } = renderPage()
     await screen.findByRole('heading', { name: 'Ada' })
+    startEditing()
 
     fireEvent.change(screen.getByLabelText('Profile visibility'), {
       target: { value: 'private' },
@@ -363,17 +392,27 @@ describe('AdminUserDetailPage settings', () => {
 
     expect(await screen.findByText('Settings saved.')).toBeVisible()
     expect(patchBodies(fetchMock)).toEqual(['{"profileVisibility":"private"}'])
+    // Saving locks the list again, showing the value that just landed
+    expect(
+      screen.queryByLabelText('Profile visibility'),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText('private')).toBeVisible()
   })
 
   it('sends nothing when the confirm is cancelled', async () => {
     const { fetchMock } = renderPage()
     await screen.findByRole('heading', { name: 'Ada' })
+    startEditing()
 
     fireEvent.change(screen.getByLabelText('Display name'), {
       target: { value: 'Ada Lovelace' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Cancel',
+      }),
+    )
 
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(patchBodies(fetchMock)).toHaveLength(0)
@@ -390,6 +429,7 @@ describe('AdminUserDetailPage settings', () => {
       },
     })
     await screen.findByRole('heading', { name: 'Ada' })
+    startEditing()
 
     fireEvent.change(screen.getByLabelText('Display name'), {
       target: { value: 'Ada Lovelace' },
