@@ -12,6 +12,17 @@ import { mockFetchRoutes } from '../test/fetch-mock'
 
 const FORM_URL = 'https://docs.google.com/forms/d/e/mock-abc123/viewform'
 
+// The generate step returns questions for the review preview (QUIZ-2), where
+// the instructor confirms/edits points before publishing.
+const GENERATE_OK = () => ({
+  status: 200,
+  body: { questions: [{ type: 'single_choice', question: 'Q1', points: 5 }] },
+})
+
+/** Clicks "Publish quiz" in the review preview (opens after "Generate & save"). */
+const publishFromPreview = async () =>
+  fireEvent.click(await screen.findByRole('button', { name: 'Publish quiz' }))
+
 afterEach(() => vi.unstubAllGlobals())
 
 describe('QuizPanel', () => {
@@ -105,6 +116,7 @@ describe('QuizPanel', () => {
         status: 200,
         body: { folders: [{ id: 'folder-quizzes', name: 'Quizzes' }] },
       }),
+      'quiz.generate': GENERATE_OK,
       'quiz.publish': init => {
         published = JSON.parse(String(init?.body))
         return {
@@ -131,6 +143,7 @@ describe('QuizPanel', () => {
     await screen.findByRole('button', { name: 'Quizzes' })
     // Save into the current folder (My Drive root)
     fireEvent.click(screen.getByRole('button', { name: 'Generate & save' }))
+    await publishFromPreview()
 
     await waitFor(() =>
       expect(published).toMatchObject({
@@ -140,6 +153,30 @@ describe('QuizPanel', () => {
       }),
     )
     expect(await screen.findByText(FORM_URL)).toBeInTheDocument()
+  })
+
+  it('keeps the entered options when the review is cancelled (QUIZ-2)', async () => {
+    mockFetchRoutes({
+      'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
+      'quiz.driveFolders': () => ({ status: 200, body: { folders: [] } }),
+      'quiz.generate': GENERATE_OK,
+    })
+    render(<QuizPanel deckId="d1" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate quiz' }),
+    )
+
+    // Enter a distinctive point total, then generate to reach the review step.
+    const points = await screen.findByLabelText('Total points')
+    fireEvent.change(points, { target: { value: '42' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Generate & save' }))
+
+    // The review step opens…
+    await screen.findByRole('button', { name: 'Publish quiz' })
+    // …cancel it: the picker returns with the point total still filled in,
+    // rather than resetting to the defaults.
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(await screen.findByLabelText('Total points')).toHaveValue(42)
   })
 
   it('navigates into a sub-folder and saves the quiz there', async () => {
@@ -158,6 +195,7 @@ describe('QuizPanel', () => {
           },
         }
       },
+      'quiz.generate': GENERATE_OK,
       'quiz.publish': init => {
         published = JSON.parse(String(init?.body))
         return {
@@ -175,12 +213,51 @@ describe('QuizPanel', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: 'Generate & save' }),
     )
+    await publishFromPreview()
     await waitFor(() =>
       expect(published).toMatchObject({
         driveFolderId: 'folder-quizzes',
         driveFolderName: 'Quizzes',
       }),
     )
+  })
+
+  it('lets the instructor override per-question points before publishing (QUIZ-2)', async () => {
+    let published: { questions?: Array<{ points?: number }> } = {}
+    mockFetchRoutes({
+      'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
+      'quiz.driveFolders': () => ({ status: 200, body: { folders: [] } }),
+      'quiz.generate': () => ({
+        status: 200,
+        body: {
+          questions: [
+            { type: 'single_choice', question: 'Q1', points: 5 },
+            { type: 'short_text', question: 'Q2', points: 5 },
+          ],
+        },
+      }),
+      'quiz.publish': init => {
+        published = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: { formUrl: FORM_URL, publishedAt: '2026-07-20T00:00:00.000Z' },
+        }
+      },
+    })
+    render(<QuizPanel deckId="d1" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate quiz' }),
+    )
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate & save' }),
+    )
+    // The review step shows the generated questions with editable points.
+    const q1Points = await screen.findByLabelText('Points for question 1')
+    fireEvent.change(q1Points, { target: { value: '20' } })
+    await publishFromPreview()
+    await waitFor(() => expect(published.questions?.[0]?.points).toBe(20))
+    // The untouched question keeps its generated points.
+    expect(published.questions?.[1]?.points).toBe(5)
   })
 
   it('shows an empty folder but still lets you save into it', async () => {
@@ -243,6 +320,7 @@ describe('QuizPanel', () => {
         status: 200,
         body: { folders: [{ id: 'root', name: 'My Drive' }] },
       }),
+      'quiz.generate': GENERATE_OK,
       'quiz.publish': () => ({ status: 500, body: {} }),
     })
     render(<QuizPanel deckId="d1" />)
@@ -252,8 +330,9 @@ describe('QuizPanel', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: 'Generate & save' }),
     )
+    await publishFromPreview()
     expect(
-      await screen.findByText(/could not generate the quiz/i),
+      await screen.findByText(/could not publish the quiz/i),
     ).toBeInTheDocument()
   })
 
@@ -293,6 +372,7 @@ describe('QuizPanel', () => {
         const { name } = JSON.parse(String(init?.body))
         return { status: 200, body: { id: 'folder-new', name } }
       },
+      'quiz.generate': GENERATE_OK,
       'quiz.publish': init => {
         published = JSON.parse(String(init?.body))
         return {
@@ -314,6 +394,7 @@ describe('QuizPanel', () => {
     // Creating steps into the new folder (shown in the breadcrumb); save there
     await screen.findByRole('button', { name: 'Week 5' })
     fireEvent.click(screen.getByRole('button', { name: 'Generate & save' }))
+    await publishFromPreview()
     await waitFor(() =>
       expect(published).toMatchObject({
         driveFolderId: 'folder-new',
@@ -402,6 +483,7 @@ describe('QuizPanel', () => {
         status: 200,
         body: { folders: [{ id: 'root', name: 'My Drive' }] },
       }),
+      'quiz.generate': GENERATE_OK,
       'quiz.publish': init => {
         published = JSON.parse(String(init?.body))
         return {
@@ -423,6 +505,7 @@ describe('QuizPanel', () => {
     })
     fireEvent.click(checkbox)
     fireEvent.click(screen.getByRole('button', { name: 'Generate & save' }))
+    await publishFromPreview()
     await waitFor(() =>
       expect(published).toMatchObject({ includeTranscript: true }),
     )
@@ -456,13 +539,14 @@ describe('QuizPanel', () => {
     let published: {
       questionCount?: number
       totalPoints?: number
-      requireEmail?: boolean
+      emailCollection?: string
       typeCounts?: Record<string, number>
       customInstructions?: string
     } = {}
     mockFetchRoutes({
       'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
       'quiz.driveFolders': () => ({ status: 200, body: { folders: [] } }),
+      'quiz.generate': GENERATE_OK,
       'quiz.publish': init => {
         published = JSON.parse(String(init?.body))
         return {
@@ -483,7 +567,9 @@ describe('QuizPanel', () => {
     })
     // Advanced: per-type counts + email + instructions
     fireEvent.click(screen.getByRole('button', { name: 'Advanced settings' }))
-    fireEvent.click(screen.getByLabelText(/require a verified/i))
+    fireEvent.change(screen.getByLabelText('Collect respondent email'), {
+      target: { value: 'none' },
+    })
     fireEvent.change(screen.getByLabelText('Single-choice (MCQ)'), {
       target: { value: '1' },
     })
@@ -494,11 +580,12 @@ describe('QuizPanel', () => {
       target: { value: 'focus on the water cycle' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Generate & save' }))
+    await publishFromPreview()
     await waitFor(() =>
       expect(published).toMatchObject({
         questionCount: 4,
         totalPoints: 8,
-        requireEmail: false,
+        emailCollection: 'none',
         typeCounts: { single_choice: 1, short_text: 3 },
         customInstructions: 'focus on the water cycle',
       }),
@@ -513,6 +600,7 @@ describe('QuizPanel', () => {
     mockFetchRoutes({
       'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
       'quiz.driveFolders': () => ({ status: 200, body: { folders: [] } }),
+      'quiz.generate': GENERATE_OK,
       'quiz.publish': init => {
         published = JSON.parse(String(init?.body))
         return {
@@ -533,6 +621,7 @@ describe('QuizPanel', () => {
     // The "Number of questions" field reflects the new sum
     expect(screen.getByLabelText('Number of questions')).toHaveValue(8)
     fireEvent.click(screen.getByRole('button', { name: 'Generate & save' }))
+    await publishFromPreview()
     await waitFor(() =>
       expect(published).toMatchObject({
         questionCount: 8,

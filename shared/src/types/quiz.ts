@@ -43,8 +43,14 @@ export interface QuizDefinition {
 }
 
 /**
+ * How the published Form collects respondent emails (QUIZ-2): a Google-verified
+ * email, one the responder types in, or none. The pilot defaults to 'verified'.
+ */
+export type QuizEmailCollection = 'verified' | 'responder_input' | 'none'
+
+/**
  * Instructor-chosen generation options from the Quiz tab (QUIZ-7). Sent with
- * quiz.publish. Basic: questionCount, totalPoints. Advanced: requireEmail,
+ * quiz.publish. Basic: questionCount, totalPoints. Advanced: emailCollection,
  * includeTranscript, per-type counts, and free-text AI instructions.
  */
 export interface QuizGenerationOptions {
@@ -52,8 +58,8 @@ export interface QuizGenerationOptions {
   questionCount?: number
   /** Total points spread across the quiz (each question gets a whole share). */
   totalPoints?: number
-  /** Collect a verified respondent email (default true). */
-  requireEmail?: boolean
+  /** How to collect respondent emails (default 'verified'). */
+  emailCollection?: QuizEmailCollection
   /** Fold the spoken transcript into the source material (default false). */
   includeTranscript?: boolean
   /** How many questions of each type; its sum overrides questionCount. */
@@ -99,6 +105,8 @@ export interface QuizStatus {
   /** True when the lecture has a spoken transcript that can be folded into
    * generation (QUIZ-5); the UI shows the "include transcript" option only then. */
   hasTranscript: boolean
+  /** The project's remembered quiz options, so the form pre-fills them (QUIZ-2). */
+  defaults?: QuizGenerationOptions
 }
 
 /** A Google Drive folder offered in the publish-destination picker (QUIZ-2). */

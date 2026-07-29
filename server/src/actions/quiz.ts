@@ -21,8 +21,10 @@ import { z } from 'zod'
 import type {
   DriveFolder,
   QuizConnectResult,
+  QuizDefinition,
   QuizGenerationOptions,
   QuizGenerationProvider,
+  QuizQuestion,
   QuizStatus,
   PublishedQuiz,
   SlideTextContent,
@@ -34,6 +36,7 @@ import { loadEditableDeck } from './deck'
 import { env } from '../config/env'
 import { UserModel } from '../models/user'
 import { SlideModel } from '../models/slide'
+import { ProjectModel } from '../models/project'
 import { registry } from '../providers/registry'
 import { publishQuiz } from '../lib/quiz-publish'
 import { splitPointsEqually } from '../lib/quiz-points'
@@ -118,10 +121,12 @@ export const quizStatus = defineAction<{ deckId: string }, QuizStatus>({
   execute: async (ctx, input) => {
     const user = await requireUser(ctx)
     const { deck } = await loadEditableDeck(ctx, input.deckId)
+    const project = await ProjectModel.findById(deck.projectId)
     return {
       googleConnected: isConnected(user),
       quiz: toPublishedQuiz(deck.quiz),
       hasTranscript: Boolean(deck.transcript?.trim()),
+      defaults: project?.quizDefaults ?? undefined,
     }
   },
 })
@@ -222,18 +227,120 @@ export const quizCreateFolder = defineAction<
   },
 })
 
+/** The generation-option fields shared by quiz.generate and quiz.publish. */
+const genOptionsShape = {
+  questionCount: z.number().int().min(1).max(50).optional(),
+  totalPoints: z.number().int().min(1).max(1000).optional(),
+  emailCollection: z.enum(['verified', 'responder_input', 'none']).optional(),
+  includeTranscript: z.boolean().optional(),
+  typeCounts: z
+    .object({
+      single_choice: z.number().int().min(0).max(50).optional(),
+      multiple_choice: z.number().int().min(0).max(50).optional(),
+      short_text: z.number().int().min(0).max(50).optional(),
+      long_text: z.number().int().min(0).max(50).optional(),
+    })
+    .optional(),
+  customInstructions: z.string().max(2000).optional(),
+}
+
+/** Validates one reviewed question sent back from the preview (QUIZ-2). */
+const quizQuestionSchema = z.object({
+  type: z.enum(['single_choice', 'multiple_choice', 'short_text', 'long_text']),
+  question: z.string().min(1),
+  points: z.number().int().min(0).max(1000).optional(),
+  choices: z.array(z.string()).optional(),
+  correctIndex: z.number().int().optional(),
+  correctIndexes: z.array(z.number().int()).optional(),
+  correctAnswers: z.array(z.string()).optional(),
+})
+
+type EditableDeck = Awaited<ReturnType<typeof loadEditableDeck>>['deck']
+
+/**
+ * Generates a quiz definition from the lecture's slides (optionally the spoken
+ * transcript, QUIZ-5), avoiding any prior quiz's questions (QUIZ-6), and splits
+ * the total points equally across the questions (QUIZ-7). Shared by the preview
+ * (quiz.generate) and the publish path.
+ */
+const buildQuiz = async (
+  deck: EditableDeck,
+  options: QuizGenerationOptions,
+): Promise<QuizDefinition> => {
+  const slideDocs = await SlideModel.find({ deckId: deck._id }).sort({
+    index: 1,
+  })
+  const slides: SlideTextContent[] = slideDocs.map(s => ({
+    title: s.title,
+    body: s.body,
+    bullets: s.bullets,
+  }))
+  const transcript =
+    options.includeTranscript && deck.transcript?.trim()
+      ? deck.transcript
+      : undefined
+  const avoidQuestions = capPastQuestions([
+    ...(deck.quizPastQuestions ?? []),
+    ...(deck.quiz?.questions ?? []),
+  ])
+  const totalPoints = options.totalPoints ?? DEFAULT_TOTAL_POINTS
+
+  const provider = registry.get<QuizGenerationProvider>('quizGeneration')
+  const quiz = await provider.generateQuiz({
+    slides,
+    transcript,
+    avoidQuestions,
+    questionCount: options.questionCount,
+    totalPoints,
+    typeCounts: options.typeCounts,
+    customInstructions: options.customInstructions,
+  })
+  if (quiz.questions.length) {
+    const points = splitPointsEqually(quiz.questions.length, totalPoints)
+    quiz.questions.forEach((q, i) => {
+      q.points = points[i]
+    })
+  }
+  return quiz
+}
+
+/**
+ * Generates the quiz WITHOUT publishing, so the instructor can review the
+ * questions and override each one's points before publishing (QUIZ-2). Returns
+ * the generated questions (with the default equal-split points applied).
+ */
+export const quizGenerate = defineAction<
+  { deckId: string } & QuizGenerationOptions,
+  { questions: QuizQuestion[] }
+>({
+  name: 'quiz.generate',
+  input: z.object({ deckId: z.string().min(1), ...genOptionsShape }),
+  execute: async (ctx, input) => {
+    const user = await requireUser(ctx)
+    if (!isConnected(user)) {
+      throw new ActionForbiddenError('Connect a Google account first')
+    }
+    const { deck } = await loadEditableDeck(ctx, input.deckId)
+    const quiz = await buildQuiz(deck, input)
+    return { questions: quiz.questions }
+  },
+})
+
 /**
  * Generates the exit-ticket quiz from the lecture's slides — optionally
  * folding in the spoken transcript (QUIZ-5) — and publishes it as a Google
  * Form in the chosen Drive folder, returning the shareable URL. Questions from
  * any prior quiz are avoided so a regeneration is genuinely different (QUIZ-6).
- * Generation is always real; the Form creation is mock or live per config.
+ * When the client sends reviewed `questions` (from the preview), those are
+ * published as-is — honoring per-question point overrides (QUIZ-2) — otherwise
+ * the quiz is generated fresh. The Form creation is mock or live per config.
  */
 export const quizPublish = defineAction<
   {
     deckId: string
     driveFolderId: string
     driveFolderName?: string
+    questions?: QuizQuestion[]
   } & QuizGenerationOptions,
   PublishedQuiz
 >({
@@ -243,19 +350,10 @@ export const quizPublish = defineAction<
     driveFolderId: z.string().min(1),
     driveFolderName: z.string().optional(),
     // Generation options (QUIZ-5/QUIZ-7)
-    questionCount: z.number().int().min(1).max(50).optional(),
-    totalPoints: z.number().int().min(1).max(1000).optional(),
-    requireEmail: z.boolean().optional(),
-    includeTranscript: z.boolean().optional(),
-    typeCounts: z
-      .object({
-        single_choice: z.number().int().min(0).max(50).optional(),
-        multiple_choice: z.number().int().min(0).max(50).optional(),
-        short_text: z.number().int().min(0).max(50).optional(),
-        long_text: z.number().int().min(0).max(50).optional(),
-      })
-      .optional(),
-    customInstructions: z.string().max(2000).optional(),
+    ...genOptionsShape,
+    // Reviewed questions from the preview (QUIZ-2): published as-is, honoring
+    // per-question point overrides. Absent = generate the quiz fresh.
+    questions: z.array(quizQuestionSchema).min(1).optional(),
   }),
   execute: async (ctx, input) => {
     const user = await requireUser(ctx)
@@ -264,58 +362,15 @@ export const quizPublish = defineAction<
     }
     const { deck } = await loadEditableDeck(ctx, input.deckId)
 
-    // De-identified slide text, in display order, as the quiz source material.
-    const slideDocs = await SlideModel.find({ deckId: deck._id }).sort({
-      index: 1,
-    })
-    const slides: SlideTextContent[] = slideDocs.map(s => ({
-      title: s.title,
-      body: s.body,
-      bullets: s.bullets,
-    }))
+    // Use the reviewed questions when the client sends them (per-question point
+    // overrides); otherwise generate the quiz fresh with equal-split points.
+    const quiz: QuizDefinition = input.questions?.length
+      ? { title: deck.title, questions: input.questions }
+      : await buildQuiz(deck, input)
 
-    // The spoken transcript is folded in only when the instructor opts in.
-    const transcript =
-      input.includeTranscript && deck.transcript?.trim()
-        ? deck.transcript
-        : undefined
-
-    // Avoid repeating any question already asked (past deletions + the quiz
-    // currently on the deck, if we are replacing it).
-    const avoidQuestions = capPastQuestions([
-      ...(deck.quizPastQuestions ?? []),
-      ...(deck.quiz?.questions ?? []),
-    ])
-
-    // No total entered → a 100-point quiz by default (QUIZ-7).
-    const totalPoints = input.totalPoints ?? DEFAULT_TOTAL_POINTS
-
-    const provider = registry.get<QuizGenerationProvider>('quizGeneration')
-    const quiz = await provider.generateQuiz({
-      slides,
-      transcript,
-      avoidQuestions,
-      questionCount: input.questionCount,
-      totalPoints,
-      typeCounts: input.typeCounts,
-      customInstructions: input.customInstructions,
-    })
-
-    // Split the total EQUALLY across the questions, so it holds regardless of
-    // what the provider chose (QUIZ-7).
-    if (quiz.questions.length) {
-      const points = splitPointsEqually(quiz.questions.length, totalPoints)
-      quiz.questions.forEach((q, i) => {
-        q.points = points[i]
-      })
-    }
-
-    // Require a verified respondent email unless explicitly turned off (QUIZ-7).
+    // How the Form collects respondent emails (QUIZ-2); default 'verified'.
     const yamlOptions = {
-      emailCollection:
-        input.requireEmail === false
-          ? ('none' as const)
-          : ('verified' as const),
+      emailCollection: input.emailCollection ?? ('verified' as const),
     }
 
     let published: { formId: string; formUrl: string }
@@ -344,6 +399,22 @@ export const quizPublish = defineAction<
       questions: quiz.questions.map(q => q.question),
     }
     await deck.save()
+
+    // Remember these options as the project's quiz defaults (QUIZ-2), so the
+    // next quiz in this course pre-fills them.
+    await ProjectModel.updateOne(
+      { _id: deck.projectId },
+      {
+        quizDefaults: {
+          questionCount: input.questionCount,
+          totalPoints: input.totalPoints,
+          emailCollection: input.emailCollection,
+          includeTranscript: input.includeTranscript,
+          typeCounts: input.typeCounts,
+          customInstructions: input.customInstructions,
+        },
+      },
+    )
 
     return toPublishedQuiz(deck.quiz)!
   },
@@ -386,5 +457,6 @@ registerAction(quizStatus)
 registerAction(quizConnectGoogle)
 registerAction(quizDriveFolders)
 registerAction(quizCreateFolder)
+registerAction(quizGenerate)
 registerAction(quizPublish)
 registerAction(quizDelete)
