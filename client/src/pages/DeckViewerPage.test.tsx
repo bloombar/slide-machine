@@ -2891,9 +2891,9 @@ describe('DeckViewerPage admin settings (ADMIN-5)', () => {
     expect(screen.queryByText('Seed material')).not.toBeInTheDocument()
 
     // The Refine settings are editable; running the pass is the owner's
-    fireEvent.click(screen.getByRole('tab', { name: 'Refine' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
     expect(
-      await screen.findByRole('checkbox', { name: /Refine all slides/ }),
+      await screen.findByRole('checkbox', { name: /Refine slide text/ }),
     ).toBeEnabled()
     expect(
       screen.queryByRole('button', { name: 'Refine' }),

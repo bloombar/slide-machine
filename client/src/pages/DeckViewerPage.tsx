@@ -71,6 +71,7 @@ import {
 } from '../runtime-config'
 import LayoutPickerModal from '../components/LayoutPickerModal'
 import TranscriptEditorModal from '../components/TranscriptEditorModal'
+import ConfirmDialog from '../components/ConfirmDialog'
 import DraggableListRow from '../components/DraggableListRow'
 import EditableText from '../components/EditableText'
 import DeckPageHeader from '../components/DeckPageHeader'
