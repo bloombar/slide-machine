@@ -324,7 +324,9 @@ export const slideDelete = defineAction<
   input: z.object({ slideId: z.string().min(1) }),
   execute: async (ctx, input) => {
     const { slide, deck } = await loadOwnedSlide(ctx, input.slideId)
-    await slide.deleteOne()
+    // Soft delete (P-10): tombstone the slide and drop it from the deck's order.
+    slide.deletedAt = new Date()
+    await slide.save()
     deck.slideOrder = deck.slideOrder.filter(id => id !== input.slideId)
     await deck.save()
     // Keep index consistent with slideOrder position

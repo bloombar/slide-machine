@@ -12,6 +12,7 @@ import type {
   TranscriptSegmentAction,
   WordTiming,
 } from '@slide-machine/shared'
+import { softDeletePlugin } from './plugins/soft-delete'
 
 export interface TranscriptSegmentDb extends Omit<
   TranscriptSegment,
@@ -20,6 +21,8 @@ export interface TranscriptSegmentDb extends Omit<
   deckId: Types.ObjectId
   slideId?: Types.ObjectId
   createdAt: Date
+  /** Soft-delete tombstone (P-10); null/absent = live. */
+  deletedAt?: Date | null
 }
 
 /** Strict, id-less subdocument for a single word's timing. */
@@ -66,6 +69,8 @@ const transcriptSegmentSchema = new Schema<TranscriptSegmentDb>(
 
 // Serves the Phase-3 time-join: segments of one recording, ordered by time.
 transcriptSegmentSchema.index({ deckId: 1, sessionId: 1, startMs: 1 })
+
+transcriptSegmentSchema.plugin(softDeletePlugin)
 
 export const TranscriptSegmentModel = model<TranscriptSegmentDb>(
   'TranscriptSegment',

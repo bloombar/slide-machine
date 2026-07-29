@@ -47,6 +47,9 @@ import {
   deleteDeckCascade,
   deleteProjectCascade,
   deleteUserCascade,
+  restoreDeckCascade,
+  restoreProjectCascade,
+  restoreUserCascade,
 } from '../lib/cascade'
 import { revokeAllSessions } from '../auth/refresh-store'
 import { hashPassword } from '../auth/password'
@@ -59,6 +62,9 @@ import {
   loadDeck,
   loadProject,
   loadUser,
+  loadDeletedDeck,
+  loadDeletedProject,
+  loadDeletedUser,
   rejectAdminTarget,
 } from './admin-targets'
 import { adminSettingsRouter } from './admin-settings'
@@ -945,6 +951,55 @@ adminRouter.delete('/decks/:id', async (req, res) => {
     actorId: admin.id,
     actorEmail: admin.email,
     action: 'deck.delete',
+    targetType: 'deck',
+    targetId: deck._id.toString(),
+    details: { title: deck.title, ownerId: deck.ownerId.toString() },
+  })
+  res.status(204).end()
+})
+
+// Restore soft-deleted content during the retention window (P-10 / ADMIN-6).
+adminRouter.post('/users/:id/restore', async (req, res) => {
+  const user = await loadDeletedUser(String(req.params.id))
+  const admin = actor(req)
+
+  await restoreUserCascade(user._id.toString())
+  await logAdminAction({
+    actorId: admin.id,
+    actorEmail: admin.email,
+    action: 'user.restore',
+    targetType: 'user',
+    targetId: user._id.toString(),
+    details: { email: user.email },
+  })
+  res.status(204).end()
+})
+
+adminRouter.post('/projects/:id/restore', async (req, res) => {
+  const project = await loadDeletedProject(String(req.params.id))
+  const admin = actor(req)
+
+  await restoreProjectCascade(project._id)
+  await logAdminAction({
+    actorId: admin.id,
+    actorEmail: admin.email,
+    action: 'project.restore',
+    targetType: 'project',
+    targetId: project._id.toString(),
+    details: { title: project.title, ownerId: project.ownerId.toString() },
+  })
+  res.status(204).end()
+})
+
+adminRouter.post('/decks/:id/restore', async (req, res) => {
+  const deck = await loadDeletedDeck(String(req.params.id))
+  const admin = actor(req)
+
+  await restoreDeckCascade(deck._id)
+  await logAdminAction({
+    actorId: admin.id,
+    actorEmail: admin.email,
+    action: 'deck.restore',
     targetType: 'deck',
     targetId: deck._id.toString(),
     details: { title: deck.title, ownerId: deck.ownerId.toString() },

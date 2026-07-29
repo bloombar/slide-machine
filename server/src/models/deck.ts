@@ -17,6 +17,7 @@ import type { Deck, Visibility } from '@slide-machine/shared'
 import { LOCALES } from '@slide-machine/shared'
 import type { ResolvedAcl } from '../lib/access'
 import { ProjectModel, projectAcl, type ProjectDb } from './project'
+import { softDeletePlugin } from './plugins/soft-delete'
 
 /** A lecture's own privacy settings, present only when overridden. */
 export interface DeckAccessOverride {
@@ -98,6 +99,8 @@ export interface DeckDb extends Omit<
   titleLocked?: boolean
   createdAt: Date
   updatedAt: Date
+  /** Soft-delete tombstone (P-10); null/absent = live. */
+  deletedAt?: Date | null
 }
 
 /** Strict, id-less subdocument for one retained session recording. */
@@ -205,6 +208,8 @@ const deckSchema = new Schema<DeckDb>(
   },
   { timestamps: true },
 )
+
+deckSchema.plugin(softDeletePlugin)
 
 export const DeckModel = model<DeckDb>('Deck', deckSchema)
 

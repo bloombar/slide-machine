@@ -11,6 +11,7 @@ import {
   type StrokeAnchor,
   type StrokePoint,
 } from '@slide-machine/shared'
+import { softDeletePlugin } from './plugins/soft-delete'
 
 export interface SlideDb extends Omit<Slide, 'id' | 'deckId'> {
   deckId: Types.ObjectId
@@ -19,6 +20,8 @@ export interface SlideDb extends Omit<Slide, 'id' | 'deckId'> {
    * changed, so repeated Refines are idempotent. Server-internal — not in the
    * Slide DTO. */
   narrateInputHash?: string
+  /** Soft-delete tombstone (P-10); null/absent = live. */
+  deletedAt?: Date | null
 }
 
 /** Id-less subdocuments for whiteboard strokes (WB-1). Strict schemas keep
@@ -92,6 +95,8 @@ const slideSchema = new Schema<SlideDb>({
 })
 
 slideSchema.index({ deckId: 1, index: 1 })
+
+slideSchema.plugin(softDeletePlugin)
 
 export const SlideModel = model<SlideDb>('Slide', slideSchema)
 

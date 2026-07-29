@@ -5,6 +5,7 @@
  */
 import { Schema, model, Types, type HydratedDocument } from 'mongoose'
 import type { SeedAsset } from '@slide-machine/shared'
+import { softDeletePlugin } from './plugins/soft-delete'
 
 export interface SeedAssetDb extends Omit<
   SeedAsset,
@@ -15,6 +16,8 @@ export interface SeedAssetDb extends Omit<
   /** Storage key of the original file (absent for extracted children). */
   storageKey?: string
   createdAt: Date
+  /** Soft-delete tombstone (P-10); null/absent = live. */
+  deletedAt?: Date | null
 }
 
 const seedAssetSchema = new Schema<SeedAssetDb>(
@@ -46,6 +49,8 @@ const seedAssetSchema = new Schema<SeedAssetDb>(
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 )
+
+seedAssetSchema.plugin(softDeletePlugin)
 
 export const SeedAssetModel = model<SeedAssetDb>('SeedAsset', seedAssetSchema)
 

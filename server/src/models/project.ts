@@ -7,6 +7,7 @@ import type { Project, QuizGenerationOptions } from '@slide-machine/shared'
 import { LOCALES } from '@slide-machine/shared'
 import type { ResolvedAcl } from '../lib/access'
 import { env } from '../config/env'
+import { softDeletePlugin } from './plugins/soft-delete'
 
 export interface ProjectDb extends Omit<
   Project,
@@ -20,6 +21,8 @@ export interface ProjectDb extends Omit<
   quizDefaults?: QuizGenerationOptions
   createdAt: Date
   updatedAt: Date
+  /** Soft-delete tombstone (P-10); null/absent = live. */
+  deletedAt?: Date | null
 }
 
 const projectSchema = new Schema<ProjectDb>(
@@ -63,6 +66,8 @@ const projectSchema = new Schema<ProjectDb>(
   // combines it with the newest deck edit to rank projects by modification.
   { timestamps: true },
 )
+
+projectSchema.plugin(softDeletePlugin)
 
 export const ProjectModel = model<ProjectDb>('Project', projectSchema)
 

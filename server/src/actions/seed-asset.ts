@@ -27,7 +27,6 @@ import {
   toSeedAssetDto,
   type SeedAssetDb,
 } from '../models/seed-asset'
-import { getStorage } from '../storage'
 
 const requireUser = (ctx: ActionContext): string => {
   if (!ctx.userId) throw new ActionForbiddenError('Sign in to continue')
@@ -131,14 +130,10 @@ export const seedAssetDelete = defineAction<
   input: z.object({ assetId: z.string().min(1) }),
   execute: async (ctx, input) => {
     const asset = await loadManagedAsset(ctx, input.assetId)
-    if (asset.storageKey) {
-      await getStorage()
-        .delete(asset.storageKey)
-        .catch(() => {
-          // A dangling file is preferable to a failed delete
-        })
-    }
-    await asset.deleteOne()
+    // Soft delete (P-10): tombstone the asset; the stored file is kept for
+    // restore and removed later by the retention purge.
+    asset.deletedAt = new Date()
+    await asset.save()
     return { deleted: true }
   },
 })
