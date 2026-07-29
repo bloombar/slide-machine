@@ -841,14 +841,14 @@ A read-mostly console (`/app/admin`) answers "who is using this and what have th
 
 - **Secondary navigation** — every admin page shows a horizontal secondary nav bar, **just below the standard header**, linking the four top-level sections: **Users**, **Projects**, **Lectures**, and **Logs**.
 - **Site-wide directories**, each **paginated and sortable**: **Users** (email, handle, join date), **Projects** (title, owner, visibility, lecture count, timestamps), and **Lectures** (title, project, owner, effective visibility, slide count, timestamps). Private lectures are **always listed** ([ADMIN-3](#admin-3-viewing-user-content--seed-material)).
-- **Detail (drill-down) pages** for each **user** (plan, email-verification, locale, profile visibility, project/lecture counts, and the user's projects/lectures), **project** (owner + a table of its lectures), and **lecture** (project, owner, details, and a link to the live viewer `/d/:slug`).
+- **Detail (drill-down) pages** for each **user** (plan, email-verification, locale, profile visibility, project/lecture counts, the user's projects/lectures, and the account's settings editor), **project** (owner + a table of its lectures), and **lecture** (project, owner, details, and a link to the live viewer `/d/:slug`). Project and lecture settings are edited in the product view those pages link to, not here ([ADMIN-5](#admin-5-editing-any-entitys-settings)).
 - **Object identity** — every user, project, and lecture **detail page shows the entity's database `_id`**, so an operator can correlate console records with direct database operations.
 - **Consistent linking** — across **all** admin pages, every **username** links to that user's detail page, every **project title** to its project detail page, and every **lecture title** to its lecture detail page.
 - **Consistent "view in product" affordance** — each detail page carries, in the same style, a link to that entity's **public/product view**: the **user** detail page links to the user's **public profile** ([SOC-4](#soc-4-user-profiles)), the **project** detail page to the **product project view**, and the **lecture** detail page to the **live viewer** (`/d/:slug`). Where the target is private, following it is confirmed and audited ([ADMIN-3](#admin-3-viewing-user-content--seed-material)).
 
 #### ADMIN-3 Viewing user content & seed material
 
-- An admin can open **any lecture** in the deck viewer (`/d/:slug`) and **any project** in the product view, **regardless of visibility**, read-only, on the allowlist's authority.
+- An admin can open **any lecture** in the deck viewer (`/d/:slug`) and **any project** in the product view, **regardless of visibility**, on the allowlist's authority. The **content** there is read-only — slides, recordings, and generation runs stay with the owner; only its settings are editable ([ADMIN-5](#admin-5-editing-any-entitys-settings)).
 - Admin project and lecture detail pages **surface the seed material** ([SEED-1](#seed-1-document-seeding)/[SEED-2](#seed-2-image-seeding)) — documents, seed text, and image captions — so an operator can see what fed generation.
 - **Privacy-infringing views are confirmed and audited** — opening a **private** lecture or a **private** project requires **explicit confirmation** and writes an audit-log entry ([ADMIN-7](#admin-7-audit-log)); routine viewing of already-public content is not logged.
 
@@ -863,7 +863,8 @@ Every action here **asks for confirmation and writes an audit-log entry** ([ADMI
 #### ADMIN-5 Editing any entity's settings
 
 - An admin can **modify the settings of any user, project, or lecture** — e.g. a lecture's/project's visibility or generation settings, or a user's profile/account fields — even when not the owner.
-- Every such edit **requires explicit confirmation and is audited** ([ADMIN-7](#admin-7-audit-log)), recording **what changed**. (Billing state — plan tier — remains governed by [§5](#5-plans-billing--usage-limits).)
+- **Account settings are edited in the console**; a **project's or lecture's are edited in the product itself**, in the **same settings UI its owner uses** ([ADMIN-2](#admin-2-admin-console) links there from each detail page). The console carries **no separate settings form** for them.
+- Every such edit **requires explicit confirmation and is audited** ([ADMIN-7](#admin-7-audit-log)), recording **what changed**. Editing an entity that is not the admin's own is **confirmed once, on entry**, and **flagged on screen** for as long as those settings are open. (Billing state — plan tier — remains governed by [§5](#5-plans-billing--usage-limits).)
 
 #### ADMIN-6 Viewing soft-deleted content
 

@@ -46,6 +46,7 @@ import {
   uploadSlideImage,
 } from '../api/slides'
 import { useAuth } from '../auth/AuthContext'
+import { useIsAdmin } from '../hooks/useIsAdmin'
 import { useTimeAgo } from '../hooks/useTimeAgo'
 import { useSlideNavigation } from '../hooks/useSlideNavigation'
 import { useBracketKeys } from '../hooks/useBracketKeys'
@@ -131,6 +132,7 @@ export default function DeckViewerPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const { user, status } = useAuth()
+  const isAdmin = useIsAdmin()
   const [view, setView] = useState<DeckViewResponse | null>(null)
   // Always-fresh view for callbacks that outlive their render (the mic
   // queue submits phrases from closures captured when listening began)
@@ -167,6 +169,10 @@ export default function DeckViewerPage() {
       : null
   })
   const [settingsOpen, setSettingsOpen] = useState(() => settingsTab !== null)
+  // Set once an admin has acknowledged editing settings that are not
+  // theirs; the modal stays shut until then (ADMIN-5), including on the
+  // deep links above, which open it without a click.
+  const [adminEditConfirmed, setAdminEditConfirmed] = useState(false)
 
   // Strip the one-shot ?settings= param after using it, so a refresh doesn't
   // reopen the modal and the URL stays clean.
@@ -1187,6 +1193,14 @@ export default function DeckViewerPage() {
   const slide = view.slides[nav.current]
   const isOwner = user?.id === view.deck.ownerId
   const canEdit = view.canEdit
+  // An allowlisted admin can open any lecture read-only (ADMIN-3), and
+  // may edit its SETTINGS from the owner's own modal (ADMIN-5) — never
+  // its slides. `canEdit` still gates all of the content editing below.
+  const adminOverride = !canEdit && isAdmin === true
+  // Which of the two a non-editor is — an admin about to be asked, or a
+  // plain viewer — is unknown until the admin check answers.
+  const rightsPending = !canEdit && isAdmin === null
+  const askAdmin = settingsOpen && adminOverride && !adminEditConfirmed
 
   /** In-place edits (EDIT-1) persist through the action layer. */
   const editSlide = (slideId: string) => (patch: SlideContentPatch) => {
@@ -1557,7 +1571,7 @@ export default function DeckViewerPage() {
           share sits rightmost, to the right of the settings icon. */}
       <ShellActions>
         <ViewModeToggle mode={mode} onChange={setMode} />
-        {canEdit && (
+        {(canEdit || adminOverride) && (
           <Tooltip label="Lecture settings">
             <button
               aria-label="Lecture settings"
@@ -1917,30 +1931,44 @@ export default function DeckViewerPage() {
         </NotificationPill>
       )}
 
-      {canEdit && settingsOpen && (
-        <DeckSettingsModal
-          deck={view.deck}
-          projectGenerationFreedom={view.projectGenerationFreedom}
-          projectTtsVoice={view.projectTtsVoice}
-          initialTab={settingsTab ?? 'general'}
-          isOwner={isOwner}
-          slidesHaveDrawings={view.slides.some(s =>
-            hasVisibleDrawings(s.drawings),
-          )}
-          onClose={closeSettings}
-          onDeckChange={deck => setView(v => (v ? { ...v, deck } : v))}
-          onDeleted={() => void navigate('/app')}
-          onTemplateChange={(deck, template) =>
-            setView(v => (v ? { ...v, deck, template } : v))
-          }
-          onReformatted={() => {
-            // Reload the deck so the reformatted slides show behind the modal.
-            apiFetch<DeckViewResponse>(`/api/decks/${slug}`)
-              .then(setView)
-              .catch(() => {
-                // Quiet failure: the current view stays until the next load
-              })
-          }}
+      {(canEdit || adminOverride) &&
+        settingsOpen &&
+        !rightsPending &&
+        !askAdmin && (
+          <DeckSettingsModal
+            deck={view.deck}
+            projectGenerationFreedom={view.projectGenerationFreedom}
+            projectTtsVoice={view.projectTtsVoice}
+            initialTab={settingsTab ?? 'general'}
+            isOwner={isOwner}
+            adminOverride={adminOverride}
+            slidesHaveDrawings={view.slides.some(s =>
+              hasVisibleDrawings(s.drawings),
+            )}
+            onClose={closeSettings}
+            onDeckChange={deck => setView(v => (v ? { ...v, deck } : v))}
+            onDeleted={() => void navigate('/app')}
+            onTemplateChange={(deck, template) =>
+              setView(v => (v ? { ...v, deck, template } : v))
+            }
+            onReformatted={() => {
+              // Reload the deck so the reformatted slides show behind the modal.
+              apiFetch<DeckViewResponse>(`/api/decks/${slug}`)
+                .then(setView)
+                .catch(() => {
+                  // Quiet failure: the current view stays until the next load
+                })
+            }}
+          />
+        )}
+
+      {askAdmin && (
+        <ConfirmDialog
+          title="Edit this lecture's settings?"
+          message={`"${lectureTitle(view.deck)}" belongs to another user. You can change its settings as an admin; every change is recorded in the audit log.`}
+          confirmLabel="Edit settings"
+          onConfirm={() => setAdminEditConfirmed(true)}
+          onCancel={closeSettings}
         />
       )}
 

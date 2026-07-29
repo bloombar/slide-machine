@@ -4,10 +4,7 @@
  * both into the shared workspace once the admin surface is wired in.
  */
 import type {
-  AdminDeckSettingsPatch,
-  AdminDeckSettingsView,
   AdminLogsResponse,
-  AdminProjectSettingsPatch,
   AdminUserSettingsPatch,
   Project,
   SafeUser,
@@ -81,9 +78,6 @@ export interface AdminSeedLevel {
  * not, is always listed and readable for an admin. */
 export interface AdminDeckDetailResponse {
   deck: AdminDeckSummary
-  /** The lecture's editable settings, plus the project-level AI freedom
-   * it inherits while unset. */
-  settings: AdminDeckSettingsView
   /** The project the lecture lives in, for the back link. */
   project: { id: string; title: string }
   /** The lecture's owner — not necessarily the project's owner. */
@@ -290,11 +284,15 @@ export const deleteAdminProject = (projectId: string): Promise<void> =>
 export const deleteAdminDeck = (deckId: string): Promise<void> =>
   apiFetch<void>(`/api/admin/decks/${deckId}`, { method: 'DELETE' })
 
-// Settings editors (ADMIN-5). Each sends only the fields that changed:
-// JSON.stringify drops `undefined`, so an absent field means "unchanged"
-// and an explicit `null` means "clear this level so it inherits again".
-// All resolve on a 204 and are recorded in the audit log with the exact
-// before/after of every field, so pages refetch after saving.
+// Account settings editor (ADMIN-5). It sends only the fields that
+// changed: JSON.stringify drops `undefined`, so an absent field means
+// "unchanged" and an explicit `null` means "clear it so it is inherited
+// again". Resolves on a 204 and is recorded in the audit log with the
+// exact before/after of every field, so the page refetches after saving.
+//
+// Project and lecture settings have no admin endpoint: an admin edits
+// them in the owner-facing settings modal, through the same actions the
+// owner uses (docs/ADMINISTRATION.md, "Editing settings").
 
 /** Updates a user's profile settings (not the plan tier, email, or
  * password — those are governed elsewhere). */
@@ -303,28 +301,6 @@ export const updateAdminUserSettings = (
   patch: AdminUserSettingsPatch,
 ): Promise<void> =>
   apiFetch<void>(`/api/admin/users/${userId}`, {
-    method: 'PATCH',
-    body: JSON.stringify(patch),
-  })
-
-/** Updates a project's visibility and generation settings. */
-export const updateAdminProjectSettings = (
-  projectId: string,
-  patch: AdminProjectSettingsPatch,
-): Promise<void> =>
-  apiFetch<void>(`/api/admin/projects/${projectId}`, {
-    method: 'PATCH',
-    body: JSON.stringify(patch),
-  })
-
-/** Updates a lecture's visibility and generation settings. Sending
- * `visibility: null` drops its own access override so it follows its
- * project again; any other value detaches it from the project. */
-export const updateAdminDeckSettings = (
-  deckId: string,
-  patch: AdminDeckSettingsPatch,
-): Promise<void> =>
-  apiFetch<void>(`/api/admin/decks/${deckId}`, {
     method: 'PATCH',
     body: JSON.stringify(patch),
   })

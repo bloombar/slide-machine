@@ -1,8 +1,10 @@
 /**
  * E2E settings editing against the built app (ADMIN-5): the allowlisted
- * admin changes another user's project and lecture settings through the
- * confirm dialog, the values survive a reload, both edits land in the
- * audit log, and an entity the admin owns refuses the edit.
+ * admin opens another user's project and lecture in the product view and
+ * edits their settings in the owner's own settings modal — confirmed
+ * once, banner shown, values surviving a reload, and both edits landing
+ * in the audit log. The admin console pages themselves no longer carry a
+ * settings editor.
  */
 import { test, expect, type Page } from '@playwright/test'
 import { createProject } from './helpers'
@@ -41,13 +43,15 @@ const ensureSignedIn = async (
   await expect(page).toHaveURL(/\/app$/)
 }
 
-/** Opens the confirm dialog, checks one listed change, and saves. */
-const saveWithConfirm = async (page: Page, change: string) => {
-  await page.getByRole('button', { name: 'Save changes' }).click()
-  const dialog = page.getByRole('alertdialog')
-  await expect(dialog.getByText(change)).toBeVisible()
-  await dialog.getByRole('button', { name: 'Save changes' }).click()
-  await expect(page.getByText('Settings saved.')).toBeVisible()
+/** Opens the settings modal from the icon, through the admin confirm. */
+const openSettingsAsAdmin = async (page: Page, label: string) => {
+  await page.getByRole('button', { name: label }).click()
+  const ask = page.getByRole('alertdialog')
+  await expect(ask).toContainText('recorded in the audit log')
+  await ask.getByRole('button', { name: 'Edit settings' }).click()
+  const modal = page.getByRole('dialog', { name: label })
+  await expect(modal).toContainText('as an admin')
+  return modal
 }
 
 test.describe.configure({ mode: 'serial' })
@@ -75,24 +79,57 @@ test('a user owns a project with a lecture', async ({ request }) => {
   expect(deck.status()).toBe(200)
 })
 
-test("the admin edits another user's project settings", async ({ page }) => {
+test('the admin console has no settings editor of its own', async ({
+  page,
+}) => {
   await ensureSignedIn(page, admin)
   await page.goto('/app/admin')
   await page.getByRole('link', { name: owner.email }).click()
   await page.getByRole('link', { name: projectTitle }).click()
   await expect(page).toHaveURL(/\/app\/admin\/projects\//)
 
-  // Nothing is dirty yet, so there is nothing to save
+  await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(
+    0,
+  )
   await expect(
-    page.getByRole('button', { name: 'Save changes' }),
-  ).toBeDisabled()
+    page.getByText('Settings are edited in the project'),
+  ).toBeVisible()
 
-  await page.getByLabel('Visibility').selectOption('restricted')
-  await saveWithConfirm(page, 'Visibility: Public → Private')
+  await page.getByRole('link', { name: deckTitle }).click()
+  await expect(page).toHaveURL(/\/app\/admin\/decks\//)
+  await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(
+    0,
+  )
+  await expect(
+    page.getByText('Settings are edited in the lecture'),
+  ).toBeVisible()
+})
+
+test("the admin edits another user's project settings", async ({ page }) => {
+  await ensureSignedIn(page, admin)
+  await page.goto('/app/admin')
+  await page.getByRole('link', { name: owner.email }).click()
+  await page.getByRole('link', { name: projectTitle }).click()
+
+  // Straight into the product view — the project is public, so no
+  // private-view confirmation stands in the way
+  await page.getByRole('button', { name: 'View project' }).click()
+  await expect(page).toHaveURL(/\/app\/projects\//)
+
+  const modal = await openSettingsAsAdmin(page, 'Project settings')
+  // Seed material is the owner's; the settings around it are editable
+  await expect(modal.getByText('Seed material')).toHaveCount(0)
+  const saved = page.waitForResponse(
+    res => res.url().includes('project.update') && res.status() === 200,
+  )
+  await modal.getByLabel('Language').selectOption('fr')
+  await saved
 
   // The value survives a reload, so it really was stored
   await page.reload()
-  await expect(page.getByLabel('Visibility')).toHaveValue('restricted')
+  await page.getByRole('button', { name: 'Project settings' }).click()
+  await page.getByRole('button', { name: 'Edit settings' }).click()
+  await expect(page.getByLabel('Language')).toHaveValue('fr')
 })
 
 test("the admin edits another user's lecture settings", async ({ page }) => {
@@ -101,20 +138,23 @@ test("the admin edits another user's lecture settings", async ({ page }) => {
   await page.getByRole('link', { name: owner.email }).click()
   await page.getByRole('link', { name: projectTitle }).click()
   await page.getByRole('link', { name: deckTitle }).click()
-  await expect(page).toHaveURL(/\/app\/admin\/decks\//)
+  await page.getByRole('button', { name: 'View slideshow' }).click()
+  await expect(page).toHaveURL(/\/d\//)
 
-  // The lecture still follows its project, so visibility is unset here
-  await expect(page.getByLabel('Visibility')).toHaveValue('')
-
-  await page.getByLabel('Visibility').selectOption('public')
-  await page.getByLabel('AI freedom').fill('4')
-  await saveWithConfirm(
-    page,
-    "Visibility: Follows the project's settings → Public",
+  const modal = await openSettingsAsAdmin(page, 'Lecture settings')
+  // Quiz and Export act through the admin's own Google account
+  await expect(modal.getByRole('tab', { name: 'Quiz' })).toHaveCount(0)
+  // The slider debounces, so wait for the save it eventually sends
+  const saved = page.waitForResponse(
+    res =>
+      res.url().includes('deck.setGenerationFreedom') && res.status() === 200,
   )
+  await modal.getByLabel('AI freedom').fill('4')
+  await saved
 
   await page.reload()
-  await expect(page.getByLabel('Visibility')).toHaveValue('public')
+  await page.getByRole('button', { name: 'Lecture settings' }).click()
+  await page.getByRole('button', { name: 'Edit settings' }).click()
   await expect(page.getByLabel('AI freedom')).toHaveValue('4')
 })
 
@@ -126,23 +166,18 @@ test('both edits are recorded in the audit log', async ({ page }) => {
   }
 })
 
-test('a project the admin owns refuses the edit', async ({ page }) => {
+test('the admin edits their own project without the admin path', async ({
+  page,
+}) => {
   await ensureSignedIn(page, admin)
   await createProject(page, `Admin Own Project ${run}`)
-  const projectId = page.url().split('/app/projects/')[1]!
 
-  await page.goto(`/app/admin/projects/${projectId}`)
-  await page.getByLabel('Visibility').selectOption('restricted')
-  await page.getByRole('button', { name: 'Save changes' }).click()
-  await page
-    .getByRole('alertdialog')
-    .getByRole('button', { name: 'Save changes' })
-    .click()
-
-  await expect(page.getByRole('alert')).toContainText(
-    'Admin accounts cannot be moderated',
-  )
-  // Nothing was stored: a reload still shows the original visibility
-  await page.reload()
-  await expect(page.getByLabel('Visibility')).toHaveValue('public')
+  await page.getByRole('button', { name: 'Project settings' }).click()
+  // Their own project: no confirmation, no banner, full settings
+  const modal = page.getByRole('dialog', { name: 'Project settings' })
+  await expect(modal).toBeVisible()
+  await expect(modal).not.toContainText('as an admin')
+  await expect(
+    modal.getByRole('heading', { name: 'Seed material' }),
+  ).toBeVisible()
 })

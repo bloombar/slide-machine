@@ -217,7 +217,7 @@ describe('project entity surfaces stay member-only', () => {
     expect(list.body).toHaveLength(1)
   })
 
-  it('an allowlisted admin reads a restricted project read-only, without prep notes', async () => {
+  it('an allowlisted admin reads a restricted project in full', async () => {
     process.env.ADMIN_EMAILS = 'root@example.com'
     try {
       await act(ada, 'project.update', {
@@ -233,10 +233,12 @@ describe('project entity surfaces stay member-only', () => {
       const res = await act(admin, 'project.get', { projectId })
       expect(res.status).toBe(200)
       expect(res.body.id).toBe(projectId)
-      // Read-only viewer shape: no instructor prep notes or member lists
-      expect(res.body.seedContext).toBeUndefined()
-      expect(res.body.viewers).toBeUndefined()
-      expect(res.body.editors).toBeUndefined()
+      // The owner's shape, prep notes and member lists included: the
+      // console already surfaces both, and the settings modal an admin
+      // edits from reads them (ADMIN-5).
+      expect(res.body.seedContext).toBe('SECRET-PREP')
+      expect(res.body.viewers).toEqual([])
+      expect(res.body.editors).toEqual([])
     } finally {
       delete process.env.ADMIN_EMAILS
     }

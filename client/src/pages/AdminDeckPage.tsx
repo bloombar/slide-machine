@@ -4,180 +4,25 @@
  * /d/:slug (always openable for admins), and a danger zone for
  * deleting the lecture — confirmed first and recorded in the admin
  * audit log server-side.
+ *
+ * Settings are not edited here: "View slideshow" opens the lecture in
+ * the viewer, where an admin edits its settings in the owner's own
+ * settings modal (ADMIN-5, see DeckViewerPage).
  */
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import {
-  findTtsVoice,
-  LOCALE_LABELS,
-  type AdminDeckSettingsPatch,
-  type Locale,
-  type Visibility,
-} from '@slide-machine/shared'
-import {
-  deleteAdminDeck,
-  fetchAdminDeck,
-  logAdminDeckView,
-  updateAdminDeckSettings,
-} from '../api/admin'
+import { deleteAdminDeck, fetchAdminDeck, logAdminDeckView } from '../api/admin'
 import type { AdminDeckDetailResponse } from '../api/admin'
 import { ApiError } from '../api/http'
 import ConfirmDialog from '../components/ConfirmDialog'
-import FreedomSlider from '../components/FreedomSlider'
-import LanguageSelect from '../components/LanguageSelect'
 import Modal from '../components/Modal'
-import VoiceSelect from '../components/VoiceSelect'
 import DetailRow from '../components/admin/DetailRow'
 import { VisibilityBadge } from '../components/admin/LectureTable'
 import SeedMaterialView from '../components/admin/SeedMaterialView'
-import SettingsPanel from '../components/admin/SettingsPanel'
-import { getTtsEnabled } from '../runtime-config'
-import {
-  formatValue,
-  type FieldLabel,
-  type FieldLabels,
-} from '../lib/admin-changes'
 import { projectTitle } from '../lib/project'
 
 /** The action the admin has asked for but not yet confirmed. */
 type PendingAction = { kind: 'delete' } | { kind: 'view-private' }
-
-/**
- * A lecture's admin-editable settings. An absent value means the lecture
- * inherits it — for `visibility`, that it still follows its project's
- * access settings; pinning any value detaches it permanently.
- */
-interface DeckSettingsDraft {
-  visibility?: Visibility
-  generationFreedom?: number
-  language?: Locale
-  ttsVoice?: string
-  refineIdentifySpeakers?: boolean
-  refineSlidesEnabled?: boolean
-  refineSlidesLevel?: number
-  refineTranscriptEnabled?: boolean
-  refineTranscriptLevel?: number
-}
-
-/** Value of the "Default (inherited)" option in every settings select. */
-const INHERIT = ''
-
-const onOffField = (label: string): FieldLabel => ({
-  label,
-  format: value =>
-    value === undefined || value === null
-      ? formatValue(undefined)
-      : value
-        ? 'On'
-        : 'Off',
-})
-
-const DECK_FIELDS: FieldLabels<DeckSettingsDraft> = {
-  visibility: {
-    label: 'Visibility',
-    format: value =>
-      value === 'public'
-        ? 'Public'
-        : value === 'restricted'
-          ? 'Private'
-          : "Follows the project's settings",
-  },
-  generationFreedom: 'AI freedom',
-  language: {
-    label: 'Language',
-    format: value =>
-      value ? LOCALE_LABELS[value as Locale] : formatValue(undefined),
-  },
-  ttsVoice: {
-    label: 'Narration voice',
-    format: value =>
-      value
-        ? (findTtsVoice(String(value))?.label ?? String(value))
-        : formatValue(undefined),
-  },
-  refineIdentifySpeakers: onOffField('Identify multiple speakers'),
-  refineSlidesEnabled: onOffField('Refine all slides'),
-  refineSlidesLevel: 'Slide refinement level',
-  refineTranscriptEnabled: onOffField('Refine the spoken transcript'),
-  refineTranscriptLevel: 'Transcript refinement level',
-}
-
-const fieldLabelClass = 'block text-sm font-medium text-slate-700'
-const selectClass =
-  'mt-1 block w-fit rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700'
-
-/** A refine toggle as three states: inherit the default, or pin on/off. */
-function OnOffSelect({
-  id,
-  label,
-  value,
-  onChange,
-}: {
-  id: string
-  label: string
-  value?: boolean
-  onChange: (value?: boolean) => void
-}) {
-  return (
-    <div>
-      <label htmlFor={id} className={fieldLabelClass}>
-        {label}
-      </label>
-      <select
-        id={id}
-        value={value === undefined ? INHERIT : String(value)}
-        onChange={e =>
-          onChange(
-            e.target.value === INHERIT ? undefined : e.target.value === 'true',
-          )
-        }
-        className={selectClass}
-      >
-        <option value={INHERIT}>Default (inherited)</option>
-        <option value="true">On</option>
-        <option value="false">Off</option>
-      </select>
-    </div>
-  )
-}
-
-/** A 1-5 refinement strength, or the inherited server default. */
-function LevelSelect({
-  id,
-  label,
-  value,
-  onChange,
-}: {
-  id: string
-  label: string
-  value?: number
-  onChange: (value?: number) => void
-}) {
-  return (
-    <div>
-      <label htmlFor={id} className={fieldLabelClass}>
-        {label}
-      </label>
-      <select
-        id={id}
-        value={value === undefined ? INHERIT : String(value)}
-        onChange={e =>
-          onChange(
-            e.target.value === INHERIT ? undefined : Number(e.target.value),
-          )
-        }
-        className={selectClass}
-      >
-        <option value={INHERIT}>Default (inherited)</option>
-        {[1, 2, 3, 4, 5].map(n => (
-          <option key={n} value={n}>
-            {n}
-          </option>
-        ))}
-      </select>
-    </div>
-  )
-}
 
 const asDate = (iso: string): string =>
   new Date(iso).toLocaleString(undefined, {
@@ -196,8 +41,6 @@ export default function AdminDeckPage() {
   const [pending, setPending] = useState<PendingAction | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [showSeed, setShowSeed] = useState(false)
-  // Bumped after a settings save so the page reads back what was stored
-  const [version, setVersion] = useState(0)
 
   useEffect(() => {
     if (!deckId) return
@@ -212,7 +55,7 @@ export default function AdminDeckPage() {
     return () => {
       cancelled = true
     }
-  }, [deckId, version])
+  }, [deckId])
 
   /** Opens the live slideshow. Public lectures open straight away; opening
    * a private one is confirmed first and recorded in the audit log,
@@ -282,21 +125,8 @@ export default function AdminDeckPage() {
     )
   }
 
-  const { deck, project, owner, seed, settings } = loaded
+  const { deck, project, owner, seed } = loaded
   const title = deck.title.trim() || 'Untitled lecture'
-  // An inheriting lecture has no visibility of its own; the effective one
-  // the read returns belongs to its project.
-  const settingsDraft: DeckSettingsDraft = {
-    visibility: settings.accessInherited ? undefined : settings.visibility,
-    generationFreedom: settings.generationFreedom,
-    language: settings.language,
-    ttsVoice: settings.ttsVoice,
-    refineIdentifySpeakers: settings.refineIdentifySpeakers,
-    refineSlidesEnabled: settings.refineSlidesEnabled,
-    refineSlidesLevel: settings.refineSlidesLevel,
-    refineTranscriptEnabled: settings.refineTranscriptEnabled,
-    refineTranscriptLevel: settings.refineTranscriptLevel,
-  }
   // Any seed material at either level — the lecture's own or the project's.
   const seedUsed =
     Boolean(seed.lecture.notes) ||
@@ -352,6 +182,14 @@ export default function AdminDeckPage() {
       >
         View slideshow
       </button>
+      <p className="mt-2 text-sm text-slate-500">
+        Settings are edited in the lecture itself: open it and use the settings
+        icon, as its owner would. Every change you make there is recorded in the{' '}
+        <Link to="/app/admin/logs" className="underline">
+          audit log
+        </Link>
+        .
+      </p>
 
       <section className="mt-6 rounded-lg border border-slate-200 p-4">
         <h2 className="mb-2 text-lg font-semibold text-slate-700">Details</h2>
@@ -363,118 +201,6 @@ export default function AdminDeckPage() {
           <DetailRow label="Permalink" value={`/d/${deck.permalinkSlug}`} />
         </dl>
       </section>
-
-      <SettingsPanel
-        value={settingsDraft}
-        labels={DECK_FIELDS}
-        confirmTitle="Save these lecture settings?"
-        description="Editing another user's lecture. Choosing any visibility detaches it from its project's access settings for good."
-        onSave={async patch => {
-          if (!deckId) return
-          // The panel's patch type allows null on every field; the wire
-          // type matches it here — null clears each level to inherited.
-          await updateAdminDeckSettings(deckId, patch as AdminDeckSettingsPatch)
-          setVersion(v => v + 1)
-        }}
-      >
-        {(draft, set) => (
-          <>
-            <div>
-              <label
-                htmlFor="admin-deck-visibility"
-                className={fieldLabelClass}
-              >
-                Visibility
-              </label>
-              <select
-                id="admin-deck-visibility"
-                value={draft.visibility ?? INHERIT}
-                onChange={e =>
-                  set(
-                    'visibility',
-                    e.target.value === INHERIT
-                      ? undefined
-                      : (e.target.value as Visibility),
-                  )
-                }
-                className={selectClass}
-              >
-                <option value={INHERIT}>
-                  Follow the project&apos;s settings
-                </option>
-                <option value="public">Public</option>
-                <option value="restricted">Private</option>
-              </select>
-            </div>
-            <div>
-              <p className={fieldLabelClass}>AI freedom</p>
-              <FreedomSlider
-                value={draft.generationFreedom}
-                inheritedValue={settings.effectiveGenerationFreedom}
-                // No debounce: nothing saves until Save changes, and a
-                // pending timer would drop the last drag on click.
-                debounceMs={0}
-                onChange={freedom =>
-                  set('generationFreedom', freedom ?? undefined)
-                }
-              />
-            </div>
-            <div>
-              <p className={fieldLabelClass}>Language</p>
-              <LanguageSelect
-                value={draft.language}
-                defaultLabel="project setting"
-                onChange={language => set('language', language ?? undefined)}
-              />
-            </div>
-            {getTtsEnabled() && (
-              <div>
-                <p className={fieldLabelClass}>Narration voice</p>
-                <VoiceSelect
-                  value={draft.ttsVoice}
-                  defaultLabel="project setting"
-                  onChange={voice => set('ttsVoice', voice ?? undefined)}
-                />
-              </div>
-            )}
-            <fieldset className="flex flex-col gap-4 rounded-md border border-slate-200 p-3">
-              <legend className="px-1 text-sm font-medium text-slate-700">
-                Refine
-              </legend>
-              <OnOffSelect
-                id="admin-refine-speakers"
-                label="Identify multiple speakers"
-                value={draft.refineIdentifySpeakers}
-                onChange={v => set('refineIdentifySpeakers', v)}
-              />
-              <OnOffSelect
-                id="admin-refine-slides"
-                label="Refine all slides"
-                value={draft.refineSlidesEnabled}
-                onChange={v => set('refineSlidesEnabled', v)}
-              />
-              <LevelSelect
-                id="admin-refine-slides-level"
-                label="Slide refinement level"
-                value={draft.refineSlidesLevel}
-                onChange={v => set('refineSlidesLevel', v)}
-              />
-              <OnOffSelect
-                id="admin-refine-transcript"
-                label="Refine the spoken transcript"
-                value={draft.refineTranscriptEnabled}
-                onChange={v => set('refineTranscriptEnabled', v)}
-              />
-              <LevelSelect
-                id="admin-refine-transcript-level"
-                label="Transcript refinement level"
-                value={draft.refineTranscriptLevel}
-                onChange={v => set('refineTranscriptLevel', v)}
-              />
-            </fieldset>
-          </>
-        )}
-      </SettingsPanel>
 
       <section className="mt-6 rounded-lg border border-slate-200 p-4">
         <div className="flex items-center justify-between gap-3">
