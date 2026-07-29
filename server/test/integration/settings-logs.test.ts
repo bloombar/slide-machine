@@ -3,7 +3,8 @@
  * MongoDB: allowlist gating, the paginated newest-first listing, the
  * entity/owner filters, and the CSV export (headers, escaping, ordering,
  * and that it honours the same filters). Entries are seeded through the
- * real logSettingsChange write path.
+ * real logSettingsChange write path, except where a test needs entries
+ * sharing one timestamp to pin down the ordering.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import express from 'express'
@@ -72,8 +73,34 @@ const seed = (
     ...entity,
   })
 
+/**
+ * Seeds `count` entries (`e-0`…`e-N`) that all share one createdAt, in
+ * order. Bypasses the logger — the only way to guarantee the tie that the
+ * ordering depends on, which real writes hit only by chance. Insert order
+ * is the true order, and the ObjectIds record it.
+ */
+const seedSameInstant = (actorId: string, count: number) =>
+  SettingsChangeLogModel.insertMany(
+    Array.from({ length: count }, (_, i) => ({
+      actorId,
+      actorEmail: ADMIN_EMAIL,
+      actorRole: 'owner',
+      entityType: 'project',
+      entityId: `e-${i}`,
+      entityName: 'Physics',
+      ownerId: 'owner-1',
+      changes: { language: { from: null, to: 'fr' } },
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    })),
+    { timestamps: false },
+  )
+
 const get = (token: string, path: string) =>
   request(server).get(path).set('Authorization', `Bearer ${token}`)
+
+/** The entityIds of a listing response, in the order returned. */
+const idsOf = (res: { body: { logs: { entityId: string }[] } }) =>
+  res.body.logs.map(l => l.entityId)
 
 describe('settings log gating', () => {
   it('401s without a token on both endpoints', async () => {
@@ -154,6 +181,30 @@ describe('GET /api/admin/settings-logs', () => {
       '/api/admin/settings-logs?sort=oldest&limit=1',
     )
     expect(oldest.body.logs[0].entityId).toBe('u-0')
+  })
+
+  it('orders entries written in the same millisecond by when they happened', async () => {
+    const { admin, token } = await asAdmin()
+    await seedSameInstant(admin._id.toString(), 5)
+
+    const newest = await get(token, '/api/admin/settings-logs')
+    expect(idsOf(newest)).toEqual(['e-4', 'e-3', 'e-2', 'e-1', 'e-0'])
+
+    const oldest = await get(token, '/api/admin/settings-logs?sort=oldest')
+    expect(idsOf(oldest)).toEqual(['e-0', 'e-1', 'e-2', 'e-3', 'e-4'])
+
+    // A tie must not let a row repeat on one page and vanish from the next
+    const [one, two] = await Promise.all([
+      get(token, '/api/admin/settings-logs?page=1&limit=3'),
+      get(token, '/api/admin/settings-logs?page=2&limit=3'),
+    ])
+    expect([...idsOf(one), ...idsOf(two)]).toEqual([
+      'e-4',
+      'e-3',
+      'e-2',
+      'e-1',
+      'e-0',
+    ])
   })
 
   it('filters by entity kind, and counts only what it returns', async () => {
@@ -241,6 +292,18 @@ describe('GET /api/admin/settings-logs/export', () => {
     // A name with a comma and quotes is quote-wrapped, quotes doubled
     expect(lines[2]).toContain('"Waves, ""advanced"""')
     expect(lines[2]).toContain('""from"":""Waves""')
+  })
+
+  it('exports same-millisecond entries in the listing order', async () => {
+    const { admin, token } = await asAdmin()
+    await seedSameInstant(admin._id.toString(), 3)
+
+    const res = await get(token, '/api/admin/settings-logs/export')
+    const rows = res.text
+      .split('\r\n')
+      .filter(line => line !== '')
+      .slice(1)
+    expect(rows.map(row => row.split(',')[5])).toEqual(['e-2', 'e-1', 'e-0'])
   })
 
   it('honours the same filters as the listing', async () => {

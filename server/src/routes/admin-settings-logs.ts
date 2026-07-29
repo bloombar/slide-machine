@@ -36,9 +36,16 @@ const logsQuerySchema = z.object({
   ownerId: z.string().min(1).optional(),
 })
 
+// `_id` breaks ties in the same direction as the timestamp, as the admin
+// action log's listing does. Entries written in the same millisecond are
+// routine here — one edit can change several fields, and a bulk edit logs
+// per entity — and would otherwise come back in an arbitrary order, which
+// both scrambles "newest first" and lets a row repeat on one page and
+// vanish from the next. ObjectIds carry a monotonic counter, so they order
+// same-millisecond writes by when they happened.
 const LOG_SORTS = {
-  newest: { createdAt: -1 },
-  oldest: { createdAt: 1 },
+  newest: { createdAt: -1, _id: -1 },
+  oldest: { createdAt: 1, _id: 1 },
 } as const
 
 /** Parses the listing query or 400s with the offending fields listed. */
@@ -112,8 +119,10 @@ adminSettingsLogsRouter.get('/settings-logs/export', async (req, res) => {
       'changes',
     ]),
   )
+  // Same tiebreaker as the listing, so the export's "newest first" matches
+  // the order the Settings changes page shows.
   const cursor = SettingsChangeLogModel.find(filter)
-    .sort({ createdAt: -1 })
+    .sort(LOG_SORTS.newest)
     .cursor()
   for await (const doc of cursor) {
     res.write(
