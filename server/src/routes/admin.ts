@@ -457,9 +457,15 @@ const logsQuerySchema = z.object({
   sort: z.enum(['newest', 'oldest']).default('newest'),
 })
 
+// `_id` breaks ties in the same direction as the timestamp. Entries written
+// in the same millisecond — routine, since one admin action can log several —
+// otherwise come back in an arbitrary order, which both scrambles "newest
+// first" and lets a row repeat on one page and vanish from the next. ObjectIds
+// carry a monotonic counter, so they order same-millisecond writes by when
+// they happened.
 const LOG_SORTS = {
-  newest: { createdAt: -1 },
-  oldest: { createdAt: 1 },
+  newest: { createdAt: -1, _id: -1 },
+  oldest: { createdAt: 1, _id: 1 },
 } as const
 
 adminRouter.get('/logs', async (req, res) => {
@@ -502,7 +508,9 @@ adminRouter.get('/logs/export', async (_req, res) => {
       'details',
     ]),
   )
-  const cursor = AdminActionLogModel.find().sort({ createdAt: -1 }).cursor()
+  // Same tiebreaker as LOG_SORTS, so the export's "newest first" matches the
+  // order the Logs page shows rather than drifting for same-millisecond rows.
+  const cursor = AdminActionLogModel.find().sort(LOG_SORTS.newest).cursor()
   for await (const doc of cursor) {
     res.write(
       csvRow([
