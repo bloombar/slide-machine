@@ -59,6 +59,10 @@ moderation actions for when the answer calls for one.
   settings are edited, and the delete action. Opens for any lecture
   regardless of the private-lecture toggle, mirroring the always-on
   viewer access.
+- **Logs** (`/app/admin/logs`) — the admin audit log: what admins did.
+- **Settings changes** (`/app/admin/settings-logs`) — the settings change
+  log: how any account's, project's, or lecture's settings got this way,
+  whoever changed them.
 
 ### Moderation
 
@@ -169,10 +173,46 @@ Every moderation action writes one (`user.delete`, `user.ban_email`,
 `deck.settings_update` from the product's own settings modals), whose
 details carry a `changes` object holding each edited field's `from` and
 `to` — an edit that changes nothing saves nothing and writes no entry.
-An owner or editor changing their own settings writes nothing either;
-only the admin override is logged. It is the durable audit trail; a local CSV
-would not survive an App Platform redeploy, which is why the CSV is an
-on-demand export rather than the store.
+An owner or editor changing their own settings writes nothing here; only
+the admin override is logged, and the [settings change
+log](#settings-change-log-appadminsettings-logs) covers the rest. It is
+the durable audit trail; a local CSV would not survive an App Platform
+redeploy, which is why the CSV is an on-demand export rather than the
+store.
+
+### Settings change log (`/app/admin/settings-logs`)
+
+A second, separate log. The audit log answers "what have admins done";
+this one answers "how did these settings get this way" — **every**
+settings change on the platform, whoever made it. A user switching their
+profile to private, a colleague with edit access changing a project's
+language, an admin editing an account from the console: all three land
+here. An admin's settings edit is therefore in both logs.
+
+Each entry holds the acting user (id + email snapshot), the **role** they
+acted in (`owner`, `editor`, or `admin`), which record changed (kind, id,
+and the name snapshotted at the time), the **owner** those settings belong
+to, the changed fields as `{field: {from, to}}`, and a timestamp. Cleared
+settings record as `null` and read as "not set" on the page; a long value
+is truncated so one big bio cannot bloat the log.
+
+The page lists entries newest first, paginated, filterable by kind
+(accounts / projects / lectures), with a **Download CSV** button that
+exports whatever the filter is showing. The API also filters by
+`entityId` (one record's whole history) and `ownerId` (everything one
+account owns).
+
+What counts as a "setting" is defined in one place —
+[server/src/lib/settings-snapshot.ts](../server/src/lib/settings-snapshot.ts)
+— and read by both logs, so adding a field to a settings editor means
+adding it there. Writes go through
+[server/src/audit/settings-log.ts](../server/src/audit/settings-log.ts)
+into the `settingschangelogs` collection; like the audit log it is
+**append-only**, and no API can edit or delete an entry. Content edits
+(slides, recordings, refine runs) are not settings and are not recorded,
+and an edit that changes nothing writes no entry — which is why merely
+opening a sharing tab, which reads through the same code path as an edit,
+leaves no trace.
 
 ## Changing how the app behaves
 
