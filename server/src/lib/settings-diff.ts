@@ -1,19 +1,20 @@
 /**
- * Entity-agnostic settings diff for the audited admin settings editors
- * (ADMIN-5). Handlers snapshot an entity's settings before and after
- * applying a patch and pass both here; the result is what the audit entry
- * records as `details.changes`, and an empty result means the request
- * changed nothing (no save, no audit entry).
+ * Entity-agnostic settings diff, shared by both audit trails: the admin
+ * action log (ADMIN-5) and the settings change log. Callers snapshot an
+ * entity's settings before and after applying an edit (lib/settings-
+ * snapshot.ts) and pass both here; the result is what an entry records as
+ * its changed fields, and an empty result means the edit changed nothing
+ * (no save, no log entry).
  */
+import type {
+  SettingsChanges,
+  SettingsFieldChange,
+} from '@slide-machine/shared'
 
-/** One field's old and new value, as recorded in the audit log. */
-export interface FieldChange {
-  from: unknown
-  to: unknown
-}
+/** One field's old and new value, as recorded in a log entry. */
+export type FieldChange = SettingsFieldChange
 
-/** Changed fields, keyed by field name. */
-export type SettingsChanges = Record<string, FieldChange>
+export type { SettingsChanges }
 
 /** Longest string kept in a recorded value; a long bio must not inflate
  * the append-only log. Truncated values end with an ellipsis. */
