@@ -2,7 +2,7 @@
  * E2E for the settings change log against the built app: an ordinary user
  * changes their own account settings and then a project setting, both
  * through the real UI, and the allowlisted admin finds each change on the
- * Settings changes page with the right actor, target, and before/after.
+ * User Logs page with the right actor, target, and before/after.
  *
  * This is the log's whole point — it records what USERS do to their
  * settings, not only what admins do — so nothing here is an admin edit;
@@ -91,12 +91,12 @@ test('the same user changes a project setting', async ({ page }) => {
   await saved
 })
 
-test('the admin finds the account change on the Settings changes page', async ({
+test('the admin finds the account change on the User Logs page', async ({
   page,
 }) => {
   await ensureSignedIn(page, admin)
   await page.goto('/app/admin')
-  await page.getByRole('link', { name: 'Settings changes' }).click()
+  await page.getByRole('link', { name: 'User Logs', exact: true }).click()
   await expect(page).toHaveURL(/\/app\/admin\/settings-logs$/)
 
   // Narrowing to accounts also keeps this run's rows on the first page of

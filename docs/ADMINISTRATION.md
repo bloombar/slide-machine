@@ -59,8 +59,8 @@ moderation actions for when the answer calls for one.
   settings are edited, and the delete action. Opens for any lecture
   regardless of the private-lecture toggle, mirroring the always-on
   viewer access.
-- **Logs** (`/app/admin/logs`) — the admin audit log: what admins did.
-- **Settings changes** (`/app/admin/settings-logs`) — the settings change
+- **Admin Logs** (`/app/admin/logs`) — the admin audit log: what admins did.
+- **User Logs** (`/app/admin/settings-logs`) — the settings change
   log: how any account's, project's, or lecture's settings got this way,
   whoever changed them.
 

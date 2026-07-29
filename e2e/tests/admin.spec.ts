@@ -153,7 +153,7 @@ test('the admin reaches the audit log and downloads the CSV export', async ({
 
   await page.getByRole('button', { name: 'Menu' }).click()
   await page.getByRole('menuitem', { name: 'Admin', exact: true }).hover()
-  await page.getByRole('menuitem', { name: 'Logs' }).click()
+  await page.getByRole('menuitem', { name: 'Admin Logs', exact: true }).click()
   await expect(page).toHaveURL(/\/app\/admin\/logs$/)
   await expect(page.getByRole('heading', { name: /Audit log/ })).toBeVisible()
 
@@ -235,7 +235,7 @@ test('the admin nav bar moves between every section and marks the current one', 
   await nav.getByRole('link', { name: 'Lectures' }).click()
   await expect(page).toHaveURL(/\/app\/admin\/decks$/)
 
-  await nav.getByRole('link', { name: 'Logs' }).click()
+  await nav.getByRole('link', { name: 'Admin Logs', exact: true }).click()
   await expect(page).toHaveURL(/\/app\/admin\/logs$/)
 
   await nav.getByRole('link', { name: 'Users' }).click()
