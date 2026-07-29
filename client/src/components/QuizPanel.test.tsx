@@ -155,6 +155,30 @@ describe('QuizPanel', () => {
     expect(await screen.findByText(FORM_URL)).toBeInTheDocument()
   })
 
+  it('keeps the entered options when the review is cancelled (QUIZ-2)', async () => {
+    mockFetchRoutes({
+      'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
+      'quiz.driveFolders': () => ({ status: 200, body: { folders: [] } }),
+      'quiz.generate': GENERATE_OK,
+    })
+    render(<QuizPanel deckId="d1" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate quiz' }),
+    )
+
+    // Enter a distinctive point total, then generate to reach the review step.
+    const points = await screen.findByLabelText('Total points')
+    fireEvent.change(points, { target: { value: '42' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Generate & save' }))
+
+    // The review step opens…
+    await screen.findByRole('button', { name: 'Publish quiz' })
+    // …cancel it: the picker returns with the point total still filled in,
+    // rather than resetting to the defaults.
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(await screen.findByLabelText('Total points')).toHaveValue(42)
+  })
+
   it('navigates into a sub-folder and saves the quiz there', async () => {
     let published: unknown
     mockFetchRoutes({

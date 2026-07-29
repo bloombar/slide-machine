@@ -74,37 +74,14 @@ const initialTypeCounts = (defaults?: QuizGenerationOptions): TypeCounts => {
   return { single_choice: n, multiple_choice: 0, short_text: 0, long_text: 0 }
 }
 
-function FolderPicker({
-  onCancel,
-  onPublish,
-  onReconnect,
-  publishing,
-  hasTranscript,
-  defaults,
-}: {
-  onCancel: () => void
-  onPublish: (folder: DriveFolder, options: QuizGenerationOptions) => void
-  onReconnect: () => void
-  publishing: boolean
-  hasTranscript: boolean
-  /** The project's remembered quiz options, pre-filled into the form (QUIZ-2). */
-  defaults?: QuizGenerationOptions
-}) {
-  // The breadcrumb; the last entry is the folder currently open (the one a
-  // quiz would be saved into). Always rooted at My Drive.
-  const [path, setPath] = useState<DriveFolder[]>([
-    { id: 'root', name: 'My Drive' },
-  ])
-  const [folders, setFolders] = useState<DriveFolder[]>([])
-  const [loadedFor, setLoadedFor] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [newFolderName, setNewFolderName] = useState('')
-  const [creatingNew, setCreatingNew] = useState(false)
-  const [creating, setCreating] = useState(false)
-
-  // Generation options (QUIZ-5/QUIZ-7). The per-type counts are the source of
-  // truth; "Number of questions" is simply their sum, defaulting to all
-  // single-choice, so the two can never disagree.
+/**
+ * The quiz generation options (QUIZ-5/QUIZ-7), owned by the caller so they
+ * outlive the folder picker and survive the review step (QUIZ-2 — cancelling
+ * review must not wipe what the instructor typed). The per-type counts are the
+ * source of truth; "Number of questions" is simply their sum, defaulting to all
+ * single-choice, so the two can never disagree.
+ */
+function useQuizOptions(defaults?: QuizGenerationOptions) {
   const [totalPoints, setTotalPoints] = useState(
     defaults?.totalPoints ? String(defaults.totalPoints) : '',
   )
@@ -177,6 +154,74 @@ function FolderPicker({
     typeCounts: types,
     customInstructions: customInstructions.trim() || undefined,
   })
+
+  return {
+    totalPoints,
+    setTotalPoints,
+    emailCollection,
+    setEmailCollection,
+    includeTranscript,
+    setIncludeTranscript,
+    advanced,
+    setAdvanced,
+    types,
+    countText,
+    onCountChange,
+    onCountBlur,
+    onTypeChange,
+    customInstructions,
+    setCustomInstructions,
+    buildOptions,
+  }
+}
+
+type QuizOptions = ReturnType<typeof useQuizOptions>
+
+function FolderPicker({
+  onCancel,
+  onGenerate,
+  onReconnect,
+  publishing,
+  hasTranscript,
+  options,
+}: {
+  onCancel: () => void
+  onGenerate: (folder: DriveFolder) => void
+  onReconnect: () => void
+  publishing: boolean
+  hasTranscript: boolean
+  /** Generation options, owned by the parent so they survive the review step. */
+  options: QuizOptions
+}) {
+  const {
+    totalPoints,
+    setTotalPoints,
+    emailCollection,
+    setEmailCollection,
+    includeTranscript,
+    setIncludeTranscript,
+    advanced,
+    setAdvanced,
+    types,
+    countText,
+    onCountChange,
+    onCountBlur,
+    onTypeChange,
+    customInstructions,
+    setCustomInstructions,
+  } = options
+
+  // The breadcrumb; the last entry is the folder currently open (the one a
+  // quiz would be saved into). Always rooted at My Drive.
+  const [path, setPath] = useState<DriveFolder[]>([
+    { id: 'root', name: 'My Drive' },
+  ])
+  const [folders, setFolders] = useState<DriveFolder[]>([])
+  const [loadedFor, setLoadedFor] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [newFolderName, setNewFolderName] = useState('')
+  const [creatingNew, setCreatingNew] = useState(false)
+  const [creating, setCreating] = useState(false)
 
   const current = path[path.length - 1]!
 
@@ -525,7 +570,7 @@ function FolderPicker({
               <button
                 type="button"
                 disabled={publishing}
-                onClick={() => onPublish(current, buildOptions())}
+                onClick={() => onGenerate(current)}
                 className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
               >
                 {publishing ? 'Generating…' : 'Generate & save'}
@@ -659,6 +704,76 @@ function QuizPreview({
   )
 }
 
+/**
+ * Owns the two-step publish flow (QUIZ-2): the folder picker and the review
+ * step. The generation options live here — above both dialogs — so cancelling
+ * the review returns to the picker with everything the instructor entered still
+ * in place, rather than starting over.
+ */
+function QuizPublishFlow({
+  defaults,
+  hasTranscript,
+  busy,
+  onGenerate,
+  onPublish,
+  onReconnect,
+  onClose,
+}: {
+  defaults?: QuizGenerationOptions
+  hasTranscript: boolean
+  busy: boolean
+  /** Generates the quiz for review; resolves to the questions, or null on error. */
+  onGenerate: (options: QuizGenerationOptions) => Promise<QuizQuestion[] | null>
+  onPublish: (
+    folder: DriveFolder,
+    options: QuizGenerationOptions,
+    reviewed: QuizQuestion[],
+  ) => void
+  onReconnect: () => void
+  onClose: () => void
+}) {
+  const options = useQuizOptions(defaults)
+  const [phase, setPhase] = useState<'picking' | 'review'>('picking')
+  const [folder, setFolder] = useState<DriveFolder | null>(null)
+  const [questions, setQuestions] = useState<QuizQuestion[]>([])
+
+  // "Generate & save": generate for review; on success move to the review step,
+  // on failure stay on the picker (options preserved either way).
+  const generate = (chosen: DriveFolder) => {
+    void onGenerate(options.buildOptions()).then(qs => {
+      if (!qs) return
+      setFolder(chosen)
+      setQuestions(qs)
+      setPhase('review')
+    })
+  }
+
+  if (phase === 'review' && folder) {
+    return (
+      <QuizPreview
+        questions={questions}
+        folderName={folder.name}
+        publishing={busy}
+        onPublish={reviewed =>
+          onPublish(folder, options.buildOptions(), reviewed)
+        }
+        // Back to the picker with the options intact (the point of this flow).
+        onCancel={() => setPhase('picking')}
+      />
+    )
+  }
+  return (
+    <FolderPicker
+      publishing={busy}
+      hasTranscript={hasTranscript}
+      options={options}
+      onGenerate={generate}
+      onCancel={onClose}
+      onReconnect={onReconnect}
+    />
+  )
+}
+
 export default function QuizPanel({ deckId }: Props) {
   const [loading, setLoading] = useState(true)
   const [connected, setConnected] = useState(false)
@@ -669,14 +784,10 @@ export default function QuizPanel({ deckId }: Props) {
   )
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [picking, setPicking] = useState(false)
+  // The publish flow (folder picker + review) is open. A single flag: the flow
+  // itself owns which step it's on and the options entered along the way.
+  const [flowOpen, setFlowOpen] = useState(false)
   const [copied, setCopied] = useState(false)
-  // The generated quiz awaiting review (points editing) before it's published.
-  const [preview, setPreview] = useState<{
-    folder: DriveFolder
-    options: QuizGenerationOptions
-    questions: QuizQuestion[]
-  } | null>(null)
   // Set when the user returned from a connect that did not grant Drive access
   // (Google's granular consent — the Drive permission was unticked). A one-shot
   // signal: the flag is stripped from the URL so a refresh (or a later
@@ -741,41 +852,43 @@ export default function QuizPanel({ deckId }: Props) {
       })
   }
 
-  // Step 1: generate the quiz (no publish yet) and open the review step so the
-  // instructor can override per-question points (QUIZ-2).
-  const startPreview = (
-    folder: DriveFolder,
+  // Step 1: generate the quiz (no publish yet) for the review step. Resolves to
+  // the questions, or null on failure so the flow can stay on the picker.
+  const generate = (
     options: QuizGenerationOptions,
-  ) => {
+  ): Promise<QuizQuestion[] | null> => {
     setBusy(true)
     setError(null)
-    dispatchAction<{ questions: QuizQuestion[] }>('quiz.generate', {
+    return dispatchAction<{ questions: QuizQuestion[] }>('quiz.generate', {
       deckId,
       ...options,
     })
-      .then(({ questions }) => {
-        setPreview({ folder, options, questions })
-        setPicking(false)
+      .then(({ questions }) => questions)
+      .catch(() => {
+        setError('Could not generate the quiz — please try again')
+        return null
       })
-      .catch(() => setError('Could not generate the quiz — please try again'))
       .finally(() => setBusy(false))
   }
 
   // Step 2: publish the reviewed questions (with any point overrides) as a Form.
-  const publishReviewed = (reviewed: QuizQuestion[]) => {
-    if (!preview) return
+  const publish = (
+    folder: DriveFolder,
+    options: QuizGenerationOptions,
+    reviewed: QuizQuestion[],
+  ) => {
     setBusy(true)
     setError(null)
     dispatchAction<PublishedQuiz>('quiz.publish', {
       deckId,
-      driveFolderId: preview.folder.id,
-      driveFolderName: preview.folder.name,
-      ...preview.options,
+      driveFolderId: folder.id,
+      driveFolderName: folder.name,
+      ...options,
       questions: reviewed,
     })
       .then(q => {
         setQuiz(q)
-        setPreview(null)
+        setFlowOpen(false)
       })
       .catch(() => setError('Could not publish the quiz — please try again'))
       .finally(() => setBusy(false))
@@ -869,7 +982,7 @@ export default function QuizPanel({ deckId }: Props) {
       ) : connected ? (
         <button
           type="button"
-          onClick={() => setPicking(true)}
+          onClick={() => setFlowOpen(true)}
           className="self-start rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white"
         >
           Generate quiz
@@ -891,24 +1004,15 @@ export default function QuizPanel({ deckId }: Props) {
         </div>
       )}
 
-      {picking && (
-        <FolderPicker
-          publishing={busy}
-          onCancel={() => setPicking(false)}
-          onPublish={startPreview}
-          onReconnect={connectGoogle}
-          hasTranscript={hasTranscript}
+      {flowOpen && connected && (
+        <QuizPublishFlow
           defaults={defaults}
-        />
-      )}
-
-      {preview && (
-        <QuizPreview
-          questions={preview.questions}
-          folderName={preview.folder.name}
-          publishing={busy}
-          onPublish={publishReviewed}
-          onCancel={() => setPreview(null)}
+          hasTranscript={hasTranscript}
+          busy={busy}
+          onGenerate={generate}
+          onPublish={publish}
+          onReconnect={connectGoogle}
+          onClose={() => setFlowOpen(false)}
         />
       )}
     </div>
