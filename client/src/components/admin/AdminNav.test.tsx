@@ -42,6 +42,7 @@ describe('AdminNav', () => {
     ['/app/admin/decks', 'Lectures'],
     ['/app/admin/decks/d1', 'Lectures'],
     ['/app/admin/logs', 'Logs'],
+    ['/app/admin/settings-logs', 'Settings changes'],
   ])('marks %s as being in the %s section', (path, label) => {
     renderAt(path)
     expect(currentLabel()).toBe(label)

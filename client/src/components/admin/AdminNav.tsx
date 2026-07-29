@@ -26,6 +26,11 @@ export const ADMIN_LINKS: AdminLink[] = [
   },
   { to: '/app/admin/decks', label: 'Lectures', prefixes: ['/app/admin/decks'] },
   { to: '/app/admin/logs', label: 'Logs', prefixes: ['/app/admin/logs'] },
+  {
+    to: '/app/admin/settings-logs',
+    label: 'Settings changes',
+    prefixes: ['/app/admin/settings-logs'],
+  },
 ]
 
 /** True when the current path is the section's own page or one nested
