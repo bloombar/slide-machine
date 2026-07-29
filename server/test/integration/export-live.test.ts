@@ -163,7 +163,8 @@ describe('export actions (live mode)', () => {
     const status = await act(ada, 'export.status', { deckId })
     expect(status.body.exports).toHaveLength(1)
     const del = await act(ada, 'export.delete', { deckId, fileId: 'pres-1' })
-    expect(del.body).toEqual({ deleted: true })
+    // Ada saved it, so it is trashed in her Drive and nothing lingers elsewhere.
+    expect(del.body).toEqual({ deleted: true, remainsInOtherDrive: false })
     expect(deleteDriveFileLive).toHaveBeenCalledWith(
       'refresh-token-123',
       'pres-1',
