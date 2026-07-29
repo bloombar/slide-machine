@@ -5,6 +5,12 @@
  * deletes the whole project after confirmation) and Privacy & Sharing —
  * the project's ACL, which every lecture without its own override
  * inherits (SHARE-1). Closes from the top-right icon or Escape.
+ *
+ * An allowlisted admin opening someone else's project edits it here too
+ * (ADMIN-5, `adminOverride`): the same controls, saving through the same
+ * actions, with a banner and an audit entry per change. Seed material is
+ * the exception — uploading files into another user's project is content
+ * authoring, not a settings edit, so that section stays with its owner.
  */
 import { useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
@@ -13,6 +19,7 @@ import { dispatchAction } from '../api/actions'
 import { projectTitle } from '../lib/project'
 import SeedNotesEditor from './SeedNotesEditor'
 import SeedMaterial from './SeedMaterial'
+import AdminEditNotice from './AdminEditNotice'
 import ConfirmDialog from './ConfirmDialog'
 import Modal from './Modal'
 import AccessSettings from './AccessSettings'
@@ -35,6 +42,9 @@ interface Props {
   project: Project
   /** Editors manage access too; only the owner can transfer ownership. */
   isOwner: boolean
+  /** True when an admin has opened a project they cannot otherwise edit
+   * (ADMIN-5): adds the audit banner and hides the seed-material uploads. */
+  adminOverride?: boolean
   /** Which tab opens first (deep links, e.g. Share from the home kebab). */
   initialTab?: TabId
   onClose: () => void
@@ -47,6 +57,7 @@ interface Props {
 export default function ProjectSettingsModal({
   project,
   isOwner,
+  adminOverride = false,
   initialTab = 'general',
   onClose,
   onProjectChange,
@@ -110,6 +121,8 @@ export default function ProjectSettingsModal({
           <X className="h-5 w-5" aria-hidden />
         </button>
       </header>
+
+      {adminOverride && <AdminEditNotice entity="project" />}
 
       <div
         role="tablist"
@@ -217,16 +230,18 @@ export default function ProjectSettingsModal({
             />
           </div>
 
-          <div>
-            <h3 className="mb-2 text-lg font-semibold text-slate-700">
-              Seed material
-            </h3>
-            <p className="mb-3 text-sm text-slate-500">
-              Documents and photos scanned for background text and imagery,
-              available to every lecture in this project.
-            </p>
-            <SeedMaterial projectId={project.id} />
-          </div>
+          {!adminOverride && (
+            <div>
+              <h3 className="mb-2 text-lg font-semibold text-slate-700">
+                Seed material
+              </h3>
+              <p className="mb-3 text-sm text-slate-500">
+                Documents and photos scanned for background text and imagery,
+                available to every lecture in this project.
+              </p>
+              <SeedMaterial projectId={project.id} />
+            </div>
+          )}
 
           <div>
             <h3 className="mb-2 text-lg font-semibold text-slate-700">

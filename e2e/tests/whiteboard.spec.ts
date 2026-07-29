@@ -28,10 +28,14 @@ const buildDeck = async (page: Page) => {
   await expect(page).toHaveURL(/\/d\//)
   await page.getByRole('button', { name: 'Start lecture' }).click()
 
-  for (const phrase of ['Lines and points', 'Angles and triangles']) {
+  const phrases = ['Lines and points', 'Angles and triangles']
+  for (const [i, phrase] of phrases.entries()) {
     await page.getByLabel('Spoken phrase').fill(phrase)
     await page.getByRole('button', { name: 'Speak' }).click()
-    await expect(page.getByTestId('slide')).toBeVisible()
+    // Wait for THIS phrase's slide before speaking the next: a slide element
+    // is on screen the whole time, so waiting on it settles nothing and the
+    // deck can still be mid-build when the calling test starts.
+    await expect(page.getByText(`${i + 1} / ${i + 1}`)).toBeVisible()
   }
 }
 
@@ -134,15 +138,30 @@ test('drawings are not lost when a mic phrase updates the slide mid-draw', async
   // Draw a first stroke, then immediately submit a phrase BEFORE the debounced
   // drawing save lands — so the session.phrase response carries no drawings.
   // Its update must not clobber the in-progress local strokes.
+  const phrased = page.waitForResponse(
+    r => r.url().includes('/actions/session.phrase') && r.status() === 200,
+  )
   await drawOnSlide(page, 0.35)
   await page.getByLabel('Spoken phrase').fill('More detail about this slide')
   await page.getByRole('button', { name: 'Speak' }).click()
+  // Wait for the phrase to actually land before checking the count: the deck
+  // already reads 2 / 2 here, so asserting it unawaited would pass even if the
+  // phrase went on to add a third slide.
+  await phrased
   await expect(page.getByText('2 / 2')).toBeVisible() // folded in, no new slide
 
   // Draw a second stroke; the save must contain BOTH, not just the second.
-  const saved = page.waitForResponse(
-    r => r.url().includes('/actions/slide.editDrawings') && r.status() === 200,
-  )
+  // Match on the save that actually carries two strokes rather than the next
+  // save of any kind: the first stroke's own debounced save is still pending
+  // here, and on a slow machine it lands mid-way through drawing the second.
+  // Waiting for that one would let the reload below cancel the second stroke's
+  // debounce, losing it — a race in the test, not in the app.
+  const saved = page.waitForResponse(r => {
+    if (!r.url().includes('/actions/slide.editDrawings') || r.status() !== 200)
+      return false
+    const sent = JSON.parse(r.request().postData() ?? '{}')
+    return (sent.drawings?.length ?? 0) === 2
+  })
   await drawOnSlide(page, 0.65)
   await saved
 
