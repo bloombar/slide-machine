@@ -12,13 +12,18 @@ import YAML from 'yaml'
 import type {
   ExportedDeckSettings,
   ImageAttribution,
+  Stroke,
 } from '@slide-machine/shared'
+import type { ExportTheme } from './deck-theme'
 
 /** Format marker written at the top of every export, so an importer can
  * recognize the shape and its version (EXP-3). */
 export const DECK_YAML_VERSION = 1
 
-/** One slide's exportable content — a de-serialized view of the stored slide. */
+/** One slide's exportable content — a de-serialized view of the stored slide.
+ * `drawings` (freehand whiteboard marks) are carried for the visual formats
+ * (PDF, Google Slides); the YAML serializer deliberately omits them (see
+ * deckToYaml). */
 export interface ExportSlide {
   layoutType: string
   title?: string
@@ -30,16 +35,19 @@ export interface ExportSlide {
   imageSource?: string
   caption?: string
   attribution?: ImageAttribution
+  drawings?: Stroke[]
 }
 
-/** The deck-level fields captured in the export. `settings` makes the file
- * import-compatible (EXP-3): the General-tab lecture settings travel with the
- * deck so a re-import restores them. Seed notes and seed material are not
- * carried (they can hold private/copyrighted content). */
+/** The deck-level fields captured in the export. `theme` (the template's
+ * resolved colors) drives the PDF/Slides look and is emitted as inline styling.
+ * `settings` makes the file import-compatible (EXP-3): the General-tab lecture
+ * settings travel with the deck so a re-import restores them. Seed notes and
+ * seed material are not carried (they can hold private/copyrighted content). */
 export interface ExportDeck {
   title: string
   templateId: string
   visibility?: string
+  theme?: ExportTheme
   settings?: ExportedDeckSettings
   slides: ExportSlide[]
 }
@@ -95,7 +103,10 @@ export const deckToYaml = (deck: ExportDeck): string => {
     version: DECK_YAML_VERSION,
     kind: 'deck',
     title: deck.title,
+    // The template it was built from, plus its resolved styling inline so the
+    // file captures the look even without that template (EXP-2 "styling").
     templateId: deck.templateId,
+    ...(deck.theme ? { styling: { ...deck.theme } } : {}),
     ...(deck.visibility ? { visibility: deck.visibility } : {}),
     ...(settings ? { settings } : {}),
     slides: deck.slides.map(slide =>

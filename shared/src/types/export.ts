@@ -20,12 +20,40 @@ export type DeckExportFormat = 'pdf' | 'google-slides' | 'yaml'
 export type DeckDownloadFormat = 'pdf' | 'yaml'
 
 /**
- * Whether a Google account is connected (so Drive/Slides export is possible)
- * and the deck's title, used to name the exported file.
+ * Formats that can render the deck's freehand whiteboard marks (WB-1). PDF and
+ * Google Slides draw the marks on the slide; YAML is a text format with no
+ * visual surface (and the marks are hundreds of coordinate points each), so it
+ * omits them — the include-whiteboard option is therefore offered only for
+ * these formats.
+ */
+export const WHITEBOARD_EXPORT_FORMATS: DeckExportFormat[] = [
+  'pdf',
+  'google-slides',
+]
+
+/** A deck export previously saved to Google Drive (EXP-4), so it can be listed
+ * and deleted later — mirrors how a published quiz is tracked (QUIZ-3/QUIZ-6). */
+export interface ExportedFile {
+  /** Drive file id, used to open or trash it. */
+  fileId: string
+  fileUrl: string
+  fileName: string
+  format: DeckExportFormat
+  driveFolderName?: string
+  exportedAt: string
+}
+
+/**
+ * Whether a Google account is connected (so Drive/Slides export is possible),
+ * the deck's title (used to name the file), whether the deck has any whiteboard
+ * marks (so the include-whiteboard option can be hidden when there are none),
+ * and the deck's previously-saved Drive exports.
  */
 export interface ExportStatus {
   googleConnected: boolean
   deckTitle: string
+  hasWhiteboard: boolean
+  exports: ExportedFile[]
 }
 
 /**
@@ -40,13 +68,16 @@ export interface ExportDownload {
 }
 
 /**
- * The result of saving an export to Google Drive: the created file's name,
- * a link to open it, and the destination folder's name for confirmation.
+ * The result of saving an export to Google Drive: the created file (id, name,
+ * link), its format, and the destination folder's name for confirmation.
  */
 export interface ExportToDriveResult {
+  fileId: string
   fileName: string
   fileUrl: string
+  format: DeckExportFormat
   driveFolderName?: string
+  exportedAt: string
 }
 
 /**

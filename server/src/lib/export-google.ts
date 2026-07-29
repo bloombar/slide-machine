@@ -18,6 +18,7 @@ import { clientForRefreshToken } from '../auth/google-connect'
 
 const DRIVE_UPLOAD =
   'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink'
+const DRIVE_FILES = 'https://www.googleapis.com/drive/v3/files'
 
 /** The Google Apps MIME type for a native Google Slides presentation, and the
  * OpenXML MIME type of the .pptx we upload for conversion. */
@@ -36,6 +37,24 @@ const accessToken = async (refreshToken: string): Promise<string> => {
 export interface DriveFile {
   id: string
   fileUrl: string
+}
+
+/** Moves a Drive file to the trash (EXP-4 delete). Used to remove an export the
+ * app created; trashing (not permanent-deleting) is reversible from Drive. */
+export const deleteDriveFileLive = async (
+  refreshToken: string,
+  fileId: string,
+): Promise<void> => {
+  const token = await accessToken(refreshToken)
+  const res = await fetch(`${DRIVE_FILES}/${fileId}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ trashed: true }),
+  })
+  if (!res.ok) throw new Error(`Drive trash failed (${res.status})`)
 }
 
 /**

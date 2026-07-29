@@ -51,7 +51,7 @@ test('generate and publish a quiz from lecture settings', async ({ page }) => {
   // Advanced settings: the transcript option lives here (a phrase was spoken)
   await picker.getByRole('button', { name: 'Advanced settings' }).click()
   const includeTranscript = picker.getByRole('checkbox', {
-    name: /include the spoken transcript/i,
+    name: /include spoken transcript/i,
   })
   await expect(includeTranscript).toBeVisible()
   await includeTranscript.check()
@@ -65,6 +65,12 @@ test('generate and publish a quiz from lecture settings', async ({ page }) => {
   ).toBeVisible()
 
   await picker.getByRole('button', { name: 'Generate & save' }).click()
+
+  // Review step (QUIZ-2): the generated questions appear with editable points;
+  // publish from here.
+  const review = page.getByRole('dialog', { name: 'Review quiz questions' })
+  await expect(review).toBeVisible()
+  await review.getByRole('button', { name: 'Publish quiz' }).click()
 
   // The shareable Form URL appears with a copy button
   const link = dialog.getByRole('link', { name: /forms/ })
