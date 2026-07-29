@@ -96,6 +96,16 @@ while you type — the form holds a draft, **Save changes** stays disabled
 until something differs, and confirming shows the exact `old → new` of
 every field before one request goes out.
 
+The two public fields — **display name** and **bio** — can also be edited
+straight from the user's profile page (`/u/:id`, **View public profile**),
+which shows an **Edit** button to admins as well as to the owner. It is
+the same audited endpoint: the first save asks for confirmation and the
+change is recorded. Admins may open a **private** profile to do this;
+that page still shows only the lectures the admin could see anyway — the
+console, not the profile page, is where private lectures are listed. The
+profile's **Settings** button is the owner's own account settings and is
+never shown to an admin.
+
 **Project and lecture settings are edited in the product itself**, in the
 same settings modal their owner uses: open the project (**View project**)
 or the lecture (**View slideshow**) from its console page and use the
@@ -106,7 +116,7 @@ server records every change you make. Nothing about the controls changes
 
 | Entity | Editable | Where | Not editable |
 | --- | --- | --- | --- |
-| User | Display name, bio, profile visibility, interface locale, lecturing language | Admin console | Plan tier (see Plans below), email, password (its own danger-zone action), email verification |
+| User | Display name, bio, profile visibility, interface locale, lecturing language | Admin console (display name and bio also on the user's profile page) | Plan tier (see Plans below), email, password (its own danger-zone action), email verification |
 | Project | Title, seed notes, AI freedom, language, narration voice, template, visibility and the sharing list | Project settings modal | Seed material, ownership, deletion (a console action) |
 | Lecture | Title, seed notes, AI freedom, language, narration voice, template, the five Refine settings, visibility and the sharing list | Lecture settings modal | Seed material, running a refine, quizzes, exports, slides, ownership, deletion (a console action) |
 

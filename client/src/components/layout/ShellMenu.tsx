@@ -71,7 +71,7 @@ function AdminMenuItem({
 }
 
 export default function ShellMenu() {
-  const { status, logout } = useAuth()
+  const { status, user, logout } = useAuth()
   const authed = status === 'authenticated'
   const [open, setOpen] = useState(false)
   const navigate = useNavigate()
@@ -129,8 +129,9 @@ export default function ShellMenu() {
           </Link>
           {authed ? (
             <>
+              {/* The user's own profile page, the same one strangers see */}
               <Link
-                to="/app/profile"
+                to={user ? `/u/${user.id}` : '/app/profile'}
                 role="menuitem"
                 onClick={() => setOpen(false)}
                 className={item}

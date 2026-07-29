@@ -26,4 +26,8 @@ export interface PublicProject {
 export interface ProfileResponse {
   user: PublicUser
   projects: Array<{ project: PublicProject; decks: Deck[] }>
+  /** Whether this viewer may edit the display name and bio — the owner,
+   * or an admin (ADMIN-5, whose edits are audited). Cosmetic: the server
+   * re-checks on the write. */
+  canEdit: boolean
 }
