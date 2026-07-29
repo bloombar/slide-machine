@@ -34,6 +34,7 @@ import type {
 import { WHITEBOARD_EXPORT_FORMATS } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import Portal from './Portal'
+import ConfirmDialog from './ConfirmDialog'
 
 interface Props {
   deckId: string
@@ -88,7 +89,9 @@ const saveToDisk = (file: ExportDownload): void => {
   document.body.appendChild(link)
   link.click()
   link.remove()
-  URL.revokeObjectURL(url)
+  // Defer the revoke: some browsers read the blob asynchronously after the
+  // click, and revoking on the same tick can produce an empty download.
+  setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
 /**
@@ -357,6 +360,9 @@ export default function ExportPanel({ deckId }: Props) {
   const [includeWhiteboard, setIncludeWhiteboard] = useState(true)
   // Exports already saved to Drive, so they can be reopened or deleted.
   const [exports, setExports] = useState<ExportedFile[]>([])
+  // Set when a just-deleted export lived in another collaborator's Drive, so a
+  // modal can explain it's gone from the lecture but still in their Drive.
+  const [remainsInOtherDrive, setRemainsInOtherDrive] = useState(false)
   // Set when the user returned from a connect that did not grant Drive access
   // (Google's granular consent — the Drive permission was unticked). A one-shot
   // signal: the flag is stripped from the URL so a refresh (or a later
@@ -466,10 +472,16 @@ export default function ExportPanel({ deckId }: Props) {
   const deleteExport = (fileId: string) => {
     setBusy(true)
     setError(null)
-    dispatchAction<{ deleted: boolean }>('export.delete', { deckId, fileId })
-      .then(() => {
+    dispatchAction<{ deleted: boolean; remainsInOtherDrive?: boolean }>(
+      'export.delete',
+      { deckId, fileId },
+    )
+      .then(res => {
         setExports(prev => prev.filter(e => e.fileId !== fileId))
         setSaved(prev => (prev?.fileId === fileId ? null : prev))
+        // Saved to another collaborator's Drive: it's gone from the lecture but
+        // still in their Drive, and our credentials can't remove it there.
+        if (res.remainsInOtherDrive) setRemainsInOtherDrive(true)
       })
       .catch(() => setError('Could not delete the export — please try again'))
       .finally(() => setBusy(false))
@@ -686,6 +698,16 @@ export default function ExportPanel({ deckId }: Props) {
           onCancel={() => setPicking(false)}
           onChoose={saveToDrive}
           onReconnect={connectGoogle}
+        />
+      )}
+
+      {remainsInOtherDrive && (
+        <ConfirmDialog
+          title="Removed from this lecture"
+          message="This export was saved to another collaborator's Google Drive, so it's been removed from this lecture but still exists in their Drive. Ask them to delete it there if you'd like it gone entirely."
+          confirmLabel="OK"
+          onConfirm={() => setRemainsInOtherDrive(false)}
+          onCancel={() => setRemainsInOtherDrive(false)}
         />
       )}
     </div>

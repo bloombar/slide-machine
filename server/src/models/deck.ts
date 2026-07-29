@@ -64,6 +64,10 @@ export interface DeckExportDb {
   driveFolderId: string
   driveFolderName?: string
   exportedAt: Date
+  /** The user who saved this to their Drive. A different editor who later
+   * deletes it can trash the app record but not the file (it lives in this
+   * user's Drive), so this lets the UI say so (EXP-4). Absent on legacy rows. */
+  savedBy?: Types.ObjectId
 }
 
 export interface DeckDb extends Omit<
@@ -136,6 +140,7 @@ const exportSchema = new Schema<DeckExportDb>(
     driveFolderId: { type: String, required: true },
     driveFolderName: String,
     exportedAt: { type: Date, default: Date.now },
+    savedBy: { type: Schema.Types.ObjectId, ref: 'User', default: undefined },
   },
   { _id: false },
 )

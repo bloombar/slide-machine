@@ -24,6 +24,8 @@
  * the visual formats.
  */
 import { z } from 'zod'
+import { randomBytes } from 'node:crypto'
+import type { HydratedDocument } from 'mongoose'
 import type {
   DeckExportFormat,
   ExportDownload,
@@ -38,7 +40,7 @@ import { loadEditableDeck } from './deck'
 import { env } from '../config/env'
 import { UserModel } from '../models/user'
 import { SlideModel } from '../models/slide'
-import { type DeckExportDb } from '../models/deck'
+import { type DeckExportDb, type DeckDb } from '../models/deck'
 import { deckToYaml, type ExportDeck, type ExportSlide } from '../lib/deck-yaml'
 import { deckToPdf } from '../lib/deck-pdf'
 import { visibleStrokes } from '../lib/deck-drawings'
@@ -88,16 +90,16 @@ const slugifyTitle = (title: string): string =>
     .slice(0, 60) || 'deck'
 
 /**
- * Loads the deck and its slides (in display order) as the export model.
+ * Builds the export model (deck + slides in display order) from an already-
+ * loaded, editable deck. Taking the deck rather than re-fetching it lets a
+ * caller that also needs the document (to record the export) load it just once.
  * Whiteboard marks are attached only when `includeWhiteboard` is set (and only
  * strokes that are still visible), so the renderer draws exactly what's wanted.
  */
-const loadExportDeck = async (
-  ctx: ActionContext,
-  deckId: string,
+const buildExportDeck = async (
+  deck: HydratedDocument<DeckDb>,
   includeWhiteboard: boolean,
 ): Promise<ExportDeck> => {
-  const { deck } = await loadEditableDeck(ctx, deckId)
   const slideDocs = await SlideModel.find({ deckId: deck._id }).sort({
     index: 1,
   })
@@ -143,14 +145,20 @@ export const exportStatus = defineAction<{ deckId: string }, ExportStatus>({
   execute: async (ctx, input) => {
     const user = await requireUser(ctx)
     const { deck } = await loadEditableDeck(ctx, input.deckId)
-    const withMarks = await SlideModel.exists({
+    // "Has whiteboard marks" must mean the same thing the exporter draws:
+    // strokes that are still visible. The stored list also holds erased and
+    // orphaned strokes, so narrow to slides that have any drawings, then keep
+    // only those with visible strokes (via the shared visibleStrokes filter) —
+    // otherwise the checkbox could offer marks the export would then omit.
+    const drawn = await SlideModel.find({
       deckId: deck._id,
       'drawings.0': { $exists: true },
-    })
+    }).select('drawings')
+    const hasWhiteboard = drawn.some(s => visibleStrokes(s.drawings).length > 0)
     return {
       googleConnected: isConnected(user),
       deckTitle: deck.title,
-      hasWhiteboard: Boolean(withMarks),
+      hasWhiteboard,
       exports: (deck.exports ?? []).map(toExportedFile),
     }
   },
@@ -175,7 +183,8 @@ export const exportDownload = defineAction<
     // YAML has no visual surface, so whiteboard marks never apply to it.
     const includeWhiteboard =
       input.format === 'pdf' && input.includeWhiteboard !== false
-    const deck = await loadExportDeck(ctx, input.deckId, includeWhiteboard)
+    const { deck: deckDoc } = await loadEditableDeck(ctx, input.deckId)
+    const deck = await buildExportDeck(deckDoc, includeWhiteboard)
     const base = slugifyTitle(deck.title)
     if (input.format === 'yaml') {
       const yaml = deckToYaml(deck)
@@ -229,7 +238,10 @@ export const exportToDrive = defineAction<
     }
     const includeWhiteboard =
       whiteboardApplies(input.format) && input.includeWhiteboard !== false
-    const deck = await loadExportDeck(ctx, input.deckId, includeWhiteboard)
+    // Load the editable deck once and reuse the document to record the export
+    // below (no second fetch + permission check per save).
+    const { deck: deckDoc } = await loadEditableDeck(ctx, input.deckId)
+    const deck = await buildExportDeck(deckDoc, includeWhiteboard)
     const base = slugifyTitle(deck.title)
     // A Google Slides file is named by the deck title; fall back to a non-empty
     // label for untitled lectures (an empty name also fails schema validation).
@@ -242,7 +254,10 @@ export const exportToDrive = defineAction<
       input.format === 'google-slides' ? slidesTitle : `${base}.${input.format}`
 
     if (!isLive()) {
-      fileId = `mock-${base}-${input.format}`
+      // A random suffix keeps every mock export distinct — two exports of the
+      // same deck/format must not collide (the saved-exports list keys on
+      // fileId, and delete matches on it).
+      fileId = `mock-${base}-${input.format}-${randomBytes(4).toString('hex')}`
       fileUrl =
         input.format === 'google-slides'
           ? `https://docs.google.com/presentation/d/${fileId}/edit`
@@ -274,6 +289,8 @@ export const exportToDrive = defineAction<
     }
 
     // Record the export on the deck (newest last) so it can be deleted later.
+    // savedBy records whose Drive the file lives in, so another editor deleting
+    // it later can be told it still exists there (EXP-4).
     const record: DeckExportDb = {
       fileId,
       fileUrl,
@@ -282,8 +299,8 @@ export const exportToDrive = defineAction<
       driveFolderId: input.driveFolderId,
       driveFolderName: input.driveFolderName,
       exportedAt: new Date(),
+      savedBy: user._id,
     }
-    const { deck: deckDoc } = await loadEditableDeck(ctx, input.deckId)
     deckDoc.exports = [...(deckDoc.exports ?? []), record]
     await deckDoc.save()
 
@@ -305,7 +322,7 @@ export const exportToDrive = defineAction<
  */
 export const exportDelete = defineAction<
   { deckId: string; fileId: string },
-  { deleted: boolean }
+  { deleted: boolean; remainsInOtherDrive?: boolean }
 >({
   name: 'export.delete',
   input: z.object({
@@ -316,16 +333,23 @@ export const exportDelete = defineAction<
     const user = await requireUser(ctx)
     const { deck } = await loadEditableDeck(ctx, input.deckId)
     const existing = deck.exports ?? []
-    if (!existing.some(e => e.fileId === input.fileId)) {
+    const record = existing.find(e => e.fileId === input.fileId)
+    if (!record) {
       return { deleted: false }
     }
-    if (isLive() && user.googleQuizRefreshToken) {
+    // The file lives in whoever saved it's Drive. If that was a different
+    // editor, this user's credentials can't trash it there — so flag that the
+    // record is gone from the app but the file remains in the other Drive.
+    const remainsInOtherDrive = Boolean(
+      record.savedBy && record.savedBy.toString() !== ctx.userId,
+    )
+    if (isLive() && user.googleQuizRefreshToken && !remainsInOtherDrive) {
       const refreshToken = decryptToken(user.googleQuizRefreshToken)
       await deleteDriveFileLive(refreshToken, input.fileId).catch(() => {})
     }
     deck.exports = existing.filter(e => e.fileId !== input.fileId)
     await deck.save()
-    return { deleted: true }
+    return { deleted: true, remainsInOtherDrive }
   },
 })
 

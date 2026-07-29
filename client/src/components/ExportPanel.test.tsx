@@ -292,6 +292,43 @@ describe('ExportPanel', () => {
     await waitFor(() => expect(screen.queryByText('Saved to Drive')).toBeNull())
   })
 
+  it('explains when a deleted export still lives in another user’s Drive', async () => {
+    mockFetchRoutes({
+      'export.status': () => ({
+        status: 200,
+        body: {
+          googleConnected: true,
+          deckTitle: 'Bio',
+          hasWhiteboard: false,
+          exports: [
+            {
+              fileId: 'file-9',
+              fileUrl: 'https://drive/9',
+              fileName: 'bio.pdf',
+              format: 'pdf',
+              exportedAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+        },
+      }),
+      'export.delete': () => ({
+        status: 200,
+        body: { deleted: true, remainsInOtherDrive: true },
+      }),
+    })
+    render(<ExportPanel deckId="d1" />)
+    expect(await screen.findByText('Saved to Drive')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete bio.pdf' }))
+    // A modal explains the file remains in the other collaborator's Drive.
+    expect(
+      await screen.findByText(/still exists in their Drive/i),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }))
+    await waitFor(() =>
+      expect(screen.queryByText(/still exists in their Drive/i)).toBeNull(),
+    )
+  })
+
   it('surfaces an error when the status fails to load', async () => {
     mockFetchRoutes({ 'export.status': () => ({ status: 500, body: {} }) })
     render(<ExportPanel deckId="d1" />)

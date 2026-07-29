@@ -24,5 +24,7 @@ export const downloadExport = (file: ExportDownload): void => {
   document.body.appendChild(link)
   link.click()
   link.remove()
-  URL.revokeObjectURL(url)
+  // Defer the revoke: some browsers read the blob asynchronously after the
+  // click, and revoking on the same tick can produce an empty download.
+  setTimeout(() => URL.revokeObjectURL(url), 0)
 }

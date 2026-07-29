@@ -148,26 +148,45 @@ describe('export actions (mock mode)', () => {
     })
     expect(res.status).toBe(200)
     expect(res.body).toMatchObject({
-      fileId: 'mock-photosynthesis-pdf',
       fileName: 'photosynthesis.pdf',
-      fileUrl: 'https://drive.google.com/file/d/mock-photosynthesis-pdf/view',
       format: 'pdf',
       driveFolderName: 'Lectures',
     })
+    // The mock file id carries a random suffix so repeat exports never collide.
+    expect(res.body.fileId).toMatch(/^mock-photosynthesis-pdf-[0-9a-f]+$/)
+    expect(res.body.fileUrl).toBe(
+      `https://drive.google.com/file/d/${res.body.fileId}/view`,
+    )
     expect(typeof res.body.exportedAt).toBe('string')
+    const fileId = res.body.fileId
 
     // It is now listed in the deck's status, and can be deleted.
     const status = await act(ada, 'export.status', { deckId })
     expect(status.body.exports).toHaveLength(1)
-    expect(status.body.exports[0].fileId).toBe('mock-photosynthesis-pdf')
+    expect(status.body.exports[0].fileId).toBe(fileId)
 
-    const del = await act(ada, 'export.delete', {
-      deckId,
-      fileId: 'mock-photosynthesis-pdf',
-    })
-    expect(del.body).toEqual({ deleted: true })
+    const del = await act(ada, 'export.delete', { deckId, fileId })
+    // Ada saved it, so it is trashed outright — nothing lingers elsewhere.
+    expect(del.body).toEqual({ deleted: true, remainsInOtherDrive: false })
     const after = await act(ada, 'export.status', { deckId })
     expect(after.body.exports).toEqual([])
+  })
+
+  it('two exports of the same deck get distinct ids (no collision)', async () => {
+    await act(ada, 'quiz.connectGoogle')
+    const first = await act(ada, 'export.toDrive', {
+      deckId,
+      format: 'pdf',
+      driveFolderId: 'root',
+    })
+    const second = await act(ada, 'export.toDrive', {
+      deckId,
+      format: 'pdf',
+      driveFolderId: 'root',
+    })
+    expect(first.body.fileId).not.toBe(second.body.fileId)
+    const status = await act(ada, 'export.status', { deckId })
+    expect(status.body.exports).toHaveLength(2)
   })
 
   it('exports to Google Slides (always Drive) with a presentation URL', async () => {
@@ -179,8 +198,8 @@ describe('export actions (mock mode)', () => {
     })
     expect(res.status).toBe(200)
     expect(res.body.fileName).toBe('Photosynthesis')
-    expect(res.body.fileUrl).toBe(
-      'https://docs.google.com/presentation/d/mock-photosynthesis-google-slides/edit',
+    expect(res.body.fileUrl).toMatch(
+      /^https:\/\/docs\.google\.com\/presentation\/d\/mock-photosynthesis-google-slides-[0-9a-f]+\/edit$/,
     )
   })
 
@@ -226,6 +245,62 @@ describe('export actions (mock mode)', () => {
     )
     const res = await act(ada, 'export.status', { deckId })
     expect(res.body.hasWhiteboard).toBe(true)
+  })
+
+  it('reports hasWhiteboard false when every mark is erased/orphaned', async () => {
+    // The stored list is non-empty, but the only stroke is orphaned, so the
+    // renderer would draw nothing — the status must agree (via visibleStrokes).
+    const deckDoc = await DeckModel.findOne({ title: 'Photosynthesis' })
+    await SlideModel.updateOne(
+      { deckId: deckDoc!._id, index: 0 },
+      {
+        $set: {
+          drawings: [
+            {
+              id: 'gone',
+              tool: 'pen',
+              color: '#000000',
+              thickness: 0.005,
+              points: [
+                { x: 0.1, y: 0.2 },
+                { x: 0.4, y: 0.5 },
+              ],
+              startedAt: new Date().toISOString(),
+              endedAt: new Date().toISOString(),
+              anchor: { charAnchor: 0, source: 'unsynced', orphaned: true },
+            },
+          ],
+        },
+      },
+    )
+    const res = await act(ada, 'export.status', { deckId })
+    expect(res.body.hasWhiteboard).toBe(false)
+  })
+
+  it('deleting an export saved by another user reports it stays in their Drive', async () => {
+    const bobUser = await UserModel.findOne({ email: 'bob@example.com' })
+    const deckDoc = await DeckModel.findOne({ title: 'Photosynthesis' })
+    deckDoc!.exports = [
+      {
+        fileId: 'mock-other-pdf-deadbeef',
+        fileUrl: 'https://drive.google.com/file/d/mock-other-pdf-deadbeef/view',
+        fileName: 'photosynthesis.pdf',
+        format: 'pdf',
+        driveFolderId: 'root',
+        exportedAt: new Date(),
+        savedBy: bobUser!._id,
+      },
+    ]
+    await deckDoc!.save()
+
+    const del = await act(ada, 'export.delete', {
+      deckId,
+      fileId: 'mock-other-pdf-deadbeef',
+    })
+    // Removed from the lecture, but flagged as still living in Bob's Drive.
+    expect(del.body).toEqual({ deleted: true, remainsInOtherDrive: true })
+    const after = await act(ada, 'export.status', { deckId })
+    expect(after.body.exports).toEqual([])
   })
 
   it('does not let a non-editor export someone else’s deck', async () => {
