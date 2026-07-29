@@ -4,9 +4,18 @@
  */
 import '@testing-library/jest-dom/vitest'
 import { afterEach } from 'vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, configure } from '@testing-library/react'
 
 afterEach(cleanup)
+
+// `waitFor` and the `findBy*` queries default to giving up after 1s. That is
+// ample on an idle machine but not when several vitest workers share the CPU:
+// a test driving a multi-step async chain (play narration, arrow to the next
+// slide, await its fetch) would intermittently time out mid-chain, failing a
+// different test on each run. These helpers poll and return the moment their
+// condition holds, so a longer ceiling costs nothing when the machine is
+// quick — it only stops a busy one from being mistaken for a broken one.
+configure({ asyncUtilTimeout: 5000 })
 
 // jsdom implements neither ResizeObserver nor a 2D canvas context, both of
 // which the whiteboard drawing overlay uses. Stub them globally so any page
