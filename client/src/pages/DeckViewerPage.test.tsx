@@ -10,6 +10,7 @@ import { setAccessToken } from '../auth/token'
 import DeckViewerPage from './DeckViewerPage'
 import PublicShell from '../components/layout/PublicShell'
 import { ShellTitleProvider } from '../components/layout/ShellTitle'
+import { resetAdminStatus } from '../hooks/useIsAdmin'
 import { mockFetchRoutes } from '../test/fetch-mock'
 import * as runtimeConfig from '../runtime-config'
 
@@ -2805,4 +2806,117 @@ describe('DeckViewerPage pre-lecture seeding', () => {
   // (SHOW_SEED_UPLOAD_IN_TOOLBAR), so there is no UI entry point to reopen
   // seeding during a lecture; seeding happens from the pre-lecture dialog
   // and Lecture settings. The wiring is retained for when it returns.
+})
+
+describe('DeckViewerPage admin settings (ADMIN-5)', () => {
+  // An allowlisted admin opening someone else's lecture: read-only over
+  // the slides (canEdit false), but its settings are theirs to change.
+  const adminRoutes = () =>
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'admin1', displayName: 'Root' }, accessToken: 't' },
+      }),
+      '/api/admin/status': () => ({ status: 200, body: { isAdmin: true } }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: false },
+      }),
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.shares': () => ({ status: 200, body: [] }),
+    })
+
+  const renderAdminViewer = () =>
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+  afterEach(() => {
+    resetAdminStatus()
+  })
+
+  it('offers the settings icon and asks before opening them', async () => {
+    adminRoutes()
+    renderAdminViewer()
+
+    const gear = await screen.findByRole('button', { name: 'Lecture settings' })
+    // Content editing stays out of reach: no way to add or speak slides
+    expect(
+      screen.queryByRole('button', { name: 'Add slide' }),
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(gear)
+    const ask = await screen.findByRole('alertdialog', {
+      name: "Edit this lecture's settings?",
+    })
+    expect(ask).toHaveTextContent(/recorded in the audit log/i)
+    expect(
+      screen.queryByRole('dialog', { name: 'Lecture settings' }),
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
+    const settings = await screen.findByRole('dialog', {
+      name: 'Lecture settings',
+    })
+    expect(settings).toHaveTextContent(
+      /editing another user's lecture as an admin/i,
+    )
+  })
+
+  it('drops the tabs and sections that are not settings edits', async () => {
+    adminRoutes()
+    renderAdminViewer()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Lecture settings' }),
+    )
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Edit settings' }),
+    )
+    await screen.findByRole('dialog', { name: 'Lecture settings' })
+
+    // Quiz and Export act through the admin's own Google account
+    expect(screen.queryByRole('tab', { name: 'Quiz' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('tab', { name: 'Export' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Privacy & Sharing' })).toBeVisible()
+    // Uploading into someone else's lecture is not a settings edit
+    expect(screen.queryByText('Seed material')).not.toBeInTheDocument()
+
+    // The Refine settings are editable; running the pass is the owner's
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine' }))
+    expect(
+      await screen.findByRole('checkbox', { name: /Refine all slides/ }),
+    ).toBeEnabled()
+    expect(
+      screen.queryByRole('button', { name: 'Refine' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('leaves the lecture alone for a signed-in non-admin viewer', async () => {
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u2', displayName: 'Bob' }, accessToken: 't' },
+      }),
+      '/api/admin/status': () => ({ status: 403 }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: false },
+      }),
+    })
+    renderAdminViewer()
+
+    await screen.findByText('Shared Lecture')
+    expect(
+      screen.queryByRole('button', { name: 'Lecture settings' }),
+    ).not.toBeInTheDocument()
+  })
 })

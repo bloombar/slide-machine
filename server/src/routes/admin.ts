@@ -50,11 +50,18 @@ import {
 } from '../lib/cascade'
 import { revokeAllSessions } from '../auth/refresh-store'
 import { hashPassword } from '../auth/password'
-import { isAdminEmail } from '../config/admin'
 import type { ResolvedAcl } from '../lib/access'
 import { requireAuth } from '../middleware/auth'
 import { requireAdmin } from '../middleware/admin'
 import { HttpError } from '../middleware/error'
+import {
+  actor,
+  loadDeck,
+  loadProject,
+  loadUser,
+  rejectAdminTarget,
+} from './admin-targets'
+import { adminSettingsRouter } from './admin-settings'
 
 /** One row of the admin user directory. */
 export interface AdminUserSummary {
@@ -408,17 +415,12 @@ const inIdOrder = <T extends { _id: Types.ObjectId }>(
   return ids.flatMap(id => byId.get(id.toString()) ?? [])
 }
 
-/** Resolves a :id route param to an existing user or 404s. */
-const loadUser = async (id: string): Promise<HydratedDocument<UserDb>> => {
-  const notFound = new HttpError(404, 'not_found', 'User not found')
-  if (!isValidObjectId(id)) throw notFound
-  const user = await UserModel.findById(id)
-  if (!user) throw notFound
-  return user
-}
-
 export const adminRouter = Router()
 adminRouter.use(requireAuth, requireAdmin)
+
+// The audited settings-editing endpoints (ADMIN-5) mount here, after the
+// guards above, so they are covered by exactly the same authorization.
+adminRouter.use(adminSettingsRouter)
 
 /** Reachable only through the guards above, so 200 means "is an admin";
  * the client uses it to decide whether to show admin navigation. */
@@ -619,15 +621,11 @@ adminRouter.get('/projects', async (req, res) => {
 })
 
 adminRouter.get('/projects/:id', async (req, res) => {
-  const notFound = new HttpError(404, 'not_found', 'Project not found')
-  const id = String(req.params.id)
-  if (!isValidObjectId(id)) throw notFound
-  const project = await ProjectModel.findById(id)
-  if (!project) throw notFound
+  const project = await loadProject(String(req.params.id))
   // Cascades keep projects ownerless-free, so a missing owner means the
   // project is mid-deletion; treat it as gone.
   const owner = await UserModel.findById(project.ownerId)
-  if (!owner) throw notFound
+  if (!owner) throw new HttpError(404, 'not_found', 'Project not found')
 
   const decks = await DeckModel.find({ projectId: project._id }).sort({
     updatedAt: -1,
@@ -659,11 +657,7 @@ adminRouter.get('/projects/:id', async (req, res) => {
  * 400s rather than logging.
  */
 adminRouter.post('/projects/:id/private-view', async (req, res) => {
-  const notFound = new HttpError(404, 'not_found', 'Project not found')
-  const id = String(req.params.id)
-  if (!isValidObjectId(id)) throw notFound
-  const project = await ProjectModel.findById(id)
-  if (!project) throw notFound
+  const project = await loadProject(String(req.params.id))
   const admin = actor(req)
   // Projects sit at the top of the ACL tree, so their stored visibility
   // is the effective one (no inheritance to resolve).
@@ -733,18 +727,15 @@ adminRouter.get('/decks', async (req, res) => {
 })
 
 adminRouter.get('/decks/:id', async (req, res) => {
-  const notFound = new HttpError(404, 'not_found', 'Lecture not found')
-  const id = String(req.params.id)
-  if (!isValidObjectId(id)) throw notFound
-  const deck = await DeckModel.findById(id)
-  if (!deck) throw notFound
+  const deck = await loadDeck(String(req.params.id))
   // Cascades remove decks with their project and owner, so a missing
   // parent means the lecture is mid-deletion; treat it as gone.
   const [project, owner] = await Promise.all([
     ProjectModel.findById(deck.projectId),
     UserModel.findById(deck.ownerId),
   ])
-  if (!project || !owner) throw notFound
+  if (!project || !owner)
+    throw new HttpError(404, 'not_found', 'Lecture not found')
   // Effective seed material: the lecture's own (deckId set) plus the
   // project's (deckId absent), which stacks underneath it at generation.
   const [acls, lectureAssets, projectAssets] = await Promise.all([
@@ -756,8 +747,9 @@ adminRouter.get('/decks/:id', async (req, res) => {
     }).sort({ createdAt: -1 }),
   ])
 
+  const acl = acls.get(deck._id.toString())!
   const body: AdminDeckDetailResponse = {
-    deck: toAdminDeckSummary(deck, acls.get(deck._id.toString())!),
+    deck: toAdminDeckSummary(deck, acl),
     project: { id: project._id.toString(), title: project.title },
     owner: {
       id: owner._id.toString(),
@@ -782,11 +774,7 @@ adminRouter.get('/decks/:id', async (req, res) => {
  * is only private by inheritance is logged too; a public one 400s.
  */
 adminRouter.post('/decks/:id/private-view', async (req, res) => {
-  const notFound = new HttpError(404, 'not_found', 'Lecture not found')
-  const id = String(req.params.id)
-  if (!isValidObjectId(id)) throw notFound
-  const deck = await DeckModel.findById(id)
-  if (!deck) throw notFound
+  const deck = await loadDeck(String(req.params.id))
   const admin = actor(req)
   const acls = await loadDeckAcls([deck])
   const visibility = acls.get(deck._id.toString())!.visibility
@@ -812,27 +800,9 @@ adminRouter.post('/decks/:id/private-view', async (req, res) => {
 // ---------------------------------------------------------------------------
 // Moderation endpoints. Every mutation below records itself in the admin
 // action log (audit/log.ts) before responding; the allowlist gate on the
-// router is the authorization. All respond 204 on success.
-
-/** The acting admin, guaranteed by requireAdmin on this router. */
-const actor = (req: { adminUser?: { id: string; email: string } }) => {
-  const admin = req.adminUser
-  if (!admin) throw new HttpError(403, 'forbidden', 'Admin access required')
-  return admin
-}
-
-/** Admin accounts moderate; they are not moderated. Deleting, banning,
- * or resetting an allowlisted account (including yourself) is refused —
- * it would be a lockout, not moderation. */
-const rejectAdminTarget = (email: string) => {
-  if (isAdminEmail(email)) {
-    throw new HttpError(
-      400,
-      'target_is_admin',
-      'Admin accounts cannot be moderated; remove the email from ADMIN_EMAILS first',
-    )
-  }
-}
+// router is the authorization. All respond 204 on success. `actor` and
+// `rejectAdminTarget` live in ./admin-targets, shared with the settings
+// endpoints.
 
 adminRouter.delete('/users/:id', async (req, res) => {
   const user = await loadUser(String(req.params.id))
@@ -943,11 +913,7 @@ adminRouter.post('/users/:id/password', async (req, res) => {
 })
 
 adminRouter.delete('/projects/:id', async (req, res) => {
-  const notFound = new HttpError(404, 'not_found', 'Project not found')
-  const id = String(req.params.id)
-  if (!isValidObjectId(id)) throw notFound
-  const project = await ProjectModel.findById(id)
-  if (!project) throw notFound
+  const project = await loadProject(String(req.params.id))
   const admin = actor(req)
 
   await deleteProjectCascade(project._id)
@@ -963,11 +929,7 @@ adminRouter.delete('/projects/:id', async (req, res) => {
 })
 
 adminRouter.delete('/decks/:id', async (req, res) => {
-  const notFound = new HttpError(404, 'not_found', 'Lecture not found')
-  const id = String(req.params.id)
-  if (!isValidObjectId(id)) throw notFound
-  const deck = await DeckModel.findById(id)
-  if (!deck) throw notFound
+  const deck = await loadDeck(String(req.params.id))
   const admin = actor(req)
 
   await deleteDeckCascade(deck)

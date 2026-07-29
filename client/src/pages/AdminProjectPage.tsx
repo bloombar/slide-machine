@@ -4,6 +4,10 @@
  * the project-level moderation actions (delete a lecture, delete the
  * whole project). Every lecture, private or not, is listed; opening one
  * in the viewer is always allowed for admins.
+ *
+ * Settings are not edited here: "View project" opens the project in the
+ * product view, where an admin edits its settings in the owner's own
+ * settings modal (ADMIN-5, see ProjectPage).
  */
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
@@ -187,6 +191,14 @@ export default function AdminProjectPage() {
       >
         View project
       </button>
+      <p className="mt-2 text-sm text-slate-500">
+        Settings are edited in the project itself: open it and use the settings
+        icon, as its owner would. Every change you make there is recorded in the{' '}
+        <Link to="/app/admin/logs" className="underline">
+          audit log
+        </Link>
+        .
+      </p>
 
       <section className="mt-6 mb-6 rounded-lg border border-slate-200 p-4">
         <h2 className="mb-2 text-lg font-semibold text-slate-700">Details</h2>
@@ -204,7 +216,7 @@ export default function AdminProjectPage() {
         </dl>
       </section>
 
-      <section>
+      <section className="mt-8">
         <div className="mb-3">
           <h2 className="text-lg font-semibold text-slate-700">Lectures</h2>
         </div>
