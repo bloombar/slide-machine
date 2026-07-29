@@ -53,17 +53,28 @@ const refitContentToList = async (page: Page, email: string) => {
     .fill('Also it contains cholesterol, embedded proteins, glycolipids')
   await page.getByRole('button', { name: 'Speak' }).click()
   await expect(page.getByTestId('slide')).toHaveAttribute('data-layout', 'list')
-  // Scoped to the slide: the GEN-9 transition fades the departing `body` slot
-  // out as a clone parked in document.body for the length of the animation, so
-  // an unscoped match would see the migrated text twice mid-flight. Scoping
-  // asserts what this test means — the content is ON the slide — and still
-  // fails if the body were genuinely left rendered alongside the bullets.
+  // Assert the migration itself, not merely that the words are somewhere on
+  // screen: the prose must now BE a bullet, alongside the new material. The
+  // old assertion matched any element holding the text, which both missed a
+  // body left standing next to the bullets and collided with the GEN-9
+  // transition's fade-out clone (a copy of the departing body slot, parked in
+  // document.body for the length of the animation).
+  const bullets = page.getByTestId('slide').getByRole('listitem')
   await expect(
-    page
-      .getByTestId('slide')
-      .getByText('The cell membrane is a strong protective barrier'),
-  ).toBeVisible()
-  await expect(page.getByTestId('slide').getByText('glycolipids')).toBeVisible()
+    bullets.filter({
+      hasText: 'The cell membrane is a strong protective barrier',
+    }),
+  ).toHaveCount(1)
+  await expect(bullets.filter({ hasText: 'glycolipids' })).toHaveCount(1)
+  // The body slot is gone from the slide — the content moved rather than
+  // being duplicated. Slot wrappers are tagged by the slot system, so this
+  // names the slot directly instead of guessing at its rendered text.
+  await expect(
+    page.getByTestId('slide').locator('[data-flip-slot="body"]'),
+  ).toHaveCount(0)
+  // ...and the transition's fade-out clone, which is parked directly on
+  // document.body, is cleaned up rather than left behind.
+  await expect(page.locator('body > [data-flip-slot]')).toHaveCount(0)
   await expect(page.getByText('1 / 1')).toBeVisible()
 }
 
