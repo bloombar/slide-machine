@@ -326,7 +326,13 @@ const deckCountLookup: PipelineStage = {
     from: DeckModel.collection.name,
     let: { projectId: '$_id' },
     pipeline: [
-      { $match: { $expr: { $eq: ['$projectId', '$$projectId'] } } },
+      // Exclude soft-deleted lectures from the count (P-10).
+      {
+        $match: {
+          $expr: { $eq: ['$projectId', '$$projectId'] },
+          deletedAt: null,
+        },
+      },
       { $count: 'count' },
     ],
     as: 'sortDeckCount',
@@ -402,6 +408,9 @@ const pageIdPipeline = (
   const column = columns[field]!
   const order = dir === 'asc' ? 1 : -1
   return [
+    // Soft delete (P-10): aggregation bypasses the exclusion middleware, so the
+    // directory must filter tombstoned rows itself.
+    { $match: { deletedAt: null } },
     ...(column.stages ?? []),
     { $project: { sortKey: column.value } },
     { $sort: { sortKey: order, _id: 1 } },
@@ -609,7 +618,8 @@ adminRouter.get('/projects', async (req, res) => {
     ownerIds.length ? UserModel.find({ _id: { $in: ownerIds } }) : [],
     projectIds.length
       ? DeckModel.aggregate<{ _id: Types.ObjectId; count: number }>([
-          { $match: { projectId: { $in: projectIds } } },
+          // Exclude soft-deleted lectures from the per-project count (P-10).
+          { $match: { projectId: { $in: projectIds }, deletedAt: null } },
           { $group: { _id: '$projectId', count: { $sum: 1 } } },
         ])
       : [],
