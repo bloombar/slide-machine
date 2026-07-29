@@ -113,19 +113,25 @@ test('the admin browses the project and lecture directories', async ({
   await expect(page.getByRole('heading', { name: /Projects/ })).toBeVisible()
   await expect(page.getByLabel('Projects per page')).toBeVisible()
 
-  // The project created by the first test is on page 1 (last-edited
-  // first), in a row that also carries its owner's email
-  const row = page.getByRole('row').filter({ hasText: user.email })
-  await expect(
-    row.getByRole('link', { name: 'Admin E2E Project' }),
-  ).toBeVisible()
+  // The directory is site-wide and the test DB is shared with every other
+  // spec running in parallel, so which projects land on page 1 is not ours
+  // to predict — asserting on a specific one made this fail whenever a
+  // concurrent spec created newer projects. Drive the FIRST row instead:
+  // that exercises the same join and drill-down without depending on the
+  // directory's contents (as the lecture and log tables below already do).
+  const firstRow = page.getByRole('table').getByRole('row').nth(1)
+  // The owner column is a join onto the user collection: it must render an
+  // email, or the explicit "—" placeholder for a project whose owner was
+  // deleted (the shared DB has those), but never an empty cell.
+  await expect(firstRow.getByRole('cell').nth(1)).toHaveText(/@|—/)
 
-  // Rows drill into the project's own admin page
-  await row.getByRole('link', { name: 'Admin E2E Project' }).click()
+  // Rows drill into the project's own admin page, under that project's title
+  const projectLink = firstRow.getByRole('link').first()
+  const title = (await projectLink.textContent())?.trim() ?? ''
+  expect(title).not.toBe('')
+  await projectLink.click()
   await expect(page).toHaveURL(/\/app\/admin\/projects\/[0-9a-f]+$/)
-  await expect(
-    page.getByRole('heading', { name: 'Admin E2E Project' }),
-  ).toBeVisible()
+  await expect(page.getByRole('heading', { name: title })).toBeVisible()
 
   // The lecture directory renders its table; the test DB is shared, so
   // assert rows or the empty state rather than specific contents

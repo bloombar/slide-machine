@@ -4,6 +4,11 @@
  * a new untitled lecture immediately, an in-place editable title, and a
  * settings icon on the title row opening the project settings modal
  * (seed material + danger zone).
+ *
+ * An allowlisted admin reaches this page from the admin console and
+ * edits the project's settings in that same modal (ADMIN-5). Because
+ * they are not the owner, opening it is confirmed first and every change
+ * they make is audited server-side.
  */
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
@@ -12,8 +17,10 @@ import type { Deck, DeckImportResult, Project } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import { ApiError } from '../api/http'
 import { useAuth } from '../auth/AuthContext'
+import { useIsAdmin } from '../hooks/useIsAdmin'
 import { projectTitle } from '../lib/project'
 import { config } from '../config'
+import ConfirmDialog from '../components/ConfirmDialog'
 import LectureRow from '../components/LectureRow'
 import NewLectureZone from '../components/NewLectureZone'
 import EditableText from '../components/EditableText'
@@ -25,6 +32,7 @@ export default function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const isAdmin = useIsAdmin()
   const [project, setProject] = useState<Project | null>(null)
   const [decks, setDecks] = useState<Deck[]>([])
   const location = useLocation()
@@ -43,6 +51,10 @@ export default function ProjectPage() {
   const [error, setError] = useState<string | null>(null)
   // A success/warning notice after importing a lecture (EXP-3).
   const [notice, setNotice] = useState<string | null>(null)
+  // Set once the admin has acknowledged the confirm dialog below; the
+  // settings modal stays shut until then (ADMIN-5 wants the edit
+  // acknowledged, and the deep link opens settings on its own).
+  const [adminEditConfirmed, setAdminEditConfirmed] = useState(false)
 
   // Scrub the deep-link state so a reload doesn't re-open settings
   useEffect(() => {
@@ -84,6 +96,19 @@ export default function ProjectPage() {
         // Quiet failure: the title reverts to the saved value
       })
   }
+
+  // Editing rights the ordinary way: the owner, or someone the project
+  // was shared with as an editor. Anyone else who got this far and is an
+  // admin edits on the allowlist's authority instead, which is audited.
+  const canEdit =
+    !!project &&
+    (project.ownerId === user?.id ||
+      (project.editors ?? []).includes(user?.id ?? ''))
+  const adminOverride = !canEdit && isAdmin === true
+  // The admin check is still in flight, so which of the two it is —
+  // an admin about to be asked, or a plain viewer — is not known yet.
+  const rightsPending = !canEdit && isAdmin === null
+  const askAdmin = settingsOpen && adminOverride && !adminEditConfirmed
 
   /** Starts a new untitled lecture and jumps straight into it. */
   const startLecture = async () => {
@@ -197,14 +222,25 @@ export default function ProjectPage() {
         </ul>
       </section>
 
-      {settingsOpen && project && (
+      {settingsOpen && project && !rightsPending && !askAdmin && (
         <ProjectSettingsModal
           project={project}
           isOwner={user?.id === project.ownerId}
+          adminOverride={adminOverride}
           initialTab={settingsTab}
           onClose={() => setSettingsOpen(false)}
           onProjectChange={setProject}
           onDeleted={() => void navigate('/app')}
+        />
+      )}
+
+      {askAdmin && project && (
+        <ConfirmDialog
+          title="Edit this project's settings?"
+          message={`"${projectTitle(project)}" belongs to another user. You can change its settings as an admin; every change is recorded in the audit log.`}
+          confirmLabel="Edit settings"
+          onConfirm={() => setAdminEditConfirmed(true)}
+          onCancel={() => setSettingsOpen(false)}
         />
       )}
     </div>

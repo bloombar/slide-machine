@@ -230,6 +230,26 @@ export const loadDeckAcls = async (
   )
 }
 
+/**
+ * Copy-on-write: the first explicit change to a lecture's privacy
+ * settings snapshots the effective (inherited) ACL as the lecture's own
+ * override; from then on the lecture stops following its project. The
+ * caller still owns `markModified('accessOverride')` and the save.
+ * Shared by the owner-facing actions (actions/deck.ts) and the admin
+ * settings editor (routes/admin-settings.ts).
+ */
+export const ensureDeckOverride = (
+  deck: HydratedDocument<DeckDb>,
+  acl: ResolvedAcl,
+): void => {
+  if (deck.accessOverride) return
+  deck.accessOverride = {
+    visibility: acl.visibility,
+    viewers: [...acl.viewers],
+    editors: [...acl.editors],
+  }
+}
+
 /** Marks the deck as modified now (used when only its slides changed). */
 export const touchDeck = async (
   deckId: Types.ObjectId | string,

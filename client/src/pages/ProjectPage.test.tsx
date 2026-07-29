@@ -1,13 +1,15 @@
 /**
  * Unit tests for the project page: lectures listed up front, the +
- * starting an untitled lecture immediately, and the settings modal
- * (seed notes auto-save + project deletion with confirmation).
+ * starting an untitled lecture immediately, the settings modal (seed
+ * notes auto-save + project deletion with confirmation), and an admin
+ * editing another user's project settings there (ADMIN-5).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router'
 import ProjectPage from './ProjectPage'
 import { AuthProvider } from '../auth/AuthContext'
+import { resetAdminStatus } from '../hooks/useIsAdmin'
 import { mockFetchRoutes } from '../test/fetch-mock'
 
 const project = {
@@ -57,6 +59,8 @@ const renderPage = () =>
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  // The admin check caches its answer per account for the session
+  resetAdminStatus()
 })
 
 describe('ProjectPage', () => {
@@ -368,5 +372,84 @@ describe('ProjectPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
     expect(await screen.findByText('HOME')).toBeInTheDocument()
     expect(deleted).toBe(true)
+  })
+})
+
+describe('ProjectPage admin settings (ADMIN-5)', () => {
+  // Signed in as an admin who owns nothing here: the project is Ada's.
+  const adminRoutes = (isAdmin = true) => ({
+    ...baseRoutes,
+    '/api/auth/refresh': () => ({
+      status: 200,
+      body: { user: { id: 'admin1', displayName: 'Root' }, accessToken: 't' },
+    }),
+    '/api/admin/status': () =>
+      isAdmin ? { status: 200, body: { isAdmin: true } } : { status: 403 },
+    '/api/actions/template.list': () => ({ status: 200, body: [] }),
+  })
+
+  const openSettings = async () => {
+    fireEvent.click(
+      await vi.waitFor(() =>
+        screen.getByRole('button', { name: 'Project settings' }),
+      ),
+    )
+  }
+
+  it('asks before opening another user’s settings, then shows the banner', async () => {
+    mockFetchRoutes(adminRoutes())
+    renderPage()
+    await openSettings()
+
+    const dialog = await screen.findByRole('alertdialog', {
+      name: "Edit this project's settings?",
+    })
+    expect(dialog).toHaveTextContent(/recorded in the audit log/i)
+    // Nothing is editable until the admin acknowledges it
+    expect(
+      screen.queryByRole('dialog', { name: 'Project settings' }),
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
+    const settings = await screen.findByRole('dialog', {
+      name: 'Project settings',
+    })
+    expect(settings).toHaveTextContent(
+      /editing another user's project as an admin/i,
+    )
+    // Uploading into someone else's project is not a settings edit
+    expect(screen.queryByText('Seed material')).not.toBeInTheDocument()
+    // Deleting it belongs to the owner (and to the admin console)
+    expect(
+      screen.queryByRole('button', { name: 'Delete project' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('leaves the settings shut when the admin declines', async () => {
+    mockFetchRoutes(adminRoutes())
+    renderPage()
+    await openSettings()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+    expect(
+      screen.queryByRole('dialog', { name: 'Project settings' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('never asks the owner, and shows no admin banner', async () => {
+    mockFetchRoutes({
+      ...baseRoutes,
+      '/api/admin/status': () => ({ status: 200, body: { isAdmin: true } }),
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+      '/api/actions/seedAsset.list': () => ({ status: 200, body: [] }),
+    })
+    renderPage()
+    await openSettings()
+
+    const settings = await screen.findByRole('dialog', {
+      name: 'Project settings',
+    })
+    expect(settings).not.toHaveTextContent(/as an admin/i)
+    expect(screen.getByText('Seed material')).toBeVisible()
   })
 })

@@ -4,6 +4,10 @@
  * /d/:slug (always openable for admins), and a danger zone for
  * deleting the lecture — confirmed first and recorded in the admin
  * audit log server-side.
+ *
+ * Settings are not edited here: "View slideshow" opens the lecture in
+ * the viewer, where an admin edits its settings in the owner's own
+ * settings modal (ADMIN-5, see DeckViewerPage).
  */
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
@@ -178,6 +182,14 @@ export default function AdminDeckPage() {
       >
         View slideshow
       </button>
+      <p className="mt-2 text-sm text-slate-500">
+        Settings are edited in the lecture itself: open it and use the settings
+        icon, as its owner would. Every change you make there is recorded in the{' '}
+        <Link to="/app/admin/logs" className="underline">
+          audit log
+        </Link>
+        .
+      </p>
 
       <section className="mt-6 rounded-lg border border-slate-200 p-4">
         <h2 className="mb-2 text-lg font-semibold text-slate-700">Details</h2>

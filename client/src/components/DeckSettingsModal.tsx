@@ -5,6 +5,13 @@
  * access controls). All changes save immediately. Closes from the
  * top-right icon or the Escape key; Left/Right arrows move between
  * tabs when the tab list has focus.
+ *
+ * An allowlisted admin opening someone else's lecture edits it here too
+ * (ADMIN-5, `adminOverride`): the same controls, saving through the same
+ * actions, with a banner and an audit entry per change. What that mode
+ * leaves out is everything that is not a settings edit — uploading seed
+ * material, running a refine over the owner's slides, and the Quiz and
+ * Export tabs, which act through the admin's own Google account.
  */
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
@@ -26,6 +33,7 @@ import QuizPanel from './QuizPanel'
 import ExportPanel from './ExportPanel'
 import SeedNotesEditor from './SeedNotesEditor'
 import SeedMaterial from './SeedMaterial'
+import AdminEditNotice from './AdminEditNotice'
 import FreedomSlider from './FreedomSlider'
 import LanguageSelect from './LanguageSelect'
 import VoiceSelect from './VoiceSelect'
@@ -51,6 +59,10 @@ const TABS = [
 export type SettingsTabId = (typeof TABS)[number]['id']
 type TabId = SettingsTabId
 
+/** Tabs an admin editing another user's lecture does not get: both act
+ * through the admin's own Google account, on the owner's content. */
+const ADMIN_HIDDEN_TABS: readonly TabId[] = ['quiz', 'export']
+
 interface Props {
   deck: Deck
   /** The project-level AI freedom this lecture inherits by default. */
@@ -61,6 +73,10 @@ interface Props {
   initialTab?: TabId
   /** Editors manage access too; only the owner can transfer ownership. */
   isOwner: boolean
+  /** True when an admin has opened a lecture they cannot otherwise edit
+   * (ADMIN-5): adds the audit banner and drops the sections that change
+   * content rather than settings. */
+  adminOverride?: boolean
   /** True when any slide carries whiteboard marks — refining slides then
    * prompts a confirmation, since it may reflow content under the marks. */
   slidesHaveDrawings?: boolean
@@ -81,6 +97,7 @@ export default function DeckSettingsModal({
   projectTtsVoice,
   initialTab = 'general',
   isOwner,
+  adminOverride = false,
   slidesHaveDrawings = false,
   onClose,
   onTemplateChange,
@@ -89,7 +106,14 @@ export default function DeckSettingsModal({
   onReformatted,
 }: Props) {
   const [templates, setTemplates] = useState<Template[]>([])
-  const [tab, setTab] = useState<TabId>(initialTab)
+  // An admin sees a shorter tab list, so a deep link into one of the
+  // hidden tabs lands on General instead.
+  const tabs = adminOverride
+    ? TABS.filter(t => !ADMIN_HIDDEN_TABS.includes(t.id))
+    : TABS
+  const [tab, setTab] = useState<TabId>(
+    tabs.some(t => t.id === initialTab) ? initialTab : 'general',
+  )
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   // Post-lecture refinement (GEN-4): any of three passes, run as one job.
   // Every setting persists to the lecture so the single-slide "Refine this
@@ -299,10 +323,10 @@ export default function DeckSettingsModal({
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
     e.preventDefault()
     e.stopPropagation()
-    const index = TABS.findIndex(t => t.id === tab)
+    const index = tabs.findIndex(t => t.id === tab)
     const next =
-      TABS[
-        (index + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length
+      tabs[
+        (index + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length
       ]!
     setTab(next.id)
     tabRefs.current.get(next.id)?.focus()
@@ -343,13 +367,15 @@ export default function DeckSettingsModal({
         </button>
       </header>
 
+      {adminOverride && <AdminEditNotice entity="lecture" />}
+
       <div
         role="tablist"
         aria-label="Settings sections"
         onKeyDown={onTabKeyDown}
         className="mb-6 flex gap-1 border-b border-slate-200"
       >
-        {TABS.map(t => (
+        {tabs.map(t => (
           <button
             key={t.id}
             ref={el => {
@@ -423,16 +449,18 @@ export default function DeckSettingsModal({
               }}
             />
           </div>
-          <div>
-            <h3 className="mb-2 text-lg font-semibold text-slate-700">
-              Seed material
-            </h3>
-            <p className="mb-3 text-sm text-slate-500">
-              Documents and photos scanned for background text and imagery, used
-              by this lecture only.
-            </p>
-            <SeedMaterial projectId={deck.projectId} deckId={deck.id} />
-          </div>
+          {!adminOverride && (
+            <div>
+              <h3 className="mb-2 text-lg font-semibold text-slate-700">
+                Seed material
+              </h3>
+              <p className="mb-3 text-sm text-slate-500">
+                Documents and photos scanned for background text and imagery,
+                used by this lecture only.
+              </p>
+              <SeedMaterial projectId={deck.projectId} deckId={deck.id} />
+            </div>
+          )}
           <div>
             <h3 className="mb-2 text-lg font-semibold text-slate-700">
               AI freedom
@@ -577,17 +605,23 @@ export default function DeckSettingsModal({
               Refine this lecture
             </h3>
             <p className="text-sm text-slate-500">
-              Improve the text, images, and spoken version of the slides. This
-              can take a few minutes and runs in the background.
+              {adminOverride
+                ? 'What a refinement pass would do, and how hard it would work. These are the lecture’s saved choices; running the pass is the owner’s to do.'
+                : 'Improve the text, images, and spoken version of the slides. This can take a few minutes and runs in the background.'}
             </p>
-            {!hasSlides && (
+            {!hasSlides && !adminOverride && (
               <p className="mt-2 text-sm text-amber-600">
                 This lecture has no slides yet, so there is nothing to refine.
               </p>
             )}
           </div>
 
-          <fieldset disabled={!hasSlides} className="flex flex-col gap-5">
+          {/* An admin edits the saved choices even on an empty lecture;
+              for the owner the form follows the Refine button. */}
+          <fieldset
+            disabled={!hasSlides && !adminOverride}
+            className="flex flex-col gap-5"
+          >
             <div>
               <RefineOption
                 label="Identify multiple speakers"
@@ -640,25 +674,29 @@ export default function DeckSettingsModal({
             />
           </fieldset>
 
-          <div>
-            <button
-              onClick={onRefineClick}
-              disabled={refining || !anySelected || !hasSlides}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-300"
-            >
-              {refining ? 'Refining…' : 'Refine'}
-            </button>
-            {refining && (
-              <p className="mt-3 text-sm text-slate-500">
-                Working in the background — this can take a few minutes.
-              </p>
-            )}
-            {refineMsg && (
-              <p role="status" className="mt-3 text-sm text-slate-700">
-                {refineMsg}
-              </p>
-            )}
-          </div>
+          {/* Running the pass rewrites the owner's slides, so it stays
+              with them; an admin only sets what it would do. */}
+          {!adminOverride && (
+            <div>
+              <button
+                onClick={onRefineClick}
+                disabled={refining || !anySelected || !hasSlides}
+                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {refining ? 'Refining…' : 'Refine'}
+              </button>
+              {refining && (
+                <p className="mt-3 text-sm text-slate-500">
+                  Working in the background — this can take a few minutes.
+                </p>
+              )}
+              {refineMsg && (
+                <p role="status" className="mt-3 text-sm text-slate-700">
+                  {refineMsg}
+                </p>
+              )}
+            </div>
+          )}
         </section>
       )}
 
