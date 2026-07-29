@@ -9,9 +9,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { FolderPlus } from 'lucide-react'
-import type { Deck, Project } from '@slide-machine/shared'
+import type { Deck, DeckImportResult, Project } from '@slide-machine/shared'
 import { useAuth } from '../auth/AuthContext'
 import { dispatchAction } from '../api/actions'
+import { ApiError } from '../api/http'
 import { userHandle } from '../lib/handle'
 import { projectTitle } from '../lib/project'
 import LectureRow from '../components/LectureRow'
@@ -24,12 +25,14 @@ function ProjectSection({
   project,
   decks,
   onStartLecture,
+  onImportLecture,
   onLectureDeleted,
   onProjectDeleted,
 }: {
   project: Project
   decks: Deck[]
   onStartLecture: (project: Project) => void
+  onImportLecture: (project: Project, file: File) => void
   onLectureDeleted: (deckId: string) => void
   onProjectDeleted: (projectId: string) => void
 }) {
@@ -55,6 +58,7 @@ function ProjectSection({
         <NewLectureZone
           projectTitle={projectTitle(project)}
           onStart={() => onStartLecture(project)}
+          onImport={file => onImportLecture(project, file)}
         />
         {visible.map(d => (
           <LectureRow key={d.id} deck={d} onDeleted={onLectureDeleted} />
@@ -81,6 +85,8 @@ export default function HomePage() {
   )
   const [creatingProject, setCreatingProject] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // A success/warning notice after importing a lecture (EXP-3).
+  const [notice, setNotice] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -161,6 +167,46 @@ export default function HomePage() {
   }
 
   /**
+   * Imports a previously exported deck YAML as a new lecture in the given
+   * project (EXP-3). The imported lecture is added to that project's list;
+   * validation errors and non-fatal warnings are surfaced in place.
+   */
+  const importLecture = async (project: Project, file: File) => {
+    setError(null)
+    setNotice(null)
+    let content: string
+    try {
+      content = await file.text()
+    } catch {
+      setError('Could not read that file')
+      return
+    }
+    try {
+      const result = await dispatchAction<DeckImportResult>('deck.import', {
+        projectId: project.id,
+        content,
+      })
+      setDecksByProject(prev => {
+        const next = new Map(prev)
+        next.set(project.id, [result.deck, ...(next.get(project.id) ?? [])])
+        return next
+      })
+      const name = result.deck.title || 'Untitled lecture'
+      setNotice(
+        result.warnings.length
+          ? `Imported "${name}". ${result.warnings.join(' ')}`
+          : `Imported "${name}".`,
+      )
+    } catch (err) {
+      if (err instanceof ApiError && err.details?.length) {
+        setError(`Could not import this file: ${err.details.join(' ')}`)
+      } else {
+        setError('Could not import this file')
+      }
+    }
+  }
+
+  /**
    * The empty-state zone: the user has no project yet, so spin up a
    * titleless default project on the fly and start the lecture in it.
    */
@@ -195,6 +241,11 @@ export default function HomePage() {
             {error}
           </p>
         )}
+        {notice && (
+          <p role="status" className="mb-4 text-sm text-slate-600">
+            {notice}
+          </p>
+        )}
         {projects === null ? (
           <p className="text-slate-500">Loading…</p>
         ) : projects.length === 0 ? (
@@ -210,6 +261,7 @@ export default function HomePage() {
               project={p}
               decks={decksByProject.get(p.id) ?? []}
               onStartLecture={proj => void startLecture(proj)}
+              onImportLecture={(proj, file) => void importLecture(proj, file)}
               onLectureDeleted={removeLecture}
               onProjectDeleted={removeProject}
             />
