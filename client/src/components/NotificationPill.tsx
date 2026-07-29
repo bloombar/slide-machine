@@ -41,10 +41,14 @@ export default function NotificationPill({
   action,
 }: Props) {
   return (
-    <div className="fixed inset-x-0 bottom-12 z-50 flex justify-center px-4">
+    // The positioning wrapper spans the full viewport width, so it must not
+    // take pointer events: it sits directly over the Speak bar and would
+    // swallow clicks across that whole band for as long as any pill is up.
+    // The pill itself re-enables them so its action button still works.
+    <div className="pointer-events-none fixed inset-x-0 bottom-12 z-50 flex justify-center px-4">
       <div
         role={role}
-        className={`flex items-center gap-3 rounded-md px-4 py-2 text-sm font-medium text-white shadow-lg ${
+        className={`pointer-events-auto flex items-center gap-3 rounded-md px-4 py-2 text-sm font-medium text-white shadow-lg ${
           tone === 'error' ? 'bg-red-600' : 'bg-slate-800'
         }`}
       >

@@ -2,7 +2,9 @@
  * Unit tests for the per-lecture admin view: lecture header with
  * visibility, project and owner links, the "View slideshow" button (which
  * confirms and logs before opening a private lecture), the detail rows,
- * and the delete action.
+ * the seed material, and the delete action. Settings are not edited here
+ * — that moved into the lecture's own settings modal (ADMIN-5), covered
+ * by DeckViewerPage's tests.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
@@ -71,11 +73,11 @@ const renderPage = (status = 200, detailBody: unknown = detail) => {
   const mocks = mockFetchRoutes({
     // More specific than /decks/d1, so it must be matched first
     '/api/admin/decks/d1/private-view': () => ({ status: 204 }),
-    // Serves both GET (detail) and DELETE (delete lecture)
-    '/api/admin/decks/d1': init =>
-      init?.method === 'DELETE'
-        ? { status: 204 }
-        : { status, body: detailBody },
+    // Serves GET (detail) and DELETE (delete lecture)
+    '/api/admin/decks/d1': init => {
+      if (init?.method === 'DELETE') return { status: 204 }
+      return { status, body: detailBody }
+    },
   })
   render(
     <MemoryRouter initialEntries={['/app/admin/decks/d1']}>
@@ -111,8 +113,10 @@ afterEach(() => {
 describe('AdminDeckPage', () => {
   it('shows the lecture title, its visibility, project, and owner', async () => {
     renderPage()
-    expect(await screen.findByRole('heading', { name: 'Waves' })).toBeVisible()
-    expect(screen.getByText('Private')).toBeVisible()
+    const heading = await screen.findByRole('heading', { name: 'Waves' })
+    expect(heading).toBeVisible()
+    // Scoped to the header: the settings editor offers "Private" too
+    expect(within(heading.closest('div')!).getByText('Private')).toBeVisible()
     expect(screen.getByRole('link', { name: 'Physics' })).toHaveAttribute(
       'href',
       '/app/admin/projects/p1',
@@ -195,8 +199,12 @@ describe('AdminDeckPage', () => {
   it('shows the detail rows', async () => {
     renderPage()
     await screen.findByRole('heading', { name: 'Waves' })
-    expect(screen.getByText('5')).toBeVisible()
-    expect(screen.getByText('/d/waves-abc123')).toBeVisible()
+    // Scoped to Details: the refine level pickers also offer a "5"
+    const details = screen
+      .getByRole('heading', { name: 'Details' })
+      .closest('section')!
+    expect(within(details).getByText('5')).toBeVisible()
+    expect(within(details).getByText('/d/waves-abc123')).toBeVisible()
   })
 
   it('falls back to "Untitled lecture" for a blank title', async () => {

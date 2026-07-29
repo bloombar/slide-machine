@@ -2,7 +2,9 @@
  * Unit tests for the per-project admin view: project header with owner
  * and visibility, the detail rows, the lecture table with viewer links,
  * the "View project" bypass (confirmed and logged for private projects),
- * and the delete actions (lecture, whole project).
+ * and the delete actions (lecture, whole project). Settings are not
+ * edited here — that moved into the project's own settings modal
+ * (ADMIN-5), covered by ProjectPage's tests.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
@@ -16,6 +18,7 @@ const detail = {
     ownerId: 'u1',
     title: 'Physics',
     visibility: 'public',
+    effectiveGenerationFreedom: 2,
     createdAt: '2026-07-01T00:00:00Z',
     updatedAt: '2026-07-04T00:00:00Z',
   },
@@ -40,11 +43,11 @@ const renderPage = (status = 200, detailBody: unknown = detail) => {
     '/api/admin/decks/d1': () => ({ status: 204 }),
     // More specific than /projects/p1, so it must be matched first
     '/api/admin/projects/p1/private-view': () => ({ status: 204 }),
-    // Serves both GET (detail) and DELETE (delete project)
-    '/api/admin/projects/p1': init =>
-      init?.method === 'DELETE'
-        ? { status: 204 }
-        : { status, body: detailBody },
+    // Serves GET (detail) and DELETE (delete project)
+    '/api/admin/projects/p1': init => {
+      if (init?.method === 'DELETE') return { status: 204 }
+      return { status, body: detailBody }
+    },
   })
   render(
     <MemoryRouter initialEntries={['/app/admin/projects/p1']}>

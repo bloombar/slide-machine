@@ -5,6 +5,7 @@
  */
 import type {
   AdminLogsResponse,
+  AdminUserSettingsPatch,
   Project,
   SafeUser,
   SeedAsset,
@@ -282,3 +283,24 @@ export const deleteAdminProject = (projectId: string): Promise<void> =>
 /** Deletes a lecture and everything under it. Irreversible. */
 export const deleteAdminDeck = (deckId: string): Promise<void> =>
   apiFetch<void>(`/api/admin/decks/${deckId}`, { method: 'DELETE' })
+
+// Account settings editor (ADMIN-5). It sends only the fields that
+// changed: JSON.stringify drops `undefined`, so an absent field means
+// "unchanged" and an explicit `null` means "clear it so it is inherited
+// again". Resolves on a 204 and is recorded in the audit log with the
+// exact before/after of every field, so the page refetches after saving.
+//
+// Project and lecture settings have no admin endpoint: an admin edits
+// them in the owner-facing settings modal, through the same actions the
+// owner uses (docs/ADMINISTRATION.md, "Editing settings").
+
+/** Updates a user's profile settings (not the plan tier, email, or
+ * password — those are governed elsewhere). */
+export const updateAdminUserSettings = (
+  userId: string,
+  patch: AdminUserSettingsPatch,
+): Promise<void> =>
+  apiFetch<void>(`/api/admin/users/${userId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })

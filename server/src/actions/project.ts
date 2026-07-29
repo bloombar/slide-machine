@@ -35,6 +35,7 @@ import {
 import { UserModel } from '../models/user'
 import { canEditAcl, isAclMember } from '../lib/access'
 import { isAllowlistedAdmin } from '../lib/admin-view'
+import { editProjectSettings } from '../lib/admin-edit'
 import { ttsVoiceIdSchema } from '../lib/tts-voice'
 import { sharesOfAcl } from '../lib/shares'
 import { getBuiltinTemplate } from '../templates/builtin'
@@ -48,17 +49,14 @@ const requireUser = (ctx: ActionContext): string => {
   return ctx.userId
 }
 
-/** Loads a project the acting user may edit (owner or editor). */
-const loadEditableProject = async (
-  ctx: ActionContext,
-  projectId: string,
-): Promise<HydratedDocument<ProjectDb>> => {
-  const userId = requireUser(ctx)
-  const doc = await ProjectModel.findById(projectId).catch(() => null)
-  if (!doc || !canEditAcl(projectAcl(doc), userId))
-    throw new ActionForbiddenError()
-  return doc
-}
+/**
+ * Every action that changes a project's settings runs its work inside
+ * editProjectSettings (lib/admin-edit.ts): it loads a project the acting
+ * user may edit — an owner or editor as usual, or an allowlisted admin
+ * editing someone else's project from the ordinary settings modal, whose
+ * changes it audits (ADMIN-5). Ownership transfer and deletion stay
+ * owner-only and check for themselves.
+ */
 
 export const projectCreate = defineAction<ProjectCreateInput, Project>({
   name: 'project.create',
@@ -116,14 +114,13 @@ export const projectGet = defineAction<{ projectId: string }, Project>({
     const acl = doc ? projectAcl(doc) : null
     if (!doc || !acl) throw new ActionForbiddenError()
     // Member-only: 'public' opens the lectures, not the project page.
-    // Allowlisted admins get an always-on read-only bypass, mirroring the
-    // lecture-viewer bypass (lib/admin-view.ts): they see the shared view
-    // (lecture list, no instructor prep notes), never editing rights.
+    // Allowlisted admins get an always-on bypass, mirroring the
+    // lecture-viewer one (lib/admin-view.ts). They read the full project,
+    // seed notes and people lists included: the console already surfaces
+    // both, and the settings modal they edit from reads them (ADMIN-5).
     if (!isAclMember(acl, userId)) {
       if (!(await isAllowlistedAdmin(userId))) throw new ActionForbiddenError()
-      const dto = toSharedProjectDto(doc)
-      delete dto.seedContext
-      return dto
+      return toProjectDto(doc)
     }
     if (acl.ownerId === userId) return toProjectDto(doc)
     const dto = toSharedProjectDto(doc)
@@ -145,27 +142,27 @@ export const projectUpdate = defineAction<ProjectUpdateInput, Project>({
     language: z.enum(LOCALES).nullable().optional(),
     ttsVoice: ttsVoiceIdSchema.nullable().optional(),
   }),
-  execute: async (ctx, input) => {
-    const doc = await loadEditableProject(ctx, input.projectId)
-    if (input.title !== undefined) doc.title = input.title
-    if (input.course !== undefined) doc.course = input.course
-    if (input.description !== undefined) doc.description = input.description
-    if (input.seedContext !== undefined) doc.seedContext = input.seedContext
-    if (input.generationFreedom !== undefined) {
-      // null clears back to the server default (stores nothing)
-      doc.generationFreedom = input.generationFreedom ?? undefined
-    }
-    if (input.language !== undefined) {
-      // null clears back to inherited (stores nothing)
-      doc.language = input.language ?? undefined
-    }
-    if (input.ttsVoice !== undefined) {
-      // null clears back to the server default (stores nothing)
-      doc.ttsVoice = input.ttsVoice ?? undefined
-    }
-    await doc.save()
-    return toProjectDto(doc)
-  },
+  execute: (ctx, input) =>
+    editProjectSettings(ctx, input.projectId, async doc => {
+      if (input.title !== undefined) doc.title = input.title
+      if (input.course !== undefined) doc.course = input.course
+      if (input.description !== undefined) doc.description = input.description
+      if (input.seedContext !== undefined) doc.seedContext = input.seedContext
+      if (input.generationFreedom !== undefined) {
+        // null clears back to the server default (stores nothing)
+        doc.generationFreedom = input.generationFreedom ?? undefined
+      }
+      if (input.language !== undefined) {
+        // null clears back to inherited (stores nothing)
+        doc.language = input.language ?? undefined
+      }
+      if (input.ttsVoice !== undefined) {
+        // null clears back to the server default (stores nothing)
+        doc.ttsVoice = input.ttsVoice ?? undefined
+      }
+      await doc.save()
+      return toProjectDto(doc)
+    }),
 })
 
 export const projectDelete = defineAction<
@@ -197,12 +194,12 @@ export const projectSetAccess = defineAction<ProjectSetAccessInput, Project>({
     projectId: z.string().min(1),
     visibility: z.enum(['restricted', 'public']),
   }),
-  execute: async (ctx, input) => {
-    const doc = await loadEditableProject(ctx, input.projectId)
-    doc.visibility = input.visibility
-    await doc.save()
-    return toProjectDto(doc)
-  },
+  execute: (ctx, input) =>
+    editProjectSettings(ctx, input.projectId, async doc => {
+      doc.visibility = input.visibility
+      await doc.save()
+      return toProjectDto(doc)
+    }),
 })
 
 export const projectShare = defineAction<ProjectShareInput, DeckShare[]>({
@@ -212,31 +209,31 @@ export const projectShare = defineAction<ProjectShareInput, DeckShare[]>({
     email: z.email(),
     role: z.enum(['viewer', 'editor']),
   }),
-  execute: async (ctx, input) => {
-    const doc = await loadEditableProject(ctx, input.projectId)
-    const user = await UserModel.findOne({
-      email: input.email.toLowerCase().trim(),
-    })
-    if (!user) {
-      throw new ActionValidationError('project.share', [
-        'email: no account with that email',
-      ])
-    }
-    const userId = user._id.toString()
-    if (userId === doc.ownerId.toString()) {
-      throw new ActionValidationError('project.share', [
-        'email: that user owns this project',
-      ])
-    }
-    const list = input.role === 'editor' ? doc.editors : doc.viewers
-    if (!list.includes(userId)) list.push(userId)
-    // One role per user: granting one revokes the other
-    const other = input.role === 'editor' ? doc.viewers : doc.editors
-    const index = other.indexOf(userId)
-    if (index >= 0) other.splice(index, 1)
-    await doc.save()
-    return sharesOfAcl(projectAcl(doc))
-  },
+  execute: (ctx, input) =>
+    editProjectSettings(ctx, input.projectId, async doc => {
+      const user = await UserModel.findOne({
+        email: input.email.toLowerCase().trim(),
+      })
+      if (!user) {
+        throw new ActionValidationError('project.share', [
+          'email: no account with that email',
+        ])
+      }
+      const userId = user._id.toString()
+      if (userId === doc.ownerId.toString()) {
+        throw new ActionValidationError('project.share', [
+          'email: that user owns this project',
+        ])
+      }
+      const list = input.role === 'editor' ? doc.editors : doc.viewers
+      if (!list.includes(userId)) list.push(userId)
+      // One role per user: granting one revokes the other
+      const other = input.role === 'editor' ? doc.viewers : doc.editors
+      const index = other.indexOf(userId)
+      if (index >= 0) other.splice(index, 1)
+      await doc.save()
+      return sharesOfAcl(projectAcl(doc))
+    }),
 })
 
 export const projectUnshare = defineAction<ProjectUnshareInput, DeckShare[]>({
@@ -246,23 +243,25 @@ export const projectUnshare = defineAction<ProjectUnshareInput, DeckShare[]>({
     userId: z.string().min(1),
     role: z.enum(['viewer', 'editor']),
   }),
-  execute: async (ctx, input) => {
-    const doc = await loadEditableProject(ctx, input.projectId)
-    const list = input.role === 'editor' ? doc.editors : doc.viewers
-    const index = list.indexOf(input.userId)
-    if (index >= 0) {
-      list.splice(index, 1)
-      await doc.save()
-    }
-    return sharesOfAcl(projectAcl(doc))
-  },
+  execute: (ctx, input) =>
+    editProjectSettings(ctx, input.projectId, async doc => {
+      const list = input.role === 'editor' ? doc.editors : doc.viewers
+      const index = list.indexOf(input.userId)
+      if (index >= 0) {
+        list.splice(index, 1)
+        await doc.save()
+      }
+      return sharesOfAcl(projectAcl(doc))
+    }),
 })
 
 export const projectShares = defineAction<ProjectSharesInput, DeckShare[]>({
   name: 'project.shares',
   input: z.object({ projectId: z.string().min(1) }),
-  execute: async (ctx, input) =>
-    sharesOfAcl(projectAcl(await loadEditableProject(ctx, input.projectId))),
+  execute: (ctx, input) =>
+    editProjectSettings(ctx, input.projectId, async doc =>
+      sharesOfAcl(projectAcl(doc)),
+    ),
 })
 
 /** Sets the default template new lectures start from (TMPL-2). */
@@ -275,17 +274,17 @@ export const projectSwitchTemplate = defineAction<
     projectId: z.string().min(1),
     templateId: z.string().min(1),
   }),
-  execute: async (ctx, input) => {
-    const doc = await loadEditableProject(ctx, input.projectId)
-    if (!getBuiltinTemplate(input.templateId)) {
-      throw new ActionValidationError('project.switchTemplate', [
-        'templateId: unknown template',
-      ])
-    }
-    doc.templateId = input.templateId
-    await doc.save()
-    return toProjectDto(doc)
-  },
+  execute: (ctx, input) =>
+    editProjectSettings(ctx, input.projectId, async doc => {
+      if (!getBuiltinTemplate(input.templateId)) {
+        throw new ActionValidationError('project.switchTemplate', [
+          'templateId: unknown template',
+        ])
+      }
+      doc.templateId = input.templateId
+      await doc.save()
+      return toProjectDto(doc)
+    }),
 })
 
 export const projectTransferOwnership = defineAction<
