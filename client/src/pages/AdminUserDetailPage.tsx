@@ -1,5 +1,7 @@
 /**
- * Admin view of one user: account details, then their projects — each
+ * Admin view of one user: account details — read-only until the admin
+ * clicks Edit and acknowledges the audit notice, after which the profile
+ * fields among them become a form — then their projects, each
  * linking to its own admin project page (/app/admin/projects/:id).
  * Lectures owned by the user but living in someone else's project are
  * grouped under "Other lectures", each linking to its own admin
@@ -37,9 +39,10 @@ import { ApiError } from '../api/http'
 import ConfirmDialog from '../components/ConfirmDialog'
 import LanguageSelect from '../components/LanguageSelect'
 import Modal from '../components/Modal'
+import DetailField from '../components/admin/DetailField'
 import DetailRow from '../components/admin/DetailRow'
+import DetailsPanel from '../components/admin/DetailsPanel'
 import LectureTable from '../components/admin/LectureTable'
-import SettingsPanel from '../components/admin/SettingsPanel'
 import type { FieldLabels } from '../lib/admin-changes'
 import { generatePassword } from '../lib/password'
 import { projectTitle } from '../lib/project'
@@ -65,9 +68,8 @@ const USER_FIELDS: FieldLabels<UserSettingsDraft> = {
   language: { label: 'Lecturing language', format: localeLabel },
 }
 
-const fieldLabelClass = 'block text-sm font-medium text-slate-700'
 const textInputClass =
-  'mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm'
+  'w-full rounded-md border border-slate-300 px-3 py-2 text-sm'
 
 interface Loaded {
   detail: AdminUserDetailResponse
@@ -405,31 +407,12 @@ export default function AdminUserDetailPage() {
         </p>
       )}
 
-      <section className="rounded-lg border border-slate-200 p-4">
-        <h2 className="mb-2 text-lg font-semibold text-slate-700">Details</h2>
-        <dl>
-          <DetailRow label="Joined" value={joinedAt(user.createdAt)} />
-          <DetailRow label="Plan" value={user.planTier} />
-          <DetailRow
-            label="Email verified"
-            value={user.emailVerified ? 'Yes' : 'No'}
-          />
-          <DetailRow label="Profile" value={user.profileVisibility} />
-          <DetailRow label="Locale" value={user.locale} />
-          {user.bio && <DetailRow label="Bio" value={user.bio} />}
-          {user.billingProvider && (
-            <DetailRow label="Billing" value={user.billingProvider} />
-          )}
-          <DetailRow label="Projects" value={String(detail.projectCount)} />
-          <DetailRow label="Lectures" value={String(detail.deckCount)} />
-        </dl>
-      </section>
-
-      <SettingsPanel
+      <DetailsPanel
         value={settings}
         labels={USER_FIELDS}
         confirmTitle="Save these profile settings?"
-        description="Editing another account's profile. Plan tier, email, and password are set elsewhere."
+        editConfirmTitle="Edit this user's details?"
+        editConfirmMessage={`${user.email}'s profile belongs to another user. You can change it as an admin; every change is recorded in the audit log.`}
         onSave={async patch => {
           if (!userId) return
           // The panel's patch type allows null on every field; the wire
@@ -438,23 +421,33 @@ export default function AdminUserDetailPage() {
           setVersion(v => v + 1)
         }}
       >
-        {(draft, set) => (
+        {({ editing, draft, set }) => (
           <>
-            <div>
-              <label htmlFor="admin-display-name" className={fieldLabelClass}>
-                Display name
-              </label>
+            <DetailRow label="Joined" value={joinedAt(user.createdAt)} />
+            <DetailRow label="Plan" value={user.planTier} />
+            <DetailRow
+              label="Email verified"
+              value={user.emailVerified ? 'Yes' : 'No'}
+            />
+            <DetailField
+              label="Display name"
+              value={draft.displayName}
+              editing={editing}
+              htmlFor="admin-display-name"
+            >
               <input
                 id="admin-display-name"
                 value={draft.displayName}
                 onChange={e => set('displayName', e.target.value)}
                 className={textInputClass}
               />
-            </div>
-            <div>
-              <label htmlFor="admin-bio" className={fieldLabelClass}>
-                Bio
-              </label>
+            </DetailField>
+            <DetailField
+              label="Bio"
+              value={draft.bio || 'Empty'}
+              editing={editing}
+              htmlFor="admin-bio"
+            >
               <textarea
                 id="admin-bio"
                 rows={3}
@@ -462,14 +455,13 @@ export default function AdminUserDetailPage() {
                 onChange={e => set('bio', e.target.value)}
                 className={textInputClass}
               />
-            </div>
-            <div>
-              <label
-                htmlFor="admin-profile-visibility"
-                className={fieldLabelClass}
-              >
-                Profile visibility
-              </label>
+            </DetailField>
+            <DetailField
+              label="Profile visibility"
+              value={draft.profileVisibility}
+              editing={editing}
+              htmlFor="admin-profile-visibility"
+            >
               <select
                 id="admin-profile-visibility"
                 value={draft.profileVisibility}
@@ -481,11 +473,13 @@ export default function AdminUserDetailPage() {
                 <option value="public">public</option>
                 <option value="private">private</option>
               </select>
-            </div>
-            <div>
-              <label htmlFor="admin-locale" className={fieldLabelClass}>
-                Interface locale
-              </label>
+            </DetailField>
+            <DetailField
+              label="Interface locale"
+              value={localeLabel(draft.locale)}
+              editing={editing}
+              htmlFor="admin-locale"
+            >
               <select
                 id="admin-locale"
                 value={draft.locale}
@@ -498,22 +492,27 @@ export default function AdminUserDetailPage() {
                   </option>
                 ))}
               </select>
-            </div>
-            <div>
-              <p className={fieldLabelClass}>Lecturing language</p>
-              <p className="mt-1 mb-2 text-sm text-slate-500">
-                Speech recognition and generated slide text, unless a project or
-                lecture overrides it.
-              </p>
+            </DetailField>
+            <DetailField
+              label="Lecturing language"
+              value={localeLabel(draft.language)}
+              editing={editing}
+              hint="Speech recognition and generated slide text, unless a project or lecture overrides it."
+            >
               <LanguageSelect
                 value={draft.language}
                 defaultLabel="browser setting"
                 onChange={language => set('language', language ?? undefined)}
               />
-            </div>
+            </DetailField>
+            {user.billingProvider && (
+              <DetailRow label="Billing" value={user.billingProvider} />
+            )}
+            <DetailRow label="Projects" value={String(detail.projectCount)} />
+            <DetailRow label="Lectures" value={String(detail.deckCount)} />
           </>
         )}
-      </SettingsPanel>
+      </DetailsPanel>
 
       <section className="mt-8">
         <div className="mb-3">
