@@ -159,6 +159,65 @@ describe('HomePage', () => {
     await vi.waitFor(() => expect(sent).toEqual({ projectId: 'p1' }))
   })
 
+  it('imports a lecture from a file into a project and lists it', async () => {
+    let sent: unknown
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/actions/project.list': () => ({
+        status: 200,
+        body: [{ id: 'p1', ownerId: 'u1', title: 'Biology', createdAt: '' }],
+      }),
+      '/api/actions/deck.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.import': init => {
+        sent = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: {
+            deck: {
+              id: 'd9',
+              projectId: 'p1',
+              title: 'Imported Deck',
+              permalinkSlug: 'imported-deck-xyz',
+              slideOrder: [],
+              updatedAt: new Date().toISOString(),
+            },
+            warnings: [],
+          },
+        }
+      },
+    })
+    renderHome()
+    await screen.findByRole('heading', { name: 'Biology' })
+
+    const file = new File(
+      ['version: 1\nkind: deck\ntitle: Imported Deck\n'],
+      'deck.yaml',
+      {
+        type: 'application/x-yaml',
+      },
+    )
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement
+    fireEvent.change(input, { target: { files: [file] } })
+
+    await vi.waitFor(() =>
+      expect(sent).toEqual({
+        projectId: 'p1',
+        content: 'version: 1\nkind: deck\ntitle: Imported Deck\n',
+      }),
+    )
+    expect(
+      await screen.findByText('Imported "Imported Deck".'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: /Imported Deck/ }),
+    ).toBeInTheDocument()
+  })
+
   it('the empty state creates a default project, then a lecture in it', async () => {
     const calls: Record<string, unknown> = {}
     mockFetchRoutes({

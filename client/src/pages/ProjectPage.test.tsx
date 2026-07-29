@@ -129,6 +129,107 @@ describe('ProjectPage', () => {
     expect(await screen.findByText('VIEWER')).toBeInTheDocument()
   })
 
+  /** Selects a YAML file in the (hidden) import input. */
+  const importFile = (content: string) => {
+    const file = new File([content], 'deck.yaml', {
+      type: 'application/x-yaml',
+    })
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement
+    fireEvent.change(input, { target: { files: [file] } })
+  }
+
+  it('imports a lecture from a file and lists it with a notice', async () => {
+    let sent: unknown
+    mockFetchRoutes({
+      ...baseRoutes,
+      '/api/actions/deck.import': init => {
+        sent = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: {
+            deck: {
+              id: 'd9',
+              projectId: 'p1',
+              title: 'Imported Deck',
+              permalinkSlug: 'imported-deck-xyz',
+              slideOrder: [],
+              updatedAt: new Date().toISOString(),
+            },
+            warnings: [],
+          },
+        }
+      },
+    })
+    renderPage()
+    await screen.findByRole('heading', { name: 'Lectures' })
+
+    importFile('version: 1\nkind: deck\ntitle: Imported Deck\n')
+
+    await vi.waitFor(() =>
+      expect(sent).toEqual({
+        projectId: 'p1',
+        content: 'version: 1\nkind: deck\ntitle: Imported Deck\n',
+      }),
+    )
+    expect(
+      await screen.findByText('Imported "Imported Deck".'),
+    ).toBeInTheDocument()
+    // The imported lecture is added to the list.
+    expect(
+      screen.getByRole('link', { name: /Imported Deck/ }),
+    ).toBeInTheDocument()
+  })
+
+  it('surfaces import warnings in the notice', async () => {
+    mockFetchRoutes({
+      ...baseRoutes,
+      '/api/actions/deck.import': () => ({
+        status: 200,
+        body: {
+          deck: {
+            id: 'd9',
+            projectId: 'p1',
+            title: 'X',
+            permalinkSlug: 'x-1',
+            slideOrder: [],
+            updatedAt: new Date().toISOString(),
+          },
+          warnings: [
+            'Unknown template "foo" — using the default template instead.',
+          ],
+        },
+      }),
+    })
+    renderPage()
+    await screen.findByRole('heading', { name: 'Lectures' })
+    importFile('version: 1\nkind: deck\ntitle: X\n')
+    expect(await screen.findByText(/Unknown template/)).toBeInTheDocument()
+  })
+
+  it('shows the validation problems when an import is rejected', async () => {
+    mockFetchRoutes({
+      ...baseRoutes,
+      '/api/actions/deck.import': () => ({
+        status: 400,
+        body: {
+          error: {
+            code: 'invalid_input',
+            message: 'Invalid input',
+            details: ['slides: Required', 'title: Required'],
+          },
+        },
+      }),
+    })
+    renderPage()
+    await screen.findByRole('heading', { name: 'Lectures' })
+    importFile('kind: deck\n')
+    expect(
+      await screen.findByText(/slides: Required title: Required/),
+    ).toBeInTheDocument()
+  })
+
   it('auto-saves seed notes from the settings modal', async () => {
     vi.useFakeTimers()
     let sent: unknown

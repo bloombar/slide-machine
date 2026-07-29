@@ -109,6 +109,7 @@ const buildExportDeck = async (
     body: s.body,
     bullets: s.bullets,
     imageRef: s.imageRef,
+    imageSource: s.imageSource,
     caption: s.caption,
     attribution: s.attribution,
     drawings: includeWhiteboard ? visibleStrokes(s.drawings) : undefined,
@@ -116,10 +117,20 @@ const buildExportDeck = async (
   // Resolve the template's theme so the export carries the same colors the
   // viewer shows (background, text, accent, muted).
   const template = getBuiltinTemplate(deck.templateId)
+  // General-tab settings make the export import-compatible (EXP-3). Seed notes
+  // and seed material are deliberately excluded — they can hold private or
+  // copyrighted content that should not travel in a shareable file.
+  const settings = {
+    language: deck.language,
+    generationFreedom: deck.generationFreedom,
+    ttsVoice: deck.ttsVoice,
+  }
+  const hasSettings = Object.values(settings).some(v => v !== undefined)
   return {
     title: deck.title,
     templateId: deck.templateId,
     theme: resolveTemplateTheme(template?.theme),
+    ...(hasSettings ? { settings } : {}),
     slides,
   }
 }

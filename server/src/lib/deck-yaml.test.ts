@@ -18,6 +18,7 @@ const deck: ExportDeck = {
       title: 'Where it happens',
       bullets: ['In chloroplasts', 'Using chlorophyll'],
       imageRef: 'https://img/leaf.jpg',
+      imageSource: 'stock',
       caption: 'A green leaf',
       attribution: {
         title: 'Leaf',
@@ -71,6 +72,7 @@ describe('deckToYaml', () => {
     expect(slide.title).toBe('Where it happens')
     expect(slide.bullets).toEqual(['In chloroplasts', 'Using chlorophyll'])
     expect(slide.image.ref).toBe('https://img/leaf.jpg')
+    expect(slide.image.source).toBe('stock')
     expect(slide.image.caption).toBe('A green leaf')
     expect(slide.image.attribution).toMatchObject({
       title: 'Leaf',
@@ -106,5 +108,46 @@ describe('deckToYaml', () => {
     )
     expect(parsed.visibility).toBeUndefined()
     expect(parsed.slides).toEqual([])
+  })
+
+  it('carries General-tab settings for round-trip import (EXP-3)', () => {
+    const parsed = YAML.parse(
+      deckToYaml({
+        title: 'T',
+        templateId: 'classic',
+        settings: {
+          language: 'fr',
+          generationFreedom: 4,
+          ttsVoice: 'emma',
+        },
+        slides: [],
+      }),
+    )
+    expect(parsed.settings).toEqual({
+      language: 'fr',
+      generationFreedom: 4,
+      ttsVoice: 'emma',
+    })
+  })
+
+  it('omits the settings block entirely when nothing is set', () => {
+    const parsed = YAML.parse(
+      deckToYaml({ title: 'T', templateId: 'c', settings: {}, slides: [] }),
+    )
+    expect(parsed.settings).toBeUndefined()
+  })
+
+  it('does not carry seed notes or seed material (privacy)', () => {
+    const parsed = YAML.parse(
+      deckToYaml({
+        title: 'T',
+        templateId: 'classic',
+        settings: { language: 'fr' },
+        slides: [],
+      }),
+    )
+    // Neither the private seed notes nor any seed-material block is emitted.
+    expect(parsed.settings.seedNotes).toBeUndefined()
+    expect(parsed.seedMaterial).toBeUndefined()
   })
 })

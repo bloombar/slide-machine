@@ -9,7 +9,11 @@
  * absent rather than emitted as an empty key.
  */
 import YAML from 'yaml'
-import type { ImageAttribution, Stroke } from '@slide-machine/shared'
+import type {
+  ExportedDeckSettings,
+  ImageAttribution,
+  Stroke,
+} from '@slide-machine/shared'
 import type { ExportTheme } from './deck-theme'
 
 /** Format marker written at the top of every export, so an importer can
@@ -26,18 +30,25 @@ export interface ExportSlide {
   body?: string
   bullets?: string[]
   imageRef?: string
+  /** Provenance of the image (seeded / stock / generated). Carried so a
+   * re-import keeps AI-sourced credit read-only, matching the original (IMG-5). */
+  imageSource?: string
   caption?: string
   attribution?: ImageAttribution
   drawings?: Stroke[]
 }
 
 /** The deck-level fields captured in the export. `theme` (the template's
- * resolved colors) drives the PDF/Slides look; the YAML serializer ignores it. */
+ * resolved colors) drives the PDF/Slides look and is emitted as inline styling.
+ * `settings` makes the file import-compatible (EXP-3): the General-tab lecture
+ * settings travel with the deck so a re-import restores them. Seed notes and
+ * seed material are not carried (they can hold private/copyrighted content). */
 export interface ExportDeck {
   title: string
   templateId: string
   visibility?: string
   theme?: ExportTheme
+  settings?: ExportedDeckSettings
   slides: ExportSlide[]
 }
 
@@ -63,6 +74,7 @@ const imageBlock = (
     : undefined
   const block = compact({
     ref: slide.imageRef,
+    source: slide.imageSource,
     caption: slide.caption,
     attribution:
       attribution && Object.keys(attribution).length ? attribution : undefined,
@@ -70,11 +82,23 @@ const imageBlock = (
   return Object.keys(block).length ? block : undefined
 }
 
+/** Maps the General-tab settings into the export shape, or undefined when none
+ * are set (so no empty `settings:` key is emitted). */
+const settingsBlock = (
+  settings: ExportDeck['settings'],
+): Record<string, unknown> | undefined => {
+  if (!settings) return undefined
+  const block = compact({ ...settings })
+  return Object.keys(block).length ? block : undefined
+}
+
 /**
  * Renders the deck to a YAML string. Slides are written in display order with
- * their layout, text content, and image (including attribution).
+ * their layout, text content, and image (including attribution). The lecture
+ * settings are written when present (EXP-3).
  */
 export const deckToYaml = (deck: ExportDeck): string => {
+  const settings = settingsBlock(deck.settings)
   const doc = {
     version: DECK_YAML_VERSION,
     kind: 'deck',
@@ -84,6 +108,7 @@ export const deckToYaml = (deck: ExportDeck): string => {
     templateId: deck.templateId,
     ...(deck.theme ? { styling: { ...deck.theme } } : {}),
     ...(deck.visibility ? { visibility: deck.visibility } : {}),
+    ...(settings ? { settings } : {}),
     slides: deck.slides.map(slide =>
       compact({
         layout: slide.layoutType,
