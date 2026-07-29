@@ -445,6 +445,37 @@ describe('DELETE /api/admin/projects/:id and /decks/:id', () => {
     ).toMatchObject({ targetType: 'deck', targetId: deck._id.toString() })
   })
 
+  it('restores a soft-deleted project and its contents, and logs (ADMIN-6)', async () => {
+    const { token } = await asAdmin()
+    const { project, deck } = await createFurnishedUser('owner@example.com')
+    await request(server)
+      .delete(`/api/admin/projects/${project._id}`)
+      .set('Authorization', `Bearer ${token}`)
+    expect(await ProjectModel.findById(project._id)).toBeNull()
+
+    const res = await request(server)
+      .post(`/api/admin/projects/${project._id}/restore`)
+      .set('Authorization', `Bearer ${token}`)
+    expect(res.status).toBe(204)
+
+    // Back to live and readable again.
+    expect(await ProjectModel.findById(project._id)).not.toBeNull()
+    expect(await DeckModel.findById(deck._id)).not.toBeNull()
+    expect(
+      await AdminActionLogModel.findOne({ action: 'project.restore' }),
+    ).toMatchObject({ targetType: 'project', targetId: project._id.toString() })
+  })
+
+  it('404s restoring something that is not soft-deleted', async () => {
+    const { token } = await asAdmin()
+    const { project } = await createFurnishedUser('owner@example.com')
+    // Live project — nothing to restore.
+    const res = await request(server)
+      .post(`/api/admin/projects/${project._id}/restore`)
+      .set('Authorization', `Bearer ${token}`)
+    expect(res.status).toBe(404)
+  })
+
   it('404s for unknown and malformed ids', async () => {
     const { token } = await asAdmin()
     for (const path of [

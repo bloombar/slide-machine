@@ -6,6 +6,7 @@
  */
 import { Schema, model, Types } from 'mongoose'
 import type { RefineJobStatus, RefineJobSummary } from '@slide-machine/shared'
+import { softDeletePlugin } from './plugins/soft-delete'
 
 export interface RefineJobDb {
   deckId: Types.ObjectId
@@ -14,6 +15,8 @@ export interface RefineJobDb {
   error?: string
   createdAt: Date
   updatedAt: Date
+  /** Soft-delete tombstone (P-10); null/absent = live. */
+  deletedAt?: Date | null
 }
 
 const summarySchema = new Schema<RefineJobSummary>(
@@ -44,5 +47,7 @@ const refineJobSchema = new Schema<RefineJobDb>(
   },
   { timestamps: true },
 )
+
+refineJobSchema.plugin(softDeletePlugin)
 
 export const RefineJobModel = model<RefineJobDb>('RefineJob', refineJobSchema)

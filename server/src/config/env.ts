@@ -213,6 +213,14 @@ const envSchema = z.object({
   // Days to keep retained recordings before a daily sweep deletes the WAV and
   // its deck reference (cost + student-voice privacy). 0 = keep forever.
   AUDIO_RETENTION_DAYS: z.coerce.number().int().nonnegative().default(30),
+  // Days a soft-deleted record (P-10 tombstone) is retained before the daily
+  // sweep permanently purges it and its files (P-11). 0 = keep tombstones
+  // forever (no purge).
+  DELETED_DATA_RETENTION_DAYS: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .default(90),
   // GCS bucket the diarization pass copies audio into — Google BatchRecognize
   // reads only from gs:// (GEN-4 Phase 3). Required for DIARIZATION_PROVIDER=
   // google-cloud; unused otherwise.

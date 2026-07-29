@@ -46,6 +46,40 @@ export const loadDeck = async (
   return deck
 }
 
+/** Resolves a :id to a **soft-deleted** user/project/lecture for restore
+ * (ADMIN-6). 404s if the id is unknown or the record is still live. */
+export const loadDeletedUser = async (
+  id: string,
+): Promise<HydratedDocument<UserDb>> => {
+  const notFound = new HttpError(404, 'not_found', 'Deleted user not found')
+  if (!isValidObjectId(id)) throw notFound
+  const user = await UserModel.findById(id).setOptions({ withDeleted: true })
+  if (!user?.deletedAt) throw notFound
+  return user
+}
+
+export const loadDeletedProject = async (
+  id: string,
+): Promise<HydratedDocument<ProjectDb>> => {
+  const notFound = new HttpError(404, 'not_found', 'Deleted project not found')
+  if (!isValidObjectId(id)) throw notFound
+  const project = await ProjectModel.findById(id).setOptions({
+    withDeleted: true,
+  })
+  if (!project?.deletedAt) throw notFound
+  return project
+}
+
+export const loadDeletedDeck = async (
+  id: string,
+): Promise<HydratedDocument<DeckDb>> => {
+  const notFound = new HttpError(404, 'not_found', 'Deleted lecture not found')
+  if (!isValidObjectId(id)) throw notFound
+  const deck = await DeckModel.findById(id).setOptions({ withDeleted: true })
+  if (!deck?.deletedAt) throw notFound
+  return deck
+}
+
 /** The acting admin, guaranteed by requireAdmin on the admin router. */
 export const actor = (req: { adminUser?: { id: string; email: string } }) => {
   const admin = req.adminUser

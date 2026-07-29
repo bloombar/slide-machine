@@ -355,8 +355,9 @@ describe('asset management actions', () => {
         .status,
     ).toBe(200)
     expect(await SeedAssetModel.findById(projectLevel.body.id)).toBeNull()
-    // The stored file went with it
-    expect((await request(server).get(url)).status).toBe(404)
+    // Soft delete (P-10) keeps the stored file for restore; the retention purge
+    // removes it later.
+    expect((await request(server).get(url)).status).toBe(200)
   })
 
   it('keeps management scoped: strangers get 403', async () => {
@@ -409,8 +410,9 @@ describe('project.delete cascade', () => {
     expect(await DeckModel.countDocuments({ projectId })).toBe(0)
     expect(await SlideModel.countDocuments({ deckId })).toBe(0)
     expect(await SeedAssetModel.countDocuments({ projectId })).toBe(0)
-    // Stored files went with it
-    expect((await request(server).get(fileUrl)).status).toBe(404)
+    // Soft delete (P-10) hides the records but keeps their files for restore;
+    // the retention purge removes them later.
+    expect((await request(server).get(fileUrl)).status).toBe(200)
   })
 })
 

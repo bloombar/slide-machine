@@ -11,9 +11,12 @@ import {
   type SafeUser,
   type User,
 } from '@slide-machine/shared'
+import { softDeletePlugin } from './plugins/soft-delete'
 
 export interface UserDb extends Omit<User, 'id' | 'createdAt'> {
   createdAt: Date
+  /** Soft-delete tombstone (P-10); null/absent = live. */
+  deletedAt?: Date | null
   // Google's stable subject id, set when an account signs in with Google
   // (AUTH-1). Kept out of the shared User type so it never crosses the
   // wire — it is an internal identity link, not client-facing.
@@ -68,6 +71,8 @@ const userSchema = new Schema<UserDb>(
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 )
+
+userSchema.plugin(softDeletePlugin)
 
 export const UserModel = model<UserDb>('User', userSchema)
 

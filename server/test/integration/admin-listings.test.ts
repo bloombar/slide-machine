@@ -480,3 +480,39 @@ describe('GET /api/admin/decks', () => {
     )
   })
 })
+
+describe('soft delete (P-10): directories exclude tombstoned rows', () => {
+  it('omits soft-deleted projects and lectures, and de-counts them', async () => {
+    const admin = await asAdmin()
+    const { user: ada } = await createUser('ada@example.com', 'Ada')
+    const live = await createProject(ada._id, 'Live')
+    const gone = await createProject(ada._id, 'Gone')
+    const liveDeck = await createDeck(ada._id, live._id, 'Kept', 'kept-1')
+    const goneDeck = await createDeck(ada._id, live._id, 'Deleted', 'del-1')
+
+    // Tombstone one project and one of the live project's lectures.
+    await ProjectModel.updateOne({ _id: gone._id }, { deletedAt: new Date() })
+    await DeckModel.updateOne({ _id: goneDeck._id }, { deletedAt: new Date() })
+
+    const projects = await request(server)
+      .get('/api/admin/projects')
+      .set('Authorization', `Bearer ${admin}`)
+    const projectIds = projects.body.projects.map((p: { id: string }) => p.id)
+    expect(projectIds).toContain(live._id.toString())
+    expect(projectIds).not.toContain(gone._id.toString())
+    expect(projects.body.total).toBe(1)
+    // The live project's lecture count excludes the tombstoned lecture.
+    const liveRow = projects.body.projects.find(
+      (p: { id: string }) => p.id === live._id.toString(),
+    )
+    expect(liveRow.deckCount).toBe(1)
+
+    const decks = await request(server)
+      .get('/api/admin/decks')
+      .set('Authorization', `Bearer ${admin}`)
+    const deckIds = decks.body.decks.map((d: { id: string }) => d.id)
+    expect(deckIds).toContain(liveDeck._id.toString())
+    expect(deckIds).not.toContain(goneDeck._id.toString())
+    expect(decks.body.total).toBe(1)
+  })
+})

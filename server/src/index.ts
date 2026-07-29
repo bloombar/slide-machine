@@ -8,6 +8,7 @@ import { connectMongo } from './db/mongoose'
 import { createApp } from './app'
 import { attachAudioSocket } from './ws/audio-socket'
 import { startAudioRetentionSweep } from './jobs/audio-cleanup'
+import { startSoftDeletePurgeSweep } from './jobs/soft-delete-purge'
 
 const main = async (): Promise<void> => {
   try {
@@ -27,6 +28,8 @@ const main = async (): Promise<void> => {
   attachAudioSocket(server)
   // Daily purge of retained lecture audio past AUDIO_RETENTION_DAYS (GEN-4).
   startAudioRetentionSweep()
+  // Daily purge of soft-deleted records past DELETED_DATA_RETENTION_DAYS (P-11).
+  startSoftDeletePurgeSweep()
 }
 
 main()

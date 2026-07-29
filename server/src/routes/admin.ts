@@ -47,6 +47,9 @@ import {
   deleteDeckCascade,
   deleteProjectCascade,
   deleteUserCascade,
+  restoreDeckCascade,
+  restoreProjectCascade,
+  restoreUserCascade,
 } from '../lib/cascade'
 import { revokeAllSessions } from '../auth/refresh-store'
 import { hashPassword } from '../auth/password'
@@ -59,6 +62,9 @@ import {
   loadDeck,
   loadProject,
   loadUser,
+  loadDeletedDeck,
+  loadDeletedProject,
+  loadDeletedUser,
   rejectAdminTarget,
 } from './admin-targets'
 import { adminSettingsRouter } from './admin-settings'
@@ -320,7 +326,13 @@ const deckCountLookup: PipelineStage = {
     from: DeckModel.collection.name,
     let: { projectId: '$_id' },
     pipeline: [
-      { $match: { $expr: { $eq: ['$projectId', '$$projectId'] } } },
+      // Exclude soft-deleted lectures from the count (P-10).
+      {
+        $match: {
+          $expr: { $eq: ['$projectId', '$$projectId'] },
+          deletedAt: null,
+        },
+      },
       { $count: 'count' },
     ],
     as: 'sortDeckCount',
@@ -396,6 +408,9 @@ const pageIdPipeline = (
   const column = columns[field]!
   const order = dir === 'asc' ? 1 : -1
   return [
+    // Soft delete (P-10): aggregation bypasses the exclusion middleware, so the
+    // directory must filter tombstoned rows itself.
+    { $match: { deletedAt: null } },
     ...(column.stages ?? []),
     { $project: { sortKey: column.value } },
     { $sort: { sortKey: order, _id: 1 } },
@@ -603,7 +618,8 @@ adminRouter.get('/projects', async (req, res) => {
     ownerIds.length ? UserModel.find({ _id: { $in: ownerIds } }) : [],
     projectIds.length
       ? DeckModel.aggregate<{ _id: Types.ObjectId; count: number }>([
-          { $match: { projectId: { $in: projectIds } } },
+          // Exclude soft-deleted lectures from the per-project count (P-10).
+          { $match: { projectId: { $in: projectIds }, deletedAt: null } },
           { $group: { _id: '$projectId', count: { $sum: 1 } } },
         ])
       : [],
@@ -945,6 +961,55 @@ adminRouter.delete('/decks/:id', async (req, res) => {
     actorId: admin.id,
     actorEmail: admin.email,
     action: 'deck.delete',
+    targetType: 'deck',
+    targetId: deck._id.toString(),
+    details: { title: deck.title, ownerId: deck.ownerId.toString() },
+  })
+  res.status(204).end()
+})
+
+// Restore soft-deleted content during the retention window (P-10 / ADMIN-6).
+adminRouter.post('/users/:id/restore', async (req, res) => {
+  const user = await loadDeletedUser(String(req.params.id))
+  const admin = actor(req)
+
+  await restoreUserCascade(user._id.toString())
+  await logAdminAction({
+    actorId: admin.id,
+    actorEmail: admin.email,
+    action: 'user.restore',
+    targetType: 'user',
+    targetId: user._id.toString(),
+    details: { email: user.email },
+  })
+  res.status(204).end()
+})
+
+adminRouter.post('/projects/:id/restore', async (req, res) => {
+  const project = await loadDeletedProject(String(req.params.id))
+  const admin = actor(req)
+
+  await restoreProjectCascade(project._id)
+  await logAdminAction({
+    actorId: admin.id,
+    actorEmail: admin.email,
+    action: 'project.restore',
+    targetType: 'project',
+    targetId: project._id.toString(),
+    details: { title: project.title, ownerId: project.ownerId.toString() },
+  })
+  res.status(204).end()
+})
+
+adminRouter.post('/decks/:id/restore', async (req, res) => {
+  const deck = await loadDeletedDeck(String(req.params.id))
+  const admin = actor(req)
+
+  await restoreDeckCascade(deck._id)
+  await logAdminAction({
+    actorId: admin.id,
+    actorEmail: admin.email,
+    action: 'deck.restore',
     targetType: 'deck',
     targetId: deck._id.toString(),
     details: { title: deck.title, ownerId: deck.ownerId.toString() },
