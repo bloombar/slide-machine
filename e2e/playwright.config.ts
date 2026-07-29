@@ -30,6 +30,9 @@ const serverEnv = (over: Record<string, string>): Record<string, string> => ({
   GENERATION_PROVIDER: 'mock',
   QUIZ_PROVIDER: 'mock',
   QUIZ_PUBLISH_MODE: 'mock',
+  // Hermetic: a developer's local EXPORT_MODE=live must not leak into e2e —
+  // export uses fabricated Drive URLs here (no real Google contact).
+  EXPORT_MODE: 'mock',
   // Mock TTS returns a silent WAV + synthetic `<mark>` timepoints, so deck
   // playback (and the WB-2 stroke-sync marks) run without a Google key.
   TTS_PROVIDER: 'mock',

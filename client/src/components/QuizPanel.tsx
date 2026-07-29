@@ -497,10 +497,10 @@ function FolderPicker({
                       onChange={e => setIncludeTranscript(e.target.checked)}
                     />
                     <span>
-                      Include the spoken transcript
+                      Include spoken transcript in source material
                       <span className="block text-xs text-slate-500">
-                        Base questions on the full lecture transcript, not only
-                        the slide text.
+                        Base questions on both the slide text and the full
+                        lecture transcript.
                       </span>
                     </span>
                   </label>

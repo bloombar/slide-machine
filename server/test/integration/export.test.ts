@@ -4,9 +4,26 @@
  * status, direct PDF/YAML downloads, saving to Drive (fabricated URLs), Google
  * Slides, connection gating, and ownership enforcement — no network.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  afterAll,
+  beforeEach,
+} from 'vitest'
 import request from 'supertest'
 import YAML from 'yaml'
+
+// Hermetic: a developer's local EXPORT_MODE=live in .env must not leak in — this
+// suite exercises mock mode (fabricated Drive URLs). (QUIZ_PUBLISH_MODE is
+// already pinned to mock by the vitest config, so quiz.connectGoogle connects.)
+vi.mock('../../src/config/env', async importActual => {
+  const actual = await importActual<typeof import('../../src/config/env')>()
+  return { ...actual, env: { ...actual.env, EXPORT_MODE: 'mock' } }
+})
+
 import { env } from '../../src/config/env'
 import { connectMongo, disconnectMongo } from '../../src/db/mongoose'
 import { createApp } from '../../src/app'
@@ -72,12 +89,14 @@ beforeEach(async () => {
 })
 
 describe('export actions (mock mode)', () => {
-  it('reports the deck title and that Google is not connected', async () => {
+  it('reports the deck title, connection, whiteboard, and no saved exports', async () => {
     const res = await act(ada, 'export.status', { deckId })
     expect(res.status).toBe(200)
     expect(res.body).toEqual({
       googleConnected: false,
       deckTitle: 'Photosynthesis',
+      hasWhiteboard: false,
+      exports: [],
     })
   })
 
@@ -119,7 +138,7 @@ describe('export actions (mock mode)', () => {
     expect(res.status).toBe(403)
   })
 
-  it('connects, then saves a PDF to Drive with a fabricated URL', async () => {
+  it('connects, then saves a PDF to Drive, recording it on the deck', async () => {
     await act(ada, 'quiz.connectGoogle')
     const res = await act(ada, 'export.toDrive', {
       deckId,
@@ -128,11 +147,46 @@ describe('export actions (mock mode)', () => {
       driveFolderName: 'Lectures',
     })
     expect(res.status).toBe(200)
-    expect(res.body).toEqual({
+    expect(res.body).toMatchObject({
       fileName: 'photosynthesis.pdf',
-      fileUrl: 'https://drive.google.com/file/d/mock-photosynthesis/view',
+      format: 'pdf',
       driveFolderName: 'Lectures',
     })
+    // The mock file id carries a random suffix so repeat exports never collide.
+    expect(res.body.fileId).toMatch(/^mock-photosynthesis-pdf-[0-9a-f]+$/)
+    expect(res.body.fileUrl).toBe(
+      `https://drive.google.com/file/d/${res.body.fileId}/view`,
+    )
+    expect(typeof res.body.exportedAt).toBe('string')
+    const fileId = res.body.fileId
+
+    // It is now listed in the deck's status, and can be deleted.
+    const status = await act(ada, 'export.status', { deckId })
+    expect(status.body.exports).toHaveLength(1)
+    expect(status.body.exports[0].fileId).toBe(fileId)
+
+    const del = await act(ada, 'export.delete', { deckId, fileId })
+    // Ada saved it, so it is trashed outright — nothing lingers elsewhere.
+    expect(del.body).toEqual({ deleted: true, remainsInOtherDrive: false })
+    const after = await act(ada, 'export.status', { deckId })
+    expect(after.body.exports).toEqual([])
+  })
+
+  it('two exports of the same deck get distinct ids (no collision)', async () => {
+    await act(ada, 'quiz.connectGoogle')
+    const first = await act(ada, 'export.toDrive', {
+      deckId,
+      format: 'pdf',
+      driveFolderId: 'root',
+    })
+    const second = await act(ada, 'export.toDrive', {
+      deckId,
+      format: 'pdf',
+      driveFolderId: 'root',
+    })
+    expect(first.body.fileId).not.toBe(second.body.fileId)
+    const status = await act(ada, 'export.status', { deckId })
+    expect(status.body.exports).toHaveLength(2)
   })
 
   it('exports to Google Slides (always Drive) with a presentation URL', async () => {
@@ -144,9 +198,109 @@ describe('export actions (mock mode)', () => {
     })
     expect(res.status).toBe(200)
     expect(res.body.fileName).toBe('Photosynthesis')
-    expect(res.body.fileUrl).toBe(
-      'https://docs.google.com/presentation/d/mock-photosynthesis/edit',
+    expect(res.body.fileUrl).toMatch(
+      /^https:\/\/docs\.google\.com\/presentation\/d\/mock-photosynthesis-google-slides-[0-9a-f]+\/edit$/,
     )
+  })
+
+  it('saves an untitled deck to Google Slides with a non-empty file name', async () => {
+    // An empty deck title must not produce an empty file name (Mongoose's
+    // `required` rejects '' — this once broke saving untitled lectures).
+    await DeckModel.updateOne({ title: 'Photosynthesis' }, { title: '' })
+    await act(ada, 'quiz.connectGoogle')
+    const res = await act(ada, 'export.toDrive', {
+      deckId,
+      format: 'google-slides',
+      driveFolderId: 'root',
+    })
+    expect(res.status).toBe(200)
+    expect(res.body.fileName).toBe('Untitled lecture')
+    const status = await act(ada, 'export.status', { deckId })
+    expect(status.body.exports).toHaveLength(1)
+  })
+
+  it('reports hasWhiteboard when a slide carries freehand marks', async () => {
+    const deckDoc = await DeckModel.findOne({ title: 'Photosynthesis' })
+    await SlideModel.updateOne(
+      { deckId: deckDoc!._id, index: 0 },
+      {
+        $set: {
+          drawings: [
+            {
+              id: 's1',
+              tool: 'pen',
+              color: '#000000',
+              thickness: 0.005,
+              points: [
+                { x: 0.1, y: 0.2 },
+                { x: 0.4, y: 0.5 },
+              ],
+              startedAt: new Date().toISOString(),
+              endedAt: new Date().toISOString(),
+              anchor: { charAnchor: 0, source: 'unsynced' },
+            },
+          ],
+        },
+      },
+    )
+    const res = await act(ada, 'export.status', { deckId })
+    expect(res.body.hasWhiteboard).toBe(true)
+  })
+
+  it('reports hasWhiteboard false when every mark is erased/orphaned', async () => {
+    // The stored list is non-empty, but the only stroke is orphaned, so the
+    // renderer would draw nothing — the status must agree (via visibleStrokes).
+    const deckDoc = await DeckModel.findOne({ title: 'Photosynthesis' })
+    await SlideModel.updateOne(
+      { deckId: deckDoc!._id, index: 0 },
+      {
+        $set: {
+          drawings: [
+            {
+              id: 'gone',
+              tool: 'pen',
+              color: '#000000',
+              thickness: 0.005,
+              points: [
+                { x: 0.1, y: 0.2 },
+                { x: 0.4, y: 0.5 },
+              ],
+              startedAt: new Date().toISOString(),
+              endedAt: new Date().toISOString(),
+              anchor: { charAnchor: 0, source: 'unsynced', orphaned: true },
+            },
+          ],
+        },
+      },
+    )
+    const res = await act(ada, 'export.status', { deckId })
+    expect(res.body.hasWhiteboard).toBe(false)
+  })
+
+  it('deleting an export saved by another user reports it stays in their Drive', async () => {
+    const bobUser = await UserModel.findOne({ email: 'bob@example.com' })
+    const deckDoc = await DeckModel.findOne({ title: 'Photosynthesis' })
+    deckDoc!.exports = [
+      {
+        fileId: 'mock-other-pdf-deadbeef',
+        fileUrl: 'https://drive.google.com/file/d/mock-other-pdf-deadbeef/view',
+        fileName: 'photosynthesis.pdf',
+        format: 'pdf',
+        driveFolderId: 'root',
+        exportedAt: new Date(),
+        savedBy: bobUser!._id,
+      },
+    ]
+    await deckDoc!.save()
+
+    const del = await act(ada, 'export.delete', {
+      deckId,
+      fileId: 'mock-other-pdf-deadbeef',
+    })
+    // Removed from the lecture, but flagged as still living in Bob's Drive.
+    expect(del.body).toEqual({ deleted: true, remainsInOtherDrive: true })
+    const after = await act(ada, 'export.status', { deckId })
+    expect(after.body.exports).toEqual([])
   })
 
   it('does not let a non-editor export someone else’s deck', async () => {

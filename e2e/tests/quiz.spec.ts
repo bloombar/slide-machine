@@ -51,7 +51,7 @@ test('generate and publish a quiz from lecture settings', async ({ page }) => {
   // Advanced settings: the transcript option lives here (a phrase was spoken)
   await picker.getByRole('button', { name: 'Advanced settings' }).click()
   const includeTranscript = picker.getByRole('checkbox', {
-    name: /include the spoken transcript/i,
+    name: /include spoken transcript/i,
   })
   await expect(includeTranscript).toBeVisible()
   await includeTranscript.check()

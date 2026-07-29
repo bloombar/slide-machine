@@ -28,6 +28,7 @@ vi.mock('../../src/lib/export-google', () => ({
     id: 'pres-1',
     fileUrl: 'https://docs.google.com/presentation/d/pres-1/edit',
   })),
+  deleteDriveFileLive: vi.fn(async () => undefined),
 }))
 vi.mock('../../src/lib/token-crypto', () => ({
   encryptToken: vi.fn((t: string) => `enc:${t}`),
@@ -45,6 +46,7 @@ import { RefreshTokenModel } from '../../src/models/refresh-token'
 import {
   uploadFileToDriveLive,
   createGoogleSlidesLive,
+  deleteDriveFileLive,
 } from '../../src/lib/export-google'
 
 const server = createApp().listen(0)
@@ -132,9 +134,11 @@ describe('export actions (live mode)', () => {
       driveFolderName: 'Lectures',
     })
     expect(res.status).toBe(200)
-    expect(res.body).toEqual({
+    expect(res.body).toMatchObject({
+      fileId: 'file-1',
       fileName: 'photosynthesis.yaml',
       fileUrl: 'https://drive.google.com/file/d/file-1/view',
+      format: 'yaml',
       driveFolderName: 'Lectures',
     })
     const [, file, folderId] = vi.mocked(uploadFileToDriveLive).mock.calls[0]!
@@ -142,7 +146,7 @@ describe('export actions (live mode)', () => {
     expect(folderId).toBe('folder-1')
   })
 
-  it('builds a Google Slides presentation through the live service', async () => {
+  it('builds a Google Slides presentation, records it, and deletes it live', async () => {
     await connect()
     const res = await act(ada, 'export.toDrive', {
       deckId,
@@ -154,6 +158,19 @@ describe('export actions (live mode)', () => {
       'https://docs.google.com/presentation/d/pres-1/edit',
     )
     expect(createGoogleSlidesLive).toHaveBeenCalledTimes(1)
+
+    // Recorded on the deck, then deleted (trashed in Drive via the live service).
+    const status = await act(ada, 'export.status', { deckId })
+    expect(status.body.exports).toHaveLength(1)
+    const del = await act(ada, 'export.delete', { deckId, fileId: 'pres-1' })
+    // Ada saved it, so it is trashed in her Drive and nothing lingers elsewhere.
+    expect(del.body).toEqual({ deleted: true, remainsInOtherDrive: false })
+    expect(deleteDriveFileLive).toHaveBeenCalledWith(
+      'refresh-token-123',
+      'pres-1',
+    )
+    const after = await act(ada, 'export.status', { deckId })
+    expect(after.body.exports).toEqual([])
   })
 
   it('forbids saving to Drive when connected but the token is gone', async () => {
