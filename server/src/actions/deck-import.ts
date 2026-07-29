@@ -2,8 +2,8 @@
  * Deck round-trip import (SPEC EXP-3). `deck.import` takes a previously exported
  * deck YAML and recreates it as a brand-new lecture in one of the caller's
  * projects. The importer becomes the owner with the project's default privacy;
- * quiz, refine settings, sharing, and the original binary uploads are not
- * carried (per the product decision — see the exporter in `lib/deck-yaml.ts`).
+ * quiz, refine settings, sharing, seed notes, and seed material are not carried
+ * (per the product decision — see the exporter in `lib/deck-yaml.ts`).
  *
  * Safety (EXP-3): the whole document is validated up front and, on any problem,
  * nothing is created. All writes target fresh documents, so existing data is
@@ -29,19 +29,14 @@ import { getBuiltinTemplate } from '../templates/builtin'
 import { ttsVoiceIdSchema } from '../lib/tts-voice'
 import { DeckModel, resolveDeckAcl, toDeckDto } from '../models/deck'
 import { SlideModel } from '../models/slide'
-import { SeedAssetModel } from '../models/seed-asset'
 import { ProjectModel } from '../models/project'
 import { deleteDeckCascade } from '../lib/cascade'
-
-/** Longest seed-notes text kept (matches project.setSeedContext's cap). */
-const MAX_SEED_NOTES = 20_000
 
 interface ResolvedSettings {
   templateId: string
   language?: Locale
   generationFreedom?: number
   ttsVoice?: string
-  seedContext?: string
   warnings: string[]
 }
 
@@ -92,14 +87,11 @@ const resolveSettings = (doc: ImportedDeck): ResolvedSettings => {
     }
   }
 
-  const seedContext = s.seedNotes?.slice(0, MAX_SEED_NOTES) || undefined
-
   return {
     templateId,
     language,
     generationFreedom,
     ttsVoice,
-    seedContext,
     warnings,
   }
 }
@@ -150,7 +142,6 @@ export const deckImport = defineAction<
       language: settings.language,
       generationFreedom: settings.generationFreedom,
       ttsVoice: settings.ttsVoice,
-      seedContext: settings.seedContext,
       slideOrder: [],
     })
 
@@ -174,22 +165,6 @@ export const deckImport = defineAction<
       }
       deck.slideOrder = order
       await deck.save()
-
-      // Recreate the extracted seed material (no original file, so no
-      // storageKey); it is ready to feed generation immediately.
-      for (const m of doc.seedMaterial ?? []) {
-        await SeedAssetModel.create({
-          projectId: project._id,
-          deckId: deck._id,
-          type: m.type,
-          name: m.name,
-          status: 'ready',
-          text: m.text,
-          caption: m.caption,
-          keywords: m.keywords ?? [],
-          enabled: m.enabled ?? true,
-        })
-      }
     } catch (err) {
       // Roll back the partial import so no orphaned lecture remains; existing
       // data was never touched (all writes were to these new documents).

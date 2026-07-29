@@ -94,7 +94,6 @@ describe('deckToYaml', () => {
           language: 'fr',
           generationFreedom: 4,
           ttsVoice: 'emma',
-          seedNotes: 'Key points about the topic.',
         },
         slides: [],
       }),
@@ -103,7 +102,6 @@ describe('deckToYaml', () => {
       language: 'fr',
       generationFreedom: 4,
       ttsVoice: 'emma',
-      seedNotes: 'Key points about the topic.',
     })
   })
 
@@ -114,44 +112,17 @@ describe('deckToYaml', () => {
     expect(parsed.settings).toBeUndefined()
   })
 
-  it('carries extracted seed material but only disabled flags', () => {
+  it('does not carry seed notes or seed material (privacy)', () => {
     const parsed = YAML.parse(
       deckToYaml({
         title: 'T',
         templateId: 'classic',
-        seedMaterial: [
-          {
-            name: 'syllabus.pdf',
-            type: 'pdf',
-            text: 'Week 1: cells',
-            keywords: ['cells', 'mitosis'],
-            enabled: true,
-          },
-          { name: 'notes.doc', type: 'doc', enabled: false },
-        ],
+        settings: { language: 'fr' },
         slides: [],
       }),
     )
-    expect(parsed.seedMaterial).toHaveLength(2)
-    // enabled=true is the default, so it is not written…
-    expect(parsed.seedMaterial[0]).toEqual({
-      name: 'syllabus.pdf',
-      type: 'pdf',
-      text: 'Week 1: cells',
-      keywords: ['cells', 'mitosis'],
-    })
-    // …while an explicit disable is preserved.
-    expect(parsed.seedMaterial[1]).toEqual({
-      name: 'notes.doc',
-      type: 'doc',
-      enabled: false,
-    })
-  })
-
-  it('omits the seedMaterial list when there is none', () => {
-    const parsed = YAML.parse(
-      deckToYaml({ title: 'T', templateId: 'c', seedMaterial: [], slides: [] }),
-    )
+    // Neither the private seed notes nor any seed-material block is emitted.
+    expect(parsed.settings.seedNotes).toBeUndefined()
     expect(parsed.seedMaterial).toBeUndefined()
   })
 })

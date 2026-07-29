@@ -5,11 +5,12 @@
  * Google Drive; Google Slides is always created in Drive.
  *
  * The YAML export is import-compatible (EXP-3): it also carries the General-tab
- * settings and the extracted (not binary) seed material so a re-import restores
- * a faithful copy.
+ * settings (language, AI freedom, narration voice) so a re-import restores them.
+ * Seed notes and seed material are deliberately NOT carried — they can hold
+ * private or copyrighted source content that should not travel in a shareable
+ * file.
  */
 import type { Deck } from './deck'
-import type { SeedAssetType } from './project'
 
 /** The formats a deck can be exported to (EXP-1/EXP-2). */
 export type DeckExportFormat = 'pdf' | 'google-slides' | 'yaml'
@@ -49,30 +50,15 @@ export interface ExportToDriveResult {
 }
 
 /**
- * One seed-material item carried in a deck export (EXP-3): the extracted
- * content that feeds AI generation — its name, kind, pulled-out text, caption,
- * keywords, and enabled flag. The original uploaded binary is deliberately not
- * carried, so the file stays small and account-independent.
- */
-export interface ExportedSeedMaterial {
-  name: string
-  type: SeedAssetType
-  text?: string
-  caption?: string
-  keywords?: string[]
-  enabled?: boolean
-}
-
-/**
  * The General-tab lecture settings carried in a deck export and restored on
- * import (EXP-3): explicit language, AI freedom, narration voice, and seed
- * notes. Each is optional; a missing value simply isn't restored.
+ * import (EXP-3): explicit language, AI freedom, and narration voice. Each is
+ * optional; a missing value simply isn't restored. Seed notes are intentionally
+ * excluded — they can contain private instructor notes.
  */
 export interface ExportedDeckSettings {
   language?: string
   generationFreedom?: number
   ttsVoice?: string
-  seedNotes?: string
 }
 
 /**

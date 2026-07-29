@@ -11,7 +11,6 @@
 import YAML from 'yaml'
 import type {
   ExportedDeckSettings,
-  ExportedSeedMaterial,
   ImageAttribution,
 } from '@slide-machine/shared'
 
@@ -30,15 +29,15 @@ export interface ExportSlide {
   attribution?: ImageAttribution
 }
 
-/** The deck-level fields captured in the export. `settings` and `seedMaterial`
- * make the file import-compatible (EXP-3): the General-tab lecture settings and
- * the extracted seed content travel with the deck so a re-import is faithful. */
+/** The deck-level fields captured in the export. `settings` makes the file
+ * import-compatible (EXP-3): the General-tab lecture settings travel with the
+ * deck so a re-import restores them. Seed notes and seed material are not
+ * carried (they can hold private/copyrighted content). */
 export interface ExportDeck {
   title: string
   templateId: string
   visibility?: string
   settings?: ExportedDeckSettings
-  seedMaterial?: ExportedSeedMaterial[]
   slides: ExportSlide[]
 }
 
@@ -81,28 +80,13 @@ const settingsBlock = (
   return Object.keys(block).length ? block : undefined
 }
 
-/** Maps one seed-material item into the export shape (extracted content only). */
-const seedMaterialItem = (
-  item: ExportedSeedMaterial,
-): Record<string, unknown> =>
-  compact({
-    name: item.name,
-    type: item.type,
-    text: item.text,
-    caption: item.caption,
-    keywords: item.keywords,
-    // `enabled` defaults to true; only carry it when explicitly disabled.
-    enabled: item.enabled === false ? false : undefined,
-  })
-
 /**
  * Renders the deck to a YAML string. Slides are written in display order with
  * their layout, text content, and image (including attribution). The lecture
- * settings and extracted seed material are written when present (EXP-3).
+ * settings are written when present (EXP-3).
  */
 export const deckToYaml = (deck: ExportDeck): string => {
   const settings = settingsBlock(deck.settings)
-  const seedMaterial = (deck.seedMaterial ?? []).map(seedMaterialItem)
   const doc = {
     version: DECK_YAML_VERSION,
     kind: 'deck',
@@ -110,7 +94,6 @@ export const deckToYaml = (deck: ExportDeck): string => {
     templateId: deck.templateId,
     ...(deck.visibility ? { visibility: deck.visibility } : {}),
     ...(settings ? { settings } : {}),
-    ...(seedMaterial.length ? { seedMaterial } : {}),
     slides: deck.slides.map(slide =>
       compact({
         layout: slide.layoutType,

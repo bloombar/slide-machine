@@ -48,14 +48,6 @@ const exportDoc = (over: Record<string, unknown> = {}) => ({
   title: 'Photosynthesis',
   templateId: 'classic',
   settings: { language: 'fr', generationFreedom: 4, ttsVoice: 'emma' },
-  seedMaterial: [
-    {
-      name: 'notes.pdf',
-      type: 'pdf',
-      text: 'chloroplasts',
-      keywords: ['leaf'],
-    },
-  ],
   slides: [
     { layout: 'title', title: 'Photosynthesis', body: 'Overview' },
     {
@@ -125,17 +117,14 @@ describe('deck.import (EXP-3)', () => {
     // slideOrder stays in step with slide index.
     expect(deckDoc!.slideOrder).toHaveLength(2)
 
-    // Seed material comes back as ready extracted content (no stored file).
+    // No seed material is created — it is neither exported nor imported.
     const assets = await SeedAssetModel.find({ deckId: deckDoc!._id })
-    expect(assets).toHaveLength(1)
-    expect(assets[0]!.name).toBe('notes.pdf')
-    expect(assets[0]!.status).toBe('ready')
-    expect(assets[0]!.storageKey).toBeUndefined()
+    expect(assets).toHaveLength(0)
   })
 
-  it('round-trips a real exported YAML back into an equivalent deck', async () => {
-    // Build a source deck with slides + settings + seed material, export it,
-    // then import the produced file into a fresh project.
+  it('round-trips a real exported YAML, but not seed notes or material (privacy)', async () => {
+    // Build a source deck carrying settings, slides, seed notes, and a seed
+    // asset, export it, then import the produced file into a fresh project.
     const src = await act(ada, 'deck.create', {
       projectId,
       title: 'Source',
@@ -171,6 +160,9 @@ describe('deck.import (EXP-3)', () => {
     const content = Buffer.from(dl.body.contentBase64, 'base64').toString(
       'utf8',
     )
+    // The exported file must not contain the seed notes or material.
+    expect(content).not.toContain('Some seed notes')
+    expect(content).not.toContain('src.pdf')
 
     const other = await act(ada, 'project.create', { title: 'Other' })
     const imp = await act(ada, 'deck.import', {
@@ -181,13 +173,14 @@ describe('deck.import (EXP-3)', () => {
     expect(imp.body.deck.title).toBe('Source')
     expect(imp.body.deck.language).toBe('es')
     expect(imp.body.deck.generationFreedom).toBe(2)
-    expect(imp.body.deck.seedContext).toBe('Some seed notes')
+    // Seed notes are not carried; no seed assets are imported.
+    expect(imp.body.deck.seedContext).toBeUndefined()
     const importedSlides = await SlideModel.find({ deckId: imp.body.deck.id })
     expect(importedSlides).toHaveLength(1)
     const importedAssets = await SeedAssetModel.find({
       deckId: imp.body.deck.id,
     })
-    expect(importedAssets[0]!.name).toBe('src.pdf')
+    expect(importedAssets).toHaveLength(0)
   })
 
   it('falls back to the default template with a warning for an unknown one', async () => {

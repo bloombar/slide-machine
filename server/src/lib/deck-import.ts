@@ -1,7 +1,8 @@
 /**
  * Parses and validates a deck YAML export back into a structured form for import
  * (SPEC EXP-3). Round-trips the shape produced by `deckToYaml`: the deck title,
- * template, General-tab settings, extracted seed material, and slides.
+ * template, General-tab settings, and slides. Seed notes and seed material are
+ * not imported (nor exported) — any such keys in an older file are ignored.
  *
  * Validation is total and side-effect-free: the whole document is checked before
  * anything is created, and every problem is collected into a readable list. On
@@ -11,16 +12,6 @@
 import YAML from 'yaml'
 import { z } from 'zod'
 import { LAYOUT_TYPES } from '@slide-machine/shared'
-
-/** Seed-material kinds accepted on import; mirrors the SeedAsset model enum. */
-const SEED_ASSET_TYPES = [
-  'doc',
-  'pdf',
-  'gdoc',
-  'gdrive',
-  'gslides',
-  'image',
-] as const
 
 /** TASL image attribution — all fields optional strings. */
 const attributionSchema = z
@@ -58,24 +49,12 @@ const settingsSchema = z
     language: z.string().optional(),
     generationFreedom: z.number().optional(),
     ttsVoice: z.string().optional(),
-    seedNotes: z.string().optional(),
-  })
-  .strip()
-
-const seedMaterialSchema = z
-  .object({
-    name: z.string(),
-    type: z.enum(SEED_ASSET_TYPES),
-    text: z.string().optional(),
-    caption: z.string().optional(),
-    keywords: z.array(z.string()).optional(),
-    enabled: z.boolean().optional(),
   })
   .strip()
 
 /** The full deck-export document. `version` is required to be a number but its
  * value is not pinned — the format is additive, so a newer file with extra keys
- * still imports (unknown keys are stripped). */
+ * still imports (unknown keys, including any legacy seedMaterial, are stripped). */
 const deckDocSchema = z
   .object({
     version: z.number(),
@@ -84,7 +63,6 @@ const deckDocSchema = z
     templateId: z.string(),
     visibility: z.string().optional(),
     settings: settingsSchema.optional(),
-    seedMaterial: z.array(seedMaterialSchema).optional(),
     slides: z.array(slideSchema),
   })
   .strip()

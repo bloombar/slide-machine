@@ -14,7 +14,6 @@ const validDoc = {
   title: 'Photosynthesis',
   templateId: 'classic',
   settings: { language: 'en', generationFreedom: 3, ttsVoice: 'emma' },
-  seedMaterial: [{ name: 'notes.pdf', type: 'pdf', text: 'chloroplasts' }],
   slides: [
     { layout: 'title', title: 'Photosynthesis', body: 'Overview' },
     {
@@ -40,16 +39,27 @@ describe('parseDeckImport', () => {
       expect(result.data.title).toBe('Photosynthesis')
       expect(result.data.slides).toHaveLength(2)
       expect(result.data.settings?.generationFreedom).toBe(3)
-      expect(result.data.seedMaterial?.[0]?.name).toBe('notes.pdf')
     }
   })
 
-  it('strips unknown top-level keys rather than failing (forward-compatible)', () => {
-    const result = parseDeckImport(asYaml({ ...validDoc, futureField: 'x' }))
+  it('strips unknown keys (incl. legacy seedMaterial) rather than failing', () => {
+    const result = parseDeckImport(
+      asYaml({
+        ...validDoc,
+        futureField: 'x',
+        seedMaterial: [{ name: 'old.pdf', type: 'pdf', text: 'secret' }],
+        settings: { ...validDoc.settings, seedNotes: 'private' },
+      }),
+    )
     expect('data' in result).toBe(true)
     if ('data' in result) {
+      const data = result.data as Record<string, unknown>
+      expect(data.futureField).toBeUndefined()
+      // Legacy seed data in an older file is ignored, never restored.
+      expect(data.seedMaterial).toBeUndefined()
       expect(
-        (result.data as Record<string, unknown>).futureField,
+        (result.data.settings as Record<string, unknown> | undefined)
+          ?.seedNotes,
       ).toBeUndefined()
     }
   })
