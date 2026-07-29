@@ -83,6 +83,7 @@ import Tooltip from '../components/Tooltip'
 import NotificationPill from '../components/NotificationPill'
 import SlideRefineModal from '../components/SlideRefineModal'
 import SeedDialog from '../components/SeedDialog'
+import ConfirmDialog from '../components/ConfirmDialog'
 import DeckSettingsModal, {
   type SettingsTabId,
 } from '../components/DeckSettingsModal'
