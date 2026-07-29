@@ -127,8 +127,14 @@ const SAME_WRAP_TOLERANCE = 0.15
 const near = (a: number, b: number) =>
   Math.abs(a - b) <= Math.abs(b) * SAME_WRAP_TOLERANCE + 1
 
-/** Pins an element to a viewport rect as a fixed overlay box. */
+/**
+ * Pins an element to a viewport rect as a fixed overlay box. Every element
+ * pinned this way is a throwaway clone of real slide content, so it is marked
+ * decorative: without that, assistive tech reads the departing copy alongside
+ * the real one for the length of the animation.
+ */
 const pinToRect = (el: HTMLElement, rect: DOMRect, radius: string) => {
+  el.setAttribute('aria-hidden', 'true')
   el.style.position = 'fixed'
   el.style.left = `${rect.left}px`
   el.style.top = `${rect.top}px`

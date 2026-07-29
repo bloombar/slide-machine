@@ -41,7 +41,9 @@ const refitContentToList = async (page: Page, email: string) => {
     'content',
   )
   await expect(
-    page.getByText('The cell membrane is a strong protective barrier'),
+    page
+      .getByTestId('slide')
+      .getByText('The cell membrane is a strong protective barrier'),
   ).toBeVisible()
 
   // An enumerating continuation refits the SAME slide to a list:
@@ -51,10 +53,17 @@ const refitContentToList = async (page: Page, email: string) => {
     .fill('Also it contains cholesterol, embedded proteins, glycolipids')
   await page.getByRole('button', { name: 'Speak' }).click()
   await expect(page.getByTestId('slide')).toHaveAttribute('data-layout', 'list')
+  // Scoped to the slide: the GEN-9 transition fades the departing `body` slot
+  // out as a clone parked in document.body for the length of the animation, so
+  // an unscoped match would see the migrated text twice mid-flight. Scoping
+  // asserts what this test means — the content is ON the slide — and still
+  // fails if the body were genuinely left rendered alongside the bullets.
   await expect(
-    page.getByText('The cell membrane is a strong protective barrier'),
+    page
+      .getByTestId('slide')
+      .getByText('The cell membrane is a strong protective barrier'),
   ).toBeVisible()
-  await expect(page.getByText('glycolipids')).toBeVisible()
+  await expect(page.getByTestId('slide').getByText('glycolipids')).toBeVisible()
   await expect(page.getByText('1 / 1')).toBeVisible()
 }
 
