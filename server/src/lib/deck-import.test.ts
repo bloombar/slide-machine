@@ -22,6 +22,7 @@ const validDoc = {
       bullets: ['Light', 'Dark'],
       image: {
         ref: 'https://img/leaf.jpg',
+        source: 'stock',
         caption: 'A leaf',
         attribution: { creator: 'Ada', license: 'CC BY' },
       },
@@ -39,6 +40,14 @@ describe('parseDeckImport', () => {
       expect(result.data.title).toBe('Photosynthesis')
       expect(result.data.slides).toHaveLength(2)
       expect(result.data.settings?.generationFreedom).toBe(3)
+      // Image reference, provenance, caption, and TASL attribution are
+      // preserved (IMG-5 / read-only credit stays read-only on import).
+      expect(result.data.slides[1]?.image?.ref).toBe('https://img/leaf.jpg')
+      expect(result.data.slides[1]?.image?.source).toBe('stock')
+      expect(result.data.slides[1]?.image?.attribution).toEqual({
+        creator: 'Ada',
+        license: 'CC BY',
+      })
     }
   })
 

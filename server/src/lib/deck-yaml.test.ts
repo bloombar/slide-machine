@@ -18,6 +18,7 @@ const deck: ExportDeck = {
       title: 'Where it happens',
       bullets: ['In chloroplasts', 'Using chlorophyll'],
       imageRef: 'https://img/leaf.jpg',
+      imageSource: 'stock',
       caption: 'A green leaf',
       attribution: {
         title: 'Leaf',
@@ -48,6 +49,7 @@ describe('deckToYaml', () => {
     expect(slide.title).toBe('Where it happens')
     expect(slide.bullets).toEqual(['In chloroplasts', 'Using chlorophyll'])
     expect(slide.image.ref).toBe('https://img/leaf.jpg')
+    expect(slide.image.source).toBe('stock')
     expect(slide.image.caption).toBe('A green leaf')
     expect(slide.image.attribution).toMatchObject({
       title: 'Leaf',

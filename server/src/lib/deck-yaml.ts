@@ -25,6 +25,9 @@ export interface ExportSlide {
   body?: string
   bullets?: string[]
   imageRef?: string
+  /** Provenance of the image (seeded / stock / generated). Carried so a
+   * re-import keeps AI-sourced credit read-only, matching the original (IMG-5). */
+  imageSource?: string
   caption?: string
   attribution?: ImageAttribution
 }
@@ -63,6 +66,7 @@ const imageBlock = (
     : undefined
   const block = compact({
     ref: slide.imageRef,
+    source: slide.imageSource,
     caption: slide.caption,
     attribution:
       attribution && Object.keys(attribution).length ? attribution : undefined,

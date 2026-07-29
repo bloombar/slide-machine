@@ -87,6 +87,7 @@ const loadExportDeck = async (
     body: s.body,
     bullets: s.bullets,
     imageRef: s.imageRef,
+    imageSource: s.imageSource,
     caption: s.caption,
     attribution: s.attribution,
   }))

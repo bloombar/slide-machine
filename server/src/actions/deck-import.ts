@@ -158,6 +158,7 @@ export const deckImport = defineAction<
           body: s.body,
           bullets: s.bullets?.length ? s.bullets : undefined,
           imageRef: s.image?.ref,
+          imageSource: s.image?.source,
           caption: s.image?.caption,
           attribution: s.image?.attribution,
         })

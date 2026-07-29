@@ -56,6 +56,7 @@ const exportDoc = (over: Record<string, unknown> = {}) => ({
       bullets: ['Light', 'Dark'],
       image: {
         ref: 'https://img/leaf.jpg',
+        source: 'stock',
         caption: 'A leaf',
         attribution: { creator: 'Ada', license: 'CC BY' },
       },
@@ -114,6 +115,14 @@ describe('deck.import (EXP-3)', () => {
     expect(slides[0]!.layoutType).toBe('title')
     expect(slides[1]!.bullets).toEqual(['Light', 'Dark'])
     expect(slides[1]!.imageRef).toBe('https://img/leaf.jpg')
+    expect(slides[1]!.caption).toBe('A leaf')
+    // Image attribution/license (IMG-5) survives the round-trip.
+    expect(slides[1]!.attribution).toMatchObject({
+      creator: 'Ada',
+      license: 'CC BY',
+    })
+    // imageSource is preserved so AI-sourced credit stays read-only on import.
+    expect(slides[1]!.imageSource).toBe('stock')
     // slideOrder stays in step with slide index.
     expect(deckDoc!.slideOrder).toHaveLength(2)
 
@@ -141,6 +150,16 @@ describe('deck.import (EXP-3)', () => {
       layoutType: 'list',
       title: 'Where',
       bullets: ['In chloroplasts'],
+      imageRef: 'https://img/leaf.jpg',
+      imageSource: 'stock',
+      caption: 'A green leaf',
+      attribution: {
+        creator: 'Ada Lovelace',
+        creatorUrl: 'https://example.com/ada',
+        license: 'CC BY-SA 4.0',
+        licenseUrl: 'https://creativecommons.org/licenses/by-sa/4.0/',
+        sourceName: 'Wikimedia Commons',
+      },
     })
     await SeedAssetModel.create({
       projectId: srcDoc!.projectId,
@@ -177,6 +196,18 @@ describe('deck.import (EXP-3)', () => {
     expect(imp.body.deck.seedContext).toBeUndefined()
     const importedSlides = await SlideModel.find({ deckId: imp.body.deck.id })
     expect(importedSlides).toHaveLength(1)
+    // The image, its provenance, caption, and full TASL attribution survive the
+    // YAML pipeline — so a stock image's credit stays read-only after import.
+    expect(importedSlides[0]!.imageRef).toBe('https://img/leaf.jpg')
+    expect(importedSlides[0]!.imageSource).toBe('stock')
+    expect(importedSlides[0]!.caption).toBe('A green leaf')
+    expect(importedSlides[0]!.attribution).toMatchObject({
+      creator: 'Ada Lovelace',
+      creatorUrl: 'https://example.com/ada',
+      license: 'CC BY-SA 4.0',
+      licenseUrl: 'https://creativecommons.org/licenses/by-sa/4.0/',
+      sourceName: 'Wikimedia Commons',
+    })
     const importedAssets = await SeedAssetModel.find({
       deckId: imp.body.deck.id,
     })

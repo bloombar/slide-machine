@@ -36,6 +36,7 @@ const slideSchema = z
     image: z
       .object({
         ref: z.string().optional(),
+        source: z.enum(['seeded', 'stock', 'generated']).optional(),
         caption: z.string().optional(),
         attribution: attributionSchema.optional(),
       })
