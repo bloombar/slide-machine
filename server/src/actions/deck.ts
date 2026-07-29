@@ -88,6 +88,8 @@ import { TranscriptSegmentModel } from '../models/transcript-segment'
 import { ProjectModel, projectAcl } from '../models/project'
 import { isAllowlistedAdmin } from '../lib/admin-view'
 import { editDeckSettings } from '../lib/admin-edit'
+import { recordSettingsChange } from '../audit/settings-log'
+import { deckSettingsSnapshot } from '../lib/settings-snapshot'
 import { getBuiltinTemplate, layoutDescriptors } from '../templates/builtin'
 import { buildDeckStructure, headerLayoutTypes } from '../lib/deck-structure'
 import { registry } from '../providers/registry'
@@ -1283,6 +1285,7 @@ export const deckTransferOwnership = defineAction<
     userId: z.string().min(1),
   }),
   execute: async (ctx, input) => {
+    const userId = requireUser(ctx)
     const deck = await loadOwnedDeck(ctx, input.deckId)
     const target = await UserModel.findById(input.userId).catch(() => null)
     if (!target) {
@@ -1291,24 +1294,37 @@ export const deckTransferOwnership = defineAction<
       ])
     }
     const targetId = target._id.toString()
-    if (targetId === ctx.userId) {
+    if (targetId === userId) {
       throw new ActionValidationError('deck.transferOwnership', [
         'userId: already the owner',
       ])
     }
+    const acl = await loadDeckAcl(deck)
+    const before = deckSettingsSnapshot(deck, acl)
     // Transfers pin an override: the old owner's continued edit access
     // must not depend on the project's (their own) settings
-    ensureDeckOverride(deck, await loadDeckAcl(deck))
+    ensureDeckOverride(deck, acl)
     const override = deck.accessOverride!
     // The new owner leaves the people list; the old owner stays an editor
     override.viewers = override.viewers.filter(id => id !== targetId)
     override.editors = override.editors.filter(id => id !== targetId)
-    if (ctx.userId && !override.editors.includes(ctx.userId)) {
-      override.editors.push(ctx.userId)
-    }
+    if (!override.editors.includes(userId)) override.editors.push(userId)
     deck.ownerId = target._id
     deck.markModified('accessOverride')
     await deck.save()
+    // Owner-only, so it never reaches editDeckSettings — it logs the
+    // change itself. The entry is filed under whoever owns the lecture
+    // now, so its history follows the settings.
+    await recordSettingsChange({
+      actorId: userId,
+      actorRole: 'owner',
+      entityType: 'deck',
+      entityId: deck._id.toString(),
+      entityName: deck.title,
+      ownerId: targetId,
+      before,
+      after: deckSettingsSnapshot(deck, resolveDeckAcl(deck, null)),
+    })
     // The caller is no longer the owner, so share lists stay behind
     return toSharedDeckDto(deck, resolveDeckAcl(deck, null))
   },

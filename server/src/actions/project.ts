@@ -36,6 +36,8 @@ import { UserModel } from '../models/user'
 import { canEditAcl, isAclMember } from '../lib/access'
 import { isAllowlistedAdmin } from '../lib/admin-view'
 import { editProjectSettings } from '../lib/admin-edit'
+import { recordSettingsChange } from '../audit/settings-log'
+import { projectSettingsSnapshot } from '../lib/settings-snapshot'
 import { ttsVoiceIdSchema } from '../lib/tts-voice'
 import { sharesOfAcl } from '../lib/shares'
 import { getBuiltinTemplate } from '../templates/builtin'
@@ -314,12 +316,26 @@ export const projectTransferOwnership = defineAction<
         'userId: already the owner',
       ])
     }
+    const before = projectSettingsSnapshot(doc)
     // The new owner leaves the people list; the old owner stays an editor
     doc.viewers = doc.viewers.filter(id => id !== targetId)
     doc.editors = doc.editors.filter(id => id !== targetId)
     if (!doc.editors.includes(userId)) doc.editors.push(userId)
     doc.ownerId = target._id
     await doc.save()
+    // Owner-only, so it never reaches editProjectSettings — it logs the
+    // change itself. The entry is filed under whoever owns the project
+    // now, so its history follows the settings.
+    await recordSettingsChange({
+      actorId: userId,
+      actorRole: 'owner',
+      entityType: 'project',
+      entityId: doc._id.toString(),
+      entityName: doc.title,
+      ownerId: targetId,
+      before,
+      after: projectSettingsSnapshot(doc),
+    })
     // The caller is no longer the owner, so share lists stay behind
     return toSharedProjectDto(doc)
   },

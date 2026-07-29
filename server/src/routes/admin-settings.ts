@@ -8,8 +8,10 @@
  * diffs the two snapshots — mongoose setters make a patch-vs-document
  * comparison lie, and it makes "the admin re-submitted the same value" a
  * free no-op. A patch that changes nothing is a 204 with no save and no
- * audit entry; anything else saves once and records `{field: {from, to}}`
- * in the admin action log.
+ * log entry; anything else saves once and records `{field: {from, to}}`
+ * in the admin action log AND in the settings change log, which carries
+ * every settings change whoever made it (docs/ADMINISTRATION.md,
+ * "Settings change log").
  *
  * Projects and lectures have no counterpart here: an admin edits their
  * settings in the owner-facing settings modal, through the same actions
@@ -17,12 +19,12 @@
  * ("Editing settings").
  */
 import { Router } from 'express'
-import type { HydratedDocument } from 'mongoose'
 import { z } from 'zod'
 import { LOCALES } from '@slide-machine/shared'
-import type { UserDb } from '../models/user'
 import { logAdminAction } from '../audit/log'
+import { recordSettingsChange } from '../audit/settings-log'
 import { diffSettings } from '../lib/settings-diff'
+import { userSettingsSnapshot } from '../lib/settings-snapshot'
 import { HttpError } from '../middleware/error'
 import { actor, loadUser, rejectAdminTarget } from './admin-targets'
 
@@ -64,15 +66,6 @@ const parsePatch = <T extends z.ZodTypeAny>(
   return parsed.data
 }
 
-/** The account's settings as the diff vocabulary sees them. */
-const userSettingsSnapshot = (doc: HydratedDocument<UserDb>) => ({
-  displayName: doc.displayName,
-  bio: doc.bio,
-  profileVisibility: doc.profileVisibility,
-  locale: doc.locale,
-  language: doc.language,
-})
-
 adminSettingsRouter.patch('/users/:id', async (req, res) => {
   const user = await loadUser(String(req.params.id))
   const admin = actor(req)
@@ -90,7 +83,8 @@ adminSettingsRouter.patch('/users/:id', async (req, res) => {
   if (input.locale !== undefined) user.locale = input.locale
   // null clears back to the browser default (stores nothing)
   if (input.language !== undefined) user.language = input.language ?? undefined
-  const changes = diffSettings(before, userSettingsSnapshot(user))
+  const after = userSettingsSnapshot(user)
+  const changes = diffSettings(before, after)
 
   if (!Object.keys(changes).length) {
     res.status(204).end()
@@ -104,6 +98,19 @@ adminSettingsRouter.patch('/users/:id', async (req, res) => {
     targetType: 'user',
     targetId: user._id.toString(),
     details: { email: user.email, changes },
+  })
+  // The same change again in the log that tracks an account's settings
+  // however they changed, filed under the account, not the admin
+  await recordSettingsChange({
+    actorId: admin.id,
+    actorEmail: admin.email,
+    actorRole: 'admin',
+    entityType: 'user',
+    entityId: user._id.toString(),
+    entityName: user.email,
+    ownerId: user._id.toString(),
+    before,
+    after,
   })
   res.status(204).end()
 })
