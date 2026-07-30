@@ -1,0 +1,122 @@
+{
+  "_meta": {
+    "locale": "en",
+    "reviewed": true,
+    "note": "Source bundle. Every other locale is derived from this one; bundles.test.ts fails if a key here has no counterpart there."
+  },
+  "common": {
+    "loading": "Loading…",
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "edit": "Edit",
+    "delete": "Delete",
+    "settings": "Settings",
+    "or": "or",
+    "adminEditNotice": "You are editing another user's {entity, select, account {account} project {project} lecture {lecture} other {settings}} as an admin. Every change you make here is recorded in the audit log."
+  },
+  "nav": {
+    "brand": "The Slide Machine",
+    "brandHome": "The Slide Machine — home",
+    "menu": "Menu",
+    "primary": "Primary",
+    "home": "Home",
+    "profile": "Profile",
+    "admin": "Admin",
+    "logIn": "Log in",
+    "logOut": "Log out"
+  },
+  "landing": {
+    "title": "The Slide Machine V2",
+    "tagline": "Speak freely — the slides will follow.",
+    "cta": "Sign in to get started"
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "signingIn": "Signing in…",
+    "signUp": "Sign up",
+    "signOut": "Sign out",
+    "createAccount": "Create account",
+    "creatingAccount": "Creating…",
+    "email": "Email",
+    "password": "Password",
+    "displayName": "Display name",
+    "noAccount": "No account?",
+    "createOne": "Create one",
+    "alreadyRegistered": "Already registered?",
+    "signInLink": "Sign in",
+    "continueWithGoogle": "{action} with Google",
+    "errors": {
+      "google": "Could not sign in with Google — try again",
+      "signIn": "Something went wrong — try again",
+      "register": "Something went wrong — try again"
+    }
+  },
+  "health": {
+    "summary": "API {status}",
+    "environment": "Environment",
+    "version": "Version",
+    "uptime": "Uptime",
+    "state": {
+      "ok": "ok",
+      "degraded": "degraded",
+      "down": "down",
+      "disabled": "disabled",
+      "loading": "checking…",
+      "error": "unreachable"
+    },
+    "components": {
+      "mongo": "Database",
+      "storage": "Storage",
+      "audioStorage": "Audio storage",
+      "gemini": "Generative AI",
+      "stt": "Speech-to-Text",
+      "tts": "Text-to-Speech"
+    }
+  },
+  "profile": {
+    "notFound": "This profile does not exist or is private.",
+    "displayName": "Display name",
+    "bio": "Bio",
+    "bioPlaceholder": "A short introduction shown on your profile.",
+    "noBio": "No bio",
+    "noLectures": "No lectures to show.",
+    "displayNameRequired": "Display name is required.",
+    "interfaceLanguage": "Interface language",
+    "interfaceLanguageHint": "Menus, buttons and messages appear in this language.",
+    "lectureLanguage": "Lecture language",
+    "lectureLanguageHint": "Speech recognition and generated slides use this language. Projects and lectures can override it.",
+    "lectureLanguageDefault": "{own, select, true {your interface language} other {their interface language}}",
+    "plan": "Plan:",
+    "publicProfile": "Public profile",
+    "publicProfileHint": "Public profile — others can see {own, select, true {your} other {their}} public and shared lectures",
+    "closeSettings": "Close settings",
+    "adminProfile": {
+      "title": "Edit this user's profile?",
+      "message": "This profile belongs to another user. You can change it as an admin; every change is recorded in the audit log.",
+      "confirm": "Save changes"
+    },
+    "adminSettings": {
+      "title": "Edit this user's settings?",
+      "message": "This account belongs to {name}. You can change their settings as an admin; every change is recorded in the audit log.",
+      "confirm": "Edit settings"
+    },
+    "errors": {
+      "save": "Could not save the profile.",
+      "loadAccount": "Could not load this account.",
+      "saveSettings": "Could not save these settings."
+    }
+  },
+  "language": {
+    "label": "Language",
+    "inherit": "Default — {source}"
+  },
+  "errors": {
+    "invalid_credentials": "Incorrect email or password",
+    "account_banned": "This account has been banned",
+    "unauthorized": "Your session has ended — sign in again",
+    "forbidden": "You do not have permission to do that",
+    "internal_error": "Something went wrong on our end — try again",
+    "unknown_error": "Something went wrong — try again"
+  }
+}

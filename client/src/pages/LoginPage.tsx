@@ -4,21 +4,23 @@
  */
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthContext'
-import { ApiError } from '../api/http'
+import { apiErrorMessage } from '../i18n/apiError'
 import GoogleSignInButton from '../components/GoogleSignInButton'
 
 export default function LoginPage() {
   const { status, login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const { t } = useTranslation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   // A failed Google callback redirects here with ?error=<code>
   const googleFailed =
     new URLSearchParams(location.search).get('error') === 'google_auth_failed'
   const [error, setError] = useState<string | null>(
-    googleFailed ? 'Could not sign in with Google — try again' : null,
+    googleFailed ? t('auth.errors.google') : null,
   )
   const [submitting, setSubmitting] = useState(false)
 
@@ -34,11 +36,7 @@ export default function LoginPage() {
         replace: true,
       })
     } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.message
-          : 'Something went wrong — try again',
-      )
+      setError(apiErrorMessage(err, t, 'auth.errors.signIn'))
     } finally {
       setSubmitting(false)
     }
@@ -50,9 +48,9 @@ export default function LoginPage() {
         onSubmit={onSubmit}
         className="flex w-80 flex-col gap-4 rounded-lg border border-slate-200 p-8"
       >
-        <h1 className="text-2xl font-bold">Sign in</h1>
+        <h1 className="text-2xl font-bold">{t('auth.signIn')}</h1>
         <label className="flex flex-col gap-1 text-sm text-slate-700">
-          Email
+          {t('auth.email')}
           <input
             type="email"
             required
@@ -62,7 +60,7 @@ export default function LoginPage() {
           />
         </label>
         <label className="flex flex-col gap-1 text-sm text-slate-700">
-          Password
+          {t('auth.password')}
           <input
             type="password"
             required
@@ -81,13 +79,13 @@ export default function LoginPage() {
           disabled={submitting}
           className="rounded-md bg-indigo-600 px-4 py-2 font-medium text-white disabled:opacity-50"
         >
-          {submitting ? 'Signing in…' : 'Sign in'}
+          {submitting ? t('auth.signingIn') : t('auth.signIn')}
         </button>
-        <GoogleSignInButton action="Sign in" />
+        <GoogleSignInButton action={t('auth.signIn')} />
         <p className="text-sm text-slate-500">
-          No account?{' '}
+          {t('auth.noAccount')}{' '}
           <Link to="/register" className="text-indigo-600">
-            Create one
+            {t('auth.createOne')}
           </Link>
         </p>
       </form>

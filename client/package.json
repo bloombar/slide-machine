@@ -15,14 +15,21 @@
   "dependencies": {
     "@atlaskit/pragmatic-drag-and-drop": "^2.0.1",
     "gsap": "^3.15.0",
+    "i18next": "^25.10.10",
+    "i18next-browser-languagedetector": "^8.2.1",
+    "i18next-icu": "^2.4.4",
+    "i18next-resources-to-backend": "^1.2.2",
+    "intl-messageformat": "^10.7.18",
     "lucide-react": "^1.24.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "react-i18next": "^16.6.6",
     "react-markdown": "^10.1.0",
     "react-router": "^8.2.0",
     "remark-breaks": "^4.0.0"
   },
   "devDependencies": {
+    "@formatjs/icu-messageformat-parser": "^2.11.4",
     "@tailwindcss/vite": "^4.3.2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

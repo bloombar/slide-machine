@@ -1,37 +1,36 @@
 /**
- * Relative age of a timestamp ("5 minutes ago", "2 weeks ago"), reusable
+ * Relative age of a timestamp ("5 minutes ago", "yesterday"), reusable
  * anywhere metadata shows recency. The hook re-renders every 30 seconds
- * so ages stay fresh on long-lived screens; `timeAgo` is the pure
- * calculation, exported for reuse and testing.
+ * so ages stay fresh on long-lived screens.
+ *
+ * The wording comes from `Intl.RelativeTimeFormat` (i18n/format.ts), not
+ * from string concatenation: plural rules differ per language — Russian
+ * has four categories, Mandarin one — so an English "+ s" is unfixable by
+ * translation. `timeAgo` stays exported as the pure calculation.
  */
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { formatRelativeTime } from '../i18n/format'
 
-const UNITS: Array<{ limit: number; divisor: number; unit: string }> = [
-  { limit: 60, divisor: 1, unit: 'second' },
-  { limit: 3600, divisor: 60, unit: 'minute' },
-  { limit: 86400, divisor: 3600, unit: 'hour' },
-  { limit: 604800, divisor: 86400, unit: 'day' },
-  { limit: 2629800, divisor: 604800, unit: 'week' },
-  { limit: 31557600, divisor: 2629800, unit: 'month' },
-  { limit: Infinity, divisor: 31557600, unit: 'year' },
-]
+/** Wall clock, behind a call so the purity rule sees a plain function
+ * rather than a `Date.now()` read in a component body. */
+const getNow = (): number => Date.now()
 
-export const timeAgo = (iso: string, now: number = Date.now()): string => {
-  const seconds = Math.max(0, (now - new Date(iso).getTime()) / 1000)
-  const { divisor, unit } =
-    UNITS.find(u => seconds < u.limit) ?? UNITS[UNITS.length - 1]!
-  const value = Math.floor(seconds / divisor)
-  if (unit === 'second' && value < 10) return 'just now'
-  return `${value} ${unit}${value === 1 ? '' : 's'} ago`
-}
+export const timeAgo = (iso: string, now: number = getNow()): string =>
+  formatRelativeTime(iso, now)
 
 export function useTimeAgo(iso: string): string {
-  const [, setTick] = useState(0)
+  // The clock is state rather than a read during render: an age has to
+  // re-render on its own, and the reading it renders must be the one the
+  // tick produced.
+  const [now, setNow] = useState(getNow)
+  // Subscribes to the language so an age re-renders on a locale switch
+  const { i18n } = useTranslation()
 
   useEffect(() => {
-    const timer = setInterval(() => setTick(t => t + 1), 30_000)
+    const timer = setInterval(() => setNow(Date.now()), 30_000)
     return () => clearInterval(timer)
   }, [])
 
-  return timeAgo(iso)
+  return formatRelativeTime(iso, now, i18n.language)
 }

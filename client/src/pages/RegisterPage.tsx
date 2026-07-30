@@ -4,13 +4,15 @@
  */
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthContext'
-import { ApiError } from '../api/http'
+import { apiErrorMessage } from '../i18n/apiError'
 import GoogleSignInButton from '../components/GoogleSignInButton'
 
 export default function RegisterPage() {
   const { status, register } = useAuth()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -27,11 +29,7 @@ export default function RegisterPage() {
       await register(email, password, displayName)
       navigate('/app', { replace: true })
     } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.message
-          : 'Something went wrong — try again',
-      )
+      setError(apiErrorMessage(err, t, 'auth.errors.register'))
     } finally {
       setSubmitting(false)
     }
@@ -43,9 +41,9 @@ export default function RegisterPage() {
         onSubmit={onSubmit}
         className="flex w-80 flex-col gap-4 rounded-lg border border-slate-200 p-8"
       >
-        <h1 className="text-2xl font-bold">Create account</h1>
+        <h1 className="text-2xl font-bold">{t('auth.createAccount')}</h1>
         <label className="flex flex-col gap-1 text-sm text-slate-700">
-          Display name
+          {t('auth.displayName')}
           <input
             required
             value={displayName}
@@ -54,7 +52,7 @@ export default function RegisterPage() {
           />
         </label>
         <label className="flex flex-col gap-1 text-sm text-slate-700">
-          Email
+          {t('auth.email')}
           <input
             type="email"
             required
@@ -64,7 +62,7 @@ export default function RegisterPage() {
           />
         </label>
         <label className="flex flex-col gap-1 text-sm text-slate-700">
-          Password
+          {t('auth.password')}
           <input
             type="password"
             required
@@ -84,13 +82,13 @@ export default function RegisterPage() {
           disabled={submitting}
           className="rounded-md bg-indigo-600 px-4 py-2 font-medium text-white disabled:opacity-50"
         >
-          {submitting ? 'Creating…' : 'Create account'}
+          {submitting ? t('auth.creatingAccount') : t('auth.createAccount')}
         </button>
-        <GoogleSignInButton action="Sign up" />
+        <GoogleSignInButton action={t('auth.signUp')} />
         <p className="text-sm text-slate-500">
-          Already registered?{' '}
+          {t('auth.alreadyRegistered')}{' '}
           <Link to="/login" className="text-indigo-600">
-            Sign in
+            {t('auth.signInLink')}
           </Link>
         </p>
       </form>

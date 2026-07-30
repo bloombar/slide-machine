@@ -2621,7 +2621,7 @@ describe('DeckViewerPage title in the primary nav', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Add slide' }))
 
     // The local stamp lands as soon as the save resolves — no reload
-    expect(await screen.findByText(/edited just now/)).toBeInTheDocument()
+    expect(await screen.findByText(/edited now/)).toBeInTheDocument()
   })
 })
 

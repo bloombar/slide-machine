@@ -6,6 +6,7 @@
  * intentionally do not use this shell.
  */
 import { Link, Outlet } from 'react-router'
+import { useTranslation } from 'react-i18next'
 import HealthFooter from './HealthFooter'
 import ShellMenu from './ShellMenu'
 import { useShellTitleSlot } from './ShellTitle'
@@ -14,6 +15,7 @@ import { useShellActionsSlot } from './ShellActions'
 export default function AppShell() {
   const shellTitle = useShellTitleSlot()
   const shellActions = useShellActionsSlot()
+  const { t } = useTranslation()
   return (
     <div className="flex min-h-screen flex-col bg-white text-slate-900">
       <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
@@ -22,10 +24,10 @@ export default function AppShell() {
             <ShellMenu />
             <Link
               to="/app"
-              aria-label="The Slide Machine — home"
+              aria-label={t('nav.brandHome')}
               className="font-semibold whitespace-nowrap"
             >
-              The Slide Machine
+              {t('nav.brand')}
             </Link>
             {shellTitle?.active && (
               <span
@@ -41,7 +43,7 @@ export default function AppShell() {
             />
           </div>
           <nav
-            aria-label="Primary"
+            aria-label={t('nav.primary')}
             className="flex items-center gap-1 sm:gap-2"
           >
             <div

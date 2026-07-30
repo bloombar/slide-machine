@@ -13,3 +13,14 @@ export const LOCALE_LABELS: Record<Locale, string> = {
   ru: 'Русский (Russian)',
   zh: '中文 (Mandarin)',
 }
+
+/** Writing direction per locale, the single source of truth for the
+ * document's `dir` attribute. Every launch locale is left-to-right; the
+ * map exists so adding a right-to-left one is a data change. */
+export const LOCALE_DIRECTION: Record<Locale, 'ltr' | 'rtl'> = {
+  en: 'ltr',
+  fr: 'ltr',
+  es: 'ltr',
+  ru: 'ltr',
+  zh: 'ltr',
+}

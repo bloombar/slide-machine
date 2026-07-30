@@ -7,6 +7,7 @@ import js from '@eslint/js'
 import tseslint from 'typescript-eslint'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
+import i18next from 'eslint-plugin-i18next'
 import prettier from 'eslint-config-prettier'
 import globals from 'globals'
 
@@ -44,6 +45,40 @@ export default tseslint.config(
     },
     languageOptions: {
       globals: globals.browser,
+    },
+  },
+  {
+    // No hardcoded user-facing strings in the app UI (TECH-12). The
+    // admin console is deliberately English-only (docs/I18N.md) and so is
+    // excluded, as are tests, which assert on literal copy by design.
+    files: ['client/src/**/*.tsx'],
+    ignores: [
+      'client/src/pages/Admin*.tsx',
+      'client/src/components/admin/**',
+      'client/src/auth/RequireAdmin.tsx',
+      'client/src/**/*.test.tsx',
+    ],
+    plugins: { i18next },
+    rules: {
+      // Starts as a warning while the extraction lands file by file, so
+      // CI is never red mid-sequence; flipped to `error` once the last
+      // surface is done.
+      'i18next/no-literal-string': [
+        'warn',
+        {
+          // `jsx-only` rather than the default `jsx-text-only`, because a
+          // good share of this app's copy is in attributes — the default
+          // mode never looks at them.
+          mode: 'jsx-only',
+          // Only the attributes a user actually reads. An empty exclude
+          // list is load-bearing: without it every other attribute (to,
+          // href, role, viewBox…) would be checked too.
+          'jsx-attributes': {
+            include: ['aria-label', 'alt', 'title', 'placeholder'],
+            exclude: [],
+          },
+        },
+      ],
     },
   },
   {

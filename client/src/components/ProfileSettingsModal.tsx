@@ -8,12 +8,15 @@
  * here too (ADMIN-5, `adminUserId`) — the same button, the same controls,
  * saving as you go — through the audited admin endpoint, with a banner up
  * for as long as the settings are open and an audit entry per change.
- * Two fields differ by design: sign out ends the *admin's* own session, so
- * it stays with the owner, and the interface locale is admin-only until
- * the in-app language switcher lands (TECH-12).
+ * Two controls differ by design: sign out ends the *admin's* own session,
+ * so it stays with the owner, and the interface language is a plain
+ * select when an admin sets it on someone else's account — LocaleSwitcher
+ * changes the language of the app you are looking at, which is the
+ * owner's, not the admin's.
  */
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
+import { useTranslation } from 'react-i18next'
 import { LogOut } from 'lucide-react'
 import {
   LOCALES,
@@ -27,6 +30,7 @@ import { useAuth } from '../auth/AuthContext'
 import { dispatchAction } from '../api/actions'
 import { fetchAdminUser, updateAdminUserSettings } from '../api/admin'
 import { ApiError } from '../api/http'
+import LocaleSwitcher from '../i18n/LocaleSwitcher'
 import AdminEditNotice from './AdminEditNotice'
 import LanguageSelect from './LanguageSelect'
 import Modal from './Modal'
@@ -57,6 +61,7 @@ interface Props {
 export default function ProfileSettingsModal({ adminUserId, onClose }: Props) {
   const { user: viewer, logout, updateUser } = useAuth()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   // The account an admin is editing. It holds the saved values too, so
   // every control shows what actually landed.
   const [target, setTarget] = useState<SafeUser | null>(null)
@@ -96,10 +101,15 @@ export default function ProfileSettingsModal({ adminUserId, onClose }: Props) {
       await updateAdminUserSettings(adminUserId, wirePatch(change))
       setTarget(current => (current ? { ...current, ...change } : current))
     } catch (err) {
+      // The admin endpoint's refusals name the specific rule that was hit
+      // ("Admin accounts cannot be moderated"), which is worth more to an
+      // admin than a translated generic. The admin surfaces are English by
+      // design (docs/I18N.md), so the raw message is shown as-is; the
+      // owner's own paths above translate instead.
       setSaveError(
         err instanceof ApiError
           ? err.message
-          : 'Could not save these settings.',
+          : t('profile.errors.saveSettings'),
       )
     }
   }
@@ -138,13 +148,13 @@ export default function ProfileSettingsModal({ adminUserId, onClose }: Props) {
     <Modal ariaLabelledBy="profile-settings-title" size="md" onClose={onClose}>
       <div className="flex items-start justify-between gap-4">
         <h2 id="profile-settings-title" className="text-lg font-bold">
-          Settings
+          {t('common.settings')}
         </h2>
         <button
           onClick={onClose}
           className="rounded-md px-2 py-1 text-sm font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700"
         >
-          Close settings
+          {t('profile.closeSettings')}
         </button>
       </div>
 
@@ -156,11 +166,11 @@ export default function ProfileSettingsModal({ adminUserId, onClose }: Props) {
 
       {loadFailed && (
         <p role="alert" className="mt-4 text-sm text-red-600">
-          Could not load this account.
+          {t('profile.errors.loadAccount')}
         </p>
       )}
       {!user && !loadFailed && (
-        <p className="mt-4 text-sm text-slate-500">Loading…</p>
+        <p className="mt-4 text-sm text-slate-500">{t('common.loading')}</p>
       )}
 
       {user && (
@@ -174,7 +184,7 @@ export default function ProfileSettingsModal({ adminUserId, onClose }: Props) {
           <div className="mt-4 flex flex-col gap-1">
             <p className="text-sm text-slate-600">{user.email}</p>
             <p className="text-sm text-slate-600">
-              Plan:{' '}
+              {t('profile.plan')}{' '}
               <span className="rounded-full bg-indigo-50 px-2 py-0.5 font-medium text-indigo-700">
                 {user.planTier}
               </span>
@@ -187,26 +197,31 @@ export default function ProfileSettingsModal({ adminUserId, onClose }: Props) {
                 type="checkbox"
                 checked={user.profileVisibility === 'public'}
                 onChange={toggleVisibility}
-                aria-label="Public profile"
+                aria-label={t('profile.publicProfile')}
               />
-              Public profile — others can see {adminUserId ? 'their' : 'your'}{' '}
-              public and shared lectures
+              {t('profile.publicProfileHint', { own: !adminUserId })}
             </label>
           </div>
 
-          {adminUserId && (
-            <div className="mt-6 flex flex-col gap-1">
-              <label
-                htmlFor="account-locale"
-                className="text-sm font-medium text-slate-700"
-              >
-                Interface locale
-              </label>
-              <p className="text-xs text-slate-500">
-                The language the app itself is shown in.
-              </p>
+          {/* Interface language (TECH-12), above the lecture language and
+              labelled so the two are never mistaken for each other. The
+              owner gets LocaleSwitcher, which re-renders the app they are
+              looking at; an admin gets a plain select, because the
+              account being changed is not the one on screen. */}
+          <div className="mt-6 flex flex-col gap-1">
+            <label
+              htmlFor="account-locale"
+              className="text-sm font-medium text-slate-700"
+            >
+              {t('profile.interfaceLanguage')}
+            </label>
+            <p className="text-xs text-slate-500">
+              {t('profile.interfaceLanguageHint')}
+            </p>
+            {adminUserId ? (
               <select
                 id="account-locale"
+                aria-label={t('profile.interfaceLanguage')}
                 value={user.locale}
                 onChange={e => setLocale(e.target.value as Locale)}
                 className="w-fit rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700"
@@ -217,24 +232,23 @@ export default function ProfileSettingsModal({ adminUserId, onClose }: Props) {
                   </option>
                 ))}
               </select>
-            </div>
-          )}
+            ) : (
+              <LocaleSwitcher id="account-locale" />
+            )}
+          </div>
 
           <div className="mt-6 flex flex-col gap-1">
             <p className="text-sm font-medium text-slate-700">
-              Lecture language
+              {t('profile.lectureLanguage')}
             </p>
             <p className="text-xs text-slate-500">
-              Speech recognition and generated slides use this language.
-              Projects and lectures can override it.
+              {t('profile.lectureLanguageHint')}
             </p>
             <LanguageSelect
               value={user.language}
-              defaultLabel={
-                adminUserId
-                  ? 'their browser language'
-                  : "your browser's language"
-              }
+              defaultLabel={t('profile.lectureLanguageDefault', {
+                own: !adminUserId,
+              })}
               onChange={setLanguage}
             />
           </div>
@@ -245,7 +259,7 @@ export default function ProfileSettingsModal({ adminUserId, onClose }: Props) {
               className="mt-6 flex items-center gap-2 rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
               <LogOut className="h-4 w-4" aria-hidden />
-              Sign out
+              {t('auth.signOut')}
             </button>
           )}
         </>

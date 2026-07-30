@@ -122,10 +122,21 @@ describe('ProfileSettingsModal', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
-  it('leaves the interface locale to the admin path', async () => {
-    renderSettings()
-    await screen.findByText('ada@example.com')
-    expect(screen.queryByLabelText('Interface locale')).toBeNull()
+  it('switches the interface language and persists it to the account', async () => {
+    let sent: unknown
+    renderSettings({
+      '/api/actions/user.setLocale': init => {
+        sent = JSON.parse(String(init?.body))
+        return { status: 200, body: user({ locale: 'fr' }) }
+      },
+    })
+
+    const select = await screen.findByLabelText('Interface language')
+    expect(select).toHaveValue('en')
+    fireEvent.change(select, { target: { value: 'fr' } })
+
+    await vi.waitFor(() => expect(sent).toEqual({ locale: 'fr' }))
+    await vi.waitFor(() => expect(select).toHaveValue('fr'))
   })
 })
 
@@ -270,7 +281,7 @@ describe('ProfileSettingsModal as an admin (ADMIN-5)', () => {
     await vi.waitFor(() => expect(select).toHaveValue(''))
   })
 
-  it('edits the interface locale, which the owner has no switcher for yet', async () => {
+  it('edits the interface language on the target account', async () => {
     const { fetchMock } = renderAsAdmin({
       '/api/admin/users/u9': init =>
         init?.method === 'PATCH'
@@ -286,7 +297,7 @@ describe('ProfileSettingsModal as an admin (ADMIN-5)', () => {
             },
     })
 
-    const select = await screen.findByLabelText('Interface locale')
+    const select = await screen.findByLabelText('Interface language')
     expect(select).toHaveValue('fr')
     fireEvent.change(select, { target: { value: 'en' } })
 
