@@ -193,8 +193,9 @@ Beyond creating the Space and a key pair ([DEPLOY.md §2](DEPLOY.md)):
    display the response**: Spaces returns the rule in the legacy form with an
    empty `<Prefix></Prefix>`, which parses to `None` and crashes the CLI's
    formatter with `argument of type 'NoneType' is not a container or iterable`.
-   That error is cosmetic — the rule is applied. Read it back with the AWS SDK
-   instead, which renders it correctly.
+   That error is cosmetic — the rule is applied. Use the maintenance script
+   below instead of the CLI; it reads the response correctly and merges rather
+   than replacing.
 
 2. **Optionally expire the `audio/` prefix.** A lifecycle expiration rule
    scoped to `audio/` is a zero-code backstop to the app's sweep. **Scope it to
@@ -207,6 +208,31 @@ Beyond creating the Space and a key pair ([DEPLOY.md §2](DEPLOY.md)):
    `ListMultipartUploads` and `AbortMultipartUpload` on the Space. It does
    _not_ need — and observably does not have — bucket creation or lifecycle
    configuration.
+
+## Maintaining the bucket
+
+[`scripts/spaces/lifecycle.mjs`](../scripts/spaces/lifecycle.mjs) does all of
+the above without the CLI's formatting bug, and reports rather than assumes —
+"could not read the rules" is distinguished from "no rule exists", because
+mistaking one for the other leads to re-applying a rule that is already there.
+
+```sh
+# report: which rules exist, and any stranded uploads
+npm run spaces:lifecycle -- --env-file server/.env.production
+
+# add or refresh the abort rule, preserving every other rule
+npm run spaces:lifecycle -- --env-file server/.env.production --apply-abort-rule
+
+# clear uploads stranded by an unclean shutdown (skips recent ones)
+npm run spaces:lifecycle -- --env-file server/.env.production --abort-orphans
+```
+
+Lifecycle calls need a full-access key; an exported `S3_ACCESS_KEY_ID` /
+`S3_SECRET_ACCESS_KEY` overrides whatever the `--env-file` supplies, so the file
+can still provide the endpoint and bucket. The script refuses to write when it
+cannot read the current configuration, and `--abort-orphans` leaves uploads
+younger than an hour alone — a lecture in progress holds one open, and aborting
+it destroys that recording.
 
 Verified against Spaces: multipart uploads complete byte-identically and the
 AWS SDK's default checksum headers are accepted, so no

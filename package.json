@@ -23,6 +23,7 @@
     "lint": "eslint .",
     "board:derive": "node scripts/board/derive.mjs",
     "board:sync": "node scripts/board/sync.mjs",
+    "spaces:lifecycle": "node scripts/spaces/lifecycle.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
