@@ -34,6 +34,11 @@ import type {
 } from '@slide-machine/shared'
 import { WHITEBOARD_EXPORT_FORMATS } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
+// The singleton's standalone translator, for the load effects below: it
+// is module-level and stable, so it is not an effect dependency the way
+// the hook's `t` is (which changes identity on every language switch,
+// and would re-run the fetch).
+import { t as translate } from '../i18n'
 import Portal from './Portal'
 import ConfirmDialog from './ConfirmDialog'
 
@@ -132,7 +137,7 @@ function FolderPicker({
       })
       .catch(() => {
         if (!ignore) {
-          setError(t('quiz.errors.loadFolders'))
+          setError(translate('quiz.errors.loadFolders'))
         }
       })
     return () => {
@@ -391,7 +396,7 @@ export default function ExportPanel({ deckId }: Props) {
         setHasWhiteboard(s.hasWhiteboard)
         setExports(s.exports)
       })
-      .catch(() => setError(t('export.errors.status')))
+      .catch(() => setError(translate('export.errors.status')))
       .finally(() => setLoading(false))
   }, [deckId])
 

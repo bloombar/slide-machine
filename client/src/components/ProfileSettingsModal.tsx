@@ -186,7 +186,9 @@ export default function ProfileSettingsModal({ adminUserId, onClose }: Props) {
             <p className="text-sm text-slate-600">
               {t('profile.plan')}{' '}
               <span className="rounded-full bg-indigo-50 px-2 py-0.5 font-medium text-indigo-700">
-                {user.planTier}
+                {t(`plan.tier.${user.planTier}`, {
+                  defaultValue: user.planTier,
+                })}
               </span>
             </p>
           </div>

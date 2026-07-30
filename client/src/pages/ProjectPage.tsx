@@ -12,14 +12,18 @@
  */
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
+import { useTranslation } from 'react-i18next'
 import { Settings } from 'lucide-react'
 import type { Deck, DeckImportResult, Project } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import { ApiError } from '../api/http'
 import { useAuth } from '../auth/AuthContext'
 import { useIsAdmin } from '../hooks/useIsAdmin'
-import { projectTitle } from '../lib/project'
-import { config } from '../config'
+import { projectTitle, untitledProject } from '../lib/project'
+import { untitledLecture } from '../lib/lecture'
+// Module-level translator for the load effect: stable, so it is not a
+// dependency the way the hook's `t` is.
+import { t as translate } from '../i18n'
 import ConfirmDialog from '../components/ConfirmDialog'
 import LectureRow from '../components/LectureRow'
 import NewLectureZone from '../components/NewLectureZone'
@@ -31,6 +35,7 @@ import ProjectSettingsModal, {
 export default function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const { user } = useAuth()
   const isAdmin = useIsAdmin()
   const [project, setProject] = useState<Project | null>(null)
@@ -77,7 +82,7 @@ export default function ProjectPage() {
         setDecks(deckList)
       })
       .catch(() => {
-        if (!cancelled) setError('Could not load this project')
+        if (!cancelled) setError(translate('project.errors.load'))
       })
     return () => {
       cancelled = true
@@ -119,7 +124,7 @@ export default function ProjectPage() {
       })
       navigate(`/d/${deck.permalinkSlug}`, { state: { startSpeaking: true } })
     } catch {
-      setError('Could not create the lecture')
+      setError(t('lecture.errors.create'))
     }
   }
 
@@ -135,7 +140,7 @@ export default function ProjectPage() {
     try {
       content = await file.text()
     } catch {
-      setError('Could not read that file')
+      setError(t('lecture.import.errors.read'))
       return
     }
     try {
@@ -144,20 +149,25 @@ export default function ProjectPage() {
         content,
       })
       setDecks(prev => [result.deck, ...prev])
-      const name = result.deck.title || 'Untitled lecture'
+      const name = result.deck.title || untitledLecture()
       setNotice(
         result.warnings.length
-          ? `Imported "${name}". ${result.warnings.join(' ')}`
-          : `Imported "${name}".`,
+          ? t('lecture.import.importedWithWarnings', {
+              name,
+              warnings: result.warnings.join(' '),
+            })
+          : t('lecture.import.imported', { name }),
       )
     } catch (err) {
       // A validation failure lists the specific problems; anything else is a
       // generic message. Nothing was created either way.
-      if (err instanceof ApiError && err.details?.length) {
-        setError(`Could not import this file: ${err.details.join(' ')}`)
-      } else {
-        setError('Could not import this file')
-      }
+      setError(
+        err instanceof ApiError && err.details?.length
+          ? t('lecture.import.errors.invalid', {
+              details: err.details.join(' '),
+            })
+          : t('lecture.import.errors.failed'),
+      )
     }
   }
 
@@ -168,17 +178,17 @@ export default function ProjectPage() {
           {project ? (
             <EditableText
               value={project.title}
-              label="Project title"
-              emptyDisplay={config.defaultProjectTitle}
+              label={t('project.titleLabel')}
+              emptyDisplay={untitledProject()}
               onSave={renameProject}
             />
           ) : (
-            'Loading…'
+            t('common.loading')
           )}
         </h1>
         <button
-          aria-label="Project settings"
-          title="Project settings"
+          aria-label={t('project.settings.title')}
+          title={t('project.settings.title')}
           onClick={() => {
             setSettingsTab('general')
             setSettingsOpen(true)
@@ -190,7 +200,9 @@ export default function ProjectPage() {
       </header>
 
       <section className="max-w-2xl">
-        <h2 className="mb-4 text-lg font-semibold text-slate-700">Lectures</h2>
+        <h2 className="mb-4 text-lg font-semibold text-slate-700">
+          {t('project.lectures')}
+        </h2>
         {error && (
           <p role="alert" className="mb-4 text-sm text-red-600">
             {error}
@@ -236,9 +248,11 @@ export default function ProjectPage() {
 
       {askAdmin && project && (
         <ConfirmDialog
-          title="Edit this project's settings?"
-          message={`"${projectTitle(project)}" belongs to another user. You can change its settings as an admin; every change is recorded in the audit log.`}
-          confirmLabel="Edit settings"
+          title={t('project.adminSettings.title')}
+          message={t('project.adminSettings.message', {
+            name: projectTitle(project),
+          })}
+          confirmLabel={t('profile.adminSettings.confirm')}
           onConfirm={() => setAdminEditConfirmed(true)}
           onCancel={() => setSettingsOpen(false)}
         />

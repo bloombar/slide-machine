@@ -156,11 +156,100 @@
     "fromTemplate": "Layouts from the <strong>{name}</strong> template."
   },
   "lecture": {
-    "untitled": "Untitled lecture"
+    "untitled": "Untitled lecture",
+    "options": "Options for {name}",
+    "new": {
+      "action": "New lecture",
+      "label": "Start a new lecture",
+      "inProject": "Start a new lecture in {project}"
+    },
+    "import": {
+      "action": "Import",
+      "label": "Import a lecture",
+      "intoProject": "Import a lecture into {project}",
+      "imported": "Imported \"{name}\".",
+      "importedWithWarnings": "Imported \"{name}\". {warnings}",
+      "errors": {
+        "read": "Could not read that file",
+        "invalid": "Could not import this file: {details}",
+        "failed": "Could not import this file"
+      }
+    },
+    "errors": {
+      "create": "Could not create the lecture"
+    }
+  },
+  "project": {
+    "untitled": "Default project",
+    "titleLabel": "Project title",
+    "lectures": "Lectures",
+    "options": "Options for {name}",
+    "new": {
+      "title": "New project",
+      "action": "New project",
+      "name": "Title",
+      "namePlaceholder": "e.g. Biology 101",
+      "description": "Description <hint>(optional)</hint>",
+      "descriptionPlaceholder": "What is this project about?",
+      "submit": "Create project"
+    },
+    "delete": {
+      "action": "Delete project",
+      "title": "Delete project?",
+      "message": "\"{name}\" and all of its lectures, slides, and seed material will be permanently deleted."
+    },
+    "adminSettings": {
+      "title": "Edit this project's settings?",
+      "message": "\"{name}\" belongs to another user. You can change its settings as an admin; every change is recorded in the audit log."
+    },
+    "settings": {
+      "title": "Project settings",
+      "scope": "These settings apply across all lectures in this project (lectures can override some of them individually).",
+      "templateHeading": "Default template",
+      "templateHint": "New lectures in this project start with this template. Each lecture keeps its own and can switch any time in its settings.",
+      "seedNotesHint": "Background material that guides slide generation for every lecture in this project. Saved automatically.",
+      "seedNotesLabel": "Project seed notes",
+      "seedNotesPlaceholder": "Key topics, terminology, planned structure…",
+      "seedMaterialHint": "Documents and photos scanned for background text and imagery, available to every lecture in this project.",
+      "freedomHint": "How much the AI may add beyond what the speaker says. Lectures in this project inherit it unless they set their own.",
+      "languageHint": "Speech recognition and generated slide text for lectures in this project, unless a lecture sets its own.",
+      "languageInherit": "your profile setting or browser language",
+      "voiceHint": "The voice used to read lectures in this project aloud, unless a lecture sets its own. It speaks in the project's language.",
+      "deleteHint": "Deleting a project permanently removes all of its lectures, slides, and seed material. This cannot be undone."
+    },
+    "errors": {
+      "load": "Could not load this project",
+      "create": "Could not create the project"
+    }
+  },
+  "home": {
+    "welcome": "Welcome, {name}",
+    "showAll": "{count, plural, one {Show the # lecture} other {Show all # lectures}}",
+    "otherLectures": "Other lectures",
+    "otherLecturesHint": "Lectures you own inside other people's projects.",
+    "errors": {
+      "load": "Could not load projects"
+    }
+  },
+  "plan": {
+    "tier": {
+      "free": "free",
+      "pro": "pro",
+      "max": "max"
+    }
+  },
+  "slot": {
+    "title": "Slide title",
+    "body": "Slide body",
+    "bullets": "Slide bullets",
+    "caption": "Slide caption",
+    "image": "Slide image",
+    "columns": "Slide columns"
   },
   "slide": {
     "previous": "Previous slide",
     "next": "Next slide",
+    "addSlot": "Add {name}",
     "image": {
       "alt": "Slide image"
     },

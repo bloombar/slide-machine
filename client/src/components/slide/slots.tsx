@@ -74,6 +74,7 @@ const textValue = (slide: Slide, slot: LayoutSlot): string => {
 
 /** A text slot: markdown normally, in-place editable for owners. */
 function TextSlot({ slot, descriptor, slide, onEdit }: SlotEditorProps) {
+  const { t } = useTranslation()
   const value = textValue(slide, slot)
   const multiline = descriptor.multiline ?? false
   if (!onEdit) return <SlideMarkdown text={value} inline={!multiline} />
@@ -87,7 +88,9 @@ function TextSlot({ slot, descriptor, slide, onEdit }: SlotEditorProps) {
       )}
       // Empty slots (e.g. after a layout switch) stay clickable via a
       // muted call-to-action placeholder
-      emptyDisplay={`Add ${descriptor.label.toLowerCase()}`}
+      emptyDisplay={t('slide.addSlot', {
+        name: descriptor.label.toLocaleLowerCase(),
+      })}
       placeholderStyle
       onSave={v => onEdit({ [slot]: v } as SlideContentPatch)}
     />
@@ -96,9 +99,10 @@ function TextSlot({ slot, descriptor, slide, onEdit }: SlotEditorProps) {
 
 /** The bullet list edits as a whole: one line per bullet. */
 function BulletsSlot({ descriptor, slide, onEdit }: SlotEditorProps) {
+  const { t } = useTranslation()
   const items = slide.bullets ?? []
   const rendered = (bullets: string[]) => (
-    <ul className="flex list-disc flex-col gap-[1.5cqi] pl-[4cqi] text-left text-[2.75cqi]">
+    <ul className="flex list-disc flex-col gap-[1.5cqi] ps-[4cqi] text-start text-[2.75cqi]">
       {bullets.map((b, i) => (
         <li key={i}>
           <SlideMarkdown text={b} inline links={!onEdit} />
@@ -113,7 +117,9 @@ function BulletsSlot({ descriptor, slide, onEdit }: SlotEditorProps) {
       label={descriptor.label}
       multiline
       renderValue={v => rendered(v.split('\n'))}
-      emptyDisplay={`Add ${descriptor.label.toLowerCase()}`}
+      emptyDisplay={t('slide.addSlot', {
+        name: descriptor.label.toLocaleLowerCase(),
+      })}
       placeholderStyle
       onSave={v => onEdit({ bullets: v.split('\n').filter(b => b.trim()) })}
     />
@@ -358,15 +364,28 @@ const EDITORS: Record<SlotKind, ComponentType<SlotEditorProps>> = {
  * over the conventional defaults, so template-declared kinds, labels,
  * and validation flow into the editor. */
 export default function SlideSlot(props: Omit<SlotEditorProps, 'descriptor'>) {
+  const { t } = useTranslation()
   const conventional = SLOT_DESCRIPTORS[props.slot] as
     SlotDescriptor | undefined
+  // A label a template author wrote is data and is shown as written
+  // (docs/I18N.md) — but the server normalizes a bare-name conventional
+  // slot into a spec carrying the English default, and that one is
+  // chrome. They are told apart by comparing against the default: a spec
+  // label that IS the default was filled in for the author, not chosen by
+  // them, so the bundle wins.
+  const authored =
+    props.spec && props.spec.label !== conventional?.label
+      ? props.spec.label
+      : undefined
+  const label =
+    authored ?? (conventional ? t(`slot.${props.slot}`) : props.slot)
   const descriptor: SlotDescriptor | undefined = props.spec
     ? {
         kind: props.spec.kind,
-        label: props.spec.label,
+        label,
         multiline: props.spec.multiline ?? conventional?.multiline,
       }
-    : conventional
+    : conventional && { ...conventional, label }
   const Editor = descriptor && EDITORS[descriptor.kind]
   if (!Editor) return null
   // Every slot renders inside a permanent layout-neutral wrapper tagged

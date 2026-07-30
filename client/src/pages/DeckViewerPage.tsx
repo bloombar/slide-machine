@@ -90,7 +90,7 @@ import DeckSettingsModal, {
 import { ShellTitle } from '../components/layout/ShellTitle'
 import { ShellActions } from '../components/layout/ShellActions'
 import ViewModeToggle, { type ViewMode } from '../components/ViewModeToggle'
-import { lectureTitle, UNTITLED } from '../lib/lecture'
+import { lectureTitle, untitledLecture } from '../lib/lecture'
 
 // The toolbar's "Seed material" upload button is hidden for now but its
 // wiring (openManualSeed, the SeedDialog) is kept so it can return by
@@ -1572,7 +1572,7 @@ export default function DeckViewerPage() {
             <EditableText
               value={view.deck.title}
               label="Lecture title"
-              emptyDisplay={UNTITLED}
+              emptyDisplay={untitledLecture()}
               onSave={renameDeck}
             />
           ) : (

@@ -34,6 +34,11 @@ import type {
   QuizStatus,
 } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
+// The singleton's standalone translator, for the load effects below: it
+// is module-level and stable, so it is not an effect dependency the way
+// the hook's `t` is (which changes identity on every language switch,
+// and would re-run the fetch).
+import { t as translate } from '../i18n'
 import Portal from './Portal'
 
 interface Props {
@@ -248,7 +253,7 @@ function FolderPicker({
       })
       .catch(() => {
         if (!ignore) {
-          setError(t('quiz.errors.loadFolders'))
+          setError(translate('quiz.errors.loadFolders'))
         }
       })
     return () => {
@@ -817,7 +822,7 @@ export default function QuizPanel({ deckId }: Props) {
         setHasTranscript(s.hasTranscript)
         setDefaults(s.defaults)
       })
-      .catch(() => setError(t('quiz.errors.status')))
+      .catch(() => setError(translate('quiz.errors.status')))
       .finally(() => setLoading(false))
   }, [deckId])
 
