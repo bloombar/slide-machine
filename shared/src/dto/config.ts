@@ -26,7 +26,8 @@ export interface RuntimeConfig {
    * switch tools or reposition the cursor still counts as active use. */
   whiteboardSuppressDebounceMs: number
   /** Rate (Hz) the mic capture downsamples to before streaming to the server
-   * (CAP-3). 16 kHz is what Cloud STT models expect; the browser's native
+   * (CAP-3). 24 kHz by default — above the 16 kHz the speech models want, to
+   * keep the recording pleasant for per-slide playback; the browser's native
    * 48 kHz would triple the bytes for no transcription gain. A client whose
    * AudioContext already runs at or below this streams its native rate. */
   sttCaptureSampleRate: number

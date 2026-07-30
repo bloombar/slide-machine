@@ -32,7 +32,7 @@ vi.mock('../auth/token', () => ({
 
 // Runtime config normally arrives from GET /api/config; a mutable stand-in
 // lets each test pick the capture rate the server would publish.
-const runtime = vi.hoisted(() => ({ captureRate: 16_000 }))
+const runtime = vi.hoisted(() => ({ captureRate: 24_000 }))
 vi.mock('../runtime-config', () => ({
   getSttCaptureSampleRate: () => runtime.captureRate,
   getSttEngine: () => 'google-cloud',
@@ -142,7 +142,7 @@ beforeEach(() => {
   FakeAudioContext.instances = []
   FakeAudioWorkletNode.instances = []
   FakeAudioContext.rate = 48_000
-  runtime.captureRate = 16_000
+  runtime.captureRate = 24_000
   track.stop.mockClear()
   getUserMedia.mockClear()
 })
@@ -186,12 +186,12 @@ describe('google cloud speech capture', () => {
     expect(JSON.parse(socket.sent[0] as string)).toEqual({
       type: 'start',
       languageCode: 'fr-FR',
-      sampleRate: 16_000,
+      sampleRate: 24_000,
       sessionId: expect.any(String),
     })
     // …and the worklet is told both rates so it can do the conversion.
     expect(lastWorklet().options?.processorOptions).toEqual({
-      targetSampleRate: 16_000,
+      targetSampleRate: 24_000,
       inputSampleRate: 48_000,
     })
 
@@ -236,7 +236,7 @@ describe('google cloud speech capture', () => {
         .sampleRate,
     ).toBe(8_000)
     expect(lastWorklet().options?.processorOptions).toEqual({
-      targetSampleRate: 16_000,
+      targetSampleRate: 24_000,
       inputSampleRate: 8_000,
     })
   })

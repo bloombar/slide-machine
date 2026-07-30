@@ -15,8 +15,11 @@ const base = {
 }
 
 describe('parseEnv STT_CAPTURE_SAMPLE_RATE', () => {
-  it('defaults to the 16 kHz Cloud STT models expect', () => {
-    expect(parseEnv({ ...base }).STT_CAPTURE_SAMPLE_RATE).toBe(16000)
+  // 24 kHz, not the 16 kHz the speech models want: the same recording is
+  // played back per slide, and 16 kHz drops the sibilance that makes it sound
+  // like speech rather than a phone call.
+  it('defaults to 24 kHz — chosen for playback, not for the model', () => {
+    expect(parseEnv({ ...base }).STT_CAPTURE_SAMPLE_RATE).toBe(24000)
   })
 
   it('accepts 0, the "no downsampling" setting', () => {
@@ -25,7 +28,7 @@ describe('parseEnv STT_CAPTURE_SAMPLE_RATE', () => {
   })
 
   it('accepts rates inside the supported band', () => {
-    for (const rate of ['8000', '16000', '48000']) {
+    for (const rate of ['8000', '16000', '24000', '48000']) {
       expect(
         parseEnv({ ...base, STT_CAPTURE_SAMPLE_RATE: rate })
           .STT_CAPTURE_SAMPLE_RATE,

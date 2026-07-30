@@ -54,8 +54,8 @@ objects with a `public-read` ACL and serves them from `S3_PUBLIC_BASE_URL`.
 ### Optional: expire retained lecture audio (`audio/` prefix)
 
 If `AUDIO_RETENTION_ENABLED=true` (GEN-4), each live session's audio is stored
-as raw LINEAR16 PCM under the **`audio/`** key prefix — large (~1.9 MB/min at
-the default 16 kHz `STT_CAPTURE_SAMPLE_RATE`, ~5.8 MB/min at 48 kHz) and
+as raw LINEAR16 PCM under the **`audio/`** key prefix — large (~2.9 MB/min at
+the default 24 kHz `STT_CAPTURE_SAMPLE_RATE`, ~1.9 at 16 kHz, ~5.8 at 48 kHz) and
 containing student voices. The app already runs a daily sweep that deletes
 recordings past `AUDIO_RETENTION_DAYS` (default 30) along with their deck
 references, so no bucket rule is required. As a belt-and-suspenders guard you
@@ -200,9 +200,9 @@ value is baked into the SPA at build.
 | `S3_FORCE_PATH_STYLE` | plain | leave unset/`false` for Spaces (`true` is MinIO-only) |
 | `AUDIO_RETENTION_ENABLED` | plain | `true` to retain live-session audio for diarization (GEN-4); default off. Needs `TRANSCRIPTION_PROVIDER=google-cloud` |
 | `AUDIO_RETENTION_DAYS` | plain | days before the daily sweep deletes a recording; default `30`, `0` = keep forever (see §2 lifecycle note) |
-| `AUDIO_RETENTION_MAX_SESSION_MB` | plain | how much audio one session may **store**; default `300` (~2 h 44 min at 16 kHz), `0` = no per-session cap. Past it that recording is truncated |
+| `AUDIO_RETENTION_MAX_SESSION_MB` | plain | how much audio one session may **store**; default `300` (~1 h 49 min at 24 kHz), `0` = no per-session cap. Past it that recording is truncated |
 | `AUDIO_RETENTION_MAX_TOTAL_MB` | plain | **memory** ceiling across all concurrent recordings (~11 MB each), so ≈ how many may record at once; default `128`, `0` = no limit. **Size to the host's RAM** — see §2 |
-| `STT_CAPTURE_SAMPLE_RATE` | plain | Hz the browser downsamples mic audio to before streaming; default `16000` (what Cloud STT expects), range `8000`–`48000`, `0` = no downsampling (stream the mic's native rate). Raising it multiplies bandwidth, retention memory, and stored WAV size. Optional |
+| `STT_CAPTURE_SAMPLE_RATE` | plain | Hz the browser downsamples mic audio to before streaming; default `24000` (16 kHz is what Cloud STT expects; the extra is for per-slide playback fidelity), range `8000`–`48000`, `0` = no downsampling (stream the mic's native rate). Raising it multiplies bandwidth, retention memory, and stored WAV size. Optional |
 | `DELETED_DATA_RETENTION_DAYS` | plain | days a soft-deleted record is kept before the daily sweep purges it and its blobs (P-11); default `90`, `0` = keep tombstones forever |
 | `WHITEBOARD_SUPPRESS_DEBOUNCE_MS` | plain | grace (ms) after the last whiteboard gesture during which speech folds into the current slide instead of creating one (EDIT-4); default `5000`, `0` disables. Optional |
 | `SIMULATED_SPEECH_ENABLED` | plain | `true` shows the live session's simulated-speech text box for typing phrases instead of speaking them — a debugging aid; default off. Optional |

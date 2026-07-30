@@ -7,7 +7,7 @@ is in [DECISIONS.md](DECISIONS.md) (the 2026-07-30 entries), the requirements in
 
 ```text
 mic ─▶ worklet ─▶ WebSocket ─▶ Cloud STT ─▶ transcript ─▶ session.phrase ─▶ slide
-       (16 kHz)      │
+       (24 kHz)      │
                      └─▶ retention tee ─▶ streaming upload ─▶ audio/<deck>/<id>.pcm
                                                                    │
                                             playback (ranged read) ◀┤
@@ -26,11 +26,18 @@ converts float frames to 16-bit little-endian PCM and posts batches to the main
 thread, which forwards them over the WebSocket.
 
 - **Rate.** Browsers capture at their hardware rate (usually 48 kHz). The
-  worklet downsamples to `STT_CAPTURE_SAMPLE_RATE` (default **16 kHz**, what
-  Cloud STT models expect) — a 3× reduction in socket traffic, retention
-  memory, and stored size with no measured effect on transcription. A context
-  already at or below the target streams natively; we never upsample. `0`
-  disables downsampling.
+  worklet downsamples to `STT_CAPTURE_SAMPLE_RATE`, default **24 kHz** — half
+  the bytes of native capture, with no measured effect on transcription. A
+  context already at or below the target streams natively; we never upsample,
+  and `0` disables downsampling.
+- **Why 24 and not 16.** Cloud STT models are trained at 16 kHz, so 16 would be
+  the cheapest rate that costs transcription nothing. But the same recording is
+  played back per slide, and 16 kHz reproduces nothing above 8 kHz — where the
+  sibilance of "s" and "f" lives — so speech stays perfectly intelligible and
+  sounds dull. 24 kHz keeps that for half the cost of 48 kHz. Drop to `16000`
+  if playback fidelity does not matter; only the recordings change. Note this
+  is coupled to `AUDIO_RETENTION_MAX_SESSION_MB`: a higher rate fills the
+  per-session cap sooner (~1 h 49 min at 24 kHz, ~2 h 44 min at 16 kHz).
 - **Anti-aliasing.** Each output sample is the _mean_ of the inputs it spans.
   Dropping samples instead would alias high frequencies into the speech band.
 - **Framing.** Frames carry a fixed **40 ms** of audio, derived from the output
@@ -140,7 +147,7 @@ Everything below lives in `server/.env` (see
 | --- | --- | --- |
 | `TRANSCRIPTION_PROVIDER` | `google-cloud` | `browser`/`none` keep audio in the browser entirely |
 | `GOOGLE_APPLICATION_CREDENTIALS` _or_ `GOOGLE_APPLICATION_CREDENTIALS_JSON` | service-account key | Streaming STT **rejects API keys** — it needs a service account. Inline JSON for hosts with no key file. See [GOOGLE_API_KEYS.md](GOOGLE_API_KEYS.md) |
-| `STT_CAPTURE_SAMPLE_RATE` | `16000` (default) | 8000–48000, or `0` for no downsampling |
+| `STT_CAPTURE_SAMPLE_RATE` | `24000` (default) | 8000–48000, or `0` for no downsampling |
 
 **Required to keep recordings:**
 
@@ -148,7 +155,7 @@ Everything below lives in `server/.env` (see
 | --- | --- | --- |
 | `AUDIO_RETENTION_ENABLED` | `false` | Master switch |
 | `AUDIO_RETENTION_DAYS` | `30` | Daily sweep deletes past this; `0` = keep forever |
-| `AUDIO_RETENTION_MAX_SESSION_MB` | `300` | How much **one** lecture may store (~2 h 44 min at 16 kHz). Past it the recording is truncated; `0` = uncapped |
+| `AUDIO_RETENTION_MAX_SESSION_MB` | `300` | How much **one** lecture may store (~1 h 49 min at 24 kHz). Past it the recording is truncated; `0` = uncapped |
 | `AUDIO_RETENTION_MAX_TOTAL_MB` | `128` | **Memory** ceiling across concurrent recordings (~11 MB each), so ≈ how many may record at once. Size to the host's RAM; `0` = uncapped |
 | `STORAGE_PROVIDER` | `local` | `s3` for any real deployment |
 | `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` | — | Spaces endpoint, region, Space name |
