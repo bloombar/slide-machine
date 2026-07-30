@@ -4,7 +4,15 @@
  * GET /api/slides/:slideId/audio stitches the slide's timed segments out of the
  * session WAV into a gated WAV clip. MongoDB real; local storage.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  vi,
+} from 'vitest'
 import request from 'supertest'
 import { env } from '../../src/config/env'
 import { connectMongo, disconnectMongo } from '../../src/db/mongoose'
@@ -147,6 +155,99 @@ describe('per-slide original audio', () => {
     const expectedPcm =
       Math.floor((900 / 1000) * SAMPLE_RATE) * BYTES_PER_SAMPLE
     expect(res.body.length).toBe(44 + expectedPcm)
+  })
+
+  /**
+   * Seeds a slide over a recording whose PCM is a recognizable ramp rather than
+   * silence, so a wrong offset produces wrong BYTES instead of more zeros.
+   * Returns the slide id and the source PCM to compare against.
+   */
+  const seedSlideWithPatternedAudio = async (
+    startMs: number,
+    endMs: number,
+  ): Promise<{ slideId: string; pcm: Buffer }> => {
+    const slide = await SlideModel.create({
+      deckId,
+      index: 0,
+      layoutType: 'content',
+      title: 'Patterned',
+    })
+    const samples = SAMPLE_RATE * 2 // 2 s
+    const pcm = Buffer.alloc(samples * BYTES_PER_SAMPLE)
+    for (let i = 0; i < samples; i++) {
+      // Distinct per sample and cheap to verify; wraps harmlessly.
+      pcm.writeInt16LE((i % 30_000) - 15_000, i * BYTES_PER_SAMPLE)
+    }
+    const audioKey = `audio/${deckId}/patterned.wav`
+    await getStorage().put(audioKey, pcmToWav(pcm, SAMPLE_RATE), 'audio/wav')
+    await DeckModel.updateOne(
+      { _id: deckId },
+      {
+        $push: {
+          recordings: {
+            sessionId: 'sess-p',
+            audioKey,
+            sampleRate: SAMPLE_RATE,
+            durationMs: 2000,
+            createdAt: new Date(),
+          },
+        },
+      },
+    )
+    await TranscriptSegmentModel.create({
+      deckId,
+      sessionId: 'sess-p',
+      text: 'Patterned segment',
+      action: 'new',
+      slideId: slide._id,
+      startMs,
+      endMs,
+      words: [{ word: 'Patterned', startMs, endMs }],
+    })
+    return { slideId: slide._id.toString(), pcm }
+  }
+
+  it('returns exactly the source bytes for the segment window', async () => {
+    // Silence fixtures cannot catch an off-by-44 or off-by-a-sample error;
+    // a ramp can.
+    const { slideId, pcm } = await seedSlideWithPatternedAudio(500, 900)
+    const res = await request(server)
+      .get(`/api/slides/${slideId}/audio`)
+      .set('Authorization', `Bearer ${ada}`)
+      .buffer(true)
+      .parse(binary)
+    expect(res.status).toBe(200)
+
+    // [500, 900+400] ms of the source, at 16 kHz mono 16-bit.
+    const toByte = (ms: number) =>
+      Math.floor((ms / 1000) * SAMPLE_RATE) * BYTES_PER_SAMPLE
+    const expected = pcm.subarray(toByte(500), toByte(1300))
+    expect(res.body.subarray(44).equals(expected)).toBe(true)
+  })
+
+  it('reads only the segment, not the whole recording', async () => {
+    // The regression this guards: pulling an entire lecture recording into
+    // memory to play back a few seconds of it, on a viewer-reachable path.
+    const { slideId } = await seedSlideWithPatternedAudio(0, 100)
+    const storage = getStorage()
+    const getRange = vi.spyOn(storage, 'getRange')
+    const getWhole = vi.spyOn(storage, 'get')
+    try {
+      await request(server)
+        .get(`/api/slides/${slideId}/audio`)
+        .set('Authorization', `Bearer ${ada}`)
+        .buffer(true)
+        .parse(binary)
+
+      expect(getWhole).not.toHaveBeenCalled()
+      expect(getRange).toHaveBeenCalledTimes(1)
+      const [, start, end] = getRange.mock.calls[0]!
+      // 500 ms of a 2 s recording: well under a tenth of the object.
+      expect(end - start).toBeLessThan(SAMPLE_RATE * BYTES_PER_SAMPLE)
+    } finally {
+      getRange.mockRestore()
+      getWhole.mockRestore()
+    }
   })
 
   it('404s when the slide has no retained audio', async () => {

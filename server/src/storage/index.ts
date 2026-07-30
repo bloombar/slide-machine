@@ -5,7 +5,7 @@
  * prod). Selected by STORAGE_PROVIDER; keys are caller-supplied and
  * already unguessable (uuid-prefixed).
  */
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, open, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, normalize } from 'node:path'
 import {
   DeleteObjectCommand,
@@ -21,6 +21,14 @@ export interface FileStorage {
   readonly name: string
   put(key: string, body: Buffer, contentType: string): Promise<void>
   get(key: string): Promise<Buffer | null>
+  /**
+   * Bytes `[start, end)` of an object, without loading the rest. Lets callers
+   * read a slice of a large blob — a few seconds out of an hour-long lecture
+   * recording — instead of pulling the whole thing into memory (GEN-4).
+   * `end` beyond the object simply returns what exists; an empty or
+   * unsatisfiable range, a missing object, or any error yields null.
+   */
+  getRange(key: string, start: number, end: number): Promise<Buffer | null>
   /** URL the browser can load the file from. */
   publicUrl(key: string): string
   delete(key: string): Promise<void>
@@ -51,6 +59,21 @@ const localStorageProvider = (): FileStorage => {
         return await readFile(join(root, safeKey(key)))
       } catch {
         return null
+      }
+    },
+    async getRange(key, start, end) {
+      if (end <= start || start < 0) return null
+      let handle
+      try {
+        handle = await open(join(root, safeKey(key)), 'r')
+        const buffer = Buffer.alloc(end - start)
+        // A short read (range past EOF) is fine: return only what was filled.
+        const { bytesRead } = await handle.read(buffer, 0, buffer.length, start)
+        return bytesRead > 0 ? buffer.subarray(0, bytesRead) : null
+      } catch {
+        return null
+      } finally {
+        await handle?.close().catch(() => {})
       }
     },
     publicUrl(key) {
@@ -99,6 +122,24 @@ const s3StorageProvider = (): FileStorage => {
         const bytes = await res.Body?.transformToByteArray()
         return bytes ? Buffer.from(bytes) : null
       } catch {
+        return null
+      }
+    },
+    async getRange(key, start, end) {
+      if (end <= start || start < 0) return null
+      try {
+        const res = await client.send(
+          new GetObjectCommand({
+            Bucket: bucket,
+            Key: safeKey(key),
+            // HTTP ranges are inclusive on both ends; ours is half-open.
+            Range: `bytes=${start}-${end - 1}`,
+          }),
+        )
+        const bytes = await res.Body?.transformToByteArray()
+        return bytes?.length ? Buffer.from(bytes) : null
+      } catch {
+        // Includes 416 when `start` is past the end of the object.
         return null
       }
     },

@@ -5,6 +5,11 @@
  * re-transcription (slide.regenerateTranscript), so both work from exactly the
  * same audio. Segments whose recording has aged out are skipped; a slide with
  * nothing left resolves to null.
+ *
+ * Each segment is fetched as a byte RANGE rather than by downloading the whole
+ * recording: a slide's audio is seconds long, the recording behind it can be
+ * hours, and this path is reachable by any viewer with playback access — so
+ * reading whole objects made memory a function of lecture length.
  */
 import type { HydratedDocument } from 'mongoose'
 import type { DeckDb } from '../models/deck'
@@ -51,34 +56,45 @@ export const buildSlideAudio = async (
   }).sort({ createdAt: 1 })
 
   const storage = getStorage()
-  const wavCache = new Map<string, Buffer | null>()
   const slices: Buffer[] = []
   let sampleRate = 0
   for (const seg of segments) {
     const rec = seg.sessionId ? recBySession.get(seg.sessionId) : undefined
     if (!rec) continue
-    if (!wavCache.has(rec.audioKey))
-      wavCache.set(rec.audioKey, await storage.get(rec.audioKey))
-    const wav = wavCache.get(rec.audioKey)
-    if (!wav) continue
 
+    // Length of the recording's PCM body, derived from what the deck already
+    // stores — no HEAD request, no schema change. Rounding `durationMs` to the
+    // millisecond can be a few bytes off; harmless, since reads past the end
+    // return only what exists and every offset is clamped to this anyway.
+    const pcmBytes = Math.max(
+      0,
+      Math.floor((rec.durationMs / 1000) * rec.sampleRate) * BYTES_PER_SAMPLE,
+    )
     // Segment times are session-absolute ms into this recording's PCM body.
-    const pcm = wav.subarray(WAV_HEADER_BYTES)
     const toByte = (ms: number): number =>
       Math.max(
         0,
         Math.min(
           Math.floor((ms / 1000) * rec.sampleRate) * BYTES_PER_SAMPLE,
-          pcm.length,
+          pcmBytes,
         ),
       )
     const start = toByte(seg.startMs as number)
     // Pad the tail so the last word is never cut off (clamped in toByte).
-    const end = seg.endMs != null ? toByte(seg.endMs + TAIL_PAD_MS) : pcm.length
-    if (end > start) {
-      slices.push(pcm.subarray(start, end))
-      if (!sampleRate) sampleRate = rec.sampleRate
-    }
+    const end = seg.endMs != null ? toByte(seg.endMs + TAIL_PAD_MS) : pcmBytes
+    if (end <= start) continue
+
+    // Read ONLY this segment's bytes. Pulling the whole object here would load
+    // an entire lecture recording to play back a few seconds of it, on a path
+    // any viewer can trigger.
+    const slice = await storage.getRange(
+      rec.audioKey,
+      WAV_HEADER_BYTES + start,
+      WAV_HEADER_BYTES + end,
+    )
+    if (!slice?.length) continue
+    slices.push(slice)
+    if (!sampleRate) sampleRate = rec.sampleRate
   }
 
   if (!slices.length) return null
