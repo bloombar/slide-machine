@@ -50,9 +50,19 @@ const rowFor = (page: Page, entityName: string) =>
 
 test.describe.configure({ mode: 'serial' })
 
+/** Opens the account-settings modal on the profile page currently shown.
+ * `/app/profile` is retired — it redirects to the signed-in user's own profile
+ * — and the account settings live behind that page's Settings button, so they
+ * have to be opened rather than navigated to. */
+const openAccountSettings = async (page: Page) => {
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await expect(page.getByLabel('Public profile')).toBeVisible()
+}
+
 test('a user changes their own account settings', async ({ page }) => {
   await ensureSignedIn(page, user)
   await page.goto('/app/profile')
+  await openAccountSettings(page)
 
   // Turning the public profile off is a settings change of its own. The
   // checkbox is controlled by the saved value, so it only flips once the
@@ -71,8 +81,10 @@ test('a user changes their own account settings', async ({ page }) => {
   await page.getByLabel('Language').selectOption('fr')
   await languageSaved
 
-  // The values survive a reload, so they really were stored
+  // The values survive a reload, so they really were stored. The reload drops
+  // the modal with the rest of the page state, so re-open it to read them.
   await page.reload()
+  await openAccountSettings(page)
   await expect(page.getByLabel('Public profile')).not.toBeChecked()
   await expect(page.getByLabel('Language')).toHaveValue('fr')
 })
