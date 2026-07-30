@@ -118,10 +118,9 @@ describe('ShellMenu', () => {
       'href',
       '/app/admin',
     )
-    expect(screen.getByRole('menuitem', { name: 'Logs' })).toHaveAttribute(
-      'href',
-      '/app/admin/logs',
-    )
+    expect(
+      screen.getByRole('menuitem', { name: 'Admin Logs' }),
+    ).toHaveAttribute('href', '/app/admin/logs')
 
     fireEvent.mouseLeave(trigger.parentElement!)
     expect(
@@ -136,12 +135,12 @@ describe('ShellMenu', () => {
 
     fireEvent.click(trigger)
     expect(trigger).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('menuitem', { name: 'Logs' })).toBeVisible()
+    expect(screen.getByRole('menuitem', { name: 'Admin Logs' })).toBeVisible()
 
     fireEvent.click(trigger)
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
     expect(
-      screen.queryByRole('menuitem', { name: 'Logs' }),
+      screen.queryByRole('menuitem', { name: 'Admin Logs' }),
     ).not.toBeInTheDocument()
   })
 })

@@ -9,6 +9,7 @@ import type {
   Project,
   SafeUser,
   SeedAsset,
+  SettingsLogsResponse,
   Visibility,
 } from '@slide-machine/shared'
 import { apiFetch, apiFetchBlob } from './http'
@@ -229,6 +230,40 @@ export const listAdminLogs = (
 /** The full audit log as a CSV blob, for a client-side download. */
 export const downloadAdminLogsCsv = (): Promise<Blob> =>
   apiFetchBlob('/api/admin/logs/export')
+
+// Settings change log: every settings edit on the platform, whoever made
+// it (a separate log from the admin audit log above, which covers only
+// what admins do). Read-only — nothing writes to it from the client.
+
+/** Narrows the settings log to one kind of entity. */
+export type SettingsLogEntityFilter = 'user' | 'project' | 'deck'
+
+/** Selectable settings-log page sizes; same cap as the user directory. */
+export const SETTINGS_LOGS_PAGE_SIZES = ADMIN_USERS_PAGE_SIZES
+export const SETTINGS_LOGS_PAGE_SIZE = 100
+
+/** The `entityType` query param, omitted when nothing is filtered. */
+const entityTypeParam = (entityType?: SettingsLogEntityFilter): string =>
+  entityType ? `&entityType=${entityType}` : ''
+
+/** Newest-first page of the settings change log. */
+export const listSettingsLogs = (
+  page = 1,
+  limit: number = SETTINGS_LOGS_PAGE_SIZE,
+  entityType?: SettingsLogEntityFilter,
+): Promise<SettingsLogsResponse> =>
+  apiFetch<SettingsLogsResponse>(
+    `/api/admin/settings-logs?page=${page}&limit=${limit}${entityTypeParam(entityType)}`,
+  )
+
+/** The settings change log as a CSV blob, honouring the same filter as
+ * the listing so an export matches what is on screen. */
+export const downloadSettingsLogsCsv = (
+  entityType?: SettingsLogEntityFilter,
+): Promise<Blob> =>
+  apiFetchBlob(
+    `/api/admin/settings-logs/export?page=1${entityTypeParam(entityType)}`,
+  )
 
 // Moderation endpoints. All resolve on a 204; failures surface as
 // ApiError (e.g. 400 target_is_admin when moderating an allowlisted

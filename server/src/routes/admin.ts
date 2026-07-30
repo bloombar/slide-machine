@@ -1,8 +1,9 @@
 /**
  * Admin API: the user directory (each user's projects and lectures),
- * the admin action audit log with its CSV export, and the moderation
- * endpoints (delete user/project/lecture, ban an email, reset a
- * password) — every mutation records itself in the audit log. Every
+ * the admin action audit log and the settings change log (each with a
+ * CSV export), and the moderation endpoints (delete user/project/lecture,
+ * ban an email, reset a password) — every mutation records itself in the
+ * admin action log; settings edits also land in the settings log. Every
  * route is guarded inside the router by requireAuth + requireAdmin
  * (ADMIN_EMAILS allowlist), so mounting it is safe on its own. Intended
  * mount point: /api/admin — see docs/ADMINISTRATION.md.
@@ -68,6 +69,7 @@ import {
   rejectAdminTarget,
 } from './admin-targets'
 import { adminSettingsRouter } from './admin-settings'
+import { adminSettingsLogsRouter } from './admin-settings-logs'
 
 /** One row of the admin user directory. */
 export interface AdminUserSummary {
@@ -433,9 +435,11 @@ const inIdOrder = <T extends { _id: Types.ObjectId }>(
 export const adminRouter = Router()
 adminRouter.use(requireAuth, requireAdmin)
 
-// The audited settings-editing endpoints (ADMIN-5) mount here, after the
-// guards above, so they are covered by exactly the same authorization.
+// The audited settings-editing endpoints (ADMIN-5) and the settings
+// change log's read endpoints mount here, after the guards above, so they
+// are covered by exactly the same authorization.
 adminRouter.use(adminSettingsRouter)
+adminRouter.use(adminSettingsLogsRouter)
 
 /** Reachable only through the guards above, so 200 means "is an admin";
  * the client uses it to decide whether to show admin navigation. */

@@ -21,6 +21,7 @@ import AdminProjectPage from './pages/AdminProjectPage'
 import AdminDecksPage from './pages/AdminDecksPage'
 import AdminDeckPage from './pages/AdminDeckPage'
 import AdminLogsPage from './pages/AdminLogsPage'
+import AdminSettingsLogsPage from './pages/AdminSettingsLogsPage'
 import RequireAuth from './auth/RequireAuth'
 import AdminShell from './components/layout/AdminShell'
 import { useAuth } from './auth/AuthContext'
@@ -61,6 +62,7 @@ export default function App() {
           <Route path="decks" element={<AdminDecksPage />} />
           <Route path="decks/:deckId" element={<AdminDeckPage />} />
           <Route path="logs" element={<AdminLogsPage />} />
+          <Route path="settings-logs" element={<AdminSettingsLogsPage />} />
         </Route>
       </Route>
     </Routes>

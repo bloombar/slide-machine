@@ -1,29 +1,40 @@
 /**
- * Admin settings override on the product path (ADMIN-5). An allowlisted
- * admin edits another user's project or lecture from the ordinary
- * owner-facing settings UI, not from a separate console form: these two
- * wrappers grant the access the ACL would otherwise refuse, and record
- * what changed in the admin audit log.
+ * The write path for project and lecture settings, and the admin override
+ * on it (ADMIN-5). Every action that changes a project's or lecture's
+ * settings runs inside one of these two wrappers, which:
+ *
+ * 1. admit the actor — an owner or editor as usual, or an allowlisted
+ *    admin editing another user's entity from the ordinary owner-facing
+ *    settings UI rather than a separate console form;
+ * 2. record what changed in the settings change log, whoever made it;
+ * 3. record an admin's edit in the admin audit log as well.
  *
  * Only the settings actions route through here — slides, recordings,
  * refine runs, quizzes, and exports keep the plain editor check, so an
  * admin's view of someone else's content stays read-only (ADMIN-3).
  *
- * The audit entry is a diff of two snapshots taken around the mutation,
- * not of the input: mongoose setters and the lecture's copy-on-write ACL
- * make an input-vs-document comparison lie, and re-saving the same value
- * costs nothing this way. An edit that changes nothing writes no entry.
- * See docs/ADMINISTRATION.md ("Editing settings").
+ * Both entries are a diff of two snapshots taken around the mutation, not
+ * of the input: mongoose setters and the lecture's copy-on-write ACL make
+ * an input-vs-document comparison lie, and re-saving the same value costs
+ * nothing this way. An edit that changes nothing writes no entry — which
+ * is also what keeps the read-only actions routed through here (
+ * `project.shares`, `deck.shares`) out of the logs. See
+ * docs/ADMINISTRATION.md ("Editing settings", "Settings change log").
  */
 import type { HydratedDocument } from 'mongoose'
-import type { AdminAction } from '@slide-machine/shared'
+import type { AdminAction, SettingsActorRole } from '@slide-machine/shared'
 import { ProjectModel, projectAcl, type ProjectDb } from '../models/project'
 import { DeckModel, loadDeckAcl, type DeckDb } from '../models/deck'
 import { UserModel } from '../models/user'
 import { isAdminEmail } from '../config/admin'
 import { logAdminAction } from '../audit/log'
+import { recordSettingsChange } from '../audit/settings-log'
 import { canEditAcl, type ResolvedAcl } from './access'
 import { diffSettings } from './settings-diff'
+import {
+  deckSettingsSnapshot,
+  projectSettingsSnapshot,
+} from './settings-snapshot'
 import { ActionForbiddenError } from '../actions/dispatch'
 import type { ActionContext } from '../actions/context'
 
@@ -50,46 +61,16 @@ const overrideActor = async (
   return { id: actor._id.toString(), email: actor.email }
 }
 
-/** A people list as one comparable, loggable value: its ids, sorted so a
- * reordering alone never reads as a change. */
-const people = (ids: string[]): string => [...ids].sort().join(', ')
-
-/** The project settings an admin can reach from the settings modal. */
-const projectSnapshot = (doc: HydratedDocument<ProjectDb>) => ({
-  title: doc.title,
-  visibility: doc.visibility,
-  templateId: doc.templateId,
-  seedContext: doc.seedContext,
-  generationFreedom: doc.generationFreedom,
-  language: doc.language,
-  ttsVoice: doc.ttsVoice,
-  viewers: people(doc.viewers ?? []),
-  editors: people(doc.editors ?? []),
-})
-
-/**
- * The lecture settings an admin can reach from the settings modal.
- * `visibility` is the EFFECTIVE one and `accessInherited` says where it
- * came from: pinning a lecture to the visibility it already inherits
- * still detaches it from its project, and that flag is the only signal.
- */
-const deckSnapshot = (doc: HydratedDocument<DeckDb>, acl: ResolvedAcl) => ({
-  title: doc.title,
-  visibility: acl.visibility,
-  accessInherited: acl.inherited,
-  templateId: doc.templateId,
-  seedContext: doc.seedContext,
-  generationFreedom: doc.generationFreedom,
-  language: doc.language,
-  ttsVoice: doc.ttsVoice,
-  refineIdentifySpeakers: doc.refineIdentifySpeakers,
-  refineSlidesEnabled: doc.refineSlidesEnabled,
-  refineSlidesLevel: doc.refineSlidesLevel,
-  refineTranscriptEnabled: doc.refineTranscriptEnabled,
-  refineTranscriptLevel: doc.refineTranscriptLevel,
-  viewers: people(acl.viewers),
-  editors: people(acl.editors),
-})
+/** How the actor was entitled to edit, for the settings change log: the
+ * owner, an editor they shared with, or an admin overriding the ACL. */
+const roleOf = (
+  acl: ResolvedAcl,
+  userId: string,
+  isAdmin: boolean,
+): SettingsActorRole => {
+  if (isAdmin) return 'admin'
+  return acl.ownerId === userId ? 'owner' : 'editor'
+}
 
 /** Appends one audit entry, unless the two snapshots are identical. */
 const recordChanges = async <T extends object>(
@@ -123,9 +104,10 @@ const requireUser = (ctx: ActionContext): string => {
 
 /**
  * Runs `apply` against a project the actor may change the settings of:
- * an owner or editor as usual, otherwise an allowlisted admin, whose
- * edit is audited. Throws ActionForbiddenError for anyone else, and for
- * a missing project (no existence leaks).
+ * an owner or editor as usual, otherwise an allowlisted admin. Throws
+ * ActionForbiddenError for anyone else, and for a missing project (no
+ * existence leaks). Whatever it changes is recorded in the settings
+ * change log; an admin's edit is additionally audited.
  */
 export const editProjectSettings = async <T>(
   ctx: ActionContext,
@@ -135,26 +117,44 @@ export const editProjectSettings = async <T>(
   const userId = requireUser(ctx)
   const doc = await ProjectModel.findById(projectId).catch(() => null)
   if (!doc) throw new ActionForbiddenError()
-  if (canEditAcl(projectAcl(doc), userId)) return apply(doc)
+  const acl = projectAcl(doc)
+  const admin = canEditAcl(acl, userId)
+    ? null
+    : await overrideActor(userId, doc.ownerId.toString())
 
-  const actor = await overrideActor(userId, doc.ownerId.toString())
-  const before = projectSnapshot(doc)
+  const before = projectSettingsSnapshot(doc)
   const result = await apply(doc)
-  await recordChanges(actor, before, projectSnapshot(doc), {
-    action: 'project.settings_update',
-    targetType: 'project',
-    targetId: doc._id.toString(),
-    details: { title: doc.title, ownerId: doc.ownerId.toString() },
+  const after = projectSettingsSnapshot(doc)
+
+  if (admin) {
+    await recordChanges(admin, before, after, {
+      action: 'project.settings_update',
+      targetType: 'project',
+      targetId: doc._id.toString(),
+      details: { title: doc.title, ownerId: doc.ownerId.toString() },
+    })
+  }
+  await recordSettingsChange({
+    actorId: userId,
+    actorEmail: admin?.email,
+    actorRole: roleOf(acl, userId, !!admin),
+    entityType: 'project',
+    entityId: doc._id.toString(),
+    entityName: doc.title,
+    ownerId: doc.ownerId.toString(),
+    before,
+    after,
   })
   return result
 }
 
 /**
  * Runs `apply` against a lecture the actor may change the settings of:
- * an owner or editor as usual, otherwise an allowlisted admin, whose
- * edit is audited. `apply` receives the ACL resolved before it runs; the
- * audit diff re-resolves it afterwards, since dropping or adding an
- * access override moves where the effective access comes from.
+ * an owner or editor as usual, otherwise an allowlisted admin. `apply`
+ * receives the ACL resolved before it runs; the diff re-resolves it
+ * afterwards, since dropping or adding an access override moves where the
+ * effective access comes from. Whatever it changes is recorded in the
+ * settings change log; an admin's edit is additionally audited.
  */
 export const editDeckSettings = async <T>(
   ctx: ActionContext,
@@ -165,21 +165,32 @@ export const editDeckSettings = async <T>(
   const doc = await DeckModel.findById(deckId).catch(() => null)
   if (!doc) throw new ActionForbiddenError()
   const acl = await loadDeckAcl(doc)
-  if (canEditAcl(acl, userId)) return apply(doc, acl)
+  const admin = canEditAcl(acl, userId)
+    ? null
+    : await overrideActor(userId, doc.ownerId.toString())
 
-  const actor = await overrideActor(userId, doc.ownerId.toString())
-  const before = deckSnapshot(doc, acl)
+  const before = deckSettingsSnapshot(doc, acl)
   const result = await apply(doc, acl)
-  await recordChanges(
-    actor,
-    before,
-    deckSnapshot(doc, await loadDeckAcl(doc)),
-    {
+  const after = deckSettingsSnapshot(doc, await loadDeckAcl(doc))
+
+  if (admin) {
+    await recordChanges(admin, before, after, {
       action: 'deck.settings_update',
       targetType: 'deck',
       targetId: doc._id.toString(),
       details: { title: doc.title, ownerId: doc.ownerId.toString() },
-    },
-  )
+    })
+  }
+  await recordSettingsChange({
+    actorId: userId,
+    actorEmail: admin?.email,
+    actorRole: roleOf(acl, userId, !!admin),
+    entityType: 'deck',
+    entityId: doc._id.toString(),
+    entityName: doc.title,
+    ownerId: doc.ownerId.toString(),
+    before,
+    after,
+  })
   return result
 }
