@@ -226,10 +226,12 @@ export default function ProfilePage() {
               )}
             </div>
           </div>
-          {profile.user.bio && (
+          {profile.user.bio ? (
             <p className="mb-6 whitespace-pre-line text-slate-600">
               {profile.user.bio}
             </p>
+          ) : (
+            <p className="mb-6 text-slate-400 italic">No bio</p>
           )}
         </>
       )}
