@@ -1,10 +1,10 @@
 /**
  * E2E settings editing against the built app (ADMIN-5): the allowlisted
- * admin edits another user's account details in the console, and their
- * project and lecture settings in the product view, in the owner's own
- * settings modal — each confirmed once, banner shown, values surviving a
- * reload, and every edit landing in the audit log. The console's project
- * and lecture pages carry no settings editor of their own.
+ * admin edits another user's account, project, and lecture settings in
+ * the product view, in the owner's own settings modal — each confirmed
+ * once, banner shown, values surviving a reload, and every edit landing
+ * in the audit log. The console's user, project, and lecture pages carry
+ * no settings editor of their own.
  */
 import { test, expect, type Page } from '@playwright/test'
 import { createProject } from './helpers'
@@ -85,6 +85,15 @@ test('the admin console has no settings editor of its own', async ({
   await ensureSignedIn(page, admin)
   await page.goto('/app/admin')
   await page.getByRole('link', { name: owner.email }).click()
+  await expect(page).toHaveURL(/\/app\/admin\/users\//)
+
+  // The user page lists the account read-only and points at the profile
+  await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(
+    0,
+  )
+  await expect(page.getByLabel('Display name')).toHaveCount(0)
+  await expect(page.getByText('Settings are edited on the user')).toBeVisible()
+
   await page.getByRole('link', { name: projectTitle }).click()
   await expect(page).toHaveURL(/\/app\/admin\/projects\//)
 
@@ -105,38 +114,40 @@ test('the admin console has no settings editor of its own', async ({
   ).toBeVisible()
 })
 
-test("the admin edits another user's account details", async ({ page }) => {
+test("the admin edits another user's account settings", async ({ page }) => {
   await ensureSignedIn(page, admin)
   await page.goto('/app/admin')
   await page.getByRole('link', { name: owner.email }).click()
   await expect(page).toHaveURL(/\/app\/admin\/users\//)
 
-  // The details open read-only: no controls, no Save
-  await expect(page.getByLabel('Display name')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(
-    0,
+  // The account's settings live on the owner's own profile page
+  await page.getByRole('link', { name: 'View public profile' }).click()
+  await expect(page).toHaveURL(/\/u\//)
+
+  const modal = await openSettingsAsAdmin(page, 'Settings')
+  await expect(modal).toContainText(owner.email)
+  // Signing out would end the admin's own session, so it is not offered
+  await expect(modal.getByRole('button', { name: /sign out/i })).toHaveCount(0)
+
+  const saved = page.waitForResponse(
+    res =>
+      /\/api\/admin\/users\/[a-f0-9]+$/.test(res.url()) &&
+      res.request().method() === 'PATCH' &&
+      res.status() === 204,
   )
+  await modal.getByLabel('Language').selectOption('fr')
+  await saved
 
-  await page.getByRole('button', { name: 'Edit' }).click()
-  const ask = page.getByRole('alertdialog')
-  await expect(ask).toContainText('recorded in the audit log')
-  await ask.getByRole('button', { name: 'Edit settings' }).click()
-
-  await page.getByLabel('Display name').fill('Settings Target Renamed')
-  await page.getByRole('button', { name: 'Save changes' }).click()
-  const confirm = page.getByRole('alertdialog')
-  await expect(confirm).toContainText(
-    'Display name: Settings Target → Settings Target Renamed',
-  )
-  await confirm.getByRole('button', { name: 'Save changes' }).click()
-  await expect(page.getByText('Settings saved.')).toBeVisible()
-
-  // The value survives a reload, and the list is locked again
+  // The value survives a reload, so it really was stored
   await page.reload()
-  await expect(
-    page.getByRole('heading', { name: 'Settings Target Renamed' }),
-  ).toBeVisible()
-  await expect(page.getByLabel('Display name')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await page.getByRole('button', { name: 'Edit settings' }).click()
+  await expect(page.getByLabel('Language')).toHaveValue('fr')
+
+  // …and the console lists it, read-only
+  await page.goto('/app/admin')
+  await page.getByRole('link', { name: owner.email }).click()
+  await expect(page.getByText('Français (French)')).toBeVisible()
 })
 
 test("the admin edits another user's project settings", async ({ page }) => {

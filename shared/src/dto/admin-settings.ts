@@ -1,6 +1,7 @@
 /**
  * DTO for the admin account settings editor (ADMIN-5): the PATCH body for
- * `/api/admin/users/:id`.
+ * `/api/admin/users/:id`, sent by the settings modal on the user's own
+ * profile page.
  *
  * The wire rule the patch depends on: `JSON.stringify` DROPS `undefined`
  * properties, so an **absent** field means "leave it alone" and an

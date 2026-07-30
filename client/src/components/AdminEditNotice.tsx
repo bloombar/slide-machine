@@ -6,7 +6,7 @@
  */
 interface Props {
   /** What is being edited, as the sentence names it. */
-  entity: 'project' | 'lecture'
+  entity: 'account' | 'project' | 'lecture'
 }
 
 export default function AdminEditNotice({ entity }: Props) {

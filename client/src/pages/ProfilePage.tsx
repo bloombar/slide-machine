@@ -9,9 +9,11 @@
  * admin saves through the audited admin endpoint after confirming, so
  * editing someone else's profile is never silent (ADMIN-5).
  *
- * The owner additionally gets a Settings button for their account
- * settings (ProfileSettingsModal) — email, plan, profile visibility,
- * lecturing language, and sign out.
+ * The same two also get a Settings button for the account settings
+ * (ProfileSettingsModal) — email, plan, profile visibility, lecturing
+ * language, and sign out. This is where an admin edits someone else's
+ * account (ADMIN-5); as with a project or a lecture, opening those
+ * settings is confirmed once, on entry, and audited from then on.
  */
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { useParams } from 'react-router'
@@ -58,6 +60,9 @@ export default function ProfilePage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // Set once an admin has acknowledged the audit notice; the settings
+  // modal stays shut until then (ADMIN-5 confirms on entry, once).
+  const [settingsConfirmed, setSettingsConfirmed] = useState(false)
 
   useEffect(() => {
     // Wait for session restore so shared-with-me lectures resolve
@@ -95,6 +100,7 @@ export default function ProfilePage() {
   const isOwner = viewer?.id === profile.user.id
   // canEdit without ownership means an admin is looking (ADMIN-5)
   const asAdmin = profile.canEdit && !isOwner
+  const askAdminSettings = settingsOpen && asAdmin && !settingsConfirmed
 
   const startEditing = () =>
     setDraft({
@@ -215,7 +221,7 @@ export default function ProfilePage() {
                   Edit
                 </button>
               )}
-              {isOwner && (
+              {profile.canEdit && (
                 <button
                   onClick={() => setSettingsOpen(true)}
                   className={headerButton}
@@ -265,8 +271,20 @@ export default function ProfilePage() {
           onCancel={() => setConfirming(false)}
         />
       )}
-      {settingsOpen && (
-        <ProfileSettingsModal onClose={() => setSettingsOpen(false)} />
+      {settingsOpen && !askAdminSettings && (
+        <ProfileSettingsModal
+          adminUserId={asAdmin ? userId : undefined}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
+      {askAdminSettings && (
+        <ConfirmDialog
+          title="Edit this user's settings?"
+          message={`This account belongs to ${profile.user.displayName}. You can change their settings as an admin; every change is recorded in the audit log.`}
+          confirmLabel="Edit settings"
+          onConfirm={() => setSettingsConfirmed(true)}
+          onCancel={() => setSettingsOpen(false)}
+        />
       )}
     </PageContainer>
   )

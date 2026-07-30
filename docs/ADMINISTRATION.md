@@ -46,8 +46,9 @@ moderation actions for when the answer calls for one.
 - **User drill-down** — account details (plan, email verification, locale,
   profile visibility, project/lecture counts) plus the user's projects,
   each linking to its own **project page**. Lectures the user owns inside
-  someone else's project are grouped under "Other lectures." Carries a
-  **Settings** section for the account's profile fields.
+  someone else's project are grouped under "Other lectures." The details
+  are read-only, with a **View public profile** link into the profile
+  page, where the account's settings are edited.
 - **Project page** — the project's owner and a table of its lectures with
   a **public/private badge**, **slide count**, and **last-edited date**;
   each lecture links to its own **lecture page**. Carries the same
@@ -94,33 +95,32 @@ allowlisted is refused the same way.
 
 ### Editing settings
 
-**Account settings** are edited in the console. The user page carries a
-**Settings** section for the account's profile fields; nothing is sent
-while you type — the form holds a draft, **Save changes** stays disabled
-until something differs, and confirming shows the exact `old → new` of
-every field before one request goes out.
+**Settings are edited in the product itself**, never in the console — the
+console's detail lists are read-only, and each one links to the place its
+settings live.
 
-The two public fields — **display name** and **bio** — can also be edited
-straight from the user's profile page (`/u/:id`, **View public profile**),
-which shows an **Edit** button to admins as well as to the owner. It is
-the same audited endpoint: the first save asks for confirmation and the
-change is recorded. Admins may open a **private** profile to do this;
-that page still shows only the lectures the admin could see anyway — the
-console, not the profile page, is where private lectures are listed. The
-profile's **Settings** button is the owner's own account settings and is
-never shown to an admin.
+**Account settings** are edited on the user's profile page (`/u/:id`,
+**View public profile**), from the same **Settings** button its owner
+uses. The two public fields — **display name** and **bio** — are edited
+on that page too, from its **Edit** button, which admins see as well as
+the owner. Admins may open a **private** profile to do either; that page
+still shows only the lectures the admin could see anyway — the console,
+not the profile page, is where private lectures are listed.
 
-**Project and lecture settings are edited in the product itself**, in the
-same settings modal their owner uses: open the project (**View project**)
-or the lecture (**View slideshow**) from its console page and use the
-settings icon. Because the entity is not yours, the first click asks for
-confirmation, a banner stays up while the settings are open, and the
-server records every change you make. Nothing about the controls changes
-— they save as you go, exactly as they do for the owner.
+**Project and lecture settings** work the same way: open the project
+(**View project**) or the lecture (**View slideshow**) from its console
+page and use the settings icon.
+
+Because the entity is not yours, the first click asks for confirmation, a
+banner stays up while the settings are open, and the server records every
+change you make. Nothing about the controls changes — they save as you
+go, exactly as they do for the owner. (The profile page's **Edit** button
+is the one exception to the timing: it confirms on the first *save*
+rather than on entry, since the form is the page.)
 
 | Entity | Editable | Where | Not editable |
 | --- | --- | --- | --- |
-| User | Display name, bio, profile visibility, interface locale, lecturing language | Admin console (display name and bio also on the user's profile page) | Plan tier (see Plans below), email, password (its own danger-zone action), email verification |
+| User | Display name, bio, profile visibility, interface locale, lecturing language | The user's profile page — **Edit** for display name and bio, **Settings** for the rest | Plan tier (see Plans below), email, password (its own danger-zone action), email verification |
 | Project | Title, seed notes, AI freedom, language, narration voice, template, visibility and the sharing list | Project settings modal | Seed material, ownership, deletion (a console action) |
 | Lecture | Title, seed notes, AI freedom, language, narration voice, template, the five Refine settings, visibility and the sharing list | Lecture settings modal | Seed material, running a refine, quizzes, exports, slides, ownership, deletion (a console action) |
 

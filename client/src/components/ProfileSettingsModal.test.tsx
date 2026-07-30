@@ -1,7 +1,9 @@
 /**
  * Unit tests for the account settings modal reached from the profile
- * page: account details, the profile-visibility toggle, the lecturing
- * language, and sign out.
+ * page: the owner's own account details, the profile-visibility toggle,
+ * the lecturing language, and sign out — then the admin path over the
+ * same controls (ADMIN-5), which loads the target account, saves through
+ * the audited endpoint, and drops the owner-only pieces.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
@@ -17,14 +19,16 @@ const user = (over: Record<string, unknown> = {}) => ({
   email: 'ada@example.com',
   planTier: 'free',
   profileVisibility: 'public',
+  locale: 'en',
   ...over,
 })
 
 type Handler = (init?: RequestInit) => { status: number; body?: unknown }
 
+/** Renders the modal for the signed-in user's own account. */
 const renderSettings = (routes: Record<string, Handler> = {}) => {
   const onClose = vi.fn()
-  mockFetchRoutes({
+  const mock = mockFetchRoutes({
     '/api/auth/refresh': () => ({
       status: 200,
       body: { user: user(), accessToken: 't' },
@@ -45,7 +49,7 @@ const renderSettings = (routes: Record<string, Handler> = {}) => {
       </AuthProvider>
     </MemoryRouter>,
   )
-  return { onClose }
+  return { onClose, ...mock }
 }
 
 beforeEach(() => setAccessToken(null))
@@ -116,5 +120,218 @@ describe('ProfileSettingsModal', () => {
       await screen.findByRole('button', { name: 'Close settings' }),
     )
     expect(onClose).toHaveBeenCalled()
+  })
+
+  it('leaves the interface locale to the admin path', async () => {
+    renderSettings()
+    await screen.findByText('ada@example.com')
+    expect(screen.queryByLabelText('Interface locale')).toBeNull()
+  })
+})
+
+describe('ProfileSettingsModal as an admin (ADMIN-5)', () => {
+  const target = user({
+    id: 'u9',
+    displayName: 'Grace',
+    email: 'grace@example.com',
+    planTier: 'pro',
+    locale: 'fr',
+  })
+
+  /** Renders the modal against another user's account, as an admin. */
+  const renderAsAdmin = (routes: Record<string, Handler> = {}) => {
+    const onClose = vi.fn()
+    const mock = mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: {
+          user: user({ id: 'root', email: 'root@example.com' }),
+          accessToken: 't',
+        },
+      }),
+      '/api/admin/users/u9': () => ({
+        status: 200,
+        body: { user: target, projectCount: 1, deckCount: 2, banned: false },
+      }),
+      ...routes,
+    })
+    render(
+      <MemoryRouter initialEntries={['/u/u9']}>
+        <AuthProvider>
+          <Routes>
+            <Route
+              path="/u/:userId"
+              element={
+                <ProfileSettingsModal adminUserId="u9" onClose={onClose} />
+              }
+            />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    return { onClose, ...mock }
+  }
+
+  /** The PATCH bodies sent so far, as raw JSON strings. */
+  const patchBodies = (
+    fetchMock: ReturnType<typeof mockFetchRoutes>['fetchMock'],
+  ) =>
+    fetchMock.mock.calls
+      .filter(([, init]) => init?.method === 'PATCH')
+      .map(([, init]) => String(init?.body))
+
+  it("shows the target's account behind the audit banner", async () => {
+    renderAsAdmin()
+    expect(await screen.findByText('grace@example.com')).toBeVisible()
+    expect(screen.getByText('pro')).toBeVisible()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      /editing another user's account as an admin/i,
+    )
+    expect(screen.getByRole('status')).toHaveTextContent(
+      /recorded in the audit log/i,
+    )
+  })
+
+  it('offers no sign out — that would end the admin’s own session', async () => {
+    renderAsAdmin()
+    await screen.findByText('grace@example.com')
+    expect(screen.queryByRole('button', { name: /sign out/i })).toBeNull()
+  })
+
+  it('saves profile visibility through the audited endpoint', async () => {
+    const { fetchMock } = renderAsAdmin({
+      '/api/admin/users/u9': init =>
+        init?.method === 'PATCH'
+          ? { status: 204 }
+          : {
+              status: 200,
+              body: {
+                user: target,
+                projectCount: 1,
+                deckCount: 2,
+                banned: false,
+              },
+            },
+    })
+
+    const toggle = await screen.findByRole('checkbox', {
+      name: 'Public profile',
+    })
+    expect(toggle).toBeChecked()
+    fireEvent.click(toggle)
+
+    await vi.waitFor(() =>
+      expect(patchBodies(fetchMock)).toEqual([
+        '{"profileVisibility":"private"}',
+      ]),
+    )
+    // The landed value is folded in, so the control reflects it
+    await vi.waitFor(() => expect(toggle).not.toBeChecked())
+    // The owner's own action is never used for someone else's account
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).includes('user.setProfileVisibility'),
+      ),
+    ).toBe(false)
+  })
+
+  it('sets and clears the lecturing language, clearing as an explicit null', async () => {
+    const { fetchMock } = renderAsAdmin({
+      '/api/admin/users/u9': init =>
+        init?.method === 'PATCH'
+          ? { status: 204 }
+          : {
+              status: 200,
+              body: {
+                user: { ...target, language: 'es' },
+                projectCount: 0,
+                deckCount: 0,
+                banned: false,
+              },
+            },
+    })
+
+    const select = await screen.findByRole('combobox', { name: 'Language' })
+    expect(select).toHaveValue('es')
+
+    fireEvent.change(select, { target: { value: 'ru' } })
+    await vi.waitFor(() =>
+      expect(patchBodies(fetchMock)).toEqual(['{"language":"ru"}']),
+    )
+    await vi.waitFor(() => expect(select).toHaveValue('ru'))
+
+    fireEvent.change(select, { target: { value: '' } })
+    await vi.waitFor(() =>
+      expect(patchBodies(fetchMock)).toEqual([
+        '{"language":"ru"}',
+        '{"language":null}',
+      ]),
+    )
+    await vi.waitFor(() => expect(select).toHaveValue(''))
+  })
+
+  it('edits the interface locale, which the owner has no switcher for yet', async () => {
+    const { fetchMock } = renderAsAdmin({
+      '/api/admin/users/u9': init =>
+        init?.method === 'PATCH'
+          ? { status: 204 }
+          : {
+              status: 200,
+              body: {
+                user: target,
+                projectCount: 0,
+                deckCount: 0,
+                banned: false,
+              },
+            },
+    })
+
+    const select = await screen.findByLabelText('Interface locale')
+    expect(select).toHaveValue('fr')
+    fireEvent.change(select, { target: { value: 'en' } })
+
+    await vi.waitFor(() =>
+      expect(patchBodies(fetchMock)).toEqual(['{"locale":"en"}']),
+    )
+    await vi.waitFor(() => expect(select).toHaveValue('en'))
+  })
+
+  it('reports a refused save rather than reverting quietly', async () => {
+    renderAsAdmin({
+      '/api/admin/users/u9': init =>
+        init?.method === 'PATCH'
+          ? {
+              status: 400,
+              body: {
+                error: {
+                  code: 'target_is_admin',
+                  message: 'Admin accounts cannot be moderated',
+                },
+              },
+            }
+          : {
+              status: 200,
+              body: {
+                user: target,
+                projectCount: 0,
+                deckCount: 0,
+                banned: false,
+              },
+            },
+    })
+
+    fireEvent.click(
+      await screen.findByRole('checkbox', { name: 'Public profile' }),
+    )
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Admin accounts cannot be moderated',
+    )
+  })
+
+  it('reports an account it cannot load', async () => {
+    renderAsAdmin({ '/api/admin/users/u9': () => ({ status: 403 }) })
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not load this account.',
+    )
   })
 })

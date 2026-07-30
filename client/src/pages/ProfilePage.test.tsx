@@ -2,7 +2,9 @@
  * Unit tests for the profile page: visible lectures grouped by project,
  * the indistinguishable not-found/private state, who sees the Edit and
  * Settings buttons, and the two save paths — the owner's own action and
- * the admin's audited endpoint behind a confirmation.
+ * the admin's audited endpoint behind a confirmation. The Settings button
+ * is the admin's way into another user's account settings (ADMIN-5), so
+ * it too confirms once before the modal opens.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
@@ -175,13 +177,66 @@ describe('ProfilePage', () => {
     expect(screen.getByRole('heading', { name: 'Ada' })).toBeVisible()
   })
 
-  it('opens account settings for the owner only', async () => {
+  it('opens account settings for the owner without a confirmation', async () => {
     renderPage({ body: profile({ canEdit: true }), viewer: 'u9' })
     fireEvent.click(await screen.findByRole('button', { name: 'Settings' }))
     expect(
       await screen.findByRole('heading', { name: 'Settings' }),
     ).toBeVisible()
     expect(screen.getByText('u9@example.com')).toBeVisible()
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+  })
+
+  it("opens another user's settings for an admin, once confirmed", async () => {
+    const { calls } = renderPage({
+      body: profile({ canEdit: true }),
+      viewer: 'root',
+      routes: {
+        '/api/admin/users/u9': () => ({
+          status: 200,
+          body: {
+            user: {
+              id: 'u9',
+              email: 'ada@example.com',
+              displayName: 'Ada',
+              planTier: 'free',
+              profileVisibility: 'public',
+              locale: 'en',
+            },
+            projectCount: 0,
+            deckCount: 0,
+            banned: false,
+          },
+        }),
+      },
+    })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Settings' }))
+
+    // Nothing is loaded until the audit notice is acknowledged
+    const ask = await screen.findByRole('alertdialog', {
+      name: "Edit this user's settings?",
+    })
+    expect(ask).toHaveTextContent(/recorded in the audit log/)
+    expect(calls.some(url => url.includes('/api/admin/users/'))).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
+    expect(await screen.findByText('ada@example.com')).toBeVisible()
+    expect(screen.getByRole('status')).toHaveTextContent(/as an admin/)
+  })
+
+  it('opens no settings when the admin declines the notice', async () => {
+    const { calls } = renderPage({
+      body: profile({ canEdit: true }),
+      viewer: 'root',
+    })
+    fireEvent.click(await screen.findByRole('button', { name: 'Settings' }))
+    await screen.findByRole('alertdialog')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Settings' })).toBeNull()
+    expect(calls.some(url => url.includes('/api/admin/users/'))).toBe(false)
   })
 
   it('saves an admin edit through the audited endpoint after confirming', async () => {
@@ -197,10 +252,7 @@ describe('ProfilePage', () => {
       },
     })
 
-    // An admin edits the profile but has no business in the account settings
     fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
-    expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull()
-
     fireEvent.change(screen.getByLabelText('Display name'), {
       target: { value: 'Ada Lovelace' },
     })

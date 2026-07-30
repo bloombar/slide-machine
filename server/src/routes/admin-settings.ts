@@ -2,7 +2,9 @@
  * Admin account settings editor (ADMIN-5): an audited PATCH endpoint that
  * lets an admin change any user's profile fields. Mounted inside
  * adminRouter (routes/admin.ts) after requireAuth + requireAdmin, so the
- * allowlist gate covers it too.
+ * allowlist gate covers it too. The console does not call it — an admin
+ * edits an account from the Settings button on the user's own profile
+ * page, and that modal saves one field at a time through here.
  *
  * The handler snapshots the account's settings, applies the patch, and
  * diffs the two snapshots — mongoose setters make a patch-vs-document
@@ -13,10 +15,12 @@
  * every settings change whoever made it (docs/ADMINISTRATION.md,
  * "Settings change log").
  *
- * Projects and lectures have no counterpart here: an admin edits their
- * settings in the owner-facing settings modal, through the same actions
- * the owner uses (lib/admin-edit.ts). See docs/ADMINISTRATION.md
- * ("Editing settings").
+ * Projects and lectures have no counterpart here: their owner-facing
+ * settings modal saves through the same actions the owner uses, with the
+ * override and the audit entry applied there (lib/admin-edit.ts). An
+ * account has no such owner action to borrow — its fields are spread
+ * across several — so this endpoint stands in for them. See
+ * docs/ADMINISTRATION.md ("Editing settings").
  */
 import { Router } from 'express'
 import { z } from 'zod'
