@@ -111,7 +111,9 @@ Behavior is tuned by env vars in `server/.env`, each annotated inline in [.env.e
 | `IMAGE_RERANK_ENABLED` / `_VISION` | `true` / `false` | AI re-rank of image candidates; vision re-rank is heavier |
 | `AUDIO_RETENTION_ENABLED` | `false` | Retain lecture audio (only with `google-cloud` STT; for diarization/playback) |
 
-Numeric tunables (`GENERATION_FREEDOM`, `GEMINI_MODEL`, `*_TIMEOUT_MS`, retention-day counts, rerank sizes, `WHITEBOARD_SUPPRESS_DEBOUNCE_MS`, refine defaults) are documented next to each flag in `.env.example`.
+Numeric tunables (`GENERATION_FREEDOM`, `GEMINI_MODEL`, `*_TIMEOUT_MS`, retention-day counts and the `AUDIO_RETENTION_MAX_*_MB` ceilings, `STT_CAPTURE_SAMPLE_RATE`, rerank sizes, `WHITEBOARD_SUPPRESS_DEBOUNCE_MS`, refine defaults) are documented next to each flag in `.env.example`.
+
+For the retention ceilings, the capture rate, and the retention-day counts, **`0` means "no limit", not "off"** — it removes a bound (no downsampling, keep forever, unbounded buffers) and therefore costs more, not less. `WHITEBOARD_SUPPRESS_DEBOUNCE_MS` is the exception: there `0` is a literal zero-length window. The full list is in [server/.env.example](../server/.env.example).
 
 ## Running the app
 

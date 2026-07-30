@@ -16,7 +16,7 @@
 import type { WordTiming } from '@slide-machine/shared'
 import { config } from '../config'
 import { getAccessToken, refreshSession } from '../auth/token'
-import { getSttEngine } from '../runtime-config'
+import { getSttCaptureSampleRate, getSttEngine } from '../runtime-config'
 
 /**
  * Metadata accompanying a finalized phrase (GEN-4 diarization groundwork).
@@ -296,8 +296,25 @@ const googleCloudCapture = (): SpeechCapture => {
           )
           if (!active) return teardown()
 
+          // Downsample to the server's configured capture rate (CAP-3), but
+          // never upsample — a context already at or below it streams native.
+          // A target of 0 disables downsampling entirely. The effective rate
+          // must be what the server is told, or Cloud STT reads the PCM at the
+          // wrong speed (and a 0 would be nonsense on the wire).
+          const targetRate = getSttCaptureSampleRate()
+          const captureRate = Math.round(
+            targetRate > 0
+              ? Math.min(targetRate, ctx.sampleRate)
+              : ctx.sampleRate,
+          )
+
           const source = ctx.createMediaStreamSource(stream)
-          const node = new AudioWorkletNode(ctx, 'pcm-processor')
+          const node = new AudioWorkletNode(ctx, 'pcm-processor', {
+            processorOptions: {
+              targetSampleRate: targetRate,
+              inputSampleRate: ctx.sampleRate,
+            },
+          })
           workletNode = node
           // A muted sink keeps the graph pulling audio without echoing to
           // the speakers.
@@ -319,7 +336,7 @@ const googleCloudCapture = (): SpeechCapture => {
               JSON.stringify({
                 type: 'start',
                 languageCode: lang,
-                sampleRate: ctx.sampleRate,
+                sampleRate: captureRate,
                 // For audio retention: the same sessionId the phrases carry,
                 // plus the deck to attach the recording to (GEN-4 Phase 2).
                 sessionId,

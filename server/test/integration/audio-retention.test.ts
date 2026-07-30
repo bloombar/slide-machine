@@ -16,6 +16,8 @@ import {
 } from 'vitest'
 import request from 'supertest'
 import type { AddressInfo } from 'node:net'
+import { readdir } from 'node:fs/promises'
+import { join } from 'node:path'
 import WebSocket from 'ws'
 
 // Feature flag on, with a dedicated storage dir so the test's audio is isolated.
@@ -129,7 +131,7 @@ beforeEach(async () => {
 })
 
 describe('STT audio retention', () => {
-  it('stores a WAV and records it on the deck for the owner', async () => {
+  it('streams raw PCM to storage and records it on the deck for the owner', async () => {
     const deck = await act(ada, 'deck.create', {
       projectId,
       title: 'Lecture 1',
@@ -161,13 +163,15 @@ describe('STT audio retention', () => {
     expect(recording.sessionId).toBe('rec-1')
     expect(recording.sampleRate).toBe(16_000)
     expect(recording.durationMs).toBe(1000)
-    expect(recording.audioKey).toMatch(new RegExp(`^audio/${deckId}/`))
+    // `.pcm`, not `.wav`: a WAV header must state a total length that is
+    // unknown until the lecture ends, so the container cannot be streamed.
+    expect(recording.audioKey).toMatch(new RegExp(`^audio/${deckId}/.*\\.pcm$`))
 
-    // The stored blob is a real WAV wrapping the 32000-byte payload.
-    const wav = await getStorage().get(recording.audioKey)
-    expect(wav).not.toBeNull()
-    expect(wav!.toString('ascii', 0, 4)).toBe('RIFF')
-    expect(wav!.length).toBe(44 + 32_000)
+    // The stored blob is exactly the payload — no header, nothing added.
+    const stored = await getStorage().get(recording.audioKey)
+    expect(stored).not.toBeNull()
+    expect(stored!.length).toBe(32_000)
+    expect(stored!.equals(Buffer.alloc(32_000))).toBe(true)
   })
 
   it('does not retain audio for a deck the user cannot edit', async () => {
@@ -193,8 +197,15 @@ describe('STT audio retention', () => {
       new Uint8Array(16_000),
     )
 
-    await new Promise(r => setTimeout(r, 100)) // allow any (rejected) flush to run
+    await new Promise(r => setTimeout(r, 200)) // allow any (rejected) flush to run
     const doc = await DeckModel.findById(bobDeckId)
     expect(doc?.recordings ?? []).toHaveLength(0)
+
+    // Stronger than "no deck reference": with audio streaming out as it
+    // arrives, the edit check has to gate the FIRST byte. Nothing may reach
+    // storage for a user who cannot edit the lecture — not even briefly.
+    const dir = join(env.STORAGE_LOCAL_DIR, 'audio', bobDeckId)
+    const written = await readdir(dir).catch(() => [] as string[])
+    expect(written).toEqual([])
   })
 })

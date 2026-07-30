@@ -14,6 +14,40 @@ const base = {
   JWT_REFRESH_SECRET: 'b'.repeat(32),
 }
 
+describe('parseEnv STT_CAPTURE_SAMPLE_RATE', () => {
+  it('defaults to the 16 kHz Cloud STT models expect', () => {
+    expect(parseEnv({ ...base }).STT_CAPTURE_SAMPLE_RATE).toBe(16000)
+  })
+
+  it('accepts 0, the "no downsampling" setting', () => {
+    const env = parseEnv({ ...base, STT_CAPTURE_SAMPLE_RATE: '0' })
+    expect(env.STT_CAPTURE_SAMPLE_RATE).toBe(0)
+  })
+
+  it('accepts rates inside the supported band', () => {
+    for (const rate of ['8000', '16000', '48000']) {
+      expect(
+        parseEnv({ ...base, STT_CAPTURE_SAMPLE_RATE: rate })
+          .STT_CAPTURE_SAMPLE_RATE,
+      ).toBe(Number(rate))
+    }
+  })
+
+  it('rejects a rate between 0 and the 8 kHz floor', () => {
+    // 4000 would be silently unusable for speech; 0 is the only value below
+    // the floor that means anything.
+    expect(() =>
+      parseEnv({ ...base, STT_CAPTURE_SAMPLE_RATE: '4000' }),
+    ).toThrow()
+  })
+
+  it('rejects a rate above the 48 kHz ceiling', () => {
+    expect(() =>
+      parseEnv({ ...base, STT_CAPTURE_SAMPLE_RATE: '96000' }),
+    ).toThrow()
+  })
+})
+
 describe('parseEnv PUBLIC_BASE_URL normalization', () => {
   it('strips a trailing slash (DO ${_self.PUBLIC_URL} includes one)', () => {
     const env = parseEnv({

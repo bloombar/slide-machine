@@ -30,6 +30,14 @@ vi.mock('../auth/token', () => ({
   refreshSession,
 }))
 
+// Runtime config normally arrives from GET /api/config; a mutable stand-in
+// lets each test pick the capture rate the server would publish.
+const runtime = vi.hoisted(() => ({ captureRate: 16_000 }))
+vi.mock('../runtime-config', () => ({
+  getSttCaptureSampleRate: () => runtime.captureRate,
+  getSttEngine: () => 'google-cloud',
+}))
+
 import { createSpeechCapture } from './capture'
 
 class FakeWebSocket {
@@ -62,7 +70,13 @@ class FakeAudioWorkletNode {
   }
   connect = vi.fn()
   disconnect = vi.fn()
-  constructor() {
+  options: { processorOptions?: Record<string, number> } | undefined
+  constructor(
+    _ctx: unknown,
+    _name: string,
+    options?: { processorOptions?: Record<string, number> },
+  ) {
+    this.options = options
     FakeAudioWorkletNode.instances.push(this)
   }
 }
@@ -72,7 +86,10 @@ const lastWorklet = (): FakeAudioWorkletNode =>
 
 class FakeAudioContext {
   static instances: FakeAudioContext[] = []
-  sampleRate = 48_000
+  /** Hardware rate the next context reports; per-test so the downsampling
+   * decision (never upsample) can be exercised both ways. */
+  static rate = 48_000
+  sampleRate = FakeAudioContext.rate
   state = 'running'
   destination = {}
   audioWorklet = { addModule: vi.fn(() => Promise.resolve()) }
@@ -124,6 +141,8 @@ beforeEach(() => {
   FakeWebSocket.instances = []
   FakeAudioContext.instances = []
   FakeAudioWorkletNode.instances = []
+  FakeAudioContext.rate = 48_000
+  runtime.captureRate = 16_000
   track.stop.mockClear()
   getUserMedia.mockClear()
 })
@@ -161,17 +180,65 @@ describe('google cloud speech capture', () => {
     // The socket opening triggers the start control message; with no deckId
     // it carries the session id (for audio retention) but no deck.
     socket.onopen?.()
+    // The reported rate is the DOWNSAMPLED one (CAP-3), not the 48 kHz
+    // context: the server hands it to Cloud STT, which would read the PCM at
+    // the wrong speed if these ever disagreed.
     expect(JSON.parse(socket.sent[0] as string)).toEqual({
       type: 'start',
       languageCode: 'fr-FR',
-      sampleRate: 48_000,
+      sampleRate: 16_000,
       sessionId: expect.any(String),
+    })
+    // …and the worklet is told both rates so it can do the conversion.
+    expect(lastWorklet().options?.processorOptions).toEqual({
+      targetSampleRate: 16_000,
+      inputSampleRate: 48_000,
     })
 
     // Worklet PCM buffers are forwarded as binary frames.
     const pcm = new ArrayBuffer(8)
     lastWorklet().port.onmessage?.({ data: pcm })
     expect(socket.sent).toContain(pcm)
+  })
+
+  it('streams the native rate when downsampling is turned off (0)', async () => {
+    // STT_CAPTURE_SAMPLE_RATE=0: no downsampling. The wire must still carry a
+    // real rate — a literal 0 would make Cloud STT misread the PCM.
+    runtime.captureRate = 0
+    stubMediaApis()
+    createSpeechCapture('google-cloud').start({ onPhrase: vi.fn() }, 'en-US')
+    await flush()
+
+    const socket = FakeWebSocket.instances[0]!
+    socket.onopen?.()
+    expect(
+      (JSON.parse(socket.sent[0] as string) as { sampleRate: number })
+        .sampleRate,
+    ).toBe(48_000)
+    expect(lastWorklet().options?.processorOptions).toEqual({
+      targetSampleRate: 0,
+      inputSampleRate: 48_000,
+    })
+  })
+
+  it('streams the context rate when it is already below the target', async () => {
+    // Never upsample: a 8 kHz context sends 8 kHz, and the server is told 8 kHz.
+    // Inventing samples would cost bytes and buy nothing.
+    FakeAudioContext.rate = 8_000
+    stubMediaApis()
+    createSpeechCapture('google-cloud').start({ onPhrase: vi.fn() }, 'en-US')
+    await flush()
+
+    const socket = FakeWebSocket.instances[0]!
+    socket.onopen?.()
+    expect(
+      (JSON.parse(socket.sent[0] as string) as { sampleRate: number })
+        .sampleRate,
+    ).toBe(8_000)
+    expect(lastWorklet().options?.processorOptions).toEqual({
+      targetSampleRate: 16_000,
+      inputSampleRate: 8_000,
+    })
   })
 
   it('includes the deck id in the start message for audio retention', async () => {

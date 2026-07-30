@@ -3,10 +3,20 @@
 # The 100% coverage gate is deliberately deferred to Phase 3 (ROADMAP §4).
 name: CI
 
+# Feature-branch pushes are covered by `pull_request`; listing them under
+# `push` as well ran the whole pipeline twice for every push to an open PR.
+# A branch with no PR open is therefore unchecked until the PR is opened —
+# the intended trade for the branch → PR flow (docs/CONTRIBUTING.md).
 on:
   push:
-    branches: ['**']
+    branches: [better-faster, master]
   pull_request:
+
+# Supersede earlier runs when a PR is pushed to again, but never on the
+# integration branches — every commit landing there deserves its own verdict.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   ci:

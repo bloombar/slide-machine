@@ -19,18 +19,40 @@ import type {
 import { verifyAccessToken } from '../auth/tokens'
 import { registry } from '../providers/registry'
 import { env } from '../config/env'
-import { getStorage } from '../storage'
+import {
+  getStorage,
+  UPLOAD_MEMORY_WINDOW_BYTES,
+  type UploadStream,
+} from '../storage'
 import { DeckModel, loadDeckAcl } from '../models/deck'
 import { canEditAcl } from '../lib/access'
-import { pcmToWav, pcmDurationMs } from '../lib/wav'
+import { pcmBytesDurationMs } from '../lib/wav'
+import {
+  canStartRetention,
+  releaseRetentionBytes,
+  reserveRetentionBytes,
+} from './retention-budget'
 
 /** Path the client connects to; scoped so other upgrades are ignored. */
 const STT_PATH = '/api/stt'
 
-/** Cap on buffered retained audio per session (~300 MB ≈ 52 min at 48 kHz
- * mono); beyond it retention is abandoned so a marathon session can't grow
- * memory without bound. Transcription continues regardless. */
-const MAX_RETAINED_BYTES = 300 * 1024 * 1024
+/** Cap on how much audio ONE session may store, from
+ * AUDIO_RETENTION_MAX_SESSION_MB (default 300 MB ≈ 2 h 44 min at the default
+ * 16 kHz capture rate, ≈ 55 min if a client streams 48 kHz); 0 disables it.
+ *
+ * Since audio streams to storage rather than accumulating here, this is a
+ * STORAGE-COST cap, not a memory guard — a long session no longer costs memory
+ * proportional to its length. Past it the recording is truncated and
+ * transcription continues. See ./retention-budget for the memory ceiling.
+ * Read per call so a test (or a restart-free config change) takes effect. */
+const maxRetainedBytes = (): number =>
+  env.AUDIO_RETENTION_MAX_SESSION_MB * 1024 * 1024
+
+/** Ceiling on audio buffered while the deck's edit check is still resolving.
+ * Nothing may be uploaded before that answer arrives, so these frames are held
+ * — briefly, and boundedly: a slow database must degrade retention, not the
+ * process. ~16 s of 16 kHz audio. */
+const MAX_PENDING_BYTES = 512 * 1024
 
 /** First control message the client sends before any audio. */
 interface StartMessage {
@@ -43,16 +65,26 @@ interface StartMessage {
   sessionId?: string
 }
 
-/** Buffered audio for one recording, flushed to storage on close. */
+/** One recording, streamed to storage as it arrives. */
 interface Retention {
   deckId: string
   sessionId: string
   sampleRate: number
-  chunks: Buffer[]
+  /** Storage key; `.pcm` because the container cannot be written up front. */
+  audioKey: string
+  /** Bytes handed to the upload — the recording's length. */
   bytes: number
-  /** Whether the connecting user may edit the deck (checked once, async). */
-  allowed: Promise<boolean>
+  /** Open once the edit check passes; null while it runs, and forever if it
+   * fails or retention is capped. */
+  upload: UploadStream | null
+  /** Frames that arrived before the edit check answered. */
+  pending: Buffer[]
+  pendingBytes: number
+  /** Set when this session stops copying audio (cap, back-pressure, denial, or
+   * an upload error). Transcription is never affected. */
   capped: boolean
+  /** True once the upload must not be completed — the audio is discarded. */
+  discard: boolean
 }
 
 /** True when the user can edit the deck the audio would attach to. */
@@ -95,54 +127,144 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(payload))
   }
 
-  // Begins buffering session audio when retention is enabled and the client
-  // named a deck + recording. Access is verified in the background (its result
-  // gates the flush), so no early audio is dropped while the check runs.
+  /** Stops copying audio for this session, once, with a reason. Transcription,
+   * generation, and the transcript are never affected — only the recording. */
+  const capRetention = (r: Retention, reason: string): void => {
+    if (r.capped) return
+    r.capped = true
+    r.pending = []
+    r.pendingBytes = 0
+    console.warn(
+      `Audio retention stopped for deck ${r.deckId} (${reason}); ` +
+        'keeping transcription, dropping the rest of the audio.',
+    )
+  }
+
+  /** Hands one frame to the open upload, honouring the storage cap and
+   * back-pressure. `write` returning false still accepts the frame — it means
+   * the consumer is behind, so we count this one and stop after it. */
+  const writeFrame = (r: Retention, data: Buffer): void => {
+    if (!r.upload) return
+    const cap = maxRetainedBytes()
+    if (cap !== 0 && r.bytes + data.length > cap) {
+      capRetention(r, 'per-session storage cap reached')
+      return
+    }
+    const accepted = r.upload.write(data)
+    r.bytes += data.length
+    if (!accepted) capRetention(r, 'upload could not keep up')
+  }
+
+  // Starts streaming session audio to storage when retention is enabled and the
+  // client named a deck + recording. Frames that arrive before the deck's edit
+  // check answers are held briefly (bounded) rather than uploaded, because once
+  // bytes leave for the bucket they cannot be un-sent.
   const beginRetention = (start: StartMessage): void => {
     if (!env.AUDIO_RETENTION_ENABLED || !start.deckId || !start.sessionId)
       return
-    retain = {
+    // Process-wide ceiling: with the budget already committed to other live
+    // sessions, this one transcribes without retaining rather than pushing the
+    // process toward an OOM kill.
+    if (
+      !canStartRetention() ||
+      !reserveRetentionBytes(UPLOAD_MEMORY_WINDOW_BYTES)
+    ) {
+      console.warn(
+        `Audio retention budget exhausted; deck ${start.deckId} will ` +
+          'transcribe without retaining audio.',
+      )
+      return
+    }
+    const r: Retention = {
       deckId: start.deckId,
       sessionId: start.sessionId,
       sampleRate: start.sampleRate ?? 16_000,
-      chunks: [],
+      // Raw LINEAR16, not WAV: a 44-byte header must state the total length,
+      // which is unknowable until the lecture ends. sampleRate on the recording
+      // is what readers use instead (GEN-4 Phase 4).
+      audioKey: `audio/${start.deckId}/${randomUUID()}.pcm`,
       bytes: 0,
-      allowed: canEditDeck(start.deckId, userId),
+      upload: null,
+      pending: [],
+      pendingBytes: 0,
       capped: false,
+      discard: false,
     }
+    retain = r
+
+    void (async () => {
+      const allowed = await canEditDeck(r.deckId, userId)
+      // The session may have ended while the check ran.
+      if (retain !== r) return
+      if (!allowed) {
+        r.discard = true
+        capRetention(r, 'user may not edit this lecture')
+        return
+      }
+      let opened
+      try {
+        opened = await getStorage().createUploadStream(r.audioKey, 'audio/L16')
+      } catch (error) {
+        console.error('Audio retention: could not open the upload:', error)
+        r.discard = true
+        capRetention(r, 'storage unavailable')
+        return
+      }
+      if (retain !== r) {
+        // Ended while the upload was opening — never leave it dangling.
+        await opened.abort().catch(() => {})
+        return
+      }
+      r.upload = opened
+      for (const frame of r.pending) writeFrame(r, frame)
+      r.pending = []
+      r.pendingBytes = 0
+    })()
   }
 
-  // Assembles the buffered PCM into a WAV, stores it, and records a reference
-  // on the deck — only if the user may edit it. Fire-and-forget on close;
-  // any failure is logged and never disrupts the (already-ended) session.
+  // Completes the upload and records a reference on the deck — only if the
+  // user may edit it and something was actually stored. Fire-and-forget on
+  // close; any failure is logged and never disrupts the (already-ended)
+  // session.
   const flushRetention = async (): Promise<void> => {
     const r = retain
     retain = null // flush at most once, even if close+error both fire
-    if (!r || !r.bytes) return
+    if (!r) return
     try {
-      if (!(await r.allowed)) return
-      const pcm = Buffer.concat(r.chunks)
-      const wav = pcmToWav(pcm, r.sampleRate)
-      const audioKey = `audio/${r.deckId}/${randomUUID()}.wav`
-      await getStorage().put(audioKey, wav, 'audio/wav')
+      // Never opened (denied, storage down, or ended before the edit check
+      // answered): nothing reached the bucket, so there is nothing to undo.
+      if (!r.upload) return
+      if (r.discard || !r.bytes) {
+        await r.upload.abort()
+        return
+      }
+      await r.upload.done()
       await DeckModel.updateOne(
         { _id: r.deckId },
         {
           $push: {
             recordings: {
               sessionId: r.sessionId,
-              audioKey,
+              audioKey: r.audioKey,
               sampleRate: r.sampleRate,
-              durationMs: Math.round(pcmDurationMs(pcm, r.sampleRate)),
+              durationMs: Math.round(pcmBytesDurationMs(r.bytes, r.sampleRate)),
               createdAt: new Date(),
             },
           },
         },
       )
-      // Phase 3 copies this WAV to GCS (gs://) here and sets the recording's
-      // gcsUri — Google BatchRecognize reads audio only from GCS.
+      // A later phase copies this audio to GCS (gs://) here and sets the
+      // recording's gcsUri — Google BatchRecognize reads only from GCS.
     } catch (error) {
       console.error('Audio retention failed:', error)
+      // A half-uploaded object must not survive as a truncated recording, and
+      // its parts must not linger.
+      await r.upload?.abort().catch(() => {})
+    } finally {
+      // The reservation covers this upload's in-flight window, so it is held
+      // until the upload has finished (or been abandoned) and the memory is
+      // genuinely gone. In a finally so no path can leak the budget.
+      releaseRetentionBytes(UPLOAD_MEMORY_WINDOW_BYTES)
     }
   }
 
@@ -206,19 +328,16 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
   ws.on('message', (data: Buffer, isBinary: boolean) => {
     if (isBinary) {
       stream?.write(new Uint8Array(data))
-      // Tee a copy for retention, until the per-session cap (logged once).
-      if (retain) {
-        if (retain.bytes + data.length > MAX_RETAINED_BYTES) {
-          if (!retain.capped) {
-            retain.capped = true
-            console.warn(
-              `Audio retention cap reached for deck ${retain.deckId}; ` +
-                'keeping transcription, dropping the rest of the audio.',
-            )
-          }
+      // Tee a copy to the retention upload. Nothing accumulates here: frames
+      // go straight out, except the few held while the edit check resolves.
+      if (retain && !retain.capped) {
+        if (retain.upload) {
+          writeFrame(retain, Buffer.from(data))
+        } else if (retain.pendingBytes + data.length > MAX_PENDING_BYTES) {
+          capRetention(retain, 'edit check too slow')
         } else {
-          retain.chunks.push(Buffer.from(data))
-          retain.bytes += data.length
+          retain.pending.push(Buffer.from(data))
+          retain.pendingBytes += data.length
         }
       }
       return
