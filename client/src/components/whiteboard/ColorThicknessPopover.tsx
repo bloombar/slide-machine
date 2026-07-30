@@ -5,6 +5,7 @@
  * opaque, highlighter translucent), so only color and thickness are offered.
  */
 import { useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ToolStyle } from './useWhiteboard'
 
 interface Props {
@@ -24,6 +25,7 @@ export default function ColorThicknessPopover({
   onChange,
   onClose,
 }: Props) {
+  const { t } = useTranslation()
   const ref = useRef<HTMLDivElement>(null)
   // Always offer the current color as a swatch, so a template default that
   // isn't in the preset list still shows as selected.
@@ -54,15 +56,15 @@ export default function ColorThicknessPopover({
     <div
       ref={ref}
       role="dialog"
-      aria-label={`${label} color and thickness`}
+      aria-label={t('whiteboard.picker.label', { tool: label })}
       // Pops out to the right of the vertical toolbar.
-      className="absolute top-0 left-full z-30 ml-2 flex items-center gap-3 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur"
+      className="absolute top-0 start-full z-30 ms-2 flex items-center gap-3 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur"
     >
       <div className="flex items-center gap-1.5">
         {swatches.map(color => (
           <button
             key={color}
-            aria-label={`Color ${color}`}
+            aria-label={t('whiteboard.picker.color', { color })}
             aria-pressed={value.color === color}
             onClick={() => onChange({ ...value, color })}
             className={`h-5 w-5 rounded-full border ${
@@ -79,7 +81,7 @@ export default function ColorThicknessPopover({
         {thicknesses.map((thickness, i) => (
           <button
             key={thickness}
-            aria-label={`Thickness ${i + 1}`}
+            aria-label={t('whiteboard.picker.thickness', { step: i + 1 })}
             aria-pressed={value.thickness === thickness}
             onClick={() => onChange({ ...value, thickness })}
             className={`flex h-6 w-6 items-center justify-center rounded-md ${

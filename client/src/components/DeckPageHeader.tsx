@@ -8,6 +8,7 @@
  * ShellTitle), not here.
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { GripVertical } from 'lucide-react'
 import Tooltip from './Tooltip'
 
@@ -102,6 +103,7 @@ const clampToViewport = (point: Point, size: DOMRect): Point => {
 }
 
 export default function DeckPageHeader({ actions, deckId }: Props) {
+  const { t } = useTranslation()
   const pillRef = useRef<HTMLDivElement>(null)
   // null while parked in the default pinned spot; a point once dragged
   const [pos, setPos] = useState<Point | null>(() => readStored(deckId))
@@ -278,9 +280,9 @@ export default function DeckPageHeader({ actions, deckId }: Props) {
           pos ? 'fixed z-30' : ''
         }`}
       >
-        <Tooltip label="Drag to move">
+        <Tooltip label={t('deck.toolbar.drag')}>
           <button
-            aria-label="Drag to move the toolbar"
+            aria-label={t('deck.toolbar.dragHint')}
             aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown Escape"
             onKeyDown={onKeyDown}
             // The smallest thing on the pill: a handle, not a control

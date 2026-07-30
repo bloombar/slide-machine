@@ -7,12 +7,23 @@
   "common": {
     "loading": "Loading…",
     "save": "Save",
+    "saving": "Saving…",
     "cancel": "Cancel",
     "close": "Close",
+    "closeEsc": "Close (Esc)",
+    "create": "Create",
+    "done": "Done",
+    "ok": "OK",
+    "stop": "Stop",
+    "resume": "Resume",
+    "dismiss": "Dismiss",
     "edit": "Edit",
     "delete": "Delete",
     "settings": "Settings",
     "or": "or",
+    "dangerZone": "Danger zone",
+    "resetToDefault": "Reset to default",
+    "listSeparator": ", ",
     "adminEditNotice": "You are editing another user's {entity, select, account {account} project {project} lecture {lecture} other {settings}} as an admin. Every change you make here is recorded in the audit log."
   },
   "nav": {
@@ -110,6 +121,496 @@
   "language": {
     "label": "Language",
     "inherit": "Default — {source}"
+  },
+  "voice": {
+    "label": "Narration voice",
+    "systemDefault": "system default",
+    "descriptions": {
+      "emma": "warm female",
+      "sophie": "bright female",
+      "james": "deep male",
+      "daniel": "clear male",
+      "aria": "natural female (premium)",
+      "nova": "natural female (premium)",
+      "leo": "natural male (premium)",
+      "owen": "natural male (premium)"
+    }
+  },
+  "freedom": {
+    "label": "AI freedom",
+    "min": "Only what I say",
+    "max": "Free elaboration",
+    "valueText": "{value} of {max}"
+  },
+  "template": {
+    "label": "Slide template",
+    "heading": "Template",
+    "exportYaml": "Export template as YAML",
+    "exportYamlHint": "Download this template’s style and layouts as a re-importable YAML file."
+  },
+  "layout": {
+    "change": "Change slide layout",
+    "close": "Close layout picker",
+    "pickerLabel": "Slide layout",
+    "changeTemplate": "Change template",
+    "fromTemplate": "Layouts from the <strong>{name}</strong> template."
+  },
+  "lecture": {
+    "untitled": "Untitled lecture"
+  },
+  "slide": {
+    "previous": "Previous slide",
+    "next": "Next slide",
+    "image": {
+      "alt": "Slide image"
+    },
+    "menu": {
+      "label": "Options for slide {number}",
+      "speak": "Speak this slide",
+      "playOriginal": "Play original audio",
+      "refine": "Refine this slide with AI",
+      "editTranscript": "Edit spoken transcript",
+      "changeLayout": "Change layout",
+      "delete": "Delete slide"
+    }
+  },
+  "image": {
+    "details": "Image details",
+    "replace": "Replace image",
+    "remove": "Remove image",
+    "add": "Add image",
+    "noDetails": "No source or licensing information is recorded for this image.",
+    "fields": {
+      "title": {
+        "label": "Title",
+        "placeholder": "Title of the work"
+      },
+      "caption": {
+        "label": "Caption",
+        "placeholder": "Short description"
+      },
+      "creator": {
+        "label": "Credit",
+        "placeholder": "Author or creator"
+      },
+      "creatorUrl": {
+        "label": "Creator URL",
+        "placeholder": "https://…"
+      },
+      "sourceName": {
+        "label": "Source",
+        "placeholder": "e.g. Wikimedia Commons"
+      },
+      "sourceUrl": {
+        "label": "Source URL",
+        "placeholder": "https://…"
+      },
+      "license": {
+        "label": "License",
+        "placeholder": "e.g. CC BY 4.0"
+      },
+      "licenseUrl": {
+        "label": "License URL",
+        "placeholder": "https://…"
+      }
+    },
+    "search": {
+      "intro": "Upload your own, or search free-to-use images from Wikimedia, Openverse, and Flickr.",
+      "drop": "Drag an image here, or",
+      "upload": "upload from your computer",
+      "uploadLabel": "Upload image file",
+      "label": "Search for images",
+      "placeholder": "Search for images…",
+      "action": "Search",
+      "searching": "Searching…",
+      "results": "Image search results",
+      "result": "Search result",
+      "use": "Use image: {name}",
+      "none": "No images found. Try different search terms."
+    },
+    "removeTooltip": "Delete image"
+  },
+  "whiteboard": {
+    "pen": "Pen",
+    "highlighter": "Highlighter",
+    "eraser": "Eraser",
+    "newSlide": "New whiteboard slide",
+    "dragHint": "Drag to move the whiteboard toolbar",
+    "picker": {
+      "label": "{tool} color and thickness",
+      "options": "Color and stroke options",
+      "color": "Color {color}",
+      "thickness": "Thickness {step}"
+    }
+  },
+  "refine": {
+    "action": "Refine",
+    "running": "Refining…",
+    "background": "Working in the background — this can take a few minutes.",
+    "howMuch": "How much: {level}",
+    "parts": {
+      "text": {
+        "label": "Refine slide text",
+        "description": "Rewrite the wording to present the content better."
+      },
+      "layout": {
+        "label": "Refine slide layout",
+        "description": "Move the slide to a layout that suits it better, keeping everything it shows."
+      },
+      "imagery": {
+        "label": "Refine slide imagery",
+        "description": "Find a picture when the layout has an image slot and none is placed."
+      }
+    },
+    "speakers": {
+      "label": "Identify multiple speakers",
+      "description": "Detect who spoke — you versus students — and reframe student turns as questions, not fact.",
+      "noAudio": "(No lecture audio was recorded, so this is unavailable.)",
+      "descriptionSlide": "Detect who spoke on this slide — you versus students — and reframe student turns as questions, not fact.",
+      "noAudioSlide": "(No recorded audio remains for this slide, so this is unavailable.)"
+    },
+    "transcript": {
+      "label": "Refine the spoken transcript",
+      "description": "Rewrite the read-aloud narration to describe the concepts more eloquently."
+    },
+    "slide": {
+      "title": "Refine this slide with AI — slide {number}",
+      "intro": "Improve this slide. Any changes will apply to this slide only. To perform refinement across all slides, use the <lectureLink>lecture-wide options</lectureLink> instead.",
+      "levelLabel": "How much to refine this slide",
+      "marked": "This slide has whiteboard markings. Refining may change its content or layout, so your highlights and annotations may no longer line up with what’s underneath.",
+      "running": "Refining this slide…",
+      "failed": "Could not refine this slide — try again"
+    }
+  },
+  "transcript": {
+    "title": "Spoken transcript — slide {number}",
+    "intro": "This is what is read aloud when the deck is played.",
+    "label": "Spoken transcript",
+    "placeholder": "Nothing has been recorded for this slide — playback narrates its content instead.",
+    "refineWithAi": "Refine with AI",
+    "playPreview": "Play the spoken transcript",
+    "pausePreview": "Pause the spoken transcript",
+    "regenerate": "Regenerate from spoken audio",
+    "regenerating": "Regenerating from spoken audio…",
+    "save": "Save transcript",
+    "marked": "This slide has whiteboard markings timed to the transcript. Saving re-matches each one to the words it was drawn over. A mark whose words are gone is hidden rather than moved — it is kept, not deleted, and returns if wording it matches comes back.",
+    "discard": {
+      "title": "Discard changes?",
+      "message": "This slide's spoken transcript has unsaved changes. Closing now loses them.",
+      "action": "Discard changes"
+    },
+    "errors": {
+      "regenerate": "Could not regenerate from the recorded audio — try again",
+      "refine": "Could not refine the transcript — try again",
+      "save": "Could not save the transcript — try again"
+    }
+  },
+  "seed": {
+    "notesHeading": "Seed notes",
+    "materialHeading": "Seed material",
+    "upload": "Upload PDF, DOCX, or photo",
+    "uploadLabel": "Upload seed material",
+    "uploadFailed": "Upload failed — PDF, DOCX, or images up to 20 MB",
+    "orDrop": "or drag and drop a file",
+    "empty": "No seed material yet.",
+    "use": "Use",
+    "useIn": "Use {name} in generation",
+    "deleteAsset": "Delete {name}",
+    "captionPlaceholder": "Caption (used to match slides)",
+    "captionFor": "Caption for {name}",
+    "status": {
+      "processing": "Processing…",
+      "ready": "Ready",
+      "failed": "Could not extract"
+    },
+    "dialog": {
+      "addTitle": "Add seed material",
+      "prelectureHint": "Give the AI background for this lecture before you begin. Optional — you can add more anytime.",
+      "manualHint": "Add background material for this lecture. It is used the next time you speak.",
+      "skip": "Skip",
+      "start": "Start lecture"
+    }
+  },
+  "access": {
+    "heading": "Access",
+    "people": "People with access",
+    "addPeople": "Add people",
+    "addByEmail": "Add people by email",
+    "emailPlaceholder": "person@example.com",
+    "role": "Access role",
+    "roleFor": "Role for {name}",
+    "add": "Add",
+    "transfer": "Transfer ownership",
+    "remove": "Remove access",
+    "onlyYou": "Only you have access so far.",
+    "inherited": "Inherited from the project — changes here detach this lecture.",
+    "overridden": "Overridden for this lecture.",
+    "useProject": "Use project settings",
+    "roles": {
+      "viewer": "Viewer",
+      "editor": "Editor"
+    },
+    "general": {
+      "heading": "General access",
+      "public": {
+        "label": "Public",
+        "hint": "Anyone on the internet with the link can view"
+      },
+      "restricted": {
+        "label": "Restricted",
+        "hint": "Only people with access can open with the link"
+      }
+    },
+    "transferConfirm": {
+      "title": "Transfer ownership?",
+      "message": "Make {name} the owner of \"{subject}\"? You will keep edit access.",
+      "action": "Transfer"
+    },
+    "errors": {
+      "noAccount": "No account with that email"
+    }
+  },
+  "deck": {
+    "meta": "{count, plural, one {# slide} other {# slides}} · edited {age}",
+    "share": "Share",
+    "shareLabel": "Share deck",
+    "addSlide": "Add slide",
+    "addSlideHint": "Add a slide",
+    "liveSession": "Live session",
+    "playingOriginal": "Playing original audio…",
+    "play": {
+      "play": "Play deck",
+      "pause": "Pause playback",
+      "hint": "Play deck aloud",
+      "empty": "Add a slide to play the deck"
+    },
+    "record": {
+      "startHint": "Speak to add slides",
+      "stopHint": "Recording — click to stop"
+    },
+    "empty": {
+      "speaking": "Start speaking to generate slides",
+      "howToStart": "Click the <plus></plus> or <mic></mic> icons to start adding content.",
+      "viewer": "This deck has no slides.",
+      "plusIcon": "plus",
+      "micIcon": "microphone"
+    },
+    "generation": {
+      "paused": "Content generation paused for drawing",
+      "resumed": "Content generation resumed"
+    },
+    "simulated": {
+      "label": "Spoken phrase",
+      "placeholder": "Say something about your topic…",
+      "listening": "Listening… (you can still type)",
+      "speak": "Speak",
+      "generating": "Generating…"
+    },
+    "toolbar": {
+      "drag": "Drag to move",
+      "dragHint": "Drag to move the toolbar"
+    },
+    "view": {
+      "label": "Slide view mode",
+      "carousel": "Carousel view",
+      "list": "List view"
+    },
+    "delete": {
+      "action": "Delete lecture",
+      "title": "Delete lecture?",
+      "message": "\"{name}\" and all of its slides and seed material will be permanently deleted."
+    },
+    "adminSettings": {
+      "title": "Edit this lecture's settings?",
+      "message": "\"{name}\" belongs to another user. You can change its settings as an admin; every change is recorded in the audit log."
+    },
+    "settings": {
+      "title": "Lecture settings",
+      "close": "Close settings",
+      "sections": "Settings sections",
+      "scope": "These settings apply to just this lecture. The <projectLink>project-wide settings</projectLink> may affect this lecture as well.",
+      "tabs": {
+        "general": "General",
+        "template": "Design",
+        "refine": "Refine with AI",
+        "quiz": "Quiz",
+        "export": "Export",
+        "sharing": "Privacy & Sharing"
+      },
+      "general": {
+        "titleHeading": "Lecture title",
+        "titleHint": "Name this lecture. Leave it blank to let the AI title it from your speech as the lecture unfolds.",
+        "seedNotesHeading": "Seed notes",
+        "seedNotesHint": "Lecture-specific background material, added on top of the project's seed notes. Saved automatically.",
+        "seedNotesLabel": "Lecture seed notes",
+        "seedNotesPlaceholder": "What this lecture covers, key terms, examples…",
+        "seedMaterialHeading": "Seed material",
+        "seedMaterialHint": "Documents and photos scanned for background text and imagery, used by this lecture only.",
+        "freedomHeading": "AI freedom",
+        "freedomHint": "How much the AI may add beyond what you actually say while generating this lecture's slides.",
+        "languageHeading": "Language",
+        "languageHint": "Speech recognition and generated slide text for this lecture.",
+        "languageInherit": "project, profile, or browser setting",
+        "voiceHeading": "Narration voice",
+        "voiceHint": "The voice used to read this lecture aloud. It speaks in the lecture's language.",
+        "deleteHint": "Deleting a lecture permanently removes its slides and seed material. This cannot be undone."
+      },
+      "refine": {
+        "heading": "Refine this lecture",
+        "intro": "Improve the text, images, and spoken version of the slides. This can take a few minutes and runs in the background.",
+        "introAdmin": "What a refinement pass would do, and how hard it would work. These are the lecture’s saved choices; running the pass is the owner’s to do.",
+        "noSlides": "This lecture has no slides yet, so there is nothing to refine.",
+        "levelLabel": "How much to refine this lecture",
+        "failed": "Could not complete the refinement — please try again.",
+        "markedTitle": "Refine marked-up slides?",
+        "markedMessage": "Some slides have whiteboard markings. Refining may change their content or layout, so highlights and annotations may no longer line up with what's underneath.",
+        "markedConfirm": "Refine anyway",
+        "summary": {
+          "done": "Done — {changes}.",
+          "none": "Done — no changes were needed.",
+          "reframed": "{count, plural, one {reframed # student slide} other {reframed # student slides}}",
+          "slidesRefined": "{count, plural, one {refined # slide} other {refined # slides}}",
+          "transcriptsUpdated": "{count, plural, one {updated # narration} other {updated # narrations}}"
+        }
+      }
+    }
+  },
+  "quiz": {
+    "heading": "Exit-ticket quiz",
+    "intro": "Generate a quiz from this lecture and publish it as a Google Form you can share with students.",
+    "connect": "Connect Google",
+    "connecting": "Connecting…",
+    "connectHint": "Connect a Google account so the Form can be saved to your Google Drive.",
+    "reconnect": "Reconnect Google",
+    "driveDenied": "Your Google account connected, but Drive access wasn’t allowed. Click {action} again and be sure to tick the Drive permission so quizzes can be saved.",
+    "generate": "Generate quiz",
+    "generating": "Generating…",
+    "generateAndSave": "Generate & save",
+    "publish": "Publish quiz",
+    "publishing": "Publishing…",
+    "ready": "Your quiz is ready",
+    "copyLink": "Copy quiz link",
+    "linkCopied": "Link copied",
+    "delete": "Delete quiz",
+    "deleting": "Deleting…",
+    "deleteHint": "Deleting lets you generate a fresh quiz with different questions.",
+    "savingTo": "Saving to:",
+    "folder": {
+      "dialog": "Choose a Drive folder",
+      "title": "Save the quiz to…",
+      "path": "Folder path",
+      "empty": "No sub-folders here. Save the quiz into this folder, or make a new one below.",
+      "new": "New folder",
+      "newName": "New folder name",
+      "newIn": "New folder in {folder}",
+      "cancelNew": "Cancel new folder",
+      "creating": "Creating…"
+    },
+    "options": {
+      "questionCount": "Number of questions",
+      "totalPoints": "Total points",
+      "advanced": "Advanced settings",
+      "types": "Question types",
+      "typesHint": "The number of questions above follows this breakdown.",
+      "email": {
+        "label": "Collect respondent email",
+        "verified": "Verified email (Google-checked)",
+        "responderInput": "Responder types their email",
+        "none": "Don’t collect email"
+      },
+      "transcript": {
+        "label": "Include spoken transcript in source material",
+        "hint": "Base questions on both the slide text and the full lecture transcript."
+      },
+      "instructions": {
+        "label": "Additional instructions (optional)",
+        "hint": "Tell the AI how to write the quiz — e.g. focus on a topic, skip a section, set the difficulty, or match a question style.",
+        "placeholder": "e.g. focus on the water cycle; avoid definitions"
+      }
+    },
+    "types": {
+      "single_choice": {
+        "field": "Single-choice (MCQ)",
+        "name": "Single choice"
+      },
+      "multiple_choice": {
+        "field": "Multiple-answer",
+        "name": "Multiple answer"
+      },
+      "short_text": {
+        "field": "Short answer",
+        "name": "Short answer"
+      },
+      "long_text": {
+        "field": "Long answer",
+        "name": "Long answer"
+      }
+    },
+    "review": {
+      "dialog": "Review quiz questions",
+      "title": "Review & set points",
+      "hint": "Adjust each question’s points, then publish. Total:",
+      "points": "Points",
+      "pointsFor": "Points for question {number}"
+    },
+    "errors": {
+      "status": "Could not load the quiz status",
+      "connect": "Could not connect your Google account",
+      "loadFolders": "Could not load your Drive folders. Your Google account may not have granted Drive access.",
+      "createFolder": "Could not create the folder",
+      "generate": "Could not generate the quiz — please try again",
+      "publish": "Could not publish the quiz — please try again",
+      "delete": "Could not delete the quiz — please try again"
+    }
+  },
+  "export": {
+    "heading": "Export this lecture",
+    "intro": "Save the deck as a PDF, an editable Google Slides presentation, or a re-importable YAML file.",
+    "format": "Format",
+    "destination": "Destination",
+    "download": "Download",
+    "toDrive": "Save to Google Drive",
+    "downloadFormat": "Download {format}",
+    "saveFormatToDrive": "Save {format} to Drive",
+    "slidesAlwaysDrive": "Google Slides is always saved to your Google Drive.",
+    "working": "Working…",
+    "saving": "Saving…",
+    "saveHere": "Save here",
+    "saved": "Saved",
+    "savedToFolder": "Saved to {folder}",
+    "savedList": "Saved to Drive",
+    "deleteFile": "Delete {name}",
+    "connectHint": "Connect a Google account so the file can be saved to your Drive.",
+    "driveDenied": "Your Google account connected, but Drive access wasn’t allowed. When you reconnect, be sure to tick the Drive permission so exports can be saved.",
+    "formats": {
+      "pdf": {
+        "hint": "One page per slide, with image credits."
+      },
+      "google-slides": {
+        "hint": "An editable presentation in your Drive."
+      },
+      "yaml": {
+        "hint": "A human-readable, re-importable file."
+      }
+    },
+    "folder": {
+      "title": "Save {format} to…",
+      "empty": "No sub-folders here. Save into this folder, or make a new one below."
+    },
+    "includeWhiteboard": {
+      "label": "Include whiteboard markups",
+      "hint": "Draw the freehand marks on the exported slides."
+    },
+    "otherDrive": {
+      "title": "Removed from this lecture",
+      "message": "This export was saved to another collaborator's Google Drive, so it's been removed from this lecture but still exists in their Drive. Ask them to delete it there if you'd like it gone entirely."
+    },
+    "errors": {
+      "status": "Could not load the export status",
+      "download": "Could not export the deck — please try again",
+      "drive": "Could not save to Drive — please try again",
+      "delete": "Could not delete the export — please try again"
+    }
   },
   "errors": {
     "invalid_credentials": "Incorrect email or password",

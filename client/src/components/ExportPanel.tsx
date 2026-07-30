@@ -10,6 +10,7 @@
  * identical either way.
  */
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Check,
   ChevronRight,
@@ -42,32 +43,23 @@ interface Props {
 
 type Destination = 'download' | 'drive'
 
+/** The export formats, in order. "PDF", "YAML" and "Google Slides" are
+ * format and product names, so only each one's hint is translated —
+ * keyed `export.formats.<id>.hint`. */
 const FORMATS: Array<{
   id: DeckExportFormat
   label: string
-  hint: string
   icon: typeof FileText
   driveOnly?: boolean
 }> = [
-  {
-    id: 'pdf',
-    label: 'PDF',
-    hint: 'One page per slide, with image credits.',
-    icon: FileText,
-  },
+  { id: 'pdf', label: 'PDF', icon: FileText },
   {
     id: 'google-slides',
     label: 'Google Slides',
-    hint: 'An editable presentation in your Drive.',
     icon: Presentation,
     driveOnly: true,
   },
-  {
-    id: 'yaml',
-    label: 'YAML',
-    hint: 'A human-readable, re-importable file.',
-    icon: FileText,
-  },
+  { id: 'yaml', label: 'YAML', icon: FileText },
 ]
 
 /** Decodes base64 file contents into a Blob of the given type. */
@@ -113,6 +105,8 @@ function FolderPicker({
   onChoose: (folder: DriveFolder) => void
   onReconnect: () => void
 }) {
+  const { t } = useTranslation()
+  // Rooted at My Drive — a Google product name, so it is not translated.
   const [path, setPath] = useState<DriveFolder[]>([
     { id: 'root', name: 'My Drive' },
   ])
@@ -138,9 +132,7 @@ function FolderPicker({
       })
       .catch(() => {
         if (!ignore) {
-          setError(
-            'Could not load your Drive folders. Your Google account may not have granted Drive access.',
-          )
+          setError(t('quiz.errors.loadFolders'))
         }
       })
     return () => {
@@ -173,7 +165,7 @@ function FolderPicker({
         setCreatingNew(false)
         openFolder(folder)
       })
-      .catch(() => setError('Could not create the folder'))
+      .catch(() => setError(t('quiz.errors.createFolder')))
       .finally(() => setCreating(false))
   }
 
@@ -188,13 +180,15 @@ function FolderPicker({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Choose a Drive folder"
+          aria-label={t('quiz.folder.dialog')}
           className="relative flex max-h-[85vh] w-full max-w-md flex-col rounded-lg bg-white p-6 shadow-xl"
         >
           <header className="mb-3 flex items-start justify-between">
-            <h2 className="text-lg font-bold">Save {formatLabel} to…</h2>
+            <h2 className="text-lg font-bold">
+              {t('export.folder.title', { format: formatLabel })}
+            </h2>
             <button
-              aria-label="Close"
+              aria-label={t('common.close')}
               onClick={onCancel}
               className="rounded p-1 text-slate-400 hover:text-slate-700"
             >
@@ -204,7 +198,7 @@ function FolderPicker({
 
           <div className="flex-1 overflow-y-auto pr-1">
             <nav
-              aria-label="Folder path"
+              aria-label={t('quiz.folder.path')}
               className="mb-2 flex flex-wrap items-center gap-0.5 text-sm text-slate-600"
             >
               {path.map((f, i) => (
@@ -236,15 +230,16 @@ function FolderPicker({
                     onClick={onReconnect}
                     className="mt-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-slate-50"
                   >
-                    Reconnect Google
+                    {t('quiz.reconnect')}
                   </button>
                 </div>
               ) : loading ? (
-                <p className="p-3 text-sm text-slate-500">Loading…</p>
+                <p className="p-3 text-sm text-slate-500">
+                  {t('common.loading')}
+                </p>
               ) : folders.length === 0 ? (
                 <p className="p-3 text-sm text-slate-400">
-                  No sub-folders here. Save into this folder, or make a new one
-                  below.
+                  {t('export.folder.empty')}
                 </p>
               ) : (
                 <ul className="divide-y divide-slate-100">
@@ -253,7 +248,7 @@ function FolderPicker({
                       <button
                         type="button"
                         onClick={() => openFolder(f)}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                        className="flex w-full items-center gap-2 px-3 py-2 text-start text-sm hover:bg-slate-50"
                       >
                         <Folder
                           className="h-4 w-4 shrink-0 text-indigo-500"
@@ -275,12 +270,14 @@ function FolderPicker({
               {creatingNew ? (
                 <div className="flex items-center gap-2">
                   <input
-                    aria-label="New folder name"
+                    aria-label={t('quiz.folder.newName')}
                     autoFocus
                     value={newFolderName}
                     onChange={e => setNewFolderName(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && createFolder()}
-                    placeholder={`New folder in ${current.name}`}
+                    placeholder={t('quiz.folder.newIn', {
+                      folder: current.name,
+                    })}
                     className="min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1.5 text-sm"
                   />
                   <button
@@ -289,11 +286,11 @@ function FolderPicker({
                     onClick={createFolder}
                     className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
                   >
-                    {creating ? 'Creating…' : 'Create'}
+                    {creating ? t('quiz.folder.creating') : t('common.create')}
                   </button>
                   <button
                     type="button"
-                    aria-label="Cancel new folder"
+                    aria-label={t('quiz.folder.cancelNew')}
                     onClick={() => {
                       setCreatingNew(false)
                       setNewFolderName('')
@@ -310,7 +307,7 @@ function FolderPicker({
                   className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:underline"
                 >
                   <FolderPlus className="h-4 w-4" aria-hidden />
-                  New folder
+                  {t('quiz.folder.new')}
                 </button>
               )}
             </div>
@@ -318,7 +315,7 @@ function FolderPicker({
 
           <div className="mt-4 flex items-center justify-between gap-2 border-t border-slate-100 pt-4">
             <span className="min-w-0 truncate text-xs text-slate-500">
-              Saving to:{' '}
+              {t('quiz.savingTo')}{' '}
               <span className="font-medium text-slate-700">{current.name}</span>
             </span>
             <div className="flex gap-2">
@@ -327,7 +324,7 @@ function FolderPicker({
                 onClick={onCancel}
                 className="rounded-md px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -335,7 +332,7 @@ function FolderPicker({
                 onClick={() => onChoose(current)}
                 className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
               >
-                {saving ? 'Saving…' : 'Save here'}
+                {saving ? t('export.saving') : t('export.saveHere')}
               </button>
             </div>
           </div>
@@ -346,6 +343,7 @@ function FolderPicker({
 }
 
 export default function ExportPanel({ deckId }: Props) {
+  const { t } = useTranslation()
   const [loading, setLoading] = useState(true)
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -393,7 +391,7 @@ export default function ExportPanel({ deckId }: Props) {
         setHasWhiteboard(s.hasWhiteboard)
         setExports(s.exports)
       })
-      .catch(() => setError('Could not load the export status'))
+      .catch(() => setError(t('export.errors.status')))
       .finally(() => setLoading(false))
   }, [deckId])
 
@@ -432,7 +430,7 @@ export default function ExportPanel({ deckId }: Props) {
         }
       })
       .catch(() => {
-        setError('Could not connect your Google account')
+        setError(t('quiz.errors.connect'))
         setBusy(false)
       })
   }
@@ -446,7 +444,7 @@ export default function ExportPanel({ deckId }: Props) {
       includeWhiteboard,
     })
       .then(saveToDisk)
-      .catch(() => setError('Could not export the deck — please try again'))
+      .catch(() => setError(t('export.errors.download')))
       .finally(() => setBusy(false))
   }
 
@@ -465,7 +463,7 @@ export default function ExportPanel({ deckId }: Props) {
         setExports(prev => [...prev, res])
         setPicking(false)
       })
-      .catch(() => setError('Could not save to Drive — please try again'))
+      .catch(() => setError(t('export.errors.drive')))
       .finally(() => setBusy(false))
   }
 
@@ -483,7 +481,7 @@ export default function ExportPanel({ deckId }: Props) {
         // still in their Drive, and our credentials can't remove it there.
         if (res.remainsInOtherDrive) setRemainsInOtherDrive(true)
       })
-      .catch(() => setError('Could not delete the export — please try again'))
+      .catch(() => setError(t('export.errors.delete')))
       .finally(() => setBusy(false))
   }
 
@@ -501,35 +499,30 @@ export default function ExportPanel({ deckId }: Props) {
   }
 
   if (loading) {
-    return <p className="text-sm text-slate-500">Loading…</p>
+    return <p className="text-sm text-slate-500">{t('common.loading')}</p>
   }
 
   return (
     <div className="flex flex-col gap-4">
       <div>
         <h3 className="text-base font-semibold text-slate-900">
-          Export this lecture
+          {t('export.heading')}
         </h3>
-        <p className="mt-1 text-sm text-slate-600">
-          Save the deck as a PDF, an editable Google Slides presentation, or a
-          re-importable YAML file.
-        </p>
+        <p className="mt-1 text-sm text-slate-600">{t('export.intro')}</p>
       </div>
 
       {error && <p className="text-sm text-rose-600">{error}</p>}
 
       {driveDenied && (
         <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-          Your Google account connected, but Drive access wasn’t allowed. When
-          you reconnect, be sure to tick the Drive permission so exports can be
-          saved.
+          {t('export.driveDenied')}
         </p>
       )}
 
       {/* Format */}
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-1 text-sm font-medium text-slate-700">
-          Format
+          {t('export.format')}
         </legend>
         {FORMATS.map(f => {
           const Icon = f.icon
@@ -557,7 +550,9 @@ export default function ExportPanel({ deckId }: Props) {
                 <span className="block text-sm font-medium text-slate-900">
                   {f.label}
                 </span>
-                <span className="block text-xs text-slate-500">{f.hint}</span>
+                <span className="block text-xs text-slate-500">
+                  {t(`export.formats.${f.id}.hint`)}
+                </span>
               </span>
             </label>
           )
@@ -567,12 +562,12 @@ export default function ExportPanel({ deckId }: Props) {
       {/* Destination — hidden for Google Slides (always Drive) */}
       {chosen.driveOnly ? (
         <p className="text-sm text-slate-600">
-          Google Slides is always saved to your Google Drive.
+          {t('export.slidesAlwaysDrive')}
         </p>
       ) : (
         <fieldset className="flex gap-4">
           <legend className="mb-1 text-sm font-medium text-slate-700">
-            Destination
+            {t('export.destination')}
           </legend>
           <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
             <input
@@ -581,7 +576,7 @@ export default function ExportPanel({ deckId }: Props) {
               checked={destination === 'download'}
               onChange={() => setDestination('download')}
             />
-            Download
+            {t('export.download')}
           </label>
           <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
             <input
@@ -590,7 +585,7 @@ export default function ExportPanel({ deckId }: Props) {
               checked={destination === 'drive'}
               onChange={() => setDestination('drive')}
             />
-            Save to Google Drive
+            {t('export.toDrive')}
           </label>
         </fieldset>
       )}
@@ -605,9 +600,9 @@ export default function ExportPanel({ deckId }: Props) {
             onChange={e => setIncludeWhiteboard(e.target.checked)}
           />
           <span>
-            Include whiteboard markups
+            {t('export.includeWhiteboard.label')}
             <span className="block text-xs text-slate-500">
-              Draw the freehand marks on the exported slides.
+              {t('export.includeWhiteboard.hint')}
             </span>
           </span>
         </label>
@@ -617,7 +612,9 @@ export default function ExportPanel({ deckId }: Props) {
         <div className="flex flex-col gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-4">
           <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-800">
             <Check className="h-4 w-4" aria-hidden />
-            Saved{saved.driveFolderName ? ` to ${saved.driveFolderName}` : ''}
+            {saved.driveFolderName
+              ? t('export.savedToFolder', { folder: saved.driveFolderName })
+              : t('export.saved')}
           </span>
           <a
             href={saved.fileUrl}
@@ -644,23 +641,25 @@ export default function ExportPanel({ deckId }: Props) {
             <ExternalLink className="h-4 w-4" aria-hidden />
           )}
           {busy
-            ? 'Working…'
+            ? t('export.working')
             : effectiveDestination === 'download'
-              ? `Download ${formatLabel}`
+              ? t('export.downloadFormat', { format: formatLabel })
               : !connected
-                ? 'Connect Google'
-                : `Save ${formatLabel} to Drive`}
+                ? t('quiz.connect')
+                : t('export.saveFormatToDrive', { format: formatLabel })}
         </button>
         {effectiveDestination === 'drive' && !connected && (
           <p className="mt-2 text-xs text-slate-500">
-            Connect a Google account so the file can be saved to your Drive.
+            {t('export.connectHint')}
           </p>
         )}
       </div>
 
       {exports.length > 0 && (
         <div className="flex flex-col gap-2">
-          <h4 className="text-sm font-medium text-slate-700">Saved to Drive</h4>
+          <h4 className="text-sm font-medium text-slate-700">
+            {t('export.savedList')}
+          </h4>
           <ul className="divide-y divide-slate-100 rounded-md border border-slate-200">
             {exports.map(e => (
               <li key={e.fileId} className="flex items-center gap-2 px-3 py-2">
@@ -673,12 +672,14 @@ export default function ExportPanel({ deckId }: Props) {
                   <span className="truncate">{e.fileName}</span>
                   <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
                 </a>
+                {/* The format's own name (PDF, YAML, Google Slides) — a
+                    file-format name, the same in every language. */}
                 <span className="shrink-0 text-xs uppercase text-slate-400">
-                  {e.format === 'google-slides' ? 'slides' : e.format}
+                  {FORMATS.find(f => f.id === e.format)?.label ?? e.format}
                 </span>
                 <button
                   type="button"
-                  aria-label={`Delete ${e.fileName}`}
+                  aria-label={t('export.deleteFile', { name: e.fileName })}
                   disabled={busy}
                   onClick={() => deleteExport(e.fileId)}
                   className="shrink-0 rounded p-1 text-slate-400 hover:text-rose-600 disabled:opacity-50"
@@ -703,9 +704,9 @@ export default function ExportPanel({ deckId }: Props) {
 
       {remainsInOtherDrive && (
         <ConfirmDialog
-          title="Removed from this lecture"
-          message="This export was saved to another collaborator's Google Drive, so it's been removed from this lecture but still exists in their Drive. Ask them to delete it there if you'd like it gone entirely."
-          confirmLabel="OK"
+          title={t('export.otherDrive.title')}
+          message={t('export.otherDrive.message')}
+          confirmLabel={t('common.ok')}
           onConfirm={() => setRemainsInOtherDrive(false)}
           onCancel={() => setRemainsInOtherDrive(false)}
         />

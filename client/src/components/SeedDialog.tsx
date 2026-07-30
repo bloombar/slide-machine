@@ -7,6 +7,7 @@
  * Lecture settings — it is the same data, one place to edit it.
  */
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import type { Deck } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
@@ -30,6 +31,7 @@ export default function SeedDialog({
   onClose,
   onDeckChange,
 }: Props) {
+  const { t } = useTranslation()
   const prelecture = mode === 'prelecture'
 
   // Escape closes, matching the other dialogs
@@ -52,22 +54,24 @@ export default function SeedDialog({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Add seed material"
+          aria-label={t('seed.dialog.addTitle')}
           className="relative max-h-[calc(100vh-4rem)] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-6 shadow-xl"
         >
           <header className="mb-4 flex items-start justify-between">
             <div>
               <h2 className="text-xl font-bold">
-                {prelecture ? 'Add seed material' : 'Seed material'}
+                {prelecture
+                  ? t('seed.dialog.addTitle')
+                  : t('seed.materialHeading')}
               </h2>
               <p className="mt-1 text-sm text-slate-500">
                 {prelecture
-                  ? 'Give the AI background for this lecture before you begin. Optional — you can add more anytime.'
-                  : 'Add background material for this lecture. It is used the next time you speak.'}
+                  ? t('seed.dialog.prelectureHint')
+                  : t('seed.dialog.manualHint')}
               </p>
             </div>
             <button
-              aria-label="Close"
+              aria-label={t('common.close')}
               onClick={onClose}
               className="rounded p-1 text-slate-400 hover:text-slate-700"
             >
@@ -77,11 +81,13 @@ export default function SeedDialog({
 
           <div className="flex flex-col gap-5">
             <div>
-              <h3 className="mb-2 font-semibold text-slate-700">Seed notes</h3>
+              <h3 className="mb-2 font-semibold text-slate-700">
+                {t('seed.notesHeading')}
+              </h3>
               <SeedNotesEditor
                 value={deck.seedContext ?? ''}
-                label="Lecture seed notes"
-                placeholder="What this lecture covers, key terms, examples…"
+                label={t('deck.settings.general.seedNotesLabel')}
+                placeholder={t('deck.settings.general.seedNotesPlaceholder')}
                 onSave={seedContext => {
                   dispatchAction<Deck>('deck.setSeedNotes', {
                     deckId: deck.id,
@@ -96,7 +102,7 @@ export default function SeedDialog({
             </div>
             <div>
               <h3 className="mb-2 font-semibold text-slate-700">
-                Seed material
+                {t('seed.materialHeading')}
               </h3>
               <SeedMaterial projectId={deck.projectId} deckId={deck.id} />
             </div>
@@ -109,13 +115,13 @@ export default function SeedDialog({
                   onClick={onClose}
                   className="rounded-md px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900"
                 >
-                  Skip
+                  {t('seed.dialog.skip')}
                 </button>
                 <button
                   onClick={onClose}
                   className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white"
                 >
-                  Start lecture
+                  {t('seed.dialog.start')}
                 </button>
               </>
             ) : (
@@ -123,7 +129,7 @@ export default function SeedDialog({
                 onClick={onClose}
                 className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white"
               >
-                Done
+                {t('common.done')}
               </button>
             )}
           </footer>

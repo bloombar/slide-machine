@@ -12,8 +12,11 @@ describe('VoiceSelect', () => {
     expect(
       screen.getByRole('option', { name: 'Default — system default' }),
     ).toBeInTheDocument()
+    // The proper name is untranslated; the description beside it is not
     for (const v of TTS_VOICES) {
-      expect(screen.getByRole('option', { name: v.label })).toBeInTheDocument()
+      expect(
+        screen.getByRole('option', { name: new RegExp(`^${v.name} — .+`) }),
+      ).toBeInTheDocument()
     }
   })
 

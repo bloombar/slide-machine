@@ -27,6 +27,7 @@
  * long rewrite nor a regeneration is lost to a stray keypress.
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Pause, Play } from 'lucide-react'
 import { hasVisibleDrawings, type Slide } from '@slide-machine/shared'
 import {
@@ -65,6 +66,7 @@ export default function TranscriptEditorModal({
   onSaved,
   onClose,
 }: Props) {
+  const { t } = useTranslation()
   const original = slide.sourceTranscript ?? ''
   const [text, setText] = useState(original)
   const [saving, setSaving] = useState(false)
@@ -137,7 +139,7 @@ export default function TranscriptEditorModal({
       const { transcript } = await regenerateSlideTranscript(slide.id)
       setText(transcript)
     } catch {
-      setError('Could not regenerate from the recorded audio — try again')
+      setError(t('transcript.errors.regenerate'))
     } finally {
       setRegenerating(false)
     }
@@ -156,7 +158,7 @@ export default function TranscriptEditorModal({
       const { transcript } = await refineSlideTranscript(slide.deckId, slide.id)
       setText(transcript)
     } catch {
-      setError('Could not refine the transcript — try again')
+      setError(t('transcript.errors.refine'))
     } finally {
       setRefining(false)
     }
@@ -175,7 +177,7 @@ export default function TranscriptEditorModal({
       onSaved(await editSlideTranscript(slide.id, text))
       onClose()
     } catch {
-      setError('Could not save the transcript — try again')
+      setError(t('transcript.errors.save'))
       setSaving(false)
     }
   }
@@ -196,10 +198,10 @@ export default function TranscriptEditorModal({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h3 id="edit-transcript-title" className="text-lg font-bold">
-              Spoken transcript — slide {number}
+              {t('transcript.title', { number })}
             </h3>
             <p className="mt-1 text-sm text-slate-500">
-              This is what is read aloud when the deck is played.
+              {t('transcript.intro')}
             </p>
           </div>
           {canRefine && (
@@ -209,7 +211,7 @@ export default function TranscriptEditorModal({
               disabled={busy}
               className="shrink-0 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
-              {refining ? 'Refining…' : 'Refine with AI'}
+              {refining ? t('refine.running') : t('transcript.refineWithAi')}
             </button>
           )}
           {tts && (
@@ -221,8 +223,8 @@ export default function TranscriptEditorModal({
               disabled={!text.trim() || filling}
               aria-label={
                 previewPlaying
-                  ? 'Pause the spoken transcript'
-                  : 'Play the spoken transcript'
+                  ? t('transcript.pausePreview')
+                  : t('transcript.playPreview')
               }
               aria-pressed={previewing}
               className="shrink-0 rounded-full border border-slate-300 p-2 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
@@ -237,7 +239,7 @@ export default function TranscriptEditorModal({
         </div>
 
         <label htmlFor="slide-transcript" className="sr-only">
-          Spoken transcript
+          {t('transcript.label')}
         </label>
         <textarea
           id="slide-transcript"
@@ -246,16 +248,13 @@ export default function TranscriptEditorModal({
           onChange={e => setText(e.target.value)}
           rows={12}
           disabled={filling}
-          placeholder="Nothing has been recorded for this slide — playback narrates its content instead."
+          placeholder={t('transcript.placeholder')}
           className="mt-4 w-full rounded-md border border-slate-300 px-3 py-2 text-sm leading-relaxed disabled:bg-slate-100 disabled:text-slate-500"
         />
 
         {marked && (
           <p className="mt-2 text-sm text-slate-500">
-            This slide has whiteboard markings timed to the transcript. Saving
-            re-matches each one to the words it was drawn over. A mark whose
-            words are gone is hidden rather than moved — it is kept, not
-            deleted, and returns if wording it matches comes back.
+            {t('transcript.marked')}
           </p>
         )}
 
@@ -279,7 +278,7 @@ export default function TranscriptEditorModal({
                     aria-hidden
                     className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-indigo-600"
                   />
-                  Regenerating from spoken audio…
+                  {t('transcript.regenerating')}
                 </span>
               ) : (
                 <button
@@ -288,7 +287,7 @@ export default function TranscriptEditorModal({
                   disabled={busy}
                   className="font-medium text-indigo-600 underline underline-offset-2 hover:text-indigo-500 disabled:opacity-50"
                 >
-                  Regenerate from spoken audio
+                  {t('transcript.regenerate')}
                 </button>
               ))}
           </div>
@@ -298,14 +297,14 @@ export default function TranscriptEditorModal({
               onClick={requestClose}
               className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
               disabled={busy}
               className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
             >
-              {saving ? 'Saving…' : 'Save transcript'}
+              {saving ? t('common.saving') : t('transcript.save')}
             </button>
           </div>
         </div>
@@ -313,9 +312,9 @@ export default function TranscriptEditorModal({
 
       {confirmingDiscard && (
         <ConfirmDialog
-          title="Discard changes?"
-          message="This slide's spoken transcript has unsaved changes. Closing now loses them."
-          confirmLabel="Discard changes"
+          title={t('transcript.discard.title')}
+          message={t('transcript.discard.message')}
+          confirmLabel={t('transcript.discard.action')}
           onConfirm={onClose}
           onCancel={() => setConfirmingDiscard(false)}
         />

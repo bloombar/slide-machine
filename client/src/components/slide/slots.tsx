@@ -8,6 +8,7 @@
  * an editor here.
  */
 import { useState, type ComponentType } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ImagePlus, ImageUp, Info, X } from 'lucide-react'
 import ImageAttributionDialog from '../ImageAttributionDialog'
 import ReplaceImageDialog from '../ReplaceImageDialog'
@@ -136,6 +137,7 @@ function ImageSlot({
   onPickImageCandidate,
   onRemoveImage,
 }: SlotEditorProps) {
+  const { t } = useTranslation()
   // Track the URL that failed, not a boolean: when the image is replaced
   // the imageRef changes, so a stale failure never suppresses the new
   // picture — it renders live without needing a page reload.
@@ -176,7 +178,7 @@ function ImageSlot({
   const image = (
     <img
       src={slide.imageRef}
-      alt={slide.caption ?? slide.title ?? 'Slide image'}
+      alt={slide.caption ?? slide.title ?? t('slide.image.alt')}
       onError={() => setFailedSrc(slide.imageRef ?? null)}
       className="h-full w-full object-cover transition-opacity duration-500"
     />
@@ -203,10 +205,10 @@ function ImageSlot({
     // z-10 lifts the control above SlideNavZones' click overlay, which
     // otherwise sits on top and would trigger navigation (matches
     // EditableText).
-    <div className="absolute right-2 bottom-2 z-10">
-      <Tooltip label="Image details" side="top" align="end">
+    <div className="absolute end-2 bottom-2 z-10">
+      <Tooltip label={t(`image.details`)} side="top" align="end">
         <button
-          aria-label="Image details"
+          aria-label={t(`image.details`)}
           onClick={() => setAttrOpen(true)}
           className="rounded-full bg-black/40 p-1 text-white hover:bg-black/60"
         >
@@ -271,19 +273,19 @@ function ImageSlot({
       {hasImage ? (
         <>
           {image}
-          <div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-            <Tooltip label="Replace image" align="end">
+          <div className="absolute top-2 end-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            <Tooltip label={t(`image.replace`)} align="end">
               <button
-                aria-label="Replace image"
+                aria-label={t(`image.replace`)}
                 onClick={() => setImageDialogOpen(true)}
                 className="rounded-md bg-white/90 p-1.5 text-slate-700 shadow hover:bg-white"
               >
                 <ImageUp className="h-4 w-4" aria-hidden />
               </button>
             </Tooltip>
-            <Tooltip label="Delete image" align="end">
+            <Tooltip label={t(`image.removeTooltip`)} align="end">
               <button
-                aria-label="Remove image"
+                aria-label={t(`image.remove`)}
                 onClick={onRemoveImage}
                 className="rounded-md bg-white/90 p-1.5 text-slate-700 shadow hover:bg-white hover:text-red-600"
               >
@@ -309,10 +311,10 @@ function ImageSlot({
             }`}
             style={{ backgroundColor: colors.surface }}
           />
-          <div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-            <Tooltip label="Add image" align="end">
+          <div className="absolute top-2 end-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            <Tooltip label={t(`image.add`)} align="end">
               <button
-                aria-label="Add image"
+                aria-label={t(`image.add`)}
                 onClick={() => setImageDialogOpen(true)}
                 className="rounded-md bg-white/90 p-1.5 text-slate-700 shadow hover:bg-white"
               >
@@ -333,7 +335,7 @@ function ImageSlot({
       {imageDialogOpen && onReplaceImage && onPickImageCandidate && (
         <ReplaceImageDialog
           slideId={slide.id}
-          title={hasImage ? 'Replace image' : 'Add image'}
+          title={hasImage ? t('image.replace') : t('image.add')}
           initialQuery={searchQuery}
           onUpload={onReplaceImage}
           onPickCandidate={onPickImageCandidate}

@@ -15,6 +15,7 @@ import {
   useState,
   type DragEvent as ReactDragEvent,
 } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ImageUp, Search, X } from 'lucide-react'
 import type { ImageSearchCandidate } from '@slide-machine/shared'
 import { searchSlideImages } from '../api/slides'
@@ -22,7 +23,8 @@ import Portal from './Portal'
 
 interface Props {
   slideId: string
-  /** Heading/label, e.g. 'Replace image' or 'Add image' for an empty slot. */
+  /** Heading/label, already translated by the call site — e.g. "Replace
+   * image", or "Add image" for an empty slot. Defaults to the former. */
   title?: string
   /** Pre-filled search terms, derived from the slide by the caller. */
   initialQuery: string
@@ -35,12 +37,14 @@ interface Props {
 
 export default function ReplaceImageDialog({
   slideId,
-  title = 'Replace image',
+  title,
   initialQuery,
   onUpload,
   onPickCandidate,
   onClose,
 }: Props) {
+  const { t } = useTranslation()
+  const heading = title ?? t('image.replace')
   const [query, setQuery] = useState(initialQuery)
   const [results, setResults] = useState<ImageSearchCandidate[]>([])
   // Starts true: the dialog searches once on open, so the loading state
@@ -122,19 +126,18 @@ export default function ReplaceImageDialog({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={title}
+          aria-label={heading}
           className="relative flex max-h-[calc(100vh-4rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-white shadow-xl"
         >
           <header className="flex items-start justify-between p-6 pb-4">
             <div>
-              <h2 className="text-xl font-bold">{title}</h2>
+              <h2 className="text-xl font-bold">{heading}</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Upload your own, or search free-to-use images from Wikimedia,
-                Openverse, and Flickr.
+                {t('image.search.intro')}
               </p>
             </div>
             <button
-              aria-label="Close"
+              aria-label={t('common.close')}
               onClick={onClose}
               className="rounded p-1 text-slate-400 hover:text-slate-700"
             >
@@ -163,19 +166,19 @@ export default function ReplaceImageDialog({
             >
               <ImageUp className="h-6 w-6 text-slate-400" aria-hidden />
               <p className="text-sm text-slate-600">
-                Drag an image here, or
+                {t('image.search.drop')}
                 <button
                   onClick={() => inputRef.current?.click()}
-                  className="ml-1 font-medium text-indigo-600 hover:underline"
+                  className="ms-1 font-medium text-indigo-600 hover:underline"
                 >
-                  upload from your computer
+                  {t('image.search.upload')}
                 </button>
               </p>
               <input
                 ref={inputRef}
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
-                aria-label="Upload image file"
+                aria-label={t('image.search.uploadLabel')}
                 className="hidden"
                 onChange={e => {
                   const file = e.target.files?.[0]
@@ -197,8 +200,8 @@ export default function ReplaceImageDialog({
               <input
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                aria-label="Search for images"
-                placeholder="Search for images…"
+                aria-label={t('image.search.label')}
+                placeholder={t('image.search.placeholder')}
                 className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
               <button
@@ -206,32 +209,34 @@ export default function ReplaceImageDialog({
                 className="flex items-center gap-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
               >
                 <Search className="h-4 w-4" aria-hidden />
-                Search
+                {t('image.search.action')}
               </button>
             </form>
 
             {searching ? (
               <p className="py-8 text-center text-sm text-slate-500">
-                Searching…
+                {t('image.search.searching')}
               </p>
             ) : results.length ? (
               <ul
-                aria-label="Image search results"
+                aria-label={t('image.search.results')}
                 className="grid grid-cols-2 gap-3 sm:grid-cols-3"
               >
                 {results.map(candidate => (
                   <li key={candidate.url}>
                     <button
                       onClick={() => pick(candidate)}
-                      aria-label={`Use image: ${candidate.title || candidate.source}`}
+                      aria-label={t('image.search.use', {
+                        name: candidate.title || candidate.source,
+                      })}
                       className="group relative block aspect-video w-full overflow-hidden rounded-md border border-slate-200 hover:border-indigo-400 hover:ring-2 hover:ring-indigo-200"
                     >
                       <img
                         src={candidate.url}
-                        alt={candidate.title || 'Search result'}
+                        alt={candidate.title || t('image.search.result')}
                         className="h-full w-full object-cover"
                       />
-                      <span className="absolute inset-x-0 bottom-0 bg-black/50 px-1.5 py-0.5 text-left text-[10px] text-white capitalize">
+                      <span className="absolute inset-x-0 bottom-0 bg-black/50 px-1.5 py-0.5 text-start text-[10px] text-white capitalize">
                         {candidate.source}
                       </span>
                     </button>
@@ -241,7 +246,7 @@ export default function ReplaceImageDialog({
             ) : (
               searched && (
                 <p className="py-8 text-center text-sm text-slate-500">
-                  No images found. Try different search terms.
+                  {t('image.search.none')}
                 </p>
               )
             )}

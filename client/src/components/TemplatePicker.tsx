@@ -1,6 +1,7 @@
 /**
  * Template chooser (TMPL-1, minimal): radio cards with theme swatches.
  */
+import { useTranslation } from 'react-i18next'
 import type { Template } from '@slide-machine/shared'
 
 interface Props {
@@ -13,10 +14,11 @@ const swatch = (theme: Record<string, unknown>, key: string): string =>
   typeof theme[key] === 'string' ? (theme[key] as string) : '#334155'
 
 export default function TemplatePicker({ templates, value, onChange }: Props) {
+  const { t } = useTranslation()
   return (
     <div
       role="radiogroup"
-      aria-label="Slide template"
+      aria-label={t('template.label')}
       className="flex flex-wrap gap-3"
     >
       {templates.map(t => (

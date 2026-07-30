@@ -30,7 +30,9 @@ export default function LanguageSelect({
       onChange={e => onChange((e.target.value || null) as Locale | null)}
       className="w-fit rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700"
     >
-      <option value="">{t('language.inherit', { source: defaultLabel })}</option>
+      <option value="">
+        {t('language.inherit', { source: defaultLabel })}
+      </option>
       {LOCALES.map(locale => (
         <option key={locale} value={locale}>
           {LOCALE_LABELS[locale]}

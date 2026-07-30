@@ -77,6 +77,26 @@ export default tseslint.config(
             include: ['aria-label', 'alt', 'title', 'placeholder'],
             exclude: [],
           },
+          callees: {
+            // `slot('title')` names a layout slot, not copy. Keeps the
+            // plugin's own exclusions, which this list replaces.
+            exclude: [
+              'slot',
+              'i18n(ext)?',
+              't',
+              'require',
+              'addEventListener',
+              'removeEventListener',
+              'postMessage',
+              'getElementById',
+              'dispatch',
+              'commit',
+              'includes',
+              'indexOf',
+              'endsWith',
+              'startsWith',
+            ],
+          },
         },
       ],
     },
