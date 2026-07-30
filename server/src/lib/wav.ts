@@ -36,6 +36,15 @@ export const pcmToWav = (pcm: Buffer, sampleRate: number): Buffer => {
   return Buffer.concat([header, pcm])
 }
 
+/** Duration in ms of `byteLength` bytes of LINEAR16 mono PCM at `sampleRate`.
+ * Byte-based so a streamed recording — which is never held as one buffer — can
+ * report its length from the running total. */
+export const pcmBytesDurationMs = (
+  byteLength: number,
+  sampleRate: number,
+): number =>
+  sampleRate > 0 ? (byteLength / (sampleRate * BYTES_PER_SAMPLE)) * 1000 : 0
+
 /** Duration in ms of a LINEAR16 mono PCM buffer at `sampleRate`. */
 export const pcmDurationMs = (pcm: Buffer, sampleRate: number): number =>
-  sampleRate > 0 ? (pcm.length / (sampleRate * BYTES_PER_SAMPLE)) * 1000 : 0
+  pcmBytesDurationMs(pcm.length, sampleRate)

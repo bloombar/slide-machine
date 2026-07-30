@@ -18,9 +18,15 @@ import { TranscriptSegmentModel } from '../models/transcript-segment'
 import { getStorage } from '../storage'
 import { pcmToWav } from './wav'
 
-// A retained session WAV is exactly pcmToWav(pcm, rate): a canonical 44-byte
-// header followed by 16-bit mono little-endian PCM (2 bytes/sample).
+// Recordings are stored as raw LINEAR16 mono PCM (`.pcm`) — a WAV header must
+// state a total length that is unknown until the lecture ends, which streaming
+// cannot provide. Recordings retained BEFORE that change are `.wav`: a
+// canonical 44-byte header then the same PCM. Both are read here until the last
+// legacy recording ages out (AUDIO_RETENTION_DAYS), after which the offset and
+// this comment can go.
 const WAV_HEADER_BYTES = 44
+const bodyOffset = (audioKey: string): number =>
+  audioKey.endsWith('.wav') ? WAV_HEADER_BYTES : 0
 const BYTES_PER_SAMPLE = 2
 // Word-end timestamps tend to land slightly before the sound actually stops, so
 // each segment's tail is extended by this much (clamped to the recording) to
@@ -87,10 +93,11 @@ export const buildSlideAudio = async (
     // Read ONLY this segment's bytes. Pulling the whole object here would load
     // an entire lecture recording to play back a few seconds of it, on a path
     // any viewer can trigger.
+    const offset = bodyOffset(rec.audioKey)
     const slice = await storage.getRange(
       rec.audioKey,
-      WAV_HEADER_BYTES + start,
-      WAV_HEADER_BYTES + end,
+      offset + start,
+      offset + end,
     )
     if (!slice?.length) continue
     slices.push(slice)

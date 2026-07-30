@@ -36,6 +36,15 @@ const UPLOAD_QUEUE_SIZE = 2
 const UPLOAD_HIGH_WATER_MARK = 1024 * 1024
 
 /**
+ * Worst-case memory one streaming upload can hold: its own buffer plus the
+ * parts in flight. Callers that budget concurrent uploads reserve this per
+ * upload, so the figure stays derived from the values above rather than being
+ * guessed somewhere else and drifting.
+ */
+export const UPLOAD_MEMORY_WINDOW_BYTES =
+  UPLOAD_HIGH_WATER_MARK + UPLOAD_PART_BYTES * UPLOAD_QUEUE_SIZE
+
+/**
  * An upload in progress: bytes are handed over as they arrive rather than
  * assembled in memory first, so an object of unknown (or unbounded) length
  * costs a fixed window instead of its full size.

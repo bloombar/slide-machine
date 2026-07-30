@@ -213,27 +213,28 @@ const envSchema = z.object({
   // Days to keep retained recordings before a daily sweep deletes the WAV and
   // its deck reference (cost + student-voice privacy). 0 = keep forever.
   AUDIO_RETENTION_DAYS: z.coerce.number().int().nonnegative().default(30),
-  // Ceiling on ONE session's buffered audio (MB) before it stops retaining —
-  // a marathon lecture can't grow memory without bound. At the default 16 kHz
-  // capture rate 300 MB is ~2 h 44 min (~55 min if a client streams 48 kHz).
-  // Transcription continues past the cap; only the audio copy stops.
-  // 0 = no per-session cap (the global ceiling below still applies).
+  // Ceiling on how much audio ONE session may STORE (MB). Audio streams out as
+  // it arrives, so a long lecture no longer costs memory — this is a
+  // storage-cost limit, not a memory guard. At the default 16 kHz capture rate
+  // 300 MB is ~2 h 44 min (~55 min if a client streams 48 kHz). Past it the
+  // recording is truncated; transcription continues. 0 = no per-session cap.
   AUDIO_RETENTION_MAX_SESSION_MB: z.coerce
     .number()
     .int()
     .nonnegative()
     .default(300),
-  // Ceiling on live retention buffers across ALL concurrent sessions (MB). The
-  // per-session cap alone doesn't bound the process: N recordings each claim
-  // their own buffer, and audio Buffers sit outside the V8 heap, so overrun
-  // shows up as RSS growth and an OOM kill, not a catchable heap error. Once
-  // the total is reached, further sessions simply don't retain — transcription
-  // is never affected. 0 = no global limit (per-session cap only).
+  // Ceiling on the MEMORY live retention may hold across all concurrent
+  // sessions (MB). Each recording holds a fixed in-flight upload window
+  // (~11 MB) rather than its whole length, so this caps how many lectures may
+  // record at once — roughly this value / 11. Audio buffers live outside the
+  // V8 heap, so an overrun shows up as RSS growth and an OOM kill, not a
+  // catchable heap error. Past the ceiling, further sessions simply don't
+  // retain — transcription is never affected. 0 = no global limit.
   AUDIO_RETENTION_MAX_TOTAL_MB: z.coerce
     .number()
     .int()
     .nonnegative()
-    .default(1024),
+    .default(128),
   // Mic capture rate (Hz) the client downsamples to before streaming (CAP-3).
   // Google's models are trained at 16 kHz, so the browser's native 48 kHz
   // triples bytes — bandwidth, retention memory, and stored WAV size — for no

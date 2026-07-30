@@ -165,6 +165,7 @@ describe('per-slide original audio', () => {
   const seedSlideWithPatternedAudio = async (
     startMs: number,
     endMs: number,
+    format: 'wav' | 'pcm' = 'wav',
   ): Promise<{ slideId: string; pcm: Buffer }> => {
     const slide = await SlideModel.create({
       deckId,
@@ -178,8 +179,15 @@ describe('per-slide original audio', () => {
       // Distinct per sample and cheap to verify; wraps harmlessly.
       pcm.writeInt16LE((i % 30_000) - 15_000, i * BYTES_PER_SAMPLE)
     }
-    const audioKey = `audio/${deckId}/patterned.wav`
-    await getStorage().put(audioKey, pcmToWav(pcm, SAMPLE_RATE), 'audio/wav')
+    // Both storage formats must read back identically: new recordings are raw
+    // `.pcm`, and `.wav` recordings retained before that change are still on
+    // the deck until they age out.
+    const audioKey = `audio/${deckId}/patterned-${format}.${format}`
+    await getStorage().put(
+      audioKey,
+      format === 'wav' ? pcmToWav(pcm, SAMPLE_RATE) : pcm,
+      format === 'wav' ? 'audio/wav' : 'audio/L16',
+    )
     await DeckModel.updateOne(
       { _id: deckId },
       {
@@ -219,6 +227,23 @@ describe('per-slide original audio', () => {
     expect(res.status).toBe(200)
 
     // [500, 900+400] ms of the source, at 16 kHz mono 16-bit.
+    const toByte = (ms: number) =>
+      Math.floor((ms / 1000) * SAMPLE_RATE) * BYTES_PER_SAMPLE
+    const expected = pcm.subarray(toByte(500), toByte(1300))
+    expect(res.body.subarray(44).equals(expected)).toBe(true)
+  })
+
+  it('returns the same bytes from a raw .pcm recording', async () => {
+    // The current storage format: no 44-byte header to skip. Getting the
+    // offset wrong for either format shifts every sample.
+    const { slideId, pcm } = await seedSlideWithPatternedAudio(500, 900, 'pcm')
+    const res = await request(server)
+      .get(`/api/slides/${slideId}/audio`)
+      .set('Authorization', `Bearer ${ada}`)
+      .buffer(true)
+      .parse(binary)
+    expect(res.status).toBe(200)
+
     const toByte = (ms: number) =>
       Math.floor((ms / 1000) * SAMPLE_RATE) * BYTES_PER_SAMPLE
     const expected = pcm.subarray(toByte(500), toByte(1300))

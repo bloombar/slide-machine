@@ -124,11 +124,17 @@ export class GoogleCloudDiarizationProvider implements DiarizationProvider {
       console.warn('Diarization: GCS_AUDIO_BUCKET unset; skipping')
       return []
     }
-    const wav = await getStorage().get(input.audioKey)
-    if (!wav) {
+    const audio = await getStorage().get(input.audioKey)
+    if (!audio) {
       console.warn(`Diarization: audio ${input.audioKey} not found; skipping`)
       return []
     }
+    // Recordings are raw LINEAR16 (`.pcm`) — a WAV header cannot be written
+    // while streaming, since it must state a length known only at the end.
+    // Headerless audio carries no format, so state it explicitly; legacy `.wav`
+    // recordings still describe themselves and keep auto-decoding until they
+    // age out (AUDIO_RETENTION_DAYS).
+    const isWav = input.audioKey.endsWith('.wav')
 
     const options = speechClientOptions()
     const projectId = (options as { projectId?: string }).projectId
@@ -138,11 +144,13 @@ export class GoogleCloudDiarizationProvider implements DiarizationProvider {
     }
 
     const { speech, storage } = this.clients()
-    const objectName = `diarize/${randomUUID()}.wav`
+    const objectName = `diarize/${randomUUID()}${isWav ? '.wav' : '.pcm'}`
     const gcsUri = `gs://${bucket}/${objectName}`
     const file = storage.bucket(bucket).file(objectName)
     try {
-      await file.save(wav, { contentType: 'audio/wav' })
+      await file.save(audio, {
+        contentType: isWav ? 'audio/wav' : 'audio/L16',
+      })
 
       const recognizer = `projects/${projectId}/locations/${env.DIARIZATION_LOCATION}/recognizers/_`
       const [operation] = await speech.batchRecognize({
@@ -150,8 +158,17 @@ export class GoogleCloudDiarizationProvider implements DiarizationProvider {
         config: {
           model: 'chirp_3',
           languageCodes: [input.languageCode ?? 'en-US'],
-          // WAV carries its own header, so let the service decode it.
-          autoDecodingConfig: {},
+          // A WAV describes itself; raw PCM does not, so hand the service the
+          // format the capture actually used.
+          ...(isWav
+            ? { autoDecodingConfig: {} }
+            : {
+                explicitDecodingConfig: {
+                  encoding: 'LINEAR16' as const,
+                  sampleRateHertz: input.sampleRate,
+                  audioChannelCount: 1,
+                },
+              }),
           features: {
             // An (empty) diarization config enables speaker labels; word time
             // offsets are opt-in and are what the time-join needs.

@@ -65,9 +65,12 @@ import { ProjectModel } from '../../src/models/project'
 import { DeckModel } from '../../src/models/deck'
 import { SlideModel } from '../../src/models/slide'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
-import { getStorage } from '../../src/storage'
+import { getStorage, UPLOAD_MEMORY_WINDOW_BYTES } from '../../src/storage'
 
 const ONE_MB = 1024 * 1024
+/** The budget now reserves one in-flight upload window per retaining session,
+ * so ceilings are expressed in windows rather than in audio bytes. */
+const WINDOW_MB = Math.ceil(UPLOAD_MEMORY_WINDOW_BYTES / ONE_MB)
 /** Frame size that divides 1 MiB evenly, so the budget fills exactly. */
 const FRAME = 256 * 1024
 
@@ -165,7 +168,9 @@ afterAll(async () => {
 
 beforeEach(async () => {
   resetRetentionBudget()
-  setLimits(1, 300) // 1 MiB global ceiling; per-session cap out of the way
+  // Exactly one in-flight window, so a second concurrent session is refused;
+  // per-session storage cap out of the way.
+  setLimits(WINDOW_MB, 300)
   await Promise.all([
     UserModel.deleteMany({}),
     ProjectModel.deleteMany({}),
@@ -179,10 +184,12 @@ beforeEach(async () => {
 })
 
 describe('audio retention budget', () => {
-  it('truncates a session that runs past the global ceiling', async () => {
+  it('keeps a long session whole — length no longer costs memory', async () => {
+    // The global ceiling used to truncate here, because a session's audio was
+    // held in memory. Streaming means length is a storage question, not a
+    // memory one: the whole recording survives on a one-window budget.
     const deckId = await newDeck(ada, projectId, 'Long Lecture')
     const ws = await openSession(ada, deckId, 'rec-long')
-    // Twice the budget: the first 1 MiB is retained, the rest dropped.
     await stream(ws, 2 * ONE_MB)
     ws.close()
 
@@ -191,15 +198,11 @@ describe('audio retention budget', () => {
       expect(rec).toBeDefined()
       return rec!
     })
-
-    const wav = await getStorage().get(recording.audioKey)
-    expect(wav).not.toBeNull()
-    // Truncated at the ceiling, not the 2 MiB streamed — and still a valid WAV.
-    expect(wav!.toString('ascii', 0, 4)).toBe('RIFF')
-    expect(wav!.length).toBe(44 + ONE_MB)
+    const stored = await getStorage().get(recording.audioKey)
+    expect(stored!.length).toBe(2 * ONE_MB)
   })
 
-  it('truncates one session at the configured per-session cap', async () => {
+  it('truncates one session at the configured per-session storage cap', async () => {
     // Global ceiling off, so only AUDIO_RETENTION_MAX_SESSION_MB can stop this.
     setLimits(0, 1)
     const deckId = await newDeck(ada, projectId, 'Marathon Lecture')
@@ -212,16 +215,15 @@ describe('audio retention budget', () => {
       expect(rec).toBeDefined()
       return rec!
     })
-    const wav = await getStorage().get(recording.audioKey)
-    expect(wav!.length).toBe(44 + ONE_MB)
+    const stored = await getStorage().get(recording.audioKey)
+    // Raw PCM: exactly the cap, with no container to account for.
+    expect(stored!.length).toBe(ONE_MB)
   })
 
-  it('lets 0 disable the per-session cap, leaving only the global ceiling', async () => {
-    setLimits(4, 0)
+  it('lets 0 disable the per-session cap', async () => {
+    setLimits(WINDOW_MB, 0)
     const deckId = await newDeck(ada, projectId, 'Uncapped Lecture')
     const ws = await openSession(ada, deckId, 'rec-uncapped')
-    // Past the old hardcoded behaviour's intent but under the global ceiling:
-    // all of it is retained.
     await stream(ws, 2 * ONE_MB)
     ws.close()
 
@@ -230,8 +232,8 @@ describe('audio retention budget', () => {
       expect(rec).toBeDefined()
       return rec!
     })
-    const wav = await getStorage().get(recording.audioKey)
-    expect(wav!.length).toBe(44 + 2 * ONE_MB)
+    const stored = await getStorage().get(recording.audioKey)
+    expect(stored!.length).toBe(2 * ONE_MB)
   })
 
   it('declines retention for a session opened while the budget is spent', async () => {
@@ -259,10 +261,9 @@ describe('audio retention budget', () => {
   })
 
   it('frees the budget when audio is discarded for a non-editor', async () => {
-    // Access is verified asynchronously, so a non-editor's audio IS buffered
-    // (and charged to the budget) before being thrown away. If that discard
-    // skipped the release, one unauthorized session would starve the budget
-    // for the life of the process.
+    // A refused session still reserves its window while the edit check runs.
+    // If that path skipped the release, one unauthorized connection would
+    // starve the budget for the life of the process.
     const bob = await registerUser('bob@example.com')
     const bobProject = await act(bob, 'project.create', { title: 'Bob' })
     const bobDeck = await newDeck(bob, bobProject.body.id, 'Bob Lecture')
@@ -304,7 +305,7 @@ describe('audio retention budget', () => {
       expect(rec).toBeDefined()
       return rec!
     })
-    const wav = await getStorage().get(recording.audioKey)
-    expect(wav!.length).toBe(44 + 2 * FRAME)
+    const stored = await getStorage().get(recording.audioKey)
+    expect(stored!.length).toBe(2 * FRAME)
   })
 })

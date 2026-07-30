@@ -62,18 +62,28 @@ bucket rule is required. As a belt-and-suspenders guard you may **also** add a
 Spaces/S3 **lifecycle expiration rule scoped to the `audio/` prefix** (e.g. 30
 days) — dashboard → your Space → **Settings → Lifecycle rules**, or via
 `s3api put-bucket-lifecycle-configuration` with a `Filter.Prefix` of `audio/`.
-Retention also costs **memory**, not just bucket space: each live session
-buffers its audio in the server process until the socket closes, and the flush
-briefly holds a session's audio twice while it builds the WAV. Audio buffers sit
-outside the V8 heap, so an overrun shows up as RSS growth and an OOM kill rather
-than a catchable error. Two ceilings bound it:
-`AUDIO_RETENTION_MAX_SESSION_MB` (default `300`) caps a single lecture, and
-`AUDIO_RETENTION_MAX_TOTAL_MB` (default `1024`) caps the total across all
-concurrent sessions — **set the total well under the container's limit**,
-leaving room for the app and the flush. Past either ceiling the affected
-sessions transcribe without retaining audio; transcription, slide generation,
-and the transcript are never affected. Budget ~115 MB per concurrent hour-long
-lecture at 16 kHz.
+Audio is **streamed** to storage as it arrives, so a session's memory cost is a
+fixed in-flight window (~11 MB) rather than its whole length — a three-hour
+lecture costs the same as a three-minute one. Two ceilings bound it:
+`AUDIO_RETENTION_MAX_SESSION_MB` (default `300`) limits how much a single
+lecture may **store** (past it the recording is truncated), and
+`AUDIO_RETENTION_MAX_TOTAL_MB` (default `128`) limits the **memory** across all
+concurrent sessions, so it effectively caps how many lectures may record at once
+— roughly its value ÷ 11. Audio buffers sit outside the V8 heap, so an overrun
+shows up as RSS growth and an OOM kill rather than a catchable error: **size the
+total to the host's RAM**, well under the container limit. Past either ceiling
+the affected sessions transcribe without retaining audio; transcription, slide
+generation, and the transcript are never affected.
+
+> **Required: abort incomplete multipart uploads.** Streaming uses multipart
+> uploads, and one interrupted by a crash or a dropped connection leaves parts
+> that consume paid storage and do **not** appear in object listings — so the
+> cost is invisible. The app aborts explicitly on every failure path it can see
+> (`Upload.abort()` alone proved insufficient on Spaces, so it also sweeps the
+> key), but a killed process cannot clean up after itself. Add an
+> **`AbortIncompleteMultipartUpload` lifecycle rule** (e.g. 7 days) on the
+> bucket as the backstop. Verify support in the DO control panel — the Spaces
+> API key used by the app cannot read or write bucket lifecycle configuration.
 
 **Scope it to `audio/`** — an unprefixed rule would also expire slide images
 (`slides/`), TTS narration (`tts/`), and seed files (`seed/`). Note the bucket
@@ -171,8 +181,8 @@ value is baked into the SPA at build.
 | `S3_FORCE_PATH_STYLE` | plain | leave unset/`false` for Spaces (`true` is MinIO-only) |
 | `AUDIO_RETENTION_ENABLED` | plain | `true` to retain live-session audio for diarization (GEN-4); default off. Needs `TRANSCRIPTION_PROVIDER=google-cloud` |
 | `AUDIO_RETENTION_DAYS` | plain | days before the daily sweep deletes a recording; default `30`, `0` = keep forever (see §2 lifecycle note) |
-| `AUDIO_RETENTION_MAX_SESSION_MB` | plain | ceiling on one session's buffered audio; default `300` (~2 h 44 min at 16 kHz), `0` = no per-session cap. Past it that recording is truncated |
-| `AUDIO_RETENTION_MAX_TOTAL_MB` | plain | ceiling on live retention buffers across all concurrent sessions; default `1024`, `0` = no limit. **Size to the host's RAM** — see §2 |
+| `AUDIO_RETENTION_MAX_SESSION_MB` | plain | how much audio one session may **store**; default `300` (~2 h 44 min at 16 kHz), `0` = no per-session cap. Past it that recording is truncated |
+| `AUDIO_RETENTION_MAX_TOTAL_MB` | plain | **memory** ceiling across all concurrent recordings (~11 MB each), so ≈ how many may record at once; default `128`, `0` = no limit. **Size to the host's RAM** — see §2 |
 | `STT_CAPTURE_SAMPLE_RATE` | plain | Hz the browser downsamples mic audio to before streaming; default `16000` (what Cloud STT expects), range `8000`–`48000`, `0` = no downsampling (stream the mic's native rate). Raising it multiplies bandwidth, retention memory, and stored WAV size. Optional |
 | `DELETED_DATA_RETENTION_DAYS` | plain | days a soft-deleted record is kept before the daily sweep purges it and its blobs (P-11); default `90`, `0` = keep tombstones forever |
 | `WHITEBOARD_SUPPRESS_DEBOUNCE_MS` | plain | grace (ms) after the last whiteboard gesture during which speech folds into the current slide instead of creating one (EDIT-4); default `5000`, `0` disables. Optional |

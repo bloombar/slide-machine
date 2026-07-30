@@ -1,17 +1,20 @@
 /**
- * Process-wide ceiling on live audio-retention buffers (GEN-4 Phase 2).
+ * Process-wide ceiling on the memory live audio retention may hold (GEN-4).
  *
- * The per-session cap in audio-socket.ts bounds ONE recording; it does not
- * bound the process. Every concurrent session claims its own buffer, and audio
- * Buffers live outside the V8 heap, so an overrun surfaces as RSS growth and an
- * OOM kill rather than a catchable heap error. This tracks the bytes currently
- * held across all sessions so retention can be declined before that happens.
+ * Audio now streams to storage as it arrives, so a session's cost no longer
+ * grows with its length — it is a fixed in-flight window (the upload's own
+ * buffer plus its parts in flight, `UPLOAD_MEMORY_WINDOW_BYTES`). What still
+ * needs bounding is CONCURRENCY: every simultaneous recording claims another
+ * window, and audio Buffers live outside the V8 heap, so an overrun surfaces as
+ * RSS growth and an OOM kill rather than a catchable heap error.
+ *
+ * So each retaining session reserves one window when it starts and releases it
+ * once the upload has finished or been abandoned. The budget therefore answers
+ * "how many lectures may record at once", and the ceiling can be far smaller
+ * than when whole sessions were buffered.
  *
  * Declining only ever costs the retained audio copy — transcription, slide
- * generation, and the transcript are untouched, exactly like the per-session
- * cap. Accounting is deliberately conservative: bytes stay reserved until the
- * flush finishes, because the flush is the peak (it concatenates the buffered
- * chunks into one WAV before handing it to storage).
+ * generation, and the transcript are untouched.
  */
 import { env } from '../config/env'
 

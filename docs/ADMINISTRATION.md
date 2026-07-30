@@ -225,9 +225,10 @@ session's audio is stored as a WAV under the bucket's `audio/` prefix
 (~1.9 MB/min at the default 16 kHz `STT_CAPTURE_SAMPLE_RATE`), and a **daily
 sweep** deletes recordings past `AUDIO_RETENTION_DAYS` (default 30; `0` = keep
 forever) with their deck references. `AUDIO_RETENTION_MAX_SESSION_MB` (default
-`300`) caps one lecture's buffered audio and `AUDIO_RETENTION_MAX_TOTAL_MB`
-(default `1024`) caps all concurrent sessions together; past either, the
-affected sessions transcribe without retaining audio. As a backstop, add an object-storage lifecycle rule **scoped to
+`300`) caps how much one lecture may store and `AUDIO_RETENTION_MAX_TOTAL_MB`
+(default `128`) caps the memory all concurrent recordings may hold — roughly
+how many may record at once, since audio streams out rather than accumulating.
+Past either, the affected sessions transcribe without retaining audio. As a backstop, add an object-storage lifecycle rule **scoped to
 `audio/`** ([docs/DEPLOY.md §2](DEPLOY.md#2-do-spaces-object-storage-for-uploads))
 so it doesn't also expire slide images, narration, or seed files.
 
