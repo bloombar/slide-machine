@@ -75,6 +75,9 @@ total to the host's RAM**, well under the container limit. Past either ceiling
 the affected sessions transcribe without retaining audio; transcription, slide
 generation, and the transcript are never affected.
 
+Full pipeline — capture, downsampling, streaming, storage format, playback, and
+diarization — is documented in [AUDIO.md](AUDIO.md).
+
 > **Required: abort incomplete multipart uploads.** Streaming uses multipart
 > uploads, and one interrupted by a crash or a dropped connection leaves parts
 > that consume paid storage and do **not** appear in object listings — so the

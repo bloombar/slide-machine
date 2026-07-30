@@ -204,9 +204,60 @@ Three consequences of streaming rather than buffering:
 
 **Abort is not what the SDK says it is.** Verified against DigitalOcean Spaces: `Upload.abort()` returned without removing the multipart upload, which then sat listed, consuming paid storage and invisible to object listings. Ending the stream and awaiting `done()` clears it but *completes* the upload — persisting audio we are discarding. So abort also sweeps the key's multipart uploads explicitly, and an `AbortIncompleteMultipartUpload` lifecycle rule is required as the backstop for a killed process ([DEPLOY.md](DEPLOY.md)).
 
-**Why not the alternative.** Uploading from the client was impossible (it doesn't retain the streamed audio). Blocking on GCS would have stalled all of Phase 2 on an unprovisioned bucket; blob-first keeps the audio captured now, and the `gs://` copy is an additive step. In-memory buffering (vs. streaming to disk/multipart) is a deliberate first-cut simplicity, bounded by the cap; a streaming upload is a later refinement if long sessions warrant it.
+**Why not the alternative.** Uploading from the client was impossible (it doesn't retain the streamed audio). Blocking on GCS would have stalled all of Phase 2 on an unprovisioned bucket; blob-first keeps the audio captured now, and the `gs://` copy is an additive step. In-memory buffering was the deliberate first cut, bounded by the cap — **superseded 2026-07-30** by the streaming upload described above, once measurement showed the buffer growing with lecture length (64 MB of RSS for four minutes of audio, and roughly 3× the audio at flush).
 
-**Retention window / deletion.** Retained audio is purely intermediate (needed only until diarization consumes it) and contains student voices, so it is not kept indefinitely — for cost *and* privacy. A daily app-side sweep ([jobs/audio-cleanup.ts](../server/src/jobs/audio-cleanup.ts)) deletes any recording older than `AUDIO_RETENTION_DAYS` (default 30, `0` = keep forever): the WAV *and* its deck reference, so storage and the DB stay consistent. The trigger is time-based here because there is no diarization yet; **Phase 3 will additionally delete a recording as soon as the batch pass consumes it** (more eager — this sweep then only catches un-processed audio), and will remove the `gs://` copy too. A Spaces/S3 lifecycle rule scoped to the **`audio/` prefix** is a complementary zero-code guard (documented in [DEPLOY.md](DEPLOY.md)), but it is blind to the DB and can leave a dangling reference — so the app-side sweep is the source of truth, and the Phase-3 read path must tolerate a missing audio object. The `audio/` prefix is isolated from images (`slides/`), TTS (`tts/`), and seed (`seed/`), so prefix-scoped expiry is safe.
+**Retention window / deletion.** Retained audio is purely intermediate (needed only until diarization consumes it) and contains student voices, so it is not kept indefinitely — for cost *and* privacy. A daily app-side sweep ([jobs/audio-cleanup.ts](../server/src/jobs/audio-cleanup.ts)) deletes any recording older than `AUDIO_RETENTION_DAYS` (default 30, `0` = keep forever): the audio object *and* its deck reference, so storage and the DB stay consistent. The trigger is time-based here because there is no diarization yet; **Phase 3 will additionally delete a recording as soon as the batch pass consumes it** (more eager — this sweep then only catches un-processed audio), and will remove the `gs://` copy too. A Spaces/S3 lifecycle rule scoped to the **`audio/` prefix** is a complementary zero-code guard (documented in [DEPLOY.md](DEPLOY.md)), but it is blind to the DB and can leave a dangling reference — so the app-side sweep is the source of truth, and the Phase-3 read path must tolerate a missing audio object. The `audio/` prefix is isolated from images (`slides/`), TTS (`tts/`), and seed (`seed/`), so prefix-scoped expiry is safe.
+
+## Capture rate: downsample in the worklet, frame by duration (2026-07-30)
+
+**Problem.** The browser captured at its hardware rate — typically 48 kHz — and streamed that to the server. Cloud STT models are trained at 16 kHz and downsample internally anyway, so two thirds of every byte bought nothing: three times the socket traffic, three times the server-side retention memory, three times the stored recording.
+
+**Choice.** Downsample in the AudioWorklet before the PCM leaves the browser ([stt/pcm-worklet.js](../client/src/stt/pcm-worklet.js)), to `STT_CAPTURE_SAMPLE_RATE` (default 16 kHz, published to the client via `/api/config` so one server flip changes it). Two properties are load-bearing:
+
+- **Each output sample is the mean of the inputs it spans**, not one of them. Dropping samples aliases high frequencies down into the speech band; averaging is a cheap low-pass that prevents it. The ratio carries its fractional remainder forward, so a non-integer ratio (44.1 → 16 kHz is 2.756…) holds the output rate exact instead of drifting.
+- **The frame is sized by duration (40 ms), not by a sample count.** A fixed count buffers proportionally longer at a lower rate — 2048 samples is 43 ms at 48 kHz but 128 ms at 16 kHz — so the first cut silently added ~85 ms to every transcript and every generated slide. Deriving the frame from the output rate pins the pacing whatever the rate is.
+
+The client reports the rate it actually streamed, never the rate it was asked for; if those disagreed Cloud STT would read the PCM at the wrong speed. A context already at or below the target is never upsampled, and `0` disables downsampling entirely.
+
+**Verified, not assumed.** Measured full-stack against live Google STT and Gemini, two complete builds side by side: transcription is character-identical (10/10 trials), end-to-end latency is unchanged (medians within 3 ms on a 20 s measurement), and the byte reduction is exactly 3.00×.
+
+**Why not the alternatives.** Downsampling server-side would save storage and memory but not bandwidth, and the bytes are already on the wire by then. Sending 48 kHz and letting Google cope is what we did before; it costs the same money in storage and memory for audio the model discards.
+
+## Streaming uploads: lib-storage, and an abort that is not one (2026-07-30)
+
+**Problem.** Retention needed to stop buffering whole sessions, which meant handing bytes to storage as they arrive. Our source pushes (a live WebSocket); S3 multipart wants to pull, needs 5 MiB parts, and has to be completed or aborted explicitly.
+
+**Choice.** A stream-shaped seam on `FileStorage` — `createUploadStream(key, contentType)` returning `{ write, done, abort }` ([storage/index.ts](../server/src/storage/index.ts)) — with `@aws-sdk/lib-storage`'s `Upload` behind it on S3 and a temp-file-then-rename on local. A `PassThrough` bridges push to pull, and its `highWaterMark` is what makes `write` report back-pressure. Parts are S3's concept and stay inside that adapter; the local adapter is naturally a file stream.
+
+The first instinct was to write the four multipart commands by hand "for control over part sizing and abort" — which was wrong, because `Upload` exposes `partSize` and `queueSize` and has an `abort()`. Hand-rolling would have bought only per-part visibility, which matters solely for crash resumability (out of scope), against ~100 lines of part numbering and ETag bookkeeping owned forever. `Upload` also degrades to a plain `PutObject` when the body is under one part, which deletes the short-lecture edge case.
+
+**`Upload.abort()` is not sufficient on DigitalOcean Spaces.** Verified live: it returned without removing the multipart upload, which then sat listed — consuming paid storage and invisible to object listings, so nothing surfaces the leak. Ending the stream and awaiting `done()` does clear it, but that *completes* the upload: the object persists, which is the opposite of an abort and would retain audio being discarded for lack of permission. Abort therefore also sweeps the key's multipart uploads explicitly. A killed process still cannot clean up after itself, so an `AbortIncompleteMultipartUpload` lifecycle rule on the bucket is **required**, not advisory ([AUDIO.md](AUDIO.md)).
+
+**A risk that did not materialise.** Recent AWS SDK v3 versions send flexible-checksum headers by default and S3-compatible providers have historically rejected them, with multipart the worst case. Both MinIO and Spaces accepted a 12 MiB streamed upload with a matching sha256 and a `-3` ETag (three real parts), so no `requestChecksumCalculation` override is needed. Recorded because the next person to see a checksum error should know this was tested, not assumed.
+
+## Recordings are raw PCM, with no container (2026-07-30)
+
+**Problem.** A WAV header must state the total byte length, which is unknown until the lecture ends. Streaming cannot write it up front, and a multipart upload's first part cannot be a 44-byte placeholder patched later — parts are immutable and every part but the last must be ≥5 MiB.
+
+**Choice.** Store raw LINEAR16 mono PCM under a `.pcm` key. `sampleRate` is already on the recording, so nothing is lost: playback stops skipping a header, re-transcription already wanted headerless audio, and diarization states the format explicitly (`explicitDecodingConfig` with the `sampleRate` it already receives) instead of asking the service to auto-detect one. Both formats are read until the last pre-change `.wav` ages out under `AUDIO_RETENTION_DAYS`; the two conditionals carry a comment naming their removal condition.
+
+**Validated against the live service.** The diarization adapter's own docstring warned its v2 field shapes came from documentation and had never been confirmed on a real run. Both paths have now been exercised end to end against Google `BatchRecognize`: `.pcm` + explicit decoding and legacy `.wav` + auto-decoding each returned `sessionsProcessed: 1, segmentsTagged: 1`.
+
+**Why not the alternative.** Writing the header with placeholder lengths would have avoided the migration window entirely, and playback would not have noticed (it ignores the length fields). It was rejected because BatchRecognize's auto-decode might reject or misread a bogus size, and that failure would surface late, on audio already recorded, plausibly as a silent empty result. A one-week dual-read costs less than an unverified assumption about undocumented behaviour.
+
+## Playback reads by byte range (2026-07-30)
+
+**Problem.** Serving a slide's original audio pulled the *entire* session recording into memory to slice out a few seconds, and cached every recording it touched. A slide from a two-hour lecture cost the whole recording — on a path any viewer with playback access can trigger, with no cap, unlike the write side.
+
+**Choice.** `getRange(key, start, end)` on the storage seam — a positioned read on local, a `Range` header on S3 — and one ranged fetch per transcript segment ([lib/slide-audio.ts](../server/src/lib/slide-audio.ts)). The recording's length is derived from `durationMs × sampleRate × 2`, so there is no `HEAD` request and no schema change; a range past the end returns only what exists, which is why rounding `durationMs` to the millisecond is harmless.
+
+**A note on the tests.** The existing fixtures were silence, so an off-by-44 error shifted every sample and still passed. The byte-exactness test seeds a ramp instead; mutation-checking it (dropping the header offset) fails that test while all the silence-based ones stay green.
+
+## Numeric `0` means "no limit", never "off" (2026-07-30)
+
+**Problem.** Several tunables use `0` as a sentinel, and the natural reading is exactly backwards: `AUDIO_RETENTION_DAYS=0` sounds like "keep nothing" but means "keep forever".
+
+**Choice.** One convention, stated in every `.env` variant and in the deploy docs: for `STT_CAPTURE_SAMPLE_RATE`, `AUDIO_RETENTION_DAYS`, `AUDIO_RETENTION_MAX_SESSION_MB`, `AUDIO_RETENTION_MAX_TOTAL_MB`, and `DELETED_DATA_RETENTION_DAYS`, `0` **removes a bound** and therefore costs more, not less. `WHITEBOARD_SUPPRESS_DEBOUNCE_MS` is the documented exception, where `0` is a literal zero-length window and does disable the behaviour. `STT_CAPTURE_SAMPLE_RATE` additionally rejects values between `1` and `7999` at boot, so a typo cannot quietly produce unusable audio.
 
 ## Diarization: a DiarizationProvider + pure time-join, roles by talk-time (2026-07-20)
 
