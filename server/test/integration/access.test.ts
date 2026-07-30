@@ -4,7 +4,15 @@
  * email with per-person roles, editor-aware content actions, and the
  * public profile route with its no-existence-leak guarantee.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  afterEach,
+} from 'vitest'
 import request from 'supertest'
 import { Types } from 'mongoose'
 import { env } from '../../src/config/env'
@@ -429,5 +437,100 @@ describe('public profiles', () => {
     expect(priv.status).toBe(404)
     // The owner still sees their own profile
     expect((await getProfile(await adaId(), ada)).status).toBe(200)
+  })
+
+  it('offers editing to the owner but not to strangers', async () => {
+    expect((await getProfile(await adaId(), ada)).body.canEdit).toBe(true)
+    expect((await getProfile(await adaId(), byron)).body.canEdit).toBe(false)
+    expect((await getProfile(await adaId())).body.canEdit).toBe(false)
+  })
+
+  describe('for an admin', () => {
+    afterEach(() => {
+      delete process.env.ADMIN_EMAILS
+    })
+
+    it('opens a private profile for editing', async () => {
+      process.env.ADMIN_EMAILS = 'byron@example.com'
+      await act(ada, 'user.setProfileVisibility', {
+        profileVisibility: 'private',
+      })
+      const res = await getProfile(await adaId(), byron)
+      expect(res.status).toBe(200)
+      expect(res.body.user.displayName).toBe('ada')
+      expect(res.body.canEdit).toBe(true)
+      // The bypass is for the profile only — a stranger is still refused
+      const stranger = await registerUser('cleo@example.com')
+      expect((await getProfile(await adaId(), stranger)).status).toBe(404)
+    })
+
+    it('does not bypass lecture ACLs on this route', async () => {
+      process.env.ADMIN_EMAILS = 'byron@example.com'
+      await act(ada, 'deck.setAccess', { deckId, visibility: 'restricted' })
+      const res = await getProfile(await adaId(), byron)
+      expect(res.status).toBe(200)
+      // Private lectures belong in the admin console, not on the profile
+      expect(res.body.projects).toHaveLength(0)
+    })
+
+    it('refuses to offer editing on another admin’s profile', async () => {
+      process.env.ADMIN_EMAILS = 'byron@example.com,ada@example.com'
+      const res = await getProfile(await adaId(), byron)
+      expect(res.status).toBe(200)
+      expect(res.body.canEdit).toBe(false)
+    })
+  })
+})
+
+describe('user.updateProfile', () => {
+  const adaId = async () =>
+    (await UserModel.findOne({ email: 'ada@example.com' }))!._id!.toString()
+
+  it('saves the display name and bio onto the profile', async () => {
+    const res = await act(ada, 'user.updateProfile', {
+      displayName: 'Ada Lovelace',
+      bio: 'Teaches waves.',
+    })
+    expect(res.status).toBe(200)
+    expect(res.body.displayName).toBe('Ada Lovelace')
+    expect(res.body.bio).toBe('Teaches waves.')
+
+    const profile = await getProfile(await adaId())
+    expect(profile.body.user.displayName).toBe('Ada Lovelace')
+    expect(profile.body.user.bio).toBe('Teaches waves.')
+  })
+
+  it('changes only the fields it is given', async () => {
+    await act(ada, 'user.updateProfile', { bio: 'Teaches waves.' })
+    const res = await act(ada, 'user.updateProfile', { displayName: 'Ada L.' })
+    expect(res.body.displayName).toBe('Ada L.')
+    expect(res.body.bio).toBe('Teaches waves.')
+  })
+
+  it('clears the bio when given an empty one', async () => {
+    await act(ada, 'user.updateProfile', { bio: 'Teaches waves.' })
+    const res = await act(ada, 'user.updateProfile', { bio: '   ' })
+    expect(res.status).toBe(200)
+    expect(res.body.bio).toBeUndefined()
+  })
+
+  it('rejects a blank display name and an over-long bio', async () => {
+    const blank = await act(ada, 'user.updateProfile', { displayName: '  ' })
+    expect(blank.status).toBe(400)
+    const long = await act(ada, 'user.updateProfile', { bio: 'x'.repeat(2001) })
+    expect(long.status).toBe(400)
+  })
+
+  it('never touches another account', async () => {
+    await act(byron, 'user.updateProfile', { displayName: 'Byron B.' })
+    const ada2 = await UserModel.findById(await adaId())
+    expect(ada2!.displayName).toBe('ada')
+  })
+
+  it('rejects unauthenticated calls', async () => {
+    const res = await request(server)
+      .post('/api/actions/user.updateProfile')
+      .send({ displayName: 'Nobody' })
+    expect(res.status).toBe(401)
   })
 })

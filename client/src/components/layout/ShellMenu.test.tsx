@@ -41,13 +41,13 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('ShellMenu', () => {
-  it('opens to Home, Profile, and Log out when signed in', async () => {
+  it('points Profile at the signed-in user’s own profile page', async () => {
     renderMenu(true)
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
     await vi.waitFor(() =>
       expect(screen.getByRole('menuitem', { name: 'Profile' })).toHaveAttribute(
         'href',
-        '/app/profile',
+        '/u/u1',
       ),
     )
     expect(screen.getByRole('menuitem', { name: 'Home' })).toHaveAttribute(

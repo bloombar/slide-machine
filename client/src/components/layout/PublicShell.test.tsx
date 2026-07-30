@@ -49,7 +49,7 @@ describe('PublicShell', () => {
     await vi.waitFor(() =>
       expect(screen.getByRole('menuitem', { name: 'Profile' })).toHaveAttribute(
         'href',
-        '/app/profile',
+        '/u/u1',
       ),
     )
   })

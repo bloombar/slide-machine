@@ -46,10 +46,12 @@ test('projects persist across logout and login', async ({ page }) => {
   await createProject(page, 'Biology 101')
   await expect(page.getByText('Biology 101')).toBeVisible()
 
-  // Profile now lives in the header's hamburger menu; sign out from there
+  // The hamburger menu's Profile opens the user's own profile page;
+  // sign out lives in its account settings
   await page.getByRole('button', { name: 'Menu' }).click()
   await page.getByRole('menuitem', { name: 'Profile' }).click()
-  await expect(page).toHaveURL(/\/app\/profile$/)
+  await expect(page).toHaveURL(/\/u\/[a-f0-9]+$/)
+  await page.getByRole('button', { name: 'Settings' }).click()
   await page.getByRole('button', { name: 'Sign out' }).click()
   await expect(page).toHaveURL(/\/login$/)
 

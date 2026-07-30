@@ -106,16 +106,16 @@ test('sharing: view/edit grants, private no-leak, public profile', async ({
   await guestPage.reload()
   await expect(guestPage.getByTestId('slide')).toBeVisible()
 
-  // Owner's public profile: only visible lectures appear. The private
-  // deck is hidden from anonymous visitors but shown to the editor.
-  await ownerPage.goto('/app/profile')
-  await ownerPage
-    .getByRole('link', { name: 'View your public profile' })
-    .click()
+  // Owner's profile, reached from the hamburger menu: only visible
+  // lectures appear. The private deck is hidden from anonymous visitors
+  // but shown to the editor.
+  await ownerPage.getByRole('button', { name: 'Menu' }).click()
+  await ownerPage.getByRole('menuitem', { name: 'Profile' }).click()
   await expect(
     ownerPage.getByRole('heading', { name: owner.name }),
   ).toBeVisible()
   const profileUrl = ownerPage.url()
+  expect(profileUrl).toContain('/u/')
 
   await anonPage.goto(profileUrl)
   await expect(
@@ -128,14 +128,31 @@ test('sharing: view/edit grants, private no-leak, public profile', async ({
     guestPage.getByRole('link', { name: /Shared Waves/ }),
   ).toBeVisible()
 
-  // Private profile reads as missing to others
-  await ownerPage.goto('/app/profile')
+  // The owner edits their display name and bio in place; visitors see it
+  await ownerPage.getByRole('button', { name: 'Edit' }).click()
+  await ownerPage.getByLabel('Display name').fill(`${owner.name} Jr`)
+  await ownerPage.getByLabel('Bio').fill('Lectures on waves.')
+  await ownerPage.getByRole('button', { name: 'Save' }).click()
+  await expect(
+    ownerPage.getByRole('heading', { name: `${owner.name} Jr` }),
+  ).toBeVisible()
+
+  await anonPage.reload()
+  await expect(
+    anonPage.getByRole('heading', { name: `${owner.name} Jr` }),
+  ).toBeVisible()
+  await expect(anonPage.getByText('Lectures on waves.')).toBeVisible()
+
+  // Private profile reads as missing to others; the toggle now lives in
+  // the settings modal behind the profile's Settings button
+  await ownerPage.getByRole('button', { name: 'Settings' }).click()
   const profileToggle = ownerPage.getByRole('checkbox', {
     name: 'Public profile',
   })
   // Controlled input: it unticks when the save round-trips
   await profileToggle.click()
   await expect(profileToggle).not.toBeChecked()
+  await ownerPage.getByRole('button', { name: 'Close settings' }).click()
   await anonPage.reload()
   await expect(
     anonPage.getByText('This profile does not exist or is private.'),
