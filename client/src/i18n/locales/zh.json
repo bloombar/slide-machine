@@ -1,0 +1,712 @@
+{
+  "_meta": {
+    "locale": "zh",
+    "reviewed": false,
+    "note": "机器翻译，尚未经母语者校对。缺失的键会回退到英文。"
+  },
+  "common": {
+    "loading": "加载中…",
+    "save": "保存",
+    "saving": "保存中…",
+    "cancel": "取消",
+    "close": "关闭",
+    "closeEsc": "关闭（Esc）",
+    "create": "创建",
+    "done": "完成",
+    "ok": "确定",
+    "stop": "停止",
+    "resume": "继续",
+    "dismiss": "关闭提示",
+    "edit": "编辑",
+    "delete": "删除",
+    "settings": "设置",
+    "or": "或",
+    "dangerZone": "危险操作",
+    "resetToDefault": "恢复默认值",
+    "listSeparator": "、",
+    "adminEditNotice": "你正以管理员身份编辑其他用户的{entity, select, account {账户} project {项目} lecture {课程} other {设置}}。你在此做的每一处更改都会记入审计日志。"
+  },
+  "nav": {
+    "brand": "The Slide Machine",
+    "brandHome": "The Slide Machine — 首页",
+    "menu": "菜单",
+    "primary": "主导航",
+    "home": "首页",
+    "profile": "个人资料",
+    "admin": "管理",
+    "logIn": "登录",
+    "logOut": "退出登录"
+  },
+  "landing": {
+    "title": "The Slide Machine V2",
+    "tagline": "尽管开口讲——幻灯片会跟上。",
+    "cta": "登录后开始使用"
+  },
+  "auth": {
+    "signIn": "登录",
+    "signingIn": "正在登录…",
+    "signUp": "注册",
+    "signOut": "退出登录",
+    "createAccount": "创建账户",
+    "creatingAccount": "正在创建…",
+    "email": "电子邮箱",
+    "password": "密码",
+    "displayName": "显示名称",
+    "noAccount": "还没有账户？",
+    "createOne": "创建一个",
+    "alreadyRegistered": "已经注册了？",
+    "signInLink": "登录",
+    "continueWithGoogle": "使用 Google {action}",
+    "errors": {
+      "google": "无法通过 Google 登录——请重试",
+      "signIn": "出了点问题——请重试",
+      "register": "出了点问题——请重试"
+    }
+  },
+  "health": {
+    "summary": "API {status}",
+    "environment": "环境",
+    "version": "版本",
+    "uptime": "运行时长",
+    "state": {
+      "ok": "正常",
+      "degraded": "降级",
+      "down": "不可用",
+      "disabled": "已停用",
+      "loading": "检查中…",
+      "error": "无法连接"
+    },
+    "components": {
+      "mongo": "数据库",
+      "storage": "存储",
+      "audioStorage": "音频存储",
+      "gemini": "生成式 AI",
+      "stt": "语音识别",
+      "tts": "语音合成"
+    }
+  },
+  "profile": {
+    "notFound": "该个人资料不存在或未公开。",
+    "displayName": "显示名称",
+    "bio": "简介",
+    "bioPlaceholder": "显示在你个人资料上的简短介绍。",
+    "noBio": "暂无简介",
+    "noLectures": "没有可显示的课程。",
+    "displayNameRequired": "显示名称为必填项。",
+    "interfaceLanguage": "界面语言",
+    "interfaceLanguageHint": "菜单、按钮和消息将以此语言显示。",
+    "lectureLanguage": "授课语言",
+    "lectureLanguageHint": "语音识别和生成的幻灯片使用此语言。项目和课程可以覆盖它。",
+    "lectureLanguageDefault": "{own, select, true {你的界面语言} other {该用户的界面语言}}",
+    "plan": "套餐：",
+    "publicProfile": "公开个人资料",
+    "publicProfileHint": "公开个人资料——其他人可以看到{own, select, true {你} other {该用户}}公开和共享的课程",
+    "closeSettings": "关闭设置",
+    "adminProfile": {
+      "title": "编辑该用户的个人资料？",
+      "message": "该个人资料属于其他用户。你可以以管理员身份修改它；每一处更改都会记入审计日志。",
+      "confirm": "保存更改"
+    },
+    "adminSettings": {
+      "title": "编辑该用户的设置？",
+      "message": "该账户属于 {name}。你可以以管理员身份修改其设置；每一处更改都会记入审计日志。",
+      "confirm": "编辑设置"
+    },
+    "errors": {
+      "save": "无法保存个人资料。",
+      "loadAccount": "无法加载该账户。",
+      "saveSettings": "无法保存这些设置。"
+    }
+  },
+  "language": {
+    "label": "语言",
+    "inherit": "默认 — {source}"
+  },
+  "voice": {
+    "label": "朗读语音",
+    "systemDefault": "系统默认",
+    "descriptions": {
+      "emma": "温暖女声",
+      "sophie": "明亮女声",
+      "james": "低沉男声",
+      "daniel": "清晰男声",
+      "aria": "自然女声（高级）",
+      "nova": "自然女声（高级）",
+      "leo": "自然男声（高级）",
+      "owen": "自然男声（高级）"
+    }
+  },
+  "freedom": {
+    "label": "AI 自由度",
+    "min": "只用我说的内容",
+    "max": "自由发挥",
+    "valueText": "{max} 中的 {value}"
+  },
+  "template": {
+    "label": "幻灯片模板",
+    "heading": "模板",
+    "exportYaml": "将模板导出为 YAML",
+    "exportYamlHint": "将该模板的样式和版式下载为可重新导入的 YAML 文件。"
+  },
+  "layout": {
+    "change": "更改幻灯片版式",
+    "close": "关闭版式选择器",
+    "pickerLabel": "幻灯片版式",
+    "changeTemplate": "更换模板",
+    "fromTemplate": "来自 <strong>{name}</strong> 模板的版式。"
+  },
+  "lecture": {
+    "untitled": "未命名课程",
+    "options": "“{name}”的操作",
+    "new": {
+      "action": "新建课程",
+      "label": "开始一节新课程",
+      "inProject": "在“{project}”中开始一节新课程"
+    },
+    "import": {
+      "action": "导入",
+      "label": "导入课程",
+      "intoProject": "将课程导入“{project}”",
+      "imported": "已导入“{name}”。",
+      "importedWithWarnings": "已导入“{name}”。{warnings}",
+      "errors": {
+        "read": "无法读取该文件",
+        "invalid": "无法导入该文件：{details}",
+        "failed": "无法导入该文件"
+      }
+    },
+    "errors": {
+      "create": "无法创建课程"
+    }
+  },
+  "project": {
+    "untitled": "默认项目",
+    "titleLabel": "项目标题",
+    "lectures": "课程",
+    "options": "“{name}”的操作",
+    "new": {
+      "title": "新建项目",
+      "action": "新建项目",
+      "name": "标题",
+      "namePlaceholder": "例如：生物学 101",
+      "description": "说明 <hint>（可选）</hint>",
+      "descriptionPlaceholder": "这个项目讲什么？",
+      "submit": "创建项目"
+    },
+    "delete": {
+      "action": "删除项目",
+      "title": "删除项目？",
+      "message": "“{name}”及其所有课程、幻灯片和参考材料将被永久删除。"
+    },
+    "adminSettings": {
+      "title": "编辑该项目的设置？",
+      "message": "“{name}”属于其他用户。你可以以管理员身份修改其设置；每一处更改都会记入审计日志。"
+    },
+    "settings": {
+      "title": "项目设置",
+      "scope": "这些设置适用于该项目中的所有课程（个别课程可以覆盖其中一部分）。",
+      "templateHeading": "默认模板",
+      "templateHint": "该项目中的新课程以此模板开始。每节课程保留自己的模板，并可随时在其设置中更换。",
+      "seedNotesHint": "为该项目所有课程的幻灯片生成提供指引的背景资料。自动保存。",
+      "seedNotesLabel": "项目参考笔记",
+      "seedNotesPlaceholder": "关键主题、术语、计划结构…",
+      "seedMaterialHint": "用于提取背景文字和图像的文档与照片，该项目的所有课程均可使用。",
+      "freedomHint": "AI 可以在讲述者所说内容之外补充多少。该项目中的课程会继承此设置，除非自行设定。",
+      "languageHint": "该项目课程的语音识别和生成文本所用语言，除非课程自行设定。",
+      "languageInherit": "你的个人资料设置或浏览器语言",
+      "voiceHint": "朗读该项目课程所用的语音，除非课程自行设定。它会以项目的语言朗读。",
+      "deleteHint": "删除项目会永久移除其所有课程、幻灯片和参考材料。此操作无法撤销。"
+    },
+    "errors": {
+      "load": "无法加载该项目",
+      "create": "无法创建项目"
+    }
+  },
+  "home": {
+    "welcome": "欢迎，{name}",
+    "showAll": "{count, plural, other {查看全部 # 节课程}}",
+    "otherLectures": "其他课程",
+    "otherLecturesHint": "你在他人项目中拥有的课程。",
+    "errors": {
+      "load": "无法加载项目"
+    }
+  },
+  "plan": {
+    "tier": {
+      "free": "免费版",
+      "pro": "专业版",
+      "max": "旗舰版"
+    }
+  },
+  "slot": {
+    "title": "幻灯片标题",
+    "body": "幻灯片正文",
+    "bullets": "幻灯片要点",
+    "caption": "幻灯片说明文字",
+    "image": "幻灯片图片",
+    "columns": "幻灯片分栏"
+  },
+  "slide": {
+    "previous": "上一张幻灯片",
+    "next": "下一张幻灯片",
+    "addSlot": "添加{name}",
+    "image": {
+      "alt": "幻灯片图片"
+    },
+    "menu": {
+      "label": "第 {number} 张幻灯片的操作",
+      "speak": "朗读这张幻灯片",
+      "playOriginal": "播放原始音频",
+      "refine": "用 AI 优化这张幻灯片",
+      "editTranscript": "编辑口述文稿",
+      "changeLayout": "更改版式",
+      "delete": "删除幻灯片"
+    }
+  },
+  "image": {
+    "details": "图片信息",
+    "replace": "替换图片",
+    "remove": "移除图片",
+    "add": "添加图片",
+    "noDetails": "该图片没有记录来源或授权信息。",
+    "fields": {
+      "title": {
+        "label": "标题",
+        "placeholder": "作品标题"
+      },
+      "caption": {
+        "label": "说明文字",
+        "placeholder": "简短描述"
+      },
+      "creator": {
+        "label": "署名",
+        "placeholder": "作者或创作者"
+      },
+      "creatorUrl": {
+        "label": "创作者链接",
+        "placeholder": "https://…"
+      },
+      "sourceName": {
+        "label": "来源",
+        "placeholder": "例如：Wikimedia Commons"
+      },
+      "sourceUrl": {
+        "label": "来源链接",
+        "placeholder": "https://…"
+      },
+      "license": {
+        "label": "许可协议",
+        "placeholder": "例如：CC BY 4.0"
+      },
+      "licenseUrl": {
+        "label": "许可协议链接",
+        "placeholder": "https://…"
+      }
+    },
+    "search": {
+      "intro": "上传你自己的图片，或从 Wikimedia、Openverse 和 Flickr 搜索可自由使用的图片。",
+      "drop": "把图片拖到这里，或",
+      "upload": "从你的电脑上传",
+      "uploadLabel": "上传图片文件",
+      "label": "搜索图片",
+      "placeholder": "搜索图片…",
+      "action": "搜索",
+      "searching": "搜索中…",
+      "results": "图片搜索结果",
+      "result": "搜索结果",
+      "use": "使用图片：{name}",
+      "none": "未找到图片。请尝试其他关键词。"
+    },
+    "removeTooltip": "删除图片"
+  },
+  "whiteboard": {
+    "pen": "画笔",
+    "highlighter": "荧光笔",
+    "eraser": "橡皮擦",
+    "newSlide": "新建白板幻灯片",
+    "dragHint": "拖动以移动白板工具栏",
+    "picker": {
+      "label": "{tool}：颜色和粗细",
+      "options": "颜色和笔画选项",
+      "color": "颜色 {color}",
+      "thickness": "粗细 {step}"
+    }
+  },
+  "refine": {
+    "action": "优化",
+    "running": "优化中…",
+    "background": "正在后台处理——可能需要几分钟。",
+    "howMuch": "强度：{level}",
+    "parts": {
+      "text": {
+        "label": "优化幻灯片文字",
+        "description": "重写措辞，让内容呈现得更好。"
+      },
+      "layout": {
+        "label": "优化幻灯片版式",
+        "description": "将幻灯片改为更合适的版式，同时保留其全部内容。"
+      },
+      "imagery": {
+        "label": "优化幻灯片配图",
+        "description": "当版式留有图片位而尚未放图时，为其寻找一张图片。"
+      }
+    },
+    "speakers": {
+      "label": "识别多位讲话者",
+      "description": "识别是谁在讲话——你还是学生——并把学生的发言改写为提问而非事实陈述。",
+      "noAudio": "（未录制课程音频，因此该选项不可用。）",
+      "descriptionSlide": "识别在这张幻灯片上是谁在讲话——你还是学生——并把学生的发言改写为提问而非事实陈述。",
+      "noAudioSlide": "（这张幻灯片没有保留录音，因此该选项不可用。）"
+    },
+    "transcript": {
+      "label": "优化口述文稿",
+      "description": "重写朗读的旁白，让概念表述得更为流畅。"
+    },
+    "slide": {
+      "title": "用 AI 优化这张幻灯片 — 第 {number} 张",
+      "intro": "优化这张幻灯片。更改只会作用于它。若要优化全部幻灯片，请改用<lectureLink>整门课程的选项</lectureLink>。",
+      "levelLabel": "这张幻灯片的优化强度",
+      "marked": "这张幻灯片上有白板标注。优化可能改变其内容或版式，你的高亮和批注可能不再与下方内容对齐。",
+      "running": "正在优化这张幻灯片…",
+      "failed": "无法优化这张幻灯片——请重试"
+    }
+  },
+  "transcript": {
+    "title": "口述文稿 — 第 {number} 张幻灯片",
+    "intro": "播放这份演示文稿时朗读的就是这些内容。",
+    "label": "口述文稿",
+    "placeholder": "这张幻灯片没有任何录音——播放时会改为朗读其内容。",
+    "refineWithAi": "用 AI 优化",
+    "playPreview": "播放口述文稿",
+    "pausePreview": "暂停口述文稿",
+    "regenerate": "根据录音重新生成",
+    "regenerating": "正在根据录音重新生成…",
+    "save": "保存文稿",
+    "marked": "这张幻灯片上有按文稿计时的白板标注。保存时会把每处标注重新对应到当初书写所覆盖的词句。若某处标注对应的词句已不存在，它会被隐藏而非移动——它只是被保留而未删除，一旦出现匹配的措辞就会重新显示。",
+    "discard": {
+      "title": "放弃更改？",
+      "message": "这张幻灯片的口述文稿有未保存的更改。现在关闭会丢失它们。",
+      "action": "放弃更改"
+    },
+    "errors": {
+      "regenerate": "无法根据录音重新生成——请重试",
+      "refine": "无法优化文稿——请重试",
+      "save": "无法保存文稿——请重试"
+    }
+  },
+  "seed": {
+    "notesHeading": "参考笔记",
+    "materialHeading": "参考材料",
+    "upload": "上传 PDF、DOCX 或照片",
+    "uploadLabel": "上传参考材料",
+    "uploadFailed": "上传失败——支持 20 MB 以内的 PDF、DOCX 或图片",
+    "orDrop": "或拖放文件",
+    "empty": "尚无参考材料。",
+    "use": "使用",
+    "useIn": "在生成时使用“{name}”",
+    "deleteAsset": "删除“{name}”",
+    "captionPlaceholder": "说明文字（用于匹配幻灯片）",
+    "captionFor": "“{name}”的说明文字",
+    "status": {
+      "processing": "处理中…",
+      "ready": "就绪",
+      "failed": "无法提取"
+    },
+    "dialog": {
+      "addTitle": "添加参考材料",
+      "prelectureHint": "在开始前先给 AI 一些课程背景。可选——之后随时可以再补充。",
+      "manualHint": "为这节课程添加背景材料。下次开口讲述时就会用到。",
+      "skip": "跳过",
+      "start": "开始课程"
+    }
+  },
+  "access": {
+    "heading": "访问权限",
+    "people": "拥有访问权限的人",
+    "addPeople": "添加成员",
+    "addByEmail": "按邮箱添加成员",
+    "emailPlaceholder": "person@example.com",
+    "role": "访问角色",
+    "roleFor": "{name} 的角色",
+    "add": "添加",
+    "transfer": "转让所有权",
+    "remove": "撤销访问权限",
+    "onlyYou": "目前只有你拥有访问权限。",
+    "inherited": "继承自项目——在此修改会使该课程脱离继承。",
+    "overridden": "已为该课程单独设置。",
+    "useProject": "使用项目设置",
+    "roles": {
+      "viewer": "查看者",
+      "editor": "编辑者"
+    },
+    "general": {
+      "heading": "常规访问权限",
+      "public": {
+        "label": "公开",
+        "hint": "互联网上任何拥有链接的人都可以查看"
+      },
+      "restricted": {
+        "label": "受限",
+        "hint": "只有获得访问权限的人才能通过链接打开"
+      }
+    },
+    "transferConfirm": {
+      "title": "转让所有权？",
+      "message": "将“{subject}”的所有权转给 {name}？你将保留编辑权限。",
+      "action": "转让"
+    },
+    "errors": {
+      "noAccount": "没有使用该邮箱的账户"
+    }
+  },
+  "deck": {
+    "meta": "{count, plural, other {# 张幻灯片}} · 编辑于{age}",
+    "share": "共享",
+    "shareLabel": "共享课程",
+    "addSlide": "添加幻灯片",
+    "addSlideHint": "添加一张幻灯片",
+    "liveSession": "实时会话",
+    "playingOriginal": "正在播放原始音频…",
+    "play": {
+      "play": "播放演示文稿",
+      "pause": "暂停播放",
+      "hint": "朗读演示文稿",
+      "empty": "先添加一张幻灯片才能播放"
+    },
+    "record": {
+      "startHint": "开口讲述即可添加幻灯片",
+      "stopHint": "录制中——点击停止"
+    },
+    "empty": {
+      "speaking": "开始讲述即可生成幻灯片",
+      "howToStart": "点击 <plus></plus> 或 <mic></mic> 图标开始添加内容。",
+      "viewer": "这份演示文稿还没有幻灯片。",
+      "plusIcon": "加号",
+      "micIcon": "麦克风"
+    },
+    "generation": {
+      "paused": "绘制期间已暂停内容生成",
+      "resumed": "已恢复内容生成"
+    },
+    "simulated": {
+      "label": "口述语句",
+      "placeholder": "说点关于你主题的内容…",
+      "listening": "聆听中…（也可以直接输入）",
+      "speak": "讲述",
+      "generating": "生成中…"
+    },
+    "toolbar": {
+      "drag": "拖动以移动",
+      "dragHint": "拖动以移动工具栏"
+    },
+    "view": {
+      "label": "幻灯片显示模式",
+      "carousel": "轮播视图",
+      "list": "列表视图"
+    },
+    "delete": {
+      "action": "删除课程",
+      "title": "删除课程？",
+      "message": "“{name}”及其所有幻灯片和参考材料将被永久删除。"
+    },
+    "adminSettings": {
+      "title": "编辑该课程的设置？",
+      "message": "“{name}”属于其他用户。你可以以管理员身份修改其设置；每一处更改都会记入审计日志。"
+    },
+    "settings": {
+      "title": "课程设置",
+      "close": "关闭设置",
+      "sections": "设置分区",
+      "scope": "这些设置仅适用于这节课程。<projectLink>项目设置</projectLink>也可能影响它。",
+      "tabs": {
+        "general": "常规",
+        "template": "外观",
+        "refine": "用 AI 优化",
+        "quiz": "测验",
+        "export": "导出",
+        "sharing": "隐私与共享"
+      },
+      "general": {
+        "titleHeading": "课程标题",
+        "titleHint": "为这节课程命名。留空则由 AI 根据你在课上所讲的内容拟定标题。",
+        "seedNotesHeading": "参考笔记",
+        "seedNotesHint": "这节课程专属的背景资料，叠加在项目参考笔记之上。自动保存。",
+        "seedNotesLabel": "课程参考笔记",
+        "seedNotesPlaceholder": "这节课程涵盖的内容、关键术语、示例…",
+        "seedMaterialHeading": "参考材料",
+        "seedMaterialHint": "用于提取背景文字和图像的文档与照片，仅供这节课程使用。",
+        "freedomHeading": "AI 自由度",
+        "freedomHint": "生成这节课程的幻灯片时，AI 可以在你实际所讲内容之外补充多少。",
+        "languageHeading": "语言",
+        "languageHint": "这节课程的语音识别和生成的幻灯片文字所用语言。",
+        "languageInherit": "项目、个人资料或浏览器设置",
+        "voiceHeading": "朗读语音",
+        "voiceHint": "朗读这节课程所用的语音。它会以课程的语言朗读。",
+        "deleteHint": "删除课程会永久移除其幻灯片和参考材料。此操作无法撤销。"
+      },
+      "refine": {
+        "heading": "优化这节课程",
+        "intro": "优化幻灯片的文字、图片和口述版本。这可能需要几分钟，并在后台进行。",
+        "introAdmin": "一次优化会做什么、力度如何。这些是课程已保存的选择；是否执行由其所有者决定。",
+        "noSlides": "这节课程还没有幻灯片，无可优化。",
+        "levelLabel": "这节课程的优化强度",
+        "failed": "无法完成优化——请重试。",
+        "markedTitle": "优化带有标注的幻灯片？",
+        "markedMessage": "有些幻灯片带有白板标注。优化可能改变其内容或版式，高亮和批注可能不再与下方内容对齐。",
+        "markedConfirm": "仍然优化",
+        "summary": {
+          "done": "完成 — {changes}。",
+          "none": "完成 — 无需任何更改。",
+          "reframed": "{count, plural, other {改写了 # 张学生发言的幻灯片}}",
+          "slidesRefined": "{count, plural, other {优化了 # 张幻灯片}}",
+          "transcriptsUpdated": "{count, plural, other {更新了 # 段旁白}}"
+        }
+      }
+    }
+  },
+  "quiz": {
+    "heading": "课后小测验",
+    "intro": "根据这节课程生成测验，并发布为可与学生共享的 Google 表单。",
+    "connect": "连接 Google",
+    "connecting": "连接中…",
+    "connectHint": "连接一个 Google 账户，表单才能保存到你的 Google 云端硬盘。",
+    "reconnect": "重新连接 Google",
+    "driveDenied": "你的 Google 账户已连接，但未授予云端硬盘访问权限。请再次点击“{action}”，并务必勾选云端硬盘权限，测验才能保存。",
+    "generate": "生成测验",
+    "generating": "生成中…",
+    "generateAndSave": "生成并保存",
+    "publish": "发布测验",
+    "publishing": "发布中…",
+    "ready": "你的测验已就绪",
+    "copyLink": "复制测验链接",
+    "linkCopied": "链接已复制",
+    "delete": "删除测验",
+    "deleting": "删除中…",
+    "deleteHint": "删除后可以重新生成一份题目不同的测验。",
+    "savingTo": "保存到：",
+    "folder": {
+      "dialog": "选择云端硬盘文件夹",
+      "title": "将测验保存到…",
+      "path": "文件夹路径",
+      "empty": "这里没有子文件夹。可以把测验保存到当前文件夹，或在下方新建一个。",
+      "new": "新建文件夹",
+      "newName": "新文件夹名称",
+      "newIn": "在“{folder}”中新建文件夹",
+      "cancelNew": "取消新建文件夹",
+      "creating": "创建中…"
+    },
+    "options": {
+      "questionCount": "题目数量",
+      "totalPoints": "总分",
+      "advanced": "高级设置",
+      "types": "题目类型",
+      "typesHint": "上方的题目数量将按此分配。",
+      "email": {
+        "label": "收集答题者邮箱",
+        "verified": "已验证邮箱（由 Google 核实）",
+        "responderInput": "由答题者自行填写邮箱",
+        "none": "不收集邮箱"
+      },
+      "transcript": {
+        "label": "将口述文稿纳入素材",
+        "hint": "同时依据幻灯片文字和整节课程的文稿来出题。"
+      },
+      "instructions": {
+        "label": "补充说明（可选）",
+        "hint": "告诉 AI 该如何出题——例如聚焦某个主题、跳过某一节、设定难度，或采用某种题目风格。",
+        "placeholder": "例如：聚焦水循环；避免考定义"
+      }
+    },
+    "types": {
+      "single_choice": {
+        "field": "单选题",
+        "name": "单选"
+      },
+      "multiple_choice": {
+        "field": "多选题",
+        "name": "多选"
+      },
+      "short_text": {
+        "field": "简答题",
+        "name": "简答"
+      },
+      "long_text": {
+        "field": "论述题",
+        "name": "论述"
+      }
+    },
+    "review": {
+      "dialog": "检查测验题目",
+      "title": "检查并设置分值",
+      "hint": "调整每道题的分值，然后发布。总分：",
+      "points": "分值",
+      "pointsFor": "第 {number} 题的分值"
+    },
+    "errors": {
+      "status": "无法加载测验状态",
+      "connect": "无法连接你的 Google 账户",
+      "loadFolders": "无法加载你的云端硬盘文件夹。你的 Google 账户可能未授予云端硬盘访问权限。",
+      "createFolder": "无法创建文件夹",
+      "generate": "无法生成测验——请重试",
+      "publish": "无法发布测验——请重试",
+      "delete": "无法删除测验——请重试"
+    }
+  },
+  "export": {
+    "heading": "导出这节课程",
+    "intro": "将演示文稿保存为 PDF、可编辑的 Google Slides 演示文稿，或可重新导入的 YAML 文件。",
+    "format": "格式",
+    "destination": "目标位置",
+    "download": "下载",
+    "toDrive": "保存到 Google 云端硬盘",
+    "downloadFormat": "下载 {format}",
+    "saveFormatToDrive": "将 {format} 保存到云端硬盘",
+    "slidesAlwaysDrive": "Google Slides 始终保存到你的 Google 云端硬盘。",
+    "working": "处理中…",
+    "saving": "保存中…",
+    "saveHere": "保存到这里",
+    "saved": "已保存",
+    "savedToFolder": "已保存到“{folder}”",
+    "savedList": "已保存到云端硬盘",
+    "deleteFile": "删除“{name}”",
+    "connectHint": "连接一个 Google 账户，文件才能保存到你的云端硬盘。",
+    "driveDenied": "你的 Google 账户已连接，但未授予云端硬盘访问权限。重新连接时，请务必勾选云端硬盘权限，导出文件才能保存。",
+    "formats": {
+      "pdf": {
+        "hint": "每张幻灯片一页，并附图片署名。"
+      },
+      "google-slides": {
+        "hint": "保存在你云端硬盘中的可编辑演示文稿。"
+      },
+      "yaml": {
+        "hint": "便于阅读、可重新导入的文件。"
+      }
+    },
+    "folder": {
+      "title": "将 {format} 保存到…",
+      "empty": "这里没有子文件夹。可以保存到当前文件夹，或在下方新建一个。"
+    },
+    "includeWhiteboard": {
+      "label": "包含白板标注",
+      "hint": "在导出的幻灯片上绘制手写笔迹。"
+    },
+    "otherDrive": {
+      "title": "已从这节课程中移除",
+      "message": "这份导出文件保存在另一位协作者的 Google 云端硬盘中，因此已从这节课程中移除，但仍存在于对方的云端硬盘里。若想彻底删除，请让对方在那里删除它。"
+    },
+    "errors": {
+      "status": "无法加载导出状态",
+      "download": "无法导出演示文稿——请重试",
+      "drive": "无法保存到云端硬盘——请重试",
+      "delete": "无法删除导出文件——请重试"
+    }
+  },
+  "errors": {
+    "invalid_credentials": "邮箱或密码不正确",
+    "account_banned": "该账户已被封禁",
+    "unauthorized": "你的会话已结束——请重新登录",
+    "forbidden": "你没有执行该操作的权限",
+    "internal_error": "我们这边出了点问题——请重试",
+    "unknown_error": "出了点问题——请重试"
+  }
+}

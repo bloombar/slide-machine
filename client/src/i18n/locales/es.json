@@ -1,0 +1,712 @@
+{
+  "_meta": {
+    "locale": "es",
+    "reviewed": false,
+    "note": "Traducción automática, sin revisión de un hablante nativo. Cualquier clave ausente recurre al inglés."
+  },
+  "common": {
+    "loading": "Cargando…",
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "cancel": "Cancelar",
+    "close": "Cerrar",
+    "closeEsc": "Cerrar (Esc)",
+    "create": "Crear",
+    "done": "Listo",
+    "ok": "Aceptar",
+    "stop": "Detener",
+    "resume": "Reanudar",
+    "dismiss": "Descartar",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "settings": "Ajustes",
+    "or": "o",
+    "dangerZone": "Zona de riesgo",
+    "resetToDefault": "Restablecer el valor predeterminado",
+    "listSeparator": ", ",
+    "adminEditNotice": "Estás editando {entity, select, account {la cuenta} project {el proyecto} lecture {la clase} other {los ajustes}} de otra persona como administrador. Cada cambio que hagas aquí queda registrado en el registro de auditoría."
+  },
+  "nav": {
+    "brand": "The Slide Machine",
+    "brandHome": "The Slide Machine — inicio",
+    "menu": "Menú",
+    "primary": "Principal",
+    "home": "Inicio",
+    "profile": "Perfil",
+    "admin": "Administración",
+    "logIn": "Iniciar sesión",
+    "logOut": "Cerrar sesión"
+  },
+  "landing": {
+    "title": "The Slide Machine V2",
+    "tagline": "Habla con libertad: las diapositivas te seguirán.",
+    "cta": "Inicia sesión para empezar"
+  },
+  "auth": {
+    "signIn": "Iniciar sesión",
+    "signingIn": "Iniciando sesión…",
+    "signUp": "Registrarse",
+    "signOut": "Cerrar sesión",
+    "createAccount": "Crear cuenta",
+    "creatingAccount": "Creando…",
+    "email": "Correo electrónico",
+    "password": "Contraseña",
+    "displayName": "Nombre visible",
+    "noAccount": "¿No tienes cuenta?",
+    "createOne": "Crea una",
+    "alreadyRegistered": "¿Ya te registraste?",
+    "signInLink": "Inicia sesión",
+    "continueWithGoogle": "{action} con Google",
+    "errors": {
+      "google": "No se pudo iniciar sesión con Google: inténtalo de nuevo",
+      "signIn": "Algo salió mal: inténtalo de nuevo",
+      "register": "Algo salió mal: inténtalo de nuevo"
+    }
+  },
+  "health": {
+    "summary": "API {status}",
+    "environment": "Entorno",
+    "version": "Versión",
+    "uptime": "Tiempo activo",
+    "state": {
+      "ok": "correcta",
+      "degraded": "degradada",
+      "down": "caída",
+      "disabled": "desactivada",
+      "loading": "comprobando…",
+      "error": "inaccesible"
+    },
+    "components": {
+      "mongo": "Base de datos",
+      "storage": "Almacenamiento",
+      "audioStorage": "Almacenamiento de audio",
+      "gemini": "IA generativa",
+      "stt": "Reconocimiento de voz",
+      "tts": "Síntesis de voz"
+    }
+  },
+  "profile": {
+    "notFound": "Este perfil no existe o es privado.",
+    "displayName": "Nombre visible",
+    "bio": "Biografía",
+    "bioPlaceholder": "Una breve presentación que se muestra en tu perfil.",
+    "noBio": "Sin biografía",
+    "noLectures": "No hay clases que mostrar.",
+    "displayNameRequired": "El nombre visible es obligatorio.",
+    "interfaceLanguage": "Idioma de la interfaz",
+    "interfaceLanguageHint": "Los menús, los botones y los mensajes aparecen en este idioma.",
+    "lectureLanguage": "Idioma de la clase",
+    "lectureLanguageHint": "El reconocimiento de voz y las diapositivas generadas usan este idioma. Los proyectos y las clases pueden cambiarlo.",
+    "lectureLanguageDefault": "{own, select, true {el idioma de tu interfaz} other {el idioma de su interfaz}}",
+    "plan": "Plan:",
+    "publicProfile": "Perfil público",
+    "publicProfileHint": "Perfil público: los demás pueden ver {own, select, true {tus} other {sus}} clases públicas y compartidas",
+    "closeSettings": "Cerrar los ajustes",
+    "adminProfile": {
+      "title": "¿Editar el perfil de este usuario?",
+      "message": "Este perfil pertenece a otra persona. Puedes modificarlo como administrador; cada cambio queda registrado en el registro de auditoría.",
+      "confirm": "Guardar los cambios"
+    },
+    "adminSettings": {
+      "title": "¿Editar los ajustes de este usuario?",
+      "message": "Esta cuenta pertenece a {name}. Puedes cambiar sus ajustes como administrador; cada cambio queda registrado en el registro de auditoría.",
+      "confirm": "Editar los ajustes"
+    },
+    "errors": {
+      "save": "No se pudo guardar el perfil.",
+      "loadAccount": "No se pudo cargar esta cuenta.",
+      "saveSettings": "No se pudieron guardar estos ajustes."
+    }
+  },
+  "language": {
+    "label": "Idioma",
+    "inherit": "Predeterminado: {source}"
+  },
+  "voice": {
+    "label": "Voz de narración",
+    "systemDefault": "valor predeterminado del sistema",
+    "descriptions": {
+      "emma": "voz femenina cálida",
+      "sophie": "voz femenina luminosa",
+      "james": "voz masculina grave",
+      "daniel": "voz masculina nítida",
+      "aria": "voz femenina natural (premium)",
+      "nova": "voz femenina natural (premium)",
+      "leo": "voz masculina natural (premium)",
+      "owen": "voz masculina natural (premium)"
+    }
+  },
+  "freedom": {
+    "label": "Libertad de la IA",
+    "min": "Solo lo que digo",
+    "max": "Desarrollo libre",
+    "valueText": "{value} de {max}"
+  },
+  "template": {
+    "label": "Plantilla de diapositiva",
+    "heading": "Plantilla",
+    "exportYaml": "Exportar la plantilla como YAML",
+    "exportYamlHint": "Descarga el estilo y los diseños de esta plantilla en un archivo YAML reimportable."
+  },
+  "layout": {
+    "change": "Cambiar el diseño de la diapositiva",
+    "close": "Cerrar el selector de diseño",
+    "pickerLabel": "Diseño de la diapositiva",
+    "changeTemplate": "Cambiar de plantilla",
+    "fromTemplate": "Diseños de la plantilla <strong>{name}</strong>."
+  },
+  "lecture": {
+    "untitled": "Clase sin título",
+    "options": "Opciones de {name}",
+    "new": {
+      "action": "Nueva clase",
+      "label": "Empezar una clase nueva",
+      "inProject": "Empezar una clase nueva en {project}"
+    },
+    "import": {
+      "action": "Importar",
+      "label": "Importar una clase",
+      "intoProject": "Importar una clase en {project}",
+      "imported": "«{name}» importada.",
+      "importedWithWarnings": "«{name}» importada. {warnings}",
+      "errors": {
+        "read": "No se pudo leer ese archivo",
+        "invalid": "No se pudo importar este archivo: {details}",
+        "failed": "No se pudo importar este archivo"
+      }
+    },
+    "errors": {
+      "create": "No se pudo crear la clase"
+    }
+  },
+  "project": {
+    "untitled": "Proyecto predeterminado",
+    "titleLabel": "Título del proyecto",
+    "lectures": "Clases",
+    "options": "Opciones de {name}",
+    "new": {
+      "title": "Nuevo proyecto",
+      "action": "Nuevo proyecto",
+      "name": "Título",
+      "namePlaceholder": "p. ej. Biología 101",
+      "description": "Descripción <hint>(opcional)</hint>",
+      "descriptionPlaceholder": "¿De qué trata este proyecto?",
+      "submit": "Crear el proyecto"
+    },
+    "delete": {
+      "action": "Eliminar el proyecto",
+      "title": "¿Eliminar el proyecto?",
+      "message": "«{name}» y todas sus clases, diapositivas y material de referencia se eliminarán de forma permanente."
+    },
+    "adminSettings": {
+      "title": "¿Editar los ajustes de este proyecto?",
+      "message": "«{name}» pertenece a otra persona. Puedes cambiar sus ajustes como administrador; cada cambio queda registrado en el registro de auditoría."
+    },
+    "settings": {
+      "title": "Ajustes del proyecto",
+      "scope": "Estos ajustes se aplican a todas las clases de este proyecto (cada clase puede cambiar algunos por su cuenta).",
+      "templateHeading": "Plantilla predeterminada",
+      "templateHint": "Las clases nuevas de este proyecto empiezan con esta plantilla. Cada clase conserva la suya y puede cambiarla cuando quiera en sus ajustes.",
+      "seedNotesHint": "Material de fondo que guía la generación de diapositivas para todas las clases de este proyecto. Se guarda automáticamente.",
+      "seedNotesLabel": "Notas de referencia del proyecto",
+      "seedNotesPlaceholder": "Temas clave, terminología, estructura prevista…",
+      "seedMaterialHint": "Documentos y fotos analizados para extraer texto e imágenes de fondo, disponibles para todas las clases de este proyecto.",
+      "freedomHint": "Cuánto puede añadir la IA más allá de lo que dice quien habla. Las clases de este proyecto lo heredan salvo que definan el suyo.",
+      "languageHint": "Reconocimiento de voz y texto generado para las clases de este proyecto, salvo que una clase defina el suyo.",
+      "languageInherit": "el ajuste de tu perfil o el idioma del navegador",
+      "voiceHint": "La voz que lee en voz alta las clases de este proyecto, salvo que una clase defina la suya. Habla en el idioma del proyecto.",
+      "deleteHint": "Eliminar un proyecto borra de forma permanente todas sus clases, diapositivas y material de referencia. Esta acción no se puede deshacer."
+    },
+    "errors": {
+      "load": "No se pudo cargar este proyecto",
+      "create": "No se pudo crear el proyecto"
+    }
+  },
+  "home": {
+    "welcome": "Bienvenido, {name}",
+    "showAll": "{count, plural, one {Ver la # clase} other {Ver las # clases}}",
+    "otherLectures": "Otras clases",
+    "otherLecturesHint": "Clases tuyas dentro de proyectos de otras personas.",
+    "errors": {
+      "load": "No se pudieron cargar los proyectos"
+    }
+  },
+  "plan": {
+    "tier": {
+      "free": "gratuito",
+      "pro": "pro",
+      "max": "max"
+    }
+  },
+  "slot": {
+    "title": "Título de la diapositiva",
+    "body": "Cuerpo de la diapositiva",
+    "bullets": "Viñetas de la diapositiva",
+    "caption": "Pie de la diapositiva",
+    "image": "Imagen de la diapositiva",
+    "columns": "Columnas de la diapositiva"
+  },
+  "slide": {
+    "previous": "Diapositiva anterior",
+    "next": "Diapositiva siguiente",
+    "addSlot": "Añadir {name}",
+    "image": {
+      "alt": "Imagen de la diapositiva"
+    },
+    "menu": {
+      "label": "Opciones de la diapositiva {number}",
+      "speak": "Leer esta diapositiva",
+      "playOriginal": "Reproducir el audio original",
+      "refine": "Mejorar esta diapositiva con IA",
+      "editTranscript": "Editar la transcripción hablada",
+      "changeLayout": "Cambiar el diseño",
+      "delete": "Eliminar la diapositiva"
+    }
+  },
+  "image": {
+    "details": "Detalles de la imagen",
+    "replace": "Reemplazar la imagen",
+    "remove": "Quitar la imagen",
+    "add": "Añadir una imagen",
+    "noDetails": "No hay información de origen ni de licencia registrada para esta imagen.",
+    "fields": {
+      "title": {
+        "label": "Título",
+        "placeholder": "Título de la obra"
+      },
+      "caption": {
+        "label": "Pie de foto",
+        "placeholder": "Descripción breve"
+      },
+      "creator": {
+        "label": "Crédito",
+        "placeholder": "Autor o creador"
+      },
+      "creatorUrl": {
+        "label": "URL del creador",
+        "placeholder": "https://…"
+      },
+      "sourceName": {
+        "label": "Fuente",
+        "placeholder": "p. ej. Wikimedia Commons"
+      },
+      "sourceUrl": {
+        "label": "URL de la fuente",
+        "placeholder": "https://…"
+      },
+      "license": {
+        "label": "Licencia",
+        "placeholder": "p. ej. CC BY 4.0"
+      },
+      "licenseUrl": {
+        "label": "URL de la licencia",
+        "placeholder": "https://…"
+      }
+    },
+    "search": {
+      "intro": "Sube la tuya o busca imágenes de uso libre en Wikimedia, Openverse y Flickr.",
+      "drop": "Arrastra una imagen aquí, o",
+      "upload": "súbela desde tu ordenador",
+      "uploadLabel": "Subir un archivo de imagen",
+      "label": "Buscar imágenes",
+      "placeholder": "Buscar imágenes…",
+      "action": "Buscar",
+      "searching": "Buscando…",
+      "results": "Resultados de la búsqueda de imágenes",
+      "result": "Resultado de búsqueda",
+      "use": "Usar la imagen: {name}",
+      "none": "No se encontraron imágenes. Prueba con otros términos de búsqueda."
+    },
+    "removeTooltip": "Eliminar la imagen"
+  },
+  "whiteboard": {
+    "pen": "Bolígrafo",
+    "highlighter": "Marcador",
+    "eraser": "Borrador",
+    "newSlide": "Nueva diapositiva de pizarra",
+    "dragHint": "Arrastra para mover la barra de herramientas de la pizarra",
+    "picker": {
+      "label": "{tool}: color y grosor",
+      "options": "Opciones de color y trazo",
+      "color": "Color {color}",
+      "thickness": "Grosor {step}"
+    }
+  },
+  "refine": {
+    "action": "Mejorar",
+    "running": "Mejorando…",
+    "background": "Trabajando en segundo plano: esto puede tardar unos minutos.",
+    "howMuch": "Intensidad: {level}",
+    "parts": {
+      "text": {
+        "label": "Mejorar el texto de la diapositiva",
+        "description": "Reescribir la redacción para presentar mejor el contenido."
+      },
+      "layout": {
+        "label": "Mejorar el diseño de la diapositiva",
+        "description": "Mover la diapositiva a un diseño que le siente mejor, conservando todo lo que muestra."
+      },
+      "imagery": {
+        "label": "Mejorar las imágenes de la diapositiva",
+        "description": "Buscar una imagen cuando el diseño tiene un hueco para imagen y no hay ninguna."
+      }
+    },
+    "speakers": {
+      "label": "Identificar a varios hablantes",
+      "description": "Detectar quién habló —tú o el alumnado— y reformular las intervenciones del alumnado como preguntas, no como hechos.",
+      "noAudio": "(No se grabó audio de la clase, así que esto no está disponible.)",
+      "descriptionSlide": "Detectar quién habló en esta diapositiva —tú o el alumnado— y reformular las intervenciones del alumnado como preguntas, no como hechos.",
+      "noAudioSlide": "(No queda audio grabado de esta diapositiva, así que esto no está disponible.)"
+    },
+    "transcript": {
+      "label": "Mejorar la transcripción hablada",
+      "description": "Reescribir la narración leída en voz alta para describir los conceptos con más elegancia."
+    },
+    "slide": {
+      "title": "Mejorar esta diapositiva con IA: diapositiva {number}",
+      "intro": "Mejora esta diapositiva. Los cambios se aplicarán solo a ella. Para mejorar todas las diapositivas, usa las <lectureLink>opciones de toda la clase</lectureLink>.",
+      "levelLabel": "Cuánto mejorar esta diapositiva",
+      "marked": "Esta diapositiva tiene anotaciones de pizarra. La mejora puede cambiar su contenido o su diseño, así que puede que tus subrayados y anotaciones dejen de coincidir con lo que hay debajo.",
+      "running": "Mejorando esta diapositiva…",
+      "failed": "No se pudo mejorar esta diapositiva: inténtalo de nuevo"
+    }
+  },
+  "transcript": {
+    "title": "Transcripción hablada: diapositiva {number}",
+    "intro": "Esto es lo que se lee en voz alta cuando se reproduce la presentación.",
+    "label": "Transcripción hablada",
+    "placeholder": "No se ha grabado nada para esta diapositiva: la reproducción narra su contenido en su lugar.",
+    "refineWithAi": "Mejorar con IA",
+    "playPreview": "Reproducir la transcripción hablada",
+    "pausePreview": "Pausar la transcripción hablada",
+    "regenerate": "Regenerar desde el audio grabado",
+    "regenerating": "Regenerando desde el audio grabado…",
+    "save": "Guardar la transcripción",
+    "marked": "Esta diapositiva tiene anotaciones de pizarra sincronizadas con la transcripción. Al guardar, cada una se vuelve a asociar a las palabras sobre las que se dibujó. Una anotación cuyas palabras han desaparecido se oculta en lugar de moverse: se conserva, no se borra, y reaparece si vuelve una redacción que le corresponda.",
+    "discard": {
+      "title": "¿Descartar los cambios?",
+      "message": "La transcripción hablada de esta diapositiva tiene cambios sin guardar. Si cierras ahora, se perderán.",
+      "action": "Descartar los cambios"
+    },
+    "errors": {
+      "regenerate": "No se pudo regenerar desde el audio grabado: inténtalo de nuevo",
+      "refine": "No se pudo mejorar la transcripción: inténtalo de nuevo",
+      "save": "No se pudo guardar la transcripción: inténtalo de nuevo"
+    }
+  },
+  "seed": {
+    "notesHeading": "Notas de referencia",
+    "materialHeading": "Material de referencia",
+    "upload": "Subir un PDF, un DOCX o una foto",
+    "uploadLabel": "Subir material de referencia",
+    "uploadFailed": "Error al subir: PDF, DOCX o imágenes de hasta 20 MB",
+    "orDrop": "o arrastra y suelta un archivo",
+    "empty": "Todavía no hay material de referencia.",
+    "use": "Usar",
+    "useIn": "Usar {name} en la generación",
+    "deleteAsset": "Eliminar {name}",
+    "captionPlaceholder": "Pie de foto (se usa para asociar diapositivas)",
+    "captionFor": "Pie de foto de {name}",
+    "status": {
+      "processing": "Procesando…",
+      "ready": "Listo",
+      "failed": "No se pudo extraer"
+    },
+    "dialog": {
+      "addTitle": "Añadir material de referencia",
+      "prelectureHint": "Dale contexto a la IA antes de empezar. Es opcional: puedes añadir más en cualquier momento.",
+      "manualHint": "Añade material de fondo para esta clase. Se usará la próxima vez que hables.",
+      "skip": "Omitir",
+      "start": "Empezar la clase"
+    }
+  },
+  "access": {
+    "heading": "Acceso",
+    "people": "Personas con acceso",
+    "addPeople": "Añadir personas",
+    "addByEmail": "Añadir personas por correo electrónico",
+    "emailPlaceholder": "persona@ejemplo.com",
+    "role": "Rol de acceso",
+    "roleFor": "Rol de {name}",
+    "add": "Añadir",
+    "transfer": "Transferir la propiedad",
+    "remove": "Quitar el acceso",
+    "onlyYou": "De momento solo tú tienes acceso.",
+    "inherited": "Heredado del proyecto: cualquier cambio aquí desvincula esta clase.",
+    "overridden": "Redefinido para esta clase.",
+    "useProject": "Usar los ajustes del proyecto",
+    "roles": {
+      "viewer": "Lector",
+      "editor": "Editor"
+    },
+    "general": {
+      "heading": "Acceso general",
+      "public": {
+        "label": "Público",
+        "hint": "Cualquier persona de internet con el enlace puede verlo"
+      },
+      "restricted": {
+        "label": "Restringido",
+        "hint": "Solo las personas con acceso pueden abrirlo con el enlace"
+      }
+    },
+    "transferConfirm": {
+      "title": "¿Transferir la propiedad?",
+      "message": "¿Hacer a {name} propietario de «{subject}»? Conservarás el acceso de edición.",
+      "action": "Transferir"
+    },
+    "errors": {
+      "noAccount": "No hay ninguna cuenta con ese correo"
+    }
+  },
+  "deck": {
+    "meta": "{count, plural, one {# diapositiva} other {# diapositivas}} · editada {age}",
+    "share": "Compartir",
+    "shareLabel": "Compartir la clase",
+    "addSlide": "Añadir una diapositiva",
+    "addSlideHint": "Añadir una diapositiva",
+    "liveSession": "Sesión en directo",
+    "playingOriginal": "Reproduciendo el audio original…",
+    "play": {
+      "play": "Reproducir la presentación",
+      "pause": "Pausar la reproducción",
+      "hint": "Reproducir la presentación en voz alta",
+      "empty": "Añade una diapositiva para reproducir la presentación"
+    },
+    "record": {
+      "startHint": "Habla para añadir diapositivas",
+      "stopHint": "Grabando: haz clic para detener"
+    },
+    "empty": {
+      "speaking": "Empieza a hablar para generar diapositivas",
+      "howToStart": "Haz clic en los iconos <plus></plus> o <mic></mic> para empezar a añadir contenido.",
+      "viewer": "Esta presentación no tiene diapositivas.",
+      "plusIcon": "más",
+      "micIcon": "micrófono"
+    },
+    "generation": {
+      "paused": "Generación de contenido en pausa mientras dibujas",
+      "resumed": "Generación de contenido reanudada"
+    },
+    "simulated": {
+      "label": "Frase hablada",
+      "placeholder": "Di algo sobre tu tema…",
+      "listening": "Escuchando… (también puedes escribir)",
+      "speak": "Hablar",
+      "generating": "Generando…"
+    },
+    "toolbar": {
+      "drag": "Arrastra para mover",
+      "dragHint": "Arrastra para mover la barra de herramientas"
+    },
+    "view": {
+      "label": "Modo de visualización de las diapositivas",
+      "carousel": "Vista de carrusel",
+      "list": "Vista de lista"
+    },
+    "delete": {
+      "action": "Eliminar la clase",
+      "title": "¿Eliminar la clase?",
+      "message": "«{name}» y todas sus diapositivas y material de referencia se eliminarán de forma permanente."
+    },
+    "adminSettings": {
+      "title": "¿Editar los ajustes de esta clase?",
+      "message": "«{name}» pertenece a otra persona. Puedes cambiar sus ajustes como administrador; cada cambio queda registrado en el registro de auditoría."
+    },
+    "settings": {
+      "title": "Ajustes de la clase",
+      "close": "Cerrar los ajustes",
+      "sections": "Secciones de ajustes",
+      "scope": "Estos ajustes se aplican solo a esta clase. Los <projectLink>ajustes del proyecto</projectLink> también pueden afectarla.",
+      "tabs": {
+        "general": "General",
+        "template": "Diseño",
+        "refine": "Mejorar con IA",
+        "quiz": "Cuestionario",
+        "export": "Exportar",
+        "sharing": "Privacidad y uso compartido"
+      },
+      "general": {
+        "titleHeading": "Título de la clase",
+        "titleHint": "Ponle nombre a esta clase. Déjalo en blanco para que la IA lo titule a partir de lo que digas a medida que avanza.",
+        "seedNotesHeading": "Notas de referencia",
+        "seedNotesHint": "Material de fondo propio de esta clase, añadido sobre las notas de referencia del proyecto. Se guarda automáticamente.",
+        "seedNotesLabel": "Notas de referencia de la clase",
+        "seedNotesPlaceholder": "Qué cubre esta clase, términos clave, ejemplos…",
+        "seedMaterialHeading": "Material de referencia",
+        "seedMaterialHint": "Documentos y fotos analizados para extraer texto e imágenes de fondo, usados solo por esta clase.",
+        "freedomHeading": "Libertad de la IA",
+        "freedomHint": "Cuánto puede añadir la IA más allá de lo que dices realmente al generar las diapositivas de esta clase.",
+        "languageHeading": "Idioma",
+        "languageHint": "Reconocimiento de voz y texto generado para esta clase.",
+        "languageInherit": "ajuste del proyecto, del perfil o del navegador",
+        "voiceHeading": "Voz de narración",
+        "voiceHint": "La voz que lee esta clase en voz alta. Habla en el idioma de la clase.",
+        "deleteHint": "Eliminar una clase borra de forma permanente sus diapositivas y su material de referencia. Esta acción no se puede deshacer."
+      },
+      "refine": {
+        "heading": "Mejorar esta clase",
+        "intro": "Mejora el texto, las imágenes y la versión hablada de las diapositivas. Puede tardar unos minutos y se ejecuta en segundo plano.",
+        "introAdmin": "Lo que haría una pasada de mejora y con cuánta intensidad. Estas son las opciones guardadas de la clase; ejecutarla corresponde a su propietario.",
+        "noSlides": "Esta clase todavía no tiene diapositivas, así que no hay nada que mejorar.",
+        "levelLabel": "Cuánto mejorar esta clase",
+        "failed": "No se pudo completar la mejora: inténtalo de nuevo.",
+        "markedTitle": "¿Mejorar diapositivas anotadas?",
+        "markedMessage": "Algunas diapositivas tienen anotaciones de pizarra. La mejora puede cambiar su contenido o su diseño, así que puede que los subrayados y las anotaciones dejen de coincidir con lo que hay debajo.",
+        "markedConfirm": "Mejorar de todos modos",
+        "summary": {
+          "done": "Listo: {changes}.",
+          "none": "Listo: no hizo falta ningún cambio.",
+          "reframed": "{count, plural, one {# diapositiva del alumnado reformulada} other {# diapositivas del alumnado reformuladas}}",
+          "slidesRefined": "{count, plural, one {# diapositiva mejorada} other {# diapositivas mejoradas}}",
+          "transcriptsUpdated": "{count, plural, one {# narración actualizada} other {# narraciones actualizadas}}"
+        }
+      }
+    }
+  },
+  "quiz": {
+    "heading": "Cuestionario de salida",
+    "intro": "Genera un cuestionario a partir de esta clase y publícalo como un Formulario de Google para compartirlo con el alumnado.",
+    "connect": "Conectar Google",
+    "connecting": "Conectando…",
+    "connectHint": "Conecta una cuenta de Google para que el formulario se guarde en tu Google Drive.",
+    "reconnect": "Volver a conectar Google",
+    "driveDenied": "Tu cuenta de Google se conectó, pero no se autorizó el acceso a Drive. Vuelve a pulsar {action} y asegúrate de marcar el permiso de Drive para que los cuestionarios se puedan guardar.",
+    "generate": "Generar el cuestionario",
+    "generating": "Generando…",
+    "generateAndSave": "Generar y guardar",
+    "publish": "Publicar el cuestionario",
+    "publishing": "Publicando…",
+    "ready": "Tu cuestionario está listo",
+    "copyLink": "Copiar el enlace del cuestionario",
+    "linkCopied": "Enlace copiado",
+    "delete": "Eliminar el cuestionario",
+    "deleting": "Eliminando…",
+    "deleteHint": "Al eliminarlo podrás generar uno nuevo con preguntas distintas.",
+    "savingTo": "Guardando en:",
+    "folder": {
+      "dialog": "Elegir una carpeta de Drive",
+      "title": "Guardar el cuestionario en…",
+      "path": "Ruta de la carpeta",
+      "empty": "Aquí no hay subcarpetas. Guarda el cuestionario en esta carpeta o crea una nueva abajo.",
+      "new": "Nueva carpeta",
+      "newName": "Nombre de la nueva carpeta",
+      "newIn": "Nueva carpeta en {folder}",
+      "cancelNew": "Cancelar la nueva carpeta",
+      "creating": "Creando…"
+    },
+    "options": {
+      "questionCount": "Número de preguntas",
+      "totalPoints": "Puntos totales",
+      "advanced": "Ajustes avanzados",
+      "types": "Tipos de pregunta",
+      "typesHint": "El número de preguntas de arriba sigue este desglose.",
+      "email": {
+        "label": "Recopilar el correo de quien responde",
+        "verified": "Correo verificado (comprobado por Google)",
+        "responderInput": "Quien responde escribe su correo",
+        "none": "No recopilar el correo"
+      },
+      "transcript": {
+        "label": "Incluir la transcripción hablada en el material de origen",
+        "hint": "Basar las preguntas tanto en el texto de las diapositivas como en la transcripción completa de la clase."
+      },
+      "instructions": {
+        "label": "Instrucciones adicionales (opcional)",
+        "hint": "Dile a la IA cómo redactar el cuestionario: p. ej. centrarse en un tema, saltarse una sección, ajustar la dificultad o seguir un estilo de pregunta.",
+        "placeholder": "p. ej. centrarse en el ciclo del agua; evitar definiciones"
+      }
+    },
+    "types": {
+      "single_choice": {
+        "field": "Opción única (test)",
+        "name": "Opción única"
+      },
+      "multiple_choice": {
+        "field": "Respuesta múltiple",
+        "name": "Respuesta múltiple"
+      },
+      "short_text": {
+        "field": "Respuesta corta",
+        "name": "Respuesta corta"
+      },
+      "long_text": {
+        "field": "Respuesta larga",
+        "name": "Respuesta larga"
+      }
+    },
+    "review": {
+      "dialog": "Revisar las preguntas del cuestionario",
+      "title": "Revisar y asignar puntos",
+      "hint": "Ajusta los puntos de cada pregunta y luego publica. Total:",
+      "points": "Puntos",
+      "pointsFor": "Puntos de la pregunta {number}"
+    },
+    "errors": {
+      "status": "No se pudo cargar el estado del cuestionario",
+      "connect": "No se pudo conectar tu cuenta de Google",
+      "loadFolders": "No se pudieron cargar tus carpetas de Drive. Puede que tu cuenta de Google no haya concedido acceso a Drive.",
+      "createFolder": "No se pudo crear la carpeta",
+      "generate": "No se pudo generar el cuestionario: inténtalo de nuevo",
+      "publish": "No se pudo publicar el cuestionario: inténtalo de nuevo",
+      "delete": "No se pudo eliminar el cuestionario: inténtalo de nuevo"
+    }
+  },
+  "export": {
+    "heading": "Exportar esta clase",
+    "intro": "Guarda la presentación como PDF, como presentación editable de Google Slides, o como archivo YAML reimportable.",
+    "format": "Formato",
+    "destination": "Destino",
+    "download": "Descargar",
+    "toDrive": "Guardar en Google Drive",
+    "downloadFormat": "Descargar en {format}",
+    "saveFormatToDrive": "Guardar el {format} en Drive",
+    "slidesAlwaysDrive": "Google Slides siempre se guarda en tu Google Drive.",
+    "working": "Trabajando…",
+    "saving": "Guardando…",
+    "saveHere": "Guardar aquí",
+    "saved": "Guardado",
+    "savedToFolder": "Guardado en {folder}",
+    "savedList": "Guardado en Drive",
+    "deleteFile": "Eliminar {name}",
+    "connectHint": "Conecta una cuenta de Google para que el archivo se guarde en tu Drive.",
+    "driveDenied": "Tu cuenta de Google se conectó, pero no se autorizó el acceso a Drive. Al volver a conectarte, asegúrate de marcar el permiso de Drive para que las exportaciones se puedan guardar.",
+    "formats": {
+      "pdf": {
+        "hint": "Una página por diapositiva, con los créditos de las imágenes."
+      },
+      "google-slides": {
+        "hint": "Una presentación editable en tu Drive."
+      },
+      "yaml": {
+        "hint": "Un archivo legible y reimportable."
+      }
+    },
+    "folder": {
+      "title": "Guardar el {format} en…",
+      "empty": "Aquí no hay subcarpetas. Guarda en esta carpeta o crea una nueva abajo."
+    },
+    "includeWhiteboard": {
+      "label": "Incluir las anotaciones de la pizarra",
+      "hint": "Dibujar los trazos a mano alzada en las diapositivas exportadas."
+    },
+    "otherDrive": {
+      "title": "Retirado de esta clase",
+      "message": "Esta exportación se guardó en el Google Drive de otra persona colaboradora, así que se ha retirado de esta clase pero sigue existiendo en su Drive. Pídele que la elimine allí si quieres que desaparezca por completo."
+    },
+    "errors": {
+      "status": "No se pudo cargar el estado de las exportaciones",
+      "download": "No se pudo exportar la presentación: inténtalo de nuevo",
+      "drive": "No se pudo guardar en Drive: inténtalo de nuevo",
+      "delete": "No se pudo eliminar la exportación: inténtalo de nuevo"
+    }
+  },
+  "errors": {
+    "invalid_credentials": "Correo o contraseña incorrectos",
+    "account_banned": "Esta cuenta ha sido bloqueada",
+    "unauthorized": "Tu sesión ha terminado: vuelve a iniciar sesión",
+    "forbidden": "No tienes permiso para hacer eso",
+    "internal_error": "Algo salió mal por nuestra parte: inténtalo de nuevo",
+    "unknown_error": "Algo salió mal: inténtalo de nuevo"
+  }
+}

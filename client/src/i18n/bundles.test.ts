@@ -94,11 +94,8 @@ const translations = Object.keys(bundles)
   .sort()
 
 describe('locale bundles', () => {
-  it('ships an English bundle and nothing outside LOCALES', () => {
-    expect(Object.keys(bundles)).toContain('en')
-    for (const locale of Object.keys(bundles)) {
-      expect(LOCALES as readonly string[]).toContain(locale)
-    }
+  it('ships exactly one bundle per supported locale', () => {
+    expect(Object.keys(bundles).sort()).toEqual([...LOCALES].sort())
   })
 
   it('has no blank or unparseable English message', () => {

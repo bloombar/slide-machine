@@ -19,7 +19,16 @@ import { resolveInitialLocale, storeLocale } from './detect'
 /** The app has one namespace; keys are grouped by dotted prefix instead. */
 export const DEFAULT_NS = 'translation'
 
-/** Fetches a non-English bundle on demand; Vite emits one chunk each. */
+/**
+ * Fetches a bundle on demand; Vite turns the template into a glob over
+ * `./locales/*.json` and emits one chunk per locale, so adding a locale
+ * is a file plus an entry in LOCALES and the direction map — nothing here.
+ *
+ * The glob also matches `en.json`, which is statically imported below, so
+ * the build prints INEFFECTIVE_DYNAMIC_IMPORT for it. That is accurate and
+ * intended: English belongs in the main chunk, and i18next never asks the
+ * backend for a language it already has resources for.
+ */
 const lazyBundles = resourcesToBackend(
   (language: string) => import(`./locales/${language}.json`),
 )

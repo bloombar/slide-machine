@@ -60,11 +60,8 @@ export default tseslint.config(
     ],
     plugins: { i18next },
     rules: {
-      // Starts as a warning while the extraction lands file by file, so
-      // CI is never red mid-sequence; flipped to `error` once the last
-      // surface is done.
       'i18next/no-literal-string': [
-        'warn',
+        'error',
         {
           // `jsx-only` rather than the default `jsx-text-only`, because a
           // good share of this app's copy is in attributes — the default
