@@ -31,7 +31,9 @@ list short — an allowlisted account can read every user's data.
 ## The admin console (`/app/admin`)
 
 It answers "who is using this and what have they made," and carries the
-moderation actions for when the answer calls for one.
+moderation actions for when the answer calls for one. Every list below
+includes **soft-deleted** records, badged **Deleted** — see [Deleted
+content and recovery](#deleted-content-and-recovery).
 
 - **User directory** — every account (email, handle, join date), paginated
   (10 / 25 / 50 / 100 per page) and sortable (newest, oldest, email A–Z).
@@ -68,8 +70,10 @@ moderation actions for when the answer calls for one.
 ### Moderation
 
 The user drill-down carries the mutation surface; every action asks for
-confirmation, is recorded in the audit log, and — except the password
-reset and the ban — cannot be undone from the app:
+confirmation and is recorded in the audit log. **Deletes are soft** — they
+hide the record from everyone but leave it visible and restorable in the
+console until the retention sweep purges it (see [Deleted content and
+recovery](#deleted-content-and-recovery)):
 
 - **Delete a project / lecture** — per-row Delete buttons. Cascades
   through everything underneath: lectures, slides, seed material and its
@@ -85,13 +89,63 @@ reset and the ban — cannot be undone from the app:
 - **Delete user** (danger zone) — deletes the account and all of its
   data: their projects (and everything in them), lectures they own inside
   other users' projects, their id in other users' sharing lists, and all
-  sessions. The audit log keeps its entries about them.
+  sessions. Sessions are ended for good (a deleted account signs out
+  immediately), and the audit log keeps its entries about them.
 
 Admin accounts moderate; they are not moderated: any of these against an
 allowlisted email (including your own) is refused with `target_is_admin`
 until the email is removed from `ADMIN_EMAILS`. The settings editing below
 extends that to **content**: editing a project or lecture whose *owner* is
 allowlisted is refused the same way.
+
+### Deleted content and recovery
+
+Nothing an admin or a user deletes is removed straight away. Deleting
+stamps a `deletedAt` **tombstone** on the record and everything under it
+(P-10), which hides it from every product read — its owner, its viewers,
+every listing and share surface. The console is the one exception
+(ADMIN-6): a deleted record stays listed **everywhere a live one is** —
+the user, project, and lecture directories, the lecture tables, the
+owner's project list, and a lecture's seed material — marked with a red
+**Deleted** pill whose tooltip carries the deletion time. Directory
+counts and totals include them, so a project's lecture count matches the
+rows its page shows.
+
+Opening a deleted user, project, or lecture works normally, with three
+differences:
+
+- A banner explains that the record is hidden from everyone, and the
+  danger zone becomes a **Recovery** panel with a single **Restore**
+  button (per-row Delete buttons become **Restore** too).
+- The links into the product — **View public profile**, **View project**,
+  **View slideshow**, and the settings pointers — are withdrawn. Nothing
+  in the product reads a tombstoned record, so those pages would 404.
+- **Moderation is refused.** Deleting, banning, resetting the password of,
+  or editing the settings of a deleted record returns `404` — a tombstoned
+  record is restored, not moderated again.
+
+**Restore** lifts the tombstone from the record and everything tombstoned
+*in the same cascade*: restoring a project brings back its lectures,
+slides, seed material, transcripts and refine jobs, and restoring an
+account brings back its projects and the lectures it owns anywhere.
+Something deleted *earlier*, on its own, stays deleted — restoring a
+project does not resurrect a lecture its owner had already thrown away.
+Stored files (seed blobs, retained audio) are kept until the purge, so a
+restore brings the whole thing back intact.
+
+**Every opening of deleted content is audited** (ADMIN-6/ADMIN-7): each
+visit to a deleted record's page writes a `user.deleted_view`,
+`project.deleted_view`, or `deck.deleted_view` entry naming the record and
+when it was deleted. The directories are not logged — they only badge
+their rows, and logging every page of them would bury the log. Restores
+are audited as `user.restore` / `project.restore` / `deck.restore`.
+
+**The window is finite.** A daily sweep permanently purges anything whose
+`deletedAt` is older than `DELETED_DATA_RETENTION_DAYS` (default **90**;
+`0` disables the sweep and keeps tombstones indefinitely). That purge is a
+hard cascade — records **and** their stored files — so after it there is
+nothing left to restore. See [Data retention and
+privacy](#data-retention-and-privacy).
 
 ### Editing settings
 
@@ -169,8 +223,10 @@ whole log.
 Both the acting admin and the target link to their admin detail pages, so
 an entry is one click from the record it describes. The target shows its
 kind plus the name snapshotted at the time (the user's email, the project
-or lecture title). Deletions are the exception: the record is gone, so
-the name is struck through rather than linked.
+or lecture title). Deletions are the exception: the name is struck through
+rather than linked, since the record is deleted (its page is still
+reachable from the directories, badged — see [Deleted content and
+recovery](#deleted-content-and-recovery)).
 
 Entries are **append-only**: they are written through one server module
 ([server/src/audit/log.ts](../server/src/audit/log.ts)) into the
@@ -178,7 +234,11 @@ Entries are **append-only**: they are written through one server module
 Every moderation action writes one (`user.delete`, `user.ban_email`,
 `user.unban_email`, `user.password_reset`, `project.delete`,
 `deck.delete`), as does opening a private project in the product view
-(`project.private_view`). Every settings edit writes one too
+(`project.private_view`). Soft-deleted content adds two more kinds:
+opening a deleted record's page writes `user.deleted_view` /
+`project.deleted_view` / `deck.deleted_view`, and restoring one writes
+`user.restore` / `project.restore` / `deck.restore` (ADMIN-6). Every
+settings edit writes one too
 (`user.settings_update` from the console; `project.settings_update` and
 `deck.settings_update` from the product's own settings modals), whose
 details carry a `changes` object holding each edited field's `from` and
@@ -274,7 +334,19 @@ so it doesn't also expire slide images, narration, or seed files.
 
 Seed material (`seed/`), slide images (`slides/`), and TTS narration
 (`tts/`) share the bucket, served public-read from the CDN. Deleting a
-project or lecture in the app cascades its stored files.
+project or lecture in the app cascades its stored files — but only at the
+purge, not at the delete, so a restore brings them back (see below).
+
+**Deleted records** are kept for a window and then purged. Deleting
+anything — by its owner or an admin — stamps a tombstone rather than
+removing the row (P-10), and a **daily sweep** hard-deletes everything
+whose tombstone is older than `DELETED_DATA_RETENTION_DAYS` (default 90;
+`0` = keep tombstones forever), cascading through owned children and their
+stored blobs so nothing is orphaned. Until then the record is visible and
+restorable in the console — see [Deleted content and
+recovery](#deleted-content-and-recovery). Shortening the window shortens
+the recovery window with it; setting `0` means deleted data is never
+reclaimed, so storage grows without bound.
 
 ## Accounts and authentication
 
@@ -308,14 +380,20 @@ changing a `planTier` — is done directly against MongoDB. It's an
 escape hatch:
 
 - Prefer the console's own actions where they exist (delete user /
-  project / lecture, ban, password reset): they cascade through stored
-  files and land in the audit log; a raw `deleteOne` orphans data and
-  leaves no trace.
+  project / lecture, ban, password reset): they cascade correctly, stay
+  restorable, and land in the audit log; a raw `deleteOne` is a **hard**
+  delete that orphans data, leaves stored files behind, and cannot be
+  undone or traced.
 - Snapshot (Atlas) before a bulk or destructive change.
 - Collections `users`, `projects`, `decks`, `slides`, `seedassets`,
   `bannedemails` map to
   [server/src/models/](../server/src/models/); find ids via the console
   first.
+- Every soft-deletable collection carries a `deletedAt` (null/absent =
+  live). Queries through Mongoose exclude tombstoned rows by default —
+  `.setOptions({ withDeleted: true })` is the escape hatch — but a raw
+  `mongosh` query sees them all, so filter `deletedAt: null` yourself when
+  you mean "live only".
 
 If a class of action becomes routine, that's the signal to add a real
 mutation endpoint behind `requireAdmin` rather than growing a habit of
