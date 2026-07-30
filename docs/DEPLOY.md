@@ -85,8 +85,10 @@ diarization — is documented in [AUDIO.md](AUDIO.md).
 > (`Upload.abort()` alone proved insufficient on Spaces, so it also sweeps the
 > key), but a killed process cannot clean up after itself. Add an
 > **`AbortIncompleteMultipartUpload` lifecycle rule** (e.g. 7 days) on the
-> bucket as the backstop. Verify support in the DO control panel — the Spaces
-> API key used by the app cannot read or write bucket lifecycle configuration.
+> bucket as the backstop. Spaces supports it; set it with a full-access Spaces
+> key, since the app's own key is denied lifecycle operations (and never needs
+> them). Exact steps, and the AWS CLI display bug that makes an applied rule
+> look like it failed, are in [AUDIO.md](AUDIO.md).
 
 **Scope it to `audio/`** — an unprefixed rule would also expire slide images
 (`slides/`), TTS narration (`tts/`), and seed files (`seed/`). Note the bucket

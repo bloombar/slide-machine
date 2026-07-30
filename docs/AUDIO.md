@@ -175,9 +175,26 @@ Beyond creating the Space and a key pair ([DEPLOY.md §2](DEPLOY.md)):
    connection leaves parts that consume paid storage and do **not** appear in
    object listings, so the cost is invisible. The app aborts explicitly on every
    failure path it can see, but a killed process cannot clean up after itself.
-   Set the rule (e.g. 7 days) in the **DO control panel** — the app's Spaces key
-   gets `AccessDenied` on bucket lifecycle configuration, so this cannot be
-   scripted with it, and support should be confirmed there.
+
+   Spaces supports this (confirmed). Set it with a **full-access Spaces key** —
+   the app's own key is denied bucket-lifecycle operations, which is fine, since
+   it never needs them:
+
+   ```jsonc
+   // s3api put-bucket-lifecycle-configuration
+   { "Rules": [{ "ID": "abort-incomplete-mpu", "Status": "Enabled",
+                 "Filter": { "Prefix": "" },
+                 "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 } }] }
+   ```
+
+   Two traps. **`put-bucket-lifecycle-configuration` replaces the entire
+   configuration** — read the current rules first and write back the merged set,
+   or you will silently drop the `audio/` expiry below. And **AWS CLI v2 cannot
+   display the response**: Spaces returns the rule in the legacy form with an
+   empty `<Prefix></Prefix>`, which parses to `None` and crashes the CLI's
+   formatter with `argument of type 'NoneType' is not a container or iterable`.
+   That error is cosmetic — the rule is applied. Read it back with the AWS SDK
+   instead, which renders it correctly.
 
 2. **Optionally expire the `audio/` prefix.** A lifecycle expiration rule
    scoped to `audio/` is a zero-code backstop to the app's sweep. **Scope it to
