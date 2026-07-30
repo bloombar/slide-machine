@@ -16,7 +16,7 @@ const envState = {
   REFINE_TRANSCRIPT_DEFAULT_LEVEL: 2,
   SIMULATED_SPEECH_ENABLED: false,
   WHITEBOARD_SUPPRESS_DEBOUNCE_MS: 5000,
-  STT_CAPTURE_SAMPLE_RATE: 16000,
+  STT_CAPTURE_SAMPLE_RATE: 24000,
 }
 vi.mock('../config/env', () => ({ env: envState }))
 vi.mock('../lib/transcribe-audio', () => ({
@@ -31,7 +31,7 @@ const getConfig = async () => (await request(app).get('/api/config')).body
 beforeEach(() => {
   envState.SIMULATED_SPEECH_ENABLED = false
   envState.TTS_PROVIDER = 'none'
-  envState.STT_CAPTURE_SAMPLE_RATE = 16000
+  envState.STT_CAPTURE_SAMPLE_RATE = 24000
 })
 
 describe('GET /api/config', () => {
@@ -43,7 +43,7 @@ describe('GET /api/config', () => {
       refineTranscriptDefaultLevel: 2,
       simulatedSpeechEnabled: false,
       whiteboardSuppressDebounceMs: 5000,
-      sttCaptureSampleRate: 16000,
+      sttCaptureSampleRate: 24000,
     })
   })
 

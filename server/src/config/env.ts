@@ -236,14 +236,24 @@ const envSchema = z.object({
     .nonnegative()
     .default(128),
   // Mic capture rate (Hz) the client downsamples to before streaming (CAP-3).
-  // Google's models are trained at 16 kHz, so the browser's native 48 kHz
-  // triples bytes — bandwidth, retention memory, and stored WAV size — for no
-  // transcription benefit. Raise only when retained-audio fidelity matters
-  // more than cost. Clients whose AudioContext already runs at or below this
-  // send their native rate unchanged (we never upsample).
-  // 0 = no downsampling at all: stream the context's native rate, whatever it
-  // is. Like the retention ceilings, 0 here means "no limit" — the MOST audio,
-  // not the least.
+  // The browser's native 48 kHz costs bandwidth, retention memory, and stored
+  // size for content the speech models discard: Google's are trained at 16 kHz.
+  //
+  // The default splits the difference at 24 kHz. Transcription only needs 16,
+  // but the same recording is played back per slide (PLAY-2), and 16 kHz
+  // reproduces nothing above 8 kHz — which is where the sibilance of "s" and
+  // "f" lives, so speech stays perfectly intelligible but sounds dull. 24 kHz
+  // keeps that for half the cost of 48 kHz. Drop to 16000 if playback fidelity
+  // does not matter to you; the recordings are the only thing that changes.
+  //
+  // Raising this also SHORTENS how long a session runs before
+  // AUDIO_RETENTION_MAX_SESSION_MB truncates it — ~1 h 49 min at 24 kHz
+  // against ~2 h 44 min at 16 kHz — so the two want setting together.
+  //
+  // Clients whose AudioContext already runs at or below this send their native
+  // rate unchanged (we never upsample). 0 = no downsampling at all: stream the
+  // context's native rate, whatever it is. Like the retention ceilings, 0 here
+  // means "no limit" — the MOST audio, not the least.
   STT_CAPTURE_SAMPLE_RATE: z.coerce
     .number()
     .int()
@@ -252,7 +262,7 @@ const envSchema = z.object({
     .refine(rate => rate === 0 || rate >= 8000, {
       message: 'must be 0 (native, no downsampling) or between 8000 and 48000',
     })
-    .default(16000),
+    .default(24000),
   // Days a soft-deleted record (P-10 tombstone) is retained before the daily
   // sweep permanently purges it and its files (P-11). 0 = keep tombstones
   // forever (no purge).

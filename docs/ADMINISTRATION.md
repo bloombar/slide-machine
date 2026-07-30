@@ -262,7 +262,7 @@ student voices. It is off by default, captured only when
 `AUDIO_RETENTION_ENABLED=true` with `TRANSCRIPTION_PROVIDER=google-cloud`
 (the browser engine's audio never reaches the server). When on, each
 session's audio is streamed to the bucket's `audio/` prefix as raw PCM
-(~1.9 MB/min at the default 16 kHz `STT_CAPTURE_SAMPLE_RATE`), and a **daily
+(~2.9 MB/min at the default 24 kHz `STT_CAPTURE_SAMPLE_RATE`), and a **daily
 sweep** deletes recordings past `AUDIO_RETENTION_DAYS` (default 30; `0` = keep
 forever) with their deck references. `AUDIO_RETENTION_MAX_SESSION_MB` (default
 `300`) caps how much one lecture may store and `AUDIO_RETENTION_MAX_TOTAL_MB`

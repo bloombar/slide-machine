@@ -37,8 +37,8 @@ import {
 const STT_PATH = '/api/stt'
 
 /** Cap on how much audio ONE session may store, from
- * AUDIO_RETENTION_MAX_SESSION_MB (default 300 MB ≈ 2 h 44 min at the default
- * 16 kHz capture rate, ≈ 55 min if a client streams 48 kHz); 0 disables it.
+ * AUDIO_RETENTION_MAX_SESSION_MB (default 300 MB ≈ 1 h 49 min at the default
+ * 24 kHz capture rate, ≈ 55 min if a client streams 48 kHz); 0 disables it.
  *
  * Since audio streams to storage rather than accumulating here, this is a
  * STORAGE-COST cap, not a memory guard — a long session no longer costs memory
@@ -51,7 +51,7 @@ const maxRetainedBytes = (): number =>
 /** Ceiling on audio buffered while the deck's edit check is still resolving.
  * Nothing may be uploaded before that answer arrives, so these frames are held
  * — briefly, and boundedly: a slow database must degrade retention, not the
- * process. ~16 s of 16 kHz audio. */
+ * process. ~11 s of 24 kHz audio. */
 const MAX_PENDING_BYTES = 512 * 1024
 
 /** First control message the client sends before any audio. */
