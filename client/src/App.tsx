@@ -4,7 +4,7 @@
  * pages use the AppShell. Admin pages nest one level deeper in the
  * AdminShell, which guards them and adds the admin nav bar.
  */
-import { Routes, Route } from 'react-router'
+import { Navigate, Routes, Route } from 'react-router'
 import PublicShell from './components/layout/PublicShell'
 import AppShell from './components/layout/AppShell'
 import LandingPage from './pages/LandingPage'
@@ -14,7 +14,6 @@ import HomePage from './pages/HomePage'
 import ProjectPage from './pages/ProjectPage'
 import ProfilePage from './pages/ProfilePage'
 import DeckViewerPage from './pages/DeckViewerPage'
-import PublicProfilePage from './pages/PublicProfilePage'
 import AdminUsersPage from './pages/AdminUsersPage'
 import AdminUserDetailPage from './pages/AdminUserDetailPage'
 import AdminProjectsPage from './pages/AdminProjectsPage'
@@ -25,6 +24,15 @@ import AdminLogsPage from './pages/AdminLogsPage'
 import AdminSettingsLogsPage from './pages/AdminSettingsLogsPage'
 import RequireAuth from './auth/RequireAuth'
 import AdminShell from './components/layout/AdminShell'
+import { useAuth } from './auth/AuthContext'
+
+/** The profile page moved to /u/:userId, where owner and stranger see
+ * the same page. Old links to /app/profile land on the signed-in user's
+ * own one; RequireAuth guarantees there is a user by the time this runs. */
+function OwnProfileRedirect() {
+  const { user } = useAuth()
+  return user ? <Navigate to={`/u/${user.id}`} replace /> : null
+}
 
 export default function App() {
   return (
@@ -34,7 +42,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/d/:slug" element={<DeckViewerPage />} />
-        <Route path="/u/:userId" element={<PublicProfilePage />} />
+        <Route path="/u/:userId" element={<ProfilePage />} />
       </Route>
       <Route
         element={
@@ -45,7 +53,7 @@ export default function App() {
       >
         <Route path="/app" element={<HomePage />} />
         <Route path="/app/projects/:projectId" element={<ProjectPage />} />
-        <Route path="/app/profile" element={<ProfilePage />} />
+        <Route path="/app/profile" element={<OwnProfileRedirect />} />
         <Route path="/app/admin" element={<AdminShell />}>
           <Route index element={<AdminUsersPage />} />
           <Route path="users/:userId" element={<AdminUserDetailPage />} />

@@ -392,7 +392,9 @@ When an **already-displayed** slide changes layout — whether from an AI update
 While a live session is recording, whiteboard use ([EDIT-4](#edit-4-whiteboard-annotation) / [EDIT-5](#edit-5-whiteboard-tools)) **pauses slide generation** so the AI never shifts content out from under a mark. Two pause modes are surfaced by a single notification carrying a **Resume** control:
 
 - **Drawing debounce** — while the instructor is actively drawing on any slide, generation pauses and **auto-resumes** shortly after the last gesture (a configurable grace window — `WHITEBOARD_SUPPRESS_DEBOUNCE_MS`, [TECH-4](#tech-4-server-configuration); `0` disables the grace), or immediately on **Resume**.
-- **Whiteboard slide** — on a blank whiteboard-layout slide ([TMPL-7](#tmpl-7-whiteboard-layout)), generation pauses **manually** (no auto-resume): it stays paused until the user clicks **Resume** or **creates a new regular slide** (the **+** button or the "new slide" voice command — [CAP-4](#cap-4-voice-commands)), which navigates off the canvas.
+- **Whiteboard slide** — on a blank whiteboard-layout slide ([TMPL-7](#tmpl-7-whiteboard-layout)), generation pauses **manually** (no auto-resume): it stays paused until the user clicks **Resume**, speaks the "resume" voice command ([CAP-4](#cap-4-voice-commands)), or **creates a new regular slide** (the **+** button or the "new slide" voice command), which navigates off the canvas.
+
+The spoken **"resume"** command is equivalent to the Resume control in both pause modes — the same action and the same confirmation — so an instructor working at the board never needs the mouse. It applies only while generation is actually paused.
 
 **While paused, nothing is lost:** speech is still **transcribed** and the transcript is **recorded** (deck transcript, timestamped segments, and the slide's `sourceTranscript` — [§15](#15-data-models)); strokes keep saving on their own pipeline; and **voice commands keep working**. Only the creation of new slides and any content/layout change is skipped, and generation resumes where it left off once the pause clears.
 

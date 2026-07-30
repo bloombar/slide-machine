@@ -1,9 +1,11 @@
 /**
- * Public profile route (SHARE-1 / AUTH-5): GET /api/users/:id. Private
- * profiles resolve only for their owner (optional auth); missing and
- * private both read as 404 so existence never leaks. The body lists the
- * user's lectures the requester can view, grouped by project — projects
- * with nothing visible are omitted, and seed notes never leave the API.
+ * Profile route (SHARE-1 / AUTH-5): GET /api/users/:id. Private profiles
+ * resolve only for their owner and for admins (optional auth); missing
+ * and private both read as 404 so existence never leaks. The body lists
+ * the user's lectures the requester can view, grouped by project —
+ * projects with nothing visible are omitted, and seed notes never leave
+ * the API. `canEdit` tells the page whether to offer its Edit button;
+ * the writes themselves are authorized on their own endpoints.
  */
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { isValidObjectId } from 'mongoose'
@@ -17,6 +19,8 @@ import {
   toDeckDto,
 } from '../models/deck'
 import { canViewAcl } from '../lib/access'
+import { isAdminEmail } from '../config/admin'
+import { isAllowlistedAdmin } from '../lib/admin-view'
 import { verifyAccessToken } from '../auth/tokens'
 import { HttpError } from '../middleware/error'
 
@@ -49,7 +53,14 @@ usersRouter.get('/users/:id', optionalAuth, async (req, res) => {
   const user = await UserModel.findById(id)
   if (!user) throw notFound
   const isSelf = req.userId === id
-  if (user.profileVisibility === 'private' && !isSelf) throw notFound
+  // Admins may edit any profile (ADMIN-5), so they must be able to open
+  // a private one to do it — the same allowlist bypass the console uses.
+  // Lecture visibility below is deliberately NOT bypassed: the admin
+  // console is where an admin sees someone's private lectures.
+  const isAdmin = !isSelf && (await isAllowlistedAdmin(req.userId))
+  if (user.profileVisibility === 'private' && !isSelf && !isAdmin) {
+    throw notFound
+  }
 
   const [projects, decks] = await Promise.all([
     ProjectModel.find({ ownerId: id }),
@@ -96,6 +107,10 @@ usersRouter.get('/users/:id', optionalAuth, async (req, res) => {
   const body: ProfileResponse = {
     user: toPublicUserDto(user),
     projects: grouped,
+    // Admins moderate but are not moderated: an allowlisted account's
+    // profile is off-limits to other admins, matching the write path
+    // (rejectAdminTarget) so the button never promises a refused save.
+    canEdit: isSelf || (isAdmin && !isAdminEmail(user.email)),
   }
   res.json(body)
 })

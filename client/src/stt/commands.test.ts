@@ -22,12 +22,27 @@ describe('matchVoiceCommand', () => {
     expect(matchVoiceCommand('slide machine new chalkboard')).toBe(
       'newWhiteboardSlide',
     )
+    expect(matchVoiceCommand('Slide machine, resume')).toBe('resume')
+    expect(matchVoiceCommand('slide machine resume generation')).toBe('resume')
+    expect(matchVoiceCommand('slide machine, keep going!')).toBe('resume')
+    expect(matchVoiceCommand('slide machine carry on')).toBe('resume')
+  })
+
+  it('keeps resume distinct from the navigation commands', () => {
+    // "continue" resumes generation; the back/forward words stay navigation,
+    // so a resume synonym can never move the deck.
+    expect(matchVoiceCommand('slide machine, continue')).toBe('resume')
+    expect(matchVoiceCommand('slide machine back')).toBe('previous')
+    expect(matchVoiceCommand('slide machine forward')).toBe('next')
   })
 
   it('requires the wake word — commands without it are lecture content', () => {
     expect(matchVoiceCommand('next slide')).toBeNull()
     expect(matchVoiceCommand('go back')).toBeNull()
     expect(matchVoiceCommand('pause')).toBeNull()
+    // Lecture speech that happens to say "continue" must not resume
+    expect(matchVoiceCommand('continue')).toBeNull()
+    expect(matchVoiceCommand('resume')).toBeNull()
   })
 
   it('requires the remainder to be exactly a known command', () => {

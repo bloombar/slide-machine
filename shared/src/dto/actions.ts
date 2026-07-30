@@ -179,6 +179,14 @@ export interface UserSetProfileVisibilityInput {
   profileVisibility: ProfileVisibility
 }
 
+/** The signed-in user's own public profile fields (AUTH-5); only
+ * provided fields change. An empty bio clears it. Admins edit these on
+ * someone else's account through the audited admin endpoint instead. */
+export interface UserUpdateProfileInput {
+  displayName?: string
+  bio?: string
+}
+
 /** Explicit lecturing/generation language; null clears back to the
  * browser default. */
 export interface UserSetLanguageInput {

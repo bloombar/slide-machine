@@ -1097,6 +1097,122 @@ describe('DeckViewerPage microphone capture', () => {
     expect(phrases[1]!.pauseGeneration).toBeUndefined()
   })
 
+  it('resumes the whiteboard pause on a "resume" voice command', async () => {
+    FakeRecognition.reset()
+    vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
+    const phrases: Array<Record<string, unknown>> = []
+    const wbDeck = {
+      ...deckView,
+      deck: { ...deckView.deck, slideOrder: ['s1'] },
+      slides: [
+        { id: 's1', deckId: 'deck1', index: 0, layoutType: 'whiteboard' },
+      ],
+    }
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...wbDeck, canEdit: true },
+      }),
+      '/api/actions/session.phrase': init => {
+        phrases.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+        return { status: 200, body: { kind: 'none' } }
+      },
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Live session' }))
+
+    expect(
+      await screen.findByText('Content generation paused for drawing'),
+    ).toBeInTheDocument()
+    const recognition = FakeRecognition.last!
+    const speak = (transcript: string) =>
+      act(() => {
+        recognition.onresult?.({
+          resultIndex: 0,
+          results: [{ isFinal: true, 0: { transcript } }],
+        })
+      })
+
+    speak('narrating while I draw')
+    await vi.waitFor(() => expect(phrases).toHaveLength(1))
+    expect(phrases[0]!.pauseGeneration).toBe(true)
+
+    // Spoken resume behaves exactly like clicking Resume: the pill confirms,
+    // and the command itself never reaches generation.
+    speak('slide machine, resume')
+    expect(
+      await screen.findByText('Content generation resumed'),
+    ).toBeInTheDocument()
+    expect(phrases).toHaveLength(1)
+
+    // The next phrase generates normally — the pause is genuinely lifted.
+    speak('now generate a slide from this')
+    await vi.waitFor(() => expect(phrases).toHaveLength(2))
+    expect(phrases[1]!.pauseGeneration).toBeUndefined()
+  })
+
+  it('ignores a "resume" command when generation is not paused', async () => {
+    FakeRecognition.reset()
+    vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
+    let generationCalls = 0
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+      '/api/actions/session.phrase': () => {
+        generationCalls++
+        return { status: 200, body: { kind: 'none' } }
+      },
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Live session' }))
+    const recognition = FakeRecognition.last!
+
+    // Nothing is paused, so there is no Resume button to click and the spoken
+    // equivalent is a no-op: no confirmation, no navigation, no generation.
+    expect(screen.getByText('1 / 2')).toBeInTheDocument()
+    act(() => {
+      recognition.onresult?.({
+        resultIndex: 0,
+        results: [
+          { isFinal: true, 0: { transcript: 'slide machine, continue' } },
+        ],
+      })
+    })
+    expect(screen.getByText('1 / 2')).toBeInTheDocument()
+    expect(
+      screen.queryByText('Content generation resumed'),
+    ).not.toBeInTheDocument()
+    expect(generationCalls).toBe(0)
+  })
+
   it('resumes the whiteboard pause when a new regular slide is made', async () => {
     FakeRecognition.reset()
     vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
