@@ -54,14 +54,20 @@ objects with a `public-read` ACL and serves them from `S3_PUBLIC_BASE_URL`.
 ### Optional: expire retained lecture audio (`audio/` prefix)
 
 If `AUDIO_RETENTION_ENABLED=true` (GEN-4), each live session's audio is stored
-as a WAV under the **`audio/`** key prefix — large (~1.9 MB/min at the default
-16 kHz `STT_CAPTURE_SAMPLE_RATE`, ~5.8 MB/min at 48 kHz) and containing student
-voices. The app already runs a daily sweep that deletes recordings past
-`AUDIO_RETENTION_DAYS` (default 30) along with their deck references, so no
-bucket rule is required. As a belt-and-suspenders guard you may **also** add a
-Spaces/S3 **lifecycle expiration rule scoped to the `audio/` prefix** (e.g. 30
-days) — dashboard → your Space → **Settings → Lifecycle rules**, or via
-`s3api put-bucket-lifecycle-configuration` with a `Filter.Prefix` of `audio/`.
+as raw LINEAR16 PCM under the **`audio/`** key prefix — large (~1.9 MB/min at
+the default 16 kHz `STT_CAPTURE_SAMPLE_RATE`, ~5.8 MB/min at 48 kHz) and
+containing student voices. The app already runs a daily sweep that deletes
+recordings past `AUDIO_RETENTION_DAYS` (default 30) along with their deck
+references, so no bucket rule is required. As a belt-and-suspenders guard you
+may **also** add a Spaces/S3 **lifecycle expiration rule scoped to the `audio/`
+prefix** (e.g. 30 days) — dashboard → your Space → **Settings → Lifecycle
+rules**.
+
+> **Do not add it with a bare `s3api put-bucket-lifecycle-configuration`.** That
+> call replaces the entire configuration, so it would silently delete the
+> required `AbortIncompleteMultipartUpload` rule below. Read the current rules
+> and write back the merged set — which is what
+> `npm run spaces:lifecycle` does ([AUDIO.md](AUDIO.md#maintaining-the-bucket)).
 Audio is **streamed** to storage as it arrives, so a session's memory cost is a
 fixed in-flight window (~11 MB) rather than its whole length — a three-hour
 lecture costs the same as a three-minute one. Two ceilings bound it:
@@ -87,8 +93,16 @@ diarization — is documented in [AUDIO.md](AUDIO.md).
 > **`AbortIncompleteMultipartUpload` lifecycle rule** (e.g. 7 days) on the
 > bucket as the backstop. Spaces supports it; set it with a full-access Spaces
 > key, since the app's own key is denied lifecycle operations (and never needs
-> them). Exact steps, and the AWS CLI display bug that makes an applied rule
-> look like it failed, are in [AUDIO.md](AUDIO.md).
+> them):
+>
+> ```sh
+> npm run spaces:lifecycle -- --env-file server/.env.production --apply-abort-rule
+> ```
+>
+> Run the same command without `--apply-abort-rule` any time to check the rule
+> is still there and to see stranded uploads. Do not reach for the AWS CLI: it
+> crashes displaying this rule, which makes an applied rule look like a failure.
+> Details in [AUDIO.md](AUDIO.md#maintaining-the-bucket).
 
 **Scope it to `audio/`** — an unprefixed rule would also expire slide images
 (`slides/`), TTS narration (`tts/`), and seed files (`seed/`). Note the bucket
