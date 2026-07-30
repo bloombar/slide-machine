@@ -45,13 +45,6 @@ interface Props {
   deckId: string
 }
 
-/**
- * Finder-style Google Drive folder browser (QUIZ-2). Navigate into folders via
- * the breadcrumb, create new ones, and save the quiz into whichever folder
- * you're in. Under the current `drive.file` scope this shows the folders the
- * app created; once `drive.readonly` is granted (server-side) and the user
- * reconnects, the very same views browse the whole Drive — no UI change.
- */
 /** The question types offered, in order. Each key names its own field
  * label under `quiz.types.<key>.field` and its preview label under
  * `quiz.types.<key>.name`. */
@@ -186,6 +179,13 @@ function useQuizOptions(defaults?: QuizGenerationOptions) {
 
 type QuizOptions = ReturnType<typeof useQuizOptions>
 
+/**
+ * Finder-style Google Drive folder browser (QUIZ-2). Navigate into folders via
+ * the breadcrumb, create new ones, and save the quiz into whichever folder
+ * you're in. Under the current `drive.file` scope this shows the folders the
+ * app created; once `drive.readonly` is granted (server-side) and the user
+ * reconnects, the very same views browse the whole Drive — no UI change.
+ */
 function FolderPicker({
   onCancel,
   onGenerate,
