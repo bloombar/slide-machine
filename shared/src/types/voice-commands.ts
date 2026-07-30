@@ -11,6 +11,7 @@ export const VOICE_COMMANDS = [
   'next',
   'previous',
   'pause',
+  'resume',
   'newSlide',
   'newWhiteboardSlide',
 ] as const
@@ -28,6 +29,11 @@ export const VOICE_COMMAND_DESCRIPTORS: VoiceCommandDescriptor[] = [
   { id: 'next', description: 'Advance to the next slide' },
   { id: 'previous', description: 'Go back to the previous slide' },
   { id: 'pause', description: 'Pause the session and stop listening' },
+  {
+    id: 'resume',
+    description:
+      'Resume slide generation after it paused for whiteboard drawing',
+  },
   { id: 'newSlide', description: 'Append a new blank slide' },
   {
     id: 'newWhiteboardSlide',

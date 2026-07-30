@@ -7,7 +7,9 @@
  *
  * SPEC's start/resume-by-voice needs an always-listening command mode
  * and arrives with the Cloud STT path; pause works today (it stops the
- * mic, so resuming is a click).
+ * mic, so resuming *listening* is a click). Note `resume` is a different
+ * axis: it resumes content generation after the whiteboard pause (GEN-10)
+ * while the mic keeps running, so it needs no always-listening mode.
  *
  * The command ids live in shared: the server's AI command-intent path
  * (GENERATION_VOICE_COMMANDS) returns the same ids, so both routes run
@@ -24,6 +26,7 @@ const VOCABULARY: Record<VoiceCommand, string[]> = {
   next: ['next slide', 'next', 'forward', 'fast forward'],
   previous: ['previous slide', 'previous', 'back', 'go back', 'rewind'],
   pause: ['pause', 'stop', 'stop listening'],
+  resume: ['resume', 'resume generation', 'continue', 'keep going', 'carry on'],
   newSlide: ['new slide', 'add slide', 'add a slide', 'blank slide'],
   newWhiteboardSlide: [
     'new whiteboard',
@@ -40,6 +43,7 @@ export const COMMAND_LABELS: Record<VoiceCommand, string> = {
   next: 'Next slide',
   previous: 'Previous slide',
   pause: 'Paused listening',
+  resume: 'Content generation resumed',
   newSlide: 'New slide',
   newWhiteboardSlide: 'New whiteboard',
 }

@@ -101,6 +101,13 @@ Two independent pause modes, surfaced by one pill
    or **makes a new regular slide** (toolbar `+` / "new slide" command), which
    navigates off the canvas.
 
+**Resume is also hands-free**: "slide machine, resume" (/ "continue", "keep
+going", "carry on") runs the _same_ `resumeGeneration('manual')` the button
+does, so both routes are identical — including the pill as the only
+confirmation. Because the button exists only while paused, an unpaused "resume"
+is deliberately a **no-op** rather than pre-authorizing the next drawing bout.
+Chalk-in-hand recovery needs no mouse.
+
 While paused:
 
 - The phrase carries `pauseGeneration`; the server **records the transcript**

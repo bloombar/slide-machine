@@ -2,8 +2,9 @@
  * Whiteboard (WB-1/2/3) e2e: draw a pen stroke that persists across reload,
  * erase it as a timestamped event (kept in data, hidden in the edit view),
  * confirm drawing suppresses auto-slide-creation while the "+" button still
- * adds slides, and that deck playback runs with drawings present. Runs against
- * the built app + test MongoDB, like the other specs.
+ * adds slides, that a spoken "resume" lifts the whiteboard generation pause,
+ * and that deck playback runs with drawings present. Runs against the built
+ * app + test MongoDB, like the other specs.
  */
 import { test, expect, type Page } from '@playwright/test'
 import { createProject } from './helpers'
@@ -194,6 +195,56 @@ test('deck playback returns TTS marks for stroke sync (WB-2)', async ({
   const body = await (await ttsResponse).json()
   expect(Array.isArray(body.marks)).toBe(true)
   expect(body).toHaveProperty('url')
+})
+
+/** Speaks one phrase through the Speak bar and waits for it to fully settle.
+ * Necessary when the next step types again: the form clears the input *after*
+ * its request resolves, so filling mid-flight gets wiped and the submit is
+ * silently dropped. Waiting for the empty input proves the reset has landed. */
+const speakAndSettle = async (page: Page, phrase: string) => {
+  const settled = page.waitForResponse(
+    r => r.url().includes('/api/actions/session.phrase') && r.status() === 200,
+  )
+  await page.getByLabel('Spoken phrase').fill(phrase)
+  await page.getByRole('button', { name: 'Speak' }).click()
+  await settled
+  await expect(page.getByLabel('Spoken phrase')).toHaveValue('')
+}
+
+test('a spoken "resume" lifts the whiteboard generation pause', async ({
+  page,
+}) => {
+  await buildDeck(page)
+  await expect(page.getByText('2 / 2')).toBeVisible()
+
+  // A whiteboard slide pauses generation manually — it never auto-resumes, so
+  // anything that lifts the pause here can only be the resume itself.
+  await page.getByRole('button', { name: 'New whiteboard slide' }).click()
+  await expect(page.getByText('3 / 3')).toBeVisible()
+  await expect(
+    page.getByText('Content generation paused for drawing'),
+  ).toBeVisible()
+
+  // While paused, speech is recorded but makes no slide — and stays paused.
+  await speakAndSettle(page, 'Sketching the proof by hand')
+  await expect(page.getByText('3 / 3')).toBeVisible()
+  await expect(
+    page.getByText('Content generation paused for drawing'),
+  ).toBeVisible()
+
+  // "Please resume" — no wake word, so the server's AI intent path (CAP-4)
+  // recognizes it and the client runs the same resume the button does.
+  await speakAndSettle(page, 'Please resume')
+  await expect(page.getByText('Content generation resumed')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Resume' })).toHaveCount(0)
+
+  // Generation is genuinely back: the next phrase makes a slide, leaving the
+  // whiteboard canvas itself untouched.
+  await speakAndSettle(
+    page,
+    'A triangle has three interior angles summing to 180 degrees',
+  )
+  await expect(page.getByText('4 / 4')).toBeVisible()
 })
 
 test('opening a slide kebab while drawing exits drawing mode', async ({

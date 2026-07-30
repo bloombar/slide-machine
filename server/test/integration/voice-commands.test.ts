@@ -115,6 +115,8 @@ describe('session.phrase with GENERATION_VOICE_COMMANDS on', () => {
     for (const [phrase, command] of [
       ['Please go back', 'previous'],
       ['Please pause', 'pause'],
+      ['Please resume', 'resume'],
+      ['Please keep going', 'resume'],
       ['Please new slide', 'newSlide'],
       ['Please new whiteboard', 'newWhiteboardSlide'],
       ['Please new chalkboard', 'newWhiteboardSlide'],
@@ -166,5 +168,20 @@ describe('session.phrase with GENERATION_VOICE_COMMANDS on', () => {
     expect(view.body.deck.transcript as string).not.toContain(
       'Please next slide',
     )
+  })
+
+  it('recognizes "resume" while paused — the case it exists for', async () => {
+    // Resume is spoken *during* a pause, so it must survive the paused path
+    // (the client then lifts the pause exactly as its Resume button does).
+    const res = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'Please resume',
+      pauseGeneration: true,
+    })
+    expect(res.body).toEqual({ kind: 'command', command: 'resume' })
+
+    // Nothing persisted: a command is operation, not lecture content.
+    const view = await act(ada, 'deck.get', { deckId })
+    expect(view.body.deck.transcript ?? '').not.toContain('Please resume')
   })
 })

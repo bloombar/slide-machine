@@ -864,6 +864,16 @@ export default function DeckViewerPage() {
       }
     } else if (command === 'pause') {
       stopListening()
+    } else if (command === 'resume') {
+      // Exactly the pill's Resume button (GEN-10): the same resumeGeneration
+      // call, and the same pill as its only confirmation — hence the early
+      // return, which skips the interim echo a click never produces. The
+      // button exists only while paused, so an unpaused "resume" does nothing
+      // rather than pre-authorizing the next drawing bout. Read the pause
+      // through the ref: this runs from a mic closure captured when listening
+      // began, where the generationPause state would be stale.
+      if (pauseSourceRef.current) resumeGeneration('manual')
+      return
     } else if (command === 'newSlide') {
       void addSlide()
     } else if (command === 'newWhiteboardSlide') {
