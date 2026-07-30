@@ -17,6 +17,7 @@ let runtime: RuntimeConfig = {
   refineTranscriptDefaultLevel: 2,
   simulatedSpeechEnabled: false,
   whiteboardSuppressDebounceMs: 5000,
+  sttCaptureSampleRate: 16000,
 }
 let loaded: Promise<RuntimeConfig> | null = null
 
@@ -57,3 +58,7 @@ export const getSimulatedSpeechEnabled = (): boolean =>
  * auto-slide-creation while recording (WB-3). */
 export const getWhiteboardSuppressDebounceMs = (): number =>
   runtime.whiteboardSuppressDebounceMs
+
+/** Rate (Hz) mic capture downsamples to before streaming (CAP-3). */
+export const getSttCaptureSampleRate = (): number =>
+  runtime.sttCaptureSampleRate

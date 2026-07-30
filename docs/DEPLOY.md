@@ -54,13 +54,27 @@ objects with a `public-read` ACL and serves them from `S3_PUBLIC_BASE_URL`.
 ### Optional: expire retained lecture audio (`audio/` prefix)
 
 If `AUDIO_RETENTION_ENABLED=true` (GEN-4), each live session's audio is stored
-as a WAV under the **`audio/`** key prefix — large (~5.7 MB/min) and containing
-student voices. The app already runs a daily sweep that deletes recordings past
+as a WAV under the **`audio/`** key prefix — large (~1.9 MB/min at the default
+16 kHz `STT_CAPTURE_SAMPLE_RATE`, ~5.8 MB/min at 48 kHz) and containing student
+voices. The app already runs a daily sweep that deletes recordings past
 `AUDIO_RETENTION_DAYS` (default 30) along with their deck references, so no
 bucket rule is required. As a belt-and-suspenders guard you may **also** add a
 Spaces/S3 **lifecycle expiration rule scoped to the `audio/` prefix** (e.g. 30
 days) — dashboard → your Space → **Settings → Lifecycle rules**, or via
 `s3api put-bucket-lifecycle-configuration` with a `Filter.Prefix` of `audio/`.
+Retention also costs **memory**, not just bucket space: each live session
+buffers its audio in the server process until the socket closes, and the flush
+briefly holds a session's audio twice while it builds the WAV. Audio buffers sit
+outside the V8 heap, so an overrun shows up as RSS growth and an OOM kill rather
+than a catchable error. Two ceilings bound it:
+`AUDIO_RETENTION_MAX_SESSION_MB` (default `300`) caps a single lecture, and
+`AUDIO_RETENTION_MAX_TOTAL_MB` (default `1024`) caps the total across all
+concurrent sessions — **set the total well under the container's limit**,
+leaving room for the app and the flush. Past either ceiling the affected
+sessions transcribe without retaining audio; transcription, slide generation,
+and the transcript are never affected. Budget ~115 MB per concurrent hour-long
+lecture at 16 kHz.
+
 **Scope it to `audio/`** — an unprefixed rule would also expire slide images
 (`slides/`), TTS narration (`tts/`), and seed files (`seed/`). Note the bucket
 rule is blind to the app's DB, so it can leave a deck reference pointing at an
@@ -157,8 +171,21 @@ value is baked into the SPA at build.
 | `S3_FORCE_PATH_STYLE` | plain | leave unset/`false` for Spaces (`true` is MinIO-only) |
 | `AUDIO_RETENTION_ENABLED` | plain | `true` to retain live-session audio for diarization (GEN-4); default off. Needs `TRANSCRIPTION_PROVIDER=google-cloud` |
 | `AUDIO_RETENTION_DAYS` | plain | days before the daily sweep deletes a recording; default `30`, `0` = keep forever (see §2 lifecycle note) |
+| `AUDIO_RETENTION_MAX_SESSION_MB` | plain | ceiling on one session's buffered audio; default `300` (~2 h 44 min at 16 kHz), `0` = no per-session cap. Past it that recording is truncated |
+| `AUDIO_RETENTION_MAX_TOTAL_MB` | plain | ceiling on live retention buffers across all concurrent sessions; default `1024`, `0` = no limit. **Size to the host's RAM** — see §2 |
+| `STT_CAPTURE_SAMPLE_RATE` | plain | Hz the browser downsamples mic audio to before streaming; default `16000` (what Cloud STT expects), range `8000`–`48000`, `0` = no downsampling (stream the mic's native rate). Raising it multiplies bandwidth, retention memory, and stored WAV size. Optional |
+| `DELETED_DATA_RETENTION_DAYS` | plain | days a soft-deleted record is kept before the daily sweep purges it and its blobs (P-11); default `90`, `0` = keep tombstones forever |
 | `WHITEBOARD_SUPPRESS_DEBOUNCE_MS` | plain | grace (ms) after the last whiteboard gesture during which speech folds into the current slide instead of creating one (EDIT-4); default `5000`, `0` disables. Optional |
 | `SIMULATED_SPEECH_ENABLED` | plain | `true` shows the live session's simulated-speech text box for typing phrases instead of speaking them — a debugging aid; default off. Optional |
+
+> **`0` means "no limit", not "off".** For `STT_CAPTURE_SAMPLE_RATE`,
+> `AUDIO_RETENTION_DAYS`, `AUDIO_RETENTION_MAX_SESSION_MB`,
+> `AUDIO_RETENTION_MAX_TOTAL_MB`, and `DELETED_DATA_RETENTION_DAYS`, setting `0`
+> **removes** a bound — so it costs more, not less: no downsampling, recordings
+> kept forever, unbounded buffers, tombstones never purged. On a production host
+> that means unbounded storage growth or an OOM kill. The one exception is
+> `WHITEBOARD_SUPPRESS_DEBOUNCE_MS`, where `0` is a literal zero-length grace
+> window and so genuinely disables the behavior.
 
 Optional, as features land: `GITHUB_OAUTH_CLIENT_ID` / `_SECRET`,
 `CONNECTED_ACCOUNT_TOKEN_ENC_KEY`, `STRIPE_SECRET_KEY` /

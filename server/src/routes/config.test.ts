@@ -16,6 +16,7 @@ const envState = {
   REFINE_TRANSCRIPT_DEFAULT_LEVEL: 2,
   SIMULATED_SPEECH_ENABLED: false,
   WHITEBOARD_SUPPRESS_DEBOUNCE_MS: 5000,
+  STT_CAPTURE_SAMPLE_RATE: 16000,
 }
 vi.mock('../config/env', () => ({ env: envState }))
 vi.mock('../lib/transcribe-audio', () => ({
@@ -30,6 +31,7 @@ const getConfig = async () => (await request(app).get('/api/config')).body
 beforeEach(() => {
   envState.SIMULATED_SPEECH_ENABLED = false
   envState.TTS_PROVIDER = 'none'
+  envState.STT_CAPTURE_SAMPLE_RATE = 16000
 })
 
 describe('GET /api/config', () => {
@@ -41,7 +43,22 @@ describe('GET /api/config', () => {
       refineTranscriptDefaultLevel: 2,
       simulatedSpeechEnabled: false,
       whiteboardSuppressDebounceMs: 5000,
+      sttCaptureSampleRate: 16000,
     })
+  })
+
+  // The client downsamples mic audio to this rate, so a server can trade
+  // retained-audio fidelity against bandwidth and storage without a rebuild.
+  it('publishes the configured capture sample rate', async () => {
+    envState.STT_CAPTURE_SAMPLE_RATE = 48000
+    expect(await getConfig()).toMatchObject({ sttCaptureSampleRate: 48000 })
+  })
+
+  // 0 means "no downsampling"; it has to survive to the client verbatim, since
+  // that is where the decision to skip the conversion is made.
+  it('publishes 0 unchanged when downsampling is off', async () => {
+    envState.STT_CAPTURE_SAMPLE_RATE = 0
+    expect(await getConfig()).toMatchObject({ sttCaptureSampleRate: 0 })
   })
 
   // The typed-phrase box in a live session is a debugging aid; a server opts in.

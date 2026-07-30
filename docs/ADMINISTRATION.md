@@ -222,9 +222,12 @@ student voices. It is off by default, captured only when
 `AUDIO_RETENTION_ENABLED=true` with `TRANSCRIPTION_PROVIDER=google-cloud`
 (the browser engine's audio never reaches the server). When on, each
 session's audio is stored as a WAV under the bucket's `audio/` prefix
-(~5.7 MB/min), and a **daily sweep** deletes recordings past
-`AUDIO_RETENTION_DAYS` (default 30; `0` = keep forever) with their deck
-references. As a backstop, add an object-storage lifecycle rule **scoped to
+(~1.9 MB/min at the default 16 kHz `STT_CAPTURE_SAMPLE_RATE`), and a **daily
+sweep** deletes recordings past `AUDIO_RETENTION_DAYS` (default 30; `0` = keep
+forever) with their deck references. `AUDIO_RETENTION_MAX_SESSION_MB` (default
+`300`) caps one lecture's buffered audio and `AUDIO_RETENTION_MAX_TOTAL_MB`
+(default `1024`) caps all concurrent sessions together; past either, the
+affected sessions transcribe without retaining audio. As a backstop, add an object-storage lifecycle rule **scoped to
 `audio/`** ([docs/DEPLOY.md §2](DEPLOY.md#2-do-spaces-object-storage-for-uploads))
 so it doesn't also expire slide images, narration, or seed files.
 

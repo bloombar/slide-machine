@@ -23,14 +23,24 @@ import { getStorage } from '../storage'
 import { DeckModel, loadDeckAcl } from '../models/deck'
 import { canEditAcl } from '../lib/access'
 import { pcmToWav, pcmDurationMs } from '../lib/wav'
+import {
+  canStartRetention,
+  releaseRetentionBytes,
+  reserveRetentionBytes,
+} from './retention-budget'
 
 /** Path the client connects to; scoped so other upgrades are ignored. */
 const STT_PATH = '/api/stt'
 
-/** Cap on buffered retained audio per session (~300 MB ≈ 52 min at 48 kHz
- * mono); beyond it retention is abandoned so a marathon session can't grow
- * memory without bound. Transcription continues regardless. */
-const MAX_RETAINED_BYTES = 300 * 1024 * 1024
+/** Cap on buffered retained audio for ONE session, from
+ * AUDIO_RETENTION_MAX_SESSION_MB (default 300 MB ≈ 2 h 44 min at the default
+ * 16 kHz capture rate, ≈ 55 min if a client streams 48 kHz); 0 disables it.
+ * Beyond the cap retention is abandoned so a marathon session can't grow
+ * memory without bound. Transcription continues regardless. See
+ * ./retention-budget for the process-wide ceiling across concurrent sessions.
+ * Read per call so a test (or a restart-free config change) takes effect. */
+const maxRetainedBytes = (): number =>
+  env.AUDIO_RETENTION_MAX_SESSION_MB * 1024 * 1024
 
 /** First control message the client sends before any audio. */
 interface StartMessage {
@@ -101,6 +111,16 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
   const beginRetention = (start: StartMessage): void => {
     if (!env.AUDIO_RETENTION_ENABLED || !start.deckId || !start.sessionId)
       return
+    // Process-wide ceiling: with the budget already committed to other live
+    // sessions, this one transcribes without retaining rather than pushing the
+    // process toward an OOM kill.
+    if (!canStartRetention()) {
+      console.warn(
+        `Audio retention budget exhausted; deck ${start.deckId} will ` +
+          'transcribe without retaining audio.',
+      )
+      return
+    }
     retain = {
       deckId: start.deckId,
       sessionId: start.sessionId,
@@ -143,6 +163,11 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
       // gcsUri — Google BatchRecognize reads audio only from GCS.
     } catch (error) {
       console.error('Audio retention failed:', error)
+    } finally {
+      // Release only now: the concat above is this session's peak memory, so
+      // holding the reservation until it completes is what keeps the budget
+      // honest. In a finally so a failed upload can never leak the budget.
+      releaseRetentionBytes(r.bytes)
     }
   }
 
@@ -206,14 +231,24 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
   ws.on('message', (data: Buffer, isBinary: boolean) => {
     if (isBinary) {
       stream?.write(new Uint8Array(data))
-      // Tee a copy for retention, until the per-session cap (logged once).
+      // Tee a copy for retention, until either the per-session cap or the
+      // process-wide budget is reached (each logged once). Both outcomes are
+      // identical from here: stop copying audio, keep transcribing.
       if (retain) {
-        if (retain.bytes + data.length > MAX_RETAINED_BYTES) {
+        const sessionCap = maxRetainedBytes()
+        const overSessionCap =
+          sessionCap !== 0 && retain.bytes + data.length > sessionCap
+        // Short-circuits so no reservation is taken once this session is full.
+        if (overSessionCap || !reserveRetentionBytes(data.length)) {
           if (!retain.capped) {
             retain.capped = true
             console.warn(
-              `Audio retention cap reached for deck ${retain.deckId}; ` +
-                'keeping transcription, dropping the rest of the audio.',
+              overSessionCap
+                ? `Audio retention cap reached for deck ${retain.deckId}; ` +
+                    'keeping transcription, dropping the rest of the audio.'
+                : `Audio retention budget exhausted mid-session for deck ` +
+                    `${retain.deckId}; keeping transcription, dropping the ` +
+                    'rest of the audio.',
             )
           }
         } else {

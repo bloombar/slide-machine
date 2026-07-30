@@ -25,4 +25,9 @@ export interface RuntimeConfig {
    * suppressing auto-slide-creation while recording (WB-3), so a pause to
    * switch tools or reposition the cursor still counts as active use. */
   whiteboardSuppressDebounceMs: number
+  /** Rate (Hz) the mic capture downsamples to before streaming to the server
+   * (CAP-3). 16 kHz is what Cloud STT models expect; the browser's native
+   * 48 kHz would triple the bytes for no transcription gain. A client whose
+   * AudioContext already runs at or below this streams its native rate. */
+  sttCaptureSampleRate: number
 }
