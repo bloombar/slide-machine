@@ -9,7 +9,11 @@
  * mount point: /api/admin — see docs/ADMINISTRATION.md.
  *
  * Admin reads deliberately bypass lib/access.ts ACLs: the allowlist gate
- * is the authorization. The wire types below are the contract mirrored
+ * is the authorization. They also see soft-deleted records, which every
+ * product read hides (P-10): tombstoned rows stay listed with a
+ * `deletedAt` so the console can badge them, opening one is audited, and
+ * they can be restored until the retention sweep purges them (ADMIN-6).
+ * The wire types below are the contract mirrored
  * by client/src/api/admin.ts; move them into the shared workspace once
  * the admin surface is wired into the apps (the audit-log DTOs already
  * live there).
@@ -23,6 +27,7 @@ import {
 } from 'mongoose'
 import { z } from 'zod'
 import type {
+  AdminAction,
   AdminLogsResponse,
   Project,
   SafeUser,
@@ -60,6 +65,9 @@ import { requireAdmin } from '../middleware/admin'
 import { HttpError } from '../middleware/error'
 import {
   actor,
+  loadAnyDeck,
+  loadAnyProject,
+  loadAnyUser,
   loadDeck,
   loadProject,
   loadUser,
@@ -71,6 +79,17 @@ import {
 import { adminSettingsRouter } from './admin-settings'
 import { adminSettingsLogsRouter } from './admin-settings-logs'
 
+/**
+ * Every admin read surface carries the tombstone (ADMIN-6): soft-deleted
+ * records are listed alongside live ones so the console can badge them,
+ * rather than being hidden as they are from every product read (P-10).
+ * Absent = live, an ISO timestamp = soft-deleted at that moment.
+ */
+type Tombstone = string | undefined
+
+/** The tombstone as it goes on the wire; absent while the record is live. */
+const tombstone = (at?: Date | null): Tombstone => at?.toISOString()
+
 /** One row of the admin user directory. */
 export interface AdminUserSummary {
   id: string
@@ -79,6 +98,8 @@ export interface AdminUserSummary {
   emailVerified: boolean
   planTier: string
   createdAt: string
+  /** Soft-delete timestamp; absent while the account is live (ADMIN-6). */
+  deletedAt?: Tombstone
 }
 
 export interface AdminUsersResponse {
@@ -94,10 +115,20 @@ export interface AdminUserDetailResponse {
   deckCount: number
   /** Whether the account's email is on the banned list. */
   banned: boolean
+  /** Soft-delete timestamp; absent while the account is live (ADMIN-6).
+   * It sits on the envelope rather than inside `user` so the tombstone
+   * never leaks into the shared User type the product reads. */
+  deletedAt?: Tombstone
+}
+
+/** A project as listed under its owner's admin page: the product shape
+ * plus its tombstone, so a deleted project stays listed and badged. */
+export interface AdminUserProject extends Project {
+  deletedAt?: Tombstone
 }
 
 export interface AdminUserProjectsResponse {
-  projects: Project[]
+  projects: AdminUserProject[]
 }
 
 /** A lecture as listed in the admin view; permalinkSlug links to /d/:slug. */
@@ -112,6 +143,18 @@ export interface AdminDeckSummary {
   slideCount: number
   createdAt: string
   updatedAt: string
+  /** Soft-delete timestamp; absent while the lecture is live (ADMIN-6). */
+  deletedAt?: Tombstone
+}
+
+/** A person referenced from an admin page (a row's owner, a lecture's
+ * owner): enough to link and label, plus their tombstone so the page can
+ * badge an owner who was deleted along with their content. */
+export interface AdminOwnerRef {
+  id: string
+  email: string
+  displayName: string
+  deletedAt?: Tombstone
 }
 
 export interface AdminUserDecksResponse {
@@ -122,8 +165,19 @@ export interface AdminUserDecksResponse {
 export interface AdminProjectDetailResponse {
   project: Project
   /** The project's owner, for the back link and the page header. */
-  owner: { id: string; email: string; displayName: string }
+  owner: AdminOwnerRef
   decks: AdminDeckSummary[]
+  /** Soft-delete timestamp; absent while the project is live (ADMIN-6).
+   * On the envelope, not inside `project`, so the tombstone stays out of
+   * the shared Project type. */
+  deletedAt?: Tombstone
+}
+
+/** An uploaded seed asset as the admin console sees it: the product shape
+ * plus its tombstone, so material the owner removed is still listed and
+ * badged rather than silently missing (ADMIN-6). */
+export interface AdminSeedAsset extends SeedAsset {
+  deletedAt?: Tombstone
 }
 
 /** Seed material at one level — the lecture's own, or its project's:
@@ -132,7 +186,7 @@ export interface AdminSeedLevel {
   /** Trimmed seed notes (seedContext); absent when empty. */
   notes?: string
   /** Uploaded seed assets at this level, newest first. */
-  assets: SeedAsset[]
+  assets: AdminSeedAsset[]
 }
 
 /** One lecture opened in the admin console; every lecture, private or
@@ -140,10 +194,11 @@ export interface AdminSeedLevel {
  * authorization, mirroring the always-on admin viewer bypass. */
 export interface AdminDeckDetailResponse {
   deck: AdminDeckSummary
-  /** The project the lecture lives in, for the back link. */
-  project: { id: string; title: string }
+  /** The project the lecture lives in, for the back link; its tombstone
+   * tells the page whether the parent went away too. */
+  project: { id: string; title: string; deletedAt?: Tombstone }
   /** The lecture's owner — not necessarily the project's owner. */
-  owner: { id: string; email: string; displayName: string }
+  owner: AdminOwnerRef
   /** The seed material that fed this lecture's generation. The lecture's
    * own material (deckId set) stacks on top of the project's (deckId
    * absent), so both levels are surfaced. */
@@ -158,10 +213,13 @@ export interface AdminProjectSummary {
   ownerEmail: string
   title: string
   visibility: Visibility
-  /** Number of lectures in the project. */
+  /** Number of lectures in the project, tombstoned ones included — it
+   * matches the row count the project's admin page lists (ADMIN-6). */
   deckCount: number
   createdAt: string
   updatedAt: string
+  /** Soft-delete timestamp; absent while the project is live (ADMIN-6). */
+  deletedAt?: Tombstone
 }
 
 export interface AdminProjectsResponse {
@@ -197,6 +255,24 @@ const toAdminUserSummary = (
   emailVerified: doc.emailVerified,
   planTier: doc.planTier,
   createdAt: doc.createdAt.toISOString(),
+  deletedAt: tombstone(doc.deletedAt),
+})
+
+/** A project row on its owner's admin page: the product DTO plus its
+ * tombstone. */
+const toAdminUserProject = (
+  doc: HydratedDocument<ProjectDb>,
+): AdminUserProject => ({
+  ...toProjectDto(doc),
+  deletedAt: tombstone(doc.deletedAt),
+})
+
+/** An owner as referenced from another admin page. */
+const toAdminOwnerRef = (doc: HydratedDocument<UserDb>): AdminOwnerRef => ({
+  id: doc._id.toString(),
+  email: doc.email,
+  displayName: doc.displayName,
+  deletedAt: tombstone(doc.deletedAt),
 })
 
 const toAdminDeckSummary = (
@@ -212,6 +288,7 @@ const toAdminDeckSummary = (
   createdAt: doc.createdAt.toISOString(),
   // Fall back for documents created before updatedAt was enabled.
   updatedAt: (doc.updatedAt ?? doc.createdAt).toISOString(),
+  deletedAt: tombstone(doc.deletedAt),
 })
 
 /** Packs one level's seed material (notes + uploaded assets) into its
@@ -224,7 +301,10 @@ const toAdminSeedLevel = (
   const trimmed = notes?.trim()
   return {
     notes: trimmed ? trimmed : undefined,
-    assets: assets.map(toSeedAssetDto),
+    assets: assets.map(asset => ({
+      ...toSeedAssetDto(asset),
+      deletedAt: tombstone(asset.deletedAt),
+    })),
   }
 }
 
@@ -244,6 +324,7 @@ const toAdminProjectSummary = (
   createdAt: doc.createdAt.toISOString(),
   // Fall back for documents created before updatedAt was enabled.
   updatedAt: (doc.updatedAt ?? doc.createdAt).toISOString(),
+  deletedAt: tombstone(doc.deletedAt),
 })
 
 /** Builds the page/limit/sort query schema every listing route shares. */
@@ -322,19 +403,15 @@ const deckProjectLookup: PipelineStage = {
 }
 
 /** Counts each project's lectures as `sortDeckCount`. Counting inside
- * the join keeps whole lecture documents out of the pipeline. */
+ * the join keeps whole lecture documents out of the pipeline. Tombstoned
+ * lectures are counted: the admin console lists them (ADMIN-6), so the
+ * count has to match the rows the project's page shows. */
 const deckCountLookup: PipelineStage = {
   $lookup: {
     from: DeckModel.collection.name,
     let: { projectId: '$_id' },
     pipeline: [
-      // Exclude soft-deleted lectures from the count (P-10).
-      {
-        $match: {
-          $expr: { $eq: ['$projectId', '$$projectId'] },
-          deletedAt: null,
-        },
-      },
+      { $match: { $expr: { $eq: ['$projectId', '$$projectId'] } } },
       { $count: 'count' },
     ],
     as: 'sortDeckCount',
@@ -398,6 +475,12 @@ const decksQuerySchema = listQuery(sortKeys(DECK_COLUMNS), 'updated:desc')
  * reduced to a single `sortKey` before the sort, so only that key and an
  * id are held in memory. `_id` breaks ties, without which a low-cardinality
  * column (visibility) could repeat or skip rows across pages.
+ *
+ * Soft-deleted rows are deliberately NOT filtered out: an admin sees
+ * tombstoned content alongside live content, badged (ADMIN-6). Aggregation
+ * bypasses the exclusion middleware, so that just means adding no
+ * `deletedAt` stage — but the `find`/`countDocuments` calls around this
+ * pipeline do need `withDeleted`, or the page would come back short.
  */
 const pageIdPipeline = (
   columns: Record<string, SortColumn>,
@@ -410,9 +493,6 @@ const pageIdPipeline = (
   const column = columns[field]!
   const order = dir === 'asc' ? 1 : -1
   return [
-    // Soft delete (P-10): aggregation bypasses the exclusion middleware, so the
-    // directory must filter tombstoned rows itself.
-    { $match: { deletedAt: null } },
     ...(column.stages ?? []),
     { $project: { sortKey: column.value } },
     { $sort: { sortKey: order, _id: 1 } },
@@ -430,6 +510,42 @@ const inIdOrder = <T extends { _id: Types.ObjectId }>(
 ): T[] => {
   const byId = new Map(docs.map(doc => [doc._id.toString(), doc]))
   return ids.flatMap(id => byId.get(id.toString()) ?? [])
+}
+
+/**
+ * Read options that let an admin query see tombstoned records. Every admin
+ * read carries them: the console lists soft-deleted content alongside live
+ * content so it can be inspected and restored during the retention window
+ * (ADMIN-6), which is the one exception to P-10's blanket exclusion.
+ */
+const seen = { withDeleted: true } as const
+
+/**
+ * Records that an admin opened a soft-deleted record in the console — one
+ * entry per opening, as ADMIN-6 requires every access to soft-deleted
+ * content to be audited. Unlike the private-view log, this is written by
+ * the read itself rather than by a POST the client volunteers: the deleted
+ * content is in the response, so the audit trail must not depend on the
+ * caller reporting it. A live record logs nothing, and only the primary
+ * detail reads call this — the directories merely badge their rows, and
+ * logging every page of them would bury the log.
+ */
+const logDeletedView = async (
+  req: { adminUser?: { id: string; email: string } },
+  action: AdminAction,
+  targetType: string,
+  targetId: string,
+  details: Record<string, unknown>,
+): Promise<void> => {
+  const admin = actor(req)
+  await logAdminAction({
+    actorId: admin.id,
+    actorEmail: admin.email,
+    action,
+    targetType,
+    targetId,
+    details,
+  })
 }
 
 export const adminRouter = Router()
@@ -450,12 +566,15 @@ adminRouter.get('/status', (_req, res) => {
 adminRouter.get('/users', async (req, res) => {
   const { page, limit, sort } = parseListQuery(listQuerySchema, req.query)
 
+  // Tombstoned accounts stay listed, badged by the console (ADMIN-6), so
+  // both the page and the total have to see them.
   const [users, total] = await Promise.all([
     UserModel.find()
       .sort(SORTS[sort])
       .skip((page - 1) * limit)
-      .limit(limit),
-    UserModel.countDocuments(),
+      .limit(limit)
+      .setOptions(seen),
+    UserModel.countDocuments().setOptions(seen),
   ])
 
   const body: AdminUsersResponse = {
@@ -547,36 +666,50 @@ adminRouter.get('/logs/export', async (_req, res) => {
 })
 
 adminRouter.get('/users/:id', async (req, res) => {
-  const user = await loadUser(String(req.params.id))
+  const user = await loadAnyUser(String(req.params.id))
+  // Counts include tombstoned rows, matching the lists below them.
   const [projectCount, deckCount, banned] = await Promise.all([
-    ProjectModel.countDocuments({ ownerId: user._id }),
-    DeckModel.countDocuments({ ownerId: user._id }),
+    ProjectModel.countDocuments({ ownerId: user._id }).setOptions(seen),
+    DeckModel.countDocuments({ ownerId: user._id }).setOptions(seen),
     isEmailBanned(user.email),
   ])
+  if (user.deletedAt) {
+    await logDeletedView(
+      req,
+      'user.deleted_view',
+      'user',
+      user._id.toString(),
+      {
+        email: user.email,
+        deletedAt: user.deletedAt.toISOString(),
+      },
+    )
+  }
 
   const body: AdminUserDetailResponse = {
     user: toUserDto(user),
     projectCount,
     deckCount,
     banned,
+    deletedAt: tombstone(user.deletedAt),
   }
   res.json(body)
 })
 
 adminRouter.get('/users/:id/projects', async (req, res) => {
-  const user = await loadUser(String(req.params.id))
-  const projects = await ProjectModel.find({ ownerId: user._id }).sort({
-    updatedAt: -1,
-  })
+  const user = await loadAnyUser(String(req.params.id))
+  const projects = await ProjectModel.find({ ownerId: user._id })
+    .sort({ updatedAt: -1 })
+    .setOptions(seen)
 
   const body: AdminUserProjectsResponse = {
-    projects: projects.map(toProjectDto),
+    projects: projects.map(toAdminUserProject),
   }
   res.json(body)
 })
 
 adminRouter.get('/users/:id/decks', async (req, res) => {
-  const user = await loadUser(String(req.params.id))
+  const user = await loadAnyUser(String(req.params.id))
   const projectId = req.query.projectId
   const filter: Record<string, unknown> = { ownerId: user._id }
   if (projectId !== undefined) {
@@ -585,13 +718,16 @@ adminRouter.get('/users/:id/decks', async (req, res) => {
     }
     filter.projectId = projectId
   }
-  const decks = await DeckModel.find(filter).sort({ updatedAt: -1 })
+  const decks = await DeckModel.find(filter)
+    .sort({ updatedAt: -1 })
+    .setOptions(seen)
   // One batched project query resolves the effective visibility of every
   // inheriting lecture; the rest read their own override.
-  const acls = await loadDeckAcls(decks)
+  const acls = await loadDeckAcls(decks, seen)
 
-  // Every lecture is listed, private or not — the allowlist gate is the
-  // authorization, mirroring the always-on admin viewer bypass.
+  // Every lecture is listed, private or not, deleted or not — the
+  // allowlist gate is the authorization, mirroring the always-on admin
+  // viewer bypass.
   const body: AdminUserDecksResponse = {
     decks: decks.map(deck =>
       toAdminDeckSummary(deck, acls.get(deck._id.toString())!),
@@ -611,19 +747,22 @@ adminRouter.get('/projects', async (req, res) => {
     pageIdPipeline(PROJECT_COLUMNS, sort, page, limit),
   ).then(rows => rows.map(row => row._id))
   const [found, total] = await Promise.all([
-    ProjectModel.find({ _id: { $in: pageIds } }),
-    ProjectModel.countDocuments(),
+    ProjectModel.find({ _id: { $in: pageIds } }).setOptions(seen),
+    ProjectModel.countDocuments().setOptions(seen),
   ])
   const projects = inIdOrder(pageIds, found)
 
   const ownerIds = [...new Set(projects.map(p => p.ownerId.toString()))]
   const projectIds = projects.map(p => p._id)
   const [owners, deckCounts] = await Promise.all([
-    ownerIds.length ? UserModel.find({ _id: { $in: ownerIds } }) : [],
+    ownerIds.length
+      ? UserModel.find({ _id: { $in: ownerIds } }).setOptions(seen)
+      : [],
     projectIds.length
       ? DeckModel.aggregate<{ _id: Types.ObjectId; count: number }>([
-          // Exclude soft-deleted lectures from the per-project count (P-10).
-          { $match: { projectId: { $in: projectIds }, deletedAt: null } },
+          // Tombstoned lectures are counted, as deckCountLookup does: the
+          // console lists them, so the count matches the rows shown.
+          { $match: { projectId: { $in: projectIds } } },
           { $group: { _id: '$projectId', count: { $sum: 1 } } },
         ])
       : [],
@@ -632,8 +771,9 @@ adminRouter.get('/projects', async (req, res) => {
   const countById = new Map(deckCounts.map(c => [c._id.toString(), c.count]))
 
   const body: AdminProjectsResponse = {
-    // A row with a missing owner (mid-cascade-deletion) is still listed,
-    // with a blank email — a directory never drops rows.
+    // A row whose owner cannot be resolved even with tombstones visible
+    // (mid-purge) is still listed, with a blank email — a directory never
+    // drops rows.
     projects: projects.map(project =>
       toAdminProjectSummary(
         project,
@@ -649,29 +789,40 @@ adminRouter.get('/projects', async (req, res) => {
 })
 
 adminRouter.get('/projects/:id', async (req, res) => {
-  const project = await loadProject(String(req.params.id))
-  // Cascades keep projects ownerless-free, so a missing owner means the
-  // project is mid-deletion; treat it as gone.
-  const owner = await UserModel.findById(project.ownerId)
+  const project = await loadAnyProject(String(req.params.id))
+  // Cascades keep projects ownerless-free, and a soft-deleted owner still
+  // resolves here, so a missing owner means the account has been purged;
+  // treat the project as gone with it.
+  const owner = await UserModel.findById(project.ownerId).setOptions(seen)
   if (!owner) throw new HttpError(404, 'not_found', 'Project not found')
 
-  const decks = await DeckModel.find({ projectId: project._id }).sort({
-    updatedAt: -1,
-  })
-  const acls = await loadDeckAcls(decks)
+  const decks = await DeckModel.find({ projectId: project._id })
+    .sort({ updatedAt: -1 })
+    .setOptions(seen)
+  const acls = await loadDeckAcls(decks, seen)
+  if (project.deletedAt) {
+    await logDeletedView(
+      req,
+      'project.deleted_view',
+      'project',
+      project._id.toString(),
+      {
+        title: project.title,
+        ownerId: project.ownerId.toString(),
+        deletedAt: project.deletedAt.toISOString(),
+      },
+    )
+  }
 
   const body: AdminProjectDetailResponse = {
     project: toProjectDto(project),
-    owner: {
-      id: owner._id.toString(),
-      email: owner.email,
-      displayName: owner.displayName,
-    },
-    // Every lecture is listed, private or not (same always-on rule as
-    // /users/:id/decks).
+    owner: toAdminOwnerRef(owner),
+    // Every lecture is listed, private or not, deleted or not (same
+    // always-on rule as /users/:id/decks).
     decks: decks.map(deck =>
       toAdminDeckSummary(deck, acls.get(deck._id.toString())!),
     ),
+    deletedAt: tombstone(project.deletedAt),
   }
   res.json(body)
 })
@@ -720,8 +871,8 @@ adminRouter.get('/decks', async (req, res) => {
     pageIdPipeline(DECK_COLUMNS, sort, page, limit),
   ).then(rows => rows.map(row => row._id))
   const [found, total] = await Promise.all([
-    DeckModel.find({ _id: { $in: pageIds } }),
-    DeckModel.countDocuments(),
+    DeckModel.find({ _id: { $in: pageIds } }).setOptions(seen),
+    DeckModel.countDocuments().setOptions(seen),
   ])
   const decks = inIdOrder(pageIds, found)
 
@@ -730,16 +881,21 @@ adminRouter.get('/decks', async (req, res) => {
   // loadDeckAcls fetches projects internally but only for inheriting
   // lectures, so project titles need their own batched lookup.
   const [acls, owners, projects] = await Promise.all([
-    loadDeckAcls(decks),
-    ownerIds.length ? UserModel.find({ _id: { $in: ownerIds } }) : [],
-    projectIds.length ? ProjectModel.find({ _id: { $in: projectIds } }) : [],
+    loadDeckAcls(decks, seen),
+    ownerIds.length
+      ? UserModel.find({ _id: { $in: ownerIds } }).setOptions(seen)
+      : [],
+    projectIds.length
+      ? ProjectModel.find({ _id: { $in: projectIds } }).setOptions(seen)
+      : [],
   ])
   const emailById = new Map(owners.map(u => [u._id.toString(), u.email]))
   const titleById = new Map(projects.map(p => [p._id.toString(), p.title]))
 
-  // Every lecture is listed, private or not — the allowlist gate is the
-  // authorization. Rows with a missing owner or project (mid-cascade-
-  // deletion) stay listed with blank fields.
+  // Every lecture is listed, private or not, deleted or not — the
+  // allowlist gate is the authorization. Rows whose owner or project
+  // cannot be resolved even with tombstones visible (mid-purge) stay
+  // listed with blank fields.
   const body: AdminDecksResponse = {
     decks: decks.map(deck => ({
       ...toAdminDeckSummary(deck, acls.get(deck._id.toString())!),
@@ -755,35 +911,53 @@ adminRouter.get('/decks', async (req, res) => {
 })
 
 adminRouter.get('/decks/:id', async (req, res) => {
-  const deck = await loadDeck(String(req.params.id))
-  // Cascades remove decks with their project and owner, so a missing
-  // parent means the lecture is mid-deletion; treat it as gone.
+  const deck = await loadAnyDeck(String(req.params.id))
+  // A tombstoned project or owner still resolves here, so a missing parent
+  // means it has been purged; treat the lecture as gone with it.
   const [project, owner] = await Promise.all([
-    ProjectModel.findById(deck.projectId),
-    UserModel.findById(deck.ownerId),
+    ProjectModel.findById(deck.projectId).setOptions(seen),
+    UserModel.findById(deck.ownerId).setOptions(seen),
   ])
   if (!project || !owner)
     throw new HttpError(404, 'not_found', 'Lecture not found')
   // Effective seed material: the lecture's own (deckId set) plus the
   // project's (deckId absent), which stacks underneath it at generation.
+  // Material the owner removed is listed too, badged as deleted (ADMIN-6).
   const [acls, lectureAssets, projectAssets] = await Promise.all([
-    loadDeckAcls([deck]),
-    SeedAssetModel.find({ deckId: deck._id }).sort({ createdAt: -1 }),
+    loadDeckAcls([deck], seen),
+    SeedAssetModel.find({ deckId: deck._id })
+      .sort({ createdAt: -1 })
+      .setOptions(seen),
     SeedAssetModel.find({
       projectId: project._id,
       deckId: { $exists: false },
-    }).sort({ createdAt: -1 }),
+    })
+      .sort({ createdAt: -1 })
+      .setOptions(seen),
   ])
+  if (deck.deletedAt) {
+    await logDeletedView(
+      req,
+      'deck.deleted_view',
+      'deck',
+      deck._id.toString(),
+      {
+        title: deck.title,
+        ownerId: deck.ownerId.toString(),
+        deletedAt: deck.deletedAt.toISOString(),
+      },
+    )
+  }
 
   const acl = acls.get(deck._id.toString())!
   const body: AdminDeckDetailResponse = {
     deck: toAdminDeckSummary(deck, acl),
-    project: { id: project._id.toString(), title: project.title },
-    owner: {
-      id: owner._id.toString(),
-      email: owner.email,
-      displayName: owner.displayName,
+    project: {
+      id: project._id.toString(),
+      title: project.title,
+      deletedAt: tombstone(project.deletedAt),
     },
+    owner: toAdminOwnerRef(owner),
     seed: {
       lecture: toAdminSeedLevel(deck.seedContext, lectureAssets),
       project: toAdminSeedLevel(project.seedContext, projectAssets),
