@@ -14,6 +14,14 @@ import type {
 } from '@slide-machine/shared'
 import { apiFetch, apiFetchBlob } from './http'
 
+/**
+ * Every admin read surface carries the tombstone (ADMIN-6): soft-deleted
+ * records are listed alongside live ones so the console can badge them
+ * with <DeletedBadge>, rather than being hidden as they are from every
+ * product read (P-10). Absent = live, an ISO timestamp = soft-deleted.
+ */
+type Tombstone = string | undefined
+
 /** One row of the admin user directory. */
 export interface AdminUserSummary {
   id: string
@@ -22,6 +30,8 @@ export interface AdminUserSummary {
   emailVerified: boolean
   planTier: string
   createdAt: string
+  /** Soft-delete timestamp; absent while the account is live (ADMIN-6). */
+  deletedAt?: Tombstone
 }
 
 /** A column the user directory can be ordered by. */
@@ -43,6 +53,16 @@ export interface AdminUserDetailResponse {
   deckCount: number
   /** Whether the account's email is on the banned list. */
   banned: boolean
+  /** Soft-delete timestamp; absent while the account is live (ADMIN-6).
+   * It sits on the envelope rather than inside `user` so the tombstone
+   * never leaks into the shared User type the product reads. */
+  deletedAt?: Tombstone
+}
+
+/** A project as listed under its owner's admin page: the product shape
+ * plus its tombstone, so a deleted project stays listed and badged. */
+export interface AdminUserProject extends Project {
+  deletedAt?: Tombstone
 }
 
 /** A lecture as listed in the admin view; permalinkSlug links to /d/:slug. */
@@ -56,14 +76,35 @@ export interface AdminDeckSummary {
   slideCount: number
   createdAt: string
   updatedAt: string
+  /** Soft-delete timestamp; absent while the lecture is live (ADMIN-6). */
+  deletedAt?: Tombstone
+}
+
+/** A person referenced from an admin page (a row's owner, a lecture's
+ * owner): enough to link and label, plus their tombstone. */
+export interface AdminOwnerRef {
+  id: string
+  email: string
+  displayName: string
+  deletedAt?: Tombstone
 }
 
 /** One project opened in the admin console, with its lectures. */
 export interface AdminProjectDetailResponse {
   project: Project
   /** The project's owner, for the back link and the page header. */
-  owner: { id: string; email: string; displayName: string }
+  owner: AdminOwnerRef
   decks: AdminDeckSummary[]
+  /** Soft-delete timestamp; absent while the project is live (ADMIN-6).
+   * On the envelope, not inside `project`, so the tombstone stays out of
+   * the shared Project type. */
+  deletedAt?: Tombstone
+}
+
+/** An uploaded seed asset as the admin console sees it: the product shape
+ * plus its tombstone, so material the owner removed is still listed. */
+export interface AdminSeedAsset extends SeedAsset {
+  deletedAt?: Tombstone
 }
 
 /** Seed material at one level — the lecture's own, or its project's:
@@ -72,17 +113,18 @@ export interface AdminSeedLevel {
   /** Trimmed seed notes (seedContext); absent when empty. */
   notes?: string
   /** Uploaded seed assets at this level, newest first. */
-  assets: SeedAsset[]
+  assets: AdminSeedAsset[]
 }
 
 /** One lecture opened in the admin console; every lecture, private or
  * not, is always listed and readable for an admin. */
 export interface AdminDeckDetailResponse {
   deck: AdminDeckSummary
-  /** The project the lecture lives in, for the back link. */
-  project: { id: string; title: string }
+  /** The project the lecture lives in, for the back link; its tombstone
+   * tells the page whether the parent went away too. */
+  project: { id: string; title: string; deletedAt?: Tombstone }
   /** The lecture's owner — not necessarily the project's owner. */
-  owner: { id: string; email: string; displayName: string }
+  owner: AdminOwnerRef
   /** The seed material that fed this lecture's generation. The lecture's
    * own material stacks on top of the project's, so both are surfaced. */
   seed: { lecture: AdminSeedLevel; project: AdminSeedLevel }
@@ -96,10 +138,13 @@ export interface AdminProjectSummary {
   ownerEmail: string
   title: string
   visibility: Visibility
-  /** Number of lectures in the project. */
+  /** Number of lectures in the project, tombstoned ones included — it
+   * matches the row count the project's admin page lists (ADMIN-6). */
   deckCount: number
   createdAt: string
   updatedAt: string
+  /** Soft-delete timestamp; absent while the project is live (ADMIN-6). */
+  deletedAt?: Tombstone
 }
 
 /** A column the project directory can be ordered by — every column the
@@ -170,8 +215,10 @@ export const fetchAdminUser = (
 
 export const fetchAdminUserProjects = (
   userId: string,
-): Promise<{ projects: Project[] }> =>
-  apiFetch<{ projects: Project[] }>(`/api/admin/users/${userId}/projects`)
+): Promise<{ projects: AdminUserProject[] }> =>
+  apiFetch<{ projects: AdminUserProject[] }>(
+    `/api/admin/users/${userId}/projects`,
+  )
 
 export const fetchAdminUserDecks = (
   userId: string,
@@ -269,7 +316,7 @@ export const downloadSettingsLogsCsv = (
 // ApiError (e.g. 400 target_is_admin when moderating an allowlisted
 // account). Each is recorded in the admin audit log server-side.
 
-/** Deletes the account and all of its data. Irreversible. */
+/** Deletes the account and all of its data. Recoverable until purged. */
 export const deleteAdminUser = (userId: string): Promise<void> =>
   apiFetch<void>(`/api/admin/users/${userId}`, { method: 'DELETE' })
 
@@ -311,13 +358,31 @@ export const logAdminProjectView = (projectId: string): Promise<void> =>
 export const logAdminDeckView = (deckId: string): Promise<void> =>
   apiFetch<void>(`/api/admin/decks/${deckId}/private-view`, { method: 'POST' })
 
-/** Deletes a project and everything in it. Irreversible. */
+/** Deletes a project and everything in it. Recoverable until purged. */
 export const deleteAdminProject = (projectId: string): Promise<void> =>
   apiFetch<void>(`/api/admin/projects/${projectId}`, { method: 'DELETE' })
 
-/** Deletes a lecture and everything under it. Irreversible. */
+/** Deletes a lecture and everything under it. Recoverable until purged. */
 export const deleteAdminDeck = (deckId: string): Promise<void> =>
   apiFetch<void>(`/api/admin/decks/${deckId}`, { method: 'DELETE' })
+
+// Restore (ADMIN-6): lifts the tombstone from a soft-deleted record and
+// everything deleted with it, putting it back in front of its owner. Only
+// works during the retention window — once the purge sweep has run
+// (DELETED_DATA_RETENTION_DAYS) the record is gone and these 404. They
+// also 404 on a record that is still live. Audited server-side.
+
+/** Restores a soft-deleted account and all of its content. */
+export const restoreAdminUser = (userId: string): Promise<void> =>
+  apiFetch<void>(`/api/admin/users/${userId}/restore`, { method: 'POST' })
+
+/** Restores a soft-deleted project and everything deleted with it. */
+export const restoreAdminProject = (projectId: string): Promise<void> =>
+  apiFetch<void>(`/api/admin/projects/${projectId}/restore`, { method: 'POST' })
+
+/** Restores a soft-deleted lecture and everything deleted with it. */
+export const restoreAdminDeck = (deckId: string): Promise<void> =>
+  apiFetch<void>(`/api/admin/decks/${deckId}/restore`, { method: 'POST' })
 
 // Account settings editor (ADMIN-5), called by the settings modal on the
 // user's profile page. It sends only the fields that changed:

@@ -2,7 +2,9 @@
  * Admin lecture directory: every lecture on the platform in a table
  * (title, project, owner, effective visibility, slide count, timestamps),
  * paginated and sortable by every column. Rows link to the per-lecture
- * admin view, the project and owner cells to theirs.
+ * admin view, the project and owner cells to theirs. Soft-deleted lectures
+ * are listed too, badged and muted, so they can be inspected or restored
+ * (ADMIN-6).
  */
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
@@ -15,6 +17,9 @@ import {
 } from '../api/admin'
 import SortHeader from '../components/admin/SortHeader'
 import { formatAdminDate } from '../lib/date'
+import DeletedBadge, {
+  deletedTextClass,
+} from '../components/admin/DeletedBadge'
 import { VisibilityBadge } from '../components/admin/LectureTable'
 
 export default function AdminDecksPage() {
@@ -142,10 +147,13 @@ export default function AdminDecksPage() {
                 <td className="px-4 py-2.5">
                   <Link
                     to={`/app/admin/decks/${deck.id}`}
-                    className="font-medium text-slate-900 hover:underline"
+                    className={`font-medium hover:underline ${
+                      deck.deletedAt ? deletedTextClass : 'text-slate-900'
+                    }`}
                   >
                     {deck.title.trim() || 'Untitled lecture'}
-                  </Link>
+                  </Link>{' '}
+                  <DeletedBadge deletedAt={deck.deletedAt} />
                 </td>
                 <td className="px-4 py-2.5">
                   <Link

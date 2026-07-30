@@ -2,7 +2,8 @@
  * Admin project directory: every project on the platform in a table
  * (title, owner, visibility, lecture count, timestamps), paginated and
  * sortable by every column. Rows link to the per-project admin view,
- * owners to theirs.
+ * owners to theirs. Soft-deleted projects are listed too, badged and
+ * muted, so they can be inspected or restored (ADMIN-6).
  */
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
@@ -15,6 +16,9 @@ import {
 } from '../api/admin'
 import SortHeader from '../components/admin/SortHeader'
 import { formatAdminDate } from '../lib/date'
+import DeletedBadge, {
+  deletedTextClass,
+} from '../components/admin/DeletedBadge'
 import { VisibilityBadge } from '../components/admin/LectureTable'
 
 export default function AdminProjectsPage() {
@@ -136,10 +140,13 @@ export default function AdminProjectsPage() {
                 <td className="px-4 py-2.5">
                   <Link
                     to={`/app/admin/projects/${project.id}`}
-                    className="font-medium text-slate-900 hover:underline"
+                    className={`font-medium hover:underline ${
+                      project.deletedAt ? deletedTextClass : 'text-slate-900'
+                    }`}
                   >
                     {project.title.trim() || 'Untitled project'}
-                  </Link>
+                  </Link>{' '}
+                  <DeletedBadge deletedAt={project.deletedAt} />
                 </td>
                 <td className="px-4 py-2.5">
                   {project.ownerEmail ? (

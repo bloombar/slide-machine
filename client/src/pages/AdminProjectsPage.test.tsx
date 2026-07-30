@@ -1,9 +1,10 @@
 /**
  * Unit tests for the admin project directory: table contents and links,
- * pagination, sorting, page size, and the error state.
+ * pagination, sorting, page size, the error state, and the badge on
+ * soft-deleted rows (ADMIN-6).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import AdminProjectsPage from './AdminProjectsPage'
 import { mockFetchRoutes } from '../test/fetch-mock'
@@ -166,5 +167,35 @@ describe('AdminProjectsPage', () => {
   it('shows an error state when the request fails', async () => {
     renderPage(() => ({ status: 500 }))
     expect(await screen.findByText('Could not load projects.')).toBeVisible()
+  })
+
+  it('badges a soft-deleted row and leaves live rows unmarked (ADMIN-6)', async () => {
+    renderPage(() => ({
+      status: 200,
+      body: {
+        projects: [
+          projects[0],
+          {
+            ...projects[1]!,
+            title: 'Removed',
+            deletedAt: '2026-07-20T09:00:00Z',
+          },
+        ],
+        total: 2,
+        page: 1,
+        limit: 25,
+      },
+    }))
+    const deletedRow = (
+      await screen.findByRole('link', { name: 'Removed' })
+    ).closest('tr')!
+    expect(within(deletedRow).getByText('Deleted')).toBeVisible()
+    // Still a working link into the project's admin page
+    expect(
+      within(deletedRow).getByRole('link', { name: 'Removed' }),
+    ).toHaveAttribute('href', '/app/admin/projects/p2')
+
+    const liveRow = screen.getByRole('link', { name: 'Physics' }).closest('tr')!
+    expect(within(liveRow).queryByText('Deleted')).not.toBeInTheDocument()
   })
 })

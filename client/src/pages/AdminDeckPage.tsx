@@ -5,24 +5,36 @@
  * deleting the lecture — confirmed first and recorded in the admin
  * audit log server-side.
  *
+ * A soft-deleted lecture is shown too, badged (ADMIN-6): opening it is
+ * itself audited, the danger zone becomes a Restore action, and the
+ * slideshow link is withdrawn — the viewer reads no tombstoned records.
+ * Seed material the owner removed is listed with its own badge.
+ *
  * Settings are not edited here: "View slideshow" opens the lecture in
  * the viewer, where an admin edits its settings in the owner's own
  * settings modal (ADMIN-5, see DeckViewerPage).
  */
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { deleteAdminDeck, fetchAdminDeck, logAdminDeckView } from '../api/admin'
+import {
+  deleteAdminDeck,
+  fetchAdminDeck,
+  logAdminDeckView,
+  restoreAdminDeck,
+} from '../api/admin'
 import type { AdminDeckDetailResponse } from '../api/admin'
 import { ApiError } from '../api/http'
 import ConfirmDialog from '../components/ConfirmDialog'
 import Modal from '../components/Modal'
+import DeletedBadge from '../components/admin/DeletedBadge'
 import DetailRow from '../components/admin/DetailRow'
 import { VisibilityBadge } from '../components/admin/LectureTable'
 import SeedMaterialView from '../components/admin/SeedMaterialView'
 import { projectTitle } from '../lib/project'
 
 /** The action the admin has asked for but not yet confirmed. */
-type PendingAction = { kind: 'delete' } | { kind: 'view-private' }
+type PendingAction =
+  { kind: 'delete' } | { kind: 'restore' } | { kind: 'view-private' }
 
 const asDate = (iso: string): string =>
   new Date(iso).toLocaleString(undefined, {
@@ -38,7 +50,10 @@ export default function AdminDeckPage() {
   const navigate = useNavigate()
   const [loaded, setLoaded] = useState<AdminDeckDetailResponse | null>(null)
   const [error, setError] = useState(false)
+  // Bumped after a restore to refetch the lecture without its tombstone
+  const [version, setVersion] = useState(0)
   const [pending, setPending] = useState<PendingAction | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [showSeed, setShowSeed] = useState(false)
 
@@ -55,7 +70,7 @@ export default function AdminDeckPage() {
     return () => {
       cancelled = true
     }
-  }, [deckId])
+  }, [deckId, version])
 
   /** Opens the live slideshow. Public lectures open straight away; opening
    * a private one is confirmed first and recorded in the audit log,
@@ -70,17 +85,24 @@ export default function AdminDeckPage() {
   }
 
   /** Runs the confirmed action; both viewing a private lecture and
-   * deleting one leave this page. */
+   * deleting one leave this page, while restoring stays and refetches. */
   const runPending = async () => {
     if (!deckId || !loaded || !pending) return
     const action = pending
     setPending(null)
+    setNotice(null)
     setActionError(null)
     try {
       if (action.kind === 'view-private') {
         // Log the private-lecture access before handing over to the viewer
         await logAdminDeckView(deckId)
         navigate(`/d/${loaded.deck.permalinkSlug}`)
+        return
+      }
+      if (action.kind === 'restore') {
+        await restoreAdminDeck(deckId)
+        setNotice('Lecture restored.')
+        setVersion(v => v + 1)
         return
       }
       await deleteAdminDeck(deckId)
@@ -127,6 +149,9 @@ export default function AdminDeckPage() {
 
   const { deck, project, owner, seed } = loaded
   const title = deck.title.trim() || 'Untitled lecture'
+  // A deleted lecture has no viewer surface left, and its danger zone
+  // becomes recovery (ADMIN-6).
+  const deckDeleted = Boolean(deck.deletedAt)
   // Any seed material at either level — the lecture's own or the project's.
   const seedUsed =
     Boolean(seed.lecture.notes) ||
@@ -134,19 +159,30 @@ export default function AdminDeckPage() {
     Boolean(seed.project.notes) ||
     seed.project.assets.length > 0
 
-  /** Copy for the confirmation dialog of each pending action. */
-  const confirmCopy = (action: PendingAction) =>
-    action.kind === 'delete'
-      ? {
+  /** Copy for the confirmation dialog of each pending action. The delete is
+   * soft (P-10), so its copy promises recovery rather than finality. */
+  const confirmCopy = (action: PendingAction) => {
+    switch (action.kind) {
+      case 'delete':
+        return {
           title: 'Delete this lecture?',
-          message: `"${title}" and everything under it will be permanently deleted. This cannot be undone.`,
+          message: `"${title}" and everything under it will be hidden from everyone. You can restore it from this page until the retention sweep purges it.`,
           confirmLabel: 'Delete lecture',
         }
-      : {
+      case 'restore':
+        return {
+          title: 'Restore this lecture?',
+          message: `"${title}" and everything deleted along with it will be visible to its owner again.`,
+          confirmLabel: 'Restore lecture',
+        }
+      case 'view-private':
+        return {
           title: 'View this private lecture?',
           message: `"${title}" is a private lecture. Opening it as an admin is recorded in the audit log.`,
           confirmLabel: 'View slideshow',
         }
+    }
+  }
 
   return (
     <div>
@@ -154,6 +190,7 @@ export default function AdminDeckPage() {
       <div className="mb-1 flex items-baseline gap-3">
         <h1 className="text-2xl font-bold">{title}</h1>
         <VisibilityBadge visibility={deck.visibility} />
+        <DeletedBadge deletedAt={deck.deletedAt} />
       </div>
       <p className="mb-6 text-slate-500">
         In{' '}
@@ -162,34 +199,57 @@ export default function AdminDeckPage() {
           className="hover:underline"
         >
           {projectTitle(project)}
-        </Link>{' '}
-        · owned by{' '}
+        </Link>
+        {project.deletedAt && <> (deleted)</>} · owned by{' '}
         <Link to={`/app/admin/users/${owner.id}`} className="hover:underline">
           {owner.displayName}
         </Link>{' '}
-        ({owner.email})
+        ({owner.email}){owner.deletedAt && <> · account deleted</>}
       </p>
 
+      {notice && (
+        <p role="status" className="mb-4 text-sm text-green-700">
+          {notice}
+        </p>
+      )}
       {actionError && (
         <p role="alert" className="mb-4 text-sm text-red-600">
           {actionError}
         </p>
       )}
 
-      <button
-        onClick={openSlideshow}
-        className="inline-block rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
-      >
-        View slideshow
-      </button>
-      <p className="mt-2 text-sm text-slate-500">
-        Settings are edited in the lecture itself: open it and use the settings
-        icon, as its owner would. Every change you make there is recorded in the{' '}
-        <Link to="/app/admin/logs" className="underline">
-          audit log
-        </Link>
-        .
-      </p>
+      {deckDeleted ? (
+        <p
+          role="status"
+          className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+        >
+          This lecture is deleted, so it is hidden from its owner and the
+          viewer. Opening it is recorded in the{' '}
+          <Link to="/app/admin/logs" className="underline">
+            audit log
+          </Link>
+          . Restore it below until the retention sweep purges it, after which it
+          is gone for good.
+        </p>
+      ) : (
+        <>
+          <button
+            onClick={openSlideshow}
+            className="inline-block rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+          >
+            View slideshow
+          </button>
+          <p className="mt-2 text-sm text-slate-500">
+            Settings are edited in the lecture itself: open it and use the
+            settings icon, as its owner would. Every change you make there is
+            recorded in the{' '}
+            <Link to="/app/admin/logs" className="underline">
+              audit log
+            </Link>
+            .
+          </p>
+        </>
+      )}
 
       <section className="mt-6 rounded-lg border border-slate-200 p-4">
         <h2 className="mb-2 text-lg font-semibold text-slate-700">Details</h2>
@@ -234,22 +294,48 @@ export default function AdminDeckPage() {
         </p>
       </section>
 
-      <section className="mt-8 rounded-lg border border-red-200 p-4">
-        <h2 className="mb-1 text-lg font-semibold text-red-700">Danger zone</h2>
-        <p className="mb-3 text-sm text-slate-600">
-          Every action here is recorded in the{' '}
-          <Link to="/app/admin/logs" className="underline">
-            audit log
-          </Link>
-          .
-        </p>
-        <button
-          onClick={() => setPending({ kind: 'delete' })}
-          className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-500"
-        >
-          Delete lecture
-        </button>
-      </section>
+      {/* A deleted lecture offers recovery instead of moderation: the
+          delete endpoint refuses a tombstoned target. */}
+      {deckDeleted ? (
+        <section className="mt-8 rounded-lg border border-emerald-200 p-4">
+          <h2 className="mb-1 text-lg font-semibold text-emerald-800">
+            Recovery
+          </h2>
+          <p className="mb-3 text-sm text-slate-600">
+            Restoring brings back the lecture and everything deleted with it,
+            and is recorded in the{' '}
+            <Link to="/app/admin/logs" className="underline">
+              audit log
+            </Link>
+            .
+          </p>
+          <button
+            onClick={() => setPending({ kind: 'restore' })}
+            className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500"
+          >
+            Restore lecture
+          </button>
+        </section>
+      ) : (
+        <section className="mt-8 rounded-lg border border-red-200 p-4">
+          <h2 className="mb-1 text-lg font-semibold text-red-700">
+            Danger zone
+          </h2>
+          <p className="mb-3 text-sm text-slate-600">
+            Every action here is recorded in the{' '}
+            <Link to="/app/admin/logs" className="underline">
+              audit log
+            </Link>
+            .
+          </p>
+          <button
+            onClick={() => setPending({ kind: 'delete' })}
+            className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-500"
+          >
+            Delete lecture
+          </button>
+        </section>
+      )}
 
       {pending && (
         <ConfirmDialog

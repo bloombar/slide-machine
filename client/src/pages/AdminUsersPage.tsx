@@ -1,6 +1,8 @@
 /**
  * Admin user directory: every account in a table (email, handle, time of
  * joining), paginated and sortable. Rows link to the per-user admin view.
+ * Soft-deleted accounts are listed too, badged and muted, so they can be
+ * inspected or restored (ADMIN-6).
  */
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
@@ -13,6 +15,9 @@ import {
 } from '../api/admin'
 import SortHeader from '../components/admin/SortHeader'
 import { formatAdminDate } from '../lib/date'
+import DeletedBadge, {
+  deletedTextClass,
+} from '../components/admin/DeletedBadge'
 
 export default function AdminUsersPage() {
   const [page, setPage] = useState(1)
@@ -116,10 +121,13 @@ export default function AdminUsersPage() {
                 <td className="px-4 py-2.5">
                   <Link
                     to={`/app/admin/users/${user.id}`}
-                    className="font-medium text-slate-900 hover:underline"
+                    className={`font-medium hover:underline ${
+                      user.deletedAt ? deletedTextClass : 'text-slate-900'
+                    }`}
                   >
                     {user.email}
-                  </Link>
+                  </Link>{' '}
+                  <DeletedBadge deletedAt={user.deletedAt} />
                 </td>
                 <td className="px-4 py-2.5 text-slate-700">
                   {user.displayName}
