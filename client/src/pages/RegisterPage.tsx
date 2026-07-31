@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthContext'
 import { apiErrorMessage } from '../i18n/apiError'
 import GoogleSignInButton from '../components/GoogleSignInButton'
+import NavLocaleSwitcher from '../i18n/NavLocaleSwitcher'
 
 export default function RegisterPage() {
   const { status, register } = useAuth()
@@ -37,6 +38,7 @@ export default function RegisterPage() {
 
   return (
     <div className="flex flex-1 items-center justify-center px-4">
+      <NavLocaleSwitcher />
       <form
         onSubmit={onSubmit}
         className="flex w-80 flex-col gap-4 rounded-lg border border-slate-200 p-8"

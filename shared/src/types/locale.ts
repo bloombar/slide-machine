@@ -14,6 +14,14 @@ export const LOCALE_LABELS: Record<Locale, string> = {
   zh: '中文 (Mandarin)',
 }
 
+/** The endonym alone — "Français", not "Français (French)". The English
+ * gloss suits a labelled form field; compact chrome like the nav language
+ * menu names each language in itself, which is the word a reader looking
+ * for their own is scanning for anyway. Derived rather than a second map,
+ * so the two sets of names cannot drift apart. */
+export const localeShortLabel = (locale: Locale): string =>
+  LOCALE_LABELS[locale].replace(/\s*\(.+\)$/, '')
+
 /** Writing direction per locale, the single source of truth for the
  * document's `dir` attribute. Every launch locale is left-to-right; the
  * map exists so adding a right-to-left one is a data change. */

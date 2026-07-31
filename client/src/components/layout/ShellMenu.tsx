@@ -10,7 +10,6 @@ import { useTranslation } from 'react-i18next'
 import { Menu, LogOut, LogIn, ChevronRight } from 'lucide-react'
 import { useAuth } from '../../auth/AuthContext'
 import { useIsAdmin } from '../../hooks/useIsAdmin'
-import LocaleSwitcher from '../../i18n/LocaleSwitcher'
 import { ADMIN_LINKS } from '../admin/AdminNav'
 
 /** Admin entry, mounted only while the dropdown is open so the status
@@ -160,20 +159,6 @@ export default function ShellMenu() {
               {t('nav.logIn')}
             </Link>
           )}
-          {/* Anonymous visitors never reach the profile page, so the
-              interface-language control also lives here (TECH-12). */}
-          <div className="mt-1 border-t border-slate-100 px-3 py-2">
-            <label
-              htmlFor="shell-locale"
-              className="block text-xs text-slate-400"
-            >
-              {t('profile.interfaceLanguage')}
-            </label>
-            <LocaleSwitcher
-              id="shell-locale"
-              className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-700"
-            />
-          </div>
           {authed && (
             <button
               role="menuitem"

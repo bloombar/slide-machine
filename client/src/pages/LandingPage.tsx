@@ -6,6 +6,7 @@ import { Link, Navigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import { LogIn } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
+import NavLocaleSwitcher from '../i18n/NavLocaleSwitcher'
 
 export default function LandingPage() {
   const { status } = useAuth()
@@ -24,6 +25,7 @@ export default function LandingPage() {
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-6 px-4 text-center">
+      <NavLocaleSwitcher />
       <h1 className="text-4xl font-bold tracking-tight">
         {t('landing.title')}
       </h1>
