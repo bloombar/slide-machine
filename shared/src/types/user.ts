@@ -2,6 +2,7 @@
  * User, subscription, and usage data models (SPEC §15).
  * Field sets are indicative — they will evolve as features land.
  */
+import type { SubscriptionStatus } from '../billing/provider'
 import type { Locale } from './locale'
 import type { PlanTier, UsageMetric } from './plans'
 
@@ -34,15 +35,23 @@ export interface User {
   createdAt: string
 }
 
+/**
+ * A user's subscription as persisted (§15). Provider-neutral by design
+ * (TECH-9): a `billingProvider` discriminator plus opaque customer and
+ * subscription references, never vendor-specific fields.
+ */
 export interface Subscription {
   id: string
   userId: string
   tier: PlanTier
   billingProvider: string
+  billingCustomerId: string
   providerSubscriptionId: string
-  status: 'active' | 'past_due' | 'canceled'
+  status: SubscriptionStatus
   currentPeriodStart: string
   currentPeriodEnd: string
+  /** True when the subscription lapses at period end instead of renewing. */
+  cancelAtPeriodEnd: boolean
 }
 
 /** Usage recorded against one metric for one user in one billing period (BILL-3). */

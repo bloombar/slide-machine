@@ -40,6 +40,8 @@ import './providers/mock-diarization'
 import './providers/google-cloud-diarization'
 import './providers/google-cloud-tts'
 import './providers/mock-tts'
+import './billing/mock'
+import './billing/stripe'
 
 export const createApp = (): Express => {
   const app = express()
