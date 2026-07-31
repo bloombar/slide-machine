@@ -41,8 +41,8 @@ Build-progress snapshot; the scope lists in [§5](#5-phase-1--mvp)–[§7](#7-ph
 
 **Phase 2 — Fuller — 🟡 in progress.**
 
-- ✅ Done: `QUIZ-1..6`; `SEED-1/2/3` + `EXP-4` (Google); `GEN-7`/`IMG-3`; `GEN-8`; `CAP-4`; `EDIT-2/3` + `TMPL-5`; `AUTH-5`; `SOC-4` (profiles); `TECH-4` (server config); `ADMIN-1`/`2`/`4`/`5`/`6`/`7` (allowlist, console, moderation, entity-settings edits, soft-deleted-content viewing + recovery, audit log); `P-10` (soft delete for all entity data). Delivered early from Phase 3: `GEN-4` (reformat/diarization/narration refine), `PLAY-2` (TTS narration), `EDIT-4`/`5` + `EDIT-6` + `TMPL-7` + `GEN-10` (whiteboard annotation, tools, spoken-transcript editing, layout, generation pause/resume).
-- ⬜ Outstanding: `TMPL-1/4` (library + custom editor); `EXP-1/2/3` (export/import); `AUTH-3/4` (email verify + password reset); `SOC-1/2/3` (voting, browse/search/sort, feeds); `GEN-9` (animated layout transitions); `ADMIN-3` (private-lecture-view logging); `IMG-5` (image attribution display); `TECH-9` (billing-provider abstraction).
+- ✅ Done: `QUIZ-1..6`; `SEED-1/2/3` + `EXP-4` (Google); `GEN-7`/`IMG-3`; `GEN-8`; `CAP-4`; `EDIT-2/3` + `TMPL-5`; `AUTH-5`; `SOC-4` (profiles); `TECH-4` (server config); `TECH-9` (billing-provider abstraction); `ADMIN-1`/`2`/`4`/`5`/`6`/`7` (allowlist, console, moderation, entity-settings edits, soft-deleted-content viewing + recovery, audit log); `P-10` (soft delete for all entity data). Delivered early from Phase 3: `GEN-4` (reformat/diarization/narration refine), `PLAY-2` (TTS narration), `EDIT-4`/`5` + `EDIT-6` + `TMPL-7` + `GEN-10` (whiteboard annotation, tools, spoken-transcript editing, layout, generation pause/resume).
+- ⬜ Outstanding: `TMPL-1/4` (library + custom editor); `EXP-1/2/3` (export/import); `AUTH-3/4` (email verify + password reset); `SOC-1/2/3` (voting, browse/search/sort, feeds); `GEN-9` (animated layout transitions); `ADMIN-3` (private-lecture-view logging); `IMG-5` (image attribution display).
 
 **Phase 3 — Complete — ⬜ not started** (its early-delivered items are in Phase 2 above).
 

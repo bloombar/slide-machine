@@ -98,7 +98,10 @@ const envSchema = z.object({
   // Hard cap on the re-rank call — enrichment must land inside the client poll.
   IMAGE_RERANK_TIMEOUT_MS: z.coerce.number().default(6000),
 
-  // Billing (SPEC TECH-9)
+  // Billing (SPEC TECH-9). Selects the active billing adapter by name; its
+  // vendor-specific credentials (STRIPE_*) live with the other secrets below
+  // and stay optional until billing goes live — 'mock' needs none, and the
+  // Stripe adapter fails descriptively without them.
   BILLING_PROVIDER: z.string().default('stripe'),
 
   // Auth (AUTH-1/2): signing secrets are required; TTLs are tunable

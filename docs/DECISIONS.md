@@ -2,6 +2,16 @@
 
 Short records of non-obvious choices, for when we revisit them.
 
+## Billing abstraction: one adapter seam, no vendor SDK (2026-07-31)
+
+**Problem.** Billing ([BILL-2](SPEC.md#bill-2-billing-provider-stripe-integration)) is the one subsystem where vendor concepts leak the furthest — price ids, customer objects, webhook envelopes — and the pilot must be able to change provider later ([TECH-9](SPEC.md#tech-9-billing-provider-abstraction-layer)) without reworking application logic.
+
+**Choice.** A `BillingProvider` interface ([billing/provider.ts](../shared/src/billing/provider.ts)) in shared, resolved by name from `BILLING_PROVIDER` through its own small registry ([billing/registry.ts](../server/src/billing/registry.ts)) — the same shape as the AI provider registry, minus the capability key. Above the adapter, everything is tier + status + opaque ids: webhooks are normalized to `subscription.active` / `past_due` / `canceled` events and subscriptions persist provider-neutrally ([models/subscription.ts](../server/src/models/subscription.ts)), so a migration is an adapter plus a data backfill.
+
+**No Stripe SDK.** The [Stripe adapter](../server/src/billing/stripe.ts) uses plain `fetch` against the REST API and verifies webhook signatures with `node:crypto` HMAC — the same keyless-fetch pattern as the Gemini and Google Cloud adapters, and it keeps the vendor out of the dependency tree entirely rather than only out of the application layer.
+
+**Unknown price ⇒ free tier.** A subscription on a price id that is not in `config/plans.json` (a retired or hand-created price) normalizes to `free` rather than to its last-known tier, so a stale price can never keep granting paid entitlements. The mock adapter (`BILLING_PROVIDER=mock`) covers dev/e2e with in-memory subscriptions and no network.
+
 ## Whiteboard markup ↔ transcript sync: phrase anchoring (2026-07-23)
 
 **Problem.** A whiteboard stroke should appear in sync with the spoken phrase it was drawn over. Strokes stored only `charAnchor` (a char offset into `sourceTranscript`) and playback revealed them at `charAnchor / length ≤ audio.currentTime / duration`. That linear char↔time model drifted three ways: characters don't map to time uniformly (pauses, emphasis); a Gemini re-narration overwrote the transcript and only *proportionally* rescaled anchors, so inserted/removed text shoved a mark off its phrase; and faster/slower voices shifted real phrase times a char-fraction can't track.
