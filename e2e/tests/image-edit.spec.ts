@@ -36,9 +36,12 @@ const newLectureWithSlide = async (page: Page, tag: string) => {
   await expect(page.getByTestId('slide')).toBeVisible()
 }
 
-/** Switches the current slide to a named layout via its kebab menu. */
-const setLayout = async (page: Page, label: RegExp) => {
-  await page.getByRole('button', { name: 'Options for slide 1' }).click()
+/** Switches slide `number` (the one the carousel is showing, slide 1 unless
+ * the test dictated more) to a named layout via its kebab menu. */
+const setLayout = async (page: Page, label: RegExp, number = 1) => {
+  await page
+    .getByRole('button', { name: `Options for slide ${number}` })
+    .click()
   await page.getByRole('menuitem', { name: 'Change layout' }).click()
   await page.getByRole('radio', { name: label }).click()
 }
@@ -190,11 +193,15 @@ test('removing the image from an image-only slide empties the slot, keeping the 
   page,
 }) => {
   await newLectureWithSlide(page, 'imageonly')
+  // A second phrase makes a second slide and the carousel moves to it, so
+  // wait for that slide's own kebab rather than racing slide 1's
   await page.getByLabel('Spoken phrase').fill('Organelles do the work')
   await page.getByRole('button', { name: 'Speak' }).click()
-  await expect(page.getByTestId('slide')).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Options for slide 2' }),
+  ).toBeVisible()
 
-  await setLayout(page, /^Image/)
+  await setLayout(page, /^Image/, 2)
   await addImage(page, png('whole.png'))
   await expect(page.getByRole('button', { name: 'Remove image' })).toBeVisible()
   const layoutBefore = await page

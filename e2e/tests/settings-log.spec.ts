@@ -78,7 +78,9 @@ test('a user changes their own account settings', async ({ page }) => {
   const languageSaved = page.waitForResponse(
     res => res.url().includes('user.setLanguage') && res.status() === 200,
   )
-  await page.getByLabel('Language').selectOption('fr')
+  // Exact: the modal also carries the "Interface language" picker (TECH-12),
+  // which a substring match on "Language" would pick up as well
+  await page.getByLabel('Language', { exact: true }).selectOption('fr')
   await languageSaved
 
   // The values survive a reload, so they really were stored. The reload drops
@@ -86,7 +88,7 @@ test('a user changes their own account settings', async ({ page }) => {
   await page.reload()
   await openAccountSettings(page)
   await expect(page.getByLabel('Public profile')).not.toBeChecked()
-  await expect(page.getByLabel('Language')).toHaveValue('fr')
+  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('fr')
 })
 
 test('the same user changes a project setting', async ({ page }) => {
