@@ -143,6 +143,11 @@
   "template": {
     "label": "幻灯片模板",
     "heading": "模板",
+    "names": {
+      "classic": "经典",
+      "midnight": "午夜",
+      "seminar": "研讨会"
+    },
     "exportYaml": "将模板导出为 YAML",
     "exportYamlHint": "将该模板的样式和版式下载为可重新导入的 YAML 文件。"
   },

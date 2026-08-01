@@ -143,6 +143,11 @@
   "template": {
     "label": "Modèle de diapositive",
     "heading": "Modèle",
+    "names": {
+      "classic": "Classique",
+      "midnight": "Minuit",
+      "seminar": "Séminaire"
+    },
     "exportYaml": "Exporter le modèle en YAML",
     "exportYamlHint": "Téléchargez le style et les mises en page de ce modèle dans un fichier YAML réimportable."
   },

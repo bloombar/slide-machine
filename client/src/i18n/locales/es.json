@@ -143,6 +143,11 @@
   "template": {
     "label": "Plantilla de diapositiva",
     "heading": "Plantilla",
+    "names": {
+      "classic": "Clásica",
+      "midnight": "Medianoche",
+      "seminar": "Seminario"
+    },
     "exportYaml": "Exportar la plantilla como YAML",
     "exportYamlHint": "Descarga el estilo y los diseños de esta plantilla en un archivo YAML reimportable."
   },

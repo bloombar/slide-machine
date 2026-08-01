@@ -143,6 +143,11 @@
   "template": {
     "label": "Slide template",
     "heading": "Template",
+    "names": {
+      "classic": "Classic",
+      "midnight": "Midnight",
+      "seminar": "Seminar"
+    },
     "exportYaml": "Export template as YAML",
     "exportYamlHint": "Download this template’s style and layouts as a re-importable YAML file."
   },

@@ -8,6 +8,7 @@ import { useRef } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import type { Template } from '@slide-machine/shared'
+import { templateName } from '../i18n/templateName'
 import Modal from './Modal'
 
 interface Props {
@@ -45,7 +46,7 @@ export default function LayoutPickerModal({
                 and where that sits in the sentence varies by language. */}
             <Trans
               i18nKey="layout.fromTemplate"
-              values={{ name: template.name }}
+              values={{ name: templateName(t, template) }}
               components={{ strong: <strong /> }}
             />{' '}
             <button

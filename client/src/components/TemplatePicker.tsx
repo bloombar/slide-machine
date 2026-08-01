@@ -3,6 +3,7 @@
  */
 import { useTranslation } from 'react-i18next'
 import type { Template } from '@slide-machine/shared'
+import { templateName } from '../i18n/templateName'
 
 interface Props {
   templates: Template[]
@@ -21,28 +22,28 @@ export default function TemplatePicker({ templates, value, onChange }: Props) {
       aria-label={t('template.label')}
       className="flex flex-wrap gap-3"
     >
-      {templates.map(t => (
+      {templates.map(template => (
         <button
-          key={t.id}
+          key={template.id}
           type="button"
           role="radio"
-          aria-checked={value === t.id}
-          onClick={() => onChange(t.id)}
+          aria-checked={value === template.id}
+          onClick={() => onChange(template.id)}
           className={`flex items-center gap-3 rounded-lg border-2 px-4 py-3 ${
-            value === t.id ? 'border-indigo-600' : 'border-slate-200'
+            value === template.id ? 'border-indigo-600' : 'border-slate-200'
           }`}
         >
           <span
             aria-hidden
             className="flex h-8 w-12 items-center justify-center rounded"
-            style={{ backgroundColor: swatch(t.theme, 'background') }}
+            style={{ backgroundColor: swatch(template.theme, 'background') }}
           >
             <span
               className="h-2 w-6 rounded-sm"
-              style={{ backgroundColor: swatch(t.theme, 'accent') }}
+              style={{ backgroundColor: swatch(template.theme, 'accent') }}
             />
           </span>
-          <span className="font-medium">{t.name}</span>
+          <span className="font-medium">{templateName(t, template)}</span>
         </button>
       ))}
     </div>
