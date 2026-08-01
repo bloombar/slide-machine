@@ -13,6 +13,7 @@
  * before the user commits — the same warning the transcript editor gives.
  */
 import { useRef, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import type {
   SlideRefineOptions,
   SlideRefineParts,
@@ -51,6 +52,7 @@ export default function SlideRefineModal({
   onOpenLectureRefine,
   onClose,
 }: Props) {
+  const { t } = useTranslation()
   // On whenever there is audio to read, matching the lecture-wide tab (whose
   // box defaults to the lecture's recordings); with no audio it is unavailable.
   const [identifySpeakers, setIdentifySpeakers] = useState(Boolean(hasAudio))
@@ -78,7 +80,7 @@ export default function SlideRefineModal({
       await onRefine({ identifySpeakers, parts, refineTranscript, level })
       onClose()
     } catch {
-      setError('Could not refine this slide — try again')
+      setError(t('refine.slide.failed'))
       setRunning(false)
     }
   }
@@ -91,35 +93,35 @@ export default function SlideRefineModal({
       initialFocusRef={closeRef}
     >
       <h3 id="refine-slide-title" className="text-lg font-bold">
-        Refine this slide with AI — slide {number}
+        {t('refine.slide.title', { number })}
       </h3>
       <p className="mt-1 text-sm text-slate-500">
-        Improve this slide. Any changes will apply to this slide only. To
-        perform refinement across all slides, use the{' '}
-        {onOpenLectureRefine ? (
-          <button
-            type="button"
-            onClick={onOpenLectureRefine}
-            disabled={running}
-            className="font-medium text-indigo-600 underline underline-offset-2 hover:text-indigo-500 disabled:opacity-50"
-          >
-            lecture-wide options
-          </button>
-        ) : (
-          'lecture-wide options'
-        )}{' '}
-        instead.
+        {/* Trans, not t: the pointer to the lecture-wide options is a link
+            when there is somewhere to send them, and plain text otherwise. */}
+        <Trans
+          i18nKey="refine.slide.intro"
+          components={{
+            lectureLink: onOpenLectureRefine ? (
+              <button
+                type="button"
+                onClick={onOpenLectureRefine}
+                disabled={running}
+                className="font-medium text-indigo-600 underline underline-offset-2 hover:text-indigo-500 disabled:opacity-50"
+              />
+            ) : (
+              <span />
+            ),
+          }}
+        />
       </p>
 
       <fieldset disabled={running} className="mt-5 flex flex-col gap-5">
         <RefineOption
-          label="Identify multiple speakers"
+          label={t('refine.speakers.label')}
           description={
             <>
-              Detect who spoke on this slide — you versus students — and reframe
-              student turns as questions, not fact.
-              {!hasAudio &&
-                ' (No recorded audio remains for this slide, so this is unavailable.)'}
+              {t('refine.speakers.descriptionSlide')}
+              {!hasAudio && ` ${t('refine.speakers.noAudioSlide')}`}
             </>
           }
           checked={identifySpeakers}
@@ -130,8 +132,8 @@ export default function SlideRefineModal({
         <RefinePartsOptions value={parts} onChange={setParts} />
 
         <RefineOption
-          label="Refine the spoken transcript"
-          description="Rewrite the read-aloud narration to describe the concepts more eloquently."
+          label={t('refine.transcript.label')}
+          description={t('refine.transcript.description')}
           checked={refineTranscript}
           onChange={setRefineTranscript}
         />
@@ -139,15 +141,13 @@ export default function SlideRefineModal({
         <RefineLevelSlider
           value={level}
           onChange={setLevel}
-          ariaLabel="How much to refine this slide"
+          ariaLabel={t('refine.slide.levelLabel')}
         />
       </fieldset>
 
       {marked && (
         <p className="mt-4 text-sm text-slate-500">
-          This slide has whiteboard markings. Refining may change its content or
-          layout, so your highlights and annotations may no longer line up with
-          what&apos;s underneath.
+          {t('refine.slide.marked')}
         </p>
       )}
 
@@ -165,7 +165,7 @@ export default function SlideRefineModal({
           disabled={running}
           className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
         >
-          Cancel
+          {t('common.cancel')}
         </button>
         <button
           type="button"
@@ -173,7 +173,7 @@ export default function SlideRefineModal({
           disabled={running || !anything}
           className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-300"
         >
-          {running ? 'Refining…' : 'Refine'}
+          {running ? t('refine.running') : t('refine.action')}
         </button>
       </div>
     </Modal>

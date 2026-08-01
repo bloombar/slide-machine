@@ -17,10 +17,14 @@ export type TtsVoiceGender = 'female' | 'male'
 export type TtsVoiceTier = 'standard' | 'premium'
 
 export interface TtsVoiceOption {
-  /** Stable id stored on the project/lecture. */
+  /** Stable id stored on the project/lecture. It also keys the voice's
+   * one-line description in the client's locale bundles
+   * (`voice.descriptions.<id>`) — a proper name reads the same in every
+   * language, but "warm female" does not, so only the description is
+   * translated (docs/I18N.md). */
   id: string
-  /** Everyday label shown in the picker. */
-  label: string
+  /** The voice's given name, shown as-is in every language. */
+  name: string
   /** Provider voice for the base language (en-US). */
   voiceName: string
   /** Set automatically when a voice is chosen; the cross-language fallback. */
@@ -35,28 +39,28 @@ export const TTS_VOICES: readonly TtsVoiceOption[] = [
   // Standard tier — Google Neural2 (natural, everyday cost).
   {
     id: 'emma',
-    label: 'Emma — warm female',
+    name: 'Emma',
     voiceName: 'en-US-Neural2-F',
     gender: 'female',
     tier: 'standard',
   },
   {
     id: 'sophie',
-    label: 'Sophie — bright female',
+    name: 'Sophie',
     voiceName: 'en-US-Neural2-C',
     gender: 'female',
     tier: 'standard',
   },
   {
     id: 'james',
-    label: 'James — deep male',
+    name: 'James',
     voiceName: 'en-US-Neural2-D',
     gender: 'male',
     tier: 'standard',
   },
   {
     id: 'daniel',
-    label: 'Daniel — clear male',
+    name: 'Daniel',
     voiceName: 'en-US-Neural2-J',
     gender: 'male',
     tier: 'standard',
@@ -64,28 +68,28 @@ export const TTS_VOICES: readonly TtsVoiceOption[] = [
   // Premium tier — Google Chirp3-HD (most natural).
   {
     id: 'aria',
-    label: 'Aria — natural female (premium)',
+    name: 'Aria',
     voiceName: 'en-US-Chirp3-HD-Aoede',
     gender: 'female',
     tier: 'premium',
   },
   {
     id: 'nova',
-    label: 'Nova — natural female (premium)',
+    name: 'Nova',
     voiceName: 'en-US-Chirp3-HD-Leda',
     gender: 'female',
     tier: 'premium',
   },
   {
     id: 'leo',
-    label: 'Leo — natural male (premium)',
+    name: 'Leo',
     voiceName: 'en-US-Chirp3-HD-Charon',
     gender: 'male',
     tier: 'premium',
   },
   {
     id: 'owen',
-    label: 'Owen — natural male (premium)',
+    name: 'Owen',
     voiceName: 'en-US-Chirp3-HD-Orus',
     gender: 'male',
     tier: 'premium',

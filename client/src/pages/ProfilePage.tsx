@@ -17,12 +17,14 @@
  */
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { useParams } from 'react-router'
+import { useTranslation } from 'react-i18next'
 import { Pencil, Settings } from 'lucide-react'
 import type { ProfileResponse, SafeUser } from '@slide-machine/shared'
-import { apiFetch, ApiError } from '../api/http'
+import { apiFetch } from '../api/http'
 import { dispatchAction } from '../api/actions'
 import { updateAdminUserSettings } from '../api/admin'
 import { useAuth } from '../auth/AuthContext'
+import { apiErrorMessage } from '../i18n/apiError'
 import { projectTitle } from '../lib/project'
 import ConfirmDialog from '../components/ConfirmDialog'
 import LectureRow from '../components/LectureRow'
@@ -53,6 +55,7 @@ const headerButton =
 export default function ProfilePage() {
   const { userId } = useParams<{ userId: string }>()
   const { status, user: viewer, updateUser } = useAuth()
+  const { t } = useTranslation()
   const [profile, setProfile] = useState<ProfileResponse | null>(null)
   const [error, setError] = useState(false)
   const [draft, setDraft] = useState<ProfileDraft | null>(null)
@@ -83,16 +86,14 @@ export default function ProfilePage() {
   if (error) {
     return (
       <PageContainer>
-        <p className="text-slate-600">
-          This profile does not exist or is private.
-        </p>
+        <p className="text-slate-600">{t('profile.notFound')}</p>
       </PageContainer>
     )
   }
   if (!profile) {
     return (
       <PageContainer>
-        <p className="text-slate-500">Loading…</p>
+        <p className="text-slate-500">{t('common.loading')}</p>
       </PageContainer>
     )
   }
@@ -138,9 +139,7 @@ export default function ProfilePage() {
       })
       setDraft(null)
     } catch (err) {
-      setSaveError(
-        err instanceof ApiError ? err.message : 'Could not save the profile.',
-      )
+      setSaveError(apiErrorMessage(err, t, 'profile.errors.save'))
     } finally {
       setSaving(false)
     }
@@ -151,7 +150,7 @@ export default function ProfilePage() {
     e.preventDefault()
     if (saving) return
     if (!draft?.displayName.trim()) {
-      setSaveError('Display name is required.')
+      setSaveError(t('profile.displayNameRequired'))
       return
     }
     if (asAdmin) setConfirming(true)
@@ -166,7 +165,7 @@ export default function ProfilePage() {
             htmlFor="profile-display-name"
             className="block text-sm font-medium text-slate-700"
           >
-            Display name
+            {t('profile.displayName')}
           </label>
           <input
             id="profile-display-name"
@@ -178,14 +177,14 @@ export default function ProfilePage() {
             htmlFor="profile-bio"
             className="mt-4 block text-sm font-medium text-slate-700"
           >
-            Bio
+            {t('profile.bio')}
           </label>
           <textarea
             id="profile-bio"
             rows={4}
             value={draft.bio}
             onChange={e => setDraft({ ...draft, bio: e.target.value })}
-            placeholder="A short introduction shown on your profile."
+            placeholder={t('profile.bioPlaceholder')}
             className={`mt-1 ${textInputClass}`}
           />
           {saveError && (
@@ -199,14 +198,14 @@ export default function ProfilePage() {
               disabled={saving}
               className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-40"
             >
-              Save
+              {t('common.save')}
             </button>
             <button
               type="button"
               onClick={cancelEditing}
               className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
           </div>
         </form>
@@ -218,7 +217,7 @@ export default function ProfilePage() {
               {profile.canEdit && (
                 <button onClick={startEditing} className={headerButton}>
                   <Pencil className="h-4 w-4" aria-hidden />
-                  Edit
+                  {t('common.edit')}
                 </button>
               )}
               {profile.canEdit && (
@@ -227,7 +226,7 @@ export default function ProfilePage() {
                   className={headerButton}
                 >
                   <Settings className="h-4 w-4" aria-hidden />
-                  Settings
+                  {t('common.settings')}
                 </button>
               )}
             </div>
@@ -241,7 +240,7 @@ export default function ProfilePage() {
       )}
 
       {profile.projects.length === 0 ? (
-        <p className="mt-6 text-slate-500">No lectures to show.</p>
+        <p className="mt-6 text-slate-500">{t('profile.noLectures')}</p>
       ) : (
         profile.projects.map(({ project, decks }) => (
           <section key={project.id} className="mt-8">
@@ -259,9 +258,9 @@ export default function ProfilePage() {
 
       {confirming && (
         <ConfirmDialog
-          title="Edit this user's profile?"
-          message="This profile belongs to another user. You can change it as an admin; every change is recorded in the audit log."
-          confirmLabel="Save changes"
+          title={t('profile.adminProfile.title')}
+          message={t('profile.adminProfile.message')}
+          confirmLabel={t('profile.adminProfile.confirm')}
           onConfirm={() => {
             setConfirming(false)
             void save()
@@ -277,9 +276,11 @@ export default function ProfilePage() {
       )}
       {askAdminSettings && (
         <ConfirmDialog
-          title="Edit this user's settings?"
-          message={`This account belongs to ${profile.user.displayName}. You can change their settings as an admin; every change is recorded in the audit log.`}
-          confirmLabel="Edit settings"
+          title={t('profile.adminSettings.title')}
+          message={t('profile.adminSettings.message', {
+            name: profile.user.displayName,
+          })}
+          confirmLabel={t('profile.adminSettings.confirm')}
           onConfirm={() => setSettingsConfirmed(true)}
           onCancel={() => setSettingsOpen(false)}
         />

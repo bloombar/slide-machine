@@ -8,6 +8,7 @@
  * the z-index tiers) so clicks act on the menu instead of navigating.
  */
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { MoreVertical } from 'lucide-react'
 
 interface Props {
@@ -45,6 +46,7 @@ export default function SlideMenu({
   elevated,
   onOpen,
 }: Props) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -98,10 +100,10 @@ export default function SlideMenu({
   return (
     <div
       ref={menuRef}
-      className={`absolute top-3 right-3 ${raised ? 'z-30' : 'z-10'}`}
+      className={`absolute top-3 end-3 ${raised ? 'z-30' : 'z-10'}`}
     >
       <button
-        aria-label={`Options for slide ${number}`}
+        aria-label={t('slide.menu.label', { number })}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={toggle}
@@ -112,34 +114,34 @@ export default function SlideMenu({
       {open && (
         <div
           role="menu"
-          aria-label={`Options for slide ${number}`}
-          className="absolute right-0 z-10 mt-1 w-52 rounded-md border border-slate-200 bg-white py-1 shadow-lg"
+          aria-label={t('slide.menu.label', { number })}
+          className="absolute end-0 z-10 mt-1 w-52 rounded-md border border-slate-200 bg-white py-1 shadow-lg"
         >
           {onSpeak && (
             <button
               role="menuitem"
               onClick={pick(onSpeak)}
-              className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+              className="block w-full px-4 py-2 text-start text-sm text-slate-700 hover:bg-slate-50"
             >
-              Speak this slide
+              {t('slide.menu.speak')}
             </button>
           )}
           {onPlayOriginalAudio && (
             <button
               role="menuitem"
               onClick={pick(onPlayOriginalAudio)}
-              className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+              className="block w-full px-4 py-2 text-start text-sm text-slate-700 hover:bg-slate-50"
             >
-              Play original audio
+              {t('slide.menu.playOriginal')}
             </button>
           )}
           {onRefine && (
             <button
               role="menuitem"
               onClick={pick(onRefine)}
-              className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+              className="block w-full px-4 py-2 text-start text-sm text-slate-700 hover:bg-slate-50"
             >
-              Refine this slide with AI
+              {t('slide.menu.refine')}
             </button>
           )}
 
@@ -147,27 +149,27 @@ export default function SlideMenu({
             <button
               role="menuitem"
               onClick={pick(onEditTranscript)}
-              className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+              className="block w-full px-4 py-2 text-start text-sm text-slate-700 hover:bg-slate-50"
             >
-              Edit spoken transcript
+              {t('slide.menu.editTranscript')}
             </button>
           )}
           {onChangeLayout && (
             <button
               role="menuitem"
               onClick={pick(onChangeLayout)}
-              className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+              className="block w-full px-4 py-2 text-start text-sm text-slate-700 hover:bg-slate-50"
             >
-              Change layout
+              {t('slide.menu.changeLayout')}
             </button>
           )}
           {onDelete && (
             <button
               role="menuitem"
               onClick={pick(onDelete)}
-              className="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+              className="block w-full px-4 py-2 text-start text-sm text-red-600 hover:bg-red-50"
             >
-              Delete slide
+              {t('slide.menu.delete')}
             </button>
           )}
         </div>

@@ -4,6 +4,7 @@
  * handling, is captured before any underlying modal's own Escape handling.
  */
 import { useRef, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import Modal from './Modal'
 
 interface Props {
@@ -23,6 +24,7 @@ export default function ConfirmDialog({
   onCancel,
 }: Props) {
   const cancelRef = useRef<HTMLButtonElement>(null)
+  const { t } = useTranslation()
 
   return (
     <Modal
@@ -41,7 +43,7 @@ export default function ConfirmDialog({
           onClick={onCancel}
           className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
         >
-          Cancel
+          {t('common.cancel')}
         </button>
         <button
           onClick={onConfirm}

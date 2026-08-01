@@ -4,6 +4,7 @@
  * signed out) and a right-hand action area pages fill via ShellActions.
  */
 import { Link, Outlet } from 'react-router'
+import { useTranslation } from 'react-i18next'
 import HealthFooter from './HealthFooter'
 import ShellMenu from './ShellMenu'
 import { useShellTitleSlot } from './ShellTitle'
@@ -12,6 +13,7 @@ import { useShellActionsSlot } from './ShellActions'
 export default function PublicShell() {
   const shellTitle = useShellTitleSlot()
   const shellActions = useShellActionsSlot()
+  const { t } = useTranslation()
 
   return (
     <div className="flex min-h-screen flex-col bg-white text-slate-900">
@@ -21,10 +23,10 @@ export default function PublicShell() {
             <ShellMenu />
             <Link
               to="/"
-              aria-label="The Slide Machine — home"
+              aria-label={t('nav.brandHome')}
               className="font-semibold whitespace-nowrap"
             >
-              The Slide Machine
+              {t('nav.brand')}
             </Link>
             {shellTitle?.active && (
               <span
@@ -40,7 +42,7 @@ export default function PublicShell() {
             />
           </div>
           <nav
-            aria-label="Primary"
+            aria-label={t('nav.primary')}
             className="flex items-center gap-1 sm:gap-2"
           >
             <div

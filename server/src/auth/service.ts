@@ -6,7 +6,7 @@
  * login runs only after credentials verify, so probing a third-party
  * email never reveals its ban status.
  */
-import type { SafeUser } from '@slide-machine/shared'
+import type { Locale, SafeUser } from '@slide-machine/shared'
 import { UserModel, toUserDto } from '../models/user'
 import { isEmailBanned } from '../models/banned-email'
 import { HttpError } from '../middleware/error'
@@ -32,11 +32,19 @@ export const register = async (
   email: string,
   password: string,
   displayName: string,
+  /** Interface language detected in the browser (TECH-12); omitted
+   * leaves the account on the schema default. */
+  locale?: Locale,
 ): Promise<AuthResult> => {
   if (await isEmailBanned(email)) throw bannedError()
   const passwordHash = await hashPassword(password)
   try {
-    const user = await UserModel.create({ email, displayName, passwordHash })
+    const user = await UserModel.create({
+      email,
+      displayName,
+      passwordHash,
+      ...(locale ? { locale } : {}),
+    })
     return {
       user: toUserDto(user),
       accessToken: await signAccessToken(user._id.toString()),

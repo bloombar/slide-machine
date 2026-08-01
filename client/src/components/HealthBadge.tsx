@@ -6,6 +6,7 @@
  * and uptime.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type {
   ComponentStatus,
   HealthComponent,
@@ -27,17 +28,6 @@ const dotStyles: Record<DisplayStatus | ComponentStatus, string> = {
 
 type ComponentKey = keyof HealthResponse['components']
 
-// Generic, vendor-neutral labels — the panel names capabilities, not the
-// specific services behind them.
-const componentLabels: Record<ComponentKey, string> = {
-  mongo: 'Database',
-  storage: 'Storage',
-  audioStorage: 'Audio storage',
-  gemini: 'Generative AI',
-  stt: 'Speech-to-Text',
-  tts: 'Text-to-Speech',
-}
-
 /** Human-friendly uptime, e.g. "3h 12m", "5m 8s", "42s". */
 function formatUptime(seconds: number): string {
   const s = Math.floor(seconds)
@@ -49,6 +39,7 @@ function formatUptime(seconds: number): string {
 }
 
 export default function HealthBadge() {
+  const { t } = useTranslation()
   const [health, setHealth] = useState<HealthResponse | null>(null)
   const [error, setError] = useState(false)
   const [open, setOpen] = useState(false)
@@ -93,11 +84,6 @@ export default function HealthBadge() {
   }
 
   const status: DisplayStatus = error ? 'error' : (health?.status ?? 'loading')
-  const label = error
-    ? 'unreachable'
-    : status === 'loading'
-      ? 'checking…'
-      : status
 
   const components = health
     ? (Object.entries(health.components) as [ComponentKey, HealthComponent][])
@@ -116,15 +102,15 @@ export default function HealthBadge() {
           className="absolute bottom-full left-1/2 z-40 mb-2 w-72 -translate-x-1/2 space-y-2 rounded-md border border-slate-200 bg-white p-3 text-left text-xs text-slate-600 shadow-lg"
         >
           <div className="flex justify-between gap-4">
-            <span className="text-slate-400">Environment</span>
+            <span className="text-slate-400">{t('health.environment')}</span>
             <span className="font-medium">{health.environment}</span>
           </div>
           <div className="flex justify-between gap-4">
-            <span className="text-slate-400">Version</span>
+            <span className="text-slate-400">{t('health.version')}</span>
             <span className="font-mono">{health.version}</span>
           </div>
           <div className="flex justify-between gap-4">
-            <span className="text-slate-400">Uptime</span>
+            <span className="text-slate-400">{t('health.uptime')}</span>
             <span>{formatUptime(health.uptime)}</span>
           </div>
           <div className="space-y-1.5 border-t border-slate-100 pt-2">
@@ -144,11 +130,13 @@ export default function HealthBadge() {
                       comp.status === 'disabled' ? 'text-slate-400' : ''
                     }
                   >
-                    {componentLabels[key]}
+                    {t(`health.components.${key}`)}
                   </span>
                 </span>
+                {/* `detail` is server-authored English (e.g. "connected");
+                    only the bare status has a translation. */}
                 <span className="text-slate-400">
-                  {comp.detail ?? comp.status}
+                  {comp.detail ?? t(`health.state.${comp.status}`)}
                 </span>
               </div>
             ))}
@@ -167,7 +155,9 @@ export default function HealthBadge() {
           className={`h-2 w-2 rounded-full ${dotStyles[status]}`}
           aria-hidden
         />
-        <span>API {label}</span>
+        <span>
+          {t('health.summary', { status: t(`health.state.${status}`) })}
+        </span>
       </button>
     </div>
   )

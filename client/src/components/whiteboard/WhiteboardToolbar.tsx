@@ -11,6 +11,7 @@
  * keep their click + press-hold gestures.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Eraser, GripVertical, Highlighter, Pen, SquarePen } from 'lucide-react'
 import Tooltip from '../Tooltip'
 import ColorThicknessPopover from './ColorThicknessPopover'
@@ -81,9 +82,15 @@ const clampToViewport = (point: Point, size: DOMRect): Point => {
  * click/hold don't fire, and — since the picker closes on an outside mousedown —
  * so a toggle-close isn't undone by that outside-close. The button keeps its
  * own label. */
-const HoldHint = ({ onToggle }: { onToggle: () => void }) => (
+const HoldHint = ({
+  label,
+  onToggle,
+}: {
+  label: string
+  onToggle: () => void
+}) => (
   <span
-    aria-label="Color and stroke options"
+    aria-label={label}
     role="button"
     onPointerDown={e => e.stopPropagation()}
     onMouseDown={e => e.stopPropagation()}
@@ -91,7 +98,7 @@ const HoldHint = ({ onToggle }: { onToggle: () => void }) => (
       e.stopPropagation()
       onToggle()
     }}
-    className="absolute bottom-0 right-0 flex h-3 w-3 cursor-pointer items-end justify-end"
+    className="absolute bottom-0 end-0 flex h-3 w-3 cursor-pointer items-end justify-end"
   >
     <svg
       viewBox="0 0 4 4"
@@ -128,6 +135,7 @@ export default function WhiteboardToolbar({
     setPenStyle,
     setHighlighterStyle,
   } = whiteboard
+  const { t } = useTranslation()
   const pillRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<Point | null>(() => readStored(deckId))
   // Which tool's color/thickness popover is open (from a press-and-hold).
@@ -265,9 +273,9 @@ export default function WhiteboardToolbar({
       // below modals and the primary nav.
       className="fixed z-30 flex select-none flex-col items-center gap-1 rounded-2xl border border-slate-200 bg-white/95 px-1.5 py-2 shadow-lg backdrop-blur"
     >
-      <Tooltip label="Drag to move" align="start">
+      <Tooltip label={t('deck.toolbar.drag')} align="start">
         <button
-          aria-label="Drag to move the whiteboard toolbar"
+          aria-label={t('whiteboard.dragHint')}
           onPointerDown={startDrag}
           className="cursor-grab touch-none rounded-md p-1 text-slate-300 hover:text-slate-500 active:cursor-grabbing"
         >
@@ -279,9 +287,9 @@ export default function WhiteboardToolbar({
         {/* Each drawing tool wraps its popover so it expands to the right of
             THAT button, not the top of the group. */}
         <div className="relative">
-          <Tooltip label="Pen" align="start">
+          <Tooltip label={t('whiteboard.pen')} align="start">
             <button
-              aria-label="Pen"
+              aria-label={t('whiteboard.pen')}
               aria-pressed={tool === 'pen'}
               className={buttonClass('pen')}
               onPointerDown={() => startHold('pen')}
@@ -290,12 +298,15 @@ export default function WhiteboardToolbar({
               onClick={() => handleToolClick('pen')}
             >
               <Pen className="h-5 w-5" aria-hidden />
-              <HoldHint onToggle={() => togglePicker('pen')} />
+              <HoldHint
+                label={t('whiteboard.picker.options')}
+                onToggle={() => togglePicker('pen')}
+              />
             </button>
           </Tooltip>
           {picker === 'pen' && (
             <ColorThicknessPopover
-              label="Pen"
+              label={t('whiteboard.pen')}
               colors={PEN_COLORS}
               thicknesses={PEN_THICKNESSES}
               value={penStyle}
@@ -305,9 +316,9 @@ export default function WhiteboardToolbar({
           )}
         </div>
         <div className="relative">
-          <Tooltip label="Highlighter" align="start">
+          <Tooltip label={t('whiteboard.highlighter')} align="start">
             <button
-              aria-label="Highlighter"
+              aria-label={t('whiteboard.highlighter')}
               aria-pressed={tool === 'highlighter'}
               className={buttonClass('highlighter')}
               onPointerDown={() => startHold('highlighter')}
@@ -316,12 +327,15 @@ export default function WhiteboardToolbar({
               onClick={() => handleToolClick('highlighter')}
             >
               <Highlighter className="h-5 w-5" aria-hidden />
-              <HoldHint onToggle={() => togglePicker('highlighter')} />
+              <HoldHint
+                label={t('whiteboard.picker.options')}
+                onToggle={() => togglePicker('highlighter')}
+              />
             </button>
           </Tooltip>
           {picker === 'highlighter' && (
             <ColorThicknessPopover
-              label="Highlighter"
+              label={t('whiteboard.highlighter')}
               colors={HIGHLIGHTER_COLORS}
               thicknesses={HIGHLIGHTER_THICKNESSES}
               value={highlighterStyle}
@@ -330,9 +344,9 @@ export default function WhiteboardToolbar({
             />
           )}
         </div>
-        <Tooltip label="Eraser" align="start">
+        <Tooltip label={t('whiteboard.eraser')} align="start">
           <button
-            aria-label="Eraser"
+            aria-label={t('whiteboard.eraser')}
             aria-pressed={tool === 'eraser'}
             className={buttonClass('eraser')}
             onClick={() => toggleTool('eraser')}
@@ -344,9 +358,9 @@ export default function WhiteboardToolbar({
         {/* New whiteboard slide: appends a blank canvas and arms the pen.
             Separated from the tools by a divider — it acts, it doesn't select. */}
         <div className="my-0.5 h-px w-6 bg-slate-200" />
-        <Tooltip label="New whiteboard slide" align="start">
+        <Tooltip label={t('whiteboard.newSlide')} align="start">
           <button
-            aria-label="New whiteboard slide"
+            aria-label={t('whiteboard.newSlide')}
             className="rounded-md p-2 text-slate-500 hover:text-slate-900"
             onClick={onNewWhiteboardSlide}
           >

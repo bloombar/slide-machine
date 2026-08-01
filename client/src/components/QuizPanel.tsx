@@ -13,6 +13,7 @@
  * live-backed per config; this UI is identical either way.
  */
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Check,
   ChevronRight,
@@ -33,27 +34,28 @@ import type {
   QuizStatus,
 } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
+// The singleton's standalone translator, for the load effects below: it
+// is module-level and stable, so it is not an effect dependency the way
+// the hook's `t` is (which changes identity on every language switch,
+// and would re-run the fetch).
+import { t as translate } from '../i18n'
 import Portal from './Portal'
 
 interface Props {
   deckId: string
 }
 
-/**
- * Finder-style Google Drive folder browser (QUIZ-2). Navigate into folders via
- * the breadcrumb, create new ones, and save the quiz into whichever folder
- * you're in. Under the current `drive.file` scope this shows the folders the
- * app created; once `drive.readonly` is granted (server-side) and the user
- * reconnects, the very same views browse the whole Drive — no UI change.
- */
+/** The question types offered, in order. Each key names its own field
+ * label under `quiz.types.<key>.field` and its preview label under
+ * `quiz.types.<key>.name`. */
 const QUESTION_TYPE_FIELDS = [
-  { key: 'single_choice', label: 'Single-choice (MCQ)' },
-  { key: 'multiple_choice', label: 'Multiple-answer' },
-  { key: 'short_text', label: 'Short answer' },
-  { key: 'long_text', label: 'Long answer' },
+  'single_choice',
+  'multiple_choice',
+  'short_text',
+  'long_text',
 ] as const
 
-type TypeCounts = Record<(typeof QUESTION_TYPE_FIELDS)[number]['key'], number>
+type TypeCounts = Record<(typeof QUESTION_TYPE_FIELDS)[number], number>
 
 /** The per-type counts to start from: the project's remembered breakdown, else
  * its remembered count as all single-choice, else five single-choice (QUIZ-2). */
@@ -177,6 +179,13 @@ function useQuizOptions(defaults?: QuizGenerationOptions) {
 
 type QuizOptions = ReturnType<typeof useQuizOptions>
 
+/**
+ * Finder-style Google Drive folder browser (QUIZ-2). Navigate into folders via
+ * the breadcrumb, create new ones, and save the quiz into whichever folder
+ * you're in. Under the current `drive.file` scope this shows the folders the
+ * app created; once `drive.readonly` is granted (server-side) and the user
+ * reconnects, the very same views browse the whole Drive — no UI change.
+ */
 function FolderPicker({
   onCancel,
   onGenerate,
@@ -210,9 +219,11 @@ function FolderPicker({
     customInstructions,
     setCustomInstructions,
   } = options
+  const { t } = useTranslation()
 
   // The breadcrumb; the last entry is the folder currently open (the one a
-  // quiz would be saved into). Always rooted at My Drive.
+  // quiz would be saved into). Always rooted at My Drive — a Google product
+  // name, so it is not translated.
   const [path, setPath] = useState<DriveFolder[]>([
     { id: 'root', name: 'My Drive' },
   ])
@@ -242,9 +253,7 @@ function FolderPicker({
       })
       .catch(() => {
         if (!ignore) {
-          setError(
-            'Could not load your Drive folders. Your Google account may not have granted Drive access.',
-          )
+          setError(translate('quiz.errors.loadFolders'))
         }
       })
     return () => {
@@ -278,7 +287,7 @@ function FolderPicker({
         // Step into the new folder so "Save here" saves the quiz into it.
         openFolder(folder)
       })
-      .catch(() => setError('Could not create the folder'))
+      .catch(() => setError(t('quiz.errors.createFolder')))
       .finally(() => setCreating(false))
   }
 
@@ -293,13 +302,13 @@ function FolderPicker({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Choose a Drive folder"
+          aria-label={t('quiz.folder.dialog')}
           className="relative flex max-h-[85vh] w-full max-w-md flex-col rounded-lg bg-white p-6 shadow-xl"
         >
           <header className="mb-3 flex items-start justify-between">
-            <h2 className="text-lg font-bold">Save the quiz to…</h2>
+            <h2 className="text-lg font-bold">{t('quiz.folder.title')}</h2>
             <button
-              aria-label="Close"
+              aria-label={t('common.close')}
               onClick={onCancel}
               className="rounded p-1 text-slate-400 hover:text-slate-700"
             >
@@ -311,7 +320,7 @@ function FolderPicker({
           <div className="flex-1 overflow-y-auto pr-1">
             {/* Breadcrumb of the current folder path */}
             <nav
-              aria-label="Folder path"
+              aria-label={t('quiz.folder.path')}
               className="mb-2 flex flex-wrap items-center gap-0.5 text-sm text-slate-600"
             >
               {path.map((f, i) => (
@@ -344,15 +353,16 @@ function FolderPicker({
                     onClick={onReconnect}
                     className="mt-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-slate-50"
                   >
-                    Reconnect Google
+                    {t('quiz.reconnect')}
                   </button>
                 </div>
               ) : loading ? (
-                <p className="p-3 text-sm text-slate-500">Loading…</p>
+                <p className="p-3 text-sm text-slate-500">
+                  {t('common.loading')}
+                </p>
               ) : folders.length === 0 ? (
                 <p className="p-3 text-sm text-slate-400">
-                  No sub-folders here. Save the quiz into this folder, or make a
-                  new one below.
+                  {t('quiz.folder.empty')}
                 </p>
               ) : (
                 <ul className="divide-y divide-slate-100">
@@ -361,7 +371,7 @@ function FolderPicker({
                       <button
                         type="button"
                         onClick={() => openFolder(f)}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                        className="flex w-full items-center gap-2 px-3 py-2 text-start text-sm hover:bg-slate-50"
                       >
                         <Folder
                           className="h-4 w-4 shrink-0 text-indigo-500"
@@ -384,12 +394,14 @@ function FolderPicker({
               {creatingNew ? (
                 <div className="flex items-center gap-2">
                   <input
-                    aria-label="New folder name"
+                    aria-label={t('quiz.folder.newName')}
                     autoFocus
                     value={newFolderName}
                     onChange={e => setNewFolderName(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && createFolder()}
-                    placeholder={`New folder in ${current.name}`}
+                    placeholder={t('quiz.folder.newIn', {
+                      folder: current.name,
+                    })}
                     className="min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1.5 text-sm"
                   />
                   <button
@@ -398,11 +410,11 @@ function FolderPicker({
                     onClick={createFolder}
                     className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
                   >
-                    {creating ? 'Creating…' : 'Create'}
+                    {creating ? t('quiz.folder.creating') : t('common.create')}
                   </button>
                   <button
                     type="button"
-                    aria-label="Cancel new folder"
+                    aria-label={t('quiz.folder.cancelNew')}
                     onClick={() => {
                       setCreatingNew(false)
                       setNewFolderName('')
@@ -419,7 +431,7 @@ function FolderPicker({
                   className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:underline"
                 >
                   <FolderPlus className="h-4 w-4" aria-hidden />
-                  New folder
+                  {t('quiz.folder.new')}
                 </button>
               )}
             </div>
@@ -427,7 +439,7 @@ function FolderPicker({
             {/* Basic generation options */}
             <div className="mt-4 grid grid-cols-2 gap-3">
               <label className="text-sm text-slate-700">
-                Number of questions
+                {t('quiz.options.questionCount')}
                 <input
                   type="number"
                   min={1}
@@ -439,7 +451,7 @@ function FolderPicker({
                 />
               </label>
               <label className="text-sm text-slate-700">
-                Total points
+                {t('quiz.options.totalPoints')}
                 <input
                   type="number"
                   min={1}
@@ -462,13 +474,13 @@ function FolderPicker({
                 className={`h-4 w-4 transition-transform ${advanced ? 'rotate-90' : ''}`}
                 aria-hidden
               />
-              Advanced settings
+              {t('quiz.options.advanced')}
             </button>
 
             {advanced && (
               <div className="mt-2 flex flex-col gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
                 <label className="text-sm text-slate-700">
-                  Collect respondent email
+                  {t('quiz.options.email.label')}
                   <select
                     value={emailCollection}
                     onChange={e =>
@@ -479,12 +491,12 @@ function FolderPicker({
                     className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
                   >
                     <option value="verified">
-                      Verified email (Google-checked)
+                      {t('quiz.options.email.verified')}
                     </option>
                     <option value="responder_input">
-                      Responder types their email
+                      {t('quiz.options.email.responderInput')}
                     </option>
-                    <option value="none">Don’t collect email</option>
+                    <option value="none">{t('quiz.options.email.none')}</option>
                   </select>
                 </label>
 
@@ -497,10 +509,9 @@ function FolderPicker({
                       onChange={e => setIncludeTranscript(e.target.checked)}
                     />
                     <span>
-                      Include spoken transcript in source material
+                      {t('quiz.options.transcript.label')}
                       <span className="block text-xs text-slate-500">
-                        Base questions on both the slide text and the full
-                        lecture transcript.
+                        {t('quiz.options.transcript.hint')}
                       </span>
                     </span>
                   </label>
@@ -508,20 +519,20 @@ function FolderPicker({
 
                 <fieldset>
                   <legend className="text-sm text-slate-700">
-                    Question types
+                    {t('quiz.options.types')}
                   </legend>
                   <div className="mt-1 grid grid-cols-2 gap-2">
-                    {QUESTION_TYPE_FIELDS.map(({ key, label }) => (
+                    {QUESTION_TYPE_FIELDS.map(key => (
                       <label
                         key={key}
                         className="flex items-center justify-between gap-2 text-sm text-slate-700"
                       >
-                        {label}
+                        {t(`quiz.types.${key}.field`)}
                         <input
                           type="number"
                           min={0}
                           max={50}
-                          aria-label={label}
+                          aria-label={t(`quiz.types.${key}.field`)}
                           placeholder="0"
                           value={types[key] || ''}
                           onChange={e => onTypeChange(key, e.target.value)}
@@ -531,22 +542,20 @@ function FolderPicker({
                     ))}
                   </div>
                   <p className="mt-1 text-xs text-slate-500">
-                    The number of questions above follows this breakdown.
+                    {t('quiz.options.typesHint')}
                   </p>
                 </fieldset>
 
                 <label className="text-sm text-slate-700">
-                  Additional instructions (optional)
+                  {t('quiz.options.instructions.label')}
                   <span className="block text-xs text-slate-500">
-                    Tell the AI how to write the quiz — e.g. focus on a topic,
-                    skip a section, set the difficulty, or match a question
-                    style.
+                    {t('quiz.options.instructions.hint')}
                   </span>
                   <textarea
                     value={customInstructions}
                     onChange={e => setCustomInstructions(e.target.value)}
                     rows={2}
-                    placeholder="e.g. focus on the water cycle; avoid definitions"
+                    placeholder={t('quiz.options.instructions.placeholder')}
                     className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
                   />
                 </label>
@@ -556,7 +565,7 @@ function FolderPicker({
           {/* Fixed footer */}
           <div className="mt-4 flex items-center justify-between gap-2 border-t border-slate-100 pt-4">
             <span className="min-w-0 truncate text-xs text-slate-500">
-              Saving to:{' '}
+              {t('quiz.savingTo')}{' '}
               <span className="font-medium text-slate-700">{current.name}</span>
             </span>
             <div className="flex gap-2">
@@ -565,7 +574,7 @@ function FolderPicker({
                 onClick={onCancel}
                 className="rounded-md px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -573,7 +582,7 @@ function FolderPicker({
                 onClick={() => onGenerate(current)}
                 className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
               >
-                {publishing ? 'Generating…' : 'Generate & save'}
+                {publishing ? t('quiz.generating') : t('quiz.generateAndSave')}
               </button>
             </div>
           </div>
@@ -581,14 +590,6 @@ function FolderPicker({
       </div>
     </Portal>
   )
-}
-
-/** Human label for a question type in the preview. */
-const TYPE_LABEL: Record<string, string> = {
-  single_choice: 'Single choice',
-  multiple_choice: 'Multiple answer',
-  short_text: 'Short answer',
-  long_text: 'Long answer',
 }
 
 /**
@@ -608,6 +609,7 @@ function QuizPreview({
   onPublish: (reviewed: QuizQuestion[]) => void
   onCancel: () => void
 }) {
+  const { t } = useTranslation()
   const [edited, setEdited] = useState<QuizQuestion[]>(questions)
   const total = edited.reduce((sum, q) => sum + (q.points ?? 0), 0)
 
@@ -627,13 +629,13 @@ function QuizPreview({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Review quiz questions"
+          aria-label={t('quiz.review.dialog')}
           className="relative flex max-h-[85vh] w-full max-w-lg flex-col rounded-lg bg-white p-6 shadow-xl"
         >
           <header className="mb-1 flex items-start justify-between">
-            <h2 className="text-lg font-bold">Review &amp; set points</h2>
+            <h2 className="text-lg font-bold">{t('quiz.review.title')}</h2>
             <button
-              aria-label="Close"
+              aria-label={t('common.close')}
               onClick={onCancel}
               className="rounded p-1 text-slate-400 hover:text-slate-700"
             >
@@ -641,7 +643,7 @@ function QuizPreview({
             </button>
           </header>
           <p className="mb-3 text-sm text-slate-600">
-            Adjust each question’s points, then publish. Total:{' '}
+            {t('quiz.review.hint')}{' '}
             <span className="font-medium text-slate-800">{total}</span>
           </p>
 
@@ -657,15 +659,15 @@ function QuizPreview({
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-slate-800">{q.question}</p>
                   <span className="text-xs uppercase tracking-wide text-slate-400">
-                    {TYPE_LABEL[q.type] ?? q.type}
+                    {t(`quiz.types.${q.type}.name`, { defaultValue: q.type })}
                   </span>
                 </div>
                 <label className="shrink-0 text-xs text-slate-500">
-                  Points
+                  {t('quiz.review.points')}
                   <input
                     type="number"
                     min={0}
-                    aria-label={`Points for question ${i + 1}`}
+                    aria-label={t('quiz.review.pointsFor', { number: i + 1 })}
                     value={q.points ?? 0}
                     onChange={e => setPoints(i, e.target.value)}
                     className="mt-0.5 w-16 rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-800"
@@ -677,7 +679,7 @@ function QuizPreview({
 
           <div className="mt-4 flex items-center justify-between gap-2 border-t border-slate-100 pt-4">
             <span className="min-w-0 truncate text-xs text-slate-500">
-              Saving to:{' '}
+              {t('quiz.savingTo')}{' '}
               <span className="font-medium text-slate-700">{folderName}</span>
             </span>
             <div className="flex gap-2">
@@ -686,7 +688,7 @@ function QuizPreview({
                 onClick={onCancel}
                 className="rounded-md px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -694,7 +696,7 @@ function QuizPreview({
                 onClick={() => onPublish(edited)}
                 className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
               >
-                {publishing ? 'Publishing…' : 'Publish quiz'}
+                {publishing ? t('quiz.publishing') : t('quiz.publish')}
               </button>
             </div>
           </div>
@@ -775,6 +777,7 @@ function QuizPublishFlow({
 }
 
 export default function QuizPanel({ deckId }: Props) {
+  const { t } = useTranslation()
   const [loading, setLoading] = useState(true)
   const [connected, setConnected] = useState(false)
   const [quiz, setQuiz] = useState<PublishedQuiz | undefined>(undefined)
@@ -819,7 +822,7 @@ export default function QuizPanel({ deckId }: Props) {
         setHasTranscript(s.hasTranscript)
         setDefaults(s.defaults)
       })
-      .catch(() => setError('Could not load the quiz status'))
+      .catch(() => setError(translate('quiz.errors.status')))
       .finally(() => setLoading(false))
   }, [deckId])
 
@@ -847,7 +850,7 @@ export default function QuizPanel({ deckId }: Props) {
         }
       })
       .catch(() => {
-        setError('Could not connect your Google account')
+        setError(t('quiz.errors.connect'))
         setBusy(false)
       })
   }
@@ -865,7 +868,7 @@ export default function QuizPanel({ deckId }: Props) {
     })
       .then(({ questions }) => questions)
       .catch(() => {
-        setError('Could not generate the quiz — please try again')
+        setError(t('quiz.errors.generate'))
         return null
       })
       .finally(() => setBusy(false))
@@ -890,7 +893,7 @@ export default function QuizPanel({ deckId }: Props) {
         setQuiz(q)
         setFlowOpen(false)
       })
-      .catch(() => setError('Could not publish the quiz — please try again'))
+      .catch(() => setError(t('quiz.errors.publish')))
       .finally(() => setBusy(false))
   }
 
@@ -899,7 +902,7 @@ export default function QuizPanel({ deckId }: Props) {
     setError(null)
     dispatchAction<{ deleted: boolean }>('quiz.delete', { deckId })
       .then(() => setQuiz(undefined))
-      .catch(() => setError('Could not delete the quiz — please try again'))
+      .catch(() => setError(t('quiz.errors.delete')))
       .finally(() => setBusy(false))
   }
 
@@ -914,35 +917,30 @@ export default function QuizPanel({ deckId }: Props) {
   }
 
   if (loading) {
-    return <p className="text-sm text-slate-500">Loading…</p>
+    return <p className="text-sm text-slate-500">{t('common.loading')}</p>
   }
 
   return (
     <div className="flex flex-col gap-4">
       <div>
         <h3 className="text-base font-semibold text-slate-900">
-          Exit-ticket quiz
+          {t('quiz.heading')}
         </h3>
-        <p className="mt-1 text-sm text-slate-600">
-          Generate a quiz from this lecture and publish it as a Google Form you
-          can share with students.
-        </p>
+        <p className="mt-1 text-sm text-slate-600">{t('quiz.intro')}</p>
       </div>
 
       {error && <p className="text-sm text-rose-600">{error}</p>}
 
       {driveDenied && (
         <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-          Your Google account connected, but Drive access wasn’t allowed. Click{' '}
-          <span className="font-medium">Connect Google</span> again and be sure
-          to tick the Drive permission so quizzes can be saved.
+          {t('quiz.driveDenied', { action: t('quiz.connect') })}
         </p>
       )}
 
       {quiz ? (
         <div className="flex flex-col gap-2 rounded-md border border-slate-200 bg-slate-50 p-4">
           <span className="text-sm font-medium text-slate-700">
-            Your quiz is ready
+            {t('quiz.ready')}
           </span>
           <div className="flex items-center gap-2">
             <a
@@ -955,7 +953,7 @@ export default function QuizPanel({ deckId }: Props) {
               <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
             </a>
             <button
-              aria-label={copied ? 'Link copied' : 'Copy quiz link'}
+              aria-label={copied ? t('quiz.linkCopied') : t('quiz.copyLink')}
               onClick={() => copyLink(quiz.formUrl)}
               className="rounded-md border border-slate-300 bg-white p-2 text-slate-600 hover:text-slate-900"
             >
@@ -973,11 +971,9 @@ export default function QuizPanel({ deckId }: Props) {
             className="mt-2 inline-flex items-center gap-1.5 self-start rounded-md border border-rose-200 bg-white px-3 py-1.5 text-sm font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50"
           >
             <Trash2 className="h-4 w-4" aria-hidden />
-            {busy ? 'Deleting…' : 'Delete quiz'}
+            {busy ? t('quiz.deleting') : t('quiz.delete')}
           </button>
-          <p className="text-xs text-slate-500">
-            Deleting lets you generate a fresh quiz with different questions.
-          </p>
+          <p className="text-xs text-slate-500">{t('quiz.deleteHint')}</p>
         </div>
       ) : connected ? (
         <button
@@ -985,21 +981,18 @@ export default function QuizPanel({ deckId }: Props) {
           onClick={() => setFlowOpen(true)}
           className="self-start rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white"
         >
-          Generate quiz
+          {t('quiz.generate')}
         </button>
       ) : (
         <div className="flex flex-col items-start gap-2">
-          <p className="text-sm text-slate-600">
-            Connect a Google account so the Form can be saved to your Google
-            Drive.
-          </p>
+          <p className="text-sm text-slate-600">{t('quiz.connectHint')}</p>
           <button
             type="button"
             disabled={busy}
             onClick={connectGoogle}
             className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           >
-            {busy ? 'Connecting…' : 'Connect Google'}
+            {busy ? t('quiz.connecting') : t('quiz.connect')}
           </button>
         </div>
       )}

@@ -135,14 +135,16 @@ test("the admin edits another user's account settings", async ({ page }) => {
       res.request().method() === 'PATCH' &&
       res.status() === 204,
   )
-  await modal.getByLabel('Language').selectOption('fr')
+  // Exact: the modal also carries the "Interface language" picker (TECH-12),
+  // which a substring match on "Language" would pick up as well
+  await modal.getByLabel('Language', { exact: true }).selectOption('fr')
   await saved
 
   // The value survives a reload, so it really was stored
   await page.reload()
   await page.getByRole('button', { name: 'Settings' }).click()
   await page.getByRole('button', { name: 'Edit settings' }).click()
-  await expect(page.getByLabel('Language')).toHaveValue('fr')
+  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('fr')
 
   // …and the console lists it, read-only
   await page.goto('/app/admin')

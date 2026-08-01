@@ -13,6 +13,7 @@
  * authoring, not a settings edit, so that section stays with its owner.
  */
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import type { Project, Template } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
@@ -29,11 +30,9 @@ import VoiceSelect from './VoiceSelect'
 import { getTtsEnabled } from '../runtime-config'
 import TemplatePicker from './TemplatePicker'
 
-const TABS = [
-  { id: 'general', label: 'General' },
-  { id: 'template', label: 'Design' },
-  { id: 'sharing', label: 'Privacy & Sharing' },
-] as const
+/** The tabs in order; each id also keys its label under
+ * `deck.settings.tabs.<id>` — the same names the lecture settings use. */
+const TABS = [{ id: 'general' }, { id: 'template' }, { id: 'sharing' }] as const
 
 export type ProjectSettingsTabId = (typeof TABS)[number]['id']
 type TabId = ProjectSettingsTabId
@@ -63,6 +62,7 @@ export default function ProjectSettingsModal({
   onProjectChange,
   onDeleted,
 }: Props) {
+  const { t } = useTranslation()
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [tab, setTab] = useState<TabId>(initialTab)
   const [templates, setTemplates] = useState<Template[]>([])
@@ -97,7 +97,7 @@ export default function ProjectSettingsModal({
   return (
     <Modal
       variant="sheet"
-      ariaLabel="Project settings"
+      ariaLabel={t('project.settings.title')}
       onClose={onClose}
       initialFocusRef={closeRef}
       escapeCapture={false}
@@ -105,16 +105,15 @@ export default function ProjectSettingsModal({
     >
       <header className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold">Project settings</h2>
+          <h2 className="text-xl font-bold">{t('project.settings.title')}</h2>
           <p className="mt-1 text-sm text-slate-500">
-            These settings apply across all lectures in this project (lectures
-            can override some of them individually).
+            {t('project.settings.scope')}
           </p>
         </div>
         <button
           ref={closeRef}
-          aria-label="Close settings"
-          title="Close (Esc)"
+          aria-label={t('deck.settings.close')}
+          title={t('common.closeEsc')}
           onClick={onClose}
           className="rounded-md p-2 text-slate-500 hover:text-slate-900"
         >
@@ -126,25 +125,25 @@ export default function ProjectSettingsModal({
 
       <div
         role="tablist"
-        aria-label="Settings sections"
+        aria-label={t('deck.settings.sections')}
         className="mb-6 flex gap-1 border-b border-slate-200"
       >
-        {TABS.map(t => (
+        {TABS.map(tab_ => (
           <button
-            key={t.id}
+            key={tab_.id}
             role="tab"
-            id={`project-tab-${t.id}`}
-            aria-selected={tab === t.id}
-            aria-controls={`project-panel-${t.id}`}
-            tabIndex={tab === t.id ? 0 : -1}
-            onClick={() => setTab(t.id)}
+            id={`project-tab-${tab_.id}`}
+            aria-selected={tab === tab_.id}
+            aria-controls={`project-panel-${tab_.id}`}
+            tabIndex={tab === tab_.id ? 0 : -1}
+            onClick={() => setTab(tab_.id)}
             className={`-mb-px rounded-t-md border-b-2 px-4 py-2 text-sm font-medium ${
-              tab === t.id
+              tab === tab_.id
                 ? 'border-indigo-600 text-indigo-700'
                 : 'border-transparent text-slate-500 hover:text-slate-900'
             }`}
           >
-            {t.label}
+            {t(`deck.settings.tabs.${tab_.id}`)}
           </button>
         ))}
       </div>
@@ -156,11 +155,10 @@ export default function ProjectSettingsModal({
           aria-labelledby="project-tab-template"
         >
           <h3 className="mb-2 text-lg font-semibold text-slate-700">
-            Default template
+            {t('project.settings.templateHeading')}
           </h3>
           <p className="mb-4 text-sm text-slate-500">
-            New lectures in this project start with this template. Each lecture
-            keeps its own and can switch any time in its settings.
+            {t('project.settings.templateHint')}
           </p>
           <TemplatePicker
             templates={templates}
@@ -207,16 +205,15 @@ export default function ProjectSettingsModal({
         >
           <div>
             <h3 className="mb-2 text-lg font-semibold text-slate-700">
-              Seed notes
+              {t('seed.notesHeading')}
             </h3>
             <p className="mb-3 text-sm text-slate-500">
-              Background material that guides slide generation for every lecture
-              in this project. Saved automatically.
+              {t('project.settings.seedNotesHint')}
             </p>
             <SeedNotesEditor
               value={project.seedContext ?? ''}
-              label="Project seed notes"
-              placeholder="Key topics, terminology, planned structure…"
+              label={t('project.settings.seedNotesLabel')}
+              placeholder={t('project.settings.seedNotesPlaceholder')}
               onSave={seedContext => {
                 dispatchAction<Project>('project.update', {
                   projectId: project.id,
@@ -233,11 +230,10 @@ export default function ProjectSettingsModal({
           {!adminOverride && (
             <div>
               <h3 className="mb-2 text-lg font-semibold text-slate-700">
-                Seed material
+                {t('seed.materialHeading')}
               </h3>
               <p className="mb-3 text-sm text-slate-500">
-                Documents and photos scanned for background text and imagery,
-                available to every lecture in this project.
+                {t('project.settings.seedMaterialHint')}
               </p>
               <SeedMaterial projectId={project.id} />
             </div>
@@ -245,11 +241,10 @@ export default function ProjectSettingsModal({
 
           <div>
             <h3 className="mb-2 text-lg font-semibold text-slate-700">
-              AI freedom
+              {t('freedom.label')}
             </h3>
             <p className="mb-3 text-sm text-slate-500">
-              How much the AI may add beyond what the speaker says. Lectures in
-              this project inherit it unless they set their own.
+              {t('project.settings.freedomHint')}
             </p>
             <FreedomSlider
               value={project.generationFreedom}
@@ -269,15 +264,14 @@ export default function ProjectSettingsModal({
 
           <div>
             <h3 className="mb-2 text-lg font-semibold text-slate-700">
-              Language
+              {t('deck.settings.general.languageHeading')}
             </h3>
             <p className="mb-3 text-sm text-slate-500">
-              Speech recognition and generated slide text for lectures in this
-              project, unless a lecture sets its own.
+              {t('project.settings.languageHint')}
             </p>
             <LanguageSelect
               value={project.language}
-              defaultLabel="your profile setting or browser language"
+              defaultLabel={t('project.settings.languageInherit')}
               onChange={language => {
                 dispatchAction<Project>('project.update', {
                   projectId: project.id,
@@ -293,15 +287,14 @@ export default function ProjectSettingsModal({
           {getTtsEnabled() && (
             <div>
               <h3 className="mb-2 text-lg font-semibold text-slate-700">
-                Narration voice
+                {t('voice.label')}
               </h3>
               <p className="mb-3 text-sm text-slate-500">
-                The voice used to read lectures in this project aloud, unless a
-                lecture sets its own. It speaks in the project's language.
+                {t('project.settings.voiceHint')}
               </p>
               <VoiceSelect
                 value={project.ttsVoice}
-                defaultLabel="system default"
+                defaultLabel={t('voice.systemDefault')}
                 onChange={ttsVoice => {
                   dispatchAction<Project>('project.update', {
                     projectId: project.id,
@@ -318,17 +311,16 @@ export default function ProjectSettingsModal({
           {isOwner && (
             <div className="rounded-md border border-red-200 p-4">
               <h3 className="mb-2 text-lg font-semibold text-red-700">
-                Danger zone
+                {t('common.dangerZone')}
               </h3>
               <p className="mb-3 text-sm text-slate-600">
-                Deleting a project permanently removes all of its lectures,
-                slides, and seed material. This cannot be undone.
+                {t('project.settings.deleteHint')}
               </p>
               <button
                 onClick={() => setConfirmingDelete(true)}
                 className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
               >
-                Delete project
+                {t('project.delete.action')}
               </button>
             </div>
           )}
@@ -337,9 +329,11 @@ export default function ProjectSettingsModal({
 
       {confirmingDelete && (
         <ConfirmDialog
-          title="Delete project?"
-          message={`"${project.title}" and all of its lectures, slides, and seed material will be permanently deleted.`}
-          confirmLabel="Delete"
+          title={t('project.delete.title')}
+          message={t('project.delete.message', {
+            name: projectTitle(project),
+          })}
+          confirmLabel={t('common.delete')}
           onConfirm={deleteProject}
           onCancel={() => setConfirmingDelete(false)}
         />

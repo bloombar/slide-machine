@@ -8,6 +8,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
+import { useTranslation } from 'react-i18next'
 import { MoreVertical } from 'lucide-react'
 import type { Deck } from '@slide-machine/shared'
 import { useTimeAgo } from '../hooks/useTimeAgo'
@@ -23,6 +24,7 @@ function RowMenu({
   onDeleted: (deckId: string) => void
 }) {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -64,7 +66,7 @@ function RowMenu({
   return (
     <div ref={menuRef} className="relative">
       <button
-        aria-label={`Options for ${lectureTitle(deck)}`}
+        aria-label={t('lecture.options', { name: lectureTitle(deck) })}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen(o => !o)}
@@ -75,22 +77,22 @@ function RowMenu({
       {open && (
         <div
           role="menu"
-          aria-label={`Options for ${lectureTitle(deck)}`}
-          className="absolute right-0 z-10 mt-1 w-40 rounded-md border border-slate-200 bg-white py-1 shadow-lg"
+          aria-label={t('lecture.options', { name: lectureTitle(deck) })}
+          className="absolute end-0 z-10 mt-1 w-40 rounded-md border border-slate-200 bg-white py-1 shadow-lg"
         >
           <button
             role="menuitem"
             onClick={() => openSettings('general')}
-            className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+            className="block w-full px-4 py-2 text-start text-sm text-slate-700 hover:bg-slate-50"
           >
-            Settings
+            {t('common.settings')}
           </button>
           <button
             role="menuitem"
             onClick={() => openSettings('sharing')}
-            className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+            className="block w-full px-4 py-2 text-start text-sm text-slate-700 hover:bg-slate-50"
           >
-            Share
+            {t('deck.share')}
           </button>
           <button
             role="menuitem"
@@ -98,17 +100,17 @@ function RowMenu({
               setOpen(false)
               setConfirming(true)
             }}
-            className="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+            className="block w-full px-4 py-2 text-start text-sm text-red-600 hover:bg-red-50"
           >
-            Delete
+            {t('common.delete')}
           </button>
         </div>
       )}
       {confirming && (
         <ConfirmDialog
-          title="Delete lecture?"
-          message={`"${lectureTitle(deck)}" and all of its slides and seed material will be permanently deleted.`}
-          confirmLabel="Delete"
+          title={t('deck.delete.title')}
+          message={t('deck.delete.message', { name: lectureTitle(deck) })}
+          confirmLabel={t('common.delete')}
           onConfirm={deleteLecture}
           onCancel={() => setConfirming(false)}
         />
@@ -125,18 +127,19 @@ export default function LectureRow({
   /** Owner lists only: enables the kebab menu (share / delete). */
   onDeleted?: (deckId: string) => void
 }) {
+  const { t } = useTranslation()
   const age = useTimeAgo(deck.updatedAt)
   const count = deck.slideOrder.length
 
   return (
-    <li className="flex items-center gap-1 rounded-md border border-slate-200 pr-2 hover:border-slate-300 hover:bg-slate-50">
+    <li className="flex items-center gap-1 rounded-md border border-slate-200 pe-2 hover:border-slate-300 hover:bg-slate-50">
       <Link
         to={`/d/${deck.permalinkSlug}`}
         className="min-w-0 flex-1 px-4 py-2"
       >
         <span className="block truncate">{lectureTitle(deck)}</span>
         <span className="block text-xs text-slate-500">
-          {count} slide{count === 1 ? '' : 's'} · edited {age}
+          {t('deck.meta', { count, age })}
         </span>
       </Link>
       {onDeleted && <RowMenu deck={deck} onDeleted={onDeleted} />}

@@ -7,6 +7,7 @@ import { randomBytes } from 'node:crypto'
 import { Router, type Request, type Response } from 'express'
 import { z } from 'zod'
 import type { AuthResponse } from '@slide-machine/shared'
+import { LOCALES } from '@slide-machine/shared'
 import { env } from '../config/env'
 import { HttpError } from '../middleware/error'
 import { requireAuth } from '../middleware/auth'
@@ -51,6 +52,9 @@ const registerSchema = z.object({
   email: z.email(),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   displayName: z.string().trim().min(1, 'Display name is required'),
+  // The interface language the browser was detected in (TECH-12). Absent
+  // leaves the account on the schema default.
+  locale: z.enum(LOCALES).optional(),
 })
 
 const loginSchema = z.object({
@@ -78,6 +82,7 @@ authRouter.post('/register', async (req, res) => {
     input.email,
     input.password,
     input.displayName,
+    input.locale,
   )
   setRefreshCookie(res, result.refreshRaw)
   const body: AuthResponse = {

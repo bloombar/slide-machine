@@ -16,6 +16,7 @@
  * A line with no link renders as plain text; links open in a new tab.
  */
 import { useEffect, useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import type { ImageAttribution } from '@slide-machine/shared'
 import Portal from './Portal'
@@ -29,20 +30,17 @@ interface Props {
   onClose: () => void
 }
 
-/** Every attribution field, in display order, with its form label. */
-const FIELDS: {
-  key: keyof ImageAttribution
-  label: string
-  placeholder: string
-}[] = [
-  { key: 'title', label: 'Title', placeholder: 'Title of the work' },
-  { key: 'caption', label: 'Caption', placeholder: 'Short description' },
-  { key: 'creator', label: 'Credit', placeholder: 'Author or creator' },
-  { key: 'creatorUrl', label: 'Creator URL', placeholder: 'https://…' },
-  { key: 'sourceName', label: 'Source', placeholder: 'e.g. Wikimedia Commons' },
-  { key: 'sourceUrl', label: 'Source URL', placeholder: 'https://…' },
-  { key: 'license', label: 'License', placeholder: 'e.g. CC BY 4.0' },
-  { key: 'licenseUrl', label: 'License URL', placeholder: 'https://…' },
+/** Every attribution field, in display order. Each keys its own label
+ * and placeholder under  in the locale bundles. */
+const FIELDS: Array<keyof ImageAttribution> = [
+  'title',
+  'caption',
+  'creator',
+  'creatorUrl',
+  'sourceName',
+  'sourceUrl',
+  'license',
+  'licenseUrl',
 ]
 
 /**
@@ -87,6 +85,7 @@ export default function ImageAttributionDialog({
   onSave,
   onClose,
 }: Props) {
+  const { t } = useTranslation()
   const [form, setForm] = useState<ImageAttribution>(() => ({ ...attribution }))
 
   useEffect(() => {
@@ -110,7 +109,7 @@ export default function ImageAttributionDialog({
   const onSubmit = (e: FormEvent) => {
     e.preventDefault()
     const cleaned: ImageAttribution = {}
-    for (const { key } of FIELDS) {
+    for (const key of FIELDS) {
       cleaned[key] = form[key]?.trim() || undefined
     }
     onSave(cleaned)
@@ -127,13 +126,13 @@ export default function ImageAttributionDialog({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Image details"
+          aria-label={t('image.details')}
           className="relative max-h-[85vh] w-full max-w-sm overflow-y-auto rounded-lg bg-white p-6 shadow-xl"
         >
           <header className="mb-4 flex items-start justify-between">
-            <h2 className="text-lg font-bold">Image details</h2>
+            <h2 className="text-lg font-bold">{t('image.details')}</h2>
             <button
-              aria-label="Close"
+              aria-label={t('common.close')}
               onClick={onClose}
               className="rounded p-1 text-slate-400 hover:text-slate-700"
             >
@@ -143,18 +142,18 @@ export default function ImageAttributionDialog({
 
           {editable ? (
             <form onSubmit={onSubmit} className="flex flex-col gap-3">
-              {FIELDS.map(({ key, label, placeholder }) => (
+              {FIELDS.map(key => (
                 <label
                   key={key}
                   className="flex flex-col gap-1 text-sm text-slate-700"
                 >
-                  {label}
+                  {t(`image.fields.${key}.label`)}
                   <input
                     value={form[key] ?? ''}
                     onChange={e =>
                       setForm(prev => ({ ...prev, [key]: e.target.value }))
                     }
-                    placeholder={placeholder}
+                    placeholder={t(`image.fields.${key}.placeholder`)}
                     className="rounded-md border border-slate-300 px-3 py-2"
                   />
                 </label>
@@ -165,13 +164,13 @@ export default function ImageAttributionDialog({
                   onClick={onClose}
                   className="rounded-md px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
                   className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white"
                 >
-                  Save
+                  {t('common.save')}
                 </button>
               </div>
             </form>
@@ -183,7 +182,7 @@ export default function ImageAttributionDialog({
                   URL to link it to — otherwise the Credit line already shows
                   it, and it would appear twice. */}
               <ReadRow
-                label="Source"
+                label={t('image.fields.sourceName.label')}
                 href={attribution?.sourceUrl}
                 text={
                   attribution?.title ??
@@ -193,21 +192,19 @@ export default function ImageAttributionDialog({
               />
               {/* Credit: the creator's name, linking to their page. */}
               <ReadRow
-                label="Credit"
+                label={t('image.fields.creator.label')}
                 href={attribution?.creatorUrl}
                 text={attribution?.creator}
               />
               {/* License: the license name, linking to its deed. */}
               <ReadRow
-                label="License"
+                label={t('image.fields.license.label')}
                 href={attribution?.licenseUrl}
                 text={attribution?.license}
               />
             </div>
           ) : (
-            <p className="text-sm text-slate-500">
-              No source or licensing information is recorded for this image.
-            </p>
+            <p className="text-sm text-slate-500">{t('image.noDetails')}</p>
           )}
         </div>
       </div>

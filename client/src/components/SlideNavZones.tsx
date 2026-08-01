@@ -28,6 +28,7 @@ import {
   type PointerEvent,
   type ReactNode,
 } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface Props {
@@ -67,6 +68,7 @@ export default function SlideNavZones({
   onNext,
   children,
 }: Props) {
+  const { t } = useTranslation()
   const [side, setSide] = useState<Side>(null)
   // Where a candidate swipe began; null when no gesture is being tracked.
   const swipeStart = useRef<{ x: number; y: number; id: number } | null>(null)
@@ -122,7 +124,7 @@ export default function SlideNavZones({
       {children}
       {hasPrev && (
         <button
-          aria-label="Previous slide"
+          aria-label={t('slide.previous')}
           onClick={onPrev}
           className={`${zoneClass} right-full ${
             side === 'prev' ? 'opacity-100' : 'pointer-events-none opacity-0'
@@ -133,7 +135,7 @@ export default function SlideNavZones({
       )}
       {hasNext && (
         <button
-          aria-label="Next slide"
+          aria-label={t('slide.next')}
           onClick={onNext}
           className={`${zoneClass} left-full ${
             side === 'next' ? 'opacity-100' : 'pointer-events-none opacity-0'

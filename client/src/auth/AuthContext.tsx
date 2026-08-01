@@ -13,6 +13,8 @@ import {
 } from 'react'
 import type { SafeUser } from '@slide-machine/shared'
 import * as authApi from '../api/auth'
+import { changeLocale } from '../i18n'
+import { resolveInitialLocale } from '../i18n/detect'
 import { refreshSession, setAccessToken } from './token'
 
 export type AuthStatus = 'restoring' | 'authenticated' | 'anonymous'
@@ -53,6 +55,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // The account's interface language outranks whatever was detected in
+  // the browser (TECH-12), so applying it here covers session restore,
+  // sign-in, and a switch made on another device alike.
+  useEffect(() => {
+    if (user) void changeLocale(user.locale)
+  }, [user])
+
   const login = useCallback(async (email: string, password: string) => {
     const res = await authApi.login({ email, password })
     setUser(res.user)
@@ -61,7 +70,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = useCallback(
     async (email: string, password: string, displayName: string) => {
-      const res = await authApi.register({ email, password, displayName })
+      // Carry the browser-detected locale onto the new account so the
+      // first visit's guess persists instead of being re-made on the
+      // next device (TECH-12).
+      const res = await authApi.register({
+        email,
+        password,
+        displayName,
+        locale: resolveInitialLocale(),
+      })
       setUser(res.user)
       setStatus('authenticated')
     },

@@ -6,6 +6,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
+import { useTranslation } from 'react-i18next'
 import { MoreVertical } from 'lucide-react'
 import type { Project } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
@@ -20,6 +21,7 @@ export default function ProjectRowMenu({
   onDeleted: (projectId: string) => void
 }) {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -63,7 +65,7 @@ export default function ProjectRowMenu({
   return (
     <div ref={menuRef} className="relative">
       <button
-        aria-label={`Options for ${projectTitle(project)}`}
+        aria-label={t('project.options', { name: projectTitle(project) })}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen(o => !o)}
@@ -74,22 +76,22 @@ export default function ProjectRowMenu({
       {open && (
         <div
           role="menu"
-          aria-label={`Options for ${projectTitle(project)}`}
-          className="absolute right-0 z-10 mt-1 w-40 rounded-md border border-slate-200 bg-white py-1 shadow-lg"
+          aria-label={t('project.options', { name: projectTitle(project) })}
+          className="absolute end-0 z-10 mt-1 w-40 rounded-md border border-slate-200 bg-white py-1 shadow-lg"
         >
           <button
             role="menuitem"
             onClick={() => openSettings('general')}
-            className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+            className="block w-full px-4 py-2 text-start text-sm text-slate-700 hover:bg-slate-50"
           >
-            Settings
+            {t('common.settings')}
           </button>
           <button
             role="menuitem"
             onClick={() => openSettings('sharing')}
-            className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+            className="block w-full px-4 py-2 text-start text-sm text-slate-700 hover:bg-slate-50"
           >
-            Share
+            {t('deck.share')}
           </button>
           <button
             role="menuitem"
@@ -97,17 +99,19 @@ export default function ProjectRowMenu({
               setOpen(false)
               setConfirming(true)
             }}
-            className="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+            className="block w-full px-4 py-2 text-start text-sm text-red-600 hover:bg-red-50"
           >
-            Delete
+            {t('common.delete')}
           </button>
         </div>
       )}
       {confirming && (
         <ConfirmDialog
-          title="Delete project?"
-          message={`"${project.title}" and all of its lectures, slides, and seed material will be permanently deleted.`}
-          confirmLabel="Delete"
+          title={t('project.delete.title')}
+          message={t('project.delete.message', {
+            name: projectTitle(project),
+          })}
+          confirmLabel={t('common.delete')}
           onConfirm={deleteProject}
           onCancel={() => setConfirming(false)}
         />
