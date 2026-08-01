@@ -42,6 +42,7 @@ import {
 } from '@slide-machine/shared'
 import type { HydratedDocument, Types } from 'mongoose'
 import { defineAction } from './define'
+import { requireAiTokens } from '../billing/meter-hooks'
 import {
   registerAction,
   ActionForbiddenError,
@@ -416,6 +417,7 @@ const LIVE_TRANSCRIPT_CHARS = 4000
 
 export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
   name: 'session.phrase',
+  meter: requireAiTokens,
   input: z.object({
     deckId: z.string().min(1),
     phrase: z.string().trim().min(1).max(2000),
