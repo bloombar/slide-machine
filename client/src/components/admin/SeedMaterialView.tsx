@@ -4,10 +4,16 @@
  * underneath. Presentational only — it renders data already fetched with
  * the deck detail, with none of the upload/edit/delete controls the
  * owner-facing SeedMaterial carries.
+ *
+ * Material the owner removed is listed too, badged as deleted, so an admin
+ * can see what fed a lecture's generation even after it was taken away
+ * (ADMIN-6). Restoring seed material happens with its lecture or project,
+ * so there is no per-asset action here.
  */
 import { FileText, Image as ImageIcon } from 'lucide-react'
 import type { SeedAsset } from '@slide-machine/shared'
-import type { AdminSeedLevel } from '../../api/admin'
+import type { AdminSeedAsset, AdminSeedLevel } from '../../api/admin'
+import DeletedBadge, { deletedTextClass } from './DeletedBadge'
 
 const statusLabel: Record<SeedAsset['status'], string> = {
   processing: 'Processing…',
@@ -26,8 +32,9 @@ const hasSeedMaterial = (level: AdminSeedLevel): boolean =>
   Boolean(level.notes) || level.assets.length > 0
 
 /** One uploaded file/image: thumbnail or icon, name, status, and any
- * caption or extracted-text preview. */
-function AssetRow({ asset }: { asset: SeedAsset }) {
+ * caption or extracted-text preview. A removed asset keeps its row, muted
+ * and badged. */
+function AssetRow({ asset }: { asset: AdminSeedAsset }) {
   return (
     <li className="flex items-start gap-3 rounded-md border border-slate-200 px-3 py-2">
       {asset.type === 'image' && asset.imageUrl ? (
@@ -43,12 +50,19 @@ function AssetRow({ asset }: { asset: SeedAsset }) {
       )}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium">{asset.name}</span>
+          <span
+            className={`truncate text-sm font-medium ${
+              asset.deletedAt ? deletedTextClass : ''
+            }`}
+          >
+            {asset.name}
+          </span>
           <span
             className={`rounded-full px-2 py-0.5 text-xs ${statusClass[asset.status]}`}
           >
             {statusLabel[asset.status]}
           </span>
+          <DeletedBadge deletedAt={asset.deletedAt} />
         </div>
         {asset.caption && (
           <p className="mt-1 text-xs text-slate-500">{asset.caption}</p>

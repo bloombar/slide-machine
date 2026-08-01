@@ -2,8 +2,10 @@
  * Integration tests for the site-wide admin directories against a real
  * MongoDB: GET /api/admin/projects and GET /api/admin/decks — allowlist
  * gating, row shapes (owner email, lecture counts, project titles,
- * effective visibility), pagination, and sorting. The router self-guards,
- * so the test app mounts it exactly as production wiring would.
+ * effective visibility), pagination, and sorting — plus the soft-deleted
+ * rows the directories carry for an admin (ADMIN-6). The router
+ * self-guards, so the test app mounts it exactly as production wiring
+ * would.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import express from 'express'
@@ -481,8 +483,8 @@ describe('GET /api/admin/decks', () => {
   })
 })
 
-describe('soft delete (P-10): directories exclude tombstoned rows', () => {
-  it('omits soft-deleted projects and lectures, and de-counts them', async () => {
+describe('soft delete (ADMIN-6): directories list tombstoned rows, badged', () => {
+  it('lists soft-deleted projects and lectures with deletedAt, and counts them', async () => {
     const admin = await asAdmin()
     const { user: ada } = await createUser('ada@example.com', 'Ada')
     const live = await createProject(ada._id, 'Live')
@@ -491,28 +493,93 @@ describe('soft delete (P-10): directories exclude tombstoned rows', () => {
     const goneDeck = await createDeck(ada._id, live._id, 'Deleted', 'del-1')
 
     // Tombstone one project and one of the live project's lectures.
-    await ProjectModel.updateOne({ _id: gone._id }, { deletedAt: new Date() })
-    await DeckModel.updateOne({ _id: goneDeck._id }, { deletedAt: new Date() })
+    const at = new Date()
+    await ProjectModel.updateOne({ _id: gone._id }, { deletedAt: at })
+    await DeckModel.updateOne({ _id: goneDeck._id }, { deletedAt: at })
 
     const projects = await request(server)
       .get('/api/admin/projects')
       .set('Authorization', `Bearer ${admin}`)
-    const projectIds = projects.body.projects.map((p: { id: string }) => p.id)
-    expect(projectIds).toContain(live._id.toString())
-    expect(projectIds).not.toContain(gone._id.toString())
-    expect(projects.body.total).toBe(1)
-    // The live project's lecture count excludes the tombstoned lecture.
-    const liveRow = projects.body.projects.find(
-      (p: { id: string }) => p.id === live._id.toString(),
+    const projectRows: Array<{
+      id: string
+      deckCount: number
+      deletedAt?: string
+    }> = projects.body.projects
+    expect(projectRows.map(p => p.id).sort()).toEqual(
+      [live._id.toString(), gone._id.toString()].sort(),
     )
-    expect(liveRow.deckCount).toBe(1)
+    expect(projects.body.total).toBe(2)
+    // The tombstone rides along so the console can badge the row; a live
+    // row carries none.
+    const goneRow = projectRows.find(p => p.id === gone._id.toString())!
+    expect(goneRow.deletedAt).toBe(at.toISOString())
+    const liveRow = projectRows.find(p => p.id === live._id.toString())!
+    expect(liveRow.deletedAt).toBeUndefined()
+    // Lecture counts include tombstoned lectures, matching the rows the
+    // project's admin page lists.
+    expect(liveRow.deckCount).toBe(2)
 
     const decks = await request(server)
       .get('/api/admin/decks')
       .set('Authorization', `Bearer ${admin}`)
-    const deckIds = decks.body.decks.map((d: { id: string }) => d.id)
-    expect(deckIds).toContain(liveDeck._id.toString())
-    expect(deckIds).not.toContain(goneDeck._id.toString())
-    expect(decks.body.total).toBe(1)
+    const deckRows: Array<{ id: string; deletedAt?: string }> = decks.body.decks
+    expect(deckRows.map(d => d.id).sort()).toEqual(
+      [liveDeck._id.toString(), goneDeck._id.toString()].sort(),
+    )
+    expect(decks.body.total).toBe(2)
+    expect(
+      deckRows.find(d => d.id === goneDeck._id.toString())!.deletedAt,
+    ).toBe(at.toISOString())
+    expect(
+      deckRows.find(d => d.id === liveDeck._id.toString())!.deletedAt,
+    ).toBeUndefined()
+  })
+
+  it('lists a deleted lecture whose owner and project are deleted too, with their context', async () => {
+    const admin = await asAdmin()
+    const { user: ada } = await createUser('ada@example.com', 'Ada')
+    const project = await createProject(ada._id, 'Gone with owner', {
+      visibility: 'public',
+    })
+    const deck = await createDeck(ada._id, project._id, 'Orphan', 'orphan-1')
+
+    const at = new Date()
+    await Promise.all([
+      UserModel.updateOne({ _id: ada._id }, { deletedAt: at }),
+      ProjectModel.updateOne({ _id: project._id }, { deletedAt: at }),
+      DeckModel.updateOne({ _id: deck._id }, { deletedAt: at }),
+    ])
+
+    const res = await request(server)
+      .get('/api/admin/decks')
+      .set('Authorization', `Bearer ${admin}`)
+    const row = res.body.decks.find(
+      (d: { id: string }) => d.id === deck._id.toString(),
+    )
+    expect(row).toBeDefined()
+    // A tombstoned owner and project still resolve, so the row keeps its
+    // context instead of blanking out...
+    expect(row.ownerEmail).toBe('ada@example.com')
+    expect(row.projectTitle).toBe('Gone with owner')
+    // ...and inherited visibility comes from the deleted project rather
+    // than falling back to the dangling-project default.
+    expect(row.visibility).toBe('public')
+  })
+
+  it('lists soft-deleted accounts in the user directory, with deletedAt', async () => {
+    const admin = await asAdmin()
+    const { user: ada } = await createUser('ada@example.com', 'Ada')
+    const at = new Date()
+    await UserModel.updateOne({ _id: ada._id }, { deletedAt: at })
+
+    const res = await request(server)
+      .get('/api/admin/users')
+      .set('Authorization', `Bearer ${admin}`)
+    const row = res.body.users.find(
+      (u: { id: string }) => u.id === ada._id.toString(),
+    )
+    expect(row.deletedAt).toBe(at.toISOString())
+    // The admin's own row plus the deleted one — the total counts both.
+    expect(res.body.total).toBe(2)
   })
 })

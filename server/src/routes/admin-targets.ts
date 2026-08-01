@@ -46,6 +46,45 @@ export const loadDeck = async (
   return deck
 }
 
+/**
+ * Resolves a :id to a user/project/lecture whether it is live or
+ * soft-deleted (ADMIN-6). The admin console lists tombstoned records
+ * alongside live ones, so its read endpoints must open either; the
+ * moderation endpoints keep using the `load*` loaders above, which 404 on
+ * a tombstone — a deleted record is restored, not moderated again.
+ */
+export const loadAnyUser = async (
+  id: string,
+): Promise<HydratedDocument<UserDb>> => {
+  const notFound = new HttpError(404, 'not_found', 'User not found')
+  if (!isValidObjectId(id)) throw notFound
+  const user = await UserModel.findById(id).setOptions({ withDeleted: true })
+  if (!user) throw notFound
+  return user
+}
+
+export const loadAnyProject = async (
+  id: string,
+): Promise<HydratedDocument<ProjectDb>> => {
+  const notFound = new HttpError(404, 'not_found', 'Project not found')
+  if (!isValidObjectId(id)) throw notFound
+  const project = await ProjectModel.findById(id).setOptions({
+    withDeleted: true,
+  })
+  if (!project) throw notFound
+  return project
+}
+
+export const loadAnyDeck = async (
+  id: string,
+): Promise<HydratedDocument<DeckDb>> => {
+  const notFound = new HttpError(404, 'not_found', 'Lecture not found')
+  if (!isValidObjectId(id)) throw notFound
+  const deck = await DeckModel.findById(id).setOptions({ withDeleted: true })
+  if (!deck) throw notFound
+  return deck
+}
+
 /** Resolves a :id to a **soft-deleted** user/project/lecture for restore
  * (ADMIN-6). 404s if the id is unknown or the record is still live. */
 export const loadDeletedUser = async (

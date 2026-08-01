@@ -255,14 +255,25 @@ export const loadDeckAcl = async (
   return resolveDeckAcl(deck, project)
 }
 
-/** Batch ACL resolution: one project query for a whole deck list. */
+/**
+ * Batch ACL resolution: one project query for a whole deck list.
+ *
+ * `withDeleted` lets the project lookup see tombstoned projects, so an
+ * inheriting lecture that was deleted with its project still resolves its
+ * real visibility instead of the dangling-project fallback (`restricted`).
+ * The admin console passes it when listing soft-deleted content (ADMIN-6);
+ * product paths never hold a tombstoned lecture, so they leave it off.
+ */
 export const loadDeckAcls = async (
   decks: Array<HydratedDocument<DeckDb>>,
+  opts: { withDeleted?: boolean } = {},
 ): Promise<Map<string, ResolvedAcl>> => {
   const inheriting = decks.filter(d => !d.accessOverride)
   const projectIds = [...new Set(inheriting.map(d => d.projectId.toString()))]
   const projects = projectIds.length
-    ? await ProjectModel.find({ _id: { $in: projectIds } })
+    ? await ProjectModel.find({ _id: { $in: projectIds } }).setOptions({
+        withDeleted: opts.withDeleted,
+      })
     : []
   const byId = new Map(projects.map(p => [p._id.toString(), p]))
   return new Map(

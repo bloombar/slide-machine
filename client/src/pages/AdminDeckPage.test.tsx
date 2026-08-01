@@ -4,7 +4,9 @@
  * confirms and logs before opening a private lecture), the detail rows,
  * the seed material, and the delete action. Settings are not edited here
  * — that moved into the lecture's own settings modal (ADMIN-5), covered
- * by DeckViewerPage's tests.
+ * by DeckViewerPage's tests. Soft-deleted content is covered too: the
+ * badge on the lecture and on withdrawn seed material, and the recovery
+ * action (ADMIN-6).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
@@ -305,5 +307,97 @@ describe('AdminDeckPage', () => {
       'href',
       '/app/admin',
     )
+  })
+})
+
+// ADMIN-6: a soft-deleted lecture is still openable here, badged, with
+// recovery in place of the danger zone.
+describe('AdminDeckPage soft-deleted content', () => {
+  const deletedDetail = {
+    ...detail,
+    deck: { ...detail.deck, deletedAt: '2026-07-20T09:00:00Z' },
+  }
+
+  it('badges the lecture, withdraws the viewer link, and offers a restore', async () => {
+    renderPage(200, deletedDetail)
+    await screen.findByRole('heading', { name: 'Waves' })
+
+    expect(screen.getByText('Deleted')).toBeVisible()
+    expect(screen.getByText(/This lecture is deleted/)).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Restore lecture' }),
+    ).toBeEnabled()
+    // Nothing to open in the viewer, and nothing to delete again
+    expect(
+      screen.queryByRole('button', { name: 'View slideshow' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Delete lecture' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('restores the lecture after a confirm and reports it', async () => {
+    const mocks = mockFetchRoutes({
+      '/api/admin/decks/d1/restore': () => ({ status: 204 }),
+      '/api/admin/decks/d1': () => ({ status: 200, body: deletedDetail }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/app/admin/decks/d1']}>
+        <Routes>
+          <Route path="/app/admin/decks/:deckId" element={<AdminDeckPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await screen.findByRole('heading', { name: 'Waves' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restore lecture' }))
+    fireEvent.click(
+      within(
+        screen.getByRole('alertdialog', { name: 'Restore this lecture?' }),
+      ).getByRole('button', { name: 'Restore lecture' }),
+    )
+
+    expect(await screen.findByText('Lecture restored.')).toBeVisible()
+    expect(requested(mocks.fetchMock)).toContainEqual(
+      expect.stringMatching(/POST .*\/api\/admin\/decks\/d1\/restore$/),
+    )
+  })
+
+  it('badges seed material the owner removed', async () => {
+    renderPage(200, {
+      ...seededDetail,
+      seed: {
+        ...seededDetail.seed,
+        lecture: {
+          ...seededDetail.seed.lecture,
+          assets: [
+            {
+              ...seededDetail.seed.lecture.assets[0]!,
+              deletedAt: '2026-07-20T09:00:00Z',
+            },
+          ],
+        },
+      },
+    })
+    await screen.findByRole('heading', { name: 'Waves' })
+    fireEvent.click(screen.getByRole('button', { name: 'View seed material' }))
+
+    const dialog = screen.getByRole('dialog', { name: 'Seed material' })
+    const row = within(dialog).getByText('lecture-notes.pdf').closest('li')!
+    expect(within(row).getByText('Deleted')).toBeVisible()
+    // The project's own asset is untouched, so it carries no badge.
+    const liveRow = within(dialog).getByText('diagram.png').closest('li')!
+    expect(within(liveRow).queryByText('Deleted')).not.toBeInTheDocument()
+  })
+
+  it('notes a project and owner deleted along with the lecture', async () => {
+    renderPage(200, {
+      ...deletedDetail,
+      project: { ...detail.project, deletedAt: '2026-07-20T09:00:00Z' },
+      owner: { ...detail.owner, deletedAt: '2026-07-20T09:00:00Z' },
+    })
+    await screen.findByRole('heading', { name: 'Waves' })
+    expect(screen.getByText(/\(deleted\)/)).toBeVisible()
+    expect(screen.getByText(/account deleted/)).toBeVisible()
   })
 })

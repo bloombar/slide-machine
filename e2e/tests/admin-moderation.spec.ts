@@ -2,7 +2,9 @@
  * E2E admin moderation journey against the built app: the allowlisted
  * admin resets a user's password, deletes their project, bans their
  * email (login then fails), unbans it (login works again), deletes the
- * account, and finds every action in the audit log.
+ * account, and finds every action in the audit log. Deletes are soft
+ * (P-10), so the console keeps showing what was deleted, badged (ADMIN-6);
+ * recovery itself is covered by admin-deleted-content.spec.ts.
  */
 import {
   test,
@@ -80,7 +82,9 @@ test('the admin moderates: password, project, ban, delete, audit', async ({
     200,
   )
 
-  // Delete the project after a confirm
+  // Delete the project after a confirm. The delete is soft (P-10), so the
+  // row stays listed for the admin, badged, with a restore in its place
+  // (ADMIN-6) — it is not gone from the console.
   await page
     .getByRole('button', { name: 'Delete project Doomed Project' })
     .click()
@@ -88,8 +92,13 @@ test('the admin moderates: password, project, ban, delete, audit', async ({
     .getByRole('alertdialog')
     .getByRole('button', { name: 'Delete project' })
     .click()
-  await expect(page.getByText('Project deleted.')).toBeVisible()
-  await expect(page.getByText('No projects.')).toBeVisible()
+  await expect(
+    page.getByText('Project deleted; you can restore it from this page.'),
+  ).toBeVisible()
+  await expect(page.getByText('Deleted', { exact: true })).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Restore project Doomed Project' }),
+  ).toBeVisible()
 
   // Ban the email: badge appears and even the new password stops working
   await page.getByRole('button', { name: 'Ban email' }).click()
@@ -118,14 +127,19 @@ test('the admin moderates: password, project, ban, delete, audit', async ({
     200,
   )
 
-  // Delete the account: back to the directory, the user is gone
+  // Delete the account: back to the directory, where the account is still
+  // listed for the admin but badged as deleted (ADMIN-6) — it is hidden
+  // from the product, not from the console.
   await page.getByRole('button', { name: 'Delete user' }).click()
   await page
     .getByRole('alertdialog')
     .getByRole('button', { name: 'Delete user' })
     .click()
   await expect(page).toHaveURL(/\/app\/admin$/)
-  await expect(page.getByRole('link', { name: victim.email })).toHaveCount(0)
+  const victimRow = page
+    .getByRole('row')
+    .filter({ has: page.getByRole('link', { name: victim.email }) })
+  await expect(victimRow.getByText('Deleted', { exact: true })).toBeVisible()
 
   // Every action is in the audit log (newest first, so all on page 1)
   await page.goto('/app/admin/logs')

@@ -1,9 +1,10 @@
 /**
  * Unit tests for the admin user directory: table contents, pagination,
- * sorting, and the error state.
+ * sorting, the error state, and the badge on soft-deleted accounts
+ * (ADMIN-6).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import AdminUsersPage from './AdminUsersPage'
 import { mockFetchRoutes } from '../test/fetch-mock'
@@ -108,5 +109,26 @@ describe('AdminUsersPage', () => {
   it('shows an error state when the request fails', async () => {
     renderPage(() => ({ status: 500 }))
     expect(await screen.findByText('Could not load users.')).toBeVisible()
+  })
+
+  it('badges a soft-deleted account and leaves live ones unmarked (ADMIN-6)', async () => {
+    renderPage(() => ({
+      status: 200,
+      body: {
+        users: [users[0], { ...users[1]!, deletedAt: '2026-07-20T09:00:00Z' }],
+        total: 2,
+        page: 1,
+        limit: 25,
+      },
+    }))
+    const deletedRow = (
+      await screen.findByRole('link', { name: 'grace@example.com' })
+    ).closest('tr')!
+    expect(within(deletedRow).getByText('Deleted')).toBeVisible()
+
+    const liveRow = screen
+      .getByRole('link', { name: 'ada@example.com' })
+      .closest('tr')!
+    expect(within(liveRow).queryByText('Deleted')).not.toBeInTheDocument()
   })
 })

@@ -9,6 +9,12 @@
  * audit log server-side. Every lecture, private or not, is listed;
  * admins can always open any lecture in the viewer.
  *
+ * Soft-deleted content is listed too, badged and muted (ADMIN-6): opening
+ * a deleted account is itself audited, its row actions become Restore, and
+ * the moderation actions are withdrawn — a tombstoned record is recovered,
+ * not moderated again. Restores work until the retention sweep purges the
+ * tombstone (P-11).
+ *
  * The details are read-only: like a project's or a lecture's, account
  * settings are edited in the product itself, from the Settings button on
  * the user's profile page, in the owner's own modal (ADMIN-5, see
@@ -16,7 +22,7 @@
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { LOCALE_LABELS, type Locale, type Project } from '@slide-machine/shared'
+import { LOCALE_LABELS, type Locale } from '@slide-machine/shared'
 import {
   banAdminUserEmail,
   deleteAdminDeck,
@@ -26,13 +32,20 @@ import {
   fetchAdminUserDecks,
   fetchAdminUserProjects,
   resetAdminUserPassword,
+  restoreAdminDeck,
+  restoreAdminProject,
+  restoreAdminUser,
   unbanAdminUserEmail,
   type AdminDeckSummary,
   type AdminUserDetailResponse,
+  type AdminUserProject,
 } from '../api/admin'
 import { ApiError } from '../api/http'
 import ConfirmDialog from '../components/ConfirmDialog'
 import Modal from '../components/Modal'
+import DeletedBadge, {
+  deletedTextClass,
+} from '../components/admin/DeletedBadge'
 import DetailRow from '../components/admin/DetailRow'
 import LectureTable from '../components/admin/LectureTable'
 import { generatePassword } from '../lib/password'
@@ -43,17 +56,20 @@ const localeLabel = (value: unknown): string =>
 
 interface Loaded {
   detail: AdminUserDetailResponse
-  projects: Project[]
+  projects: AdminUserProject[]
   decks: AdminDeckSummary[]
 }
 
 /** The moderation the admin has asked for but not yet confirmed. */
 type PendingAction =
   | { kind: 'delete-user' }
+  | { kind: 'restore-user' }
   | { kind: 'ban' }
   | { kind: 'unban' }
-  | { kind: 'delete-project'; project: Project }
+  | { kind: 'delete-project'; project: AdminUserProject }
+  | { kind: 'restore-project'; project: AdminUserProject }
   | { kind: 'delete-deck'; deck: AdminDeckSummary }
+  | { kind: 'restore-deck'; deck: AdminDeckSummary }
 
 const joinedAt = (iso: string): string =>
   new Date(iso).toLocaleString(undefined, {
@@ -89,7 +105,7 @@ const asDate = (iso: string): string =>
  * date reflects editing the project OR one of its lectures. ISO strings
  * sort chronologically, so a lexical max is a chronological one. */
 const lastActivity = (
-  project: Pick<Project, 'updatedAt'>,
+  project: Pick<AdminUserProject, 'updatedAt'>,
   decks: AdminDeckSummary[],
 ): string =>
   [project.updatedAt, ...decks.map(d => d.updatedAt)].reduce((a, b) =>
@@ -202,7 +218,8 @@ function ResetPasswordDialog({
   )
 }
 
-/** The ConfirmDialog copy for each moderation action. */
+/** The ConfirmDialog copy for each moderation action. Deletes are soft
+ * (P-10), so their copy promises recovery rather than finality. */
 const confirmCopy = (
   pending: PendingAction,
   email: string,
@@ -211,8 +228,26 @@ const confirmCopy = (
     case 'delete-user':
       return {
         title: 'Delete this user?',
-        message: `${email} and all of their projects, lectures, and files will be permanently deleted. This cannot be undone.`,
+        message: `${email} and all of their projects, lectures, and files will be hidden from everyone and the account signed out. You can restore it from this page until the retention sweep purges it.`,
         confirmLabel: 'Delete user',
+      }
+    case 'restore-user':
+      return {
+        title: 'Restore this user?',
+        message: `${email} and everything deleted along with the account will be visible to them again.`,
+        confirmLabel: 'Restore user',
+      }
+    case 'restore-project':
+      return {
+        title: 'Restore this project?',
+        message: `"${projectTitle(pending.project)}" and everything deleted along with it will be visible to its owner again.`,
+        confirmLabel: 'Restore project',
+      }
+    case 'restore-deck':
+      return {
+        title: 'Restore this lecture?',
+        message: `"${pending.deck.title.trim() || 'Untitled lecture'}" and everything deleted along with it will be visible to its owner again.`,
+        confirmLabel: 'Restore lecture',
       }
     case 'ban':
       return {
@@ -229,13 +264,13 @@ const confirmCopy = (
     case 'delete-project':
       return {
         title: 'Delete this project?',
-        message: `"${projectTitle(pending.project)}" and every lecture and file in it will be permanently deleted. This cannot be undone.`,
+        message: `"${projectTitle(pending.project)}" and every lecture and file in it will be hidden from everyone. You can restore it from this page until the retention sweep purges it.`,
         confirmLabel: 'Delete project',
       }
     case 'delete-deck':
       return {
         title: 'Delete this lecture?',
-        message: `"${pending.deck.title.trim() || 'Untitled lecture'}" and everything under it will be permanently deleted. This cannot be undone.`,
+        message: `"${pending.deck.title.trim() || 'Untitled lecture'}" and everything under it will be hidden from everyone. You can restore it from this page until the retention sweep purges it.`,
         confirmLabel: 'Delete lecture',
       }
   }
@@ -285,6 +320,10 @@ export default function AdminUserDetailPage() {
           await deleteAdminUser(userId)
           navigate('/app/admin')
           return
+        case 'restore-user':
+          await restoreAdminUser(userId)
+          setNotice('Account restored.')
+          break
         case 'ban':
           await banAdminUserEmail(userId)
           setNotice('Email banned; all sessions signed out.')
@@ -295,11 +334,19 @@ export default function AdminUserDetailPage() {
           break
         case 'delete-project':
           await deleteAdminProject(action.project.id)
-          setNotice('Project deleted.')
+          setNotice('Project deleted; you can restore it from this page.')
+          break
+        case 'restore-project':
+          await restoreAdminProject(action.project.id)
+          setNotice('Project restored.')
           break
         case 'delete-deck':
           await deleteAdminDeck(action.deck.id)
-          setNotice('Lecture deleted.')
+          setNotice('Lecture deleted; you can restore it from this page.')
+          break
+        case 'restore-deck':
+          await restoreAdminDeck(action.deck.id)
+          setNotice('Lecture restored.')
           break
       }
       setVersion(v => v + 1)
@@ -327,6 +374,9 @@ export default function AdminUserDetailPage() {
 
   const { detail, projects, decks } = loaded
   const { user } = detail
+  // A deleted account has no product surfaces left to open and cannot be
+  // moderated again — it is restored instead (ADMIN-6).
+  const userDeleted = Boolean(detail.deletedAt)
   const byProject = new Map<string, AdminDeckSummary[]>()
   for (const deck of decks) {
     const list = byProject.get(deck.projectId) ?? []
@@ -337,18 +387,22 @@ export default function AdminUserDetailPage() {
   const otherDecks = decks.filter(d => !ownProjectIds.has(d.projectId))
   const deleteDeck = (deck: AdminDeckSummary) =>
     setPending({ kind: 'delete-deck', deck })
+  const restoreDeck = (deck: AdminDeckSummary) =>
+    setPending({ kind: 'restore-deck', deck })
 
   return (
     <div>
       <BackToUsers />
       <div className="mb-1 flex items-baseline justify-between gap-4">
         <h1 className="text-2xl font-bold">{user.displayName}</h1>
-        <Link
-          to={`/u/${user.id}`}
-          className="text-sm text-slate-500 hover:underline"
-        >
-          View public profile
-        </Link>
+        {!userDeleted && (
+          <Link
+            to={`/u/${user.id}`}
+            className="text-sm text-slate-500 hover:underline"
+          >
+            View public profile
+          </Link>
+        )}
       </div>
       <p className="mb-6 text-slate-500">
         {user.email}
@@ -356,8 +410,24 @@ export default function AdminUserDetailPage() {
           <span className="ml-2 inline-block rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
             Banned
           </span>
-        )}
+        )}{' '}
+        <DeletedBadge deletedAt={detail.deletedAt} />
       </p>
+
+      {userDeleted && (
+        <p
+          role="status"
+          className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+        >
+          This account is deleted, so nothing here is visible to its owner or
+          anyone else. Opening it is recorded in the{' '}
+          <Link to="/app/admin/logs" className="underline">
+            audit log
+          </Link>
+          . Restore it below until the retention sweep purges it, after which it
+          is gone for good.
+        </p>
+      )}
 
       {notice && (
         <p role="status" className="mb-4 text-sm text-green-700">
@@ -370,18 +440,20 @@ export default function AdminUserDetailPage() {
         </p>
       )}
 
-      <p className="mb-4 text-sm text-slate-500">
-        Settings are edited on the user&apos;s{' '}
-        <Link to={`/u/${user.id}`} className="underline">
-          profile page
-        </Link>
-        : open it and use the Settings button, as they would. Every change you
-        make there is recorded in the{' '}
-        <Link to="/app/admin/logs" className="underline">
-          audit log
-        </Link>
-        .
-      </p>
+      {!userDeleted && (
+        <p className="mb-4 text-sm text-slate-500">
+          Settings are edited on the user&apos;s{' '}
+          <Link to={`/u/${user.id}`} className="underline">
+            profile page
+          </Link>
+          : open it and use the Settings button, as they would. Every change you
+          make there is recorded in the{' '}
+          <Link to="/app/admin/logs" className="underline">
+            audit log
+          </Link>
+          .
+        </p>
+      )}
 
       <section className="rounded-lg border border-slate-200 p-4">
         <h2 className="mb-2 text-lg font-semibold text-slate-700">Details</h2>
@@ -429,26 +501,43 @@ export default function AdminUserDetailPage() {
                   key={project.id}
                   className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3 hover:bg-slate-50"
                 >
-                  <Link
-                    to={`/app/admin/projects/${project.id}`}
-                    className="font-medium text-slate-800 hover:underline"
-                  >
-                    {projectTitle(project)}{' '}
-                    <span className="text-sm font-normal text-slate-400">
-                      {projectDecks.length}{' '}
-                      {projectDecks.length === 1 ? 'lecture' : 'lectures'} ·
-                      updated {asDate(lastActivity(project, projectDecks))}
-                    </span>
-                  </Link>
-                  <button
-                    onClick={() =>
-                      setPending({ kind: 'delete-project', project })
-                    }
-                    aria-label={`Delete project ${projectTitle(project)}`}
-                    className="rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
-                  >
-                    Delete
-                  </button>
+                  <div className="min-w-0">
+                    <Link
+                      to={`/app/admin/projects/${project.id}`}
+                      className={`font-medium hover:underline ${
+                        project.deletedAt ? deletedTextClass : 'text-slate-800'
+                      }`}
+                    >
+                      {projectTitle(project)}{' '}
+                      <span className="text-sm font-normal text-slate-400">
+                        {projectDecks.length}{' '}
+                        {projectDecks.length === 1 ? 'lecture' : 'lectures'} ·
+                        updated {asDate(lastActivity(project, projectDecks))}
+                      </span>
+                    </Link>{' '}
+                    <DeletedBadge deletedAt={project.deletedAt} />
+                  </div>
+                  {project.deletedAt ? (
+                    <button
+                      onClick={() =>
+                        setPending({ kind: 'restore-project', project })
+                      }
+                      aria-label={`Restore project ${projectTitle(project)}`}
+                      className="rounded-md px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                    >
+                      Restore
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() =>
+                        setPending({ kind: 'delete-project', project })
+                      }
+                      aria-label={`Delete project ${projectTitle(project)}`}
+                      className="rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
+                  )}
                 </div>
               )
             })}
@@ -460,45 +549,76 @@ export default function AdminUserDetailPage() {
                     {otherDecks.length}
                   </span>
                 </summary>
-                <LectureTable decks={otherDecks} onDelete={deleteDeck} />
+                <LectureTable
+                  decks={otherDecks}
+                  onDelete={deleteDeck}
+                  onRestore={restoreDeck}
+                />
               </details>
             )}
           </div>
         )}
       </section>
 
-      <section className="mt-8 rounded-lg border border-red-200 p-4">
-        <h2 className="mb-1 text-lg font-semibold text-red-700">Danger zone</h2>
-        <p className="mb-3 text-sm text-slate-600">
-          Every action here is recorded in the{' '}
-          <Link to="/app/admin/logs" className="underline">
-            audit log
-          </Link>
-          .
-        </p>
-        <div className="flex flex-wrap gap-2">
+      {/* A deleted account offers recovery instead of moderation: every
+          moderation endpoint refuses a tombstoned target. */}
+      {userDeleted ? (
+        <section className="mt-8 rounded-lg border border-emerald-200 p-4">
+          <h2 className="mb-1 text-lg font-semibold text-emerald-800">
+            Recovery
+          </h2>
+          <p className="mb-3 text-sm text-slate-600">
+            Restoring brings back the account and everything deleted with it.
+            Moderation is unavailable while the account is deleted; it is
+            recorded in the{' '}
+            <Link to="/app/admin/logs" className="underline">
+              audit log
+            </Link>
+            .
+          </p>
           <button
-            onClick={() => setPasswordOpen(true)}
-            className={dangerMenuButton}
+            onClick={() => setPending({ kind: 'restore-user' })}
+            className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500"
           >
-            Reset password
+            Restore user
           </button>
-          <button
-            onClick={() =>
-              setPending({ kind: detail.banned ? 'unban' : 'ban' })
-            }
-            className={dangerMenuButton}
-          >
-            {detail.banned ? 'Unban email' : 'Ban email'}
-          </button>
-          <button
-            onClick={() => setPending({ kind: 'delete-user' })}
-            className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-500"
-          >
-            Delete user
-          </button>
-        </div>
-      </section>
+        </section>
+      ) : (
+        <section className="mt-8 rounded-lg border border-red-200 p-4">
+          <h2 className="mb-1 text-lg font-semibold text-red-700">
+            Danger zone
+          </h2>
+          <p className="mb-3 text-sm text-slate-600">
+            Every action here is recorded in the{' '}
+            <Link to="/app/admin/logs" className="underline">
+              audit log
+            </Link>
+            .
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setPasswordOpen(true)}
+              className={dangerMenuButton}
+            >
+              Reset password
+            </button>
+            <button
+              onClick={() =>
+                setPending({ kind: detail.banned ? 'unban' : 'ban' })
+              }
+              className={dangerMenuButton}
+            >
+              {detail.banned ? 'Unban email' : 'Ban email'}
+            </button>
+            <button
+              onClick={() => setPending({ kind: 'delete-user' })}
+              className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-500"
+            >
+              Delete user
+            </button>
+          </div>
+        </section>
+      )}
 
       {pending && (
         <ConfirmDialog

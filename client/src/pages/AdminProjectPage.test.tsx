@@ -4,7 +4,8 @@
  * the "View project" bypass (confirmed and logged for private projects),
  * and the delete actions (lecture, whole project). Settings are not
  * edited here — that moved into the project's own settings modal
- * (ADMIN-5), covered by ProjectPage's tests.
+ * (ADMIN-5), covered by ProjectPage's tests. Soft-deleted content is
+ * covered too: the badge and the recovery action (ADMIN-6).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
@@ -140,7 +141,11 @@ describe('AdminProjectPage', () => {
       within(dialog).getByRole('button', { name: 'Delete lecture' }),
     )
 
-    expect(await screen.findByText('Lecture deleted.')).toBeVisible()
+    expect(
+      await screen.findByText(
+        'Lecture deleted; you can restore it from this page.',
+      ),
+    ).toBeVisible()
     expect(requested(fetchMock)).toContainEqual(
       expect.stringMatching(/DELETE .*\/api\/admin\/decks\/d1$/),
     )
@@ -239,5 +244,109 @@ describe('AdminProjectPage', () => {
     renderPage(200, { ...detail, decks: [] })
     await screen.findByRole('heading', { name: 'Physics' })
     expect(screen.getByText('No lectures.')).toBeVisible()
+  })
+})
+
+// ADMIN-6: a soft-deleted project is still openable here, badged, with
+// recovery in place of the danger zone.
+describe('AdminProjectPage soft-deleted content', () => {
+  const deletedDetail = { ...detail, deletedAt: '2026-07-20T09:00:00Z' }
+
+  it('badges the project, withdraws the product view, and offers a restore', async () => {
+    renderPage(200, deletedDetail)
+    await screen.findByRole('heading', { name: 'Physics' })
+
+    expect(screen.getByText('Deleted')).toBeVisible()
+    expect(screen.getByText(/This project is deleted/)).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Restore project' }),
+    ).toBeEnabled()
+    // Nothing to open in the product, and nothing to delete again
+    expect(
+      screen.queryByRole('button', { name: 'View project' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Delete project' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('restores the project after a confirm and reports it', async () => {
+    const mocks = mockFetchRoutes({
+      '/api/admin/projects/p1/restore': () => ({ status: 204 }),
+      '/api/admin/projects/p1': () => ({ status: 200, body: deletedDetail }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/app/admin/projects/p1']}>
+        <Routes>
+          <Route
+            path="/app/admin/projects/:projectId"
+            element={<AdminProjectPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await screen.findByRole('heading', { name: 'Physics' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restore project' }))
+    fireEvent.click(
+      within(
+        screen.getByRole('alertdialog', { name: 'Restore this project?' }),
+      ).getByRole('button', { name: 'Restore project' }),
+    )
+
+    expect(await screen.findByText('Project restored.')).toBeVisible()
+    expect(requested(mocks.fetchMock)).toContainEqual(
+      expect.stringMatching(/POST .*\/api\/admin\/projects\/p1\/restore$/),
+    )
+  })
+
+  it('notes an owner who was deleted along with the project', async () => {
+    renderPage(200, {
+      ...deletedDetail,
+      owner: { ...detail.owner, deletedAt: '2026-07-20T09:00:00Z' },
+    })
+    await screen.findByRole('heading', { name: 'Physics' })
+    expect(screen.getByText(/account deleted/)).toBeVisible()
+  })
+
+  it('badges a deleted lecture in the table and restores it', async () => {
+    const mocks = mockFetchRoutes({
+      '/api/admin/decks/d1/restore': () => ({ status: 204 }),
+      '/api/admin/projects/p1': () => ({
+        status: 200,
+        body: {
+          ...detail,
+          decks: [{ ...detail.decks[0]!, deletedAt: '2026-07-20T09:00:00Z' }],
+        },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/app/admin/projects/p1']}>
+        <Routes>
+          <Route
+            path="/app/admin/projects/:projectId"
+            element={<AdminProjectPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+    const row = (await screen.findByRole('link', { name: 'Waves' })).closest(
+      'tr',
+    )!
+    expect(within(row).getByText('Deleted')).toBeVisible()
+
+    fireEvent.click(
+      within(row).getByRole('button', { name: 'Restore lecture Waves' }),
+    )
+    fireEvent.click(
+      within(
+        screen.getByRole('alertdialog', { name: 'Restore this lecture?' }),
+      ).getByRole('button', { name: 'Restore lecture' }),
+    )
+
+    expect(await screen.findByText('Lecture restored.')).toBeVisible()
+    expect(requested(mocks.fetchMock)).toContainEqual(
+      expect.stringMatching(/POST .*\/api\/admin\/decks\/d1\/restore$/),
+    )
   })
 })

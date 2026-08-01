@@ -3,11 +3,16 @@
  * table of lectures (each linking to its own admin lecture page,
  * visibility badge, slide count, last-edited date) with a per-row
  * delete action, plus the visibility badge itself for standalone use.
+ *
+ * Soft-deleted lectures stay in the table, badged and muted; their row
+ * action becomes Restore instead of Delete, since a tombstoned lecture is
+ * recovered rather than deleted again (ADMIN-6).
  */
 import { Link } from 'react-router'
 import type { Visibility } from '@slide-machine/shared'
 import type { AdminDeckSummary } from '../../api/admin'
 import { formatAdminDate } from '../../lib/date'
+import DeletedBadge, { deletedTextClass } from './DeletedBadge'
 
 /** Colour-coded pill for a lecture's effective visibility. */
 export function VisibilityBadge({ visibility }: { visibility: Visibility }) {
@@ -26,13 +31,18 @@ export function VisibilityBadge({ visibility }: { visibility: Visibility }) {
 }
 
 /** A set of lectures as a table: title, visibility, slide count,
- * last-edited date, and a delete action. */
+ * last-edited date, and a delete action — or a restore action on the rows
+ * that are already soft-deleted. */
 export default function LectureTable({
   decks,
   onDelete,
+  onRestore,
 }: {
   decks: AdminDeckSummary[]
   onDelete: (deck: AdminDeckSummary) => void
+  /** Asked for on a soft-deleted row. Without it, deleted rows are listed
+   * and badged but carry no action. */
+  onRestore?: (deck: AdminDeckSummary) => void
 }) {
   if (decks.length === 0) {
     return <p className="px-4 pb-3 text-sm text-slate-500">No lectures.</p>
@@ -60,36 +70,54 @@ export default function LectureTable({
           </tr>
         </thead>
         <tbody>
-          {decks.map(deck => (
-            <tr key={deck.id} className="border-t border-slate-100">
-              <td className="py-1.5 pr-3">
-                <Link
-                  to={`/app/admin/decks/${deck.id}`}
-                  className="font-medium text-slate-900 hover:underline"
-                >
-                  {deck.title.trim() || 'Untitled lecture'}
-                </Link>
-              </td>
-              <td className="py-1.5 pr-3">
-                <VisibilityBadge visibility={deck.visibility} />
-              </td>
-              <td className="py-1.5 pr-3 text-right tabular-nums text-slate-600">
-                {deck.slideCount}
-              </td>
-              <td className="py-1.5 pr-3 text-slate-500">
-                {formatAdminDate(deck.updatedAt)}
-              </td>
-              <td className="py-1.5 text-right">
-                <button
-                  onClick={() => onDelete(deck)}
-                  aria-label={`Delete lecture ${deck.title.trim() || 'Untitled lecture'}`}
-                  className="rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
-                >
-                  Delete
-                </button>
-              </td>
-            </tr>
-          ))}
+          {decks.map(deck => {
+            const title = deck.title.trim() || 'Untitled lecture'
+            return (
+              <tr key={deck.id} className="border-t border-slate-100">
+                <td className="py-1.5 pr-3">
+                  <Link
+                    to={`/app/admin/decks/${deck.id}`}
+                    className={`font-medium hover:underline ${
+                      deck.deletedAt ? deletedTextClass : 'text-slate-900'
+                    }`}
+                  >
+                    {title}
+                  </Link>{' '}
+                  <DeletedBadge deletedAt={deck.deletedAt} />
+                </td>
+                <td className="py-1.5 pr-3">
+                  <VisibilityBadge visibility={deck.visibility} />
+                </td>
+                <td className="py-1.5 pr-3 text-right tabular-nums text-slate-600">
+                  {deck.slideCount}
+                </td>
+                <td className="py-1.5 pr-3 text-slate-500">
+                  {formatAdminDate(deck.updatedAt)}
+                </td>
+                <td className="py-1.5 text-right">
+                  {deck.deletedAt ? (
+                    onRestore && (
+                      <button
+                        onClick={() => onRestore(deck)}
+                        aria-label={`Restore lecture ${title}`}
+                        className="rounded-md px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                      >
+                        Restore
+                      </button>
+                    )
+                  ) : (
+                    <button
+                      onClick={() => onDelete(deck)}
+                      aria-label={`Delete lecture ${title}`}
+                      className="rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
+                  )}
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>
