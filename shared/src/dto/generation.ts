@@ -5,7 +5,7 @@
  * the seam between the generation pipeline and the renderer.
  */
 import type { Locale } from '../types/locale'
-import type { Deck, Slide } from '../types/deck'
+import type { Deck, Slide, SlideTranslationEntry } from '../types/deck'
 import type { Template } from '../types/template'
 import type { VoiceCommand } from '../types/voice-commands'
 
@@ -55,4 +55,18 @@ export interface DeckViewResponse {
    * the viewer's vote control. */
   voteUp: number
   voteDown: number
+}
+
+/**
+ * A deck's slide content in one locale (SHARE-2), returned by the viewer's
+ * translate endpoint. `perSlide` is keyed by slide id and is empty when the
+ * requested locale is the deck's own — there is nothing to translate, and the
+ * viewer renders the authored text.
+ */
+export interface DeckTranslationResponse {
+  /** The locale the content was translated into. */
+  locale: Locale
+  /** The deck's own language — what "Original" means for this deck. */
+  source: Locale
+  perSlide: Record<string, SlideTranslationEntry>
 }

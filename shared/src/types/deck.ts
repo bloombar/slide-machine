@@ -259,19 +259,26 @@ export interface TranscriptSegment {
   createdAt: string
 }
 
+/** One slide's translated text, plus the fingerprint of what was translated. */
+export interface SlideTranslationEntry {
+  title?: string
+  body?: string
+  bullets?: string[]
+  caption?: string
+  /**
+   * Hash of the source fields this entry was translated from. Slides stay
+   * editable (EDIT-1), so an entry whose hash no longer matches its slide is
+   * stale and is re-translated on the next view — one edited slide costs one
+   * slide's translation, not the whole deck's.
+   */
+  sourceHash?: string
+}
+
 /** Cached on-demand translation of a deck's slide content (SHARE-2). */
 export interface SlideTranslation {
   id: string
   deckId: string
   locale: Locale
-  perSlide: Record<
-    string,
-    {
-      title?: string
-      body?: string
-      bullets?: string[]
-      caption?: string
-    }
-  >
+  perSlide: Record<string, SlideTranslationEntry>
   createdAt: string
 }
