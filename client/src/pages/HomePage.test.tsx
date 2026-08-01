@@ -18,6 +18,17 @@ vi.mock('../config', () => ({
   },
 }))
 
+/**
+ * Relative to now, never a literal date. The row renders its age with
+ * `Intl.RelativeTimeFormat({ numeric: 'auto' })`, which words the -1 case of
+ * every unit as "yesterday" / "last week" / "last month" — with no "ago" in it
+ * at all. A fixed timestamp therefore drifts from "3 weeks ago" into
+ * "last month" as real time passes, breaking the assertion below on a date
+ * rather than on a change. Three days keeps it inside the "N days ago" bucket
+ * indefinitely; DeckViewerPage.test.tsx pins its fixture the same way.
+ */
+const UPDATED_AT = new Date(Date.now() - 3 * 86_400_000).toISOString()
+
 const deck = (id: string, projectId: string, title: string) => ({
   id,
   projectId,
@@ -29,7 +40,7 @@ const deck = (id: string, projectId: string, title: string) => ({
   slideOrder: ['a', 'b'],
   voteScore: 0,
   createdAt: '2026-07-01T00:00:00.000Z',
-  updatedAt: '2026-07-02T00:00:00.000Z',
+  updatedAt: UPDATED_AT,
 })
 
 beforeEach(() => {
