@@ -82,13 +82,16 @@ Each user has a profile (display name, bio, avatar, **preferred locale**) and ow
 
 #### BILL-1 Subscription tiers
 
-The product offers three subscription tiers, each priced accordingly (exact prices set in configuration — BILL-6):
+The product offers four subscription tiers, each priced accordingly (exact prices set in configuration — BILL-6):
 
-- **Free** — basic level for personal/occasional use; the default tier on registration.
-- **Pro** — mid level for professional / regular instructional use; higher caps and access to paid-tier features.
-- **Max** — highest tier; the largest usage caps and full feature access.
+- **Free** — basic level for personal/occasional use; the default tier on registration. Sized to a couple of weeks of one course.
+- **Fresh** — entry paid tier, the step off Free; sized to one course.
+- **Pro** — mid level for professional / regular instructional use; sized to three courses, with higher caps and access to paid-tier features.
+- **Max** — highest tier; the largest usage caps and full feature access. **Every cap is finite** — there is no unlimited tier, because unbounded usage is unbounded cost. Users who outgrow Max are invited to contact us rather than shown an upgrade path that does not exist (BILL-5).
 
-Each tier defines what features are available and the usage caps that apply to costly services (BILL-3).
+Each tier defines what features are available and the usage caps that apply to costly services (BILL-3). The main feature boundary is **speech capture**: Free and Fresh transcribe in the browser (keyless and free), while Pro and Max include cloud transcription with word timings, confidence, and retained audio — the single largest cost driver in the product, so it is a paid capability. Premium narration voices, AI imagery, and instructor-initiated translation are likewise Pro-and-above.
+
+Per-tier cap values and the arithmetic behind them are in [BILLING_COST_MODEL.md](BILLING_COST_MODEL.md).
 
 #### BILL-2 Billing provider (Stripe) integration
 
@@ -101,27 +104,65 @@ Payments and subscription management run through a configured **billing provider
 
 #### BILL-3 Usage caps & metering
 
-Each tier carries **usage caps on AI and other costly services**, metered per billing period and enforced **server-side**, including at minimum:
+Each tier carries **usage caps on AI and other costly services**, metered per billing period and enforced **server-side**. Metrics are **provider-neutral** (`aiTokens`, not `geminiTokens`) so swapping an adapter ([TECH-8](#tech-8-ai-provider-abstraction-layer)) never renames a persisted metric. `null` means unlimited; **`0` means the capability is unavailable on that tier**, which is how paid-only features are gated without a second mechanism.
 
-- AI generation (e.g., Gemini tokens or number of slide generations).
-- Speech-to-Text minutes (Google Cloud).
-- Image-enrichment API calls (Wikimedia/Flickr/Openverse).
-- AI image generation (IMG-4), typically a Pro/Max-tier capability.
-- Document/Drive import volume, storage, and export operations.
+The metered resources:
 
-Usage is recorded against the user's current period; the user can view remaining quota for each metered resource.
+- **`aiTokens`** — input + output across every LLM call: slide generation, refine, narrate, reformat, quiz, image re-rank, seed extraction, embeddings.
+- **`sttMinutes`** — minutes streamed to cloud speech-to-text, summed across stream restarts, including post-lecture re-transcription (which is streaming-priced, not batch).
+- **`diarizationMinutes`** — minutes submitted to batch diarization.
+- **`ttsCharacters`** and **`ttsPremiumCharacters`** — characters synthesized on a cache miss, standard and premium voices metered separately since premium costs roughly twice as much.
+- **`aiImages`** — AI-generated images ([IMG-4](#img-4-ai-generated-imagery-optional)), a Pro/Max capability.
+- **`imageLookups`** — image-enrichment attempts, one per slide image resolved rather than one per provider HTTP request, so the number stays legible when the search fan-out is tuned.
+- **`importMb`**, **`exports`** — document/Drive import volume and export operations.
+- **`translationCharacters`** — source characters the owner translates ([SHARE-2](#share-2-post-lecture-translated-viewing)).
+- **`audioStorageMb`** — retained lecture audio held at once. A **stock, not a per-period flow**: checked when audio is written, never reset by a period boundary. Each tier also sets **`audioRetentionDays`**, how long recordings are kept before the sweep deletes them.
+- **`audienceTtsCharacters`**, **`audienceLocales`** — work caused by _viewers_ (a student's first playback of an un-narrated slide, or a translation they request), charged to the deck owner but drawn from a **separate allowance** so a widely-viewed deck can never exhaust its author's own budget.
+
+**All usage is recorded, including cache hits.** Serving already-synthesized narration or an existing translation costs nothing and **never debits a cap**, but it is still recorded at zero cost — otherwise the count of users and students, and every average derived from it, reflects only the few who happened to trigger a paid call ([BILL-7](#bill-7-cost-attribution--admin-cost-reporting)).
+
+Usage is recorded against the user's current period; the user can view remaining quota for each metered resource (BILL-4).
 
 #### BILL-4 Enforcement & upgrade prompts
 
-When a metered cap is reached, the system **fails gracefully**: the costly operation is blocked (or degraded to a free alternative where one exists) rather than silently incurring cost, and the user is shown a clear message with an **upgrade** path. Caps reset at the start of each billing period. Higher tiers raise or remove the relevant caps.
+When a metered cap is reached, the system **fails gracefully**: the costly operation is blocked rather than silently incurring cost, and the user is shown a clear message with an **upgrade** path. Caps reset at the start of each billing period. Higher tiers raise the relevant caps.
+
+- **Hard stop, never overage.** Exceeding a cap returns **HTTP 402** and the operation does not run; usage is never billed beyond the plan. Anything already generated and cached keeps working, so hitting a cap degrades what can be _created_, never what already exists.
+- **Warn before blocking.** Crossing ~80% of a cap raises an in-app warning; exhaustion sends an **email** to the account owner as well, since the person who can act on it is not always the person who hit the wall.
+- **Students are told least.** When a viewer's request is blocked, they see that the content is unavailable — never the instructor's billing state — and they receive no email: they may be anonymous, and the limit is not theirs to fix. The **instructor** is notified when their audience allowance is exhausted, with counts only and no student identities ([§16](#16-privacy-security--compliance)).
+- **Notifications are idempotent.** One message per (user, metric, period, threshold) — a blocked translation in a 30-student class must not produce 30 emails.
+- **The call to action follows the tier.** Free, Fresh, and Pro see **Upgrade**; Max sees **Contact us**, since no larger plan exists (BILL-5).
+- **Usage is visible before it binds.** A simplified view on the home page shows the metrics that are actually close to their limits; a detailed view in account settings lists every metric with used-versus-cap, the period reset date, and the instructor and audience allowances shown separately.
 
 #### BILL-5 Plan management
 
 Users can **upgrade, downgrade, or cancel** at any time via Stripe Checkout / the billing portal, with proration handled by Stripe. Feature access and caps update to match the active tier; downgrades take effect per the configured policy (immediately or at period end).
 
+- **A downgrade can delete data.** Tiers differ in `audioRetentionDays` (BILL-3), so moving down shortens how long lecture audio is kept and may put existing recordings past the new limit. The user is warned about what will be removed **before** confirming ([P-10](#16-privacy-security--compliance)).
+- **There is no tier above Max.** A Max user who needs more is directed to **contact us** for a custom arrangement rather than shown an upgrade that does not exist.
+
 #### BILL-6 Configurable pricing & caps
 
 Tier definitions — **price and per-tier usage caps** — live in **server-side configuration** (BILL config + Stripe price IDs in [TECH-4](#tech-4-server-configuration)) and are **adjustable without code changes**. Exact prices and cap values are TBD and will be tuned against real service costs ([§19](#19-open-questions)).
+
+**Per-unit vendor prices are configuration too** — the rate per million tokens, per STT minute, per million TTS characters, and so on — so cost accounting (BILL-7) re-prices when a vendor changes its rates without touching code. Recorded cost is nevertheless **frozen at the moment it is written**: a later price change must never retroactively re-price history.
+
+Adding a cap must not be able to take the server down: a metric absent from the config file reads as unlimited rather than failing validation, so a deployment whose config has not caught up degrades to permissive instead of refusing to boot.
+
+The derivation of the shipped values — assumptions, vendor prices, per-lecture arithmetic, and how to recompute them — is documented in [BILLING_COST_MODEL.md](BILLING_COST_MODEL.md), which is the artifact to update when an assumption changes.
+
+#### BILL-7 Cost attribution & admin cost reporting
+
+Operators can see **what the deployment actually costs, and who it is spent on**. Every metered event (BILL-3) is recorded to an append-only cost ledger carrying the paying user, the acting user, the project and lecture it belongs to, the service, the quantity, and the money — priced from the configured service prices (BILL-6) and **frozen at write time**.
+
+- **Attribution.** Cost rolls up per **user**, per **lecture**, and per **project** — a project's total being its lectures plus any project-scoped spend such as seed-material extraction. A lecture's owner is not always its project's owner, so both references are recorded when the event occurs rather than inferred later.
+- **Instructor versus student.** Each view separates cost the instructor caused from cost their audience caused, since the two have different remedies: one is a plan-sizing question, the other an audience-reach question.
+- **Who paid, who acted.** The deck owner always pays for audience activity (BILL-3), while the acting viewer is recorded separately — that pair is what makes both perspectives available from one ledger.
+- **Counting people, not just spend.** Views report **how many students were involved** and the **average cost per student**. This is why cache hits are recorded at zero cost: a deck where two students trigger a translation and twenty-eight play the cached result costs what those two spent, but it reached **thirty** students, and an average computed over two would be an order of magnitude wrong.
+- **Anonymous viewers are counted, not identified.** Unregistered playbacks are reported as an event count; assigning them tracking identities to make them countable would conflict with [§16](#16-privacy-security--compliance). Per-student averages are therefore scoped to registered students, and views say so rather than implying the average covers everyone. Student identities never appear in instructor-facing views or notifications.
+- **Cache efficiency.** Because both billable and cached events are recorded, the cache-hit ratio and the resulting **cost avoided** fall out of the same data — the measure of whether caching is earning its complexity.
+- **Where it appears.** Per-entity panels on the existing admin user, project, and lecture pages, plus deployment-wide averages — cost per user, per lecture, per project, per student, active users and students, and the largest spenders — on an admin overview ([§20](#20-administration-operations--moderation)). Exportable as CSV, like the other admin logs.
+- **Retention.** Raw events are kept for a bounded window with monthly pre-aggregated roll-ups behind them, so queries stay cheap as the ledger grows ([P-11](#16-privacy-security--compliance)). Ledger rows are **never cascade-deleted** with the entities they describe — a deleted lecture's cost still happened — so the entity's name is denormalized onto the row.
 
 ### 6. Slide Projects & Seeding
 
@@ -608,41 +649,27 @@ Server-side secrets and global settings live in a `.env` file (never committed),
 
 **Numeric-`0` convention.** Across the retention ceilings, retention-day counts, and `STT_CAPTURE_SAMPLE_RATE`, `0` means **"no limit"**, never "off" — it removes a bound and therefore costs _more_ (audio kept forever, unbounded buffers, no downsampling). `WHITEBOARD_SUPPRESS_DEBOUNCE_MS` is the exception, where `0` is a literal zero-length grace window.
 
-**Plan definitions** — the Free/Pro/Max **prices and usage caps** (BILL-1, BILL-3) live in an adjustable server-side config (e.g., `config/plans.*`) so pricing and caps can be tuned **without code changes** (see BILL-6 and TECH-4). Illustrative shape:
+**Plan definitions** — the Free/Fresh/Pro/Max **prices, usage caps, and retention policy** (BILL-1, BILL-3) live in an adjustable server-side config (`config/plans.json`, path overridable) so pricing and caps can be tuned **without code changes** (see BILL-6 and TECH-4). Illustrative shape, one tier shown:
 
 ```jsonc
 {
-  "free": {
-    "priceId": null,
+  "fresh": {
+    "priceId": "price_fresh_xxx",
+    "audioRetentionDays": 14,
     "caps": {
-      "geminiTokens": 50000,
-      "sttMinutes": 60,
-      "imageCalls": 200,
-      "exports": 5,
-    },
-  },
-  "pro": {
-    "priceId": "price_pro_xxx",
-    "caps": {
-      "geminiTokens": 1000000,
-      "sttMinutes": 1200,
-      "imageCalls": 5000,
-      "exports": 200,
-    },
-  },
-  "max": {
-    "priceId": "price_max_xxx",
-    "caps": {
-      "geminiTokens": null,
-      "sttMinutes": null,
-      "imageCalls": null,
-      "exports": null,
+      "aiTokens": 14000000,
+      "sttMinutes": 0, // 0 = unavailable on this tier (browser capture only)
+      "ttsCharacters": 200000,
+      "audienceLocales": 3,
+      // …one entry per metered resource (BILL-3)
     },
   },
 }
 ```
 
-(`null` = unlimited; exact values TBD — [§19](#19-open-questions).)
+(`null` = unlimited, `0` = unavailable on that tier, an absent metric reads as unlimited. Shipped values and their derivation: [BILLING_COST_MODEL.md](BILLING_COST_MODEL.md).)
+
+**Service prices** — the per-unit vendor rates those caps were derived from live beside them in `config/service-prices.json`, so cost accounting (BILL-7) re-prices without a code change.
 
 #### TECH-5 Client configuration
 
@@ -720,8 +747,10 @@ All operations that modify a project, concept set, or deck are exposed through a
 Indicative MongoDB collections, expressed as shared TypeScript types ([TECH-6](#tech-6-shared-types--data-models)):
 
 - **User** — `{ id, email, displayName, passwordHash, emailVerified, bio, avatarUrl, locale: 'en'|'fr'|'es'|'ru'|'zh', projectDefaults?: { manualSlideAdvance?, animatedTransitions?, ... }, planTier: 'free'|'pro'|'max', billingProvider?, billingCustomerId?, createdAt }` (`projectDefaults` apply to all new projects unless overridden — GEN-8)
-- **Subscription** — `{ id, userId, tier, billingProvider, providerSubscriptionId, status: 'active'|'past_due'|'canceled', currentPeriodStart, currentPeriodEnd }`
-- **UsageRecord** — `{ id, userId, period, metric: 'geminiTokens'|'sttMinutes'|'imageCalls'|'exports'|..., used, cap }`
+- **Subscription** — `{ id, userId, tier, billingProvider, billingCustomerId, providerSubscriptionId, status: 'active'|'past_due'|'canceled', currentPeriodStart, currentPeriodEnd, cancelAtPeriodEnd }` (provider-neutral by design — a discriminator plus opaque references, TECH-9)
+- **UsageRecord** — `{ id, userId, period, metric: 'aiTokens'|'sttMinutes'|'diarizationMinutes'|'ttsCharacters'|'ttsPremiumCharacters'|'aiImages'|'imageLookups'|'importMb'|'exports'|'translationCharacters'|'audioStorageMb'|'audienceTtsCharacters'|'audienceLocales', used, cap }` (BILL-3; `audioStorageMb` is a gauge — current holdings, not a per-period total)
+- **CostEvent** — `{ id, userId, actorUserId?, actorRole: 'instructor'|'student'|'anonymous', projectId?, deckId?, deckTitle, service, metric, eventKind: 'billable'|'cached', units, unitPrice, cost, createdAt }` (append-only cost ledger — BILL-7; cost frozen at write time, rows never cascade-deleted, `deckTitle` denormalized so a deleted lecture keeps its history)
+- **NotificationLog** — `{ id, userId, metric, period, threshold, channel: 'email'|'in_app', sentAt }` (makes cap notifications idempotent — BILL-4)
 - **ConnectedAccount** — `{ id, userId, provider: 'google'|'github', scopes[], accessTokenEnc, refreshTokenEnc?, externalAccountLabel, connectedAt }` (for import/export — EXP-4; tokens encrypted at rest — P-9)
 - **Project** — `{ id, ownerId, title, course, description, seedContext, settings?: { manualSlideAdvance?, animatedTransitions?, ... }, createdAt }` (`settings` override the user's `projectDefaults`)
 - **SeedAsset** — `{ id, projectId, type: 'doc'|'pdf'|'gdoc'|'gdrive'|'gslides'|'image', text?, imageUrl?, caption?, keywords[], enabled }`
@@ -845,9 +874,10 @@ The governing principle: **admin power is broad but never silent.** Admin reads 
 
 A read-mostly console (`/app/admin`) answers "who is using this and what have they made," and carries the moderation surface.
 
-- **Secondary navigation** — every admin page shows a horizontal secondary nav bar, **just below the standard header**, linking the four top-level sections: **Users**, **Projects**, **Lectures**, and **Logs**.
+- **Secondary navigation** — every admin page shows a horizontal secondary nav bar, **just below the standard header**, linking the top-level sections: **Overview**, **Users**, **Projects**, **Lectures**, and **Logs**.
+- **Overview** — deployment-wide averages and totals, chiefly **cost**: per user, per lecture, per project, and per student, alongside active users, active students, and the largest spenders ([BILL-7](#bill-7-cost-attribution--admin-cost-reporting)).
 - **Site-wide directories**, each **paginated and sortable**: **Users** (email, handle, join date), **Projects** (title, owner, visibility, lecture count, timestamps), and **Lectures** (title, project, owner, effective visibility, slide count, timestamps). Private lectures are **always listed** ([ADMIN-3](#admin-3-viewing-user-content--seed-material)).
-- **Detail (drill-down) pages** for each **user** (plan, email-verification, locale, profile visibility, project/lecture counts, and the user's projects/lectures), **project** (owner + a table of its lectures), and **lecture** (project, owner, details, and a link to the live viewer `/d/:slug`). Settings are edited in the product view those pages link to — the user's profile page, the project, the lecture — not here ([ADMIN-5](#admin-5-editing-any-entitys-settings)).
+- **Detail (drill-down) pages** for each **user** (plan, email-verification, locale, profile visibility, project/lecture counts, and the user's projects/lectures), **project** (owner + a table of its lectures), and **lecture** (project, owner, details, and a link to the live viewer `/d/:slug`). Each also carries a **cost panel** — instructor versus student spend, students involved, and average per student ([BILL-7](#bill-7-cost-attribution--admin-cost-reporting)). Settings are edited in the product view those pages link to — the user's profile page, the project, the lecture — not here ([ADMIN-5](#admin-5-editing-any-entitys-settings)).
 - **Object identity** — every user, project, and lecture **detail page shows the entity's database `_id`**, so an operator can correlate console records with direct database operations.
 - **Consistent linking** — across **all** admin pages, every **username** links to that user's detail page, every **project title** to its project detail page, and every **lecture title** to its lecture detail page.
 - **Consistent "view in product" affordance** — each detail page carries, in the same style, a link to that entity's **public/product view**: the **user** detail page links to the user's **public profile** ([SOC-4](#soc-4-user-profiles)), the **project** detail page to the **product project view**, and the **lecture** detail page to the **live viewer** (`/d/:slug`). Where the target is private, following it is confirmed and audited ([ADMIN-3](#admin-3-viewing-user-content--seed-material)).

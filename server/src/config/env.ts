@@ -46,6 +46,11 @@ const envSchema = z.object({
   PLANS_CONFIG_PATH: z
     .string()
     .default(path.join(serverRoot, '..', 'config', 'plans.json')),
+  /** Per-unit vendor prices the plan caps were derived from (BILL-6/BILL-7);
+   * see docs/BILLING_COST_MODEL.md. */
+  SERVICE_PRICES_PATH: z
+    .string()
+    .default(path.join(serverRoot, '..', 'config', 'service-prices.json')),
   /** Externalized prompt templates (docs/GENERATION_PROMPT.md). */
   PROMPTS_DIR: z
     .string()

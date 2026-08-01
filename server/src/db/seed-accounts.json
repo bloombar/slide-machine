@@ -42,7 +42,7 @@
       "handle": "mary.beard",
       "displayName": "Mary Beard",
       "bio": "Classicist. Rome, and what the past can (and cannot) teach us.",
-      "planTier": "free",
+      "planTier": "fresh",
       "locale": "en",
       "profileVisibility": "public",
       "disciplines": ["roman-history", "art-history"]

@@ -1,0 +1,33 @@
+{
+  "asOf": "2026-07-31",
+  "currency": "USD",
+  "ai": {
+    "inputPerMillionTokens": 0.25,
+    "outputPerMillionTokens": 1.5,
+    "embeddingPerMillionTokens": 0.15
+  },
+  "stt": {
+    "streamingPerMinute": 0.016,
+    "batchPerMinute": 0.004
+  },
+  "tts": {
+    "standardPerMillionChars": 16,
+    "premiumPerMillionChars": 30
+  },
+  "translation": {
+    "perMillionChars": 20,
+    "freeCharsPerMonth": 500000
+  },
+  "images": {
+    "generatedPerImage": 0.034
+  },
+  "storage": {
+    "perGibMonth": 0.02,
+    "egressPerGib": 0.01
+  },
+  "payments": {
+    "rate": 0.029,
+    "perTransaction": 0.3,
+    "billingRate": 0.007
+  }
+}
