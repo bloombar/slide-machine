@@ -5,6 +5,10 @@ How the per-tier caps in [config/plans.json](../config/plans.json) were derived
 Every figure below comes from a stated parameter times a vendor price, so when
 an assumption changes the caps can be recomputed rather than re-guessed.
 
+The workings are reproducible: [`cost-model/`](../cost-model/) holds a Jupyter
+notebook that computes every figure below from two editable data files, so an
+assumption can be changed and the consequences re-read rather than re-derived.
+
 Unit prices live in [config/service-prices.json](../config/service-prices.json),
 keyed by **model and voice family**, so switching `GEMINI_MODEL` or a narration
 voice does not strand the cost model. Cost accounting
@@ -153,18 +157,18 @@ on each side.
 
 | Service | Instructor usage | Student usage | Cost / 100 lectures | Share |
 | --- | --- | --- | --- | --- |
-| **Cloud STT** | 7,800 min (75 live + 3 re-transcribe per lecture) | — | **$124.80** | 37% |
-| **Gemini (all LLM)** | 234M tokens | — | **$89.75** | 27% |
-| **TTS** | 3.0M chars | 1.35M chars | **$69.60** | 21% |
-| **Diarization** | 2,250 min (30% of lectures) | — | **$36.00** | 11% |
-| **Translation** | — | 900K chars | **$18.00** | 5% |
+| **Cloud STT** | 7,800 min (75 live + 3 re-transcribe per lecture) | — | **$124.80** | 36.5% |
+| **Gemini (all LLM)** | 226M tokens | — | **$92.83** | 27.1% |
+| **TTS** | 3.0M chars | 1.35M chars | **$69.60** | 20.4% |
+| **Diarization** | 2,250 min (30% of lectures) | — | **$36.00** | 10.5% |
+| **Translation** | — | 900K chars | **$18.00** | 5.3% |
 | **Image search APIs** | 5,000 lookups | — | **$0.00** | free |
-| **Object storage + egress** | 21.6 GB held | 30 GB (2,000 playbacks) | **$0.60** | 0.2% |
-| **Total** | | | **$339** | |
+| **Object storage + egress** | 21.6 GB held | 30 GB (2,000 playbacks) | **$0.70** | 0.2% |
+| **Total** | | | **$341.93** | |
 
-Browser-capture tiers cost **$178** — they lose both the STT line and the
+Browser-capture tiers cost **$181** — they lose both the STT line and the
 diarization line, since retention only happens on the cloud engine.
-**Instructor-driven cost is $299 (88%); student-driven is $40 (12%).**
+**Instructor-driven cost is $302 (88%); student-driven is $40 (12%).**
 
 Five conclusions:
 
@@ -186,16 +190,16 @@ Five conclusions:
 
 | Line | Cost |
 | --- | --- |
-| Slide generation (2.03M in / 0.22M out) | $0.84 |
+| Slide generation (2.03M in / 0.24M out) | $0.86 |
 | Image re-rank + quiz + embeddings | $0.04 |
 | Cloud STT, 75 min | $1.20 (zero on browser capture) |
-| **Live subtotal** | **$2.08 cloud / $0.88 browser** |
+| **Live subtotal** | **$2.10 cloud / $0.90 browser** |
 
 **Post-lecture**, light revision profile:
 
 | Line | Quantity | Cost |
 | --- | --- | --- |
-| Refine + narrate passes | ~11 slides | $0.02 |
+| Refine + narrate passes | ~11 slides | $0.03 |
 | TTS narration of the deck | 27,000 chars | $0.43 |
 | Re-synthesis after edits | ~5 slides | $0.05 |
 | Image enrichment redos | ~5 slides | $0.01 |
@@ -205,7 +209,7 @@ Five conclusions:
 
 **Audience** — 0.5 locales and 20 playbacks per deck: **~$0.40**.
 
-**Per lecture, all in: ~$3.40 with cloud capture, ~$1.79 on browser capture.**
+**Per lecture, all in: ~$3.42 with cloud capture, ~$1.81 on browser capture.**
 
 Three things worth knowing. Re-transcribing a saved clip runs through the
 *streaming* recognizer, so it bills at the full $0.016/min. Every narration edit
@@ -279,8 +283,8 @@ would otherwise dominate the tier:
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Free | 4 | 30 | ~$2.89 | ~$5.79 | $6.32 | **$0** | — |
 | Fresh | 6 | 30 | ~$5.16 | ~$10.31 | $11.01 | **$19** | 54% |
-| Pro | 26 | 90 | ~$35.80 | ~$71.59 | $74.58 | **$99** | 72% |
-| Max | 40 | 120 | ~$87.92 | ~$175.85 | $182.72 | **$299** | 59% |
+| Pro | 26 | 90 | ~$35.53 | ~$71.05 | $74.02 | **$99** | 72% |
+| Max | 40 | 120 | ~$86.86 | ~$173.73 | $180.53 | **$299** | 58% |
 
 Price floor = `(cost_at_caps + $0.30) ÷ 0.964` — services plus Stripe's cut and
 nothing else. It recovers no fixed costs and leaves no margin.
@@ -323,9 +327,14 @@ Sensitivity at the tier volumes above:
 
 | Duration | Cost/lecture (browser) | Cost/lecture (cloud) | Pro `aiTokens` cap |
 | --- | --- | --- | --- |
-| 50 min | ~$1.21 | ~$2.30 | 43,000,000 |
-| **75 min** | **~$1.79** | **~$3.40** | **65,000,000** |
-| 110 min | ~$2.59 | ~$4.93 | 95,000,000 |
+| 50 min | ~$1.23 | ~$2.31 | 39M needed → cap 45,000,000 |
+| **75 min** | **~$1.81** | **~$3.42** | **59M needed → cap 65,000,000** |
+| 110 min | ~$2.63 | ~$4.97 | 86M needed → cap 95,000,000 |
+
+Re-running is a notebook away: [`cost-model/billing-cost-model.ipynb`](../cost-model/)
+computes all of the above from `pricing.json`, `assumptions.json`, and the
+shipped `config/plans.json`, including a check that the shipped caps still sit
+above what the assumptions imply.
 
 Every number in this document is a starting point. The audience parameters and
 the revision profile are guesses that a semester of pilot data will replace —

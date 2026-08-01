@@ -1,0 +1,111 @@
+{
+  "asOf": "2026-07-31",
+  "currency": "USD",
+  "ai": {
+    "defaultModel": "gemini-3.1-flash-lite-preview",
+    "models": {
+      "gemini-3.1-flash-lite-preview": {
+        "inputPerMillionTokens": 0.25,
+        "outputPerMillionTokens": 1.5,
+        "audioInputPerMillionTokens": 0.5
+      },
+      "gemini-3.1-flash-lite": {
+        "inputPerMillionTokens": 0.25,
+        "outputPerMillionTokens": 1.5,
+        "audioInputPerMillionTokens": 0.5
+      },
+      "gemini-3.5-flash-lite": {
+        "inputPerMillionTokens": 0.3,
+        "outputPerMillionTokens": 2.5
+      },
+      "gemini-2.5-flash-lite": {
+        "inputPerMillionTokens": 0.1,
+        "outputPerMillionTokens": 0.4,
+        "audioInputPerMillionTokens": 0.3
+      },
+      "gemini-3-flash-preview": {
+        "inputPerMillionTokens": 0.5,
+        "outputPerMillionTokens": 3.0,
+        "audioInputPerMillionTokens": 1.0
+      },
+      "gemini-3.6-flash": {
+        "inputPerMillionTokens": 1.5,
+        "outputPerMillionTokens": 7.5
+      },
+      "gemini-3.5-flash": {
+        "inputPerMillionTokens": 1.5,
+        "outputPerMillionTokens": 9.0
+      },
+      "gemini-2.5-flash": {
+        "inputPerMillionTokens": 0.3,
+        "outputPerMillionTokens": 2.5,
+        "audioInputPerMillionTokens": 1.0
+      }
+    },
+    "embeddingModels": {
+      "text-embedding-004": { "inputPerMillionTokens": 0.15 },
+      "gemini-embedding-001": { "inputPerMillionTokens": 0.15 },
+      "gemini-embedding-2": { "inputPerMillionTokens": 0.2 }
+    },
+    "imageModels": {
+      "gemini-3.1-flash-lite-image": { "perImage": 0.0336 },
+      "gemini-2.5-flash-image": { "perImage": 0.039 },
+      "gemini-3.1-flash-image": { "perImage": 0.067 }
+    }
+  },
+  "stt": {
+    "recognitionPerMinute": 0.016,
+    "dynamicBatchPerMinute": 0.003,
+    "freeMinutesPerMonth": 0,
+    "volumeTiers": [
+      { "fromMinutesPerMonth": 0, "perMinute": 0.016 },
+      { "fromMinutesPerMonth": 500000, "perMinute": 0.01 },
+      { "fromMinutesPerMonth": 1000000, "perMinute": 0.008 },
+      { "fromMinutesPerMonth": 2000000, "perMinute": 0.004 }
+    ]
+  },
+  "tts": {
+    "billingUnit": "characters-including-ssml-except-mark",
+    "defaultStandardFamily": "neural2",
+    "defaultPremiumFamily": "chirp3-hd",
+    "geminiTtsModels": {
+      "gemini-2.5-flash-tts": {
+        "inputPerMillionTextTokens": 0.5,
+        "outputPerMillionAudioTokens": 10,
+        "audioTokensPerSecond": 25
+      },
+      "gemini-3.1-flash-tts-preview": {
+        "inputPerMillionTextTokens": 1.0,
+        "outputPerMillionAudioTokens": 20,
+        "audioTokensPerSecond": 25
+      },
+      "gemini-2.5-pro-tts": {
+        "inputPerMillionTextTokens": 1.0,
+        "outputPerMillionAudioTokens": 20,
+        "audioTokensPerSecond": 25
+      }
+    },
+    "voiceFamilies": {
+      "standard": { "perMillionChars": 4, "freeCharsPerMonth": 4000000 },
+      "wavenet": { "perMillionChars": 4, "freeCharsPerMonth": 4000000 },
+      "neural2": { "perMillionChars": 16, "freeCharsPerMonth": 1000000 },
+      "polyglot": { "perMillionChars": 16, "freeCharsPerMonth": 1000000 },
+      "chirp3-hd": { "perMillionChars": 30, "freeCharsPerMonth": 1000000 },
+      "studio": { "perMillionChars": 160, "freeCharsPerMonth": 1000000 },
+      "instant-custom": { "perMillionChars": 60, "freeCharsPerMonth": 0 }
+    }
+  },
+  "translation": {
+    "perMillionChars": 20,
+    "freeCharsPerMonth": 500000
+  },
+  "storage": {
+    "perGibMonth": 0.02,
+    "egressPerGib": 0.01
+  },
+  "payments": {
+    "rate": 0.029,
+    "perTransaction": 0.3,
+    "billingRate": 0.007
+  }
+}

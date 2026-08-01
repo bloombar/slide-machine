@@ -1,0 +1,114 @@
+{
+  "_note": "Usage assumptions behind docs/BILLING_COST_MODEL.md. Every number here is an input you can change; rerun the notebook to see the effect. Confidence: 'weak' means an educated guess a semester of pilot data should replace.",
+
+  "lecture": {
+    "durationMinutes": 75,
+    "phrasesPerMinute": 9,
+    "inputTokensPerCall": 3000,
+    "outputTokensPerCall": 350,
+    "slidesPerLecture": 45,
+    "slideTextChars": 400,
+    "narrationCharsPerSlide": 600,
+    "captureSampleRateHz": 24000,
+    "captureBytesPerSample": 2,
+    "sttMinutesPerLectureMinute": 1.0,
+    "_confidence": {
+      "durationMinutes": "product decision",
+      "inputTokensPerCall": "weak: +/-30%, an independent estimate said 2200",
+      "outputTokensPerCall": "weak",
+      "slideTextChars": "weak: unmeasured",
+      "narrationCharsPerSlide": "weak: unmeasured"
+    }
+  },
+
+  "perLectureExtras": {
+    "rerankInputTokensPerSlide": 1500,
+    "rerankOutputTokensPerSlide": 200,
+    "quizInputTokens": 12000,
+    "quizOutputTokens": 2000,
+    "embeddingTokens": 23000
+  },
+
+  "revision": {
+    "_note": "The 'light' profile: what an average teacher does after a lecture, not a power user.",
+    "refinedSlideShare": 0.25,
+    "refineInputTokensPerSlide": 2500,
+    "refineOutputTokensPerSlide": 500,
+    "narrateInputTokensPerSlide": 2000,
+    "narrateOutputTokensPerSlide": 400,
+    "resynthesizedSlides": 5,
+    "enrichmentRedoShare": 0.1,
+    "retranscribeMinutes": 3,
+    "diarizeShareOfLectures": 0.3,
+    "_confidence": "weak throughout"
+  },
+
+  "audience": {
+    "studentsPerSection": 30,
+    "deckOpenRate": 0.5,
+    "playbacksPerViewingStudent": 1.3,
+    "localesPerDeck": 0.5,
+    "imageMbPerPlayback": 9.0,
+    "narrationAudioMbPerPlayback": 5.4,
+    "_confidence": "weak throughout: these drive the entire student-cost picture"
+  },
+
+  "storage": {
+    "retainedAudioHeldDaysFactor": 1.0,
+    "_note": "Audio MB per lecture is derived from the capture rate; held volume comes from each tier's audioRetentionDays in config/plans.json."
+  },
+
+  "tiers": {
+    "free": {
+      "lecturesPerMonth": 4,
+      "sections": 1,
+      "priceUsd": 0,
+      "cloudCapture": false
+    },
+    "fresh": {
+      "lecturesPerMonth": 6,
+      "sections": 1,
+      "priceUsd": 19,
+      "cloudCapture": false
+    },
+    "pro": {
+      "lecturesPerMonth": 26,
+      "sections": 3,
+      "priceUsd": 99,
+      "cloudCapture": true
+    },
+    "max": {
+      "lecturesPerMonth": 40,
+      "sections": 4,
+      "priceUsd": 299,
+      "cloudCapture": true
+    }
+  },
+
+  "targets": {
+    "worstCaseShareOfPrice": 0.6,
+    "expectedUtilisation": 0.5,
+    "heavyUtilisation": 0.8
+  },
+
+  "fixedCostsUsdPerMonth": {
+    "pilot": {
+      "appPlatformApi": 5,
+      "spaces": 5,
+      "atlasM10WithBackups": 66.94,
+      "transactionalEmail": 0,
+      "domain": 1.5,
+      "developerTooling": 200
+    },
+    "production": {
+      "appPlatformApi": 25,
+      "spaces": 5,
+      "atlasM10WithBackups": 66.94,
+      "transactionalEmail": 15,
+      "domain": 1.5,
+      "developerTooling": 200
+    }
+  },
+
+  "sensitivityDurationsMinutes": [50, 75, 110]
+}
