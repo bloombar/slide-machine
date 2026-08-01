@@ -13,7 +13,11 @@
  * produce the effective ACL; decisions run through lib/access.ts.
  */
 import { Schema, model, Types, type HydratedDocument } from 'mongoose'
-import type { Deck, Visibility } from '@slide-machine/shared'
+import type {
+  Deck,
+  DiarizedSpeakerSegment,
+  Visibility,
+} from '@slide-machine/shared'
 import { LOCALES } from '@slide-machine/shared'
 import type { ResolvedAcl } from '../lib/access'
 import { ProjectModel, projectAcl, type ProjectDb } from './project'
@@ -41,6 +45,18 @@ export interface DeckRecordingDb {
   durationMs: number
   gcsUri?: string
   createdAt: Date
+  /**
+   * Cached diarizer output for this recording. The retained WAV is written once
+   * and never appended to, so the intervals are a pure function of (audio,
+   * model) and never go stale — which matters because diarization is billed at
+   * the same per-minute rate as live capture, and speaker identification is
+   * invoked once per slide.
+   */
+  diarization?: DiarizedSpeakerSegment[]
+  /** Which adapter produced them: a mock's scripted intervals must never be
+   * reused once a real engine is configured. */
+  diarizedBy?: string
+  diarizedAt?: Date
 }
 
 /** The published exit-ticket quiz (Google Form) for a deck (QUIZ-3). */
@@ -112,6 +128,24 @@ const recordingSchema = new Schema<DeckRecordingDb>(
     durationMs: { type: Number, required: true },
     gcsUri: String,
     createdAt: { type: Date, default: Date.now },
+    // Speaker turns from the last diarization of this recording, so repeat
+    // passes re-tag from cache instead of re-billing the audio. Absent until
+    // the first successful run.
+    diarization: {
+      type: [
+        new Schema<DiarizedSpeakerSegment>(
+          {
+            speaker: { type: Number, required: true },
+            startMs: { type: Number, required: true },
+            endMs: { type: Number, required: true },
+          },
+          { _id: false },
+        ),
+      ],
+      default: undefined,
+    },
+    diarizedBy: String,
+    diarizedAt: Date,
   },
   { _id: false },
 )

@@ -4,9 +4,20 @@
  * the mock's scripted speakers onto the segments and tags each with a speaker
  * and a lecturer/student role. MongoDB is real; DIARIZATION_PROVIDER=mock.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  afterEach,
+  vi,
+} from 'vitest'
 import request from 'supertest'
+import type { DiarizationProvider } from '@slide-machine/shared'
 import { env } from '../../src/config/env'
+import { registry } from '../../src/providers/registry'
 import { connectMongo, disconnectMongo } from '../../src/db/mongoose'
 import { createApp } from '../../src/app'
 import { UserModel } from '../../src/models/user'
@@ -121,5 +132,118 @@ describe('deck.diarize', () => {
     const bob = await registerUser('bob@example.com')
     const res = await act(bob, 'deck.diarize', { deckId })
     expect(res.status).toBe(403)
+  })
+})
+
+/**
+ * Diarization bills per minute of audio at the same rate as live capture, and
+ * per-slide speaker identification runs this pass once per slide — so a
+ * re-diarized recording is a real, repeated charge, not just wasted time. The
+ * speaker turns are cached on the recording and reused.
+ */
+describe('deck.diarize caching', () => {
+  /** A recording plus one timed segment, the minimum for a pass to do work. */
+  const seedRecording = async (sessionId = 'rec-1') => {
+    await DeckModel.updateOne(
+      { _id: deckId },
+      {
+        $push: {
+          recordings: {
+            sessionId,
+            audioKey: 'audio/x.wav',
+            sampleRate: 16_000,
+            durationMs: 620_000,
+            createdAt: new Date(),
+          },
+        },
+      },
+    )
+    return TranscriptSegmentModel.create({
+      deckId,
+      sessionId,
+      text: 'Photosynthesis basics',
+      action: 'new',
+      startMs: 0,
+      endMs: 1000,
+      words: [{ word: 'Photosynthesis', startMs: 0, endMs: 1000 }],
+    })
+  }
+
+  const recordingOf = async (deck = deckId) =>
+    (await DeckModel.findById(deck))?.recordings?.[0]
+
+  let spy: ReturnType<typeof vi.spyOn>
+
+  beforeEach(() => {
+    const provider = registry.get<DiarizationProvider>('diarization')
+    spy = vi.spyOn(provider, 'diarize')
+  })
+  afterEach(() => spy.mockRestore())
+
+  it("stores the diarizer's speaker turns on the recording", async () => {
+    await seedRecording()
+
+    await act(ada, 'deck.diarize', { deckId })
+
+    const rec = await recordingOf()
+    expect(rec?.diarizedBy).toBe('mock')
+    expect(rec?.diarizedAt).toBeInstanceOf(Date)
+    // Mapped to plain objects: these are mongoose subdocuments, which carry
+    // internals that a deep-equality check would trip over.
+    expect(
+      rec?.diarization?.map(d => ({
+        speaker: d.speaker,
+        startMs: d.startMs,
+        endMs: d.endMs,
+      })),
+    ).toEqual([
+      { speaker: 1, startMs: 0, endMs: 600_000 },
+      { speaker: 2, startMs: 600_000, endMs: 620_000 },
+    ])
+  })
+
+  it('re-tags from the cache instead of submitting the audio again', async () => {
+    const segment = await seedRecording()
+
+    const first = await act(ada, 'deck.diarize', { deckId })
+    const second = await act(ada, 'deck.diarize', { deckId })
+
+    // Same answer both times, but the paid call happened only once.
+    expect(second.body).toEqual(first.body)
+    expect(spy).toHaveBeenCalledTimes(1)
+
+    // The second pass still tagged from the cached intervals.
+    const tagged = await TranscriptSegmentModel.findById(segment._id)
+    expect(tagged?.speaker).toBe(1)
+    expect(tagged?.role).toBe('lecturer')
+  })
+
+  it('re-diarizes when a different engine produced the cache', async () => {
+    await seedRecording()
+    // A developer who ran the mock, then configured a real engine, must not
+    // inherit scripted intervals as though they described the audio.
+    await act(ada, 'deck.diarize', { deckId })
+    await DeckModel.updateOne(
+      { _id: deckId, 'recordings.sessionId': 'rec-1' },
+      { $set: { 'recordings.$.diarizedBy': 'some-other-engine' } },
+    )
+
+    await act(ada, 'deck.diarize', { deckId })
+
+    expect(spy).toHaveBeenCalledTimes(2)
+    expect((await recordingOf())?.diarizedBy).toBe('mock')
+  })
+
+  it('caches each recording separately', async () => {
+    await seedRecording('rec-1')
+    await seedRecording('rec-2')
+
+    await act(ada, 'deck.diarize', { deckId })
+    await act(ada, 'deck.diarize', { deckId })
+
+    // Two recordings diarized once each, not twice each.
+    expect(spy).toHaveBeenCalledTimes(2)
+    const deck = await DeckModel.findById(deckId)
+    expect(deck?.recordings?.map(r => r.diarizedBy)).toEqual(['mock', 'mock'])
   })
 })
