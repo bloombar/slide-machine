@@ -416,13 +416,13 @@
   full: 'A read-mostly console (/app/admin) answers "who is using this and what
     have they made," and carries the moderation surface. Secondary navigation —
     every admin page shows a horizontal secondary nav bar, just below the
-    standard header, linking the four top-level sections: Users, Projects,
-    Lectures, and Logs. Site-wide directories, each paginated and sortable:
-    Users (email, handle, join date), Projects (title, owner, visibility,
-    lecture count, timestamps), and Lectures (title, project, owner, effective
-    visibility, slide count, timestamps). Private lectures are always listed
-    (ADMIN-3). Detail (drill-down) pages for each user (plan,
-    email-verification, locale, profile visibility, project/lecture…'
+    standard header, linking the top-level sections: Overview, Users, Projects,
+    Lectures, and Logs. Overview — deployment-wide averages and totals, chiefly
+    cost: per user, per lecture, per project, and per student, alongside active
+    users, active students, and the largest spenders (BILL-7). Site-wide
+    directories, each paginated and sortable: Users (email, handle, join date),
+    Projects (title, owner, visibility, lecture count, timestamps), and Lectures
+    (title, project, owner…'
   section: §20 Administration, Operations & Moderation
   family: ADMIN
   phase: 2
@@ -432,13 +432,15 @@
 - id: ADMIN-3
   title: Viewing user content & seed material
   full: An admin can open any lecture in the deck viewer (/d/:slug) and any
-    project in the product view, regardless of visibility, read-only, on the
-    allowlist's authority. Admin project and lecture detail pages surface the
-    seed material (SEED-1/SEED-2) — documents, seed text, and image captions —
-    so an operator can see what fed generation. Privacy-infringing views are
-    confirmed and audited — opening a private lecture or a private project
-    requires explicit confirmation and writes an audit-log entry (ADMIN-7);
-    routine viewing of already-public content is not logged.
+    project in the product view, regardless of visibility, on the allowlist's
+    authority. The content there is read-only — slides, recordings, and
+    generation runs stay with the owner; only its settings are editable
+    (ADMIN-5). Admin project and lecture detail pages surface the seed material
+    (SEED-1/SEED-2) — documents, seed text, and image captions — so an operator
+    can see what fed generation. Privacy-infringing views are confirmed and
+    audited — opening a private lecture or a private project requires explicit
+    confirmation and writes an audit-log entry (ADMIN-7); routine viewing of
+    already-public content is not logged.
   section: §20 Administration, Operations & Moderation
   family: ADMIN
   phase: 2
@@ -465,11 +467,16 @@
   note: administration & moderation
 - id: ADMIN-5
   title: Editing any entity's settings
-  full: An admin can modify the settings of any user, project, or lecture — e.g. a
-    lecture's/project's visibility or generation settings, or a user's
-    profile/account fields — even when not the owner. Every such edit requires
-    explicit confirmation and is audited (ADMIN-7), recording what changed.
-    (Billing state — plan tier — remains governed by §5.)
+  full: "An admin can modify the settings of any user, project, or lecture — e.g.
+    a lecture's/project's visibility or generation settings, or a user's
+    profile/account fields — even when not the owner. Settings are edited in the
+    product itself, in the same settings UI the entity's owner uses (ADMIN-2
+    links there from each detail page): an account's from the Settings button on
+    the user's profile page, a project's or a lecture's from its settings modal.
+    The console carries no separate settings form for any of them, and its
+    detail lists are read-only. Every such edit requires explicit confirmation
+    and is audited (ADMIN-7), recording what changed. Editing an entity that is
+    not the admin's own is…"
   section: §20 Administration, Operations & Moderation
   family: ADMIN
   phase: 2
@@ -506,6 +513,24 @@
   phase: 2
   status: Done
   review: false
+  note: administration & moderation
+- id: ADMIN-8
+  title: Settings change log
+  full: "A second, separate append-only log, beside the admin audit log (ADMIN-7):
+    where that one records what admins did, this one records every settings
+    change on the platform, whoever made it — a user changing their own account
+    settings, a collaborator with edit access changing a project's or lecture's,
+    or an admin editing on someone's behalf (ADMIN-5). An admin's settings edit
+    appears in both. Each entry records the acting user (id + email snapshot),
+    the role they acted in (owner, editor, admin), the entity whose settings
+    changed (kind, id, and its name snapshotted at the time), the owner those
+    settings belong to, the changed fields as {field: {from, to}}, and a
+    timestamp. An edit that changes…"
+  section: §20 Administration, Operations & Moderation
+  family: ADMIN
+  phase: 2
+  status: Backlog
+  review: true
   note: administration & moderation
 - id: AUTH-3
   title: Email verification
@@ -751,8 +776,8 @@
     gesture (a configurable grace window — WHITEBOARD_SUPPRESS_DEBOUNCE_MS,
     TECH-4; 0 disables the grace), or immediately on Resume. Whiteboard slide —
     on a blank whiteboard-layout slide (TMPL-7), generation pauses manually (no
-    auto-resume): it stays paused until the user clicks Resume or creates a new
-    regular slide (the + button or the "new…'
+    auto-resume): it stays paused until the user clicks Resume, speaks the
+    "resume" voice command (CAP-4), or creates a…'
   section: §9 Slide Generation & Enrichment
   family: GEN
   phase: 2
@@ -1077,13 +1102,16 @@
   note: GitHub remainder of AUTH-1
 - id: BILL-1
   title: Subscription tiers
-  full: "The product offers three subscription tiers, each priced accordingly
+  full: "The product offers four subscription tiers, each priced accordingly
     (exact prices set in configuration — BILL-6): Free — basic level for
-    personal/occasional use; the default tier on registration. Pro — mid level
-    for professional / regular instructional use; higher caps and access to
-    paid-tier features. Max — highest tier; the largest usage caps and full
-    feature access. Each tier defines what features are available and the usage
-    caps that apply to costly services (BILL-3)."
+    personal/occasional use; the default tier on registration. Sized to a couple
+    of weeks of one course. Fresh — entry paid tier, the step off Free; sized to
+    one course. Pro — mid level for professional / regular instructional use;
+    sized to three courses, with higher caps and access to paid-tier features.
+    Max — highest tier; the largest usage caps and full feature access. Every
+    cap is finite — there is no unlimited tier, because unbounded usage is
+    unbounded cost. Users who outgrow Max are invited to contact us rather than
+    shown an upgrade path that does not…"
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
@@ -1109,13 +1137,15 @@
 - id: BILL-3
   title: Usage caps & metering
   full: "Each tier carries usage caps on AI and other costly services, metered per
-    billing period and enforced server-side, including at minimum: AI generation
-    (e.g., Gemini tokens or number of slide generations). Speech-to-Text minutes
-    (Google Cloud). Image-enrichment API calls (Wikimedia/Flickr/Openverse). AI
-    image generation (IMG-4), typically a Pro/Max-tier capability.
-    Document/Drive import volume, storage, and export operations. Usage is
-    recorded against the user's current period; the user can view remaining
-    quota for each metered resource."
+    billing period and enforced server-side. Metrics are provider-neutral
+    (aiTokens, not geminiTokens) so swapping an adapter (TECH-8) never renames a
+    persisted metric. null means unlimited; 0 means the capability is
+    unavailable on that tier, which is how paid-only features are gated without
+    a second mechanism. The metered resources: aiTokens — input + output across
+    every LLM call: slide generation, refine, narrate, reformat, quiz, image
+    re-rank, seed extraction, embeddings. sttMinutes — minutes streamed to cloud
+    speech-to-text, summed across stream restarts, including post-lecture
+    re-transcription (which is…"
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
@@ -1124,10 +1154,15 @@
 - id: BILL-4
   title: Enforcement & upgrade prompts
   full: "When a metered cap is reached, the system fails gracefully: the costly
-    operation is blocked (or degraded to a free alternative where one exists)
-    rather than silently incurring cost, and the user is shown a clear message
-    with an upgrade path. Caps reset at the start of each billing period. Higher
-    tiers raise or remove the relevant caps."
+    operation is blocked rather than silently incurring cost, and the user is
+    shown a clear message with an upgrade path. Caps reset at the start of each
+    billing period. Higher tiers raise the relevant caps. Hard stop, never
+    overage. Exceeding a cap returns HTTP 402 and the operation does not run;
+    usage is never billed beyond the plan. Anything already generated and cached
+    keeps working, so hitting a cap degrades what can be _created_, never what
+    already exists. Warn before blocking. Crossing ~80% of a cap raises an
+    in-app warning; exhaustion sends an email to the account owner as well,
+    since the person who can act on it is…"
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
@@ -1138,7 +1173,13 @@
   full: Users can upgrade, downgrade, or cancel at any time via Stripe Checkout /
     the billing portal, with proration handled by Stripe. Feature access and
     caps update to match the active tier; downgrades take effect per the
-    configured policy (immediately or at period end).
+    configured policy (immediately or at period end). A downgrade can delete
+    data. Tiers differ in audioRetentionDays (BILL-3), so moving down shortens
+    how long lecture audio is kept and may put existing recordings past the new
+    limit. The user is warned about what will be removed before confirming
+    (P-10). There is no tier above Max. A Max user who needs more is directed to
+    contact us for a custom arrangement rather than shown an upgrade that does
+    not exist.
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
@@ -1146,10 +1187,33 @@
   review: false
 - id: BILL-6
   title: Configurable pricing & caps
-  full: Tier definitions — price and per-tier usage caps — live in server-side
+  full: "Tier definitions — price and per-tier usage caps — live in server-side
     configuration (BILL config + Stripe price IDs in TECH-4) and are adjustable
     without code changes. Exact prices and cap values are TBD and will be tuned
-    against real service costs (§19).
+    against real service costs (§19). Per-unit vendor prices are configuration
+    too — the rate per million tokens, per STT minute, per million TTS
+    characters, and so on — so cost accounting (BILL-7) re-prices when a vendor
+    changes its rates without touching code. Recorded cost is nevertheless
+    frozen at the moment it is written: a later price change must never
+    retroactively re-price history. Adding a cap must not be able to take the
+    server down: a metric absent from the config…"
+  section: §5 Plans, Billing & Usage Limits
+  family: BILL
+  phase: 3
+  status: Backlog
+  review: false
+- id: BILL-7
+  title: Cost attribution & admin cost reporting
+  full: Operators can see what the deployment actually costs, and who it is spent
+    on. Every metered event (BILL-3) is recorded to an append-only cost ledger
+    carrying the paying user, the acting user, the project and lecture it
+    belongs to, the service, the quantity, and the money — priced from the
+    configured service prices (BILL-6) and frozen at write time. Attribution.
+    Cost rolls up per user, per lecture, and per project — a project's total
+    being its lectures plus any project-scoped spend such as seed-material
+    extraction. A lecture's owner is not always its project's owner, so both
+    references are recorded when the event occurs rather than inferred later.
+    Instructor versus student. Each view…
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3

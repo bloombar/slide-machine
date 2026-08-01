@@ -306,10 +306,17 @@ the new value.
 ## Plans and usage caps
 
 Tiers and their caps live in [config/plans.json](../config/plans.json), not
-the database (`PLANS_CONFIG_PATH` overrides the path). Each tier sets a
-Stripe `priceId` and caps for `geminiTokens`, `sttMinutes`, `imageCalls`,
-and `exports` (`null` = unlimited). Edit and redeploy to change what a plan
-includes; the `priceId`s must match real Stripe prices for billing to work
+the database (`PLANS_CONFIG_PATH` overrides the path). Each of the four tiers
+— Free, Fresh, Pro, Max — sets a Stripe `priceId`, an `audioRetentionDays`
+policy, and one cap per metered resource: `aiTokens`, `sttMinutes`,
+`diarizationMinutes`, `ttsCharacters`, `ttsPremiumCharacters`, `aiImages`,
+`imageLookups`, `importMb`, `exports`, `translationCharacters`,
+`audioStorageMb`, and the viewer-driven `audienceTtsCharacters` and
+`audienceLocales` (`null` = unlimited, `0` = unavailable on that tier, absent
+= unlimited). The per-unit vendor prices these were derived from live in
+[config/service-prices.json](../config/service-prices.json); the arithmetic is
+in [BILLING_COST_MODEL.md](BILLING_COST_MODEL.md). Edit and redeploy to change
+what a plan includes; the `priceId`s must match real Stripe prices for billing to work
 (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`). A user's `planTier` shows
 read-only in the console: the settings editor excludes it by design —
 billing state is governed by [SPEC §5](SPEC.md#5-plans-billing--usage-limits),

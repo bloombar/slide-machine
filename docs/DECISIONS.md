@@ -2,6 +2,16 @@
 
 Short records of non-obvious choices, for when we revisit them.
 
+## Diarization is billed like live capture, not like cheap batch (2026-07-31)
+
+**Problem.** Sizing the tier caps ([BILL-1](SPEC.md#bill-1-subscription-tiers)) needed a price per diarized minute. The obvious assumption — batch work is cheap — put it at $0.003/min, which made diarization look like a rounding error at 3% of service cost.
+
+**What is actually true.** Speech-to-Text V2 has one `Recognition` SKU at **$0.016/min covering streaming *and* standard batch**; the $0.003 rate belongs to a separate **Dynamic Batch** mode with up to 24 hours' turnaround. Our [diarization adapter](../server/src/providers/google-cloud-diarization.ts) calls `BatchRecognize` without dynamic batching, so **a diarized minute costs exactly what a captured minute costs** — 5.3× the assumption, and 11% of total service cost rather than 3%. Two smaller corrections came with it: V2 has **no free tier** (the 60 free minutes are a V1-only SKU), and requests round up to **1 second**, not 15, so stream restarts add nothing meaningful.
+
+**Choice.** Price diarization at the recognition rate and **cap it well below full coverage** — 350 min on Pro (~5 lectures), 1,100 on Max — rather than adopt Dynamic Batch. Diarizing all 26 of a Pro lecture-month would cost $31 on its own, as much as the capture. Dynamic Batch would recover the 5.3×, but the per-slide "identify speakers" control in the Refine dialog cannot wait a day for an answer, so it is not a drop-in swap; it becomes attractive only if diarization moves to an overnight job.
+
+**Why this matters beyond the caps.** [`diarizeDeckRecordings`](../server/src/actions/reconcile.ts) re-submits the whole recording on every call, with no cache. At the corrected price, running per-slide speaker identification across a 45-slide lecture costs **~$54** where one cached pass costs $0.36. Fixing that is a prerequisite for metering — otherwise the meter faithfully bills a redundancy, and a single Refine session would blow through a Pro user's entire diarization budget 10× over. The fix has a precedent in the same file: `narrateHash` already prevents re-billing unchanged narration.
+
 ## Billing abstraction: one adapter seam, no vendor SDK (2026-07-31)
 
 **Problem.** Billing ([BILL-2](SPEC.md#bill-2-billing-provider-stripe-integration)) is the one subsystem where vendor concepts leak the furthest — price ids, customer objects, webhook envelopes — and the pilot must be able to change provider later ([TECH-9](SPEC.md#tech-9-billing-provider-abstraction-layer)) without reworking application logic.

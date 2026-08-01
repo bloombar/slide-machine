@@ -22,15 +22,26 @@ import { loadPlans } from '../config/plans'
 import { BillingUnavailableError, WebhookVerificationError } from './errors'
 
 const caps = {
-  geminiTokens: null,
+  aiTokens: null,
   sttMinutes: null,
-  imageCalls: null,
+  diarizationMinutes: null,
+  ttsCharacters: null,
+  ttsPremiumCharacters: null,
+  aiImages: null,
+  imageLookups: null,
+  importMb: null,
   exports: null,
+  translationCharacters: null,
+  audioStorageMb: null,
+  audienceTtsCharacters: null,
+  audienceLocales: null,
 }
+const plan = { caps, audioRetentionDays: null }
 const plans: PlansConfig = {
-  free: { priceId: null, caps },
-  pro: { priceId: 'price_pro', caps },
-  max: { priceId: 'price_max', caps },
+  free: { ...plan, priceId: null },
+  fresh: { ...plan, priceId: 'price_fresh' },
+  pro: { ...plan, priceId: 'price_pro' },
+  max: { ...plan, priceId: 'price_max' },
 }
 
 /** A Stripe subscription object with the fields the adapter reads. */
