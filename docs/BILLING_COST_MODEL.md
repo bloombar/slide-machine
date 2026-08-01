@@ -5,9 +5,11 @@ How the per-tier caps in [config/plans.json](../config/plans.json) were derived
 Every figure below comes from a stated parameter times a vendor price, so when
 an assumption changes the caps can be recomputed rather than re-guessed.
 
-Unit prices live in [config/service-prices.json](../config/service-prices.json)
-so cost accounting ([BILL-7](SPEC.md#bill-7-cost-attribution--admin-cost-reporting))
-re-prices without a code change.
+Unit prices live in [config/service-prices.json](../config/service-prices.json),
+keyed by **model and voice family**, so switching `GEMINI_MODEL` or a narration
+voice does not strand the cost model. Cost accounting
+([BILL-7](SPEC.md#bill-7-cost-attribution--admin-cost-reporting)) prices usage
+from that file and freezes the result at write time.
 
 ## 1. Parameters
 
@@ -17,7 +19,6 @@ re-run everything from a different value.
 | Parameter | Value | Confidence |
 | --- | --- | --- |
 | **Average lecture duration** | **75 min** (standard Tue/Thu block) | product decision |
-| Billable mic-open time | 80 min (75 + setup/teardown, plus ~15 s per-request rounding across stream restarts) | derived |
 | Slides per lecture | 45 | estimate |
 | Slide text | 400 chars/slide → 18,000 per deck | **weak** — unmeasured |
 | Narration text | 600 chars/slide → 27,000 per deck | **weak** — unmeasured |
@@ -43,31 +44,91 @@ in the model.
 
 ## 2. Vendor prices
 
-Verified 2026-07-31. Re-check before pricing goes live — two lines are not
-first-party.
+Verified 2026-07-31 against the vendors' own pricing pages.
+
+### Speech-to-Text ([source](https://cloud.google.com/speech-to-text/pricing))
+
+We use the **V2 API**, where one rate covers both streaming and standard batch:
+
+| Item | Price |
+| --- | --- |
+| Recognition (streaming **and** standard batch), 0–500k min/month | **$0.016 / min** |
+| …500k–1M / 1M–2M / 2M+ min per month | $0.010 / $0.008 / $0.004 per min |
+| **Dynamic Batch** Recognition (opt-in, up to 24 h turnaround) | **$0.003 / min** |
+| Free tier | **none on V2** |
+
+Three corrections to earlier assumptions, all of which matter:
+
+- **Diarization is not cheap batch.** Our adapter calls `BatchRecognize`
+  without dynamic batching, so it bills at the **same $0.016/min as streaming**,
+  not the $0.003 dynamic-batch rate — 5.3× what was first assumed. Opting into
+  Dynamic Batch would recover that 5.3×, at the cost of up to 24 hours'
+  turnaround, which the per-slide "identify speakers" flow cannot absorb.
+- **There is no free STT tier on V2.** The 60 free minutes/month belong to the
+  V1 SKUs; V1 also prices *without* data logging at $0.024/min.
+- **Requests round up to 1 second**, not 15, so stream restarts add a
+  negligible fraction of a minute rather than the ~7% first assumed.
+
+Chirp models (including the `chirp_3` our diarization uses) are Standard-priced
+— no premium.
+
+### Text-to-Speech ([source](https://cloud.google.com/text-to-speech/pricing))
+
+Billed per **character of input**, with a monthly free allowance per family:
+
+| Voice family | Price | Free per month |
+| --- | --- | --- |
+| Standard / WaveNet | $4 / 1M chars | 4,000,000 chars |
+| **Neural2** (our standard voices) | **$16 / 1M chars** | 1,000,000 chars |
+| **Chirp 3: HD** (our premium voices) | **$30 / 1M chars** | 1,000,000 chars |
+| Studio | $160 / 1M chars | 1,000,000 chars |
+| Instant custom voice | $60 / 1M chars | — |
+
+**What counts as a character.** Google's own wording: "the total number of
+characters in the input string are counted for billing purposes, including
+spaces and newline characters. All SSML tags (except the `<mark>` tag) are also
+included." Two consequences for us, neither large enough to move the caps but
+both worth knowing:
+
+- Our [SSML builder](../server/src/tts/ssml.ts) wraps each request in
+  `<speak>…</speak>` and adds a space per phrase, so **billed characters run
+  ~3% above the plain narration text**. The `<mark>` timepoints that make
+  whiteboard playback work are excluded, which is the expensive part avoided.
+- The adapter tries SSML first and **re-sends plain text when a voice rejects
+  it** — which Chirp3-HD does. If Google bills the rejected attempt, premium
+  synthesis costs roughly twice its character count. Worth confirming against a
+  real bill before premium voices ship.
+
+**A different unit lives on the same page.** The **Gemini-TTS** family
+(`Gemini 2.5 Flash TTS` and successors) is priced per **token**, not per
+character: $0.50/1M text-input tokens plus $10/1M audio-output tokens, where
+audio tokens run at 25 per second of speech. We use Neural2 and Chirp3-HD, so
+the per-character rates above apply — but switching narration to a Gemini-TTS
+model would change the **metric's unit**, not just its price, and
+`ttsCharacters` would have to become a token count.
+
+The free allowances are **per Google Cloud account per month**, not per user —
+about 37 decks' worth of Neural2 narration across the whole deployment. Real
+headroom at pilot scale, gone at any scale worth having. **Caps are sized
+against the paid rate**, never the free allowance.
+
+### Everything else
 
 | Service | Price | Source |
 | --- | --- | --- |
-| Gemini 3.1 Flash-Lite | $0.25 / 1M input, $1.50 / 1M output | Google pricing page ✅ |
-| `gemini-embedding-001` | $0.15 / 1M input | Google pricing page ✅ |
-| Gemini 3.1 Flash-Lite Image | ~$0.034 / image | Google pricing page ✅ |
-| Cloud STT streaming | ~$0.016 / min | **aggregator only (±20%)** ⚠️ |
-| Cloud STT batch (diarization) | ~$0.004 / min | **aggregator only (±20%)** ⚠️ |
-| Cloud TTS standard (Neural2) | $16 / 1M chars | **aggregator only (±20%)** ⚠️ |
-| Cloud TTS premium (Chirp3-HD) | $30 / 1M chars | **aggregator only (±20%)** ⚠️ |
-| Cloud Translation | $20 / 1M chars, first 500,000 chars/month free | Google pricing page ✅ |
-| DO Spaces | $5/mo (250 GiB + 1 TiB transfer), then $0.02/GiB-month, $0.01/GiB egress | DO pricing page ✅ |
-| MongoDB Atlas M10 | $56.94/mo + ~$10 backups (snapshot storage, grows with data) | Atlas pricing page ✅ |
-| DO App Platform | `basic-xxs` $5/mo; 1 vCPU / 2 GiB $25/mo | DO pricing page ✅ |
-| Stripe | 2.9% + $0.30 per charge, plus 0.7% Billing | Stripe pricing page ✅ |
+| Gemini 3.1 Flash-Lite (`GEMINI_MODEL` default) | $0.25 / 1M input, $1.50 / 1M output | Google ✅ |
+| Other Gemini models (2.5/3/3.5/3.6 Flash and Flash-Lite) | see `service-prices.json` — $0.10–$1.50 in, $0.40–$9.00 out | Google ✅ |
+| Embeddings | $0.15 / 1M tokens | Google ✅ |
+| Gemini image generation | ~$0.034–$0.067 / image | Google ✅ |
+| Cloud Translation | $20 / 1M chars, first 500,000 free per account | Google ✅ |
+| DO Spaces | $5/mo (250 GiB + 1 TiB transfer), then $0.02/GiB-month, $0.01/GiB egress | DO ✅ |
+| MongoDB Atlas M10 | $56.94/mo + ~$10 backups (snapshot storage, grows with data) | Atlas ✅ |
+| DO App Platform | `basic-xxs` $5/mo; 1 vCPU / 2 GiB $25/mo | DO ✅ |
+| Stripe | 2.9% + $0.30 per charge, plus 0.7% Billing | Stripe ✅ |
 
-Google's STT and TTS pricing pages truncated on fetch, so those four rates come
-from vendor aggregators. TTS drives the largest single line in the audience
-model, so it is the first number to confirm by hand.
-
-The translation free allowance is **per Google Cloud account**, not per user —
-roughly 27 deck-locales a month across the whole deployment. Treat it as
-headroom, never as budget: caps are sized against the $20/1M marginal price.
+Switching `GEMINI_MODEL` changes cost sharply — 2.5 Flash-Lite is 2.5× cheaper
+than the current default, 3.5 Flash is 6× dearer on input and 6× on output — so
+the model map is keyed by the exact model id the adapter uses.
 
 ## 3. Per-minute rates
 
@@ -79,11 +140,11 @@ headroom, never as budget: caps are sized against the $20/1M marginal price.
 | Narration characters | 360 / min | 600 chars/slide × 0.6 slides/min |
 | Image enrichments | 0.6 / min | one attempt per slide produced |
 | Retained audio | 2.88 MB / min | 24 kHz × 16-bit mono (`STT_CAPTURE_SAMPLE_RATE`) |
-| Cloud STT | 1.07 min / min | restart rounding; **zero** unless `TRANSCRIPTION_PROVIDER=google-cloud` |
+| Cloud STT | 1.0 min / min | 1-second request rounding is negligible; **zero** unless `TRANSCRIPTION_PROVIDER=google-cloud` |
 
 The tokens-per-minute figure carries **±30%** — an independent estimate put
-input at 2,200 tokens/call rather than 3,000, which moves a lecture's
-generation cost between $0.62 and $0.84.
+input at 2,200 tokens/call rather than 3,000, moving a lecture's generation
+cost between $0.62 and $0.84.
 
 ## 4. Cost per 100 lectures
 
@@ -92,27 +153,28 @@ on each side.
 
 | Service | Instructor usage | Student usage | Cost / 100 lectures | Share |
 | --- | --- | --- | --- | --- |
-| **Cloud STT** | 8,300 min | — | **$133.00** | 42% |
-| **Gemini (all LLM)** | 234M tokens | — | **$89.00** | 28% |
-| **TTS** | 3.0M chars | 1.35M chars | **$69.50** | 22% |
-| **Translation** | — | 900K chars | **$18.00** | 6% |
-| **Diarization** | 2,300 min | — | **$9.00** | 3% |
+| **Cloud STT** | 7,800 min (75 live + 3 re-transcribe per lecture) | — | **$124.80** | 37% |
+| **Gemini (all LLM)** | 234M tokens | — | **$89.75** | 27% |
+| **TTS** | 3.0M chars | 1.35M chars | **$69.60** | 21% |
+| **Diarization** | 2,250 min (30% of lectures) | — | **$36.00** | 11% |
+| **Translation** | — | 900K chars | **$18.00** | 5% |
 | **Image search APIs** | 5,000 lookups | — | **$0.00** | free |
-| **Object storage** | 21.6 GB held | — | **$0.30** | 0.1% |
-| **Egress** | — | 30 GB (2,000 playbacks) | **$0.30** | 0.1% |
-| **Total** | | | **$319** | |
+| **Object storage + egress** | 21.6 GB held | 30 GB (2,000 playbacks) | **$0.60** | 0.2% |
+| **Total** | | | **$339** | |
 
-Browser capture drops the total to **$186**. **Instructor-driven cost is $279
-(88%); student-driven is $40 (12%).**
+Browser-capture tiers cost **$178** — they lose both the STT line and the
+diarization line, since retention only happens on the cloud engine.
+**Instructor-driven cost is $299 (88%); student-driven is $40 (12%).**
 
 Five conclusions:
 
-- **Cloud STT and Gemini are 70% of all cost.** Everything else is rounding
+- **Cloud STT and Gemini are 64% of all cost.** Everything else is a rounding
   error beside them.
-- **Browser capture removes 42% with one config value** — which is why Free and
-  Fresh are browser-only.
-- **TTS is 22% in aggregate**, two-thirds of it the first narration of each
-  deck. "Don't narrate decks nobody plays" is the next-largest saving.
+- **Browser capture removes 47%** — STT plus the diarization it enables — which
+  is why Free and Fresh are browser-only.
+- **Diarization is now the fourth-largest line at 11%**, having been assumed to
+  be 3%. It costs the same per minute as live capture, so diarizing every
+  lecture roughly doubles its transcription bill.
 - **Students are an eighth of cost** even at 2,000 playbacks, because cache
   hits are free and only new languages spend.
 - **Storage and egress are 0.2%** — they dominate the operational constraints
@@ -126,8 +188,8 @@ Five conclusions:
 | --- | --- |
 | Slide generation (2.03M in / 0.22M out) | $0.84 |
 | Image re-rank + quiz + embeddings | $0.04 |
-| Cloud STT, 80 billable min | $1.28 (zero on browser capture) |
-| **Live subtotal** | **$2.16 cloud / $0.88 browser** |
+| Cloud STT, 75 min | $1.20 (zero on browser capture) |
+| **Live subtotal** | **$2.08 cloud / $0.88 browser** |
 
 **Post-lecture**, light revision profile:
 
@@ -137,16 +199,20 @@ Five conclusions:
 | TTS narration of the deck | 27,000 chars | $0.43 |
 | Re-synthesis after edits | ~5 slides | $0.05 |
 | Image enrichment redos | ~5 slides | $0.01 |
-| Re-transcribing an edited clip | 3 min (streaming-priced) | $0.05 |
-| Diarization | 30% of lectures | $0.09 |
-| **Post-lecture subtotal** | | **~$0.65** |
+| Re-transcribing an edited clip | 3 min | $0.05 |
+| Diarization | 30% of lectures × 75 min | $0.36 |
+| **Post-lecture subtotal** | | **~$0.92** |
 
-**Per lecture, all in: ~$1.53 browser capture, ~$2.81 with cloud STT.**
+**Audience** — 0.5 locales and 20 playbacks per deck: **~$0.40**.
 
-Two things worth knowing. Re-transcribing a saved clip runs through the
-*streaming* recognizer, so it is billed at $0.016/min, not the batch rate. And
-every narration edit re-synthesizes that slide, so revision volume matters more
-than it looks.
+**Per lecture, all in: ~$3.40 with cloud capture, ~$1.79 on browser capture.**
+
+Three things worth knowing. Re-transcribing a saved clip runs through the
+*streaming* recognizer, so it bills at the full $0.016/min. Every narration edit
+re-synthesizes that slide. And browser-capture tiers cannot diarize or
+re-transcribe at all, because retention only happens on the cloud engine —
+their `audioStorageMb` and `audioRetentionDays` are therefore reserved for a
+future where browser audio is retained, not live constraints today.
 
 ## 6. Audience costs
 
@@ -167,7 +233,8 @@ Four rules follow, and they are what keep audience cost bounded:
 
 1. **The deck owner's plan pays**, registered viewer or anonymous.
 2. **Cache hits are never metered** — only a first synthesis or a new locale
-   spends.
+   spends — though they are still *recorded* at zero cost, so student counts
+   and averages stay honest ([BILL-7](SPEC.md#bill-7-cost-attribution--admin-cost-reporting)).
 3. **Audience work draws on its own allowance** (`audienceTtsCharacters`,
    `audienceLocales`), so a popular deck cannot exhaust its author's budget.
 4. **Exhaustion hard-blocks with a 402** and a viewer-safe message that never
@@ -175,13 +242,13 @@ Four rules follow, and they are what keep audience cost bounded:
 
 ## 7. Cap formulas
 
-```
+```text
 cap = lectures_per_month × lecture_minutes × per_minute_rate × revision_factor
 ```
 
 plus, for the audience metrics:
 
-```
+```text
 audienceLocales       = lectures_per_month × locales_per_deck
 audienceTtsCharacters = audienceLocales × narration_chars_per_deck + headroom
 ```
@@ -197,24 +264,28 @@ Worked for Pro (26 lectures, 1,950 lecture-min):
 | `audienceTtsCharacters` | 15 × 27,000 = 405,000 | 450,000 |
 | `audioStorageMb` | 21 days ≈ 18 lectures × 216 MB = 3.9 GB | 8,000 |
 
-`sttMinutes` is deliberately **not** full coverage: 600 minutes covers ~8 of
-Pro's 26 lectures, because browser capture handles the rest for free and full
-cloud coverage would cost $33/month by itself.
+Two caps are deliberately **below** full coverage, because at $0.016/min each
+would otherwise dominate the tier:
+
+- **`sttMinutes: 600`** covers ~8 of Pro's 26 lectures. Browser capture handles
+  the rest for free; full cloud coverage would cost $31/month by itself.
+- **`diarizationMinutes: 350`** covers ~5 lectures. Diarizing all 26 would cost
+  another $31. Adopting Dynamic Batch (§2) would make full coverage affordable
+  at the price of 24-hour turnaround.
 
 ## 8. Tier economics and break-even
 
-| Plan | Lectures/mo | Students | Cost expected | Cost at caps | Price floor | Price |
-| --- | --- | --- | --- | --- | --- | --- |
-| Free | 4 | 30 | ~$3 | ~$6 | $6.50 | **$0** |
-| Fresh | 6 | 30 | ~$5.50 | ~$11 | $11.66 | **$19** |
-| Pro | 26 | 90 | ~$36 | ~$71 | $74 | **$99** |
-| Max | 40 | 120 | ~$88 | ~$175 | $182 | **$299** |
+| Plan | Lectures/mo | Students | Cost expected | Cost at caps | Price floor | Price | Maxed as % of price |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Free | 4 | 30 | ~$2.89 | ~$5.79 | $6.32 | **$0** | — |
+| Fresh | 6 | 30 | ~$5.16 | ~$10.31 | $11.01 | **$19** | 54% |
+| Pro | 26 | 90 | ~$35.80 | ~$71.59 | $74.58 | **$99** | 72% |
+| Max | 40 | 120 | ~$87.92 | ~$175.85 | $182.72 | **$299** | 59% |
 
 Price floor = `(cost_at_caps + $0.30) ÷ 0.964` — services plus Stripe's cut and
-nothing else. It recovers no fixed costs and leaves no margin. Caps are sized so
-worst case sits near 60% of price.
+nothing else. It recovers no fixed costs and leaves no margin.
 
-**Fixed costs**
+### Fixed costs
 
 | Line | Pilot | Production |
 | --- | --- | --- |
@@ -230,13 +301,13 @@ worst case sits near 60% of price.
 Excludes RA/PI salaries (grant-funded) and CI (free tier).
 
 **Break-even** against $278/month, at expected / heavy / capped use:
-Fresh **22 / 30 / 38**, Pro **5 / 8 / 12**, Max **2 / 2 / 3**.
+Fresh **22 / 29 / 37**, Pro **5 / 8 / 12**, Max **2 / 2 / 3**.
 
 A cheap tier carries fixed costs badly: Stripe's $0.30 + 3.6% is the same
 whatever the price, so Fresh needs three times Pro's subscriber count. It earns
 its place as the conversion step off Free, not as the plan the economics rest
-on. Free users are pure cost at ~$6/month each — thirteen fully-active free
-users cost about as much as the entire pilot infrastructure.
+on. Free users are pure cost at ~$5.79/month each at their caps — thirteen
+fully-active free users cost about as much as the entire pilot infrastructure.
 
 ## 9. Recalculating
 
@@ -245,15 +316,16 @@ To re-run for a different lecture duration:
 1. Change **lecture duration** in §1.
 2. Multiply each §3 per-minute rate by the new duration for per-lecture usage.
 3. Multiply by each tier's monthly lecture count for caps (§7).
-4. Re-price with §2 and re-check that worst case sits near 60% of price (§8).
+4. Re-price with §2 and re-check that worst case sits at a sane fraction of
+   price (§8).
 
 Sensitivity at the tier volumes above:
 
-| Duration | Cost/lecture (browser) | Cost/lecture (cloud STT) | Pro `aiTokens` cap |
+| Duration | Cost/lecture (browser) | Cost/lecture (cloud) | Pro `aiTokens` cap |
 | --- | --- | --- | --- |
-| 50 min | ~$1.02 | ~$1.87 | 43,000,000 |
-| **75 min** | **~$1.53** | **~$2.81** | **65,000,000** |
-| 110 min | ~$2.24 | ~$4.12 | 95,000,000 |
+| 50 min | ~$1.21 | ~$2.30 | 43,000,000 |
+| **75 min** | **~$1.79** | **~$3.40** | **65,000,000** |
+| 110 min | ~$2.59 | ~$4.93 | 95,000,000 |
 
 Every number in this document is a starting point. The audience parameters and
 the revision profile are guesses that a semester of pilot data will replace —

@@ -43,7 +43,7 @@
     "caps": {
       "aiTokens": 65000000,
       "sttMinutes": 600,
-      "diarizationMinutes": 1000,
+      "diarizationMinutes": 350,
       "ttsCharacters": 800000,
       "ttsPremiumCharacters": 100000,
       "aiImages": 100,
@@ -62,7 +62,7 @@
     "caps": {
       "aiTokens": 100000000,
       "sttMinutes": 3300,
-      "diarizationMinutes": 3300,
+      "diarizationMinutes": 1100,
       "ttsCharacters": 1350000,
       "ttsPremiumCharacters": 300000,
       "aiImages": 300,
