@@ -1,7 +1,11 @@
 /**
  * Unit tests for the primary-nav hamburger menu: it opens to Home/Profile/
  * Log out when signed in, offers Log in when signed out, closes on
- * Escape, and shows admins an "Admin" flyout submenu of admin sections.
+ * Escape, and shows admins an "Admin" flyout submenu of admin sections —
+ * that one entry staying English whatever the interface language is.
+ *
+ * The shared setup resets the language between tests, so the French case
+ * below does not leak into the others.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
@@ -9,6 +13,7 @@ import { MemoryRouter } from 'react-router'
 import { AuthProvider } from '../../auth/AuthContext'
 import { setAccessToken } from '../../auth/token'
 import { resetAdminStatus } from '../../hooks/useIsAdmin'
+import { i18n } from '../../i18n'
 import ShellMenu from './ShellMenu'
 import { mockFetchRoutes } from '../../test/fetch-mock'
 
@@ -126,6 +131,19 @@ describe('ShellMenu', () => {
     expect(
       screen.queryByRole('menuitem', { name: 'Users' }),
     ).not.toBeInTheDocument()
+  })
+
+  it('keeps the Admin entry English in a translated interface', async () => {
+    await i18n.changeLanguage('fr')
+    renderMenu(true, true)
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    // The rest of the menu follows the interface language…
+    expect(screen.getByRole('menuitem', { name: 'Accueil' })).toBeVisible()
+    // …but the way into the English-only console does not (docs/I18N.md)
+    const trigger = await screen.findByRole('menuitem', { name: 'Admin' })
+    fireEvent.click(trigger)
+    expect(screen.getByRole('menu', { name: 'Admin' })).toBeVisible()
+    expect(screen.getByRole('menuitem', { name: 'Admin Logs' })).toBeVisible()
   })
 
   it('toggles the Admin submenu on click for keyboard and touch', async () => {
