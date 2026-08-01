@@ -279,12 +279,19 @@ would otherwise dominate the tier:
 
 ## 8. Tier economics and break-even
 
-| Plan | Lectures/mo | Students | Cost expected | Cost at caps | Price floor | Price | Maxed as % of price |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Free | 4 | 30 | ~$2.89 | ~$5.79 | $6.32 | **$0** | — |
-| Fresh | 6 | 30 | ~$5.16 | ~$10.31 | $11.01 | **$19** | 54% |
-| Pro | 26 | 90 | ~$35.53 | ~$71.05 | $74.02 | **$99** | 72% |
-| Max | 40 | 120 | ~$86.86 | ~$173.73 | $180.53 | **$299** | 58% |
+| Plan | Lectures/mo | Light (25%) | Expected (50%) | Heavy (80%) | At caps | Price floor | Price | Maxed as % of price |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Free | 4 | ~$1.45 | ~$2.89 | ~$4.63 | ~$5.79 | $6.32 | **$0** | — |
+| Fresh | 6 | ~$2.58 | ~$5.16 | ~$8.25 | ~$10.31 | $11.01 | **$19** | 54% |
+| Pro | 26 | ~$17.76 | ~$35.53 | ~$56.84 | ~$71.05 | $74.02 | **$99** | 72% |
+| Max | 40 | ~$43.43 | ~$86.86 | ~$138.98 | ~$173.73 | $180.53 | **$299** | 58% |
+
+Four utilisation levels, because subscribers are not all the same shape.
+**Light** is someone who subscribed for the capability rather than the volume —
+a few lectures a month, little revision; common, and the most profitable.
+**Expected** is the planning case. **Heavy** is a power user near the limits.
+**At caps** is everything consumed: rare, but the number the price has to
+survive.
 
 Price floor = `(cost_at_caps + $0.30) ÷ 0.964` — services plus Stripe's cut and
 nothing else. It recovers no fixed costs and leaves no margin.
@@ -304,8 +311,17 @@ nothing else. It recovers no fixed costs and leaves no margin.
 
 Excludes RA/PI salaries (grant-funded) and CI (free tier).
 
-**Break-even** against $278/month, at expected / heavy / capped use:
-Fresh **22 / 29 / 37**, Pro **5 / 8 / 12**, Max **2 / 2 / 3**.
+**Break-even** against $278/month:
+
+| Tier | Light | Expected | Heavy | At caps |
+| --- | --- | --- | --- | --- |
+| Fresh | 19 | 22 | 29 | 37 |
+| Pro | 4 | 5 | 8 | 12 |
+| Max | 2 | 2 | 2 | 3 |
+
+The spread matters most at the cheap end: Fresh needs 19 subscribers even when
+they barely use it, against Pro's 4, because the $0.30 per charge and the 3.6%
+cut do not shrink with the price.
 
 A cheap tier carries fixed costs badly: Stripe's $0.30 + 3.6% is the same
 whatever the price, so Fresh needs three times Pro's subscriber count. It earns

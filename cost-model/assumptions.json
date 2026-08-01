@@ -87,8 +87,10 @@
 
   "targets": {
     "worstCaseShareOfPrice": 0.6,
+    "lightUtilisation": 0.25,
     "expectedUtilisation": 0.5,
-    "heavyUtilisation": 0.8
+    "heavyUtilisation": 0.8,
+    "_note": "Share of a tier's caps a subscriber actually consumes. Light = an occasional user who subscribed for the features rather than the volume; expected = the planning case; heavy = a power user just short of the caps."
   },
 
   "fixedCostsUsdPerMonth": {
