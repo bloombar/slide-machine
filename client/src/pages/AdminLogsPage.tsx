@@ -36,6 +36,13 @@ const TARGET_ROUTES: Record<string, string> = {
   deck: 'decks',
 }
 
+/** Placeholder for a titleless project. A deployment that sets
+ * VITE_DEFAULT_PROJECT_TITLE names its default project itself and that
+ * name wins; otherwise the console shows this. Hardcoded English rather
+ * than the bundle's `project.untitled`: the admin console is English-only
+ * (docs/I18N.md). */
+const UNTITLED = 'Default project'
+
 /** Reads a string field out of an entry's details, ignoring blanks. */
 const detail = (entry: AdminLogEntry, key: string): string | undefined => {
   const value = entry.details?.[key]
@@ -51,7 +58,7 @@ const targetName = (entry: AdminLogEntry): string | undefined => {
     case 'user':
       return detail(entry, 'email')
     case 'project':
-      return detail(entry, 'title') ?? config.defaultProjectTitle
+      return detail(entry, 'title') ?? config.defaultProjectTitle ?? UNTITLED
     case 'deck':
       return detail(entry, 'title') ?? 'Untitled lecture'
     default:
