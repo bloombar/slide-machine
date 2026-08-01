@@ -1,6 +1,53 @@
 {
   "asOf": "2026-07-31",
   "currency": "USD",
+  "_sources": {
+    "gemini": {
+      "service": "Gemini API (text, embeddings, image generation)",
+      "url": "https://ai.google.dev/gemini-api/docs/pricing",
+      "verified": "2026-07-31"
+    },
+    "stt": {
+      "service": "Google Cloud Speech-to-Text",
+      "url": "https://cloud.google.com/speech-to-text/pricing",
+      "verified": "2026-07-31",
+      "note": "V2 table. One Recognition SKU covers streaming AND standard batch; Dynamic Batch is a separate opt-in SKU. No free tier on V2 - the 60 free minutes are V1 only. Requests round up to 1 second."
+    },
+    "tts": {
+      "service": "Google Cloud Text-to-Speech",
+      "url": "https://cloud.google.com/text-to-speech/pricing",
+      "verified": "2026-07-31",
+      "note": "Per character of input, including SSML tags except <mark>. Each voice family has its own monthly free allowance. Gemini-TTS models are priced per token instead."
+    },
+    "translation": {
+      "service": "Google Cloud Translation",
+      "url": "https://cloud.google.com/translate/pricing",
+      "verified": "2026-07-31",
+      "note": "First 500,000 chars/month free per account, not per user."
+    },
+    "spaces": {
+      "service": "DigitalOcean Spaces (object storage + egress)",
+      "url": "https://www.digitalocean.com/pricing/spaces-object-storage",
+      "verified": "2026-07-31"
+    },
+    "appPlatform": {
+      "service": "DigitalOcean App Platform (fixed cost)",
+      "url": "https://www.digitalocean.com/pricing/app-platform",
+      "verified": "2026-07-31"
+    },
+    "atlas": {
+      "service": "MongoDB Atlas (fixed cost)",
+      "url": "https://www.mongodb.com/pricing",
+      "verified": "2026-07-31",
+      "note": "M10 dedicated; backups are billed by snapshot storage and grow with the data."
+    },
+    "stripe": {
+      "service": "Stripe payments + Billing",
+      "url": "https://stripe.com/pricing",
+      "verified": "2026-07-31",
+      "note": "2.9% + $0.30 per successful charge, plus 0.7% of volume for Billing on pay-as-you-go."
+    }
+  },
   "ai": {
     "defaultModel": "gemini-3.1-flash-lite-preview",
     "models": {
@@ -43,14 +90,26 @@
       }
     },
     "embeddingModels": {
-      "text-embedding-004": { "inputPerMillionTokens": 0.15 },
-      "gemini-embedding-001": { "inputPerMillionTokens": 0.15 },
-      "gemini-embedding-2": { "inputPerMillionTokens": 0.2 }
+      "text-embedding-004": {
+        "inputPerMillionTokens": 0.15
+      },
+      "gemini-embedding-001": {
+        "inputPerMillionTokens": 0.15
+      },
+      "gemini-embedding-2": {
+        "inputPerMillionTokens": 0.2
+      }
     },
     "imageModels": {
-      "gemini-3.1-flash-lite-image": { "perImage": 0.0336 },
-      "gemini-2.5-flash-image": { "perImage": 0.039 },
-      "gemini-3.1-flash-image": { "perImage": 0.067 }
+      "gemini-3.1-flash-lite-image": {
+        "perImage": 0.0336
+      },
+      "gemini-2.5-flash-image": {
+        "perImage": 0.039
+      },
+      "gemini-3.1-flash-image": {
+        "perImage": 0.067
+      }
     }
   },
   "stt": {
@@ -58,10 +117,22 @@
     "dynamicBatchPerMinute": 0.003,
     "freeMinutesPerMonth": 0,
     "volumeTiers": [
-      { "fromMinutesPerMonth": 0, "perMinute": 0.016 },
-      { "fromMinutesPerMonth": 500000, "perMinute": 0.01 },
-      { "fromMinutesPerMonth": 1000000, "perMinute": 0.008 },
-      { "fromMinutesPerMonth": 2000000, "perMinute": 0.004 }
+      {
+        "fromMinutesPerMonth": 0,
+        "perMinute": 0.016
+      },
+      {
+        "fromMinutesPerMonth": 500000,
+        "perMinute": 0.01
+      },
+      {
+        "fromMinutesPerMonth": 1000000,
+        "perMinute": 0.008
+      },
+      {
+        "fromMinutesPerMonth": 2000000,
+        "perMinute": 0.004
+      }
     ]
   },
   "tts": {
@@ -86,13 +157,34 @@
       }
     },
     "voiceFamilies": {
-      "standard": { "perMillionChars": 4, "freeCharsPerMonth": 4000000 },
-      "wavenet": { "perMillionChars": 4, "freeCharsPerMonth": 4000000 },
-      "neural2": { "perMillionChars": 16, "freeCharsPerMonth": 1000000 },
-      "polyglot": { "perMillionChars": 16, "freeCharsPerMonth": 1000000 },
-      "chirp3-hd": { "perMillionChars": 30, "freeCharsPerMonth": 1000000 },
-      "studio": { "perMillionChars": 160, "freeCharsPerMonth": 1000000 },
-      "instant-custom": { "perMillionChars": 60, "freeCharsPerMonth": 0 }
+      "standard": {
+        "perMillionChars": 4,
+        "freeCharsPerMonth": 4000000
+      },
+      "wavenet": {
+        "perMillionChars": 4,
+        "freeCharsPerMonth": 4000000
+      },
+      "neural2": {
+        "perMillionChars": 16,
+        "freeCharsPerMonth": 1000000
+      },
+      "polyglot": {
+        "perMillionChars": 16,
+        "freeCharsPerMonth": 1000000
+      },
+      "chirp3-hd": {
+        "perMillionChars": 30,
+        "freeCharsPerMonth": 1000000
+      },
+      "studio": {
+        "perMillionChars": 160,
+        "freeCharsPerMonth": 1000000
+      },
+      "instant-custom": {
+        "perMillionChars": 60,
+        "freeCharsPerMonth": 0
+      }
     }
   },
   "translation": {
