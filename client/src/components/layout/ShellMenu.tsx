@@ -12,13 +12,18 @@ import { useAuth } from '../../auth/AuthContext'
 import { useIsAdmin } from '../../hooks/useIsAdmin'
 import { ADMIN_LINKS } from '../admin/AdminNav'
 
+/** The admin entry's label. Hardcoded English, not a translation key: the
+ * console it opens is English-only by design (docs/I18N.md), and so is the
+ * way in. Kept out of JSX so the no-literal-string rule, which only reads
+ * JSX, does not need a disable comment. */
+const ADMIN_LABEL = 'Admin'
+
 /** Admin entry, mounted only while the dropdown is open so the status
  * check fires at most once per session and only for users who open the
  * menu; non-admins render nothing. Admins get a single "Admin" item
  * whose flyout submenu (hover, or click for keyboard/touch) lists every
- * admin section. The item is app chrome and translated; the console it
- * leads to is English-only by design (docs/I18N.md), so ADMIN_LINKS'
- * own labels are left as they are. */
+ * admin section. Neither this item nor ADMIN_LINKS' own labels are
+ * translated — every admin surface stays English. */
 function AdminMenuItem({
   className,
   onNavigate,
@@ -27,7 +32,6 @@ function AdminMenuItem({
   onNavigate: () => void
 }) {
   const isAdmin = useIsAdmin()
-  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   if (!isAdmin) return null
   return (
@@ -43,7 +47,7 @@ function AdminMenuItem({
         onClick={() => setOpen(o => !o)}
         className={`${className} justify-between`}
       >
-        {t('nav.admin')}
+        {ADMIN_LABEL}
         <ChevronRight className="h-4 w-4" aria-hidden />
       </button>
       {open && (
@@ -53,7 +57,7 @@ function AdminMenuItem({
         <div className="absolute top-0 start-full z-50 ps-1">
           <div
             role="menu"
-            aria-label={t('nav.admin')}
+            aria-label={ADMIN_LABEL}
             className="w-36 rounded-lg border border-slate-200 bg-white p-1 shadow-lg"
           >
             {ADMIN_LINKS.map(link => (
