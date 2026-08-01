@@ -28,6 +28,7 @@ import type {
   DeckRefineStatusInput,
   DeckRefineStatusResult,
   DiarizationProvider,
+  DiarizedSpeakerSegment,
   GenerationProvider,
   LayoutDescriptor,
   LayoutType,
@@ -161,12 +162,41 @@ const studentSlideIds = async (
 }
 
 /**
+ * Stores one recording's speaker turns so later passes skip the paid call.
+ * Targets the single subdocument by sessionId rather than saving the whole
+ * deck, so a concurrent slide edit cannot be clobbered by a stale copy.
+ */
+const cacheDiarization = async (
+  deck: DeckDoc,
+  sessionId: string,
+  diarization: DiarizedSpeakerSegment[],
+  provider: string,
+): Promise<void> => {
+  await DeckModel.updateOne(
+    { _id: deck._id, 'recordings.sessionId': sessionId },
+    {
+      $set: {
+        'recordings.$.diarization': diarization,
+        'recordings.$.diarizedBy': provider,
+        'recordings.$.diarizedAt': new Date(),
+      },
+    },
+  )
+}
+
+/**
  * Diarizes retained recordings and tags their segments with speaker + role.
  * `onlySessions` narrows the work to the recordings a single slide's speech
  * came from (the per-slide dialog); roles are still decided from each WHOLE
  * recording's talk-time, which is what makes "the lecturer is whoever talks
  * most" hold — on one slide's audio alone a student could out-talk the
- * lecturer. Tagging is idempotent, so a later deck-wide run costs nothing extra.
+ * lecturer.
+ *
+ * The diarizer's output is cached on the recording, so a repeat pass re-tags
+ * from stored intervals and never re-bills the audio. That matters because
+ * diarization costs the same per minute as capturing the lecture live, and
+ * per-slide speaker identification calls this once per slide: on a 45-slide
+ * lecture the uncached path submitted 45 full recordings.
  */
 const diarizeDeckRecordings = async (
   deck: DeckDoc,
@@ -187,11 +217,22 @@ const diarizeDeckRecordings = async (
     const sessionSegments = segments.filter(s => s.sessionId === rec.sessionId)
     if (!sessionSegments.length) continue
 
-    const diarized = await provider.diarize({
-      audioKey: rec.audioKey,
-      sampleRate: rec.sampleRate,
-    })
+    // Reuse the stored intervals when the same engine produced them. The audio
+    // is immutable once retained, so the only thing that can invalidate them is
+    // a change of adapter — switching off the mock, above all.
+    const cached =
+      rec.diarizedBy === provider.name && rec.diarization?.length
+        ? rec.diarization
+        : undefined
+    const diarized =
+      cached ??
+      (await provider.diarize({
+        audioKey: rec.audioKey,
+        sampleRate: rec.sampleRate,
+      }))
     if (!diarized.length) continue
+    if (!cached)
+      await cacheDiarization(deck, rec.sessionId, diarized, provider.name)
     sessionsProcessed++
 
     const roleBySpeaker = mapSpeakerRoles(diarized)
