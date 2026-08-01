@@ -11,6 +11,7 @@ import {
   type ChangeEvent,
   type DragEvent as ReactDragEvent,
 } from 'react'
+import { useTranslation } from 'react-i18next'
 import { FileText, Image as ImageIcon, Trash2, UploadCloud } from 'lucide-react'
 import type { SeedAsset } from '@slide-machine/shared'
 import {
@@ -23,12 +24,6 @@ import {
 const POLL_MS = 1500
 const ACCEPT = '.pdf,.docx,image/png,image/jpeg,image/webp'
 
-const statusLabel: Record<SeedAsset['status'], string> = {
-  processing: 'Processing…',
-  ready: 'Ready',
-  failed: 'Could not extract',
-}
-
 function CaptionField({
   asset,
   onSaved,
@@ -36,6 +31,7 @@ function CaptionField({
   asset: SeedAsset
   onSaved: (asset: SeedAsset) => void
 }) {
+  const { t } = useTranslation()
   const [caption, setCaption] = useState(asset.caption ?? '')
   const savedRef = useRef(asset.caption ?? '')
   const timerRef = useRef<number | undefined>(undefined)
@@ -66,8 +62,8 @@ function CaptionField({
         window.clearTimeout(timerRef.current)
         save(caption)
       }}
-      placeholder="Caption (used to match slides)"
-      aria-label={`Caption for ${asset.name}`}
+      placeholder={t('seed.captionPlaceholder')}
+      aria-label={t('seed.captionFor', { name: asset.name })}
       className="w-full rounded border border-slate-200 px-2 py-1 text-xs"
     />
   )
@@ -80,6 +76,7 @@ interface Props {
 }
 
 export default function SeedMaterial({ projectId, deckId }: Props) {
+  const { t } = useTranslation()
   const [assets, setAssets] = useState<SeedAsset[]>([])
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
@@ -132,7 +129,7 @@ export default function SeedMaterial({ projectId, deckId }: Props) {
       setAssets(prev => [asset, ...prev])
       window.setTimeout(startPolling, POLL_MS)
     } catch {
-      setUploadError('Upload failed — PDF, DOCX, or images up to 20 MB')
+      setUploadError(t('seed.uploadFailed'))
     }
   }
 
@@ -180,7 +177,7 @@ export default function SeedMaterial({ projectId, deckId }: Props) {
         multiple
         accept={ACCEPT}
         onChange={e => void onPick(e)}
-        aria-label="Upload seed material"
+        aria-label={t('seed.uploadLabel')}
         className="hidden"
       />
       <div
@@ -199,9 +196,9 @@ export default function SeedMaterial({ projectId, deckId }: Props) {
           className="flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
         >
           <UploadCloud className="h-4 w-4" aria-hidden />
-          Upload PDF, DOCX, or photo
+          {t('seed.upload')}
         </button>
-        <span className="text-xs text-slate-400">or drag and drop a file</span>
+        <span className="text-xs text-slate-400">{t('seed.orDrop')}</span>
       </div>
       {uploadError && (
         <p role="alert" className="mt-2 text-sm text-red-600">
@@ -240,7 +237,7 @@ export default function SeedMaterial({ projectId, deckId }: Props) {
                         : 'bg-emerald-50 text-emerald-700'
                   }`}
                 >
-                  {statusLabel[asset.status]}
+                  {t(`seed.status.${asset.status}`)}
                 </span>
               </div>
               {asset.text && (
@@ -259,13 +256,13 @@ export default function SeedMaterial({ projectId, deckId }: Props) {
                 type="checkbox"
                 checked={asset.enabled}
                 onChange={() => toggle(asset)}
-                aria-label={`Use ${asset.name} in generation`}
+                aria-label={t('seed.useIn', { name: asset.name })}
               />
-              Use
+              {t('seed.use')}
             </label>
             <button
-              aria-label={`Delete ${asset.name}`}
-              title="Delete"
+              aria-label={t('seed.deleteAsset', { name: asset.name })}
+              title={t('common.delete')}
               onClick={() => remove(asset)}
               className="shrink-0 rounded p-1 text-slate-400 hover:text-red-600"
             >
@@ -274,7 +271,7 @@ export default function SeedMaterial({ projectId, deckId }: Props) {
           </li>
         ))}
         {assets.length === 0 && (
-          <li className="text-sm text-slate-500">No seed material yet.</li>
+          <li className="text-sm text-slate-500">{t('seed.empty')}</li>
         )}
       </ul>
     </div>

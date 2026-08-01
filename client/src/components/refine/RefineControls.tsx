@@ -9,6 +9,7 @@
  * (and the same `SlideRefineParts` payload) whenever it grows the split.
  */
 import type { ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { SlideRefineParts } from '@slide-machine/shared'
 
 interface OptionProps {
@@ -61,13 +62,14 @@ export function RefineLevelSlider({
   ariaLabel,
   indented,
 }: LevelProps) {
+  const { t } = useTranslation()
   return (
     <label
       className={`flex items-center gap-3 text-sm text-slate-600 ${
-        indented ? 'mt-2 ml-7' : ''
+        indented ? 'mt-2 ms-7' : ''
       }`}
     >
-      How much: {value}
+      {t('refine.howMuch', { level: value })}
       <input
         type="range"
         min={1}
@@ -80,36 +82,16 @@ export function RefineLevelSlider({
   )
 }
 
-/** One separable aspect of a slide, as offered in the UI. */
-interface PartDescriptor {
-  key: keyof SlideRefineParts
-  label: string
-  description: string
-}
-
 /**
- * The content pass's three aspects, in the order they are offered. Keyed by the
- * same field names the server takes, so a surface renders this list and sends
- * the object straight through.
+ * The content pass's three aspects, in the order they are offered. These
+ * are the same field names the server takes, so a surface renders this
+ * list and sends the object straight through — and each one also keys its
+ * own copy under `refine.parts.<key>` in the locale bundles.
  */
-export const SLIDE_REFINE_PARTS: PartDescriptor[] = [
-  {
-    key: 'text',
-    label: 'Refine slide text',
-    description: 'Rewrite the wording to present the content better.',
-  },
-  {
-    key: 'layout',
-    label: 'Refine slide layout',
-    description:
-      'Move the slide to a layout that suits it better, keeping everything it shows.',
-  },
-  {
-    key: 'imagery',
-    label: 'Refine slide imagery',
-    description:
-      'Find a picture when the layout has an image slot and none is placed.',
-  },
+export const SLIDE_REFINE_PARTS: Array<keyof SlideRefineParts> = [
+  'text',
+  'layout',
+  'imagery',
 ]
 
 interface PartsProps {
@@ -119,15 +101,16 @@ interface PartsProps {
 
 /** The three content-pass toggles as a group; reusable by any refine surface. */
 export function RefinePartsOptions({ value, onChange }: PartsProps) {
+  const { t } = useTranslation()
   return (
     <>
       {SLIDE_REFINE_PARTS.map(part => (
         <RefineOption
-          key={part.key}
-          label={part.label}
-          description={part.description}
-          checked={value[part.key]}
-          onChange={checked => onChange({ ...value, [part.key]: checked })}
+          key={part}
+          label={t(`refine.parts.${part}.label`)}
+          description={t(`refine.parts.${part}.description`)}
+          checked={value[part]}
+          onChange={checked => onChange({ ...value, [part]: checked })}
         />
       ))}
     </>

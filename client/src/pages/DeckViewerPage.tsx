@@ -9,6 +9,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
+import { Trans, useTranslation } from 'react-i18next'
 import {
   Mic,
   Pause,
@@ -89,7 +90,7 @@ import DeckSettingsModal, {
 import { ShellTitle } from '../components/layout/ShellTitle'
 import { ShellActions } from '../components/layout/ShellActions'
 import ViewModeToggle, { type ViewMode } from '../components/ViewModeToggle'
-import { lectureTitle, UNTITLED } from '../lib/lecture'
+import { lectureTitle, untitledLecture } from '../lib/lecture'
 
 // The toolbar's "Seed material" upload button is hidden for now but its
 // wiring (openManualSeed, the SeedDialog) is kept so it can return by
@@ -118,17 +119,21 @@ const writeViewMode = (mode: ViewMode): void => {
   }
 }
 
-/** Slide count and modification age, small beside the title in the nav. */
+/** Slide count and modification age, small beside the title in the nav.
+ * The count is an ICU plural, so languages with more than two forms get
+ * them right. */
 function DeckTitleMeta({ deck, count }: { deck: Deck; count: number }) {
+  const { t } = useTranslation()
   const age = useTimeAgo(deck.updatedAt)
   return (
     <span className="whitespace-nowrap text-xs font-normal text-slate-500">
-      {count} slide{count === 1 ? '' : 's'} · edited {age}
+      {t('deck.meta', { count, age })}
     </span>
   )
 }
 
 export default function DeckViewerPage() {
+  const { t } = useTranslation()
   const { slug } = useParams<{ slug: string }>()
   const location = useLocation()
   const navigate = useNavigate()
@@ -1196,7 +1201,7 @@ export default function DeckViewerPage() {
   if (!view) {
     return (
       <div className="flex flex-1 items-center justify-center text-slate-400">
-        Loading…
+        {t('common.loading')}
       </div>
     )
   }
@@ -1567,7 +1572,7 @@ export default function DeckViewerPage() {
             <EditableText
               value={view.deck.title}
               label="Lecture title"
-              emptyDisplay={UNTITLED}
+              emptyDisplay={untitledLecture()}
               onSave={renameDeck}
             />
           ) : (
@@ -1583,9 +1588,9 @@ export default function DeckViewerPage() {
       <ShellActions>
         <ViewModeToggle mode={mode} onChange={setMode} />
         {(canEdit || adminOverride) && (
-          <Tooltip label="Lecture settings">
+          <Tooltip label={t('deck.settings.title')}>
             <button
-              aria-label="Lecture settings"
+              aria-label={t('deck.settings.title')}
               onClick={() => openSettings()}
               className="rounded-md p-2 text-slate-500 hover:text-slate-900"
             >
@@ -1593,9 +1598,9 @@ export default function DeckViewerPage() {
             </button>
           </Tooltip>
         )}
-        <Tooltip label="Share" align="end">
+        <Tooltip label={t('deck.share')} align="end">
           <button
-            aria-label="Share deck"
+            aria-label={t('deck.shareLabel')}
             onClick={() => openSettings('sharing')}
             className="rounded-md p-2 text-slate-500 hover:text-slate-900"
           >
@@ -1612,14 +1617,16 @@ export default function DeckViewerPage() {
               <Tooltip
                 label={
                   view.slides.length === 0
-                    ? 'Add a slide to play the deck'
+                    ? t('deck.play.empty')
                     : deckPlaying
-                      ? 'Pause playback'
-                      : 'Play deck aloud'
+                      ? t('deck.play.pause')
+                      : t('deck.play.hint')
                 }
               >
                 <button
-                  aria-label={deckPlaying ? 'Pause playback' : 'Play deck'}
+                  aria-label={
+                    deckPlaying ? t('deck.play.pause') : t('deck.play.play')
+                  }
                   aria-pressed={deckPlaying}
                   disabled={view.slides.length === 0}
                   onClick={() => tts.toggle(activePlayIndex())}
@@ -1639,9 +1646,9 @@ export default function DeckViewerPage() {
             )}
             {canEdit && (
               <>
-                <Tooltip label="Add a slide">
+                <Tooltip label={t('deck.addSlideHint')}>
                   <button
-                    aria-label="Add slide"
+                    aria-label={t('deck.addSlide')}
                     onClick={() => void addSlide()}
                     className="rounded-md p-2 text-slate-500 hover:text-slate-900"
                   >
@@ -1649,9 +1656,9 @@ export default function DeckViewerPage() {
                   </button>
                 </Tooltip>
                 {SHOW_SEED_UPLOAD_IN_TOOLBAR && (
-                  <Tooltip label="Seed material">
+                  <Tooltip label={t('seed.materialHeading')}>
                     <button
-                      aria-label="Add seed material"
+                      aria-label={t('seed.dialog.addTitle')}
                       onClick={openManualSeed}
                       className="rounded-md p-2 text-slate-500 hover:text-slate-900"
                     >
@@ -1662,12 +1669,12 @@ export default function DeckViewerPage() {
                 <Tooltip
                   label={
                     listening
-                      ? 'Recording — click to stop'
-                      : 'Speak to add slides'
+                      ? t('deck.record.stopHint')
+                      : t('deck.record.startHint')
                   }
                 >
                   <button
-                    aria-label="Live session"
+                    aria-label={t('deck.liveSession')}
                     aria-pressed={speaking}
                     onClick={() => {
                       // One toggle: the bar and the microphone together
@@ -1711,25 +1718,33 @@ export default function DeckViewerPage() {
           // deck says so; closing it again restores the "how to start" hint.
           speaking ? (
             <p className="text-center text-slate-400">
-              Start speaking to generate slides
+              {t('deck.empty.speaking')}
             </p>
           ) : (
             <p className="text-center text-slate-400">
-              Click the{' '}
-              <Plus
-                className="inline h-4 w-4 align-text-bottom"
-                aria-label="plus"
-              />{' '}
-              or{' '}
-              <Mic
-                className="inline h-4 w-4 align-text-bottom"
-                aria-label="microphone"
-              />{' '}
-              icons to start adding content.
+              {/* Trans, not t: two icons sit inside the sentence, and the
+                  order they fall in is the translator's call. */}
+              <Trans
+                i18nKey="deck.empty.howToStart"
+                components={{
+                  plus: (
+                    <Plus
+                      className="inline h-4 w-4 align-text-bottom"
+                      aria-label={t('deck.empty.plusIcon')}
+                    />
+                  ),
+                  mic: (
+                    <Mic
+                      className="inline h-4 w-4 align-text-bottom"
+                      aria-label={t('deck.empty.micIcon')}
+                    />
+                  ),
+                }}
+              />
             </p>
           )
         ) : (
-          <p className="text-center text-slate-400">This deck has no slides.</p>
+          <p className="text-center text-slate-400">{t('deck.empty.viewer')}</p>
         )
       ) : mode === 'carousel' ? (
         <>
@@ -1903,14 +1918,14 @@ export default function DeckViewerPage() {
       )}
 
       {refiningSlideId && (
-        <NotificationPill>Refining this slide…</NotificationPill>
+        <NotificationPill>{t('refine.slide.running')}</NotificationPill>
       )}
 
       {playingOriginalId && (
         <NotificationPill
-          action={{ label: 'Stop', onClick: stopOriginalAudio }}
+          action={{ label: t('common.stop'), onClick: stopOriginalAudio }}
         >
-          Playing original audio…
+          {t('deck.playingOriginal')}
         </NotificationPill>
       )}
 
@@ -1918,13 +1933,16 @@ export default function DeckViewerPage() {
         <NotificationPill
           action={
             generationPause === 'paused'
-              ? { label: 'Resume', onClick: () => resumeGeneration('manual') }
+              ? {
+                  label: t('common.resume'),
+                  onClick: () => resumeGeneration('manual'),
+                }
               : undefined
           }
         >
           {generationPause === 'paused'
-            ? 'Content generation paused for drawing'
-            : 'Content generation resumed'}
+            ? t('deck.generation.paused')
+            : t('deck.generation.resumed')}
         </NotificationPill>
       )}
 
@@ -1934,7 +1952,7 @@ export default function DeckViewerPage() {
           role="alert"
           action={{
             label: '✕',
-            ariaLabel: 'Dismiss',
+            ariaLabel: t('common.dismiss'),
             onClick: () => setImageError(null),
           }}
         >
@@ -1975,9 +1993,11 @@ export default function DeckViewerPage() {
 
       {askAdmin && (
         <ConfirmDialog
-          title="Edit this lecture's settings?"
-          message={`"${lectureTitle(view.deck)}" belongs to another user. You can change its settings as an admin; every change is recorded in the audit log.`}
-          confirmLabel="Edit settings"
+          title={t('deck.adminSettings.title')}
+          message={t('deck.adminSettings.message', {
+            name: lectureTitle(view.deck),
+          })}
+          confirmLabel={t('profile.adminSettings.confirm')}
           onConfirm={() => setAdminEditConfirmed(true)}
           onCancel={closeSettings}
         />
@@ -1991,7 +2011,7 @@ export default function DeckViewerPage() {
           {simulatedSpeechEnabled && (
             <form
               onSubmit={onSpeak}
-              aria-label="Live session"
+              aria-label={t('deck.liveSession')}
               className="mt-6 flex w-full gap-2"
             >
               <input
@@ -2000,10 +2020,10 @@ export default function DeckViewerPage() {
                 onChange={e => setPhrase(e.target.value)}
                 placeholder={
                   listening
-                    ? 'Listening… (you can still type)'
-                    : 'Say something about your topic…'
+                    ? t('deck.simulated.listening')
+                    : t('deck.simulated.placeholder')
                 }
-                aria-label="Spoken phrase"
+                aria-label={t('deck.simulated.label')}
                 className="flex-1 rounded-lg border border-slate-300 px-4 py-3"
               />
               <button
@@ -2011,7 +2031,9 @@ export default function DeckViewerPage() {
                 disabled={busy}
                 className="rounded-lg bg-indigo-600 px-6 py-3 font-medium text-white disabled:opacity-50"
               >
-                {busy ? 'Generating…' : 'Speak'}
+                {busy
+                  ? t('deck.simulated.generating')
+                  : t('deck.simulated.speak')}
               </button>
             </form>
           )}

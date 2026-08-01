@@ -15,6 +15,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
+import { Trans, useTranslation } from 'react-i18next'
 import { Download, X } from 'lucide-react'
 import {
   findTtsVoice,
@@ -49,13 +50,15 @@ import {
 import { getTtsEnabled, getRefineSlidesDefaultLevel } from '../runtime-config'
 import { lectureTitle } from '../lib/lecture'
 
+/** The tabs in order; each id also keys its label under
+ * `deck.settings.tabs.<id>` in the locale bundles. */
 const TABS = [
-  { id: 'general', label: 'General' },
-  { id: 'template', label: 'Design' },
-  { id: 'refine', label: 'Refine with AI' },
-  { id: 'quiz', label: 'Quiz' },
-  { id: 'export', label: 'Export' },
-  { id: 'sharing', label: 'Privacy & Sharing' },
+  { id: 'general' },
+  { id: 'template' },
+  { id: 'refine' },
+  { id: 'quiz' },
+  { id: 'export' },
+  { id: 'sharing' },
 ] as const
 
 export type SettingsTabId = (typeof TABS)[number]['id']
@@ -107,6 +110,7 @@ export default function DeckSettingsModal({
   onDeleted,
   onReformatted,
 }: Props) {
+  const { t } = useTranslation()
   const [templates, setTemplates] = useState<Template[]>([])
   // An admin sees a shorter tab list, so a deep link into one of the
   // hidden tabs lands on General instead.
@@ -245,24 +249,26 @@ export default function DeckSettingsModal({
       })
   }
 
-  /** Human summary of what a finished refine job changed. */
+  /** Human summary of what a finished refine job changed. Each clause is
+   * its own ICU plural, so the counts read correctly in every language,
+   * and the list separator comes from the bundle too. */
   const summaryMessage = (s: RefineJobSummary): string => {
-    const parts: string[] = []
-    if (s.reframed)
-      parts.push(
-        `reframed ${s.reframed} student slide${s.reframed === 1 ? '' : 's'}`,
+    const clauses = (
+      [
+        ['reframed', s.reframed],
+        ['slidesRefined', s.slidesRefined],
+        ['transcriptsUpdated', s.transcriptsUpdated],
+      ] as const
+    )
+      .filter(([, count]) => count > 0)
+      .map(([kind, count]) =>
+        t(`deck.settings.refine.summary.${kind}`, { count }),
       )
-    if (s.slidesRefined)
-      parts.push(
-        `refined ${s.slidesRefined} slide${s.slidesRefined === 1 ? '' : 's'}`,
-      )
-    if (s.transcriptsUpdated)
-      parts.push(
-        `updated ${s.transcriptsUpdated} narration${s.transcriptsUpdated === 1 ? '' : 's'}`,
-      )
-    return parts.length
-      ? `Done — ${parts.join(', ')}.`
-      : 'Done — no changes were needed.'
+    return clauses.length
+      ? t('deck.settings.refine.summary.done', {
+          changes: clauses.join(t('common.listSeparator')),
+        })
+      : t('deck.settings.refine.summary.none')
   }
 
   /** Polls the job until it leaves 'running' (batch diarization can take
@@ -303,7 +309,7 @@ export default function DeckSettingsModal({
       setRefineMsg(summaryMessage(summary))
       onReformatted()
     } catch {
-      setRefineMsg('Could not complete the refinement — please try again.')
+      setRefineMsg(t('deck.settings.refine.failed'))
     } finally {
       setRefining(false)
     }
@@ -348,7 +354,7 @@ export default function DeckSettingsModal({
   return (
     <Modal
       variant="sheet"
-      ariaLabel="Lecture settings"
+      ariaLabel={t('deck.settings.title')}
       onClose={onClose}
       initialFocusRef={closeRef}
       escapeCapture={false}
@@ -356,23 +362,28 @@ export default function DeckSettingsModal({
     >
       <header className="mb-4 flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold">Lecture settings</h2>
+          <h2 className="text-xl font-bold">{t('deck.settings.title')}</h2>
           <p className="mt-1 text-sm text-slate-500">
-            These settings apply to just this lecture. The{' '}
-            <Link
-              to={`/app/projects/${deck.projectId}`}
-              state={{ openSettings: true }}
-              className="text-indigo-600 hover:underline"
-            >
-              project-wide settings
-            </Link>{' '}
-            may affect this lecture as well.
+            {/* Trans, not t: a link sits mid-sentence, and where in the
+                sentence it falls is the translator's call. */}
+            <Trans
+              i18nKey="deck.settings.scope"
+              components={{
+                projectLink: (
+                  <Link
+                    to={`/app/projects/${deck.projectId}`}
+                    state={{ openSettings: true }}
+                    className="text-indigo-600 hover:underline"
+                  />
+                ),
+              }}
+            />
           </p>
         </div>
         <button
           ref={closeRef}
-          aria-label="Close settings"
-          title="Close (Esc)"
+          aria-label={t('deck.settings.close')}
+          title={t('common.closeEsc')}
           onClick={onClose}
           className="rounded-md p-2 text-slate-500 hover:text-slate-900"
         >
@@ -384,29 +395,29 @@ export default function DeckSettingsModal({
 
       <div
         role="tablist"
-        aria-label="Settings sections"
+        aria-label={t('deck.settings.sections')}
         onKeyDown={onTabKeyDown}
         className="mb-6 flex gap-1 border-b border-slate-200"
       >
-        {tabs.map(t => (
+        {tabs.map(tab_ => (
           <button
-            key={t.id}
+            key={tab_.id}
             ref={el => {
-              if (el) tabRefs.current.set(t.id, el)
+              if (el) tabRefs.current.set(tab_.id, el)
             }}
             role="tab"
-            id={`settings-tab-${t.id}`}
-            aria-selected={tab === t.id}
-            aria-controls={`settings-panel-${t.id}`}
-            tabIndex={tab === t.id ? 0 : -1}
-            onClick={() => setTab(t.id)}
+            id={`settings-tab-${tab_.id}`}
+            aria-selected={tab === tab_.id}
+            aria-controls={`settings-panel-${tab_.id}`}
+            tabIndex={tab === tab_.id ? 0 : -1}
+            onClick={() => setTab(tab_.id)}
             className={`-mb-px rounded-t-md border-b-2 px-4 py-2 text-sm font-medium ${
-              tab === t.id
+              tab === tab_.id
                 ? 'border-indigo-600 text-indigo-700'
                 : 'border-transparent text-slate-500 hover:text-slate-900'
             }`}
           >
-            {t.label}
+            {t(`deck.settings.tabs.${tab_.id}`)}
           </button>
         ))}
       </div>
@@ -420,36 +431,34 @@ export default function DeckSettingsModal({
         >
           <div>
             <h3 className="mb-2 text-lg font-semibold text-slate-700">
-              Lecture title
+              {t('deck.settings.general.titleHeading')}
             </h3>
             <p className="mb-3 text-sm text-slate-500">
-              Name this lecture. Leave it blank to let the AI title it from your
-              speech as the lecture unfolds.
+              {t('deck.settings.general.titleHint')}
             </p>
             <input
-              aria-label="Lecture title"
+              aria-label={t('deck.settings.general.titleHeading')}
               value={titleDraft}
               onChange={e => setTitleDraft(e.target.value)}
               onBlur={saveTitle}
               onKeyDown={e => {
                 if (e.key === 'Enter') e.currentTarget.blur()
               }}
-              placeholder="Untitled lecture"
+              placeholder={t('lecture.untitled')}
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
             />
           </div>
           <div>
             <h3 className="mb-2 text-lg font-semibold text-slate-700">
-              Seed notes
+              {t('deck.settings.general.seedNotesHeading')}
             </h3>
             <p className="mb-3 text-sm text-slate-500">
-              Lecture-specific background material, added on top of the
-              project&apos;s seed notes. Saved automatically.
+              {t('deck.settings.general.seedNotesHint')}
             </p>
             <SeedNotesEditor
               value={deck.seedContext ?? ''}
-              label="Lecture seed notes"
-              placeholder="What this lecture covers, key terms, examples…"
+              label={t('deck.settings.general.seedNotesLabel')}
+              placeholder={t('deck.settings.general.seedNotesPlaceholder')}
               onSave={seedContext => {
                 dispatchAction<Deck>('deck.setSeedNotes', {
                   deckId: deck.id,
@@ -465,22 +474,20 @@ export default function DeckSettingsModal({
           {!adminOverride && (
             <div>
               <h3 className="mb-2 text-lg font-semibold text-slate-700">
-                Seed material
+                {t('deck.settings.general.seedMaterialHeading')}
               </h3>
               <p className="mb-3 text-sm text-slate-500">
-                Documents and photos scanned for background text and imagery,
-                used by this lecture only.
+                {t('deck.settings.general.seedMaterialHint')}
               </p>
               <SeedMaterial projectId={deck.projectId} deckId={deck.id} />
             </div>
           )}
           <div>
             <h3 className="mb-2 text-lg font-semibold text-slate-700">
-              AI freedom
+              {t('deck.settings.general.freedomHeading')}
             </h3>
             <p className="mb-3 text-sm text-slate-500">
-              How much the AI may add beyond what you actually say while
-              generating this lecture&apos;s slides.
+              {t('deck.settings.general.freedomHint')}
             </p>
             <FreedomSlider
               value={deck.generationFreedom}
@@ -499,14 +506,14 @@ export default function DeckSettingsModal({
           </div>
           <div>
             <h3 className="mb-2 text-lg font-semibold text-slate-700">
-              Language
+              {t('deck.settings.general.languageHeading')}
             </h3>
             <p className="mb-3 text-sm text-slate-500">
-              Speech recognition and generated slide text for this lecture.
+              {t('deck.settings.general.languageHint')}
             </p>
             <LanguageSelect
               value={deck.language}
-              defaultLabel="project, profile, or browser setting"
+              defaultLabel={t('deck.settings.general.languageInherit')}
               onChange={language => {
                 dispatchAction<Deck>('deck.setLanguage', {
                   deckId: deck.id,
@@ -522,16 +529,16 @@ export default function DeckSettingsModal({
           {getTtsEnabled() && (
             <div>
               <h3 className="mb-2 text-lg font-semibold text-slate-700">
-                Narration voice
+                {t('deck.settings.general.voiceHeading')}
               </h3>
               <p className="mb-3 text-sm text-slate-500">
-                The voice used to read this lecture aloud. It speaks in the
-                lecture&apos;s language.
+                {t('deck.settings.general.voiceHint')}
               </p>
               <VoiceSelect
                 value={deck.ttsVoice}
                 defaultLabel={
-                  findTtsVoice(projectTtsVoice)?.label ?? 'system default'
+                  findTtsVoice(projectTtsVoice)?.name ??
+                  t('voice.systemDefault')
                 }
                 onChange={ttsVoice => {
                   dispatchAction<Deck>('deck.setTtsVoice', {
@@ -549,17 +556,16 @@ export default function DeckSettingsModal({
           {isOwner && (
             <div className="rounded-md border border-red-200 p-4">
               <h3 className="mb-2 text-lg font-semibold text-red-700">
-                Danger zone
+                {t('common.dangerZone')}
               </h3>
               <p className="mb-3 text-sm text-slate-600">
-                Deleting a lecture permanently removes its slides and seed
-                material. This cannot be undone.
+                {t('deck.settings.general.deleteHint')}
               </p>
               <button
                 onClick={() => setConfirmingDelete(true)}
                 className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
               >
-                Delete lecture
+                {t('deck.delete.action')}
               </button>
             </div>
           )}
@@ -568,9 +574,9 @@ export default function DeckSettingsModal({
 
       {confirmingDelete && (
         <ConfirmDialog
-          title="Delete lecture?"
-          message={`"${lectureTitle(deck)}" and all of its slides and seed material will be permanently deleted.`}
-          confirmLabel="Delete"
+          title={t('deck.delete.title')}
+          message={t('deck.delete.message', { name: lectureTitle(deck) })}
+          confirmLabel={t('common.delete')}
           onConfirm={deleteLecture}
           onCancel={() => setConfirmingDelete(false)}
         />
@@ -578,9 +584,9 @@ export default function DeckSettingsModal({
 
       {confirmingRefine && (
         <ConfirmDialog
-          title="Refine marked-up slides?"
-          message="Some slides have whiteboard markings. Refining may change their content or layout, so highlights and annotations may no longer line up with what's underneath."
-          confirmLabel="Refine anyway"
+          title={t('deck.settings.refine.markedTitle')}
+          message={t('deck.settings.refine.markedMessage')}
+          confirmLabel={t('deck.settings.refine.markedConfirm')}
           onConfirm={() => {
             setConfirmingRefine(false)
             void runRefine()
@@ -596,7 +602,7 @@ export default function DeckSettingsModal({
           aria-labelledby="settings-tab-template"
         >
           <h3 className="mb-4 text-lg font-semibold text-slate-700">
-            Template
+            {t('template.heading')}
           </h3>
           <TemplatePicker
             templates={templates}
@@ -610,11 +616,10 @@ export default function DeckSettingsModal({
               className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
               <Download className="h-4 w-4" aria-hidden />
-              Export template as YAML
+              {t('template.exportYaml')}
             </button>
             <p className="mt-1 text-xs text-slate-500">
-              Download this template’s style and layouts as a re-importable YAML
-              file.
+              {t('template.exportYamlHint')}
             </p>
           </div>
         </section>
@@ -629,16 +634,16 @@ export default function DeckSettingsModal({
         >
           <div>
             <h3 className="mb-2 text-lg font-semibold text-slate-700">
-              Refine this lecture
+              {t('deck.settings.refine.heading')}
             </h3>
             <p className="text-sm text-slate-500">
               {adminOverride
-                ? 'What a refinement pass would do, and how hard it would work. These are the lecture’s saved choices; running the pass is the owner’s to do.'
-                : 'Improve the text, images, and spoken version of the slides. This can take a few minutes and runs in the background.'}
+                ? t('deck.settings.refine.introAdmin')
+                : t('deck.settings.refine.intro')}
             </p>
             {!hasSlides && !adminOverride && (
               <p className="mt-2 text-sm text-amber-600">
-                This lecture has no slides yet, so there is nothing to refine.
+                {t('deck.settings.refine.noSlides')}
               </p>
             )}
           </div>
@@ -651,13 +656,11 @@ export default function DeckSettingsModal({
           >
             <div>
               <RefineOption
-                label="Identify multiple speakers"
+                label={t('refine.speakers.label')}
                 description={
                   <>
-                    Detect who spoke — you versus students — and reframe student
-                    turns as questions, not fact.
-                    {!deck.hasRecordings &&
-                      ' (No lecture audio was recorded, so this is unavailable.)'}
+                    {t('refine.speakers.description')}
+                    {!deck.hasRecordings && ` ${t('refine.speakers.noAudio')}`}
                   </>
                 }
                 checked={identifySpeakers}
@@ -682,8 +685,8 @@ export default function DeckSettingsModal({
             />
 
             <RefineOption
-              label="Refine the spoken transcript"
-              description="Rewrite the read-aloud narration to describe the concepts more eloquently."
+              label={t('refine.transcript.label')}
+              description={t('refine.transcript.description')}
               checked={refineTranscript}
               onChange={checked => {
                 setRefineTranscript(checked)
@@ -693,7 +696,7 @@ export default function DeckSettingsModal({
 
             <RefineLevelSlider
               value={level}
-              ariaLabel="How much to refine this lecture"
+              ariaLabel={t('deck.settings.refine.levelLabel')}
               onChange={v => {
                 setLevel(v)
                 persistLevel(v)
@@ -710,11 +713,11 @@ export default function DeckSettingsModal({
                 disabled={refining || !anySelected || !hasSlides}
                 className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
-                {refining ? 'Refining…' : 'Refine'}
+                {refining ? t('refine.running') : t('refine.action')}
               </button>
               {refining && (
                 <p className="mt-3 text-sm text-slate-500">
-                  Working in the background — this can take a few minutes.
+                  {t('refine.background')}
                 </p>
               )}
               {refineMsg && (

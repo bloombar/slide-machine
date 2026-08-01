@@ -16,8 +16,10 @@ export const config = {
   /** Show the "Continue with Google" button (AUTH-1). Gated on the public
    * client id, so the button appears only once Google sign-in is set up. */
   googleAuthEnabled: Boolean(import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID),
-  /** Placeholder name shown for a titleless project (e.g. the default one
-   * created for a user's first lecture). Blank env falls back too. */
-  defaultProjectTitle:
-    import.meta.env.VITE_DEFAULT_PROJECT_TITLE || 'Default project',
+  /** Deployment override for the placeholder name of a titleless project
+   * (e.g. the default one created for a user's first lecture). A blank or
+   * absent env var leaves it undefined, and the interface falls back to
+   * the translated `project.untitled` — an env var cannot vary by locale,
+   * so the bundle is the default and this is the exception. */
+  defaultProjectTitle: import.meta.env.VITE_DEFAULT_PROJECT_TITLE || undefined,
 } as const

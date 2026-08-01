@@ -8,6 +8,7 @@ import { AuthProvider } from './auth/AuthContext'
 import { ShellTitleProvider } from './components/layout/ShellTitle'
 import { ShellActionsProvider } from './components/layout/ShellActions'
 import { loadRuntimeConfig } from './runtime-config'
+import { initI18n } from './i18n'
 import App from './App'
 import './index.css'
 
@@ -27,6 +28,9 @@ const render = (): void => {
   )
 }
 
-// Learn the active speech engine before mounting so the STT seam resolves
-// correctly at first render; a failed fetch falls back to the browser engine.
-loadRuntimeConfig().finally(render)
+// Two things must be settled before the first paint: the active speech
+// engine, so the STT seam resolves correctly at first render, and the
+// interface language, so nothing flashes untranslated. Neither is fatal —
+// a failed config fetch falls back to the browser engine, and a failed
+// bundle load falls back to English.
+void Promise.allSettled([loadRuntimeConfig(), initI18n()]).then(render)

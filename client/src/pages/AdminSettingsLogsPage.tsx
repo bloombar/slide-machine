@@ -93,13 +93,22 @@ function ChangesCell({ changes }: { changes: SettingsLogEntry['changes'] }) {
   )
 }
 
+/** Placeholder for a titleless project. A deployment that sets
+ * VITE_DEFAULT_PROJECT_TITLE names its default project itself and that
+ * name wins; otherwise the console shows this. Hardcoded English rather
+ * than the bundle's `project.untitled`: the admin console is English-only
+ * (docs/I18N.md). */
+const UNTITLED_PROJECT = 'Default project'
+
 /** The Settings column: which record changed, linked to its admin page.
  * Untitled projects and lectures fall back to the same placeholders their
  * own admin pages use. */
 function EntityCell({ entry }: { entry: SettingsLogEntry }) {
   const kind = ENTITY_KINDS[entry.entityType]
   const fallback =
-    entry.entityType === 'project' ? config.defaultProjectTitle : undefined
+    entry.entityType === 'project'
+      ? (config.defaultProjectTitle ?? UNTITLED_PROJECT)
+      : undefined
   const name = entry.entityName?.trim() || fallback || 'Untitled'
 
   return (

@@ -8,12 +8,17 @@
  */
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
+import { useTranslation } from 'react-i18next'
 import { FolderPlus } from 'lucide-react'
 import type { Deck, DeckImportResult, Project } from '@slide-machine/shared'
 import { useAuth } from '../auth/AuthContext'
 import { dispatchAction } from '../api/actions'
 import { ApiError } from '../api/http'
 import { userHandle } from '../lib/handle'
+import { untitledLecture } from '../lib/lecture'
+// Module-level translator for the load effect: stable, so it is not a
+// dependency the way the hook's `t` is.
+import { t as translate } from '../i18n'
 import { projectTitle } from '../lib/project'
 import LectureRow from '../components/LectureRow'
 import NewLectureZone from '../components/NewLectureZone'
@@ -36,6 +41,7 @@ function ProjectSection({
   onLectureDeleted: (deckId: string) => void
   onProjectDeleted: (projectId: string) => void
 }) {
+  const { t } = useTranslation()
   const limit = config.homeLecturesLimit
   const visible = decks.slice(0, limit)
   const hiddenCount = decks.length - limit
@@ -67,9 +73,9 @@ function ProjectSection({
       {hiddenCount > 0 && (
         <Link
           to={`/app/projects/${project.id}`}
-          className="mt-2 inline-block pl-4 text-sm text-indigo-600"
+          className="mt-2 inline-block ps-4 text-sm text-indigo-600"
         >
-          Show all {decks.length} lectures
+          {t('home.showAll', { count: decks.length })}
         </Link>
       )}
     </section>
@@ -79,6 +85,7 @@ function ProjectSection({
 export default function HomePage() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [projects, setProjects] = useState<Project[] | null>(null)
   const [decksByProject, setDecksByProject] = useState<Map<string, Deck[]>>(
     new Map(),
@@ -113,7 +120,7 @@ export default function HomePage() {
         setDecksByProject(grouped)
       })
       .catch(() => {
-        if (!cancelled) setError('Could not load projects')
+        if (!cancelled) setError(translate('home.errors.load'))
       })
     return () => {
       cancelled = true
@@ -162,7 +169,7 @@ export default function HomePage() {
       })
       navigate(`/d/${deck.permalinkSlug}`, { state: { startSpeaking: true } })
     } catch {
-      setError('Could not create the lecture')
+      setError(t('lecture.errors.create'))
     }
   }
 
@@ -178,7 +185,7 @@ export default function HomePage() {
     try {
       content = await file.text()
     } catch {
-      setError('Could not read that file')
+      setError(t('lecture.import.errors.read'))
       return
     }
     try {
@@ -191,18 +198,25 @@ export default function HomePage() {
         next.set(project.id, [result.deck, ...(next.get(project.id) ?? [])])
         return next
       })
-      const name = result.deck.title || 'Untitled lecture'
+      const name = result.deck.title || untitledLecture()
       setNotice(
         result.warnings.length
-          ? `Imported "${name}". ${result.warnings.join(' ')}`
-          : `Imported "${name}".`,
+          ? t('lecture.import.importedWithWarnings', {
+              name,
+              warnings: result.warnings.join(' '),
+            })
+          : t('lecture.import.imported', { name }),
       )
     } catch (err) {
-      if (err instanceof ApiError && err.details?.length) {
-        setError(`Could not import this file: ${err.details.join(' ')}`)
-      } else {
-        setError('Could not import this file')
-      }
+      // A validation failure lists the specific problems; anything else is
+      // a generic message. Nothing was created either way.
+      setError(
+        err instanceof ApiError && err.details?.length
+          ? t('lecture.import.errors.invalid', {
+              details: err.details.join(' '),
+            })
+          : t('lecture.import.errors.failed'),
+      )
     }
   }
 
@@ -216,7 +230,7 @@ export default function HomePage() {
       const project = await dispatchAction<Project>('project.create', {})
       await startLecture(project)
     } catch {
-      setError('Could not create the lecture')
+      setError(t('lecture.errors.create'))
     }
   }
 
@@ -224,14 +238,14 @@ export default function HomePage() {
     <div>
       <div className="mb-8 flex items-center justify-between gap-4">
         <h1 className="min-w-0 truncate text-2xl font-bold">
-          Welcome, {user ? userHandle(user) : ''}
+          {t('home.welcome', { name: user ? userHandle(user) : '' })}
         </h1>
         <button
           onClick={() => setCreatingProject(true)}
           className="flex shrink-0 items-center gap-2 rounded-md border border-indigo-600 px-4 py-2 font-medium text-indigo-600 hover:bg-indigo-50"
         >
           <FolderPlus className="h-4 w-4" aria-hidden />
-          New project
+          {t('project.new.action')}
         </button>
       </div>
 
@@ -247,7 +261,7 @@ export default function HomePage() {
           </p>
         )}
         {projects === null ? (
-          <p className="text-slate-500">Loading…</p>
+          <p className="text-slate-500">{t('common.loading')}</p>
         ) : projects.length === 0 ? (
           // No project yet: a dashed zone that creates a default project
           // and starts the first lecture in one click.
@@ -269,9 +283,11 @@ export default function HomePage() {
         )}
         {otherDecks.length > 0 && (
           <section className="mb-8">
-            <h2 className="mb-3 text-lg font-semibold">Other lectures</h2>
+            <h2 className="mb-3 text-lg font-semibold">
+              {t('home.otherLectures')}
+            </h2>
             <p className="mb-3 text-sm text-slate-500">
-              Lectures you own inside other people&apos;s projects.
+              {t('home.otherLecturesHint')}
             </p>
             <ul className="flex flex-col gap-2">
               {otherDecks.map(d => (

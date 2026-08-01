@@ -7,6 +7,7 @@
  * nothing at this level again). Saves with the usual debounce.
  */
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   GENERATION_FREEDOM_MAX,
   GENERATION_FREEDOM_MIN,
@@ -28,6 +29,7 @@ export default function FreedomSlider({
   onChange,
   debounceMs = 500,
 }: Props) {
+  const { t } = useTranslation()
   const target = value ?? inheritedValue
   const [draft, setDraft] = useState<number>(target)
   // Derived-state-from-props (the sanctioned render-time pattern):
@@ -55,7 +57,7 @@ export default function FreedomSlider({
   return (
     <div>
       <div className="flex items-center gap-3">
-        <span className="text-xs text-slate-500">Only what I say</span>
+        <span className="text-xs text-slate-500">{t('freedom.min')}</span>
         <div className="min-w-0 flex-1">
           <input
             type="range"
@@ -64,8 +66,11 @@ export default function FreedomSlider({
             step={1}
             value={draft}
             onChange={e => slide(Number(e.target.value))}
-            aria-label="AI freedom"
-            aria-valuetext={`${draft} of 5`}
+            aria-label={t('freedom.label')}
+            aria-valuetext={t('freedom.valueText', {
+              value: draft,
+              max: GENERATION_FREEDOM_MAX,
+            })}
             className="w-full accent-indigo-600"
           />
           {/* Light tick scale; inset to sit under the thumb centers */}
@@ -81,7 +86,7 @@ export default function FreedomSlider({
             )}
           </div>
         </div>
-        <span className="text-xs text-slate-500">Free elaboration</span>
+        <span className="text-xs text-slate-500">{t('freedom.max')}</span>
       </div>
       {value !== undefined && (
         <p className="mt-1 text-xs">
@@ -89,7 +94,7 @@ export default function FreedomSlider({
             onClick={reset}
             className="cursor-pointer text-indigo-600 hover:underline"
           >
-            Reset to default
+            {t('common.resetToDefault')}
           </button>
         </p>
       )}

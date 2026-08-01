@@ -49,6 +49,12 @@ export interface SlotDescriptor {
  * The descriptor for every slot a layout can name. Adding an editable
  * media type means: extend SlotKind, describe the slots that use it
  * here, and register a client editor for the kind.
+ *
+ * These labels are the English defaults the server normalizes bare-name
+ * slots to, so a template file and the wire format always carry one. The
+ * client shows a translated label instead for these conventional slots
+ * (`slot.<name>` in the locale bundles); a label a template author wrote
+ * for a slot of their own is data and is shown as written (docs/I18N.md).
  */
 export const SLOT_DESCRIPTORS: Record<LayoutSlot, SlotDescriptor> = {
   title: { kind: 'text', label: 'Slide title' },

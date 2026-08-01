@@ -5,6 +5,7 @@
  * screen. Renders nothing until Google sign-in is configured
  * (config.googleAuthEnabled), so no dead button ever shows.
  */
+import { useTranslation } from 'react-i18next'
 import { config } from '../config'
 
 /** Google's multicolour "G", inlined so the button needs no network. */
@@ -32,17 +33,19 @@ function GoogleGlyph() {
 }
 
 interface Props {
-  /** Verb shown in the label, e.g. "Sign in" or "Sign up". */
+  /** Verb shown in the label, already translated by the call site —
+   * e.g. t('auth.signIn') or t('auth.signUp'). */
   action: string
 }
 
 export default function GoogleSignInButton({ action }: Props) {
+  const { t } = useTranslation()
   if (!config.googleAuthEnabled) return null
   return (
     <>
       <div className="flex items-center gap-3 text-xs text-slate-400">
         <span className="h-px flex-1 bg-slate-200" />
-        or
+        {t('common.or')}
         <span className="h-px flex-1 bg-slate-200" />
       </div>
       <a
@@ -50,7 +53,7 @@ export default function GoogleSignInButton({ action }: Props) {
         className="flex items-center justify-center gap-2 rounded-md border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-50"
       >
         <GoogleGlyph />
-        {action} with Google
+        {t('auth.continueWithGoogle', { action })}
       </a>
     </>
   )

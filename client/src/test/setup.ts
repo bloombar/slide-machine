@@ -5,8 +5,24 @@
 import '@testing-library/jest-dom/vitest'
 import { afterEach } from 'vitest'
 import { cleanup, configure } from '@testing-library/react'
+import { i18n, initI18n } from '../i18n'
+import { LOCALE_STORAGE_KEY } from '../i18n/detect'
 
 afterEach(cleanup)
+
+// The i18n singleton and its localStorage key outlive a single test, so a
+// spec that switches language would otherwise leave the next one running
+// in it. Reset both between tests.
+afterEach(async () => {
+  localStorage.removeItem(LOCALE_STORAGE_KEY)
+  if (i18n.language !== 'en') await i18n.changeLanguage('en')
+})
+
+// `useTranslation` reads a module-level singleton rather than a provider,
+// so initializing it once here translates every rendered component
+// without a single render helper having to know about i18n. English is
+// bundled eagerly, so this resolves without a network or a chunk load.
+await initI18n('en')
 
 // `waitFor` and the `findBy*` queries default to giving up after 1s. That is
 // ample on an idle machine but not when several vitest workers share the CPU:

@@ -1,0 +1,715 @@
+{
+  "_meta": {
+    "locale": "fr",
+    "reviewed": false,
+    "note": "Traduction automatique, non relue par un locuteur natif. Toute clé absente retombe sur l'anglais."
+  },
+  "common": {
+    "loading": "Chargement…",
+    "save": "Enregistrer",
+    "saving": "Enregistrement…",
+    "cancel": "Annuler",
+    "close": "Fermer",
+    "closeEsc": "Fermer (Échap)",
+    "create": "Créer",
+    "done": "Terminé",
+    "ok": "OK",
+    "stop": "Arrêter",
+    "resume": "Reprendre",
+    "dismiss": "Ignorer",
+    "edit": "Modifier",
+    "delete": "Supprimer",
+    "settings": "Paramètres",
+    "or": "ou",
+    "dangerZone": "Zone sensible",
+    "resetToDefault": "Rétablir la valeur par défaut",
+    "listSeparator": ", ",
+    "adminEditNotice": "Vous modifiez {entity, select, account {le compte} project {le projet} lecture {le cours} other {les paramètres}} d'un autre utilisateur en tant qu'administrateur. Chaque modification est consignée dans le journal d'audit."
+  },
+  "nav": {
+    "brand": "The Slide Machine",
+    "brandHome": "The Slide Machine — accueil",
+    "menu": "Menu",
+    "primary": "Principale",
+    "home": "Accueil",
+    "profile": "Profil",
+    "logIn": "Connexion",
+    "logOut": "Déconnexion"
+  },
+  "landing": {
+    "title": "The Slide Machine V2",
+    "tagline": "Parlez librement — les diapositives suivront.",
+    "cta": "Connectez-vous pour commencer"
+  },
+  "auth": {
+    "signIn": "Se connecter",
+    "signingIn": "Connexion…",
+    "signUp": "S'inscrire",
+    "signOut": "Se déconnecter",
+    "createAccount": "Créer un compte",
+    "creatingAccount": "Création…",
+    "email": "E-mail",
+    "password": "Mot de passe",
+    "displayName": "Nom d'affichage",
+    "noAccount": "Pas encore de compte ?",
+    "createOne": "En créer un",
+    "alreadyRegistered": "Déjà inscrit ?",
+    "signInLink": "Se connecter",
+    "continueWithGoogle": "{action} avec Google",
+    "errors": {
+      "google": "Connexion avec Google impossible — réessayez",
+      "signIn": "Une erreur s'est produite — réessayez",
+      "register": "Une erreur s'est produite — réessayez"
+    }
+  },
+  "health": {
+    "summary": "API {status}",
+    "environment": "Environnement",
+    "version": "Version",
+    "uptime": "Disponibilité",
+    "state": {
+      "ok": "ok",
+      "degraded": "dégradée",
+      "down": "hors service",
+      "disabled": "désactivée",
+      "loading": "vérification…",
+      "error": "injoignable"
+    },
+    "components": {
+      "mongo": "Base de données",
+      "storage": "Stockage",
+      "audioStorage": "Stockage audio",
+      "gemini": "IA générative",
+      "stt": "Reconnaissance vocale",
+      "tts": "Synthèse vocale"
+    }
+  },
+  "profile": {
+    "notFound": "Ce profil n'existe pas ou est privé.",
+    "displayName": "Nom d'affichage",
+    "bio": "Biographie",
+    "bioPlaceholder": "Une courte présentation affichée sur votre profil.",
+    "noLectures": "Aucun cours à afficher.",
+    "displayNameRequired": "Le nom d'affichage est obligatoire.",
+    "interfaceLanguage": "Langue de l'interface",
+    "interfaceLanguageHint": "Les menus, les boutons et les messages apparaissent dans cette langue.",
+    "lectureLanguage": "Langue du cours",
+    "lectureLanguageHint": "La reconnaissance vocale et les diapositives générées utilisent cette langue. Les projets et les cours peuvent la remplacer.",
+    "lectureLanguageDefault": "{own, select, true {la langue de votre interface} other {la langue de son interface}}",
+    "plan": "Formule :",
+    "publicProfile": "Profil public",
+    "publicProfileHint": "Profil public — les autres peuvent voir {own, select, true {vos} other {ses}} cours publics et partagés",
+    "closeSettings": "Fermer les paramètres",
+    "adminProfile": {
+      "title": "Modifier le profil de cet utilisateur ?",
+      "message": "Ce profil appartient à un autre utilisateur. Vous pouvez le modifier en tant qu'administrateur ; chaque modification est consignée dans le journal d'audit.",
+      "confirm": "Enregistrer les modifications"
+    },
+    "adminSettings": {
+      "title": "Modifier les paramètres de cet utilisateur ?",
+      "message": "Ce compte appartient à {name}. Vous pouvez modifier ses paramètres en tant qu'administrateur ; chaque modification est consignée dans le journal d'audit.",
+      "confirm": "Modifier les paramètres"
+    },
+    "errors": {
+      "save": "Impossible d'enregistrer le profil.",
+      "loadAccount": "Impossible de charger ce compte.",
+      "saveSettings": "Impossible d'enregistrer ces paramètres."
+    }
+  },
+  "language": {
+    "label": "Langue",
+    "inherit": "Par défaut — {source}"
+  },
+  "voice": {
+    "label": "Voix de narration",
+    "systemDefault": "valeur par défaut du système",
+    "descriptions": {
+      "emma": "voix féminine chaleureuse",
+      "sophie": "voix féminine claire",
+      "james": "voix masculine grave",
+      "daniel": "voix masculine nette",
+      "aria": "voix féminine naturelle (premium)",
+      "nova": "voix féminine naturelle (premium)",
+      "leo": "voix masculine naturelle (premium)",
+      "owen": "voix masculine naturelle (premium)"
+    }
+  },
+  "freedom": {
+    "label": "Liberté de l'IA",
+    "min": "Uniquement mes propos",
+    "max": "Développement libre",
+    "valueText": "{value} sur {max}"
+  },
+  "template": {
+    "label": "Modèle de diapositive",
+    "heading": "Modèle",
+    "names": {
+      "classic": "Classique",
+      "midnight": "Minuit",
+      "seminar": "Séminaire"
+    },
+    "exportYaml": "Exporter le modèle en YAML",
+    "exportYamlHint": "Téléchargez le style et les mises en page de ce modèle dans un fichier YAML réimportable."
+  },
+  "layout": {
+    "change": "Changer la mise en page",
+    "close": "Fermer le sélecteur de mise en page",
+    "pickerLabel": "Mise en page de la diapositive",
+    "changeTemplate": "Changer de modèle",
+    "fromTemplate": "Mises en page du modèle <strong>{name}</strong>."
+  },
+  "lecture": {
+    "untitled": "Cours sans titre",
+    "options": "Options pour {name}",
+    "new": {
+      "action": "Nouveau cours",
+      "label": "Démarrer un nouveau cours",
+      "inProject": "Démarrer un nouveau cours dans {project}"
+    },
+    "import": {
+      "action": "Importer",
+      "label": "Importer un cours",
+      "intoProject": "Importer un cours dans {project}",
+      "imported": "« {name} » importé.",
+      "importedWithWarnings": "« {name} » importé. {warnings}",
+      "errors": {
+        "read": "Impossible de lire ce fichier",
+        "invalid": "Impossible d'importer ce fichier : {details}",
+        "failed": "Impossible d'importer ce fichier"
+      }
+    },
+    "errors": {
+      "create": "Impossible de créer le cours"
+    }
+  },
+  "project": {
+    "untitled": "Projet par défaut",
+    "titleLabel": "Titre du projet",
+    "lectures": "Cours",
+    "options": "Options pour {name}",
+    "new": {
+      "title": "Nouveau projet",
+      "action": "Nouveau projet",
+      "name": "Titre",
+      "namePlaceholder": "p. ex. Biologie 101",
+      "description": "Description <hint>(facultative)</hint>",
+      "descriptionPlaceholder": "De quoi parle ce projet ?",
+      "submit": "Créer le projet"
+    },
+    "delete": {
+      "action": "Supprimer le projet",
+      "title": "Supprimer le projet ?",
+      "message": "« {name} » ainsi que tous ses cours, diapositives et documents sources seront définitivement supprimés."
+    },
+    "adminSettings": {
+      "title": "Modifier les paramètres de ce projet ?",
+      "message": "« {name} » appartient à un autre utilisateur. Vous pouvez en modifier les paramètres en tant qu'administrateur ; chaque modification est consignée dans le journal d'audit."
+    },
+    "settings": {
+      "title": "Paramètres du projet",
+      "scope": "Ces paramètres s’appliquent à tous les cours de ce projet (chaque cours peut en redéfinir certains).",
+      "templateHeading": "Modèle par défaut",
+      "templateHint": "Les nouveaux cours de ce projet démarrent avec ce modèle. Chaque cours conserve le sien et peut en changer à tout moment dans ses paramètres.",
+      "seedNotesHint": "Documentation de fond qui guide la génération des diapositives pour tous les cours de ce projet. Enregistrée automatiquement.",
+      "seedNotesLabel": "Notes sources du projet",
+      "seedNotesPlaceholder": "Thèmes clés, terminologie, structure prévue…",
+      "seedMaterialHint": "Documents et photos analysés pour en extraire du texte et des images, disponibles pour tous les cours de ce projet.",
+      "freedomHint": "Jusqu'où l'IA peut aller au-delà des propos du présentateur. Les cours de ce projet en héritent tant qu'ils ne définissent pas la leur.",
+      "languageHint": "Reconnaissance vocale et texte généré pour les cours de ce projet, sauf si un cours définit la sienne.",
+      "languageInherit": "les paramètres de votre profil ou la langue du navigateur",
+      "voiceHint": "La voix qui lit à voix haute les cours de ce projet, sauf si un cours définit la sienne. Elle parle dans la langue du projet.",
+      "deleteHint": "La suppression d’un projet efface définitivement tous ses cours, diapositives et documents sources. Cette action est irréversible."
+    },
+    "errors": {
+      "load": "Impossible de charger ce projet",
+      "create": "Impossible de créer le projet"
+    }
+  },
+  "home": {
+    "welcome": "Bienvenue, {name}",
+    "showAll": "{count, plural, one {Afficher le # cours} other {Afficher les # cours}}",
+    "otherLectures": "Autres cours",
+    "otherLecturesHint": "Les cours qui vous appartiennent dans les projets d'autres utilisateurs.",
+    "errors": {
+      "load": "Impossible de charger les projets"
+    }
+  },
+  "plan": {
+    "tier": {
+      "free": "gratuite",
+      "pro": "pro",
+      "max": "max"
+    }
+  },
+  "slot": {
+    "title": "Titre de la diapositive",
+    "body": "Corps de la diapositive",
+    "bullets": "Puces de la diapositive",
+    "caption": "Légende de la diapositive",
+    "image": "Image de la diapositive",
+    "columns": "Colonnes de la diapositive"
+  },
+  "slide": {
+    "previous": "Diapositive précédente",
+    "next": "Diapositive suivante",
+    "addSlot": "Ajouter {name}",
+    "image": {
+      "alt": "Image de la diapositive"
+    },
+    "menu": {
+      "label": "Options de la diapositive {number}",
+      "speak": "Lire cette diapositive",
+      "playOriginal": "Écouter l'audio d'origine",
+      "refine": "Améliorer cette diapositive avec l'IA",
+      "editTranscript": "Modifier la transcription orale",
+      "changeLayout": "Changer la mise en page",
+      "delete": "Supprimer la diapositive"
+    }
+  },
+  "image": {
+    "details": "Détails de l'image",
+    "replace": "Remplacer l'image",
+    "remove": "Retirer l'image",
+    "add": "Ajouter une image",
+    "noDetails": "Aucune information de source ou de licence n'est enregistrée pour cette image.",
+    "fields": {
+      "title": {
+        "label": "Titre",
+        "placeholder": "Titre de l'œuvre"
+      },
+      "caption": {
+        "label": "Légende",
+        "placeholder": "Courte description"
+      },
+      "creator": {
+        "label": "Crédit",
+        "placeholder": "Auteur ou créateur"
+      },
+      "creatorUrl": {
+        "label": "URL du créateur",
+        "placeholder": "https://…"
+      },
+      "sourceName": {
+        "label": "Source",
+        "placeholder": "p. ex. Wikimedia Commons"
+      },
+      "sourceUrl": {
+        "label": "URL de la source",
+        "placeholder": "https://…"
+      },
+      "license": {
+        "label": "Licence",
+        "placeholder": "p. ex. CC BY 4.0"
+      },
+      "licenseUrl": {
+        "label": "URL de la licence",
+        "placeholder": "https://…"
+      }
+    },
+    "search": {
+      "intro": "Importez la vôtre, ou cherchez des images libres de droits sur Wikimedia, Openverse et Flickr.",
+      "drop": "Déposez une image ici, ou",
+      "upload": "importez-la depuis votre ordinateur",
+      "uploadLabel": "Importer un fichier image",
+      "label": "Rechercher des images",
+      "placeholder": "Rechercher des images…",
+      "action": "Rechercher",
+      "searching": "Recherche…",
+      "results": "Résultats de la recherche d'images",
+      "result": "Résultat de recherche",
+      "use": "Utiliser l'image : {name}",
+      "none": "Aucune image trouvée. Essayez d'autres mots-clés."
+    },
+    "removeTooltip": "Supprimer l'image"
+  },
+  "whiteboard": {
+    "pen": "Stylo",
+    "highlighter": "Surligneur",
+    "eraser": "Gomme",
+    "newSlide": "Nouvelle diapositive tableau blanc",
+    "dragHint": "Faites glisser pour déplacer la barre du tableau blanc",
+    "picker": {
+      "label": "{tool} : couleur et épaisseur",
+      "options": "Options de couleur et de trait",
+      "color": "Couleur {color}",
+      "thickness": "Épaisseur {step}"
+    }
+  },
+  "refine": {
+    "action": "Améliorer",
+    "running": "Amélioration…",
+    "background": "Traitement en arrière-plan — cela peut prendre quelques minutes.",
+    "howMuch": "Intensité : {level}",
+    "parts": {
+      "text": {
+        "label": "Améliorer le texte de la diapositive",
+        "description": "Reformuler le texte pour mieux présenter le contenu."
+      },
+      "layout": {
+        "label": "Améliorer la mise en page",
+        "description": "Déplacer la diapositive vers une mise en page qui lui convient mieux, en conservant tout son contenu."
+      },
+      "imagery": {
+        "label": "Améliorer l'illustration",
+        "description": "Trouver une image lorsque la mise en page comporte un emplacement d'image vide."
+      }
+    },
+    "speakers": {
+      "label": "Identifier plusieurs intervenants",
+      "description": "Détecter qui a parlé — vous ou les étudiants — et reformuler les prises de parole des étudiants en questions plutôt qu’en affirmations.",
+      "noAudio": "(Aucun audio du cours n'a été enregistré, cette option est donc indisponible.)",
+      "descriptionSlide": "Détecter qui a parlé sur cette diapositive — vous ou les étudiants — et reformuler les prises de parole des étudiants en questions plutôt qu’en affirmations.",
+      "noAudioSlide": "(Aucun audio enregistré ne subsiste pour cette diapositive, cette option est donc indisponible.)"
+    },
+    "transcript": {
+      "label": "Améliorer la transcription orale",
+      "description": "Réécrire la narration lue à voix haute pour décrire les concepts plus élégamment."
+    },
+    "slide": {
+      "title": "Améliorer cette diapositive avec l'IA — diapositive {number}",
+      "intro": "Améliorez cette diapositive. Les modifications ne s'appliqueront qu'à elle. Pour améliorer toutes les diapositives, utilisez plutôt les <lectureLink>options du cours</lectureLink>.",
+      "levelLabel": "Intensité de l’amélioration de cette diapositive",
+      "marked": "Cette diapositive comporte des annotations au tableau blanc. L'amélioration peut modifier son contenu ou sa mise en page ; vos surlignages et annotations risquent alors de ne plus correspondre à ce qui se trouve dessous.",
+      "running": "Amélioration de cette diapositive…",
+      "failed": "Impossible d'améliorer cette diapositive — réessayez"
+    }
+  },
+  "transcript": {
+    "title": "Transcription orale — diapositive {number}",
+    "intro": "C’est ce qui est lu à voix haute pendant la lecture du diaporama.",
+    "label": "Transcription orale",
+    "placeholder": "Rien n'a été enregistré pour cette diapositive — la lecture narre son contenu à la place.",
+    "refineWithAi": "Améliorer avec l'IA",
+    "playPreview": "Lire la transcription orale",
+    "pausePreview": "Mettre en pause la transcription orale",
+    "regenerate": "Régénérer à partir de l'audio",
+    "regenerating": "Régénération à partir de l'audio…",
+    "save": "Enregistrer la transcription",
+    "marked": "Cette diapositive comporte des annotations au tableau blanc calées sur la transcription. L'enregistrement réassocie chacune aux mots sur lesquels elle a été tracée. Une annotation dont les mots ont disparu est masquée plutôt que déplacée — elle est conservée, non supprimée, et réapparaît si une formulation correspondante revient.",
+    "discard": {
+      "title": "Abandonner les modifications ?",
+      "message": "La transcription orale de cette diapositive comporte des modifications non enregistrées. Les fermer maintenant les perdra.",
+      "action": "Abandonner les modifications"
+    },
+    "errors": {
+      "regenerate": "Impossible de régénérer à partir de l'audio enregistré — réessayez",
+      "refine": "Impossible d’améliorer la transcription — réessayez",
+      "save": "Impossible d'enregistrer la transcription — réessayez"
+    }
+  },
+  "seed": {
+    "notesHeading": "Notes sources",
+    "materialHeading": "Documents sources",
+    "upload": "Importer un PDF, un DOCX ou une photo",
+    "uploadLabel": "Importer des documents sources",
+    "uploadFailed": "Échec de l'import — PDF, DOCX ou images jusqu'à 20 Mo",
+    "orDrop": "ou déposez un fichier",
+    "empty": "Aucun document source pour le moment.",
+    "use": "Utiliser",
+    "useIn": "Utiliser {name} pour la génération",
+    "deleteAsset": "Supprimer {name}",
+    "captionPlaceholder": "Légende (utilisée pour associer les diapositives)",
+    "captionFor": "Légende de {name}",
+    "status": {
+      "processing": "Traitement…",
+      "ready": "Prêt",
+      "failed": "Extraction impossible"
+    },
+    "dialog": {
+      "addTitle": "Ajouter des documents sources",
+      "prelectureHint": "Donnez du contexte à l'IA avant de commencer. Facultatif — vous pourrez en ajouter à tout moment.",
+      "manualHint": "Ajoutez de la documentation de fond pour ce cours. Elle sera utilisée dès votre prochaine prise de parole.",
+      "skip": "Passer",
+      "start": "Démarrer le cours"
+    }
+  },
+  "access": {
+    "heading": "Accès",
+    "people": "Personnes ayant accès",
+    "addPeople": "Ajouter des personnes",
+    "addByEmail": "Ajouter des personnes par e-mail",
+    "emailPlaceholder": "personne@exemple.com",
+    "role": "Rôle d'accès",
+    "roleFor": "Rôle de {name}",
+    "add": "Ajouter",
+    "transfer": "Transférer la propriété",
+    "remove": "Retirer l'accès",
+    "onlyYou": "Vous seul avez accès pour l'instant.",
+    "inherited": "Hérité du projet — toute modification ici détache ce cours.",
+    "overridden": "Redéfini pour ce cours.",
+    "useProject": "Utiliser les paramètres du projet",
+    "roles": {
+      "viewer": "Lecteur",
+      "editor": "Éditeur"
+    },
+    "general": {
+      "heading": "Accès général",
+      "public": {
+        "label": "Public",
+        "hint": "Toute personne disposant du lien peut consulter"
+      },
+      "restricted": {
+        "label": "Restreint",
+        "hint": "Seules les personnes autorisées peuvent ouvrir le lien"
+      }
+    },
+    "transferConfirm": {
+      "title": "Transférer la propriété ?",
+      "message": "Faire de {name} le propriétaire de « {subject} » ? Vous conserverez un accès en modification.",
+      "action": "Transférer"
+    },
+    "errors": {
+      "noAccount": "Aucun compte avec cette adresse e-mail"
+    }
+  },
+  "deck": {
+    "meta": "{count, plural, one {# diapositive} other {# diapositives}} · modifié {age}",
+    "share": "Partager",
+    "shareLabel": "Partager le cours",
+    "addSlide": "Ajouter une diapositive",
+    "addSlideHint": "Ajouter une diapositive",
+    "liveSession": "Session en direct",
+    "playingOriginal": "Lecture de l'audio d'origine…",
+    "play": {
+      "play": "Lire le diaporama",
+      "pause": "Mettre la lecture en pause",
+      "hint": "Lire le diaporama à voix haute",
+      "empty": "Ajoutez une diapositive pour lire le diaporama"
+    },
+    "record": {
+      "startHint": "Parlez pour ajouter des diapositives",
+      "stopHint": "Enregistrement — cliquez pour arrêter"
+    },
+    "empty": {
+      "speaking": "Commencez à parler pour générer des diapositives",
+      "howToStart": "Cliquez sur les icônes <plus></plus> ou <mic></mic> pour commencer à ajouter du contenu.",
+      "viewer": "Ce diaporama ne contient aucune diapositive.",
+      "plusIcon": "plus",
+      "micIcon": "microphone"
+    },
+    "generation": {
+      "paused": "Génération de contenu suspendue pendant le dessin",
+      "resumed": "Génération de contenu reprise"
+    },
+    "simulated": {
+      "label": "Phrase prononcée",
+      "placeholder": "Dites quelque chose sur votre sujet…",
+      "listening": "Écoute… (vous pouvez aussi taper)",
+      "speak": "Parler",
+      "generating": "Génération…"
+    },
+    "toolbar": {
+      "drag": "Faites glisser pour déplacer",
+      "dragHint": "Faites glisser pour déplacer la barre d'outils"
+    },
+    "view": {
+      "label": "Mode d'affichage des diapositives",
+      "carousel": "Vue carrousel",
+      "list": "Vue liste"
+    },
+    "delete": {
+      "action": "Supprimer le cours",
+      "title": "Supprimer le cours ?",
+      "message": "« {name} » ainsi que toutes ses diapositives et ses documents sources seront définitivement supprimés."
+    },
+    "adminSettings": {
+      "title": "Modifier les paramètres de ce cours ?",
+      "message": "« {name} » appartient à un autre utilisateur. Vous pouvez en modifier les paramètres en tant qu'administrateur ; chaque modification est consignée dans le journal d'audit."
+    },
+    "settings": {
+      "title": "Paramètres du cours",
+      "close": "Fermer les paramètres",
+      "sections": "Sections des paramètres",
+      "scope": "Ces paramètres ne s'appliquent qu'à ce cours. Les <projectLink>paramètres du projet</projectLink> peuvent également le concerner.",
+      "tabs": {
+        "general": "Général",
+        "template": "Apparence",
+        "refine": "Améliorer avec l'IA",
+        "quiz": "Quiz",
+        "export": "Export",
+        "sharing": "Confidentialité et partage"
+      },
+      "general": {
+        "titleHeading": "Titre du cours",
+        "titleHint": "Donnez un nom à ce cours. Laissez le champ vide pour que l'IA le titre à partir de vos propos au fil du cours.",
+        "seedNotesHeading": "Notes sources",
+        "seedNotesHint": "Documentation propre à ce cours, ajoutée aux notes sources du projet. Enregistrée automatiquement.",
+        "seedNotesLabel": "Notes sources du cours",
+        "seedNotesPlaceholder": "Sujets abordés, termes clés, exemples…",
+        "seedMaterialHeading": "Documents sources",
+        "seedMaterialHint": "Documents et photos analysés pour en extraire du texte et des images, utilisés uniquement par ce cours.",
+        "freedomHeading": "Liberté de l'IA",
+        "freedomHint": "Jusqu'où l'IA peut aller au-delà de vos propos lors de la génération des diapositives de ce cours.",
+        "languageHeading": "Langue",
+        "languageHint": "Reconnaissance vocale et texte généré pour ce cours.",
+        "languageInherit": "paramètre du projet, du profil ou du navigateur",
+        "voiceHeading": "Voix de narration",
+        "voiceHint": "La voix qui lit ce cours à voix haute. Elle parle dans la langue du cours.",
+        "deleteHint": "La suppression d’un cours efface définitivement ses diapositives et ses documents sources. Cette action est irréversible."
+      },
+      "refine": {
+        "heading": "Améliorer ce cours",
+        "intro": "Améliorez le texte, les images et la version parlée des diapositives. Cela peut prendre quelques minutes et se déroule en arrière-plan.",
+        "introAdmin": "Ce que ferait une passe d'amélioration, et son intensité. Ce sont les choix enregistrés du cours ; son exécution revient au propriétaire.",
+        "noSlides": "Ce cours ne contient encore aucune diapositive, il n'y a donc rien à améliorer.",
+        "levelLabel": "Intensité de l’amélioration de ce cours",
+        "failed": "Impossible de terminer l'amélioration — veuillez réessayer.",
+        "markedTitle": "Améliorer des diapositives annotées ?",
+        "markedMessage": "Certaines diapositives comportent des annotations au tableau blanc. L'amélioration peut modifier leur contenu ou leur mise en page ; les surlignages et annotations risquent alors de ne plus correspondre à ce qui se trouve dessous.",
+        "markedConfirm": "Améliorer quand même",
+        "summary": {
+          "done": "Terminé — {changes}.",
+          "none": "Terminé — aucune modification nécessaire.",
+          "reframed": "{count, plural, one {# diapositive étudiante reformulée} other {# diapositives étudiantes reformulées}}",
+          "slidesRefined": "{count, plural, one {# diapositive améliorée} other {# diapositives améliorées}}",
+          "transcriptsUpdated": "{count, plural, one {# narration mise à jour} other {# narrations mises à jour}}"
+        }
+      }
+    }
+  },
+  "quiz": {
+    "heading": "Quiz de fin de cours",
+    "intro": "Générez un quiz à partir de ce cours et publiez-le sous forme de Google Form à partager avec vos étudiants.",
+    "connect": "Connecter Google",
+    "connecting": "Connexion…",
+    "connectHint": "Connectez un compte Google pour que le formulaire soit enregistré dans votre Google Drive.",
+    "reconnect": "Reconnecter Google",
+    "driveDenied": "Votre compte Google est connecté, mais l'accès à Drive n'a pas été autorisé. Cliquez de nouveau sur {action} et veillez à cocher l'autorisation Drive pour que les quiz puissent être enregistrés.",
+    "generate": "Générer le quiz",
+    "generating": "Génération…",
+    "generateAndSave": "Générer et enregistrer",
+    "publish": "Publier le quiz",
+    "publishing": "Publication…",
+    "ready": "Votre quiz est prêt",
+    "copyLink": "Copier le lien du quiz",
+    "linkCopied": "Lien copié",
+    "delete": "Supprimer le quiz",
+    "deleting": "Suppression…",
+    "deleteHint": "La suppression vous permet de générer un nouveau quiz avec des questions différentes.",
+    "savingTo": "Enregistrement dans :",
+    "folder": {
+      "dialog": "Choisir un dossier Drive",
+      "title": "Enregistrer le quiz dans…",
+      "path": "Chemin du dossier",
+      "empty": "Aucun sous-dossier ici. Enregistrez le quiz dans ce dossier, ou créez-en un ci-dessous.",
+      "new": "Nouveau dossier",
+      "newName": "Nom du nouveau dossier",
+      "newIn": "Nouveau dossier dans {folder}",
+      "cancelNew": "Annuler le nouveau dossier",
+      "creating": "Création…"
+    },
+    "options": {
+      "questionCount": "Nombre de questions",
+      "totalPoints": "Total des points",
+      "advanced": "Paramètres avancés",
+      "types": "Types de questions",
+      "typesHint": "Le nombre de questions ci-dessus suit cette répartition.",
+      "email": {
+        "label": "Collecter l'e-mail du répondant",
+        "verified": "E-mail vérifié (contrôlé par Google)",
+        "responderInput": "Le répondant saisit son e-mail",
+        "none": "Ne pas collecter d'e-mail"
+      },
+      "transcript": {
+        "label": "Inclure la transcription orale dans les sources",
+        "hint": "Fonder les questions à la fois sur le texte des diapositives et sur la transcription complète du cours."
+      },
+      "instructions": {
+        "label": "Instructions supplémentaires (facultatif)",
+        "hint": "Indiquez à l'IA comment rédiger le quiz — p. ex. se concentrer sur un thème, ignorer une section, régler la difficulté ou suivre un style de question.",
+        "placeholder": "p. ex. se concentrer sur le cycle de l'eau ; éviter les définitions"
+      }
+    },
+    "types": {
+      "single_choice": {
+        "field": "Choix unique (QCM)",
+        "name": "Choix unique"
+      },
+      "multiple_choice": {
+        "field": "Réponses multiples",
+        "name": "Réponses multiples"
+      },
+      "short_text": {
+        "field": "Réponse courte",
+        "name": "Réponse courte"
+      },
+      "long_text": {
+        "field": "Réponse longue",
+        "name": "Réponse longue"
+      }
+    },
+    "review": {
+      "dialog": "Relire les questions du quiz",
+      "title": "Relire et attribuer les points",
+      "hint": "Ajustez les points de chaque question, puis publiez. Total :",
+      "points": "Points",
+      "pointsFor": "Points de la question {number}"
+    },
+    "errors": {
+      "status": "Impossible de charger l'état du quiz",
+      "connect": "Impossible de connecter votre compte Google",
+      "loadFolders": "Impossible de charger vos dossiers Drive. Votre compte Google n'a peut-être pas accordé l'accès à Drive.",
+      "createFolder": "Impossible de créer le dossier",
+      "generate": "Impossible de générer le quiz — veuillez réessayer",
+      "publish": "Impossible de publier le quiz — veuillez réessayer",
+      "delete": "Impossible de supprimer le quiz — veuillez réessayer"
+    }
+  },
+  "export": {
+    "heading": "Exporter ce cours",
+    "intro": "Enregistrez le diaporama en PDF, en présentation Google Slides modifiable, ou en fichier YAML réimportable.",
+    "format": "Format",
+    "destination": "Destination",
+    "download": "Télécharger",
+    "toDrive": "Enregistrer dans Google Drive",
+    "downloadFormat": "Télécharger en {format}",
+    "saveFormatToDrive": "Enregistrer le {format} dans Drive",
+    "slidesAlwaysDrive": "Google Slides est toujours enregistré dans votre Google Drive.",
+    "working": "Traitement…",
+    "saving": "Enregistrement…",
+    "saveHere": "Enregistrer ici",
+    "saved": "Enregistré",
+    "savedToFolder": "Enregistré dans {folder}",
+    "savedList": "Enregistré dans Drive",
+    "deleteFile": "Supprimer {name}",
+    "connectHint": "Connectez un compte Google pour que le fichier soit enregistré dans votre Drive.",
+    "driveDenied": "Votre compte Google est connecté, mais l'accès à Drive n'a pas été autorisé. Lors de la reconnexion, veillez à cocher l'autorisation Drive pour que les exports puissent être enregistrés.",
+    "formats": {
+      "pdf": {
+        "hint": "Une page par diapositive, avec les crédits des images."
+      },
+      "google-slides": {
+        "hint": "Une présentation modifiable dans votre Drive."
+      },
+      "yaml": {
+        "hint": "Un fichier lisible et réimportable."
+      }
+    },
+    "folder": {
+      "title": "Enregistrer le {format} dans…",
+      "empty": "Aucun sous-dossier ici. Enregistrez dans ce dossier, ou créez-en un ci-dessous."
+    },
+    "includeWhiteboard": {
+      "label": "Inclure les annotations du tableau blanc",
+      "hint": "Dessiner les tracés à main levée sur les diapositives exportées."
+    },
+    "otherDrive": {
+      "title": "Retiré de ce cours",
+      "message": "Cet export a été enregistré dans le Google Drive d'un autre collaborateur : il a été retiré de ce cours mais existe toujours dans son Drive. Demandez-lui de le supprimer si vous souhaitez le faire disparaître complètement."
+    },
+    "errors": {
+      "status": "Impossible de charger l'état des exports",
+      "download": "Impossible d’exporter le diaporama — veuillez réessayer",
+      "drive": "Impossible d’enregistrer dans Drive — veuillez réessayer",
+      "delete": "Impossible de supprimer l'export — veuillez réessayer"
+    }
+  },
+  "errors": {
+    "invalid_credentials": "E-mail ou mot de passe incorrect",
+    "account_banned": "Ce compte a été banni",
+    "unauthorized": "Votre session a expiré — reconnectez-vous",
+    "forbidden": "Vous n'avez pas l'autorisation de faire cela",
+    "internal_error": "Une erreur s'est produite de notre côté — réessayez",
+    "unknown_error": "Une erreur s'est produite — réessayez"
+  }
+}

@@ -193,6 +193,12 @@ export interface UserSetLanguageInput {
   language: Locale | null
 }
 
+/** Interface language (TECH-12). Unlike `language` there is nothing to
+ * inherit, so this is never null — an account always has a locale. */
+export interface UserSetLocaleInput {
+  locale: Locale
+}
+
 /** Lecture-level language; null re-inherits project/profile/browser. */
 export interface DeckSetLanguageInput {
   deckId: string

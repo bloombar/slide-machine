@@ -9,6 +9,7 @@ import type { HydratedDocument } from 'mongoose'
 import type {
   SafeUser,
   UserSetLanguageInput,
+  UserSetLocaleInput,
   UserSetProfileVisibilityInput,
   UserUpdateProfileInput,
 } from '@slide-machine/shared'
@@ -111,3 +112,21 @@ export const userSetLanguage = defineAction<UserSetLanguageInput, SafeUser>({
 })
 
 registerAction(userSetLanguage)
+
+/** Interface language (TECH-12). Mirrors userSetLanguage, but is not
+ * nullable: an account always has a locale, so there is nothing to clear
+ * back to. */
+export const userSetLocale = defineAction<UserSetLocaleInput, SafeUser>({
+  name: 'user.setLocale',
+  input: z.object({ locale: z.enum(LOCALES) }),
+  execute: async (ctx, input) => {
+    const user = await loadSelf(ctx.userId)
+    const before = userSettingsSnapshot(user)
+    user.locale = input.locale
+    await user.save()
+    await recordSelfChange(user, before)
+    return toUserDto(user)
+  },
+})
+
+registerAction(userSetLocale)

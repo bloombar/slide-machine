@@ -58,7 +58,14 @@ export default defineConfig({
   testDir: './tests',
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  use: { trace: 'on-first-retry' },
+  use: {
+    trace: 'on-first-retry',
+    // The app follows the browser's language (TECH-12), so pin it: every
+    // spec but i18n.spec selects on English copy, and without this they
+    // would pass or fail by the runner's system locale. i18n.spec opts
+    // out with its own test.use({ locale: 'fr-FR' }).
+    locale: 'en-US',
+  },
   projects: [
     {
       name: 'chromium',

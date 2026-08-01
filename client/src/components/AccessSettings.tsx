@@ -11,26 +11,14 @@
  * "Use project settings" re-attaches.
  */
 import { useEffect, useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { DeckShare, ShareRole, Visibility } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import ConfirmDialog from './ConfirmDialog'
 
-const GENERAL_ACCESS: Array<{
-  value: Visibility
-  label: string
-  hint: string
-}> = [
-  {
-    value: 'public',
-    label: 'Public',
-    hint: 'Anyone on the internet with the link can view',
-  },
-  {
-    value: 'restricted',
-    label: 'Restricted',
-    hint: 'Only people with access can open with the link',
-  },
-]
+/** The general-access choices, in order. Each value keys its own label
+ * and hint under `access.general.<value>` in the locale bundles. */
+const GENERAL_ACCESS: readonly Visibility[] = ['public', 'restricted']
 
 export interface AccessSubject {
   id: string
@@ -58,6 +46,7 @@ export default function AccessSettings({
   isOwner,
   onChange,
 }: Props) {
+  const { t } = useTranslation()
   const [shares, setShares] = useState<DeckShare[]>([])
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<ShareRole>('viewer')
@@ -122,7 +111,7 @@ export default function AccessSettings({
       setShares(await grant(email.trim(), role))
       setEmail('')
     } catch {
-      setShareError('No account with that email')
+      setShareError(t('access.errors.noAccount'))
     } finally {
       setBusy(false)
     }
@@ -174,20 +163,22 @@ export default function AccessSettings({
 
   return (
     <section>
-      <h3 className="mb-4 text-lg font-semibold text-slate-700">Access</h3>
+      <h3 className="mb-4 text-lg font-semibold text-slate-700">
+        {t('access.heading')}
+      </h3>
 
       {entity === 'deck' && (
         <p className="mb-4 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600">
           {subject.accessInherited ? (
-            <>Inherited from the project — changes here detach this lecture.</>
+            t('access.inherited')
           ) : (
             <>
-              Overridden for this lecture.{' '}
+              {t('access.overridden')}{' '}
               <button
                 onClick={resetToProject}
                 className="cursor-pointer text-indigo-600 hover:underline"
               >
-                Use project settings
+                {t('access.useProject')}
               </button>
             </>
           )}
@@ -197,36 +188,36 @@ export default function AccessSettings({
       <div className="flex flex-col gap-6">
         <div>
           <h4 className="mb-2 text-sm font-medium text-slate-700">
-            People with access
+            {t('access.people')}
           </h4>
           <form
             onSubmit={e => void addPerson(e)}
-            aria-label="Add people"
+            aria-label={t('access.addPeople')}
             className="flex flex-wrap items-center gap-2"
           >
             <input
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              placeholder="person@example.com"
-              aria-label="Add people by email"
+              placeholder={t('access.emailPlaceholder')}
+              aria-label={t('access.addByEmail')}
               className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
             />
             <select
               value={role}
               onChange={e => setRole(e.target.value as ShareRole)}
-              aria-label="Access role"
+              aria-label={t('access.role')}
               className="rounded-md border border-slate-300 px-2 py-2 text-sm"
             >
-              <option value="viewer">Viewer</option>
-              <option value="editor">Editor</option>
+              <option value="viewer">{t('access.roles.viewer')}</option>
+              <option value="editor">{t('access.roles.editor')}</option>
             </select>
             <button
               type="submit"
               disabled={busy}
               className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
             >
-              Add
+              {t('access.add')}
             </button>
           </form>
           {shareError && (
@@ -245,50 +236,50 @@ export default function AccessSettings({
                 <select
                   value={entry.role}
                   onChange={e => onRowAction(entry, e.target.value)}
-                  aria-label={`Role for ${entry.displayName}`}
-                  className="ml-auto rounded-md border border-slate-300 px-2 py-1 text-xs"
+                  aria-label={t('access.roleFor', {
+                    name: entry.displayName,
+                  })}
+                  className="ms-auto rounded-md border border-slate-300 px-2 py-1 text-xs"
                 >
-                  <option value="viewer">Viewer</option>
-                  <option value="editor">Editor</option>
+                  <option value="viewer">{t('access.roles.viewer')}</option>
+                  <option value="editor">{t('access.roles.editor')}</option>
                   {isOwner && (
-                    <option value="transfer">Transfer ownership</option>
+                    <option value="transfer">{t('access.transfer')}</option>
                   )}
-                  <option value="remove">Remove access</option>
+                  <option value="remove">{t('access.remove')}</option>
                 </select>
               </li>
             ))}
             {shares.length === 0 && (
-              <li className="text-sm text-slate-500">
-                Only you have access so far.
-              </li>
+              <li className="text-sm text-slate-500">{t('access.onlyYou')}</li>
             )}
           </ul>
         </div>
 
         <fieldset>
           <legend className="mb-2 text-sm font-medium text-slate-700">
-            General access
+            {t('access.general.heading')}
           </legend>
           <div className="flex flex-col gap-2 sm:flex-row sm:gap-4">
             {GENERAL_ACCESS.map(option => (
               <label
-                key={option.value}
+                key={option}
                 className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 px-3 py-2 has-checked:border-indigo-400 has-checked:bg-indigo-50 sm:flex-1"
               >
                 <input
                   type="radio"
-                  name="General access"
-                  value={option.value}
-                  checked={subject.visibility === option.value}
-                  onChange={() => setGeneralAccess(option.value)}
+                  name="general-access"
+                  value={option}
+                  checked={subject.visibility === option}
+                  onChange={() => setGeneralAccess(option)}
                   className="mt-1"
                 />
                 <span>
                   <span className="block text-sm font-medium">
-                    {option.label}
+                    {t(`access.general.${option}.label`)}
                   </span>
                   <span className="block text-xs text-slate-500">
-                    {option.hint}
+                    {t(`access.general.${option}.hint`)}
                   </span>
                 </span>
               </label>
@@ -299,9 +290,12 @@ export default function AccessSettings({
 
       {confirmingTransfer && (
         <ConfirmDialog
-          title="Transfer ownership?"
-          message={`Make ${confirmingTransfer.displayName} the owner of "${subject.name}"? You will keep edit access.`}
-          confirmLabel="Transfer"
+          title={t('access.transferConfirm.title')}
+          message={t('access.transferConfirm.message', {
+            name: confirmingTransfer.displayName,
+            subject: subject.name,
+          })}
+          confirmLabel={t('access.transferConfirm.action')}
           onConfirm={() => transferOwnership(confirmingTransfer)}
           onCancel={() => setConfirmingTransfer(null)}
         />

@@ -6,6 +6,7 @@
  * from a previously exported deck YAML file (EXP-3).
  */
 import { useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Plus, Upload } from 'lucide-react'
 
 interface Props {
@@ -23,6 +24,7 @@ export default function NewLectureZone({
   onStart,
   onImport,
 }: Props) {
+  const { t } = useTranslation()
   const fileInput = useRef<HTMLInputElement>(null)
 
   /** Forwards the picked file, then resets the input so the same file can be
@@ -38,14 +40,14 @@ export default function NewLectureZone({
       <button
         aria-label={
           projectTitle
-            ? `Start a new lecture in ${projectTitle}`
-            : 'Start a new lecture'
+            ? t('lecture.new.inProject', { project: projectTitle })
+            : t('lecture.new.label')
         }
         onClick={onStart}
         className="flex items-center gap-1 text-sm font-medium text-indigo-600 hover:underline"
       >
         <Plus className="h-4 w-4" aria-hidden />
-        New lecture
+        {t('lecture.new.action')}
       </button>
       {onImport && (
         <>
@@ -55,14 +57,14 @@ export default function NewLectureZone({
           <button
             aria-label={
               projectTitle
-                ? `Import a lecture into ${projectTitle}`
-                : 'Import a lecture'
+                ? t('lecture.import.intoProject', { project: projectTitle })
+                : t('lecture.import.label')
             }
             onClick={() => fileInput.current?.click()}
             className="flex items-center gap-1 text-sm font-medium text-indigo-600 hover:underline"
           >
             <Upload className="h-4 w-4" aria-hidden />
-            Import
+            {t('lecture.import.action')}
           </button>
           <input
             ref={fileInput}

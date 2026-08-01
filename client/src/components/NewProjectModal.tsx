@@ -5,6 +5,7 @@
  * Focus lands on the title field.
  */
 import { useRef, useState, type FormEvent } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import type { Project } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import Modal from './Modal'
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export default function NewProjectModal({ onCreated, onCancel }: Props) {
+  const { t } = useTranslation()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -33,7 +35,7 @@ export default function NewProjectModal({ onCreated, onCancel }: Props) {
       })
       onCreated(project)
     } catch {
-      setError('Could not create the project')
+      setError(t('project.errors.create'))
       setSubmitting(false)
     }
   }
@@ -47,21 +49,21 @@ export default function NewProjectModal({ onCreated, onCancel }: Props) {
     >
       <form onSubmit={onSubmit}>
         <h3 id="new-project-title" className="text-lg font-bold">
-          New project
+          {t('project.new.title')}
         </h3>
 
         <label
           htmlFor="new-project-name"
           className="mt-4 block text-sm font-medium text-slate-700"
         >
-          Title
+          {t('project.new.name')}
         </label>
         <input
           id="new-project-name"
           ref={titleRef}
           value={title}
           onChange={e => setTitle(e.target.value)}
-          placeholder="e.g. Biology 101"
+          placeholder={t('project.new.namePlaceholder')}
           className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2"
         />
 
@@ -69,14 +71,19 @@ export default function NewProjectModal({ onCreated, onCancel }: Props) {
           htmlFor="new-project-description"
           className="mt-4 block text-sm font-medium text-slate-700"
         >
-          Description <span className="text-slate-400">(optional)</span>
+          {/* Trans, not t: "(optional)" is greyed out inside the label,
+              and it does not sit last in every language. */}
+          <Trans
+            i18nKey="project.new.description"
+            components={{ hint: <span className="text-slate-400" /> }}
+          />
         </label>
         <textarea
           id="new-project-description"
           value={description}
           onChange={e => setDescription(e.target.value)}
           rows={3}
-          placeholder="What is this project about?"
+          placeholder={t('project.new.descriptionPlaceholder')}
           className="mt-1 w-full resize-none rounded-md border border-slate-300 px-3 py-2"
         />
 
@@ -92,14 +99,14 @@ export default function NewProjectModal({ onCreated, onCancel }: Props) {
             onClick={onCancel}
             className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
             type="submit"
             disabled={!title.trim() || submitting}
             className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
           >
-            Create project
+            {t('project.new.submit')}
           </button>
         </div>
       </form>

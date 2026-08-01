@@ -312,8 +312,11 @@ describe('ProfilePage', () => {
     })
     fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    // `invalid_input` is not one of the globally meaningful error codes,
+    // so the call site's own wording is shown rather than the server's
+    // English message (docs/I18N.md).
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Display name is required',
+      'Could not save the profile.',
     )
     expect(screen.getByLabelText('Display name')).toBeVisible()
   })
