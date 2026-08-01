@@ -90,7 +90,6 @@
     "displayName": "Nombre visible",
     "bio": "Biografía",
     "bioPlaceholder": "Una breve presentación que se muestra en tu perfil.",
-    "noBio": "Sin biografía",
     "noLectures": "No hay clases que mostrar.",
     "displayNameRequired": "El nombre visible es obligatorio.",
     "interfaceLanguage": "Idioma de la interfaz",

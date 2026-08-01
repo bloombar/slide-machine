@@ -90,7 +90,6 @@
     "displayName": "Display name",
     "bio": "Bio",
     "bioPlaceholder": "A short introduction shown on your profile.",
-    "noBio": "No bio",
     "noLectures": "No lectures to show.",
     "displayNameRequired": "Display name is required.",
     "interfaceLanguage": "Interface language",

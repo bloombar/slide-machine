@@ -90,7 +90,6 @@
     "displayName": "Отображаемое имя",
     "bio": "О себе",
     "bioPlaceholder": "Краткое представление, видимое в профиле.",
-    "noBio": "Нет описания",
     "noLectures": "Нет лекций для показа.",
     "displayNameRequired": "Укажите отображаемое имя.",
     "interfaceLanguage": "Язык интерфейса",

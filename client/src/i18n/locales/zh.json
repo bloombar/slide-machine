@@ -90,7 +90,6 @@
     "displayName": "显示名称",
     "bio": "简介",
     "bioPlaceholder": "显示在你个人资料上的简短介绍。",
-    "noBio": "暂无简介",
     "noLectures": "没有可显示的课程。",
     "displayNameRequired": "显示名称为必填项。",
     "interfaceLanguage": "界面语言",

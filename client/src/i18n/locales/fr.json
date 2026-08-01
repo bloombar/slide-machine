@@ -90,7 +90,6 @@
     "displayName": "Nom d'affichage",
     "bio": "Biographie",
     "bioPlaceholder": "Une courte présentation affichée sur votre profil.",
-    "noBio": "Aucune biographie",
     "noLectures": "Aucun cours à afficher.",
     "displayNameRequired": "Le nom d'affichage est obligatoire.",
     "interfaceLanguage": "Langue de l'interface",
