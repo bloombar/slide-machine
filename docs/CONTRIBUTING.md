@@ -92,6 +92,7 @@ Behavior is tuned by env vars in `server/.env`, each annotated inline in [.env.e
 | `GENERATION_PROVIDER` | `mock` \| `gemini` | Slide-generation engine (`.env.example` ships `mock` for keyless dev) |
 | `TRANSCRIPTION_PROVIDER` | `browser` \| `google-cloud` \| `none` | Live speech engine |
 | `TTS_PROVIDER` | `google-cloud` | Narration engine (off without a TTS key) |
+| `TRANSLATION_PROVIDER` | `google-cloud` \| `none` \| `mock` | Slide-content translation for translated viewing (off without a Translation key) |
 | `IMAGE_GEN_PROVIDER` / `QUIZ_PROVIDER` | `gemini` | AI image / quiz engines |
 | `STORAGE_PROVIDER` | `local` \| `s3` | Object-storage backend |
 | `DIARIZATION_PROVIDER` | `none` \| `google-cloud` \| `mock` | Post-lecture speaker diarization |
