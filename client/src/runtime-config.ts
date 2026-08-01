@@ -13,6 +13,7 @@ import { config } from './config'
 let runtime: RuntimeConfig = {
   sttEngine: 'browser',
   ttsEnabled: false,
+  translationEnabled: false,
   refineSlidesDefaultLevel: 2,
   refineTranscriptDefaultLevel: 2,
   simulatedSpeechEnabled: false,
@@ -38,6 +39,10 @@ export const getSttEngine = (): SttEngine => runtime.sttEngine
 
 /** Whether TTS playback is available; false (feature hidden) until config loads. */
 export const getTtsEnabled = (): boolean => runtime.ttsEnabled
+
+/** Whether translated viewing is available (SHARE-2); false (switcher hidden)
+ * until config loads. */
+export const getTranslationEnabled = (): boolean => runtime.translationEnabled
 
 /** Default strength (1–5) the "Refine all slides" slider starts at (GEN-4). */
 export const getRefineSlidesDefaultLevel = (): number =>

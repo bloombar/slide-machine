@@ -11,7 +11,9 @@ import request from 'supertest'
 const envState = {
   TRANSCRIPTION_PROVIDER: 'browser',
   TTS_PROVIDER: 'none',
+  TRANSLATION_PROVIDER: 'none',
   GOOGLE_CLOUD_TTS_KEY: undefined as string | undefined,
+  GOOGLE_CLOUD_TRANSLATION_KEY: undefined as string | undefined,
   REFINE_SLIDES_DEFAULT_LEVEL: 2,
   REFINE_TRANSCRIPT_DEFAULT_LEVEL: 2,
   SIMULATED_SPEECH_ENABLED: false,
@@ -31,6 +33,8 @@ const getConfig = async () => (await request(app).get('/api/config')).body
 beforeEach(() => {
   envState.SIMULATED_SPEECH_ENABLED = false
   envState.TTS_PROVIDER = 'none'
+  envState.TRANSLATION_PROVIDER = 'none'
+  envState.GOOGLE_CLOUD_TRANSLATION_KEY = undefined
   envState.STT_CAPTURE_SAMPLE_RATE = 24000
 })
 
@@ -44,6 +48,7 @@ describe('GET /api/config', () => {
       simulatedSpeechEnabled: false,
       whiteboardSuppressDebounceMs: 5000,
       sttCaptureSampleRate: 24000,
+      translationEnabled: false,
     })
   })
 
@@ -70,5 +75,23 @@ describe('GET /api/config', () => {
   it('reports TTS as usable once a provider is configured', async () => {
     envState.TTS_PROVIDER = 'mock'
     expect(await getConfig()).toMatchObject({ ttsEnabled: true })
+  })
+
+  // The viewer's slide-language switcher is hidden unless translation can
+  // actually run, so this flag gates a control rather than just describing one.
+  it('reports translation as usable once a provider is configured', async () => {
+    envState.TRANSLATION_PROVIDER = 'mock'
+    expect(await getConfig()).toMatchObject({ translationEnabled: true })
+  })
+
+  it('reports translation as unusable when Google has no key', async () => {
+    envState.TRANSLATION_PROVIDER = 'google-cloud'
+    expect(await getConfig()).toMatchObject({ translationEnabled: false })
+  })
+
+  it('reports translation as usable once the Google key is set', async () => {
+    envState.TRANSLATION_PROVIDER = 'google-cloud'
+    envState.GOOGLE_CLOUD_TRANSLATION_KEY = 'translate-key'
+    expect(await getConfig()).toMatchObject({ translationEnabled: true })
   })
 })

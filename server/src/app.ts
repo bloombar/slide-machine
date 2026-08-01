@@ -43,6 +43,8 @@ import './providers/mock-diarization'
 import './providers/google-cloud-diarization'
 import './providers/google-cloud-tts'
 import './providers/mock-tts'
+import './providers/google-cloud-translation'
+import './providers/mock-translation'
 import './billing/mock'
 import './billing/stripe'
 

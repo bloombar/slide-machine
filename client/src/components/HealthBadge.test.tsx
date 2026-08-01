@@ -18,6 +18,7 @@ const healthFixture: HealthResponse = {
     gemini: { status: 'ok', detail: 'connected' },
     stt: { status: 'disabled', detail: 'browser (client-side)' },
     tts: { status: 'ok', detail: 'ready' },
+    translation: { status: 'ok', detail: 'ready' },
   },
 }
 
