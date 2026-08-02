@@ -37,6 +37,9 @@ const serverEnv = (over: Record<string, string>): Record<string, string> => ({
   // playback (and the WB-2 stroke-sync marks) run without a Google key.
   TTS_PROVIDER: 'mock',
   IMAGE_ENRICHMENT_ENABLED: 'false',
+  // Billing runs on the in-memory adapter: no e2e run may reach Stripe, and
+  // the mock drives the whole checkout → webhook path offline (BILL-2).
+  BILLING_PROVIDER: 'mock',
   STORAGE_PROVIDER: 'local',
   // Hermetic: the developer's local .env must not leak into e2e
   GENERATION_FREEDOM: '2',
@@ -102,6 +105,11 @@ export default defineConfig({
         PORT: String(PORT),
         STORAGE_LOCAL_DIR: '.uploads-e2e',
         TRANSCRIPTION_PROVIDER: 'browser',
+        // Pinned to this server's own origin: a developer's .env pointing at
+        // the Vite dev port would send billing's checkout return (BILL-2) to
+        // a different origin, where the session does not exist.
+        PUBLIC_BASE_URL: `http://localhost:${PORT}`,
+        CLIENT_APP_URL: '',
       }),
     },
     {
@@ -112,6 +120,8 @@ export default defineConfig({
         PORT: String(STT_PORT),
         STORAGE_LOCAL_DIR: '.uploads-e2e-stt',
         TRANSCRIPTION_PROVIDER: 'mock',
+        PUBLIC_BASE_URL: `http://localhost:${STT_PORT}`,
+        CLIENT_APP_URL: '',
         // Keeps each session's audio, which is what a slide is re-transcribed
         // from (regenerate-transcript.spec).
         AUDIO_RETENTION_ENABLED: 'true',

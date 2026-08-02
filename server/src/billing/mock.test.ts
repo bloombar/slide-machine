@@ -52,6 +52,18 @@ describe('MockBillingProvider.createCheckoutSession', () => {
     expect(session.url).toContain('?from=upgrade&session_id=')
   })
 
+  it('remembers which account the checkout was for', async () => {
+    await provider.createCheckoutSession(checkout)
+
+    // The real adapters carry this in provider metadata; the mock keeps it so
+    // a webhook driven through it attributes to somebody, as Stripe's would.
+    const changed = await provider.changeTier({
+      providerSubscriptionId: 'mock_sub_2',
+      tier: 'max',
+    })
+    expect(changed.userId).toBe('user-1')
+  })
+
   it('reuses a known customer reference instead of minting one', async () => {
     await provider.createCheckoutSession({
       ...checkout,

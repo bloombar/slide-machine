@@ -367,6 +367,36 @@ describe('StripeBillingProvider.cancelSubscription', () => {
 })
 
 describe('StripeBillingProvider normalization', () => {
+  it('carries the account back out of the subscription metadata', async () => {
+    // Checkout writes `subscription_data[metadata][userId]`; reading it back
+    // is what lets a webhook name an account before any local row exists.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => stripeSubscription({ metadata: { userId: 'user-42' } }),
+    })
+
+    const snapshot = await provider.cancelSubscription({
+      providerSubscriptionId: 'sub_123',
+    })
+
+    expect(snapshot.userId).toBe('user-42')
+  })
+
+  it('leaves the account unset when the provider echoes no metadata', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => stripeSubscription({}),
+    })
+
+    const snapshot = await provider.cancelSubscription({
+      providerSubscriptionId: 'sub_123',
+    })
+
+    // Absent rather than guessed: the caller falls back to matching on the
+    // opaque references instead of attributing money to the wrong person.
+    expect(snapshot.userId).toBeUndefined()
+  })
+
   it('reads period bounds from the subscription item when the root omits them', async () => {
     fetchMock.mockResolvedValue({
       ok: true,

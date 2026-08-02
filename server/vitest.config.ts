@@ -34,6 +34,10 @@ export default defineConfig({
       QUIZ_PUBLISH_MODE: 'mock',
       // Post-lecture diarization runs against the deterministic mock in tests.
       DIARIZATION_PROVIDER: 'mock',
+      // Billing runs against the in-memory adapter: no test may reach Stripe,
+      // and the mock drives the whole checkout → portal → webhook path
+      // without a network or a signing secret (BILL-2).
+      BILLING_PROVIDER: 'mock',
       // Tests never call live image APIs; enrichment units stub fetch
       IMAGE_ENRICHMENT_ENABLED: 'false',
       // No grace window in tests: rotated-out tokens must die immediately

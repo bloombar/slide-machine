@@ -261,6 +261,25 @@
       "max": "Max"
     }
   },
+  "billing": {
+    "status": {
+      "none": "You are on the free plan — no subscription.",
+      "pastDue": "Your last payment did not go through. Update your payment method to keep your plan.",
+      "canceled": "Your subscription has ended."
+    },
+    "renewsOn": "Renews {date}",
+    "endsOn": "Ends {date}",
+    "upgradeTo": "Upgrade to {plan}",
+    "manage": "Manage billing",
+    "checkout": {
+      "success": "Thanks — your plan is being updated.",
+      "canceled": "Checkout was canceled. Nothing has changed."
+    },
+    "errors": {
+      "load": "Could not load your billing details",
+      "redirect": "Could not open the billing page. Please try again."
+    }
+  },
   "slot": {
     "title": "Slide title",
     "body": "Slide body",

@@ -261,6 +261,25 @@
       "max": "Max"
     }
   },
+  "billing": {
+    "status": {
+      "none": "Estás en el plan gratuito: sin suscripción.",
+      "pastDue": "Tu último pago no se completó. Actualiza tu método de pago para conservar tu plan.",
+      "canceled": "Tu suscripción ha finalizado."
+    },
+    "renewsOn": "Se renueva el {date}",
+    "endsOn": "Finaliza el {date}",
+    "upgradeTo": "Cambiar a {plan}",
+    "manage": "Gestionar la facturación",
+    "checkout": {
+      "success": "Gracias: tu plan se está actualizando.",
+      "canceled": "Se canceló el pago. No ha cambiado nada."
+    },
+    "errors": {
+      "load": "No se pudieron cargar los datos de facturación",
+      "redirect": "No se pudo abrir la página de facturación. Inténtalo de nuevo."
+    }
+  },
   "slot": {
     "title": "Título de la diapositiva",
     "body": "Cuerpo de la diapositiva",

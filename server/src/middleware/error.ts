@@ -13,6 +13,7 @@ import {
 } from '../actions/dispatch'
 import { GenerationUnavailableError } from '../providers/errors'
 import { PlanLimitExceededError } from '../billing/limits'
+import { BillingUnavailableError } from '../billing/errors'
 
 /** An error with an HTTP status and a stable machine-readable code. */
 export class HttpError extends Error {
@@ -54,6 +55,15 @@ export const errorHandler = (
     // billed past the plan — there is no overage path (BILL-4). `metric` lets
     // the client name the right upgrade prompt without parsing the message.
     res.status(402).json(body('plan_limit_exceeded', err.message, [err.metric]))
+  } else if (err instanceof BillingUnavailableError) {
+    // The billing provider could not serve the request (BILL-2). Retryable
+    // means an outage or a rate limit, which will pass — 503, and the client
+    // may offer to try again. Anything else is a rejection that will repeat
+    // exactly the same way, so it is reported as a bad request instead of
+    // inviting the user to keep pressing the button.
+    res
+      .status(err.retryable ? 503 : 400)
+      .json(body('billing_unavailable', err.message))
   } else if (err instanceof GenerationUnavailableError) {
     // 503: an upstream AI provider is out of quota/credits or overloaded.
     res.status(503).json(body('generation_unavailable', err.message))

@@ -261,6 +261,25 @@
       "max": "Max"
     }
   },
+  "billing": {
+    "status": {
+      "none": "Vous êtes sur la formule gratuite : aucun abonnement.",
+      "pastDue": "Votre dernier paiement n'a pas abouti. Mettez à jour votre moyen de paiement pour conserver votre formule.",
+      "canceled": "Votre abonnement a pris fin."
+    },
+    "renewsOn": "Renouvellement le {date}",
+    "endsOn": "Fin le {date}",
+    "upgradeTo": "Passer à {plan}",
+    "manage": "Gérer la facturation",
+    "checkout": {
+      "success": "Merci — votre formule est en cours de mise à jour.",
+      "canceled": "Paiement annulé. Rien n'a changé."
+    },
+    "errors": {
+      "load": "Impossible de charger vos informations de facturation",
+      "redirect": "Impossible d'ouvrir la page de facturation. Veuillez réessayer."
+    }
+  },
   "slot": {
     "title": "Titre de la diapositive",
     "body": "Corps de la diapositive",

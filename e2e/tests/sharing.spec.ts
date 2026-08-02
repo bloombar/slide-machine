@@ -128,11 +128,20 @@ test('sharing: view/edit grants, private no-leak, public profile', async ({
     guestPage.getByRole('link', { name: /Shared Waves/ }),
   ).toBeVisible()
 
-  // The owner edits their display name and bio in place; visitors see it
-  await ownerPage.getByRole('button', { name: 'Edit' }).click()
+  // The owner edits their display name and bio on the account settings page,
+  // which is where every account setting now lives; visitors see the result.
+  // Both fields commit on blur rather than behind a Save button.
+  await ownerPage.goto('/app/settings')
   await ownerPage.getByLabel('Display name').fill(`${owner.name} Jr`)
+  await ownerPage.getByLabel('Display name').blur()
+  const bioSaved = ownerPage.waitForResponse(
+    res => res.url().includes('user.updateProfile') && res.status() === 200,
+  )
   await ownerPage.getByLabel('Bio').fill('Lectures on waves.')
-  await ownerPage.getByRole('button', { name: 'Save' }).click()
+  await ownerPage.getByLabel('Bio').blur()
+  await bioSaved
+
+  await ownerPage.goto(profileUrl)
   await expect(
     ownerPage.getByRole('heading', { name: `${owner.name} Jr` }),
   ).toBeVisible()
@@ -143,16 +152,15 @@ test('sharing: view/edit grants, private no-leak, public profile', async ({
   ).toBeVisible()
   await expect(anonPage.getByText('Lectures on waves.')).toBeVisible()
 
-  // Private profile reads as missing to others; the toggle now lives in
-  // the settings modal behind the profile's Settings button
-  await ownerPage.getByRole('button', { name: 'Settings' }).click()
+  // Private profile reads as missing to others; the toggle lives on the
+  // Privacy tab of the account settings page.
+  await ownerPage.goto('/app/settings?tab=privacy')
   const profileToggle = ownerPage.getByRole('checkbox', {
     name: 'Public profile',
   })
   // Controlled input: it unticks when the save round-trips
   await profileToggle.click()
   await expect(profileToggle).not.toBeChecked()
-  await ownerPage.getByRole('button', { name: 'Close settings' }).click()
   await anonPage.reload()
   await expect(
     anonPage.getByText('This profile does not exist or is private.'),

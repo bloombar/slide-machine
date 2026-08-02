@@ -33,8 +33,22 @@ const emptyUsage = {
   metrics: [],
 }
 
-/** Renders the page at its canonical route, for the signed-in user. */
-const renderSettings = (routes: Record<string, Handler> = {}) => {
+/** A free account's billing: no subscription, the paid tiers on offer. */
+const freeBilling = {
+  tier: 'free',
+  status: null,
+  currentPeriodEnd: null,
+  cancelAtPeriodEnd: false,
+  canManageBilling: false,
+  purchasableTiers: ['fresh', 'pro', 'max'],
+}
+
+/** Renders the page at its canonical route, for the signed-in user.
+ * `entry` varies the URL, which is where the open tab lives. */
+const renderSettings = (
+  routes: Record<string, Handler> = {},
+  entry = '/app/settings',
+) => {
   const mock = mockFetchRoutes({
     '/api/auth/refresh': () => ({
       status: 200,
@@ -42,10 +56,11 @@ const renderSettings = (routes: Record<string, Handler> = {}) => {
     }),
     '/api/auth/logout': () => ({ status: 204 }),
     '/api/actions/user.usage': () => ({ status: 200, body: emptyUsage }),
+    '/api/actions/billing.summary': () => ({ status: 200, body: freeBilling }),
     ...routes,
   })
   render(
-    <MemoryRouter initialEntries={['/app/settings']}>
+    <MemoryRouter initialEntries={[entry]}>
       <AuthProvider>
         <Routes>
           <Route path="/app/settings" element={<AccountSettingsPage />} />
@@ -77,6 +92,28 @@ describe('AccountSettingsPage', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Plan' }))
 
     expect(await screen.findByText('Free')).toBeVisible()
+  })
+
+  it('opens the tab named in the URL', async () => {
+    // The billing provider sends the browser back here after checkout
+    // (BILL-2); landing on General would hide what the user just paid for.
+    renderSettings({}, '/app/settings?tab=plan')
+
+    expect(await screen.findByText('Free')).toBeVisible()
+    expect(screen.getByRole('tab', { name: 'Plan' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+  })
+
+  it('falls back to General when the URL names no tab it knows', async () => {
+    renderSettings({}, '/app/settings?tab=nonsense')
+
+    expect(await screen.findByText('ada@example.com')).toBeVisible()
+    expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
   })
 
   it('moves between tabs with the arrow keys', async () => {
@@ -219,6 +256,10 @@ describe('AccountSettingsPage', () => {
         body: { user: user(), accessToken: 't' },
       }),
       '/api/actions/user.usage': () => ({ status: 200, body: emptyUsage }),
+      '/api/actions/billing.summary': () => ({
+        status: 200,
+        body: freeBilling,
+      }),
     })
     render(
       <MemoryRouter initialEntries={['/app/settings/u1']}>

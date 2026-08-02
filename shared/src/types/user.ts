@@ -52,6 +52,14 @@ export interface Subscription {
   currentPeriodEnd: string
   /** True when the subscription lapses at period end instead of renewing. */
   cancelAtPeriodEnd: boolean
+  /**
+   * The provider event this row was last written from (BILL-2). Providers
+   * retry deliveries and do not guarantee order, so both are kept: the id
+   * discards an exact replay, the timestamp discards one that arrives late
+   * and would otherwise undo a newer state.
+   */
+  lastEventId?: string
+  lastEventAt?: string
 }
 
 /** Usage recorded against one metric for one user in one billing period (BILL-3). */

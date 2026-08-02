@@ -62,6 +62,7 @@ export class MockBillingProvider implements BillingProvider {
   private snapshot(
     providerSubscriptionId: string,
     tier: PlanTier = FALLBACK_TIER,
+    userId?: string,
   ): SubscriptionSnapshot {
     const existing = this.subscriptions.get(providerSubscriptionId)
     if (existing) return existing
@@ -70,6 +71,7 @@ export class MockBillingProvider implements BillingProvider {
     const created: SubscriptionSnapshot = {
       providerSubscriptionId,
       billingCustomerId: this.nextId('cus'),
+      userId,
       tier,
       status: 'active',
       currentPeriodStart: period.start,
@@ -81,6 +83,7 @@ export class MockBillingProvider implements BillingProvider {
   }
 
   async createCheckoutSession({
+    userId,
     tier,
     successUrl,
     billingCustomerId,
@@ -90,6 +93,7 @@ export class MockBillingProvider implements BillingProvider {
     const subscription: SubscriptionSnapshot = {
       providerSubscriptionId: this.nextId('sub'),
       billingCustomerId: billingCustomerId ?? this.nextId('cus'),
+      userId,
       tier,
       status: 'active',
       currentPeriodStart: period.start,
@@ -160,6 +164,7 @@ export class MockBillingProvider implements BillingProvider {
     const subscription = this.snapshot(
       event.subscription.providerSubscriptionId,
       event.subscription.tier,
+      event.subscription.userId,
     )
     const merged: SubscriptionSnapshot = {
       ...subscription,
