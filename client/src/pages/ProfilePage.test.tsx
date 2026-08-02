@@ -1,13 +1,13 @@
 /**
- * Unit tests for the profile page: visible lectures grouped by project,
- * the indistinguishable not-found/private state, who sees the Edit and
- * Settings buttons, and the two save paths — the owner's own action and
- * the admin's audited endpoint behind a confirmation. The Settings button
- * is the admin's way into another user's account settings (ADMIN-5), so
- * it too confirms once before the modal opens.
+ * Unit tests for the profile page: visible lectures grouped by project, the
+ * indistinguishable not-found/private state, and who gets the Settings link.
+ *
+ * The page is read-only. Editing a name or bio now happens on the settings
+ * page, which is also where the rest of the account's settings are, so the
+ * tests that used to cover the in-place form live there instead.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router'
 import { AuthProvider } from '../auth/AuthContext'
 import { setAccessToken } from '../auth/token'
@@ -102,222 +102,38 @@ describe('ProfilePage', () => {
     ).toBeVisible()
   })
 
-  it('offers no Edit or Settings to a stranger', async () => {
+  it('offers no Settings to a stranger', async () => {
     renderPage()
     await screen.findByRole('heading', { name: 'Ada' })
+    expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull()
+  })
+
+  it('sends the owner to the canonical settings route', async () => {
+    // Your own settings have one URL, whoever links to them.
+    renderPage({ body: profile({ canEdit: true }), viewer: 'u9' })
+
+    expect(
+      await screen.findByRole('link', { name: 'Settings' }),
+    ).toHaveAttribute('href', '/app/settings')
+  })
+
+  it("names the account in the path when an admin opens someone else's", async () => {
+    // canEdit without ownership means an admin is looking (ADMIN-5); the
+    // settings page confirms on entry and audits from then on.
+    renderPage({ body: profile({ canEdit: true }), viewer: 'root' })
+
+    expect(
+      await screen.findByRole('link', { name: 'Settings' }),
+    ).toHaveAttribute('href', '/app/settings/u9')
+  })
+
+  it('never offers editing in place', async () => {
+    // The name and bio are edited on the settings page; two places to change
+    // one field is how they drift apart.
+    renderPage({ body: profile({ canEdit: true }), viewer: 'u9' })
+    await screen.findByRole('heading', { name: 'Ada' })
+
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull()
-  })
-
-  it('lets the owner edit the display name and bio', async () => {
-    let sent: unknown
-    renderPage({
-      body: profile({ canEdit: true }),
-      viewer: 'u9',
-      routes: {
-        '/api/actions/user.updateProfile': init => {
-          sent = JSON.parse(String(init?.body))
-          return {
-            status: 200,
-            body: {
-              id: 'u9',
-              displayName: 'Ada L.',
-              email: 'u9@example.com',
-              bio: 'Now with optics.',
-              planTier: 'free',
-              profileVisibility: 'public',
-            },
-          }
-        },
-      },
-    })
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
-    const name = screen.getByLabelText('Display name')
-    const bio = screen.getByLabelText('Bio')
-    expect(name).toHaveValue('Ada')
-    expect(bio).toHaveValue('Teaches waves.')
-
-    fireEvent.change(name, { target: { value: 'Ada L.' } })
-    fireEvent.change(bio, { target: { value: 'Now with optics.' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-
-    await vi.waitFor(() =>
-      expect(sent).toEqual({ displayName: 'Ada L.', bio: 'Now with optics.' }),
-    )
-    // The form closes and the page shows the saved values
-    expect(await screen.findByRole('heading', { name: 'Ada L.' })).toBeVisible()
-    expect(screen.getByText('Now with optics.')).toBeVisible()
-  })
-
-  it('rejects a blank display name without calling the server', async () => {
-    const { calls } = renderPage({
-      body: profile({ canEdit: true }),
-      viewer: 'u9',
-    })
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
-    fireEvent.change(screen.getByLabelText('Display name'), {
-      target: { value: '   ' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Display name is required.',
-    )
-    expect(calls.some(url => url.includes('user.updateProfile'))).toBe(false)
-  })
-
-  it('discards edits on cancel', async () => {
-    renderPage({ body: profile({ canEdit: true }), viewer: 'u9' })
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
-    fireEvent.change(screen.getByLabelText('Display name'), {
-      target: { value: 'Nope' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.getByRole('heading', { name: 'Ada' })).toBeVisible()
-  })
-
-  it('opens account settings for the owner without a confirmation', async () => {
-    renderPage({ body: profile({ canEdit: true }), viewer: 'u9' })
-    fireEvent.click(await screen.findByRole('button', { name: 'Settings' }))
-    expect(
-      await screen.findByRole('heading', { name: 'Settings' }),
-    ).toBeVisible()
-    expect(screen.getByText('u9@example.com')).toBeVisible()
-    expect(screen.queryByRole('alertdialog')).toBeNull()
-  })
-
-  it("opens another user's settings for an admin, once confirmed", async () => {
-    const { calls } = renderPage({
-      body: profile({ canEdit: true }),
-      viewer: 'root',
-      routes: {
-        '/api/admin/users/u9': () => ({
-          status: 200,
-          body: {
-            user: {
-              id: 'u9',
-              email: 'ada@example.com',
-              displayName: 'Ada',
-              planTier: 'free',
-              profileVisibility: 'public',
-              locale: 'en',
-            },
-            projectCount: 0,
-            deckCount: 0,
-            banned: false,
-          },
-        }),
-      },
-    })
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Settings' }))
-
-    // Nothing is loaded until the audit notice is acknowledged
-    const ask = await screen.findByRole('alertdialog', {
-      name: "Edit this user's settings?",
-    })
-    expect(ask).toHaveTextContent(/recorded in the audit log/)
-    expect(calls.some(url => url.includes('/api/admin/users/'))).toBe(false)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
-    expect(await screen.findByText('ada@example.com')).toBeVisible()
-    expect(screen.getByRole('status')).toHaveTextContent(/as an admin/)
-  })
-
-  it('opens no settings when the admin declines the notice', async () => {
-    const { calls } = renderPage({
-      body: profile({ canEdit: true }),
-      viewer: 'root',
-    })
-    fireEvent.click(await screen.findByRole('button', { name: 'Settings' }))
-    await screen.findByRole('alertdialog')
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-
-    expect(screen.queryByRole('alertdialog')).toBeNull()
-    expect(screen.queryByRole('heading', { name: 'Settings' })).toBeNull()
-    expect(calls.some(url => url.includes('/api/admin/users/'))).toBe(false)
-  })
-
-  it('saves an admin edit through the audited endpoint after confirming', async () => {
-    let patched: unknown
-    renderPage({
-      body: profile({ canEdit: true }),
-      viewer: 'root',
-      routes: {
-        '/api/admin/users/u9': init => {
-          patched = JSON.parse(String(init?.body))
-          return { status: 204 }
-        },
-      },
-    })
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
-    fireEvent.change(screen.getByLabelText('Display name'), {
-      target: { value: 'Ada Lovelace' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-
-    // Nothing is written until the audit notice is acknowledged
-    const confirm = await screen.findByRole('alertdialog', {
-      name: "Edit this user's profile?",
-    })
-    expect(confirm).toHaveTextContent(/recorded in the audit log/)
-    expect(patched).toBeUndefined()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
-    await vi.waitFor(() =>
-      expect(patched).toEqual({
-        displayName: 'Ada Lovelace',
-        bio: 'Teaches waves.',
-      }),
-    )
-    expect(
-      await screen.findByRole('heading', { name: 'Ada Lovelace' }),
-    ).toBeVisible()
-  })
-
-  it('writes nothing when the admin cancels the confirmation', async () => {
-    const { calls } = renderPage({
-      body: profile({ canEdit: true }),
-      viewer: 'root',
-    })
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    await screen.findByRole('alertdialog')
-    // The dialog's own Cancel, not the form's, is the last one rendered
-    const cancels = screen.getAllByRole('button', { name: 'Cancel' })
-    fireEvent.click(cancels[cancels.length - 1]!)
-
-    expect(calls.some(url => url.includes('/api/admin/users/'))).toBe(false)
-    // The form stays open so the edit is not lost
-    expect(screen.getByLabelText('Display name')).toBeVisible()
-  })
-
-  it('reports a failed save and keeps the form open', async () => {
-    renderPage({
-      body: profile({ canEdit: true }),
-      viewer: 'u9',
-      routes: {
-        '/api/actions/user.updateProfile': () => ({
-          status: 400,
-          body: {
-            error: {
-              code: 'invalid_input',
-              message: 'Display name is required',
-            },
-          },
-        }),
-      },
-    })
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    // `invalid_input` is not one of the globally meaningful error codes,
-    // so the call site's own wording is shown rather than the server's
-    // English message (docs/I18N.md).
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Could not save the profile.',
-    )
-    expect(screen.getByLabelText('Display name')).toBeVisible()
+    expect(screen.queryByLabelText('Display name')).toBeNull()
   })
 })

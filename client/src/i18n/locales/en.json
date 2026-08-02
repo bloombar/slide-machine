@@ -100,20 +100,37 @@
     "publicProfile": "Public profile",
     "publicProfileHint": "Public profile — others can see {own, select, true {your} other {their}} public and shared lectures",
     "closeSettings": "Close settings",
-    "adminProfile": {
-      "title": "Edit this user's profile?",
-      "message": "This profile belongs to another user. You can change it as an admin; every change is recorded in the audit log.",
-      "confirm": "Save changes"
-    },
     "adminSettings": {
       "title": "Edit this user's settings?",
-      "message": "This account belongs to {name}. You can change their settings as an admin; every change is recorded in the audit log.",
-      "confirm": "Edit settings"
+      "confirm": "Edit settings",
+      "messageGeneric": "These settings belong to another user. You can change them as an admin; every change is recorded in the audit log."
     },
     "errors": {
       "save": "Could not save the profile.",
       "loadAccount": "Could not load this account.",
-      "saveSettings": "Could not save these settings."
+      "saveSettings": "Could not save these settings.",
+      "deleteAccount": "Could not delete your account"
+    },
+    "backToProfile": "Back to profile",
+    "publicProfileSection": "Public profile",
+    "accountSection": "Account",
+    "privacySection": "Privacy",
+    "languagesSection": "Languages",
+    "sessionSection": "Session",
+    "sections": "Settings sections",
+    "tabs": {
+      "general": "General",
+      "plan": "Plan",
+      "privacy": "Privacy"
+    },
+    "accountTypeSection": "Account type",
+    "publicProfileSectionHint": "Saved as you go. What strangers see on your profile page.",
+    "privacySectionHint": "Who can see your profile page and the lectures on it.",
+    "delete": {
+      "action": "Delete account",
+      "hint": "Deleting your account permanently removes your projects, lectures, and slides. This cannot be undone.",
+      "title": "Delete your account?",
+      "message": "Your account and all of its projects, lectures, and slides will be permanently deleted."
     }
   },
   "language": {
@@ -236,9 +253,10 @@
   },
   "plan": {
     "tier": {
-      "free": "free",
-      "pro": "pro",
-      "max": "max"
+      "free": "Free",
+      "fresh": "Fresh",
+      "pro": "Pro",
+      "max": "Max"
     }
   },
   "slot": {
@@ -711,5 +729,56 @@
     "forbidden": "You do not have permission to do that",
     "internal_error": "Something went wrong on our end — try again",
     "unknown_error": "Something went wrong — try again"
+  },
+  "usage": {
+    "title": "Plan usage",
+    "instructor": "Your allowances",
+    "audience": "Your audience",
+    "audienceHint": "Spent by people viewing your lectures, from a separate pool so a popular lecture never uses up your own.",
+    "resets": "Resets {date}",
+    "usedOfCap": "{used} of {cap}",
+    "usedUnlimited": "{used} used",
+    "unit": {
+      "minutes": "{value} min",
+      "mb": "{value} MB"
+    },
+    "cta": {
+      "upgrade": "Need more? Upgrading raises every limit.",
+      "contact": "You are on our largest plan — get in touch and we will work something out."
+    },
+    "badge": {
+      "summary": "{plan} plan {status}",
+      "state": {
+        "ok": "ok",
+        "approaching": "near limit",
+        "reached": "limit reached",
+        "loading": "…",
+        "error": "unavailable"
+      }
+    },
+    "notice": {
+      "approaching": "You are close to some of your plan's limits",
+      "reached": "You have reached one of your plan's limits",
+      "seeAll": "See all usage"
+    },
+    "metric": {
+      "aiTokens": "AI generation",
+      "sttMinutes": "Recording time",
+      "diarizationMinutes": "Speaker identification",
+      "ttsCharacters": "Narration",
+      "ttsPremiumCharacters": "Premium narration",
+      "aiImages": "AI images",
+      "imageLookups": "Image searches",
+      "importMb": "Imports",
+      "exports": "Exports",
+      "translationCharacters": "Translation",
+      "audioStorageMb": "Stored audio",
+      "audienceTtsCharacters": "Narration for viewers",
+      "audienceLocales": "Translations for viewers"
+    },
+    "errors": {
+      "load": "Could not load your usage"
+    },
+    "plan": "Plan"
   }
 }

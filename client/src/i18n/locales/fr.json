@@ -100,20 +100,37 @@
     "publicProfile": "Profil public",
     "publicProfileHint": "Profil public — les autres peuvent voir {own, select, true {vos} other {ses}} cours publics et partagés",
     "closeSettings": "Fermer les paramètres",
-    "adminProfile": {
-      "title": "Modifier le profil de cet utilisateur ?",
-      "message": "Ce profil appartient à un autre utilisateur. Vous pouvez le modifier en tant qu'administrateur ; chaque modification est consignée dans le journal d'audit.",
-      "confirm": "Enregistrer les modifications"
-    },
     "adminSettings": {
       "title": "Modifier les paramètres de cet utilisateur ?",
-      "message": "Ce compte appartient à {name}. Vous pouvez modifier ses paramètres en tant qu'administrateur ; chaque modification est consignée dans le journal d'audit.",
-      "confirm": "Modifier les paramètres"
+      "confirm": "Modifier les paramètres",
+      "messageGeneric": "Ces réglages appartiennent à un autre utilisateur. Vous pouvez les modifier en tant qu'administrateur ; chaque modification est enregistrée dans le journal d'audit."
     },
     "errors": {
       "save": "Impossible d'enregistrer le profil.",
       "loadAccount": "Impossible de charger ce compte.",
-      "saveSettings": "Impossible d'enregistrer ces paramètres."
+      "saveSettings": "Impossible d'enregistrer ces paramètres.",
+      "deleteAccount": "Impossible de supprimer votre compte"
+    },
+    "backToProfile": "Retour au profil",
+    "publicProfileSection": "Profil public",
+    "accountSection": "Compte",
+    "privacySection": "Confidentialité",
+    "languagesSection": "Langues",
+    "sessionSection": "Session",
+    "sections": "Sections des réglages",
+    "tabs": {
+      "general": "Général",
+      "plan": "Forfait",
+      "privacy": "Confidentialité"
+    },
+    "accountTypeSection": "Type de compte",
+    "publicProfileSectionHint": "Enregistré au fil de la saisie. Ce que les inconnus voient sur votre profil.",
+    "privacySectionHint": "Qui peut voir votre profil et les cours qui y figurent.",
+    "delete": {
+      "action": "Supprimer le compte",
+      "hint": "La suppression de votre compte efface définitivement vos projets, cours et diapositives. Cette action est irréversible.",
+      "title": "Supprimer votre compte ?",
+      "message": "Votre compte et tous ses projets, cours et diapositives seront définitivement supprimés."
     }
   },
   "language": {
@@ -236,9 +253,10 @@
   },
   "plan": {
     "tier": {
-      "free": "gratuite",
-      "pro": "pro",
-      "max": "max"
+      "free": "Gratuite",
+      "fresh": "Fresh",
+      "pro": "Pro",
+      "max": "Max"
     }
   },
   "slot": {
@@ -711,5 +729,56 @@
     "forbidden": "Vous n'avez pas l'autorisation de faire cela",
     "internal_error": "Une erreur s'est produite de notre côté — réessayez",
     "unknown_error": "Une erreur s'est produite — réessayez"
+  },
+  "usage": {
+    "title": "Utilisation du forfait",
+    "instructor": "Vos quotas",
+    "audience": "Votre audience",
+    "audienceHint": "Dépensé par les personnes qui regardent vos cours, sur une réserve distincte : un cours très suivi n'épuise jamais le vôtre.",
+    "resets": "Réinitialisation le {date}",
+    "usedOfCap": "{used} sur {cap}",
+    "usedUnlimited": "{used} utilisé",
+    "unit": {
+      "minutes": "{value} min",
+      "mb": "{value} Mo"
+    },
+    "cta": {
+      "upgrade": "Besoin de plus ? Un forfait supérieur relève toutes les limites.",
+      "contact": "Vous avez notre forfait le plus large — écrivez-nous et nous trouverons une solution."
+    },
+    "badge": {
+      "summary": "Forfait {plan} {status}",
+      "state": {
+        "ok": "normale",
+        "approaching": "proche de la limite",
+        "reached": "limite atteinte",
+        "loading": "…",
+        "error": "indisponible"
+      }
+    },
+    "notice": {
+      "approaching": "Vous approchez de certaines limites de votre forfait",
+      "reached": "Vous avez atteint une limite de votre forfait",
+      "seeAll": "Voir toute l'utilisation"
+    },
+    "metric": {
+      "aiTokens": "Génération par IA",
+      "sttMinutes": "Temps d'enregistrement",
+      "diarizationMinutes": "Identification des intervenants",
+      "ttsCharacters": "Narration",
+      "ttsPremiumCharacters": "Narration premium",
+      "aiImages": "Images par IA",
+      "imageLookups": "Recherches d'images",
+      "importMb": "Importations",
+      "exports": "Exportations",
+      "translationCharacters": "Traduction",
+      "audioStorageMb": "Audio conservé",
+      "audienceTtsCharacters": "Narration pour les spectateurs",
+      "audienceLocales": "Traductions pour les spectateurs"
+    },
+    "errors": {
+      "load": "Impossible de charger votre utilisation"
+    },
+    "plan": "Forfait"
   }
 }
