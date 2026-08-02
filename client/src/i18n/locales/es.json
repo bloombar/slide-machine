@@ -93,6 +93,7 @@
     "displayNameRequired": "El nombre visible es obligatorio.",
     "interfaceLanguage": "Idioma de la interfaz",
     "interfaceLanguageHint": "Los menús, los botones y los mensajes aparecen en este idioma.",
+    "interfaceLanguageDefault": "{own, select, true {el idioma de tu navegador} other {el idioma de su navegador}}",
     "lectureLanguage": "Idioma de la clase",
     "lectureLanguageHint": "El reconocimiento de voz y las diapositivas generadas usan este idioma. Los proyectos y las clases pueden cambiarlo.",
     "lectureLanguageDefault": "{own, select, true {el idioma de tu interfaz} other {el idioma de su interfaz}}",
@@ -259,6 +260,36 @@
       "fresh": "Fresh",
       "pro": "Pro",
       "max": "Max"
+    },
+    "change": "Cambiar de plan",
+    "feature": {
+      "liveCapture": "Diapositivas en directo mientras hablas",
+      "voiceControl": "Comandos de voz",
+      "whiteboard": "Anotaciones en pizarra",
+      "editing": "Edición de diapositivas y narración",
+      "templates": "Plantillas y diseños",
+      "refine": "Refinado posterior a la clase",
+      "quizzes": "Cuestionarios de salida",
+      "sharing": "Compartir y colaborar"
+    },
+    "pricing": {
+      "title": "Planes",
+      "subtitle": "Todos los planes incluyen todas las funciones. Lo que cambia es cuánto puedes usar de cada una.",
+      "back": "Volver a tu plan",
+      "tableCaption": "Funciones y límites, plan a plan",
+      "featureColumn": "Función",
+      "features": "En todos los planes",
+      "included": "Incluido",
+      "notIncluded": "No incluido",
+      "unlimited": "Sin límite",
+      "currentPlan": "Tu plan",
+      "audioRetention": "Conservación de grabaciones",
+      "retentionDays": "{count, plural, one {# día} other {# días}}",
+      "retentionUnlimited": "Se conservan indefinidamente",
+      "changeHint": "Para pasar a un plan menor o cancelar, usa el portal de facturación.",
+      "errors": {
+        "load": "No se pudieron cargar los planes"
+      }
     }
   },
   "billing": {

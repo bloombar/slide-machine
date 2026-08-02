@@ -56,7 +56,11 @@ const userSchema = new Schema<UserDb>(
     },
     bio: String,
     avatarUrl: String,
-    locale: { type: String, enum: LOCALES, default: 'en' },
+    // Interface language: stored ONLY when explicitly chosen (no default)
+    // — absent falls through to the browser's language, re-matched
+    // against LOCALES on each visit so a newly supported language is
+    // picked up without touching stored accounts
+    locale: { type: String, enum: LOCALES },
     // Lecturing/generation language: stored ONLY when explicitly chosen
     // (no default) — absent falls through to the browser's language
     language: { type: String, enum: LOCALES },

@@ -3,12 +3,16 @@
  * gets, and in what order the signals are consulted.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { LOCALES } from '@slide-machine/shared'
 import {
   LOCALE_STORAGE_KEY,
+  clearStoredLocale,
+  detectBrowserLocale,
   matchLocale,
   resolveInitialLocale,
   storeLocale,
   storedLocale,
+  subscribeStoredLocale,
 } from './detect'
 
 /** Replaces navigator.languages for one test. */
@@ -59,8 +63,48 @@ describe('storedLocale', () => {
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw blocked
     })
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+      throw blocked
+    })
     expect(storedLocale()).toBeNull()
     expect(() => storeLocale('fr')).not.toThrow()
+    expect(() => clearStoredLocale()).not.toThrow()
+  })
+
+  it('forgets a choice, leaving nothing stored', () => {
+    storeLocale('fr')
+    clearStoredLocale()
+    expect(localStorage.getItem(LOCALE_STORAGE_KEY)).toBeNull()
+    expect(storedLocale()).toBeNull()
+  })
+
+  it('tells subscribers when the choice is made or forgotten', () => {
+    const seen: (string | null)[] = []
+    const unsubscribe = subscribeStoredLocale(() => seen.push(storedLocale()))
+
+    storeLocale('es')
+    clearStoredLocale()
+    unsubscribe()
+    // Nothing after the unsubscribe
+    storeLocale('ru')
+
+    expect(seen).toEqual(['es', null])
+  })
+})
+
+describe('detectBrowserLocale', () => {
+  it('ignores a remembered choice — this is the browser signal alone', () => {
+    withLanguages(['fr-FR'])
+    storeLocale('es')
+    expect(detectBrowserLocale()).toBe('fr')
+  })
+
+  // The match is against LOCALES as it stands at call time, so a locale
+  // added to the app is picked up on the next visit by everyone who
+  // never chose one — nothing stored has to be migrated
+  it.each(LOCALES)('matches %s once it is a supported locale', locale => {
+    withLanguages([`${locale}-XX`])
+    expect(detectBrowserLocale()).toBe(locale)
   })
 })
 

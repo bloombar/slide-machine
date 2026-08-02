@@ -24,7 +24,10 @@ export interface User {
   profileVisibility: ProfileVisibility
   bio?: string
   avatarUrl?: string
-  locale: Locale
+  /** Interface language (TECH-12), only when explicitly chosen; absent
+   * = whatever the browser asks for, re-matched against the supported
+   * locales on every visit. */
+  locale?: Locale
   /** Lecturing/generation language, only when explicitly chosen; absent
    * = browser default. Cascades: lecture ?? project ?? this ?? browser. */
   language?: Locale

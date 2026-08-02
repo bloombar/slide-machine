@@ -93,6 +93,7 @@
     "displayNameRequired": "Le nom d'affichage est obligatoire.",
     "interfaceLanguage": "Langue de l'interface",
     "interfaceLanguageHint": "Les menus, les boutons et les messages apparaissent dans cette langue.",
+    "interfaceLanguageDefault": "{own, select, true {la langue de votre navigateur} other {la langue de son navigateur}}",
     "lectureLanguage": "Langue du cours",
     "lectureLanguageHint": "La reconnaissance vocale et les diapositives générées utilisent cette langue. Les projets et les cours peuvent la remplacer.",
     "lectureLanguageDefault": "{own, select, true {la langue de votre interface} other {la langue de son interface}}",
@@ -259,6 +260,36 @@
       "fresh": "Fresh",
       "pro": "Pro",
       "max": "Max"
+    },
+    "change": "Changer d’offre",
+    "feature": {
+      "liveCapture": "Diapositives générées en direct pendant que vous parlez",
+      "voiceControl": "Commandes vocales",
+      "whiteboard": "Annotations au tableau blanc",
+      "editing": "Édition des diapositives et de la narration",
+      "templates": "Modèles et mises en page",
+      "refine": "Amélioration après le cours",
+      "quizzes": "Quiz de fin de séance",
+      "sharing": "Partage et collaboration"
+    },
+    "pricing": {
+      "title": "Offres",
+      "subtitle": "Toutes les offres incluent toutes les fonctionnalités. Ce qui change, c’est la quantité que vous pouvez utiliser.",
+      "back": "Revenir à votre offre",
+      "tableCaption": "Fonctionnalités et quotas, offre par offre",
+      "featureColumn": "Fonctionnalité",
+      "features": "Dans toutes les offres",
+      "included": "Inclus",
+      "notIncluded": "Non inclus",
+      "unlimited": "Illimité",
+      "currentPlan": "Votre offre",
+      "audioRetention": "Conservation des enregistrements",
+      "retentionDays": "{count, plural, one {# jour} other {# jours}}",
+      "retentionUnlimited": "Conservés indéfiniment",
+      "changeHint": "Pour passer à une offre inférieure ou résilier, utilisez le portail de facturation.",
+      "errors": {
+        "load": "Impossible de charger les offres"
+      }
     }
   },
   "billing": {

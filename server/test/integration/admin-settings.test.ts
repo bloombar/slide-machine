@@ -153,9 +153,10 @@ describe('PATCH /api/admin/users/:id', () => {
       displayName: 'Renamed',
       profileVisibility: 'private',
       language: 'fr',
-      // Absent from the patch, so untouched
-      locale: 'en',
     })
+    // Absent from the patch, so untouched — and never set in the first
+    // place, since the account has always followed the browser
+    expect(saved?.locale).toBeUndefined()
 
     const logs = await auditEntries()
     expect(logs).toHaveLength(1)
@@ -188,6 +189,23 @@ describe('PATCH /api/admin/users/:id', () => {
     expect((await UserModel.findById(user._id))!.language).toBeUndefined()
     expect((await auditEntries())[0]!.details).toMatchObject({
       changes: { language: { from: 'es', to: null } },
+    })
+  })
+
+  it('clears the interface locale with an explicit null', async () => {
+    const { token } = await asAdmin()
+    const { user } = await createVictim()
+    await UserModel.updateOne({ _id: user._id }, { locale: 'zh' })
+
+    const res = await patch(token, `/api/admin/users/${user._id}`, {
+      locale: null,
+    })
+    expect(res.status).toBe(204)
+
+    // Cleared, so the account follows the browser again
+    expect((await UserModel.findById(user._id))!.locale).toBeUndefined()
+    expect((await auditEntries())[0]!.details).toMatchObject({
+      changes: { locale: { from: 'zh', to: null } },
     })
   })
 

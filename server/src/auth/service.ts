@@ -32,8 +32,9 @@ export const register = async (
   email: string,
   password: string,
   displayName: string,
-  /** Interface language detected in the browser (TECH-12); omitted
-   * leaves the account on the schema default. */
+  /** Interface language the visitor explicitly picked before signing up
+   * (TECH-12); omitted stores nothing, leaving the account following
+   * whatever language the browser asks for. */
   locale?: Locale,
 ): Promise<AuthResult> => {
   if (await isEmailBanned(email)) throw bannedError()

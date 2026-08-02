@@ -25,8 +25,8 @@ export interface AdminUserSettingsPatch {
   /** Empty string clears the bio. */
   bio?: string
   profileVisibility?: ProfileVisibility
-  /** UI locale; always stored (no inherit). */
-  locale?: Locale
+  /** Interface language; null clears it back to the browser default. */
+  locale?: Locale | null
   /** Lecturing language; null clears it back to the browser default. */
   language?: Locale | null
 }

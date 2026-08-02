@@ -52,8 +52,8 @@ const registerSchema = z.object({
   email: z.email(),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   displayName: z.string().trim().min(1, 'Display name is required'),
-  // The interface language the browser was detected in (TECH-12). Absent
-  // leaves the account on the schema default.
+  // An interface language the visitor explicitly picked before signing
+  // up (TECH-12). Absent stores nothing: the account follows the browser.
   locale: z.enum(LOCALES).optional(),
 })
 

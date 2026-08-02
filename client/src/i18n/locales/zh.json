@@ -93,6 +93,7 @@
     "displayNameRequired": "显示名称为必填项。",
     "interfaceLanguage": "界面语言",
     "interfaceLanguageHint": "菜单、按钮和消息将以此语言显示。",
+    "interfaceLanguageDefault": "{own, select, true {你的浏览器语言} other {该用户的浏览器语言}}",
     "lectureLanguage": "授课语言",
     "lectureLanguageHint": "语音识别和生成的幻灯片使用此语言。项目和课程可以覆盖它。",
     "lectureLanguageDefault": "{own, select, true {你的界面语言} other {该用户的界面语言}}",
@@ -259,6 +260,36 @@
       "fresh": "Fresh",
       "pro": "专业版",
       "max": "旗舰版"
+    },
+    "change": "更改套餐",
+    "feature": {
+      "liveCapture": "边讲边生成幻灯片",
+      "voiceControl": "语音指令",
+      "whiteboard": "白板批注",
+      "editing": "幻灯片与讲稿编辑",
+      "templates": "模板与版式",
+      "refine": "课后优化",
+      "quizzes": "课堂小测",
+      "sharing": "共享与协作"
+    },
+    "pricing": {
+      "title": "套餐",
+      "subtitle": "所有套餐都包含全部功能，区别只在于每项功能的可用额度。",
+      "back": "返回你的套餐",
+      "tableCaption": "各套餐的功能与额度",
+      "featureColumn": "功能",
+      "features": "所有套餐均含",
+      "included": "包含",
+      "notIncluded": "不包含",
+      "unlimited": "不限量",
+      "currentPlan": "你的套餐",
+      "audioRetention": "录音保留时长",
+      "retentionDays": "{count, plural, other {# 天}}",
+      "retentionUnlimited": "长期保留",
+      "changeHint": "如需降级或取消，请前往账单门户。",
+      "errors": {
+        "load": "无法加载套餐"
+      }
     }
   },
   "billing": {

@@ -13,8 +13,8 @@ import {
 } from 'react'
 import type { SafeUser } from '@slide-machine/shared'
 import * as authApi from '../api/auth'
-import { changeLocale } from '../i18n'
-import { resolveInitialLocale } from '../i18n/detect'
+import { applyLocale } from '../i18n'
+import { resolveInitialLocale, storedLocale } from '../i18n/detect'
 import { refreshSession, setAccessToken } from './token'
 
 export type AuthStatus = 'restoring' | 'authenticated' | 'anonymous'
@@ -55,11 +55,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // The account's interface language outranks whatever was detected in
-  // the browser (TECH-12), so applying it here covers session restore,
-  // sign-in, and a switch made on another device alike.
+  // The account's interface language outranks whatever this browser
+  // says (TECH-12), so applying it here covers session restore, sign-in,
+  // and a switch made on another device alike. An account that never
+  // chose one has nothing stored, and falls back to a choice remembered
+  // in this browser, then to the browser's own languages — re-resolved
+  // here rather than frozen at sign-up, so a newly supported language
+  // reaches accounts that never picked one.
   useEffect(() => {
-    if (user) void changeLocale(user.locale)
+    if (user) void applyLocale(user.locale ?? resolveInitialLocale())
   }, [user])
 
   const login = useCallback(async (email: string, password: string) => {
@@ -70,14 +74,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = useCallback(
     async (email: string, password: string, displayName: string) => {
-      // Carry the browser-detected locale onto the new account so the
-      // first visit's guess persists instead of being re-made on the
-      // next device (TECH-12).
+      // Carry a locale the visitor explicitly picked before signing up
+      // onto the new account (TECH-12). A merely detected language is
+      // not sent: the account stores nothing and follows the browser,
+      // which is re-detected on every visit.
+      const chosen = storedLocale()
       const res = await authApi.register({
         email,
         password,
         displayName,
-        locale: resolveInitialLocale(),
+        ...(chosen ? { locale: chosen } : {}),
       })
       setUser(res.user)
       setStatus('authenticated')

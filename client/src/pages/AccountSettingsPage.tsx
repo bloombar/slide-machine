@@ -26,7 +26,13 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react'
-import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router'
+import {
+  Link,
+  Navigate,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from 'react-router'
 import { useTranslation } from 'react-i18next'
 import {
   LOCALES,
@@ -49,18 +55,19 @@ import UsagePanel from '../components/UsagePanel'
 import BillingPanel from '../components/BillingPanel'
 
 /** One settings change, as the account itself holds it: an absent
- * `language` means "unchanged", an explicit `undefined` one means
- * "inherit the browser default". */
+ * `language`/`locale` means "unchanged", an explicit `undefined` one
+ * means "inherit the browser default". */
 type AccountChange = Partial<
   Pick<SafeUser, 'profileVisibility' | 'locale' | 'language'>
 >
 
 /** The same change as the admin endpoint takes it. `JSON.stringify` drops
- * `undefined`, so clearing the language has to travel as an explicit
- * `null` — but only when the change touches the language at all. */
+ * `undefined`, so clearing a language has to travel as an explicit
+ * `null` — but only when the change touches that field at all. */
 const wirePatch = (change: AccountChange): AdminUserSettingsPatch => ({
   ...change,
   ...('language' in change ? { language: change.language ?? null } : {}),
+  ...('locale' in change ? { locale: change.locale ?? null } : {}),
 })
 
 /** The public-profile fields, as edited. A field is absent until it is
@@ -283,7 +290,10 @@ export default function AccountSettingsPage() {
       })
   }
 
-  const setLocale = (locale: Locale) => void saveAsAdmin({ locale })
+  // Owner-side switching lives in LocaleSwitcher, which also re-renders
+  // the app; this is only the admin's copy of the control.
+  const setLocale = (locale: Locale | null) =>
+    void saveAsAdmin({ locale: locale ?? undefined })
 
   const toggleVisibility = () => {
     const profileVisibility: ProfileVisibility =
@@ -442,10 +452,19 @@ export default function AccountSettingsPage() {
                     <select
                       id="account-locale"
                       aria-label={t('profile.interfaceLanguage')}
-                      value={user.locale}
-                      onChange={e => setLocale(e.target.value as Locale)}
+                      value={user.locale ?? ''}
+                      onChange={e =>
+                        setLocale((e.target.value || null) as Locale | null)
+                      }
                       className="w-fit rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700"
                     >
+                      <option value="">
+                        {t('language.inherit', {
+                          source: t('profile.interfaceLanguageDefault', {
+                            own: false,
+                          }),
+                        })}
+                      </option>
                       {LOCALES.map(locale => (
                         <option key={locale} value={locale}>
                           {LOCALE_LABELS[locale]}
@@ -529,13 +548,26 @@ export default function AccountSettingsPage() {
               className="flex flex-col gap-8"
             >
               <Section title={t('profile.accountTypeSection')}>
+                {/* What the account is on, and one way to change it. The
+                    comparison of what each plan allows lives on its own page:
+                    a column per plan does not fit beside a settings form, and
+                    picking one is a decision you make by reading the table
+                    rather than by pressing the first button you see. */}
                 <p className="text-sm text-slate-600">
                   {t('profile.plan')}{' '}
                   <span className="rounded-full bg-indigo-50 px-2 py-0.5 font-medium text-indigo-700">
                     {t(`plan.tier.${user.planTier}`, {
                       defaultValue: user.planTier,
                     })}
-                  </span>
+                  </span>{' '}
+                  {!adminUserId && (
+                    <Link
+                      to="/app/plans"
+                      className="ml-1 font-medium text-indigo-600 hover:text-indigo-500"
+                    >
+                      {t('plan.change')}
+                    </Link>
+                  )}
                 </p>
 
                 {/* Subscription state and the way to change it (BILL-2).
