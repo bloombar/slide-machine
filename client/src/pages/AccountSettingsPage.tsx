@@ -1,7 +1,8 @@
 /**
  * Everything about one account, in one place (AUTH-5 / SHARE-1 / BILL-4):
  * the public profile fields, the account's plan and what it has used, profile
- * visibility, both languages, and sign out.
+ * visibility, and both languages. Signing out is not here — it lives in the
+ * shell's hamburger menu, which every page carries.
  *
  * A full page at a canonical route rather than a modal, and rather than half
  * of it living on the profile page. Settings is somewhere you go and stay for
@@ -13,8 +14,7 @@
  * `/app/settings` is your own; `/app/settings/:userId` is how an allowlisted
  * admin edits someone else's (ADMIN-5). The admin path confirms once on entry,
  * keeps a banner up for as long as the page is open, and writes an audit entry
- * per change. Two controls differ by design: sign out ends the *admin's* own
- * session, so it stays with the owner, and the interface language is a plain
+ * per change. One control differs by design: the interface language is a plain
  * select when an admin sets it on someone else's account — LocaleSwitcher
  * changes the language of the app you are looking at, which is the owner's,
  * not the admin's.
@@ -28,7 +28,6 @@ import {
 } from 'react'
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import { LogOut } from 'lucide-react'
 import {
   LOCALES,
   LOCALE_LABELS,
@@ -207,11 +206,6 @@ export default function AccountSettingsPage() {
     }
   }
 
-  const onSignOut = async () => {
-    await logout()
-    navigate('/login')
-  }
-
   /** Saves one changed field of the admin's target account and folds it
    * in. Unlike the owner's quiet failures, a refusal here is reported —
    * the account is not the admin's, so a silent revert would mislead. */
@@ -312,21 +306,10 @@ export default function AccountSettingsPage() {
   // the same way the home page narrows its lecture list.
   return (
     <div>
+      {/* Signing out lives only in the shell's hamburger menu now, so it is
+          reachable from every page instead of just this one. */}
       <div className="mb-6 flex items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">{t('common.settings')}</h1>
-        {/* Sign out sits with the title rather than at the bottom of a tab:
-            it belongs to the account, not to General or to Plan, and burying
-            it inside one of them would make it findable from only half the
-            page. Absent for an admin — it would end the *admin's* session. */}
-        {user && !adminUserId && (
-          <button
-            onClick={() => void onSignOut()}
-            className="flex shrink-0 items-center gap-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            <LogOut className="h-4 w-4" aria-hidden />
-            {t('auth.signOut')}
-          </button>
-        )}
       </div>
 
       {adminUserId && <AdminEditNotice entity="account" />}

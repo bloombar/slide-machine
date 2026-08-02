@@ -70,4 +70,18 @@ describe('PublicShell', () => {
       await screen.findByRole('link', { name: /slide machine/i }),
     ).toHaveAttribute('href', '/')
   })
+
+  it('shows the app badge inside the home link, after the menu button', async () => {
+    renderShell(401)
+    const brand = await screen.findByRole('link', { name: /slide machine/i })
+    const badge = brand.querySelector('img')
+    expect(badge).toBeInTheDocument()
+    expect(badge).toHaveAttribute('src', expect.stringContaining('badge'))
+    expect(badge).toHaveAttribute('alt', '')
+    const menu = screen.getByRole('button', { name: 'Menu' })
+    expect(
+      menu.compareDocumentPosition(badge as Element) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
 })

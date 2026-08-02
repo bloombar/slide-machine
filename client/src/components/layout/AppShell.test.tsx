@@ -57,4 +57,21 @@ describe('AppShell', () => {
     ).toHaveAttribute('href', '/app')
     expect(screen.getByText('HOME CONTENT')).toBeInTheDocument()
   })
+
+  it('shows the app badge inside the home link, after the menu button', () => {
+    const { container } = renderShell()
+    const brand = screen.getByRole('link', { name: /slide machine/i })
+    const badge = brand.querySelector('img')
+    expect(badge).toBeInTheDocument()
+    expect(badge).toHaveAttribute('src', expect.stringContaining('badge'))
+    // Decorative: the link's own label already names the destination
+    expect(badge).toHaveAttribute('alt', '')
+    // Badge sits between the hamburger button and the title text
+    const menu = screen.getByRole('button', { name: 'Menu' })
+    expect(
+      menu.compareDocumentPosition(badge as Element) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(container.textContent).toContain('The Slide Machine')
+  })
 })

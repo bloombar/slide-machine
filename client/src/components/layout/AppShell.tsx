@@ -9,6 +9,7 @@ import { Link, Outlet } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import HealthFooter from './HealthFooter'
 import ShellMenu from './ShellMenu'
+import badgeUrl from '../../assets/badge.png'
 import { useShellTitleSlot } from './ShellTitle'
 import { useShellActionsSlot } from './ShellActions'
 
@@ -22,11 +23,15 @@ export default function AppShell() {
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-4">
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <ShellMenu />
+            {/* App badge and title are one link so the icon and the words
+                next to it are a single home target, not two adjacent
+                links to the same page. */}
             <Link
               to="/app"
               aria-label={t('nav.brandHome')}
-              className="font-semibold whitespace-nowrap"
+              className="flex items-center gap-2 font-semibold whitespace-nowrap"
             >
+              <img src={badgeUrl} alt="" aria-hidden className="h-7 w-auto" />
               {t('nav.brand')}
             </Link>
             {shellTitle?.active && (

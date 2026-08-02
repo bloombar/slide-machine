@@ -1,6 +1,6 @@
 /**
  * Unit tests for the unified account settings page: the owner's own profile
- * fields, account details, visibility toggle, both languages, and sign out —
+ * fields, account details, visibility toggle, and both languages —
  * then the admin path over the same controls (ADMIN-5), which confirms on
  * entry, loads the target account, saves through the audited endpoint, and
  * drops the owner-only pieces.
@@ -176,12 +176,6 @@ describe('AccountSettingsPage', () => {
     await vi.waitFor(() => expect(sent).toEqual({ language: null }))
   })
 
-  it('signs out and redirects to login', async () => {
-    renderSettings()
-    fireEvent.click(await screen.findByRole('button', { name: /sign out/i }))
-    expect(await screen.findByText('LOGIN PAGE')).toBeInTheDocument()
-  })
-
   it('edits the public profile fields in place', async () => {
     // Merged from the profile page: there is one place to change a setting,
     // whichever setting it is.
@@ -322,16 +316,13 @@ describe('AccountSettingsPage', () => {
     ).toBe(false)
   })
 
-  it('keeps sign out in the title row, out of both tabs', async () => {
-    // It belongs to the account rather than to General or Plan; inside one of
-    // them it would be findable from only half the page.
+  it('offers no sign out — it lives in the shell menu, on every page', async () => {
     renderSettings()
 
-    expect(
-      await screen.findByRole('button', { name: /sign out/i }),
-    ).toBeVisible()
+    await screen.findByRole('tab', { name: 'Plan' })
+    expect(screen.queryByRole('button', { name: /sign out/i })).toBeNull()
     fireEvent.click(screen.getByRole('tab', { name: 'Plan' }))
-    expect(screen.getByRole('button', { name: /sign out/i })).toBeVisible()
+    expect(screen.queryByRole('button', { name: /sign out/i })).toBeNull()
   })
 
   it('switches the interface language and persists it to the account', async () => {
@@ -487,7 +478,7 @@ describe('AccountSettingsPage as an admin (ADMIN-5)', () => {
     expect(screen.queryByTestId('usage-panel')).toBeNull()
   })
 
-  it('offers no sign out — that would end the admin’s own session', async () => {
+  it('offers no sign out, the same as the owner’s own view', async () => {
     await renderAsAdmin()
     await screen.findByText('grace@example.com')
     expect(screen.queryByRole('button', { name: /sign out/i })).toBeNull()
