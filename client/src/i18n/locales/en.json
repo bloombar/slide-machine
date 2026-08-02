@@ -225,6 +225,8 @@
     "settings": {
       "title": "Project settings",
       "scope": "These settings apply across all lectures in this project (lectures can override some of them individually).",
+      "titleHeading": "Project title",
+      "titleHint": "Name this project. It appears in your project list and to anyone you share it with.",
       "templateHeading": "Default template",
       "templateHint": "New lectures in this project start with this template. Each lecture keeps its own and can switch any time in its settings.",
       "seedNotesHint": "Background material that guides slide generation for every lecture in this project. Saved automatically.",

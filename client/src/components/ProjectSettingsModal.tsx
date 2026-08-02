@@ -1,8 +1,9 @@
 /**
  * Project settings as a full-width modal, mirroring the lecture
- * settings chrome, in tabs: General (seed notes + seed material, which
- * apply to every lecture, PROJ-1/SEED-1; plus an owner Danger zone that
- * deletes the whole project after confirmation) and Privacy & Sharing —
+ * settings chrome, in tabs: General (the project's title, then seed notes
+ * + seed material, which apply to every lecture, PROJ-1/SEED-1; plus an
+ * owner Danger zone that deletes the whole project after confirmation)
+ * and Privacy & Sharing —
  * the project's ACL, which every lecture without its own override
  * inherits (SHARE-1). Closes from the top-right icon or Escape.
  *
@@ -17,7 +18,7 @@ import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import type { Project, Template } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
-import { projectTitle } from '../lib/project'
+import { projectTitle, untitledProject } from '../lib/project'
 import SeedNotesEditor from './SeedNotesEditor'
 import SeedMaterial from './SeedMaterial'
 import AdminEditNotice from './AdminEditNotice'
@@ -81,6 +82,23 @@ export default function ProjectSettingsModal({
     }
   }, [])
   const closeRef = useRef<HTMLButtonElement>(null)
+
+  // Editable project title. A project must keep a name — the server
+  // rejects a blank one — so an emptied field is left unsaved and reverts
+  // to the stored title on the next render. Only saved when it changed.
+  const [titleDraft, setTitleDraft] = useState(project.title)
+  const saveTitle = () => {
+    const title = titleDraft.trim()
+    if (!title || title === project.title.trim()) return
+    dispatchAction<Project>('project.update', {
+      projectId: project.id,
+      title,
+    })
+      .then(onProjectChange)
+      .catch(() => {
+        // Quiet failure: the field reverts to the saved title on re-render
+      })
+  }
 
   const deleteProject = () => {
     dispatchAction('project.delete', { projectId: project.id })
@@ -203,6 +221,26 @@ export default function ProjectSettingsModal({
           aria-labelledby="project-tab-general"
           className="flex flex-col gap-8"
         >
+          <div>
+            <h3 className="mb-2 text-lg font-semibold text-slate-700">
+              {t('project.settings.titleHeading')}
+            </h3>
+            <p className="mb-3 text-sm text-slate-500">
+              {t('project.settings.titleHint')}
+            </p>
+            <input
+              aria-label={t('project.settings.titleHeading')}
+              value={titleDraft}
+              onChange={e => setTitleDraft(e.target.value)}
+              onBlur={saveTitle}
+              onKeyDown={e => {
+                if (e.key === 'Enter') e.currentTarget.blur()
+              }}
+              placeholder={untitledProject()}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+
           <div>
             <h3 className="mb-2 text-lg font-semibold text-slate-700">
               {t('seed.notesHeading')}

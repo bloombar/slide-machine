@@ -225,6 +225,8 @@
     "settings": {
       "title": "Paramètres du projet",
       "scope": "Ces paramètres s’appliquent à tous les cours de ce projet (chaque cours peut en redéfinir certains).",
+      "titleHeading": "Titre du projet",
+      "titleHint": "Nommez ce projet. Il apparaît dans votre liste de projets et pour les personnes avec qui vous le partagez.",
       "templateHeading": "Modèle par défaut",
       "templateHint": "Les nouveaux cours de ce projet démarrent avec ce modèle. Chaque cours conserve le sien et peut en changer à tout moment dans ses paramètres.",
       "seedNotesHint": "Documentation de fond qui guide la génération des diapositives pour tous les cours de ce projet. Enregistrée automatiquement.",

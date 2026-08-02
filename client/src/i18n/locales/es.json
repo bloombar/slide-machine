@@ -225,6 +225,8 @@
     "settings": {
       "title": "Ajustes del proyecto",
       "scope": "Estos ajustes se aplican a todas las clases de este proyecto (cada clase puede cambiar algunos por su cuenta).",
+      "titleHeading": "Título del proyecto",
+      "titleHint": "Ponle nombre a este proyecto. Aparece en tu lista de proyectos y para quienes lo compartas.",
       "templateHeading": "Plantilla predeterminada",
       "templateHint": "Las clases nuevas de este proyecto empiezan con esta plantilla. Cada clase conserva la suya y puede cambiarla cuando quiera en sus ajustes.",
       "seedNotesHint": "Material de fondo que guía la generación de diapositivas para todas las clases de este proyecto. Se guarda automáticamente.",
