@@ -65,13 +65,18 @@ const MINUTES_AS_HOURS = 120
  * them up would only put a guess between the user and their allowance.
  */
 const FRIENDLY_UNITS: Partial<
-  Record<UsageMetric, 'spoken' | 'words' | 'languages'>
+  Record<UsageMetric, 'spoken' | 'words' | 'languages' | 'tokens'>
 > = {
   ttsCharacters: 'spoken',
   ttsPremiumCharacters: 'spoken',
   audienceTtsCharacters: 'spoken',
   translationCharacters: 'words',
   audienceLocales: 'languages',
+  // Not re-expressed, only named: how many tokens a lecture takes depends on
+  // how much refining and quizzing it gets, so any conversion to "lectures"
+  // would be a guess dressed as a promise. A bare seven-digit number, though,
+  // does not say what it counts.
+  aiTokens: 'tokens',
 }
 
 /**
@@ -93,6 +98,17 @@ export const friendlyCap = (
 
   if (kind === 'languages') {
     return translate('plan.pricing.approx.languages', { count: cap })
+  }
+  if (kind === 'tokens') {
+    // Millions, because token allowances run to seven and eight digits and
+    // "5M" is read at a glance where "5,000,000" is counted digit by digit.
+    // One decimal only where it is not a whole million (7.5M), never "5.0M".
+    const millions = cap / 1_000_000
+    return translate('plan.pricing.approx.tokens', {
+      value: formatNumber(
+        Number.isInteger(millions) ? millions : Math.round(millions * 10) / 10,
+      ),
+    })
   }
   if (kind === 'words') {
     return translate('plan.pricing.approx.words', {

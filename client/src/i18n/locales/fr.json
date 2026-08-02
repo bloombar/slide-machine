@@ -301,24 +301,25 @@
         "spokenMinutes": "environ {value} min de narration",
         "spokenHours": "environ {value} h de narration",
         "words": "environ {value} mots",
-        "languages": "{count, plural, one {# langue} other {# langues}}"
+        "languages": "{count, plural, one {# langue} other {# langues}}",
+        "tokens": "{value} M de jetons"
       }
     },
     "metricHint": {
       "sttMinutes": "Parole transcrite en direct pendant votre cours.",
       "audioRetention": "Durée de conservation des enregistrements originaux avant leur suppression.",
-      "aiTokens": "Travail de l’IA : génération des diapositives, amélioration, narration et quiz.",
-      "ttsCharacters": "Narration que vous générez avec une voix standard.",
-      "ttsPremiumCharacters": "Narration générée avec les voix premium, plus naturelles.",
+      "aiTokens": "Travail de l’IA : génération des diapositives, amélioration, narration et quiz. Mesuré en jetons : une requête de génération de diapositive avoisine 3 500, et un cours de 75 minutes environ 2 M.",
+      "ttsCharacters": "Narration que vous générez avec une voix standard. Comptée une seule fois, à la première narration de la diapositive : la réécouter ne coûte rien.",
+      "ttsPremiumCharacters": "Narration générée avec les voix premium, plus naturelles. Comptée une seule fois, à la première narration de la diapositive : la réécouter ne coûte rien.",
       "diarizationMinutes": "Audio enregistré que vous pouvez attribuer aux intervenants. Moins que ce que vous pouvez enregistrer : cette étape est payante à part et sert aux cours qui en ont besoin, pas à tous.",
-      "translationCharacters": "Texte du cours que vous traduisez vous-même.",
+      "translationCharacters": "Texte du cours que vous traduisez vous-même. Compté une fois par cours et par langue : la traduction est conservée et réutilisée.",
       "aiImages": "Images générées par l’IA pour vos diapositives.",
       "imageLookups": "Images de diapositive trouvées par recherche.",
       "importMb": "Documents importés comme matière première.",
       "exports": "Téléchargements, exports vers Drive et publication de quiz.",
       "audioStorageMb": "Audio de cours conservé à un instant donné.",
-      "audienceTtsCharacters": "Narration déclenchée par vos spectateurs, sur un quota distinct : un cours populaire ne consomme jamais le vôtre.",
-      "audienceLocales": "Langues vers lesquelles vos spectateurs peuvent faire traduire un cours."
+      "audienceTtsCharacters": "Narration déclenchée par vos spectateurs, sur un quota distinct : un cours populaire ne consomme jamais le vôtre. Comptée une fois par diapositive, quel que soit le nombre d’auditeurs.",
+      "audienceLocales": "Langues vers lesquelles vos spectateurs peuvent faire traduire un cours. Comptée une fois par langue ; après le premier spectateur, tous lisent la traduction conservée."
     }
   },
   "billing": {

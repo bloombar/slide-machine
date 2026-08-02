@@ -205,9 +205,16 @@ export default function PlanPricingPage() {
     return null
   }
 
-  /** A titled band of rows. `<tbody>` per group so the heading belongs to the
-   * rows under it rather than floating as another data row. */
-  const group = (title: string, rows: ReactNode) => (
+  /**
+   * A titled band of rows. `<tbody>` per group so the heading belongs to the
+   * rows under it rather than floating as another data row.
+   *
+   * `hint` is what is true of every row in the band — the audience pool being
+   * separate from the instructor's own, say. It runs the full width directly
+   * under the heading, because a caption at the foot of the table is a
+   * sentence with nothing visibly attached to it.
+   */
+  const group = (title: string, rows: ReactNode, hint?: string) => (
     <tbody className="divide-y divide-slate-100 border-t border-slate-200">
       <tr className="bg-slate-50">
         <th
@@ -218,6 +225,16 @@ export default function PlanPricingPage() {
           {title}
         </th>
       </tr>
+      {hint && (
+        <tr className="bg-slate-50">
+          <td
+            colSpan={plans.length + 1}
+            className="px-4 pb-2 text-left text-xs text-slate-500"
+          >
+            {hint}
+          </td>
+        </tr>
+      )}
       {rows}
     </tbody>
   )
@@ -359,11 +376,13 @@ export default function PlanPricingPage() {
           )}
 
           {group(t('usage.instructor'), capRows(ALLOWANCE.instructor))}
-          {group(t('usage.audience'), capRows(ALLOWANCE.audience))}
+          {group(
+            t('usage.audience'),
+            capRows(ALLOWANCE.audience),
+            t('usage.audienceHint'),
+          )}
         </table>
       </div>
-
-      <p className="mt-4 text-xs text-slate-500">{t('usage.audienceHint')}</p>
 
       {/* Moving down a plan, or off one, is the hosted portal's job (BILL-5) —
           and it only exists once the account has been billed at all. */}

@@ -301,24 +301,25 @@
         "spokenMinutes": "unos {value} min de narración",
         "spokenHours": "unas {value} h de narración",
         "words": "unas {value} palabras",
-        "languages": "{count, plural, one {# idioma} other {# idiomas}}"
+        "languages": "{count, plural, one {# idioma} other {# idiomas}}",
+        "tokens": "{value} M de tokens"
       }
     },
     "metricHint": {
       "sttMinutes": "Voz transcrita en directo mientras das clase.",
       "audioRetention": "Cuánto tiempo se conservan las grabaciones originales antes de borrarse.",
-      "aiTokens": "Trabajo de la IA en generación de diapositivas, refinado, narración y cuestionarios.",
-      "ttsCharacters": "Narración que generas con una voz estándar.",
-      "ttsPremiumCharacters": "Narración generada con las voces premium, más naturales.",
+      "aiTokens": "Trabajo de la IA en generación de diapositivas, refinado, narración y cuestionarios. Se mide en tokens: una petición de generación de diapositiva ronda los 3.500, y una clase de 75 minutos, unos 2 M.",
+      "ttsCharacters": "Narración que generas con una voz estándar. Se cuenta una sola vez, al narrar la diapositiva por primera vez; volver a reproducirla no cuesta nada.",
+      "ttsPremiumCharacters": "Narración generada con las voces premium, más naturales. Se cuenta una sola vez, al narrar la diapositiva por primera vez; volver a reproducirla no cuesta nada.",
       "diarizationMinutes": "Audio grabado que puedes etiquetar por hablante. Menos de lo que puedes grabar: el etiquetado es un proceso de pago aparte, pensado para las clases que lo necesitan y no para todas.",
-      "translationCharacters": "Texto de la clase que traduces tú.",
+      "translationCharacters": "Texto de la clase que traduces tú. Se cuenta una vez por clase e idioma: la traducción se guarda y se reutiliza.",
       "aiImages": "Imágenes generadas por IA para tus diapositivas.",
       "imageLookups": "Imágenes de diapositiva obtenidas por búsqueda.",
       "importMb": "Documentos subidos como material de partida.",
       "exports": "Descargas, exportaciones a Drive y publicación de cuestionarios.",
       "audioStorageMb": "Audio de clases conservado en un momento dado.",
-      "audienceTtsCharacters": "Narración que piden quienes te ven, desde una bolsa propia para que una clase popular nunca gaste la tuya.",
-      "audienceLocales": "Idiomas a los que quienes te ven pueden traducir una clase."
+      "audienceTtsCharacters": "Narración que piden quienes te ven, desde una bolsa propia para que una clase popular nunca gaste la tuya. Se cuenta una vez por diapositiva, por mucha gente que la escuche.",
+      "audienceLocales": "Idiomas a los que quienes te ven pueden traducir una clase. Se cuenta una vez por idioma; a partir del primero, todos leen la traducción guardada."
     }
   },
   "billing": {

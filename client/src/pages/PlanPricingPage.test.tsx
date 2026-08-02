@@ -53,6 +53,7 @@ const catalog = (over: Partial<PlanCatalog> = {}): PlanCatalog =>
         caps: {
           sttMinutes: 75,
           audienceTtsCharacters: 25000,
+          aiTokens: 5000000,
           ttsCharacters: 60000,
           diarizationMinutes: 40,
           audienceLocales: 1,
@@ -72,6 +73,7 @@ const catalog = (over: Partial<PlanCatalog> = {}): PlanCatalog =>
         caps: {
           sttMinutes: 600,
           audienceTtsCharacters: 450000,
+          aiTokens: 7500000,
           ttsCharacters: 600000,
           diarizationMinutes: 350,
           audienceLocales: 15,
@@ -91,6 +93,7 @@ const catalog = (over: Partial<PlanCatalog> = {}): PlanCatalog =>
         caps: {
           sttMinutes: 3300,
           audienceTtsCharacters: 700000,
+          aiTokens: 65000000,
           ttsCharacters: 3300000,
           diarizationMinutes: 1100,
           audienceLocales: 27,
@@ -166,6 +169,15 @@ const renderPage = ({
 /** The row whose header cell is `label`, so a cap can be read per plan. */
 const row = async (label: RegExp) =>
   (await screen.findByRole('rowheader', { name: label })).closest('tr')!
+
+/** The row whose *name* is exactly `label` — the header also carries a hint,
+ * and "Narration" would otherwise match "Narration for viewers" too. */
+const rowNamed = async (label: string) => {
+  const headers = await screen.findAllByRole('rowheader')
+  const header = headers.find(th => th.firstElementChild?.textContent === label)
+  if (!header) throw new Error(`No row labelled "${label}"`)
+  return header.closest('tr')!
+}
 
 let assign: ReturnType<typeof vi.fn>
 
@@ -292,6 +304,63 @@ describe('PlanPricingPage', () => {
     ])
   })
 
+  it('says that generated narration and translations are only counted once', async () => {
+    renderPage({
+      plans: catalog({
+        metrics: [
+          {
+            metric: 'ttsCharacters',
+            allowance: 'instructor',
+            unit: 'characters',
+          },
+          {
+            metric: 'translationCharacters',
+            allowance: 'instructor',
+            unit: 'characters',
+          },
+          {
+            metric: 'audienceTtsCharacters',
+            allowance: 'audience',
+            unit: 'characters',
+          },
+        ],
+      }),
+    })
+
+    // Both are cached, and serving what is already there costs nothing and
+    // debits nothing (BILL-3). Left unsaid, an allowance reads as though a
+    // class of thirty listening to one slide spent it thirty times.
+    expect(await rowNamed('Narration')).toHaveTextContent(/replaying it costs/i)
+    expect(await rowNamed('Translation')).toHaveTextContent(
+      /stored and reused/i,
+    )
+    expect(await rowNamed('Narration for viewers')).toHaveTextContent(
+      /once per slide, however many people listen/i,
+    )
+  })
+
+  it('names what the AI allowance counts, in millions', async () => {
+    renderPage({
+      plans: catalog({
+        metrics: [
+          { metric: 'aiTokens', allowance: 'instructor', unit: 'tokens' },
+        ],
+      }),
+    })
+
+    // A bare "5,000,000" says nothing about what is being counted, and is
+    // read digit by digit.
+    const ai = await rowNamed('AI generation')
+    expect(
+      within(ai)
+        .getAllByRole('cell')
+        .map(c => c.textContent),
+    ).toEqual(['5M tokens', '7.5M tokens', '65M tokens'])
+    // A token is not a unit anyone has intuitions about, so the row anchors it
+    // to work the reader recognizes (docs/BILLING_COST_MODEL.md §4-5).
+    expect(ai).toHaveTextContent(/one slide-generation request runs about/i)
+  })
+
   it('explains what an allowance covers when the number alone would mislead', async () => {
     renderPage({
       plans: catalog({
@@ -316,8 +385,15 @@ describe('PlanPricingPage', () => {
 
     // Both group headings are present, so a viewer-spent allowance is never
     // read as something the instructor's own work draws on (BILL-3).
-    expect(await screen.findByText('Your allowances')).toBeInTheDocument()
-    expect(screen.getByText('Your audience')).toBeInTheDocument()
+    const heading = await screen.findByText('Your audience')
+    expect(screen.getByText('Your allowances')).toBeInTheDocument()
+
+    // And what makes that pool separate is said directly under the heading it
+    // applies to: at the foot of the table it was a sentence attached to
+    // nothing the reader could see.
+    expect(heading.closest('tr')!.nextElementSibling).toHaveTextContent(
+      /separate pool so a popular lecture never uses up your own/i,
+    )
   })
 
   it('marks the plan the account is on instead of offering to sell it', async () => {
