@@ -130,6 +130,23 @@ describe('friendlyCap', () => {
     )
   })
 
+  it('reads a token allowance in millions', () => {
+    // Seven and eight digits are counted digit by digit; "5M" is read.
+    expect(friendlyCap('aiTokens', 5_000_000, t)).toBe(
+      'plan.pricing.approx.tokens:{"value":"5"}',
+    )
+  })
+
+  it('keeps one decimal on a token allowance that is not whole millions', () => {
+    expect(friendlyCap('aiTokens', 7_500_000, t)).toBe(
+      'plan.pricing.approx.tokens:{"value":"7.5"}',
+    )
+    // …and never renders a pointless one.
+    expect(friendlyCap('aiTokens', 65_000_000, t)).toBe(
+      'plan.pricing.approx.tokens:{"value":"65"}',
+    )
+  })
+
   it('leaves alone the metrics that are already plain', () => {
     // Minutes recorded, images, exports and megabytes are units a reader
     // already has; putting an approximation in front of them would only add a
@@ -137,6 +154,6 @@ describe('friendlyCap', () => {
     expect(friendlyCap('sttMinutes', 75, t)).toBeNull()
     expect(friendlyCap('aiImages', 5, t)).toBeNull()
     expect(friendlyCap('audioStorageMb', 500, t)).toBeNull()
-    expect(friendlyCap('aiTokens', 5_000_000, t)).toBeNull()
+    expect(friendlyCap('exports', 10, t)).toBeNull()
   })
 })

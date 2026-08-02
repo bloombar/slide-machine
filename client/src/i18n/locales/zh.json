@@ -301,24 +301,25 @@
         "spokenMinutes": "约 {value} 分钟旁白",
         "spokenHours": "约 {value} 小时旁白",
         "words": "约 {value} 个词",
-        "languages": "{count, plural, other {# 种语言}}"
+        "languages": "{count, plural, other {# 种语言}}",
+        "tokens": "{value} 百万 token"
       }
     },
     "metricHint": {
       "sttMinutes": "授课时实时转写的语音。",
       "audioRetention": "原始录音在删除前保留多久。",
-      "aiTokens": "AI 用于生成幻灯片、优化、旁白和测验的工作量。",
-      "ttsCharacters": "你用标准音色生成的旁白。",
-      "ttsPremiumCharacters": "用更自然的高级音色生成的旁白。",
+      "aiTokens": "AI 用于生成幻灯片、优化、旁白和测验的工作量。以 token 计量：一次幻灯片生成请求约 3,500，一节 75 分钟的课程约 200 万。",
+      "ttsCharacters": "你用标准音色生成的旁白。仅在幻灯片首次生成旁白时计入一次，重复播放不计费。",
+      "ttsPremiumCharacters": "用更自然的高级音色生成的旁白。仅在幻灯片首次生成旁白时计入一次，重复播放不计费。",
       "diarizationMinutes": "可按发言人标注的录音时长。少于可录制时长：说话人标注是另行计费的处理，用于需要的课程，而非全部课程。",
-      "translationCharacters": "你自己翻译的课程文本。",
+      "translationCharacters": "你自己翻译的课程文本。每门课程、每种语言只计入一次——译文会被保存并重复使用。",
       "aiImages": "AI 为幻灯片生成的图片。",
       "imageLookups": "通过图片搜索获取的幻灯片配图。",
       "importMb": "作为素材上传的文档。",
       "exports": "下载、导出到 Drive 以及发布测验。",
       "audioStorageMb": "同一时间保留的课程音频量。",
-      "audienceTtsCharacters": "观看者触发的旁白，来自独立额度，热门课程不会占用你的额度。",
-      "audienceLocales": "观看者可将课程翻译成的语言数。"
+      "audienceTtsCharacters": "观看者触发的旁白，来自独立额度，热门课程不会占用你的额度。每张幻灯片只计入一次，无论多少人收听。",
+      "audienceLocales": "观看者可将课程翻译成的语言数。每种语言只计入一次；第一位观看者之后，其他人读取已保存的译文。"
     }
   },
   "billing": {
