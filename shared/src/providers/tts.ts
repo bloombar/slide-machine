@@ -36,6 +36,11 @@ export interface TtsSynthesisResult {
   /** Sentence-boundary timepoints; empty when the voice/engine can't emit them
    * (e.g. non-SSML voices), in which case playback uses the linear fallback. */
   marks: TtsMark[]
+  /** Characters the synthesizer charged for, which is rarely `text.length`:
+   * adapters that send SSML are billed for the markup too. Reported by the
+   * adapter because only it knows what it actually sent; callers metering usage
+   * fall back to the input length when an adapter omits it. */
+  billedCharacters?: number
 }
 
 export interface TtsProvider {

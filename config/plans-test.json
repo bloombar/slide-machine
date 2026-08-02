@@ -3,38 +3,38 @@
     "priceId": null,
     "audioRetentionDays": 7,
     "caps": {
-      "aiTokens": 10000000,
-      "sttMinutes": 90,
-      "diarizationMinutes": 0,
-      "ttsCharacters": 150000,
-      "ttsPremiumCharacters": 0,
-      "aiImages": 0,
+      "aiTokens": 5000000,
+      "sttMinutes": 75,
+      "diarizationMinutes": 40,
+      "ttsCharacters": 60000,
+      "ttsPremiumCharacters": 20000,
+      "aiImages": 5,
       "imageLookups": 250,
       "importMb": 100,
       "exports": 10,
-      "translationCharacters": 0,
-      "audioStorageMb": 750,
-      "audienceTtsCharacters": 0,
-      "audienceLocales": 0
+      "translationCharacters": 9000,
+      "audioStorageMb": 500,
+      "audienceTtsCharacters": 25000,
+      "audienceLocales": 1
     }
   },
   "fresh": {
     "priceId": "price_1TzTqsBV5MO3WSY6MNFaGHiJ",
     "audioRetentionDays": 14,
     "caps": {
-      "aiTokens": 14000000,
-      "sttMinutes": 225,
-      "diarizationMinutes": 0,
-      "ttsCharacters": 200000,
-      "ttsPremiumCharacters": 0,
-      "aiImages": 0,
+      "aiTokens": 7500000,
+      "sttMinutes": 150,
+      "diarizationMinutes": 70,
+      "ttsCharacters": 120000,
+      "ttsPremiumCharacters": 40000,
+      "aiImages": 10,
       "imageLookups": 350,
       "importMb": 300,
       "exports": 30,
-      "translationCharacters": 0,
-      "audioStorageMb": 1500,
-      "audienceTtsCharacters": 80000,
-      "audienceLocales": 3
+      "translationCharacters": 18000,
+      "audioStorageMb": 1000,
+      "audienceTtsCharacters": 45000,
+      "audienceLocales": 2
     }
   },
   "pro": {

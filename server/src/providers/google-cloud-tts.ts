@@ -45,7 +45,7 @@ export class GoogleCloudTtsProvider implements TtsProvider {
 
     // Preferred path: SSML with `<mark>`s + timepoints, so playback gets the
     // real spoken time of each phrase boundary.
-    const { ssml, marks: markRefs } = buildMarkedSsml(text)
+    const { ssml, marks: markRefs, billedCharacters } = buildMarkedSsml(text)
     const ssmlResult = await this.request(
       {
         input: { ssml },
@@ -55,7 +55,7 @@ export class GoogleCloudTtsProvider implements TtsProvider {
       },
       markRefs,
     )
-    if (ssmlResult) return ssmlResult
+    if (ssmlResult) return { ...ssmlResult, billedCharacters }
 
     // Fallback: some voices (e.g. Chirp/HD) reject SSML. Re-synthesize the
     // plain text with no marks — playback degrades to the linear proxy.
@@ -64,7 +64,10 @@ export class GoogleCloudTtsProvider implements TtsProvider {
       [],
     )
     if (!plainResult) throw new Error('Text-to-speech returned no audio')
-    return plainResult
+    // Plain text is billed as-is: no wrapper, no escaping. The rejected SSML
+    // attempt is not billed — Google charges for synthesis, and it produced no
+    // audio — so only this second request counts.
+    return { ...plainResult, billedCharacters: text.length }
   }
 
   /**

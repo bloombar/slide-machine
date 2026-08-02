@@ -8,9 +8,11 @@
  * by gender.
  *
  * `tier` marks provider cost/quality: 'standard' voices (Neural2) are the
- * everyday default; 'premium' voices (Chirp3-HD) are the most natural. All are
- * available to everyone for now; premium will later be gated to paid plans —
- * hence the field, so that gate has something to key on.
+ * everyday default; 'premium' voices (Chirp3-HD) are the most natural. Every
+ * plan may use every voice — tiers differ in how much narration they allow,
+ * not in which voices they offer (BILL-1) — but premium characters cost about
+ * twice standard ones, so the field is what lets metering charge them to the
+ * right allowance.
  */
 
 export type TtsVoiceGender = 'female' | 'male'

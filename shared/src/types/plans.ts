@@ -10,9 +10,12 @@ export const PLAN_TIERS = ['free', 'fresh', 'pro', 'max'] as const
 export type PlanTier = (typeof PLAN_TIERS)[number]
 
 /**
- * Metered resources subject to per-tier caps (BILL-3). `null` means unlimited;
- * `0` means the capability is not available on that tier, which is how
- * paid-only features (premium voices, AI imagery, translation) are gated.
+ * Metered resources subject to per-tier caps (BILL-3). `null` means unlimited
+ * and `0` means the capability is unavailable — but **no shipped tier uses
+ * `0`**: every plan offers every service and they differ only in allowance
+ * (BILL-1). The sentinel stays because a deployment may want to switch a
+ * service off entirely, and because "unavailable" and "exhausted" have to read
+ * differently to whoever is blocked.
  *
  * Metrics are provider-neutral on purpose — `aiTokens`, not `geminiTokens` —
  * so swapping an adapter (TECH-8) never renames a persisted metric.

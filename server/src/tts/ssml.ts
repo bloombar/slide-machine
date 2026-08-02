@@ -26,6 +26,14 @@ export interface SsmlMarkRef {
 export interface SsmlBuild {
   ssml: string
   marks: SsmlMarkRef[]
+  /**
+   * Characters Google charges for. SSML is billed including its tags — the
+   * `<speak>` wrapper and every entity `escapeSsml` expands — with `<mark>` the
+   * one documented exception, so those tags are subtracted back out. Counted
+   * here rather than estimated by the caller, because this is the function that
+   * decides what the request contains.
+   */
+  billedCharacters: number
 }
 
 /**
@@ -38,11 +46,14 @@ export const buildMarkedSsml = (text: string): SsmlBuild => {
   const phrases = segmentPhrases(text)
   const marks: SsmlMarkRef[] = []
   let ssml = '<speak>'
+  let markChars = 0
   phrases.forEach((phrase, i) => {
     const name = `m${i}`
+    const tag = `<mark name="${name}"/>`
+    markChars += tag.length
     marks.push({ name, charOffset: phrase.start })
-    ssml += `<mark name="${name}"/>${escapeSsml(phrase.text)} `
+    ssml += `${tag}${escapeSsml(phrase.text)} `
   })
   ssml += '</speak>'
-  return { ssml, marks }
+  return { ssml, marks, billedCharacters: ssml.length - markChars }
 }

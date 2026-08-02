@@ -27,8 +27,8 @@ re-run everything from a different value.
 | Slide text | 400 chars/slide → 18,000 per deck | **weak** — unmeasured |
 | Narration text | 600 chars/slide → 27,000 per deck | **weak** — unmeasured |
 | Instructor revision profile | **light**: refine ~25% of slides, re-synthesize ~5, redo enrichment on ~10%, re-transcribe ~3 min, diarize ~30% of lectures | **weak** — pilot data will replace this |
-| Free tier volume | 4 lectures/month = 300 lecture-min | product decision |
-| Fresh tier volume | 6 lectures/month = 450 lecture-min | sized backwards from a $19 price |
+| Free tier volume | 2 lectures/month = 150 lecture-min | product decision |
+| Fresh tier volume | 3 lectures/month = 225 lecture-min | sized backwards from a $19 price |
 | Pro tier volume | 26 lectures/month (3 courses × 2/week) = 1,950 lecture-min | product decision |
 | Max tier volume | 40 lectures/month (4 courses × 2/week) = 3,000 lecture-min | product decision |
 
@@ -177,8 +177,9 @@ Five conclusions:
 
 - **Cloud STT and Gemini are 64% of all cost.** Everything else is a rounding
   error beside them.
-- **Browser capture removes 47%** — STT plus the diarization it enables — which
-  is why Free and Fresh are browser-only.
+- **Browser capture removes 47%** — STT plus the diarization it enables — but
+  it is a deployment-wide switch, not a tier boundary, so it is a lever on the
+  whole deployment's bill rather than a way to make a cheap tier cheap.
 - **Diarization is now the fourth-largest line at 11%**, having been assumed to
   be 3%. It costs the same per minute as live capture, so diarizing every
   lecture roughly doubles its transcription bill.
@@ -216,10 +217,10 @@ Five conclusions:
 
 Three things worth knowing. Re-transcribing a saved clip runs through the
 *streaming* recognizer, so it bills at the full $0.016/min. Every narration edit
-re-synthesizes that slide. And browser-capture tiers cannot diarize or
-re-transcribe at all, because retention only happens on the cloud engine —
-their `audioStorageMb` and `audioRetentionDays` are therefore reserved for a
-future where browser audio is retained, not live constraints today.
+re-synthesizes that slide. And diarization and re-transcription depend on
+retained audio, which only the cloud engine produces — so on a
+browser-capture deployment those allowances go unspent by every tier alike,
+rather than being a difference between tiers.
 
 ## 6. Audience costs
 
@@ -274,21 +275,41 @@ Worked for Pro (26 lectures, 1,950 lecture-min):
 Two caps are deliberately **below** full coverage, because at $0.016/min each
 would otherwise dominate the tier:
 
-- **`sttMinutes`** is below full coverage on every tier — 90 minutes on Free
-  (~1 lecture), 225 on Fresh (~3), 600 on Pro (~8 of 26). At $0.016/min,
+- **`sttMinutes`** is below full coverage on every tier — 75 minutes on Free
+  (~1 lecture), 150 on Fresh (~2), 600 on Pro (~8 of 26). At $0.016/min,
   recording every lecture a tier allows would cost $4.80, $7.20 and $31.20
   respectively, which no tier's price supports. Recording is an allowance, not
   an entitlement to record everything.
-- **`diarizationMinutes: 350`** covers ~5 lectures. Diarizing all 26 would cost
-  another $31. Adopting Dynamic Batch (§2) would make full coverage affordable
-  at the price of 24-hour turnaround.
+- **`diarizationMinutes`** covers ~5 lectures on Pro, one on Fresh, half on
+  Free. Diarizing all 26 of Pro's would cost another $31. Adopting Dynamic
+  Batch (§2) would make full coverage affordable at the price of 24-hour
+  turnaround.
+
+### Every tier offers every service
+
+No cap is `0` anywhere. A tier never removes a capability — it allows less of
+it — which is the same rule already applied to speech capture, extended to
+premium voices, diarization, AI imagery, translation and the audience
+allowances.
+
+The reasoning is as much about support as fairness: a capability that appears
+and disappears with the plan has to be explained everywhere it might be
+missing, in the UI, the docs and the error copy, while an allowance that runs
+out explains itself once. It also keeps the upgrade prompt honest — a user who
+hits a wall has *used* something and can see how much, rather than being told a
+button they can see is not for them.
+
+The cost is that the cheap tiers now carry a little of every expensive line, so
+their allowances have to be small to stay affordable. Free and Fresh were
+resized accordingly when this rule was adopted: roughly one lecture's worth of
+each optional service on Free, two on Fresh.
 
 ## 8. Tier economics and break-even
 
 | Plan | Lectures/mo | Light (25%) | Expected (50%) | Heavy (80%) | At caps | Price floor | Price | Maxed as % of price |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Free | 4 | ~$1.81 | ~$3.61 | ~$5.78 | ~$7.23 | $7.81 | **$0** | — |
-| Fresh | 6 | ~$3.48 | ~$6.96 | ~$11.13 | ~$13.91 | $14.75 | **$19** | 73% |
+| Free | 2 | ~$1.55 | ~$3.10 | ~$4.96 | ~$6.21 | $6.75 | **$0** | — |
+| Fresh | 3 | ~$2.83 | ~$5.66 | ~$9.06 | ~$11.33 | $12.06 | **$19** | 60% |
 | Pro | 26 | ~$17.76 | ~$35.53 | ~$56.84 | ~$71.05 | $74.02 | **$99** | 72% |
 | Max | 40 | ~$43.43 | ~$86.86 | ~$138.98 | ~$173.73 | $180.53 | **$299** | 58% |
 
@@ -321,24 +342,29 @@ Excludes RA/PI salaries (grant-funded) and CI (free tier).
 
 | Tier | Light | Expected | Heavy | At caps |
 | --- | --- | --- | --- | --- |
-| Fresh | 20 | 26 | 41 | 68 |
+| Fresh | 19 | 23 | 32 | 42 |
 | Pro | 4 | 5 | 8 | 12 |
 | Max | 2 | 2 | 2 | 3 |
 
-The spread matters most at the cheap end: Fresh needs 20 subscribers even when
-they barely use it, against Pro's 4, because the $0.30 per charge and the 3.6%
-cut do not shrink with the price. Putting every tier on the cloud engine
-sharpens that — a Fresh subscriber at their caps now leaves ~$4 after fees, so
-68 of them are needed to carry the fixed costs. Fresh is a conversion step, not
-a tier the economics can lean on.
-
 A cheap tier carries fixed costs badly: Stripe's $0.30 + 3.6% is the same
-whatever the price, so Fresh needs three times Pro's subscriber count. It earns
-its place as the conversion step off Free, not as the plan the economics rest
-on. Free users are pure cost at **~$7.23/month each at their caps** — ten
-fully-active free users cost about as much as the entire pilot infrastructure.
-Roughly $1.44 of that is the 90 minutes of cloud transcription the tier now
-includes, which is the price of giving every tier the same capture experience.
+whatever the price, so Fresh needs four times Pro's subscriber count even
+though its worst case is a seventh of Pro's. It earns its place as the
+conversion step off Free, not as the plan the economics rest on.
+
+Fresh sits exactly on the **60%-of-price** rule, which is what its allowances
+were sized to. That is not a coincidence but a constraint: once every service
+is available on every tier, the sub-$20 price is what decides how much of each
+Fresh may have. Adding an allowance to Fresh means taking one away somewhere
+else, or moving the price.
+
+Free users are pure cost at **~$6.21/month each at their caps** — **seven**
+fully-active free users cost about as much as the pilot's ~$78 of
+infrastructure (thirteen against the full ~$278, which includes developer
+tooling). Reaching that ceiling means exhausting every allowance in the same
+month, which no single workflow does: at the expected 50% it is ~$3.10 a head.
+The number to watch during the pilot is free-to-paid conversion — one Pro
+subscriber contributes ~$59.61 after service cost and fees, which carries
+about **nineteen** free users at expected use, or ten who max out.
 
 ## 9. Recalculating
 
