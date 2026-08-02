@@ -303,6 +303,12 @@ export const slideRegenerateTranscript = defineAction<
   SlideRegenerateTranscriptResult
 >({
   name: 'slide.regenerateTranscript',
+  // No `meter` hook, deliberately. This action checks edit access *inside*
+  // execute (loadEditableDeck), and dispatch runs meter before execute — so a
+  // hook here would answer a user with no rights to the lecture with a billing
+  // error instead of a 403. The minutes are still counted, in transcribeAudio;
+  // enforcing them needs the access check lifted into an `authorize` hook
+  // first, which is a wider refactor than this slice.
   input: z.object({
     slideId: z.string().min(1),
     save: z.boolean().optional(),
