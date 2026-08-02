@@ -283,13 +283,42 @@
       "notIncluded": "不包含",
       "unlimited": "不限量",
       "currentPlan": "你的套餐",
-      "audioRetention": "录音保留时长",
+      "free": "无需付费",
+      "per": {
+        "day": "{count, plural, other {{price} / # 天}}",
+        "week": "{count, plural, other {{price} / # 周}}",
+        "month": "{count, plural, other {{price} / # 个月}}",
+        "year": "{count, plural, other {{price} / # 年}}"
+      },
+      "audioRetention": "原始音频保留时长",
       "retentionDays": "{count, plural, other {# 天}}",
       "retentionUnlimited": "长期保留",
       "changeHint": "如需降级或取消，请前往账单门户。",
       "errors": {
         "load": "无法加载套餐"
+      },
+      "approx": {
+        "spokenMinutes": "约 {value} 分钟旁白",
+        "spokenHours": "约 {value} 小时旁白",
+        "words": "约 {value} 个词",
+        "languages": "{count, plural, other {# 种语言}}"
       }
+    },
+    "metricHint": {
+      "sttMinutes": "授课时实时转写的语音。",
+      "audioRetention": "原始录音在删除前保留多久。",
+      "aiTokens": "AI 用于生成幻灯片、优化、旁白和测验的工作量。",
+      "ttsCharacters": "你用标准音色生成的旁白。",
+      "ttsPremiumCharacters": "用更自然的高级音色生成的旁白。",
+      "diarizationMinutes": "可按发言人标注的录音时长。少于可录制时长：说话人标注是另行计费的处理，用于需要的课程，而非全部课程。",
+      "translationCharacters": "你自己翻译的课程文本。",
+      "aiImages": "AI 为幻灯片生成的图片。",
+      "imageLookups": "通过图片搜索获取的幻灯片配图。",
+      "importMb": "作为素材上传的文档。",
+      "exports": "下载、导出到 Drive 以及发布测验。",
+      "audioStorageMb": "同一时间保留的课程音频量。",
+      "audienceTtsCharacters": "观看者触发的旁白，来自独立额度，热门课程不会占用你的额度。",
+      "audienceLocales": "观看者可将课程翻译成的语言数。"
     }
   },
   "billing": {
@@ -815,7 +844,7 @@
     },
     "metric": {
       "aiTokens": "AI 生成",
-      "sttMinutes": "录音时长",
+      "sttMinutes": "音频录制时长",
       "diarizationMinutes": "说话人识别",
       "ttsCharacters": "旁白",
       "ttsPremiumCharacters": "高级旁白",

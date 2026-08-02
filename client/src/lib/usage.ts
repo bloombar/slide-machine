@@ -7,6 +7,7 @@
 import {
   USAGE_WARN_THRESHOLD,
   type PlanTier,
+  type UsageMetric,
   type UsageMetricSummary,
   type UsageUnit,
 } from '@slide-machine/shared'
@@ -39,6 +40,75 @@ export const isExhausted = (m: UsageMetricSummary): boolean =>
  */
 export const callToActionFor = (tier: PlanTier): 'upgrade' | 'contact' =>
   tier === 'max' ? 'contact' : 'upgrade'
+
+/**
+ * Roughly how many characters of text a minute of speech takes: about 150
+ * words a minute at six characters a word, space included. An approximation on
+ * purpose — narration is billed per character, and nobody choosing a plan
+ * thinks in characters.
+ */
+const CHARACTERS_PER_SPOKEN_MINUTE = 900
+
+/** Average characters per written word, the space after it included. */
+const CHARACTERS_PER_WORD = 6
+
+/** Past this many minutes, an allowance reads better in hours. */
+const MINUTES_AS_HOURS = 120
+
+/**
+ * How a plan's allowance is described to someone choosing a plan, where the
+ * billed unit is not the one they think in. Character counts become time spoken
+ * or words written; a count of locales becomes languages.
+ *
+ * Only these five are re-expressed. The rest are already in units a reader
+ * recognizes — minutes recorded, images, exports, megabytes — and dressing
+ * them up would only put a guess between the user and their allowance.
+ */
+const FRIENDLY_UNITS: Partial<
+  Record<UsageMetric, 'spoken' | 'words' | 'languages'>
+> = {
+  ttsCharacters: 'spoken',
+  ttsPremiumCharacters: 'spoken',
+  audienceTtsCharacters: 'spoken',
+  translationCharacters: 'words',
+  audienceLocales: 'languages',
+}
+
+/**
+ * A cap in everyday terms — "about 65 min of narration", "about 1,500 words",
+ * "2 languages" — or null for a metric that is already plain, leaving the
+ * caller to format the raw number.
+ *
+ * The spoken and written figures are explicitly approximate, and say so in the
+ * words they use: they are derived from an average, and a plan that promised an
+ * exact number of minutes would be promising something it does not meter.
+ */
+export const friendlyCap = (
+  metric: UsageMetric,
+  cap: number,
+  translate: (key: string, vars: Record<string, unknown>) => string,
+): string | null => {
+  const kind = FRIENDLY_UNITS[metric]
+  if (!kind) return null
+
+  if (kind === 'languages') {
+    return translate('plan.pricing.approx.languages', { count: cap })
+  }
+  if (kind === 'words') {
+    return translate('plan.pricing.approx.words', {
+      value: formatNumber(Math.round(cap / CHARACTERS_PER_WORD)),
+    })
+  }
+
+  const minutes = cap / CHARACTERS_PER_SPOKEN_MINUTE
+  return minutes >= MINUTES_AS_HOURS
+    ? translate('plan.pricing.approx.spokenHours', {
+        value: formatNumber(Math.round(minutes / 60)),
+      })
+    : translate('plan.pricing.approx.spokenMinutes', {
+        value: formatNumber(Math.round(minutes)),
+      })
+}
 
 /** i18n key for a unit's suffix, or null when the metric's own label already
  * says what is being counted ("Narration — 12,000 of 60,000"). */

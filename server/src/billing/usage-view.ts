@@ -39,6 +39,12 @@ const UNITS: Partial<Record<UsageMetric, UsageUnit>> = {
   audioStorageMb: 'mb',
 }
 
+/** How a metric's number reads, defaulting to a plain count. Exported so the
+ * plan catalog labels a cap the same way the usage panel labels what is spent
+ * against it. */
+export const unitOf = (metric: UsageMetric): UsageUnit =>
+  UNITS[metric] ?? 'count'
+
 /**
  * Display order: the services a user is most likely to run out of first, then
  * the rest. Metrics absent from this list still appear — they sort to the end
@@ -60,8 +66,23 @@ const ORDER: readonly UsageMetric[] = [
   'audienceLocales',
 ]
 
-const allowanceOf = (metric: UsageMetric): UsageAllowance =>
+export const allowanceOf = (metric: UsageMetric): UsageAllowance =>
   AUDIENCE_METRICS.includes(metric) ? 'audience' : 'instructor'
+
+/** Where a metric sorts: instructor allowances first, then audience; within
+ * each, `ORDER`. Exported so the pricing table's rows arrive in the same
+ * sequence as the account's own meters. */
+export const metricSortKey = (metric: UsageMetric): [number, number] => [
+  allowanceOf(metric) === 'audience' ? 1 : 0,
+  ORDER.indexOf(metric) === -1 ? ORDER.length : ORDER.indexOf(metric),
+]
+
+/** Compares two metrics by that key. */
+export const byDisplayOrder = (a: UsageMetric, b: UsageMetric): number => {
+  const [aGroup, aIndex] = metricSortKey(a)
+  const [bGroup, bIndex] = metricSortKey(b)
+  return aGroup - bGroup || aIndex - bIndex
+}
 
 /**
  * How much of a cap is spent, 0–1. Null when unlimited — there is no fraction
@@ -73,12 +94,6 @@ const fractionOf = (used: number, cap: number | null): number | null => {
   if (cap <= 0) return 1 // not offered on this tier: nothing left to spend
   return Math.min(1, used / cap)
 }
-
-/** Instructor allowances first, then audience; within each, `ORDER`. */
-const sortKey = (m: UsageMetricSummary): [number, number] => [
-  m.allowance === 'audience' ? 1 : 0,
-  ORDER.indexOf(m.metric) === -1 ? ORDER.length : ORDER.indexOf(m.metric),
-]
 
 /** Every metered resource for one user, ready for the account and home views. */
 export const accountUsage = async (
@@ -99,15 +114,11 @@ export const accountUsage = async (
         cap,
         fraction: fractionOf(used, cap),
         allowance: allowanceOf(metric),
-        unit: UNITS[metric] ?? 'count',
+        unit: unitOf(metric),
         gauge: isGaugeMetric(metric),
       }
     })
-    .sort((a, b) => {
-      const [aGroup, aIndex] = sortKey(a)
-      const [bGroup, bIndex] = sortKey(b)
-      return aGroup - bGroup || aIndex - bIndex
-    })
+    .sort((a, b) => byDisplayOrder(a.metric, b.metric))
 
   return {
     tier,

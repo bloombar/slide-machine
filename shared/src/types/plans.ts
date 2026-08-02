@@ -58,6 +58,28 @@ export interface PlanCaps {
   audienceLocales: number | null
 }
 
+/**
+ * Capabilities that are simply part of the product rather than something a
+ * plan meters — the rows the pricing table shows as a tick before it gets to
+ * the allowances (BILL-1: no tier withholds a service).
+ *
+ * Keys, not prose: the words are a translated bundle's business. Membership is
+ * still reported per tier by the plan catalog rather than assumed, so a
+ * deployment that one day does hold a capability back has somewhere to say so.
+ */
+export const PLAN_FEATURES = [
+  'liveCapture',
+  'voiceControl',
+  'whiteboard',
+  'editing',
+  'templates',
+  'refine',
+  'quizzes',
+  'sharing',
+] as const
+
+export type PlanFeature = (typeof PLAN_FEATURES)[number]
+
 export interface PlanDefinition {
   /** Billing-provider price id; null for the free tier. */
   priceId: string | null

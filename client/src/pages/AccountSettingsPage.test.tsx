@@ -106,6 +106,36 @@ describe('AccountSettingsPage', () => {
     )
   })
 
+  it('links from the current plan to where plans are compared', async () => {
+    renderSettings({}, '/app/settings?tab=plan')
+
+    // Settings says what the account is on; choosing a different plan means
+    // comparing four of them, which is a page rather than a row of buttons.
+    const link = await screen.findByRole('link', { name: 'Change plan' })
+    expect(link).toHaveAttribute('href', '/app/plans')
+    expect(screen.queryByRole('button', { name: /Upgrade to/i })).toBeNull()
+  })
+
+  it('does not offer an admin a link to change someone else’s plan', async () => {
+    renderSettings(
+      {
+        '/api/admin/users/u2': () => ({
+          status: 200,
+          body: { user: user({ id: 'u2', email: 'bob@example.com' }) },
+        }),
+      },
+      '/app/settings/u2?tab=plan',
+    )
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Edit settings/i }),
+    )
+
+    // The subscription is not the admin's to change, and the checkout behind
+    // that link would bill the admin's own card.
+    expect(await screen.findByText('Free')).toBeVisible()
+    expect(screen.queryByRole('link', { name: 'Change plan' })).toBeNull()
+  })
+
   it('falls back to General when the URL names no tab it knows', async () => {
     renderSettings({}, '/app/settings?tab=nonsense')
 

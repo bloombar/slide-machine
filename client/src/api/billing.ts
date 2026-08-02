@@ -7,12 +7,18 @@
 import type {
   BillingRedirect,
   BillingSummary,
+  PlanCatalog,
   PlanTier,
 } from '@slide-machine/shared'
 import { dispatchAction } from './actions'
 
 export const fetchBillingSummary = (): Promise<BillingSummary> =>
   dispatchAction<BillingSummary>('billing.summary')
+
+/** What every plan offers — the pricing page's table (BILL-1/BILL-6). Carries
+ * no account state; which plan the caller is on comes from the summary. */
+export const fetchPlanCatalog = (): Promise<PlanCatalog> =>
+  dispatchAction<PlanCatalog>('billing.plans')
 
 /** Hosted checkout for `tier`. `returnPath` is where the provider sends the
  * browser back to; the server defaults it to the account's Plan tab. */

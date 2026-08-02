@@ -6,10 +6,16 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { SubscriptionSnapshot } from '@slide-machine/shared'
 
-const testEnv = vi.hoisted(() => ({ BILLING_PROVIDER: 'mock' }))
+const testEnv = vi.hoisted(() => ({
+  BILLING_PROVIDER: 'mock',
+  // The real plans file: the mock prices whatever price ids it names.
+  PLANS_CONFIG_PATH: new URL('../../../config/plans.json', import.meta.url)
+    .pathname,
+}))
 vi.mock('../config/env', () => ({ env: testEnv }))
 
 import { MockBillingProvider } from './mock'
+import { loadPlans } from '../config/plans'
 import { billingRegistry } from './registry'
 import { WebhookVerificationError } from './errors'
 
@@ -113,6 +119,28 @@ describe('MockBillingProvider.createPortalSession', () => {
     })
 
     expect(session.url).toBe('https://app.test/settings?mock_portal=cus_1')
+  })
+})
+
+describe('MockBillingProvider.listPrices', () => {
+  it('quotes a monthly price for each paid tier, rising with the tier', async () => {
+    const plans = loadPlans()
+    const ids = [plans.fresh.priceId!, plans.pro.priceId!, plans.max.priceId!]
+
+    const prices = await provider.listPrices(ids)
+
+    expect(prices[ids[0]!]).toEqual({
+      amountMinor: 900,
+      currency: 'usd',
+      interval: 'month',
+      intervalCount: 1,
+    })
+    expect(ids.map(id => prices[id]!.amountMinor)).toEqual([900, 2900, 9900])
+  })
+
+  it('says nothing about a price id it never issued', async () => {
+    // The contract is to omit what it does not know, not to invent a figure.
+    expect(await provider.listPrices(['price_not_ours'])).toEqual({})
   })
 })
 

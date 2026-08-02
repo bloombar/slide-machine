@@ -1,12 +1,12 @@
 /**
  * Unit tests for the account-settings billing panel (BILL-2): what the plan
- * is doing, the two ways out to the payment provider, and the outcome of a
+ * is doing, the way out to the payment provider, and the outcome of a
  * checkout the browser has just come back from.
  *
  * The panel's job is to navigate, not to decide, so what is asserted here is
- * mostly restraint: it offers only tiers above the current one, only offers
- * the portal once there is something to manage, and never claims a plan the
- * server has not confirmed.
+ * mostly restraint: it only offers the portal once there is something to
+ * manage, never claims a plan the server has not confirmed, and no longer
+ * sells anything — choosing a plan is the pricing page's job.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
@@ -57,10 +57,6 @@ const renderPanel = (
             status: 500,
             body: { error: { code: 'server_error', message: 'x' } },
           },
-    '/api/actions/billing.checkout': () => ({
-      status: 200,
-      body: { url: redirect },
-    }),
     '/api/actions/billing.portal': () => ({
       status: 200,
       body: { url: redirect },
@@ -102,14 +98,13 @@ describe('BillingPanel', () => {
     ).toBeInTheDocument()
   })
 
-  it('offers only the tiers above the current one', async () => {
-    renderPanel(summary({ tier: 'pro' }))
+  it('sells nothing — a plan is chosen on the pricing page', async () => {
+    renderPanel()
 
-    expect(
-      await screen.findByRole('button', { name: /Max/ }),
-    ).toBeInTheDocument()
-    // Downgrades are the portal's business, not a button that reads "upgrade".
-    expect(screen.queryByRole('button', { name: /Fresh/ })).toBeNull()
+    // Three tiers are on offer and none is advertised here: comparing them
+    // needs the table, so settings links out rather than listing buttons.
+    await screen.findByText(/free plan — no subscription/i)
+    expect(screen.queryByRole('button', { name: /Upgrade/i })).toBeNull()
   })
 
   it('offers nothing to buy on the largest plan, and says why', async () => {
@@ -119,20 +114,10 @@ describe('BillingPanel', () => {
     expect(screen.queryByRole('button', { name: /Upgrade/ })).toBeNull()
   })
 
-  it('sends the browser to the hosted checkout', async () => {
-    renderPanel()
-
-    fireEvent.click(await screen.findByRole('button', { name: /Pro/ }))
-
-    await waitFor(() =>
-      expect(assign).toHaveBeenCalledWith('https://pay.test/session'),
-    )
-  })
-
   it('hides the portal until there is a billing record to manage', async () => {
     renderPanel()
 
-    await screen.findByRole('button', { name: /Pro/ })
+    await screen.findByText(/free plan — no subscription/i)
     expect(screen.queryByRole('button', { name: /Manage/i })).toBeNull()
   })
 
@@ -218,8 +203,15 @@ describe('BillingPanel', () => {
         status: 200,
         body: { user, accessToken: 't' },
       }),
-      '/api/actions/billing.summary': () => ({ status: 200, body: summary() }),
-      '/api/actions/billing.checkout': () => ({
+      '/api/actions/billing.summary': () => ({
+        status: 200,
+        body: summary({
+          tier: 'pro',
+          status: 'active',
+          canManageBilling: true,
+        }),
+      }),
+      '/api/actions/billing.portal': () => ({
         status: 503,
         body: {
           error: { code: 'billing_unavailable', message: 'busy' },
@@ -235,13 +227,13 @@ describe('BillingPanel', () => {
       </MemoryRouter>,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: /Pro/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Manage/i }))
 
     // Nothing navigated, so the user is still here and must be able to retry.
     expect(await screen.findByRole('alert')).toHaveTextContent(
       /Could not open the billing page/i,
     )
     expect(assign).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: /Pro/ })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Manage/i })).toBeEnabled()
   })
 })

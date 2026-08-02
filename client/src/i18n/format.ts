@@ -130,13 +130,35 @@ export const formatFileSize = (
   }).format(value)
 }
 
-/**
- * An amount of money. Unused by the UI today — plans and billing
- * (BILL-*) land in this phase and should not re-invent it.
- */
+/** An amount of money, in the currency's major unit (dollars, euros). */
 export const formatCurrency = (
   amount: number,
   currency: string,
   locale: string = currentLocale(),
 ): string =>
   new Intl.NumberFormat(locale, { style: 'currency', currency }).format(amount)
+
+/**
+ * The same, from an amount in the currency's **minor** unit — 2900 USD cents
+ * as "$29.00". Payment providers quote money this way, so this is what the
+ * pricing table formats.
+ *
+ * How many minor units make a major one is a property of the currency, not a
+ * constant: most take 100, yen takes 1. Intl already knows, so the exponent is
+ * read from it rather than assumed to be two.
+ */
+export const formatCurrencyMinor = (
+  amountMinor: number,
+  currency: string,
+  locale: string = currentLocale(),
+): string => {
+  const { maximumFractionDigits } = new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency,
+  }).resolvedOptions()
+  return formatCurrency(
+    amountMinor / 10 ** (maximumFractionDigits ?? 2),
+    currency,
+    locale,
+  )
+}

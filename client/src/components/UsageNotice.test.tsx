@@ -84,7 +84,7 @@ describe('UsageNotice', () => {
     ])
 
     expect(await screen.findByTestId('usage-notice')).toBeInTheDocument()
-    expect(screen.getByText('Recording time')).toBeInTheDocument()
+    expect(screen.getByText('Audio recording time')).toBeInTheDocument()
     // The comfortable metric is not listed: the point is what needs attention.
     expect(screen.queryByText('Exports')).toBeNull()
   })

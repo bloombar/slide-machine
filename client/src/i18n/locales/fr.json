@@ -283,13 +283,42 @@
       "notIncluded": "Non inclus",
       "unlimited": "Illimité",
       "currentPlan": "Votre offre",
-      "audioRetention": "Conservation des enregistrements",
+      "free": "Sans frais",
+      "per": {
+        "day": "{count, plural, one {{price} par jour} other {{price} tous les # jours}}",
+        "week": "{count, plural, one {{price} par semaine} other {{price} toutes les # semaines}}",
+        "month": "{count, plural, one {{price} par mois} other {{price} tous les # mois}}",
+        "year": "{count, plural, one {{price} par an} other {{price} tous les # ans}}"
+      },
+      "audioRetention": "Conservation de l’audio original",
       "retentionDays": "{count, plural, one {# jour} other {# jours}}",
       "retentionUnlimited": "Conservés indéfiniment",
       "changeHint": "Pour passer à une offre inférieure ou résilier, utilisez le portail de facturation.",
       "errors": {
         "load": "Impossible de charger les offres"
+      },
+      "approx": {
+        "spokenMinutes": "environ {value} min de narration",
+        "spokenHours": "environ {value} h de narration",
+        "words": "environ {value} mots",
+        "languages": "{count, plural, one {# langue} other {# langues}}"
       }
+    },
+    "metricHint": {
+      "sttMinutes": "Parole transcrite en direct pendant votre cours.",
+      "audioRetention": "Durée de conservation des enregistrements originaux avant leur suppression.",
+      "aiTokens": "Travail de l’IA : génération des diapositives, amélioration, narration et quiz.",
+      "ttsCharacters": "Narration que vous générez avec une voix standard.",
+      "ttsPremiumCharacters": "Narration générée avec les voix premium, plus naturelles.",
+      "diarizationMinutes": "Audio enregistré que vous pouvez attribuer aux intervenants. Moins que ce que vous pouvez enregistrer : cette étape est payante à part et sert aux cours qui en ont besoin, pas à tous.",
+      "translationCharacters": "Texte du cours que vous traduisez vous-même.",
+      "aiImages": "Images générées par l’IA pour vos diapositives.",
+      "imageLookups": "Images de diapositive trouvées par recherche.",
+      "importMb": "Documents importés comme matière première.",
+      "exports": "Téléchargements, exports vers Drive et publication de quiz.",
+      "audioStorageMb": "Audio de cours conservé à un instant donné.",
+      "audienceTtsCharacters": "Narration déclenchée par vos spectateurs, sur un quota distinct : un cours populaire ne consomme jamais le vôtre.",
+      "audienceLocales": "Langues vers lesquelles vos spectateurs peuvent faire traduire un cours."
     }
   },
   "billing": {
@@ -815,7 +844,7 @@
     },
     "metric": {
       "aiTokens": "Génération par IA",
-      "sttMinutes": "Temps d'enregistrement",
+      "sttMinutes": "Durée d’enregistrement audio",
       "diarizationMinutes": "Identification des intervenants",
       "ttsCharacters": "Narration",
       "ttsPremiumCharacters": "Narration premium",

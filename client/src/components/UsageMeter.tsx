@@ -3,7 +3,7 @@
  * panel and the home-page notice so a metric reads identically wherever it
  * appears.
  *
- * The metric is named in plain language — "Narration", "Recording time" — not
+ * The metric is named in plain language — "Narration", "Audio recording time" — not
  * by its identifier: the person reading has a lecture to give, and `ttsCharacters`
  * is a fact about our database, not about their afternoon.
  */

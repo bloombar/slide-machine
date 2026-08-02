@@ -283,13 +283,42 @@
       "notIncluded": "Не включено",
       "unlimited": "Без ограничений",
       "currentPlan": "Ваш тариф",
-      "audioRetention": "Хранение записей",
+      "free": "Без оплаты",
+      "per": {
+        "day": "{count, plural, one {{price} в день} few {{price} каждые # дня} many {{price} каждые # дней} other {{price} каждые # дня}}",
+        "week": "{count, plural, one {{price} в неделю} few {{price} каждые # недели} many {{price} каждые # недель} other {{price} каждые # недели}}",
+        "month": "{count, plural, one {{price} в месяц} few {{price} каждые # месяца} many {{price} каждые # месяцев} other {{price} каждые # месяца}}",
+        "year": "{count, plural, one {{price} в год} few {{price} каждые # года} many {{price} каждые # лет} other {{price} каждые # года}}"
+      },
+      "audioRetention": "Хранение исходного аудио",
       "retentionDays": "{count, plural, one {# день} few {# дня} many {# дней} other {# дня}}",
       "retentionUnlimited": "Хранятся бессрочно",
       "changeHint": "Переход на меньший тариф или отмена — в портале оплаты.",
       "errors": {
         "load": "Не удалось загрузить тарифы"
+      },
+      "approx": {
+        "spokenMinutes": "около {value} мин озвучки",
+        "spokenHours": "около {value} ч озвучки",
+        "words": "около {value} слов",
+        "languages": "{count, plural, one {# язык} few {# языка} many {# языков} other {# языка}}"
       }
+    },
+    "metricHint": {
+      "sttMinutes": "Речь, распознаваемая прямо во время лекции.",
+      "audioRetention": "Сколько хранятся исходные записи до удаления.",
+      "aiTokens": "Работа ИИ: создание слайдов, доработка, озвучка и тесты.",
+      "ttsCharacters": "Озвучка, которую вы создаёте обычным голосом.",
+      "ttsPremiumCharacters": "Озвучка более естественными премиум-голосами.",
+      "diarizationMinutes": "Записанное аудио, которое можно разметить по говорящим. Меньше, чем можно записать: это отдельная платная обработка — для тех лекций, где она нужна, а не для всех.",
+      "translationCharacters": "Текст лекции, который вы переводите сами.",
+      "aiImages": "Изображения, созданные ИИ для ваших слайдов.",
+      "imageLookups": "Изображения для слайдов, найденные поиском.",
+      "importMb": "Документы, загруженные как исходный материал.",
+      "exports": "Скачивания, экспорт в Drive и публикация тестов.",
+      "audioStorageMb": "Сохранённое аудио лекций, хранимое одновременно.",
+      "audienceTtsCharacters": "Озвучка, которую запускают зрители, — из отдельного лимита, чтобы популярная лекция не расходовала ваш.",
+      "audienceLocales": "Языки, на которые зрители могут перевести лекцию."
     }
   },
   "billing": {
@@ -815,7 +844,7 @@
     },
     "metric": {
       "aiTokens": "Генерация ИИ",
-      "sttMinutes": "Время записи",
+      "sttMinutes": "Время аудиозаписи",
       "diarizationMinutes": "Определение говорящих",
       "ttsCharacters": "Озвучивание",
       "ttsPremiumCharacters": "Премиум-озвучивание",

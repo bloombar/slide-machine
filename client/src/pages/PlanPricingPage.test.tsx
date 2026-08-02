@@ -1,0 +1,439 @@
+/**
+ * Unit tests for the plan-pricing page (BILL-1/BILL-5): the comparison table
+ * and the one control per plan.
+ *
+ * What is asserted is mostly about honesty. The table has to say what each
+ * plan allows in the same words the usage panel uses, the plan the account is
+ * already on must read as *held* rather than as something to buy again, and
+ * nothing may offer a checkout the server would refuse — an unpriced tier, or
+ * a downgrade, which BILL-5 routes through the hosted portal instead.
+ */
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import {
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+  within,
+} from '@testing-library/react'
+import { MemoryRouter, Routes, Route } from 'react-router'
+import type { BillingSummary, PlanCatalog } from '@slide-machine/shared'
+import { AuthProvider } from '../auth/AuthContext'
+import { setAccessToken } from '../auth/token'
+import PlanPricingPage from './PlanPricingPage'
+import { mockFetchRoutes } from '../test/fetch-mock'
+
+const user = {
+  id: 'u1',
+  displayName: 'Ada',
+  email: 'ada@example.com',
+  planTier: 'free',
+  profileVisibility: 'public',
+  locale: 'en',
+}
+
+/** Two metered rows, one from each allowance, which is all the table needs to
+ * prove it groups and formats them. */
+const catalog = (over: Partial<PlanCatalog> = {}): PlanCatalog =>
+  ({
+    metrics: [
+      { metric: 'sttMinutes', allowance: 'instructor', unit: 'minutes' },
+      {
+        metric: 'audienceTtsCharacters',
+        allowance: 'audience',
+        unit: 'characters',
+      },
+    ],
+    plans: [
+      {
+        tier: 'free',
+        purchasable: false,
+        price: null,
+        features: ['liveCapture', 'quizzes'],
+        caps: {
+          sttMinutes: 75,
+          audienceTtsCharacters: 25000,
+          ttsCharacters: 60000,
+          diarizationMinutes: 40,
+          audienceLocales: 1,
+        },
+        audioRetentionDays: 7,
+      },
+      {
+        tier: 'pro',
+        purchasable: true,
+        price: {
+          amountMinor: 2900,
+          currency: 'usd',
+          interval: 'month',
+          intervalCount: 1,
+        },
+        features: ['liveCapture', 'quizzes'],
+        caps: {
+          sttMinutes: 600,
+          audienceTtsCharacters: 450000,
+          ttsCharacters: 600000,
+          diarizationMinutes: 350,
+          audienceLocales: 15,
+        },
+        audioRetentionDays: 21,
+      },
+      {
+        tier: 'max',
+        purchasable: true,
+        price: {
+          amountMinor: 9900,
+          currency: 'usd',
+          interval: 'month',
+          intervalCount: 1,
+        },
+        features: ['liveCapture', 'quizzes'],
+        caps: {
+          sttMinutes: 3300,
+          audienceTtsCharacters: 700000,
+          ttsCharacters: 3300000,
+          diarizationMinutes: 1100,
+          audienceLocales: 27,
+        },
+        audioRetentionDays: null,
+      },
+    ],
+    ...over,
+  }) as PlanCatalog
+
+const summary = (over: Partial<BillingSummary> = {}): BillingSummary => ({
+  tier: 'free',
+  status: null,
+  currentPeriodEnd: null,
+  cancelAtPeriodEnd: false,
+  canManageBilling: false,
+  purchasableTiers: ['pro', 'max'],
+  ...over,
+})
+
+/** Renders the page for a signed-in account. `plans: null` fails the catalog
+ * load, which is the only thing the page cannot render without. */
+const renderPage = ({
+  plans = catalog(),
+  billing = summary(),
+  redirect = 'https://pay.test/session',
+  checkoutStatus = 200,
+}: {
+  plans?: PlanCatalog | null
+  billing?: BillingSummary
+  redirect?: string
+  checkoutStatus?: number
+} = {}) => {
+  const mocked = mockFetchRoutes({
+    '/api/auth/refresh': () => ({
+      status: 200,
+      body: { user, accessToken: 't' },
+    }),
+    '/api/actions/billing.plans': () =>
+      plans
+        ? { status: 200, body: plans }
+        : {
+            status: 500,
+            body: { error: { code: 'server_error', message: 'x' } },
+          },
+    '/api/actions/billing.summary': () => ({ status: 200, body: billing }),
+    '/api/actions/billing.checkout': () =>
+      checkoutStatus === 200
+        ? { status: 200, body: { url: redirect } }
+        : {
+            status: checkoutStatus,
+            body: { error: { code: 'billing_unavailable', message: 'busy' } },
+          },
+    '/api/actions/billing.portal': () => ({
+      status: 200,
+      body: { url: redirect },
+    }),
+  })
+  setAccessToken('t')
+  render(
+    <MemoryRouter initialEntries={['/app/plans']}>
+      <AuthProvider>
+        <Routes>
+          <Route path="/app/plans" element={<PlanPricingPage />} />
+          <Route path="/app/settings" element={<div>SETTINGS PAGE</div>} />
+        </Routes>
+      </AuthProvider>
+    </MemoryRouter>,
+  )
+  return mocked
+}
+
+/** The row whose header cell is `label`, so a cap can be read per plan. */
+const row = async (label: RegExp) =>
+  (await screen.findByRole('rowheader', { name: label })).closest('tr')!
+
+let assign: ReturnType<typeof vi.fn>
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  assign = vi.fn()
+  vi.stubGlobal('location', { ...window.location, assign })
+})
+afterEach(() => {
+  vi.unstubAllGlobals()
+  setAccessToken(null)
+})
+
+describe('PlanPricingPage', () => {
+  it('gives every plan a column, cheapest first', async () => {
+    renderPage()
+
+    // Scoped to the head: the group headings inside the body are column
+    // headers too, and they head rows rather than plans.
+    const head = (await screen.findByTestId('plan-table')).querySelector(
+      'thead',
+    )!
+    const headers = within(head).getAllByRole('columnheader')
+    // The first column heads the feature names, not a plan.
+    expect(headers.slice(1).map(h => h.textContent)).toEqual([
+      expect.stringContaining('Free'),
+      expect.stringContaining('Pro'),
+      expect.stringContaining('Max'),
+    ])
+  })
+
+  it('quotes each plan’s price, and says which one costs nothing', async () => {
+    renderPage()
+
+    // Minor units in, money out: 2900 cents is $29.00 (BILL-2 — the provider
+    // quotes the figure, this only formats it).
+    expect(await screen.findByText('$29.00 per month')).toBeInTheDocument()
+    expect(screen.getByText('$99.00 per month')).toBeInTheDocument()
+    // The free tier has no price to quote, and says so rather than showing a
+    // zero the provider would never charge.
+    expect(screen.getByText('No charge')).toBeInTheDocument()
+  })
+
+  it('leaves a plan unpriced when the provider could not quote it', async () => {
+    const plans = catalog()
+    for (const plan of plans.plans) plan.price = null
+    renderPage({ plans })
+
+    // No price is better than a wrong one, and better than no page at all.
+    await screen.findByRole('button', { name: /Upgrade to Pro/i })
+    expect(screen.queryByText(/per month/)).toBeNull()
+  })
+
+  it('ticks the features every plan includes', async () => {
+    renderPage()
+
+    const features = await row(/Exit-ticket quizzes/i)
+    // One tick per plan, and the tick has words for anyone not looking at it.
+    expect(within(features).getAllByText('Included')).toHaveLength(3)
+  })
+
+  it('states each plan’s allowance in the unit it is metered in', async () => {
+    renderPage()
+
+    const stt = await row(/Audio recording time/i)
+    const cells = within(stt).getAllByRole('cell')
+    expect(cells.map(c => c.textContent)).toEqual([
+      '75 min',
+      '600 min',
+      '3,300 min',
+    ])
+  })
+
+  it('says how long each plan keeps recordings, and which keeps them for good', async () => {
+    renderPage()
+
+    const retention = await row(/Original audio retention/i)
+    expect(
+      within(retention)
+        .getAllByRole('cell')
+        .map(c => c.textContent),
+    ).toEqual(['7 days', '21 days', 'Kept indefinitely'])
+  })
+
+  it('puts retention directly under the recording allowance it applies to', async () => {
+    renderPage()
+
+    // How much you may record, then how long what you recorded survives: the
+    // two are one question, and reading them apart invites the wrong answer.
+    const stt = await row(/Audio recording time/i)
+    expect(stt.nextElementSibling).toHaveTextContent(/Original audio retention/)
+  })
+
+  it('states narration and translation allowances in everyday units', async () => {
+    renderPage({
+      plans: catalog({
+        metrics: [
+          {
+            metric: 'ttsCharacters',
+            allowance: 'instructor',
+            unit: 'characters',
+          },
+          {
+            metric: 'audienceLocales',
+            allowance: 'audience',
+            unit: 'count',
+          },
+        ],
+      }),
+    })
+
+    // Narration is billed per character and read in minutes; a viewer
+    // translation allowance is read in languages.
+    const narration = await row(/^Narration/)
+    expect(
+      within(narration)
+        .getAllByRole('cell')
+        .map(c => c.textContent),
+    ).toEqual([
+      'about 67 min of narration',
+      // Past a couple of hours, minutes stop being a number anyone reads.
+      'about 11 h of narration',
+      'about 61 h of narration',
+    ])
+  })
+
+  it('explains what an allowance covers when the number alone would mislead', async () => {
+    renderPage({
+      plans: catalog({
+        metrics: [
+          {
+            metric: 'diarizationMinutes',
+            allowance: 'instructor',
+            unit: 'minutes',
+          },
+        ],
+      }),
+    })
+
+    // Speaker labelling is capped below recording time on purpose, which
+    // reads as a bug unless the row says why (BILL-3).
+    const diarization = await row(/Speaker identification/i)
+    expect(diarization).toHaveTextContent(/separate paid pass/i)
+  })
+
+  it('separates the audience allowances from the instructor’s own', async () => {
+    renderPage()
+
+    // Both group headings are present, so a viewer-spent allowance is never
+    // read as something the instructor's own work draws on (BILL-3).
+    expect(await screen.findByText('Your allowances')).toBeInTheDocument()
+    expect(screen.getByText('Your audience')).toBeInTheDocument()
+  })
+
+  it('marks the plan the account is on instead of offering to sell it', async () => {
+    renderPage({ billing: summary({ tier: 'pro' }) })
+
+    expect(await screen.findByTestId('current-plan-pro')).toHaveTextContent(
+      'Your plan',
+    )
+    expect(screen.queryByRole('button', { name: /Upgrade to Pro/i })).toBeNull()
+  })
+
+  it('offers only the plans above the current one', async () => {
+    renderPage({ billing: summary({ tier: 'pro' }) })
+
+    expect(
+      await screen.findByRole('button', { name: /Upgrade to Max/i }),
+    ).toBeInTheDocument()
+    // Moving down is the portal's business (BILL-5), not a button that reads
+    // "upgrade" — and the free tier cannot be checked out for at all.
+    expect(screen.queryByRole('button', { name: /Free/i })).toBeNull()
+  })
+
+  it('sends the browser to the hosted checkout', async () => {
+    renderPage()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Upgrade to Pro/i }),
+    )
+
+    await waitFor(() =>
+      expect(assign).toHaveBeenCalledWith('https://pay.test/session'),
+    )
+  })
+
+  it('returns from checkout to the account’s plan tab, not to this page', async () => {
+    const mocked = renderPage()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Upgrade to Pro/i }),
+    )
+
+    // The plan changes when the webhook says so, and the Plan tab is where
+    // that is explained — so that is where the provider sends the browser.
+    await waitFor(() => expect(assign).toHaveBeenCalled())
+    const call = mocked.fetchMock.mock.calls.find(args =>
+      String(args[0]).includes('billing.checkout'),
+    )!
+    expect(JSON.parse(String(call[1]?.body))).toEqual({
+      tier: 'pro',
+      returnPath: '/app/settings?tab=plan',
+    })
+  })
+
+  it('keeps the buttons disabled while the browser is on its way out', async () => {
+    renderPage()
+
+    const upgrade = await screen.findByRole('button', {
+      name: /Upgrade to Pro/i,
+    })
+    fireEvent.click(upgrade)
+
+    // A second checkout is never what a slow redirect meant.
+    await waitFor(() => expect(upgrade).toBeDisabled())
+  })
+
+  it('re-enables the buttons when the provider could not be reached', async () => {
+    renderPage({ checkoutStatus: 503 })
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Upgrade to Pro/i }),
+    )
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /Could not open the billing page/i,
+    )
+    expect(assign).not.toHaveBeenCalled()
+    expect(
+      screen.getByRole('button', { name: /Upgrade to Pro/i }),
+    ).toBeEnabled()
+  })
+
+  it('hides the portal until the account has been billed', async () => {
+    renderPage()
+
+    await screen.findByRole('button', { name: /Upgrade to Pro/i })
+    expect(screen.queryByRole('button', { name: /Manage billing/i })).toBeNull()
+  })
+
+  it('sends a subscriber to the portal to move down or cancel', async () => {
+    renderPage({
+      billing: summary({
+        tier: 'pro',
+        status: 'active',
+        canManageBilling: true,
+      }),
+    })
+
+    fireEvent.click(await screen.findByRole('button', { name: /Manage/i }))
+
+    await waitFor(() =>
+      expect(assign).toHaveBeenCalledWith('https://pay.test/session'),
+    )
+  })
+
+  it('invites the largest plan to get in touch rather than upgrade', async () => {
+    renderPage({ billing: summary({ tier: 'max' }) })
+
+    expect(await screen.findByText(/largest plan/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Upgrade/i })).toBeNull()
+  })
+
+  it('reports a catalog it could not load', async () => {
+    renderPage({ plans: null })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /Could not load the plans/i,
+    )
+  })
+})

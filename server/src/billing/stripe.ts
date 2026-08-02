@@ -16,6 +16,7 @@ import type {
   CancelRequest,
   CheckoutRequest,
   CheckoutSession,
+  PlanPrice,
   PlanTier,
   PlansConfig,
   PortalRequest,
@@ -95,6 +96,37 @@ interface StripeEvent {
   type?: string
   created?: number
   data?: { object?: StripeSubscription }
+}
+
+/** The slice of a Stripe price object this adapter reads. */
+interface StripePrice {
+  /** Amount in the currency's minor unit; absent on tiered/metered prices,
+   * which quote no single figure. */
+  unit_amount?: number | null
+  currency?: string
+  recurring?: { interval?: string; interval_count?: number } | null
+}
+
+/** Recurring intervals the application knows how to say. */
+const PRICE_INTERVALS = ['day', 'week', 'month', 'year'] as const
+
+/**
+ * A Stripe price as a quotable figure, or null when it is not one: a
+ * one-off price, a tiered price with no flat amount, or an interval we have
+ * no words for. Nothing is guessed — a price we cannot state plainly is
+ * better left off the table than stated wrongly.
+ */
+const toPlanPrice = (price: StripePrice): PlanPrice | null => {
+  const interval = price.recurring?.interval
+  if (typeof price.unit_amount !== 'number' || !price.currency) return null
+  if (!PRICE_INTERVALS.includes(interval as (typeof PRICE_INTERVALS)[number]))
+    return null
+  return {
+    amountMinor: price.unit_amount,
+    currency: price.currency,
+    interval: interval as PlanPrice['interval'],
+    intervalCount: price.recurring?.interval_count ?? 1,
+  }
 }
 
 /** Unix seconds → ISO-8601, falling back to the epoch when Stripe omits it. */
@@ -236,6 +268,36 @@ export class StripeBillingProvider implements BillingProvider {
       )
     }
     return { url: session.url, providerSessionId: session.id ?? '' }
+  }
+
+  /**
+   * Reads what each price actually charges (BILL-6). Stripe is the system of
+   * record for money, so the pricing table quotes it rather than a number
+   * copied into our own config, which could drift from what checkout bills.
+   *
+   * One request per price, run together, and a price that cannot be read is
+   * dropped rather than failing the batch: a table missing one figure still
+   * tells the user everything else about the plan.
+   */
+  async listPrices(priceIds: string[]): Promise<Record<string, PlanPrice>> {
+    const entries = await Promise.all(
+      priceIds.map(async id => {
+        try {
+          const price = await this.request<StripePrice>(
+            `/prices/${encodeURIComponent(id)}`,
+            undefined,
+            'GET',
+          )
+          const parsed = toPlanPrice(price)
+          return parsed ? ([id, parsed] as const) : null
+        } catch {
+          // A deleted price, a key without read access, Stripe being down —
+          // none of it is worth taking the page down for.
+          return null
+        }
+      }),
+    )
+    return Object.fromEntries(entries.filter(entry => entry !== null))
   }
 
   async changeTier({
