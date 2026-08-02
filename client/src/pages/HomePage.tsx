@@ -24,6 +24,7 @@ import LectureRow from '../components/LectureRow'
 import NewLectureZone from '../components/NewLectureZone'
 import ProjectRowMenu from '../components/ProjectRowMenu'
 import NewProjectModal from '../components/NewProjectModal'
+import UsageNotice from '../components/UsageNotice'
 import { config } from '../config'
 
 function ProjectSection({
@@ -250,6 +251,8 @@ export default function HomePage() {
       </div>
 
       <div className="max-w-2xl">
+        {/* Only speaks up when something is close to a limit (BILL-4). */}
+        <UsageNotice />
         {error && (
           <p role="alert" className="mb-4 text-sm text-red-600">
             {error}

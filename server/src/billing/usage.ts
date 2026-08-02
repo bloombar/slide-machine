@@ -71,6 +71,24 @@ export const periodKeyFor = async (userId: string): Promise<string> => {
   return new Date().toISOString().slice(0, 7) // YYYY-MM
 }
 
+/**
+ * When the current period's counters next reset. A subscriber's follows their
+ * billing period end; everyone else rolls over at the start of the next
+ * calendar month in UTC, mirroring `periodKeyFor` exactly — the date shown to
+ * a user and the key their usage is filed under must never disagree.
+ *
+ * Gauges are unaffected: nothing about them resets, which is why the views
+ * label them separately rather than printing this date beside them.
+ */
+export const periodResetAt = async (userId: string): Promise<Date> => {
+  const sub = await SubscriptionModel.findOne({ userId, status: 'active' })
+  if (sub) return sub.currentPeriodEnd
+  const now = new Date()
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0),
+  )
+}
+
 /** The key a given metric's counter lives under — a gauge's never rolls over,
  * every other metric's follows the user's billing period. */
 const periodForMetric = async (

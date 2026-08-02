@@ -100,20 +100,37 @@
     "publicProfile": "公开个人资料",
     "publicProfileHint": "公开个人资料——其他人可以看到{own, select, true {你} other {该用户}}公开和共享的课程",
     "closeSettings": "关闭设置",
-    "adminProfile": {
-      "title": "编辑该用户的个人资料？",
-      "message": "该个人资料属于其他用户。你可以以管理员身份修改它；每一处更改都会记入审计日志。",
-      "confirm": "保存更改"
-    },
     "adminSettings": {
       "title": "编辑该用户的设置？",
-      "message": "该账户属于 {name}。你可以以管理员身份修改其设置；每一处更改都会记入审计日志。",
-      "confirm": "编辑设置"
+      "confirm": "编辑设置",
+      "messageGeneric": "这些设置属于其他用户。你可以以管理员身份更改；每次更改都会记录在审计日志中。"
     },
     "errors": {
       "save": "无法保存个人资料。",
       "loadAccount": "无法加载该账户。",
-      "saveSettings": "无法保存这些设置。"
+      "saveSettings": "无法保存这些设置。",
+      "deleteAccount": "无法删除你的账户"
+    },
+    "backToProfile": "返回个人资料",
+    "publicProfileSection": "公开资料",
+    "accountSection": "账户",
+    "privacySection": "隐私",
+    "languagesSection": "语言",
+    "sessionSection": "会话",
+    "sections": "设置分区",
+    "tabs": {
+      "general": "常规",
+      "plan": "套餐",
+      "privacy": "隐私"
+    },
+    "accountTypeSection": "账户类型",
+    "publicProfileSectionHint": "编辑后自动保存。陌生人在你的个人资料页看到的内容。",
+    "privacySectionHint": "谁可以查看你的个人资料页以及其中的课程。",
+    "delete": {
+      "action": "删除账户",
+      "hint": "删除账户将永久移除你的项目、课程和幻灯片。此操作无法撤销。",
+      "title": "删除你的账户？",
+      "message": "你的账户及其所有项目、课程和幻灯片将被永久删除。"
     }
   },
   "language": {
@@ -237,6 +254,7 @@
   "plan": {
     "tier": {
       "free": "免费版",
+      "fresh": "Fresh",
       "pro": "专业版",
       "max": "旗舰版"
     }
@@ -711,5 +729,56 @@
     "forbidden": "你没有执行该操作的权限",
     "internal_error": "我们这边出了点问题——请重试",
     "unknown_error": "出了点问题——请重试"
+  },
+  "usage": {
+    "title": "套餐用量",
+    "instructor": "你的额度",
+    "audience": "你的观众",
+    "audienceHint": "由观看你课程的人消耗，来自独立额度，因此热门课程绝不会用光你自己的额度。",
+    "resets": "{date} 重置",
+    "usedOfCap": "{used} / {cap}",
+    "usedUnlimited": "已用 {used}",
+    "unit": {
+      "minutes": "{value} 分钟",
+      "mb": "{value} MB"
+    },
+    "cta": {
+      "upgrade": "需要更多？升级套餐可提高所有上限。",
+      "contact": "你已使用我们最高的套餐——请联系我们，我们会另行安排。"
+    },
+    "badge": {
+      "summary": "{plan} {status}",
+      "state": {
+        "ok": "正常",
+        "approaching": "接近上限",
+        "reached": "已达上限",
+        "loading": "…",
+        "error": "不可用"
+      }
+    },
+    "notice": {
+      "approaching": "你已接近套餐的部分上限",
+      "reached": "你已达到套餐的某项上限",
+      "seeAll": "查看全部用量"
+    },
+    "metric": {
+      "aiTokens": "AI 生成",
+      "sttMinutes": "录音时长",
+      "diarizationMinutes": "说话人识别",
+      "ttsCharacters": "旁白",
+      "ttsPremiumCharacters": "高级旁白",
+      "aiImages": "AI 图像",
+      "imageLookups": "图像检索",
+      "importMb": "导入",
+      "exports": "导出",
+      "translationCharacters": "翻译",
+      "audioStorageMb": "已存音频",
+      "audienceTtsCharacters": "面向观众的旁白",
+      "audienceLocales": "面向观众的翻译"
+    },
+    "errors": {
+      "load": "无法加载用量信息"
+    },
+    "plan": "套餐"
   }
 }

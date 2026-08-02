@@ -100,20 +100,37 @@
     "publicProfile": "Perfil público",
     "publicProfileHint": "Perfil público: los demás pueden ver {own, select, true {tus} other {sus}} clases públicas y compartidas",
     "closeSettings": "Cerrar los ajustes",
-    "adminProfile": {
-      "title": "¿Editar el perfil de este usuario?",
-      "message": "Este perfil pertenece a otra persona. Puedes modificarlo como administrador; cada cambio queda registrado en el registro de auditoría.",
-      "confirm": "Guardar los cambios"
-    },
     "adminSettings": {
       "title": "¿Editar los ajustes de este usuario?",
-      "message": "Esta cuenta pertenece a {name}. Puedes cambiar sus ajustes como administrador; cada cambio queda registrado en el registro de auditoría.",
-      "confirm": "Editar los ajustes"
+      "confirm": "Editar los ajustes",
+      "messageGeneric": "Estos ajustes pertenecen a otro usuario. Puedes cambiarlos como administrador; cada cambio queda registrado en el historial de auditoría."
     },
     "errors": {
       "save": "No se pudo guardar el perfil.",
       "loadAccount": "No se pudo cargar esta cuenta.",
-      "saveSettings": "No se pudieron guardar estos ajustes."
+      "saveSettings": "No se pudieron guardar estos ajustes.",
+      "deleteAccount": "No se pudo eliminar tu cuenta"
+    },
+    "backToProfile": "Volver al perfil",
+    "publicProfileSection": "Perfil público",
+    "accountSection": "Cuenta",
+    "privacySection": "Privacidad",
+    "languagesSection": "Idiomas",
+    "sessionSection": "Sesión",
+    "sections": "Secciones de ajustes",
+    "tabs": {
+      "general": "General",
+      "plan": "Plan",
+      "privacy": "Privacidad"
+    },
+    "accountTypeSection": "Tipo de cuenta",
+    "publicProfileSectionHint": "Se guarda al escribir. Lo que ven los desconocidos en tu perfil.",
+    "privacySectionHint": "Quién puede ver tu perfil y las clases que aparecen en él.",
+    "delete": {
+      "action": "Eliminar cuenta",
+      "hint": "Eliminar tu cuenta borra definitivamente tus proyectos, clases y diapositivas. Esta acción no se puede deshacer.",
+      "title": "¿Eliminar tu cuenta?",
+      "message": "Tu cuenta y todos sus proyectos, clases y diapositivas se eliminarán definitivamente."
     }
   },
   "language": {
@@ -236,9 +253,10 @@
   },
   "plan": {
     "tier": {
-      "free": "gratuito",
-      "pro": "pro",
-      "max": "max"
+      "free": "Gratuito",
+      "fresh": "Fresh",
+      "pro": "Pro",
+      "max": "Max"
     }
   },
   "slot": {
@@ -711,5 +729,56 @@
     "forbidden": "No tienes permiso para hacer eso",
     "internal_error": "Algo salió mal por nuestra parte: inténtalo de nuevo",
     "unknown_error": "Algo salió mal: inténtalo de nuevo"
+  },
+  "usage": {
+    "title": "Uso del plan",
+    "instructor": "Tus límites",
+    "audience": "Tu audiencia",
+    "audienceHint": "Lo gastan quienes ven tus clases, desde una reserva aparte, para que una clase popular nunca agote la tuya.",
+    "resets": "Se reinicia el {date}",
+    "usedOfCap": "{used} de {cap}",
+    "usedUnlimited": "{used} usado",
+    "unit": {
+      "minutes": "{value} min",
+      "mb": "{value} MB"
+    },
+    "cta": {
+      "upgrade": "¿Necesitas más? Mejorar el plan amplía todos los límites.",
+      "contact": "Tienes nuestro plan más amplio: escríbenos y buscamos una solución."
+    },
+    "badge": {
+      "summary": "Plan {plan} {status}",
+      "state": {
+        "ok": "correcto",
+        "approaching": "cerca del límite",
+        "reached": "límite alcanzado",
+        "loading": "…",
+        "error": "no disponible"
+      }
+    },
+    "notice": {
+      "approaching": "Estás cerca de algunos límites de tu plan",
+      "reached": "Has alcanzado uno de los límites de tu plan",
+      "seeAll": "Ver todo el uso"
+    },
+    "metric": {
+      "aiTokens": "Generación con IA",
+      "sttMinutes": "Tiempo de grabación",
+      "diarizationMinutes": "Identificación de hablantes",
+      "ttsCharacters": "Narración",
+      "ttsPremiumCharacters": "Narración premium",
+      "aiImages": "Imágenes con IA",
+      "imageLookups": "Búsquedas de imágenes",
+      "importMb": "Importaciones",
+      "exports": "Exportaciones",
+      "translationCharacters": "Traducción",
+      "audioStorageMb": "Audio almacenado",
+      "audienceTtsCharacters": "Narración para espectadores",
+      "audienceLocales": "Traducciones para espectadores"
+    },
+    "errors": {
+      "load": "No se pudo cargar tu uso"
+    },
+    "plan": "Plan"
   }
 }
