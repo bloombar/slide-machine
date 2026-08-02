@@ -1,34 +1,23 @@
 /**
- * Profile page (SHARE-1 / AUTH-5): a user's display name and bio, then
- * the lectures the current viewer is allowed to see, grouped by project.
- * Private profiles and unknown users both read as "not found" — existence
- * never leaks.
+ * Profile page (SHARE-1): a user's display name and bio, then the lectures the
+ * current viewer is allowed to see, grouped by project. Private profiles and
+ * unknown users both read as "not found" — existence never leaks.
  *
- * The owner and admins get an Edit button that turns the name and bio
- * into a form in place. The owner saves through their own action; an
- * admin saves through the audited admin endpoint after confirming, so
- * editing someone else's profile is never silent (ADMIN-5).
- *
- * The same two also get a Settings button for the account settings
- * (ProfileSettingsModal) — email, plan, profile visibility, lecturing
- * language, and sign out. This is where an admin edits someone else's
- * account (ADMIN-5); as with a project or a lecture, opening those
- * settings is confirmed once, on entry, and audited from then on.
+ * Read-only. The owner and an allowlisted admin get a Settings link through to
+ * `/app/settings`, which is where the name, the bio, and everything else about
+ * the account are edited (AUTH-5). Editing used to happen here in place, which
+ * meant two places to change a profile and only one of them had the rest of the
+ * account's settings beside it.
  */
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { useParams } from 'react-router'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Link, useParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import { Pencil, Settings } from 'lucide-react'
-import type { ProfileResponse, SafeUser } from '@slide-machine/shared'
+import { Settings } from 'lucide-react'
+import type { ProfileResponse } from '@slide-machine/shared'
 import { apiFetch } from '../api/http'
-import { dispatchAction } from '../api/actions'
-import { updateAdminUserSettings } from '../api/admin'
 import { useAuth } from '../auth/AuthContext'
-import { apiErrorMessage } from '../i18n/apiError'
 import { projectTitle } from '../lib/project'
-import ConfirmDialog from '../components/ConfirmDialog'
 import LectureRow from '../components/LectureRow'
-import ProfileSettingsModal from '../components/ProfileSettingsModal'
 
 /** The standard content container (mirrors AppShell's main wrapper —
  * PublicShell leaves containment to its pages for the deck viewer). */
@@ -40,32 +29,15 @@ function PageContainer({ children }: { children: ReactNode }) {
   )
 }
 
-/** The editable profile fields, as held by the form. */
-interface ProfileDraft {
-  displayName: string
-  bio: string
-}
-
-const textInputClass =
-  'w-full rounded-md border border-slate-300 px-3 py-2 text-sm'
-
 const headerButton =
   'flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50'
 
 export default function ProfilePage() {
   const { userId } = useParams<{ userId: string }>()
-  const { status, user: viewer, updateUser } = useAuth()
+  const { status, user: viewer } = useAuth()
   const { t } = useTranslation()
   const [profile, setProfile] = useState<ProfileResponse | null>(null)
   const [error, setError] = useState(false)
-  const [draft, setDraft] = useState<ProfileDraft | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [confirming, setConfirming] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  // Set once an admin has acknowledged the audit notice; the settings
-  // modal stays shut until then (ADMIN-5 confirms on entry, once).
-  const [settingsConfirmed, setSettingsConfirmed] = useState(false)
 
   useEffect(() => {
     // Wait for session restore so shared-with-me lectures resolve
@@ -99,144 +71,25 @@ export default function ProfilePage() {
   }
 
   const isOwner = viewer?.id === profile.user.id
-  // canEdit without ownership means an admin is looking (ADMIN-5)
-  const asAdmin = profile.canEdit && !isOwner
-  const askAdminSettings = settingsOpen && asAdmin && !settingsConfirmed
-
-  const startEditing = () =>
-    setDraft({
-      displayName: profile.user.displayName,
-      bio: profile.user.bio ?? '',
-    })
-
-  const cancelEditing = () => {
-    setDraft(null)
-    setSaveError(null)
-  }
-
-  /** Writes the draft, then folds it into the loaded profile so the page
-   * reflects the save without a refetch. The owner's save also refreshes
-   * the auth context, which is what the rest of the app reads. */
-  const save = async () => {
-    if (!draft || !userId) return
-    setSaving(true)
-    setSaveError(null)
-    try {
-      const patch = { displayName: draft.displayName.trim(), bio: draft.bio }
-      if (isOwner) {
-        updateUser(await dispatchAction<SafeUser>('user.updateProfile', patch))
-      } else {
-        // 204, so the local patch below is what updates the page
-        await updateAdminUserSettings(userId, patch)
-      }
-      setProfile({
-        ...profile,
-        user: {
-          ...profile.user,
-          displayName: patch.displayName,
-          bio: patch.bio.trim() || undefined,
-        },
-      })
-      setDraft(null)
-    } catch (err) {
-      setSaveError(apiErrorMessage(err, t, 'profile.errors.save'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  /** An admin confirms first; the owner's own edit saves straight away. */
-  const submit = (e: FormEvent) => {
-    e.preventDefault()
-    if (saving) return
-    if (!draft?.displayName.trim()) {
-      setSaveError(t('profile.displayNameRequired'))
-      return
-    }
-    if (asAdmin) setConfirming(true)
-    else void save()
-  }
+  // Your own settings live at the canonical route; an admin editing someone
+  // else's names the account in the path (ADMIN-5).
+  const settingsPath = isOwner ? '/app/settings' : `/app/settings/${userId}`
 
   return (
     <PageContainer>
-      {draft ? (
-        <form onSubmit={submit} className="mb-6 max-w-xl">
-          <label
-            htmlFor="profile-display-name"
-            className="block text-sm font-medium text-slate-700"
-          >
-            {t('profile.displayName')}
-          </label>
-          <input
-            id="profile-display-name"
-            value={draft.displayName}
-            onChange={e => setDraft({ ...draft, displayName: e.target.value })}
-            className={`mt-1 ${textInputClass}`}
-          />
-          <label
-            htmlFor="profile-bio"
-            className="mt-4 block text-sm font-medium text-slate-700"
-          >
-            {t('profile.bio')}
-          </label>
-          <textarea
-            id="profile-bio"
-            rows={4}
-            value={draft.bio}
-            onChange={e => setDraft({ ...draft, bio: e.target.value })}
-            placeholder={t('profile.bioPlaceholder')}
-            className={`mt-1 ${textInputClass}`}
-          />
-          {saveError && (
-            <p role="alert" className="mt-2 text-sm text-red-600">
-              {saveError}
-            </p>
-          )}
-          <div className="mt-4 flex gap-2">
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-40"
-            >
-              {t('common.save')}
-            </button>
-            <button
-              type="button"
-              onClick={cancelEditing}
-              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              {t('common.cancel')}
-            </button>
-          </div>
-        </form>
-      ) : (
-        <>
-          <div className="mb-2 flex items-start justify-between gap-4">
-            <h1 className="text-2xl font-bold">{profile.user.displayName}</h1>
-            <div className="flex shrink-0 gap-2">
-              {profile.canEdit && (
-                <button onClick={startEditing} className={headerButton}>
-                  <Pencil className="h-4 w-4" aria-hidden />
-                  {t('common.edit')}
-                </button>
-              )}
-              {profile.canEdit && (
-                <button
-                  onClick={() => setSettingsOpen(true)}
-                  className={headerButton}
-                >
-                  <Settings className="h-4 w-4" aria-hidden />
-                  {t('common.settings')}
-                </button>
-              )}
-            </div>
-          </div>
-          {profile.user.bio && (
-            <p className="mb-6 whitespace-pre-line text-slate-600">
-              {profile.user.bio}
-            </p>
-          )}
-        </>
+      <div className="mb-2 flex items-start justify-between gap-4">
+        <h1 className="text-2xl font-bold">{profile.user.displayName}</h1>
+        {profile.canEdit && (
+          <Link to={settingsPath} className={`shrink-0 ${headerButton}`}>
+            <Settings className="h-4 w-4" aria-hidden />
+            {t('common.settings')}
+          </Link>
+        )}
+      </div>
+      {profile.user.bio && (
+        <p className="mb-6 whitespace-pre-line text-slate-600">
+          {profile.user.bio}
+        </p>
       )}
 
       {profile.projects.length === 0 ? (
@@ -254,36 +107,6 @@ export default function ProfilePage() {
             </ul>
           </section>
         ))
-      )}
-
-      {confirming && (
-        <ConfirmDialog
-          title={t('profile.adminProfile.title')}
-          message={t('profile.adminProfile.message')}
-          confirmLabel={t('profile.adminProfile.confirm')}
-          onConfirm={() => {
-            setConfirming(false)
-            void save()
-          }}
-          onCancel={() => setConfirming(false)}
-        />
-      )}
-      {settingsOpen && !askAdminSettings && (
-        <ProfileSettingsModal
-          adminUserId={asAdmin ? userId : undefined}
-          onClose={() => setSettingsOpen(false)}
-        />
-      )}
-      {askAdminSettings && (
-        <ConfirmDialog
-          title={t('profile.adminSettings.title')}
-          message={t('profile.adminSettings.message', {
-            name: profile.user.displayName,
-          })}
-          confirmLabel={t('profile.adminSettings.confirm')}
-          onConfirm={() => setSettingsConfirmed(true)}
-          onCancel={() => setSettingsOpen(false)}
-        />
       )}
     </PageContainer>
   )

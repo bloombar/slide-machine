@@ -94,7 +94,9 @@ export default function HealthBadge() {
       ref={containerRef}
       role="status"
       data-testid="health-bar"
-      className="relative flex w-full justify-center"
+      // Content-width, not full-width: the footer centres this and the usage
+      // badge as a pair, and a w-full item would push its neighbour aside.
+      className="relative flex items-center"
     >
       {open && health && (
         <div

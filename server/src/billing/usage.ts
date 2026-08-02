@@ -41,6 +41,25 @@ export const capFor = (tier: PlanTier, metric: UsageMetric): number | null =>
   planFor(tier).caps[metric]
 
 /**
+ * Metrics that measure a **stock rather than a flow** (BILL-3): what the user
+ * is holding right now, not what they consumed since the period began. Storage
+ * is the only one today — audio retained last month is still occupying a disk
+ * this month, so a period rollover must not zero it.
+ */
+const GAUGE_METRICS = new Set<UsageMetric>(['audioStorageMb'])
+
+/** Whether a metric is a standing quantity rather than a per-period total. */
+export const isGaugeMetric = (metric: UsageMetric): boolean =>
+  GAUGE_METRICS.has(metric)
+
+/**
+ * The period key gauges live under. A literal, never a date: period keys are
+ * compared for equality and never parsed, so a word that no calendar can
+ * produce is a safe way to say "this one does not roll over".
+ */
+export const STANDING_PERIOD = 'standing'
+
+/**
  * The period a user's usage counts against. A subscriber's allowance resets
  * with their billing period, so their counter is keyed to it; everyone else
  * (the free tier has no subscription at all) resets on the calendar month in
@@ -50,6 +69,70 @@ export const periodKeyFor = async (userId: string): Promise<string> => {
   const sub = await SubscriptionModel.findOne({ userId, status: 'active' })
   if (sub) return sub.currentPeriodStart.toISOString().slice(0, 10)
   return new Date().toISOString().slice(0, 7) // YYYY-MM
+}
+
+/**
+ * When the current period's counters next reset. A subscriber's follows their
+ * billing period end; everyone else rolls over at the start of the next
+ * calendar month in UTC, mirroring `periodKeyFor` exactly — the date shown to
+ * a user and the key their usage is filed under must never disagree.
+ *
+ * Gauges are unaffected: nothing about them resets, which is why the views
+ * label them separately rather than printing this date beside them.
+ */
+export const periodResetAt = async (userId: string): Promise<Date> => {
+  const sub = await SubscriptionModel.findOne({ userId, status: 'active' })
+  if (sub) return sub.currentPeriodEnd
+  const now = new Date()
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0),
+  )
+}
+
+/** The key a given metric's counter lives under — a gauge's never rolls over,
+ * every other metric's follows the user's billing period. */
+const periodForMetric = async (
+  userId: string,
+  metric: UsageMetric,
+): Promise<string> =>
+  isGaugeMetric(metric) ? STANDING_PERIOD : periodKeyFor(userId)
+
+/**
+ * Moves a gauge by `delta`, which may be negative — deleting retained audio
+ * gives the space back. Clamped at zero in the same update that applies it, so
+ * a decrement that arrives twice (a re-run sweep, a delete racing a purge)
+ * leaves the gauge at nothing rather than owing the user storage.
+ *
+ * A pipeline update rather than `$inc` precisely because `$inc` cannot clamp:
+ * the floor has to be applied atomically or two concurrent deletes can each
+ * read a non-negative value and write a negative one.
+ */
+export const adjustGauge = async (
+  userId: string,
+  metric: UsageMetric,
+  delta: number,
+): Promise<void> => {
+  if (!delta) return
+  try {
+    await UsageRecordModel.updateOne(
+      { userId, period: STANDING_PERIOD, metric },
+      [
+        {
+          $set: {
+            used: {
+              $max: [0, { $add: [{ $ifNull: ['$used', 0] }, delta] }],
+            },
+            updatedAt: new Date(),
+          },
+        },
+      ],
+      // `updatePipeline` is mongoose's opt-in for an aggregation-pipeline
+      // update; without it the array is rejected as a malformed update object.
+      { upsert: true, updatePipeline: true },
+    )
+  } catch (error) {
+    console.error(`Failed to adjust ${metric} for ${userId}:`, error)
+  }
 }
 
 /**
@@ -68,7 +151,7 @@ export const recordUsage = async (
 ): Promise<void> => {
   if (quantity < 0) return
   try {
-    const period = await periodKeyFor(userId)
+    const period = await periodForMetric(userId, metric)
     await UsageRecordModel.updateOne(
       { userId, period, metric },
       {
@@ -83,12 +166,13 @@ export const recordUsage = async (
   }
 }
 
-/** How much of a metric a user has spent this period. */
+/** How much of a metric a user has spent this period — or, for a gauge, how
+ * much they are holding right now. */
 export const usedThisPeriod = async (
   userId: string,
   metric: UsageMetric,
 ): Promise<number> => {
-  const period = await periodKeyFor(userId)
+  const period = await periodForMetric(userId, metric)
   const record = await UsageRecordModel.findOne({ userId, period, metric })
   return record?.used ?? 0
 }
@@ -110,8 +194,15 @@ export const assertWithinCap = async (
   if (used >= cap) throw new PlanLimitExceededError(metric, cap, used, message)
 }
 
-/** Every metric's usage and cap for one user — the shape the account and admin
- * views read (BILL-3's "the user can view remaining quota"). */
+/**
+ * Every metric's usage and cap for one user — the shape the account and admin
+ * views read (BILL-3's "the user can view remaining quota").
+ *
+ * `period` names the billing period the flow metrics belong to. Gauges are
+ * folded in from their standing counter and are deliberately not labelled with
+ * it: "500 MB held" is not a fact about this month, and a view that presents it
+ * beside "resets on the 17th" would be telling the user something untrue.
+ */
 export const usageSummary = async (
   userId: string,
   tier: PlanTier,
@@ -120,7 +211,12 @@ export const usageSummary = async (
   metrics: Record<string, { used: number; cap: number | null }>
 }> => {
   const period = await periodKeyFor(userId)
-  const records = await UsageRecordModel.find({ userId, period })
+  const records = await UsageRecordModel.find({
+    userId,
+    period: { $in: [period, STANDING_PERIOD] },
+  })
+  // A gauge's row only ever exists under the standing key, and a flow's only
+  // ever under the period key, so one map cannot collide.
   const used = new Map(records.map(r => [r.metric, r.used]))
   const caps = planFor(tier).caps
   const metrics = Object.fromEntries(

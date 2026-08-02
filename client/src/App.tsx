@@ -13,6 +13,7 @@ import RegisterPage from './pages/RegisterPage'
 import HomePage from './pages/HomePage'
 import ProjectPage from './pages/ProjectPage'
 import ProfilePage from './pages/ProfilePage'
+import AccountSettingsPage from './pages/AccountSettingsPage'
 import DeckViewerPage from './pages/DeckViewerPage'
 import AdminUsersPage from './pages/AdminUsersPage'
 import AdminUserDetailPage from './pages/AdminUserDetailPage'
@@ -54,6 +55,10 @@ export default function App() {
         <Route path="/app" element={<HomePage />} />
         <Route path="/app/projects/:projectId" element={<ProjectPage />} />
         <Route path="/app/profile" element={<OwnProfileRedirect />} />
+        {/* One canonical place to change anything about an account (AUTH-5);
+            the :userId form is how an admin edits someone else's (ADMIN-5). */}
+        <Route path="/app/settings" element={<AccountSettingsPage />} />
+        <Route path="/app/settings/:userId" element={<AccountSettingsPage />} />
         <Route path="/app/admin" element={<AdminShell />}>
           <Route index element={<AdminUsersPage />} />
           <Route path="users/:userId" element={<AdminUserDetailPage />} />

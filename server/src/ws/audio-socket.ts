@@ -27,7 +27,7 @@ import {
 import { DeckModel, loadDeckAcl } from '../models/deck'
 import { canEditAcl } from '../lib/access'
 import { pcmBytesDurationMs } from '../lib/wav'
-import { recordUsage } from '../billing/usage'
+import { adjustGauge, recordUsage, BYTES_PER_MB } from '../billing/usage'
 import { usedFractionOf, userHasCapacity } from '../billing/meter-hooks'
 import {
   canStartRetention,
@@ -81,6 +81,12 @@ interface StartMessage {
 interface Retention {
   deckId: string
   sessionId: string
+  /** Whose storage allowance this recording occupies — the deck's owner, not
+   * whoever is speaking. The bytes live on their lecture and stay there after
+   * the session ends, so the account that is debited on write has to be the
+   * one credited when the sweep deletes it. Null until the edit check answers.
+   */
+  ownerId: string | null
   sampleRate: number
   /** Storage key; `.pcm` because the container cannot be written up front. */
   audioKey: string
@@ -99,17 +105,22 @@ interface Retention {
   discard: boolean
 }
 
-/** True when the user can edit the deck the audio would attach to. */
-const canEditDeck = async (
+/**
+ * The deck's owner id when `userId` may edit it, else null — the two answers
+ * retention needs, from one lookup: whether the audio may be stored at all,
+ * and whose storage allowance it will occupy.
+ */
+const retentionOwnerOf = async (
   deckId: string,
   userId: string,
-): Promise<boolean> => {
+): Promise<string | null> => {
   try {
     const deck = await DeckModel.findById(deckId)
-    if (!deck) return false
-    return canEditAcl(await loadDeckAcl(deck), userId)
+    if (!deck) return null
+    const acl = await loadDeckAcl(deck)
+    return canEditAcl(acl, userId) ? acl.ownerId : null
   } catch {
-    return false
+    return null
   }
 }
 
@@ -198,6 +209,7 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
     const r: Retention = {
       deckId: start.deckId,
       sessionId: start.sessionId,
+      ownerId: null,
       sampleRate: start.sampleRate ?? 16_000,
       // Raw LINEAR16, not WAV: a 44-byte header must state the total length,
       // which is unknowable until the lecture ends. sampleRate on the recording
@@ -213,14 +225,25 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
     retain = r
 
     void (async () => {
-      const allowed = await canEditDeck(r.deckId, userId)
+      const ownerId = await retentionOwnerOf(r.deckId, userId)
       // The session may have ended while the check ran.
       if (retain !== r) return
-      if (!allowed) {
+      if (!ownerId) {
         r.discard = true
         capRetention(r, 'user may not edit this lecture')
         return
       }
+      r.ownerId = ownerId
+      // The owner's storage is a stock, not a per-period flow: what they are
+      // already holding decides whether one more recording is kept (BILL-3).
+      // Full means transcribe-without-retaining — the same graceful path the
+      // process-wide budget takes above, and never a dropped lecture.
+      if (!(await userHasCapacity(ownerId, 'audioStorageMb'))) {
+        r.discard = true
+        capRetention(r, 'the lecture owner’s audio storage is full')
+        return
+      }
+      if (retain !== r) return
       let opened
       try {
         opened = await getStorage().createUploadStream(r.audioKey, 'audio/L16')
@@ -273,6 +296,12 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
           },
         },
       )
+      // Charged once the object and its deck reference both exist, so the
+      // gauge only ever counts audio the sweep can later find and credit back
+      // (BILL-3). ownerId is set: the upload could not have opened without it.
+      if (r.ownerId) {
+        await adjustGauge(r.ownerId, 'audioStorageMb', r.bytes / BYTES_PER_MB)
+      }
       // A later phase copies this audio to GCS (gs://) here and sets the
       // recording's gcsUri — Google BatchRecognize reads only from GCS.
     } catch (error) {

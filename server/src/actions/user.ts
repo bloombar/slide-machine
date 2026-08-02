@@ -8,6 +8,7 @@ import { z } from 'zod'
 import type { HydratedDocument } from 'mongoose'
 import type {
   SafeUser,
+  UsageSummaryResponse,
   UserSetLanguageInput,
   UserSetLocaleInput,
   UserSetProfileVisibilityInput,
@@ -17,6 +18,8 @@ import { LOCALES } from '@slide-machine/shared'
 import { defineAction } from './define'
 import { registerAction, ActionForbiddenError } from './dispatch'
 import { UserModel, toUserDto, type UserDb } from '../models/user'
+import { accountUsage } from '../billing/usage-view'
+import { deleteUserCascade } from '../lib/cascade'
 import { recordSettingsChange } from '../audit/settings-log'
 import { userSettingsSnapshot } from '../lib/settings-snapshot'
 
@@ -130,3 +133,50 @@ export const userSetLocale = defineAction<UserSetLocaleInput, SafeUser>({
 })
 
 registerAction(userSetLocale)
+
+/**
+ * The account's own metered usage (BILL-4). Read-only, and scoped to the
+ * caller: a plan's remaining quota is an account's own business, so there is
+ * deliberately no way to ask for someone else's. An admin who needs to see it
+ * reads it through the admin views, which are audited.
+ */
+export const userUsage = defineAction<
+  Record<string, never>,
+  UsageSummaryResponse
+>({
+  name: 'user.usage',
+  input: z.object({}).strict(),
+  execute: async ctx => {
+    const user = await loadSelf(ctx.userId)
+    return accountUsage(user._id.toString(), user.planTier)
+  },
+})
+
+registerAction(userUsage)
+
+/**
+ * Closes the caller's own account (P-10). A **soft** delete: the account and
+ * everything under it is tombstoned, not erased, so it can be restored during
+ * the retention window before the purge sweep hard-deletes it (P-11).
+ *
+ * Scoped to the caller, like every other action here. An admin closing someone
+ * else's account goes through the audited admin endpoint instead — the same
+ * cascade, but recorded against the admin who ran it.
+ *
+ * The cascade also drops every refresh token, so the account is signed out the
+ * moment this returns rather than lingering until the access token expires.
+ */
+export const userDeleteAccount = defineAction<
+  Record<string, never>,
+  { deleted: true }
+>({
+  name: 'user.deleteAccount',
+  input: z.object({}).strict(),
+  execute: async ctx => {
+    const user = await loadSelf(ctx.userId)
+    await deleteUserCascade(user._id.toString())
+    return { deleted: true }
+  },
+})
+
+registerAction(userDeleteAccount)

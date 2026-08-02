@@ -130,9 +130,22 @@ the live service.
 ## 7. Lifecycle
 
 A daily sweep ([jobs/audio-cleanup.ts](../server/src/jobs/audio-cleanup.ts))
-deletes recordings older than `AUDIO_RETENTION_DAYS` — the audio object _and_
-its deck reference, so storage and the database stay consistent. Deleting a
-project, lecture, or user cascades to their recordings.
+deletes expired recordings — the audio object _and_ its deck reference, so
+storage and the database stay consistent. Deleting a project, lecture, or user
+cascades to their recordings.
+
+**How long a recording lives is per lecture owner.** Each plan tier sets its own
+`audioRetentionDays` in [config/plans.json](../config/plans.json) (BILL-3), and
+`AUDIO_RETENTION_DAYS` applies on top; the **shorter of the two wins**, so a
+deployment can tighten the window but never loosen a tier's. `0` for
+`AUDIO_RETENTION_DAYS` still means what it always has — the sweep is off and
+nothing is deleted, tiers included.
+
+Retained audio also counts against the owner's `audioStorageMb` allowance, which
+is a **stock rather than a per-period total**: it is charged when a recording
+lands, credited back when the sweep or a deletion removes it, and never reset by
+a billing period. An owner whose storage is full still gets a transcript — the
+lecture simply is not recorded.
 
 ---
 
@@ -154,7 +167,7 @@ Everything below lives in `server/.env` (see
 | Variable | Default | Notes |
 | --- | --- | --- |
 | `AUDIO_RETENTION_ENABLED` | `false` | Master switch |
-| `AUDIO_RETENTION_DAYS` | `30` | Daily sweep deletes past this; `0` = keep forever |
+| `AUDIO_RETENTION_DAYS` | `30` | Deployment-wide ceiling on the window; the owner's tier may be shorter and then wins. `0` = sweep off, keep forever |
 | `AUDIO_RETENTION_MAX_SESSION_MB` | `300` | How much **one** lecture may store (~1 h 49 min at 24 kHz). Past it the recording is truncated; `0` = uncapped |
 | `AUDIO_RETENTION_MAX_TOTAL_MB` | `128` | **Memory** ceiling across concurrent recordings (~11 MB each), so ≈ how many may record at once. Size to the host's RAM; `0` = uncapped |
 | `STORAGE_PROVIDER` | `local` | `s3` for any real deployment |

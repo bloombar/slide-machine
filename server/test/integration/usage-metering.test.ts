@@ -22,6 +22,9 @@ import {
   usageSummary,
   periodKeyFor,
   capFor,
+  adjustGauge,
+  assertWithinCap,
+  STANDING_PERIOD,
 } from '../../src/billing/usage'
 
 const server = createApp().listen(0)
@@ -152,6 +155,78 @@ describe('billing period', () => {
     // The new period starts empty; the old counter is untouched, not reset.
     expect(await usedThisPeriod(adaId, 'aiTokens')).toBe(0)
     expect(await UsageRecordModel.countDocuments({ userId: adaId })).toBe(1)
+  })
+
+  it('carries a gauge across a period boundary instead of resetting it', async () => {
+    // `audioStorageMb` is a stock, not a flow: audio retained last month is
+    // still occupying a disk this month, so a rollover must not zero it.
+    await adjustGauge(adaId, 'audioStorageMb', 250)
+    await SubscriptionModel.create({
+      userId: adaId,
+      tier: 'pro',
+      billingProvider: 'stripe',
+      billingCustomerId: 'cus_1',
+      providerSubscriptionId: 'sub_1',
+      status: 'active',
+      currentPeriodStart: new Date('2026-03-17T00:00:00.000Z'),
+      currentPeriodEnd: new Date('2026-04-17T00:00:00.000Z'),
+      cancelAtPeriodEnd: false,
+    })
+
+    expect(await usedThisPeriod(adaId, 'audioStorageMb')).toBe(250)
+  })
+})
+
+describe('gauge metrics', () => {
+  it('goes up and down, unlike a flow', async () => {
+    await adjustGauge(adaId, 'audioStorageMb', 120)
+    await adjustGauge(adaId, 'audioStorageMb', -50)
+
+    expect(await usedThisPeriod(adaId, 'audioStorageMb')).toBe(70)
+  })
+
+  it('floors at zero rather than going negative', async () => {
+    // A decrement that arrives twice — a re-run sweep, a delete racing a purge
+    // — must leave the user at nothing rather than owing them storage.
+    await adjustGauge(adaId, 'audioStorageMb', 10)
+    await adjustGauge(adaId, 'audioStorageMb', -40)
+
+    expect(await usedThisPeriod(adaId, 'audioStorageMb')).toBe(0)
+  })
+
+  it('files the counter under the standing key, not a period', async () => {
+    await adjustGauge(adaId, 'audioStorageMb', 5)
+
+    const row = await UsageRecordModel.findOne({
+      userId: adaId,
+      metric: 'audioStorageMb',
+    })
+    expect(row?.period).toBe(STANDING_PERIOD)
+  })
+
+  it('enforces the cap like any other metric', async () => {
+    await adjustGauge(
+      adaId,
+      'audioStorageMb',
+      capFor('free', 'audioStorageMb')!,
+    )
+
+    await expect(
+      assertWithinCap(adaId, 'free', 'audioStorageMb'),
+    ).rejects.toThrow()
+  })
+
+  it('appears in the account summary beside the period metrics', async () => {
+    await recordUsage(adaId, 'aiTokens', 900)
+    await adjustGauge(adaId, 'audioStorageMb', 42)
+
+    const summary = await usageSummary(adaId, 'free')
+
+    // One read returns both, even though they live under different keys.
+    expect(summary.metrics.aiTokens?.used).toBe(900)
+    expect(summary.metrics.audioStorageMb?.used).toBe(42)
+    // The period label describes the flows; the gauge is not of a period.
+    expect(summary.period).not.toBe(STANDING_PERIOD)
   })
 })
 

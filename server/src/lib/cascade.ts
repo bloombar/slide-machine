@@ -21,6 +21,8 @@ import { TranscriptSegmentModel } from '../models/transcript-segment'
 import { RefineJobModel } from '../models/refine-job'
 import { RefreshTokenModel } from '../models/refresh-token'
 import { UserModel } from '../models/user'
+import { adjustGauge, BYTES_PER_MB } from '../billing/usage'
+import { pcmBytesFor } from './wav'
 import { getStorage } from '../storage'
 
 // ─── Soft delete (tombstone) ────────────────────────────────────────────────
@@ -216,12 +218,37 @@ const purgeDeckContents = async (
     ...assets.flatMap(a => (a.storageKey ? [a.storageKey] : [])),
     ...decks.flatMap(d => (d.recordings ?? []).map(r => r.audioKey)),
   ])
+  // Deleting a lecture gives its owner their storage back (BILL-3). Without
+  // this the gauge only ever climbs, and a user who deleted everything would
+  // still be told they are full.
+  await creditRetainedAudio(decks)
   await Promise.all([
     SlideModel.deleteMany(by),
     SeedAssetModel.deleteMany(by),
     TranscriptSegmentModel.deleteMany(by),
     RefineJobModel.deleteMany(by),
   ])
+}
+
+/**
+ * Credits each deck owner's `audioStorageMb` gauge for the recordings about to
+ * be purged, summed per owner so a project-wide purge is one write per person
+ * rather than one per lecture.
+ */
+const creditRetainedAudio = async (
+  decks: HydratedDocument<DeckDb>[],
+): Promise<void> => {
+  const freedByOwner = new Map<string, number>()
+  for (const deck of decks) {
+    for (const rec of deck.recordings ?? []) {
+      const owner = deck.ownerId.toString()
+      const mb = pcmBytesFor(rec.durationMs, rec.sampleRate) / BYTES_PER_MB
+      freedByOwner.set(owner, (freedByOwner.get(owner) ?? 0) + mb)
+    }
+  }
+  for (const [ownerId, mb] of freedByOwner) {
+    await adjustGauge(ownerId, 'audioStorageMb', -mb)
+  }
 }
 
 /** Permanently removes one deck and everything under it (records + files). */
