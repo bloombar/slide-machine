@@ -1,6 +1,7 @@
 /**
  * Unit tests for the primary-nav hamburger menu: it opens to Home/Profile/
- * Log out when signed in, offers Log in when signed out, closes on
+ * Account settings/Log out when signed in, offers Log in when signed out,
+ * closes on
  * Escape, and shows admins an "Admin" flyout submenu of admin sections —
  * that one entry staying English whatever the interface language is.
  *
@@ -64,7 +65,20 @@ describe('ShellMenu', () => {
     ).toBeInTheDocument()
   })
 
-  it('offers Log in instead of Profile/Log out when signed out', () => {
+  it('links to account settings, right after Profile', async () => {
+    renderMenu(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    const settings = await screen.findByRole('menuitem', {
+      name: 'Account settings',
+    })
+    expect(settings).toHaveAttribute('href', '/app/settings')
+    const labels = screen
+      .getAllByRole('menuitem')
+      .map(el => el.textContent?.trim())
+    expect(labels.slice(0, 3)).toEqual(['Home', 'Profile', 'Account settings'])
+  })
+
+  it('offers Log in instead of Profile/Account settings/Log out when signed out', () => {
     renderMenu(false)
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
     expect(screen.getByRole('menuitem', { name: 'Log in' })).toHaveAttribute(
@@ -77,6 +91,9 @@ describe('ShellMenu', () => {
     )
     expect(
       screen.queryByRole('menuitem', { name: 'Log out' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('menuitem', { name: 'Account settings' }),
     ).not.toBeInTheDocument()
   })
 
@@ -94,6 +111,42 @@ describe('ShellMenu', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Log out' }))
     await vi.waitFor(() =>
       expect(screen.queryByRole('menu')).not.toBeInTheDocument(),
+    )
+  })
+
+  it('keeps the closed panel out of the accessibility tree', async () => {
+    renderMenu(true)
+    // Still mounted, so it has something to slide out — but hidden, so
+    // nothing in it is reachable by pointer, keyboard or screen reader
+    const panel = document.querySelector('[role="menu"]')
+    expect(panel).toHaveAttribute('aria-hidden', 'true')
+    expect(panel).toHaveAttribute('inert')
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('menuitem', { name: 'Home' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('fences the Admin entry with separators, for admins only', async () => {
+    renderMenu(true, true)
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    const admin = await screen.findByRole('menuitem', { name: 'Admin' })
+    const separators = screen.getAllByRole('separator')
+    expect(separators).toHaveLength(2)
+    // One directly above the entry, one directly below
+    const items = Array.from(screen.getByRole('menu').children)
+    const at = (el: Element) => items.indexOf(el)
+    const entry = at(admin.closest('.relative')!)
+    expect(at(separators[0]!)).toBe(entry - 1)
+    expect(at(separators[1]!)).toBe(entry + 1)
+  })
+
+  it('leaves out the separators when there is no Admin entry', async () => {
+    renderMenu(true, false)
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    await screen.findByRole('menuitem', { name: 'Profile' })
+    await vi.waitFor(() =>
+      expect(screen.queryByRole('separator')).not.toBeInTheDocument(),
     )
   })
 
