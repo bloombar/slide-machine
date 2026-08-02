@@ -1160,9 +1160,9 @@
     overage. Exceeding a cap returns HTTP 402 and the operation does not run;
     usage is never billed beyond the plan. Anything already generated and cached
     keeps working, so hitting a cap degrades what can be _created_, never what
-    already exists. Warn before blocking. Crossing ~80% of a cap raises an
-    in-app warning; exhaustion sends an email to the account owner as well,
-    since the person who can act on it is…"
+    already exists. Warn before blocking. Crossing a cap is never the first the
+    user hears of it; the thresholds, channels, and delivery rules are BILL-8.
+    Students are told least. When…"
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
@@ -1214,6 +1214,23 @@
     extraction. A lecture's owner is not always its project's owner, so both
     references are recorded when the event occurs rather than inferred later.
     Instructor versus student. Each view…
+  section: §5 Plans, Billing & Usage Limits
+  family: BILL
+  phase: 3
+  status: Backlog
+  review: false
+- id: BILL-8
+  title: Cap notifications (email & in-app)
+  full: "A cap the user did not see coming is indistinguishable from a broken
+    feature. Every metered resource (BILL-3) therefore notifies the account that
+    pays for it twice: once while there is still room to act, and again when the
+    work has actually been refused. Two thresholds. Approaching fires when usage
+    crosses ~80% of a cap; reached fires when the cap blocks an operation. Both
+    are sent in-app and by email, because the moment a cap binds is often not a
+    moment the owner is looking at the app — a lecture stops recording, or a
+    student cannot load a translation, hours after the owner last signed in. The
+    payer is notified, not the actor. Notifications follow the account whose
+    allowance was spent…"
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
