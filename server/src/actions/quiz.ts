@@ -30,6 +30,7 @@ import type {
   SlideTextContent,
 } from '@slide-machine/shared'
 import { defineAction } from './define'
+import { requireAiTokens } from '../billing/meter-hooks'
 import { registerAction, ActionForbiddenError } from './dispatch'
 import type { ActionContext } from './context'
 import { loadEditableDeck } from './deck'
@@ -314,6 +315,7 @@ export const quizGenerate = defineAction<
   { questions: QuizQuestion[] }
 >({
   name: 'quiz.generate',
+  meter: requireAiTokens,
   input: z.object({ deckId: z.string().min(1), ...genOptionsShape }),
   execute: async (ctx, input) => {
     const user = await requireUser(ctx)

@@ -13,6 +13,10 @@
  */
 import { z } from 'zod'
 import { env } from '../config/env'
+import {
+  meterGeminiUsage,
+  type GeminiUsageMetadata,
+} from '../providers/usage-metadata'
 import type { ImageCandidate, SlideImageContext } from './types'
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
@@ -140,7 +144,9 @@ export const rankAndCaption = async (
     if (!res.ok) return null
     const data = (await res.json()) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+      usageMetadata?: GeminiUsageMetadata
     }
+    await meterGeminiUsage(data.usageMetadata)
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text
     if (!text) return null
     const parsed = replySchema.parse(JSON.parse(text))

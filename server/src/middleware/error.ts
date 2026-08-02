@@ -12,6 +12,7 @@ import {
   ActionValidationError,
 } from '../actions/dispatch'
 import { GenerationUnavailableError } from '../providers/errors'
+import { PlanLimitExceededError } from '../billing/limits'
 
 /** An error with an HTTP status and a stable machine-readable code. */
 export class HttpError extends Error {
@@ -48,6 +49,11 @@ export const errorHandler = (
     res.status(403).json(body('forbidden', err.message))
   } else if (err instanceof ActionNotFoundError) {
     res.status(404).json(body('unknown_action', err.message))
+  } else if (err instanceof PlanLimitExceededError) {
+    // 402: a plan cap is exhausted. The operation did not run, so nothing was
+    // billed past the plan — there is no overage path (BILL-4). `metric` lets
+    // the client name the right upgrade prompt without parsing the message.
+    res.status(402).json(body('plan_limit_exceeded', err.message, [err.metric]))
   } else if (err instanceof GenerationUnavailableError) {
     // 503: an upstream AI provider is out of quota/credits or overloaded.
     res.status(503).json(body('generation_unavailable', err.message))

@@ -41,6 +41,7 @@ import type {
 import { remapDrawingAnchors } from './remap-drawings'
 import { applySlideTranscript } from '../lib/slide-transcript'
 import { defineAction } from './define'
+import { requireAiTokens } from '../billing/meter-hooks'
 import { registerAction, ActionForbiddenError } from './dispatch'
 import { loadEditableDeck } from './deck'
 import { env } from '../config/env'
@@ -386,6 +387,7 @@ registerAction(deckDiarize)
 export const deckReformat = defineAction<DeckReformatInput, DeckReformatResult>(
   {
     name: 'deck.reformat',
+    meter: requireAiTokens,
     input: z.object({ deckId: z.string().min(1) }),
     execute: async (ctx, input) => {
       const { deck } = await loadEditableDeck(ctx, input.deckId)
@@ -731,6 +733,7 @@ const runRefine = async (
 
 export const deckRefine = defineAction<DeckRefineInput, DeckRefineResult>({
   name: 'deck.refine',
+  meter: requireAiTokens,
   input: z.object({
     deckId: z.string().min(1),
     identifySpeakers: z.boolean().optional(),
@@ -841,6 +844,7 @@ export const deckRefineSlide = defineAction<
   DeckRefineSlideResult
 >({
   name: 'deck.refineSlide',
+  meter: requireAiTokens,
   input: z.object({
     deckId: z.string().min(1),
     slideId: z.string().min(1),

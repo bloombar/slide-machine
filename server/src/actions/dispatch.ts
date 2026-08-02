@@ -5,6 +5,7 @@
  */
 import type { Action } from './define'
 import type { ActionContext } from './context'
+import { runWithUsage } from '../billing/usage-context'
 
 export class ActionNotFoundError extends Error {
   constructor(name: string) {
@@ -59,5 +60,10 @@ export const dispatch = async <O = unknown>(
 
   await action.authorize?.(ctx, parsed.data)
   await action.meter?.(ctx, parsed.data)
-  return (await action.execute(ctx, parsed.data)) as O
+
+  // Everything the action does — including provider calls several layers down —
+  // is attributed to the acting user, so adapters can meter what they spend
+  // without taking a userId through the vendor-neutral interfaces (BILL-3).
+  const run = () => action.execute(ctx, parsed.data) as Promise<O>
+  return ctx.userId ? runWithUsage(ctx.userId, run) : run()
 }

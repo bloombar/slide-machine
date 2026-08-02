@@ -19,6 +19,7 @@ import type {
 } from '@slide-machine/shared'
 import { env } from '../config/env'
 import { registry } from './registry'
+import { meterGeminiUsage, type GeminiUsageMetadata } from './usage-metadata'
 import { GenerationUnavailableError } from './errors'
 import {
   renderAvoidBlock,
@@ -185,7 +186,9 @@ export class GeminiQuizProvider implements QuizGenerationProvider {
 
     const data = (await res.json()) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+      usageMetadata?: GeminiUsageMetadata
     }
+    await meterGeminiUsage(data.usageMetadata)
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text
     if (env.GENERATION_LOG_PROMPTS) {
       console.log(

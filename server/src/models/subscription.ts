@@ -4,9 +4,10 @@
  * references, so switching vendors is an adapter plus a data backfill rather
  * than a schema change. One live subscription per user.
  */
-import { Schema, model, type HydratedDocument, type Types } from 'mongoose'
+import { Schema, type HydratedDocument, type Types } from 'mongoose'
 import { SUBSCRIPTION_STATUSES, type Subscription } from '@slide-machine/shared'
 import { PLAN_TIERS } from '@slide-machine/shared'
+import { defineModel } from './define-model'
 
 export interface SubscriptionDb extends Omit<
   Subscription,
@@ -36,7 +37,8 @@ const subscriptionSchema = new Schema<SubscriptionDb>({
   cancelAtPeriodEnd: { type: Boolean, default: false },
 })
 
-export const SubscriptionModel = model<SubscriptionDb>(
+// Reachable from the action graph via the billing layer — see define-model.ts.
+export const SubscriptionModel = defineModel<SubscriptionDb>(
   'Subscription',
   subscriptionSchema,
 )

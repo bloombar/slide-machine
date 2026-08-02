@@ -30,6 +30,7 @@ import { isVoiceCommand, WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
 import type { HealthComponent } from '@slide-machine/shared'
 import { env } from '../config/env'
 import { registry } from './registry'
+import { meterGeminiUsage, type GeminiUsageMetadata } from './usage-metadata'
 import { GenerationUnavailableError } from './errors'
 import { freedomPolicy, renderGenerationPrompt } from './prompt-templates'
 import {
@@ -388,7 +389,9 @@ const callGemini = async (prompt: string, label: string): Promise<string> => {
   }
   const data = (await res.json()) as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+    usageMetadata?: GeminiUsageMetadata
   }
+  await meterGeminiUsage(data.usageMetadata)
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text
   if (!text) throw new Error(`Gemini ${label} returned no candidate text`)
   return text
@@ -506,7 +509,9 @@ export class GeminiGenerationProvider implements GenerationProvider {
 
     const data = (await res.json()) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+      usageMetadata?: GeminiUsageMetadata
     }
+    await meterGeminiUsage(data.usageMetadata)
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text
     if (env.GENERATION_LOG_PROMPTS) {
       console.log(
@@ -652,7 +657,9 @@ export class GeminiGenerationProvider implements GenerationProvider {
 
     const data = (await res.json()) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+      usageMetadata?: GeminiUsageMetadata
     }
+    await meterGeminiUsage(data.usageMetadata)
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text
     if (!text) return unchanged
     let raw: unknown
