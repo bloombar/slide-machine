@@ -28,7 +28,7 @@ import { DeckModel, loadDeckAcl } from '../models/deck'
 import { canEditAcl } from '../lib/access'
 import { pcmBytesDurationMs } from '../lib/wav'
 import { recordUsage } from '../billing/usage'
-import { userHasCapacity } from '../billing/meter-hooks'
+import { usedFractionOf, userHasCapacity } from '../billing/meter-hooks'
 import {
   canStartRetention,
   releaseRetentionBytes,
@@ -63,6 +63,8 @@ const DEFAULT_SAMPLE_RATE = 16_000
 /** Audio between usage settles — the ceiling on how far a session can overrun
  * its cap before it is stopped. */
 const SETTLE_SECONDS = 30
+/** Share of the transcription allowance that triggers the one-time warning. */
+const WARN_AT = 0.8
 
 /** First control message the client sends before any audio. */
 interface StartMessage {
@@ -138,6 +140,8 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
   let sttBytes = 0
   let sttSampleRate = DEFAULT_SAMPLE_RATE
   let sttStopped = false
+  // Warned once per session, so a long lecture does not repeat it every settle.
+  let sttWarned = false
 
   const send = (payload: object): void => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(payload))
@@ -302,13 +306,22 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
     await recordUsage(userId, 'sttMinutes', minutes)
 
     if (final || sttStopped) return
-    // enforceEntitlement: false — a tier with no cloud-STT allowance is metered
-    // but not cut off, because the engine is still a deployment-wide choice.
-    // See userHasCapacity for why.
-    if (
-      await userHasCapacity(userId, 'sttMinutes', { enforceEntitlement: false })
-    )
-      return
+
+    // Warn once on the way to the wall, so an instructor can finish the
+    // lecture or upgrade rather than being cut off without notice (BILL-4).
+    if (!sttWarned) {
+      const spent = await usedFractionOf(userId, 'sttMinutes')
+      if (spent !== null && spent >= WARN_AT) {
+        sttWarned = true
+        send({
+          type: 'warning',
+          message:
+            'You have used most of this billing period’s transcription. Recording will stop when it runs out.',
+        })
+      }
+    }
+
+    if (await userHasCapacity(userId, 'sttMinutes')) return
     sttStopped = true
     send({
       type: 'error',
@@ -323,11 +336,7 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
     sttSampleRate = start.sampleRate ?? DEFAULT_SAMPLE_RATE
     // Checked before the stream opens: an exhausted allowance should cost
     // nothing at all, not one recognizer session's worth of audio.
-    if (
-      !(await userHasCapacity(userId, 'sttMinutes', {
-        enforceEntitlement: false,
-      }))
-    ) {
+    if (!(await userHasCapacity(userId, 'sttMinutes'))) {
       send({
         type: 'error',
         message:

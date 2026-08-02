@@ -63,13 +63,13 @@
       "lecturesPerMonth": 4,
       "sections": 1,
       "priceUsd": 0,
-      "cloudCapture": false
+      "cloudCapture": true
     },
     "fresh": {
       "lecturesPerMonth": 6,
       "sections": 1,
       "priceUsd": 19,
-      "cloudCapture": false
+      "cloudCapture": true
     },
     "pro": {
       "lecturesPerMonth": 26,

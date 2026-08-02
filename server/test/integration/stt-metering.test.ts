@@ -156,22 +156,42 @@ describe('cloud transcription metering', () => {
     expect(streams).toHaveLength(0)
   })
 
-  it('meters a tier with no cloud allowance without cutting it off', async () => {
-    // Free and Fresh cap sttMinutes at 0 — those tiers are meant to transcribe
-    // in the browser, where it is free. But the engine is still chosen per
-    // DEPLOYMENT, so enforcing the 0 here would not downgrade a free user to
-    // browser capture; it would stop them recording at all. Until /api/config
-    // resolves the engine per user, their minutes are counted, not refused.
+  it('gives every tier a positive allowance, enforced the same way', async () => {
+    // The engine is a deployment-wide choice, so a free user records through
+    // the same recognizer a Pro user does — they just get fewer minutes.
     await UserModel.updateOne({ _id: userId }, { planTier: 'free' })
-    expect(capFor('free', 'sttMinutes')).toBe(0)
+    expect(capFor('free', 'sttMinutes')).toBeGreaterThan(0)
+    await recordUsage(userId, 'sttMinutes', capFor('free', 'sttMinutes')! + 1)
 
-    const ws = await stream(5)
+    const ws = new WebSocket(url(token))
+    const messages: { type?: string }[] = []
+    ws.on('message', data => messages.push(JSON.parse(data.toString())))
+    await new Promise<void>(resolve => ws.on('open', () => resolve()))
+    ws.send(JSON.stringify({ type: 'start', sampleRate: SAMPLE_RATE }))
     await settle()
+
+    expect(messages.some(m => m.type === 'error')).toBe(true)
+    expect(streams).toHaveLength(0)
+  })
+
+  it('warns once before the allowance runs out, not only at the wall', async () => {
+    // Just past 80% of Free's 90 minutes, with room left to finish a thought.
+    await UserModel.updateOne({ _id: userId }, { planTier: 'free' })
+    const cap = capFor('free', 'sttMinutes')!
+    await recordUsage(userId, 'sttMinutes', cap * 0.81)
+
+    const ws = await stream(31)
+    const messages: { type?: string; message?: string }[] = []
+    ws.on('message', data => messages.push(JSON.parse(data.toString())))
+    await settle(120)
+
+    const warnings = messages.filter(m => m.type === 'warning')
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]?.message).toMatch(/used most of/i)
+    // Still recording: a warning is not a stop.
+    expect(await usedThisPeriod(userId, 'sttMinutes')).toBeLessThan(cap)
     ws.close()
     await settle()
-
-    expect(streams).toHaveLength(1)
-    expect(await usedThisPeriod(userId, 'sttMinutes')).toBeGreaterThan(0)
   })
 
   it('stops a running session once the allowance runs out mid-lecture', async () => {

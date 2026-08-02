@@ -45,6 +45,26 @@ export const requireAiTokens = requireCapacity(
 )
 
 /**
+ * How much of a metric's allowance is spent, as a 0–1 fraction; null when the
+ * cap is unlimited. Lets a caller warn before it refuses (BILL-4) rather than
+ * only at the wall.
+ */
+export const usedFractionOf = async (
+  userId: string,
+  metric: UsageMetric,
+): Promise<number | null> => {
+  try {
+    const user = await UserModel.findById(userId).select('planTier')
+    if (!user) return null
+    const cap = capFor(user.planTier, metric)
+    if (cap === null || cap <= 0) return null
+    return (await usedThisPeriod(userId, metric)) / cap
+  } catch {
+    return null
+  }
+}
+
+/**
  * Cap check for callers outside the action pipeline. The live audio socket
  * never passes through `dispatch`, so it cannot use a `meter` hook and has to
  * ask directly — and it needs an answer rather than an exception, because a
@@ -56,32 +76,12 @@ export const requireAiTokens = requireCapacity(
 export const userHasCapacity = async (
   userId: string,
   metric: UsageMetric,
-  {
-    /**
-     * Whether a cap of `0` — "this tier does not include the capability" —
-     * refuses the call.
-     *
-     * The live audio socket passes `false`, and the reason is a missing
-     * prerequisite rather than a preference. Free and Fresh cap `sttMinutes`
-     * at 0 because those tiers are meant to transcribe in the browser, where
-     * it is free — but the engine is still chosen **per deployment**
-     * (`TRANSCRIPTION_PROVIDER`), not per user. On a deployment configured for
-     * cloud STT, enforcing the 0 would not downgrade a free user to browser
-     * capture; it would stop them recording at all.
-     *
-     * So the socket meters their minutes and enforces only a positive
-     * allowance. Once `/api/config` resolves the engine per user, a 0-cap tier
-     * simply never opens this socket and this option can go.
-     */
-    enforceEntitlement = true,
-  }: { enforceEntitlement?: boolean } = {},
 ): Promise<boolean> => {
   try {
     const user = await UserModel.findById(userId).select('planTier')
     if (!user) return true
     const cap = capFor(user.planTier, metric)
     if (cap === null) return true
-    if (cap === 0 && !enforceEntitlement) return true
     return (await usedThisPeriod(userId, metric)) < cap
   } catch (error) {
     // A malformed id or an unreachable database must not sever a live lecture.

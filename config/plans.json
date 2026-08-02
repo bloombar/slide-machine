@@ -4,7 +4,7 @@
     "audioRetentionDays": 7,
     "caps": {
       "aiTokens": 10000000,
-      "sttMinutes": 0,
+      "sttMinutes": 90,
       "diarizationMinutes": 0,
       "ttsCharacters": 150000,
       "ttsPremiumCharacters": 0,
@@ -23,7 +23,7 @@
     "audioRetentionDays": 14,
     "caps": {
       "aiTokens": 14000000,
-      "sttMinutes": 0,
+      "sttMinutes": 225,
       "diarizationMinutes": 0,
       "ttsCharacters": 200000,
       "ttsPremiumCharacters": 0,

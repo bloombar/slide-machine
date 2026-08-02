@@ -166,8 +166,11 @@ on each side.
 | **Object storage + egress** | 21.6 GB held | 30 GB (2,000 playbacks) | **$0.70** | 0.2% |
 | **Total** | | | **$341.93** | |
 
-Browser-capture tiers cost **$181** — they lose both the STT line and the
-diarization line, since retention only happens on the cloud engine.
+On the **browser engine** the same 100 lectures cost **$181** — it removes both
+the STT line and the diarization line, since retention only happens on the
+cloud engine. That is a deployment-wide choice (`TRANSCRIPTION_PROVIDER`), not
+a per-tier one: every tier gets whichever engine the deployment configured, and
+tiers differ by how many minutes of it they may use.
 **Instructor-driven cost is $302 (88%); student-driven is $40 (12%).**
 
 Five conclusions:
@@ -271,8 +274,11 @@ Worked for Pro (26 lectures, 1,950 lecture-min):
 Two caps are deliberately **below** full coverage, because at $0.016/min each
 would otherwise dominate the tier:
 
-- **`sttMinutes: 600`** covers ~8 of Pro's 26 lectures. Browser capture handles
-  the rest for free; full cloud coverage would cost $31/month by itself.
+- **`sttMinutes`** is below full coverage on every tier — 90 minutes on Free
+  (~1 lecture), 225 on Fresh (~3), 600 on Pro (~8 of 26). At $0.016/min,
+  recording every lecture a tier allows would cost $4.80, $7.20 and $31.20
+  respectively, which no tier's price supports. Recording is an allowance, not
+  an entitlement to record everything.
 - **`diarizationMinutes: 350`** covers ~5 lectures. Diarizing all 26 would cost
   another $31. Adopting Dynamic Batch (§2) would make full coverage affordable
   at the price of 24-hour turnaround.
@@ -281,8 +287,8 @@ would otherwise dominate the tier:
 
 | Plan | Lectures/mo | Light (25%) | Expected (50%) | Heavy (80%) | At caps | Price floor | Price | Maxed as % of price |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Free | 4 | ~$1.45 | ~$2.89 | ~$4.63 | ~$5.79 | $6.32 | **$0** | — |
-| Fresh | 6 | ~$2.58 | ~$5.16 | ~$8.25 | ~$10.31 | $11.01 | **$19** | 54% |
+| Free | 4 | ~$1.81 | ~$3.61 | ~$5.78 | ~$7.23 | $7.81 | **$0** | — |
+| Fresh | 6 | ~$3.48 | ~$6.96 | ~$11.13 | ~$13.91 | $14.75 | **$19** | 73% |
 | Pro | 26 | ~$17.76 | ~$35.53 | ~$56.84 | ~$71.05 | $74.02 | **$99** | 72% |
 | Max | 40 | ~$43.43 | ~$86.86 | ~$138.98 | ~$173.73 | $180.53 | **$299** | 58% |
 
@@ -315,19 +321,24 @@ Excludes RA/PI salaries (grant-funded) and CI (free tier).
 
 | Tier | Light | Expected | Heavy | At caps |
 | --- | --- | --- | --- | --- |
-| Fresh | 19 | 22 | 29 | 37 |
+| Fresh | 20 | 26 | 41 | 68 |
 | Pro | 4 | 5 | 8 | 12 |
 | Max | 2 | 2 | 2 | 3 |
 
-The spread matters most at the cheap end: Fresh needs 19 subscribers even when
+The spread matters most at the cheap end: Fresh needs 20 subscribers even when
 they barely use it, against Pro's 4, because the $0.30 per charge and the 3.6%
-cut do not shrink with the price.
+cut do not shrink with the price. Putting every tier on the cloud engine
+sharpens that — a Fresh subscriber at their caps now leaves ~$4 after fees, so
+68 of them are needed to carry the fixed costs. Fresh is a conversion step, not
+a tier the economics can lean on.
 
 A cheap tier carries fixed costs badly: Stripe's $0.30 + 3.6% is the same
 whatever the price, so Fresh needs three times Pro's subscriber count. It earns
 its place as the conversion step off Free, not as the plan the economics rest
-on. Free users are pure cost at ~$5.79/month each at their caps — thirteen
+on. Free users are pure cost at **~$7.23/month each at their caps** — ten
 fully-active free users cost about as much as the entire pilot infrastructure.
+Roughly $1.44 of that is the 90 minutes of cloud transcription the tier now
+includes, which is the price of giving every tier the same capture experience.
 
 ## 9. Recalculating
 
