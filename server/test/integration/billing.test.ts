@@ -11,7 +11,9 @@
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import request from 'supertest'
+import type { PlanTier } from '@slide-machine/shared'
 import { env } from '../../src/config/env'
+import { loadPlans } from '../../src/config/plans'
 import { connectMongo, disconnectMongo } from '../../src/db/mongoose'
 import { createApp } from '../../src/app'
 import { UserModel } from '../../src/models/user'
@@ -111,6 +113,74 @@ describe('billing.summary', () => {
 
   it('refuses an unauthenticated caller', async () => {
     const res = await request(server).post('/api/actions/billing.summary')
+    expect(res.status).toBe(401)
+  })
+})
+
+describe('billing.plans', () => {
+  it('describes every plan, cheapest first, with its caps and price', async () => {
+    const res = await act(ada, 'billing.plans')
+
+    expect(res.status).toBe(200)
+    expect(res.body.plans.map((p: { tier: string }) => p.tier)).toEqual([
+      'free',
+      'fresh',
+      'pro',
+      'max',
+    ])
+
+    // The caps are the deployment's own plans file (PLANS_CONFIG_PATH), read
+    // here rather than restated, so this test cannot drift from it (BILL-6).
+    const configured = loadPlans()
+    for (const plan of res.body.plans) {
+      expect(plan.caps).toEqual(configured[plan.tier as PlanTier].caps)
+      expect(plan.audioRetentionDays).toBe(
+        configured[plan.tier as PlanTier].audioRetentionDays,
+      )
+    }
+
+    // And the money comes from the provider, which is what does the charging.
+    const pro = res.body.plans.find((p: { tier: string }) => p.tier === 'pro')
+    expect(pro.price).toMatchObject({ currency: 'usd', interval: 'month' })
+    expect(pro.price.amountMinor).toBeGreaterThan(0)
+    // The free tier has nothing to charge for.
+    expect(
+      res.body.plans.find((p: { tier: string }) => p.tier === 'free').price,
+    ).toBeNull()
+  })
+
+  it('rows every metered resource, instructor allowances before the audience’s', async () => {
+    const res = await act(ada, 'billing.plans')
+
+    const metrics = res.body.metrics as {
+      metric: string
+      allowance: string
+      unit: string
+    }[]
+    // Every cap the config defines has a row, so a tuned config cannot leave
+    // an allowance invisible on the pricing page.
+    expect(metrics.map(m => m.metric).sort()).toEqual(
+      Object.keys(loadPlans().free.caps).sort(),
+    )
+    const audienceFrom = metrics.findIndex(m => m.allowance === 'audience')
+    expect(
+      metrics.slice(audienceFrom).every(m => m.allowance === 'audience'),
+    ).toBe(true)
+    expect(metrics.find(m => m.metric === 'sttMinutes')?.unit).toBe('minutes')
+  })
+
+  it('offers only the tiers the deployment has priced', async () => {
+    const res = await act(ada, 'billing.plans')
+
+    const purchasable = res.body.plans
+      .filter((p: { purchasable: boolean }) => p.purchasable)
+      .map((p: { tier: string }) => p.tier)
+    expect(purchasable).not.toContain('free')
+    expect(purchasable).toContain('pro')
+  })
+
+  it('refuses an unauthenticated caller', async () => {
+    const res = await request(server).post('/api/actions/billing.plans')
     expect(res.status).toBe(401)
   })
 })

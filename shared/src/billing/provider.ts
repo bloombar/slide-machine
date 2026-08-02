@@ -57,6 +57,27 @@ export interface BillingEvent {
   subscription: SubscriptionSnapshot
 }
 
+/**
+ * What one plan costs, as the provider quotes it (BILL-2/BILL-6). The provider
+ * is the system of record for money, so this is read from it rather than
+ * duplicated into our own config, where the two could quietly disagree and the
+ * page would advertise a price the checkout does not charge.
+ *
+ * The amount is in the currency's **minor unit** — 2900 is $29.00 — because
+ * that is how providers quote money and the only representation that cannot
+ * lose a fraction on the way through. Formatting for a reader, including how
+ * many minor units make a major one, is the interface's job.
+ */
+export interface PlanPrice {
+  amountMinor: number
+  /** ISO-4217 code, as the provider gives it (e.g. "usd"). */
+  currency: string
+  /** The period one charge covers. */
+  interval: 'day' | 'week' | 'month' | 'year'
+  /** Intervals per charge — 3 for a price billed quarterly. Usually 1. */
+  intervalCount: number
+}
+
 export interface CheckoutRequest {
   /** Threaded through to the provider so its webhooks identify the account. */
   userId: string
@@ -108,6 +129,13 @@ export interface BillingProvider {
   readonly name: string
   /** Starts a hosted checkout for a new subscription at `tier`. */
   createCheckoutSession(request: CheckoutRequest): Promise<CheckoutSession>
+  /**
+   * What the given prices cost, keyed by the price id asked for. Ids the
+   * provider does not recognize are **left out** rather than raising: a
+   * pricing table missing one figure is better than a page that will not load,
+   * and a caller can tell the difference from the absent key.
+   */
+  listPrices(priceIds: string[]): Promise<Record<string, PlanPrice>>
   /** Moves an existing subscription to another tier (up or down). */
   changeTier(request: TierChangeRequest): Promise<SubscriptionSnapshot>
   /** Opens the hosted portal for payment methods, invoices, cancellation. */

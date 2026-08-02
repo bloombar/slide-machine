@@ -14,6 +14,7 @@ import HomePage from './pages/HomePage'
 import ProjectPage from './pages/ProjectPage'
 import ProfilePage from './pages/ProfilePage'
 import AccountSettingsPage from './pages/AccountSettingsPage'
+import PlanPricingPage from './pages/PlanPricingPage'
 import DeckViewerPage from './pages/DeckViewerPage'
 import AdminUsersPage from './pages/AdminUsersPage'
 import AdminUserDetailPage from './pages/AdminUserDetailPage'
@@ -58,6 +59,8 @@ export default function App() {
         {/* One canonical place to change anything about an account (AUTH-5);
             the :userId form is how an admin edits someone else's (ADMIN-5). */}
         <Route path="/app/settings" element={<AccountSettingsPage />} />
+        {/* Comparing plans needs a page of its own; settings links here. */}
+        <Route path="/app/plans" element={<PlanPricingPage />} />
         <Route path="/app/settings/:userId" element={<AccountSettingsPage />} />
         <Route path="/app/admin" element={<AdminShell />}>
           <Route index element={<AdminUsersPage />} />

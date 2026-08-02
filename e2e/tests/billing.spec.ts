@@ -1,14 +1,19 @@
 /**
- * E2E billing journey (SPEC BILL-2) against the built app and the in-memory
- * billing adapter: the Plan tab, a hosted checkout that lands back in the
- * app, and the provider webhook that is the only thing allowed to actually
- * move the account onto a paid tier.
+ * E2E billing journey (SPEC BILL-1/BILL-2) against the built app and the
+ * in-memory billing adapter: the Plan tab, the plan-pricing page it links to,
+ * a hosted checkout that lands back in the app, and the provider webhook that
+ * is the only thing allowed to actually move the account onto a paid tier.
  *
  * The split matters and is the reason this is an e2e rather than two unit
  * tests: coming back from checkout does not upgrade anybody. The browser
  * returns first and the provider's webhook arrives separately, so the test
  * checks that the app says "being updated" on the way back, and only reads
  * "Pro" once the webhook has been delivered.
+ *
+ * The pricing table is checked here too, because it is assembled from three
+ * places that only meet in a running system: caps from the deployment's plans
+ * file, prices from the billing provider, and the account's own tier from the
+ * database.
  */
 import { test, expect, type Page } from '@playwright/test'
 
@@ -83,11 +88,71 @@ test('a new account starts on the free plan with nothing to manage', async ({
   ).toBeHidden()
 })
 
-test('checkout hands off to the provider and returns to the plan tab', async ({
+test('the plan tab links to the pricing table rather than listing upgrades', async ({
   page,
 }) => {
   await ensureSignedIn(page)
   await page.goto('/app/settings?tab=plan')
+
+  // Nothing is sold from settings any more: it says what you are on, and
+  // where to go to compare.
+  await expect(page.getByRole('button', { name: /Upgrade to/i })).toBeHidden()
+  await page.getByRole('link', { name: /Change plan/i }).click()
+
+  await expect(page).toHaveURL(/\/app\/plans$/)
+  await expect(page.getByTestId('plan-table')).toBeVisible()
+})
+
+test('the pricing table compares every plan, with prices and caps', async ({
+  page,
+}) => {
+  await ensureSignedIn(page)
+  await page.goto('/app/plans')
+
+  const table = page.getByTestId('plan-table')
+  // A column per plan, the free one included.
+  for (const plan of ['Free', 'Fresh', 'Pro', 'Max']) {
+    await expect(
+      table.getByRole('columnheader', { name: new RegExp(plan) }),
+    ).toBeVisible()
+  }
+
+  // The price comes from the billing provider; the mock adapter quotes $29
+  // for the second paid tier.
+  await expect(table.getByText('$29.00 per month')).toBeVisible()
+  await expect(table.getByText('No charge')).toBeVisible()
+
+  // A capped row carries each plan's allowance, straight from the
+  // deployment's plans file, in a unit a reader recognizes.
+  const recording = table.getByRole('row', { name: /Audio recording time/ })
+  await expect(recording.getByRole('cell').first()).toHaveText('75 min')
+  // Retention answers the question the row above it raises, so it sits under
+  // it rather than in a section of its own.
+  await expect(
+    table.getByRole('row', { name: /Original audio retention/ }),
+  ).toBeVisible()
+  // And narration, billed per character, is read as time spoken.
+  await expect(
+    table
+      .getByRole('row', { name: /^Narration/ })
+      .getByRole('cell')
+      .first(),
+  ).toContainText(/of narration/)
+
+  // And an uncapped capability is ticked rather than given a number.
+  await expect(
+    table.getByRole('row', { name: /Voice commands/ }).getByText('Included'),
+  ).toHaveCount(4)
+
+  // The plan the account is on is held, not sold again.
+  await expect(page.getByTestId('current-plan-free')).toHaveText('Your plan')
+})
+
+test('checkout hands off to the provider and returns to the plan tab', async ({
+  page,
+}) => {
+  await ensureSignedIn(page)
+  await page.goto('/app/plans')
   await page.getByRole('button', { name: /Upgrade to Pro/i }).click()
 
   // The mock adapter has no hosted page, so it "completes" straight back to
@@ -118,12 +183,19 @@ test('the provider webhook is what puts the account on the paid tier', async ({
   await expect(
     page.getByRole('button', { name: /Manage billing/i }),
   ).toBeVisible()
-  // And there is one tier left to sell, but no longer a Pro upgrade.
+
+  // And on the pricing page there is one tier left to sell: Pro now reads as
+  // the plan held, and the smaller plans are the portal's business.
+  await page.goto('/app/plans')
+  await expect(page.getByTestId('current-plan-pro')).toBeVisible()
   await expect(
     page.getByRole('button', { name: /Upgrade to Max/i }),
   ).toBeVisible()
   await expect(
     page.getByRole('button', { name: /Upgrade to Pro/i }),
+  ).toBeHidden()
+  await expect(
+    page.getByRole('button', { name: /Upgrade to Fresh/i }),
   ).toBeHidden()
 })
 

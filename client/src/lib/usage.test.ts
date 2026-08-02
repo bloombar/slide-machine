@@ -6,7 +6,12 @@
  */
 import { describe, it, expect } from 'vitest'
 import type { UsageMetricSummary } from '@slide-machine/shared'
-import { approachingLimits, callToActionFor, isExhausted } from './usage'
+import {
+  approachingLimits,
+  callToActionFor,
+  friendlyCap,
+  isExhausted,
+} from './usage'
 
 const metric = (
   over: Partial<UsageMetricSummary> = {},
@@ -84,5 +89,54 @@ describe('callToActionFor', () => {
     // There is no plan above Max, so an upgrade prompt would send the user
     // looking for a page that cannot exist (BILL-5).
     expect(callToActionFor('max')).toBe('contact')
+  })
+})
+
+describe('friendlyCap', () => {
+  /** Stands in for i18next: returns the key and the values it was given, so
+   * the arithmetic is asserted rather than the English wording. */
+  const t = (key: string, vars: Record<string, unknown>) =>
+    `${key}:${JSON.stringify(vars)}`
+
+  it('reads a narration allowance as time spoken, not characters', () => {
+    // 60,000 characters at ~900 a minute — nobody choosing a plan thinks in
+    // characters, and the meter behind it still counts them.
+    expect(friendlyCap('ttsCharacters', 60_000, t)).toBe(
+      'plan.pricing.approx.spokenMinutes:{"value":"67"}',
+    )
+  })
+
+  it('switches to hours once minutes stop being readable', () => {
+    expect(friendlyCap('ttsPremiumCharacters', 300_000, t)).toBe(
+      'plan.pricing.approx.spokenHours:{"value":"6"}',
+    )
+  })
+
+  it('applies to the audience narration pool too', () => {
+    expect(friendlyCap('audienceTtsCharacters', 25_000, t)).toBe(
+      'plan.pricing.approx.spokenMinutes:{"value":"28"}',
+    )
+  })
+
+  it('reads a translation allowance as words', () => {
+    expect(friendlyCap('translationCharacters', 9_000, t)).toBe(
+      'plan.pricing.approx.words:{"value":"1,500"}',
+    )
+  })
+
+  it('reads an audience locale allowance as languages', () => {
+    expect(friendlyCap('audienceLocales', 2, t)).toBe(
+      'plan.pricing.approx.languages:{"count":2}',
+    )
+  })
+
+  it('leaves alone the metrics that are already plain', () => {
+    // Minutes recorded, images, exports and megabytes are units a reader
+    // already has; putting an approximation in front of them would only add a
+    // guess between the user and their allowance.
+    expect(friendlyCap('sttMinutes', 75, t)).toBeNull()
+    expect(friendlyCap('aiImages', 5, t)).toBeNull()
+    expect(friendlyCap('audioStorageMb', 500, t)).toBeNull()
+    expect(friendlyCap('aiTokens', 5_000_000, t)).toBeNull()
   })
 })

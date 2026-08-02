@@ -294,6 +294,109 @@ describe('StripeBillingProvider.changeTier', () => {
   })
 })
 
+describe('StripeBillingProvider.listPrices', () => {
+  /** A Stripe price object with the fields the adapter reads. */
+  const stripePrice = (overrides: Record<string, unknown> = {}) => ({
+    unit_amount: 2900,
+    currency: 'usd',
+    recurring: { interval: 'month', interval_count: 1 },
+    ...overrides,
+  })
+
+  it('reads each price from Stripe and normalizes it', async () => {
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, json: async () => stripePrice() })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => stripePrice({ unit_amount: 9900 }),
+      })
+
+    const prices = await provider.listPrices(['price_pro', 'price_max'])
+
+    expect(fetchCall()[0]).toBe('https://api.stripe.com/v1/prices/price_pro')
+    expect(fetchCall()[1].method).toBe('GET')
+    expect(prices).toEqual({
+      price_pro: {
+        amountMinor: 2900,
+        currency: 'usd',
+        interval: 'month',
+        intervalCount: 1,
+      },
+      price_max: {
+        amountMinor: 9900,
+        currency: 'usd',
+        interval: 'month',
+        intervalCount: 1,
+      },
+    })
+  })
+
+  it('keeps the amount in minor units rather than rounding it to money', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => stripePrice({ unit_amount: 1250 }),
+    })
+
+    const prices = await provider.listPrices(['price_pro'])
+
+    // $12.50, and the half is not lost on the way through.
+    expect(prices.price_pro!.amountMinor).toBe(1250)
+  })
+
+  it('carries a longer billing interval through', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () =>
+        stripePrice({ recurring: { interval: 'month', interval_count: 3 } }),
+    })
+
+    const prices = await provider.listPrices(['price_pro'])
+
+    expect(prices.price_pro).toMatchObject({
+      interval: 'month',
+      intervalCount: 3,
+    })
+  })
+
+  it('drops a price it cannot state plainly', async () => {
+    fetchMock
+      // A one-off price: no recurring interval to quote.
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => stripePrice({ recurring: null }),
+      })
+      // A tiered price: no single amount.
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => stripePrice({ unit_amount: null }),
+      })
+
+    const prices = await provider.listPrices(['price_pro', 'price_max'])
+
+    expect(prices).toEqual({})
+  })
+
+  it('drops the prices it could not read instead of failing the batch', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        text: async () => 'No such price',
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => stripePrice() })
+
+    const prices = await provider.listPrices(['price_gone', 'price_max'])
+
+    // One deleted price must not cost the pricing page every other figure.
+    expect(Object.keys(prices)).toEqual(['price_max'])
+  })
+
+  it('asks for nothing when there is nothing to price', async () => {
+    expect(await provider.listPrices([])).toEqual({})
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
 describe('StripeBillingProvider.createPortalSession', () => {
   it('returns the hosted portal url', async () => {
     fetchMock.mockResolvedValue({

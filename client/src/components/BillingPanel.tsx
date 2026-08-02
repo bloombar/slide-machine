@@ -1,10 +1,14 @@
 /**
  * Plan and billing in account settings (SPEC BILL-2): what the account is on,
- * what happens at the end of the period, and the two doors out to the payment
- * provider — checkout to move up a tier, and the hosted portal for payment
+ * what happens at the end of the period, and the hosted portal for payment
  * methods, invoices, and cancellation.
  *
- * Both doors are redirects. The app never collects card details and never
+ * Choosing a *different* plan is not here. Comparing four plans needs a table,
+ * and a table needs a page — so settings links to the plan-pricing page, which
+ * owns the upgrade buttons, and this panel keeps only what is true of the
+ * subscription the account already has.
+ *
+ * The portal is a redirect. The app never collects card details and never
  * quotes a price: the provider hosts those pages and is the system of record
  * for what was charged (P-8), so this component only ever navigates.
  *
@@ -17,16 +21,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router'
-import {
-  PLAN_TIERS,
-  type BillingSummary,
-  type PlanTier,
-} from '@slide-machine/shared'
-import {
-  fetchBillingSummary,
-  openBillingPortal,
-  startCheckout,
-} from '../api/billing'
+import type { BillingSummary } from '@slide-machine/shared'
+import { fetchBillingSummary, openBillingPortal } from '../api/billing'
 import { apiErrorMessage } from '../i18n/apiError'
 import { formatDate } from '../i18n/format'
 import { useAuth } from '../auth/AuthContext'
@@ -36,18 +32,6 @@ import { callToActionFor } from '../lib/usage'
  * One retry, not a poll: the webhook is normally already applied, and a page
  * that keeps refetching is worse than one that settles a moment late. */
 const WEBHOOK_GRACE_MS = 2500
-
-/** Tiers above `current` that this deployment sells — what an upgrade can
- * move to. Ordered by PLAN_TIERS, which runs cheapest to largest. */
-const upgradesFrom = (
-  current: PlanTier,
-  purchasable: PlanTier[],
-): PlanTier[] => {
-  const index = PLAN_TIERS.indexOf(current)
-  return PLAN_TIERS.filter(
-    tier => PLAN_TIERS.indexOf(tier) > index && purchasable.includes(tier),
-  )
-}
 
 export default function BillingPanel() {
   const { t } = useTranslation()
@@ -121,7 +105,6 @@ export default function BillingPanel() {
     return <p className="text-sm text-slate-500">{t('common.loading')}</p>
   }
 
-  const upgrades = upgradesFrom(summary.tier, summary.purchasableTiers)
   const renewalKey = summary.cancelAtPeriodEnd ? 'endsOn' : 'renewsOn'
 
   return (
@@ -166,21 +149,10 @@ export default function BillingPanel() {
         </p>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        {upgrades.map(tier => (
-          <button
-            key={tier}
-            disabled={busy !== null}
-            onClick={() => void redirect(tier, () => startCheckout(tier))}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
-          >
-            {t('billing.upgradeTo', {
-              plan: t(`plan.tier.${tier}`, { defaultValue: tier }),
-            })}
-          </button>
-        ))}
-
-        {summary.canManageBilling && (
+      {/* Only once the provider has something on file to manage — before that
+          there are no invoices, no card, and nothing to cancel. */}
+      {summary.canManageBilling && (
+        <div>
           <button
             disabled={busy !== null}
             onClick={() => void redirect('portal', () => openBillingPortal())}
@@ -188,8 +160,8 @@ export default function BillingPanel() {
           >
             {t('billing.manage')}
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Max has no larger plan to move to, so it is invited to get in touch
           rather than shown an upgrade that does not exist (BILL-5). */}

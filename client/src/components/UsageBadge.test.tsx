@@ -112,7 +112,7 @@ describe('UsageBadge', () => {
     await openPanel()
 
     expect(await screen.findByTestId('usage-panel-popover')).toBeInTheDocument()
-    expect(screen.getByText('Recording time')).toBeInTheDocument()
+    expect(screen.getByText('Audio recording time')).toBeInTheDocument()
     expect(screen.getByText('30 min of 75 min')).toBeInTheDocument()
     // The two allowances are labelled apart, not merged into one list.
     expect(screen.getByText('Your allowances')).toBeInTheDocument()

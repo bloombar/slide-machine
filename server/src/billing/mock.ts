@@ -12,6 +12,7 @@ import type {
   CancelRequest,
   CheckoutRequest,
   CheckoutSession,
+  PlanPrice,
   PlanTier,
   PortalRequest,
   PortalSession,
@@ -19,12 +20,21 @@ import type {
   TierChangeRequest,
   WebhookDelivery,
 } from '@slide-machine/shared'
-import { BILLING_EVENT_TYPES } from '@slide-machine/shared'
+import { BILLING_EVENT_TYPES, PLAN_TIERS } from '@slide-machine/shared'
+import { loadPlans } from '../config/plans'
 import { billingRegistry } from './registry'
 import { WebhookVerificationError } from './errors'
 
 /** Length of a mock billing period. */
 const PERIOD_DAYS = 30
+
+/**
+ * Monthly price, in cents, the mock quotes for the n-th paid tier — a
+ * stand-in for what a real provider would hold, so dev and e2e see a filled-in
+ * pricing table instead of a column of blanks. Tiers beyond the list reuse the
+ * last figure rather than inventing an ever-growing one.
+ */
+const MOCK_PRICES_MINOR = [900, 2900, 9900]
 
 /** Tier assumed when a request names a subscription the mock never issued. */
 const FALLBACK_TIER: PlanTier = 'pro'
@@ -106,6 +116,33 @@ export class MockBillingProvider implements BillingProvider {
       url: withParam(successUrl, 'session_id', providerSessionId),
       providerSessionId,
     }
+  }
+
+  /**
+   * A monthly price per known price id. The ids come from the plans config,
+   * so which tier each belongs to is looked up there rather than parsed out of
+   * the id — an id is opaque to everyone but the provider that issued it, and
+   * the mock is only pretending to be one.
+   */
+  async listPrices(priceIds: string[]): Promise<Record<string, PlanPrice>> {
+    const plans = loadPlans()
+    // Paid tiers in order, so the n-th one gets the n-th mock price.
+    const paid = PLAN_TIERS.filter(tier => plans[tier]?.priceId)
+
+    const priced = priceIds
+      .map(id => {
+        const index = paid.findIndex(tier => plans[tier]?.priceId === id)
+        if (index === -1) return null
+        const amountMinor =
+          MOCK_PRICES_MINOR[Math.min(index, MOCK_PRICES_MINOR.length - 1)]!
+        return [
+          id,
+          { amountMinor, currency: 'usd', interval: 'month', intervalCount: 1 },
+        ] as const
+      })
+      .filter(entry => entry !== null)
+
+    return Object.fromEntries(priced)
   }
 
   async changeTier({

@@ -20,6 +20,7 @@ import type {
   BillingPortalInput,
   BillingRedirect,
   BillingSummary,
+  PlanCatalog,
 } from '@slide-machine/shared'
 import { PLAN_TIERS } from '@slide-machine/shared'
 import { defineAction } from './define'
@@ -32,6 +33,7 @@ import {
   billingSummary,
   purchasableTiers,
 } from '../billing/subscription'
+import { planCatalog } from '../billing/catalog'
 
 /**
  * Where the provider sends the browser back to. An in-app path, never a URL:
@@ -92,6 +94,22 @@ export const billingGetSummary = defineAction<
 })
 
 registerAction(billingGetSummary)
+
+/**
+ * What every plan offers, for the pricing page (BILL-1/BILL-6). The one
+ * billing action that takes no account: it is the published price list, the
+ * same for whoever asks, so it neither loads a user nor varies by one — which
+ * tier the caller is on comes from `billing.summary` beside it.
+ */
+export const billingGetPlans = defineAction<Record<string, never>, PlanCatalog>(
+  {
+    name: 'billing.plans',
+    input: z.object({}).strict(),
+    execute: () => planCatalog(),
+  },
+)
+
+registerAction(billingGetPlans)
 
 /**
  * Starts a hosted checkout for `tier` and returns the page to send the
