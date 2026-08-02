@@ -3,9 +3,17 @@
  * queried separately (never concatenated into one over-specified query),
  * the results are pooled and de-duplicated by URL, and the phrase count is
  * capped. Flickr needs no key here — it stays dormant without one.
+ *
+ * Also covers `imageLookups` metering (BILL-3), which happens here because
+ * this is the one place both automatic enrichment and the manual picker fan
+ * out from.
  */
-import { describe, it, expect, vi, afterEach } from 'vitest'
-import { gatherCandidates } from './gather'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
+
+const meterUsage = vi.fn()
+vi.mock('../billing/usage-context', () => ({ meterUsage }))
+
+const { gatherCandidates } = await import('./gather')
 
 /**
  * Stubs the sources: Wikimedia returns the SAME image for every query (to
@@ -58,6 +66,7 @@ const stub = () => {
   return { wikiQueries, ovQueries }
 }
 
+beforeEach(() => meterUsage.mockClear())
 afterEach(() => vi.unstubAllGlobals())
 
 describe('gatherCandidates', () => {
@@ -93,5 +102,37 @@ describe('gatherCandidates', () => {
     const { ovQueries } = stub()
     expect(await gatherCandidates(['', '  '], 1000)).toEqual([])
     expect(ovQueries).toHaveLength(0)
+  })
+
+  describe('imageLookups metering (BILL-3)', () => {
+    it('spends one lookup per call, however wide the fan-out', async () => {
+      const { ovQueries } = stub()
+      await gatherCandidates(['alpha', 'beta', 'gamma'], 1000)
+      // Three phrases across three sources is nine outbound requests, and the
+      // user is charged for one lookup — the metric is slide images resolved,
+      // not HTTP calls, so retuning the fan-out must not move it.
+      expect(ovQueries).toHaveLength(3)
+      expect(meterUsage).toHaveBeenCalledTimes(1)
+      expect(meterUsage).toHaveBeenCalledWith('imageLookups', 1)
+    })
+
+    it('spends the lookup even when no source has a match', async () => {
+      // The searches are what cost; finding nothing does not refund them.
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          async () =>
+            ({ ok: true, status: 200, json: async () => ({}) }) as Response,
+        ),
+      )
+      expect(await gatherCandidates(['nothing matches this'], 1000)).toEqual([])
+      expect(meterUsage).toHaveBeenCalledWith('imageLookups', 1)
+    })
+
+    it('spends nothing when there was no usable phrase to search', async () => {
+      stub()
+      await gatherCandidates(['', '  '], 1000)
+      expect(meterUsage).not.toHaveBeenCalled()
+    })
   })
 })

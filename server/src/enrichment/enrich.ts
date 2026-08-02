@@ -7,6 +7,8 @@
  */
 import { SlideModel } from '../models/slide'
 import { env } from '../config/env'
+import { currentUsageUser } from '../billing/usage-context'
+import { userHasCapacity } from '../billing/meter-hooks'
 import { gatherCandidates } from './gather'
 import { pickBest, scoreCandidate } from './scoring'
 import { rankAndCaption } from './ai-rank'
@@ -81,6 +83,12 @@ const compactAttribution = (
  * Fire-and-forget enrichment for a persisted slide. Never throws; never
  * overwrites an existing image (IMG-3 stability). The client discovers
  * the image by re-reading the slide.
+ *
+ * An exhausted `imageLookups` allowance simply skips the search (BILL-4). This
+ * path has no response to carry a 402: the slide was returned long ago and the
+ * user is watching for a picture to appear. A slide that stays text-only is the
+ * same outcome enrichment already produces whenever no source has a good
+ * match, so it degrades along a path the UI already handles.
  */
 export const enrichSlideImage = async (
   slideId: string,
@@ -89,6 +97,9 @@ export const enrichSlideImage = async (
   context?: SlideImageContext,
 ): Promise<void> => {
   try {
+    const payer = currentUsageUser()
+    if (payer && !(await userHasCapacity(payer, 'imageLookups'))) return
+
     const image = await enrichImage(keywords, seeded, context)
     if (!image) return
 

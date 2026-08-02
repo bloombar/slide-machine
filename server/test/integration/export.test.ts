@@ -32,6 +32,8 @@ import { ProjectModel } from '../../src/models/project'
 import { DeckModel } from '../../src/models/deck'
 import { SlideModel } from '../../src/models/slide'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
+import { UsageRecordModel } from '../../src/models/usage-record'
+import { capFor, recordUsage, usedThisPeriod } from '../../src/billing/usage'
 
 const server = createApp().listen(0)
 afterAll(() => server.close())
@@ -66,6 +68,7 @@ beforeEach(async () => {
     DeckModel.deleteMany({}),
     SlideModel.deleteMany({}),
     RefreshTokenModel.deleteMany({}),
+    UsageRecordModel.deleteMany({}),
   ])
   ada = await registerUser('ada@example.com')
   bob = await registerUser('bob@example.com')
@@ -308,5 +311,59 @@ describe('export actions (mock mode)', () => {
     expect(
       (await act(bob, 'export.download', { deckId, format: 'yaml' })).status,
     ).toBe(403)
+  })
+})
+
+/** Export metering (BILL-3): one unit per file produced, wherever it lands. */
+describe('export metering', () => {
+  const adaId = async () =>
+    (await UserModel.findOne({ email: 'ada@example.com' }))!._id.toString()
+
+  it('counts one export per download', async () => {
+    await act(ada, 'export.download', { deckId, format: 'yaml' })
+    await act(ada, 'export.download', { deckId, format: 'pdf' })
+
+    expect(await usedThisPeriod(await adaId(), 'exports')).toBe(2)
+  })
+
+  it('counts a Drive export the same as a download', async () => {
+    await act(ada, 'quiz.connectGoogle', { code: 'mock-code' })
+    await act(ada, 'export.toDrive', {
+      deckId,
+      format: 'google-slides',
+      driveFolderId: 'folder-1',
+    })
+
+    expect(await usedThisPeriod(await adaId(), 'exports')).toBe(1)
+  })
+
+  it('counts nothing for reading the export status or deleting a file', async () => {
+    await act(ada, 'export.status', { deckId })
+    await act(ada, 'export.delete', { deckId, fileId: 'nope' })
+
+    expect(await usedThisPeriod(await adaId(), 'exports')).toBe(0)
+  })
+
+  it('402s once the allowance is spent', async () => {
+    const id = await adaId()
+    await recordUsage(id, 'exports', capFor('free', 'exports')!)
+
+    const res = await act(ada, 'export.download', { deckId, format: 'yaml' })
+
+    expect(res.status).toBe(402)
+    expect(res.body.error.details).toEqual(['exports'])
+  })
+
+  it('does not charge for an export that failed to render', async () => {
+    // Metered after the bytes exist, so a failed render leaves the allowance
+    // where it was — the user got no file.
+    const id = await adaId()
+    const res = await act(ada, 'export.download', {
+      deckId: 'not-a-real-deck',
+      format: 'yaml',
+    })
+
+    expect(res.status).toBeGreaterThanOrEqual(400)
+    expect(await usedThisPeriod(id, 'exports')).toBe(0)
   })
 })

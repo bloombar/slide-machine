@@ -26,6 +26,8 @@ import { DeckModel } from '../../src/models/deck'
 import { SlideModel } from '../../src/models/slide'
 import { TranscriptSegmentModel } from '../../src/models/transcript-segment'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
+import { UsageRecordModel } from '../../src/models/usage-record'
+import { capFor, recordUsage, usedThisPeriod } from '../../src/billing/usage'
 
 const server = createApp().listen(0)
 afterAll(() => server.close())
@@ -44,6 +46,7 @@ const act = (token: string, name: string, input: object = {}) =>
     .send(input)
 
 let ada: string
+let adaId: string
 let deckId: string
 
 beforeAll(async () => {
@@ -61,8 +64,12 @@ beforeEach(async () => {
     SlideModel.deleteMany({}),
     TranscriptSegmentModel.deleteMany({}),
     RefreshTokenModel.deleteMany({}),
+    UsageRecordModel.deleteMany({}),
   ])
   ada = await registerUser('ada@example.com')
+  adaId = (await UserModel.findOne({
+    email: 'ada@example.com',
+  }))!._id.toString()
   const project = await act(ada, 'project.create', { title: 'Bio 101' })
   const deck = await act(ada, 'deck.create', {
     projectId: project.body.id,
@@ -245,5 +252,102 @@ describe('deck.diarize caching', () => {
     expect(spy).toHaveBeenCalledTimes(2)
     const deck = await DeckModel.findById(deckId)
     expect(deck?.recordings?.map(r => r.diarizedBy)).toEqual(['mock', 'mock'])
+  })
+})
+
+/**
+ * Diarization metering (BILL-3). The minutes submitted are charged to whoever
+ * ran the pass; a pass served from the cache submits nothing, so it is recorded
+ * without being debited.
+ */
+describe('deck.diarize metering', () => {
+  /** A recording plus one timed segment, the minimum for a pass to do work. */
+  const seedRecording = async (durationMs = 620_000) => {
+    await DeckModel.updateOne(
+      { _id: deckId },
+      {
+        $push: {
+          recordings: {
+            sessionId: 'rec-1',
+            audioKey: 'audio/x.wav',
+            sampleRate: 16_000,
+            durationMs,
+            createdAt: new Date(),
+          },
+        },
+      },
+    )
+    return TranscriptSegmentModel.create({
+      deckId,
+      sessionId: 'rec-1',
+      text: 'Photosynthesis basics',
+      action: 'new',
+      startMs: 0,
+      endMs: 1000,
+      words: [{ word: 'Photosynthesis', startMs: 0, endMs: 1000 }],
+    })
+  }
+
+  it('charges the audio’s duration in minutes', async () => {
+    await seedRecording(600_000) // exactly ten minutes
+
+    await act(ada, 'deck.diarize', { deckId })
+
+    expect(await usedThisPeriod(adaId, 'diarizationMinutes')).toBeCloseTo(10, 5)
+  })
+
+  it('does not charge again when the pass is served from cache', async () => {
+    await seedRecording(600_000)
+
+    await act(ada, 'deck.diarize', { deckId })
+    await act(ada, 'deck.diarize', { deckId })
+
+    // Recorded twice, debited once: the second pass re-tagged from stored
+    // intervals and submitted no audio.
+    expect(await usedThisPeriod(adaId, 'diarizationMinutes')).toBeCloseTo(10, 5)
+    expect(
+      await UsageRecordModel.countDocuments({
+        userId: adaId,
+        metric: 'diarizationMinutes',
+      }),
+    ).toBe(1)
+  })
+
+  it('402s once the allowance is spent, without submitting the audio', async () => {
+    await seedRecording()
+    await recordUsage(
+      adaId,
+      'diarizationMinutes',
+      capFor('free', 'diarizationMinutes')!,
+    )
+    const provider = registry.get<DiarizationProvider>('diarization')
+    const spy = vi.spyOn(provider, 'diarize')
+
+    const res = await act(ada, 'deck.diarize', { deckId })
+
+    expect(res.status).toBe(402)
+    expect(res.body.error.details).toEqual(['diarizationMinutes'])
+    // Checked before the submit, so an exhausted allowance costs nothing.
+    expect(spy).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('still re-tags from the cache after the allowance is spent', async () => {
+    // Work already paid for keeps working: hitting a cap degrades what can be
+    // created, never what already exists (BILL-4).
+    const segment = await seedRecording()
+    await act(ada, 'deck.diarize', { deckId })
+    await recordUsage(
+      adaId,
+      'diarizationMinutes',
+      capFor('free', 'diarizationMinutes')!,
+    )
+
+    const res = await act(ada, 'deck.diarize', { deckId })
+
+    expect(res.status).toBe(200)
+    expect((await TranscriptSegmentModel.findById(segment._id))?.speaker).toBe(
+      1,
+    )
   })
 })

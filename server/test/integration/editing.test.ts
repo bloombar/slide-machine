@@ -21,6 +21,8 @@ import { ProjectModel } from '../../src/models/project'
 import { DeckModel } from '../../src/models/deck'
 import { SlideModel } from '../../src/models/slide'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
+import { UsageRecordModel } from '../../src/models/usage-record'
+import { capFor, recordUsage, usedThisPeriod } from '../../src/billing/usage'
 
 // One long-lived server per file: supertest's default per-request
 // ephemeral servers intermittently lost requests to localhost port
@@ -66,6 +68,7 @@ beforeEach(async () => {
     DeckModel.deleteMany({}),
     SlideModel.deleteMany({}),
     RefreshTokenModel.deleteMany({}),
+    UsageRecordModel.deleteMany({}),
   ])
   ada = await registerUser('ada@example.com')
   const project = await act(ada, 'project.create', { title: 'Bio' })
@@ -736,6 +739,37 @@ describe('POST /slides/:slideId/image-candidates (EDIT-1)', () => {
       .set('Authorization', `Bearer ${bob}`)
       .send({ query: 'cell' })
     expect(res.status).toBe(403)
+  })
+
+  it('spends one image lookup per search (BILL-3)', async () => {
+    stubImageApis()
+    const adaId = (await UserModel.findOne({
+      email: 'ada@example.com',
+    }))!._id.toString()
+
+    await request(server)
+      .post(`/api/slides/${slideIds[0]}/image-candidates`)
+      .set('Authorization', `Bearer ${ada}`)
+      .send({ query: 'red cell, blue cell' })
+
+    // Two phrases across three sources; one lookup charged.
+    expect(await usedThisPeriod(adaId, 'imageLookups')).toBe(1)
+  })
+
+  it('402s the picker once the image-lookup allowance is spent', async () => {
+    stubImageApis()
+    const adaId = (await UserModel.findOne({
+      email: 'ada@example.com',
+    }))!._id.toString()
+    await recordUsage(adaId, 'imageLookups', capFor('free', 'imageLookups')!)
+
+    const res = await request(server)
+      .post(`/api/slides/${slideIds[0]}/image-candidates`)
+      .set('Authorization', `Bearer ${ada}`)
+      .send({ query: 'cell' })
+
+    expect(res.status).toBe(402)
+    expect(res.body.error.details).toEqual(['imageLookups'])
   })
 })
 

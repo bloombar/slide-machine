@@ -32,6 +32,10 @@ export const resetPlanCache = (): void => {
   plans = undefined
 }
 
+/** Divisor turning a byte count into the `importMb` metric's unit. Binary
+ * megabytes, matching how upload limits are expressed everywhere else here. */
+export const BYTES_PER_MB = 1024 * 1024
+
 /** The cap for a metric on a tier. `null` = unlimited. */
 export const capFor = (tier: PlanTier, metric: UsageMetric): number | null =>
   planFor(tier).caps[metric]

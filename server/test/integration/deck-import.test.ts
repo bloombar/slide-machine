@@ -24,6 +24,13 @@ import { DeckModel } from '../../src/models/deck'
 import { SlideModel } from '../../src/models/slide'
 import { SeedAssetModel } from '../../src/models/seed-asset'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
+import { UsageRecordModel } from '../../src/models/usage-record'
+import {
+  BYTES_PER_MB,
+  capFor,
+  recordUsage,
+  usedThisPeriod,
+} from '../../src/billing/usage'
 
 const server = createApp().listen(0)
 afterAll(() => server.close())
@@ -87,6 +94,7 @@ beforeEach(async () => {
     SlideModel.deleteMany({}),
     SeedAssetModel.deleteMany({}),
     RefreshTokenModel.deleteMany({}),
+    UsageRecordModel.deleteMany({}),
   ])
   ada = await registerUser('ada@example.com')
   bob = await registerUser('bob@example.com')
@@ -268,5 +276,58 @@ describe('deck.import (EXP-3)', () => {
     expect(await DeckModel.countDocuments()).toBe(0)
     expect(await SlideModel.countDocuments()).toBe(0)
     expect(await SeedAssetModel.countDocuments()).toBe(0)
+  })
+})
+
+/** Import metering (BILL-3): the volume imported, in megabytes. */
+describe('deck.import metering', () => {
+  const adaId = async () =>
+    (await UserModel.findOne({ email: 'ada@example.com' }))!._id.toString()
+
+  it('charges the payload’s size in megabytes', async () => {
+    const content = yamlFor()
+
+    await act(ada, 'deck.import', { projectId, content })
+
+    expect(await usedThisPeriod(await adaId(), 'importMb')).toBeCloseTo(
+      Buffer.byteLength(content, 'utf8') / BYTES_PER_MB,
+      9,
+    )
+  })
+
+  it('charges nothing for a paste that does not parse', async () => {
+    // Nothing was imported, so nothing is spent.
+    const res = await act(ada, 'deck.import', {
+      projectId,
+      content: 'not: a: deck',
+    })
+
+    expect(res.status).toBeGreaterThanOrEqual(400)
+    expect(await usedThisPeriod(await adaId(), 'importMb')).toBe(0)
+  })
+
+  it('charges nothing for an import that rolled back', async () => {
+    const spy = vi
+      .spyOn(SlideModel, 'create')
+      .mockRejectedValue(new Error('boom') as never)
+
+    const res = await act(ada, 'deck.import', { projectId, content: yamlFor() })
+
+    spy.mockRestore()
+    expect(res.status).toBeGreaterThanOrEqual(400)
+    // The lecture was removed, so the volume it would have counted goes with it.
+    expect(await DeckModel.countDocuments()).toBe(0)
+    expect(await usedThisPeriod(await adaId(), 'importMb')).toBe(0)
+  })
+
+  it('402s once the allowance is spent', async () => {
+    await recordUsage(await adaId(), 'importMb', capFor('free', 'importMb')!)
+
+    const res = await act(ada, 'deck.import', { projectId, content: yamlFor() })
+
+    expect(res.status).toBe(402)
+    expect(res.body.error.details).toEqual(['importMb'])
+    // Blocked before execute, so no lecture was created.
+    expect(await DeckModel.countDocuments()).toBe(0)
   })
 })

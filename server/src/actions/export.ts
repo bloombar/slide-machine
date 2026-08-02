@@ -37,6 +37,8 @@ import { defineAction } from './define'
 import { registerAction, ActionForbiddenError } from './dispatch'
 import type { ActionContext } from './context'
 import { loadEditableDeck } from './deck'
+import { requireExports } from '../billing/meter-hooks'
+import { meterUsage } from '../billing/usage-context'
 import { env } from '../config/env'
 import { UserModel } from '../models/user'
 import { SlideModel } from '../models/slide'
@@ -179,12 +181,16 @@ export const exportStatus = defineAction<{ deckId: string }, ExportStatus>({
  * Generates a PDF or YAML export of the deck and returns its bytes base64-
  * encoded for the browser to download (EXP-1/EXP-2). PDF may include whiteboard
  * marks; YAML never does. No Google contact.
+ *
+ * Counts one `exports` unit (BILL-3), charged when the file has actually been
+ * produced: a render that threw gave the user nothing to download.
  */
 export const exportDownload = defineAction<
   { deckId: string; format: 'pdf' | 'yaml'; includeWhiteboard?: boolean },
   ExportDownload
 >({
   name: 'export.download',
+  meter: requireExports,
   input: z.object({
     deckId: z.string().min(1),
     format: z.enum(['pdf', 'yaml']),
@@ -199,6 +205,7 @@ export const exportDownload = defineAction<
     const base = slugifyTitle(deck.title)
     if (input.format === 'yaml') {
       const yaml = deckToYaml(deck)
+      await meterUsage('exports', 1)
       return {
         fileName: `${base}.yaml`,
         mimeType: MIME.yaml,
@@ -206,6 +213,7 @@ export const exportDownload = defineAction<
       }
     }
     const pdf = await deckToPdf(deck)
+    await meterUsage('exports', 1)
     return {
       fileName: `${base}.pdf`,
       mimeType: MIME.pdf,
@@ -223,6 +231,9 @@ const whiteboardApplies = (format: DeckExportFormat): boolean =>
  * uploaded into the chosen folder, or a native Google Slides presentation built
  * from the deck. Records it on the deck so it can be listed/deleted, and returns
  * the created file.
+ *
+ * Counts one `exports` unit (BILL-3), the same as a download — the deck is
+ * rendered either way, and where the file lands is not what costs.
  */
 export const exportToDrive = defineAction<
   {
@@ -235,6 +246,7 @@ export const exportToDrive = defineAction<
   ExportToDriveResult
 >({
   name: 'export.toDrive',
+  meter: requireExports,
   input: z.object({
     deckId: z.string().min(1),
     format: z.enum(['pdf', 'yaml', 'google-slides']),
@@ -314,6 +326,7 @@ export const exportToDrive = defineAction<
     }
     deckDoc.exports = [...(deckDoc.exports ?? []), record]
     await deckDoc.save()
+    await meterUsage('exports', 1)
 
     return {
       fileId,

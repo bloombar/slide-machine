@@ -161,6 +161,34 @@ describe('narration metering', () => {
     expect(await usedThisPeriod(ownerId, 'ttsCharacters')).toBe(afterFirst)
   })
 
+  it('records a listener’s cached playback without debiting it', async () => {
+    // The reason cache hits are recorded at all: a deck where two students
+    // trigger synthesis and twenty-eight play the cached result reached
+    // thirty, and an average computed over two would be an order of magnitude
+    // wrong (BILL-7).
+    const slideId = await makeSlide()
+    await speak(ownerToken, slideId) // owner fills the cache
+    expect(
+      await UsageRecordModel.countDocuments({
+        userId: ownerId,
+        metric: 'audienceTtsCharacters',
+      }),
+    ).toBe(0)
+
+    const replay = await speak(listenerToken, slideId)
+
+    expect(replay.status).toBe(200)
+    // The audience row now exists — the playback happened — but nothing was
+    // debited, because serving stored audio costs nothing.
+    expect(
+      await UsageRecordModel.countDocuments({
+        userId: ownerId,
+        metric: 'audienceTtsCharacters',
+      }),
+    ).toBe(1)
+    expect(await usedThisPeriod(ownerId, 'audienceTtsCharacters')).toBe(0)
+  })
+
   it('keeps serving cached audio after the allowance is gone', async () => {
     // The rule that makes a hard block defensible: students never lose access
     // to material their instructor already paid to produce.

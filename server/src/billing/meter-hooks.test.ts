@@ -1,8 +1,10 @@
 /**
- * Unit tests for `userHasCapacity`, the check the audio socket uses. It
- * answers rather than throws, because a WebSocket has no error response to map
- * a 402 onto — and it errs toward allowing, since refusing to transcribe a
- * lecture is a worse failure than an uncounted minute.
+ * Unit tests for the two cap checks callers outside the action pipeline use.
+ *
+ * `assertUserCapacity` throws (→ 402) and is what a route or a mid-action
+ * service calls; `userHasCapacity` answers instead, because the audio socket
+ * has no error response to map a 402 onto — and it errs toward allowing, since
+ * refusing to transcribe a lecture is a worse failure than an uncounted minute.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -19,18 +21,56 @@ vi.mock('../models/user', () => ({
 }))
 vi.mock('./usage', () => ({
   assertWithinCap: vi.fn(),
-  capFor: (tier: string, metric: string) =>
+  capFor: vi.fn((tier: string, metric: string) =>
     metric === 'imageLookups' ? null : tier === 'pro' ? 1000 : 10,
+  ),
   usedThisPeriod: async () => used,
 }))
 
-const { userHasCapacity } = await import('./meter-hooks')
+const { userHasCapacity, assertUserCapacity } = await import('./meter-hooks')
 const { UserModel } = await import('../models/user')
+const { assertWithinCap, capFor } = await import('./usage')
 
 beforeEach(() => {
   userExists = true
   found.planTier = 'free'
   used = 0
+  vi.mocked(assertWithinCap).mockClear()
+})
+
+describe('assertUserCapacity', () => {
+  it('checks the metric against the user’s own tier', async () => {
+    found.planTier = 'pro'
+    await assertUserCapacity('u1', 'exports', 'Out of exports.')
+    expect(assertWithinCap).toHaveBeenCalledWith(
+      'u1',
+      'pro',
+      'exports',
+      'Out of exports.',
+    )
+  })
+
+  it('says "not included" rather than "used up" when the cap is 0', async () => {
+    // A tier with a 0 cap never had the capability, so telling the user they
+    // have spent it all would be a lie. No shipped tier does this, but a
+    // deployment can switch a service off (BILL-3).
+    vi.mocked(capFor).mockReturnValueOnce(0)
+    await assertUserCapacity('u1', 'aiImages', 'Out of images.')
+    expect(assertWithinCap).toHaveBeenCalledWith(
+      'u1',
+      'free',
+      'aiImages',
+      'This feature is not included in your current plan.',
+    )
+  })
+
+  it('lets a deleted account through rather than answering 402', async () => {
+    // Their request is about to fail on its own; a payment-required response
+    // would be a confusing way to say "this account is gone".
+    userExists = false
+    await assertUserCapacity('ghost', 'exports', 'Out of exports.')
+    expect(assertWithinCap).not.toHaveBeenCalled()
+  })
 })
 
 describe('userHasCapacity', () => {

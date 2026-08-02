@@ -13,35 +13,64 @@ import { UserModel } from '../models/user'
 import { assertWithinCap, capFor, usedThisPeriod } from './usage'
 
 /**
+ * Refuses work when `userId` has already spent `metric`'s allowance, reading
+ * the cap from whatever tier that user is on. Throws `PlanLimitExceededError`
+ * (→ 402); returns normally when the work may proceed.
+ *
+ * Takes a user id rather than an action context because the payer is not
+ * always the caller: a deck's audio is diarized against its *owner's* plan
+ * whoever asked for it (BILL-3). A user who no longer exists is let through —
+ * their request is about to fail on its own, and a 402 would be a confusing
+ * way to say "deleted account".
+ */
+export const assertUserCapacity = async (
+  userId: string,
+  metric: UsageMetric,
+  message: string,
+): Promise<void> => {
+  const user = await UserModel.findById(userId).select('planTier')
+  if (!user) return
+  // A cap of 0 is not an exhausted allowance, it is a capability the tier
+  // never had — saying "you have used all of it" would be a lie to someone
+  // who never had any.
+  const excluded = capFor(user.planTier, metric) === 0
+  await assertWithinCap(
+    userId,
+    user.planTier,
+    metric,
+    excluded ? 'This feature is not included in your current plan.' : message,
+  )
+}
+
+/**
  * Builds a hook that refuses the action when `metric` is exhausted.
  *
  * Unauthenticated calls are not metered: there is no allowance to spend, and
- * the routes that matter already require auth. A user who no longer exists is
- * likewise let through — their action is about to fail on its own, and a 402
- * would be a confusing way to say "deleted account".
+ * the routes that matter already require auth.
  */
 export const requireCapacity =
   (metric: UsageMetric, message: string): NonNullable<Action['meter']> =>
   async ctx => {
     if (!ctx.userId) return
-    const user = await UserModel.findById(ctx.userId).select('planTier')
-    if (!user) return
-    // A cap of 0 is not an exhausted allowance, it is a capability the tier
-    // never had — saying "you have used all of it" would be a lie to someone
-    // who never had any.
-    const excluded = capFor(user.planTier, metric) === 0
-    await assertWithinCap(
-      ctx.userId,
-      user.planTier,
-      metric,
-      excluded ? 'This feature is not included in your current plan.' : message,
-    )
+    await assertUserCapacity(ctx.userId, metric, message)
   }
 
 /** Guards the AI token allowance — slide generation, refine, quizzes. */
 export const requireAiTokens = requireCapacity(
   'aiTokens',
   'You have used all of this billing period’s AI generation. It resets at the start of your next period.',
+)
+
+/** Guards the export allowance — PDF/YAML downloads and Drive exports. */
+export const requireExports = requireCapacity(
+  'exports',
+  'You have used all of this billing period’s exports. It resets at the start of your next period.',
+)
+
+/** Guards the import allowance — uploaded seed material and deck YAML. */
+export const requireImportVolume = requireCapacity(
+  'importMb',
+  'You have used all of this billing period’s import allowance. It resets at the start of your next period.',
 )
 
 /**

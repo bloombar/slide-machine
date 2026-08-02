@@ -10,12 +10,20 @@ import { searchWikimedia } from './wikimedia'
 import { searchOpenverse } from './openverse'
 import { searchFlickr } from './flickr'
 import { env } from '../config/env'
+import { meterUsage } from '../billing/usage-context'
 import type { ImageCandidate } from './types'
 
 /**
  * Queries every source once per keyword phrase and returns the pooled,
  * URL-deduplicated candidates. Any source (or phrase) failing collapses to
  * fewer results, never an error (IMG-2). Ranking is left to the caller.
+ *
+ * This is also where `imageLookups` is metered (BILL-3): one unit per call,
+ * not one per outbound HTTP request. The fan-out here is a tuning decision —
+ * three sources times up to `IMAGE_MAX_QUERY_PHRASES` phrases — and a metric
+ * that moved every time that was retuned would be unreadable to the person
+ * whose allowance it is. One lookup means "one slide image resolved", which is
+ * the unit a user recognises.
  */
 export const gatherCandidates = async (
   phrases: string[],
@@ -29,6 +37,10 @@ export const gatherCandidates = async (
     .filter(Boolean)
     .slice(0, env.IMAGE_MAX_QUERY_PHRASES)
   if (!queries.length) return []
+
+  // Metered before the fan-out: the searches are what cost, so an attempt that
+  // happens to find nothing still spent the lookup.
+  await meterUsage('imageLookups', 1)
 
   const settled = await Promise.allSettled(
     queries.flatMap(q => [
