@@ -3,7 +3,7 @@
     "priceId": null,
     "audioRetentionDays": 7,
     "caps": {
-      "aiTokens": 5000,
+      "aiTokens": 10000000,
       "sttMinutes": 0,
       "diarizationMinutes": 0,
       "ttsCharacters": 150000,
