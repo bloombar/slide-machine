@@ -1103,15 +1103,15 @@
 - id: BILL-1
   title: Subscription tiers
   full: "The product offers four subscription tiers, each priced accordingly
-    (exact prices set in configuration — BILL-6): Free — basic level for
-    personal/occasional use; the default tier on registration. Sized to a couple
-    of weeks of one course. Fresh — entry paid tier, the step off Free; sized to
-    one course. Pro — mid level for professional / regular instructional use;
-    sized to three courses, with higher caps and access to paid-tier features.
-    Max — highest tier; the largest usage caps and full feature access. Every
-    cap is finite — there is no unlimited tier, because unbounded usage is
-    unbounded cost. Users who outgrow Max are invited to contact us rather than
-    shown an upgrade path that does not…"
+    (exact prices set in configuration — BILL-6). Every tier offers every
+    service; they differ only in how much of each is allowed, so no cap is ever
+    0: Free — basic level for personal/occasional use; the default tier on
+    registration. Sized to about two lectures a month. Fresh — entry paid tier,
+    the step off Free; sized to about three lectures a month. Pro — mid level
+    for professional / regular instructional use; sized to three courses, with
+    substantially higher caps across every service. Max — highest tier; the
+    largest usage caps. Every cap is finite — there is no unlimited tier,
+    because unbounded usage is unbounded cost.…"
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
@@ -1136,16 +1136,16 @@
   review: false
 - id: BILL-3
   title: Usage caps & metering
-  full: "Each tier carries usage caps on AI and other costly services, metered per
+  full: 'Each tier carries usage caps on AI and other costly services, metered per
     billing period and enforced server-side. Metrics are provider-neutral
     (aiTokens, not geminiTokens) so swapping an adapter (TECH-8) never renames a
-    persisted metric. null means unlimited; 0 means the capability is
-    unavailable on that tier, which is how paid-only features are gated without
-    a second mechanism. The metered resources: aiTokens — input + output across
-    every LLM call: slide generation, refine, narrate, reformat, quiz, image
-    re-rank, seed extraction, embeddings. sttMinutes — minutes streamed to cloud
-    speech-to-text, summed across stream restarts, including post-lecture
-    re-transcription (which is…"
+    persisted metric. null means unlimited and 0 means the capability is
+    unavailable on that tier, but no shipped tier uses 0 — every plan offers
+    every service (BILL-1). The sentinel remains so a deployment can switch a
+    service off entirely, and because "not included" and "used up" must read
+    differently to whoever is blocked. The metered resources: aiTokens — input +
+    output across every LLM call: slide generation, refine, narrate, reformat,
+    quiz, image re-rank, seed extraction…'
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3

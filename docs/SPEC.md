@@ -82,12 +82,12 @@ Each user has a profile (display name, bio, avatar, **preferred locale**) and ow
 
 #### BILL-1 Subscription tiers
 
-The product offers four subscription tiers, each priced accordingly (exact prices set in configuration — BILL-6):
+The product offers four subscription tiers, each priced accordingly (exact prices set in configuration — BILL-6). **Every tier offers every service; they differ only in how much of each is allowed**, so no cap is ever `0`:
 
-- **Free** — basic level for personal/occasional use; the default tier on registration. Sized to a couple of weeks of one course.
-- **Fresh** — entry paid tier, the step off Free; sized to one course.
-- **Pro** — mid level for professional / regular instructional use; sized to three courses, with higher caps and access to paid-tier features.
-- **Max** — highest tier; the largest usage caps and full feature access. **Every cap is finite** — there is no unlimited tier, because unbounded usage is unbounded cost. Users who outgrow Max are invited to contact us rather than shown an upgrade path that does not exist (BILL-5).
+- **Free** — basic level for personal/occasional use; the default tier on registration. Sized to about two lectures a month.
+- **Fresh** — entry paid tier, the step off Free; sized to about three lectures a month.
+- **Pro** — mid level for professional / regular instructional use; sized to three courses, with substantially higher caps across every service.
+- **Max** — highest tier; the largest usage caps. **Every cap is finite** — there is no unlimited tier, because unbounded usage is unbounded cost. Users who outgrow Max are invited to contact us rather than shown an upgrade path that does not exist (BILL-5).
 
 Each tier defines what features are available and the usage caps that apply to costly services (BILL-3). **Speech capture works the same on every tier**: the engine is a deployment-wide choice ([TECH-4](#tech-4-server-configuration) `TRANSCRIPTION_PROVIDER`), not a per-tier one, so all users get whatever that deployment configured — cloud transcription with word timings, confidence, and retained audio, or the keyless browser engine without them. What differs by tier is the **allowance**: cloud transcription is the single largest cost driver in the product, so lower tiers get fewer minutes of it rather than a lesser engine.
 
@@ -106,7 +106,7 @@ Payments and subscription management run through a configured **billing provider
 
 #### BILL-3 Usage caps & metering
 
-Each tier carries **usage caps on AI and other costly services**, metered per billing period and enforced **server-side**. Metrics are **provider-neutral** (`aiTokens`, not `geminiTokens`) so swapping an adapter ([TECH-8](#tech-8-ai-provider-abstraction-layer)) never renames a persisted metric. `null` means unlimited; **`0` means the capability is unavailable on that tier**, which is how paid-only features are gated without a second mechanism.
+Each tier carries **usage caps on AI and other costly services**, metered per billing period and enforced **server-side**. Metrics are **provider-neutral** (`aiTokens`, not `geminiTokens`) so swapping an adapter ([TECH-8](#tech-8-ai-provider-abstraction-layer)) never renames a persisted metric. `null` means unlimited and **`0` means the capability is unavailable on that tier**, but no shipped tier uses `0` — every plan offers every service (BILL-1). The sentinel remains so a deployment can switch a service off entirely, and because "not included" and "used up" must read differently to whoever is blocked.
 
 The metered resources:
 
