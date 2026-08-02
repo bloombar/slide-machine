@@ -57,8 +57,10 @@ If `AUDIO_RETENTION_ENABLED=true` (GEN-4), each live session's audio is stored
 as raw LINEAR16 PCM under the **`audio/`** key prefix — large (~2.9 MB/min at
 the default 24 kHz `STT_CAPTURE_SAMPLE_RATE`, ~1.9 at 16 kHz, ~5.8 at 48 kHz) and
 containing student voices. The app already runs a daily sweep that deletes
-recordings past `AUDIO_RETENTION_DAYS` (default 30) along with their deck
-references, so no bucket rule is required. As a belt-and-suspenders guard you
+expired recordings along with their deck references, so no bucket rule is
+required. The window is the shorter of the owner's plan tier
+(`audioRetentionDays` in `config/plans.json`) and `AUDIO_RETENTION_DAYS`
+(default 30). As a belt-and-suspenders guard you
 may **also** add a Spaces/S3 **lifecycle expiration rule scoped to the `audio/`
 prefix** (e.g. 30 days) — dashboard → your Space → **Settings → Lifecycle
 rules**.
@@ -199,7 +201,7 @@ value is baked into the SPA at build.
 | `S3_PUBLIC_BASE_URL` | plain | `https://<bucket>.<region>.cdn.digitaloceanspaces.com` |
 | `S3_FORCE_PATH_STYLE` | plain | leave unset/`false` for Spaces (`true` is MinIO-only) |
 | `AUDIO_RETENTION_ENABLED` | plain | `true` to retain live-session audio for diarization (GEN-4); default off. Needs `TRANSCRIPTION_PROVIDER=google-cloud` |
-| `AUDIO_RETENTION_DAYS` | plain | days before the daily sweep deletes a recording; default `30`, `0` = keep forever (see §2 lifecycle note) |
+| `AUDIO_RETENTION_DAYS` | plain | deployment-wide ceiling on the retention window; default `30`, `0` = sweep off, keep forever (see §2 lifecycle note). Each plan tier sets its own `audioRetentionDays` in `config/plans.json` and the **shorter of the two wins**, so this can tighten a tier's window but never loosen it |
 | `AUDIO_RETENTION_MAX_SESSION_MB` | plain | how much audio one session may **store**; default `300` (~1 h 49 min at 24 kHz), `0` = no per-session cap. Past it that recording is truncated |
 | `AUDIO_RETENTION_MAX_TOTAL_MB` | plain | **memory** ceiling across all concurrent recordings (~11 MB each), so ≈ how many may record at once; default `128`, `0` = no limit. **Size to the host's RAM** — see §2 |
 | `STT_CAPTURE_SAMPLE_RATE` | plain | Hz the browser downsamples mic audio to before streaming; default `24000` (16 kHz is what Cloud STT expects; the extra is for per-slide playback fidelity), range `8000`–`48000`, `0` = no downsampling (stream the mic's native rate). Raising it multiplies bandwidth, retention memory, and stored WAV size. Optional |

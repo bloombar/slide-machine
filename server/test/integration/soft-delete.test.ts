@@ -18,6 +18,8 @@ import {
   restoreProjectCascade,
 } from '../../src/lib/cascade'
 import { purgeExpiredSoftDeletes } from '../../src/jobs/soft-delete-purge'
+import { UsageRecordModel } from '../../src/models/usage-record'
+import { adjustGauge, usedThisPeriod } from '../../src/billing/usage'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -61,6 +63,7 @@ beforeEach(async () => {
     DeckModel.deleteMany({}),
     SlideModel.deleteMany({}),
     SeedAssetModel.deleteMany({}),
+    UsageRecordModel.deleteMany({}),
   ])
   const owner = await UserModel.create({
     email: 'ada@x.com',
@@ -168,5 +171,71 @@ describe('soft delete (P-10)', () => {
     // The sibling deck and the project itself are untouched.
     expect(await DeckModel.findById(sibling._id)).not.toBeNull()
     expect(await ProjectModel.findById(project._id)).not.toBeNull()
+  })
+})
+
+/**
+ * Purging a lecture gives its owner their storage back (BILL-3). The gauge is a
+ * stock, so every path that deletes retained audio has to credit it — otherwise
+ * it only ever climbs and a user who deleted everything stays "full".
+ */
+describe('storage gauge on purge', () => {
+  /** Attaches one minute of 16 kHz LINEAR16 mono to a deck. */
+  const withRecording = async (deckId: unknown, sessionId = 'r1') =>
+    DeckModel.updateOne(
+      { _id: deckId as string },
+      {
+        $push: {
+          recordings: {
+            sessionId,
+            audioKey: `audio/${String(deckId)}/${sessionId}.pcm`,
+            sampleRate: 16_000,
+            durationMs: 60_000,
+            createdAt: new Date(),
+          },
+        },
+      },
+    ).setOptions({ withDeleted: true })
+
+  /** One minute at 16 kHz, 16-bit mono, in MB. */
+  const ONE_MINUTE_MB = (60 * 16_000 * 2) / (1024 * 1024)
+
+  it('credits the owner when a purged lecture had retained audio', async () => {
+    const { project, deck } = await makeProject()
+    await withRecording(deck._id)
+    await adjustGauge(ownerId, 'audioStorageMb', 10)
+
+    await deleteProjectCascade(project._id)
+    await purgeExpiredSoftDeletes(90, Date.now() + 100 * DAY_MS)
+
+    expect(await usedThisPeriod(ownerId, 'audioStorageMb')).toBeCloseTo(
+      10 - ONE_MINUTE_MB,
+      6,
+    )
+  })
+
+  it('sums several recordings into one credit per owner', async () => {
+    const { project, deck } = await makeProject()
+    await withRecording(deck._id, 'r1')
+    await withRecording(deck._id, 'r2')
+    await adjustGauge(ownerId, 'audioStorageMb', 10)
+
+    await deleteProjectCascade(project._id)
+    await purgeExpiredSoftDeletes(90, Date.now() + 100 * DAY_MS)
+
+    expect(await usedThisPeriod(ownerId, 'audioStorageMb')).toBeCloseTo(
+      10 - 2 * ONE_MINUTE_MB,
+      6,
+    )
+  })
+
+  it('leaves the gauge alone for a lecture that retained nothing', async () => {
+    const { project } = await makeProject()
+    await adjustGauge(ownerId, 'audioStorageMb', 4)
+
+    await deleteProjectCascade(project._id)
+    await purgeExpiredSoftDeletes(90, Date.now() + 100 * DAY_MS)
+
+    expect(await usedThisPeriod(ownerId, 'audioStorageMb')).toBe(4)
   })
 })

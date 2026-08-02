@@ -61,6 +61,13 @@ import { ProjectModel } from '../../src/models/project'
 import { DeckModel } from '../../src/models/deck'
 import { SlideModel } from '../../src/models/slide'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
+import { UsageRecordModel } from '../../src/models/usage-record'
+import {
+  adjustGauge,
+  capFor,
+  usedThisPeriod,
+  STANDING_PERIOD,
+} from '../../src/billing/usage'
 import { getStorage } from '../../src/storage'
 
 const server = createApp().listen(0)
@@ -124,6 +131,7 @@ beforeEach(async () => {
     DeckModel.deleteMany({}),
     SlideModel.deleteMany({}),
     RefreshTokenModel.deleteMany({}),
+    UsageRecordModel.deleteMany({}),
   ])
   ada = await registerUser('ada@example.com')
   const project = await act(ada, 'project.create', { title: 'Bio 101' })
@@ -207,5 +215,104 @@ describe('STT audio retention', () => {
     const dir = join(env.STORAGE_LOCAL_DIR, 'audio', bobDeckId)
     const written = await readdir(dir).catch(() => [] as string[])
     expect(written).toEqual([])
+  })
+})
+
+/**
+ * Retained audio is metered as a **stock** (BILL-3): what the owner is holding
+ * right now, charged when the recording lands and given back when it is
+ * deleted, never reset by a billing period.
+ */
+describe('STT audio retention metering', () => {
+  const adaId = async () =>
+    (await UserModel.findOne({ email: 'ada@example.com' }))!._id.toString()
+
+  const streamOneSecond = async (deckId: string, sessionId = 'rec-1') =>
+    streamAudio(
+      ada,
+      {
+        type: 'start',
+        languageCode: 'en-US',
+        sampleRate: 16_000,
+        deckId,
+        sessionId,
+      },
+      new Uint8Array(32_000), // 1000 ms of LINEAR16 mono @ 16 kHz
+    )
+
+  const newDeck = async (): Promise<string> => {
+    const deck = await act(ada, 'deck.create', {
+      projectId,
+      title: 'Lecture',
+      templateId: 'classic',
+    })
+    return deck.body.id as string
+  }
+
+  it('charges the stored megabytes to the deck owner', async () => {
+    const deckId = await newDeck()
+
+    await streamOneSecond(deckId)
+
+    await vi.waitFor(async () => {
+      const held = await usedThisPeriod(await adaId(), 'audioStorageMb')
+      expect(held).toBeCloseTo(32_000 / (1024 * 1024), 6)
+    })
+  })
+
+  it('accumulates across recordings instead of resetting', async () => {
+    const deckId = await newDeck()
+
+    await streamOneSecond(deckId, 'rec-1')
+    await vi.waitFor(async () =>
+      expect(
+        await usedThisPeriod(await adaId(), 'audioStorageMb'),
+      ).toBeGreaterThan(0),
+    )
+    await streamOneSecond(deckId, 'rec-2')
+
+    await vi.waitFor(async () => {
+      const held = await usedThisPeriod(await adaId(), 'audioStorageMb')
+      expect(held).toBeCloseTo((2 * 32_000) / (1024 * 1024), 6)
+    })
+  })
+
+  it('keeps the gauge under a period key that never rolls over', async () => {
+    // A stock is not a per-period total: audio retained last month is still on
+    // a disk this month, so the counter must not be filed under a period that
+    // a subscription rollover would leave behind.
+    const deckId = await newDeck()
+    await streamOneSecond(deckId)
+
+    const row = await vi.waitFor(async () => {
+      const found = await UsageRecordModel.findOne({
+        userId: await adaId(),
+        metric: 'audioStorageMb',
+      })
+      expect(found).not.toBeNull()
+      return found!
+    })
+    expect(row.period).toBe(STANDING_PERIOD)
+  })
+
+  it('transcribes without retaining once the owner’s storage is full', async () => {
+    // Degrades exactly as the process-wide memory budget does: the lecture is
+    // still transcribed, the audio simply is not kept. There is no response to
+    // carry a 402 on a WebSocket, and losing the transcript would be far worse
+    // than losing a recording.
+    const deckId = await newDeck()
+    await adjustGauge(
+      await adaId(),
+      'audioStorageMb',
+      capFor('free', 'audioStorageMb')!,
+    )
+
+    await streamOneSecond(deckId)
+    await new Promise(r => setTimeout(r, 200)) // allow any flush to run
+
+    const doc = await DeckModel.findById(deckId)
+    expect(doc?.recordings ?? []).toHaveLength(0)
+    const dir = join(env.STORAGE_LOCAL_DIR, 'audio', deckId)
+    expect(await readdir(dir).catch(() => [] as string[])).toEqual([])
   })
 })

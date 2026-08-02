@@ -330,8 +330,12 @@ student voices. It is off by default, captured only when
 (the browser engine's audio never reaches the server). When on, each
 session's audio is streamed to the bucket's `audio/` prefix as raw PCM
 (~2.9 MB/min at the default 24 kHz `STT_CAPTURE_SAMPLE_RATE`), and a **daily
-sweep** deletes recordings past `AUDIO_RETENTION_DAYS` (default 30; `0` = keep
-forever) with their deck references. `AUDIO_RETENTION_MAX_SESSION_MB` (default
+sweep** deletes expired recordings with their deck references. The window is the
+**shorter** of the lecture owner's plan tier (`audioRetentionDays` in
+`config/plans.json`) and `AUDIO_RETENTION_DAYS` (default 30; `0` = sweep off,
+keep forever), so a deployment can tighten a tier's window but never loosen it.
+Retained audio also counts against the owner's `audioStorageMb` allowance, which
+is credited back when a recording is deleted. `AUDIO_RETENTION_MAX_SESSION_MB` (default
 `300`) caps how much one lecture may store and `AUDIO_RETENTION_MAX_TOTAL_MB`
 (default `128`) caps the memory all concurrent recordings may hold — roughly
 how many may record at once, since audio streams out rather than accumulating.

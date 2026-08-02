@@ -48,3 +48,15 @@ export const pcmBytesDurationMs = (
 /** Duration in ms of a LINEAR16 mono PCM buffer at `sampleRate`. */
 export const pcmDurationMs = (pcm: Buffer, sampleRate: number): number =>
   pcmBytesDurationMs(pcm.length, sampleRate)
+
+/**
+ * Bytes occupied by `durationMs` of LINEAR16 mono PCM at `sampleRate` — the
+ * inverse of `pcmBytesDurationMs`.
+ *
+ * Exact rather than an estimate: the format is uncompressed and fixed-width, so
+ * length and duration determine each other. That is what lets the storage gauge
+ * (BILL-3) credit a deleted recording back from what the deck recorded about
+ * it, without also persisting a byte count that could drift from the object.
+ */
+export const pcmBytesFor = (durationMs: number, sampleRate: number): number =>
+  Math.round((durationMs / 1000) * sampleRate * BYTES_PER_SAMPLE)
