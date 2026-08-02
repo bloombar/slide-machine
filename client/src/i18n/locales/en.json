@@ -93,6 +93,7 @@
     "displayNameRequired": "Display name is required.",
     "interfaceLanguage": "Interface language",
     "interfaceLanguageHint": "Menus, buttons and messages appear in this language.",
+    "interfaceLanguageDefault": "{own, select, true {your browser's language} other {their browser's language}}",
     "lectureLanguage": "Lecture language",
     "lectureLanguageHint": "Speech recognition and generated slides use this language. Projects and lectures can override it.",
     "lectureLanguageDefault": "{own, select, true {your interface language} other {their interface language}}",
@@ -259,6 +260,36 @@
       "fresh": "Fresh",
       "pro": "Pro",
       "max": "Max"
+    },
+    "change": "Change plan",
+    "feature": {
+      "liveCapture": "Speak-to-slides live capture",
+      "voiceControl": "Voice commands",
+      "whiteboard": "Whiteboard markup",
+      "editing": "Slide and narration editing",
+      "templates": "Templates and layouts",
+      "refine": "Post-lecture refine",
+      "quizzes": "Exit-ticket quizzes",
+      "sharing": "Sharing and collaboration"
+    },
+    "pricing": {
+      "title": "Plans",
+      "subtitle": "Every plan includes every feature. What changes is how much of each you may use.",
+      "back": "Back to your plan",
+      "tableCaption": "Features and allowances, plan by plan",
+      "featureColumn": "Feature",
+      "features": "In every plan",
+      "included": "Included",
+      "notIncluded": "Not included",
+      "unlimited": "Unlimited",
+      "currentPlan": "Your plan",
+      "audioRetention": "Recording retention",
+      "retentionDays": "{count, plural, one {# day} other {# days}}",
+      "retentionUnlimited": "Kept indefinitely",
+      "changeHint": "Moving to a smaller plan, or cancelling, happens in the billing portal.",
+      "errors": {
+        "load": "Could not load the plans"
+      }
     }
   },
   "billing": {

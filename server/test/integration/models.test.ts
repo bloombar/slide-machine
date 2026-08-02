@@ -52,9 +52,11 @@ describe('User model', () => {
       email: 'ada@example.com',
       displayName: 'Ada',
       emailVerified: false,
-      locale: 'en',
       planTier: 'free',
     })
+    // No interface locale is defaulted (TECH-12): an account stores one
+    // only once its owner picks a language
+    expect(dto.locale).toBeUndefined()
     expect(dto).not.toHaveProperty('passwordHash')
     expect(new Date(dto.createdAt).getTime()).toBeGreaterThan(0)
   })

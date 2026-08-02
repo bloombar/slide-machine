@@ -1,7 +1,8 @@
 /**
- * Integration tests for the interface locale (TECH-12): the account
- * always has one, registration can carry the browser-detected value, and
- * `user.setLocale` changes it and is recorded in the settings change log.
+ * Integration tests for the interface locale (TECH-12): nothing is
+ * stored until a language is explicitly chosen, registration can carry a
+ * choice made before signing up, and `user.setLocale` sets or clears it
+ * and is recorded in the settings change log.
  *
  * The interface locale and the lecturing language are deliberately
  * independent — see language.test.ts for the other one — so this file
@@ -49,13 +50,18 @@ beforeEach(async () => {
 })
 
 describe('registration locale', () => {
-  it('defaults to English when the client sends none', async () => {
+  it('stores nothing when the client sends none', async () => {
     const res = await request(server).post('/api/auth/register').send(CREDS)
     expect(res.status).toBe(201)
-    expect(res.body.user.locale).toBe('en')
+    // No stored preference: the client follows the browser instead, and
+    // re-resolves it against the supported locales on every visit
+    expect(res.body.user.locale).toBeUndefined()
+
+    const stored = await UserModel.findOne({ email: CREDS.email })
+    expect(stored?.locale).toBeUndefined()
   })
 
-  it('stores the browser-detected locale the client sends', async () => {
+  it('stores a locale the visitor explicitly chose before signing up', async () => {
     const res = await request(server)
       .post('/api/auth/register')
       .send({ ...CREDS, locale: 'fr' })
@@ -95,15 +101,22 @@ describe('user.setLocale', () => {
     expect(stored?.locale).toBe('ru')
   })
 
+  it('clears the stored locale back to the browser default', async () => {
+    await act(token, 'user.setLocale', { locale: 'ru' })
+    const res = await act(token, 'user.setLocale', { locale: null })
+    expect(res.status).toBe(200)
+    expect(res.body.locale).toBeUndefined()
+
+    const stored = await UserModel.findOne({ email: CREDS.email })
+    expect(stored?.locale).toBeUndefined()
+  })
+
   it('rejects an unsupported locale, and a missing one', async () => {
     expect((await act(token, 'user.setLocale', { locale: 'de' })).status).toBe(
       400,
     )
-    // Unlike the lecturing language there is nothing to clear back to,
-    // so null is not a valid value either
-    expect((await act(token, 'user.setLocale', { locale: null })).status).toBe(
-      400,
-    )
+    // null clears, but the field itself is still required — an empty
+    // body is a malformed call, not a request to clear
     expect((await act(token, 'user.setLocale')).status).toBe(400)
   })
 
@@ -133,8 +146,9 @@ describe('user.setLocale', () => {
     const entries = await SettingsChangeLogModel.find({ entityType: 'user' })
     expect(entries).toHaveLength(1)
     expect(entries[0]?.actorRole).toBe('owner')
+    // The account had no stored locale, so the change starts from unset
     expect(entries[0]?.changes).toEqual({
-      locale: { from: 'en', to: 'zh' },
+      locale: { from: null, to: 'zh' },
     })
   })
 })

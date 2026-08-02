@@ -116,16 +116,16 @@ export const userSetLanguage = defineAction<UserSetLanguageInput, SafeUser>({
 
 registerAction(userSetLanguage)
 
-/** Interface language (TECH-12). Mirrors userSetLanguage, but is not
- * nullable: an account always has a locale, so there is nothing to clear
- * back to. */
+/** Interface language (TECH-12). Mirrors userSetLanguage: nothing is
+ * stored until a language is explicitly chosen, and null clears the
+ * choice so the interface follows the browser again. */
 export const userSetLocale = defineAction<UserSetLocaleInput, SafeUser>({
   name: 'user.setLocale',
-  input: z.object({ locale: z.enum(LOCALES) }),
+  input: z.object({ locale: z.enum(LOCALES).nullable() }),
   execute: async (ctx, input) => {
     const user = await loadSelf(ctx.userId)
     const before = userSettingsSnapshot(user)
-    user.locale = input.locale
+    user.locale = input.locale ?? undefined
     await user.save()
     await recordSelfChange(user, before)
     return toUserDto(user)

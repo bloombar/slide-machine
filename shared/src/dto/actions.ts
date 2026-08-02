@@ -193,10 +193,10 @@ export interface UserSetLanguageInput {
   language: Locale | null
 }
 
-/** Interface language (TECH-12). Unlike `language` there is nothing to
- * inherit, so this is never null — an account always has a locale. */
+/** Interface language (TECH-12). Like `language`, null clears the stored
+ * preference so the interface follows the browser again. */
 export interface UserSetLocaleInput {
-  locale: Locale
+  locale: Locale | null
 }
 
 /** Lecture-level language; null re-inherits project/profile/browser. */

@@ -76,7 +76,7 @@ Standard "forgot password" flow: time-limited, single-use reset link sent by ema
 
 #### AUTH-5 Profile & ownership
 
-Each user has a profile (display name, bio, avatar, **preferred locale**) and owns their projects, decks, and templates. The preferred locale drives the UI language ([TECH-12](#tech-12-internationalization-i18n--localization)). Authorization enforces that users may only modify their own resources (except admins — [§20](#20-administration-operations--moderation), whose authorization comes from the allowlist, not ownership).
+Each user has a profile (display name, bio, avatar, **preferred locale**) and owns their projects, decks, and templates. The preferred locale drives the UI language ([TECH-12](#tech-12-internationalization-i18n--localization)); it is stored only once the user picks one, and the browser's language decides until then. Authorization enforces that users may only modify their own resources (except admins — [§20](#20-administration-operations--moderation), whose authorization comes from the allowlist, not ownership).
 
 ### 5. Plans, Billing & Usage Limits
 
@@ -742,7 +742,7 @@ The application UI is fully internationalized — no hardcoded user-facing strin
 
 - **Supported locales** at launch: **English (`en`), French (`fr`), Spanish (`es`), Russian (`ru`), and Mandarin Chinese (`zh`)**. All five are left-to-right; the i18n layer should not preclude adding a right-to-left locale later (use logical CSS properties and a per-document `dir`).
 - **Implementation** — an i18n library (e.g., **react-i18next** / FormatJS with **ICU message format**) with one resource bundle per locale; pluralization and date/number/currency formatting via the `Intl` API. Adding a locale is a resource-bundle addition, not a code change.
-- **Locale selection** — detected from the browser (`Accept-Language`) on first visit, overridable by an in-app language switcher, and **persisted to the user profile** (`User.locale`, AUTH-5).
+- **Locale selection** — detected from the browser on every visit and matched against the locales supported at that moment, falling back to English when none is; overridable by an in-app language switcher, whose choice is **persisted to the user profile** (`User.locale`, AUTH-5). Nothing is stored until a language is explicitly chosen, and the switcher's default option clears it again — so an account that never chose one keeps following its browser, and a newly supported locale reaches those accounts without a migration.
 - **Scope boundary** — i18n localizes the application UI/chrome only and does **not** automatically translate slide/quiz content. Translating **slide content** is a separate, explicit, on-demand **post-lecture viewing** feature ([SHARE-2](#share-2-post-lecture-translated-viewing)); live/real-time translated generation remains out of scope ([§2.2](#22-non-goals), [§18](#18-future-work)).
 - **Relationship to speech/generation** — the STT language ([CAP-3](#cap-3-speech-to-text-transcription)) and the language the generator is asked to produce ([GEN-1](#gen-1-speech-to-slide-generation)) default to the user's locale but remain independently selectable, so an instructor can run the UI in one language while lecturing/generating in another.
 - **Testing** — locale resource-bundle completeness is checked in CI, and at least one non-English locale is exercised in the Playwright e2e suite ([TECH-7](#tech-7-testing--coverage)).

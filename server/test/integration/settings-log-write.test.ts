@@ -161,7 +161,8 @@ describe('account settings', () => {
     expect(entry.ownerId).toBe(adaId)
     expect(entry.changes).toEqual({
       displayName: { from: 'ada', to: 'Ada L' },
-      locale: { from: 'en', to: 'fr' },
+      // The account had no stored locale — it followed the browser
+      locale: { from: null, to: 'fr' },
     })
     expect(await AdminActionLogModel.countDocuments()).toBe(1)
   })

@@ -18,6 +18,11 @@
  * the word they already know, so the English gloss `LOCALE_LABELS`
  * carries adds length without adding a way in. The gloss remains on the
  * account settings select.
+ *
+ * The first entry is the default — no stored choice, the browser's
+ * language decides — and it is what stays checked until a visitor picks
+ * a language themselves. The trigger still names the language actually
+ * on screen, since that is what the reader is looking at.
  */
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -27,7 +32,7 @@ import { ShellActions } from '../components/layout/ShellActions'
 import { useLocale } from './useLocale'
 
 export default function NavLocaleSwitcher() {
-  const { locale, setLocale } = useLocale()
+  const { locale, preference, setLocale } = useLocale()
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -49,7 +54,7 @@ export default function NavLocaleSwitcher() {
     }
   }, [open])
 
-  const choose = (next: Locale) => {
+  const choose = (next: Locale | null) => {
     setLocale(next)
     setOpen(false)
   }
@@ -79,10 +84,27 @@ export default function NavLocaleSwitcher() {
           <div
             role="menu"
             aria-label={t('profile.interfaceLanguage')}
-            className="absolute top-full end-0 z-50 mt-1 w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-lg"
+            className="absolute top-full end-0 z-50 mt-1 w-56 rounded-lg border border-slate-200 bg-white p-1 shadow-lg"
           >
+            <button
+              role="menuitemradio"
+              aria-checked={preference === null}
+              onClick={() => choose(null)}
+              className={`flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-start text-sm hover:bg-slate-100 ${
+                preference === null
+                  ? 'font-medium text-indigo-600'
+                  : 'text-slate-700'
+              }`}
+            >
+              {t('language.inherit', {
+                source: t('profile.interfaceLanguageDefault', { own: true }),
+              })}
+              {preference === null && (
+                <Check className="h-4 w-4 shrink-0" aria-hidden />
+              )}
+            </button>
             {LOCALES.map(option => {
-              const active = option === locale
+              const active = option === preference
               return (
                 <button
                   key={option}

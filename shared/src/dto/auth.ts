@@ -11,9 +11,10 @@ export interface RegisterRequest {
   email: string
   password: string
   displayName: string
-  /** Interface language detected in the browser at sign-up (TECH-12), so
-   * the first visit's guess persists instead of being re-made. Absent
-   * leaves the account on the schema default. */
+  /** Interface language the visitor explicitly picked before signing up
+   * (TECH-12), so the choice carries onto the new account. A merely
+   * detected language is NOT sent: absent means "follow the browser",
+   * which is re-resolved on every visit. */
   locale?: Locale
 }
 

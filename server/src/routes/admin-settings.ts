@@ -49,7 +49,7 @@ const userSettingsSchema = z.strictObject({
   // Empty clears the bio (there is nothing to inherit at this level)
   bio: z.string().trim().max(2000).optional(),
   profileVisibility: z.enum(['public', 'private']).optional(),
-  locale: z.enum(LOCALES).optional(),
+  locale: locale(),
   language: locale(),
 })
 
@@ -84,8 +84,8 @@ adminSettingsRouter.patch('/users/:id', async (req, res) => {
   if (input.profileVisibility !== undefined) {
     user.profileVisibility = input.profileVisibility
   }
-  if (input.locale !== undefined) user.locale = input.locale
   // null clears back to the browser default (stores nothing)
+  if (input.locale !== undefined) user.locale = input.locale ?? undefined
   if (input.language !== undefined) user.language = input.language ?? undefined
   const after = userSettingsSnapshot(user)
   const changes = diffSettings(before, after)

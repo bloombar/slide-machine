@@ -10,7 +10,8 @@ import { MemoryRouter, Routes, Route } from 'react-router'
 import { AuthProvider } from '../auth/AuthContext'
 import { setAccessToken } from '../auth/token'
 import { mockFetchRoutes } from '../test/fetch-mock'
-import { changeLocale } from './index'
+import { applyLocale } from './index'
+import { LOCALE_STORAGE_KEY } from './detect'
 import { ShellActionsProvider } from '../components/layout/ShellActions'
 import PublicShell from '../components/layout/PublicShell'
 import LandingPage from '../pages/LandingPage'
@@ -32,7 +33,7 @@ afterEach(async () => {
   vi.unstubAllGlobals()
   // The i18next instance is a module singleton: a test that switches
   // language would otherwise hand French to the next one
-  await changeLocale('en')
+  await applyLocale('en')
 })
 
 describe('NavLocaleSwitcher', () => {
@@ -52,12 +53,63 @@ describe('NavLocaleSwitcher', () => {
       </MemoryRouter>,
     )
 
-    // Every supported locale, so a visitor can reach their own language
+    // The default, then every supported locale, so a visitor can reach
+    // their own language
     fireEvent.click(await screen.findByRole('button', SWITCHER))
     // Each named in itself, with no English gloss
     expect(
       screen.getAllByRole('menuitemradio').map(i => i.textContent),
-    ).toEqual(['English', 'Français', 'Español', 'Русский', '中文'])
+    ).toEqual([
+      "Default — your browser's language",
+      'English',
+      'Français',
+      'Español',
+      'Русский',
+      '中文',
+    ])
+  })
+
+  it('starts on the default, and returns to it when picked again', async () => {
+    anonymous()
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    const trigger = await screen.findByRole('button', SWITCHER)
+    fireEvent.click(trigger)
+    // Nothing has been chosen, so it is the default that is checked —
+    // even though English is what the browser resolved to and is showing
+    const defaultItem = () =>
+      screen.getByRole('menuitemradio', {
+        name: "Default — your browser's language",
+      })
+    expect(defaultItem()).toBeChecked()
+    expect(
+      screen.getByRole('menuitemradio', { name: 'English' }),
+    ).not.toBeChecked()
+
+    // Each switch has to land before the next one: the bundle load is
+    // async, and a second switch started mid-flight would be overtaken
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Français' }))
+    await vi.waitFor(() => expect(trigger).toHaveTextContent('Français'))
+    expect(localStorage.getItem(LOCALE_STORAGE_KEY)).toBe('fr')
+
+    // Back to the default: the choice is forgotten, and the browser's
+    // language decides again
+    fireEvent.click(trigger)
+    fireEvent.click(
+      screen.getByRole('menuitemradio', { name: /votre navigateur/ }),
+    )
+    await vi.waitFor(() => expect(trigger).toHaveTextContent('English'))
+    expect(localStorage.getItem(LOCALE_STORAGE_KEY)).toBeNull()
+    fireEvent.click(trigger)
+    expect(defaultItem()).toBeChecked()
   })
 
   it('labels itself with the chosen language, by its native name', async () => {

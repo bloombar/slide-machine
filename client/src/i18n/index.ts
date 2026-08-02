@@ -14,7 +14,7 @@ import { initReactI18next } from 'react-i18next'
 import { LOCALES, type Locale } from '@slide-machine/shared'
 import en from './locales/en.json'
 import { applyDocumentLocale } from './document'
-import { resolveInitialLocale, storeLocale } from './detect'
+import { clearStoredLocale, resolveInitialLocale, storeLocale } from './detect'
 
 /** The app has one namespace; keys are grouped by dotted prefix instead. */
 export const DEFAULT_NS = 'translation'
@@ -71,14 +71,26 @@ export const initI18n = async (locale?: Locale): Promise<void> => {
 }
 
 /**
- * Switches the interface language and remembers it for the next visit's
- * pre-auth paint. Persisting to the account is the caller's job — see
- * useLocale, which also dispatches `user.setLocale` when signed in.
+ * Shows the app in a locale, without touching what is remembered. For
+ * applying a locale that was not just chosen — the account's stored
+ * preference on sign-in, or the browser's language absent one.
  */
-export const changeLocale = async (locale: Locale): Promise<void> => {
-  storeLocale(locale)
+export const applyLocale = async (locale: Locale): Promise<void> => {
   if (i18n.language !== locale) await i18n.changeLanguage(locale)
   applyDocumentLocale(locale)
+}
+
+/**
+ * Records an explicit choice and applies it: a locale is remembered for
+ * the next visit's pre-auth paint, null forgets the choice and hands the
+ * interface back to the browser's language. Persisting to the account is
+ * the caller's job — see useLocale, which also dispatches
+ * `user.setLocale` when signed in.
+ */
+export const changeLocale = async (locale: Locale | null): Promise<void> => {
+  if (locale) storeLocale(locale)
+  else clearStoredLocale()
+  await applyLocale(locale ?? resolveInitialLocale())
 }
 
 /** Narrows any BCP-47 tag i18next reports to a supported locale. */

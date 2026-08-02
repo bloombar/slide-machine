@@ -93,6 +93,7 @@
     "displayNameRequired": "Укажите отображаемое имя.",
     "interfaceLanguage": "Язык интерфейса",
     "interfaceLanguageHint": "Меню, кнопки и сообщения отображаются на этом языке.",
+    "interfaceLanguageDefault": "{own, select, true {язык вашего браузера} other {язык браузера этого пользователя}}",
     "lectureLanguage": "Язык лекции",
     "lectureLanguageHint": "Распознавание речи и генерация слайдов используют этот язык. Проекты и лекции могут переопределить его.",
     "lectureLanguageDefault": "{own, select, true {язык вашего интерфейса} other {язык интерфейса этого пользователя}}",
@@ -259,6 +260,36 @@
       "fresh": "Fresh",
       "pro": "Pro",
       "max": "Max"
+    },
+    "change": "Сменить тариф",
+    "feature": {
+      "liveCapture": "Слайды создаются вживую, пока вы говорите",
+      "voiceControl": "Голосовые команды",
+      "whiteboard": "Пометки на доске",
+      "editing": "Редактирование слайдов и озвучки",
+      "templates": "Шаблоны и макеты",
+      "refine": "Доработка после лекции",
+      "quizzes": "Итоговые тесты",
+      "sharing": "Доступ и совместная работа"
+    },
+    "pricing": {
+      "title": "Тарифы",
+      "subtitle": "Все возможности доступны на любом тарифе. Различается только объём, который можно использовать.",
+      "back": "Назад к вашему тарифу",
+      "tableCaption": "Возможности и лимиты по тарифам",
+      "featureColumn": "Возможность",
+      "features": "На всех тарифах",
+      "included": "Включено",
+      "notIncluded": "Не включено",
+      "unlimited": "Без ограничений",
+      "currentPlan": "Ваш тариф",
+      "audioRetention": "Хранение записей",
+      "retentionDays": "{count, plural, one {# день} few {# дня} many {# дней} other {# дня}}",
+      "retentionUnlimited": "Хранятся бессрочно",
+      "changeHint": "Переход на меньший тариф или отмена — в портале оплаты.",
+      "errors": {
+        "load": "Не удалось загрузить тарифы"
+      }
     }
   },
   "billing": {
