@@ -17,6 +17,7 @@ import { seedAssetsRouter } from './routes/seed-assets'
 import { slidesRouter } from './routes/slides'
 import { filesRouter } from './routes/files'
 import { ttsRouter } from './routes/tts'
+import { billingRouter, WEBHOOK_PATH } from './routes/billing'
 import { errorHandler } from './middleware/error'
 import { serveSpa } from './static'
 import './actions/system'
@@ -30,6 +31,7 @@ import './actions/user'
 import './actions/seed-asset'
 import './actions/quiz'
 import './actions/export'
+import './actions/billing'
 import './providers/mock-generation'
 import './providers/gemini-generation'
 import './providers/mock-quiz'
@@ -45,6 +47,10 @@ import './billing/stripe'
 
 export const createApp = (): Express => {
   const app = express()
+  // Ahead of the JSON parser, and only for this path: webhook signatures are
+  // computed over the exact bytes the provider sent, so the body has to reach
+  // the adapter unparsed (BILL-2). Everything else gets JSON as usual.
+  app.use(`/api${WEBHOOK_PATH}`, express.raw({ type: '*/*', limit: '1mb' }))
   app.use(express.json())
   app.use(cookieParser())
 
@@ -61,6 +67,7 @@ export const createApp = (): Express => {
   api.use(slidesRouter)
   api.use(filesRouter)
   api.use(ttsRouter)
+  api.use(billingRouter)
   app.use('/api', api)
 
   if (env.NODE_ENV === 'production') {

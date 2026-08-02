@@ -26,7 +26,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react'
-import { Navigate, useNavigate, useParams } from 'react-router'
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import {
   LOCALES,
@@ -46,6 +46,7 @@ import AdminEditNotice from '../components/AdminEditNotice'
 import ConfirmDialog from '../components/ConfirmDialog'
 import LanguageSelect from '../components/LanguageSelect'
 import UsagePanel from '../components/UsagePanel'
+import BillingPanel from '../components/BillingPanel'
 
 /** One settings change, as the account itself holds it: an absent
  * `language` means "unchanged", an explicit `undefined` one means
@@ -118,7 +119,21 @@ export default function AccountSettingsPage() {
   // the question.
   const [confirmed, setConfirmed] = useState(false)
 
-  const [tab, setTab] = useState<SettingsTab>('general')
+  // The tab is in the URL so it can be linked and returned to: the billing
+  // provider sends the browser back here after checkout (BILL-2), and landing
+  // on General would hide the very thing the user just paid for.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedTab = searchParams.get('tab')
+  const tab: SettingsTab = TABS.includes(requestedTab as SettingsTab)
+    ? (requestedTab as SettingsTab)
+    : 'general'
+  const setTab = (next: SettingsTab) => {
+    const params = new URLSearchParams(searchParams)
+    params.set('tab', next)
+    // Replace, so a run along the tab strip does not fill the back button
+    // with steps that all look like the same page.
+    setSearchParams(params, { replace: true })
+  }
   const tabRefs = useRef(new Map<SettingsTab, HTMLButtonElement>())
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [edits, setEdits] = useState<ProfileEdits>({})
@@ -522,6 +537,16 @@ export default function AccountSettingsPage() {
                     })}
                   </span>
                 </p>
+
+                {/* Subscription state and the way to change it (BILL-2).
+                    Owner-only for the same reason as usage below: it reports
+                    the *caller's* own billing, and an admin looking at
+                    someone else's account would be shown their own. */}
+                {!adminUserId && (
+                  <div className="mt-4">
+                    <BillingPanel />
+                  </div>
+                )}
               </Section>
 
               {/* Usage against the plan's caps (BILL-4). Owner-only: the

@@ -46,17 +46,16 @@ test('registering keeps the detected locale, and a switch persists', async ({
     page.getByRole('heading', { name: `Bienvenue, ${displayName}` }),
   ).toBeVisible()
 
-  // Switch to English from the account settings on the profile page
+  // Switch to English from the account settings page, reached from the
+  // profile
   await page.getByRole('button', { name: 'Menu' }).click()
   await page.getByRole('menuitem', { name: 'Profil' }).click()
-  await page.getByRole('button', { name: 'Paramètres' }).click()
+  await page.getByRole('link', { name: 'Paramètres' }).click()
   await page.getByLabel("Langue de l'interface").first().selectOption('en')
 
-  // The app re-renders in English straight away
-  await expect(
-    page.getByRole('button', { name: 'Close settings' }),
-  ).toBeVisible()
-  await page.getByRole('button', { name: 'Close settings' }).click()
+  // The app re-renders in English straight away — the page's own heading is
+  // the proof, since it is translated from the same bundle.
+  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()
 
   // …and it stuck to the account, not just this page: a reload re-detects
   // from the same French browser and still comes back English.

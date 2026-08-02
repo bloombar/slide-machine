@@ -31,6 +31,14 @@ export type BillingEventType = (typeof BILLING_EVENT_TYPES)[number]
 export interface SubscriptionSnapshot {
   providerSubscriptionId: string
   billingCustomerId: string
+  /**
+   * The account this subscription belongs to, when the provider can tell us.
+   * Adapters read it back out of whatever metadata they were given at
+   * checkout, so a webhook arriving before any local record exists can still
+   * be attributed. Optional because a provider may not echo it — callers fall
+   * back to matching on the opaque references.
+   */
+  userId?: string
   tier: PlanTier
   status: SubscriptionStatus
   /** ISO-8601 timestamps bounding the current billing period. */

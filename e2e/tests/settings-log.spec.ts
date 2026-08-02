@@ -50,19 +50,20 @@ const rowFor = (page: Page, entityName: string) =>
 
 test.describe.configure({ mode: 'serial' })
 
-/** Opens the account-settings modal on the profile page currently shown.
- * `/app/profile` is retired — it redirects to the signed-in user's own profile
- * — and the account settings live behind that page's Settings button, so they
- * have to be opened rather than navigated to. */
-const openAccountSettings = async (page: Page) => {
-  await page.getByRole('button', { name: 'Settings' }).click()
-  await expect(page.getByLabel('Public profile')).toBeVisible()
+/** Opens a tab of the account settings. Settings is a page with its own URL
+ * rather than a modal, so it is navigated to — which is also why a reload no
+ * longer loses it. */
+const openAccountSettings = async (
+  page: Page,
+  tab: 'general' | 'privacy' = 'general',
+) => {
+  await page.goto(`/app/settings?tab=${tab}`)
+  await expect(page.getByRole('tab', { selected: true })).toBeVisible()
 }
 
 test('a user changes their own account settings', async ({ page }) => {
   await ensureSignedIn(page, user)
-  await page.goto('/app/profile')
-  await openAccountSettings(page)
+  await openAccountSettings(page, 'privacy')
 
   // Turning the public profile off is a settings change of its own. The
   // checkbox is controlled by the saved value, so it only flips once the
@@ -78,17 +79,18 @@ test('a user changes their own account settings', async ({ page }) => {
   const languageSaved = page.waitForResponse(
     res => res.url().includes('user.setLanguage') && res.status() === 200,
   )
-  // Exact: the modal also carries the "Interface language" picker (TECH-12),
-  // which a substring match on "Language" would pick up as well
+  // The lecture language lives on General, beside the interface language
+  // (TECH-12) — hence exact, which a substring match on "Language" would
+  // pick up as well.
+  await openAccountSettings(page, 'general')
   await page.getByLabel('Language', { exact: true }).selectOption('fr')
   await languageSaved
 
-  // The values survive a reload, so they really were stored. The reload drops
-  // the modal with the rest of the page state, so re-open it to read them.
+  // The values survive a reload, so they really were stored.
   await page.reload()
-  await openAccountSettings(page)
-  await expect(page.getByLabel('Public profile')).not.toBeChecked()
   await expect(page.getByLabel('Language', { exact: true })).toHaveValue('fr')
+  await openAccountSettings(page, 'privacy')
+  await expect(page.getByLabel('Public profile')).not.toBeChecked()
 })
 
 test('the same user changes a project setting', async ({ page }) => {

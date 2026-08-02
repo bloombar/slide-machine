@@ -11,11 +11,12 @@ import { defineModel } from './define-model'
 
 export interface SubscriptionDb extends Omit<
   Subscription,
-  'id' | 'userId' | 'currentPeriodStart' | 'currentPeriodEnd'
+  'id' | 'userId' | 'currentPeriodStart' | 'currentPeriodEnd' | 'lastEventAt'
 > {
   userId: Types.ObjectId
   currentPeriodStart: Date
   currentPeriodEnd: Date
+  lastEventAt?: Date
 }
 
 const subscriptionSchema = new Schema<SubscriptionDb>({
@@ -35,6 +36,10 @@ const subscriptionSchema = new Schema<SubscriptionDb>({
   currentPeriodStart: { type: Date, required: true },
   currentPeriodEnd: { type: Date, required: true },
   cancelAtPeriodEnd: { type: Boolean, default: false },
+  // Webhook de-duplication (BILL-2): providers retry, and deliveries can
+  // arrive out of order.
+  lastEventId: { type: String },
+  lastEventAt: { type: Date },
 })
 
 // Reachable from the action graph via the billing layer — see define-model.ts.
@@ -57,4 +62,6 @@ export const toSubscriptionDto = (
   currentPeriodStart: doc.currentPeriodStart.toISOString(),
   currentPeriodEnd: doc.currentPeriodEnd.toISOString(),
   cancelAtPeriodEnd: doc.cancelAtPeriodEnd,
+  lastEventId: doc.lastEventId,
+  lastEventAt: doc.lastEventAt?.toISOString(),
 })

@@ -74,6 +74,9 @@ interface StripeSubscription {
   id?: string
   customer?: string
   status?: string
+  /** Set from `subscription_data[metadata][userId]` at checkout, so every
+   * later webhook names the account without a lookup table. */
+  metadata?: { userId?: string }
   cancel_at_period_end?: boolean
   current_period_start?: number
   current_period_end?: number
@@ -189,6 +192,7 @@ export class StripeBillingProvider implements BillingProvider {
     return {
       providerSubscriptionId: subscription.id ?? '',
       billingCustomerId: subscription.customer ?? '',
+      userId: subscription.metadata?.userId,
       tier: this.tierForPriceId(subscription.items?.data?.[0]?.price?.id),
       status: STATUS_MAP[subscription.status ?? ''] ?? 'canceled',
       currentPeriodStart: period.start,

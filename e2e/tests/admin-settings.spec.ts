@@ -54,6 +54,23 @@ const openSettingsAsAdmin = async (page: Page, label: string) => {
   return modal
 }
 
+/** Opens another user's account settings as an admin. Unlike the project and
+ * lecture sheets above, these are a page rather than a modal — reached by a
+ * link, behind the same audit-log confirmation — so what comes back is the
+ * page itself. */
+const openAccountSettingsAsAdmin = async (page: Page) => {
+  // Exact: this spec's fixture lecture is called "Settings Lecture", whose
+  // link a substring match would also find.
+  await page.getByRole('link', { name: 'Settings', exact: true }).click()
+  const ask = page.getByRole('alertdialog')
+  await expect(ask).toContainText('recorded in the audit log')
+  await ask.getByRole('button', { name: 'Edit settings' }).click()
+  await expect(page.getByText('as an admin')).toBeVisible()
+  // The page body, so callers can assert against it the way they do the
+  // project and lecture modals.
+  return page.getByRole('main')
+}
+
 test.describe.configure({ mode: 'serial' })
 
 test('a user owns a project with a lecture', async ({ request }) => {
@@ -120,14 +137,16 @@ test("the admin edits another user's account settings", async ({ page }) => {
   await page.getByRole('link', { name: owner.email }).click()
   await expect(page).toHaveURL(/\/app\/admin\/users\//)
 
-  // The account's settings live on the owner's own profile page
+  // The account's settings are reached from the owner's own profile page
   await page.getByRole('link', { name: 'View public profile' }).click()
   await expect(page).toHaveURL(/\/u\//)
 
-  const modal = await openSettingsAsAdmin(page, 'Settings')
-  await expect(modal).toContainText(owner.email)
+  const settings = await openAccountSettingsAsAdmin(page)
+  await expect(settings).toContainText(owner.email)
   // Signing out would end the admin's own session, so it is not offered
-  await expect(modal.getByRole('button', { name: /sign out/i })).toHaveCount(0)
+  await expect(settings.getByRole('button', { name: /sign out/i })).toHaveCount(
+    0,
+  )
 
   const saved = page.waitForResponse(
     res =>
@@ -135,14 +154,14 @@ test("the admin edits another user's account settings", async ({ page }) => {
       res.request().method() === 'PATCH' &&
       res.status() === 204,
   )
-  // Exact: the modal also carries the "Interface language" picker (TECH-12),
+  // Exact: the page also carries the "Interface language" picker (TECH-12),
   // which a substring match on "Language" would pick up as well
-  await modal.getByLabel('Language', { exact: true }).selectOption('fr')
+  await settings.getByLabel('Language', { exact: true }).selectOption('fr')
   await saved
 
-  // The value survives a reload, so it really was stored
+  // The value survives a reload, so it really was stored. The reload drops
+  // the admin's confirmation, which stands in front of the page every time.
   await page.reload()
-  await page.getByRole('button', { name: 'Settings' }).click()
   await page.getByRole('button', { name: 'Edit settings' }).click()
   await expect(page.getByLabel('Language', { exact: true })).toHaveValue('fr')
 
