@@ -21,6 +21,8 @@ import { buildSlideAudio, slideAudioWav } from '../lib/slide-audio'
 import { SeedAssetModel } from '../models/seed-asset'
 import { keywordsFromName } from '../seeding/extract'
 import { searchImageCandidates } from '../enrichment/search'
+import { assertUserCapacity } from '../billing/meter-hooks'
+import { runWithUsage } from '../billing/usage-context'
 import { canEditAcl } from '../lib/access'
 import { getStorage } from '../storage'
 
@@ -127,6 +129,11 @@ const compactAttribution = (value: unknown): ImageAttribution | undefined => {
  * slide's picture. An explicit `query` wins; otherwise the AI's own image
  * keywords are used, falling back to the slide title — so results relate
  * to what the slide is about. Sources and credit come from enrichment.
+ *
+ * Costs one `imageLookups` unit, the same as an automatic enrichment (BILL-3):
+ * the searcher does the same work either way. Unlike enrichment this one is
+ * refused outright when the allowance is gone (402), because the person asking
+ * is sitting in front of the picker waiting for results.
  */
 slidesRouter.post(
   '/slides/:slideId/image-candidates',
@@ -152,7 +159,18 @@ slidesRouter.post(
         ? slide.imageKeywords
         : [slide.title].filter((t): t is string => Boolean(t))
 
-    const candidates = await searchImageCandidates(keywords)
+    // requireAuth has already established this; the field stays optional on the
+    // request type because unauthenticated routes share the same shape.
+    const payer = req.userId
+    if (!payer) throw new HttpError(401, 'unauthorized', 'Sign in to continue')
+    await assertUserCapacity(
+      payer,
+      'imageLookups',
+      'You have used all of this billing period’s image searches. It resets at the start of your next period.',
+    )
+    const candidates = await runWithUsage(payer, () =>
+      searchImageCandidates(keywords),
+    )
     const dto: ImageSearchCandidate[] = candidates.map(c => ({
       url: c.url,
       title: c.title,

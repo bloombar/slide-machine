@@ -159,24 +159,40 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
   const marksKey = `tts/${hash}.json`
   const storage = getStorage()
 
+  // Whoever asked, the owner's plan pays (BILL-1) — but an owner or editor
+  // preparing the deck draws on a different allowance than someone listening
+  // to it. Decided before the cache is consulted, because a cache hit is still
+  // recorded and has to land on the same metric a miss would have.
+  const actor = canEditAcl(acl, req.userId) ? 'author' : 'audience'
+  // Premium only when the premium voice is really the one being sent: a voice
+  // whose language does not match the lecture's is dropped in favour of the
+  // provider's own default, which is a standard one.
+  const premium = voiceName !== undefined && voice?.tier === 'premium'
+
   // Cache hit → serve the stored audio + its marks sidecar; no synthesis. Marks
   // derive purely from (text, voice), so they cache alongside the audio and are
   // never invalidated by whiteboard edits.
   if (await storage.get(storageKey)) {
     const marksBuf = await storage.get(marksKey)
     const marks: TtsMark[] = marksBuf ? JSON.parse(marksBuf.toString()) : []
+    // Recorded, never debited (BILL-3). Serving stored audio costs nothing, but
+    // the playback still happened — and the count of students who listened is
+    // the denominator of every per-student average (BILL-7). Zero units, not a
+    // character count: on the narrate path the synthesized text is precisely
+    // what a cache hit avoids producing, so no honest quantity is available
+    // here. The ledger will need one; the row that says "this happened" does
+    // not.
+    //
+    // No owner lookup, unlike the miss path below: this is the hot path, and a
+    // row against a since-deleted owner is harmless when it is never debited.
+    await recordUsage(acl.ownerId, ttsMetricFor(actor, premium), 0, {
+      billable: false,
+    })
     return res.json({ url: storage.publicUrl(storageKey), marks })
   }
 
   // Cache miss: this call will spend money, so the owner's allowance decides
-  // whether it happens. Whoever asked, the owner's plan pays (BILL-1) — but an
-  // owner or editor preparing the deck draws on a different allowance than
-  // someone listening to it.
-  const actor = canEditAcl(acl, req.userId) ? 'author' : 'audience'
-  // Premium only when the premium voice is really the one being sent: a voice
-  // whose language does not match the lecture's is dropped in favour of the
-  // provider's own default, which is a standard one.
-  const premium = voiceName !== undefined && voice?.tier === 'premium'
+  // whether it happens.
   const owner = await UserModel.findById(acl.ownerId)
     .select('planTier')
     .catch(() => null)

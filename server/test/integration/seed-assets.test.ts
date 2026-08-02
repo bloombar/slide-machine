@@ -30,6 +30,13 @@ import { DeckModel } from '../../src/models/deck'
 import { SlideModel } from '../../src/models/slide'
 import { SeedAssetModel } from '../../src/models/seed-asset'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
+import { UsageRecordModel } from '../../src/models/usage-record'
+import {
+  BYTES_PER_MB,
+  capFor,
+  recordUsage,
+  usedThisPeriod,
+} from '../../src/billing/usage'
 
 // One long-lived server per file: supertest's default per-request
 // ephemeral servers intermittently lost requests to localhost port
@@ -167,6 +174,7 @@ beforeEach(async () => {
     SlideModel.deleteMany({}),
     SeedAssetModel.deleteMany({}),
     RefreshTokenModel.deleteMany({}),
+    UsageRecordModel.deleteMany({}),
   ])
   ada = await registerUser('ada@example.com')
   byron = await registerUser('byron@example.com')
@@ -498,5 +506,57 @@ describe('generation integration', () => {
     } finally {
       provider.generateSlideContent = original
     }
+  })
+})
+
+/**
+ * Import metering (BILL-3): uploaded seed material spends the `importMb`
+ * allowance, charged to the uploader before the bytes are stored.
+ */
+describe('seed upload metering', () => {
+  const adaId = async () =>
+    (await UserModel.findOne({ email: 'ada@example.com' }))!._id.toString()
+
+  it('charges the uploaded file’s size in megabytes', async () => {
+    const body = Buffer.alloc(256 * 1024, 3)
+
+    const res = await uploadFile(
+      ada,
+      { projectId },
+      { name: 'notes.png', type: 'image/png', body },
+    )
+
+    expect(res.status).toBe(201)
+    expect(await usedThisPeriod(await adaId(), 'importMb')).toBeCloseTo(
+      body.length / BYTES_PER_MB,
+      9,
+    )
+  })
+
+  it('402s once the allowance is spent, storing nothing', async () => {
+    await recordUsage(await adaId(), 'importMb', capFor('free', 'importMb')!)
+
+    const res = await uploadFile(
+      ada,
+      { projectId },
+      { name: 'notes.png', type: 'image/png', body: PNG },
+    )
+
+    expect(res.status).toBe(402)
+    expect(res.body.error.details).toEqual(['importMb'])
+    // Refused before the asset record and the blob were written, so an
+    // exhausted allowance costs neither storage nor an extraction pass.
+    expect(await SeedAssetModel.countDocuments()).toBe(0)
+  })
+
+  it('charges nothing for a file type it refuses', async () => {
+    const res = await uploadFile(
+      ada,
+      { projectId },
+      { name: 'notes.txt', type: 'text/plain', body: Buffer.from('hello') },
+    )
+
+    expect(res.status).toBe(400)
+    expect(await usedThisPeriod(await adaId(), 'importMb')).toBe(0)
   })
 })

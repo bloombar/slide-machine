@@ -16,6 +16,8 @@ import { ProjectModel, projectAcl } from '../models/project'
 import { DeckModel, loadDeckAcl } from '../models/deck'
 import { canEditAcl } from '../lib/access'
 import { SeedAssetModel, toSeedAssetDto } from '../models/seed-asset'
+import { assertUserCapacity } from '../billing/meter-hooks'
+import { BYTES_PER_MB, recordUsage } from '../billing/usage'
 import { getStorage } from '../storage'
 import { processSeedAsset, keywordsFromName } from '../seeding/extract'
 
@@ -67,6 +69,19 @@ seedAssetsRouter.post(
       if (!project || !canEditAcl(projectAcl(project), req.userId))
         throw forbidden
     }
+
+    // Charged before the bytes are stored and extracted, so an exhausted
+    // allowance costs neither storage nor an extraction pass (BILL-4). The
+    // uploader pays rather than the project's owner: they chose to spend it,
+    // and it is the same account the extraction's AI tokens are charged to.
+    const payer = req.userId
+    if (!payer) throw new HttpError(401, 'unauthorized', 'Sign in to continue')
+    await assertUserCapacity(
+      payer,
+      'importMb',
+      'You have used all of this billing period’s import allowance. It resets at the start of your next period.',
+    )
+    await recordUsage(payer, 'importMb', file.size / BYTES_PER_MB)
 
     const name = file.originalname || 'upload'
     const asset = await SeedAssetModel.create({

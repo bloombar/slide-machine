@@ -41,7 +41,8 @@ import type {
 import { remapDrawingAnchors } from './remap-drawings'
 import { applySlideTranscript } from '../lib/slide-transcript'
 import { defineAction } from './define'
-import { requireAiTokens } from '../billing/meter-hooks'
+import { requireAiTokens, assertUserCapacity } from '../billing/meter-hooks'
+import { currentUsageUser, meterUsage } from '../billing/usage-context'
 import { registerAction, ActionForbiddenError } from './dispatch'
 import { loadEditableDeck } from './deck'
 import { env } from '../config/env'
@@ -198,6 +199,12 @@ const cacheDiarization = async (
  * diarization costs the same per minute as capturing the lecture live, and
  * per-slide speaker identification calls this once per slide: on a 45-slide
  * lecture the uncached path submitted 45 full recordings.
+ *
+ * Minutes submitted count against `diarizationMinutes` (BILL-3), charged to
+ * whoever's action this is — the same ambient attribution the AI tokens spent
+ * in the surrounding reconcile use. Diarization is never audience-triggered
+ * (every path into it needs edit rights), so the "the deck owner pays" rule
+ * that governs viewer-caused work does not apply here.
  */
 const diarizeDeckRecordings = async (
   deck: DeckDoc,
@@ -209,6 +216,9 @@ const diarizeDeckRecordings = async (
     : all
   if (!recordings.length) return { sessionsProcessed: 0, segmentsTagged: 0 }
 
+  // Absent outside a dispatched action (a background sweep, a seed script):
+  // nobody asked for the work, so nobody's allowance pays for it.
+  const payer = currentUsageUser()
   const provider = registry.get<DiarizationProvider>('diarization')
   const segments = await TranscriptSegmentModel.find({ deckId: deck._id })
 
@@ -225,12 +235,36 @@ const diarizeDeckRecordings = async (
       rec.diarizedBy === provider.name && rec.diarization?.length
         ? rec.diarization
         : undefined
+
+    const minutes = rec.durationMs / 60_000
+    if (cached) {
+      // Recorded, never debited: re-tagging from stored intervals submits no
+      // audio, but the pass still happened and the user is still active on this
+      // metric (BILL-3).
+      await meterUsage('diarizationMinutes', minutes, { billable: false })
+    } else if (payer) {
+      // Checked before the audio is submitted, so an exhausted allowance costs
+      // nothing at all. Per recording rather than once for the deck: a lecture
+      // with several recordings should stop at the cap, not sail past it.
+      await assertUserCapacity(
+        payer,
+        'diarizationMinutes',
+        'You have used all of this billing period’s speaker identification. It resets at the start of your next period.',
+      )
+    }
+
     const diarized =
       cached ??
       (await provider.diarize({
         audioKey: rec.audioKey,
         sampleRate: rec.sampleRate,
       }))
+    // Metered on a result, not on the attempt: the adapter returns [] without
+    // submitting anything when the audio or the staging bucket is missing, and
+    // an unconfigured deployment must not bill for work it never sent.
+    if (!cached && diarized.length) {
+      await meterUsage('diarizationMinutes', minutes)
+    }
     if (!diarized.length) continue
     if (!cached)
       await cacheDiarization(deck, rec.sessionId, diarized, provider.name)

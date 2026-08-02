@@ -23,6 +23,9 @@ import {
   ActionValidationError,
 } from './dispatch'
 import type { ActionContext } from './context'
+import { requireImportVolume } from '../billing/meter-hooks'
+import { meterUsage } from '../billing/usage-context'
+import { BYTES_PER_MB } from '../billing/usage'
 import { parseDeckImport, type ImportedDeck } from '../lib/deck-import'
 import { permalinkSlug } from '../lib/slug'
 import { getBuiltinTemplate } from '../templates/builtin'
@@ -105,6 +108,7 @@ export const deckImport = defineAction<
   DeckImportResult
 >({
   name: 'deck.import',
+  meter: requireImportVolume,
   input: z.object({
     projectId: z.string().min(1),
     content: z.string().min(1),
@@ -172,6 +176,15 @@ export const deckImport = defineAction<
       await deleteDeckCascade(deck).catch(() => {})
       throw err
     }
+
+    // Charged once the lecture is committed (BILL-3): a paste that did not
+    // parse, and an import rolled back mid-write, both leave nothing behind and
+    // so spend nothing. Byte length, not character count — the metric is
+    // volume, and non-ASCII lecture titles are multi-byte.
+    await meterUsage(
+      'importMb',
+      Buffer.byteLength(input.content, 'utf8') / BYTES_PER_MB,
+    )
 
     const acl = resolveDeckAcl(deck, project)
     return { deck: toDeckDto(deck, acl), warnings: settings.warnings }
