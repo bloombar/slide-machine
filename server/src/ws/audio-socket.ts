@@ -27,6 +27,8 @@ import {
 import { DeckModel, loadDeckAcl } from '../models/deck'
 import { canEditAcl } from '../lib/access'
 import { pcmBytesDurationMs } from '../lib/wav'
+import { recordUsage } from '../billing/usage'
+import { usedFractionOf, userHasCapacity } from '../billing/meter-hooks'
 import {
   canStartRetention,
   releaseRetentionBytes,
@@ -53,6 +55,16 @@ const maxRetainedBytes = (): number =>
  * — briefly, and boundedly: a slow database must degrade retention, not the
  * process. ~11 s of 24 kHz audio. */
 const MAX_PENDING_BYTES = 512 * 1024
+
+/** LINEAR16 mono: two bytes per sample. */
+const BYTES_PER_SAMPLE = 2
+/** Sample rate assumed when the client does not declare one. */
+const DEFAULT_SAMPLE_RATE = 16_000
+/** Audio between usage settles — the ceiling on how far a session can overrun
+ * its cap before it is stopped. */
+const SETTLE_SECONDS = 30
+/** Share of the transcription allowance that triggers the one-time warning. */
+const WARN_AT = 0.8
 
 /** First control message the client sends before any audio. */
 interface StartMessage {
@@ -122,6 +134,14 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
   // Audio retention (GEN-4 Phase 2): populated on `start` when enabled and the
   // client named a deck + session; audio is buffered and flushed on close.
   let retain: Retention | null = null
+  // Cloud-transcription metering (BILL-3). Counts audio handed to the
+  // recognizer — which is what the vendor bills for — independently of
+  // retention, since a session can transcribe without keeping any audio.
+  let sttBytes = 0
+  let sttSampleRate = DEFAULT_SAMPLE_RATE
+  let sttStopped = false
+  // Warned once per session, so a long lecture does not repeat it every settle.
+  let sttWarned = false
 
   const send = (payload: object): void => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(payload))
@@ -268,7 +288,64 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
     }
   }
 
-  const begin = (start: StartMessage): void => {
+  /**
+   * Meters the audio forwarded to the recognizer since the last settle, then
+   * stops the session if that exhausted the allowance (BILL-3).
+   *
+   * Settling periodically rather than only at close is what bounds the
+   * overrun: cloud transcription bills per minute of audio submitted, so a
+   * lecture left running would otherwise spend an unbounded amount before
+   * anyone checked. `final` skips the re-check — the stream is already ending.
+   */
+  const settleStt = async (final = false): Promise<void> => {
+    const bytes = sttBytes
+    if (bytes <= 0) return
+    // Taken before the await so concurrent frames cannot be counted twice.
+    sttBytes = 0
+    const minutes = pcmBytesDurationMs(bytes, sttSampleRate) / 60_000
+    await recordUsage(userId, 'sttMinutes', minutes)
+
+    if (final || sttStopped) return
+
+    // Warn once on the way to the wall, so an instructor can finish the
+    // lecture or upgrade rather than being cut off without notice (BILL-4).
+    if (!sttWarned) {
+      const spent = await usedFractionOf(userId, 'sttMinutes')
+      if (spent !== null && spent >= WARN_AT) {
+        sttWarned = true
+        send({
+          type: 'warning',
+          message:
+            'You have used most of this billing period’s transcription. Recording will stop when it runs out.',
+        })
+      }
+    }
+
+    if (await userHasCapacity(userId, 'sttMinutes')) return
+    sttStopped = true
+    send({
+      type: 'error',
+      message:
+        'You have used all of this billing period’s cloud transcription.',
+    })
+    stream?.end()
+    ws.close()
+  }
+
+  const begin = async (start: StartMessage): Promise<void> => {
+    sttSampleRate = start.sampleRate ?? DEFAULT_SAMPLE_RATE
+    // Checked before the stream opens: an exhausted allowance should cost
+    // nothing at all, not one recognizer session's worth of audio.
+    if (!(await userHasCapacity(userId, 'sttMinutes'))) {
+      send({
+        type: 'error',
+        message:
+          'You have used all of this billing period’s cloud transcription.',
+      })
+      ws.close()
+      return
+    }
+
     let provider: TranscriptionProvider
     try {
       provider = registry.get<TranscriptionProvider>('transcription')
@@ -322,12 +399,22 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
   const finish = (): void => {
     stopped = true
     stream?.end()
+    void settleStt(true)
     void flushRetention()
   }
 
   ws.on('message', (data: Buffer, isBinary: boolean) => {
     if (isBinary) {
       stream?.write(new Uint8Array(data))
+      if (stream) {
+        sttBytes += data.length
+        // Settle every ~30 seconds of audio rather than on every frame: one
+        // upsert per frame would be hundreds of writes a minute for a number
+        // that only has to be roughly live.
+        if (sttBytes >= sttSampleRate * BYTES_PER_SAMPLE * SETTLE_SECONDS) {
+          void settleStt()
+        }
+      }
       // Tee a copy to the retention upload. Nothing accumulates here: frames
       // go straight out, except the few held while the edit check resolves.
       if (retain && !retain.capped) {
@@ -348,7 +435,7 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
     } catch {
       return
     }
-    if (message.type === 'start' && !stream) begin(message as StartMessage)
+    if (message.type === 'start' && !stream) void begin(message as StartMessage)
     else if (message.type === 'stop') finish()
   })
 

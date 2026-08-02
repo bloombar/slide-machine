@@ -954,6 +954,8 @@ export const deckRefineSlideTranscript = defineAction<
   DeckRefineSlideTranscriptResult
 >({
   name: 'deck.refineSlideTranscript',
+  // Rewrites narration with the generation model; it does not re-transcribe.
+  meter: requireAiTokens,
   input: z.object({
     deckId: z.string().min(1),
     slideId: z.string().min(1),

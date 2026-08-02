@@ -14,6 +14,12 @@
  * replays are free and never re-call the paid APIs. View access (not edit) is
  * enough to listen to what a lecture already says. Synthesis is behind the
  * vendor-neutral TtsProvider.
+ *
+ * Synthesis is metered against the **deck owner's** plan, never the caller's
+ * (BILL-1/BILL-3): a listener spends the owner's audience allowance, an owner
+ * or editor spends the authoring one. Only cache misses count — audio that
+ * already exists keeps playing after a cap is reached, so students never lose
+ * access to material that was already paid for.
  */
 import { createHash } from 'node:crypto'
 import { Router } from 'express'
@@ -34,6 +40,10 @@ import { narrateSlide } from '../tts/narrate'
 import { registry } from '../providers/registry'
 import { getStorage } from '../storage'
 import { env } from '../config/env'
+import { UserModel } from '../models/user'
+import { assertTtsCapacity, ttsMetricFor } from '../billing/tts-usage'
+import { recordUsage } from '../billing/usage'
+import { runWithUsage } from '../billing/usage-context'
 
 export const ttsRouter = Router()
 
@@ -158,14 +168,46 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
     return res.json({ url: storage.publicUrl(storageKey), marks })
   }
 
-  const text = await resolveText()
+  // Cache miss: this call will spend money, so the owner's allowance decides
+  // whether it happens. Whoever asked, the owner's plan pays (BILL-1) — but an
+  // owner or editor preparing the deck draws on a different allowance than
+  // someone listening to it.
+  const actor = canEditAcl(acl, req.userId) ? 'author' : 'audience'
+  // Premium only when the premium voice is really the one being sent: a voice
+  // whose language does not match the lecture's is dropped in favour of the
+  // provider's own default, which is a standard one.
+  const premium = voiceName !== undefined && voice?.tier === 'premium'
+  const owner = await UserModel.findById(acl.ownerId)
+    .select('planTier')
+    .catch(() => null)
+  // An ownerless deck is not billable to anyone — its owner's account is gone,
+  // so there is no allowance to check and nothing to debit.
+  if (owner) {
+    await assertTtsCapacity(acl.ownerId, owner.planTier, actor, premium)
+  }
+
+  // Narration of a transcript-less slide calls Gemini, so the owner pays for
+  // those tokens too — the ambient context is how the adapter attributes them.
+  const text = owner
+    ? await runWithUsage(acl.ownerId, resolveText)
+    : await resolveText()
   if (!text.trim()) return res.json({ url: null, marks: [] })
-  const { audio, marks } = await provider.synthesize({
+  const { audio, marks, billedCharacters } = await provider.synthesize({
     text,
     languageCode,
     voiceName,
     gender,
   })
+  // Metered after the fact: only a synthesis that produced audio is charged,
+  // and the adapter reports what it was actually billed for rather than the
+  // caller guessing from the plain text.
+  if (owner) {
+    await recordUsage(
+      acl.ownerId,
+      ttsMetricFor(actor, premium),
+      billedCharacters ?? text.length,
+    )
+  }
   await storage.put(storageKey, Buffer.from(audio), provider.audioMimeType)
   await storage.put(
     marksKey,

@@ -38,6 +38,31 @@ describe('buildMarkedSsml', () => {
     expect(buildMarkedSsml('   ')).toEqual({
       ssml: '<speak></speak>',
       marks: [],
+      billedCharacters: 15,
     })
+  })
+})
+
+/**
+ * Google bills SSML by character *including* its tags, with `<mark>` the one
+ * exception. Getting this wrong bills users for markup they never wrote — or,
+ * worse, silently under-counts what we are actually paying for.
+ */
+describe('buildMarkedSsml billing', () => {
+  it('counts the markup it sends but never the marks', () => {
+    const { ssml, billedCharacters } = buildMarkedSsml('Hello there. Bye now.')
+    const markChars = '<mark name="m0"/>'.length + '<mark name="m1"/>'.length
+    expect(billedCharacters).toBe(ssml.length - markChars)
+    // The wrapper and the phrase-separating spaces are billed, so the count
+    // sits above the plain text it came from.
+    expect(billedCharacters).toBeGreaterThan('Hello there. Bye now.'.length)
+  })
+
+  it('counts an escaped entity at its expanded length', () => {
+    // Same length as plain text, but '&' is sent as '&amp;' — so it costs four
+    // characters more on the invoice than it does on the slide.
+    const plain = buildMarkedSsml('Tom v Jerry.').billedCharacters
+    const escaped = buildMarkedSsml('Tom & Jerry.').billedCharacters
+    expect(escaped).toBe(plain + 4)
   })
 })

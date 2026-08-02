@@ -12,6 +12,8 @@
 import type { TranscriptionProvider } from '@slide-machine/shared'
 import { registry } from '../providers/registry'
 import { env } from '../config/env'
+import { meterUsage } from '../billing/usage-context'
+import { pcmDurationMs } from './wav'
 
 /** How much PCM is handed to the engine per write. */
 const CHUNK_BYTES = 32 * 1024
@@ -62,6 +64,12 @@ export const transcribeAudio = async ({
       if (text) phrases.push(text)
     }
   })()
+
+  // Metered before the audio is sent, and in full: this path runs a finished
+  // clip through the *streaming* recognizer, so it bills at the live per-minute
+  // rate rather than a cheaper batch one, and the whole buffer is submitted
+  // whether or not the engine returns anything (BILL-3).
+  await meterUsage('sttMinutes', pcmDurationMs(pcm, sampleRate) / 60_000)
 
   try {
     for (let at = 0; at < pcm.length; at += CHUNK_BYTES)

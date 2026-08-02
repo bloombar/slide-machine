@@ -82,14 +82,16 @@ Each user has a profile (display name, bio, avatar, **preferred locale**) and ow
 
 #### BILL-1 Subscription tiers
 
-The product offers four subscription tiers, each priced accordingly (exact prices set in configuration — BILL-6):
+The product offers four subscription tiers, each priced accordingly (exact prices set in configuration — BILL-6). **Every tier offers every service; they differ only in how much of each is allowed**, so no cap is ever `0`:
 
-- **Free** — basic level for personal/occasional use; the default tier on registration. Sized to a couple of weeks of one course.
-- **Fresh** — entry paid tier, the step off Free; sized to one course.
-- **Pro** — mid level for professional / regular instructional use; sized to three courses, with higher caps and access to paid-tier features.
-- **Max** — highest tier; the largest usage caps and full feature access. **Every cap is finite** — there is no unlimited tier, because unbounded usage is unbounded cost. Users who outgrow Max are invited to contact us rather than shown an upgrade path that does not exist (BILL-5).
+- **Free** — basic level for personal/occasional use; the default tier on registration. Sized to about two lectures a month.
+- **Fresh** — entry paid tier, the step off Free; sized to about three lectures a month.
+- **Pro** — mid level for professional / regular instructional use; sized to three courses, with substantially higher caps across every service.
+- **Max** — highest tier; the largest usage caps. **Every cap is finite** — there is no unlimited tier, because unbounded usage is unbounded cost. Users who outgrow Max are invited to contact us rather than shown an upgrade path that does not exist (BILL-5).
 
-Each tier defines what features are available and the usage caps that apply to costly services (BILL-3). The main feature boundary is **speech capture**: Free and Fresh transcribe in the browser (keyless and free), while Pro and Max include cloud transcription with word timings, confidence, and retained audio — the single largest cost driver in the product, so it is a paid capability. Premium narration voices, AI imagery, and instructor-initiated translation are likewise Pro-and-above.
+Each tier defines what features are available and the usage caps that apply to costly services (BILL-3). **Speech capture works the same on every tier**: the engine is a deployment-wide choice ([TECH-4](#tech-4-server-configuration) `TRANSCRIPTION_PROVIDER`), not a per-tier one, so all users get whatever that deployment configured — cloud transcription with word timings, confidence, and retained audio, or the keyless browser engine without them. What differs by tier is the **allowance**: cloud transcription is the single largest cost driver in the product, so lower tiers get fewer minutes of it rather than a lesser engine.
+
+**No tier withholds a service.** Every plan — Free included — offers every paid capability: both narration voice tiers, diarization, AI imagery, translation, and the audience allowances. Tiers differ only in how much of each they may use, so no cap is ever `0`. A capability that appears and disappears with the plan has to be explained wherever it might be missing; an allowance that runs out explains itself, and leaves the user with a number they can act on. The cost of the rule is that cheap tiers carry a little of every expensive line, so their allowances are correspondingly small ([docs/BILLING_COST_MODEL.md](BILLING_COST_MODEL.md)).
 
 Per-tier cap values and the arithmetic behind them are in [BILLING_COST_MODEL.md](BILLING_COST_MODEL.md).
 
@@ -104,7 +106,7 @@ Payments and subscription management run through a configured **billing provider
 
 #### BILL-3 Usage caps & metering
 
-Each tier carries **usage caps on AI and other costly services**, metered per billing period and enforced **server-side**. Metrics are **provider-neutral** (`aiTokens`, not `geminiTokens`) so swapping an adapter ([TECH-8](#tech-8-ai-provider-abstraction-layer)) never renames a persisted metric. `null` means unlimited; **`0` means the capability is unavailable on that tier**, which is how paid-only features are gated without a second mechanism.
+Each tier carries **usage caps on AI and other costly services**, metered per billing period and enforced **server-side**. Metrics are **provider-neutral** (`aiTokens`, not `geminiTokens`) so swapping an adapter ([TECH-8](#tech-8-ai-provider-abstraction-layer)) never renames a persisted metric. `null` means unlimited and **`0` means the capability is unavailable on that tier**, but no shipped tier uses `0` — every plan offers every service (BILL-1). The sentinel remains so a deployment can switch a service off entirely, and because "not included" and "used up" must read differently to whoever is blocked.
 
 The metered resources:
 
@@ -128,9 +130,8 @@ Usage is recorded against the user's current period; the user can view remaining
 When a metered cap is reached, the system **fails gracefully**: the costly operation is blocked rather than silently incurring cost, and the user is shown a clear message with an **upgrade** path. Caps reset at the start of each billing period. Higher tiers raise the relevant caps.
 
 - **Hard stop, never overage.** Exceeding a cap returns **HTTP 402** and the operation does not run; usage is never billed beyond the plan. Anything already generated and cached keeps working, so hitting a cap degrades what can be _created_, never what already exists.
-- **Warn before blocking.** Crossing ~80% of a cap raises an in-app warning; exhaustion sends an **email** to the account owner as well, since the person who can act on it is not always the person who hit the wall.
+- **Warn before blocking.** Crossing a cap is never the first the user hears of it; the thresholds, channels, and delivery rules are [BILL-8](#bill-8-cap-notifications-email--in-app).
 - **Students are told least.** When a viewer's request is blocked, they see that the content is unavailable — never the instructor's billing state — and they receive no email: they may be anonymous, and the limit is not theirs to fix. The **instructor** is notified when their audience allowance is exhausted, with counts only and no student identities ([§16](#16-privacy-security--compliance)).
-- **Notifications are idempotent.** One message per (user, metric, period, threshold) — a blocked translation in a 30-student class must not produce 30 emails.
 - **The call to action follows the tier.** Free, Fresh, and Pro see **Upgrade**; Max sees **Contact us**, since no larger plan exists (BILL-5).
 - **Usage is visible before it binds.** A simplified view on the home page shows the metrics that are actually close to their limits; a detailed view in account settings lists every metric with used-versus-cap, the period reset date, and the instructor and audience allowances shown separately.
 
@@ -163,6 +164,20 @@ Operators can see **what the deployment actually costs, and who it is spent on**
 - **Cache efficiency.** Because both billable and cached events are recorded, the cache-hit ratio and the resulting **cost avoided** fall out of the same data — the measure of whether caching is earning its complexity.
 - **Where it appears.** Per-entity panels on the existing admin user, project, and lecture pages, plus deployment-wide averages — cost per user, per lecture, per project, per student, active users and students, and the largest spenders — on an admin overview ([§20](#20-administration-operations--moderation)). Exportable as CSV, like the other admin logs.
 - **Retention.** Raw events are kept for a bounded window with monthly pre-aggregated roll-ups behind them, so queries stay cheap as the ledger grows ([P-11](#16-privacy-security--compliance)). Ledger rows are **never cascade-deleted** with the entities they describe — a deleted lecture's cost still happened — so the entity's name is denormalized onto the row.
+
+#### BILL-8 Cap notifications (email & in-app)
+
+A cap the user did not see coming is indistinguishable from a broken feature. Every metered resource (BILL-3) therefore notifies the account that pays for it **twice**: once while there is still room to act, and again when the work has actually been refused.
+
+- **Two thresholds.** **Approaching** fires when usage crosses ~80% of a cap; **reached** fires when the cap blocks an operation. Both are sent **in-app and by email**, because the moment a cap binds is often not a moment the owner is looking at the app — a lecture stops recording, or a student cannot load a translation, hours after the owner last signed in.
+- **The payer is notified, not the actor.** Notifications follow the account whose allowance was spent — the deck owner (BILL-3) — since they are the only person who can raise a cap. A viewer who triggers the block sees only that the content is unavailable ([BILL-4](#bill-4-enforcement--upgrade-prompts)), gets no email, and learns nothing about the owner's plan.
+- **Audience exhaustion is reported to the owner in counts.** When an audience allowance runs out, the instructor is told how many playbacks or translations were refused — never which students, and never their identities ([§16](#16-privacy-security--compliance)). This is the case that most needs a notification, because the failure lands entirely on people the owner cannot see.
+- **One message per (user, metric, period, threshold).** Recorded in `NotificationLog` ([§15](#15-data-models)) and checked before sending, so a blocked translation in a 30-student class produces one email rather than thirty. Crossings that occur close together coalesce into a single message listing each metric, so exhausting several caps in one lecture is not several emails. The record clears with the billing period, so the next period notifies afresh.
+- **Delivery never affects the request.** Notifications are dispatched after the response is sent, and a send that fails is logged rather than raised — a mail outage must not turn a blocked action into a failed one, or a successful action into an error.
+- **In-app state is persistent, not transient.** Approaching raises a dismissible notice; reached raises a banner that stays until the cap clears or the plan changes, because exhaustion is a standing condition rather than an event. Both carry the tier-appropriate action — **Upgrade** for Free, Fresh, and Pro; **Contact us** for Max (BILL-5).
+- **Written for the person reading it.** Messages name the resource in plain language — "narration", "recording time" — not the metric identifier, and state how much was used, when it resets ([BILL-2](#bill-2-billing-provider-stripe-integration) period end, or the calendar month for tiers with no subscription), and what is now blocked.
+- **Approaching emails can be silenced; reached emails cannot.** The 80% warning is advisory and users may turn it off per account. The exhaustion email explains why something the user just attempted did not happen, so it is transactional and always sent. In-app notices always appear regardless.
+- **One mail transport, shared.** Notifications use the same sending module as account email ([AUTH-3](#auth-3-email-verification)); whichever ships first builds it, and the other consumes it. Two independent transports must not exist. Message text is localized from the user's stored locale, which requires server-side message catalogs — [TECH-12](#tech-12-internationalization-i18n--localization) covers client strings only, so this is a dependency and not an assumption.
 
 ### 6. Slide Projects & Seeding
 
@@ -750,7 +765,7 @@ Indicative MongoDB collections, expressed as shared TypeScript types ([TECH-6](#
 - **Subscription** — `{ id, userId, tier, billingProvider, billingCustomerId, providerSubscriptionId, status: 'active'|'past_due'|'canceled', currentPeriodStart, currentPeriodEnd, cancelAtPeriodEnd }` (provider-neutral by design — a discriminator plus opaque references, TECH-9)
 - **UsageRecord** — `{ id, userId, period, metric: 'aiTokens'|'sttMinutes'|'diarizationMinutes'|'ttsCharacters'|'ttsPremiumCharacters'|'aiImages'|'imageLookups'|'importMb'|'exports'|'translationCharacters'|'audioStorageMb'|'audienceTtsCharacters'|'audienceLocales', used, cap }` (BILL-3; `audioStorageMb` is a gauge — current holdings, not a per-period total)
 - **CostEvent** — `{ id, userId, actorUserId?, actorRole: 'instructor'|'student'|'anonymous', projectId?, deckId?, deckTitle, service, metric, eventKind: 'billable'|'cached', units, unitPrice, cost, createdAt }` (append-only cost ledger — BILL-7; cost frozen at write time, rows never cascade-deleted, `deckTitle` denormalized so a deleted lecture keeps its history)
-- **NotificationLog** — `{ id, userId, metric, period, threshold, channel: 'email'|'in_app', sentAt }` (makes cap notifications idempotent — BILL-4)
+- **NotificationLog** — `{ id, userId, metric, period, threshold: 'approaching'|'reached', channel: 'email'|'in_app', sentAt }` (makes cap notifications idempotent — BILL-8)
 - **ConnectedAccount** — `{ id, userId, provider: 'google'|'github', scopes[], accessTokenEnc, refreshTokenEnc?, externalAccountLabel, connectedAt }` (for import/export — EXP-4; tokens encrypted at rest — P-9)
 - **Project** — `{ id, ownerId, title, course, description, seedContext, settings?: { manualSlideAdvance?, animatedTransitions?, ... }, createdAt }` (`settings` override the user's `projectDefaults`)
 - **SeedAsset** — `{ id, projectId, type: 'doc'|'pdf'|'gdoc'|'gdrive'|'gslides'|'image', text?, imageUrl?, caption?, keywords[], enabled }`

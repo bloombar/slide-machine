@@ -10,7 +10,7 @@
 import type { UsageMetric } from '@slide-machine/shared'
 import type { Action } from '../actions/define'
 import { UserModel } from '../models/user'
-import { assertWithinCap } from './usage'
+import { assertWithinCap, capFor, usedThisPeriod } from './usage'
 
 /**
  * Builds a hook that refuses the action when `metric` is exhausted.
@@ -26,7 +26,16 @@ export const requireCapacity =
     if (!ctx.userId) return
     const user = await UserModel.findById(ctx.userId).select('planTier')
     if (!user) return
-    await assertWithinCap(ctx.userId, user.planTier, metric, message)
+    // A cap of 0 is not an exhausted allowance, it is a capability the tier
+    // never had — saying "you have used all of it" would be a lie to someone
+    // who never had any.
+    const excluded = capFor(user.planTier, metric) === 0
+    await assertWithinCap(
+      ctx.userId,
+      user.planTier,
+      metric,
+      excluded ? 'This feature is not included in your current plan.' : message,
+    )
   }
 
 /** Guards the AI token allowance — slide generation, refine, quizzes. */
@@ -34,3 +43,50 @@ export const requireAiTokens = requireCapacity(
   'aiTokens',
   'You have used all of this billing period’s AI generation. It resets at the start of your next period.',
 )
+
+/**
+ * How much of a metric's allowance is spent, as a 0–1 fraction; null when the
+ * cap is unlimited. Lets a caller warn before it refuses (BILL-4) rather than
+ * only at the wall.
+ */
+export const usedFractionOf = async (
+  userId: string,
+  metric: UsageMetric,
+): Promise<number | null> => {
+  try {
+    const user = await UserModel.findById(userId).select('planTier')
+    if (!user) return null
+    const cap = capFor(user.planTier, metric)
+    if (cap === null || cap <= 0) return null
+    return (await usedThisPeriod(userId, metric)) / cap
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Cap check for callers outside the action pipeline. The live audio socket
+ * never passes through `dispatch`, so it cannot use a `meter` hook and has to
+ * ask directly — and it needs an answer rather than an exception, because a
+ * WebSocket has no error response to map a 402 onto.
+ *
+ * Errs toward allowing: an unknown user or an unlimited cap passes, since
+ * refusing to transcribe is a worse failure than an uncounted minute.
+ */
+export const userHasCapacity = async (
+  userId: string,
+  metric: UsageMetric,
+): Promise<boolean> => {
+  try {
+    const user = await UserModel.findById(userId).select('planTier')
+    if (!user) return true
+    const cap = capFor(user.planTier, metric)
+    if (cap === null) return true
+    return (await usedThisPeriod(userId, metric)) < cap
+  } catch (error) {
+    // A malformed id or an unreachable database must not sever a live lecture.
+    // Same trade as above: an uncounted minute beats a dropped session.
+    console.error(`Capacity check failed for ${userId}/${metric}:`, error)
+    return true
+  }
+}

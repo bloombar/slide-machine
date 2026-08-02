@@ -51,7 +51,13 @@ export class MockTtsProvider implements TtsProvider {
       charOffset: p.start,
       timeSeconds: (i / Math.max(1, phrases.length)) * MOCK_DURATION_SECONDS,
     }))
-    return { audio: buildSilentWav(), marks }
+    // Bills the plain text: the mock sends nothing anywhere, but metering tests
+    // need a count that behaves like a real adapter's.
+    return {
+      audio: buildSilentWav(),
+      marks,
+      billedCharacters: (text ?? '').length,
+    }
   }
 }
 
