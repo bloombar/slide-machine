@@ -95,6 +95,16 @@ const slideSchema = new Schema<SlideDb>({
 })
 
 slideSchema.index({ deckId: 1, index: 1 })
+// Full-text search over what is actually on a slide (SOC-2 "content"). Slides
+// are the largest collection by far, so scanning them per keystroke is the
+// first thing to hurt; this index makes whole-word queries indexed lookups.
+slideSchema.index(
+  { title: 'text', body: 'text', bullets: 'text', caption: 'text' },
+  {
+    weights: { title: 10, body: 3, bullets: 3, caption: 1 },
+    name: 'slide_text',
+  },
+)
 
 slideSchema.plugin(softDeletePlugin)
 

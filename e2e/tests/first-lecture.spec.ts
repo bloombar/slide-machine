@@ -40,8 +40,12 @@ test('a new user starts a lecture with no project; a default project is created'
   await expect(
     page.getByRole('heading', { name: 'Default project' }),
   ).toBeVisible()
+  // Scoped to "Your work": the Discover sidebar beside it lists other
+  // people's untitled lectures.
   await expect(
-    page.getByRole('link', { name: /Untitled lecture/ }),
+    page
+      .getByRole('region', { name: 'Your work' })
+      .getByRole('link', { name: /Untitled lecture/ }),
   ).toBeVisible()
 
   // The project's own page shows the placeholder name too; its data title is

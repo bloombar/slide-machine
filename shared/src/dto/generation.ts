@@ -45,4 +45,14 @@ export interface DeckViewResponse {
    * transcript segment belonging to a still-retained recording). Populated
    * only for editors; drives the per-slide "Play original audio" option. */
   audioSlideIds?: string[]
+  /** The lecture's owner (SOC-4 link target) and its project (header link). */
+  owner: { id: string; displayName: string }
+  project: { id: string; title: string }
+  /** The requesting user's vote on this lecture: up (1), down (-1), none (0)
+   * (SOC-1). */
+  myVote: 1 | -1 | 0
+  /** Up- and down-vote counts for this lecture (SOC-1), shown side by side in
+   * the viewer's vote control. */
+  voteUp: number
+  voteDown: number
 }

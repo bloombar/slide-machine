@@ -76,6 +76,10 @@ const userSchema = new Schema<UserDb>(
   { timestamps: { createdAt: true, updatedAt: false } },
 )
 
+// Finding people by name (SOC-2). Profiles are public, so a name is how you
+// reach someone's work; indexed so the lookup does not scan every account.
+userSchema.index({ displayName: 'text' }, { name: 'user_text' })
+
 userSchema.plugin(softDeletePlugin)
 
 export const UserModel = model<UserDb>('User', userSchema)

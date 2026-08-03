@@ -31,15 +31,17 @@ test('untitled lectures start from the + option and can be named later', async (
     page.getByRole('heading', { name: 'Untitled lecture' }),
   ).toBeVisible()
 
-  // Home lists it as Untitled lecture too
+  // Home lists it as Untitled lecture too. Scoped to "Your work": the
+  // Discover sidebar beside it lists other people's untitled lectures.
   await page.getByRole('link', { name: 'The Slide Machine' }).click()
+  const yourWork = page.getByRole('region', { name: 'Your work' })
   await expect(
-    page.getByRole('link', { name: /Untitled lecture/ }),
+    yourWork.getByRole('link', { name: /Untitled lecture/ }),
   ).toBeVisible()
 
   // Speaking earns an AI title once the topic is clear (second phrase
   // with the mock provider) — saved server-side, live in the header
-  await page.getByRole('link', { name: /Untitled lecture/ }).click()
+  await yourWork.getByRole('link', { name: /Untitled lecture/ }).click()
   await page.getByRole('button', { name: 'Live session' }).click()
   await page.getByLabel('Spoken phrase').fill('Photosynthesis basics')
   await page.getByRole('button', { name: 'Speak' }).click()

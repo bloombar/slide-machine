@@ -3,7 +3,7 @@
  * components between tests (auto-cleanup needs globals, which we keep off).
  */
 import '@testing-library/jest-dom/vitest'
-import { afterEach } from 'vitest'
+import { afterEach, beforeEach } from 'vitest'
 import { cleanup, configure } from '@testing-library/react'
 import { i18n, initI18n } from '../i18n'
 import { LOCALE_STORAGE_KEY } from '../i18n/detect'
@@ -13,10 +13,19 @@ afterEach(cleanup)
 // The i18n singleton and its localStorage key outlive a single test, so a
 // spec that switches language would otherwise leave the next one running
 // in it. Reset both between tests.
-afterEach(async () => {
+//
+// Reset *before* each test as well as after. A language switch is applied by
+// an effect reacting to a fetch, so it can land after the previous test's
+// cleanup has already run — leaving the singleton in French and the next test
+// looking for English labels that are not there. Clearing on the way in makes
+// each test's starting language certain rather than dependent on what the last
+// one left behind.
+const useEnglish = async () => {
   localStorage.removeItem(LOCALE_STORAGE_KEY)
   if (i18n.language !== 'en') await i18n.changeLanguage('en')
-})
+}
+beforeEach(useEnglish)
+afterEach(useEnglish)
 
 // `useTranslation` reads a module-level singleton rather than a provider,
 // so initializing it once here translates every rendered component
@@ -43,6 +52,22 @@ if (!('ResizeObserver' in globalThis)) {
     unobserve() {}
     disconnect() {}
   }
+}
+// jsdom has no IntersectionObserver either, and it never scrolls, so nothing
+// could intersect anyway. This inert stub lets lazy-loading lists mount; their
+// tests drive the visible "Load more" button, which does the same work.
+if (!('IntersectionObserver' in globalThis)) {
+  // Cast because the DOM lib's IntersectionObserver keeps growing fields
+  // (scrollMargin, and whatever comes next) that an inert stub has no reason
+  // to carry; the four methods below are all any caller here touches.
+  globalThis.IntersectionObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords() {
+      return []
+    }
+  } as unknown as typeof IntersectionObserver
 }
 // jsdom's getContext logs a "Not implemented" error on every call; a silent
 // null-returning stub keeps overlay redraws (which no-op without a context)

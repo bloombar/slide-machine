@@ -86,7 +86,12 @@ test('choosing the default again hands the interface back to the browser', async
 
   await page.getByRole('button', { name: 'Menu' }).click()
   await page.getByRole('menuitem', { name: 'Profile' }).click()
-  await page.getByRole('link', { name: 'Settings' }).click()
+  // Exact: the Discover feed lists other people's lectures, and one titled
+  // "Settings Lecture ..." matches a substring search for "Settings". Waiting
+  // for the profile URL is not enough on its own — the URL changes before the
+  // route's markup does, so the home page can still be in the DOM.
+  await expect(page).toHaveURL(/\/u\//)
+  await page.getByRole('link', { name: 'Settings', exact: true }).click()
   await page
     .getByLabel('Interface language')
     .first()

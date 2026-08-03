@@ -130,13 +130,18 @@ describe('ProjectPage', () => {
   })
 
   /** Selects a YAML file in the (hidden) import input. */
-  const importFile = (content: string) => {
+  /** Drops a file on the hidden import input. Awaits it: the input lives in
+   * the new-lecture zone, which only editors see, so it appears once the
+   * viewer's rights resolve rather than with the first paint. */
+  const importFile = async (content: string) => {
     const file = new File([content], 'deck.yaml', {
       type: 'application/x-yaml',
     })
-    const input = document.querySelector(
-      'input[type="file"]',
-    ) as HTMLInputElement
+    const input = await vi.waitFor(() => {
+      const el = document.querySelector('input[type="file"]')
+      if (!el) throw new Error('import input not rendered yet')
+      return el as HTMLInputElement
+    })
     fireEvent.change(input, { target: { files: [file] } })
   }
 
@@ -165,7 +170,7 @@ describe('ProjectPage', () => {
     renderPage()
     await screen.findByRole('heading', { name: 'Lectures' })
 
-    importFile('version: 1\nkind: deck\ntitle: Imported Deck\n')
+    await importFile('version: 1\nkind: deck\ntitle: Imported Deck\n')
 
     await vi.waitFor(() =>
       expect(sent).toEqual({
@@ -204,7 +209,7 @@ describe('ProjectPage', () => {
     })
     renderPage()
     await screen.findByRole('heading', { name: 'Lectures' })
-    importFile('version: 1\nkind: deck\ntitle: X\n')
+    await importFile('version: 1\nkind: deck\ntitle: X\n')
     expect(await screen.findByText(/Unknown template/)).toBeInTheDocument()
   })
 
@@ -224,7 +229,7 @@ describe('ProjectPage', () => {
     })
     renderPage()
     await screen.findByRole('heading', { name: 'Lectures' })
-    importFile('kind: deck\n')
+    await importFile('kind: deck\n')
     expect(
       await screen.findByText(/slides: Required title: Required/),
     ).toBeInTheDocument()
@@ -451,5 +456,39 @@ describe('ProjectPage admin settings (ADMIN-5)', () => {
     })
     expect(settings).not.toHaveTextContent(/as an admin/i)
     expect(screen.getByText('Seed material')).toBeVisible()
+  })
+})
+
+/**
+ * A public project is browsable read-only by anyone (SOC-2 discovery), so a
+ * signed-in stranger reaches this page. They must see the lectures and nothing
+ * that implies they can change the project.
+ */
+describe('ProjectPage read-only visitor (SOC-2)', () => {
+  // Signed in as someone who neither owns the project nor is an admin.
+  const strangerRoutes = {
+    ...baseRoutes,
+    '/api/auth/refresh': () => ({
+      status: 200,
+      body: { user: { id: 'u9', displayName: 'Byron' }, accessToken: 't' },
+    }),
+    '/api/admin/status': () => ({ status: 403 }),
+  }
+
+  it('shows the lectures but offers no owner controls', async () => {
+    mockFetchRoutes(strangerRoutes)
+    renderPage()
+    // The project's content is readable
+    expect(
+      await screen.findByRole('heading', { name: 'Lectures' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Waves/ })).toBeInTheDocument()
+    // …but nothing that edits it
+    await vi.waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'Project settings' }),
+      ).toBeNull(),
+    )
+    expect(screen.queryByRole('button', { name: /new lecture/i })).toBeNull()
   })
 })

@@ -12,6 +12,7 @@ import { ProjectModel } from '../../src/models/project'
 import { DeckModel } from '../../src/models/deck'
 import { SlideModel } from '../../src/models/slide'
 import { SeedAssetModel } from '../../src/models/seed-asset'
+import { VoteModel } from '../../src/models/vote'
 import {
   deleteProjectCascade,
   deleteDeckCascade,
@@ -48,7 +49,13 @@ const makeProject = async () => {
     name: 'notes.pdf',
     status: 'ready',
   })
-  return { project, deck, slide, asset }
+  const vote = await VoteModel.create({
+    userId: ownerId,
+    targetType: 'deck',
+    targetId: deck._id,
+    value: 1,
+  })
+  return { project, deck, slide, asset, vote }
 }
 
 beforeAll(async () => {
@@ -63,6 +70,7 @@ beforeEach(async () => {
     DeckModel.deleteMany({}),
     SlideModel.deleteMany({}),
     SeedAssetModel.deleteMany({}),
+    VoteModel.deleteMany({}),
     UsageRecordModel.deleteMany({}),
   ])
   const owner = await UserModel.create({
@@ -153,6 +161,8 @@ describe('soft delete (P-10)', () => {
     expect(
       await SlideModel.countDocuments({}).setOptions({ withDeleted: true }),
     ).toBe(0)
+    // The purged deck's votes (SOC-1) are hard-deleted with it.
+    expect(await VoteModel.countDocuments({})).toBe(0)
   })
 
   it('tombstones a single deck and its slides without touching siblings', async () => {

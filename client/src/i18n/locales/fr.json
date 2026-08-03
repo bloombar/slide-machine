@@ -248,12 +248,33 @@
   },
   "home": {
     "welcome": "Bienvenue, {name}",
+    "yourWork": "Votre travail",
     "showAll": "{count, plural, one {Afficher le # cours} other {Afficher les # cours}}",
     "otherLectures": "Autres cours",
     "otherLecturesHint": "Les cours qui vous appartiennent dans les projets d'autres utilisateurs.",
     "errors": {
       "load": "Impossible de charger les projets"
     }
+  },
+  "discover": {
+    "title": "Découvrir",
+    "regionLabel": "Cours de la communauté",
+    "latest": "Récents",
+    "top": "Populaires",
+    "searchLabel": "Rechercher des cours, des projets et des personnes",
+    "searchPlaceholder": "Rechercher cours, projets, personnes…",
+    "searching": "Recherche…",
+    "loadFailed": "Impossible de charger le fil.",
+    "searchFailed": "La recherche n’a pas pu aboutir.",
+    "empty": "Aucun cours public pour l’instant.",
+    "noMatches": "Aucun résultat pour « {query} ».",
+    "groupLectures": "Cours",
+    "groupProjects": "Projets",
+    "groupPeople": "Personnes",
+    "loadMore": "Charger plus",
+    "unknownOwner": "Inconnu",
+    "rating": "Note {score}",
+    "ratingTitle": "Note nette : {score}"
   },
   "plan": {
     "tier": {

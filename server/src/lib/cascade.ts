@@ -21,6 +21,7 @@ import { TranscriptSegmentModel } from '../models/transcript-segment'
 import { RefineJobModel } from '../models/refine-job'
 import { RefreshTokenModel } from '../models/refresh-token'
 import { UserModel } from '../models/user'
+import { VoteModel } from '../models/vote'
 import { adjustGauge, BYTES_PER_MB } from '../billing/usage'
 import { pcmBytesFor } from './wav'
 import { getStorage } from '../storage'
@@ -227,6 +228,8 @@ const purgeDeckContents = async (
     SeedAssetModel.deleteMany(by),
     TranscriptSegmentModel.deleteMany(by),
     RefineJobModel.deleteMany(by),
+    // Votes on the purged decks (SOC-1) — nothing to restore, so drop them.
+    VoteModel.deleteMany({ targetType: 'deck', targetId: { $in: deckIds } }),
   ])
 }
 

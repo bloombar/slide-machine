@@ -243,6 +243,16 @@ const deckSchema = new Schema<DeckDb>(
   { timestamps: true },
 )
 
+// Full-text search over a lecture's own words (SOC-2). A case-insensitive
+// regex cannot use an index, so searching by scanning every deck stops working
+// as the corpus grows; this index makes whole-word queries indexed lookups.
+// The title is weighted far above the transcript: a lecture called "Osmosis"
+// should beat one that merely says the word once.
+deckSchema.index(
+  { title: 'text', transcript: 'text' },
+  { weights: { title: 10, transcript: 1 }, name: 'deck_text' },
+)
+
 deckSchema.plugin(softDeletePlugin)
 
 export const DeckModel = model<DeckDb>('Deck', deckSchema)

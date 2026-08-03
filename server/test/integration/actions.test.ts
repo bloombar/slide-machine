@@ -94,10 +94,16 @@ describe('POST /api/actions/:name', () => {
     expect((await act(ada, 'project.list')).body).toHaveLength(0)
   })
 
-  it('project.get returns own projects and 403s foreign ones', async () => {
+  it('project.get returns own projects and 403s foreign restricted ones', async () => {
     const ada = await registerUser('ada@example.com')
     const bob = await registerUser('bob@example.com')
     const created = await act(ada, 'project.create', { title: 'Mine' })
+    // A public project is browsable by anyone (SOC); restrict it so the
+    // ownership gate is what's under test here.
+    await act(ada, 'project.setAccess', {
+      projectId: created.body.id,
+      visibility: 'restricted',
+    })
 
     const own = await act(ada, 'project.get', { projectId: created.body.id })
     expect(own.status).toBe(200)

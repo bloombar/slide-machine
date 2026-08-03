@@ -248,12 +248,33 @@
   },
   "home": {
     "welcome": "Bienvenido, {name}",
+    "yourWork": "Tu trabajo",
     "showAll": "{count, plural, one {Ver la # clase} other {Ver las # clases}}",
     "otherLectures": "Otras clases",
     "otherLecturesHint": "Clases tuyas dentro de proyectos de otras personas.",
     "errors": {
       "load": "No se pudieron cargar los proyectos"
     }
+  },
+  "discover": {
+    "title": "Descubrir",
+    "regionLabel": "Clases de la comunidad",
+    "latest": "Recientes",
+    "top": "Mejores",
+    "searchLabel": "Buscar clases, proyectos y personas",
+    "searchPlaceholder": "Buscar clases, proyectos, personas…",
+    "searching": "Buscando…",
+    "loadFailed": "No se pudo cargar el listado.",
+    "searchFailed": "No se pudo realizar la búsqueda.",
+    "empty": "Todavía no hay clases públicas.",
+    "noMatches": "Sin resultados para «{query}».",
+    "groupLectures": "Clases",
+    "groupProjects": "Proyectos",
+    "groupPeople": "Personas",
+    "loadMore": "Cargar más",
+    "unknownOwner": "Desconocido",
+    "rating": "Valoración {score}",
+    "ratingTitle": "Valoración neta: {score}"
   },
   "plan": {
     "tier": {

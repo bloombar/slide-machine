@@ -115,14 +115,19 @@ export const projectGet = defineAction<{ projectId: string }, Project>({
     const doc = await ProjectModel.findById(input.projectId).catch(() => null)
     const acl = doc ? projectAcl(doc) : null
     if (!doc || !acl) throw new ActionForbiddenError()
-    // Member-only: 'public' opens the lectures, not the project page.
-    // Allowlisted admins get an always-on bypass, mirroring the
-    // lecture-viewer one (lib/admin-view.ts). They read the full project,
-    // seed notes and people lists included: the console already surfaces
-    // both, and the settings modal they edit from reads them (ADMIN-5).
+    // Non-members: allowlisted admins get an always-on bypass, mirroring the
+    // lecture-viewer one (lib/admin-view.ts). They read the full project, seed
+    // notes and people lists included: the console already surfaces both, and
+    // the settings modal they edit from reads them (ADMIN-5). Everyone else may
+    // read a PUBLIC project (SOC discovery) — but only its shareable shape: the
+    // people lists and prep notes are stripped, and deck.list still hides its
+    // non-public lectures. A restricted project stays members-only (404).
     if (!isAclMember(acl, userId)) {
-      if (!(await isAllowlistedAdmin(userId))) throw new ActionForbiddenError()
-      return toProjectDto(doc)
+      if (await isAllowlistedAdmin(userId)) return toProjectDto(doc)
+      if (doc.visibility !== 'public') throw new ActionForbiddenError()
+      const dto = toSharedProjectDto(doc)
+      delete dto.seedContext
+      return dto
     }
     if (acl.ownerId === userId) return toProjectDto(doc)
     const dto = toSharedProjectDto(doc)
