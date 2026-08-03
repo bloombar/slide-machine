@@ -250,40 +250,99 @@ Four rules follow, and they are what keep audience cost bounded:
 
 ## 7. Cap formulas
 
-```text
-cap = lectures_per_month × lecture_minutes × per_minute_rate × revision_factor
+**`sttMinutes` is the only cap set by hand.** Eight others are derived from it
+by [`scripts/pricing/derive-caps.mjs`](../scripts/pricing/derive-caps.mjs), so
+changing a tier's recording allowance updates everything that recording implies
+rather than leaving eight numbers describing a different product:
+
+```bash
+npm run caps:derive               # report what would change
+npm run caps:derive -- --write    # apply to config/plans.json
+npm run caps:check                # exit 1 if a cap has been hand-edited adrift
 ```
 
-plus, for the audience metrics:
+N minutes of recording is N minutes of lecture. That fixes the slide count, and
+everything else follows from it plus the expected refinement level — the share
+of slides an instructor tidies afterwards, and the narration that gets rewritten
+when they do:
 
 ```text
-audienceLocales       = lectures_per_month × locales_per_deck
-audienceTtsCharacters = audienceLocales × narration_chars_per_deck + headroom
+lectures   = sttMinutes ÷ lecture_minutes
+slides     = lectures × slides_per_lecture
+refined    = slides × refined_slide_share
+
+aiTokens              = phrases(sttMinutes) × tokens_per_call
+                        + slides × rerank_tokens
+                        + lectures × (quiz_tokens + embedding_tokens)
+                        + refined × (refine_tokens + narrate_tokens)
+ttsCharacters         = slides × narration_chars_per_slide
+                        + lectures × resynthesised_slides × narration_chars_per_slide
+ttsPremiumCharacters  = ttsCharacters × premium_narration_share
+diarizationMinutes    = sttMinutes × diarization_share_of_recording
+translationCharacters = slides × slide_text_chars × instructor_locales_per_deck
+audioStorageMb        = sttMinutes × audio_mb_per_minute × held_periods
+audienceLocales       = lectures × locales_per_deck
+audienceTtsCharacters = audienceLocales × narration_chars_per_deck
 ```
 
-Worked for Pro (26 lectures, 1,950 lecture-min):
+Worked for Pro (600 recorded minutes = 8 lectures, 360 slides). These are what
+the recording allowance alone implies — Pro ships larger caps for most of them,
+for the reason in the next subsection:
 
-| Metric | Arithmetic | Rounded cap |
+| Metric | Arithmetic | Derived |
 | --- | --- | --- |
-| `aiTokens` | 1,950 × 30,000 = 58.5M | 65,000,000 |
-| `ttsCharacters` | 26 × 30,000 = 780,000 | 800,000 |
-| `imageLookups` | 26 × 50 = 1,300 | 1,500 |
-| `audienceLocales` | 26 × 0.5 = 13 | 15 |
-| `audienceTtsCharacters` | 15 × 27,000 = 405,000 | 450,000 |
-| `audioStorageMb` | 21 days ≈ 18 lectures × 216 MB = 3.9 GB | 8,000 |
+| `aiTokens` | 5,400 calls × 3,350 + 360 × 1,700 + 8 × 37,000 + 90 × 5,400 | 20,000,000 |
+| `ttsCharacters` | 360 × 600 + 8 × 5 × 600 = 240,000 | 240,000 |
+| `diarizationMinutes` | 600 × 1.0 | 600 |
+| `audioStorageMb` | 600 × 2.88 MB = 1,728 | 1,800 |
+| `audienceLocales` | 8 × 0.5 = 4 | 4 |
+| `audienceTtsCharacters` | 4 × 27,000 = 108,000 | 110,000 |
 
-Two caps are deliberately **below** full coverage, because at $0.016/min each
-would otherwise dominate the tier:
+Raw requirements are rounded **up** to two significant figures, which is where
+the model's only headroom comes from: a slightly heavier month than average is
+not cut off at exactly the assumed figure.
 
-- **`sttMinutes`** is below full coverage on every tier — 75 minutes on Free
-  (~1 lecture), 150 on Fresh (~2), 600 on Pro (~8 of 26). At $0.016/min,
-  recording every lecture a tier allows would cost $4.80, $7.20 and $31.20
-  respectively, which no tier's price supports. Recording is an allowance, not
-  an entitlement to record everything.
-- **`diarizationMinutes`** covers ~5 lectures on Pro, one on Fresh, half on
-  Free. Diarizing all 26 of Pro's would cost another $31. Adopting Dynamic
-  Batch (§2) would make full coverage affordable at the price of 24-hour
-  turnaround.
+### Derived is a floor, not a ceiling
+
+The script runs in `--mode=floor` by default: it raises a cap that falls short
+of what the recording allowance implies and leaves a larger one alone. This
+matters because `sttMinutes` is rationed well below the lecture volume a tier is
+designed around — Pro records 600 minutes but is built for 26 lectures a month,
+mostly captured in the browser, where speech costs us nothing. Its `aiTokens`,
+narration and audience caps are sized for that larger volume and stay there;
+sizing them down to 600 minutes would cut Pro's allowances by roughly 70% for no
+reason beyond arithmetic tidiness.
+
+`--mode=fit` sizes every cap to the recording allowance exactly, in both
+directions. Useful for seeing what the allowance alone justifies; not what
+ships.
+
+### The two caps that stay hand-set
+
+- **`sttMinutes`** is below full lecture coverage on every tier — 75 minutes on
+  Free (~1 lecture), 150 on Fresh, 600 on Pro. At $0.016/min, recording every
+  lecture a tier allows would cost $4.80, $7.20 and $31.20 respectively, which
+  no tier's price supports. Recording is an allowance, not an entitlement to
+  record everything. It is the input to everything above, so it is the one
+  number a human decides.
+- **`aiImages`, `imageLookups`, `importMb`, `exports`** bound discrete actions a
+  user chooses to take rather than the volume of recorded material, so they do
+  not scale with lecture length and are not derived.
+
+**`diarizationMinutes` now covers every recorded minute** (`share = 1.0`), where
+it previously covered a fraction — ~5 of Pro's lectures, one on Fresh, half on
+Free. Full coverage costs the same per minute as live capture and is the single
+largest line in this change: it adds $35.20 to Max's worst case alone. Adopting
+Dynamic Batch (§2) would cut that by 80% at the price of 24-hour turnaround, and
+is the obvious lever if the cost proves uncomfortable.
+
+The **worst case** above assumes that allowance is spent; the **expected** case
+should not, because the app no longer opts users into it. Speaker identification
+now defaults **off** in both places it is offered — the lecture-wide Refine tab
+and the per-slide Refine dialog — and the lecture-wide tab actively steers users
+to run it per slide instead, since a batch pass re-reads the whole recording
+however few slides needed it. The cap is sized so that nobody who wants it is
+rationed; the default is what keeps the realistic figure well below it.
 
 ### Every tier offers every service
 
@@ -308,10 +367,15 @@ each optional service on Free, two on Fresh.
 
 | Plan | Lectures/mo | Light (25%) | Expected (50%) | Heavy (80%) | At caps | Price floor | Price | Maxed as % of price |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Free | 2 | ~$1.55 | ~$3.10 | ~$4.96 | ~$6.21 | $6.75 | **$0** | — |
-| Fresh | 3 | ~$2.83 | ~$5.66 | ~$9.06 | ~$11.33 | $12.06 | **$19** | 60% |
-| Pro | 26 | ~$17.76 | ~$35.53 | ~$56.84 | ~$71.05 | $74.02 | **$99** | 72% |
-| Max | 40 | ~$43.43 | ~$86.86 | ~$138.98 | ~$173.73 | $180.53 | **$299** | 58% |
+| Free | 2 | ~$1.69 | ~$3.38 | ~$5.41 | ~$6.77 | $7.33 | **$0** | — |
+| Fresh | 3 | ~$3.15 | ~$6.30 | ~$10.09 | ~$12.61 | $13.39 | **$19** | 66% |
+| Pro | 26 | ~$18.76 | ~$37.53 | ~$60.04 | ~$75.05 | $78.17 | **$99** | **76%** ⚠️ |
+| Max | 40 | ~$54.61 | ~$109.23 | ~$174.77 | ~$218.46 | $226.93 | **$299** | 73% |
+
+**Pro now sits above the 60%-of-price target** (and past the 75% tolerance the
+model checks against). Full diarization coverage is what put it there — see §7.
+The levers, cheapest first: adopt STT Dynamic Batch for diarization (−80% on
+that line), drop `diarizationShareOfRecording` below 1.0, or raise the price.
 
 Four utilisation levels, because subscribers are not all the same shape.
 **Light** is someone who subscribed for the capability rather than the volume —
@@ -342,29 +406,31 @@ Excludes RA/PI salaries (grant-funded) and CI (free tier).
 
 | Tier | Light | Expected | Heavy | At caps |
 | --- | --- | --- | --- | --- |
-| Fresh | 19 | 23 | 32 | 42 |
-| Pro | 4 | 5 | 8 | 12 |
-| Max | 2 | 2 | 2 | 3 |
+| Fresh | 19 | 24 | 36 | 52 |
+| Pro | 4 | 5 | 8 | 14 |
+| Max | 2 | 2 | 3 | 5 |
 
 A cheap tier carries fixed costs badly: Stripe's $0.30 + 3.6% is the same
-whatever the price, so Fresh needs four times Pro's subscriber count even
-though its worst case is a seventh of Pro's. It earns its place as the
+whatever the price, so Fresh needs five times Pro's subscriber count even
+though its worst case is a sixth of Pro's. It earns its place as the
 conversion step off Free, not as the plan the economics rest on.
 
-Fresh sits exactly on the **60%-of-price** rule, which is what its allowances
-were sized to. That is not a coincidence but a constraint: once every service
-is available on every tier, the sub-$20 price is what decides how much of each
-Fresh may have. Adding an allowance to Fresh means taking one away somewhere
-else, or moving the price.
+Fresh sits at **66% of price**, above the 60% rule its allowances were
+originally sized to. That is the constraint the whole tier lives under: once
+every service is available on every tier, the sub-$20 price is what decides how
+much of each Fresh may have. Adding an allowance to Fresh means taking one away
+somewhere else, or moving the price.
 
-Free users are pure cost at **~$6.21/month each at their caps** — **seven**
+Free users are pure cost at **~$6.77/month each at their caps** — **twelve**
 fully-active free users cost about as much as the pilot's ~$78 of
-infrastructure (thirteen against the full ~$278, which includes developer
+infrastructure (forty-one against the full ~$278, which includes developer
 tooling). Reaching that ceiling means exhausting every allowance in the same
-month, which no single workflow does: at the expected 50% it is ~$3.10 a head.
+month, which no single workflow does: at the expected 50% it is ~$3.38 a head.
 The number to watch during the pilot is free-to-paid conversion — one Pro
-subscriber contributes ~$59.61 after service cost and fees, which carries
-about **nineteen** free users at expected use, or ten who max out.
+subscriber now contributes only ~$20.09 after service cost and fees, which
+carries about **six** free users at expected use, or three who max out. That
+margin was ~$59.61 before diarization moved to full coverage, and is the
+strongest argument for one of the §7 levers.
 
 ## 9. Recalculating
 

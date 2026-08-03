@@ -66,12 +66,14 @@ describe('DeckSettingsModal — Refine tab', () => {
     renderModal()
     fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
 
-    // The three slide aspects and (with audio) speaker ID start on; the
-    // narration starts off — exactly like "Refine this slide with AI".
+    // The three slide aspects start on; the narration and speaker ID start
+    // off — exactly like "Refine this slide with AI". Speaker ID is opted
+    // into because it re-reads the whole recording at the same per-minute
+    // rate as capturing it.
     expect(screen.getByRole('button', { name: 'Refine' })).toBeEnabled()
     expect(
       screen.getByRole('checkbox', { name: /Identify multiple speakers/ }),
-    ).toBeChecked()
+    ).not.toBeChecked()
     expect(
       screen.getByRole('checkbox', { name: /Refine slide text/ }),
     ).toBeChecked()
@@ -98,8 +100,9 @@ describe('DeckSettingsModal — Refine tab', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
     const refine = screen.getByRole('button', { name: 'Refine' })
 
+    // Speaker ID is already off by default, so only the content passes need
+    // clearing to leave nothing selected.
     for (const name of [
-      /Identify multiple speakers/,
       /Refine slide text/,
       /Refine slide layout/,
       /Refine slide imagery/,
@@ -269,7 +272,29 @@ describe('DeckSettingsModal — Refine tab', () => {
     ).toBeDisabled()
   })
 
-  it('enables + checks speaker ID when recordings appear, without a remount', () => {
+  // Diarization is billed across the whole recording however few slides need
+  // it, so the lecture-wide tab points at the per-slide action instead.
+  it('advises running speaker identification per slide, not lecture-wide', () => {
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+    })
+    renderModal()
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
+    expect(
+      screen.getByText(/Usually better one slide at a time/),
+    ).toBeInTheDocument()
+  })
+
+  it('omits the per-slide advice when there is no audio to identify', () => {
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+    })
+    renderModal({ hasRecordings: false })
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
+    expect(screen.queryByText(/Usually better one slide at a time/)).toBeNull()
+  })
+
+  it('enables speaker ID when recordings appear, still unchecked, without a remount', () => {
     mockFetchRoutes({
       '/api/actions/template.list': () => ({ status: 200, body: [] }),
     })
@@ -300,9 +325,11 @@ describe('DeckSettingsModal — Refine tab', () => {
 
     // The lecture's audio finishes flushing and the deck now reports recordings
     // (the viewer's poll updates the prop) — no reload, same mounted modal.
+    // The toggle becomes available but stays off: audio arriving is not the
+    // user asking to pay for a diarization pass over it.
     rerender(modal({ ...baseDeck, hasRecordings: true }))
     expect(box()).toBeEnabled()
-    expect(box()).toBeChecked()
+    expect(box()).not.toBeChecked()
     expect(screen.queryByText(/No lecture audio was recorded/)).toBeNull()
   })
 

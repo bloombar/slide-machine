@@ -312,7 +312,7 @@
       "aiTokens": "Trabajo de la IA en generación de diapositivas, refinado, narración y cuestionarios. Se mide en tokens: una petición de generación de diapositiva ronda los 3.500, y una clase de 75 minutos, unos 2 M.",
       "ttsCharacters": "Narración que generas con una voz estándar. Se cuenta una sola vez, al narrar la diapositiva por primera vez; volver a reproducirla no cuesta nada.",
       "ttsPremiumCharacters": "Narración generada con las voces premium, más naturales. Se cuenta una sola vez, al narrar la diapositiva por primera vez; volver a reproducirla no cuesta nada.",
-      "diarizationMinutes": "Audio grabado que puedes etiquetar por hablante. Menos de lo que puedes grabar: el etiquetado es un proceso de pago aparte, pensado para las clases que lo necesitan y no para todas.",
+      "diarizationMinutes": "Audio grabado que puedes etiquetar por hablante. Coincide con tu tiempo de grabación, así que puedes etiquetar todo lo que grabes: es un proceso aparte, para las clases que lo necesitan.",
       "translationCharacters": "Texto de la clase que traduces tú. Se cuenta una vez por clase e idioma: la traducción se guarda y se reutiliza.",
       "aiImages": "Imágenes generadas por IA para tus diapositivas.",
       "imageLookups": "Imágenes de diapositiva obtenidas por búsqueda.",
@@ -460,7 +460,8 @@
       "description": "Detectar quién habló —tú o el alumnado— y reformular las intervenciones del alumnado como preguntas, no como hechos.",
       "noAudio": "(No se grabó audio de la clase, así que esto no está disponible.)",
       "descriptionSlide": "Detectar quién habló en esta diapositiva —tú o el alumnado— y reformular las intervenciones del alumnado como preguntas, no como hechos.",
-      "noAudioSlide": "(No queda audio grabado de esta diapositiva, así que esto no está disponible.)"
+      "noAudioSlide": "(No queda audio grabado de esta diapositiva, así que esto no está disponible.)",
+      "wholeLectureHint": "Suele ser mejor diapositiva por diapositiva: hazlo desde la acción Refinar de la diapositiva donde los hablantes importen. En toda la clase vuelve a procesar cada minuto grabado, incluidos los tramos largos en los que solo hablas tú."
     },
     "transcript": {
       "label": "Mejorar la transcripción hablada",

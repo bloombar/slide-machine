@@ -39,8 +39,16 @@ describe('SlideRefineModal', () => {
     expect(checkbox(/Refine slide layout/)).toBeChecked()
     expect(checkbox(/Refine slide imagery/)).toBeChecked()
     expect(checkbox(/Refine the spoken transcript/)).not.toBeChecked()
-    // Speaker ID follows the audio, like the lecture tab follows recordings.
-    expect(checkbox(/Identify multiple speakers/)).toBeChecked()
+    // Speaker ID is opted into, not out of: it re-reads the whole recording at
+    // the same per-minute rate as capturing it, so refining a slide's wording
+    // must not quietly spend a diarization allowance too.
+    expect(checkbox(/Identify multiple speakers/)).not.toBeChecked()
+  })
+
+  it('leaves speaker identification off even when there is audio to read', () => {
+    setup({ hasAudio: true })
+    expect(checkbox(/Identify multiple speakers/)).not.toBeChecked()
+    expect(checkbox(/Identify multiple speakers/)).toBeEnabled()
   })
 
   it('leaves speaker identification off when there is no audio to read', () => {
@@ -48,10 +56,19 @@ describe('SlideRefineModal', () => {
     expect(checkbox(/Identify multiple speakers/)).not.toBeChecked()
   })
 
+  // This dialog IS what the lecture-wide tab recommends, so it does not repeat
+  // the advice to prefer it.
+  it('does not carry the lecture-wide "prefer per slide" advice', () => {
+    setup()
+    expect(screen.queryByText(/Usually better one slide at a time/)).toBeNull()
+  })
+
   it('runs every selected pass at the chosen strength', async () => {
     const { onRefine, onClose } = setup()
 
     fireEvent.click(checkbox(/Refine the spoken transcript/))
+    // Speaker ID starts off, so selecting "every pass" means asking for it.
+    fireEvent.click(checkbox(/Identify multiple speakers/))
     fireEvent.change(
       screen.getByRole('slider', { name: 'How much to refine this slide' }),
       { target: { value: '5' } },
@@ -100,7 +117,8 @@ describe('SlideRefineModal', () => {
 
   it('cannot refine with nothing selected', () => {
     const { onRefine } = setup()
-    fireEvent.click(checkbox(/Identify multiple speakers/))
+    // Speaker ID is already off by default; unchecking the three content
+    // passes is all it takes to leave nothing selected.
     fireEvent.click(checkbox(/Refine slide text/))
     fireEvent.click(checkbox(/Refine slide layout/))
     fireEvent.click(checkbox(/Refine slide imagery/))

@@ -124,24 +124,20 @@ export default function DeckSettingsModal({
   // Post-lecture refinement (GEN-4): any of three passes, run as one job.
   // Every setting persists to the lecture so the single-slide "Refine this
   // slide" kebab action reuses the same choices. Toggles start from the
-  // lecture's saved value, else the default (all on; speaker ID only when
-  // there is audio to diarize, and it is disabled otherwise). Slider levels
-  // start at the lecture's own value if set, else the server default.
+  // lecture's saved value, else the default: the content passes on, speaker ID
+  // off. Slider levels start at the lecture's own value if set, else the
+  // server default.
+  //
+  // Speaker ID is the exception because it is the one pass that spends a
+  // metered allowance by itself — batch diarization re-reads the entire
+  // recording at the same per-minute rate as capturing it
+  // (docs/BILLING_COST_MODEL.md §7). Defaulting it on meant a user who opened
+  // this modal to reword some slides paid for speaker labelling they never
+  // asked for, and the cost scales with lecture length rather than with what
+  // they changed. It stays available on every plan; it is just opted into.
   const [identifySpeakers, setIdentifySpeakers] = useState(
-    deck.refineIdentifySpeakers ?? deck.hasRecordings ?? false,
+    deck.refineIdentifySpeakers ?? false,
   )
-  // A google-cloud recording's audio can finish flushing after this modal is
-  // already open (the viewer polls for it). When the lecture first reports
-  // recordings, the speaker-ID toggle was disabled — so the user couldn't have
-  // set it — so re-derive its default now (enable + check unless the lecture
-  // explicitly saved it off), matching what a reload would show.
-  const hadRecordingsRef = useRef(deck.hasRecordings ?? false)
-  useEffect(() => {
-    if (deck.hasRecordings && !hadRecordingsRef.current) {
-      setIdentifySpeakers(deck.refineIdentifySpeakers ?? true)
-    }
-    hadRecordingsRef.current = deck.hasRecordings ?? false
-  }, [deck.hasRecordings, deck.refineIdentifySpeakers])
   // Which aspects of each slide the content pass may change. The lecture
   // stores one flag for the pass as a whole, so the three boxes start together
   // from it (all on unless the lecture saved the pass off) and their combined
@@ -670,6 +666,17 @@ export default function DeckSettingsModal({
                   saveRefineSettings({ identifySpeakers: checked })
                 }}
               />
+              {/* Steer people to the per-slide action instead. Diarization is
+                  billed on the whole recording however few slides need it, so
+                  running it lecture-wide usually pays to label a lot of audio
+                  in which nobody but the lecturer speaks. Shown only when the
+                  option is actually available — with no audio the toggle is
+                  disabled and already explains itself. */}
+              {deck.hasRecordings && (
+                <p className="mt-2 text-xs text-slate-500">
+                  {t('refine.speakers.wholeLectureHint')}
+                </p>
+              )}
             </div>
 
             <RefinePartsOptions

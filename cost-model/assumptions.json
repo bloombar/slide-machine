@@ -52,6 +52,20 @@
     "retainedAudioHeldDaysFactor": 1.0,
     "_note": "Audio MB per lecture is derived from the capture rate; held volume comes from each tier's audioRetentionDays in config/plans.json."
   },
+  "capSizing": {
+    "_note": "Inputs to scripts/pricing/derive-caps.mjs, which sizes eight caps from each tier's sttMinutes allowance. Everything else it needs comes from the lecture/revision/audience blocks above, so changing an assumption there changes the shipped caps too — re-run `npm run caps:derive`.",
+    "diarizationShareOfRecording": 1.0,
+    "premiumNarrationShare": 0.33,
+    "instructorLocalesPerDeck": 0.5,
+    "unlimitedRetentionPeriods": 6,
+    "roundToSignificantDigits": 2,
+    "_confidence": {
+      "diarizationShareOfRecording": "product decision: 1.0 means every recorded minute may also be labelled by speaker",
+      "premiumNarrationShare": "product decision: the share of a tier's narration that may use a premium voice",
+      "instructorLocalesPerDeck": "weak: how many languages an instructor translates their own deck into",
+      "unlimitedRetentionPeriods": "periods of audio a tier with no retention sweep must be able to hold at once"
+    }
+  },
   "tiers": {
     "free": {
       "lecturesPerMonth": 2,
