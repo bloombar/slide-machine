@@ -220,8 +220,9 @@ value is baked into the SPA at build.
 
 Optional, as features land: `GITHUB_OAUTH_CLIENT_ID` / `_SECRET`,
 `CONNECTED_ACCOUNT_TOKEN_ENC_KEY`, `STRIPE_SECRET_KEY` /
-`STRIPE_WEBHOOK_SECRET`, and the `SMTP_*` set (email verification / reset).
-Full list and defaults: [server/.env.example](../server/.env.example).
+`STRIPE_WEBHOOK_SECRET` (products, prices, webhook, and the rest of billing
+setup: [STRIPE.md](STRIPE.md)), and the `SMTP_*` set (email verification /
+reset). Full list and defaults: [server/.env.example](../server/.env.example).
 
 ## 6. Register the Google OAuth redirect URI
 

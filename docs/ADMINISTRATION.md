@@ -317,7 +317,8 @@ policy, and one cap per metered resource: `aiTokens`, `sttMinutes`,
 [config/service-prices.json](../config/service-prices.json); the arithmetic is
 in [BILLING_COST_MODEL.md](BILLING_COST_MODEL.md). Edit and redeploy to change
 what a plan includes; the `priceId`s must match real Stripe prices for billing to work
-(`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`). A user's `planTier` shows
+(`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) — how to create them:
+[STRIPE.md](STRIPE.md). A user's `planTier` shows
 read-only in the console: the settings editor excludes it by design —
 billing state is governed by [SPEC §5](SPEC.md#5-plans-billing--usage-limits),
 not by moderation — so changing it is a database operation.
