@@ -24,8 +24,11 @@ import { TranscriptSegmentModel } from '../models/transcript-segment'
 import { getBuiltinTemplate } from '../templates/builtin'
 import { verifyAccessToken } from '../auth/tokens'
 import { ProjectModel } from '../models/project'
+import { UserModel } from '../models/user'
+import { VoteModel, voteBreakdown } from '../models/vote'
 import { env } from '../config/env'
 import { HttpError } from '../middleware/error'
+import type { MyVote } from '@slide-machine/shared'
 
 /** Attaches userId when a valid Bearer token is present; never rejects. */
 const optionalAuth = async (
@@ -89,6 +92,20 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
   const canEdit = canEditAcl(acl, req.userId)
   const slides = await SlideModel.find({ deckId: deck._id }).sort({ index: 1 })
   const project = await ProjectModel.findById(deck.projectId).catch(() => null)
+  // Owner (SOC-4 link) and the viewer's own vote on this lecture (SOC-1).
+  const owner = await UserModel.findById(deck.ownerId)
+    .select('displayName')
+    .catch(() => null)
+  const myVote: MyVote = req.userId
+    ? ((
+        await VoteModel.findOne({
+          userId: req.userId,
+          targetType: 'deck',
+          targetId: deck._id,
+        })
+      )?.value ?? 0)
+    : 0
+  const { up: voteUp, down: voteDown } = await voteBreakdown('deck', deck._id)
   const body: DeckViewResponse = {
     deck: isOwner ? toDeckDto(deck, acl) : toSharedDeckDto(deck, acl),
     slides: slides.map(toSlideDto),
@@ -102,6 +119,14 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
     // voices). A slide qualifies if a timed segment of it belongs to a
     // recording that is still retained on the deck.
     audioSlideIds: await playableAudioSlideIds(deck, canEdit),
+    owner: {
+      id: deck.ownerId.toString(),
+      displayName: owner?.displayName ?? '',
+    },
+    project: { id: deck.projectId.toString(), title: project?.title ?? '' },
+    myVote,
+    voteUp,
+    voteDown,
   }
   res.json(body)
 })

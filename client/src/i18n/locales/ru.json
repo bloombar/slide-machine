@@ -248,12 +248,33 @@
   },
   "home": {
     "welcome": "Здравствуйте, {name}",
+    "yourWork": "Ваша работа",
     "showAll": "{count, plural, one {Показать # лекцию} few {Показать все # лекции} many {Показать все # лекций} other {Показать все # лекции}}",
     "otherLectures": "Другие лекции",
     "otherLecturesHint": "Ваши лекции внутри проектов других пользователей.",
     "errors": {
       "load": "Не удалось загрузить проекты"
     }
+  },
+  "discover": {
+    "title": "Обзор",
+    "regionLabel": "Лекции сообщества",
+    "latest": "Новые",
+    "top": "Лучшие",
+    "searchLabel": "Поиск лекций, проектов и людей",
+    "searchPlaceholder": "Поиск лекций, проектов, людей…",
+    "searching": "Поиск…",
+    "loadFailed": "Не удалось загрузить ленту.",
+    "searchFailed": "Не удалось выполнить поиск.",
+    "empty": "Публичных лекций пока нет.",
+    "noMatches": "Нет совпадений по запросу «{query}».",
+    "groupLectures": "Лекции",
+    "groupProjects": "Проекты",
+    "groupPeople": "Люди",
+    "loadMore": "Показать ещё",
+    "unknownOwner": "Неизвестно",
+    "rating": "Оценка {score}",
+    "ratingTitle": "Итоговая оценка: {score}"
   },
   "plan": {
     "tier": {

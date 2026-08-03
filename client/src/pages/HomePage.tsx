@@ -25,6 +25,7 @@ import NewLectureZone from '../components/NewLectureZone'
 import ProjectRowMenu from '../components/ProjectRowMenu'
 import NewProjectModal from '../components/NewProjectModal'
 import UsageNotice from '../components/UsageNotice'
+import DeckFeed from '../components/DeckFeed'
 import { config } from '../config'
 
 function ProjectSection({
@@ -250,55 +251,68 @@ export default function HomePage() {
         </button>
       </div>
 
-      <div className="max-w-2xl">
-        {/* Only speaks up when something is close to a limit (BILL-4). */}
-        <UsageNotice />
-        {error && (
-          <p role="alert" className="mb-4 text-sm text-red-600">
-            {error}
-          </p>
-        )}
-        {notice && (
-          <p role="status" className="mb-4 text-sm text-slate-600">
-            {notice}
-          </p>
-        )}
-        {projects === null ? (
-          <p className="text-slate-500">{t('common.loading')}</p>
-        ) : projects.length === 0 ? (
-          // No project yet: a dashed zone that creates a default project
-          // and starts the first lecture in one click.
-          <ul className="flex flex-col gap-2">
-            <NewLectureZone onStart={() => void startFirstLecture()} />
-          </ul>
-        ) : (
-          projects.map(p => (
-            <ProjectSection
-              key={p.id}
-              project={p}
-              decks={decksByProject.get(p.id) ?? []}
-              onStartLecture={proj => void startLecture(proj)}
-              onImportLecture={(proj, file) => void importLecture(proj, file)}
-              onLectureDeleted={removeLecture}
-              onProjectDeleted={removeProject}
-            />
-          ))
-        )}
-        {otherDecks.length > 0 && (
-          <section className="mb-8">
-            <h2 className="mb-3 text-lg font-semibold">
-              {t('home.otherLectures')}
-            </h2>
-            <p className="mb-3 text-sm text-slate-500">
-              {t('home.otherLecturesHint')}
+      <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
+        {/* A named region so your own projects stay tellable apart from the
+            Discover sidebar, which lists other people's lectures beside them. */}
+        <section
+          aria-label={t('home.yourWork')}
+          className="min-w-0 flex-1 lg:max-w-2xl"
+        >
+          {/* Only speaks up when something is close to a limit (BILL-4). */}
+          <UsageNotice />
+          {error && (
+            <p role="alert" className="mb-4 text-sm text-red-600">
+              {error}
             </p>
+          )}
+          {notice && (
+            <p role="status" className="mb-4 text-sm text-slate-600">
+              {notice}
+            </p>
+          )}
+          {projects === null ? (
+            <p className="text-slate-500">{t('common.loading')}</p>
+          ) : projects.length === 0 ? (
+            // No project yet: a dashed zone that creates a default project
+            // and starts the first lecture in one click.
             <ul className="flex flex-col gap-2">
-              {otherDecks.map(d => (
-                <LectureRow key={d.id} deck={d} onDeleted={removeLecture} />
-              ))}
+              <NewLectureZone onStart={() => void startFirstLecture()} />
             </ul>
-          </section>
-        )}
+          ) : (
+            projects.map(p => (
+              <ProjectSection
+                key={p.id}
+                project={p}
+                decks={decksByProject.get(p.id) ?? []}
+                onStartLecture={proj => void startLecture(proj)}
+                onImportLecture={(proj, file) => void importLecture(proj, file)}
+                onLectureDeleted={removeLecture}
+                onProjectDeleted={removeProject}
+              />
+            ))
+          )}
+          {otherDecks.length > 0 && (
+            <section className="mb-8">
+              <h2 className="mb-3 text-lg font-semibold">
+                {t('home.otherLectures')}
+              </h2>
+              <p className="mb-3 text-sm text-slate-500">
+                {t('home.otherLecturesHint')}
+              </p>
+              <ul className="flex flex-col gap-2">
+                {otherDecks.map(d => (
+                  <LectureRow key={d.id} deck={d} onDeleted={removeLecture} />
+                ))}
+              </ul>
+            </section>
+          )}
+        </section>
+
+        {/* Discover (SOC-2/SOC-3): other people's public lectures alongside
+            your own work, sticky so it stays put as the main column scrolls. */}
+        <div className="w-full lg:sticky lg:top-6 lg:w-80 lg:shrink-0">
+          <DeckFeed />
+        </div>
       </div>
 
       {creatingProject && (

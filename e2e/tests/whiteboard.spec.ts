@@ -40,6 +40,20 @@ const buildDeck = async (page: Page) => {
   }
 }
 
+/** Drags the eraser along the same line a stroke was drawn on, so it crosses
+ * the stroke rather than landing on a single point. A stationary press samples
+ * one position and can miss the stroke entirely. */
+const eraseAcrossSlide = async (page: Page, yFraction = 0.5) => {
+  const box = await page.getByTestId('slide').boundingBox()
+  if (!box) throw new Error('no slide box')
+  const y = box.y + box.height * yFraction
+  await page.mouse.move(box.x + box.width * 0.35, y)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width * 0.5, y)
+  await page.mouse.move(box.x + box.width * 0.65, y)
+  await page.mouse.up()
+}
+
 /** Drags the mouse across the current slide to draw a stroke, at an optional
  * vertical fraction of the slide so successive strokes stay distinct. */
 const drawOnSlide = async (page: Page, yFraction = 0.5) => {
@@ -83,25 +97,37 @@ test('erases a stroke as a timestamped event (kept in data)', async ({
   page,
 }) => {
   await buildDeck(page)
-  await page.getByRole('button', { name: 'Pen' }).click()
+  const pen = page.getByRole('button', { name: 'Pen' })
+  await pen.click()
+  // Wait for the tool to actually be selected. Clicking only requests the
+  // switch; dragging before it lands draws with the previous tool, so the
+  // erase never happens and no save is ever stamped.
+  await expect(pen).toHaveAttribute('aria-pressed', 'true')
 
-  let saved = page.waitForResponse(r =>
+  const saved = page.waitForResponse(r =>
     r.url().includes('/actions/slide.editDrawings'),
   )
   await drawOnSlide(page)
   await saved
 
-  // Erase over the same stroke; it is stamped, not deleted.
-  await page.getByRole('button', { name: 'Eraser' }).click()
-  saved = page.waitForResponse(r =>
-    r.url().includes('/actions/slide.editDrawings'),
-  )
-  const box = await page.getByTestId('slide').boundingBox()
-  if (!box) throw new Error('no slide box')
-  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height / 2)
-  await page.mouse.down()
-  await page.mouse.up()
-  const body = await (await saved).json()
+  // Erase over the same stroke; it is stamped, not deleted. Wait for the save
+  // that actually carries the stamp rather than whichever `editDrawings`
+  // response arrives first — drawing and erasing both save, so matching on the
+  // URL alone can capture the wrong one and read a pre-erase payload.
+  const stamped = page.waitForResponse(async r => {
+    if (!r.url().includes('/actions/slide.editDrawings')) return false
+    try {
+      const b = (await r.json()) as { drawings?: { erasedAnchor?: unknown }[] }
+      return !!b.drawings?.some(d => d.erasedAnchor)
+    } catch {
+      return false
+    }
+  })
+  const eraser = page.getByRole('button', { name: 'Eraser' })
+  await eraser.click()
+  await expect(eraser).toHaveAttribute('aria-pressed', 'true')
+  await eraseAcrossSlide(page)
+  const body = await (await stamped).json()
   expect(body.drawings).toHaveLength(1)
   expect(body.drawings[0].erasedAnchor).toBeTruthy() // kept + stamped
 })

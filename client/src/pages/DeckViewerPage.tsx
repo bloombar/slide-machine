@@ -90,6 +90,7 @@ import DeckSettingsModal, {
 import { ShellTitle } from '../components/layout/ShellTitle'
 import { ShellActions } from '../components/layout/ShellActions'
 import ViewModeToggle, { type ViewMode } from '../components/ViewModeToggle'
+import VoteControl from '../components/VoteControl'
 import { lectureTitle, untitledLecture } from '../lib/lecture'
 
 // The toolbar's "Seed material" upload button is hidden for now but its
@@ -1710,6 +1711,21 @@ export default function DeckViewerPage() {
           whiteboard={whiteboard}
           onNewWhiteboardSlide={() => void addWhiteboardSlide()}
         />
+      )}
+
+      {/* Quiet, neutral up/down vote (SOC-1): ▲ up-votes and ▼ down-votes side
+          by side. In the content flow (right-aligned, under the view toggle),
+          so it scrolls with the slides. Shown to signed-in viewers, not the
+          owner — you do not vote on your own lecture. */}
+      {status === 'authenticated' && !isOwner && (
+        <div className="mb-4 flex justify-end">
+          <VoteControl
+            deckId={view.deck.id}
+            up={view.voteUp}
+            down={view.voteDown}
+            myVote={view.myVote}
+          />
+        </div>
       )}
 
       {view.slides.length === 0 ? (

@@ -10,9 +10,13 @@ import { createProject } from './helpers'
 const email = `home-order-${Date.now()}@example.com`
 const password = 'sturdy-passw0rd'
 
-/** Titles of the project sub-headings, top to bottom, on the home page. */
+/** Titles of the project sub-headings, top to bottom, on the home page.
+ * Scoped to "Your work": the Discover sidebar carries a heading of its own. */
 const projectOrder = (page: import('@playwright/test').Page) =>
-  page.getByRole('heading', { level: 2 }).allTextContents()
+  page
+    .getByRole('region', { name: 'Your work' })
+    .getByRole('heading', { level: 2 })
+    .allTextContents()
 
 test('projects sort by most recent modification (settings or deck)', async ({
   page,

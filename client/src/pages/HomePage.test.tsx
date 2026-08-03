@@ -133,8 +133,12 @@ describe('HomePage', () => {
     renderHome()
     await screen.findByRole('heading', { name: 'Biology' })
 
+    // Only the project headings in the main column — the Discover sidebar
+    // (SOC-3) carries a level-2 heading of its own and sits outside them.
+    const discover = screen.getByRole('complementary')
     const headings = screen
       .getAllByRole('heading', { level: 2 })
+      .filter(h => !discover.contains(h))
       .map(h => h.textContent)
     expect(headings).toEqual(['Biology', 'Chemistry'])
   })

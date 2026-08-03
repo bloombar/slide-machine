@@ -192,10 +192,37 @@ describe('copy-on-write overrides', () => {
   })
 })
 
-describe('project entity surfaces stay member-only', () => {
-  it('a public project is not open to signed-in strangers', async () => {
-    expect((await act(byron, 'project.get', { projectId })).status).toBe(403)
-    expect((await act(byron, 'deck.list', { projectId })).status).toBe(403)
+describe('public projects browse read-only; restricted stay member-only', () => {
+  it('a public project is browsable read-only by signed-in strangers (SOC)', async () => {
+    await act(ada, 'project.update', { projectId, seedContext: 'SECRET-PREP' })
+    const res = await act(byron, 'project.get', { projectId })
+    expect(res.status).toBe(200)
+    // The shareable shape only: prep notes and people lists stay hidden.
+    expect(res.body.seedContext).toBeUndefined()
+    expect(res.body.viewers).toBeUndefined()
+    expect(res.body.editors).toBeUndefined()
+    // Its public lectures are listed
+    const list = await act(byron, 'deck.list', { projectId })
+    expect(list.status).toBe(200)
+    expect(list.body).toHaveLength(1)
+  })
+
+  it('a stranger browsing a public project sees only its public lectures', async () => {
+    // Add a lecture and restrict just it: the stranger must not see it.
+    const secret = await act(ada, 'deck.create', {
+      projectId,
+      title: 'Secret',
+      templateId: 'classic',
+    })
+    await act(ada, 'deck.setAccess', {
+      deckId: secret.body.id as string,
+      visibility: 'restricted',
+    })
+    const list = await act(byron, 'deck.list', { projectId })
+    expect(list.status).toBe(200)
+    expect((list.body as { title: string }[]).map(d => d.title)).toEqual([
+      'Waves',
+    ])
   })
 
   it('viewers see the project without seed notes or share lists', async () => {

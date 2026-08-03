@@ -248,12 +248,33 @@
   },
   "home": {
     "welcome": "Welcome, {name}",
+    "yourWork": "Your work",
     "showAll": "{count, plural, one {Show the # lecture} other {Show all # lectures}}",
     "otherLectures": "Other lectures",
     "otherLecturesHint": "Lectures you own inside other people's projects.",
     "errors": {
       "load": "Could not load projects"
     }
+  },
+  "discover": {
+    "title": "Discover",
+    "regionLabel": "Community lectures",
+    "latest": "Latest",
+    "top": "Top",
+    "searchLabel": "Search lectures, projects, and people",
+    "searchPlaceholder": "Search lectures, projects, people…",
+    "searching": "Searching…",
+    "loadFailed": "Could not load the feed.",
+    "searchFailed": "Could not run that search.",
+    "empty": "No public lectures yet.",
+    "noMatches": "No matches for “{query}”.",
+    "groupLectures": "Lectures",
+    "groupProjects": "Projects",
+    "groupPeople": "People",
+    "loadMore": "Load more",
+    "unknownOwner": "Unknown",
+    "rating": "Rating {score}",
+    "ratingTitle": "Net rating: {score}"
   },
   "plan": {
     "tier": {

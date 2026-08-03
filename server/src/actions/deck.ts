@@ -84,6 +84,8 @@ import {
 } from '../lib/layout-refit'
 import { layoutHasImageSlot, reconcileImageLayout } from '../lib/image-layout'
 import { UserModel } from '../models/user'
+import { VoteModel, voteBreakdown } from '../models/vote'
+import type { MyVote } from '@slide-machine/shared'
 import { SlideModel, toSlideDto } from '../models/slide'
 import { TranscriptSegmentModel } from '../models/transcript-segment'
 import { ProjectModel, projectAcl } from '../models/project'
@@ -258,7 +260,12 @@ export const deckList = defineAction<DeckListInput, Deck[]>({
       // They can already open any lecture in the viewer, so listing the
       // project's lectures here — private ones included — leaks nothing new.
       const admin = !member && (await isAllowlistedAdmin(userId))
-      if (!member && !admin) throw new ActionForbiddenError()
+      // A PUBLIC project is browsable by anyone (SOC discovery); the per-deck
+      // ACL filter below still limits a non-member to its public lectures.
+      const publicProject = !member && !admin && project.visibility === 'public'
+      if (!member && !admin && !publicProject) {
+        throw new ActionForbiddenError()
+      }
       const docs = await DeckModel.find({ projectId: input.projectId }).sort({
         updatedAt: -1,
       })
@@ -294,6 +301,18 @@ export const deckGet = defineAction<DeckGetInput, DeckViewResponse>({
     const project = await ProjectModel.findById(deck.projectId).catch(
       () => null,
     )
+    const owner = await UserModel.findById(deck.ownerId)
+      .select('displayName')
+      .catch(() => null)
+    const myVote: MyVote =
+      (
+        await VoteModel.findOne({
+          userId,
+          targetType: 'deck',
+          targetId: deck._id,
+        })
+      )?.value ?? 0
+    const { up: voteUp, down: voteDown } = await voteBreakdown('deck', deck._id)
     return {
       deck: isOwner ? toDeckDto(deck, acl) : toSharedDeckDto(deck, acl),
       slides: slides.map(toSlideDto),
@@ -301,6 +320,11 @@ export const deckGet = defineAction<DeckGetInput, DeckViewResponse>({
       canEdit: canEditAcl(acl, userId),
       projectGenerationFreedom:
         project?.generationFreedom ?? env.GENERATION_FREEDOM,
+      owner: { id: acl.ownerId, displayName: owner?.displayName ?? '' },
+      project: { id: deck.projectId.toString(), title: project?.title ?? '' },
+      myVote,
+      voteUp,
+      voteDown,
     }
   },
 })

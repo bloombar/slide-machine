@@ -248,12 +248,33 @@
   },
   "home": {
     "welcome": "欢迎，{name}",
+    "yourWork": "你的作品",
     "showAll": "{count, plural, other {查看全部 # 节课程}}",
     "otherLectures": "其他课程",
     "otherLecturesHint": "你在他人项目中拥有的课程。",
     "errors": {
       "load": "无法加载项目"
     }
+  },
+  "discover": {
+    "title": "发现",
+    "regionLabel": "社区讲座",
+    "latest": "最新",
+    "top": "最热",
+    "searchLabel": "搜索讲座、项目和用户",
+    "searchPlaceholder": "搜索讲座、项目、用户…",
+    "searching": "搜索中…",
+    "loadFailed": "无法加载信息流。",
+    "searchFailed": "无法完成搜索。",
+    "empty": "还没有公开的讲座。",
+    "noMatches": "没有与“{query}”匹配的结果。",
+    "groupLectures": "讲座",
+    "groupProjects": "项目",
+    "groupPeople": "用户",
+    "loadMore": "加载更多",
+    "unknownOwner": "未知",
+    "rating": "评分 {score}",
+    "ratingTitle": "净评分：{score}"
   },
   "plan": {
     "tier": {
