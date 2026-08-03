@@ -53,9 +53,12 @@ export default function SlideRefineModal({
   onClose,
 }: Props) {
   const { t } = useTranslation()
-  // On whenever there is audio to read, matching the lecture-wide tab (whose
-  // box defaults to the lecture's recordings); with no audio it is unavailable.
-  const [identifySpeakers, setIdentifySpeakers] = useState(Boolean(hasAudio))
+  // Off by default, matching the lecture-wide tab. Speaker identification is
+  // billed per minute of the whole recording at the same rate as capturing it
+  // (docs/BILLING_COST_MODEL.md §7), so it is opted into rather than out of —
+  // it is the one refinement pass that costs real money on a slide the user
+  // may only have wanted reworded. With no audio it is unavailable entirely.
+  const [identifySpeakers, setIdentifySpeakers] = useState(false)
   // Text, layout, and imagery are what "refine a slide" has always meant, so
   // they start on; the narration is a separate ask, so it starts off.
   const [parts, setParts] = useState<Required<SlideRefineParts>>({

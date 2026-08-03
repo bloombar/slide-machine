@@ -23,6 +23,8 @@
     "lint": "eslint .",
     "board:derive": "node scripts/board/derive.mjs",
     "board:sync": "node scripts/board/sync.mjs",
+    "caps:derive": "node scripts/pricing/derive-caps.mjs",
+    "caps:check": "node scripts/pricing/derive-caps.mjs --check",
     "spaces:lifecycle": "node scripts/spaces/lifecycle.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "format": "prettier --write .",

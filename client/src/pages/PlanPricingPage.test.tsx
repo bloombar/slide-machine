@@ -374,10 +374,12 @@ describe('PlanPricingPage', () => {
       }),
     })
 
-    // Speaker labelling is capped below recording time on purpose, which
-    // reads as a bug unless the row says why (BILL-3).
+    // Speaker labelling now matches the recording allowance rather than
+    // sitting below it, so the row has to say so — a bare minute count next
+    // to an identical one reads as a duplicate unless it explains itself
+    // (BILL-3).
     const diarization = await row(/Speaker identification/i)
-    expect(diarization).toHaveTextContent(/separate paid pass/i)
+    expect(diarization).toHaveTextContent(/matches your recording allowance/i)
   })
 
   it('separates the audience allowances from the instructor’s own', async () => {

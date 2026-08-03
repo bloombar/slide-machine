@@ -5,7 +5,7 @@
     "caps": {
       "aiTokens": 5000000,
       "sttMinutes": 75,
-      "diarizationMinutes": 40,
+      "diarizationMinutes": 75,
       "ttsCharacters": 60000,
       "ttsPremiumCharacters": 20000,
       "aiImages": 5,
@@ -24,7 +24,7 @@
     "caps": {
       "aiTokens": 7500000,
       "sttMinutes": 150,
-      "diarizationMinutes": 70,
+      "diarizationMinutes": 150,
       "ttsCharacters": 120000,
       "ttsPremiumCharacters": 40000,
       "aiImages": 10,
@@ -43,7 +43,7 @@
     "caps": {
       "aiTokens": 65000000,
       "sttMinutes": 600,
-      "diarizationMinutes": 350,
+      "diarizationMinutes": 600,
       "ttsCharacters": 800000,
       "ttsPremiumCharacters": 100000,
       "aiImages": 100,
@@ -60,17 +60,17 @@
     "priceId": "price_1U0PHDB99SsfgcVSweIGyODu",
     "audioRetentionDays": null,
     "caps": {
-      "aiTokens": 100000000,
+      "aiTokens": 110000000,
       "sttMinutes": 3300,
-      "diarizationMinutes": 1100,
-      "ttsCharacters": 1350000,
-      "ttsPremiumCharacters": 300000,
+      "diarizationMinutes": 3300,
+      "ttsCharacters": 1400000,
+      "ttsPremiumCharacters": 440000,
       "aiImages": 300,
       "imageLookups": 2200,
       "importMb": 10000,
       "exports": 1000,
-      "translationCharacters": 350000,
-      "audioStorageMb": 50000,
+      "translationCharacters": 400000,
+      "audioStorageMb": 58000,
       "audienceTtsCharacters": 700000,
       "audienceLocales": 27
     }

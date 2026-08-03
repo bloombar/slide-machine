@@ -312,7 +312,7 @@
       "aiTokens": "Travail de l’IA : génération des diapositives, amélioration, narration et quiz. Mesuré en jetons : une requête de génération de diapositive avoisine 3 500, et un cours de 75 minutes environ 2 M.",
       "ttsCharacters": "Narration que vous générez avec une voix standard. Comptée une seule fois, à la première narration de la diapositive : la réécouter ne coûte rien.",
       "ttsPremiumCharacters": "Narration générée avec les voix premium, plus naturelles. Comptée une seule fois, à la première narration de la diapositive : la réécouter ne coûte rien.",
-      "diarizationMinutes": "Audio enregistré que vous pouvez attribuer aux intervenants. Moins que ce que vous pouvez enregistrer : cette étape est payante à part et sert aux cours qui en ont besoin, pas à tous.",
+      "diarizationMinutes": "Audio enregistré que vous pouvez attribuer aux intervenants. Équivaut à votre temps d'enregistrement : tout ce que vous enregistrez peut donc être attribué. C'est une étape distincte, pour les cours qui en ont besoin.",
       "translationCharacters": "Texte du cours que vous traduisez vous-même. Compté une fois par cours et par langue : la traduction est conservée et réutilisée.",
       "aiImages": "Images générées par l’IA pour vos diapositives.",
       "imageLookups": "Images de diapositive trouvées par recherche.",
@@ -460,7 +460,8 @@
       "description": "Détecter qui a parlé — vous ou les étudiants — et reformuler les prises de parole des étudiants en questions plutôt qu’en affirmations.",
       "noAudio": "(Aucun audio du cours n'a été enregistré, cette option est donc indisponible.)",
       "descriptionSlide": "Détecter qui a parlé sur cette diapositive — vous ou les étudiants — et reformuler les prises de parole des étudiants en questions plutôt qu’en affirmations.",
-      "noAudioSlide": "(Aucun audio enregistré ne subsiste pour cette diapositive, cette option est donc indisponible.)"
+      "noAudioSlide": "(Aucun audio enregistré ne subsiste pour cette diapositive, cette option est donc indisponible.)",
+      "wholeLectureHint": "Mieux vaut généralement procéder diapositive par diapositive : lancez-le depuis l’action Affiner d’une diapositive où les intervenants comptent vraiment. Sur tout le cours, chaque minute enregistrée est relue, y compris les longs passages où vous seul parlez."
     },
     "transcript": {
       "label": "Améliorer la transcription orale",
