@@ -19,7 +19,7 @@
     }
   },
   "fresh": {
-    "priceId": "price_fresh_REPLACE_ME",
+    "priceId": "price_1U0P1qB5UeQhNCWrLlKbcC5R",
     "audioRetentionDays": 14,
     "caps": {
       "aiTokens": 7500000,
@@ -38,7 +38,7 @@
     }
   },
   "pro": {
-    "priceId": "price_pro_REPLACE_ME",
+    "priceId": "price_1U0P2iB5UeQhNCWrwIcC6rnK",
     "audioRetentionDays": 21,
     "caps": {
       "aiTokens": 65000000,
@@ -57,7 +57,7 @@
     }
   },
   "max": {
-    "priceId": "price_max_REPLACE_ME",
+    "priceId": "price_1U0P3bB5UeQhNCWr8KNYrkcL",
     "audioRetentionDays": null,
     "caps": {
       "aiTokens": 100000000,
