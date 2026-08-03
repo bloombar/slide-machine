@@ -1,8 +1,9 @@
 /**
- * User account settings actions (AUTH-5): profile visibility, which gates
- * the public profile page (SHARE-1), and the lecturing language. Every
- * change is recorded in the settings change log — see
- * docs/ADMINISTRATION.md ("Settings change log").
+ * User account settings actions (AUTH-5): the display name and bio shown
+ * on the profile, the profile visibility that gates the public profile
+ * page (SHARE-1), and the lecturing and interface languages. Every change
+ * is recorded in the settings change log — see docs/ADMINISTRATION.md
+ * ("Settings change log").
  */
 import { z } from 'zod'
 import type { HydratedDocument } from 'mongoose'
@@ -68,12 +69,12 @@ export const userUpdateProfile = defineAction<UserUpdateProfileInput, SafeUser>(
       bio: z.string().trim().max(2000).optional(),
     }),
     execute: async (ctx, input) => {
-      if (!ctx.userId) throw new ActionForbiddenError('Sign in to continue')
-      const user = await UserModel.findById(ctx.userId)
-      if (!user) throw new ActionForbiddenError()
+      const user = await loadSelf(ctx.userId)
+      const before = userSettingsSnapshot(user)
       if (input.displayName !== undefined) user.displayName = input.displayName
       if (input.bio !== undefined) user.bio = input.bio || undefined
       await user.save()
+      await recordSelfChange(user, before)
       return toUserDto(user)
     },
   },

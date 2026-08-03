@@ -128,6 +128,64 @@ describe('account settings', () => {
     expect(await AdminActionLogModel.countDocuments()).toBe(0)
   })
 
+  it('records the display name and bio a user changes about themselves', async () => {
+    const res = await act(ada, 'user.updateProfile', {
+      displayName: 'Ada L',
+      bio: 'Teaches waves.',
+    })
+    expect(res.status).toBe(200)
+
+    const entry = await onlyEntry()
+    expect(entry.actorId.toString()).toBe(adaId)
+    expect(entry.actorEmail).toBe('ada@example.com')
+    expect(entry.actorRole).toBe('owner')
+    expect(entry.entityType).toBe('user')
+    expect(entry.entityId).toBe(adaId)
+    expect(entry.entityName).toBe('ada@example.com')
+    expect(entry.ownerId).toBe(adaId)
+    expect(entry.changes).toEqual({
+      displayName: { from: 'ada', to: 'Ada L' },
+      // The account registered without one, so there was nothing stored
+      bio: { from: null, to: 'Teaches waves.' },
+    })
+    // The account edited itself, so the admin audit log stays empty
+    expect(await AdminActionLogModel.countDocuments()).toBe(0)
+  })
+
+  it('records clearing the bio, and leaves a re-sent field out of the diff', async () => {
+    await act(ada, 'user.updateProfile', { bio: 'Teaches waves.' })
+    await act(ada, 'user.updateProfile', { displayName: 'ada', bio: '' })
+
+    const entries = await settingsEntries()
+    expect(entries).toHaveLength(2)
+    expect(entries[0]?.changes).toEqual({
+      bio: { from: null, to: 'Teaches waves.' },
+    })
+    // The display name went along for the ride unchanged, so only the
+    // cleared bio is recorded — as null, the way every cleared setting is
+    expect(entries[1]?.changes).toEqual({
+      bio: { from: 'Teaches waves.', to: null },
+    })
+  })
+
+  it('truncates a long bio rather than storing it whole', async () => {
+    const bio = 'w'.repeat(500)
+    const res = await act(ada, 'user.updateProfile', { bio })
+    expect(res.status).toBe(200)
+    // The profile keeps the full text; only the log entry is shortened, so
+    // one big bio cannot inflate an append-only collection
+    expect(res.body.bio).toBe(bio)
+
+    const entry = await onlyEntry()
+    expect(entry.changes.bio?.to).toBe(`${'w'.repeat(200)}…`)
+  })
+
+  it('writes nothing when a profile edit re-sends the stored values', async () => {
+    const res = await act(ada, 'user.updateProfile', { displayName: 'ada' })
+    expect(res.status).toBe(200)
+    expect(await SettingsChangeLogModel.countDocuments()).toBe(0)
+  })
+
   it('records the lecturing language, and clearing it back to the default', async () => {
     await act(ada, 'user.setLanguage', { language: 'fr' })
     await act(ada, 'user.setLanguage', { language: null })
