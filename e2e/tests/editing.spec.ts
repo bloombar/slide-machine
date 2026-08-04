@@ -41,7 +41,8 @@ test('in-place editing in the viewer, including list view and bullets', async ({
   await buildDeck(page)
 
   // Open the deck in the viewer via the home screen
-  await page.getByRole('link', { name: 'The Slide Machine' }).click()
+  await page.getByRole('button', { name: 'Menu', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Home' }).click()
   await page.getByRole('link', { name: 'Atoms' }).click()
   await expect(page).toHaveURL(/\/d\//)
 

@@ -611,6 +611,7 @@
   },
   "deck": {
     "meta": "{count, plural, other {# 张幻灯片}} · 编辑于{age}",
+    "byAuthor": "· 作者",
     "share": "共享",
     "shareLabel": "共享课程",
     "addSlide": "添加幻灯片",

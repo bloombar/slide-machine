@@ -9,7 +9,7 @@
  * that path is covered by admin-settings.spec.ts.
  */
 import { test, expect, type Page } from '@playwright/test'
-import { createProject } from './helpers'
+import { createProject, openProjectSettings } from './helpers'
 
 const password = 'sturdy-passw0rd'
 // The admin email is fixed (it must match ADMIN_EMAILS); the account may
@@ -97,7 +97,7 @@ test('the same user changes a project setting', async ({ page }) => {
   await ensureSignedIn(page, user)
   await createProject(page, projectTitle)
 
-  await page.getByRole('button', { name: 'Project settings' }).click()
+  await openProjectSettings(page, projectTitle)
   const modal = page.getByRole('dialog', { name: 'Project settings' })
   await expect(modal).toBeVisible()
   const saved = page.waitForResponse(

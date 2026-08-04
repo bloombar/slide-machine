@@ -611,6 +611,7 @@
   },
   "deck": {
     "meta": "{count, plural, one {# diapositiva} other {# diapositivas}} · editada {age}",
+    "byAuthor": "· por",
     "share": "Compartir",
     "shareLabel": "Compartir la clase",
     "addSlide": "Añadir una diapositiva",

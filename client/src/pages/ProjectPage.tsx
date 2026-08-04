@@ -13,7 +13,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import { Settings } from 'lucide-react'
 import type { Deck, DeckImportResult, Project } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import { ApiError } from '../api/http'
@@ -27,6 +26,7 @@ import { t as translate } from '../i18n'
 import ConfirmDialog from '../components/ConfirmDialog'
 import LectureRow from '../components/LectureRow'
 import NewLectureZone from '../components/NewLectureZone'
+import ProjectRowMenu from '../components/ProjectRowMenu'
 import EditableText from '../components/EditableText'
 import ProjectSettingsModal, {
   type ProjectSettingsTabId,
@@ -186,22 +186,21 @@ export default function ProjectPage() {
             t('common.loading')
           )}
         </h1>
-        {/* Owner controls only. A public project is browsable read-only by
-            anyone (SOC-2 discovery), so a stranger reaches this page and must
-            not be offered settings they cannot change. Admins get it once the
-            allowlist check resolves. */}
-        {(canEdit || adminOverride) && (
-          <button
-            aria-label={t('project.settings.title')}
-            title={t('project.settings.title')}
-            onClick={() => {
-              setSettingsTab('general')
+        {/* One menu for a project wherever it appears — the same kebab the
+            home screen shows beside each project, opening settings in place
+            here rather than navigating away. Editors and admins only: a
+            public project is browsable read-only by anyone (SOC-2 discovery),
+            and a stranger must not be offered controls they cannot use. */}
+        {project && (canEdit || adminOverride) && (
+          <ProjectRowMenu
+            project={project}
+            onDeleted={() => void navigate('/app')}
+            onImport={file => void importLecture(file)}
+            onOpenSettings={tab => {
+              setSettingsTab(tab)
               setSettingsOpen(true)
             }}
-            className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-          >
-            <Settings className="h-5 w-5" aria-hidden />
-          </button>
+          />
         )}
       </header>
 
@@ -220,13 +219,12 @@ export default function ProjectPage() {
           </p>
         )}
         <ul className="flex flex-col gap-2">
-          {/* Always first: a dashed zone to add or import a lecture. Editors
-              only — a read-only visitor to a public project cannot add to it. */}
+          {/* Always first: a dashed zone to add a lecture. Editors only — a
+              read-only visitor to a public project cannot add to it. */}
           {project && (canEdit || adminOverride) && (
             <NewLectureZone
               projectTitle={projectTitle(project)}
               onStart={() => void startLecture()}
-              onImport={file => void importLecture(file)}
             />
           )}
           {decks.map(d => (

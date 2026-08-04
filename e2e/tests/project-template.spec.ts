@@ -4,7 +4,7 @@
  * so later project changes never rewrite existing lectures.
  */
 import { test, expect } from '@playwright/test'
-import { createProject } from './helpers'
+import { createProject, openProjectSettings } from './helpers'
 
 const email = `ptmpl-${Date.now()}@example.com`
 
@@ -20,7 +20,7 @@ test('project template is the default for new lectures only', async ({
   await createProject(page, 'TmplProj')
 
   // Default the project to Midnight
-  await page.getByRole('button', { name: 'Project settings' }).click()
+  await openProjectSettings(page, 'TmplProj')
   await page.getByRole('tab', { name: 'Design' }).click()
   await page.getByRole('radio', { name: /midnight/i }).click()
   await expect(page.getByRole('radio', { name: /midnight/i })).toHaveAttribute(
@@ -52,9 +52,10 @@ test('project template is the default for new lectures only', async ({
   )
   await page.getByRole('button', { name: 'Close settings' }).click()
 
-  await page.getByRole('link', { name: 'The Slide Machine' }).click()
+  await page.getByRole('button', { name: 'Menu', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Home' }).click()
   await page.getByRole('link', { name: 'TmplProj', exact: true }).click()
-  await page.getByRole('button', { name: 'Project settings' }).click()
+  await openProjectSettings(page, 'TmplProj')
   await page.getByRole('tab', { name: 'Design' }).click()
   await page.getByRole('radio', { name: /classic/i }).click()
   await expect(page.getByRole('radio', { name: /classic/i })).toHaveAttribute(

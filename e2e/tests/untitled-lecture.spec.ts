@@ -33,7 +33,8 @@ test('untitled lectures start from the + option and can be named later', async (
 
   // Home lists it as Untitled lecture too. Scoped to "Your work": the
   // Discover sidebar beside it lists other people's untitled lectures.
-  await page.getByRole('link', { name: 'The Slide Machine' }).click()
+  await page.getByRole('button', { name: 'Menu', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Home' }).click()
   const yourWork = page.getByRole('region', { name: 'Your work' })
   await expect(
     yourWork.getByRole('link', { name: /Untitled lecture/ }),

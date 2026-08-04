@@ -8,7 +8,7 @@
  * come from the shared slide-navigation codebase.
  */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { Trans, useTranslation } from 'react-i18next'
 import {
   Mic,
@@ -92,6 +92,7 @@ import { ShellActions } from '../components/layout/ShellActions'
 import ViewModeToggle, { type ViewMode } from '../components/ViewModeToggle'
 import VoteControl from '../components/VoteControl'
 import { lectureTitle, untitledLecture } from '../lib/lecture'
+import { untitledProject } from '../lib/project'
 
 // The toolbar's "Seed material" upload button is hidden for now but its
 // wiring (openManualSeed, the SeedDialog) is kept so it can return by
@@ -123,12 +124,32 @@ const writeViewMode = (mode: ViewMode): void => {
 /** Slide count and modification age, small beside the title in the nav.
  * The count is an ICU plural, so languages with more than two forms get
  * them right. */
-function DeckTitleMeta({ deck, count }: { deck: Deck; count: number }) {
+function DeckTitleMeta({
+  deck,
+  count,
+  owner,
+}: {
+  deck: Deck
+  count: number
+  /** The lecture's owner; their name links to their public profile (SOC-4). */
+  owner?: { id: string; displayName: string }
+}) {
   const { t } = useTranslation()
   const age = useTimeAgo(deck.updatedAt)
   return (
     <span className="whitespace-nowrap text-xs font-normal text-slate-500">
       {t('deck.meta', { count, age })}
+      {owner?.displayName && (
+        <>
+          {` ${t('deck.byAuthor')} `}
+          <Link
+            to={`/u/${owner.id}`}
+            className="hover:text-indigo-600 hover:underline"
+          >
+            {owner.displayName}
+          </Link>
+        </>
+      )}
     </span>
   )
 }
@@ -1568,19 +1589,40 @@ export default function DeckViewerPage() {
       data-reveal-blanks={revealBlanks ? 'true' : undefined}
     >
       <ShellTitle>
-        <h1 className="min-w-0 truncate">
-          {canEdit ? (
-            <EditableText
-              value={view.deck.title}
-              label="Lecture title"
-              emptyDisplay={untitledLecture()}
-              onSave={renameDeck}
-            />
-          ) : (
-            lectureTitle(view.deck)
+        {/* Project then lecture, both reachable: the project opens read-only
+            for anyone when it is public (SOC-2 discovery). */}
+        <h1 className="flex min-w-0 items-center gap-1.5 truncate">
+          {view.project && (
+            <>
+              <Link
+                to={`/app/projects/${view.project.id}`}
+                className="min-w-0 truncate font-normal text-slate-500 hover:text-indigo-600"
+              >
+                {view.project.title?.trim() || untitledProject()}
+              </Link>
+              <span className="text-slate-300" aria-hidden>
+                /
+              </span>
+            </>
           )}
+          <span className="min-w-0 truncate">
+            {canEdit ? (
+              <EditableText
+                value={view.deck.title}
+                label="Lecture title"
+                emptyDisplay={untitledLecture()}
+                onSave={renameDeck}
+              />
+            ) : (
+              lectureTitle(view.deck)
+            )}
+          </span>
         </h1>
-        <DeckTitleMeta deck={view.deck} count={view.slides.length} />
+        <DeckTitleMeta
+          deck={view.deck}
+          count={view.slides.length}
+          owner={view.owner}
+        />
       </ShellTitle>
 
       {/* View toggle, settings, and share live in the primary nav (header),

@@ -611,6 +611,7 @@
   },
   "deck": {
     "meta": "{count, plural, one {# слайд} few {# слайда} many {# слайдов} other {# слайда}} · изменено {age}",
+    "byAuthor": "· от",
     "share": "Поделиться",
     "shareLabel": "Поделиться лекцией",
     "addSlide": "Добавить слайд",

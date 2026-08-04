@@ -5,7 +5,7 @@
  * project settings" re-attaches it.
  */
 import { test, expect, type Browser, type Page } from '@playwright/test'
-import { createProject } from './helpers'
+import { createProject, openProjectSettings } from './helpers'
 
 const stamp = Date.now()
 const owner = { email: `powner-${stamp}@example.com`, name: 'Powner' }
@@ -47,11 +47,12 @@ test('project privacy cascades to lectures; overrides detach and reset', async (
   await expect(anonPage.getByText('This deck has no slides.')).toBeVisible()
 
   // Restrict the PROJECT: the inheriting lecture goes dark
-  await ownerPage.getByRole('link', { name: 'The Slide Machine' }).click()
+  await ownerPage.getByRole('button', { name: 'Menu', exact: true }).click()
+  await ownerPage.getByRole('menuitem', { name: 'Home' }).click()
   await ownerPage
     .getByRole('link', { name: 'CascadeProj', exact: true })
     .click()
-  await ownerPage.getByRole('button', { name: 'Project settings' }).click()
+  await openProjectSettings(ownerPage, 'CascadeProj')
   await ownerPage.getByRole('tab', { name: 'Privacy & Sharing' }).click()
   await ownerPage.getByRole('radio', { name: /restricted/i }).click()
   await expect(

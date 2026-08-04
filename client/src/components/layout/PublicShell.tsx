@@ -25,23 +25,25 @@ export default function PublicShell() {
             <div className="flex min-w-0 flex-1 items-center gap-2">
               <ShellMenu />
               {/* App badge and title are one link so the icon and the words
-                next to it are a single home target, not two adjacent
-                links to the same page. */}
-              <Link
-                to="/"
-                aria-label={t('nav.brandHome')}
-                className="flex items-center gap-2 font-semibold whitespace-nowrap"
-              >
-                <img src={badgeUrl} alt="" aria-hidden className="h-7 w-auto" />
-                {t('nav.brand')}
-              </Link>
-              {shellTitle?.active && (
-                <span
-                  aria-hidden
-                  className="font-semibold text-slate-300 select-none"
+                next to it are a single home target, not two adjacent links to
+                the same page. A page that teleports its own title — a lecture
+                showing project / lecture / author — replaces the brand rather
+                than sitting after it; the header is narrow, and Home stays
+                reachable from the hamburger menu beside it. */}
+              {!shellTitle?.active && (
+                <Link
+                  to="/"
+                  aria-label={t('nav.brandHome')}
+                  className="flex items-center gap-2 font-semibold whitespace-nowrap"
                 >
-                  /
-                </span>
+                  <img
+                    src={badgeUrl}
+                    alt=""
+                    aria-hidden
+                    className="h-7 w-auto"
+                  />
+                  {t('nav.brand')}
+                </Link>
               )}
               <div
                 ref={el => shellTitle?.setSlot(el)}

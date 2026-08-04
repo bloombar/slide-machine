@@ -7,7 +7,7 @@
  * no settings editor of their own.
  */
 import { test, expect, type Page } from '@playwright/test'
-import { createProject } from './helpers'
+import { createProject, openProjectSettings } from './helpers'
 
 const password = 'sturdy-passw0rd'
 // The admin email is fixed (it must match ADMIN_EMAILS); the account may
@@ -44,8 +44,14 @@ const ensureSignedIn = async (
 }
 
 /** Opens the settings modal from the icon, through the admin confirm. */
-const openSettingsAsAdmin = async (page: Page, label: string) => {
-  await page.getByRole('button', { name: label }).click()
+const openSettingsAsAdmin = async (
+  page: Page,
+  label: string,
+  /** A project's settings live in its kebab; a lecture's are a button. */
+  projectTitle?: string,
+) => {
+  if (projectTitle) await openProjectSettings(page, projectTitle)
+  else await page.getByRole('button', { name: label }).click()
   const ask = page.getByRole('alertdialog')
   await expect(ask).toContainText('recorded in the audit log')
   await ask.getByRole('button', { name: 'Edit settings' }).click()
@@ -182,7 +188,11 @@ test("the admin edits another user's project settings", async ({ page }) => {
   await page.getByRole('button', { name: 'View project' }).click()
   await expect(page).toHaveURL(/\/app\/projects\//)
 
-  const modal = await openSettingsAsAdmin(page, 'Project settings')
+  const modal = await openSettingsAsAdmin(
+    page,
+    'Project settings',
+    projectTitle,
+  )
   // Seed material is the owner's; the settings around it are editable
   await expect(modal.getByText('Seed material')).toHaveCount(0)
   const saved = page.waitForResponse(
@@ -193,7 +203,7 @@ test("the admin edits another user's project settings", async ({ page }) => {
 
   // The value survives a reload, so it really was stored
   await page.reload()
-  await page.getByRole('button', { name: 'Project settings' }).click()
+  await openProjectSettings(page, projectTitle)
   await page.getByRole('button', { name: 'Edit settings' }).click()
   await expect(page.getByLabel('Language')).toHaveValue('fr')
 })
@@ -242,7 +252,7 @@ test('the admin edits their own project without the admin path', async ({
   await ensureSignedIn(page, admin)
   await createProject(page, `Admin Own Project ${run}`)
 
-  await page.getByRole('button', { name: 'Project settings' }).click()
+  await openProjectSettings(page, `Admin Own Project ${run}`)
   // Their own project: no confirmation, no banner, full settings
   const modal = page.getByRole('dialog', { name: 'Project settings' })
   await expect(modal).toBeVisible()

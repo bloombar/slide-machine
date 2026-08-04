@@ -16,15 +16,34 @@ import ConfirmDialog from './ConfirmDialog'
 export default function ProjectRowMenu({
   project,
   onDeleted,
+  onImport,
+  onOpenSettings,
 }: {
   project: Project
   onDeleted: (projectId: string) => void
+  /** Opens settings in place. The home screen omits it and the menu navigates
+   * to the project page instead; the project page is already there, so it
+   * passes a handler that opens its own modal. */
+  onOpenSettings?: (tab: 'general' | 'sharing') => void
+  /** Receives a chosen deck-export file to import as a new lecture (EXP-3).
+   * Omitted for a project the viewer cannot add to. */
+  onImport?: (file: File) => void
 }) {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const fileInput = useRef<HTMLInputElement>(null)
+
+  /** Forwards the picked file, resets the input so the same file can be chosen
+   * again, and closes the menu. */
+  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) onImport?.(file)
+    e.target.value = ''
+    setOpen(false)
+  }
 
   // Outside clicks and Escape close the menu
   useEffect(() => {
@@ -45,6 +64,10 @@ export default function ProjectRowMenu({
 
   const openSettings = (settingsTab: 'general' | 'sharing') => {
     setOpen(false)
+    if (onOpenSettings) {
+      onOpenSettings(settingsTab)
+      return
+    }
     navigate(`/app/projects/${project.id}`, {
       state: { openSettings: true, settingsTab },
     })
@@ -64,6 +87,18 @@ export default function ProjectRowMenu({
 
   return (
     <div ref={menuRef} className="relative">
+      {onImport && (
+        <input
+          ref={fileInput}
+          type="file"
+          accept=".yaml,.yml"
+          className="hidden"
+          aria-label={t('lecture.import.intoProject', {
+            project: projectTitle(project),
+          })}
+          onChange={onFileChange}
+        />
+      )}
       <button
         aria-label={t('project.options', { name: projectTitle(project) })}
         aria-haspopup="menu"
@@ -93,6 +128,15 @@ export default function ProjectRowMenu({
           >
             {t('deck.share')}
           </button>
+          {onImport && (
+            <button
+              role="menuitem"
+              onClick={() => fileInput.current?.click()}
+              className="block w-full px-4 py-2 text-start text-sm text-slate-700 hover:bg-slate-50"
+            >
+              {t('lecture.import.action')}
+            </button>
+          )}
           <button
             role="menuitem"
             onClick={() => {

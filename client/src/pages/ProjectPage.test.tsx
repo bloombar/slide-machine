@@ -44,6 +44,20 @@ const baseRoutes = {
   }),
 }
 
+/** Opens the project's settings through its kebab — the same menu the home
+ * screen shows beside each project, rather than a settings button of its own.
+ * Named exactly: every lecture row carries a kebab of its own. */
+const openProjectSettings = async () => {
+  fireEvent.click(
+    await vi.waitFor(() =>
+      screen.getByRole('button', { name: `Options for ${project.title}` }),
+    ),
+  )
+  // The menu opens synchronously on click, so read it directly — a polling
+  // query would stall in the specs that install fake timers.
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Settings' }))
+}
+
 const renderPage = () =>
   render(
     <MemoryRouter initialEntries={['/app/projects/p1']}>
@@ -251,11 +265,7 @@ describe('ProjectPage', () => {
     })
     renderPage()
 
-    fireEvent.click(
-      await vi.waitFor(() =>
-        screen.getByRole('button', { name: 'Project settings' }),
-      ),
-    )
+    await openProjectSettings()
     const box = await vi.waitFor(() =>
       screen.getByRole('textbox', { name: 'Project seed notes' }),
     )
@@ -310,11 +320,7 @@ describe('ProjectPage', () => {
     })
     renderPage()
 
-    fireEvent.click(
-      await vi.waitFor(() =>
-        screen.getByRole('button', { name: 'Project settings' }),
-      ),
-    )
+    await openProjectSettings()
     fireEvent.click(await screen.findByRole('tab', { name: 'Design' }))
     fireEvent.click(await screen.findByRole('radio', { name: /midnight/i }))
 
@@ -359,11 +365,7 @@ describe('ProjectPage', () => {
     })
     renderPage()
 
-    fireEvent.click(
-      await vi.waitFor(() =>
-        screen.getByRole('button', { name: 'Project settings' }),
-      ),
-    )
+    await openProjectSettings()
     fireEvent.click(
       await screen.findByRole('button', { name: 'Delete project' }),
     )
@@ -394,11 +396,7 @@ describe('ProjectPage admin settings (ADMIN-5)', () => {
   })
 
   const openSettings = async () => {
-    fireEvent.click(
-      await vi.waitFor(() =>
-        screen.getByRole('button', { name: 'Project settings' }),
-      ),
-    )
+    await openProjectSettings()
   }
 
   it('asks before opening another user’s settings, then shows the banner', async () => {

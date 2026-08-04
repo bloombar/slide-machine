@@ -153,8 +153,9 @@ test('voting + discover feed: upvote persists, owner link, top sort', async ({
   await expect(guestPage.getByText('Could not load this project')).toHaveCount(
     0,
   )
-  // A read-only viewer gets no owner controls
+  // A read-only viewer gets no owner controls: the project's menu carries
+  // settings, sharing, import and delete, and none of them are theirs.
   await expect(
-    guestPage.getByRole('button', { name: 'Project settings' }),
+    guestPage.getByRole('button', { name: `Options for ${projectName}` }),
   ).toHaveCount(0)
 })
