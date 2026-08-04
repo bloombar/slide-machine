@@ -15,6 +15,12 @@
  * enough to listen to what a lecture already says. Synthesis is behind the
  * vendor-neutral TtsProvider.
  *
+ * Because that hash covers only what was spoken, two lectures narrating the
+ * same words in the same voice share one object. Every playback therefore
+ * records the deck against it (`retainTtsObject`), so the retention purge can
+ * tell a file its last lecture has left from one another lecture still plays
+ * (P-11).
+ *
  * Synthesis is metered against the **deck owner's** plan, never the caller's
  * (BILL-1/BILL-3): a listener spends the owner's audience allowance, an owner
  * or editor spends the authoring one. Only cache misses count — audio that
@@ -41,6 +47,7 @@ import { registry } from '../providers/registry'
 import { getStorage } from '../storage'
 import { env } from '../config/env'
 import { UserModel } from '../models/user'
+import { retainTtsObject, ttsStorageKeys } from '../models/tts-object'
 import { assertTtsCapacity, ttsMetricFor } from '../billing/tts-usage'
 import { recordUsage } from '../billing/usage'
 import { runWithUsage } from '../billing/usage-context'
@@ -155,9 +162,22 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
       ].join(' '),
     )
     .digest('hex')
-  const storageKey = `tts/${hash}.${ext}`
-  const marksKey = `tts/${hash}.json`
+  const { storageKey, marksKey } = ttsStorageKeys(hash, ext)
   const storage = getStorage()
+
+  /**
+   * Claims this object for the slide's deck, so the purge knows the lecture
+   * plays it (P-11). Best-effort: an unrecorded reference costs a file that
+   * outlives the lecture it belonged to, which is never worth failing a
+   * playback over.
+   */
+  const retain = async (): Promise<void> => {
+    try {
+      await retainTtsObject({ storageKey, marksKey }, slide.deckId)
+    } catch (error) {
+      console.warn('TTS reference not recorded:', error)
+    }
+  }
 
   // Whoever asked, the owner's plan pays (BILL-1) — but an owner or editor
   // preparing the deck draws on a different allowance than someone listening
@@ -188,6 +208,10 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
     await recordUsage(acl.ownerId, ttsMetricFor(actor, premium), 0, {
       billable: false,
     })
+    // A hit is how a second deck comes to share audio a first one paid for, so
+    // this is the reference that keeps the file alive past the first deck's
+    // deletion.
+    await retain()
     return res.json({ url: storage.publicUrl(storageKey), marks })
   }
 
@@ -230,5 +254,6 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
     Buffer.from(JSON.stringify(marks)),
     'application/json',
   )
+  await retain()
   res.json({ url: storage.publicUrl(storageKey), marks })
 })

@@ -4,8 +4,10 @@
  * and everything under it — slides, seed material, transcript segments, refine
  * jobs — by stamping `deletedAt`, so the whole subtree vanishes from reads at
  * once and can be restored during the retention window. Stored files (audio,
- * seed blobs) are intentionally kept until the retention purge hard-deletes them
- * (see `purge*`), so a restore brings everything back.
+ * seed blobs, synthesized narration) are intentionally kept until the retention
+ * purge hard-deletes them (see `purge*`), so a restore brings everything back.
+ * Narration is the one file type shared between lectures, so the purge deletes
+ * it through the reference index in `models/tts-object.ts` rather than directly.
  *
  * Authorization is the caller's job: owner actions check ownership first, admin
  * routes are gated by the allowlist. Sessions (refresh tokens) are always hard-
@@ -22,6 +24,7 @@ import { RefineJobModel } from '../models/refine-job'
 import { RefreshTokenModel } from '../models/refresh-token'
 import { UserModel } from '../models/user'
 import { VoteModel } from '../models/vote'
+import { releaseTtsObjects } from '../models/tts-object'
 import { adjustGauge, BYTES_PER_MB } from '../billing/usage'
 import { pcmBytesFor } from './wav'
 import { getStorage } from '../storage'
@@ -215,9 +218,14 @@ const purgeDeckContents = async (
     SeedAssetModel.find(by).setOptions(opts),
     DeckModel.find({ _id: { $in: deckIds } }).setOptions(opts),
   ])
+  // Narration is shared between lectures that say the same words, so it is the
+  // reference index — not this cascade — that decides which files may go
+  // (P-11). What comes back is only what no surviving lecture still plays.
+  const orphanedNarration = await releaseTtsObjects(deckIds)
   await deleteStorageKeys([
     ...assets.flatMap(a => (a.storageKey ? [a.storageKey] : [])),
     ...decks.flatMap(d => (d.recordings ?? []).map(r => r.audioKey)),
+    ...orphanedNarration,
   ])
   // Deleting a lecture gives its owner their storage back (BILL-3). Without
   // this the gauge only ever climbs, and a user who deleted everything would
