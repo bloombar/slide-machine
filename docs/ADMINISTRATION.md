@@ -349,6 +349,15 @@ Seed material (`seed/`), slide images (`slides/`), and TTS narration
 project or lecture in the app cascades its stored files — but only at the
 purge, not at the delete, so a restore brings them back (see below).
 
+Narration is the exception to "one lecture, one file": it is cached under a
+hash of the words spoken, so two lectures saying the same thing in the same
+voice share one object. Each is **reference-counted** by the lectures that
+have played it ([models/tts-object.ts](../server/src/models/tts-object.ts)),
+and the purge deletes it only with the last of them. Objects synthesized
+before that index existed hold no references and so are never purged; a
+lifecycle rule scoped to `tts/` is the way to retire that backlog, and costs
+only a re-synthesis if anything still plays them.
+
 **Deleted records** are kept for a window and then purged. Deleting
 anything — by its owner or an admin — stamps a tombstone rather than
 removing the row (P-10), and a **daily sweep** hard-deletes everything
