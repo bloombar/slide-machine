@@ -77,12 +77,12 @@ describe('DeckFeed', () => {
     )
   })
 
-  it('shows one net rating per row, not two separate counts', async () => {
+  it('shows how many voted per row, not two separate counts', async () => {
     onePage()
     renderFeed()
     await screen.findByText('Waves')
-    // 4 up and 2 down read as a single "2"
-    expect(screen.getByLabelText('Rating 2')).toHaveTextContent('2')
+    // 4 up and 2 down is six people having voted
+    expect(screen.getByText('6 votes')).toBeInTheDocument()
     // No voting from the list — that happens inside the lecture
     expect(screen.queryByRole('button', { name: 'Upvote' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Downvote' })).toBeNull()
@@ -235,12 +235,13 @@ describe('DeckFeed search (SOC-2)', () => {
     )
   })
 
-  it('shows the rating on search hits too', async () => {
+  it('shows the vote count on search hits too', async () => {
     searchRoutes()
     renderFeed()
     fireEvent.change(searchBox(), { target: { value: 'cat' } })
     await screen.findByText('Cats 101')
-    expect(screen.getByLabelText('Rating 7')).toBeInTheDocument()
+    // The search fixture carries the same 4 up / 2 down as the feed row
+    expect(screen.getByText('6 votes')).toBeInTheDocument()
   })
 
   it('carries the chosen sort into the search (SOC-2)', async () => {

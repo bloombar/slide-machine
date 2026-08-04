@@ -13,7 +13,7 @@ import type { FeedDeck } from '@slide-machine/shared'
 import { lectureTitle } from '../../lib/lecture'
 import { untitledProject } from '../../lib/project'
 import type { Discover } from './useDiscover'
-import RatingBadge from './RatingBadge'
+import VoteCount from './VoteCount'
 import LoadMore from './LoadMore'
 
 /** One lecture: the title leads, its project and owner sit beneath as links,
@@ -29,20 +29,27 @@ export function LectureRow({ deck }: { deck: FeedDeck }) {
       >
         {lectureTitle(deck)}
       </Link>
-      <div className="mt-1 flex items-center justify-between gap-2">
-        <span className="min-w-0 truncate text-xs text-slate-500">
+      <div className="mt-1 flex items-baseline justify-between gap-3">
+        {/* The project title gives up room first: it truncates, while the
+            author keeps its full width. A long title would otherwise push the
+            name out of sight, and whose lecture it is matters more than the
+            tail of the project it sits in. */}
+        <span className="flex min-w-0 flex-1 items-baseline gap-1 text-xs text-slate-500">
           <Link
             to={`/app/projects/${deck.project.id}`}
-            className="hover:text-indigo-600"
+            className="min-w-0 truncate hover:text-indigo-600"
           >
             {deck.project.title.trim() || untitledProject()}
           </Link>
-          <span aria-hidden> · </span>
-          <Link to={`/u/${deck.owner.id}`} className="hover:text-indigo-600">
+          <span aria-hidden>·</span>
+          <Link
+            to={`/u/${deck.owner.id}`}
+            className="shrink-0 hover:text-indigo-600"
+          >
             {deck.owner.displayName || t('discover.unknownOwner')}
           </Link>
         </span>
-        <RatingBadge score={deck.voteScore} />
+        <VoteCount up={deck.up} down={deck.down} />
       </div>
     </li>
   )

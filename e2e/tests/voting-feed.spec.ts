@@ -108,9 +108,9 @@ test('voting + discover feed: upvote persists, owner link, top sort', async ({
     .filter({ hasText: lectureTitle })
     .first()
 
-  // The row shows one net rating (the single up-vote), and offers no way to
-  // vote from the list — voting happens inside the lecture
-  await expect(row.getByLabel('Rating 1')).toBeVisible()
+  // The row reports how many voted (the guest's single up-vote), and offers
+  // no way to vote from the list — voting happens inside the lecture
+  await expect(row.getByText('1 vote')).toBeVisible()
   await expect(feedAgain.getByRole('button', { name: 'Upvote' })).toHaveCount(0)
 
   // The row credits its owner, and that name reaches their public profile
