@@ -21,6 +21,9 @@ import type {
   BillingRedirect,
   BillingSummary,
   PlanCatalog,
+  PlanChangeImpact,
+  PlanChangeInput,
+  PlanChangeResult,
 } from '@slide-machine/shared'
 import { PLAN_TIERS } from '@slide-machine/shared'
 import { defineAction } from './define'
@@ -29,11 +32,14 @@ import { UserModel } from '../models/user'
 import { billingRegistry } from '../billing/registry'
 import { BillingUnavailableError } from '../billing/errors'
 import {
+  applySubscriptionSnapshot,
   billingCustomerIdFor,
   billingSummary,
+  providerSubscriptionIdFor,
   purchasableTiers,
 } from '../billing/subscription'
 import { planCatalog } from '../billing/catalog'
+import { planChangeImpact } from '../billing/plan-change'
 
 /**
  * Where the provider sends the browser back to. An in-app path, never a URL:
@@ -154,6 +160,94 @@ export const billingCheckout = defineAction<
 })
 
 registerAction(billingCheckout)
+
+/**
+ * What moving to `tier` would do, before anything is changed (BILL-5). Read
+ * by the confirmation dialog: a smaller plan keeps lecture audio for fewer
+ * days, and the recordings that puts past the limit are named here so the user
+ * can decline while they still have them (P-10).
+ *
+ * A preview never changes anything, so it answers for any tier — including one
+ * the account cannot move to from here, which it reports as `changeable:
+ * false` rather than refusing.
+ */
+export const billingChangePreview = defineAction<
+  PlanChangeInput,
+  PlanChangeImpact
+>({
+  name: 'billing.changePreview',
+  input: z.object({ tier: z.enum(PLAN_TIERS) }).strict(),
+  execute: async (ctx, input) => {
+    const user = await loadSelf(ctx.userId)
+    return planChangeImpact(user._id.toString(), user.planTier, input.tier)
+  },
+})
+
+registerAction(billingChangePreview)
+
+/**
+ * Moves the account down to `tier` (BILL-5), which the user has just been
+ * shown the cost of. Only downwards: moving up is a purchase, and a purchase
+ * is hosted checkout.
+ *
+ * Moving to free is a cancellation and runs to the end of the paid period;
+ * every other move is immediate, with the provider prorating it. The provider
+ * answers with the updated subscription, which is applied here rather than
+ * waited for — the webhook saying the same thing may arrive after the page has
+ * already re-read the plan.
+ */
+export const billingChange = defineAction<PlanChangeInput, PlanChangeResult>({
+  name: 'billing.change',
+  input: z.object({ tier: z.enum(PLAN_TIERS) }).strict(),
+  execute: async (ctx, input) => {
+    const user = await loadSelf(ctx.userId)
+    const userId = user._id.toString()
+    const impact = await planChangeImpact(userId, user.planTier, input.tier)
+    if (!impact.changeable) {
+      // Three refusals, told apart because they need different answers: stay
+      // put, buy the larger plan, or there is no subscription to move at all.
+      if (input.tier === user.planTier) {
+        throw new BillingUnavailableError(
+          `This account is already on the ${input.tier} plan`,
+          false,
+        )
+      }
+      throw new BillingUnavailableError(
+        impact.isDowngrade
+          ? 'This account has no subscription to change'
+          : `Moving to the ${input.tier} plan goes through checkout`,
+        false,
+      )
+    }
+
+    const subscriptionId = await providerSubscriptionIdFor(userId)
+    if (!subscriptionId) {
+      throw new BillingUnavailableError(
+        'This account has no subscription to change',
+        false,
+      )
+    }
+
+    const provider = billingRegistry.get()
+    const snapshot =
+      input.tier === 'free'
+        ? await provider.cancelSubscription({
+            providerSubscriptionId: subscriptionId,
+            atPeriodEnd: true,
+          })
+        : await provider.changeTier({
+            providerSubscriptionId: subscriptionId,
+            tier: input.tier,
+          })
+
+    const applied = await applySubscriptionSnapshot(snapshot, provider.name)
+    return {
+      summary: await billingSummary(userId, applied.tier ?? user.planTier),
+    }
+  },
+})
+
+registerAction(billingChange)
 
 /**
  * Opens the provider's hosted portal, where the user manages payment methods,

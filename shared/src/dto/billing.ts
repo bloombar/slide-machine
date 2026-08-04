@@ -50,6 +50,66 @@ export interface BillingPortalInput {
   returnPath?: string
 }
 
+/** Which tier to move an existing subscription to (BILL-5). */
+export interface PlanChangeInput {
+  tier: PlanTier
+}
+
+/**
+ * One lecture that would lose recordings to a shorter retention window, named
+ * so the warning says what is actually at stake rather than a bare count.
+ */
+export interface PlanChangeLecture {
+  deckId: string
+  title: string
+  /** Recordings on this lecture that fall outside the new window. */
+  recordings: number
+}
+
+/**
+ * What moving to another tier would do, read *before* it is confirmed
+ * (BILL-5/P-10). A smaller plan keeps lecture audio for fewer days, which can
+ * put recordings the user still has past the new limit — deletion they must be
+ * told about while they can still decline it.
+ */
+export interface PlanChangeImpact {
+  /** The tier being moved to, and the one the account is on now. */
+  tier: PlanTier
+  currentTier: PlanTier
+  /** The move is downwards: caps shrink, and audio may be deleted. */
+  isDowngrade: boolean
+  /**
+   * Retention windows, in days, as they actually apply — the shorter of the
+   * tier's own and the deployment's. `null` means nothing is deleted on time:
+   * either the sweep is off deployment-wide or neither bound applies.
+   */
+  currentRetentionDays: number | null
+  nextRetentionDays: number | null
+  /** Recordings that would fall outside the new window, and where they live.
+   * `lectures` is capped for readability — `lecturesAffected` is the true
+   * count, so a truncated list can say how much it left out. */
+  recordingsRemoved: number
+  lecturesAffected: number
+  lectures: PlanChangeLecture[]
+  /**
+   * When the new tier starts applying. A paid-to-paid switch is immediate,
+   * with the provider prorating it; moving to free cancels, which runs to the
+   * end of the period already paid for.
+   */
+  effective: 'immediately' | 'period_end'
+  /** End of the paid period, ISO-8601, when `effective` is `period_end`. */
+  effectiveAt: string | null
+  /** Whether the change can be made here at all — an account with no
+   * subscription has nothing to move, and moves up go through checkout. */
+  changeable: boolean
+}
+
+/** The account's billing state after a plan change, so the page can show what
+ * it is on now without a second read. */
+export interface PlanChangeResult {
+  summary: BillingSummary
+}
+
 /** A hosted page — checkout or portal — for the browser to navigate to. */
 export interface BillingRedirect {
   url: string

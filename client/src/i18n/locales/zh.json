@@ -284,6 +284,30 @@
       "max": "旗舰版"
     },
     "change": "更改套餐",
+    "switch": {
+      "to": "切换到 {plan}",
+      "title": "切换到 {plan}？",
+      "cancelTo": "取消订阅",
+      "cancelTitle": "要取消订阅吗？",
+      "retention": "录音将保留 {next}，而不是 {current}。",
+      "recordings": "{count, plural, other {有 # 个录音早于该期限，将被删除：}}",
+      "lecture": "{title} — {count, plural, other {# 个录音}}",
+      "andMore": "{count, plural, other {…还有 # 节课}}",
+      "noLoss": "你录制的内容不会被删除。",
+      "effective": {
+        "immediately": "更改立即生效，本期费用会相应调整。",
+        "periodEnd": "你的方案将持续到 {date}，之后转为 Free。",
+        "periodEndSoon": "你的方案将持续到已付费周期结束，之后转为 Free。"
+      },
+      "done": {
+        "immediate": "你现在使用的是 {plan} 方案。",
+        "periodEnd": "订阅将于 {date} 结束，届时转为 Free。"
+      },
+      "errors": {
+        "preview": "无法计算此更改的影响，请重试。",
+        "apply": "无法更改你的方案，请重试。"
+      }
+    },
     "feature": {
       "liveCapture": "边讲边生成幻灯片",
       "voiceControl": "语音指令",
@@ -315,7 +339,7 @@
       "audioRetention": "原始音频保留时长",
       "retentionDays": "{count, plural, other {# 天}}",
       "retentionUnlimited": "长期保留",
-      "changeHint": "如需降级或取消，请前往账单门户。",
+      "changeHint": "付款方式、账单和收据都在计费门户中。",
       "errors": {
         "load": "无法加载套餐"
       },

@@ -184,8 +184,9 @@ test('the provider webhook is what puts the account on the paid tier', async ({
     page.getByRole('button', { name: /Manage billing/i }),
   ).toBeVisible()
 
-  // And on the pricing page there is one tier left to sell: Pro now reads as
-  // the plan held, and the smaller plans are the portal's business.
+  // And on the pricing page there is one tier left to *sell*: Pro now reads as
+  // the plan held, and the smaller plans are a change to the subscription
+  // rather than a second purchase, so none of them offers an upgrade.
   await page.goto('/app/plans')
   await expect(page.getByTestId('current-plan-pro')).toBeVisible()
   await expect(
@@ -210,4 +211,71 @@ test('the paid plan raises the caps the usage panel reports', async ({
   // provider at every metered call (BILL-3).
   await expect(page.getByTestId('usage-panel')).toBeVisible()
   await expect(page.getByText('Pro', { exact: true })).toBeVisible()
+})
+
+test('a smaller plan says what it costs before anything changes', async ({
+  page,
+}) => {
+  await ensureSignedIn(page)
+  await page.goto('/app/plans')
+
+  await page.getByTestId('downgrade-fresh').click()
+
+  // The warning is the requirement (BILL-5/P-10): a smaller plan keeps lecture
+  // audio for fewer days, and what that deletes is said here — for this
+  // account, nothing, since it has recorded nothing.
+  const dialog = page.getByRole('alertdialog')
+  await expect(dialog).toContainText(/Switch to Fresh\?/i)
+  await expect(dialog).toContainText(/will be deleted|Nothing you have/i)
+
+  // Declining changes nothing at all.
+  await dialog.getByRole('button', { name: /^Cancel$/ }).click()
+  await expect(dialog).toBeHidden()
+  await expect(page.getByTestId('current-plan-pro')).toBeVisible()
+})
+
+test('accepting the warning moves the account down in place', async ({
+  page,
+}) => {
+  await ensureSignedIn(page)
+  await page.goto('/app/plans')
+
+  await page.getByTestId('downgrade-fresh').click()
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: /Switch to Fresh/i })
+    .click()
+
+  // No hosted page and no webhook: a downgrade is a change to a subscription
+  // that already exists, so the account is on the smaller plan when the call
+  // returns rather than whenever the provider gets around to saying so.
+  await expect(page.getByTestId('plan-change-done')).toContainText(
+    /now on the Fresh plan/i,
+  )
+  await expect(page.getByTestId('current-plan-fresh')).toBeVisible()
+
+  await page.goto('/app/settings?tab=plan')
+  await expect(page.getByText('Fresh', { exact: true })).toBeVisible()
+})
+
+test('cancelling runs the plan to the end of the period paid for', async ({
+  page,
+}) => {
+  await ensureSignedIn(page)
+  await page.goto('/app/plans')
+
+  await page.getByTestId('downgrade-free').click()
+  const dialog = page.getByRole('alertdialog')
+  await expect(dialog).toContainText(/Cancel your subscription\?/i)
+  await dialog.getByRole('button', { name: /Cancel subscription/i }).click()
+
+  await expect(page.getByTestId('plan-change-done')).toContainText(
+    /subscription ends/i,
+  )
+  // Still on the paid plan: cancelling stops the renewal, it does not take
+  // back the period already bought.
+  await expect(page.getByTestId('current-plan-fresh')).toBeVisible()
+
+  await page.goto('/app/settings?tab=plan')
+  await expect(page.getByTestId('billing-panel')).toContainText(/Ends /i)
 })

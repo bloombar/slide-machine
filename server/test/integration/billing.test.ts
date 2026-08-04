@@ -11,12 +11,14 @@
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import request from 'supertest'
+import { Types } from 'mongoose'
 import type { PlanTier } from '@slide-machine/shared'
 import { env } from '../../src/config/env'
 import { loadPlans } from '../../src/config/plans'
 import { connectMongo, disconnectMongo } from '../../src/db/mongoose'
 import { createApp } from '../../src/app'
 import { UserModel } from '../../src/models/user'
+import { DeckModel } from '../../src/models/deck'
 import { SubscriptionModel } from '../../src/models/subscription'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
 
@@ -79,9 +81,39 @@ afterAll(async () => {
   await disconnectMongo()
 })
 
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * A lecture owned by `ownerId` holding one retained recording `age` days old —
+ * the only thing a plan change can actually destroy (P-6/P-10).
+ */
+const lectureWithRecording = (
+  ownerId: string,
+  title: string,
+  age: number,
+  slug: string,
+) =>
+  DeckModel.create({
+    ownerId: new Types.ObjectId(ownerId),
+    projectId: new Types.ObjectId(),
+    title,
+    templateId: 'classic',
+    permalinkSlug: slug,
+    recordings: [
+      {
+        sessionId: `s-${slug}`,
+        audioKey: `audio/${slug}.wav`,
+        sampleRate: 24_000,
+        durationMs: 60_000,
+        createdAt: new Date(Date.now() - age * DAY_MS),
+      },
+    ],
+  })
+
 beforeEach(async () => {
   await Promise.all([
     UserModel.deleteMany({}),
+    DeckModel.deleteMany({}),
     SubscriptionModel.deleteMany({}),
     RefreshTokenModel.deleteMany({}),
   ])
@@ -251,6 +283,163 @@ describe('billing.portal', () => {
 
     expect(res.status).toBe(200)
     expect(res.body.url).toContain('/app/settings?tab=plan')
+  })
+})
+
+describe('billing.changePreview', () => {
+  it('names the recordings a smaller plan would delete', async () => {
+    // On Pro audio is kept 21 days; on Fresh, 14. An 18-day-old recording is
+    // therefore safe today and gone the moment the plan changes (P-10).
+    await deliver(event({ subscription: { userId: adaId } }))
+    await lectureWithRecording(adaId, 'Week 4 — Sorting', 18, 'wk4')
+    await lectureWithRecording(adaId, 'Week 5 — Recursion', 2, 'wk5')
+
+    const res = await act(ada, 'billing.changePreview', { tier: 'fresh' })
+
+    expect(res.status).toBe(200)
+    expect(res.body.isDowngrade).toBe(true)
+    expect(res.body.currentRetentionDays).toBe(21)
+    expect(res.body.nextRetentionDays).toBe(14)
+    expect(res.body.recordingsRemoved).toBe(1)
+    expect(res.body.lecturesAffected).toBe(1)
+    expect(res.body.lectures).toEqual([
+      { deckId: expect.any(String), title: 'Week 4 — Sorting', recordings: 1 },
+    ])
+    expect(res.body.effective).toBe('immediately')
+    expect(res.body.changeable).toBe(true)
+  })
+
+  it('leaves another instructor’s lectures out of it', async () => {
+    // Retention follows the lecture's owner, so a colleague's recordings are
+    // never at stake in this account's plan change.
+    await deliver(event({ subscription: { userId: adaId } }))
+    const grace = await registerUser('grace@example.com')
+    const graceId = (await UserModel.findOne({
+      email: 'grace@example.com',
+    }))!._id.toString()
+    await lectureWithRecording(graceId, 'Not Ada’s', 18, 'wk-grace')
+    expect(grace).toBeTruthy()
+
+    const res = await act(ada, 'billing.changePreview', { tier: 'fresh' })
+
+    expect(res.body.recordingsRemoved).toBe(0)
+    expect(res.body.lectures).toEqual([])
+  })
+
+  it('deletes nothing on the way up, and says so', async () => {
+    await deliver(event({ subscription: { userId: adaId } }))
+    await lectureWithRecording(adaId, 'Week 4 — Sorting', 18, 'wk4')
+
+    const res = await act(ada, 'billing.changePreview', { tier: 'max' })
+
+    expect(res.body.isDowngrade).toBe(false)
+    expect(res.body.recordingsRemoved).toBe(0)
+    // A larger plan is a purchase, so it is not changed from here.
+    expect(res.body.changeable).toBe(false)
+  })
+
+  it('reports a move to free as ending with the paid period', async () => {
+    await deliver(event({ subscription: { userId: adaId } }))
+
+    const res = await act(ada, 'billing.changePreview', { tier: 'free' })
+
+    expect(res.body.effective).toBe('period_end')
+    expect(res.body.effectiveAt).toBe('2026-09-01T00:00:00.000Z')
+  })
+
+  it('changes nothing itself', async () => {
+    await deliver(event({ subscription: { userId: adaId } }))
+
+    await act(ada, 'billing.changePreview', { tier: 'free' })
+
+    expect(await tierOf(adaId)).toBe('pro')
+  })
+
+  it('refuses an unauthenticated caller', async () => {
+    const res = await request(server)
+      .post('/api/actions/billing.changePreview')
+      .send({ tier: 'free' })
+    expect(res.status).toBe(401)
+  })
+})
+
+describe('billing.change', () => {
+  it('moves the account down without leaving the app', async () => {
+    await deliver(event({ subscription: { userId: adaId } }))
+
+    const res = await act(ada, 'billing.change', { tier: 'fresh' })
+
+    expect(res.status).toBe(200)
+    expect(res.body.summary.tier).toBe('fresh')
+    // Applied here rather than waited for: the provider's webhook saying the
+    // same thing may land after the page has already re-read the plan.
+    expect(await tierOf(adaId)).toBe('fresh')
+    expect((await SubscriptionModel.findOne({ userId: adaId }))?.tier).toBe(
+      'fresh',
+    )
+  })
+
+  it('treats a move to free as a cancellation at period end', async () => {
+    await deliver(event({ subscription: { userId: adaId } }))
+
+    const res = await act(ada, 'billing.change', { tier: 'free' })
+
+    expect(res.status).toBe(200)
+    // Still Pro, and paid for: cancelling does not forfeit the period the
+    // user has already bought — it stops the next renewal.
+    expect(res.body.summary.tier).toBe('pro')
+    expect(res.body.summary.cancelAtPeriodEnd).toBe(true)
+    expect(await tierOf(adaId)).toBe('pro')
+  })
+
+  it('refuses to sell an upgrade — that is checkout', async () => {
+    await deliver(event({ subscription: { userId: adaId } }))
+
+    const res = await act(ada, 'billing.change', { tier: 'max' })
+
+    expect(res.status).toBe(400)
+    expect(res.body.error.code).toBe('billing_unavailable')
+    expect(await tierOf(adaId)).toBe('pro')
+  })
+
+  it('refuses when the account has no subscription to change', async () => {
+    const res = await act(ada, 'billing.change', { tier: 'free' })
+
+    expect(res.status).toBe(400)
+    expect(res.body.error.code).toBe('billing_unavailable')
+  })
+
+  it('refuses a move to the plan the account is already on', async () => {
+    await deliver(event({ subscription: { userId: adaId } }))
+
+    const res = await act(ada, 'billing.change', { tier: 'pro' })
+
+    expect(res.status).toBe(400)
+    expect(res.body.error.code).toBe('billing_unavailable')
+  })
+
+  it('rejects a tier that is not a tier', async () => {
+    const res = await act(ada, 'billing.change', { tier: 'enterprise' })
+    expect(res.status).toBe(400)
+  })
+
+  it('refuses an unauthenticated caller', async () => {
+    const res = await request(server)
+      .post('/api/actions/billing.change')
+      .send({ tier: 'free' })
+    expect(res.status).toBe(401)
+  })
+
+  it('cannot be aimed at somebody else’s subscription', async () => {
+    // Nothing here takes a customer or subscription id: the references are
+    // looked up from the signed-in account, so there is no id to swap.
+    await deliver(event({ subscription: { userId: adaId } }))
+    const grace = await registerUser('grace@example.com')
+
+    const res = await act(grace, 'billing.change', { tier: 'fresh' })
+
+    expect(res.status).toBe(400)
+    expect(await tierOf(adaId)).toBe('pro')
   })
 })
 
