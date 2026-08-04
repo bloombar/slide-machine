@@ -248,6 +248,7 @@
   },
   "home": {
     "welcome": "Bienvenue, {name}",
+    "createNew": "Créer",
     "yourWork": "Votre travail",
     "showAll": "{count, plural, one {Afficher le # cours} other {Afficher les # cours}}",
     "otherLectures": "Autres cours",

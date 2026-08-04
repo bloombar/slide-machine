@@ -2,14 +2,12 @@
  * Authenticated home: every project as a sub-heading with its lectures
  * beneath, newest modification first. Each project shows at most
  * config.homeLecturesLimit lectures with a "Show all" expander, and a
- * dashed "New lecture" zone pinned to the top of its list. A "New
- * project" button in the header opens a modal that creates a project and
- * jumps straight to its page.
+ * dashed "New lecture" zone pinned to the top of its list. A "+" button
+ * beside the welcome heading starts a project, a lecture, or an import.
  */
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import { FolderPlus } from 'lucide-react'
 import type { Deck, DeckImportResult, Project } from '@slide-machine/shared'
 import { useAuth } from '../auth/AuthContext'
 import { dispatchAction } from '../api/actions'
@@ -24,6 +22,7 @@ import LectureRow from '../components/LectureRow'
 import NewLectureZone from '../components/NewLectureZone'
 import ProjectRowMenu from '../components/ProjectRowMenu'
 import NewProjectModal from '../components/NewProjectModal'
+import CreateMenu from '../components/CreateMenu'
 import UsageNotice from '../components/UsageNotice'
 import DeckFeed from '../components/DeckFeed'
 import { config } from '../config'
@@ -226,34 +225,44 @@ export default function HomePage() {
   }
 
   /**
-   * The empty-state zone: the user has no project yet, so spin up a
-   * titleless default project on the fly and start the lecture in it.
+   * Where a lecture goes when it was started without naming a project — the
+   * header menu and the empty-state zone. Projects arrive newest-modified
+   * first, so that is the one the user was last working in; with no project
+   * at all, a titleless default one is spun up on the fly.
    */
-  const startFirstLecture = async () => {
+  const targetProject = async (): Promise<Project> => {
+    const recent = projects?.[0]
+    if (recent) return recent
+    const created = await dispatchAction<Project>('project.create', {})
+    setProjects(prev => [...(prev ?? []), created])
+    return created
+  }
+
+  /** Starts an untitled lecture in the target project. */
+  const startLectureHere = async () => {
     setError(null)
     try {
-      const project = await dispatchAction<Project>('project.create', {})
-      await startLecture(project)
+      await startLecture(await targetProject())
     } catch {
       setError(t('lecture.errors.create'))
     }
   }
 
+  /** Imports a picked file as a lecture in the target project. */
+  const importLectureHere = async (file: File) => {
+    setError(null)
+    let project: Project
+    try {
+      project = await targetProject()
+    } catch {
+      setError(t('project.errors.create'))
+      return
+    }
+    await importLecture(project, file)
+  }
+
   return (
     <div>
-      <div className="mb-8 flex items-center justify-between gap-4">
-        <h1 className="min-w-0 truncate text-2xl font-bold">
-          {t('home.welcome', { name: user ? userHandle(user) : '' })}
-        </h1>
-        <button
-          onClick={() => setCreatingProject(true)}
-          className="flex shrink-0 items-center gap-2 rounded-md border border-indigo-600 px-4 py-2 font-medium text-indigo-600 hover:bg-indigo-50"
-        >
-          <FolderPlus className="h-4 w-4" aria-hidden />
-          {t('project.new.action')}
-        </button>
-      </div>
-
       <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
         {/* A named region so your own projects stay tellable apart from the
             Discover sidebar, which lists other people's lectures beside them. */}
@@ -261,6 +270,17 @@ export default function HomePage() {
           aria-label={t('home.yourWork')}
           className="min-w-0 flex-1 lg:max-w-2xl"
         >
+          <div className="mb-8 flex items-center justify-between gap-4">
+            <h1 className="min-w-0 truncate text-2xl font-bold">
+              {t('home.welcome', { name: user ? userHandle(user) : '' })}
+            </h1>
+            <CreateMenu
+              onNewProject={() => setCreatingProject(true)}
+              onNewLecture={() => void startLectureHere()}
+              onImportLecture={file => void importLectureHere(file)}
+            />
+          </div>
+
           {/* Only speaks up when something is close to a limit (BILL-4). */}
           <UsageNotice />
           {error && (
@@ -279,7 +299,7 @@ export default function HomePage() {
             // No project yet: a dashed zone that creates a default project
             // and starts the first lecture in one click.
             <ul className="flex flex-col gap-2">
-              <NewLectureZone onStart={() => void startFirstLecture()} />
+              <NewLectureZone onStart={() => void startLectureHere()} />
             </ul>
           ) : (
             projects.map(p => (
@@ -312,8 +332,10 @@ export default function HomePage() {
         </section>
 
         {/* Discover (SOC-2/SOC-3): other people's public lectures alongside
-            your own work, sticky so it stays put as the main column scrolls. */}
-        <div className="w-full lg:sticky lg:top-6 lg:w-[28rem] lg:shrink-0">
+            your own work, sticky so it stays put as the main column scrolls.
+            It sticks below the shell's own sticky header (3.5rem) rather than
+            under it, since the panel now fills the viewport's height. */}
+        <div className="w-full lg:sticky lg:top-18 lg:w-[28rem] lg:shrink-0">
           <DeckFeed />
         </div>
       </div>

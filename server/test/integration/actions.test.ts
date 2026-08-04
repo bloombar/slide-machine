@@ -115,6 +115,31 @@ describe('POST /api/actions/:name', () => {
     expect(foreign.status).toBe(403)
   })
 
+  it('project.get names the owner, for the page byline', async () => {
+    const ada = await registerUser('ada@example.com')
+    const bob = await registerUser('bob@example.com')
+    const created = await act(ada, 'project.create', { title: 'Mine' })
+
+    const own = await act(ada, 'project.get', { projectId: created.body.id })
+    expect(own.body.owner).toEqual({
+      id: own.body.ownerId,
+      displayName: 'ada',
+    })
+
+    // A public project is browsable by anyone: whose it is comes along,
+    // even though seed notes and people lists do not.
+    const visitor = await act(bob, 'project.get', {
+      projectId: created.body.id,
+    })
+    expect(visitor.status).toBe(200)
+    expect(visitor.body.owner.displayName).toBe('ada')
+    expect(visitor.body.seedContext).toBeUndefined()
+
+    // The list stays lean: no per-row user lookup
+    const list = await act(ada, 'project.list')
+    expect(list.body[0].owner).toBeUndefined()
+  })
+
   it('404s unknown actions and 400s invalid input', async () => {
     const ada = await registerUser('ada@example.com')
 

@@ -30,6 +30,10 @@ interface Props {
   placeholderStyle?: boolean
   /** Debounce for auto-save while typing; overridable in tests. */
   debounceMs?: number
+  /** Ellipsize the display when it outgrows the space it is given, for a
+   * title in a narrow header. Off by default: text that wraps over several
+   * lines (slide bullets) must keep wrapping. Editing is unaffected. */
+  truncate?: boolean
 }
 
 export default function EditableText({
@@ -41,6 +45,7 @@ export default function EditableText({
   emptyDisplay,
   placeholderStyle = false,
   debounceMs = 800,
+  truncate = false,
 }: Props) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
@@ -111,10 +116,14 @@ export default function EditableText({
           }
         }}
         // relative z-10 lifts the text above SlideNavZones' overlay
-        // hotspots, so clicking text edits instead of navigating
-        className={`relative z-10 -mx-1 inline-block cursor-text rounded px-1 hover:bg-black/5 ${
-          !value && emptyDisplay && placeholderStyle ? 'slot-blank' : ''
-        }`}
+        // hotspots, so clicking text edits instead of navigating.
+        // The hover background normally bleeds a little past the text
+        // (px-1 with -mx-1 back out, so the layout is unmoved); a
+        // truncating box gives that up, since padding inside a capped
+        // width would ellipsize text that in fact fits.
+        className={`relative z-10 inline-block cursor-text rounded hover:bg-black/5 ${
+          truncate ? 'max-w-full truncate' : '-mx-1 px-1'
+        } ${!value && emptyDisplay && placeholderStyle ? 'slot-blank' : ''}`}
       >
         {value
           ? (renderValue?.(value) ?? value)

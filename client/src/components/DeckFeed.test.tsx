@@ -108,6 +108,24 @@ describe('DeckFeed', () => {
     expect(await screen.findByText(/no public lectures/i)).toBeInTheDocument()
   })
 
+  it('stands one viewport tall with square edges, and scrolls its list', async () => {
+    // Few rows or many, the panel is the same height — jsdom has no layout,
+    // so the mechanism is what can be asserted: a fixed viewport-based
+    // height on the frame, and the scrolling confined to the list inside it.
+    onePage()
+    renderFeed()
+    await screen.findByText('Waves')
+
+    const panel = screen.getByRole('complementary')
+    expect(panel.className).toContain('h-[calc(100vh-6rem)]')
+    expect(panel.className).not.toMatch(/\bmax-h-/)
+    expect(panel.className).not.toMatch(/\brounded/)
+
+    const list = screen.getByRole('link', { name: 'Waves' }).closest('ul')!
+    expect(list.className).toContain('overflow-y-auto')
+    expect(list.className).toContain('flex-1')
+  })
+
   it('reports a failure to load the feed', async () => {
     mockDispatch.mockRejectedValue(new Error('offline'))
     renderFeed()

@@ -123,7 +123,9 @@ const writeViewMode = (mode: ViewMode): void => {
 
 /** Slide count and modification age, small beside the title in the nav.
  * The count is an ICU plural, so languages with more than two forms get
- * them right. */
+ * them right. In a narrow header it is the first thing to give way: a
+ * large shrink factor makes flexbox take the space from here before the
+ * titles beside it (see the ShellTitle block below). */
 function DeckTitleMeta({
   deck,
   count,
@@ -137,7 +139,7 @@ function DeckTitleMeta({
   const { t } = useTranslation()
   const age = useTimeAgo(deck.updatedAt)
   return (
-    <span className="whitespace-nowrap text-xs font-normal text-slate-500">
+    <span className="min-w-0 shrink-100 truncate text-xs font-normal text-slate-500">
       {t('deck.meta', { count, age })}
       {owner?.displayName && (
         <>
@@ -1590,17 +1592,23 @@ export default function DeckViewerPage() {
     >
       <ShellTitle>
         {/* Project then lecture, both reachable: the project opens read-only
-            for anyone when it is public (SOC-2 discovery). */}
+            for anyone when it is public (SOC-2 discovery).
+
+            A narrow header gives way in a set order — the meta beside this
+            heading first, then the project, and the lecture's own title
+            last. Shrink factors do it: flexbox takes space from an item in
+            proportion to its factor, so the bigger the factor the sooner
+            that part is the one being trimmed. */}
         <h1 className="flex min-w-0 items-center gap-1.5 truncate">
           {view.project && (
             <>
               <Link
                 to={`/app/projects/${view.project.id}`}
-                className="min-w-0 truncate font-normal text-slate-500 hover:text-indigo-600"
+                className="min-w-0 shrink-100 truncate font-normal text-slate-500 hover:text-indigo-600"
               >
                 {view.project.title?.trim() || untitledProject()}
               </Link>
-              <span className="text-slate-300" aria-hidden>
+              <span className="shrink-0 text-slate-300" aria-hidden>
                 /
               </span>
             </>
@@ -1612,6 +1620,7 @@ export default function DeckViewerPage() {
                 label="Lecture title"
                 emptyDisplay={untitledLecture()}
                 onSave={renameDeck}
+                truncate
               />
             ) : (
               lectureTitle(view.deck)

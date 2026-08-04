@@ -248,6 +248,7 @@
   },
   "home": {
     "welcome": "Welcome, {name}",
+    "createNew": "Create new",
     "yourWork": "Your work",
     "showAll": "{count, plural, one {Show the # lecture} other {Show all # lectures}}",
     "otherLectures": "Other lectures",

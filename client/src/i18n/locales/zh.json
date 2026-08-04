@@ -248,6 +248,7 @@
   },
   "home": {
     "welcome": "欢迎，{name}",
+    "createNew": "新建",
     "yourWork": "你的作品",
     "showAll": "{count, plural, other {查看全部 # 节课程}}",
     "otherLectures": "其他课程",

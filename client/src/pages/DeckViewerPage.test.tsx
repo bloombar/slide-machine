@@ -2370,12 +2370,16 @@ describe('DeckViewerPage title in the primary nav', () => {
       name: 'Shared Lecture',
     })
     expect(heading.closest('header')).not.toBeNull()
-    // The brand steps aside for the lecture's own title: the header is narrow,
-    // and project / lecture / author is what identifies this page. Home stays
-    // reachable from the hamburger menu beside it.
-    expect(
-      screen.queryByRole('link', { name: /the slide machine — home/i }),
-    ).toBeNull()
+    // Only the brand words step aside for the lecture's own title: the header
+    // is narrow, and project / lecture / author is what identifies this page.
+    // The badge stays beside the hamburger as the link home, as on every
+    // other page.
+    const brand = screen.getByRole('link', {
+      name: /the slide machine — home/i,
+    })
+    expect(brand).toHaveAttribute('href', '/')
+    expect(brand.querySelector('img')).toBeInTheDocument()
+    expect(brand).toHaveTextContent('')
     // Owners can still edit the title in place, now inside the nav
     expect(screen.getByTitle('Click to edit Lecture title')).toBeInTheDocument()
     // Slide count and modification age sit beside the title, outside

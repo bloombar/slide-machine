@@ -90,6 +90,76 @@ describe('ProjectPage', () => {
     )
   })
 
+  it('names the owner under the title, linking to their profile', async () => {
+    mockFetchRoutes({
+      ...baseRoutes,
+      '/api/actions/project.get': () => ({
+        status: 200,
+        body: { ...project, owner: { id: 'u1', displayName: 'ada@nyu.edu' } },
+      }),
+    })
+    renderPage()
+
+    // An email-shaped display name reads as its handle, as in the greeting
+    const byline = await screen.findByRole('link', { name: 'ada' })
+    expect(byline).toHaveAttribute('href', '/u/u1')
+  })
+
+  it('leaves the byline out when the owner is unknown', async () => {
+    mockFetchRoutes(baseRoutes)
+    renderPage()
+    await screen.findByRole('heading', { name: 'Lectures' })
+
+    expect(screen.queryByRole('link', { name: /^u1$/ })).toBeNull()
+  })
+
+  it('the Lectures "+" offers New lecture and Import, but no New project', async () => {
+    mockFetchRoutes(baseRoutes)
+    renderPage()
+    await screen.findByRole('heading', { name: 'Lectures' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create new' }))
+    expect(screen.getAllByRole('menuitem').map(i => i.textContent)).toEqual([
+      'New lecture',
+      'Import a lecture',
+    ])
+  })
+
+  it('the project kebab no longer carries Import — the "+" does', async () => {
+    mockFetchRoutes(baseRoutes)
+    renderPage()
+    await screen.findByRole('heading', { name: 'Lectures' })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: `Options for ${project.title}` }),
+    )
+    const menu = screen.getByRole('menu', {
+      name: `Options for ${project.title}`,
+    })
+    expect(menu.textContent).not.toMatch(/Import/)
+  })
+
+  it('starts a lecture from the "+" menu', async () => {
+    let sent: unknown
+    mockFetchRoutes({
+      ...baseRoutes,
+      '/api/actions/deck.create': init => {
+        sent = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: { id: 'd2', title: '', permalinkSlug: 'untitled-abc123' },
+        }
+      },
+    })
+    renderPage()
+    await screen.findByRole('heading', { name: 'Lectures' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create new' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'New lecture' }))
+
+    await vi.waitFor(() => expect(sent).toEqual({ projectId: 'p1' }))
+  })
+
   it('renames the project title in place', async () => {
     vi.useFakeTimers()
     let sent: unknown

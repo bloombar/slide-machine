@@ -1,7 +1,7 @@
 /**
  * Deck round-trip import end to end (EXP-3): an instructor exports a lecture to
  * YAML from the Export tab, then imports that same file back into the project
- * from the "Import" affordance, and a second lecture appears. Runs against the
+ * from the "+" menu on the Lectures row, and a second lecture appears. Runs against the
  * live front/back end and test DB; the export is produced for real.
  */
 import { test, expect } from '@playwright/test'
@@ -47,8 +47,14 @@ test('round-trip: export a lecture to YAML and re-import it', async ({
   const lectureLinks = page.locator('a[href^="/d/"]')
   await expect(lectureLinks).toHaveCount(1)
 
-  // Import the exported file → a confirmation notice and a second lecture
-  await page.locator('input[type="file"]').setInputFiles(filePath)
+  // Import the exported file from the "+" menu on the Lectures row → a
+  // confirmation notice and a second lecture. The menu item only forwards to
+  // this hidden input, which is what a real file pick fills.
+  await page.getByRole('button', { name: 'Create new' }).click()
+  await expect(
+    page.getByRole('menuitem', { name: 'Import a lecture' }),
+  ).toBeVisible()
+  await page.getByLabel('Import a lecture').setInputFiles(filePath)
   await expect(page.getByText(/^Imported /)).toBeVisible()
   await expect(lectureLinks).toHaveCount(2)
 })

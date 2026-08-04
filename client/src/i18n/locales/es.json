@@ -248,6 +248,7 @@
   },
   "home": {
     "welcome": "Bienvenido, {name}",
+    "createNew": "Crear nuevo",
     "yourWork": "Tu trabajo",
     "showAll": "{count, plural, one {Ver la # clase} other {Ver las # clases}}",
     "otherLectures": "Otras clases",

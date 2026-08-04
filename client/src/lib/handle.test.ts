@@ -3,7 +3,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import type { SafeUser } from '@slide-machine/shared'
-import { userHandle } from './handle'
+import { displayHandle, userHandle } from './handle'
 
 const user = (displayName: string, email = 'ada@example.com'): SafeUser =>
   ({ displayName, email }) as SafeUser
@@ -21,5 +21,13 @@ describe('userHandle', () => {
 
   it('falls back to the email local part when the display name is blank', () => {
     expect(userHandle(user('  '))).toBe('ada')
+  })
+})
+
+describe('displayHandle', () => {
+  it('applies the same rule to a bare name, with no account behind it', () => {
+    expect(displayHandle('Ada Lovelace')).toBe('Ada Lovelace')
+    expect(displayHandle('  Ada  ')).toBe('Ada')
+    expect(displayHandle('ada@example.com')).toBe('ada')
   })
 })

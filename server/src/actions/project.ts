@@ -115,6 +115,14 @@ export const projectGet = defineAction<{ projectId: string }, Project>({
     const doc = await ProjectModel.findById(input.projectId).catch(() => null)
     const acl = doc ? projectAcl(doc) : null
     if (!doc || !acl) throw new ActionForbiddenError()
+    /** Names the owner on the page, linking to their profile (SOC-4). Every
+     * reader of a project gets it: it says whose work this is, which is not
+     * privileged the way seed notes and people lists are. */
+    const withOwner = async (dto: Project): Promise<Project> => {
+      const owner = await UserModel.findById(dto.ownerId).catch(() => null)
+      if (!owner) return dto
+      return { ...dto, owner: { id: owner.id, displayName: owner.displayName } }
+    }
     // Non-members: allowlisted admins get an always-on bypass, mirroring the
     // lecture-viewer one (lib/admin-view.ts). They read the full project, seed
     // notes and people lists included: the console already surfaces both, and
@@ -123,17 +131,17 @@ export const projectGet = defineAction<{ projectId: string }, Project>({
     // people lists and prep notes are stripped, and deck.list still hides its
     // non-public lectures. A restricted project stays members-only (404).
     if (!isAclMember(acl, userId)) {
-      if (await isAllowlistedAdmin(userId)) return toProjectDto(doc)
+      if (await isAllowlistedAdmin(userId)) return withOwner(toProjectDto(doc))
       if (doc.visibility !== 'public') throw new ActionForbiddenError()
       const dto = toSharedProjectDto(doc)
       delete dto.seedContext
-      return dto
+      return withOwner(dto)
     }
-    if (acl.ownerId === userId) return toProjectDto(doc)
+    if (acl.ownerId === userId) return withOwner(toProjectDto(doc))
     const dto = toSharedProjectDto(doc)
     // Viewers see the lecture list, not the instructor's prep notes
     if (!canEditAcl(acl, userId)) delete dto.seedContext
-    return dto
+    return withOwner(dto)
   },
 })
 
