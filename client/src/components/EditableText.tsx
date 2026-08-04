@@ -120,9 +120,12 @@ export default function EditableText({
         // The hover background normally bleeds a little past the text
         // (px-1 with -mx-1 back out, so the layout is unmoved); a
         // truncating box gives that up, since padding inside a capped
-        // width would ellipsize text that in fact fits.
-        className={`relative z-10 inline-block cursor-text rounded hover:bg-black/5 ${
-          truncate ? 'max-w-full truncate' : '-mx-1 px-1'
+        // width would ellipsize text that in fact fits. It is a block, not
+        // an inline-block: hidden overflow makes an inline-block sit on the
+        // line by its bottom edge, which lifts the text off the baseline of
+        // whatever is beside it.
+        className={`relative z-10 cursor-text rounded hover:bg-black/5 ${
+          truncate ? 'block max-w-full truncate' : '-mx-1 inline-block px-1'
         } ${!value && emptyDisplay && placeholderStyle ? 'slot-blank' : ''}`}
       >
         {value
