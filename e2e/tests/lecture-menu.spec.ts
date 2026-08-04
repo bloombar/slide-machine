@@ -24,7 +24,8 @@ test('kebab menu shares and deletes lectures from lists', async ({ page }) => {
   await page.getByRole('button', { name: 'Start lecture' }).click()
 
   // Back home: Settings opens the viewer on the General tab
-  await page.getByRole('link', { name: 'The Slide Machine' }).click()
+  await page.getByRole('button', { name: 'Menu', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Home' }).click()
   await page
     .getByRole('button', { name: 'Options for Untitled lecture' })
     .click()
@@ -42,7 +43,8 @@ test('kebab menu shares and deletes lectures from lists', async ({ page }) => {
   await page.getByRole('button', { name: 'Close settings' }).click()
 
   // Share opens the viewer on the Privacy & Sharing tab
-  await page.getByRole('link', { name: 'The Slide Machine' }).click()
+  await page.getByRole('button', { name: 'Menu', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Home' }).click()
   await page
     .getByRole('button', { name: 'Options for Untitled lecture' })
     .click()
@@ -57,7 +59,8 @@ test('kebab menu shares and deletes lectures from lists', async ({ page }) => {
   await page.getByRole('button', { name: 'Close settings' }).click()
 
   // From the project page: Delete confirms, then the row disappears
-  await page.getByRole('link', { name: 'The Slide Machine' }).click()
+  await page.getByRole('button', { name: 'Menu', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Home' }).click()
   await page.getByRole('link', { name: 'MenuProj', exact: true }).click()
   await page
     .getByRole('button', { name: 'Options for Untitled lecture' })
@@ -88,7 +91,8 @@ test('kebab menu shares and deletes lectures from lists', async ({ page }) => {
     .getByRole('textbox', { name: 'Project title' })
     .fill('MenuProj Renamed')
   await page.keyboard.press('Enter')
-  await page.getByRole('link', { name: 'The Slide Machine' }).click()
+  await page.getByRole('button', { name: 'Menu', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Home' }).click()
   await expect(
     page.getByRole('heading', { name: 'MenuProj Renamed' }),
   ).toBeVisible()

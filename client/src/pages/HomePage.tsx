@@ -59,14 +59,17 @@ function ProjectSection({
             {projectTitle(project)}
           </Link>
         </h2>
-        <ProjectRowMenu project={project} onDeleted={onProjectDeleted} />
+        <ProjectRowMenu
+          project={project}
+          onDeleted={onProjectDeleted}
+          onImport={file => onImportLecture(project, file)}
+        />
       </div>
       <ul className="flex flex-col gap-2">
         {/* Always first: a dashed zone to add a lecture */}
         <NewLectureZone
           projectTitle={projectTitle(project)}
           onStart={() => onStartLecture(project)}
-          onImport={file => onImportLecture(project, file)}
         />
         {visible.map(d => (
           <LectureRow key={d.id} deck={d} onDeleted={onLectureDeleted} />

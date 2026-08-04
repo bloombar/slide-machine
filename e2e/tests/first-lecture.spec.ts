@@ -36,7 +36,8 @@ test('a new user starts a lecture with no project; a default project is created'
 
   // Home now shows the default project under its placeholder name, with the
   // lecture beneath it
-  await page.getByRole('link', { name: 'The Slide Machine' }).click()
+  await page.getByRole('button', { name: 'Menu', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Home' }).click()
   await expect(
     page.getByRole('heading', { name: 'Default project' }),
   ).toBeVisible()

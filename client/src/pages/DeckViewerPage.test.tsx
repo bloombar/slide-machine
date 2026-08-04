@@ -2325,7 +2325,7 @@ describe('DeckViewerPage settings modal', () => {
 })
 
 describe('DeckViewerPage title in the primary nav', () => {
-  it('teleports the deck title into the shell header alongside the brand', async () => {
+  it('teleports the deck title into the shell header, in place of the brand', async () => {
     mockFetchRoutes({
       '/api/auth/refresh': () => ({
         status: 200,
@@ -2370,14 +2370,12 @@ describe('DeckViewerPage title in the primary nav', () => {
       name: 'Shared Lecture',
     })
     expect(heading.closest('header')).not.toBeNull()
-    // The brand wordmark stays visible as the always-clickable home link,
-    // now sitting alongside the teleported title rather than being replaced
-    // by it — an empty link would not be reachable to navigate home.
-    const brand = screen.getByRole('link', {
-      name: /the slide machine — home/i,
-    })
-    expect(brand).toBeInTheDocument()
-    expect(brand).toHaveTextContent('The Slide Machine')
+    // The brand steps aside for the lecture's own title: the header is narrow,
+    // and project / lecture / author is what identifies this page. Home stays
+    // reachable from the hamburger menu beside it.
+    expect(
+      screen.queryByRole('link', { name: /the slide machine — home/i }),
+    ).toBeNull()
     // Owners can still edit the title in place, now inside the nav
     expect(screen.getByTitle('Click to edit Lecture title')).toBeInTheDocument()
     // Slide count and modification age sit beside the title, outside

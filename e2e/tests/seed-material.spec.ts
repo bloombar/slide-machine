@@ -4,7 +4,7 @@
  * asset toggles out of generation, and deletion clears the list.
  */
 import { test, expect } from '@playwright/test'
-import { createProject } from './helpers'
+import { createProject, openProjectSettings } from './helpers'
 
 const email = `material-${Date.now()}@example.com`
 
@@ -23,7 +23,7 @@ test('photo seed material uploads, captions, toggles, and deletes', async ({
   await page.getByRole('button', { name: 'Create account' }).click()
 
   await createProject(page, 'MaterialProj')
-  await page.getByRole('button', { name: 'Project settings' }).click()
+  await openProjectSettings(page, 'MaterialProj')
 
   // Upload a photo and watch extraction settle
   await page
@@ -39,7 +39,7 @@ test('photo seed material uploads, captions, toggles, and deletes', async ({
   await page.getByLabel('Caption for golgi.png').blur()
   await page.waitForTimeout(200)
   await page.reload()
-  await page.getByRole('button', { name: 'Project settings' }).click()
+  await openProjectSettings(page, 'MaterialProj')
   await expect(page.getByLabel('Caption for golgi.png')).toHaveValue(
     'Golgi apparatus micrograph',
   )
@@ -52,7 +52,7 @@ test('photo seed material uploads, captions, toggles, and deletes', async ({
   await toggle.click()
   await expect(toggle).not.toBeChecked()
   await page.reload()
-  await page.getByRole('button', { name: 'Project settings' }).click()
+  await openProjectSettings(page, 'MaterialProj')
   await expect(
     page.getByRole('checkbox', { name: 'Use golgi.png in generation' }),
   ).not.toBeChecked()

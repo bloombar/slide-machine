@@ -4,7 +4,7 @@
  * modal, and both survive a reload.
  */
 import { test, expect } from '@playwright/test'
-import { createProject } from './helpers'
+import { createProject, openProjectSettings } from './helpers'
 
 const email = `seed-${Date.now()}@example.com`
 
@@ -19,7 +19,7 @@ test('project and lecture seed notes auto-save and persist', async ({
 
   // Project-level notes save from the project settings modal (blur flushes)
   await createProject(page, 'SeedProj')
-  await page.getByRole('button', { name: 'Project settings' }).click()
+  await openProjectSettings(page, 'SeedProj')
   await page
     .getByRole('textbox', { name: 'Project seed notes' })
     .fill('Course covers waves, optics, and thermodynamics')
@@ -27,7 +27,7 @@ test('project and lecture seed notes auto-save and persist', async ({
   await page.getByRole('button', { name: 'Close settings' }).click()
 
   await page.reload()
-  await page.getByRole('button', { name: 'Project settings' }).click()
+  await openProjectSettings(page, 'SeedProj')
   await expect(
     page.getByRole('textbox', { name: 'Project seed notes' }),
   ).toHaveValue('Course covers waves, optics, and thermodynamics')

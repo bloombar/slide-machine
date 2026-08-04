@@ -611,6 +611,7 @@
   },
   "deck": {
     "meta": "{count, plural, one {# slide} other {# slides}} · edited {age}",
+    "byAuthor": "· by",
     "share": "Share",
     "shareLabel": "Share deck",
     "addSlide": "Add slide",
