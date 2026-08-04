@@ -554,9 +554,10 @@
   title: Profile & ownership
   full: Each user has a profile (display name, bio, avatar, preferred locale) and
     owns their projects, decks, and templates. The preferred locale drives the
-    UI language (TECH-12). Authorization enforces that users may only modify
-    their own resources (except admins — §20, whose authorization comes from the
-    allowlist, not ownership).
+    UI language (TECH-12); it is stored only once the user picks one, and the
+    browser's language decides until then. Authorization enforces that users may
+    only modify their own resources (except admins — §20, whose authorization
+    comes from the allowlist, not ownership).
   section: §4 Accounts & Authentication
   family: AUTH
   phase: 2
@@ -1362,10 +1363,13 @@
     background sweep once their deletedAt is older than a configurable window
     (DELETED_DATA_RETENTION_DAYS, default 90 days — TECH-4). Purge is a hard
     cascade delete that also removes owned children and stored blobs (seed
-    assets, exports, and any retained audio — P-6), so no orphaned data
-    survives. 0 disables the sweep (tombstones kept indefinitely). This bounds
-    storage cost and honors data-minimization, consistent with the
-    audio-retention sweep (P-6).
+    assets, exports, retained audio — P-6 — and synthesized narration), so no
+    orphaned data survives. Narration is cached under a hash of the words
+    spoken, so one stored file can serve two lectures that say the same thing;
+    it is therefore reference-counted per lecture and deleted with the last
+    lecture that played it, never with the first. 0 disables the sweep
+    (tombstones kept indefinitely). This bounds storage cost and honors
+    data-minimization, consistent with the audio-retention sweep (P-6).
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 3
@@ -1465,8 +1469,8 @@
     library (e.g., react-i18next / FormatJS with ICU message format) with one
     resource bundle per locale; pluralization and date/number/currency
     formatting via the Intl API. Adding a locale is a resource-bundle addition,
-    not a code change. Locale selection — detected from the browser
-    (Accept-Language) on first visit, overridable by…"
+    not a code change. Locale selection — detected from the browser on every
+    visit and matched against the locales…"
   section: §14 Technical Stack & Conventions
   family: TECH
   phase: 3
