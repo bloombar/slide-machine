@@ -272,9 +272,9 @@
     "groupProjects": "项目",
     "groupPeople": "用户",
     "loadMore": "加载更多",
-    "unknownOwner": "未知",
-    "rating": "评分 {score}",
-    "ratingTitle": "净评分：{score}"
+    "votes": "{count, plural, other {# 票}}",
+    "votesBreakdown": "{up} 赞成 · {down} 反对",
+    "unknownOwner": "未知"
   },
   "plan": {
     "tier": {

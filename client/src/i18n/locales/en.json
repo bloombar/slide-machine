@@ -272,9 +272,9 @@
     "groupProjects": "Projects",
     "groupPeople": "People",
     "loadMore": "Load more",
-    "unknownOwner": "Unknown",
-    "rating": "Rating {score}",
-    "ratingTitle": "Net rating: {score}"
+    "votes": "{count, plural, one {# vote} other {# votes}}",
+    "votesBreakdown": "{up} up · {down} down",
+    "unknownOwner": "Unknown"
   },
   "plan": {
     "tier": {

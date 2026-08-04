@@ -313,7 +313,7 @@ export default function HomePage() {
 
         {/* Discover (SOC-2/SOC-3): other people's public lectures alongside
             your own work, sticky so it stays put as the main column scrolls. */}
-        <div className="w-full lg:sticky lg:top-6 lg:w-80 lg:shrink-0">
+        <div className="w-full lg:sticky lg:top-6 lg:w-[28rem] lg:shrink-0">
           <DeckFeed />
         </div>
       </div>

@@ -6,7 +6,7 @@
  * clears it. Updates are optimistic and revert on failure.
  *
  * Voting is offered in the lecture viewer only. Browsable lists show a
- * read-only `RatingBadge` instead, so a list never presents a control that
+ * read-only `VoteCount` instead, so a list never presents a control that
  * needs a lecture's context to be honest.
  */
 import { useState } from 'react'

@@ -272,9 +272,9 @@
     "groupProjects": "Проекты",
     "groupPeople": "Люди",
     "loadMore": "Показать ещё",
-    "unknownOwner": "Неизвестно",
-    "rating": "Оценка {score}",
-    "ratingTitle": "Итоговая оценка: {score}"
+    "votes": "{count, plural, one {# голос} few {# голоса} other {# голосов}}",
+    "votesBreakdown": "{up} за · {down} против",
+    "unknownOwner": "Неизвестно"
   },
   "plan": {
     "tier": {

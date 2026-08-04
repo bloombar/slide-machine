@@ -272,9 +272,9 @@
     "groupProjects": "Projets",
     "groupPeople": "Personnes",
     "loadMore": "Charger plus",
-    "unknownOwner": "Inconnu",
-    "rating": "Note {score}",
-    "ratingTitle": "Note nette : {score}"
+    "votes": "{count, plural, one {# vote} other {# votes}}",
+    "votesBreakdown": "{up} pour · {down} contre",
+    "unknownOwner": "Inconnu"
   },
   "plan": {
     "tier": {
