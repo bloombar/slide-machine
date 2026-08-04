@@ -249,7 +249,12 @@ test('a new lecture starts with its toolbar pinned', async ({ page }) => {
 
   // The position is remembered per lecture, so a fresh one has no entry
   await page.goto('/app')
-  await page.getByRole('link', { name: project, exact: true }).click()
+  // Scoped to "Your work": the Discover feed beside it links projects too,
+  // and an earlier run's leftover lecture can carry this project's name
+  await page
+    .getByRole('region', { name: 'Your work' })
+    .getByRole('link', { name: project, exact: true })
+    .click()
   await page
     .getByRole('button', { name: `Start a new lecture in ${project}` })
     .click()

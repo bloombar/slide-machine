@@ -23,6 +23,12 @@ test('the drawer pushes the page aside and leaves the toggle where it was', asyn
   const toggle = page.getByRole('button', { name: 'Menu' })
   const brand = page.locator('header a').first()
 
+  // The brand badge widens its link the moment it decodes, so measure only
+  // once it has: otherwise the before/after comparison races the image
+  await expect(page.locator('header img').first()).toHaveJSProperty(
+    'complete',
+    true,
+  )
   const toggleClosed = await box(toggle)
   const brandClosed = await box(brand)
 
@@ -53,4 +59,21 @@ test('the drawer pushes the page aside and leaves the toggle where it was', asyn
   await page.waitForTimeout(500)
   expect(await box(brand)).toEqual(brandClosed)
   await expect(page.getByRole('menuitem', { name: 'Home' })).toBeHidden()
+})
+
+test('the closed drawer leaves fixed page chrome on the viewport', async ({
+  page,
+}) => {
+  await page.goto('/')
+  // Any translate other than `none` — `translate-x-0` included — makes the
+  // shifted layer the containing block for its `position: fixed`
+  // descendants, which then anchor to the document instead of the window.
+  // That is what threw the dragged deck toolbar off-screen, so while the
+  // drawer is closed this layer must carry no translate at all.
+  const layer = page.locator('div.overflow-x-clip > div').first()
+  await expect(layer).toHaveCSS('translate', 'none')
+
+  await page.getByRole('button', { name: 'Menu' }).click()
+  await page.waitForTimeout(500)
+  await expect(layer).not.toHaveCSS('translate', 'none')
 })

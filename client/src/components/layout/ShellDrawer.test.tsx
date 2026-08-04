@@ -49,7 +49,7 @@ afterEach(() => vi.unstubAllGlobals())
 describe('ShellDrawerFrame', () => {
   it('pushes the page aside and slides the panel in when opened', () => {
     const { shifted, panel } = renderFrame()
-    expect(shifted).toHaveClass('translate-x-0')
+    expect(shifted).not.toHaveClass('translate-x-0')
     expect(panel).toHaveClass('-translate-x-full')
     expect(panel).toHaveClass('transition-transform')
 
@@ -63,8 +63,20 @@ describe('ShellDrawerFrame', () => {
     const { shifted, panel } = renderFrame()
     fireEvent.click(toggle())
     fireEvent.click(toggle())
-    expect(shifted).toHaveClass('translate-x-0')
+    expect(shifted).not.toHaveClass('translate-x-64')
     expect(panel).toHaveClass('-translate-x-full')
+  })
+
+  it('carries no translate at all while closed', () => {
+    // The regression: `translate-x-0` is `translate: 0`, not `none`, which
+    // makes this layer the containing block for every `position: fixed`
+    // descendant — the dragged deck toolbar was then placed against the
+    // document and flew off-screen by the page's scroll offset.
+    const { shifted } = renderFrame()
+    expect(shifted.className).not.toMatch(/translate-x/)
+
+    fireEvent.click(toggle())
+    expect(shifted).toHaveClass('translate-x-64')
   })
 
   it('crosses the hamburger bars into a close icon while open', () => {

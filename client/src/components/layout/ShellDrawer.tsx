@@ -48,9 +48,16 @@ export function ShellDrawerFrame({ children }: { children: ReactNode }) {
       {/* Clipped, not hidden: `overflow-x: hidden` would turn this into a
           scroll container and strand the sticky header inside it. */}
       <div className="overflow-x-clip">
+        {/* Closed carries no translate at all, rather than a `translate-x-0`
+            that resolves to `translate: 0`. Any translate other than `none`
+            makes this layer the containing block for every `position: fixed`
+            descendant inside it, which positions them against the document
+            instead of the viewport — the dragged deck toolbar landed a whole
+            scroll offset above the window. Dropping the class still animates:
+            `translate` interpolates from `none` as the identity. */}
         <div
           className={`transition-transform duration-300 ease-out motion-reduce:transition-none ${
-            open ? DRAWER_SHIFT : 'translate-x-0'
+            open ? DRAWER_SHIFT : ''
           }`}
         >
           {children}
