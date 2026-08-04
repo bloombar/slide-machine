@@ -117,7 +117,7 @@ describe('DeckFeed', () => {
     await screen.findByText('Waves')
 
     const panel = screen.getByRole('complementary')
-    expect(panel.className).toContain('h-[calc(100vh-6rem)]')
+    expect(panel.className).toContain('h-[calc(100vh-8rem)]')
     expect(panel.className).not.toMatch(/\bmax-h-/)
     expect(panel.className).not.toMatch(/\brounded/)
 

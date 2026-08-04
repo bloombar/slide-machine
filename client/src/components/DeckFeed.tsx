@@ -20,7 +20,7 @@ export default function DeckFeed() {
 
   return (
     <aside
-      className="flex h-[calc(100vh-6rem)] w-full flex-col overflow-hidden border border-slate-200 bg-slate-100"
+      className="flex h-[calc(100vh-8rem)] w-full flex-col overflow-hidden border border-slate-200 bg-slate-100"
       aria-label={t('discover.regionLabel')}
     >
       <DiscoverControls
@@ -34,8 +34,12 @@ export default function DeckFeed() {
       {/* The card is one viewport tall whatever it holds — a short feed leaves
           the space empty rather than shrinking, so the page beside it does not
           reflow as results load. Anything longer scrolls inside this list
-          rather than growing the page: 6rem covers the sticky header above it
-          and the gap below (see the sticky wrapper on the home page). */}
+          rather than growing the page. The 8rem is what the panel cannot
+          have: the sticky header above it (3.5rem) and the page's own top
+          padding (2rem), then the sticky health footer below (2rem) and a
+          gap clear of it. The home page sticks it at exactly that top
+          offset, so the panel holds still as the column beside it scrolls
+          and never runs under the footer. */}
       <DiscoverResults
         discover={discover}
         className="min-h-0 flex-1 overflow-y-auto"
