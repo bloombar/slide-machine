@@ -22,6 +22,7 @@
  */
 import type {
   BillingEvent,
+  BillingEventType,
   BillingSummary,
   PlanTier,
   SubscriptionSnapshot,
@@ -175,6 +176,40 @@ export const applyBillingEvent = async (
   return { applied: true, userId, tier }
 }
 
+/** Which internal event a snapshot in this state amounts to. */
+const EVENT_FOR_STATUS: Record<SubscriptionStatus, BillingEventType> = {
+  active: 'subscription.active',
+  past_due: 'subscription.past_due',
+  canceled: 'subscription.canceled',
+}
+
+/**
+ * Records a subscription the application itself just changed (BILL-5), rather
+ * than one a webhook reported. The provider answers a tier change with the
+ * updated subscription, and the matching webhook lands separately — often
+ * after the browser has already re-read the page — so applying the answer we
+ * were handed is what stops the user seeing the plan they just left.
+ *
+ * It goes through the same path as a webhook, and is therefore subject to the
+ * same rules: the webhook that follows describes the state we already applied,
+ * so it is either a no-op or discarded as stale. The event id is marked local
+ * so it can never collide with a provider's own.
+ */
+export const applySubscriptionSnapshot = async (
+  snapshot: SubscriptionSnapshot,
+  providerName: string,
+  now: Date = new Date(),
+): Promise<ApplyResult> =>
+  applyBillingEvent(
+    {
+      type: EVENT_FOR_STATUS[snapshot.status],
+      providerEventId: `local:${snapshot.providerSubscriptionId}:${now.getTime()}`,
+      occurredAt: now.toISOString(),
+      subscription: snapshot,
+    },
+    providerName,
+  )
+
 /** The provider's customer reference for an account, if it has ever been
  * billed. Checkout reuses it so one account keeps one billing record, and the
  * portal cannot be opened without it. */
@@ -185,6 +220,21 @@ export const billingCustomerIdFor = async (
     'billingCustomerId',
   )
   return sub?.billingCustomerId || undefined
+}
+
+/**
+ * The provider's reference for the account's live subscription, if it has one
+ * (BILL-5). A canceled subscription is not one: it has already ended, so there
+ * is nothing left to move to another tier.
+ */
+export const providerSubscriptionIdFor = async (
+  userId: string,
+): Promise<string | undefined> => {
+  const sub = await SubscriptionModel.findOne({ userId }).select(
+    'providerSubscriptionId status',
+  )
+  if (!sub || sub.status === 'canceled') return undefined
+  return sub.providerSubscriptionId || undefined
 }
 
 /** Tiers a checkout can be started for: those the deployment has priced

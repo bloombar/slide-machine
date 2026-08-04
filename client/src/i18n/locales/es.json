@@ -284,6 +284,30 @@
       "max": "Max"
     },
     "change": "Cambiar de plan",
+    "switch": {
+      "to": "Cambiar a {plan}",
+      "title": "¿Cambiar a {plan}?",
+      "cancelTo": "Cancelar la suscripción",
+      "cancelTitle": "¿Cancelar tu suscripción?",
+      "retention": "Las grabaciones se conservarán {next} en lugar de {current}.",
+      "recordings": "{count, plural, one {# grabación es más antigua que eso y se eliminará:} other {# grabaciones son más antiguas que eso y se eliminarán:}}",
+      "lecture": "{title} — {count, plural, one {# grabación} other {# grabaciones}}",
+      "andMore": "{count, plural, one {…y # clase más} other {…y # clases más}}",
+      "noLoss": "No se eliminará nada de lo que hayas grabado.",
+      "effective": {
+        "immediately": "El cambio se aplica de inmediato y tu pago se ajusta por el resto de este periodo.",
+        "periodEnd": "Tu plan sigue hasta el {date} y luego pasa a Free.",
+        "periodEndSoon": "Tu plan sigue hasta el final del periodo que ya pagaste y luego pasa a Free."
+      },
+      "done": {
+        "immediate": "Ahora estás en el plan {plan}.",
+        "periodEnd": "Tu suscripción termina el {date}. Entonces pasarás a Free."
+      },
+      "errors": {
+        "preview": "No se pudo calcular qué haría este cambio. Inténtalo de nuevo.",
+        "apply": "No se pudo cambiar tu plan. Inténtalo de nuevo."
+      }
+    },
     "feature": {
       "liveCapture": "Diapositivas en directo mientras hablas",
       "voiceControl": "Comandos de voz",
@@ -315,7 +339,7 @@
       "audioRetention": "Conservación del audio original",
       "retentionDays": "{count, plural, one {# día} other {# días}}",
       "retentionUnlimited": "Se conservan indefinidamente",
-      "changeHint": "Para pasar a un plan menor o cancelar, usa el portal de facturación.",
+      "changeHint": "Los métodos de pago, las facturas y los recibos están en el portal de facturación.",
       "errors": {
         "load": "No se pudieron cargar los planes"
       },

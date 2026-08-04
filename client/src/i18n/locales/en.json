@@ -284,6 +284,30 @@
       "max": "Max"
     },
     "change": "Change plan",
+    "switch": {
+      "to": "Switch to {plan}",
+      "title": "Switch to {plan}?",
+      "cancelTo": "Cancel subscription",
+      "cancelTitle": "Cancel your subscription?",
+      "retention": "Recordings will be kept for {next} instead of {current}.",
+      "recordings": "{count, plural, one {# recording is older than that and will be deleted:} other {# recordings are older than that and will be deleted:}}",
+      "lecture": "{title} — {count, plural, one {# recording} other {# recordings}}",
+      "andMore": "{count, plural, one {…and # more lecture} other {…and # more lectures}}",
+      "noLoss": "Nothing you have recorded will be deleted.",
+      "effective": {
+        "immediately": "The change takes effect right away, and your payment is adjusted for the rest of this period.",
+        "periodEnd": "Your plan runs until {date}, then moves to Free.",
+        "periodEndSoon": "Your plan runs to the end of the period you have paid for, then moves to Free."
+      },
+      "done": {
+        "immediate": "You are now on the {plan} plan.",
+        "periodEnd": "Your subscription ends {date}. You move to Free then."
+      },
+      "errors": {
+        "preview": "Could not work out what this change would do. Please try again.",
+        "apply": "Could not change your plan. Please try again."
+      }
+    },
     "feature": {
       "liveCapture": "Speak-to-slides live capture",
       "voiceControl": "Voice commands",
@@ -315,7 +339,7 @@
       "audioRetention": "Original audio retention",
       "retentionDays": "{count, plural, one {# day} other {# days}}",
       "retentionUnlimited": "Kept indefinitely",
-      "changeHint": "Moving to a smaller plan, or cancelling, happens in the billing portal.",
+      "changeHint": "Payment methods, invoices and receipts are in the billing portal.",
       "errors": {
         "load": "Could not load the plans"
       },

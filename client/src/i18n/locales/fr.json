@@ -284,6 +284,30 @@
       "max": "Max"
     },
     "change": "Changer d’offre",
+    "switch": {
+      "to": "Passer à {plan}",
+      "title": "Passer à {plan} ?",
+      "cancelTo": "Annuler l'abonnement",
+      "cancelTitle": "Annuler votre abonnement ?",
+      "retention": "Les enregistrements seront conservés {next} au lieu de {current}.",
+      "recordings": "{count, plural, one {# enregistrement est plus ancien que cela et sera supprimé :} other {# enregistrements sont plus anciens que cela et seront supprimés :}}",
+      "lecture": "{title} — {count, plural, one {# enregistrement} other {# enregistrements}}",
+      "andMore": "{count, plural, one {…et # cours de plus} other {…et # cours de plus}}",
+      "noLoss": "Rien de ce que vous avez enregistré ne sera supprimé.",
+      "effective": {
+        "immediately": "Le changement prend effet immédiatement, et votre paiement est ajusté pour le reste de la période.",
+        "periodEnd": "Votre plan court jusqu'au {date}, puis passe à Free.",
+        "periodEndSoon": "Votre plan court jusqu'à la fin de la période déjà payée, puis passe à Free."
+      },
+      "done": {
+        "immediate": "Vous êtes maintenant sur le plan {plan}.",
+        "periodEnd": "Votre abonnement se termine le {date}. Vous passerez à Free."
+      },
+      "errors": {
+        "preview": "Impossible de déterminer les effets de ce changement. Réessayez.",
+        "apply": "Impossible de changer votre plan. Réessayez."
+      }
+    },
     "feature": {
       "liveCapture": "Diapositives générées en direct pendant que vous parlez",
       "voiceControl": "Commandes vocales",
@@ -315,7 +339,7 @@
       "audioRetention": "Conservation de l’audio original",
       "retentionDays": "{count, plural, one {# jour} other {# jours}}",
       "retentionUnlimited": "Conservés indéfiniment",
-      "changeHint": "Pour passer à une offre inférieure ou résilier, utilisez le portail de facturation.",
+      "changeHint": "Les moyens de paiement, les factures et les reçus sont dans le portail de facturation.",
       "errors": {
         "load": "Impossible de charger les offres"
       },

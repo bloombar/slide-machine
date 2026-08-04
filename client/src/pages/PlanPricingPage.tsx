@@ -17,6 +17,12 @@
  * checkout, this page only navigates (P-8), and the plan changes when the
  * webhook says so — which is why the browser is sent back to the account's
  * Plan tab, where that story is already told, rather than back here.
+ *
+ * Moving *down* is not a purchase and does not leave the app. It is confirmed
+ * here because only here can the user be told what it costs them: a smaller
+ * plan keeps lecture audio for fewer days, so recordings they still have may
+ * be deleted, and BILL-5 requires them to hear that before they agree to it
+ * (P-10) rather than a day later from the retention sweep.
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
@@ -28,20 +34,25 @@ import {
   type BillingSummary,
   type PlanCatalog,
   type PlanCatalogEntry,
+  type PlanChangeImpact,
   type PlanFeature,
   type PlanTier,
   type UsageMetric,
   type UsageUnit,
 } from '@slide-machine/shared'
 import {
+  changePlan,
   fetchBillingSummary,
   fetchPlanCatalog,
   openBillingPortal,
+  previewPlanChange,
   startCheckout,
 } from '../api/billing'
 import { apiErrorMessage } from '../i18n/apiError'
-import { formatCurrencyMinor } from '../i18n/format'
+import { formatCurrencyMinor, formatDate } from '../i18n/format'
 import { callToActionFor, formatAmount, friendlyCap } from '../lib/usage'
+import { useAuth } from '../auth/AuthContext'
+import ConfirmDialog from '../components/ConfirmDialog'
 
 /** Where the account's own plan lives — where this page is reached from, and
  * where checkout returns to. */
@@ -62,6 +73,7 @@ const rowHeaderClass =
 
 export default function PlanPricingPage() {
   const { t } = useTranslation()
+  const { user, updateUser } = useAuth()
   const [catalog, setCatalog] = useState<PlanCatalog | null>(null)
   const [summary, setSummary] = useState<BillingSummary | null>(null)
   const [failed, setFailed] = useState(false)
@@ -69,6 +81,11 @@ export default function PlanPricingPage() {
   /** Which button is mid-redirect, so every button can be disabled while the
    * page is on its way out. */
   const [busy, setBusy] = useState<string | null>(null)
+  /** The move being confirmed, with what it would delete (BILL-5). Null until
+   * a smaller plan is chosen, and cleared whichever way the dialog ends. */
+  const [pending, setPending] = useState<PlanChangeImpact | null>(null)
+  /** What a completed change did, since nothing navigates away to say so. */
+  const [done, setDone] = useState<string | null>(null)
 
   useEffect(() => {
     let live = true
@@ -116,6 +133,122 @@ export default function PlanPricingPage() {
   const current = summary.tier
   const tierName = (tier: PlanTier) =>
     t(`plan.tier.${tier}`, { defaultValue: tier })
+
+  /**
+   * Whether a smaller plan can be moved to from here: there has to be a live
+   * subscription to move, and an account already set to lapse at period end
+   * has nothing left to step down from — it is on its way to free either way.
+   */
+  const canMoveDown =
+    summary.status !== null &&
+    summary.status !== 'canceled' &&
+    !summary.cancelAtPeriodEnd
+
+  /** Asks what a move would cost before making it. The answer is the dialog:
+   * a shorter retention window can delete recordings the user still has, and
+   * that has to be said while declining is still an option (P-10). */
+  const askToConfirm = async (tier: PlanTier) => {
+    setBusy(tier)
+    setError(null)
+    setDone(null)
+    try {
+      setPending(await previewPlanChange(tier))
+    } catch (err) {
+      setError(apiErrorMessage(err, t, 'plan.switch.errors.preview'))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /** Confirmed. Unlike checkout this never leaves the app, so the page takes
+   * the plan the server hands back rather than waiting to be redirected to
+   * somewhere that would re-read it. */
+  const applyChange = async (impact: PlanChangeImpact) => {
+    setBusy(impact.tier)
+    setError(null)
+    try {
+      const { summary: next } = await changePlan(impact.tier)
+      setSummary(next)
+      // The tier lives on the account everywhere else in the app; leaving it
+      // stale would have the header and the usage bars quoting the old plan.
+      if (user && next.tier !== user.planTier) {
+        updateUser({ ...user, planTier: next.tier })
+      }
+      setDone(
+        impact.effective === 'period_end' && impact.effectiveAt
+          ? t('plan.switch.done.periodEnd', {
+              date: formatDate(impact.effectiveAt, 'long'),
+            })
+          : t('plan.switch.done.immediate', { plan: tierName(impact.tier) }),
+      )
+    } catch (err) {
+      setError(apiErrorMessage(err, t, 'plan.switch.errors.apply'))
+    } finally {
+      setPending(null)
+      setBusy(null)
+    }
+  }
+
+  /** A retention window in words, sharing the table's own phrasing. */
+  const retentionLabel = (days: number | null) =>
+    days === null
+      ? t('plan.pricing.retentionUnlimited')
+      : t('plan.pricing.retentionDays', { count: days })
+
+  /**
+   * What the confirmation dialog says: the new retention window, then every
+   * lecture that loses recordings to it — named, because "3 recordings" does
+   * not tell anyone whether the one that matters is among them. The list is
+   * capped, and says how many it left out rather than quietly ending.
+   */
+  const changeMessage = (impact: PlanChangeImpact) => {
+    const untold = impact.lecturesAffected - impact.lectures.length
+    return (
+      <>
+        {impact.nextRetentionDays !== impact.currentRetentionDays && (
+          <p>
+            {t('plan.switch.retention', {
+              next: retentionLabel(impact.nextRetentionDays),
+              current: retentionLabel(impact.currentRetentionDays),
+            })}
+          </p>
+        )}
+        {impact.recordingsRemoved > 0 ? (
+          <>
+            <p className="mt-2 font-medium text-red-700">
+              {t('plan.switch.recordings', { count: impact.recordingsRemoved })}
+            </p>
+            <ul className="mt-1 list-disc pl-5">
+              {impact.lectures.map(lecture => (
+                <li key={lecture.deckId}>
+                  {t('plan.switch.lecture', {
+                    title: lecture.title,
+                    count: lecture.recordings,
+                  })}
+                </li>
+              ))}
+            </ul>
+            {untold > 0 && (
+              <p className="mt-1">
+                {t('plan.switch.andMore', { count: untold })}
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="mt-2">{t('plan.switch.noLoss')}</p>
+        )}
+        <p className="mt-2">
+          {impact.effective !== 'period_end'
+            ? t('plan.switch.effective.immediately')
+            : impact.effectiveAt
+              ? t('plan.switch.effective.periodEnd', {
+                  date: formatDate(impact.effectiveAt, 'long'),
+                })
+              : t('plan.switch.effective.periodEndSoon')}
+        </p>
+      </>
+    )
+  }
 
   /**
    * What a plan costs, over how long — "$29.00 per month", or every third
@@ -176,8 +309,9 @@ export default function PlanPricingPage() {
     )
 
   /** The one control per column: what you are on, what it would cost to move
-   * up, or nothing — a smaller plan is a downgrade, which BILL-5 routes
-   * through the hosted portal rather than a second checkout. */
+   * up, or what it would cost to move down — moving down being a change to the
+   * subscription that already exists rather than a second purchase, and the
+   * free column being a cancellation, since there is no free plan to buy. */
   const action = (plan: PlanCatalogEntry) => {
     if (plan.tier === current) {
       return (
@@ -199,6 +333,20 @@ export default function PlanPricingPage() {
           className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
         >
           {t('billing.upgradeTo', { plan: tierName(plan.tier) })}
+        </button>
+      )
+    }
+    if (!isAbove(plan.tier, current) && canMoveDown) {
+      return (
+        <button
+          data-testid={`downgrade-${plan.tier}`}
+          disabled={busy !== null}
+          onClick={() => void askToConfirm(plan.tier)}
+          className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+        >
+          {plan.tier === 'free'
+            ? t('plan.switch.cancelTo')
+            : t('plan.switch.to', { plan: tierName(plan.tier) })}
         </button>
       )
     }
@@ -322,6 +470,16 @@ export default function PlanPricingPage() {
         </p>
       )}
 
+      {done && (
+        <p
+          data-testid="plan-change-done"
+          role="status"
+          className="mt-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+        >
+          {done}
+        </p>
+      )}
+
       {/* The table scrolls on its own where four columns will not fit, rather
           than making the whole page scroll sideways. */}
       <div className="mt-6 overflow-x-auto">
@@ -384,8 +542,8 @@ export default function PlanPricingPage() {
         </table>
       </div>
 
-      {/* Moving down a plan, or off one, is the hosted portal's job (BILL-5) —
-          and it only exists once the account has been billed at all. */}
+      {/* Cards and invoices stay with the provider (P-8), and the portal only
+          exists once the account has been billed at all. */}
       {summary.canManageBilling && (
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <button
@@ -407,6 +565,26 @@ export default function PlanPricingPage() {
           rather than shown an upgrade that does not exist (BILL-5). */}
       {callToActionFor(current) === 'contact' && (
         <p className="mt-4 text-xs text-slate-500">{t('usage.cta.contact')}</p>
+      )}
+
+      {/* What the smaller plan would delete, said before it is agreed to
+          (BILL-5/P-10). Cancelling the dialog changes nothing. */}
+      {pending && (
+        <ConfirmDialog
+          title={
+            pending.tier === 'free'
+              ? t('plan.switch.cancelTitle')
+              : t('plan.switch.title', { plan: tierName(pending.tier) })
+          }
+          message={changeMessage(pending)}
+          confirmLabel={
+            pending.tier === 'free'
+              ? t('plan.switch.cancelTo')
+              : t('plan.switch.to', { plan: tierName(pending.tier) })
+          }
+          onConfirm={() => void applyChange(pending)}
+          onCancel={() => setPending(null)}
+        />
       )}
     </div>
   )

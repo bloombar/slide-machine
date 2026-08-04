@@ -45,6 +45,10 @@ export default defineConfig({
       // Uploads land on disk in an isolated test dir
       STORAGE_PROVIDER: 'local',
       STORAGE_LOCAL_DIR: '.uploads-test',
+      // Hermetic: retention composes a tier's window with the deployment's
+      // (BILL-3/BILL-5), so a developer's tighter .env would otherwise decide
+      // what the plan-change tests see.
+      AUDIO_RETENTION_DAYS: '30',
       // Hermetic: the developer's local .env must not leak into tests
       GENERATION_FREEDOM: '2',
       // Feature flags pinned to their code defaults; flag-variant tests
