@@ -2389,6 +2389,61 @@ describe('DeckViewerPage title in the primary nav', () => {
     expect(heading.contains(meta)).toBe(false)
   })
 
+  it('a narrow header sheds the slide count before the author', async () => {
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: {
+          ...deckView,
+          owner: { id: 'u2', displayName: 'Amos Bloomberg' },
+        },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <ShellTitleProvider>
+            <Routes>
+              <Route element={<PublicShell />}>
+                <Route path="/d/:slug" element={<DeckViewerPage />} />
+              </Route>
+            </Routes>
+          </ShellTitleProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    // jsdom has no layout, so the assertion is the arrangement that produces
+    // it: three siblings in the nav's title row, each with its own share of
+    // a shrinking header.
+    const author = await screen.findByRole('link', { name: 'Amos Bloomberg' })
+    const authorBox = author.parentElement!
+    const stats = screen
+      .getByText(/slides · edited 2 minutes ago/)
+      .closest('span')!.parentElement!
+    const heading = screen.getByRole('heading', { name: /Shared Lecture/ })
+    expect(stats.previousElementSibling).toBe(heading)
+    expect(stats.nextElementSibling).toBe(authorBox)
+
+    // The count and age are clipped, and from the left: right-aligned text
+    // in a box whose overflow is hidden. They also go first (1000 against
+    // the heading's 100), and the author never gives up anything.
+    expect(stats.className).toContain('justify-end')
+    expect(stats.className).toContain('overflow-hidden')
+    expect(stats.className).toContain('shrink-1000')
+    expect(heading.className).toContain('shrink-100')
+    expect(authorBox.className).toContain('shrink-0')
+    // …and it keeps clear of the view controls beside it
+    expect(authorBox.className).toContain('pe-3')
+
+    // The row itself clips, so nothing can spill over those controls
+    expect(heading.parentElement!.className).toContain('overflow-hidden')
+  })
+
   it('shows empty titles as "Untitled lecture" in the nav', async () => {
     mockFetchRoutes({
       '/api/auth/refresh': () => ({

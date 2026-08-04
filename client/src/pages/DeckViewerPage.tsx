@@ -121,11 +121,17 @@ const writeViewMode = (mode: ViewMode): void => {
   }
 }
 
-/** Slide count and modification age, small beside the title in the nav.
- * The count is an ICU plural, so languages with more than two forms get
- * them right. In a narrow header it is the first thing to give way: a
- * large shrink factor makes flexbox take the space from here before the
- * titles beside it (see the ShellTitle block below). */
+/** Slide count, modification age, and who wrote it, small beside the title
+ * in the nav. The count is an ICU plural, so languages with more than two
+ * forms get them right.
+ *
+ * Two boxes rather than one, and siblings of the heading rather than a pair
+ * nested inside a wrapper: a nested pair would take its share of a narrow
+ * header as a block, and spend it on the author once the stats ran out,
+ * while the titles beside it still had room. As siblings they take their
+ * turn in the header's own order — stats, then titles, then the author (see
+ * the ShellTitle block below). The stats also give way from the LEFT, so
+ * what goes is the count and the age, never the tail beside the name. */
 function DeckTitleMeta({
   deck,
   count,
@@ -139,20 +145,30 @@ function DeckTitleMeta({
   const { t } = useTranslation()
   const age = useTimeAgo(deck.updatedAt)
   return (
-    <span className="min-w-0 shrink-100 truncate text-xs font-normal text-slate-500">
-      {t('deck.meta', { count, age })}
+    <>
+      {/* Right-aligned in a box that may be narrower than its text, so what
+          does not fit falls off the left edge and is clipped there. */}
+      <span className="flex min-w-0 shrink-1000 justify-end overflow-hidden text-xs font-normal text-slate-500">
+        <span className="shrink-0 whitespace-nowrap">
+          {t('deck.meta', { count, age })}
+          {owner?.displayName && <span aria-hidden> ·</span>}
+        </span>
+      </span>
       {owner?.displayName && (
-        <>
-          {` ${t('deck.byAuthor')} `}
+        // Never shrunk: everything else gives way around it, and the shell
+        // clips the row if even this will not fit. Padded clear of the view
+        // controls beside it.
+        <span className="shrink-0 pe-3 text-xs font-normal whitespace-nowrap text-slate-500">
+          {`${t('deck.byAuthor')} `}
           <Link
             to={`/u/${owner.id}`}
             className="hover:text-indigo-600 hover:underline"
           >
             {owner.displayName}
           </Link>
-        </>
+        </span>
       )}
-    </span>
+    </>
   )
 }
 
@@ -1594,12 +1610,14 @@ export default function DeckViewerPage() {
         {/* Project then lecture, both reachable: the project opens read-only
             for anyone when it is public (SOC-2 discovery).
 
-            A narrow header gives way in a set order — the meta beside this
-            heading first, then the project, and the lecture's own title
-            last. Shrink factors do it: flexbox takes space from an item in
-            proportion to its factor, so the bigger the factor the sooner
-            that part is the one being trimmed. */}
-        <h1 className="flex min-w-0 items-center gap-1.5 truncate">
+            A narrow header gives way in a set order: the slide count and
+            age beside this heading (1000), then this heading (100) — the
+            project inside it (100) before the lecture's own title (1) —
+            and the author last of all (1). Shrink factors do it: flexbox
+            takes space from an item in proportion to its factor, so the
+            bigger the factor the sooner that part is the one being
+            trimmed. */}
+        <h1 className="flex min-w-0 shrink-100 items-center gap-1.5 truncate">
           {view.project && (
             <>
               <Link

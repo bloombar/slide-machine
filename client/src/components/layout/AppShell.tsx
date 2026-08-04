@@ -46,7 +46,7 @@ export default function AppShell() {
               )}
               <div
                 ref={el => shellTitle?.setSlot(el)}
-                className="flex min-w-0 flex-1 items-baseline gap-2 text-base font-semibold text-slate-700"
+                className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden text-base font-semibold text-slate-700"
               />
             </div>
             <nav

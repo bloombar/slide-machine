@@ -612,7 +612,7 @@
   },
   "deck": {
     "meta": "{count, plural, one {# diapositive} other {# diapositives}} · modifié {age}",
-    "byAuthor": "· par",
+    "byAuthor": "par",
     "share": "Partager",
     "shareLabel": "Partager le cours",
     "addSlide": "Ajouter une diapositive",
