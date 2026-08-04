@@ -1,6 +1,6 @@
 /**
  * Unit tests for the auto-saving seed-notes editor: debounced save,
- * blur flush, and no redundant saves.
+ * blur and unmount flushes, and no redundant saves.
  */
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
@@ -23,6 +23,45 @@ describe('SeedNotesEditor', () => {
     fireEvent.change(box, { target: { value: 'Key topics, expanded' } })
     fireEvent.blur(box)
     expect(onSave).toHaveBeenCalledWith('Key topics, expanded')
+    vi.useRealTimers()
+  })
+
+  it('flushes a pending save when it goes away', () => {
+    // The regression: typing a note and starting the lecture straight
+    // away closed the seed dialog inside the debounce window, and the
+    // pending timer was dropped rather than run — the note was lost
+    vi.useFakeTimers()
+    const onSave = vi.fn()
+    const { unmount } = render(
+      <SeedNotesEditor value="" label="Lecture seed notes" onSave={onSave} />,
+    )
+    fireEvent.change(
+      screen.getByRole('textbox', { name: 'Lecture seed notes' }),
+      {
+        target: { value: 'Cell biology basics' },
+      },
+    )
+
+    unmount()
+    expect(onSave).toHaveBeenCalledWith('Cell biology basics')
+    // …and the dropped timer must not fire a second, duplicate save
+    vi.advanceTimersByTime(1000)
+    expect(onSave).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
+  })
+
+  it('saves nothing when it goes away untouched', () => {
+    vi.useFakeTimers()
+    const onSave = vi.fn()
+    const { unmount } = render(
+      <SeedNotesEditor
+        value="Existing"
+        label="Lecture seed notes"
+        onSave={onSave}
+      />,
+    )
+    unmount()
+    expect(onSave).not.toHaveBeenCalled()
     vi.useRealTimers()
   })
 
