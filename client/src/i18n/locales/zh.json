@@ -532,6 +532,22 @@
         "apply": "无法更改你的方案，请重试。"
       }
     },
+    "grant": {
+      "title": "赠送套餐",
+      "hint": "免费将此账户升级到更高的套餐。赠送结束后将恢复为其自行订阅的套餐。",
+      "tier": "套餐",
+      "expires": "最后一天",
+      "submit": "赠送套餐",
+      "replace": "更换赠送套餐",
+      "active": "免费使用 {tier} 套餐至 {date}，之后恢复为 {revertsTo}。",
+      "ended": "赠送的 {tier} 套餐已于 {date} 结束。",
+      "end": "立即结束",
+      "clear": "清除",
+      "maxed": "此账户已是最高套餐。",
+      "expiresRequired": "请选择套餐适用的最后一天。",
+      "error": "无法更改赠送套餐。",
+      "notice": "您正在免费使用 {tier} 套餐，至 {date} 为止。届时您的套餐将恢复为 {revertsTo}。"
+    },
     "feature": {
       "liveCapture": "边讲边生成幻灯片",
       "voiceControl": "语音指令",

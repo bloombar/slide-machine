@@ -20,6 +20,7 @@
  * not the admin's.
  */
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -37,8 +38,10 @@ import { useTranslation } from 'react-i18next'
 import {
   LOCALES,
   LOCALE_LABELS,
+  type AdminPlanGrant,
   type AdminUserSettingsPatch,
   type Locale,
+  type PlanTier,
   type ProfileVisibility,
   type SafeUser,
 } from '@slide-machine/shared'
@@ -47,10 +50,12 @@ import { dispatchAction } from '../api/actions'
 import { fetchAdminUser, updateAdminUserSettings } from '../api/admin'
 import { ApiError } from '../api/http'
 import { apiErrorMessage } from '../i18n/apiError'
+import { formatDate } from '../i18n/format'
 import LocaleSwitcher from '../i18n/LocaleSwitcher'
 import AdminEditNotice from '../components/AdminEditNotice'
 import ConfirmDialog from '../components/ConfirmDialog'
 import LanguageSelect from '../components/LanguageSelect'
+import PlanGrantEditor from '../components/PlanGrantEditor'
 import UsagePanel from '../components/UsagePanel'
 import BillingPanel from '../components/BillingPanel'
 import EmailVerificationNotice from '../components/EmailVerificationNotice'
@@ -121,6 +126,14 @@ export default function AccountSettingsPage() {
   // The account an admin is editing. Holds the saved values too, so every
   // control shows what actually landed.
   const [target, setTarget] = useState<SafeUser | null>(null)
+  // Its billing state, which only the admin path has: the tier the account
+  // itself pays for and any complimentary grant on top of it (ADMIN-9). Kept
+  // beside `target` rather than inside it because the account's own view of
+  // its plan comes from the billing summary, not from this envelope.
+  const [plan, setPlan] = useState<{
+    billingTier: PlanTier
+    grant?: AdminPlanGrant
+  } | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   // ADMIN-5 confirms on entry, once; until then the page shows nothing but
@@ -147,12 +160,19 @@ export default function AccountSettingsPage() {
   const [edits, setEdits] = useState<ProfileEdits>({})
   const [profileError, setProfileError] = useState<string | null>(null)
 
+  // Bumped after a plan grant changes, to re-read what actually landed —
+  // the endpoint answers 204, and the effective tier it produces is the
+  // server's to decide, not something the form can predict.
+  const [planVersion, setPlanVersion] = useState(0)
+
   useEffect(() => {
     if (!adminUserId || !confirmed) return
     let cancelled = false
     fetchAdminUser(adminUserId)
-      .then(({ user }) => {
-        if (!cancelled) setTarget(user)
+      .then(detail => {
+        if (cancelled) return
+        setTarget(detail.user)
+        setPlan({ billingTier: detail.billingTier, grant: detail.planGrant })
       })
       .catch(() => {
         if (!cancelled) setLoadFailed(true)
@@ -160,7 +180,9 @@ export default function AccountSettingsPage() {
     return () => {
       cancelled = true
     }
-  }, [adminUserId, confirmed])
+  }, [adminUserId, confirmed, planVersion])
+
+  const reloadPlan = useCallback(() => setPlanVersion(v => v + 1), [])
 
   const user = adminUserId ? target : viewer
   // An admin looking at someone else's settings cannot send their mail
@@ -567,7 +589,10 @@ export default function AccountSettingsPage() {
                     rather than by pressing the first button you see. */}
                 <p className="text-sm text-slate-600">
                   {t('profile.plan')}{' '}
-                  <span className="rounded-full bg-indigo-50 px-2 py-0.5 font-medium text-indigo-700">
+                  <span
+                    data-testid="plan-tier"
+                    className="rounded-full bg-indigo-50 px-2 py-0.5 font-medium text-indigo-700"
+                  >
                     {t(`plan.tier.${user.planTier}`, {
                       defaultValue: user.planTier,
                     })}
@@ -581,6 +606,36 @@ export default function AccountSettingsPage() {
                     </Link>
                   )}
                 </p>
+
+                {/* A complimentary plan is entitlement without a bill behind
+                    it, so the badge above would otherwise be unexplained — and
+                    the date it ends is the one thing the account needs in
+                    order not to be surprised (ADMIN-9). */}
+                {user.planGrant && (
+                  <p className="mt-2 text-sm text-slate-600">
+                    {t('plan.grant.notice', {
+                      tier: t(`plan.tier.${user.planGrant.tier}`, {
+                        defaultValue: user.planGrant.tier,
+                      }),
+                      date: formatDate(user.planGrant.expiresAt),
+                      revertsTo: t(`plan.tier.${user.planGrant.revertsTo}`, {
+                        defaultValue: user.planGrant.revertsTo,
+                      }),
+                    })}
+                  </p>
+                )}
+
+                {/* Granting one is an admin action, audited like a password
+                    reset rather than saved like a setting — so it appears only
+                    on the admin's path through this page. */}
+                {adminUserId && plan && (
+                  <PlanGrantEditor
+                    userId={adminUserId}
+                    billingTier={plan.billingTier}
+                    grant={plan.grant}
+                    onChanged={reloadPlan}
+                  />
+                )}
 
                 {/* Subscription state and the way to change it (BILL-2).
                     Owner-only for the same reason as usage below: it reports

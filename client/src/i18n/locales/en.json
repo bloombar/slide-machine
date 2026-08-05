@@ -532,6 +532,22 @@
         "apply": "Could not change your plan. Please try again."
       }
     },
+    "grant": {
+      "title": "Complimentary plan",
+      "hint": "Move this account to a larger plan at no charge. It returns to the plan it pays for when the grant ends.",
+      "tier": "Plan",
+      "expires": "Last day",
+      "submit": "Grant plan",
+      "replace": "Replace grant",
+      "active": "Complimentary {tier} until {date}, then back to {revertsTo}.",
+      "ended": "A complimentary {tier} ended {date}.",
+      "end": "End now",
+      "clear": "Clear",
+      "maxed": "This account is already on the largest plan.",
+      "expiresRequired": "Pick the last day the plan applies.",
+      "error": "Could not change the complimentary plan.",
+      "notice": "You are on {tier} at no charge until {date}. Your plan returns to {revertsTo} then."
+    },
     "feature": {
       "liveCapture": "Speak-to-slides live capture",
       "voiceControl": "Voice commands",

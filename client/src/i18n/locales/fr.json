@@ -532,6 +532,22 @@
         "apply": "Impossible de changer votre plan. Réessayez."
       }
     },
+    "grant": {
+      "title": "Offre offerte",
+      "hint": "Faites passer ce compte à une offre supérieure sans frais. Il revient à l’offre qu’il paie à la fin de la période.",
+      "tier": "Offre",
+      "expires": "Dernier jour",
+      "submit": "Offrir l’offre",
+      "replace": "Remplacer l’offre",
+      "active": "Offre {tier} offerte jusqu’au {date}, puis retour à {revertsTo}.",
+      "ended": "Une offre {tier} offerte a pris fin le {date}.",
+      "end": "Arrêter maintenant",
+      "clear": "Effacer",
+      "maxed": "Ce compte est déjà sur l’offre la plus élevée.",
+      "expiresRequired": "Choisissez le dernier jour d’application de l’offre.",
+      "error": "Impossible de modifier l’offre offerte.",
+      "notice": "Vous bénéficiez de l’offre {tier} sans frais jusqu’au {date}. Votre offre reviendra ensuite à {revertsTo}."
+    },
     "feature": {
       "liveCapture": "Diapositives générées en direct pendant que vous parlez",
       "voiceControl": "Commandes vocales",
