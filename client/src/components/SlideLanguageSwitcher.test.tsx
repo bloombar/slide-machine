@@ -1,8 +1,8 @@
 /**
  * Unit tests for the deck viewer's slide-content language picker (SHARE-2):
- * it denotes each language by its flag, marks the deck's own language with a
- * dot, never offers that language twice, and reports the current choice in
- * its accessible name.
+ * its trigger is an icon alone, its menu names every language once, a check
+ * marks the one being read, and the trigger reports that choice in its
+ * accessible name.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, within, fireEvent } from '@testing-library/react'
@@ -25,11 +25,21 @@ const open = () => {
   return screen.getByRole('menu')
 }
 
-/** A row's label, which is its accessible name — the flag has no text. */
+/** Every row's label, in menu order. */
 const labels = (menu: HTMLElement) =>
   within(menu)
     .getAllByRole('menuitemradio')
-    .map(i => i.getAttribute('aria-label'))
+    .map(i => i.textContent)
+
+/** The rows showing a checkmark. Every row holds one — it keeps the menu a
+ * steady width — but only the current choice's is visible. */
+const checkedRows = (menu: HTMLElement) =>
+  within(menu)
+    .getAllByRole('menuitemradio')
+    .filter(row => {
+      const check = row.querySelector('svg')
+      return check !== null && !check.classList.contains('invisible')
+    })
 
 describe('SlideLanguageSwitcher', () => {
   it("shows the deck's own language as the original", () => {
@@ -64,69 +74,61 @@ describe('SlideLanguageSwitcher', () => {
     expect(names).toContain('中文')
   })
 
-  it('denotes languages by flag rather than by name', () => {
+  it('names every language, and nothing else stands in for one', () => {
     render(
       <SlideLanguageSwitcher source="fr" value={null} onChange={() => {}} />,
     )
-    const menu = open()
-    const rows = within(menu).getAllByRole('menuitemradio')
-    // No language names take up room in the menu; every row is a flag
-    expect(rows.every(row => row.textContent === '')).toBe(true)
-    expect(
-      rows.map(row =>
-        row.querySelector('svg[data-locale]')?.getAttribute('data-locale'),
-      ),
-    ).toEqual(['fr', 'en', 'es', 'ru', 'zh'])
+    const rows = within(open()).getAllByRole('menuitemradio')
+    expect(rows.map(row => row.textContent)).toEqual([
+      'Original (Français)',
+      'English',
+      'Español',
+      'Русский',
+      '中文',
+    ])
   })
 
-  it('flies the flag of the language on screen', () => {
+  it('keeps the trigger to its icon, whatever language is on screen', () => {
     const { rerender } = render(
       <SlideLanguageSwitcher source="ru" value={null} onChange={() => {}} />,
     )
-    const flag = () =>
-      screen
-        .getByRole('button', TRIGGER)
-        .querySelector('svg[data-locale]')
-        ?.getAttribute('data-locale')
-    // The deck's own language while the original is showing...
-    expect(flag()).toBe('ru')
-    // ...and the translation's once one is chosen
+    // The nav has no room for a language name, so the trigger carries none
+    const trigger = () => screen.getByRole('button', TRIGGER)
+    expect(trigger().textContent).toBe('')
     rerender(
       <SlideLanguageSwitcher source="ru" value="zh" onChange={() => {}} />,
     )
-    expect(flag()).toBe('zh')
+    expect(trigger().textContent).toBe('')
   })
 
-  it("marks the deck's own language with a dot, and only that one", () => {
-    render(<SlideLanguageSwitcher source="es" value="en" onChange={() => {}} />)
-    const menu = open()
-    const dots = within(menu).getAllByTestId('default-language-dot')
-    expect(dots).toHaveLength(1)
-    const row = dots[0]?.closest('[role="menuitemradio"]')
-    expect(row?.getAttribute('aria-label')).toBe('Original (Español)')
-  })
-
-  it('reports the chosen language and marks it checked', () => {
+  it('reports the chosen language and checks its row', () => {
     render(<SlideLanguageSwitcher source="en" value="es" onChange={() => {}} />)
     expect(
       screen.getByRole('button', { name: /Slide language: Español/ }),
     ).toBeInTheDocument()
-    const checked = within(open())
+    const menu = open()
+    const checked = within(menu)
       .getAllByRole('menuitemradio')
       .filter(i => i.getAttribute('aria-checked') === 'true')
     expect(checked).toHaveLength(1)
-    expect(checked[0]?.getAttribute('aria-label')).toBe('Español')
+    expect(checked[0]?.textContent).toBe('Español')
+    // And the check is the one a reader can actually see
+    expect(checkedRows(menu).map(row => row.textContent)).toEqual(['Español'])
   })
 
   it("checks the deck's own language while the original is showing", () => {
     render(
       <SlideLanguageSwitcher source="en" value={null} onChange={() => {}} />,
     )
-    const checked = within(open())
+    const menu = open()
+    const checked = within(menu)
       .getAllByRole('menuitemradio')
       .filter(i => i.getAttribute('aria-checked') === 'true')
     expect(checked).toHaveLength(1)
-    expect(checked[0]?.getAttribute('aria-label')).toBe('Original (English)')
+    expect(checked[0]?.textContent).toBe('Original (English)')
+    expect(checkedRows(menu).map(row => row.textContent)).toEqual([
+      'Original (English)',
+    ])
   })
 
   it('reports a choice and closes the menu', () => {
@@ -148,7 +150,7 @@ describe('SlideLanguageSwitcher', () => {
     expect(onChange).toHaveBeenCalledWith(null)
   })
 
-  it('spins while a translation is being fetched, keeping the flag', () => {
+  it('spins while a translation is being fetched', () => {
     const { container, rerender } = render(
       <SlideLanguageSwitcher source="en" value="fr" onChange={() => {}} />,
     )
@@ -157,9 +159,10 @@ describe('SlideLanguageSwitcher', () => {
       <SlideLanguageSwitcher source="en" value="fr" onChange={() => {}} busy />,
     )
     expect(container.querySelector('.animate-spin')).not.toBeNull()
+    // The spinner takes the chevron's place, so the icon stays put
     expect(
-      screen.getByRole('button', TRIGGER).querySelector('svg[data-locale]'),
-    ).not.toBeNull()
+      screen.getByRole('button', TRIGGER).querySelectorAll('svg'),
+    ).toHaveLength(2)
   })
 
   it('closes on Escape', () => {

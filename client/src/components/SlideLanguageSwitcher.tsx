@@ -7,24 +7,25 @@
  * sign-in pages — but the accessible names still say which is which, because
  * a reader who meets one of them has no way to guess.
  *
- * Trigger and rows show a flag rather than a language name. The control sits
+ * The trigger is the languages icon and nothing else — the same glyph the
+ * interface-language picker wears, since both mean "pick a language". It sits
  * in the deck viewer's nav beside the view toggle, settings and share, where
  * "Original (Français)" spent more width than the rest of that row put
- * together. The language's own name is still one hover away — it is the
- * tooltip, and the accessible name — so nothing is lost to a screen reader or
- * to anyone who does not read a flag at a glance.
+ * together; the language on screen stays one hover away, as the tooltip and
+ * the accessible name. The menu it opens has the room to spell things out, so
+ * every row is a language's name in that language, with a check on the one
+ * being read — the same menu the interface-language picker offers.
  *
- * The deck's own language leads the list and wears a black dot. It is marked
- * rather than left implicit because a machine translation is a reading aid
- * and the authored text is what the lecture actually says — knowing which one
- * you are looking at matters. Choosing it means "show the original", which is
- * why it reports null rather than its locale.
+ * The deck's own language leads the list, named as the original rather than
+ * left implicit: a machine translation is a reading aid and the authored text
+ * is what the lecture actually says, so knowing which one you are looking at
+ * matters. Choosing it means "show the original", which is why it reports
+ * null rather than its locale.
  */
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, Loader2 } from 'lucide-react'
+import { Languages, ChevronDown, Check, Loader2 } from 'lucide-react'
 import { LOCALES, localeShortLabel, type Locale } from '@slide-machine/shared'
-import LocaleFlag from './LocaleFlag'
 import Tooltip from './Tooltip'
 
 interface Props {
@@ -89,8 +90,8 @@ export default function SlideLanguageSwitcher({
           onClick={() => setOpen(o => !o)}
           className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
         >
-          <LocaleFlag locale={value ?? source} />
-          {/* The spinner takes the chevron's place rather than the flag's, so
+          <Languages className="h-4 w-4 shrink-0 text-slate-500" aria-hidden />
+          {/* The spinner takes the chevron's place rather than the icon's, so
               fetching a translation does not change the control's width */}
           {busy ? (
             <Loader2
@@ -108,7 +109,8 @@ export default function SlideLanguageSwitcher({
       {open && (
         // Anchored to the trigger's inline-end: this sits near the edge of
         // the nav, so a start-aligned menu would overflow the page. It is as
-        // wide as its rows, which is not much now that they are flags.
+        // wide as its longest row and no wider — five language names do not
+        // need a fixed column to sit in.
         <div
           role="menu"
           aria-label={t('viewer.slideLanguage')}
@@ -123,25 +125,18 @@ export default function SlideLanguageSwitcher({
                 key={option}
                 role="menuitemradio"
                 aria-checked={active}
-                // Flags carry no text, so this is the row's only label —
-                // for assistive tech and for the hover title alike
-                aria-label={isSource ? original : localeShortLabel(option)}
-                title={isSource ? original : localeShortLabel(option)}
                 onClick={() => choose(isSource ? null : option)}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-slate-100"
+                className={`flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-start text-sm hover:bg-slate-100 ${
+                  active ? 'font-medium text-indigo-600' : 'text-slate-700'
+                }`}
               >
-                <LocaleFlag locale={option} />
-                {/* The slot is always rendered, so every row is the same
-                    width whether or not it is the deck's own language */}
-                <span className="flex w-1.5 justify-center">
-                  {isSource && (
-                    <span
-                      aria-hidden
-                      data-testid="default-language-dot"
-                      className="h-1.5 w-1.5 rounded-full bg-slate-900"
-                    />
-                  )}
-                </span>
+                {isSource ? original : localeShortLabel(option)}
+                {/* The check is always rendered, so the menu is the same
+                    width whichever language is being read */}
+                <Check
+                  className={`h-4 w-4 shrink-0 ${active ? '' : 'invisible'}`}
+                  aria-hidden
+                />
               </button>
             )
           })}
