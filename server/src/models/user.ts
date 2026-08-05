@@ -11,10 +11,22 @@ import {
   type SafeUser,
   type User,
 } from '@slide-machine/shared'
+import {
+  effectivePlanTier,
+  planGrantView,
+  type PlanGrantDb,
+} from '../billing/plan-grant'
 import { softDeletePlugin } from './plugins/soft-delete'
 
-export interface UserDb extends Omit<User, 'id' | 'createdAt'> {
+export interface UserDb extends Omit<User, 'id' | 'createdAt' | 'planGrant'> {
   createdAt: Date
+  /**
+   * A complimentary plan an admin gave this account (ADMIN-9), stored beside
+   * `planTier` rather than in it — `planTier` stays whatever the account's
+   * own billing entitles it to. Kept after it lapses, as history, until it is
+   * replaced or revoked; billing/plan-grant.ts decides when one counts.
+   */
+  planGrant?: PlanGrantDb | null
   /** Soft-delete tombstone (P-10); null/absent = live. */
   deletedAt?: Date | null
   // Google's stable subject id, set when an account signs in with Google
@@ -70,6 +82,21 @@ const userSchema = new Schema<UserDb>(
       _id: false,
     },
     planTier: { type: String, enum: PLAN_TIERS, default: 'free' },
+    // A complimentary plan (ADMIN-9). `default: undefined` so an account
+    // that was never granted one carries no empty subdocument, and the
+    // absence is what every read tests.
+    planGrant: {
+      type: {
+        tier: { type: String, enum: PLAN_TIERS, required: true },
+        expiresAt: { type: Date, required: true },
+        grantedAt: { type: Date, required: true },
+        grantedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+        grantedByEmail: { type: String, required: true },
+        note: String,
+      },
+      default: undefined,
+      _id: false,
+    },
     billingProvider: String,
     billingCustomerId: String,
   },
@@ -93,7 +120,15 @@ export const toPublicUserDto = (doc: HydratedDocument<UserDb>): PublicUser => ({
   createdAt: doc.createdAt.toISOString(),
 })
 
-/** Maps a user document to the wire shape; never exposes passwordHash. */
+/**
+ * Maps a user document to the wire shape; never exposes passwordHash.
+ *
+ * `planTier` is the **effective** tier — what the account may actually
+ * spend against, which is the granted tier while a complimentary grant is
+ * in effect (ADMIN-9). Everything downstream reads the tier to decide what
+ * to allow or display, so sending the stored one would have every usage bar
+ * and plan badge quoting a plan the server is not enforcing.
+ */
 export const toUserDto = (doc: HydratedDocument<UserDb>): SafeUser => ({
   id: doc._id.toString(),
   email: doc.email,
@@ -105,7 +140,8 @@ export const toUserDto = (doc: HydratedDocument<UserDb>): SafeUser => ({
   locale: doc.locale,
   language: doc.language,
   projectDefaults: doc.projectDefaults,
-  planTier: doc.planTier,
+  planTier: effectivePlanTier(doc),
+  planGrant: planGrantView(doc),
   billingProvider: doc.billingProvider,
   billingCustomerId: doc.billingCustomerId,
   createdAt: doc.createdAt.toISOString(),
