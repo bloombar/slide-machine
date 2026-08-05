@@ -25,7 +25,7 @@ This document specifies both the **functional** behavior (what the system does, 
 5. Auto-generate, publish, and auto-grade an exit-ticket quiz per lecture via the separate Quiz Generator.
 6. Offer a lightweight social layer: browse, search, and up/down-vote decks and templates; user profiles; a "Latest" feed.
 7. Support standards-based export/import: **YAML and Google Slides in both directions for decks and templates**, plus PDF export for decks. A style template can be derived from an existing Google Slides presentation, whether or not that presentation defines layouts of its own.
-8. Meter and monetize usage through tiered plans (Free/Pro/Max) with server-configurable caps on costly services.
+8. Meter and monetize usage through tiered plans (Free/Fresh/Pro/Max) with server-configurable caps on costly services.
 9. Keep the core logic provider-agnostic so AI engines (commercial or locally-hosted) and the billing provider can be swapped via configuration.
 10. Provide a fully localized UI in English, French, Spanish, Russian, and Mandarin.
 11. Keep all student data inside NYU-approved, FERPA-compliant systems. No student PII leaves the institution.
@@ -114,7 +114,7 @@ The metered resources:
 - **`sttMinutes`** — minutes streamed to cloud speech-to-text, summed across stream restarts, including post-lecture re-transcription (which is streaming-priced, not batch).
 - **`diarizationMinutes`** — minutes submitted to batch diarization.
 - **`ttsCharacters`** and **`ttsPremiumCharacters`** — characters synthesized on a cache miss, standard and premium voices metered separately since premium costs roughly twice as much.
-- **`aiImages`** — AI-generated images ([IMG-4](#img-4-ai-generated-imagery-optional)), a Pro/Max capability.
+- **`aiImages`** — AI-generated images ([IMG-4](#img-4-ai-generated-imagery-optional)), offered on every tier with the smallest allowances on Free and Fresh (BILL-1).
 - **`imageLookups`** — image-enrichment attempts, one per slide image resolved rather than one per provider HTTP request, so the number stays legible when the search fan-out is tuned.
 - **`importMb`**, **`exports`** — document/Drive import volume and export operations.
 - **`translationCharacters`** — source characters the owner translates ([SHARE-2](#share-2-post-lecture-translated-viewing)).
@@ -377,7 +377,7 @@ For slides that warrant a **custom diagram or infographic** rather than a stock 
 
 - **Provider-agnostic** — generation goes through an `ImageGenerationProvider` adapter ([TECH-8](#tech-8-ai-provider-abstraction-layer)); most major engines support this (e.g., Google's Gemini/Imagen "Nano Banana" family, OpenAI's image models), so the engine is configurable/swappable like every other AI capability ([GEN-2](#gen-2-ai-provider-abstraction)).
 - **Best in the latency-tolerant paths** — generation is slower and costlier than a stock fetch, so it is favored in the **post-lecture reformat** ([GEN-4](#gen-4-post-lecture-ai-reformat-holistic-regeneration)) and on demand; live use is optional and limited.
-- **Tiered & metered** — image generation is its own metered capability ([BILL-3](#bill-3-usage-caps--metering)), typically a **Pro/Max-tier** feature; results are cached per slide.
+- **Metered, not gated** — image generation is its own metered capability ([BILL-3](#bill-3-usage-caps--metering)), available on **every tier** at tier-sized allowances rather than withheld from the cheap ones ([BILL-1](#bill-1-subscription-tiers)); results are cached per slide.
 - **Provenance & disclosure** — AI-generated images are **labeled as such** (and may carry a provider watermark, e.g., SynthID); their provenance and licensing differ from stock imagery and are recorded for sharing/export ([§11](#11-exportimport-voting--social), licensing — [§19](#19-open-questions)).
 - **Accuracy caveat** — generated infographics may contain factual or textual errors; the original content remains authoritative and the user can review, regenerate, or replace ([EDIT-1](#edit-1-full-content-editing)).
 
@@ -725,7 +725,7 @@ Server-side secrets and global settings live in a `.env` file (never committed),
     "audioRetentionDays": 14,
     "caps": {
       "aiTokens": 14000000,
-      "sttMinutes": 0, // 0 = unavailable on this tier (browser capture only)
+      "sttMinutes": 150, // rationed, never withheld — see BILL-1
       "ttsCharacters": 200000,
       "audienceLocales": 3,
       // …one entry per metered resource (BILL-3)
@@ -734,7 +734,7 @@ Server-side secrets and global settings live in a `.env` file (never committed),
 }
 ```
 
-(`null` = unlimited, `0` = unavailable on that tier, an absent metric reads as unlimited. Shipped values and their derivation: [BILLING_COST_MODEL.md](BILLING_COST_MODEL.md).)
+(`null` = unlimited, `0` = unavailable on that tier, an absent metric reads as unlimited. **No shipped tier sets `0`** — every plan offers every service (BILL-1); the sentinel exists so a deployment can switch a service off entirely. Shipped values and their derivation: [BILLING_COST_MODEL.md](BILLING_COST_MODEL.md).)
 
 **Service prices** — the per-unit vendor rates those caps were derived from live beside them in `config/service-prices.json`, so cost accounting (BILL-7) re-prices without a code change.
 
@@ -906,13 +906,13 @@ Out of scope for the Fall 2026 pilot:
 - A remote, OAuth-authenticated, multi-user **MCP server** that exposes the action/command layer ([TECH-13](#tech-13-application-actioncommand-layer)) as agent tools, letting users modify upcoming or saved decks through back-and-forth with an external AI agent (preflight and post-lecture). Built as a thin facade over existing actions — reusing the same auth, ownership, and plan-cap metering — so it adds reach without duplicating logic. Deferred from the pilot for scope/timeline; a good student-contribution target.
 - **Narrating slides in the student's translated language** — pairing text-to-speech narration ([PLAY-2](#play-2-narration-playback)) with the post-lecture translated viewing ([SHARE-2](#share-2-post-lecture-translated-viewing)) so a student can hear a deck spoken in their own locale (the base narration and translated viewing exist; synthesizing the translated text is the remaining step).
 - Real-time collaborative (multi-user) editing of a single deck.
-- Team/organization (seat-based) billing and institutional licensing beyond individual Free/Pro/Max plans.
+- Team/organization (seat-based) billing and institutional licensing beyond individual Free/Fresh/Pro/Max plans.
 - Richer analytics dashboards and recommendation/ranking beyond simple vote tallies.
 - Publishing a setup guide for other NYU faculty (dissemination deliverable).
 
 ### 19. Open Questions
 
-1. **Plan pricing & caps** — exact Free/Pro/Max prices and per-metric caps, tuned against measured per-lecture Gemini + Speech-to-Text + image-API costs.
+1. **Plan pricing & caps** — exact Free/Fresh/Pro/Max prices and per-metric caps, tuned against measured per-lecture Gemini + Speech-to-Text + image-API costs.
 2. **Pilot vs. paid** — are NYU pilot instructors/students exempt from paid tiers (e.g., a comped institutional tier) during Fall 2026?
 3. **STT streaming path** — does Speech-to-Text audio stream client→Google directly, or proxy through the Express back-end (affects latency, credential exposure, cost accounting, and metering)? This also determines whether App Platform needs **WebSocket sticky sessions** for horizontal scaling ([TECH-10](#tech-10-deployment-topology-digital-ocean-app-platform)).
 4. **Student identity / roster source** — how are enrolled students resolved for quiz distribution (NYU SIS, Google Classroom, manual roster)?

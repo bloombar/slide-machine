@@ -48,33 +48,65 @@ templates are listed and mutated only by their owner.
 
 ## 2. Layouts and slots
 
-Each layout carries `type` (one of the conventional types, SPEC
-[TMPL-2](SPEC.md#tmpl-2-conventional-layout-types)), `label`, `purpose` (**read by the AI**
-when choosing layouts), `slots`, `constraints`, `elementPositions`, and optional
-`decorations`.
+Each layout carries `type`, `label`, `purpose` (**read by the AI** when choosing layouts),
+`slots`, `constraints`, `elementPositions`, and optional `decorations`.
+
+`type` is an **open name**. The conventional types (SPEC
+[TMPL-2](SPEC.md#tmpl-2-conventional-layout-types)) are a preferred vocabulary to reuse
+whenever one fits — shared names are what let layouts be compared and merged during import —
+but a template may name a layout of its own when none of them describes the design, and a
+template may declare as many layouts as it needs (SPEC
+[TMPL-9](SPEC.md#tmpl-9-open-slot--layout-model)).
 
 Every template **must** include a `whiteboard` layout — a blank slate with no slots, for
 freehand drawing (WB-1). The loader rejects a template that omits it. It is withheld from
 the AI's option set and never auto-selected; users add it via the layout picker.
 
-Slots use the object form — the same shape the future editor authors and MongoDB stores:
+A layout declares **any number of slots of any kind** — three code samples and two images is a
+legitimate layout. Slots use the object form, the same shape the future editor authors and
+MongoDB stores:
 
 ```json
-{ "name": "body", "kind": "text", "label": "Slide body",
-  "multiline": true, "maxChars": 400,
+{ "name": "example", "kind": "code", "label": "Worked example",
+  "description": "A runnable Python snippet, at most eight lines.",
+  "required": true, "maxChars": 400,
+  "options": { "language": "python" },
   "style": {}, "metadata": {} }
 ```
 
-`kind` selects the client editor (`text` | `bullets` | `image`); `maxChars` is per-slot
-validation that **overrides the layout-level constraint** for that slot; `style` and
-`metadata` are reserved for the visual editor. Conventional slot names (`title`, `body`,
-`bullets`, `image`, `caption`) may be written as bare-string shorthand and expand from the
-shared defaults; custom-named slots must declare their `kind`.
+`name` is the author's, and it is the key a slide stores content under. `maxChars` (and
+`maxWords`) are per-slot validation that **overrides the layout-level constraint** for that
+slot; `required` marks a slot the layout expects filled; `style` and `metadata` are reserved
+for the visual editor. Conventional slot names (`title`, `body`, `bullets`, `image`,
+`caption`) may be written as bare-string shorthand and expand from the shared defaults;
+slots the author names must declare their `kind`.
+
+### Content kinds
+
+`kind` selects the client editor and the export renderer. Unlike slot names and layout types,
+**the kind list is closed** — each kind is something the system must know how to display,
+edit, fit, export and speak, so kinds are added by the project, not by users:
+
+| Kind | Holds | Displayed as |
+| --- | --- | --- |
+| `text` | prose | inline markdown |
+| `bullets` | a list | `<ul>`/`<ol>` |
+| `image` | a picture + its own credit | `<img>` with the IMG-5 indicator |
+| `code` | a program listing | monospace, syntax-highlighted per `options.language` |
+| `math` | a LaTeX expression | typeset notation, never source |
+| `preformatted` | text whose spacing carries meaning | monospace, spacing preserved |
+| `table` | rows + optional header | a real table |
+
+`description` is the author's **instruction to the AI** — what this slot is for, in their own
+words ([§3](#3-layout-descriptors-and-ai-selection)). It is data, never a command: it is
+length-capped and cannot change how the system behaves.
 
 Layout-level `constraints` are the budget fallback, enforced both in the generation prompt
 and server-side ([slide-fit.ts](../server/src/lib/slide-fit.ts)): `maxTitleChars`,
 `maxBodyChars`, `maxBulletChars`, `maxCaptionChars` (characters, not words, so budgets hold
-in unspaced languages like Mandarin), `maxBullets`, and `imageRequired`.
+in unspaced languages like Mandarin), `maxBullets`, and `imageRequired`. Fitting respects the
+kind — prose may be trimmed at a word boundary, but code and math are **never truncated
+mid-token**; they are moved to another slide or omitted whole.
 
 ## 3. Layout descriptors and AI selection
 
@@ -90,11 +122,20 @@ The `whiteboard` layout is filtered out of the descriptor set, which is the mech
 End to end:
 
 1. Descriptors are serialized into the generation prompt — the AI picks a `type` and fills
-   its slots.
+   its slots **by name**, guided by each slot's `kind` and `description`.
 2. The server enforces the budgets (slot `maxChars` over layout constraints) regardless of
-   what the model returns.
+   what the model returns, and discards content for slots the chosen layout does not declare.
 3. The client resolves the layout renderer and each slot's editor by `kind`, with the
    template's own slot spec taking precedence over the conventional defaults.
+
+**A template's slots are the AI's whole vocabulary.** A template that declares no `math` slot
+can never produce a formula, so the template an instructor picks is what decides whether
+specialized content appears at all — no separate subject setting is needed.
+
+**The descriptor set is budgeted.** Live generation runs once per finalized phrase, so every
+byte of descriptor costs latency. `description` is length-capped, self-evident conventional
+slots are described tersely, and if the set has to be trimmed that is logged rather than
+silently truncated.
 
 ## 4. Rendering
 
@@ -141,7 +182,10 @@ and are never editable content.
 A contract test
 ([contract.test.tsx](../client/src/components/slide/layouts/contract.test.tsx)) renders every
 registered layout against every template file and fails if declared and rendered slot sets
-differ — drift in either direction means invisible content or never-filled slots.
+differ — drift in either direction means invisible content or never-filled slots. It applies
+to `components` templates, where a named component is what could drift; a `positioned`
+template has no component to compare against, so it is checked against the positioned
+renderer's own output instead.
 
 **Adding a layout type** = one renderer component + one registry entry + declaring the
 layout in a template file (the contract test binds them).
@@ -259,6 +303,19 @@ type** and sitting within a looser `SEMANTIC_MERGE_TOLERANCE` are merged and pas
 over the union. This is what a model is genuinely better at than geometry: seeing that
 title-left/image-right and title-right/image-left are both `two-column`.
 
+> **This pass depends on the model reusing names.** Layout types are open strings
+> ([§2](#2-layouts-and-slots)), so a model free to invent one per layout would merge nothing —
+> silently defeating the pass that exists to stop a 40-slide deck yielding 25 layouts. The
+> semantics prompt therefore presents the conventional types as a **preferred vocabulary**:
+> reuse one whenever it fits, and invent a name only when none does. Merging still requires
+> type equality *and* geometric similarity, exactly as before. A model that returns many novel
+> names must still consolidate; that is a tested property, not an assumption.
+
+The same call also proposes each slot's **kind** and **description**
+([§2](#2-layouts-and-slots)). Geometry stays deterministic and every slot defaults to `text` —
+mistaking prose for code is worse than not recognizing code — so a proposed specialized kind
+is a suggestion the author corrects in the editor, never a silent reinterpretation.
+
 **Singletons do not become layouts.** A cluster must reach `MIN_CLUSTER_SIZE`, or be
 master-derived, to be emitted; a one-off slide is mapped to its nearest layout and reported
 as approximated. Without this, a 40-slide deck yields 25 layouts — the failure this whole
@@ -299,6 +356,42 @@ one already used to create files.
 Because the exporter writes masters and the importer reads them, export → import is a real
 round-trip rather than a coincidence.
 
+#### Carrying slot metadata
+
+Google Slides can say where a shape sits and what text it holds, but not what a slot **is** —
+its name, kind, authoring instructions or limits. So an export writes that metadata into the
+presentation itself, in fields Google preserves but does not display as slide content (SPEC
+[EXP-8](SPEC.md#exp-8-slot-metadata-across-google-slides-round-trips)).
+
+**Identity travels on the shape that is the slot.** Each emitted shape carries a short
+`slot:<name>` token in its alt text; the bulky part — kind, description, limits, options —
+lives in a versioned payload keyed by that name. Association is therefore structural: on
+import, a shape whose alt text names a slot **is** that slot, and its box becomes that slot's
+geometry. Shapes with no token are decoration.
+
+> **Why not one blob in the speaker notes.** A single blob needs a key back to each shape, and
+> every candidate is bad: object ids are reassigned when a slide is duplicated and are chosen
+> by Drive during conversion, so we cannot even predict what to write; placeholder types are
+> too coarse to tell three code slots apart; z-order breaks on any reorder. And **notes exist
+> only on slides, never on layouts** — so per-layout slot metadata, which is exactly what a
+> template needs, has no home there at all.
+>
+> The token is kept short rather than being the whole payload because Google shows alt text to
+> the user in its Alt text pane, and a wall of JSON there invites deletion.
+
+**Speaker notes carry the narration**, which is what they mean to a presenter: a slide's
+`sourceTranscript` round-trips through them.
+
+**The metadata is written into the `.pptx`**, not applied afterwards through the Slides API —
+so this needs no write scope, and the "export needs no Slides scope" property above still
+holds.
+
+**It is advisory, and untrusted.** An instructor can edit or delete alt text and notes in
+Google's interface, and a converter may not preserve everything. So the payload is versioned,
+validated and size-capped, and import **falls back to inference** when it is missing, damaged
+or unrecognized. Its presence makes the round trip lossless; its absence degrades the result
+but never fails the import.
+
 **Deck export offers two shapes** (SPEC [EXP-1](SPEC.md#exp-1-deck-export)):
 
 | Mode | Output | When |
@@ -313,11 +406,23 @@ template that carries geometry, so it is offered only for decks that have one.
 The `whiteboard` layout has no visual design to carry. It is omitted on export and
 re-synthesized on import.
 
+### Specialized content in exports
+
+Every export shows **what the audience saw**, not the source behind it (SPEC
+[EXP-7](SPEC.md#exp-7-specialized-content-export-fidelity)). Math is typeset, never emitted as
+LaTeX source — a maths lecture exported to PDF is otherwise unusable, which is the whole
+reason the kind exists. Code keeps its indentation and its highlighting where the format
+supports colored text, tables become real tables where the format has them and a ruled grid
+where it does not, and preformatted text keeps its exact spacing. This holds for PDF and
+Google Slides alike; anything a format genuinely cannot represent is named in the report.
+
 ### YAML
 
 The YAML format is versioned and carries a template's identity, theme, layouts **and their
 geometry** — not merely the descriptors, so a round-trip reconstructs the design rather than
-an outline of it. Older versions stay readable.
+an outline of it. It also carries every slot's name, kind, description and limits, and a
+deck's YAML stores content **by slot name**, so author-defined slots survive as fully as
+conventional ones. Older versions stay readable.
 
 A **deck** import that names an unknown template falls back to a default and warns: the
 content is the point and is worth recovering. A **template** import cannot do that — there is
@@ -326,14 +431,21 @@ the user did not ask for.
 
 ## 9. Fidelity and limits
 
-- **At most seven content layouts.** `LayoutType` is a fixed union, so a presentation with
-  more distinct designs than there are conventional types yields fewer layouts than it had.
-  Consolidation makes this far less lossy than it sounds — candidates sharing a type are
-  merged, not dropped — but two designs that share a type and are geometrically incompatible
-  cannot both survive. The larger wins; the other is reported.
+- **A presentation we exported round-trips losslessly**; one from anywhere else does not.
+  Ours carries slot metadata ([§8](#8-exporting)), so re-import restores names, kinds,
+  instructions and limits exactly. A foreign deck has none, so its slots are inferred from
+  geometry and placeholder type and every slot arrives as `text` for the author to correct.
+- **There is no ceiling on layouts or slots.** Layout types and slot names are open
+  ([§2](#2-layouts-and-slots)), so a design is never dropped merely because the vocabulary ran
+  out. Consolidation still merges near-identical designs on purpose — that is a judgment call,
+  and it is reported.
+- **Content kinds are a closed list.** An imported slot can only be one of the kinds in
+  [§2](#2-layouts-and-slots); there is no way for a template to introduce a new one.
 - **Fonts are mapped, not reproduced** ([§5](#5-theme-resolution)).
-- **Not carried in either direction:** animations, transitions, speaker notes, slide
-  numbering, and anything scripted on the master.
+- **Carried through Google Slides:** slot metadata and narration, via the mechanism in
+  [§8](#8-exporting).
+- **Not carried in either direction:** animations, transitions, slide numbering, and anything
+  scripted on the master.
 - Everything lost is named in the report, never dropped silently.
 
 ## 10. Deleting templates and layouts
@@ -396,13 +508,12 @@ The WYSIWYG template editor (SPEC
 [TMPL-4](SPEC.md#tmpl-4-custom-templates-create--edit--save)) remains unbuilt. With storage
 and the positioned renderer in place, what it still needs is:
 
-1. **The editor itself** — a canvas for adding and arranging slots, styling them, and
-   attaching labels, metadata and validation. Import currently stands in as the authoring
-   path; the editor is what lets a user fix what import got wrong.
-2. **Widening `LayoutType`** from the fixed union to open strings, and moving slide content
-   from fixed fields to a slot-name map so custom slots can persist. This is also what would
-   lift the seven-layout ceiling in [§9](#9-fidelity-and-limits).
-3. **Retiring the hand-tuned components.** They are scaffolding with a planned demolition:
+1. **The editor itself** — a canvas for adding and arranging slots, choosing each one's kind,
+   styling them, and attaching labels, instructions and validation. Import currently stands in
+   as the authoring path; the editor is what lets a user fix what import got wrong, and it is
+   the only remaining piece of the open slot model that is not yet reachable without editing
+   a JSON file by hand.
+2. **Retiring the hand-tuned components.** They are scaffolding with a planned demolition:
    convert one built-in layout to geometry, compare it side by side with its component, and
    when the data version is indistinguishable, convert the rest and delete the components.
    The registry makes this incremental — each layout type flips independently. What can never
