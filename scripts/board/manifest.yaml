@@ -68,9 +68,11 @@
   review: false
 - id: EDIT-1
   title: Full content editing
-  full: "Users can add, edit, and delete all slide content: slide text
-    (title/body/bullets/caption), images (replace from seed, re-fetch, upload,
-    or remove), and slide order."
+  full: "Users can add, edit, and delete all slide content: every slot the slide's
+    layout declares (TMPL-9) — text, bullets, and the specialized kinds (EDIT-7)
+    — plus images (replace from seed, re-fetch, upload, or remove) and slide
+    order. Editing is by slot, so a layout's own slots are as editable as the
+    conventional ones."
   section: §10 Playback, Editing & Sharing
   family: EDIT
   phase: 1
@@ -140,12 +142,12 @@
     content block uses. The active template's layout descriptors (TMPL-6) are
     serialized into the generation request as the explicit option set the model
     must select from. For each content block the model returns a chosen
-    layoutType plus the content mapped to that layout's slots
-    (title/body/bullets/image/caption/columns), so a list-like block becomes a
-    list layout, a single striking idea becomes a quote/callout, etc. The choice
-    is constrained to the template's available layouts; if the model returns an
-    unknown or ill-fitting type, the system falls back to a sensible default
-    layout (e.g., content). The user can always…
+    layoutType plus the content mapped to that layout's declared slots, by name
+    (GEN-11), so a list-like block becomes a list layout, a single striking idea
+    becomes a quote/callout, etc. The choice is constrained to the template's
+    available layouts; if the model returns an unknown or ill-fitting type, the
+    system falls back to a sensible default layout (e.g., content). The user can
+    always override the AI's…
   section: §9 Slide Generation & Enrichment
   family: GEN
   phase: 1
@@ -153,13 +155,13 @@
   review: false
 - id: IMG-1
   title: Real-time image enrichment
-  full: "Slides are enriched with images using the AI's per-slide image guidance
-    (GEN-7), in priority order: 1. A seeded image the AI selected for the slide,
-    or whose caption/keywords match the slide topic (SEED-2). 2. An image
-    fetched in real time from Wikimedia, Flickr, and Openverse APIs using the
-    AI's recommended keywords (falling back to the slide topic if none). 3. A
-    graceful fallback (placeholder/solid layout) when no image is recommended or
-    found."
+  full: "Slides are enriched with images using the AI's image guidance (GEN-7),
+    independently for each image slot the layout declares (IMG-6), in priority
+    order: 1. A seeded image the AI selected for the slot, or whose
+    caption/keywords match the slide topic (SEED-2). 2. An image fetched in real
+    time from Wikimedia, Flickr, and Openverse APIs using the AI's recommended
+    keywords (falling back to the slide topic if none). 3. A graceful fallback
+    (placeholder/solid layout) when no image is recommended or found."
   section: §9 Slide Generation & Enrichment
   family: IMG
   phase: 1
@@ -362,7 +364,12 @@
     conventions, including at minimum: Title / heading slide Section /
     subheading slide Content (title + body) slide List / bullet slide
     Image-heavy (full-bleed or image-dominant) slide Two-column (text + image)
-    slide Quote / callout slide"
+    slide Quote / callout slide These names are a preferred vocabulary, not a
+    closed set. They are the baseline every template should cover and the terms
+    an author or the AI should reuse whenever one fits, because shared names are
+    what let layouts be compared, merged during import (TMPL-8), and reasoned
+    about consistently. A template may also define layout types of its own when
+    none of the conventional ones describes the…"
   section: §7 Style Template Library
   family: TMPL
   phase: 1
@@ -384,10 +391,10 @@
     image-heavy, two-column, quote — TMPL-2); a short purpose / when-to-use
     description the AI can reason over (e.g., "use for 3–6 parallel points");
     the content slots the layout expects (e.g., title, body, bullets[], image,
-    caption, columns) and any constraints (max bullets, approximate text length,
-    whether an image is required/optional). Descriptors are authored as part of
-    the template (TMPL-3/TMPL-4), stored with it (§15), and serialized into the
-    generation request as the option…'
+    caption) and any constraints (max bullets, approximate text length, whether
+    an image is required/optional). Each slot carries its own descriptor too,
+    not just a name: its content kind (TMPL-9), a human label, optional
+    authoring instructions stating what the slot…'
   section: §7 Style Template Library
   family: TMPL
   phase: 1
@@ -650,6 +657,23 @@
   phase: 2
   status: Done
   review: false
+- id: EDIT-7
+  title: Editing specialized content slots
+  full: Every content kind (TMPL-9) is editable in place, in the same
+    click-to-edit way as slide text (EDIT-1) — the slide shows the rendered
+    result, and editing reveals the underlying source. Code edits as plain
+    source in a monospaced field and displays highlighted for its declared
+    language; indentation is preserved exactly, and no automatic reflow or spell
+    correction is applied to it. Math edits as LaTeX and displays as typeset
+    notation, so an author writes what they know and the audience sees what they
+    mean. Invalid syntax shows a clear inline error rather than a blank slot or
+    a crash. Tables edit as rows and columns, with cells editable individually.
+    Preformatted text preserves the author's…
+  section: §10 Playback, Editing & Sharing
+  family: EDIT
+  phase: 2
+  status: Backlog
+  review: false
 - id: EXP-1
   title: Deck export
   full: "Decks can be exported to PDF, Google Slides, and other easily supportable
@@ -673,7 +697,11 @@
     human-readable format (YAML or equivalent) capturing structure, content, and
     styling. For a template this includes its layout geometry — where each
     content slot sits and how it is styled — not merely the layout descriptors,
-    so the exported file describes the design fully enough to reconstruct it.
+    so the exported file describes the design fully enough to reconstruct it. A
+    template's export also carries each slot's name, content kind, authoring
+    instructions and limits (TMPL-9 / TMPL-10), and a deck's export carries its
+    content by slot name, so author-defined slots survive the round trip as
+    fully as conventional ones.
   section: §11 Export/Import, Voting & Social
   family: EXP
   phase: 2
@@ -687,10 +715,10 @@
     Imports may come from an upload or a connected account (EXP-4).
     Round-tripping is a stated guarantee, not a hope: a deck or template
     exported and re-imported must come back materially unchanged, including a
-    template's theme, layouts, and geometry (EXP-2). Where the format has
-    versions, older exports remain readable. The two directions differ in how
-    they treat an unresolvable reference. A deck import that names an unknown
-    template falls back to a default and warns — the lecture's…"
+    template's theme, layouts, and geometry (EXP-2), and every slot's name,
+    kind, authoring instructions and limits along with the content stored under
+    it (TMPL-9 / TMPL-10). The guarantee holds for author-defined slots and
+    specialized content exactly as it does for conventional text…"
   section: §11 Export/Import, Voting & Social
   family: EXP
   phase: 2
@@ -743,6 +771,40 @@
     per-layout geometry, and background images and logos are carried into the
     exported presentation, so the file stands on its own without referring back
     to this app. Export is round-trip compatible…
+  section: §11 Export/Import, Voting & Social
+  family: EXP
+  phase: 2
+  status: Backlog
+  review: false
+- id: EXP-7
+  title: Specialized content export fidelity
+  full: "An exported deck shows what the audience saw, not the source behind it.
+    Specialized content (TMPL-9) is rendered in every export format, not emitted
+    as raw markup: Math appears as typeset notation. A formula must never export
+    as its LaTeX source — a mathematics lecture exported to PDF is otherwise
+    unusable, which is the whole point of supporting the kind. Code appears in a
+    monospaced face with its indentation and line breaks intact, and its syntax
+    highlighting carried where the format supports colored text. Tables appear
+    as real tables where the format has them, and as a ruled grid where it does
+    not. Preformatted text keeps its exact spacing. This applies to PDF and
+    Google Slides alike.…"
+  section: §11 Export/Import, Voting & Social
+  family: EXP
+  phase: 2
+  status: Backlog
+  review: false
+- id: EXP-8
+  title: Slot metadata across Google Slides round trips
+  full: Google Slides cannot express what a slot is — only where a shape sits and
+    what text it holds. So an export written by this system additionally carries
+    its own slot metadata inside the presentation, in fields Google preserves
+    but does not display as content, allowing a re-import to restore the design
+    exactly instead of inferring it. Each slot's identity travels on the shape
+    that is the slot, so the association survives shapes being reordered, and it
+    works on the presentation's layouts as well as its slides — which is what
+    allows a template, not just a deck, to round-trip. The metadata is advisory.
+    It is user-editable in Google's interface and may not survive every
+    transformation, so import…
   section: §11 Export/Import, Voting & Social
   family: EXP
   phase: 2
@@ -834,6 +896,23 @@
   phase: 2
   status: Done
   review: false
+- id: GEN-11
+  title: AI population of declared slots
+  full: Slide content is not a fixed set of fields the model fills in. Having
+    chosen a layout (GEN-6), the model returns content keyed by that layout's
+    own declared slot names (TMPL-9), whatever the author called them and
+    however many there are. The slot descriptors are the contract. Each slot's
+    kind, label, authoring instructions and limits (TMPL-10) are serialized with
+    the layout, and the model is expected to write content of the right kind for
+    each — a code slot receives a program listing, a math slot receives LaTeX, a
+    table slot receives rows and columns. Instructions steer the content. A slot
+    that says "a runnable Python snippet, no more than eight lines" is what
+    makes a computer-science…
+  section: §9 Slide Generation & Enrichment
+  family: GEN
+  phase: 2
+  status: Backlog
+  review: false
 - id: IMG-3
   title: Image disambiguation
   full: "Polysemous terms must not pull the wrong picture — speech about
@@ -869,6 +948,23 @@
   status: Backlog
   review: false
   note: image attribution & licensing display
+- id: IMG-6
+  title: Per-slot image enrichment
+  full: A layout may declare any number of image slots (TMPL-9), so enrichment
+    operates per slot rather than once per slide. Each image slot is sourced
+    independently against its own guidance (GEN-7) and its own authoring
+    instructions (TMPL-10) — a slot described as "a photograph of the figure
+    under discussion" and one described as "a schematic diagram" are searched,
+    ranked, and captioned differently even on the same slide. Slots fill
+    independently and out of order. One slot resolving slowly or failing
+    entirely never blocks another, and each falls back on its own (IMG-2). A
+    user's own image is never overwritten. Enrichment claims an image slot only
+    while it is still empty, per slot — so a picture…
+  section: §9 Slide Generation & Enrichment
+  family: IMG
+  phase: 2
+  status: Backlog
+  review: false
 - id: P-10
   title: Deletion — user-initiated or admin-initiated (§20 ADMIN-4) — of any…
   full: "Deletion — user-initiated or admin-initiated (§20 ADMIN-4) — of any
@@ -1155,6 +1251,40 @@
     that don't. Most real decks are built by hand with no reusable layouts at
     all. The system then derives a template by analyzing how the slides are
     actually constructed — which content slots…"
+  section: §7 Style Template Library
+  family: TMPL
+  phase: 2
+  status: Backlog
+  review: false
+- id: TMPL-9
+  title: Open slot & layout model
+  full: "A template author — not the system — decides what a slide can hold. A
+    layout may declare any number of content slots, each with an author-chosen
+    name and a content kind, and a template may declare as many layouts as its
+    design needs, named from the conventional vocabulary (TMPL-2) where one fits
+    or with a name of the author's own where none does. There is no fixed
+    ceiling on layouts per template, slots per layout, or slots of a given kind
+    per layout: a layout may carry three code samples and two images if that is
+    the design. Content kinds are a closed, system-provided menu, because each
+    kind is a thing the system must know how to display, edit, fit, export, and
+    read aloud. The kinds cover…"
+  section: §7 Style Template Library
+  family: TMPL
+  phase: 2
+  status: Backlog
+  review: false
+- id: TMPL-10
+  title: Slot metadata & authoring instructions
+  full: "Beyond its name and kind, each slot carries metadata the author sets and
+    the AI reads: Authoring instructions — a short, plain-language statement of
+    what the slot is for, written by the template author (\"a runnable Python
+    snippet, no more than eight lines\"; \"the verb conjugated across all six
+    persons\"; \"only a photograph of the figure under discussion\"). This is
+    how a template teaches the AI to fill it, and it is the mechanism by which a
+    subject-specific template produces subject-appropriate slides. Limits — an
+    approximate character or word ceiling for this slot, overriding the
+    layout-level constraint. Whether the slot is required. Kind-specific options
+    — for example a code slot's default…"
   section: §7 Style Template Library
   family: TMPL
   phase: 2

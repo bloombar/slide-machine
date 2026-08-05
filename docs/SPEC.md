@@ -266,6 +266,8 @@ Each template provides multiple layout types, using conventional slide conventio
 - **Two-column** (text + image) slide
 - **Quote / callout** slide
 
+These names are a **preferred vocabulary, not a closed set**. They are the baseline every template should cover and the terms an author or the AI should reuse whenever one fits, because shared names are what let layouts be compared, merged during import ([TMPL-8](#tmpl-8-template-import-from-google-slides)), and reasoned about consistently. A template may also define layout types of its own when none of the conventional ones describes the design ([TMPL-9](#tmpl-9-open-slot--layout-model)).
+
 #### TMPL-3 Pre-made templates
 
 Ship several polished, ready-to-use templates covering common lecture styles.
@@ -284,9 +286,11 @@ Every layout in a template carries a **machine-readable descriptor** so the AI c
 
 - a stable **`type`/id** and human label (e.g., `title`, `section`, `content`, `list`, `image-heavy`, `two-column`, `quote` — TMPL-2);
 - a short **purpose / when-to-use** description the AI can reason over (e.g., "use for 3–6 parallel points");
-- the **content slots** the layout expects (e.g., `title`, `body`, `bullets[]`, `image`, `caption`, `columns`) and any **constraints** (max bullets, approximate text length, whether an image is required/optional).
+- the **content slots** the layout expects (e.g., `title`, `body`, `bullets[]`, `image`, `caption`) and any **constraints** (max bullets, approximate text length, whether an image is required/optional).
 
-Descriptors are authored as part of the template (TMPL-3/TMPL-4), stored with it ([§15](#15-data-models)), and serialized into the generation request as the **option set** the AI must pick from.
+Each slot carries its own descriptor too, not just a name: its **content kind** ([TMPL-9](#tmpl-9-open-slot--layout-model)), a human label, optional **authoring instructions** stating what the slot is for in the author's own words ([TMPL-10](#tmpl-10-slot-metadata--authoring-instructions)), and per-slot limits that override the layout-level constraint. A layout may declare **any number of slots of any kind**, so slot descriptors — not a fixed field list — are what tell the AI what a slide can hold.
+
+Descriptors are authored as part of the template (TMPL-3/TMPL-4), stored with it ([§15](#15-data-models)), and serialized into the generation request as the **option set** the AI must pick from. Because live generation runs per spoken phrase, the serialized descriptor set is **budgeted**: authoring instructions are length-capped, and if the set must be trimmed the system says so rather than silently truncating it.
 
 #### TMPL-7 Whiteboard layout
 
@@ -303,11 +307,44 @@ Two sources, one result:
 
 **Near-identical slides must consolidate into one layout.** A hand-built deck typically contains the same design rebuilt many times over, each copy differing by a few pixels of slot position or size. Reproducing every variation would yield a template of twenty near-duplicate layouts, which is worse than useless. Slides that share a slot composition and sit within a tolerance of one another are recognized as **one design**, and the layout that results is **standardized** rather than copied from any single slide: representative positions, aligned edges and margins, and a quantized type scale, so the derived template is tidier than the deck it came from. One-off slides do not become layouts; they are mapped to the closest one.
 
-What is captured: theme colors, typography, per-slot element geometry, and background images and logos (stored as the template's own assets). Each derived layout is mapped onto a conventional layout type ([TMPL-2](#tmpl-2-conventional-layout-types)) and given the machine-readable descriptor the AI selects from ([TMPL-6](#tmpl-6-layout-descriptors-for-ai-selection)); the required blank `whiteboard` layout ([TMPL-7](#tmpl-7-whiteboard-layout)) is synthesized on import. Fonts are mapped to available families rather than reproduced exactly, and no font is fetched from a third party at display time.
+What is captured: theme colors, typography, per-slot element geometry, and background images and logos (stored as the template's own assets). Each derived layout is named with a conventional layout type where one fits and its own type where none does ([TMPL-2](#tmpl-2-conventional-layout-types) / [TMPL-9](#tmpl-9-open-slot--layout-model)), and given the machine-readable descriptor the AI selects from ([TMPL-6](#tmpl-6-layout-descriptors-for-ai-selection)); the required blank `whiteboard` layout ([TMPL-7](#tmpl-7-whiteboard-layout)) is synthesized on import. Every derived slot is assigned a content kind — defaulting to text, since mistaking prose for something specialized is worse than not recognizing it — which the author can then correct ([TMPL-10](#tmpl-10-slot-metadata--authoring-instructions)). Fonts are mapped to available families rather than reproduced exactly, and no font is fetched from a third party at display time.
 
-**Import is lossy and says so.** Because the conventional layout types are a fixed set, a presentation with more distinct designs than there are types yields fewer layouts than it had. The import returns a plain-language **report** of what happened — how many slides became how many layouts, what was merged, what was approximated, and any asset that could not be retrieved — surfaced to the user rather than logged. The imported template is saved as a normal user-owned template: renamable, duplicable, deletable, exportable ([EXP-6](#exp-6-template-export-to-google-slides)), and shareable under the same rules as any other ([TMPL-4](#tmpl-4-custom-templates-create--edit--save) / [SOC-1](#soc-1-voting)).
+**A presentation this system exported round-trips losslessly.** Exports carry their own slot metadata ([EXP-8](#exp-8-slot-metadata-across-google-slides-round-trips)), so re-importing one restores slot names, kinds, instructions and limits exactly. A presentation from anywhere else has no such metadata and must be inferred from geometry, so that direction stays lossy — and says so.
+
+**Import is lossy and says so.** Consolidating near-identical slides is a judgment call, assets can fail to retrieve, and inferred slot kinds can be wrong. The import returns a plain-language **report** of what happened — how many slides became how many layouts, what was merged, what was approximated, and any asset that could not be retrieved — surfaced to the user rather than logged. The imported template is saved as a normal user-owned template: renamable, duplicable, deletable, exportable ([EXP-6](#exp-6-template-export-to-google-slides)), and shareable under the same rules as any other ([TMPL-4](#tmpl-4-custom-templates-create--edit--save) / [SOC-1](#soc-1-voting)).
 
 Importing a template never modifies the source presentation, and reads only presentations the user already has access to (P-5).
+
+#### TMPL-9 Open slot & layout model
+
+A template author — not the system — decides what a slide can hold. A layout may declare **any number of content slots**, each with an author-chosen **name** and a **content kind**, and a template may declare **as many layouts as its design needs**, named from the conventional vocabulary ([TMPL-2](#tmpl-2-conventional-layout-types)) where one fits or with a name of the author's own where none does. There is no fixed ceiling on layouts per template, slots per layout, or slots of a given kind per layout: a layout may carry three code samples and two images if that is the design.
+
+**Content kinds are a closed, system-provided menu**, because each kind is a thing the system must know how to display, edit, fit, export, and read aloud. The kinds cover ordinary lecture material and the specialized content that K-12 and undergraduate subjects actually require:
+
+- **text** — a prose slot (titles, bodies, captions)
+- **bullets** — an ordered or unordered list
+- **image** — a picture, with its own credit ([IMG-5](#img-5-image-attribution--licensing-display))
+- **code** — a program listing, displayed in a monospaced face with syntax highlighting for its declared language
+- **math** — a mathematical expression written in LaTeX and displayed as typeset notation, not as source
+- **preformatted** — text whose exact spacing and line breaks carry meaning
+- **table** — rows and columns with an optional header
+
+Authors choose from this menu; new kinds are added by the project, not by users. Everything else about a slot — how many, what they are called, what they are for, how large they may be, and where they sit — is the author's.
+
+A slide stores its content **by slot name**, so content added by an author-defined slot is first-class: it is generated, edited, searched, exported, and imported exactly like conventional content, with no field reserved to a privileged few.
+
+#### TMPL-10 Slot metadata & authoring instructions
+
+Beyond its name and kind, each slot carries metadata the author sets and the AI reads:
+
+- **Authoring instructions** — a short, plain-language statement of what the slot is for, written by the template author ("a runnable Python snippet, no more than eight lines"; "the verb conjugated across all six persons"; "only a photograph of the figure under discussion"). This is how a template teaches the AI to fill it, and it is the mechanism by which a subject-specific template produces subject-appropriate slides.
+- **Limits** — an approximate character or word ceiling for this slot, overriding the layout-level constraint.
+- **Whether the slot is required.**
+- **Kind-specific options** — for example a code slot's default language, or a table's expected column count.
+
+Instructions are **data, never commands**: they describe the slot to the model and are length-capped, and no instruction can change how the system behaves. The system honors a slot's limits regardless of what the model returns ([GEN-11](#gen-11-ai-population-of-declared-slots)).
+
+Slot metadata is set wherever templates are authored — the template editor ([TMPL-4](#tmpl-4-custom-templates-create--edit--save)), a hand-written template file, or by correcting what import inferred ([TMPL-8](#tmpl-8-template-import-from-google-slides)) — and travels with the template through export and import ([EXP-2](#exp-2-standards-based-data-export) / [EXP-8](#exp-8-slot-metadata-across-google-slides-round-trips)).
 
 ### 8. Live Lecture Capture
 
@@ -351,9 +388,9 @@ The **core logic of the slide generator (and quiz maker) is decoupled from any s
 
 #### IMG-1 Real-time image enrichment
 
-Slides are enriched with images using the AI's per-slide image guidance ([GEN-7](#gen-7-ai-image-guidance)), in priority order:
+Slides are enriched with images using the AI's image guidance ([GEN-7](#gen-7-ai-image-guidance)), **independently for each image slot the layout declares** ([IMG-6](#img-6-per-slot-image-enrichment)), in priority order:
 
-1. A **seeded** image the AI selected for the slide, or whose caption/keywords match the slide topic (SEED-2).
+1. A **seeded** image the AI selected for the slot, or whose caption/keywords match the slide topic (SEED-2).
 2. An image fetched in real time from **Wikimedia**, **Flickr**, and **Openverse** APIs using the AI's **recommended keywords** (falling back to the slide topic if none).
 3. A graceful fallback (placeholder/solid layout) when no image is recommended or found.
 
@@ -390,6 +427,16 @@ Every image can carry a **caption** and **copyright/license attribution**, and t
 - **Attribution dialog** — clicking (or activating via keyboard) the "i" icon opens a **modal dialog** presenting the full attribution: caption, title, author, source, license (as a link to the license text), and any modifications note. Links open the source and license in a new tab.
 - **Owner/editor editing** — a user who is the **owner or an editor** of the deck ([SHARE-1](#share-1-saved-deck-viewer--permalink), [EDIT-1](#edit-1-full-content-editing)) can **modify** the caption and every attribution field from this dialog — to correct enrichment metadata, add missing credit, or supply attribution for an uploaded image. Viewers see the dialog read-only. Edits are subject to the same access control as other slide edits ([§16](#16-privacy-security--compliance)).
 - **Preserved on share & export** — attribution travels with the image wherever the deck is shown or published: the on-slide indicator and dialog appear in the shared **deck viewer** ([SHARE-1](#share-1-saved-deck-viewer--permalink)), and attribution/license text is embedded in **exports** ([EXP-1](#exp-1-deck-export)/[EXP-2](#exp-2-standards-based-data-export)) so downstream copies remain license-compliant. This is the mechanism that resolves the image-licensing question in [§19](#19-open-questions).
+- **Credit belongs to the image, not the slide** — a slide may carry several images ([TMPL-9](#tmpl-9-open-slot--layout-model)), each with its own caption, license and indicator, so attribution is stored and shown **per image slot** rather than once per slide.
+
+#### IMG-6 Per-slot image enrichment
+
+A layout may declare **any number of image slots** ([TMPL-9](#tmpl-9-open-slot--layout-model)), so enrichment operates per slot rather than once per slide.
+
+- **Each image slot is sourced independently** against its own guidance ([GEN-7](#gen-7-ai-image-guidance)) and its own authoring instructions ([TMPL-10](#tmpl-10-slot-metadata--authoring-instructions)) — a slot described as "a photograph of the figure under discussion" and one described as "a schematic diagram" are searched, ranked, and captioned differently even on the same slide.
+- **Slots fill independently and out of order.** One slot resolving slowly or failing entirely never blocks another, and each falls back on its own ([IMG-2](#img-2-fault-tolerance)).
+- **A user's own image is never overwritten.** Enrichment claims an image slot only while it is still empty, per slot — so a picture the instructor set by hand stands even if background enrichment for that same slide is still running.
+- **Layout reconciliation counts slots.** If the AI asks for more images than the chosen layout can show, the system prefers a layout that can hold them, and otherwise drops the surplus guidance rather than storing an image with nowhere to appear ([GEN-6](#gen-6-ai-layout-selection)).
 
 #### GEN-3 Live display
 
@@ -424,7 +471,7 @@ Live generation has unavoidable lag: slide text trails the spoken phrase ([CAP-3
 The AI does not only write slide text — it also **chooses which layout each content block uses**.
 
 - The active template's **layout descriptors** ([TMPL-6](#tmpl-6-layout-descriptors-for-ai-selection)) are serialized into the generation request as the explicit **option set** the model must select from.
-- For each content block the model returns a **chosen `layoutType`** plus the content mapped to that layout's slots (title/body/bullets/image/caption/columns), so a list-like block becomes a list layout, a single striking idea becomes a quote/callout, etc.
+- For each content block the model returns a **chosen `layoutType`** plus the content mapped to **that layout's declared slots, by name** ([GEN-11](#gen-11-ai-population-of-declared-slots)), so a list-like block becomes a list layout, a single striking idea becomes a quote/callout, etc.
 - The choice is **constrained to the template's available layouts**; if the model returns an unknown or ill-fitting type, the system falls back to a sensible default layout (e.g., `content`).
 - The user can always override the AI's choice per slide ([EDIT-3](#edit-3-per-slide-layout-switch)), and the post-lecture reformat ([GEN-4](#gen-4-post-lecture-ai-reformat-holistic-regeneration)) re-runs this selection holistically.
 
@@ -436,6 +483,7 @@ For each slide, the AI also **recommends the supporting imagery**, feeding image
 - When the project has **teacher-supplied (seeded) images** ([SEED-2](#seed-2-image-seeding)), their captions/keywords are sent to the model as context options, and the model may **select a specific seeded image** it deems the best fit for a given slide (or indicate that no image is needed).
 - For a slide better served by a **custom diagram/infographic** than a stock photo, the model may instead recommend **generating** the image ([IMG-4](#img-4-ai-generated-imagery-optional)).
 - This guidance is per-slide and optional: a slide may warrant no image, in which case the model says so and the layout adapts (TMPL-6).
+- **Guidance is per image slot, not per slide.** A layout may declare several image slots ([TMPL-9](#tmpl-9-open-slot--layout-model)), so the model returns guidance **keyed by slot name** and can ask for different imagery in each — a photograph in one, a diagram in another — following each slot's authoring instructions ([TMPL-10](#tmpl-10-slot-metadata--authoring-instructions)).
 
 #### GEN-8 New slide vs. update current
 
@@ -473,6 +521,16 @@ The spoken **"resume"** command is equivalent to the Resume control in both paus
 
 A slide that already carries **visible** marks is further protected whenever it is the update target: updates are **additive only**, its layout is **pinned** (no refit/reformat), and an overflowing update spills to a **new** slide rather than reflowing the marked one ([GEN-8](#gen-8-new-slide-vs-update-current)). (Behavior: [WHITEBOARD.md](WHITEBOARD.md); design: [DECISIONS.md](DECISIONS.md) "Whiteboard ↔ live generation".)
 
+#### GEN-11 AI population of declared slots
+
+Slide content is not a fixed set of fields the model fills in. Having chosen a layout ([GEN-6](#gen-6-ai-layout-selection)), the model returns content **keyed by that layout's own declared slot names** ([TMPL-9](#tmpl-9-open-slot--layout-model)), whatever the author called them and however many there are.
+
+- **The slot descriptors are the contract.** Each slot's kind, label, authoring instructions and limits ([TMPL-10](#tmpl-10-slot-metadata--authoring-instructions)) are serialized with the layout, and the model is expected to write content of the right kind for each — a code slot receives a program listing, a math slot receives LaTeX, a table slot receives rows and columns.
+- **Instructions steer the content.** A slot that says "a runnable Python snippet, no more than eight lines" is what makes a computer-science template produce computer-science slides. This is the mechanism by which subject-appropriate material is generated without the system knowing anything about the subject.
+- **The system validates rather than trusts.** Content for a slot the chosen layout does not declare is discarded; content of the wrong shape is coerced where that is unambiguous and dropped where it is not; a slide is never left in a state the template does not describe.
+- **Limits are enforced regardless of what the model returns**, per slot, and content that will not fit spills into a new slide rather than overflowing ([GEN-8](#gen-8-new-slide-vs-update-current)). Fitting respects the kind: prose may be trimmed at a word boundary, but a program listing or a formula is never truncated mid-token — it is moved or omitted whole, because a half-expression is worse than none.
+- **Specialized kinds are offered only where a template declares them**, so the layouts a lecture's template provides are exactly the content the AI can produce for it. A history template that declares no math slot can never yield a formula.
+
 **Metering note.** Gemini, Speech-to-Text, and image-API usage in §8–§9 all count against the user's plan caps (BILL-3) and are subject to enforcement (BILL-4).
 
 ### 10. Playback, Editing & Sharing
@@ -487,7 +545,7 @@ Saved decks can be **spoken aloud**: play the whole deck (auto-advancing slide t
 
 #### EDIT-1 Full content editing
 
-Users can **add, edit, and delete** all slide content: slide text (title/body/bullets/caption), images (replace from seed, re-fetch, upload, or remove), and slide order.
+Users can **add, edit, and delete** all slide content: every slot the slide's layout declares ([TMPL-9](#tmpl-9-open-slot--layout-model)) — text, bullets, and the specialized kinds ([EDIT-7](#edit-7-editing-specialized-content-slots)) — plus images (replace from seed, re-fetch, upload, or remove) and slide order. Editing is by slot, so a layout's own slots are as editable as the conventional ones.
 
 #### EDIT-2 Deck-level template switch
 
@@ -522,6 +580,19 @@ Each slide's menu opens an editor for its **spoken transcript** (`sourceTranscri
 - **Whiteboard marks are preserved** — marks are timed by position within the transcript ([EDIT-4](#edit-4-whiteboard-annotation)), so a save **re-anchors** them onto the edited text by the phrase each was drawn over, exactly as a [GEN-4](#gen-4-post-lecture-ai-reformat-holistic-regeneration) narration refine does; a mark whose phrase no longer exists is orphaned — kept but hidden, in editing as well as playback — rather than left pointing at unrelated words, and reappears if wording it matches returns. The editor says so when the slide carries marks.
 - **Clearing it is allowed** — an empty transcript returns the slide to being narrated from its own content ([PLAY-2](#play-2-narration-playback)).
 
+#### EDIT-7 Editing specialized content slots
+
+Every content kind ([TMPL-9](#tmpl-9-open-slot--layout-model)) is editable in place, in the same click-to-edit way as slide text ([EDIT-1](#edit-1-full-content-editing)) — the slide shows the rendered result, and editing reveals the underlying source.
+
+- **Code** edits as plain source in a monospaced field and displays highlighted for its declared language; indentation is preserved exactly, and no automatic reflow or spell correction is applied to it.
+- **Math** edits as LaTeX and displays as typeset notation, so an author writes what they know and the audience sees what they mean. Invalid syntax shows a clear inline error rather than a blank slot or a crash.
+- **Tables** edit as rows and columns, with cells editable individually.
+- **Preformatted text** preserves the author's exact spacing and line breaks.
+
+A slot's authoring instructions and limits ([TMPL-10](#tmpl-10-slot-metadata--authoring-instructions)) are visible to the editor as guidance, so an instructor filling a slot by hand sees what the template intended it for. As with all hand edits, editing a slot marks it as manually edited so the post-lecture reformat does not overwrite it ([GEN-4](#gen-4-post-lecture-ai-reformat-holistic-regeneration)).
+
+Specialized content is **read aloud sensibly or not at all** — narration ([PLAY-2](#play-2-narration-playback)) does not recite LaTeX source or punctuation-heavy program listings.
+
 #### SHARE-1 Saved deck viewer & permalink
 
 Saved decks have a **deck viewer** reachable via a stable **permalink** that can be shared. Sharing visibility is controllable (private / unlisted-by-link / public). Public/shared class artifacts respect [§16](#16-privacy-security--compliance).
@@ -548,15 +619,19 @@ Google Slides export offers a **choice of two shapes**, because the two reasons 
 
 The second shape needs a template that carries element positioning, so it is offered only for decks whose template has it. Exporting a template on its own is [EXP-6](#exp-6-template-export-to-google-slides).
 
+Every export renders **all** of a slide's content, including specialized slots ([EXP-7](#exp-7-specialized-content-export-fidelity)), and Google Slides exports additionally carry the slot metadata needed to re-import them faithfully ([EXP-8](#exp-8-slot-metadata-across-google-slides-round-trips)).
+
 #### EXP-2 Standards-based data export
 
 Both **slide decks** and **style templates** can be exported to a standard, human-readable format (**YAML** or equivalent) capturing structure, content, and styling. For a template this includes its **layout geometry** — where each content slot sits and how it is styled — not merely the layout descriptors, so the exported file describes the design fully enough to reconstruct it.
+
+A template's export also carries each slot's **name, content kind, authoring instructions and limits** ([TMPL-9](#tmpl-9-open-slot--layout-model) / [TMPL-10](#tmpl-10-slot-metadata--authoring-instructions)), and a deck's export carries its content **by slot name**, so author-defined slots survive the round trip as fully as conventional ones.
 
 #### EXP-3 Round-trip import
 
 The exported format is **import-compatible**: a user can re-import a previously exported deck and/or template and restore it faithfully. Import validates and reports errors without partial-corrupting existing data. Imports may come from an upload or a connected account (EXP-4).
 
-Round-tripping is a **stated guarantee, not a hope**: a deck or template exported and re-imported must come back materially unchanged, including a template's theme, layouts, and geometry (EXP-2). Where the format has versions, older exports remain readable.
+Round-tripping is a **stated guarantee, not a hope**: a deck or template exported and re-imported must come back materially unchanged, including a template's theme, layouts, and geometry (EXP-2), and **every slot's name, kind, authoring instructions and limits** along with the content stored under it ([TMPL-9](#tmpl-9-open-slot--layout-model) / [TMPL-10](#tmpl-10-slot-metadata--authoring-instructions)). The guarantee holds for author-defined slots and specialized content exactly as it does for conventional text — a new content kind that cannot survive a round trip is not finished. Where the format has versions, older exports remain readable.
 
 The two directions differ in how they treat an unresolvable reference. A **deck** import that names an unknown template falls back to a default and warns — the lecture's content is the point and is still worth recovering. A **template** import cannot do that: there is nothing to fall back to, so it **fails with an explanation** rather than substituting a design the user did not ask for.
 
@@ -574,7 +649,7 @@ Users can connect their **own Google Drive and/or GitHub** accounts via OAuth to
 A user can create a lecture from an **existing Google Slides presentation** in their connected Drive, rather than starting from speech or a YAML file. The presentation's design is derived into a style template exactly as [TMPL-8](#tmpl-8-template-import-from-google-slides) describes, and its **content** is imported onto that template as the lecture's slides.
 
 - **Layout assignment comes free from the same analysis.** Deriving the template already determines which design each source slide belongs to, so each imported slide is placed on the layout it actually came from — not re-guessed afterwards.
-- **Content maps by slot.** A slide's title, body text, bullet lists, images, and captions are mapped onto the corresponding content slots ([TMPL-2](#tmpl-2-conventional-layout-types)); images are copied into the app so the lecture does not depend on the Google file continuing to exist.
+- **Content maps by slot.** A slide's title, body text, bullet lists, images, and captions are mapped onto the corresponding content slots ([TMPL-2](#tmpl-2-conventional-layout-types)); images are copied into the app so the lecture does not depend on the Google file continuing to exist. A presentation this system exported carries the slot metadata to map content back exactly ([EXP-8](#exp-8-slot-metadata-across-google-slides-round-trips)); one from elsewhere is mapped by inference.
 - The result is an ordinary deck: editable ([EDIT-1](#edit-1-full-content-editing)), narratable, shareable, and exportable. The instructor can then lecture over it, refine it ([GEN-4](#gen-4-post-lecture-ai-reformat-holistic-regeneration)), or keep only the template.
 - The same **report** described in TMPL-8 covers the content side: slides whose material did not fit the layout it was mapped to are named rather than silently truncated.
 
@@ -589,6 +664,26 @@ Google Slides has **no separate "template" file type** — a template there is s
 - The template's theme, per-layout geometry, and background images and logos are carried into the exported presentation, so the file stands on its own without referring back to this app.
 - Export is **round-trip compatible with [TMPL-8](#tmpl-8-template-import-from-google-slides)**: a template exported to Google Slides and imported back is materially the same template.
 - The `whiteboard` layout ([TMPL-7](#tmpl-7-whiteboard-layout)) is an app-only blank slate with no visual design to carry, so it is omitted from the export and re-synthesized on import.
+
+#### EXP-7 Specialized content export fidelity
+
+An exported deck shows **what the audience saw**, not the source behind it. Specialized content ([TMPL-9](#tmpl-9-open-slot--layout-model)) is rendered in every export format, not emitted as raw markup:
+
+- **Math** appears as typeset notation. A formula must never export as its LaTeX source — a mathematics lecture exported to PDF is otherwise unusable, which is the whole point of supporting the kind.
+- **Code** appears in a monospaced face with its indentation and line breaks intact, and its syntax highlighting carried where the format supports colored text.
+- **Tables** appear as real tables where the format has them, and as a ruled grid where it does not.
+- **Preformatted text** keeps its exact spacing.
+
+This applies to PDF and Google Slides alike. Where a format genuinely cannot represent something, the export says so in its report rather than silently emitting source text.
+
+#### EXP-8 Slot metadata across Google Slides round trips
+
+Google Slides cannot express what a slot **is** — only where a shape sits and what text it holds. So an export written by this system additionally carries its own **slot metadata** inside the presentation, in fields Google preserves but does not display as content, allowing a re-import to restore the design exactly instead of inferring it.
+
+- **Each slot's identity travels on the shape that is the slot**, so the association survives shapes being reordered, and it works on the presentation's layouts as well as its slides — which is what allows a template, not just a deck, to round-trip.
+- **The metadata is advisory.** It is user-editable in Google's interface and may not survive every transformation, so import **validates it and falls back to inference** when it is missing, damaged, or from an unknown version. Its absence degrades the result; it never fails the import.
+- **Speaker notes carry the slide's narration** ([EDIT-6](#edit-6-spoken-transcript-editing)), which is what they mean to a presenter, and they round-trip as narration.
+- Carrying this metadata must not require broader access to the user's Google account than exporting already does ([EXP-4](#exp-4-connected-accounts-google-drive--github)).
 
 #### SOC-1 Voting
 
@@ -821,10 +916,16 @@ Indicative MongoDB collections, expressed as shared TypeScript types ([TECH-6](#
 - **SeedAsset** — `{ id, projectId, type: 'doc'|'pdf'|'gdoc'|'gdrive'|'gslides'|'image', text?, imageUrl?, caption?, keywords[], enabled }`
 - **Concept** — `{ id, projectId, label, canonical, synonyms[], gloss?, entityId?, preferredImageRef?, importance: 'must'|'maybe', source?, confirmed }` (preflight concept set — PREP-1/2/3; `entityId` = resolved entity e.g. Wikidata QID)
 - **Deck** — `{ id, projectId, ownerId, title, templateId, visibility: 'private'|'unlisted'|'public', permalinkSlug, slideOrder[], transcript?, ttsVoice?, recordings?, voteScore, createdAt }` (`transcript` = finalized full lecture transcript, retained for post-lecture reformat — GEN-4; `recordings` = **server-only** references to retained session audio — P-6, never exposed in a DTO)
-- **Slide** — `{ id, deckId, index, layoutType, title?, body?, bullets[]?, imageRef?, imageSource?: 'seeded'|'stock'|'generated', imageKeywords[]?, caption?, sourceTranscript?, attribution?: { title?, author?, sourceUrl?, licenseName?, licenseUrl?, modifications? }, drawings[]? }` (`layoutType` chosen by the AI — GEN-6; `imageKeywords` are AI-recommended search terms — GEN-7; `imageSource` records provenance incl. AI-generated — IMG-4; `attribution` is the image's TASL license metadata surfaced on-slide and editable by owners/editors — IMG-5; `sourceTranscript` = the slide's spoken narration, spoken by PLAY-2 and refined by GEN-4; `drawings` = whiteboard strokes with per-stroke tool/color/points + transcript timing anchors — EDIT-4)
+- **Slide** — `{ id, deckId, index, layoutType, slots: { [slotName]: SlotValue }, sourceTranscript?, drawings[]? }` — content is stored **by slot name** rather than in fixed fields, so whatever slots a layout declares are what a slide holds ([TMPL-9](#tmpl-9-open-slot--layout-model)); `layoutType` is the AI's choice (GEN-6) and is an open name, not a closed set. A `SlotValue` is discriminated by its slot's kind:
+  - `{ kind: 'text'|'preformatted', value }`
+  - `{ kind: 'bullets', items[] }`
+  - `{ kind: 'image', ref?, source?: 'seeded'|'stock'|'generated', keywords[]?, attribution?: { title?, author?, sourceUrl?, licenseName?, licenseUrl?, modifications? } }` — image provenance (IMG-4), AI-recommended search terms (GEN-7) and TASL credit (IMG-5) all sit **on the image**, so a slide with several images keeps them straight (IMG-6)
+  - `{ kind: 'code', source, language? }` · `{ kind: 'math', tex, display? }` · `{ kind: 'table', header[]?, rows[][] }`
+
+  (`sourceTranscript` = the slide's spoken narration, spoken by PLAY-2 and refined by GEN-4; `drawings` = whiteboard strokes with per-stroke tool/color/points + transcript timing anchors — EDIT-4. The conventional slot names `title`, `body`, `bullets`, `image` and `caption` keep their conventional meaning and remain what built-in templates use.)
 - **TranscriptSegment** — `{ id, deckId, sessionId?, startMs?, endMs?, text, words?: { word, startMs, endMs }[], action, slideId?, speaker?, role?: 'lecturer'|'student', createdAt }` — one finalized phrase, **append-only** in its own collection (kept off the deck doc to dodge the 16 MB cap on long lectures). Carries the per-word timings used to time whiteboard playback (EDIT-4) and the speaker/role tags the diarization pass joins on (GEN-4).
-- **SlideTranslation** — `{ id, deckId, locale: 'en'|'fr'|'es'|'ru'|'zh', perSlide: { slideId: { title?, body?, bullets[]?, caption? } }, createdAt }` (on-demand slide-content translation cache — SHARE-2)
-- **Template** — `{ id, ownerId, name, theme, layouts: Layout[], deletedLayouts?: { layout, deletedAt }[], renderMode: 'components'|'positioned', source: 'builtin'|'google-slides'|'yaml', sourceFileId?, assetKeys[]?, visibility, voteScore, createdAt }` where `Layout = { type, label, purpose, slots[], constraints?, elementPositions, decorations? }` (`purpose`/`slots`/`constraints` are the AI-facing descriptor — TMPL-6 / GEN-6; `elementPositions` places each slot and `decorations` holds a layout's static logos/rules — TMPL-8; `renderMode` states which renderer draws the template rather than letting it be inferred from whether geometry is present, since geometry is also used for export — EXP-6; `assetKeys` are the stored files the template owns, so the retention sweep can find them — P-11). **Built-in templates ship as files, not records** ([TMPL-3](#tmpl-3-pre-made-templates)); user templates are stored, and both are served through one resolver.
+- **SlideTranslation** — `{ id, deckId, locale: 'en'|'fr'|'es'|'ru'|'zh', perSlide: { slideId: { [slotName]: translated } }, createdAt }` (on-demand slide-content translation cache — SHARE-2; keyed by slot name like the slide itself, and covering the slots whose content is prose — a program listing or a formula is not translated)
+- **Template** — `{ id, ownerId, name, theme, layouts: Layout[], deletedLayouts?: { layout, deletedAt }[], renderMode: 'components'|'positioned', source: 'builtin'|'google-slides'|'yaml', sourceFileId?, assetKeys[]?, visibility, voteScore, createdAt }` where `Layout = { type, label, purpose, slots[], constraints?, elementPositions, decorations? }` and each slot is `{ name, kind: 'text'|'bullets'|'image'|'code'|'math'|'preformatted'|'table', label, description?, required?, maxChars?, maxWords?, options? }` (`type` is an open name — conventional where one fits, the author's own where none does, TMPL-9; `description` is the author's instruction to the AI and `options` is kind-specific, e.g. a code slot's language — TMPL-10; `purpose`/`slots`/`constraints` are the AI-facing descriptor — TMPL-6 / GEN-6; `elementPositions` places each slot and `decorations` holds a layout's static logos/rules — TMPL-8; `renderMode` states which renderer draws the template rather than letting it be inferred from whether geometry is present, since geometry is also used for export — EXP-6; `assetKeys` are the stored files the template owns, so the retention sweep can find them — P-11). **Built-in templates ship as files, not records** ([TMPL-3](#tmpl-3-pre-made-templates)); user templates are stored, and both are served through one resolver.
 - **Vote** — `{ id, userId, targetType: 'deck'|'template', targetId, value: 1|-1 }`
 - **QuizRef** — `{ id, deckId, formId, formUrl, status, publishConfig: { authMode, defaultPoints, driveFolderId, title } }` (link to the published Google Form + the publish config used — QUIZ-2/QUIZ-3)
 
