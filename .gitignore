@@ -30,3 +30,6 @@ docs/grant_proposal.pdf
 
 # Local upload storage (STORAGE_PROVIDER=local)
 .uploads*/
+
+# Scratch space for throwaway probe scripts — local only, never committed
+server/__p/
