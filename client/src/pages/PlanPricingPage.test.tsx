@@ -262,6 +262,28 @@ describe('PlanPricingPage', () => {
     ])
   })
 
+  it('pins the tier row so it stays above the rows being read', async () => {
+    renderPage()
+
+    const table = await screen.findByTestId('plan-table')
+    const head = table.querySelector('thead')!
+    // Every cell of the row, the unlabelled first column included: one cell
+    // left behind would tear a hole in the pinned row.
+    for (const cell of within(head).getAllByRole('columnheader')) {
+      // Pinned only where the table has stopped scrolling sideways: inside a
+      // container that never scrolls vertically, the offset would push this
+      // row down over the first rows instead of holding it above them.
+      expect(cell.className).toContain('lg:sticky')
+      expect(cell.className).not.toMatch(/(^|\s)sticky\b/)
+      // Opaque, or the rows sliding under it would read through.
+      expect(cell.className).toMatch(/bg-(white|indigo-50)\b/)
+    }
+    // A scroll container of its own would pin the row to the table rather
+    // than to the page, so the sideways scrolling is dropped where the
+    // columns fit without it.
+    expect(table.parentElement!.className).toContain('lg:overflow-x-visible')
+  })
+
   it('quotes each plan’s price, and says which one costs nothing', async () => {
     renderPage()
 
