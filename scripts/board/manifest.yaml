@@ -652,8 +652,16 @@
   review: false
 - id: EXP-1
   title: Deck export
-  full: Decks can be exported to PDF, Google Slides, and other easily supportable
-    common formats.
+  full: "Decks can be exported to PDF, Google Slides, and other easily supportable
+    common formats. Google Slides export offers a choice of two shapes, because
+    the two reasons to export are different: A flat deck (the default) — slides
+    with their formatting baked in and no reusable layouts. The right answer for
+    handing someone a finished lecture: nothing to maintain, nothing to break. A
+    deck carrying reusable layouts — the deck's style template is exported
+    alongside it as the presentation's own layouts, and each slide is attached
+    to the layout it uses. The right answer for continuing to work in Google
+    Slides, restyling the deck there, or re-importing it later (TMPL-8). The
+    second shape needs a…"
   section: §11 Export/Import, Voting & Social
   family: EXP
   phase: 2
@@ -663,7 +671,9 @@
   title: Standards-based data export
   full: Both slide decks and style templates can be exported to a standard,
     human-readable format (YAML or equivalent) capturing structure, content, and
-    styling.
+    styling. For a template this includes its layout geometry — where each
+    content slot sits and how it is styled — not merely the layout descriptors,
+    so the exported file describes the design fully enough to reconstruct it.
   section: §11 Export/Import, Voting & Social
   family: EXP
   phase: 2
@@ -674,7 +684,13 @@
   full: "The exported format is import-compatible: a user can re-import a
     previously exported deck and/or template and restore it faithfully. Import
     validates and reports errors without partial-corrupting existing data.
-    Imports may come from an upload or a connected account (EXP-4)."
+    Imports may come from an upload or a connected account (EXP-4).
+    Round-tripping is a stated guarantee, not a hope: a deck or template
+    exported and re-imported must come back materially unchanged, including a
+    template's theme, layouts, and geometry (EXP-2). Where the format has
+    versions, older exports remain readable. The two directions differ in how
+    they treat an unresolvable reference. A deck import that names an unknown
+    template falls back to a default and warns — the lecture's…"
   section: §11 Export/Import, Voting & Social
   family: EXP
   phase: 2
@@ -698,6 +714,40 @@
   status: Done
   review: true
   note: split id — GitHub part tracked separately
+- id: EXP-5
+  title: Lecture import from Google Slides
+  full: A user can create a lecture from an existing Google Slides presentation in
+    their connected Drive, rather than starting from speech or a YAML file. The
+    presentation's design is derived into a style template exactly as TMPL-8
+    describes, and its content is imported onto that template as the lecture's
+    slides. Layout assignment comes free from the same analysis. Deriving the
+    template already determines which design each source slide belongs to, so
+    each imported slide is placed on the layout it actually came from — not
+    re-guessed afterwards. Content maps by slot. A slide's title, body text,
+    bullet lists, images, and captions are mapped onto the corresponding content
+    slots (TMPL-2); images are…
+  section: §11 Export/Import, Voting & Social
+  family: EXP
+  phase: 2
+  status: Backlog
+  review: false
+- id: EXP-6
+  title: Template export to Google Slides
+  full: A style template can be exported to the user's Google Drive as a Google
+    Slides presentation whose layouts are the template's layouts, with one
+    demonstration slide per layout so the design is visible and immediately
+    usable. Google Slides has no separate "template" file type — a template
+    there is simply a presentation whose layouts define a design, which is what
+    users copy and build on. Exporting a template therefore means producing
+    exactly that, not a document of a special kind. The template's theme,
+    per-layout geometry, and background images and logos are carried into the
+    exported presentation, so the file stands on its own without referring back
+    to this app. Export is round-trip compatible…
+  section: §11 Export/Import, Voting & Social
+  family: EXP
+  phase: 2
+  status: Backlog
+  review: false
 - id: GEN-4
   title: Post-lecture AI reformat (holistic regeneration)
   full: 'Once a session ends (CAP-1 Stop) and the full transcript is available,
@@ -1093,6 +1143,23 @@
   phase: 2
   status: Done
   review: false
+- id: TMPL-8
+  title: Template import from Google Slides
+  full: "A user can point at a Google Slides presentation in their connected Drive
+    (EXP-4) and get its design back as a style template in their own library.
+    Most instructors arrive with an existing deck rather than a design brief, so
+    this — not the template editor (TMPL-4) — is the realistic path to a
+    template that looks like their own material. Two sources, one result:
+    Presentations that define layouts. The presentation's own masters and
+    layouts are read directly and become the template's layouts. Presentations
+    that don't. Most real decks are built by hand with no reusable layouts at
+    all. The system then derives a template by analyzing how the slides are
+    actually constructed — which content slots…"
+  section: §7 Style Template Library
+  family: TMPL
+  phase: 2
+  status: Backlog
+  review: false
 - id: AUTH-1a
   title: GitHub sign-in
   section: §4 Accounts & Authentication
@@ -1304,7 +1371,10 @@
 - id: P-5
   title: Google Drive/Docs/Slides access uses per-user OAuth consent and…
   full: Google Drive/Docs/Slides access uses per-user OAuth consent and
-    least-privilege scopes; imported content is the user's own.
+    least-privilege scopes; imported content is the user's own. Reads of a
+    user's existing presentations (TMPL-8/EXP-5) are read-only and never modify
+    the source file; adding a scope requires already-connected users to
+    reconnect, which the app detects and prompts for (EXP-4).
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 3
@@ -1359,17 +1429,17 @@
   review: false
 - id: P-11
   title: Soft-deleted records (P-10) are permanently purged by a scheduled daily…
-  full: Soft-deleted records (P-10) are permanently purged by a scheduled daily
+  full: "Soft-deleted records (P-10) are permanently purged by a scheduled daily
     background sweep once their deletedAt is older than a configurable window
     (DELETED_DATA_RETENTION_DAYS, default 90 days — TECH-4). Purge is a hard
     cascade delete that also removes owned children and stored blobs (seed
-    assets, exports, retained audio — P-6 — and synthesized narration), so no
-    orphaned data survives. Narration is cached under a hash of the words
-    spoken, so one stored file can serve two lectures that say the same thing;
-    it is therefore reference-counted per lecture and deleted with the last
-    lecture that played it, never with the first. 0 disables the sweep
-    (tombstones kept indefinitely). This bounds storage cost and honors
-    data-minimization, consistent with the audio-retention sweep (P-6).
+    assets, exports, retained audio — P-6 — synthesized narration, and a
+    template's own imported assets such as backgrounds and logos — TMPL-8), so
+    no orphaned data survives. Blobs that more than one thing can point at are
+    reference-counted rather than deleted with the first referent: narration is
+    cached under a hash of the words spoken, so one file can serve two lectures
+    that say the same thing and is deleted with the last lecture that played it;
+    likewise a template asset shared by several layouts survives…"
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 3

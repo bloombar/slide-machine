@@ -1,4 +1,4 @@
-# Google credentials (Gemini + Cloud Speech-to-Text + Cloud Text-to-Speech + Cloud Translation + Forms/Drive OAuth)
+# Google credentials (Gemini + Cloud Speech-to-Text + Cloud Text-to-Speech + Cloud Translation + Forms/Drive/Slides OAuth)
 
 The server reads its Google credentials from `server/.env` (see
 [server/.env.example](../server/.env.example)):
@@ -12,8 +12,13 @@ The server reads its Google credentials from `server/.env` (see
   §5). Optional — without it, the play button and per-slide "Speak this
   slide" simply don't appear
 - `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` — OAuth client for
-  Google sign-in (AUTH-1) and connected-account Drive/Forms access used by
-  quiz publishing (EXP-4); see §6
+  Google sign-in (AUTH-1) and connected-account Drive/Forms/Slides access used
+  by quiz publishing, export, and template/lecture import (EXP-4); see §6
+
+**Connected-account features need no API key of their own.** Quiz publishing,
+Drive export, and Google Slides import all act *as the instructor* through the
+OAuth client above, not through the ops account's keys. Adding them changes §6
+only — there is no "Slides API key" to create.
 
 Live transcription is optional — the app ships with a keyless browser engine
 (§3). Gemini and Translation use plain API keys; real-time STT uses a
@@ -203,13 +208,23 @@ GOOGLE_APPLICATION_CREDENTIALS=service-account.json
 TTS_PROVIDER=google-cloud   # or: none
 # TTS_LANGUAGE=en-US         # deck/project language overrides this per request
 TTS_DEFAULT_VOICE=nova       # default catalog voice; blank = provider default
+
+# Google Slides import (§6). `mock` needs no Google setup at all and is what
+# the test suite runs under; `live` requires the connected-account scopes below.
+IMPORT_MODE=mock             # or: live
 ```
 
 Restart the server; config is validated at boot by `server/src/config/env.ts`.
 
-## 6. Google Forms & Drive access for quiz publishing (EXP-4 connected accounts)
+## 6. Connected-account access: Forms, Drive & Slides (EXP-4)
 
-Quiz publishing ([SPEC §17](SPEC.md#17-quiz-generator-integration)) creates a Google Form **in the instructor's own Drive**, so it does not use the ops account's API keys above. Instead it acts as the **instructor**, through the per-user Google account they connect ([EXP-4](SPEC.md#exp-4-connected-accounts-google-drive--github)) — the same OAuth client as Google sign-in, but with **broader scopes** and offline access.
+Three features act **as the instructor** rather than as the ops account, through the per-user Google account they connect ([EXP-4](SPEC.md#exp-4-connected-accounts-google-drive--github)) — the same OAuth client as Google sign-in, but with **broader scopes** and offline access:
+
+- **Quiz publishing** ([SPEC §17](SPEC.md#17-quiz-generator-integration)) — creates a Google Form in the instructor's own Drive.
+- **Export** ([EXP-1](SPEC.md#exp-1-deck-export)/[EXP-6](SPEC.md#exp-6-template-export-to-google-slides)) — writes decks and templates into their Drive.
+- **Import** ([TMPL-8](SPEC.md#tmpl-8-template-import-from-google-slides)/[EXP-5](SPEC.md#exp-5-lecture-import-from-google-slides)) — reads their existing Google Slides presentations to derive a template or a lecture.
+
+One OAuth client, one stored authorization, three consumers. None of them uses an API key.
 
 ### Enable the APIs
 
@@ -217,18 +232,36 @@ In the same Cloud project (§1), **APIs & Services → Library**, enable:
 
 - **Google Forms API**
 - **Google Drive API**
+- **Google Slides API** — *needed only for import; see the release note below*
 
 ### Scopes to request on the connect flow
 
-The connected-account consent must request these least-privilege scopes — they match what the imported Quiz Generator library uses (`src/lib/google-auth.ts` in that repo):
+The connected-account consent must request these least-privilege scopes:
 
-| Scope                                            | Why                                                                          |
-| ------------------------------------------------ | --------------------------------------------------------------------------- |
-| `https://www.googleapis.com/auth/forms.body`     | Create and edit the quiz form's questions, settings, and metadata           |
-| `https://www.googleapis.com/auth/forms.body.readonly` | Read a form back (download / update flows)                             |
-| `https://www.googleapis.com/auth/drive.file`     | Place the created form into a chosen Drive folder — per-file access, limited to files this app creates |
+| Scope | Why |
+| --- | --- |
+| `https://www.googleapis.com/auth/forms.body` | Create and edit the quiz form's questions, settings, and metadata |
+| `https://www.googleapis.com/auth/forms.body.readonly` | Read a form back (download / update flows) |
+| `https://www.googleapis.com/auth/drive.file` | Place the created form into a chosen Drive folder, and write exports — per-file access, limited to files this app creates |
+| `https://www.googleapis.com/auth/drive.readonly` | Browse and read files the app did **not** create — the import picker listing the instructor's own presentations |
+| `https://www.googleapis.com/auth/presentations.readonly` | Read a presentation's layouts, element geometry and theme to derive a template. Read-only: import never writes to the instructor's Slides — *see the release note below* |
 
-These are **separate from the Google sign-in scopes** (`openid`, `email`, `profile`) requested in [server/src/auth/google.ts](../server/src/auth/google.ts). Sign-in identifies the user; **connecting** a Google account for publishing is a second, broader consent (AUTH-1 vs EXP-4), and a user who signed in by email/GitHub can still connect Google here.
+The first four are requested today. `presentations.readonly` and the Slides API arrive with Google Slides import; granting them before that ships is harmless but does nothing.
+
+Note that **exporting** a template to Google Slides needs no Slides scope — the file is produced as a `.pptx` and converted by Drive, which `drive.file` already covers. Only reading someone's existing presentation needs the new scope.
+
+These are all **separate from the Google sign-in scopes** (`openid`, `email`, `profile`) requested in [server/src/auth/google.ts](../server/src/auth/google.ts). Sign-in identifies the user; **connecting** a Google account is a second, broader consent (AUTH-1 vs EXP-4), and a user who signed in by email/GitHub can still connect Google here.
+
+### Adding a scope forces a one-time reconnect
+
+A stored refresh token carries **only the scopes granted when it was issued**. Adding a scope therefore does nothing for accounts that connected earlier — they keep working for whatever they were already authorized to do, and the new feature fails for them until they reconnect.
+
+This is handled, not left to chance:
+
+- The consent URL sends `include_granted_scopes=true`, so reconnecting is **additive** — an instructor never loses a grant by re-consenting.
+- The server checks the stored grant before attempting a scoped call, and the UI **prompts the instructor to reconnect** rather than failing with an opaque error.
+
+Expect this whenever a scope is added, not just this once. If you are rolling out to an existing cohort, tell them to expect a single reconnect prompt.
 
 ### Offline access (refresh token)
 
@@ -252,7 +285,13 @@ Paste the output into `CONNECTED_ACCOUNT_TOKEN_ENC_KEY` in `server/.env`. **Keep
 
 ### OAuth consent screen
 
-`drive.file` and `forms.body` are **sensitive scopes**. While the OAuth consent screen is in **Testing**, add each pilot instructor as a **test user**; a published *external* consent screen using these scopes can require Google verification. For a single-institution pilot, scoping the OAuth client to the **NYU Workspace** organization and keeping instructors as known users avoids the public-verification path.
+`drive.file`, `drive.readonly`, `forms.body` and `presentations.readonly` are **sensitive scopes**. While the OAuth consent screen is in **Testing**, add each pilot instructor as a **test user**; a published *external* consent screen using these scopes can require Google verification. For a single-institution pilot, scoping the OAuth client to the **NYU Workspace** organization and keeping instructors as known users avoids the public-verification path.
+
+**Add sensitive scopes before publishing, not after.** Adding one to an already-published external consent screen re-triggers Google's verification review, which can take weeks and blocks the feature meanwhile. A Workspace-internal client is exempt, which is another reason to prefer it for the pilot.
+
+### Quotas
+
+Slides and Drive reads are quota'd per Cloud project, not per user. One template or lecture import is a single presentation read plus one fetch per image it copies, so the default quotas are ample — a cohort importing on the same afternoon is nowhere near them. Worth knowing before diagnosing a failed import as a quota problem: it almost certainly isn't.
 
 ## 7. Share the project with coworkers
 
