@@ -19,6 +19,11 @@
  * (BILL-3); the subscription row is the billing record behind it. Keeping the
  * two in one function is deliberate — a tier that disagrees with what the user
  * is paying for is either free service or a false refusal.
+ *
+ * One thing can raise entitlement above `planTier` without a payment: an
+ * admin's complimentary plan grant (ADMIN-9). It is stored in a separate field
+ * precisely so nothing here has to know about it — this module keeps writing
+ * what the provider says, and plan-grant.ts combines the two.
  */
 import type {
   BillingEvent,
@@ -33,6 +38,11 @@ import { Types } from 'mongoose'
 import { loadPlans } from '../config/plans'
 import { SubscriptionModel } from '../models/subscription'
 import { UserModel } from '../models/user'
+import {
+  effectivePlanTier,
+  planGrantView,
+  type PlanBearing,
+} from './plan-grant'
 
 /** Why an event was not applied, for the caller to log. Never an error: an
  * event we decline to act on is a success from the provider's point of view,
@@ -248,17 +258,23 @@ export const purchasableTiers = (): PlanTier[] => {
 
 /**
  * The account's billing state for the Plan view (BILL-2). The tier comes from
- * the user rather than the subscription because the user is what the caps are
- * read from: if the two ever disagree, the page must show what the account
- * will actually be allowed to do.
+ * the account rather than the subscription because the account is what the
+ * caps are read from: if the two ever disagree, the page must show what the
+ * account will actually be allowed to do — including a complimentary grant
+ * (ADMIN-9), which is entitlement without a subscription behind it.
+ *
+ * The subscription fields are unaffected by a grant. A comped account with no
+ * subscription still reads `status: null` and no renewal date, because it has
+ * a plan and no bill; what it may spend, and until when, is `planGrant`.
  */
 export const billingSummary = async (
   userId: string,
-  tier: PlanTier,
+  user: PlanBearing,
 ): Promise<BillingSummary> => {
   const sub = await SubscriptionModel.findOne({ userId })
   return {
-    tier,
+    tier: effectivePlanTier(user),
+    planGrant: planGrantView(user),
     status: sub?.status ?? null,
     currentPeriodEnd: sub?.currentPeriodEnd?.toISOString() ?? null,
     cancelAtPeriodEnd: sub?.cancelAtPeriodEnd ?? false,

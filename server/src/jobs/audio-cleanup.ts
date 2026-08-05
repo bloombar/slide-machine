@@ -35,6 +35,7 @@ import { DeckModel } from '../models/deck'
 import { UserModel } from '../models/user'
 import { loadPlans } from '../config/plans'
 import { adjustGauge, BYTES_PER_MB } from '../billing/usage'
+import { effectivePlanTier, PLAN_FIELDS } from '../billing/plan-grant'
 import { pcmBytesFor } from '../lib/wav'
 import { getStorage } from '../storage'
 
@@ -98,9 +99,15 @@ export const sweepExpiredRecordings = async (
   // once per lecture they own.
   const ownerIds = [...new Set(decks.map(d => d.ownerId.toString()))]
   const owners = await UserModel.find({ _id: { $in: ownerIds } }).select(
-    'planTier',
+    PLAN_FIELDS,
   )
-  const tierOf = new Map(owners.map(u => [u._id.toString(), u.planTier]))
+  // The effective tier, so a comped instructor's recordings are kept for the
+  // window they were promised (ADMIN-9) rather than their own plan's. When the
+  // grant lapses the window shortens again, and the next sweep collects what
+  // has aged past it.
+  const tierOf = new Map(
+    owners.map(u => [u._id.toString(), effectivePlanTier(u)]),
+  )
 
   let removed = 0
   for (const deck of decks) {
