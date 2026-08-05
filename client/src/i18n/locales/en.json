@@ -227,7 +227,24 @@
     "arrangeHint": "Place the slots yourself instead of using the built-in arrangement.",
     "arrangeDragHint": "Drag a box to move it, or its corner to resize. Arrows nudge, shift and arrows resize.",
     "arrangeReset": "Use the built-in arrangement",
-    "boxAt": "{slot}: {x}% from the left, {y}% down, {w}% wide, {h}% tall"
+    "boxAt": "{slot}: {x}% from the left, {y}% down, {w}% wide, {h}% tall",
+    "slotsLabel": "What goes on this slide",
+    "slotsHint": "Add a box for each thing the slide holds — a heading, a paragraph, or a picture. A slide can have several pictures.",
+    "slotLabel": "What it is called",
+    "slotKind": "What goes in it",
+    "slotKinds": {
+      "text": "Text",
+      "bullets": "Bullet points",
+      "image": "Picture"
+    },
+    "addSlot": "Add a box",
+    "addSlotName": "Name this box",
+    "removeSlot": "Remove the {name} box",
+    "boxCount": "{count, plural, one {# box} other {# boxes}}",
+    "newLayout": "Or make a layout of your own",
+    "newLayoutName": "Name this layout",
+    "newLayoutAdd": "Add layout",
+    "newLayoutPurpose": "When to use it"
   },
   "layout": {
     "change": "Change slide layout",

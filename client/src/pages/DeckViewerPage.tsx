@@ -1429,18 +1429,24 @@ export default function DeckViewerPage() {
   }
 
   /** Uploads a file to replace (or set) a slide's image (EDIT-1). */
-  const replaceSlideImage = (slideId: string) => (file: File) => {
-    setImageError(null)
-    uploadSlideImage(slideId, file)
-      .then(applySlide)
-      .catch(() => setImageError('Could not upload the image — try again'))
-  }
+  const replaceSlideImage =
+    (slideId: string) => (file: File, slot?: string) => {
+      setImageError(null)
+      uploadSlideImage(slideId, file, slot)
+        .then(applySlide)
+        .catch(() => setImageError('Could not upload the image — try again'))
+    }
 
   /** Applies a chosen web-search image to a slide (EDIT-1). */
   const pickSlideImageCandidate =
-    (slideId: string) => (candidate: ImageSearchCandidate) => {
+    (slideId: string) => (candidate: ImageSearchCandidate, slot?: string) => {
       setImageError(null)
-      applySlideImageFromSource(slideId, candidate.url, candidate.attribution)
+      applySlideImageFromSource(
+        slideId,
+        candidate.url,
+        candidate.attribution,
+        slot,
+      )
         .then(applySlide)
         .catch(() => setImageError('Could not set that image — try again'))
     }
@@ -1451,14 +1457,18 @@ export default function DeckViewerPage() {
    * layout is deliberately NOT switched and the slide is never deleted — even
    * an image-only layout just shows its empty image slot.
    */
-  const removeSlideImage = (target: Slide) => () => {
-    dispatchAction<Slide>('slide.editContent', {
-      slideId: target.id,
-      imageRef: '',
-    })
-      .then(applySlide)
-      .catch(() => setImageError('Could not remove the image — try again'))
-  }
+  const removeSlideImage =
+    (target: Slide) =>
+    (slot = 'image') => {
+      dispatchAction<Slide>('slide.editContent', {
+        slideId: target.id,
+        // Every picture lives in a slot of its own, so emptying one addresses
+        // it by name — a layout may hold several (TMPL-9).
+        slots: { [slot]: { kind: 'image', ref: '' } },
+      })
+        .then(applySlide)
+        .catch(() => setImageError('Could not remove the image — try again'))
+    }
 
   /** Renames the lecture through the action layer (owner only). */
   const renameDeck = (title: string) => {

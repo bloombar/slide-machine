@@ -245,7 +245,7 @@ describe('arrangement (TMPL-4 positioning)', () => {
             elementPositions: Object.fromEntries(
               l.slots.map((s, i) => [
                 s.name,
-                { x: 10, y: 10 + i * 30, w: 80, h: 25 },
+                { x: 0.1, y: 0.1 + i * 0.3, w: 0.8, h: 0.25 },
               ]),
             ),
           }
@@ -265,10 +265,10 @@ describe('arrangement (TMPL-4 positioning)', () => {
       (l: { type: string }) => l.type === 'content',
     )
     expect(content.elementPositions.title).toEqual({
-      x: 10,
-      y: 10,
-      w: 80,
-      h: 25,
+      x: 0.1,
+      y: 0.1,
+      w: 0.8,
+      h: 0.25,
     })
   })
 
@@ -276,7 +276,10 @@ describe('arrangement (TMPL-4 positioning)', () => {
     const template = await own()
     const layouts = template.layouts.map((l: { type: string }) =>
       l.type === 'content'
-        ? { ...l, elementPositions: { title: { x: 60, y: 10, w: 80, h: 20 } } }
+        ? {
+            ...l,
+            elementPositions: { title: { x: 0.6, y: 0.1, w: 0.8, h: 0.2 } },
+          }
         : l,
     )
     const res = await act(ada, 'template.update', {
@@ -292,7 +295,10 @@ describe('arrangement (TMPL-4 positioning)', () => {
     const template = await own()
     const layouts = template.layouts.map((l: { type: string }) =>
       l.type === 'content'
-        ? { ...l, elementPositions: { nope: { x: 0, y: 0, w: 10, h: 10 } } }
+        ? {
+            ...l,
+            elementPositions: { nope: { x: 0, y: 0, w: 0.1, h: 0.1 } },
+          }
         : l,
     )
     const res = await act(ada, 'template.update', {
@@ -302,6 +308,155 @@ describe('arrangement (TMPL-4 positioning)', () => {
       layouts,
     })
     expect(res.status).toBe(400)
+  })
+
+  it('saves how a box is styled, not only where it sits', async () => {
+    const template = await own()
+    const layouts = template.layouts.map((l: { type: string }) =>
+      l.type === 'content'
+        ? {
+            ...l,
+            elementPositions: {
+              title: {
+                x: 0,
+                y: 0,
+                w: 1,
+                h: 0.3,
+                align: 'center',
+                vAlign: 'end',
+                fontSize: 8,
+                fontWeight: 700,
+                color: 'accent',
+              },
+            },
+          }
+        : l,
+    )
+    const res = await act(ada, 'template.update', {
+      templateId: template.id,
+      name: template.name,
+      theme: template.theme,
+      layouts,
+    })
+    expect(res.status).toBe(200)
+    const content = res.body.layouts.find(
+      (l: { type: string }) => l.type === 'content',
+    )
+    expect(content.elementPositions.title).toMatchObject({
+      align: 'center',
+      vAlign: 'end',
+      fontSize: 8,
+      fontWeight: 700,
+      color: 'accent',
+    })
+  })
+
+  it('refuses a box measured in percent rather than fractions', async () => {
+    const template = await own()
+    const layouts = template.layouts.map((l: { type: string }) =>
+      l.type === 'content'
+        ? {
+            ...l,
+            elementPositions: { title: { x: 10, y: 10, w: 80, h: 25 } },
+          }
+        : l,
+    )
+    const res = await act(ada, 'template.update', {
+      templateId: template.id,
+      name: template.name,
+      theme: template.theme,
+      layouts,
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('remembers which renderer the template asked for', async () => {
+    const template = await own()
+    const saved = await act(ada, 'template.update', {
+      templateId: template.id,
+      name: template.name,
+      renderMode: 'positioned',
+      theme: template.theme,
+      layouts: arrange(template),
+    })
+    expect(saved.body.renderMode).toBe('positioned')
+    // and a copy of it starts out drawing the same way
+    const copy = await act(ada, 'template.duplicate', {
+      templateId: template.id,
+    })
+    expect(copy.body.renderMode).toBe('positioned')
+  })
+
+  it('takes a layout the author gave four pictures (TMPL-4)', async () => {
+    const template = await own()
+    const photos = [1, 2, 3, 4].map(n => ({
+      name: `photo-${n}`,
+      kind: 'image' as const,
+      label: `Photo ${n}`,
+    }))
+    const layouts = template.layouts.map((l: { type: string }) =>
+      l.type === 'content'
+        ? {
+            ...l,
+            slots: photos,
+            elementPositions: Object.fromEntries(
+              photos.map((p, i) => [
+                p.name,
+                {
+                  x: i % 2 === 0 ? 0.04 : 0.52,
+                  y: i < 2 ? 0.04 : 0.52,
+                  w: 0.44,
+                  h: 0.44,
+                },
+              ]),
+            ),
+          }
+        : l,
+    )
+    const res = await act(ada, 'template.update', {
+      templateId: template.id,
+      name: template.name,
+      renderMode: 'positioned',
+      theme: template.theme,
+      layouts,
+    })
+    expect(res.status).toBe(200)
+    const content = res.body.layouts.find(
+      (l: { type: string }) => l.type === 'content',
+    )
+    expect(content.slots).toHaveLength(4)
+    expect(
+      content.slots.every((s: { kind: string }) => s.kind === 'image'),
+    ).toBe(true)
+    expect(Object.keys(content.elementPositions)).toHaveLength(4)
+  })
+
+  it('rescales a template saved when boxes were percentages', async () => {
+    const template = await own()
+    // Write percentages straight to the document, the way the editor did
+    // before boxes became fractions
+    const doc = await TemplateModel.findById(template.id)
+    doc!.layouts = doc!.layouts.map(l =>
+      l.type === 'content'
+        ? { ...l, elementPositions: { title: { x: 6, y: 6, w: 88, h: 42.5 } } }
+        : l,
+    )
+    doc!.markModified('layouts')
+    await doc!.save()
+
+    const res = await act(ada, 'template.list', {})
+    const reloaded = res.body.find((x: { id: string }) => x.id === template.id)
+    const content = reloaded.layouts.find(
+      (l: { type: string }) => l.type === 'content',
+    )
+    // Read back as fractions, so it is drawn on the slide rather than
+    // eighty-eight slides to the right
+    expect(content.elementPositions.title).toEqual({
+      x: 0.06,
+      y: 0.06,
+      w: 0.88,
+      h: 0.425,
+    })
   })
 
   it('reaches the viewer, so a lecture is drawn from the arrangement', async () => {
@@ -323,6 +478,102 @@ describe('arrangement (TMPL-4 positioning)', () => {
       (l: { type: string }) => l.type === 'content',
     )
     expect(Object.keys(content.elementPositions).length).toBeGreaterThan(0)
+  })
+})
+
+describe('layouts an author named themselves (TMPL-9)', () => {
+  const own = async () =>
+    (await act(ada, 'template.duplicate', { templateId: builtinId() })).body
+
+  const withLayout = (
+    template: { layouts: unknown[] },
+    layout: Record<string, unknown>,
+  ) => [...template.layouts, layout]
+
+  it('saves a layout type that is not one of the conventional names', async () => {
+    const template = await own()
+    const res = await act(ada, 'template.update', {
+      templateId: template.id,
+      name: template.name,
+      theme: template.theme,
+      layouts: withLayout(template, {
+        type: 'lab-safety',
+        label: 'Lab safety',
+        purpose: 'The rules to read out before an experiment',
+        slots: [{ name: 'title', kind: 'text', label: 'Slide title' }],
+        elementPositions: {},
+      }),
+    })
+    expect(res.status).toBe(200)
+    expect(
+      res.body.layouts.some((l: { type: string }) => l.type === 'lab-safety'),
+    ).toBe(true)
+  })
+
+  it('a slide can be put on it, and stays there', async () => {
+    const template = await own()
+    await act(ada, 'template.update', {
+      templateId: template.id,
+      name: template.name,
+      theme: template.theme,
+      layouts: withLayout(template, {
+        type: 'lab-safety',
+        label: 'Lab safety',
+        purpose: 'The rules to read out before an experiment',
+        slots: [{ name: 'title', kind: 'text', label: 'Slide title' }],
+        elementPositions: {},
+      }),
+    })
+    const project = await act(ada, 'project.create', { title: 'Chemistry' })
+    await act(ada, 'project.switchTemplate', {
+      projectId: project.body.id,
+      templateId: template.id,
+    })
+    const deck = await act(ada, 'deck.create', { projectId: project.body.id })
+    const slide = await act(ada, 'slide.add', {
+      deckId: deck.body.id,
+      layoutType: 'lab-safety',
+    })
+    expect(slide.status).toBe(200)
+    expect(slide.body.layoutType).toBe('lab-safety')
+
+    const reloaded = await act(ada, 'slide.get', { slideId: slide.body.id })
+    expect(reloaded.body.layoutType).toBe('lab-safety')
+  })
+
+  it('refuses a name that would not work as a key', async () => {
+    const template = await own()
+    const res = await act(ada, 'template.update', {
+      templateId: template.id,
+      name: template.name,
+      theme: template.theme,
+      layouts: withLayout(template, {
+        type: 'Lab Safety!',
+        label: 'Lab safety',
+        purpose: 'The rules',
+        slots: [{ name: 'title', kind: 'text', label: 'Slide title' }],
+        elementPositions: {},
+      }),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('refuses two layouts sharing one type', async () => {
+    const template = await own()
+    const res = await act(ada, 'template.update', {
+      templateId: template.id,
+      name: template.name,
+      theme: template.theme,
+      layouts: withLayout(template, {
+        // 'content' is already in the duplicated template
+        type: 'content',
+        label: 'Content again',
+        purpose: 'A second content layout',
+        slots: [{ name: 'title', kind: 'text', label: 'Slide title' }],
+        elementPositions: {},
+      }),
+    })
+    expect(res.status).toBe(400)
   })
 })
 

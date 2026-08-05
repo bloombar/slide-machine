@@ -10,7 +10,7 @@ import path from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
 import { createElement } from 'react'
-import type { LayoutSlot, Slide } from '@slide-machine/shared'
+import type { Slide } from '@slide-machine/shared'
 import { getLayoutRenderer } from './index'
 import type { ThemeColors } from '../theme'
 
@@ -33,6 +33,7 @@ const fullSlide: Slide = {
   deckId: 'd1',
   index: 0,
   layoutType: 'content',
+  slots: {},
   title: 'Title',
   body: 'Body',
   bullets: ['one', 'two'],
@@ -61,7 +62,7 @@ describe('layout renderers match the template files', () => {
     for (const layout of template.layouts) {
       it(`${template.id}/${layout.type}: renderer uses exactly the declared slots`, () => {
         const requested = new Set<string>()
-        const spy = (name: LayoutSlot) => {
+        const spy = (name: string) => {
           requested.add(name)
           return null
         }

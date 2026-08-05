@@ -81,6 +81,22 @@ for the visual editor. Conventional slot names (`title`, `body`, `bullets`, `ima
 `caption`) may be written as bare-string shorthand and expand from the shared defaults;
 slots the author names must declare their `kind`.
 
+### Where a slot's content lives
+
+The conventional slots have fields of their own on a slide (`title`, `body`, `bullets`,
+`imageRef`, `caption`). A slot the author named has no such field, so its content is stored
+under its `name` in `slide.slotContent`:
+
+```json
+{ "slotContent": { "photo-2": { "imageRef": "https://…/b.png", "imageSource": "seeded" },
+                   "note": { "text": "Read chapter 4" } } }
+```
+
+Edits address it the same way — `slide.editContent` takes a `slots` map and merges one slot
+at a time, so filling one box never clears another — and an image upload names its box
+(`POST /api/slides/:id/image` with a `slot` field). This is what lets one layout hold four
+pictures: four image slots, four names, four boxes.
+
 ### Content kinds
 
 `kind` selects the client editor and the export renderer. Unlike slot names and layout types,

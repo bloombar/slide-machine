@@ -41,26 +41,43 @@ export default function TemplatePreview({
   const { t } = useTranslation()
   const layout = previewLayout(template)
 
-  // Only the slots this layout declares are filled: a preview showing content
-  // in a slot the layout has no room for would misrepresent it.
+  // Every slot the layout declares is filled, and nothing else: a preview
+  // showing content in a slot the layout has no room for would misrepresent
+  // it. A slot the author named gets its own label as sample text, so a
+  // custom layout previews as itself rather than as a blank.
   const slide = useMemo<Slide | undefined>(() => {
     if (!layout) return undefined
-    const has = (name: string) => layout.slots.some(s => s.name === name)
+    const sample: Record<string, string> = {
+      title: t('template.preview.title'),
+      body: t('template.preview.body'),
+      caption: t('template.preview.caption'),
+    }
+    const slots: Slide['slots'] = {}
+    for (const spec of layout.slots) {
+      if (spec.kind === 'bullets') {
+        slots[spec.name] = {
+          kind: 'bullets',
+          items: [
+            t('template.preview.bullet1'),
+            t('template.preview.bullet2'),
+            t('template.preview.bullet3'),
+          ],
+        }
+      } else if (spec.kind === 'text') {
+        slots[spec.name] = {
+          kind: 'text',
+          value: sample[spec.name] ?? spec.label,
+        }
+      }
+      // Image slots stay empty: the renderer's quiet reserved block is what
+      // a picture-shaped hole looks like, and a preview must not fetch one.
+    }
     return {
       id: `preview-${template.id}`,
       deckId: 'preview',
       index: 0,
       layoutType: layout.type,
-      title: has('title') ? t('template.preview.title') : undefined,
-      body: has('body') ? t('template.preview.body') : undefined,
-      bullets: has('bullets')
-        ? [
-            t('template.preview.bullet1'),
-            t('template.preview.bullet2'),
-            t('template.preview.bullet3'),
-          ]
-        : undefined,
-      caption: has('caption') ? t('template.preview.caption') : undefined,
+      slots,
     }
   }, [layout, template.id, t])
 

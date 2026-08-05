@@ -3,7 +3,7 @@
  * (SPEC GEN-1/GEN-6/GEN-7/GEN-8 / TECH-8). Gemini is the pilot adapter.
  * Interface is minimal and expected to evolve with the first adapter.
  */
-import type { LayoutDescriptor, LayoutType } from '../types/template'
+import type { LayoutDescriptor } from '../types/template'
 import type {
   VoiceCommand,
   VoiceCommandDescriptor,
@@ -34,7 +34,7 @@ export interface SlideGenerationRequest {
     /** A title slide already opened the deck. */
     hasTitleSlide: boolean
     /** The heading (title/section) slides so far, in order. */
-    outline: { position: number; layoutType: LayoutType; title: string }[]
+    outline: { position: number; layoutType: string; title: string }[]
   }
   /** Seed context layers (typed notes, imported docs, honed concepts).
    * Deck-level notes are more specific and outrank project-level ones. */
@@ -58,7 +58,7 @@ export interface SlideGenerationRequest {
   /** Snapshot of the current (last) slide so the model can judge
    * whether an update still fits or a new slide is due (GEN-8). */
   currentSlide?: {
-    layoutType: LayoutType
+    layoutType: string
     bulletCount: number
     bodyChars: number
     /** The slide's exact slot content — present when layout re-fit is
@@ -119,7 +119,7 @@ export interface SlideGenerationResult {
    * changes nothing (GEN-8) — or, when voice commands were offered, is
    * an operational command addressed to the slide system. */
   action: 'new' | 'update' | 'none' | 'command'
-  layoutType: LayoutType
+  layoutType: string
   /** Content mapped to the chosen layout's slots. */
   slots: {
     title?: string
@@ -154,7 +154,7 @@ export interface ReformatTurn {
 export interface SlideReformatRequest {
   /** The slide's current content, to revise in place. */
   current: {
-    layoutType: LayoutType
+    layoutType: string
     title?: string
     body?: string
     bullets?: string[]
@@ -173,7 +173,7 @@ export interface SlideReformatRequest {
 
 /** Revised slide content from a reformat. */
 export interface SlideReformatResult {
-  layoutType: LayoutType
+  layoutType: string
   slots: {
     title?: string
     body?: string
@@ -185,7 +185,7 @@ export interface SlideReformatResult {
 
 /** The slide content the refine/narrate passes operate on. */
 export interface SlideContent {
-  layoutType: LayoutType
+  layoutType: string
   title?: string
   body?: string
   bullets?: string[]
@@ -215,7 +215,7 @@ export interface SlideRefineRequest {
 }
 
 export interface SlideRefineResult {
-  layoutType: LayoutType
+  layoutType: string
   slots: {
     title?: string
     body?: string

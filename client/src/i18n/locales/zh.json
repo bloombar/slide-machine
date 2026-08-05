@@ -227,7 +227,24 @@
     "arrangeHint": "自己摆放各个区域，而不使用内置排布。",
     "arrangeDragHint": "拖动方块可移动，拖动右下角可调整大小。方向键移动，Shift 加方向键调整大小。",
     "arrangeReset": "使用内置排布",
-    "boxAt": "{slot}：距左 {x}%，距顶 {y}%，宽 {w}%，高 {h}%"
+    "boxAt": "{slot}：距左 {x}%，距顶 {y}%，宽 {w}%，高 {h}%",
+    "slotsLabel": "这张幻灯片上有什么",
+    "slotsHint": "为幻灯片上的每项内容添加一个框——标题、段落或图片。一张幻灯片可以有多张图片。",
+    "slotLabel": "名称",
+    "slotKind": "内容类型",
+    "slotKinds": {
+      "text": "文字",
+      "bullets": "要点",
+      "image": "图片"
+    },
+    "addSlot": "添加一个框",
+    "addSlotName": "为这个框命名",
+    "removeSlot": "移除“{name}”框",
+    "boxCount": "{count, plural, other {# 个框}}",
+    "newLayout": "或者自己创建一种版式",
+    "newLayoutName": "为这个版式命名",
+    "newLayoutAdd": "添加版式",
+    "newLayoutPurpose": "何时使用"
   },
   "layout": {
     "change": "更改幻灯片版式",

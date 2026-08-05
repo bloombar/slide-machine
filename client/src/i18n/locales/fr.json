@@ -227,7 +227,24 @@
     "arrangeHint": "Placez les zones vous-même au lieu d’utiliser la disposition intégrée.",
     "arrangeDragHint": "Faites glisser une zone pour la déplacer, ou son coin pour la redimensionner. Les flèches la déplacent, Maj + flèches la redimensionnent.",
     "arrangeReset": "Utiliser la disposition intégrée",
-    "boxAt": "{slot} : {x}% depuis la gauche, {y}% depuis le haut, {w}% de large, {h}% de haut"
+    "boxAt": "{slot} : {x}% depuis la gauche, {y}% depuis le haut, {w}% de large, {h}% de haut",
+    "slotsLabel": "Ce que contient cette diapositive",
+    "slotsHint": "Ajoutez un cadre pour chaque élément de la diapositive : un titre, un paragraphe ou une image. Une diapositive peut contenir plusieurs images.",
+    "slotLabel": "Son nom",
+    "slotKind": "Son contenu",
+    "slotKinds": {
+      "text": "Texte",
+      "bullets": "Puces",
+      "image": "Image"
+    },
+    "addSlot": "Ajouter un cadre",
+    "addSlotName": "Nommez ce cadre",
+    "removeSlot": "Supprimer le cadre {name}",
+    "boxCount": "{count, plural, one {# cadre} other {# cadres}}",
+    "newLayout": "Ou créez une mise en page à vous",
+    "newLayoutName": "Nommez cette mise en page",
+    "newLayoutAdd": "Ajouter la mise en page",
+    "newLayoutPurpose": "Quand l’utiliser"
   },
   "layout": {
     "change": "Changer la mise en page",

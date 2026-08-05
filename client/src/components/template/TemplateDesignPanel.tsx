@@ -8,7 +8,11 @@
  */
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { Layout, Template } from '@slide-machine/shared'
+import type {
+  Layout,
+  Template,
+  TemplateRenderMode,
+} from '@slide-machine/shared'
 import { dispatchAction } from '../../api/actions'
 import { useAuth } from '../../auth/AuthContext'
 import { templateName } from '../../i18n/templateName'
@@ -54,6 +58,7 @@ export default function TemplateDesignPanel({
 
   const save = (draft: {
     name: string
+    renderMode: TemplateRenderMode
     theme: Record<string, unknown>
     layouts: Layout[]
     visibility: Template['visibility']

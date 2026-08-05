@@ -7,18 +7,53 @@
  * as *data* — a box per slot — and this component turns that data into DOM.
  * One renderer, any arrangement.
  *
- * It runs only for layouts that actually carry positions; the built-ins have
- * none and keep their hand-tuned components, so the two coexist and a layout
- * can move to data on its own (docs/TEMPLATES.md).
+ * It runs for templates that declare `renderMode: 'positioned'`; the built-ins
+ * declare nothing and keep their hand-tuned components, so the two coexist
+ * (docs/TEMPLATES.md §4).
  *
- * Boxes are percentages, so an arrangement holds at any size — a thumbnail in
- * the library and the full-bleed viewer are the same layout scaled.
+ * Boxes are normalized 0–1, so an arrangement holds at any size — a thumbnail
+ * in the library and the full-bleed viewer are the same layout scaled.
  */
-import type { LayoutSlot } from '@slide-machine/shared'
+import type { LayoutSlot, SlotBox } from '@slide-machine/shared'
+import type { ThemeColors } from '../theme'
 import type { LayoutProps } from './types'
+
+/** A box's colour is either a theme key, so a template's palette stays the
+ * single source of truth, or a literal the author chose. */
+const resolveColor = (
+  color: string | undefined,
+  colors: ThemeColors,
+): string | undefined => {
+  if (!color) return undefined
+  return color in colors ? colors[color as keyof ThemeColors] : color
+}
+
+/** Flex alignment for a box's own content. */
+const FLEX: Record<string, string> = {
+  start: 'flex-start',
+  center: 'center',
+  end: 'flex-end',
+}
+
+const boxStyle = (box: SlotBox, colors: ThemeColors): React.CSSProperties => ({
+  left: `${box.x * 100}%`,
+  top: `${box.y * 100}%`,
+  width: `${box.w * 100}%`,
+  height: `${box.h * 100}%`,
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: FLEX[box.vAlign ?? 'start'],
+  alignItems: FLEX[box.align ?? 'start'],
+  // cqi so type scales with the slide, exactly as the hand-tuned components do
+  fontSize: box.fontSize ? `${box.fontSize}cqi` : undefined,
+  fontWeight: box.fontWeight,
+  color: resolveColor(box.color, colors),
+  textAlign: box.align === 'center' ? 'center' : undefined,
+})
 
 export default function PositionedLayout({
   layout,
+  colors,
   editable,
   slot,
 }: LayoutProps) {
@@ -35,12 +70,7 @@ export default function PositionedLayout({
           <div
             key={spec.name}
             className="absolute overflow-hidden"
-            style={{
-              left: `${box.x}%`,
-              top: `${box.y}%`,
-              width: `${box.w}%`,
-              height: `${box.h}%`,
-            }}
+            style={boxStyle(box, colors)}
           >
             {slot(spec.name as LayoutSlot)}
           </div>

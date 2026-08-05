@@ -14,7 +14,6 @@ import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { z } from 'zod'
 import {
-  LAYOUT_TYPES,
   SLOT_DESCRIPTORS,
   WHITEBOARD_LAYOUT_TYPE,
   type Layout,
@@ -70,9 +69,24 @@ export const normalizeSlot = (
   }
 }
 
+/**
+ * A layout type is a NAME, not a menu choice (TMPL-9): the conventional types
+ * (TMPL-2) are the vocabulary to reuse where one fits, and an author may name
+ * a layout of their own where none does. Shaped like a slug so it stays usable
+ * as a key — in a slide's `layoutType`, in exports, and in the AI's option set.
+ */
+const layoutTypeSchema = z
+  .string()
+  .min(1)
+  .max(40)
+  .regex(
+    /^[a-z0-9]+(-[a-z0-9]+)*$/,
+    'layout type must be lowercase words joined by hyphens',
+  )
+
 export const layoutSchema = z
   .object({
-    type: z.enum(LAYOUT_TYPES),
+    type: layoutTypeSchema,
     label: z.string().min(1),
     purpose: z.string().min(1),
     // The whiteboard layout is a blank slate with no content slots; every
@@ -88,18 +102,26 @@ export const layoutSchema = z
         imageRequired: z.boolean().optional(),
       })
       .optional(),
-    // Where each slot sits, as percentages of the slide (TMPL-4). Validated
-    // here rather than trusted from the editor: a box outside the slide, or
-    // one naming a slot the layout does not have, would render a slide with
-    // content nobody can see.
+    // Where each slot sits, as a fraction of the slide, 0–1 (TMPL-4, see
+    // docs/TEMPLATES.md §4). Validated here rather than trusted from the
+    // editor: a box outside the slide, or one naming a slot the layout does
+    // not have, would render a slide with content nobody can see.
     elementPositions: z
       .record(
         z.string(),
         z.object({
-          x: z.number().min(0).max(100),
-          y: z.number().min(0).max(100),
-          w: z.number().min(1).max(100),
-          h: z.number().min(1).max(100),
+          x: z.number().min(0).max(1),
+          y: z.number().min(0).max(1),
+          w: z.number().min(0.01).max(1),
+          h: z.number().min(0.01).max(1),
+          align: z.enum(['start', 'center', 'end']).optional(),
+          vAlign: z.enum(['start', 'center', 'end']).optional(),
+          /** Font size in `cqi` — a percent of the slide's width, so type
+           * scales with the slide rather than the window. */
+          fontSize: z.number().positive().max(100).optional(),
+          fontWeight: z.number().int().min(100).max(900).optional(),
+          /** A hex value, or a theme key such as `accent`. */
+          color: z.string().min(1).max(40).optional(),
         }),
       )
       .default({}),
@@ -125,7 +147,7 @@ export const layoutSchema = z
         continue
       }
       // A box that starts inside but runs past the edge hides its own content.
-      if (box.x + box.w > 100 || box.y + box.h > 100) {
+      if (box.x + box.w > 1 || box.y + box.h > 1) {
         ctx.addIssue({
           code: 'custom',
           message: `slot "${name}" extends past the slide`,
@@ -139,6 +161,8 @@ const templateFileSchema = z
   .object({
     id: z.string().min(1),
     name: z.string().min(1),
+    /** Absent means `components`: the hand-tuned layout components. */
+    renderMode: z.enum(['components', 'positioned']).optional(),
     theme: z.record(z.string(), z.unknown()),
     layouts: z.array(layoutSchema).min(1),
   })
@@ -149,6 +173,46 @@ const templateFileSchema = z
   )
 
 let cache: Template[] | undefined
+
+/**
+ * Rescales a layout's boxes to the 0–1 they are stored in today.
+ *
+ * The first templates saved through the editor held percentages, and 88 read
+ * as 0–1 places a box eighty-eight slides to the right — off screen, so the
+ * layout looks empty. A box is percentages if any side exceeds 1, which a
+ * fraction never does (a full-width box is exactly 1).
+ */
+export const normalizePositions = <T extends { elementPositions?: unknown }>(
+  layouts: T[],
+): T[] =>
+  layouts.map(layout => {
+    const positions = layout.elementPositions as
+      Record<string, Record<string, unknown>> | undefined
+    if (!positions) return layout
+    let rescaled = false
+    const next = Object.fromEntries(
+      Object.entries(positions).map(([name, box]) => {
+        const sides = ['x', 'y', 'w', 'h'] as const
+        if (!sides.some(k => typeof box[k] === 'number' && box[k] > 1)) {
+          return [name, box]
+        }
+        rescaled = true
+        return [
+          name,
+          {
+            ...box,
+            ...Object.fromEntries(
+              sides.map(k => [
+                k,
+                typeof box[k] === 'number' ? (box[k] as number) / 100 : box[k],
+              ]),
+            ),
+          },
+        ]
+      }),
+    )
+    return rescaled ? { ...layout, elementPositions: next } : layout
+  })
 
 /**
  * The rule every template must satisfy, file-based or user-authored: a blank
@@ -166,6 +230,19 @@ export const requireWhiteboardLayout = (
       message: `template must include a '${WHITEBOARD_LAYOUT_TYPE}' layout`,
       path: ['layouts'],
     })
+  }
+  // A slide stores its layout as a type, so two layouts sharing one would be
+  // indistinguishable to every slide that used it.
+  const seen = new Set<string>()
+  for (const layout of layouts) {
+    if (seen.has(layout.type)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `duplicate layout type '${layout.type}'`,
+        path: ['layouts'],
+      })
+    }
+    seen.add(layout.type)
   }
 }
 

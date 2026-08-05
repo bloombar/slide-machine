@@ -163,6 +163,20 @@ describe('TemplateEditor (TMPL-4)', () => {
     expect(saved.purpose).toBe('use for a single idea')
   })
 
+  it('declares how it wants to be drawn, based on what was arranged', () => {
+    const onSave = renderEditor()
+    // Nothing arranged: the hand-tuned components stay in charge
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(onSave.mock.calls[0]![0].renderMode).toBe('components')
+
+    // Arranging one layout is what asks for the engine
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Arrange this layout' })[0]!,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(onSave.mock.calls[1]![0].renderMode).toBe('positioned')
+  })
+
   it('removes a layout, but never the whiteboard (TMPL-7)', () => {
     const onSave = renderEditor()
     expect(screen.queryByLabelText(/Remove the Whiteboard layout/)).toBeNull()
@@ -170,6 +184,154 @@ describe('TemplateEditor (TMPL-4)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     const types = onSave.mock.calls[0]![0].layouts.map((l: Layout) => l.type)
     expect(types).toEqual(['whiteboard'])
+  })
+
+  it('adds a box for something the author wants on the slide', () => {
+    const onSave = renderEditor()
+    fireEvent.change(screen.getAllByLabelText('Name this box')[0]!, {
+      target: { value: 'Photo' },
+    })
+    fireEvent.change(screen.getAllByLabelText('What goes in it').at(-1)!, {
+      target: { value: 'image' },
+    })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add a box' })[0]!)
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    const content = onSave.mock.calls[0]![0].layouts.find(
+      (l: Layout) => l.type === 'content',
+    )
+    expect(content.slots.at(-1)).toMatchObject({
+      name: 'photo',
+      kind: 'image',
+      label: 'Photo',
+    })
+  })
+
+  it('takes four pictures on one slide (the professor’s case)', () => {
+    const onSave = renderEditor()
+    for (let i = 0; i < 4; i++) {
+      fireEvent.change(screen.getAllByLabelText('Name this box')[0]!, {
+        target: { value: 'Photo' },
+      })
+      fireEvent.change(screen.getAllByLabelText('What goes in it').at(-1)!, {
+        target: { value: 'image' },
+      })
+      fireEvent.click(screen.getAllByRole('button', { name: 'Add a box' })[0]!)
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    const content = onSave.mock.calls[0]![0].layouts.find(
+      (l: Layout) => l.type === 'content',
+    )
+    const images = content.slots.filter(
+      (s: { kind: string }) => s.kind === 'image',
+    )
+    expect(images).toHaveLength(4)
+    // Each keeps a name of its own, so four pictures are four pictures
+    expect(new Set(images.map((s: { name: string }) => s.name)).size).toBe(4)
+  })
+
+  it('removes a box, and the arrangement that placed it', () => {
+    const onSave = vi.fn()
+    const arranged = template({
+      id: 'mine-1',
+      ownerId: 'u1',
+      layouts: [
+        {
+          ...layout('content', 'Content', ['title', 'body']),
+          elementPositions: {
+            title: { x: 0, y: 0, w: 1, h: 0.3 },
+            body: { x: 0, y: 0.35, w: 1, h: 0.6 },
+          },
+        } as Layout,
+        layout('whiteboard', 'Whiteboard', []),
+      ],
+    })
+    render(
+      <MemoryRouter>
+        <TemplateEditor
+          template={arranged}
+          layoutSources={[template()]}
+          onSave={onSave}
+          onCancel={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Remove the body box' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    const content = onSave.mock.calls[0]![0].layouts.find(
+      (l: Layout) => l.type === 'content',
+    )
+    expect(content.slots.map((s: { name: string }) => s.name)).toEqual([
+      'title',
+    ])
+    // The box left behind would be drawn for a slot that no longer exists
+    expect(content.elementPositions).toEqual({
+      title: { x: 0, y: 0, w: 1, h: 0.3 },
+    })
+  })
+
+  it('places a box added to an already-arranged layout', () => {
+    const onSave = vi.fn()
+    const arranged = template({
+      id: 'mine-1',
+      ownerId: 'u1',
+      layouts: [
+        {
+          ...layout('content', 'Content', ['title']),
+          elementPositions: { title: { x: 0, y: 0, w: 1, h: 0.3 } },
+        } as Layout,
+        layout('whiteboard', 'Whiteboard', []),
+      ],
+    })
+    render(
+      <MemoryRouter>
+        <TemplateEditor
+          template={arranged}
+          layoutSources={[template()]}
+          onSave={onSave}
+          onCancel={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+    fireEvent.change(screen.getAllByLabelText('Name this box')[0]!, {
+      target: { value: 'Photo' },
+    })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add a box' })[0]!)
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    const content = onSave.mock.calls[0]![0].layouts.find(
+      (l: Layout) => l.type === 'content',
+    )
+    // Without a box of its own the new slot would save but never be drawn
+    expect(content.elementPositions.photo).toBeDefined()
+  })
+
+  it('makes a layout of the author’s own when none of the conventional ones fits (TMPL-9)', () => {
+    const onSave = renderEditor()
+    fireEvent.change(screen.getByLabelText('Name this layout'), {
+      target: { value: 'Lab safety' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add layout' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    const added = onSave.mock.calls[0]![0].layouts.find(
+      (l: Layout) => l.type === 'lab-safety',
+    )
+    expect(added.label).toBe('Lab safety')
+    // It starts with a box, since a layout holding nothing cannot be saved
+    expect(added.slots).toHaveLength(1)
+  })
+
+  it('keeps two layouts of the author’s own apart', () => {
+    const onSave = renderEditor()
+    for (let i = 0; i < 2; i++) {
+      fireEvent.change(screen.getByLabelText('Name this layout'), {
+        target: { value: 'Lab safety' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Add layout' }))
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    const types = onSave.mock.calls[0]![0].layouts.map((l: Layout) => l.type)
+    // A slide stores its layout as a type, so two cannot share one
+    expect(types).toContain('lab-safety')
+    expect(types).toContain('lab-safety-2')
   })
 
   it('adds a layout by copying its definition from another template', () => {

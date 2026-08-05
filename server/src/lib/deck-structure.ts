@@ -7,7 +7,6 @@
  */
 import type {
   LayoutDescriptor,
-  LayoutType,
   SlideGenerationRequest,
 } from '@slide-machine/shared'
 import { isHeaderLayout } from './layout-refit'
@@ -17,9 +16,7 @@ export type DeckStructure = NonNullable<SlideGenerationRequest['deckStructure']>
 /** The template's heading layout types (title/section) — those with no body,
  * bullets, or image slot. Derived from the descriptors so custom templates with
  * differently-named heading layouts work automatically. */
-export const headerLayoutTypes = (
-  descriptors: LayoutDescriptor[],
-): LayoutType[] =>
+export const headerLayoutTypes = (descriptors: LayoutDescriptor[]): string[] =>
   descriptors.filter(d => isHeaderLayout(d.type, descriptors)).map(d => d.type)
 
 /**
@@ -31,7 +28,7 @@ export const headerLayoutTypes = (
  * heading (position 0).
  */
 export const buildDeckStructure = (
-  headings: { id: string; layoutType: LayoutType; title?: string }[],
+  headings: { id: string; layoutType: string; title?: string }[],
   slideOrder: string[],
 ): DeckStructure => {
   const placed = headings

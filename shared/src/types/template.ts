@@ -4,10 +4,12 @@
  * selection (TMPL-6 / GEN-6).
  */
 
-/** Conventional layout types every template provides (TMPL-2). The
- * `whiteboard` layout is a required blank slate — no slots, never
- * auto-selected by generation — that the user draws on with the
- * whiteboard tools (WB-1). */
+/** The conventional layout types (TMPL-2): a preferred vocabulary every
+ * template covers, NOT a closed set — a template may name a layout of its own
+ * where none of these describes the design (TMPL-9). Shared names are what
+ * let layouts be compared and merged on import (TMPL-8). The `whiteboard`
+ * layout is a required blank slate — no slots, never auto-selected by
+ * generation — that the user draws on with the whiteboard tools (WB-1). */
 export const LAYOUT_TYPES = [
   'title',
   'section',
@@ -102,21 +104,35 @@ export interface SlotSpec {
 }
 
 /**
- * Where one slot sits on a layout, as percentages of the slide (TMPL-4).
+ * Where one slot sits on a layout, and how its content sits inside the box
+ * (TMPL-4).
  *
- * Percentages rather than pixels because a slide is rendered at whatever size
- * its container gives it — a thumbnail in the library, full-bleed in the
- * viewer — so an arrangement has to survive being scaled.
+ * Coordinates are **normalized 0–1 from the top-left** — the same vocabulary
+ * the export layout model already uses (server/src/lib/deck-layout.ts), so
+ * geometry means one thing across the app, the PDF and the Slides output. A
+ * fraction is resolution-independent: the thumbnail in the library and the
+ * full-bleed viewer are the same layout scaled.
  */
 export interface SlotBox {
-  /** Distance from the left edge, 0-100. */
+  /** Distance from the left edge, 0–1. */
   x: number
-  /** Distance from the top edge, 0-100. */
+  /** Distance from the top edge, 0–1. */
   y: number
-  /** Width, 1-100. */
+  /** Width, 0–1. */
   w: number
-  /** Height, 1-100. */
+  /** Height, 0–1. */
   h: number
+  /** Horizontal alignment of the content within the box. */
+  align?: 'start' | 'center' | 'end'
+  /** Vertical alignment of the content within the box. */
+  vAlign?: 'start' | 'center' | 'end'
+  /** Font size in `cqi` (percent of slide width), matching how the hand-tuned
+   * components size type so the two look alike at any scale. */
+  fontSize?: number
+  fontWeight?: number
+  /** A hex value, or a theme key (`accent`, `muted`, …) so a template's
+   * palette stays the single source of truth. */
+  color?: string
 }
 
 /**
@@ -132,7 +148,8 @@ export type ElementPositions = Record<string, SlotBox>
  * form the machine-readable descriptor serialized into generation requests.
  */
 export interface Layout {
-  type: LayoutType
+  /** A conventional type (TMPL-2), or a name the author chose (TMPL-9). */
+  type: string
   label: string
   purpose: string
   slots: SlotSpec[]
@@ -148,10 +165,22 @@ export type LayoutDescriptor = Pick<
   'type' | 'label' | 'purpose' | 'slots' | 'constraints'
 >
 
+/**
+ * Which renderer draws a template's layouts (TMPL-4).
+ *
+ * Explicit rather than inferred from "does this layout have geometry".
+ * Geometry has two consumers — the positioned renderer and the exporters —
+ * so giving a built-in boxes purely to improve its PDF must not silently
+ * change how it looks on screen. One field keeps the two apart.
+ */
+export type TemplateRenderMode = 'components' | 'positioned'
+
 export interface Template {
   id: string
   ownerId: string
   name: string
+  /** Absent means `components`: the hand-tuned layout components. */
+  renderMode?: TemplateRenderMode
   /** Visual theme: colors, typography, spacing. Shape is renderer-defined for now. */
   theme: Record<string, unknown>
   layouts: Layout[]

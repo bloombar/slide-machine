@@ -3,8 +3,11 @@
  *
  * Drag a box to move it, drag its corner to resize. A drag is not reachable
  * from a keyboard, so each box is focusable too: arrows move it, shift and
- * arrows resize it. Both routes write the same percentages, so neither is a
+ * arrows resize it. Both routes write the same numbers, so neither is a
  * lesser path.
+ *
+ * Boxes are stored as fractions of the slide, 0–1 (docs/TEMPLATES.md §4);
+ * only the labels shown to a person are turned into percentages.
  *
  * A layout with no arrangement keeps its hand-tuned component — that is what
  * every built-in does. Arranging one is opt-in, and clearing it hands the
@@ -14,8 +17,12 @@ import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ElementPositions, Layout, SlotBox } from '@slide-machine/shared'
 
-/** How far one arrow-key press moves or resizes a box, in percent. */
-const NUDGE = 2
+/** How far one arrow-key press moves or resizes a box: two percent of the
+ * slide, expressed in the stored 0–1 scale. */
+const NUDGE = 0.02
+
+/** The smallest box worth having — below this there is nothing to grab. */
+const MIN_SIDE = 0.05
 
 /** Which way each arrow points, as a delta. */
 const ARROWS: Record<string, { dx: number; dy: number }> = {
@@ -26,15 +33,16 @@ const ARROWS: Record<string, { dx: number; dy: number }> = {
 }
 
 /** Keeps a box inside the slide and larger than a hairline, whichever way it
- * was moved. Percentages, so this is the same maths at any render size. */
+ * was moved. Fractions, so this is the same maths at any render size. */
 const clampBox = (box: SlotBox): SlotBox => {
-  const w = Math.min(100, Math.max(5, box.w))
-  const h = Math.min(100, Math.max(5, box.h))
+  const w = Math.min(1, Math.max(MIN_SIDE, box.w))
+  const h = Math.min(1, Math.max(MIN_SIDE, box.h))
   return {
+    ...box,
     w,
     h,
-    x: Math.min(100 - w, Math.max(0, box.x)),
-    y: Math.min(100 - h, Math.max(0, box.y)),
+    x: Math.min(1 - w, Math.max(0, box.x)),
+    y: Math.min(1 - h, Math.max(0, box.y)),
   }
 }
 
@@ -46,9 +54,9 @@ const clampBox = (box: SlotBox): SlotBox => {
 const seedPositions = (layout: Layout): ElementPositions => {
   const slots = layout.slots
   if (slots.length === 0) return {}
-  const margin = 6
-  const gap = 3
-  const usable = 100 - margin * 2
+  const margin = 0.06
+  const gap = 0.03
+  const usable = 1 - margin * 2
   const height = (usable - gap * (slots.length - 1)) / slots.length
   return Object.fromEntries(
     slots.map((slot, i) => [
@@ -82,7 +90,7 @@ export default function TemplateArrangement({
     onChange({ ...positions, [name]: clampBox({ ...current, ...patch }) })
   }
 
-  /** Moves a box with the pointer, in canvas percentages. */
+  /** Moves a box with the pointer, in fractions of the canvas. */
   const onPointerDown = (name: string) => (e: React.PointerEvent) => {
     const canvas = canvasRef.current
     const box = positions[name]
@@ -90,14 +98,14 @@ export default function TemplateArrangement({
     const rect = canvas.getBoundingClientRect()
     // Where in the box the pointer grabbed it, so it does not jump to the
     // cursor on the first move.
-    const grabX = ((e.clientX - rect.left) / rect.width) * 100 - box.x
-    const grabY = ((e.clientY - rect.top) / rect.height) * 100 - box.y
+    const grabX = (e.clientX - rect.left) / rect.width - box.x
+    const grabY = (e.clientY - rect.top) / rect.height - box.y
     setDragging(name)
 
     const move = (ev: PointerEvent) => {
       setBox(name, {
-        x: ((ev.clientX - rect.left) / rect.width) * 100 - grabX,
-        y: ((ev.clientY - rect.top) / rect.height) * 100 - grabY,
+        x: (ev.clientX - rect.left) / rect.width - grabX,
+        y: (ev.clientY - rect.top) / rect.height - grabY,
       })
     }
     const up = () => {
@@ -121,8 +129,8 @@ export default function TemplateArrangement({
 
     const move = (ev: PointerEvent) => {
       setBox(name, {
-        w: ((ev.clientX - rect.left) / rect.width) * 100 - box.x,
-        h: ((ev.clientY - rect.top) / rect.height) * 100 - box.y,
+        w: (ev.clientX - rect.left) / rect.width - box.x,
+        h: (ev.clientY - rect.top) / rect.height - box.y,
       })
     }
     const up = () => {
@@ -196,10 +204,10 @@ export default function TemplateArrangement({
               // someone who cannot see the canvas still knows.
               aria-label={t('template.boxAt', {
                 slot: slot.name,
-                x: Math.round(box.x),
-                y: Math.round(box.y),
-                w: Math.round(box.w),
-                h: Math.round(box.h),
+                x: Math.round(box.x * 100),
+                y: Math.round(box.y * 100),
+                w: Math.round(box.w * 100),
+                h: Math.round(box.h * 100),
               })}
               onPointerDown={onPointerDown(slot.name)}
               onKeyDown={onKeyDown(slot.name)}
@@ -209,10 +217,10 @@ export default function TemplateArrangement({
                   : 'border-slate-400 bg-white/80'
               }`}
               style={{
-                left: `${box.x}%`,
-                top: `${box.y}%`,
-                width: `${box.w}%`,
-                height: `${box.h}%`,
+                left: `${box.x * 100}%`,
+                top: `${box.y * 100}%`,
+                width: `${box.w * 100}%`,
+                height: `${box.h * 100}%`,
               }}
             >
               {slot.name}

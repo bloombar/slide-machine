@@ -1,8 +1,9 @@
 /**
  * The style-template library end to end (TMPL-1, TMPL-4): browse the library
  * from a project's settings, duplicate a shipped template, rename and retheme
- * the copy, apply it to the project, and delete it again — checking at each
- * step that the app agrees, rather than that a request was sent.
+ * the copy, give a layout a box of the author's own, arrange it, apply it to
+ * the project, and delete it again — checking at each step that the app
+ * agrees, rather than that a request was sent.
  */
 import { test, expect } from '@playwright/test'
 import { createProject, openProjectSettings } from './helpers'
@@ -45,13 +46,22 @@ test('template library: duplicate, edit, apply, delete', async ({ page }) => {
   await nameField.fill(templateName)
   await page.getByLabel('Accent').fill('#00aa88')
 
+  // Every template carries the conventional layouts (TMPL-2), so they are
+  // folded away — open the one being worked on.
+  const firstLayout = page.locator('details').first()
+  await firstLayout.locator('summary').click()
+
+  // A custom template is not just a recolour: the author decides what the
+  // slide holds. Adding a second picture box is how a layout ends up with
+  // more pictures than anything shipped has (TMPL-4).
+  await firstLayout.getByLabel('Name this box').fill('Photo 2')
+  await firstLayout.getByLabel('What goes in it').last().selectOption('image')
+  await firstLayout.getByRole('button', { name: 'Add a box' }).click()
+
   // Arrange a layout: where its slots sit becomes data on the template, and
   // the slide renderer draws from it instead of the hand-tuned component
   // (TMPL-4 positioning).
-  await page
-    .getByRole('button', { name: 'Arrange this layout' })
-    .first()
-    .click()
+  await firstLayout.getByRole('button', { name: 'Arrange this layout' }).click()
   // Moving a box by keyboard rather than dragging: the same result, and the
   // route a pointer user does not need but a keyboard user does. Narrow it
   // first — a box is kept inside the slide, so a full-width one cannot move.
@@ -61,6 +71,12 @@ test('template library: duplicate, edit, apply, delete', async ({ page }) => {
   await expect(titleBox).toHaveAttribute('aria-label', /86% wide/)
   await page.keyboard.press('ArrowRight')
   await expect(titleBox).toHaveAttribute('aria-label', /8% from the left/)
+  // A layout of the author's own, for a design none of the conventional
+  // names describes (TMPL-9)
+  await page.getByLabel('Name this layout').fill('Lab safety')
+  await page.getByRole('button', { name: 'Add layout' }).click()
+  await expect(page.getByText('Lab safety', { exact: true })).toBeVisible()
+
   await page.getByRole('button', { name: 'Save' }).click()
 
   // Back in the library, the copy is there and marked as the user's own
@@ -87,10 +103,17 @@ test('template library: duplicate, edit, apply, delete', async ({ page }) => {
 
   // The arrangement survived the save
   await page.getByRole('button', { name: `Edit ${templateName}` }).click()
+  await expect(page.getByText('Lab safety', { exact: true })).toBeVisible()
+  await page.locator('details').first().locator('summary').click()
   await expect(page.getByLabel(/^title:/)).toHaveAttribute(
     'aria-label',
     /8% from the left/,
   )
+  // ...and so did the author's own box, with a place on the slide of its own
+  await expect(page.getByLabel(/^photo-2:/)).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Remove the Photo 2 box' }),
+  ).toBeVisible()
   await page.getByRole('button', { name: 'Cancel' }).click()
 
   // Deleting the copy takes it out of the library, and the project page

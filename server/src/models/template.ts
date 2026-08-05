@@ -11,12 +11,19 @@
  * schema that could drift from it.
  */
 import { Schema, model, Types, type HydratedDocument } from 'mongoose'
-import type { Layout, Template } from '@slide-machine/shared'
+import type {
+  Layout,
+  Template,
+  TemplateRenderMode,
+} from '@slide-machine/shared'
 import { softDeletePlugin } from './plugins/soft-delete'
+import { normalizePositions } from '../templates/builtin'
 
 export interface TemplateDb {
   ownerId: Types.ObjectId
   name: string
+  /** How its layouts are drawn; absent means the hand-tuned components. */
+  renderMode?: TemplateRenderMode
   theme: Record<string, unknown>
   layouts: Layout[]
   /** Private by default; unlisted or public once the author shares it. */
@@ -38,6 +45,7 @@ const templateSchema = new Schema<TemplateDb>(
       index: true,
     },
     name: { type: String, required: true, trim: true },
+    renderMode: { type: String, enum: ['components', 'positioned'] },
     theme: { type: Schema.Types.Mixed, required: true },
     layouts: { type: Schema.Types.Mixed, required: true },
     visibility: {
@@ -63,8 +71,11 @@ export const toTemplateDto = (doc: HydratedDocument<TemplateDb>): Template => ({
   id: doc._id.toString(),
   ownerId: doc.ownerId.toString(),
   name: doc.name,
+  renderMode: doc.renderMode,
   theme: doc.theme,
-  layouts: doc.layouts,
+  // Templates saved before boxes were fractions still hold percentages, and
+  // would otherwise be drawn far off the slide.
+  layouts: normalizePositions(doc.layouts),
   visibility: doc.visibility,
   voteScore: doc.voteScore,
   createdAt: doc.createdAt.toISOString(),

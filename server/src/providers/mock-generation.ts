@@ -21,7 +21,6 @@
 import type {
   GenerationProvider,
   LayoutDescriptor,
-  LayoutType,
   SlideGenerationRequest,
   SlideGenerationResult,
   SlideReformatRequest,
@@ -76,10 +75,7 @@ const commandIntent = (
 }
 
 /** Falls back to `content`, then the first available layout (GEN-6). */
-const fitLayout = (
-  wanted: LayoutType,
-  available: LayoutDescriptor[],
-): LayoutType => {
+const fitLayout = (wanted: string, available: LayoutDescriptor[]): string => {
   const types = available.map(d => d.type)
   if (types.includes(wanted)) return wanted
   if (types.includes('content')) return 'content'

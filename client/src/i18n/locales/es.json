@@ -227,7 +227,24 @@
     "arrangeHint": "Coloca tú las casillas en lugar de usar la disposición integrada.",
     "arrangeDragHint": "Arrastra una casilla para moverla, o su esquina para redimensionarla. Las flechas la mueven; con Mayús la redimensionan.",
     "arrangeReset": "Usar la disposición integrada",
-    "boxAt": "{slot}: {x}% desde la izquierda, {y}% desde arriba, {w}% de ancho, {h}% de alto"
+    "boxAt": "{slot}: {x}% desde la izquierda, {y}% desde arriba, {w}% de ancho, {h}% de alto",
+    "slotsLabel": "Qué contiene esta diapositiva",
+    "slotsHint": "Añade un cuadro para cada elemento de la diapositiva: un título, un párrafo o una imagen. Una diapositiva puede tener varias imágenes.",
+    "slotLabel": "Cómo se llama",
+    "slotKind": "Qué contiene",
+    "slotKinds": {
+      "text": "Texto",
+      "bullets": "Viñetas",
+      "image": "Imagen"
+    },
+    "addSlot": "Añadir un cuadro",
+    "addSlotName": "Nombra este cuadro",
+    "removeSlot": "Quitar el cuadro {name}",
+    "boxCount": "{count, plural, one {# cuadro} other {# cuadros}}",
+    "newLayout": "O crea un diseño propio",
+    "newLayoutName": "Nombra este diseño",
+    "newLayoutAdd": "Añadir diseño",
+    "newLayoutPurpose": "Cuándo usarlo"
   },
   "layout": {
     "change": "Cambiar el diseño de la diapositiva",

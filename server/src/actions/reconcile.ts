@@ -31,7 +31,6 @@ import type {
   DiarizedSpeakerSegment,
   GenerationProvider,
   LayoutDescriptor,
-  LayoutType,
   ReformatTurn,
   SlideContent,
   SlideRefineParts,
@@ -57,9 +56,9 @@ import { resolveTemplate } from '../templates/resolve'
 import { assignSpeakers } from '../lib/diarization-join'
 import { mapSpeakerRoles } from '../lib/speaker-roles'
 import { planReformat } from '../lib/reformat-plan'
-import { layoutHasImageSlot } from '../lib/image-layout'
+import { imageSlotNames, layoutHasImageSlot } from '../lib/image-layout'
 import { layoutDisplaysContent } from '../lib/layout-refit'
-import { enrichSlideImage } from '../enrichment/enrich'
+import { enrichSlideImages } from '../enrichment/enrich'
 import type { SlideImageContext } from '../enrichment/types'
 import { deriveImageKeywords } from '../enrichment/keywords'
 import { seedAssetsFor, seededImageCandidates } from '../lib/seed-assets'
@@ -80,7 +79,7 @@ const contentOf = (s: SlideDoc): SlideContent => ({
 const applyContent = (
   s: SlideDoc,
   result: {
-    layoutType: LayoutType
+    layoutType: string
     slots: {
       title?: string
       body?: string
@@ -142,8 +141,9 @@ const enrichRefinedSlideImage = async (
   }
   try {
     const assets = await seedAssetsFor(deck)
-    await enrichSlideImage(
+    await enrichSlideImages(
       slide._id.toString(),
+      imageSlotNames(slide.layoutType, descriptors),
       keywords,
       [
         ...seededImageCandidates(assets.project),

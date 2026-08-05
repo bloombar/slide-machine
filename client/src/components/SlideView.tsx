@@ -12,7 +12,6 @@
 import { createElement } from 'react'
 import type {
   ImageSearchCandidate,
-  LayoutSlot,
   Slide,
   Template,
 } from '@slide-machine/shared'
@@ -43,10 +42,11 @@ export default function SlideView({
   /** Owner-only: enables click-to-edit on every editable slot. */
   editable?: boolean
   onEdit?: (patch: SlideContentPatch) => void
-  /** Owner-only image editing (EDIT-1), bound to this slide. */
-  onReplaceImage?: (file: File) => void
-  onPickImageCandidate?: (candidate: ImageSearchCandidate) => void
-  onRemoveImage?: () => void
+  /** Owner-only image editing (EDIT-1), bound to this slide. The slot name
+   * comes along, since a layout may have several image slots (TMPL-4). */
+  onReplaceImage?: (file: File, slot: string) => void
+  onPickImageCandidate?: (candidate: ImageSearchCandidate, slot: string) => void
+  onRemoveImage?: (slot: string) => void
 }) {
   const colors = themeColors(template.theme)
   const layoutDef = template.layouts.find(l => l.type === slide.layoutType)
@@ -54,7 +54,7 @@ export default function SlideView({
   /** A named content slot, editable when the owner is viewing. The
    * template's own slot spec (kind/label/validation) takes precedence
    * over the conventional defaults. */
-  const slot = (name: LayoutSlot) => (
+  const slot = (name: string) => (
     <SlideSlot
       slot={name}
       spec={layoutDef?.slots.find(s => s.name === name)}
@@ -76,13 +76,16 @@ export default function SlideView({
       className="@container aspect-video w-full overflow-hidden rounded-xl shadow-2xl"
       style={{ backgroundColor: colors.background, color: colors.text }}
     >
-      {createElement(rendererFor(slide.layoutType, layoutDef), {
-        slide,
-        colors,
-        layout: layoutDef,
-        editable: Boolean(editable && onEdit),
-        slot,
-      })}
+      {createElement(
+        rendererFor(slide.layoutType, template.renderMode, layoutDef),
+        {
+          slide,
+          colors,
+          layout: layoutDef,
+          editable: Boolean(editable && onEdit),
+          slot,
+        },
+      )}
     </div>
   )
 }

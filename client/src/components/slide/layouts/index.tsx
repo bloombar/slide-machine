@@ -7,7 +7,7 @@
  * newer content degrades instead of disappearing.
  */
 import type { ComponentType } from 'react'
-import type { Layout } from '@slide-machine/shared'
+import type { Layout, TemplateRenderMode } from '@slide-machine/shared'
 import type { LayoutProps } from './types'
 import TitleLayout from './TitleLayout'
 import SectionLayout from './SectionLayout'
@@ -39,15 +39,23 @@ export const getLayoutRenderer = (
 ): ComponentType<LayoutProps> => LAYOUT_RENDERERS[layoutType] ?? GenericLayout
 
 /**
- * The renderer for a layout: its own arrangement data if it has any, else the
- * hand-tuned component for its type. This is the seam that lets a layout move
- * from code to data one at a time — a template that positions its slots is
- * drawn by the engine, and everything else is untouched.
+ * The renderer for a layout, chosen by the template's declared `renderMode`.
+ *
+ * Deliberately not "does this layout have geometry": the exporters read the
+ * same `elementPositions`, so a built-in could be given boxes purely to
+ * export accurately, and inferring from their presence would silently
+ * redesign it on screen. The template says which renderer it wants.
+ *
+ * A positioned template whose layout has no boxes yet is the one exception:
+ * the engine would draw an empty slide, so that layout keeps its hand-tuned
+ * component until it is arranged.
  */
 export const rendererFor = (
   layoutType: string,
+  renderMode?: TemplateRenderMode,
   layout?: Layout,
 ): ComponentType<LayoutProps> =>
-  layout && Object.keys(layout.elementPositions ?? {}).length > 0
+  renderMode === 'positioned' &&
+  Object.keys(layout?.elementPositions ?? {}).length > 0
     ? PositionedLayout
     : getLayoutRenderer(layoutType)

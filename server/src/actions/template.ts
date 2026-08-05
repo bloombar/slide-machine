@@ -45,6 +45,9 @@ const requireUser = (ctx: ActionContext): string => {
  * so a saved template and a shipped one cannot differ in shape. */
 const templateBody = z.object({
   name: z.string().trim().min(1).max(80),
+  /** `positioned` draws every layout from its boxes; absent keeps the
+   * hand-tuned components (docs/TEMPLATES.md §4). */
+  renderMode: z.enum(['components', 'positioned']).optional(),
   theme: z.record(z.string(), z.unknown()),
   layouts: z.array(layoutSchema).min(1),
   /** Private until the author shares it: unlisted is reachable by link,
@@ -142,6 +145,7 @@ export const templateDuplicate = defineAction<
     const doc = await TemplateModel.create({
       ownerId: userId,
       name: input.name ?? source.name,
+      renderMode: source.renderMode,
       theme: source.theme,
       layouts: source.layouts,
       visibility: 'private',
@@ -155,6 +159,7 @@ export const templateUpdate = defineAction<
   {
     templateId: string
     name: string
+    renderMode?: 'components' | 'positioned'
     theme: Record<string, unknown>
     layouts: z.infer<typeof templateBody>['layouts']
     visibility?: 'private' | 'unlisted' | 'public'
@@ -170,6 +175,7 @@ export const templateUpdate = defineAction<
     const userId = requireUser(ctx)
     const doc = await loadOwn(userId, input.templateId)
     doc.name = input.name
+    doc.renderMode = input.renderMode
     doc.theme = input.theme
     doc.layouts = normalizeLayouts(input.layouts)
     if (input.visibility) doc.visibility = input.visibility

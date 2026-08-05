@@ -28,7 +28,6 @@ import type {
   DeckSwitchTemplateInput,
   DeckViewResponse,
   GenerationProvider,
-  LayoutType,
   SessionPhraseInput,
   Slide,
   SlideAddInput,
@@ -82,7 +81,11 @@ import {
   safeLayoutType,
   type SlideContentSnapshot,
 } from '../lib/layout-refit'
-import { layoutHasImageSlot, reconcileImageLayout } from '../lib/image-layout'
+import {
+  imageSlotNames,
+  layoutHasImageSlot,
+  reconcileImageLayout,
+} from '../lib/image-layout'
 import { UserModel } from '../models/user'
 import { VoteModel, voteBreakdown } from '../models/vote'
 import type { MyVote } from '@slide-machine/shared'
@@ -102,7 +105,7 @@ import {
 import { buildDeckStructure, headerLayoutTypes } from '../lib/deck-structure'
 import { registry } from '../providers/registry'
 import { permalinkSlug } from '../lib/slug'
-import { enrichSlideImage } from '../enrichment/enrich'
+import { enrichSlideImages } from '../enrichment/enrich'
 import type { SlideImageContext } from '../enrichment/types'
 import {
   seedAssetsFor,
@@ -130,6 +133,8 @@ const maybeEnrich = (
   guidance: ImageGuidance | undefined,
   seeded: SeedAssetDoc[] = [],
   context?: SlideImageContext,
+  /** The layout's image slots (IMG-6); a layout with two pictures gets two. */
+  slots: string[] = ['image'],
 ): void => {
   if (!env.IMAGE_ENRICHMENT_ENABLED) return
   if (!guidance || guidance.none) return
@@ -139,22 +144,49 @@ const maybeEnrich = (
     ? images.find(a => a._id.toString() === guidance.seededImageId)
     : undefined
   if (chosen?.imageUrl) {
+    // The chosen picture goes in the layout's first image slot; any others
+    // are left for enrichment or the instructor to fill.
+    const slot = slots[0] ?? 'image'
     void SlideModel.updateOne(
       // "No image yet" is an absent field OR an empty string (see
       // enrichSlideImage); a real URL is never overwritten (IMG-3).
-      { _id: slideId, imageRef: { $in: [null, ''] } },
       {
-        imageRef: chosen.imageUrl,
-        imageSource: 'seeded',
-        attribution: seededAttribution(chosen),
+        _id: slideId,
+        $and: [
+          {
+            $or: [
+              { [`slots.${slot}.ref`]: { $in: [null, ''] } },
+              { [`slots.${slot}`]: { $exists: false } },
+            ],
+          },
+          // A slide written before the map keeps its picture in the old
+          // field alone, and that picture is still the user's (IMG-3).
+          ...(slot === 'image' ? [{ imageRef: { $in: [null, ''] } }] : []),
+        ],
+      },
+      {
+        [`slots.${slot}`]: {
+          kind: 'image',
+          ref: chosen.imageUrl,
+          source: 'seeded',
+          attribution: seededAttribution(chosen),
+        },
+        ...(slot === 'image'
+          ? {
+              imageRef: chosen.imageUrl,
+              imageSource: 'seeded',
+              attribution: seededAttribution(chosen),
+            }
+          : {}),
       },
     ).catch(() => undefined)
     return
   }
 
   if (!guidance.keywords.length) return
-  void enrichSlideImage(
+  void enrichSlideImages(
     slideId,
+    slots,
     guidance.keywords,
     seededImageCandidates(images),
     context,
@@ -342,7 +374,7 @@ export const slideAdd = defineAction<SlideAddInput, Slide>({
   }),
   execute: async (ctx, input) => {
     const { deck } = await loadEditableDeck(ctx, input.deckId)
-    let layoutType: LayoutType = 'content'
+    let layoutType = 'content'
     if (input.layoutType) {
       const template = await resolveTemplate(deck.templateId)
       if (!template?.layouts.some(l => l.type === input.layoutType)) {
@@ -350,7 +382,7 @@ export const slideAdd = defineAction<SlideAddInput, Slide>({
           'layoutType: not a layout of this template',
         ])
       }
-      layoutType = input.layoutType as LayoutType
+      layoutType = input.layoutType
     }
     // A whiteboard slide is a blank drawing canvas — no placeholder text;
     // every other layout gets the editable starter content.
@@ -883,6 +915,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
             },
             'fill',
           ),
+          imageSlotNames(refit.layoutType, descriptors),
         )
       return event({ kind: 'slide.update', slide: toSlideDto(lastSlide) })
     }
@@ -1059,6 +1092,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
             },
             'fill',
           ),
+          imageSlotNames(lastSlide.layoutType, descriptors),
         )
       return event({ kind: 'slide.update', slide: toSlideDto(lastSlide) })
     }
@@ -1095,6 +1129,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
         },
         'replace',
       ),
+      imageSlotNames(result.layoutType, descriptors),
     )
     return event({ kind: 'slide.new', slide: toSlideDto(slide) })
   },

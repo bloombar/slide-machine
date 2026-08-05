@@ -8,7 +8,6 @@
 import { z } from 'zod'
 import type { HydratedDocument } from 'mongoose'
 import type {
-  LayoutType,
   Slide,
   SlideDeleteInput,
   SlideEditDrawingsInput,
@@ -28,9 +27,11 @@ import type { ActionContext } from './context'
 import { SlideModel, toSlideDto, type SlideDb } from '../models/slide'
 import { DeckModel, loadDeckAcl, touchDeck, type DeckDb } from '../models/deck'
 import { resolveTemplate } from '../templates/resolve'
+import { layoutDescriptors } from '../templates/builtin'
 import { canEditAcl } from '../lib/access'
-import { layoutHasImageSlot } from '../lib/image-layout'
-import { enrichSlideImage } from '../enrichment/enrich'
+import { patchSlot, slotValueSchema, slotsOf } from '../lib/slide-slots'
+import { imageSlotNames, layoutHasImageSlot } from '../lib/image-layout'
+import { enrichSlideImages } from '../enrichment/enrich'
 import type { SlideImageContext } from '../enrichment/types'
 import { deriveImageKeywords } from '../enrichment/keywords'
 import { seedAssetsFor, seededImageCandidates } from '../lib/seed-assets'
@@ -90,6 +91,10 @@ export const slideEditContent = defineAction<SlideEditInput, Slide>({
         licenseUrl: z.string().optional(),
       })
       .optional(),
+    // Content keyed by slot name (TMPL-9/GEN-11). The names are the
+    // template author's, so this is a map rather than named fields, and each
+    // value declares the kind it carries.
+    slots: z.record(z.string().min(1).max(60), slotValueSchema).optional(),
   }),
   execute: async (ctx, input) => {
     const { slide } = await loadOwnedSlide(ctx, input.slideId)
@@ -101,7 +106,10 @@ export const slideEditContent = defineAction<SlideEditInput, Slide>({
       input.title !== undefined ||
       input.body !== undefined ||
       input.bullets !== undefined ||
-      input.caption !== undefined
+      input.caption !== undefined ||
+      // A custom text/bullet slot is hand-written content too; an image-only
+      // patch is not, matching how imageRef is treated below.
+      Object.values(input.slots ?? {}).some(v => v.kind !== 'image')
     if (editedContent) slide.manuallyEdited = true
     if (input.title !== undefined) slide.title = input.title
     if (input.body !== undefined) slide.body = input.body
@@ -114,6 +122,30 @@ export const slideEditContent = defineAction<SlideEditInput, Slide>({
       const a = input.attribution
       const any = Object.values(a).some(v => v != null && v !== '')
       slide.attribution = any ? a : undefined
+    }
+    // Slots merge one at a time, so editing one never clears another. A slot
+    // the slide's layout does not declare is refused rather than stored: a
+    // slide must never hold content the template cannot show.
+    if (input.slots) {
+      const deck = await DeckModel.findById(slide.deckId)
+      const template = deck ? await resolveTemplate(deck.templateId) : undefined
+      const declared = new Set(
+        template?.layouts
+          .find(l => l.type === slide.layoutType)
+          ?.slots.map(s => s.name) ?? [],
+      )
+      const unknown = Object.keys(input.slots).filter(n => !declared.has(n))
+      if (unknown.length) {
+        throw new ActionValidationError('slide.editContent', [
+          `slots: not declared by this layout: ${unknown.join(', ')}`,
+        ])
+      }
+      let next = slotsOf(slide)
+      for (const [name, value] of Object.entries(input.slots)) {
+        next = patchSlot(next, name, value)
+      }
+      slide.slots = next
+      slide.markModified('slots')
     }
     await slide.save()
     await touchDeck(slide.deckId)
@@ -139,7 +171,7 @@ export const slideSetLayout = defineAction<SlideSetLayoutInput, Slide>({
         'layoutType: not a layout of this template',
       ])
     }
-    slide.layoutType = input.layoutType as LayoutType
+    slide.layoutType = input.layoutType
 
     // Switching onto a layout with an image slot on a slide that has no
     // image yet: source one via enrichment. Derive keywords from the
@@ -179,8 +211,9 @@ export const slideSetLayout = defineAction<SlideSetLayoutInput, Slide>({
       }
       void seedAssetsFor(deck)
         .then(assets =>
-          enrichSlideImage(
+          enrichSlideImages(
             slideId,
+            imageSlotNames(input.layoutType, layoutDescriptors(template)),
             keywords,
             [
               ...seededImageCandidates(assets.project),

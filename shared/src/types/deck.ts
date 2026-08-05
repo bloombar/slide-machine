@@ -3,7 +3,6 @@
  * Field sets are indicative — they will evolve as features land.
  */
 import type { Locale } from './locale'
-import type { LayoutType } from './template'
 import type { WordTiming } from '../providers/transcription'
 import type { SpeakerRole } from '../providers/diarization'
 
@@ -111,12 +110,45 @@ export interface ImageAttribution {
   licenseUrl?: string
 }
 
+/**
+ * What one slot holds, discriminated by the kind its layout declares
+ * (docs/plans/extensible-templates-plan.md). A slide's content is a map of
+ * these keyed by slot name, so a layout with three code samples and two
+ * images is representable — which fixed fields never could be.
+ *
+ * Image credit lives on the image slot rather than beside the slide, so
+ * several pictures on one slide each carry their own (IMG-5).
+ */
+export type SlotValue =
+  | { kind: 'text' | 'preformatted'; value: string }
+  | { kind: 'bullets'; items: string[] }
+  | {
+      kind: 'image'
+      ref?: string
+      source?: ImageSource
+      keywords?: string[]
+      attribution?: ImageAttribution
+    }
+  | { kind: 'code'; source: string; language?: string }
+  | { kind: 'math'; tex: string; display?: boolean }
+  | { kind: 'table'; header?: string[]; rows: string[][] }
+
+/** The conventional slot names, which keep derived fields on the DTO. */
+export const CONVENTIONAL_SLOTS = [
+  'title',
+  'body',
+  'bullets',
+  'caption',
+  'image',
+] as const
+
 export interface Slide {
   id: string
   deckId: string
   index: number
-  /** Chosen by the AI from the template's layout descriptors (GEN-6). */
-  layoutType: LayoutType
+  /** Chosen by the AI from the template's layout descriptors (GEN-6). A
+   * conventional type, or one the template's author named (TMPL-9). */
+  layoutType: string
   title?: string
   body?: string
   bullets?: string[]
@@ -135,6 +167,13 @@ export interface Slide {
   /** Freehand whiteboard annotations drawn on the slide (WB-1), each
    * timing-anchored to the narration for synced playback. Absent = none. */
   drawings?: Stroke[]
+  /**
+   * The slide's content, keyed by the slot names its layout declares — the
+   * authoritative store (TMPL-9/GEN-11). The fields above are DERIVED from
+   * this by conventional name, so the many readers written against them keep
+   * working while storage lives here.
+   */
+  slots: Record<string, SlotValue>
 }
 
 /** A single point of a stroke, normalized 0..1 to the slide's rendered box

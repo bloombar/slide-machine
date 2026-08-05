@@ -7,7 +7,7 @@
  * template's theme. Register renderers in ./index.tsx.
  */
 import type { ReactNode } from 'react'
-import type { Layout, LayoutSlot, Slide } from '@slide-machine/shared'
+import type { Layout, Slide } from '@slide-machine/shared'
 import type { ThemeColors } from '../theme'
 
 export interface LayoutProps {
@@ -21,6 +21,7 @@ export interface LayoutProps {
    * their EMPTY conditional slots (as clickable placeholders) so a
    * layout switch never strands content the user can't reach. */
   editable?: boolean
-  /** Renders a named content slot (editable when the viewer may edit). */
-  slot: (name: LayoutSlot) => ReactNode
+  /** Renders a named content slot (editable when the viewer may edit). The
+   * name is a conventional slot, or one a template author defined (TMPL-4). */
+  slot: (name: string) => ReactNode
 }

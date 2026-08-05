@@ -37,6 +37,7 @@ const slide = (over: Partial<Slide> = {}): Slide => ({
   deckId: 'deck1',
   index: 0,
   layoutType: 'content',
+  slots: {},
   title: 'Cells',
   sourceTranscript: 'A cell is the basic unit of life.',
   ...over,
