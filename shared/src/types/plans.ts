@@ -10,6 +10,18 @@ export const PLAN_TIERS = ['free', 'fresh', 'pro', 'max'] as const
 export type PlanTier = (typeof PLAN_TIERS)[number]
 
 /**
+ * Where a tier sits on the ladder — PLAN_TIERS runs cheapest-first, so a
+ * larger number is a larger plan. The one place that ordering is stated, so
+ * "is this an upgrade" and "which of these two plans wins" are answered the
+ * same way wherever they are asked.
+ */
+export const planRank = (tier: PlanTier): number => PLAN_TIERS.indexOf(tier)
+
+/** The larger of two tiers. */
+export const higherTier = (a: PlanTier, b: PlanTier): PlanTier =>
+  planRank(a) >= planRank(b) ? a : b
+
+/**
  * Metered resources subject to per-tier caps (BILL-3). `null` means unlimited
  * and `0` means the capability is unavailable — but **no shipped tier uses
  * `0`**: every plan offers every service and they differ only in allowance
