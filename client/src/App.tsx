@@ -16,6 +16,10 @@ import ProfilePage from './pages/ProfilePage'
 import AccountSettingsPage from './pages/AccountSettingsPage'
 import PlanPricingPage from './pages/PlanPricingPage'
 import DeckViewerPage from './pages/DeckViewerPage'
+import AboutPage from './pages/AboutPage'
+import FeedbackPage from './pages/FeedbackPage'
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
+import TermsPage from './pages/TermsPage'
 import AdminUsersPage from './pages/AdminUsersPage'
 import AdminUserDetailPage from './pages/AdminUserDetailPage'
 import AdminProjectsPage from './pages/AdminProjectsPage'
@@ -45,6 +49,13 @@ export default function App() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/d/:slug" element={<DeckViewerPage />} />
         <Route path="/u/:userId" element={<ProfilePage />} />
+        {/* Static pages. Public on purpose: a privacy policy nobody can read
+            without an account is no policy, and the feedback form is most
+            useful to someone who cannot get in. */}
+        <Route path="/about" element={<AboutPage />} />
+        <Route path="/feedback" element={<FeedbackPage />} />
+        <Route path="/privacy" element={<PrivacyPolicyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
       </Route>
       <Route
         element={

@@ -40,6 +40,16 @@ const serverEnv = (over: Record<string, string>): Record<string, string> => ({
   // viewing (SHARE-2) is assertable without a Google key.
   TRANSLATION_PROVIDER: 'mock',
   IMAGE_ENRICHMENT_ENABLED: 'false',
+  // Feedback is mailed. The log transport keeps the run hermetic — no relay
+  // is contacted — while still exercising the whole form-to-send path.
+  MAIL_PROVIDER: 'log',
+  FEEDBACK_EMAIL: 'e2e-feedback@example.com',
+  // Who the privacy policy and the terms name. Set here so the specs can
+  // prove the pages really take it from the server rather than from source.
+  OPERATOR_NAME: 'E2E Teaching Ltd',
+  OPERATOR_JURISDICTION: 'New York, USA',
+  OPERATOR_CONTACT_EMAIL: 'legal@e2e.example',
+  OPERATOR_POSTAL_ADDRESS: '1 Broadway, New York, NY 10004, USA',
   // Billing runs on the in-memory adapter: no e2e run may reach Stripe, and
   // the mock drives the whole checkout → webhook path offline (BILL-2).
   BILLING_PROVIDER: 'mock',

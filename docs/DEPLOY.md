@@ -226,6 +226,32 @@ Optional, as features land: `GITHUB_OAUTH_CLIENT_ID` / `_SECRET`,
 setup: [STRIPE.md](STRIPE.md)), and the `SMTP_*` set (email verification /
 reset). Full list and defaults: [server/.env.example](../server/.env.example).
 
+### The "Send feedback" form
+
+The form is hidden unless the server can deliver it: set the `SMTP_*` set,
+`MAIL_PROVIDER=smtp`, and `FEEDBACK_EMAIL` to the inbox that should receive
+bug reports and feature requests (`MAIL_FROM` if the envelope sender differs
+from `SMTP_USER`). Nothing is stored — the inbox is the record.
+
+### Before launch: the static pages
+
+The privacy policy and terms name whoever runs the deployment, and they read
+it from the environment — so this is configuration, not a release:
+
+| Variable | Value |
+| --- | --- |
+| `OPERATOR_NAME` | the legal entity behind the service |
+| `OPERATOR_JURISDICTION` | whose law governs the terms (e.g. `New York, USA`) |
+| `OPERATOR_CONTACT_EMAIL` | where privacy/legal correspondence goes — **not** `FEEDBACK_EMAIL` |
+| `OPERATOR_POSTAL_ADDRESS` | postal address, on one line |
+
+None is secret; all four appear verbatim on `/privacy` and `/terms`. Each one
+left blank shows a bracketed placeholder (`[Operator legal name]`) on the live
+page instead. Both documents also carry a **draft** banner until a lawyer has
+read them — the wording is in
+[`client/src/content/`](../client/src/content/), which is where an edit or a
+reviewed replacement goes.
+
 ## 6. Register the Google OAuth redirect URI
 
 Google returns to `<origin>/api/auth/google/callback`, which the server

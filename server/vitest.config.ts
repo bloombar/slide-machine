@@ -43,6 +43,10 @@ export default defineConfig({
       TRANSLATION_PROVIDER: 'mock',
       // Tests never call live image APIs; enrichment units stub fetch
       IMAGE_ENRICHMENT_ENABLED: 'false',
+      // The feedback form needs a transport and an address to be offered at
+      // all; the log transport gives it both without a relay to talk to.
+      MAIL_PROVIDER: 'log',
+      FEEDBACK_EMAIL: 'feedback@example.test',
       // No grace window in tests: rotated-out tokens must die immediately
       REFRESH_GRACE_SECONDS: '0',
       // Uploads land on disk in an isolated test dir

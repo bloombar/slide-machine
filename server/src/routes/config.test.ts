@@ -19,11 +19,19 @@ const envState = {
   SIMULATED_SPEECH_ENABLED: false,
   WHITEBOARD_SUPPRESS_DEBOUNCE_MS: 5000,
   STT_CAPTURE_SAMPLE_RATE: 24000,
+  OPERATOR_NAME: '',
+  OPERATOR_JURISDICTION: '',
+  OPERATOR_CONTACT_EMAIL: '',
+  OPERATOR_POSTAL_ADDRESS: '',
 }
 vi.mock('../config/env', () => ({ env: envState }))
 vi.mock('../lib/transcribe-audio', () => ({
   serverTranscriptionAvailable: () => false,
 }))
+// The feedback form's availability is the feedback route's own answer; this
+// suite only checks that /api/config publishes it.
+const feedbackEnabled = vi.fn(() => false)
+vi.mock('./feedback', () => ({ feedbackEnabled: () => feedbackEnabled() }))
 
 const { configRouter } = await import('./config')
 
@@ -36,6 +44,11 @@ beforeEach(() => {
   envState.TRANSLATION_PROVIDER = 'none'
   envState.GOOGLE_CLOUD_TRANSLATION_KEY = undefined
   envState.STT_CAPTURE_SAMPLE_RATE = 24000
+  envState.OPERATOR_NAME = ''
+  envState.OPERATOR_JURISDICTION = ''
+  envState.OPERATOR_CONTACT_EMAIL = ''
+  envState.OPERATOR_POSTAL_ADDRESS = ''
+  feedbackEnabled.mockReturnValue(false)
 })
 
 describe('GET /api/config', () => {
@@ -49,6 +62,46 @@ describe('GET /api/config', () => {
       whiteboardSuppressDebounceMs: 5000,
       sttCaptureSampleRate: 24000,
       translationEnabled: false,
+      feedbackEnabled: false,
+      operator: {
+        name: '',
+        jurisdiction: '',
+        contactEmail: '',
+        postalAddress: '',
+      },
+    })
+  })
+
+  // The client leaves "Send feedback" out of the menu when the server has no
+  // way to deliver it, so this flag gates a link rather than just describing
+  // one.
+  it('reports the feedback form as usable once mail is configured', async () => {
+    feedbackEnabled.mockReturnValue(true)
+    expect(await getConfig()).toMatchObject({ feedbackEnabled: true })
+  })
+
+  // The privacy policy and the terms name whoever runs the deployment, and
+  // they read it from here — so a change of entity is config, not a release.
+  it('publishes the operator the deployment was given', async () => {
+    envState.OPERATOR_NAME = 'Acme Teaching Ltd'
+    envState.OPERATOR_JURISDICTION = 'New York, USA'
+    envState.OPERATOR_CONTACT_EMAIL = 'legal@acme.example'
+    envState.OPERATOR_POSTAL_ADDRESS = '1 Broadway, New York'
+    expect(await getConfig()).toMatchObject({
+      operator: {
+        name: 'Acme Teaching Ltd',
+        jurisdiction: 'New York, USA',
+        contactEmail: 'legal@acme.example',
+        postalAddress: '1 Broadway, New York',
+      },
+    })
+  })
+
+  // Blank is a deployment declining to say, not an error: the pages show
+  // their own bracketed placeholder for each field left empty.
+  it('passes an unnamed operator through as blanks', async () => {
+    expect(await getConfig()).toMatchObject({
+      operator: { name: '', jurisdiction: '' },
     })
   })
 
