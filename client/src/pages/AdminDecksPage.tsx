@@ -129,12 +129,14 @@ export default function AdminDecksPage() {
                 field="created"
                 sort={sort}
                 onSort={changeSort}
+                chronological
               />
               <SortHeader
                 label="Updated"
                 field="updated"
                 sort={sort}
                 onSort={changeSort}
+                chronological
               />
             </tr>
           </thead>

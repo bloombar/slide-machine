@@ -109,6 +109,7 @@ export default function AdminUsersPage() {
                 field="joined"
                 sort={sort}
                 onSort={changeSort}
+                chronological
               />
             </tr>
           </thead>

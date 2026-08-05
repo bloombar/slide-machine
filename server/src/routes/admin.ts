@@ -586,25 +586,52 @@ adminRouter.get('/users', async (req, res) => {
   res.json(body)
 })
 
+// One sort key per sortable column of the Logs page, in the directories'
+// `${column}:${dir}` form. Details is the exception: it holds whatever
+// context an action recorded, which has no meaningful order.
+//
+// Every key ends in `createdAt`/`_id`, and the timestamp sort ends in
+// `_id` alone. Entries written in the same millisecond — routine, since
+// one admin action can log several — otherwise come back in an arbitrary
+// order, which both scrambles the order on screen and lets a row repeat
+// on one page and vanish from the next. ObjectIds carry a monotonic
+// counter, so they order same-millisecond writes by when they happened.
+//
+// Target sorts by kind first and then by the name the column displays,
+// which the entry snapshotted into its details: an email for users, a
+// title for projects and lectures. Kind leads, so the two never
+// interleave and each group reads alphabetically, exactly as the cell
+// renders it.
+const LOG_SORTS = {
+  'time:desc': { createdAt: -1, _id: -1 },
+  'time:asc': { createdAt: 1, _id: 1 },
+  'admin:asc': { actorEmail: 1, createdAt: -1, _id: -1 },
+  'admin:desc': { actorEmail: -1, createdAt: -1, _id: -1 },
+  'action:asc': { action: 1, createdAt: -1, _id: -1 },
+  'action:desc': { action: -1, createdAt: -1, _id: -1 },
+  'target:asc': {
+    targetType: 1,
+    'details.email': 1,
+    'details.title': 1,
+    createdAt: -1,
+    _id: -1,
+  },
+  'target:desc': {
+    targetType: -1,
+    'details.email': -1,
+    'details.title': -1,
+    createdAt: -1,
+    _id: -1,
+  },
+} as const
+
 // Audit-log listing query. Extension point for future filters
 // (action, actorId, date range): add optional fields here and fold
 // them into the Mongo filter below.
-const logsQuerySchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(250).default(25),
-  sort: z.enum(['newest', 'oldest']).default('newest'),
-})
-
-// `_id` breaks ties in the same direction as the timestamp. Entries written
-// in the same millisecond — routine, since one admin action can log several —
-// otherwise come back in an arbitrary order, which both scrambles "newest
-// first" and lets a row repeat on one page and vanish from the next. ObjectIds
-// carry a monotonic counter, so they order same-millisecond writes by when
-// they happened.
-const LOG_SORTS = {
-  newest: { createdAt: -1, _id: -1 },
-  oldest: { createdAt: 1, _id: 1 },
-} as const
+const logsQuerySchema = listQuery(
+  Object.keys(LOG_SORTS) as (keyof typeof LOG_SORTS)[],
+  'time:desc',
+)
 
 adminRouter.get('/logs', async (req, res) => {
   const { page, limit, sort } = parseListQuery(logsQuerySchema, req.query)
@@ -648,7 +675,9 @@ adminRouter.get('/logs/export', async (_req, res) => {
   )
   // Same tiebreaker as LOG_SORTS, so the export's "newest first" matches the
   // order the Logs page shows rather than drifting for same-millisecond rows.
-  const cursor = AdminActionLogModel.find().sort(LOG_SORTS.newest).cursor()
+  const cursor = AdminActionLogModel.find()
+    .sort(LOG_SORTS['time:desc'])
+    .cursor()
   for await (const doc of cursor) {
     res.write(
       csvRow([

@@ -178,9 +178,63 @@ describe('GET /api/admin/settings-logs', () => {
 
     const oldest = await get(
       token,
-      '/api/admin/settings-logs?sort=oldest&limit=1',
+      '/api/admin/settings-logs?sort=time:asc&limit=1',
     )
     expect(oldest.body.logs[0].entityId).toBe('u-0')
+  })
+
+  it('sorts by each column the page offers, in both directions', async () => {
+    const { admin, token } = await asAdmin()
+    const actorId = admin._id.toString()
+    // Seeded so the actor and entity columns disagree about the order,
+    // and so the entity column has two names to order within one kind.
+    for (const entry of [
+      {
+        actorEmail: 'carol@example.com',
+        entityType: 'project' as const,
+        entityId: 'p-zebras',
+        entityName: 'Zebras',
+      },
+      {
+        actorEmail: 'alice@example.com',
+        entityType: 'user' as const,
+        entityId: 'u-1',
+        entityName: 'anna@example.com',
+      },
+      {
+        actorEmail: 'bob@example.com',
+        entityType: 'project' as const,
+        entityId: 'p-amber',
+        entityName: 'Amber',
+      },
+    ]) {
+      await logSettingsChange({
+        actorId,
+        actorRole: 'owner',
+        ownerId: 'owner-1',
+        changes: { language: { from: null, to: 'fr' } },
+        ...entry,
+      })
+    }
+
+    const order = async (sort: string): Promise<string[]> => {
+      const res = await get(token, `/api/admin/settings-logs?sort=${sort}`)
+      expect(res.status).toBe(200)
+      return idsOf(res)
+    }
+
+    expect(await order('actor:asc')).toEqual(['u-1', 'p-amber', 'p-zebras'])
+    expect(await order('actor:desc')).toEqual(['p-zebras', 'p-amber', 'u-1'])
+    // Kind leads, then the name each row shows
+    expect(await order('entity:asc')).toEqual(['p-amber', 'p-zebras', 'u-1'])
+    expect(await order('entity:desc')).toEqual(['u-1', 'p-zebras', 'p-amber'])
+  })
+
+  it('400s on an unknown sort key', async () => {
+    const { token } = await asAdmin()
+    const res = await get(token, '/api/admin/settings-logs?sort=sideways')
+    expect(res.status).toBe(400)
+    expect(res.body.error.code).toBe('invalid_input')
   })
 
   it('orders entries written in the same millisecond by when they happened', async () => {
@@ -190,7 +244,7 @@ describe('GET /api/admin/settings-logs', () => {
     const newest = await get(token, '/api/admin/settings-logs')
     expect(idsOf(newest)).toEqual(['e-4', 'e-3', 'e-2', 'e-1', 'e-0'])
 
-    const oldest = await get(token, '/api/admin/settings-logs?sort=oldest')
+    const oldest = await get(token, '/api/admin/settings-logs?sort=time:asc')
     expect(idsOf(oldest)).toEqual(['e-0', 'e-1', 'e-2', 'e-3', 'e-4'])
 
     // A tie must not let a row repeat on one page and vanish from the next

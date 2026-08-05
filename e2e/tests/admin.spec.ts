@@ -174,15 +174,15 @@ test('the admin reaches the audit log and downloads the CSV export', async ({
   expect(download.suggestedFilename()).toBe('admin-audit-log.csv')
 })
 
-test('every directory column sorts, including the joined ones', async ({
+test('every admin table column sorts, including the joined ones', async ({
   page,
 }) => {
   await ensureSignedIn(page, admin)
 
-  // Each directory: its columns, and the row-count assertion that proves
+  // Each table: its columns, and the row-count assertion that proves
   // the re-sorted page still loaded (the test DB is shared, so assert
   // "renders rows", not specific contents)
-  const directories = [
+  const tables = [
     {
       url: '/app/admin/projects',
       columns: ['Title', 'Owner', 'Visibility', 'Lectures', 'Created'],
@@ -191,9 +191,16 @@ test('every directory column sorts, including the joined ones', async ({
       url: '/app/admin/decks',
       columns: ['Lecture', 'Project', 'Owner', 'Visibility', 'Slides'],
     },
+    // The two logs sort server-side over the whole log, like the
+    // directories above — their one unsortable column is asserted below
+    { url: '/app/admin/logs', columns: ['Time', 'Admin', 'Action', 'Target'] },
+    {
+      url: '/app/admin/settings-logs',
+      columns: ['Time', 'Changed by', 'Settings'],
+    },
   ]
 
-  for (const directory of directories) {
+  for (const directory of tables) {
     await page.goto(directory.url)
     const table = page.getByRole('table')
     for (const column of directory.columns) {
@@ -210,6 +217,27 @@ test('every directory column sorts, including the joined ones', async ({
         page.getByRole('columnheader', { name: column }),
       ).toHaveAttribute('aria-sort', 'descending')
     }
+  }
+})
+
+test('the log columns holding recorded data offer no sort', async ({
+  page,
+}) => {
+  await ensureSignedIn(page, admin)
+
+  // Both hold what an entry recorded — a bag of action context, a set of
+  // changed fields — which has no order to sort into
+  for (const [url, column] of [
+    ['/app/admin/logs', 'Details'],
+    ['/app/admin/settings-logs', 'What changed'],
+  ]) {
+    await page.goto(url!)
+    const header = page.getByRole('columnheader', { name: column })
+    await expect(header).toBeVisible()
+    // Not even aria-sort="none", which would advertise a sort that is
+    // not on offer
+    await expect(header).not.toHaveAttribute('aria-sort', /.*/)
+    await expect(header.getByRole('button')).toHaveCount(0)
   }
 })
 

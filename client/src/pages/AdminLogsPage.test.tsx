@@ -194,6 +194,44 @@ describe('AdminLogsPage', () => {
     expect(calls.at(-1)).toContain('page=2')
   })
 
+  it('sorts newest first, and each column heading re-sorts from page 1', async () => {
+    const { calls } = renderPage(() => ({
+      status: 200,
+      body: { logs, total: 60, page: 2, limit: 25 },
+    }))
+    await screen.findByText('user.ban')
+    expect(calls.at(-1)).toContain('sort=time:desc')
+
+    // The arrow glyph is aria-hidden, so the header button's accessible
+    // name is exactly the column label.
+    for (const [label, field] of [
+      ['Admin', 'admin'],
+      ['Action', 'action'],
+      ['Target', 'target'],
+    ] as const) {
+      fireEvent.click(screen.getByRole('button', { name: label }))
+      await screen.findByText('user.ban')
+      expect(calls.at(-1)).toContain(`sort=${field}:asc`)
+      expect(calls.at(-1)).toContain('page=1')
+    }
+
+    // A second click on the sorting column flips the direction
+    fireEvent.click(screen.getByRole('button', { name: 'Target' }))
+    await screen.findByText('user.ban')
+    expect(calls.at(-1)).toContain('sort=target:desc')
+  })
+
+  it('offers no sort on Details, whose contents have no order', async () => {
+    renderPage()
+    await screen.findByText('user.ban')
+
+    // No aria-sort at all, rather than "none": the column does not sort,
+    // as against a sortable one that simply is not sorting right now.
+    const details = screen.getByRole('columnheader', { name: 'Details' })
+    expect(details).not.toHaveAttribute('aria-sort')
+    expect(screen.queryByRole('button', { name: 'Details' })).toBeNull()
+  })
+
   it('changing the page size refetches from page 1', async () => {
     const { calls } = renderPage(() => ({
       status: 200,

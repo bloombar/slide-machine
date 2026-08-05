@@ -35,16 +35,27 @@ moderation actions for when the answer calls for one. Every list below
 includes **soft-deleted** records, badged **Deleted** — see [Deleted
 content and recovery](#deleted-content-and-recovery).
 
+Every table in the console **sorts by any of its columns**: click a
+heading to sort by it, ascending first; click it again to flip. Only one
+column sorts at a time, and only that column is marked — with an arrow
+pointing the way its values run down the rows, so ascending is ↓ on an
+ordinary column (A–Z, 0–9) and ↑ on a column of dates (oldest first).
+The paginated tables sort server-side, over the whole collection rather
+than the page on screen; the lecture tables nested in a detail page sort
+the rows in hand. Two columns are the exception: the audit log's
+**Details** and the settings log's **What changed** hold whatever an
+entry recorded, which has no order to sort into.
+
 - **User directory** — every account (email, handle, join date), paginated
-  (10 / 25 / 50 / 100 per page) and sortable (newest, oldest, email A–Z).
+  (10 / 25 / 50 / 100 per page); newest first by default.
 - **Project directory** (`/app/admin/projects`) — every project on the
   platform (title, owner, visibility, lecture count, timestamps),
-  paginated and sortable (title, created, updated; last-edited first by
-  default). Rows link to the project page, owners to their user page.
+  paginated; last-edited first by default. Rows link to the project page,
+  owners to their user page.
 - **Lecture directory** (`/app/admin/decks`) — every lecture on the
   platform (title, project, owner, effective visibility, slide count,
-  timestamps), paginated and sortable the same way. Rows link to the
-  lecture page, and the project and owner cells to theirs.
+  timestamps), paginated the same way. Rows link to the lecture page, and
+  the project and owner cells to theirs.
 - **User drill-down** — account details (plan, email verification, locale,
   profile visibility, project/lecture counts) plus the user's projects,
   each linking to its own **project page**. Lectures the user owns inside
@@ -217,8 +228,10 @@ The audit log records admin actions that change or expose user data. Each
 entry holds the acting admin (id + email snapshot), a namespaced action
 name (`user.delete`, `deck.delete`, …), an optional target (type + id),
 optional action-specific details, and a timestamp. The page lists entries
-newest first, paginated, with a **Download CSV** button that exports the
-whole log.
+newest first, paginated and sortable by time, admin, action, or target
+(the target orders by kind and then by the name it shows), with a
+**Download CSV** button that exports the whole log, newest first
+whatever the page is sorted by.
 
 Both the acting admin and the target link to their admin detail pages, so
 an entry is one click from the record it describes. The target shows its
@@ -267,10 +280,12 @@ settings record as `null` and read as "not set" on the page; a long value
 is truncated so one big bio cannot bloat the log.
 
 The page lists entries newest first, paginated, filterable by kind
-(accounts / projects / lectures), with a **Download CSV** button that
-exports whatever the filter is showing. The API also filters by
-`entityId` (one record's whole history) and `ownerId` (everything one
-account owns).
+(accounts / projects / lectures), and sortable by time, who changed it,
+or whose settings changed (that column orders by kind and then by name),
+with a **Download CSV** button that exports whatever the filter is
+showing, newest first whatever the page is sorted by. The API also
+filters by `entityId` (one record's whole history) and `ownerId`
+(everything one account owns).
 
 What counts as a "setting" is defined in one place —
 [server/src/lib/settings-snapshot.ts](../server/src/lib/settings-snapshot.ts)

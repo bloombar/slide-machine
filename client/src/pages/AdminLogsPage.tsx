@@ -16,7 +16,9 @@ import {
   downloadAdminLogsCsv,
   ADMIN_LOGS_PAGE_SIZE,
   ADMIN_LOGS_PAGE_SIZES,
+  type AdminLogsSort,
 } from '../api/admin'
+import SortHeader from '../components/admin/SortHeader'
 import { config } from '../config'
 
 const loggedAt = (iso: string): string =>
@@ -119,6 +121,7 @@ const saveCsv = async (): Promise<void> => {
 export default function AdminLogsPage() {
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(ADMIN_LOGS_PAGE_SIZE)
+  const [sort, setSort] = useState<AdminLogsSort>('time:desc')
   const [data, setData] = useState<AdminLogsResponse | null>(null)
   const [error, setError] = useState(false)
   const [downloading, setDownloading] = useState(false)
@@ -128,7 +131,7 @@ export default function AdminLogsPage() {
   // trigger one, so a stale error can never linger past a new response
   useEffect(() => {
     let cancelled = false
-    listAdminLogs(page, limit)
+    listAdminLogs(page, limit, sort)
       .then(res => {
         if (!cancelled) setData(res)
       })
@@ -138,7 +141,7 @@ export default function AdminLogsPage() {
     return () => {
       cancelled = true
     }
-  }, [page, limit])
+  }, [page, limit, sort])
 
   const onDownload = async () => {
     setDownloading(true)
@@ -160,6 +163,12 @@ export default function AdminLogsPage() {
   }
 
   const pageCount = Math.max(1, Math.ceil(data.total / data.limit))
+
+  // Any sort change starts the listing over from the first page.
+  const changeSort = (next: AdminLogsSort) => {
+    setSort(next)
+    setPage(1)
+  }
 
   return (
     <div>
@@ -206,18 +215,33 @@ export default function AdminLogsPage() {
         <table className="w-full text-left text-sm">
           <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500 uppercase">
             <tr>
-              <th scope="col" className="px-4 py-3">
-                Time
-              </th>
-              <th scope="col" className="px-4 py-3">
-                Admin
-              </th>
-              <th scope="col" className="px-4 py-3">
-                Action
-              </th>
-              <th scope="col" className="px-4 py-3">
-                Target
-              </th>
+              <SortHeader
+                label="Time"
+                field="time"
+                sort={sort}
+                onSort={changeSort}
+                chronological
+              />
+              <SortHeader
+                label="Admin"
+                field="admin"
+                sort={sort}
+                onSort={changeSort}
+              />
+              <SortHeader
+                label="Action"
+                field="action"
+                sort={sort}
+                onSort={changeSort}
+              />
+              <SortHeader
+                label="Target"
+                field="target"
+                sort={sort}
+                onSort={changeSort}
+              />
+              {/* Details holds whatever context each action recorded, so
+                  there is no order to sort it into. */}
               <th scope="col" className="px-4 py-3">
                 Details
               </th>
