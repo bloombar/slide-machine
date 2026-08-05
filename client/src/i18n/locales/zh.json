@@ -20,6 +20,7 @@
     "edit": "编辑",
     "delete": "删除",
     "settings": "设置",
+    "accountSettings": "账户设置",
     "or": "或",
     "dangerZone": "危险操作",
     "resetToDefault": "恢复默认值",
@@ -82,7 +83,8 @@
       "audioStorage": "音频存储",
       "gemini": "生成式 AI",
       "stt": "语音识别",
-      "tts": "语音合成"
+      "tts": "语音合成",
+      "translation": "翻译"
     }
   },
   "profile": {
@@ -773,6 +775,14 @@
       }
     }
   },
+  "viewer": {
+    "slideLanguage": "幻灯片语言",
+    "slideLanguageOriginal": "原文（{language}）",
+    "showOriginal": "显示原文",
+    "translatedNotice": "机器翻译——以原文为准",
+    "translatedNoticeEditor": "机器翻译视图——显示原文后方可编辑",
+    "translationFailed": "无法翻译本讲。正在显示原文。"
+  },
   "quiz": {
     "heading": "课后小测验",
     "intro": "根据这节课程生成测验，并发布为可与学生共享的 Google 表单。",
@@ -865,6 +875,7 @@
     "heading": "导出这节课程",
     "intro": "将演示文稿保存为 PDF、可编辑的 Google Slides 演示文稿，或可重新导入的 YAML 文件。",
     "format": "格式",
+    "translated": "此文件将包含你正在阅读的{language}译文，而非原文。",
     "destination": "目标位置",
     "download": "下载",
     "toDrive": "保存到 Google 云端硬盘",

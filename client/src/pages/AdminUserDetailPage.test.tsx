@@ -120,19 +120,18 @@ describe('AdminUserDetailPage', () => {
     ).toHaveAttribute('href', '/u/u1')
   })
 
-  it('edits no settings of its own, pointing at the profile page', async () => {
+  it('edits no settings of its own, pointing at Account Settings', async () => {
     renderPage()
     await screen.findByRole('heading', { name: 'Ada' })
 
-    // No editor: settings are changed in the owner's own modal (ADMIN-5)
+    // No editor: settings are changed on the owner's own settings page (ADMIN-5)
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull()
     expect(screen.queryByLabelText('Display name')).toBeNull()
     expect(screen.getByText(/Settings are edited on the user/)).toBeVisible()
-    expect(screen.getByRole('link', { name: 'profile page' })).toHaveAttribute(
-      'href',
-      '/u/u1',
-    )
+    expect(
+      screen.getByRole('link', { name: 'Account Settings' }),
+    ).toHaveAttribute('href', '/app/settings/u1')
   })
 
   it('links each project to its admin project page', async () => {

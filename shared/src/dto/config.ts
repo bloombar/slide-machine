@@ -13,6 +13,10 @@ export interface RuntimeConfig {
    * configured with a usable key). When false the client hides the play
    * button and the per-slide "Speak this slide" option. */
   ttsEnabled: boolean
+  /** Whether post-lecture translated viewing is available (translation
+   * provider configured with a usable key — SHARE-2). When false the client
+   * hides the deck viewer's slide-language switcher. */
+  translationEnabled: boolean
   /** Default strength (1–5) the "Refine all slides" slider starts at (GEN-4). */
   refineSlidesDefaultLevel: number
   /** Default strength (1–5) the "Refine the spoken transcript" slider starts at. */

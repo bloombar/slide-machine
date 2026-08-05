@@ -20,6 +20,7 @@
     "edit": "Modifier",
     "delete": "Supprimer",
     "settings": "Paramètres",
+    "accountSettings": "Paramètres du compte",
     "or": "ou",
     "dangerZone": "Zone sensible",
     "resetToDefault": "Rétablir la valeur par défaut",
@@ -82,7 +83,8 @@
       "audioStorage": "Stockage audio",
       "gemini": "IA générative",
       "stt": "Reconnaissance vocale",
-      "tts": "Synthèse vocale"
+      "tts": "Synthèse vocale",
+      "translation": "Traduction"
     }
   },
   "profile": {
@@ -773,6 +775,14 @@
       }
     }
   },
+  "viewer": {
+    "slideLanguage": "Langue des diapositives",
+    "slideLanguageOriginal": "Original ({language})",
+    "showOriginal": "Afficher l'original",
+    "translatedNotice": "Traduction automatique — l'original fait foi",
+    "translatedNoticeEditor": "Vue traduite automatiquement — la modification est désactivée tant que l'original n'est pas affiché",
+    "translationFailed": "Impossible de traduire ce cours. Affichage de l'original."
+  },
   "quiz": {
     "heading": "Quiz de fin de cours",
     "intro": "Générez un quiz à partir de ce cours et publiez-le sous forme de Google Form à partager avec vos étudiants.",
@@ -865,6 +875,7 @@
     "heading": "Exporter ce cours",
     "intro": "Enregistrez le diaporama en PDF, en présentation Google Slides modifiable, ou en fichier YAML réimportable.",
     "format": "Format",
+    "translated": "Ce fichier contiendra la traduction en {language} que vous lisez, et non le texte original.",
     "destination": "Destination",
     "download": "Télécharger",
     "toDrive": "Enregistrer dans Google Drive",

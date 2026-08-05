@@ -38,6 +38,9 @@ export default defineConfig({
       // and the mock drives the whole checkout → portal → webhook path
       // without a network or a signing secret (BILL-2).
       BILLING_PROVIDER: 'mock',
+      // Slide-content translation (SHARE-2) runs against the deterministic
+      // mock — no key, no network, stable strings to assert on.
+      TRANSLATION_PROVIDER: 'mock',
       // Tests never call live image APIs; enrichment units stub fetch
       IMAGE_ENRICHMENT_ENABLED: 'false',
       // No grace window in tests: rotated-out tokens must die immediately

@@ -20,6 +20,7 @@
     "edit": "Editar",
     "delete": "Eliminar",
     "settings": "Ajustes",
+    "accountSettings": "Ajustes de la cuenta",
     "or": "o",
     "dangerZone": "Zona de riesgo",
     "resetToDefault": "Restablecer el valor predeterminado",
@@ -82,7 +83,8 @@
       "audioStorage": "Almacenamiento de audio",
       "gemini": "IA generativa",
       "stt": "Reconocimiento de voz",
-      "tts": "Síntesis de voz"
+      "tts": "Síntesis de voz",
+      "translation": "Traducción"
     }
   },
   "profile": {
@@ -773,6 +775,14 @@
       }
     }
   },
+  "viewer": {
+    "slideLanguage": "Idioma de las diapositivas",
+    "slideLanguageOriginal": "Original ({language})",
+    "showOriginal": "Mostrar el original",
+    "translatedNotice": "Traducción automática — el original es la versión válida",
+    "translatedNoticeEditor": "Vista traducida automáticamente — la edición está desactivada hasta que muestres el original",
+    "translationFailed": "No se pudo traducir esta clase. Se muestra el original."
+  },
   "quiz": {
     "heading": "Cuestionario de salida",
     "intro": "Genera un cuestionario a partir de esta clase y publícalo como un Formulario de Google para compartirlo con el alumnado.",
@@ -865,6 +875,7 @@
     "heading": "Exportar esta clase",
     "intro": "Guarda la presentación como PDF, como presentación editable de Google Slides, o como archivo YAML reimportable.",
     "format": "Formato",
+    "translated": "Este archivo llevará la traducción al {language} que estás leyendo, no el texto original.",
     "destination": "Destino",
     "download": "Descargar",
     "toDrive": "Guardar en Google Drive",

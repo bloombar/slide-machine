@@ -32,6 +32,12 @@ import type {
   ExportStatus,
   ExportToDriveResult,
   ExportedFile,
+  Locale,
+} from '@slide-machine/shared'
+import {
+  LOCALES,
+  deckSourceLocale,
+  overlaySlideTranslation,
 } from '@slide-machine/shared'
 import { defineAction } from './define'
 import { registerAction, ActionForbiddenError } from './dispatch'
@@ -42,7 +48,9 @@ import { meterUsage } from '../billing/usage-context'
 import { env } from '../config/env'
 import { UserModel } from '../models/user'
 import { SlideModel } from '../models/slide'
+import { ProjectModel } from '../models/project'
 import { type DeckExportDb, type DeckDb } from '../models/deck'
+import { translateSlides, translationEnabled } from '../lib/translate-slides'
 import { deckToYaml, type ExportDeck, type ExportSlide } from '../lib/deck-yaml'
 import { deckToPdf } from '../lib/deck-pdf'
 import { visibleStrokes } from '../lib/deck-drawings'
@@ -97,25 +105,61 @@ const slugifyTitle = (title: string): string =>
  * caller that also needs the document (to record the export) load it just once.
  * Whiteboard marks are attached only when `includeWhiteboard` is set (and only
  * strokes that are still visible), so the renderer draws exactly what's wanted.
+ *
+ * `locale` exports the deck as it reads in another language (SHARE-2): the
+ * slide text is overlaid with its translation, computed and cached on the same
+ * read-through path the viewer uses, so a translated export costs nothing extra
+ * once someone has read the deck in that language. The stored slides are never
+ * modified — only what this function hands the renderers changes.
  */
 const buildExportDeck = async (
   deck: HydratedDocument<DeckDb>,
   includeWhiteboard: boolean,
+  locale?: Locale,
 ): Promise<ExportDeck> => {
   const slideDocs = await SlideModel.find({ deckId: deck._id }).sort({
     index: 1,
   })
-  const slides: ExportSlide[] = slideDocs.map(s => ({
-    layoutType: s.layoutType,
-    title: s.title,
-    body: s.body,
-    bullets: s.bullets,
-    imageRef: s.imageRef,
-    imageSource: s.imageSource,
-    caption: s.caption,
-    attribution: s.attribution,
-    drawings: includeWhiteboard ? visibleStrokes(s.drawings) : undefined,
-  }))
+  const project = await ProjectModel.findById(deck.projectId).catch(() => null)
+  const source = deckSourceLocale(deck.language, project?.language ?? undefined)
+  // Asking for the language the deck is already in is a no-op, not a call.
+  const translation =
+    locale && locale !== source && translationEnabled()
+      ? await translateSlides(
+          deck._id,
+          slideDocs.map(s => ({
+            id: s._id.toString(),
+            title: s.title,
+            body: s.body,
+            bullets: s.bullets,
+            caption: s.caption,
+          })),
+          source,
+          locale,
+        )
+      : {}
+  const slides: ExportSlide[] = slideDocs.map(doc => {
+    const s = overlaySlideTranslation(
+      {
+        title: doc.title,
+        body: doc.body,
+        bullets: doc.bullets,
+        caption: doc.caption,
+      },
+      translation[doc._id.toString()],
+    )
+    return {
+      layoutType: doc.layoutType,
+      title: s.title,
+      body: s.body,
+      bullets: s.bullets,
+      imageRef: doc.imageRef,
+      imageSource: doc.imageSource,
+      caption: s.caption,
+      attribution: doc.attribution,
+      drawings: includeWhiteboard ? visibleStrokes(doc.drawings) : undefined,
+    }
+  })
   // Resolve the template's theme so the export carries the same colors the
   // viewer shows (background, text, accent, muted).
   const template = await resolveTemplate(deck.templateId)
@@ -186,7 +230,12 @@ export const exportStatus = defineAction<{ deckId: string }, ExportStatus>({
  * produced: a render that threw gave the user nothing to download.
  */
 export const exportDownload = defineAction<
-  { deckId: string; format: 'pdf' | 'yaml'; includeWhiteboard?: boolean },
+  {
+    deckId: string
+    format: 'pdf' | 'yaml'
+    includeWhiteboard?: boolean
+    locale?: Locale
+  },
   ExportDownload
 >({
   name: 'export.download',
@@ -195,13 +244,16 @@ export const exportDownload = defineAction<
     deckId: z.string().min(1),
     format: z.enum(['pdf', 'yaml']),
     includeWhiteboard: z.boolean().optional(),
+    // Export the deck as it reads in this language (SHARE-2); omitted exports
+    // the authored text.
+    locale: z.enum(LOCALES).optional(),
   }),
   execute: async (ctx, input) => {
     // YAML has no visual surface, so whiteboard marks never apply to it.
     const includeWhiteboard =
       input.format === 'pdf' && input.includeWhiteboard !== false
     const { deck: deckDoc } = await loadEditableDeck(ctx, input.deckId)
-    const deck = await buildExportDeck(deckDoc, includeWhiteboard)
+    const deck = await buildExportDeck(deckDoc, includeWhiteboard, input.locale)
     const base = slugifyTitle(deck.title)
     if (input.format === 'yaml') {
       const yaml = deckToYaml(deck)
@@ -242,6 +294,7 @@ export const exportToDrive = defineAction<
     driveFolderId: string
     driveFolderName?: string
     includeWhiteboard?: boolean
+    locale?: Locale
   },
   ExportToDriveResult
 >({
@@ -253,6 +306,9 @@ export const exportToDrive = defineAction<
     driveFolderId: z.string().min(1),
     driveFolderName: z.string().optional(),
     includeWhiteboard: z.boolean().optional(),
+    // Save the deck as it reads in this language (SHARE-2); omitted saves the
+    // authored text.
+    locale: z.enum(LOCALES).optional(),
   }),
   execute: async (ctx, input) => {
     const user = await requireUser(ctx)
@@ -264,7 +320,7 @@ export const exportToDrive = defineAction<
     // Load the editable deck once and reuse the document to record the export
     // below (no second fetch + permission check per save).
     const { deck: deckDoc } = await loadEditableDeck(ctx, input.deckId)
-    const deck = await buildExportDeck(deckDoc, includeWhiteboard)
+    const deck = await buildExportDeck(deckDoc, includeWhiteboard, input.locale)
     const base = slugifyTitle(deck.title)
     // A Google Slides file is named by the deck title; fall back to a non-empty
     // label for untitled lectures (an empty name also fails schema validation).

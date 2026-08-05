@@ -24,6 +24,7 @@ import {
   type DeckRefineResult,
   type DeckRefineStatusResult,
   type DeckSetRefineSettingsInput,
+  type Locale,
   type RefineJobSummary,
   type SlideRefineParts,
   type Template,
@@ -85,6 +86,9 @@ interface Props {
   /** True when any slide carries whiteboard marks — refining slides then
    * prompts a confirmation, since it may reflow content under the marks. */
   slidesHaveDrawings?: boolean
+  /** The language the viewer is reading the slides in (SHARE-2), so an
+   * export carries what is on screen rather than the authored text. */
+  contentLocale?: Locale
   onClose: () => void
   /** Fired after a successful save so the viewer re-themes immediately. */
   onTemplateChange: (deck: Deck, template: Template) => void
@@ -104,6 +108,7 @@ export default function DeckSettingsModal({
   isOwner,
   adminOverride = false,
   slidesHaveDrawings = false,
+  contentLocale,
   onClose,
   onTemplateChange,
   onDeckChange,
@@ -762,7 +767,7 @@ export default function DeckSettingsModal({
           id="settings-panel-export"
           aria-labelledby="settings-tab-export"
         >
-          <ExportPanel deckId={deck.id} />
+          <ExportPanel deckId={deck.id} locale={contentLocale} />
         </section>
       )}
 

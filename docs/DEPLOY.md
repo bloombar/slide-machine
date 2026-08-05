@@ -123,7 +123,9 @@ Follow [docs/GOOGLE_API_KEYS.md](GOOGLE_API_KEYS.md) to create each of:
   is gitignored and dockerignored, so it never reaches the container; the
   file-path variable (`GOOGLE_APPLICATION_CREDENTIALS`) will not work in the
   deployed env — use the `_JSON` form.
-- **`GOOGLE_CLOUD_TRANSLATION_KEY`** — translation API key.
+- **`GOOGLE_CLOUD_TRANSLATION_KEY`** — translation API key. Without it the
+  deck viewer's slide-language switcher is hidden; set `TRANSLATION_PROVIDER=none`
+  to disable translated viewing explicitly.
 - **`GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET`** — the OAuth
   client for "Continue with Google" (see also §7).
 

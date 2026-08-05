@@ -59,7 +59,9 @@ test('registering stores no language, and a switch persists', async ({
 
   // The app re-renders in English straight away — the page's own heading is
   // the proof, since it is translated from the same bundle.
-  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Account Settings' }),
+  ).toBeVisible()
 
   // …and it stuck to the account, not just this page: a reload re-detects
   // from the same French browser and still comes back English.
@@ -99,7 +101,9 @@ test('choosing the default again hands the interface back to the browser', async
 
   // Back to French straight away, and it stuck: a reload finds nothing
   // stored on the account and detects the French browser again.
-  await expect(page.getByRole('heading', { name: 'Paramètres' })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Paramètres du compte' }),
+  ).toBeVisible()
   await page.goto('/app')
   await expect(
     page.getByRole('heading', { name: `Bienvenue, ${displayName}` }),

@@ -5,6 +5,11 @@ export const LOCALES = ['en', 'fr', 'es', 'ru', 'zh'] as const
 
 export type Locale = (typeof LOCALES)[number]
 
+/** Narrows untrusted input (a request body, a stored string) to a supported
+ * locale, so callers never have to cast. */
+export const isLocale = (value: unknown): value is Locale =>
+  typeof value === 'string' && (LOCALES as readonly string[]).includes(value)
+
 /** Display names for language pickers (native name first). */
 export const LOCALE_LABELS: Record<Locale, string> = {
   en: 'English',

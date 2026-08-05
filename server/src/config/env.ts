@@ -89,6 +89,10 @@ const envSchema = z.object({
   // 'none' disables the feature; 'mock' is for tests. Without a usable key the
   // client hides the play button and the per-slide "Speak this slide" option.
   TTS_PROVIDER: z.string().default('google-cloud'),
+  // Post-lecture translated viewing (SHARE-2). 'google-cloud' needs
+  // GOOGLE_CLOUD_TRANSLATION_KEY below; 'none' disables the feature; 'mock' is
+  // for tests. Without a usable key the client hides the language switcher.
+  TRANSLATION_PROVIDER: z.string().default('google-cloud'),
 
   // Image enrichment (IMG-1): background stock-image fetch for slides
   IMAGE_ENRICHMENT_ENABLED: z.stringbool().default(true),

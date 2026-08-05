@@ -443,11 +443,10 @@ export default function AdminUserDetailPage() {
       {!userDeleted && (
         <p className="mb-4 text-sm text-slate-500">
           Settings are edited on the user&apos;s{' '}
-          <Link to={`/u/${user.id}`} className="underline">
-            profile page
-          </Link>
-          : open it and use the Settings button, as they would. Every change you
-          make there is recorded in the{' '}
+          <Link to={`/app/settings/${user.id}`} className="underline">
+            Account Settings
+          </Link>{' '}
+          page. Every change you make there is recorded in the{' '}
           <Link to="/app/admin/logs" className="underline">
             audit log
           </Link>

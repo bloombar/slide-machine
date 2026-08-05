@@ -17,6 +17,7 @@ const selectors: ProviderSelectors = {
   quizGeneration: 'gemini',
   imageGeneration: 'gemini',
   tts: 'google-cloud',
+  translation: 'google-cloud',
 }
 
 describe('ProviderRegistry', () => {
