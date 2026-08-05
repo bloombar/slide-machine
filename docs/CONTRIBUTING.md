@@ -131,6 +131,8 @@ MongoDB must be reachable at `MONGODB_URI` for every mode (`/api/health` reports
 
 Dev mode hot-reloads both sides (`tsx watch` + Vite HMR). The server reads `server/.env` at boot and exits with a clear message if required config is missing.
 
+The root `dev` script passes `--raw` to `concurrently`, which is load-bearing on Windows: without it, `tsx watch`'s child process deadlocks against concurrently's prefixing pipes, so the server never binds `:3000` and `wait-on` fails with a misleading `Timed out waiting for: http-get://localhost:3000/api/health`. The cost of `--raw` is losing the `[server]`/`[client]` prefixes — `tsx` and Vite still label their own output. Saving a server file restarts the API and briefly (~4s) makes it unreachable; the client's proxy errors during that window are expected.
+
 ## Seeding
 
 Two unrelated things share the word "seed":
