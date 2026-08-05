@@ -97,6 +97,64 @@ describe('AdminLogsPage', () => {
     expect(screen.getAllByText(/2026/).length).toBeGreaterThan(0)
   })
 
+  it('expands a clipped details entry on click, and folds it back', async () => {
+    // Longer than the column can show, and nested — the reason the cell
+    // needs expanding at all
+    const changes = {
+      email: 'ada@example.com',
+      changes: {
+        locale: { from: 'en', to: 'fr' },
+        profileVisibility: { from: 'public', to: 'private' },
+      },
+    }
+    renderPage(() => ({
+      status: 200,
+      body: {
+        logs: [{ ...logs[0], details: changes }],
+        total: 1,
+        page: 1,
+        limit: 25,
+      },
+    }))
+    await screen.findByText('user.ban')
+
+    // Collapsed: one line, and the cell says what a click will do
+    const toggle = screen.getByRole('button', { name: 'Show full details' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByText(JSON.stringify(changes))).toBeVisible()
+
+    fireEvent.click(toggle)
+    const expanded = screen.getByRole('button', { name: 'Hide full details' })
+    expect(expanded).toHaveAttribute('aria-expanded', 'true')
+    // Indented over as many lines as it takes, with nothing left out.
+    // Compared as raw text: getByText would normalize the newlines away.
+    expect(expanded.textContent).toBe(JSON.stringify(changes, null, 2))
+
+    fireEvent.click(expanded)
+    expect(
+      screen.getByRole('button', { name: 'Show full details' }),
+    ).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByText(JSON.stringify(changes))).toBeVisible()
+  })
+
+  it('expands one entry at a time, leaving the other rows clipped', async () => {
+    renderPage()
+    await screen.findByText('user.ban')
+
+    // Only the entry that recorded details is expandable; the other row
+    // has none, so it offers no toggle
+    const toggles = screen.getAllByRole('button', { name: 'Show full details' })
+    expect(toggles).toHaveLength(1)
+
+    fireEvent.click(toggles[0]!)
+    expect(
+      screen.getByRole('button', { name: 'Hide full details' }),
+    ).toBeVisible()
+    // The detail-less entry still shows its placeholder rather than a
+    // toggle or an empty cell
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
+  })
+
   it('links a user target to its admin page under the recorded email', async () => {
     await renderTarget({
       targetType: 'user',

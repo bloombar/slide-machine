@@ -233,8 +233,10 @@ newest first, paginated and sortable by time, admin, action, or target
 **Download CSV** button that exports the whole log, newest first
 whatever the page is sorted by.
 
-Both the acting admin and the target link to their admin detail pages, so
-an entry is one click from the record it describes. The target shows its
+**Details** shows what the action recorded, as JSON clipped to one line;
+clicking the cell expands it in place, indented, and clicking again folds
+it back. Both the acting admin and the target link to their admin detail
+pages, so an entry is one click from the record it describes. The target shows its
 kind plus the name snapshotted at the time (the user's email, the project
 or lecture title). Deletions are the exception: the name is struck through
 rather than linked, since the record is deleted (its page is still

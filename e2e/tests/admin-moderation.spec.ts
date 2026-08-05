@@ -152,4 +152,27 @@ test('the admin moderates: password, project, ban, delete, audit', async ({
   ]) {
     await expect(page.getByText(action).first()).toBeVisible()
   }
+
+  // The Details column clips what an entry recorded; clicking the cell
+  // expands it in place, indented, and clicking again folds it back
+  const banRow = page
+    .getByRole('table')
+    .getByRole('row')
+    .filter({ hasText: 'user.ban_email' })
+    .first()
+  const details = banRow.getByRole('button', { name: 'Show full details' })
+  await expect(details).toHaveAttribute('aria-expanded', 'false')
+  // Clipped, but the whole recorded email is in the DOM either way — the
+  // indent is what tells the two renderings apart
+  await expect(details).toContainText(`"email":"${victim.email}"`)
+  await details.click()
+
+  const expanded = banRow.getByRole('button', { name: 'Hide full details' })
+  await expect(expanded).toHaveAttribute('aria-expanded', 'true')
+  await expect(expanded).toContainText(`"email": "${victim.email}"`)
+
+  await expanded.click()
+  await expect(
+    banRow.getByRole('button', { name: 'Show full details' }),
+  ).toBeVisible()
 })

@@ -105,6 +105,40 @@ function TargetCell({ entry }: { entry: AdminLogEntry }) {
   )
 }
 
+/**
+ * The Details column: whatever context the action recorded, as JSON on
+ * one clipped line. Clicking it expands the entry in place, indented over
+ * as many lines as it takes, and clicking again folds it back — the
+ * entries worth reading (a ban's reason, a settings edit's before/after)
+ * are exactly the ones too long to fit the column.
+ */
+function DetailsCell({ details }: { details?: Record<string, unknown> }) {
+  const [expanded, setExpanded] = useState(false)
+  if (details === undefined) return <>—</>
+
+  return (
+    <button
+      type="button"
+      onClick={() => setExpanded(open => !open)}
+      aria-expanded={expanded}
+      aria-label={expanded ? 'Hide full details' : 'Show full details'}
+      // The whole cell is the target, so a one-line entry is as easy to
+      // hit as a long one
+      className="w-full cursor-pointer text-left hover:text-slate-700"
+    >
+      {expanded ? (
+        <pre className="font-mono text-xs break-all whitespace-pre-wrap">
+          {JSON.stringify(details, null, 2)}
+        </pre>
+      ) : (
+        <span className="block max-w-xs truncate">
+          {JSON.stringify(details)}
+        </span>
+      )}
+    </button>
+  )
+}
+
 /** Fetches the CSV export and hands it to the browser as a download.
  * A plain <a href> can't send the Bearer token, so the bytes arrive as
  * a blob and leave through a temporary object-URL anchor. */
@@ -248,42 +282,35 @@ export default function AdminLogsPage() {
             </tr>
           </thead>
           <tbody>
-            {data.logs.map(entry => {
-              const details =
-                entry.details === undefined ? '' : JSON.stringify(entry.details)
-              return (
-                <tr
-                  key={entry.id}
-                  className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
-                >
-                  <td className="px-4 py-2.5 whitespace-nowrap text-slate-500">
-                    {loggedAt(entry.createdAt)}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <Link
-                      to={`/app/admin/users/${entry.actorId}`}
-                      className="font-medium text-slate-900 hover:underline"
-                    >
-                      {entry.actorEmail}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-                      {entry.action}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2.5 text-slate-700">
-                    <TargetCell entry={entry} />
-                  </td>
-                  <td
-                    title={details}
-                    className="max-w-xs truncate px-4 py-2.5 text-slate-500"
+            {data.logs.map(entry => (
+              <tr
+                key={entry.id}
+                className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
+              >
+                <td className="px-4 py-2.5 whitespace-nowrap text-slate-500">
+                  {loggedAt(entry.createdAt)}
+                </td>
+                <td className="px-4 py-2.5">
+                  <Link
+                    to={`/app/admin/users/${entry.actorId}`}
+                    className="font-medium text-slate-900 hover:underline"
                   >
-                    {details || '—'}
-                  </td>
-                </tr>
-              )
-            })}
+                    {entry.actorEmail}
+                  </Link>
+                </td>
+                <td className="px-4 py-2.5">
+                  <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                    {entry.action}
+                  </span>
+                </td>
+                <td className="px-4 py-2.5 text-slate-700">
+                  <TargetCell entry={entry} />
+                </td>
+                <td className="px-4 py-2.5 align-top text-slate-500">
+                  <DetailsCell details={entry.details} />
+                </td>
+              </tr>
+            ))}
             {data.logs.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-slate-500">
