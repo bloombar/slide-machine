@@ -43,26 +43,33 @@ A few things happen around that core loop:
 
 ## Where it came from
 
-The first Slide Machine was a quirky artisanal browser app with no server and no
-accounts — a proof that live speech-to-slides was possible. This
-version is built to be usable by a wider audience: accounts, saved projects, a template
-library, shareable lectures, usage plans, and a codebase that student
-contributors can extend a module at a time.
+The first Slide Machine was created to help its author lecture to 4th grade
+elementary school students about what he does for a living. It was an
+artisanal browser app with no server and no account system — a proof of
+concept that it was possible for technology to help save the lecturer from the
+fate of becoming an actor reading lines from a script. The current version you
+are using is built better to be usable by a wider audience: accounts, saved
+projects, a template library, shareable lectures, usage plans, and a codebase
+that student contributors can extend a module at a time.
 
-It is developed in a university context and evaluated as a pilot,
-with anonymized findings shared with the community, including identifying the parts that do and do not
-work in this concept.
+It is currently being developed into a classroom pilot program in a university
+context, with anonymized findings shared with the community, including
+identifying the parts that do and do not work in this concept for students and
+instructors.
 
 ## What we care about
 
+- **You are in control.** This technology is here to assist you, not to get in
+  your way or tell you what to say or when to say it. We are actively working
+  to maintain the purity of this concept.
 - **Your material stays yours.** You can export any lecture in an open format
   and delete any of it, and deletion means deletion (see the
   [Privacy policy](/privacy)).
 - **No student data goes to an AI model.** Only de-identified lecture text
   drives generation.
-- **No lock-in of the machinery either.** The speech, generation, image and
-  billing engines all sit behind interchangeable adapters, so none of them is
-  a permanent commitment to a particular AI company or cloud services provider.
+- **No lock-in.** The speech, generation, image and billing engines all sit
+  behind interchangeable adapters, so none of them is a permanent commitment
+  to a particular AI company or cloud services provider.
 
 ## Talk to us
 
