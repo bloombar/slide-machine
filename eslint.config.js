@@ -51,11 +51,19 @@ export default tseslint.config(
     // No hardcoded user-facing strings in the app UI (TECH-12). The
     // admin console is deliberately English-only (docs/I18N.md) and so is
     // excluded, as are tests, which assert on literal copy by design.
+    //
+    // The static pages — About, Privacy, Terms, and the feedback form that
+    // sits with them — are English-only for the same reason (see
+    // client/src/content/document.ts): they are documents rather than
+    // application chrome, and a machine-translated privacy policy would be
+    // a legal statement nobody has read.
     files: ['client/src/**/*.tsx'],
     ignores: [
       'client/src/pages/Admin*.tsx',
       'client/src/components/admin/**',
       'client/src/auth/RequireAdmin.tsx',
+      'client/src/pages/{About,Feedback,PrivacyPolicy,Terms}Page.tsx',
+      'client/src/components/StaticDocument.tsx',
       'client/src/**/*.test.tsx',
     ],
     plugins: { i18next },

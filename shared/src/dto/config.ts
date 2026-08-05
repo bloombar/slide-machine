@@ -7,6 +7,28 @@
 /** The live-session speech engine the client should use. */
 export type SttEngine = 'browser' | 'google-cloud' | 'none'
 
+/**
+ * Who runs this deployment, for the privacy policy and the terms to name
+ * (`OPERATOR_*` in the server environment). Configuration rather than source,
+ * so a change of address is a restart and not a release.
+ *
+ * Every field is a string, empty where the server was given nothing: the
+ * client substitutes its own placeholder per field, and an absent value is
+ * the deployment declining to say rather than an error. Nothing here is a
+ * secret — these appear verbatim on two public pages.
+ */
+export interface OperatorDetails {
+  /** The legal entity behind the service. */
+  name: string
+  /** Whose law governs the terms, and where disputes are heard. */
+  jurisdiction: string
+  /** Where privacy and legal correspondence should go — not the feedback
+   * address, which stays server-side. */
+  contactEmail: string
+  /** Postal address, where a policy is expected to give one. */
+  postalAddress: string
+}
+
 export interface RuntimeConfig {
   sttEngine: SttEngine
   /** Whether slide/deck text-to-speech playback is available (TTS provider
@@ -17,6 +39,15 @@ export interface RuntimeConfig {
    * provider configured with a usable key — SHARE-2). When false the client
    * hides the deck viewer's slide-language switcher. */
   translationEnabled: boolean
+  /** Whether the "Send feedback" form can deliver: the server has a working
+   * mail transport and an address to send to. When false the client leaves
+   * the entry point out of the menu rather than offering a form that would
+   * refuse the message. */
+  feedbackEnabled: boolean
+  /** Who runs this deployment, named by the privacy policy and the terms.
+   * Blank fields fall back to the client's placeholders, which read as the
+   * draft they are. */
+  operator: OperatorDetails
   /** Default strength (1–5) the "Refine all slides" slider starts at (GEN-4). */
   refineSlidesDefaultLevel: number
   /** Default strength (1–5) the "Refine the spoken transcript" slider starts at. */

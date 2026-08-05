@@ -2,17 +2,20 @@
  * Hamburger menu for the primary nav, shown on every page (both shells).
  * Its button sits where the brand icon used to; clicking it slides a drawer
  * in from the left, pushing the page aside, and morphs the hamburger into a
- * close icon. The drawer holds Home, Profile and Account settings links and
- * a log-out action. Signed out, it offers Home and Log in instead. Closes on
- * outside click or Escape.
+ * close icon. The drawer holds Home, Profile and Account settings links, the
+ * static pages (About, feedback, and the two documents), and a log-out
+ * action. Signed out, it offers Home and Log in in place of the account
+ * links, and the static pages all the same. Closes on outside click or
+ * Escape.
  */
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Link, useNavigate } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import { LogOut, LogIn, ChevronRight } from 'lucide-react'
 import { useAuth } from '../../auth/AuthContext'
 import { useIsAdmin } from '../../hooks/useIsAdmin'
+import { getFeedbackEnabled } from '../../runtime-config'
 import { ADMIN_LINKS } from '../admin/AdminNav'
 import { DRAWER_PX, DRAWER_WIDTH, useShellDrawer } from './ShellDrawer'
 
@@ -21,6 +24,26 @@ import { DRAWER_PX, DRAWER_WIDTH, useShellDrawer } from './ShellDrawer'
  * way in. Kept out of JSX so the no-literal-string rule, which only reads
  * JSX, does not need a disable comment. */
 const ADMIN_LABEL = 'Admin'
+
+/**
+ * The static pages, in the two fenced groups they are read as: what we are
+ * and how to reach us, then the two documents. Each inner array becomes one
+ * group with a rule above it.
+ *
+ * English for the same reason as ADMIN_LABEL: the pages themselves are
+ * English-only documents (client/src/content/document.ts), so a translated
+ * way in would promise something the page does not deliver.
+ */
+const STATIC_GROUPS: { to: string; label: string; needsMail?: boolean }[][] = [
+  [
+    { to: '/about', label: 'About us' },
+    { to: '/feedback', label: 'Send feedback', needsMail: true },
+  ],
+  [
+    { to: '/privacy', label: 'Privacy policy' },
+    { to: '/terms', label: 'Terms & conditions' },
+  ],
+]
 
 /** Rule between the admin entry and the everyday links around it. */
 const SEPARATOR = 'my-1 border-t border-slate-200'
@@ -107,6 +130,59 @@ function AdminMenuItem({
   )
 }
 
+/**
+ * The static-page entries, fenced off from the account links above them the
+ * same way the admin entry is fenced from what surrounds it. "Send feedback"
+ * drops out on a server that cannot send mail rather than opening a form
+ * that would refuse the message; a group left with nothing in it renders no
+ * rule either.
+ *
+ * The feedback link carries the page it was opened from, so a bug report
+ * arrives knowing what it is about.
+ */
+function StaticMenuItems({
+  className,
+  from,
+  onNavigate,
+}: {
+  className: string
+  from: string
+  onNavigate: () => void
+}) {
+  const mail = getFeedbackEnabled()
+  return (
+    <>
+      {STATIC_GROUPS.map(group => {
+        const links = group.filter(link => !link.needsMail || mail)
+        if (links.length === 0) return null
+        return (
+          // A fragment rather than a wrapper, so every child of the panel is
+          // a menu item or a separator and nothing else.
+          <Fragment key={links[0]!.to}>
+            <div role="separator" className={SEPARATOR} />
+            {links.map(link => (
+              <Link
+                key={link.to}
+                to={link.to}
+                // Opened from the feedback page itself, there is nowhere to
+                // send it back to and nothing to say it is about.
+                state={
+                  link.needsMail && from !== link.to ? { from } : undefined
+                }
+                role="menuitem"
+                onClick={onNavigate}
+                className={className}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </Fragment>
+        )
+      })}
+    </>
+  )
+}
+
 export default function ShellMenu() {
   const { status, user, logout } = useAuth()
   const { t } = useTranslation()
@@ -116,6 +192,10 @@ export default function ShellMenu() {
   // but nothing inside it needs to exist before anyone asks for it.
   const [everOpened, setEverOpened] = useState(false)
   const navigate = useNavigate()
+  // Where the menu was opened from, handed to the feedback form so a report
+  // filed from a lecture says which lecture.
+  const location = useLocation()
+  const from = `${location.pathname}${location.search}`
   const buttonRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const slotRef = useRef<HTMLSpanElement>(null)
@@ -197,6 +277,12 @@ export default function ShellMenu() {
       inert={!open}
       // Links start below the header's height, clear of the close button
       // pinned over the top of the panel.
+      //
+      // Deliberately NOT a scroll container. The admin flyout opens beside
+      // the drawer (`start-full`), so any overflow other than `visible`
+      // clips it out of sight — and a scrollbar on one axis makes the other
+      // one clip too. The panel is full-height, which is room enough for the
+      // entries it holds.
       className={`fixed inset-y-0 start-0 z-50 ${DRAWER_WIDTH} border-e border-slate-200 bg-white p-2 pt-14 shadow-xl transition-transform duration-300 ease-out motion-reduce:transition-none ${
         open ? 'translate-x-0' : '-translate-x-full'
       }`}
@@ -229,20 +315,37 @@ export default function ShellMenu() {
           >
             {t('nav.accountSettings')}
           </Link>
+          {/* The static pages sit between the account links and the way into
+              the admin console, which fences itself off again below them. */}
+          <StaticMenuItems
+            className={item}
+            from={from}
+            onNavigate={() => setOpen(false)}
+          />
           {everOpened && (
             <AdminMenuItem className={item} onNavigate={() => setOpen(false)} />
           )}
         </>
       ) : (
-        <Link
-          to="/login"
-          role="menuitem"
-          onClick={() => setOpen(false)}
-          className={item}
-        >
-          <LogIn className="h-4 w-4" aria-hidden />
-          {t('nav.logIn')}
-        </Link>
+        <>
+          <Link
+            to="/login"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className={item}
+          >
+            <LogIn className="h-4 w-4" aria-hidden />
+            {t('nav.logIn')}
+          </Link>
+          {/* Signed out too: a policy that needs an account to read is not a
+              policy, and the feedback form is most useful to someone who
+              cannot get in. */}
+          <StaticMenuItems
+            className={item}
+            from={from}
+            onNavigate={() => setOpen(false)}
+          />
+        </>
       )}
       {authed && (
         <button

@@ -64,6 +64,36 @@ test('a regular user has no admin entry and is bounced from /app/admin', async (
   await expect(page).toHaveURL(/\/app$/)
 })
 
+// The submenu opens *beside* the drawer, so the drawer must not clip it —
+// give the panel any overflow but `visible` and the flyout disappears from
+// view while every other check still passes: it keeps its box, and clicking
+// it works because Playwright scrolls it into view first. Hit-testing the
+// point a user would actually aim at is what catches that.
+test('the Admin flyout opens beside the drawer, unclipped', async ({
+  page,
+}) => {
+  await ensureSignedIn(page, admin)
+
+  await page.getByRole('button', { name: 'Menu' }).click()
+  const trigger = page.getByRole('menuitem', { name: 'Admin', exact: true })
+  await trigger.hover()
+
+  const users = page.getByRole('menuitem', { name: 'Users' })
+  await expect(users).toBeVisible()
+  const box = await users.boundingBox()
+  expect(box).not.toBeNull()
+
+  // Beside the 256px drawer, not inside it
+  expect(box!.x).toBeGreaterThanOrEqual(256)
+  // And really on screen: whatever is painted at its centre is the link
+  // itself, rather than the page showing through where it was clipped away.
+  const at = await page.evaluate(
+    ([x, y]) => document.elementFromPoint(x!, y!)?.closest('a')?.textContent,
+    [box!.x + box!.width / 2, box!.y + box!.height / 2],
+  )
+  expect(at).toBe('Users')
+})
+
 test('the allowlisted admin reaches the directory and a user drill-down', async ({
   page,
 }) => {

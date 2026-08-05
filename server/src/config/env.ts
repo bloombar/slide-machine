@@ -213,6 +213,30 @@ const envSchema = z.object({
   SMTP_PORT: z.coerce.number().optional(),
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
+  // How outgoing mail leaves the server: 'smtp' relays through the SMTP_*
+  // settings above, 'log' writes the message to the server log instead (dev
+  // and e2e, where there is no relay to talk to), 'none' disables mail
+  // altogether. Mail-backed features report themselves unavailable rather
+  // than failing at send time when the transport cannot deliver.
+  MAIL_PROVIDER: z.enum(['smtp', 'log', 'none']).default('smtp'),
+  // Envelope sender for mail the app originates. Unset falls back to
+  // SMTP_USER, which is the account most relays require to be the sender
+  // anyway.
+  MAIL_FROM: z.string().optional(),
+  // Where the "Send feedback" form delivers (bug reports, feature requests).
+  // Unset hides the form: there is no address to send to.
+  FEEDBACK_EMAIL: z.string().optional(),
+
+  // Who runs this deployment. Published through GET /api/config and named
+  // verbatim by the privacy policy and the terms, so a change of address or
+  // legal entity is configuration rather than a release. Nothing here is a
+  // secret — it appears on two public pages. Each field left unset shows the
+  // client's own placeholder in square brackets, which reads as the draft it
+  // is (docs/DEPLOY.md, "Before launch").
+  OPERATOR_NAME: z.string().default(''),
+  OPERATOR_JURISDICTION: z.string().default(''),
+  OPERATOR_CONTACT_EMAIL: z.string().default(''),
+  OPERATOR_POSTAL_ADDRESS: z.string().default(''),
   // Uploaded-file storage: 'local' (disk, dev/test default) or 's3'
   STORAGE_PROVIDER: z.enum(['local', 's3']).default('local'),
   STORAGE_LOCAL_DIR: z.string().default('.uploads'),

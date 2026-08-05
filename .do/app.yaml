@@ -84,3 +84,14 @@ services:
       #   type: SECRET
       # - key: SMTP_PASSWORD
       #   type: SECRET
+      # The "Send feedback" page is hidden unless mail can be delivered:
+      # the SMTP_* set above, plus these. MAIL_FROM defaults to SMTP_USER.
+      # - key: MAIL_PROVIDER      # smtp | log | none (default smtp)
+      # - key: MAIL_FROM
+      # - key: FEEDBACK_EMAIL
+      # Named verbatim by /privacy and /terms; blank shows a bracketed
+      # placeholder there. Not secret. See docs/DEPLOY.md "Before launch".
+      # - key: OPERATOR_NAME
+      # - key: OPERATOR_JURISDICTION
+      # - key: OPERATOR_CONTACT_EMAIL
+      # - key: OPERATOR_POSTAL_ADDRESS

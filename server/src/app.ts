@@ -8,6 +8,7 @@ import { env } from './config/env'
 import { healthRouter } from './routes/health'
 import { configRouter } from './routes/config'
 import { authRouter } from './routes/auth'
+import { feedbackRouter } from './routes/feedback'
 import { googleConnectRouter } from './routes/google-connect'
 import { adminRouter } from './routes/admin'
 import { actionsRouter } from './routes/actions'
@@ -61,6 +62,7 @@ export const createApp = (): Express => {
   api.use(healthRouter)
   api.use(configRouter)
   api.use('/auth', authRouter)
+  api.use(feedbackRouter)
   api.use('/auth', googleConnectRouter)
   api.use('/admin', adminRouter)
   api.use(actionsRouter)
