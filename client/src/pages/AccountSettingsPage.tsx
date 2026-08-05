@@ -50,7 +50,6 @@ import { dispatchAction } from '../api/actions'
 import { fetchAdminUser, updateAdminUserSettings } from '../api/admin'
 import { ApiError } from '../api/http'
 import { apiErrorMessage } from '../i18n/apiError'
-import { formatDate } from '../i18n/format'
 import LocaleSwitcher from '../i18n/LocaleSwitcher'
 import AdminEditNotice from '../components/AdminEditNotice'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -610,20 +609,10 @@ export default function AccountSettingsPage() {
                 {/* A complimentary plan is entitlement without a bill behind
                     it, so the badge above would otherwise be unexplained — and
                     the date it ends is the one thing the account needs in
-                    order not to be surprised (ADMIN-9). */}
-                {user.planGrant && (
-                  <p className="mt-2 text-sm text-slate-600">
-                    {t('plan.grant.notice', {
-                      tier: t(`plan.tier.${user.planGrant.tier}`, {
-                        defaultValue: user.planGrant.tier,
-                      }),
-                      date: formatDate(user.planGrant.expiresAt),
-                      revertsTo: t(`plan.tier.${user.planGrant.revertsTo}`, {
-                        defaultValue: user.planGrant.revertsTo,
-                      }),
-                    })}
-                  </p>
-                )}
+                    order not to be surprised (ADMIN-9). The account is told by
+                    the billing panel below, which is the only place that says
+                    it in the second person; an admin reading someone else's
+                    page sees the grant stated in the editor instead. */}
 
                 {/* Granting one is an admin action, audited like a password
                     reset rather than saved like a setting — so it appears only

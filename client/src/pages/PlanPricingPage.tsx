@@ -30,7 +30,7 @@ import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Check } from 'lucide-react'
 import {
   PLAN_FEATURES,
-  PLAN_TIERS,
+  planRank,
   type BillingSummary,
   type PlanCatalog,
   type PlanCatalogEntry,
@@ -58,9 +58,9 @@ import ConfirmDialog from '../components/ConfirmDialog'
  * where checkout returns to. */
 const PLAN_TAB = '/app/settings?tab=plan'
 
-/** Whether `tier` is above `current`; PLAN_TIERS runs cheapest to largest. */
+/** Whether `tier` is above `current` on the plan ladder. */
 const isAbove = (tier: PlanTier, current: PlanTier): boolean =>
-  PLAN_TIERS.indexOf(tier) > PLAN_TIERS.indexOf(current)
+  planRank(tier) > planRank(current)
 
 /** The two allowances, named rather than written inline: the metered rows are
  * split by one of these, and a bare string in the JSX below reads to the i18n
@@ -148,7 +148,13 @@ export default function PlanPricingPage() {
   }
 
   const { plans, metrics } = catalog
-  const current = summary.tier
+  // What the account is *paying* for, which is what buying decisions are made
+  // against. A complimentary grant (ADMIN-9) raises `summary.tier` without a
+  // subscription behind it, and reading that as "your plan" here would mark a
+  // plan nobody is paying for as the current one and hide the button that
+  // buys it — leaving a comped account unable to subscribe to the very tier
+  // it was comped on, and dropped to free the day the grant lapsed.
+  const current = summary.planGrant?.revertsTo ?? summary.tier
   const tierName = (tier: PlanTier) =>
     t(`plan.tier.${tier}`, { defaultValue: tier })
 
@@ -189,8 +195,15 @@ export default function PlanPricingPage() {
       setSummary(next)
       // The tier lives on the account everywhere else in the app; leaving it
       // stale would have the header and the usage bars quoting the old plan.
-      if (user && next.tier !== user.planTier) {
-        updateUser({ ...user, planTier: next.tier })
+      // The grant travels with it (ADMIN-9): buying a plan that outgrows a
+      // complimentary one ends it, and a tier updated without the grant would
+      // keep announcing a comp that no longer applies.
+      if (
+        user &&
+        (next.tier !== user.planTier ||
+          next.planGrant?.expiresAt !== user.planGrant?.expiresAt)
+      ) {
+        updateUser({ ...user, planTier: next.tier, planGrant: next.planGrant })
       }
       setDone(
         impact.effective === 'period_end' && impact.effectiveAt

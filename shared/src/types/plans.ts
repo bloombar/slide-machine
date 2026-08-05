@@ -17,10 +17,6 @@ export type PlanTier = (typeof PLAN_TIERS)[number]
  */
 export const planRank = (tier: PlanTier): number => PLAN_TIERS.indexOf(tier)
 
-/** The larger of two tiers. */
-export const higherTier = (a: PlanTier, b: PlanTier): PlanTier =>
-  planRank(a) >= planRank(b) ? a : b
-
 /**
  * Metered resources subject to per-tier caps (BILL-3). `null` means unlimited
  * and `0` means the capability is unavailable — but **no shipped tier uses

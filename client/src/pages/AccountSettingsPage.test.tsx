@@ -135,9 +135,20 @@ describe('AccountSettingsPage', () => {
         },
       }),
       '/api/actions/user.usage': () => ({ status: 200, body: emptyUsage }),
+      // The notice is the billing panel's to state, once: the summary is
+      // what carries the grant, and saying it twice on one tab is what a
+      // second copy beside the badge would amount to.
       '/api/actions/billing.summary': () => ({
         status: 200,
-        body: freeBilling,
+        body: {
+          ...freeBilling,
+          tier: 'pro',
+          planGrant: {
+            tier: 'pro',
+            expiresAt: '2026-09-30T23:59:59.999Z',
+            revertsTo: 'free',
+          },
+        },
       }),
     })
     render(
