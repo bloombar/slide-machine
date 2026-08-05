@@ -7,7 +7,14 @@
  * pipeline will (GEN-1/CAP-1). Playback and the carousel/list switch
  * come from the shared slide-navigation codebase.
  */
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { Trans, useTranslation } from 'react-i18next'
 import {
@@ -24,6 +31,7 @@ import type {
   DeckRefineSlideResult,
   DeckViewResponse,
   ImageSearchCandidate,
+  Locale,
   Slide,
   SlideEvent,
   SlideRefineOptions,
@@ -34,6 +42,8 @@ import type {
 import {
   WHITEBOARD_LAYOUT_TYPE,
   hasVisibleDrawings,
+  deckSourceLocale,
+  overlaySlideTranslation,
 } from '@slide-machine/shared'
 import { strokeVisible, erasureReplays } from '../lib/drawing'
 import { runLayoutFlip } from '../lib/layoutFlip'
@@ -50,6 +60,7 @@ import { useAuth } from '../auth/AuthContext'
 import { useIsAdmin } from '../hooks/useIsAdmin'
 import { useTimeAgo } from '../hooks/useTimeAgo'
 import { useSlideNavigation } from '../hooks/useSlideNavigation'
+import { useSlideTranslation } from '../hooks/useSlideTranslation'
 import { useBracketKeys } from '../hooks/useBracketKeys'
 import { useSpaceKey } from '../hooks/useSpaceKey'
 import { useUndoRedoKeys } from '../hooks/useUndoRedoKeys'
@@ -67,6 +78,7 @@ import {
   getRefineSlidesDefaultLevel,
   getSimulatedSpeechEnabled,
   getSttEngine,
+  getTranslationEnabled,
   getTtsEnabled,
   getWhiteboardSuppressDebounceMs,
 } from '../runtime-config'
@@ -91,6 +103,7 @@ import { ShellTitle } from '../components/layout/ShellTitle'
 import { ShellActions } from '../components/layout/ShellActions'
 import ViewModeToggle, { type ViewMode } from '../components/ViewModeToggle'
 import VoteControl from '../components/VoteControl'
+import SlideLanguageSwitcher from '../components/SlideLanguageSwitcher'
 import { lectureTitle, untitledLecture } from '../lib/lecture'
 import { untitledProject } from '../lib/project'
 
@@ -191,6 +204,27 @@ export default function DeckViewerPage() {
     setModeState(next)
     writeViewMode(next)
   }
+  // Reading the slides in another language (SHARE-2). The translation is
+  // fetched alongside the deck and laid over it at render time — `view.slides`
+  // stays the authored text that every edit, narration and save path reads.
+  const translationAvailable = getTranslationEnabled()
+  const translation = useSlideTranslation(slug, translationAvailable)
+  const sourceLocale = deckSourceLocale(
+    view?.deck.language,
+    view?.projectLanguage,
+  )
+  // A deck being read in its own language is not translated at all.
+  const showingTranslation =
+    translation.locale !== null && translation.locale !== sourceLocale
+  /** The slide as it should be displayed — translated text over the original
+   * when a translation is on, and the original itself otherwise. */
+  const displaySlide = useCallback(
+    (slide: Slide): Slide =>
+      showingTranslation
+        ? overlaySlideTranslation(slide, translation.perSlide[slide.id])
+        : slide,
+    [showingTranslation, translation.perSlide],
+  )
   const [error, setError] = useState<string | null>(null)
   // A lecture list's Share option deep-links to the sharing tab; the
   // layout picker's "Change template" link deep-links to the design tab
@@ -1205,6 +1239,21 @@ export default function DeckViewerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeLanguage, listening])
 
+  /**
+   * Changes the language the slides are read in, ending any live session
+   * first. The microphone leaves the toolbar with the rest of the editing
+   * surface, so a session left running would keep recording — and keep
+   * adding slides — with nothing on screen to stop it.
+   */
+  const setSlideLanguage = (next: Locale | null) => {
+    const translating = next !== null && next !== sourceLocale
+    if (translating && (speaking || listening)) {
+      stopListening()
+      setSpeaking(false)
+    }
+    translation.setLocale(next)
+  }
+
   // A click on the page background — not the slide, a control, or a
   // modal backdrop — briefly reveals blank slots (styled in index.css),
   // which hide again on their own half a second later
@@ -1657,6 +1706,14 @@ export default function DeckViewerPage() {
           share sits rightmost, to the right of the settings icon. */}
       <ShellActions>
         <ViewModeToggle mode={mode} onChange={setMode} />
+        {translationAvailable && view.slides.length > 0 && (
+          <SlideLanguageSwitcher
+            source={sourceLocale}
+            value={translation.locale}
+            onChange={setSlideLanguage}
+            busy={translation.busy}
+          />
+        )}
         {(canEdit || adminOverride) && (
           <Tooltip label={t('deck.settings.title')}>
             <button
@@ -1736,50 +1793,79 @@ export default function DeckViewerPage() {
                     </button>
                   </Tooltip>
                 )}
-                <Tooltip
-                  label={
-                    listening
-                      ? t('deck.record.stopHint')
-                      : t('deck.record.startHint')
-                  }
-                >
-                  <button
-                    aria-label={t('deck.liveSession')}
-                    aria-pressed={speaking}
-                    onClick={() => {
-                      // One toggle: the bar and the microphone together
-                      if (speaking) stopListening()
-                      else {
-                        tts.stop() // never record while speaking (and vice-versa)
-                        startListening()
-                      }
-                      setSpeaking(s => !s)
-                    }}
-                    // Recording fills solid red and pulses: the audience is
-                    // live, so the state has to be unmissable at a glance
-                    className={`rounded-md p-2 ${
+                {/* Speaking new slides into the deck is editing, so it is
+                    held back with the rest of the editing surface while a
+                    translation is shown: dictated slides would arrive in the
+                    authored language and sit untranslated among the rest. */}
+                {!showingTranslation && (
+                  <Tooltip
+                    label={
                       listening
-                        ? 'animate-pulse bg-red-600 text-white ring-2 ring-red-300'
-                        : speaking
-                          ? 'bg-indigo-50 text-indigo-600'
-                          : 'text-slate-500 hover:text-slate-900'
-                    }`}
+                        ? t('deck.record.stopHint')
+                        : t('deck.record.startHint')
+                    }
                   >
-                    <Mic className="h-5 w-5" aria-hidden />
-                  </button>
-                </Tooltip>
+                    <button
+                      aria-label={t('deck.liveSession')}
+                      aria-pressed={speaking}
+                      onClick={() => {
+                        // One toggle: the bar and the microphone together
+                        if (speaking) stopListening()
+                        else {
+                          tts.stop() // never record while speaking (and vice-versa)
+                          startListening()
+                        }
+                        setSpeaking(s => !s)
+                      }}
+                      // Recording fills solid red and pulses: the audience is
+                      // live, so the state has to be unmissable at a glance
+                      className={`rounded-md p-2 ${
+                        listening
+                          ? 'animate-pulse bg-red-600 text-white ring-2 ring-red-300'
+                          : speaking
+                            ? 'bg-indigo-50 text-indigo-600'
+                            : 'text-slate-500 hover:text-slate-900'
+                      }`}
+                    >
+                      <Mic className="h-5 w-5" aria-hidden />
+                    </button>
+                  </Tooltip>
+                )}
               </>
             )}
           </>
         }
       />
 
-      {canEdit && view.slides.length > 0 && (
+      {/* Annotating is held back with editing while a translation is shown:
+          a stroke placed over translated words would sit over different
+          words the moment the reader switches back. */}
+      {canEdit && !showingTranslation && view.slides.length > 0 && (
         <WhiteboardToolbar
           deckId={view.deck.id}
           whiteboard={whiteboard}
           onNewWhiteboardSlide={() => void addWhiteboardSlide()}
         />
+      )}
+
+      {/* Says plainly that these are not the lecturer's own words, and (for
+          editors) why the editing surface has gone quiet. */}
+      {showingTranslation && !translation.busy && (
+        <NotificationPill
+          action={{
+            label: t('viewer.showOriginal'),
+            onClick: () => translation.setLocale(null),
+          }}
+        >
+          {canEdit
+            ? t('viewer.translatedNoticeEditor')
+            : t('viewer.translatedNotice')}
+        </NotificationPill>
+      )}
+      {translation.failed && (
+        <NotificationPill tone="error" role="alert">
+          {t('viewer.translationFailed')}
+        </NotificationPill>
       )}
 
       {/* Quiet, neutral up/down vote (SOC-1): ▲ up-votes and ▼ down-votes side
@@ -1840,11 +1926,14 @@ export default function DeckViewerPage() {
               onPrev={nav.goPrev}
               onNext={nav.goNext}
             >
+              {/* The displayed slide may carry translated text; every
+                  callback below still takes the authored slide, so editing,
+                  narration and image work never see a translation. */}
               <SlideView
-                slide={slide!}
+                slide={displaySlide(slide!)}
                 template={view.template}
-                editable={canEdit}
-                onEdit={editSlide(slide!.id)}
+                editable={canEdit && !showingTranslation}
+                onEdit={showingTranslation ? undefined : editSlide(slide!.id)}
                 onReplaceImage={replaceSlideImage(slide!.id)}
                 onPickImageCandidate={pickSlideImageCandidate(slide!.id)}
                 onRemoveImage={removeSlideImage(slide!)}
@@ -1897,10 +1986,10 @@ export default function DeckViewerPage() {
                   itemRef={nav.registerItem(i)}
                 >
                   <SlideView
-                    slide={s}
+                    slide={displaySlide(s)}
                     template={view.template}
-                    editable
-                    onEdit={editSlide(s.id)}
+                    editable={!showingTranslation}
+                    onEdit={showingTranslation ? undefined : editSlide(s.id)}
                     onReplaceImage={replaceSlideImage(s.id)}
                     onPickImageCandidate={pickSlideImageCandidate(s.id)}
                     onRemoveImage={removeSlideImage(s)}
@@ -1928,7 +2017,7 @@ export default function DeckViewerPage() {
                 </DraggableListRow>
               ) : (
                 <li key={s.id} ref={nav.registerItem(i)} className="relative">
-                  <SlideView slide={s} template={view.template} />
+                  <SlideView slide={displaySlide(s)} template={view.template} />
                   {ttsEnabled && (
                     <SlideMenu number={i + 1} onSpeak={() => speakSlide(s)} />
                   )}
@@ -2059,6 +2148,7 @@ export default function DeckViewerPage() {
             slidesHaveDrawings={view.slides.some(s =>
               hasVisibleDrawings(s.drawings),
             )}
+            contentLocale={showingTranslation ? translation.locale! : undefined}
             onClose={closeSettings}
             onDeckChange={deck => setView(v => (v ? { ...v, deck } : v))}
             onDeleted={() => void navigate('/app')}

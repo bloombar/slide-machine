@@ -3093,3 +3093,116 @@ describe('DeckViewerPage admin settings (ADMIN-5)', () => {
     ).not.toBeInTheDocument()
   })
 })
+
+// Reading a deck in another language turns the editing surface off, and
+// speaking new slides into it is editing: dictated slides would land in the
+// authored language and sit untranslated among words the reader can follow.
+describe('DeckViewerPage live session under translated viewing (SHARE-2)', () => {
+  class FakeRecognition {
+    static last: FakeRecognition | null = null
+    static reset() {
+      FakeRecognition.last = null
+    }
+    continuous = false
+    interimResults = false
+    lang = ''
+    onresult: ((e: unknown) => void) | null = null
+    onerror: ((e: unknown) => void) | null = null
+    onend: (() => void) | null = null
+    start() {}
+    stop() {
+      this.onend?.()
+    }
+    constructor() {
+      FakeRecognition.last = this
+    }
+  }
+
+  /** Renders the owner's own deck with the slide-language switcher offered. */
+  const translatableRoutes = () => {
+    FakeRecognition.reset()
+    vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
+    vi.spyOn(runtimeConfig, 'getTranslationEnabled').mockReturnValue(true)
+    return mockFetchRoutes({
+      // Ahead of the deck route: the mock matches by substring, and the
+      // deck's own path is a prefix of the translation path.
+      '/api/decks/shared-abc123/translation': () => ({
+        status: 200,
+        body: {
+          locale: 'fr',
+          source: 'en',
+          perSlide: {
+            s1: { title: 'Bonjour' },
+            s2: { title: 'Deuxième', body: 'Plus de détail' },
+          },
+        },
+      }),
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+    })
+  }
+
+  const mount = () =>
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+  /** Picks a language from the slide-language switcher. */
+  const chooseLanguage = (name: RegExp) => {
+    fireEvent.click(screen.getByRole('button', { name: /Slide language/ }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name }))
+  }
+
+  it('keeps the microphone out of the toolbar while a translation is shown', async () => {
+    localStorage.setItem('sm:slide-language:shared-abc123', 'fr')
+    translatableRoutes()
+    mount()
+
+    // The remembered language loads, and the mic never appears with it
+    expect(await screen.findByText('Bonjour')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Live session' }),
+    ).not.toBeInTheDocument()
+
+    // Returning to the authored text hands it back
+    chooseLanguage(/Original/)
+    expect(
+      await screen.findByRole('button', { name: 'Live session' }),
+    ).toBeInTheDocument()
+  })
+
+  it('ends a running live session when the reader switches to a translation', async () => {
+    translatableRoutes()
+    mount()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Live session' }))
+    const recognition = FakeRecognition.last!
+    expect(recognition).not.toBeNull()
+    const stopSpy = vi.spyOn(recognition, 'stop')
+
+    chooseLanguage(/Français/)
+
+    // The microphone is released, not merely hidden behind a gone button
+    expect(stopSpy).toHaveBeenCalled()
+    expect(
+      screen.queryByRole('button', { name: 'Live session' }),
+    ).not.toBeInTheDocument()
+    // And the Speak bar closes with it
+    expect(
+      screen.queryByRole('textbox', { name: 'Spoken phrase' }),
+    ).not.toBeInTheDocument()
+    expect(await screen.findByText('Bonjour')).toBeInTheDocument()
+  })
+})

@@ -36,6 +36,9 @@ const serverEnv = (over: Record<string, string>): Record<string, string> => ({
   // Mock TTS returns a silent WAV + synthetic `<mark>` timepoints, so deck
   // playback (and the WB-2 stroke-sync marks) run without a Google key.
   TTS_PROVIDER: 'mock',
+  // Mock translation tags each segment with its target locale, so translated
+  // viewing (SHARE-2) is assertable without a Google key.
+  TRANSLATION_PROVIDER: 'mock',
   IMAGE_ENRICHMENT_ENABLED: 'false',
   // Billing runs on the in-memory adapter: no e2e run may reach Stripe, and
   // the mock drives the whole checkout → webhook path offline (BILL-2).

@@ -92,6 +92,7 @@ Behavior is tuned by env vars in `server/.env`, each annotated inline in [.env.e
 | `GENERATION_PROVIDER` | `mock` \| `gemini` | Slide-generation engine (`.env.example` ships `mock` for keyless dev) |
 | `TRANSCRIPTION_PROVIDER` | `browser` \| `google-cloud` \| `none` | Live speech engine |
 | `TTS_PROVIDER` | `google-cloud` | Narration engine (off without a TTS key) |
+| `TRANSLATION_PROVIDER` | `google-cloud` \| `none` \| `mock` | Slide-content translation for translated viewing (off without a Translation key) |
 | `IMAGE_GEN_PROVIDER` / `QUIZ_PROVIDER` | `gemini` | AI image / quiz engines |
 | `STORAGE_PROVIDER` | `local` \| `s3` | Object-storage backend |
 | `DIARIZATION_PROVIDER` | `none` \| `google-cloud` \| `mock` | Post-lecture speaker diarization |
@@ -130,6 +131,8 @@ MongoDB must be reachable at `MONGODB_URI` for every mode (`/api/health` reports
 | Seed dev data           | `npm run seed -w server`                   | sample users/lectures ([SEEDING.md](SEEDING.md))          |
 
 Dev mode hot-reloads both sides (`tsx watch` + Vite HMR). The server reads `server/.env` at boot and exits with a clear message if required config is missing.
+
+The root `dev` script passes `--raw` to `concurrently`, which is load-bearing on Windows: without it, `tsx watch`'s child process deadlocks against concurrently's prefixing pipes, so the server never binds `:3000` and `wait-on` fails with a misleading `Timed out waiting for: http-get://localhost:3000/api/health`. The cost of `--raw` is losing the `[server]`/`[client]` prefixes — `tsx` and Vite still label their own output. Saving a server file restarts the API and briefly (~4s) makes it unreachable; the client's proxy errors during that window are expected.
 
 ## Seeding
 

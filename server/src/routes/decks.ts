@@ -6,10 +6,20 @@
  * lecture read-only (the ADMIN_EMAILS gate is the authorization, as on
  * the admin API). canEdit tells the client whether to enable the
  * editing surface.
+ *
+ * POST /api/decks/:slug/translation (SHARE-2) serves the same deck's slide
+ * content in another language, behind the same view gate: translated reading
+ * is part of viewing a lecture, so it is open to the anonymous permalink
+ * visitors the feature exists for.
  */
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import type { HydratedDocument } from 'mongoose'
-import type { DeckViewResponse } from '@slide-machine/shared'
+import {
+  deckSourceLocale,
+  isLocale,
+  type DeckTranslationResponse,
+  type DeckViewResponse,
+} from '@slide-machine/shared'
 import {
   DeckModel,
   loadDeckAcl,
@@ -22,6 +32,7 @@ import { canEditAcl, canViewAcl } from '../lib/access'
 import { SlideModel, toSlideDto } from '../models/slide'
 import { TranscriptSegmentModel } from '../models/transcript-segment'
 import { getBuiltinTemplate } from '../templates/builtin'
+import { translateSlides, translationEnabled } from '../lib/translate-slides'
 import { verifyAccessToken } from '../auth/tokens'
 import { ProjectModel } from '../models/project'
 import { UserModel } from '../models/user'
@@ -71,19 +82,32 @@ const playableAudioSlideIds = async (
 
 export const decksRouter = Router()
 
+/**
+ * Loads the deck behind a permalink and enforces the viewer ACL, or throws
+ * 404 — missing and forbidden look identical so existence never leaks. Shared
+ * by the view and translate routes so both gate viewing the same way.
+ */
+const loadViewableDeck = async (
+  slug: string,
+  userId: string | undefined,
+): Promise<HydratedDocument<DeckDb>> => {
+  const notFound = new HttpError(404, 'not_found', 'Deck not found')
+  const deck = await DeckModel.findOne({ permalinkSlug: slug })
+  if (!deck) throw notFound
+  const acl = await loadDeckAcl(deck)
+  if (!canViewAcl(acl, userId)) {
+    // Admin view bypass: allowlisted admins may always open a lecture
+    // (read-only — canEdit still follows the ACL)
+    if (!(await isAllowlistedAdmin(userId))) throw notFound
+  }
+  return deck
+}
+
 decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
   const notFound = new HttpError(404, 'not_found', 'Deck not found')
 
-  const deck = await DeckModel.findOne({
-    permalinkSlug: String(req.params.slug),
-  })
-  if (!deck) throw notFound
+  const deck = await loadViewableDeck(String(req.params.slug), req.userId)
   const acl = await loadDeckAcl(deck)
-  if (!canViewAcl(acl, req.userId)) {
-    // Admin view bypass: allowlisted admins may always open a lecture
-    // (read-only — canEdit below still follows the ACL)
-    if (!(await isAllowlistedAdmin(req.userId))) throw notFound
-  }
 
   const template = getBuiltinTemplate(deck.templateId)
   if (!template) throw notFound
@@ -127,6 +151,59 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
     myVote,
     voteUp,
     voteDown,
+  }
+  res.json(body)
+})
+
+/**
+ * POST /api/decks/:slug/translation — the deck's slide content in another
+ * language (SHARE-2).
+ *
+ * Gated on VIEW access, not edit and not sign-in: reading a shared lecture in
+ * your own language is part of viewing it, and the students this exists for
+ * arrive through a permalink without an account. Results are cached per deck +
+ * locale, so this is usually a database read; only new or edited slides reach
+ * the paid API.
+ */
+decksRouter.post('/decks/:slug/translation', optionalAuth, async (req, res) => {
+  if (!translationEnabled()) {
+    throw new HttpError(
+      503,
+      'unavailable',
+      'Translation is not configured on this server',
+    )
+  }
+  const locale = req.body?.locale
+  if (!isLocale(locale)) {
+    throw new HttpError(400, 'bad_request', 'Unsupported language')
+  }
+
+  const deck = await loadViewableDeck(String(req.params.slug), req.userId)
+  const project = await ProjectModel.findById(deck.projectId).catch(() => null)
+  const source = deckSourceLocale(deck.language, project?.language)
+
+  const body: DeckTranslationResponse = { locale, source, perSlide: {} }
+  // Asking for the language it is already in is not an error, just a no-op:
+  // the viewer renders the authored text and nothing is spent.
+  if (locale === source) return res.json(body)
+
+  const slides = await SlideModel.find({ deckId: deck._id }).sort({ index: 1 })
+  try {
+    body.perSlide = await translateSlides(
+      deck._id,
+      slides.map(toSlideDto),
+      source,
+      locale,
+    )
+  } catch {
+    // The provider failed or timed out. Report it as an upstream failure so
+    // the viewer can fall back to the original text rather than showing a
+    // half-translated deck.
+    throw new HttpError(
+      502,
+      'translation_failed',
+      'Could not translate this lecture right now',
+    )
   }
   res.json(body)
 })

@@ -82,7 +82,8 @@
       "audioStorage": "Audio storage",
       "gemini": "Generative AI",
       "stt": "Speech-to-Text",
-      "tts": "Text-to-Speech"
+      "tts": "Text-to-Speech",
+      "translation": "Translation"
     }
   },
   "profile": {
@@ -716,6 +717,14 @@
       }
     }
   },
+  "viewer": {
+    "slideLanguage": "Slide language",
+    "slideLanguageOriginal": "Original ({language})",
+    "showOriginal": "Show original",
+    "translatedNotice": "Machine-translated — the original is authoritative",
+    "translatedNoticeEditor": "Machine-translated view — editing is off until you show the original",
+    "translationFailed": "Could not translate this lecture. Showing the original."
+  },
   "quiz": {
     "heading": "Exit-ticket quiz",
     "intro": "Generate a quiz from this lecture and publish it as a Google Form you can share with students.",
@@ -808,6 +817,7 @@
     "heading": "Export this lecture",
     "intro": "Save the deck as a PDF, an editable Google Slides presentation, or a re-importable YAML file.",
     "format": "Format",
+    "translated": "This file will carry the {language} translation you are reading, not the original text.",
     "destination": "Destination",
     "download": "Download",
     "toDrive": "Save to Google Drive",

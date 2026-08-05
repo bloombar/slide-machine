@@ -10,6 +10,7 @@ export const CAPABILITIES = [
   'quizGeneration',
   'imageGeneration',
   'tts',
+  'translation',
 ] as const
 
 export type Capability = (typeof CAPABILITIES)[number]

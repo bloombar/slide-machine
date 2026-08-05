@@ -13,6 +13,7 @@ const {
   pingGemini,
   pingGoogleStt,
   pingGoogleTts,
+  pingGoogleTranslation,
 } = vi.hoisted(() => ({
   pingMongo: vi.fn(),
   storageHealthCheck: vi.fn(),
@@ -20,6 +21,7 @@ const {
   pingGemini: vi.fn(),
   pingGoogleStt: vi.fn(),
   pingGoogleTts: vi.fn(),
+  pingGoogleTranslation: vi.fn(),
 }))
 
 vi.mock('../db/mongoose', () => ({ pingMongo }))
@@ -29,12 +31,19 @@ vi.mock('../storage', () => ({
 vi.mock('../providers/gemini-generation', () => ({ pingGemini }))
 vi.mock('../providers/google-cloud-transcription', () => ({ pingGoogleStt }))
 vi.mock('../providers/google-cloud-tts', () => ({ pingGoogleTts }))
+vi.mock('../providers/google-cloud-translation', () => ({
+  pingGoogleTranslation,
+}))
 vi.mock('../providers/google-cloud-diarization', () => ({
   pingGcsAudioStorage,
 }))
 vi.mock('./app-version', () => ({ APP_VERSION: '2026.07.18+testsha' }))
 vi.mock('../config/env', () => ({
-  env: { NODE_ENV: 'test', TTS_PROVIDER: 'google-cloud' },
+  env: {
+    NODE_ENV: 'test',
+    TTS_PROVIDER: 'google-cloud',
+    TRANSLATION_PROVIDER: 'google-cloud',
+  },
 }))
 
 import { computeOverall, getHealth, resetHealthCache } from './health'
@@ -50,6 +59,7 @@ const components = (
   gemini: ok,
   stt: disabled,
   tts: disabled,
+  translation: disabled,
   ...over,
 })
 
@@ -61,6 +71,7 @@ beforeEach(() => {
   pingGemini.mockResolvedValue(ok)
   pingGoogleStt.mockResolvedValue(disabled)
   pingGoogleTts.mockResolvedValue(disabled)
+  pingGoogleTranslation.mockResolvedValue(disabled)
 })
 
 describe('computeOverall', () => {

@@ -20,6 +20,7 @@ import { getStorage } from '../storage'
 import { pingGemini } from '../providers/gemini-generation'
 import { pingGoogleStt } from '../providers/google-cloud-transcription'
 import { pingGoogleTts } from '../providers/google-cloud-tts'
+import { pingGoogleTranslation } from '../providers/google-cloud-translation'
 import { pingGcsAudioStorage } from '../providers/google-cloud-diarization'
 import { APP_VERSION } from './app-version'
 
@@ -61,17 +62,28 @@ const ttsComponent = async (): Promise<HealthComponent> => {
   return { status: 'ok', detail: provider }
 }
 
+/** Slide-content translation status, probed like TTS: the active adapter
+ * decides how, and an unconfigured feature reads as `disabled`. */
+const translationComponent = async (): Promise<HealthComponent> => {
+  const provider = env.TRANSLATION_PROVIDER
+  if (provider === 'none') return { status: 'disabled', detail: 'off' }
+  if (provider === 'google-cloud') return pingGoogleTranslation()
+  return { status: 'ok', detail: provider }
+}
+
 /** Probes all components concurrently. */
 const runChecks = async (): Promise<HealthComponents> => {
-  const [mongo, storage, audioStorage, gemini, stt, tts] = await Promise.all([
-    withTimeout(mongoComponent()),
-    withTimeout(getStorage().healthCheck()),
-    withTimeout(pingGcsAudioStorage()),
-    withTimeout(pingGemini()),
-    withTimeout(pingGoogleStt()),
-    withTimeout(ttsComponent()),
-  ])
-  return { mongo, storage, audioStorage, gemini, stt, tts }
+  const [mongo, storage, audioStorage, gemini, stt, tts, translation] =
+    await Promise.all([
+      withTimeout(mongoComponent()),
+      withTimeout(getStorage().healthCheck()),
+      withTimeout(pingGcsAudioStorage()),
+      withTimeout(pingGemini()),
+      withTimeout(pingGoogleStt()),
+      withTimeout(ttsComponent()),
+      withTimeout(translationComponent()),
+    ])
+  return { mongo, storage, audioStorage, gemini, stt, tts, translation }
 }
 
 let cache: { at: number; components: HealthComponents } | null = null

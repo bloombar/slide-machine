@@ -25,6 +25,9 @@ export interface HealthComponents {
   gemini: HealthComponent
   stt: HealthComponent
   tts: HealthComponent
+  /** Slide-content translation for post-lecture translated viewing (SHARE-2);
+   * `disabled` when no translator is configured. */
+  translation: HealthComponent
 }
 
 export interface HealthResponse {

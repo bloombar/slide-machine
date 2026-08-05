@@ -30,9 +30,13 @@ import type {
   ExportedFile,
   ExportStatus,
   ExportToDriveResult,
+  Locale,
   QuizConnectResult,
 } from '@slide-machine/shared'
-import { WHITEBOARD_EXPORT_FORMATS } from '@slide-machine/shared'
+import {
+  WHITEBOARD_EXPORT_FORMATS,
+  localeShortLabel,
+} from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 // The singleton's standalone translator, for the load effects below: it
 // is module-level and stable, so it is not an effect dependency the way
@@ -44,6 +48,10 @@ import ConfirmDialog from './ConfirmDialog'
 
 interface Props {
   deckId: string
+  /** The language the viewer is currently reading the slides in (SHARE-2).
+   * Set, the export carries that translation instead of the authored text —
+   * what you are looking at is what you get. */
+  locale?: Locale
 }
 
 type Destination = 'download' | 'drive'
@@ -347,7 +355,7 @@ function FolderPicker({
   )
 }
 
-export default function ExportPanel({ deckId }: Props) {
+export default function ExportPanel({ deckId, locale }: Props) {
   const { t } = useTranslation()
   const [loading, setLoading] = useState(true)
   const [connected, setConnected] = useState(false)
@@ -447,6 +455,7 @@ export default function ExportPanel({ deckId }: Props) {
       deckId,
       format: format as 'pdf' | 'yaml',
       includeWhiteboard,
+      locale,
     })
       .then(saveToDisk)
       .catch(() => setError(t('export.errors.download')))
@@ -462,6 +471,7 @@ export default function ExportPanel({ deckId }: Props) {
       driveFolderId: folder.id,
       driveFolderName: folder.name,
       includeWhiteboard,
+      locale,
     })
       .then(res => {
         setSaved(res)
@@ -593,6 +603,15 @@ export default function ExportPanel({ deckId }: Props) {
             {t('export.toDrive')}
           </label>
         </fieldset>
+      )}
+
+      {/* Says which language the file will carry, when it is not the one the
+          lecture was written in — an export that silently differed from the
+          deck would be a surprise on someone's disk. */}
+      {locale && (
+        <p className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+          {t('export.translated', { language: localeShortLabel(locale) })}
+        </p>
       )}
 
       {/* Whiteboard marks — only when the deck has any AND the format shows them */}

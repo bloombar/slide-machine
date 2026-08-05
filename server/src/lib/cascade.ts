@@ -21,6 +21,7 @@ import { SlideModel } from '../models/slide'
 import { SeedAssetModel } from '../models/seed-asset'
 import { TranscriptSegmentModel } from '../models/transcript-segment'
 import { RefineJobModel } from '../models/refine-job'
+import { SlideTranslationModel } from '../models/slide-translation'
 import { RefreshTokenModel } from '../models/refresh-token'
 import { UserModel } from '../models/user'
 import { VoteModel } from '../models/vote'
@@ -45,6 +46,10 @@ const tombstoneDeckContents = async (
     SeedAssetModel.updateMany(by, { deletedAt: at }),
     TranscriptSegmentModel.updateMany(by, { deletedAt: at }),
     RefineJobModel.updateMany(by, { deletedAt: at }),
+    // Translations are a derived cache, not authored content — they are
+    // removed outright rather than tombstoned, and a restored deck simply
+    // re-translates on its next view (SHARE-2).
+    SlideTranslationModel.deleteMany(by),
   ])
 }
 
@@ -238,6 +243,7 @@ const purgeDeckContents = async (
     RefineJobModel.deleteMany(by),
     // Votes on the purged decks (SOC-1) — nothing to restore, so drop them.
     VoteModel.deleteMany({ targetType: 'deck', targetId: { $in: deckIds } }),
+    SlideTranslationModel.deleteMany(by),
   ])
 }
 
