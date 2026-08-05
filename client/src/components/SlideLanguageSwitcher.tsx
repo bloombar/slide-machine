@@ -22,7 +22,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, Check, Loader2 } from 'lucide-react'
+import { ChevronDown, Loader2 } from 'lucide-react'
 import { LOCALES, localeShortLabel, type Locale } from '@slide-machine/shared'
 import LocaleFlag from './LocaleFlag'
 import Tooltip from './Tooltip'
@@ -131,8 +131,8 @@ export default function SlideLanguageSwitcher({
                 className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-slate-100"
               >
                 <LocaleFlag locale={option} />
-                {/* The slot is always rendered, so the checks beside it line
-                    up whether or not a row is the deck's own language */}
+                {/* The slot is always rendered, so every row is the same
+                    width whether or not it is the deck's own language */}
                 <span className="flex w-1.5 justify-center">
                   {isSource && (
                     <span
@@ -142,10 +142,6 @@ export default function SlideLanguageSwitcher({
                     />
                   )}
                 </span>
-                <Check
-                  className={`h-4 w-4 shrink-0 text-indigo-600 ${active ? '' : 'invisible'}`}
-                  aria-hidden
-                />
               </button>
             )
           })}
