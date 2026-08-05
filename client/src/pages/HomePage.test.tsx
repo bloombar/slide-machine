@@ -214,8 +214,9 @@ describe('HomePage', () => {
         type: 'application/x-yaml',
       },
     )
-    const input = document.querySelector(
-      'input[type="file"]',
+    // The project's own import input, not the header menu's
+    const input = screen.getByLabelText(
+      'Import a lecture into Biology',
     ) as HTMLInputElement
     fireEvent.change(input, { target: { files: [file] } })
 
@@ -290,9 +291,10 @@ describe('HomePage', () => {
     // With no projects, the empty-state New lecture zone is shown
     await screen.findByRole('button', { name: 'Start a new lecture' })
 
-    // Modal is closed until the header button opens it
+    // Modal is closed until the header menu opens it
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'New project' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create new' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'New project' }))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Title'), {
@@ -315,11 +317,148 @@ describe('HomePage', () => {
     renderHome()
     await screen.findByRole('heading', { name: 'Biology' })
 
-    fireEvent.click(screen.getByRole('button', { name: 'New project' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create new' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'New project' }))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('the header "+" offers New project, New lecture, and Import', async () => {
+    renderHome()
+    await screen.findByRole('heading', { name: 'Biology' })
+
+    // Closed until the "+" is pressed, and it sits beside the welcome heading
+    expect(screen.queryByRole('menu', { name: 'Create new' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Create new' }))
+
+    const menu = screen.getByRole('menu', { name: 'Create new' })
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map(i => i.textContent),
+    ).toEqual(['New project', 'New lecture', 'Import a lecture'])
+  })
+
+  it('New lecture in the header starts one in the most recent project', async () => {
+    let sent: unknown
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      // Projects arrive newest-modified first, so Biology is the target
+      '/api/actions/project.list': () => ({
+        status: 200,
+        body: [
+          { id: 'p1', ownerId: 'u1', title: 'Biology', createdAt: '' },
+          { id: 'p2', ownerId: 'u1', title: 'Chemistry', createdAt: '' },
+        ],
+      }),
+      '/api/actions/deck.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.create': init => {
+        sent = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: { id: 'd9', title: '', permalinkSlug: 'untitled-fff000' },
+        }
+      },
+    })
+    renderHome()
+    await screen.findByRole('heading', { name: 'Biology' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create new' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'New lecture' }))
+
+    await vi.waitFor(() => expect(sent).toEqual({ projectId: 'p1' }))
+  })
+
+  it('New lecture with no project yet creates a default one first', async () => {
+    const calls: Record<string, unknown> = {}
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/actions/project.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.list': () => ({ status: 200, body: [] }),
+      '/api/actions/project.create': init => {
+        calls.project = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: { id: 'p9', ownerId: 'u1', title: '', createdAt: '' },
+        }
+      },
+      '/api/actions/deck.create': init => {
+        calls.deck = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: { id: 'd9', title: '', permalinkSlug: 'untitled-fff000' },
+        }
+      },
+    })
+    renderHome()
+    await screen.findByRole('button', { name: 'Start a new lecture' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create new' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'New lecture' }))
+
+    await vi.waitFor(() => expect(calls.project).toEqual({}))
+    await vi.waitFor(() => expect(calls.deck).toEqual({ projectId: 'p9' }))
+  })
+
+  it('Import in the header imports into the most recent project', async () => {
+    let sent: unknown
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/actions/project.list': () => ({
+        status: 200,
+        body: [{ id: 'p1', ownerId: 'u1', title: 'Biology', createdAt: '' }],
+      }),
+      '/api/actions/deck.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.import': init => {
+        sent = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: {
+            deck: {
+              id: 'd9',
+              projectId: 'p1',
+              title: 'Imported Deck',
+              permalinkSlug: 'imported-deck-xyz',
+              slideOrder: [],
+              updatedAt: new Date().toISOString(),
+            },
+            warnings: [],
+          },
+        }
+      },
+    })
+    renderHome()
+    await screen.findByRole('heading', { name: 'Biology' })
+
+    const file = new File(['version: 1\nkind: deck\n'], 'deck.yaml', {
+      type: 'application/x-yaml',
+    })
+    // The menu item forwards to its hidden file input; the change event is
+    // what a real pick produces once the OS dialog closes.
+    fireEvent.change(screen.getByLabelText('Import a lecture'), {
+      target: { files: [file] },
+    })
+
+    await vi.waitFor(() =>
+      expect(sent).toEqual({
+        projectId: 'p1',
+        content: 'version: 1\nkind: deck\n',
+      }),
+    )
+    expect(
+      await screen.findByText('Imported "Imported Deck".'),
+    ).toBeInTheDocument()
   })
 
   it('the project kebab offers Settings, Share, and Delete', async () => {

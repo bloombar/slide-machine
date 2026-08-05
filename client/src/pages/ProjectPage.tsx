@@ -1,9 +1,10 @@
 /**
  * One project: its lectures up front (newest modification first, like
  * the home screen), a dashed "New lecture" zone atop the list that starts
- * a new untitled lecture immediately, an in-place editable title, and a
- * settings icon on the title row opening the project settings modal
- * (seed material + danger zone).
+ * a new untitled lecture immediately, a "+" button on the Lectures row for
+ * starting or importing one, an in-place editable title, and a settings
+ * icon on the title row opening the project settings modal (seed material
+ * + danger zone).
  *
  * An allowlisted admin reaches this page from the admin console and
  * edits the project's settings in that same modal (ADMIN-5). Because
@@ -11,7 +12,7 @@
  * they make is audited server-side.
  */
 import { useEffect, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import type { Deck, DeckImportResult, Project } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
@@ -19,6 +20,7 @@ import { ApiError } from '../api/http'
 import { useAuth } from '../auth/AuthContext'
 import { useIsAdmin } from '../hooks/useIsAdmin'
 import { projectTitle, untitledProject } from '../lib/project'
+import { displayHandle } from '../lib/handle'
 import { untitledLecture } from '../lib/lecture'
 // Module-level translator for the load effect: stable, so it is not a
 // dependency the way the hook's `t` is.
@@ -26,6 +28,7 @@ import { t as translate } from '../i18n'
 import ConfirmDialog from '../components/ConfirmDialog'
 import LectureRow from '../components/LectureRow'
 import NewLectureZone from '../components/NewLectureZone'
+import CreateMenu from '../components/CreateMenu'
 import ProjectRowMenu from '../components/ProjectRowMenu'
 import EditableText from '../components/EditableText'
 import ProjectSettingsModal, {
@@ -173,19 +176,33 @@ export default function ProjectPage() {
 
   return (
     <div>
-      <header className="mb-8 flex items-center justify-between gap-4">
-        <h1 className="min-w-0 flex-1 truncate text-2xl font-bold">
-          {project ? (
-            <EditableText
-              value={project.title}
-              label={t('project.titleLabel')}
-              emptyDisplay={untitledProject()}
-              onSave={renameProject}
-            />
-          ) : (
-            t('common.loading')
+      <header className="mb-8 flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-2xl font-bold">
+            {project ? (
+              <EditableText
+                value={project.title}
+                label={t('project.titleLabel')}
+                emptyDisplay={untitledProject()}
+                onSave={renameProject}
+              />
+            ) : (
+              t('common.loading')
+            )}
+          </h1>
+          {/* Whose project this is, reading through to their profile
+              (SOC-4), in the same voice a profile's bio is set in. */}
+          {project?.owner && (
+            <p className="mt-1 truncate text-slate-600">
+              <Link
+                to={`/u/${project.owner.id}`}
+                className="hover:text-indigo-600 hover:underline"
+              >
+                {displayHandle(project.owner.displayName)}
+              </Link>
+            </p>
           )}
-        </h1>
+        </div>
         {/* One menu for a project wherever it appears — the same kebab the
             home screen shows beside each project, opening settings in place
             here rather than navigating away. Editors and admins only: a
@@ -195,7 +212,6 @@ export default function ProjectPage() {
           <ProjectRowMenu
             project={project}
             onDeleted={() => void navigate('/app')}
-            onImport={file => void importLecture(file)}
             onOpenSettings={tab => {
               setSettingsTab(tab)
               setSettingsOpen(true)
@@ -205,9 +221,19 @@ export default function ProjectPage() {
       </header>
 
       <section className="max-w-2xl">
-        <h2 className="mb-4 text-lg font-semibold text-slate-700">
-          {t('project.lectures')}
-        </h2>
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <h2 className="min-w-0 truncate text-lg font-semibold text-slate-700">
+            {t('project.lectures')}
+          </h2>
+          {/* New project is left out: this page is already inside one.
+              Editors only, like the dashed zone below. */}
+          {project && (canEdit || adminOverride) && (
+            <CreateMenu
+              onNewLecture={() => void startLecture()}
+              onImportLecture={file => void importLecture(file)}
+            />
+          )}
+        </div>
         {error && (
           <p role="alert" className="mb-4 text-sm text-red-600">
             {error}

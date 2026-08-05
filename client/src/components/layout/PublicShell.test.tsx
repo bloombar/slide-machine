@@ -8,6 +8,7 @@ import { MemoryRouter, Routes, Route } from 'react-router'
 import { AuthProvider } from '../../auth/AuthContext'
 import { setAccessToken } from '../../auth/token'
 import PublicShell from './PublicShell'
+import { ShellTitle, ShellTitleProvider } from './ShellTitle'
 import { mockFetchRoutes } from '../../test/fetch-mock'
 
 const renderShell = (refreshStatus: number) => {
@@ -83,5 +84,39 @@ describe('PublicShell', () => {
       menu.compareDocumentPosition(badge as Element) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
+  })
+
+  it('keeps the badge home link when a page teleports its own title', async () => {
+    // What a lecture page does: its own title takes the header, and the
+    // badge stays beside the hamburger as the way home. Only the brand
+    // words give way, since the header has no room for both.
+    mockFetchRoutes({ '/api/auth/refresh': () => ({ status: 401 }) })
+    render(
+      <MemoryRouter initialEntries={['/d/waves-abc123']}>
+        <AuthProvider>
+          <ShellTitleProvider>
+            <Routes>
+              <Route element={<PublicShell />}>
+                <Route
+                  path="/d/:slug"
+                  element={
+                    <ShellTitle>
+                      <span>Waves</span>
+                    </ShellTitle>
+                  }
+                />
+              </Route>
+            </Routes>
+          </ShellTitleProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    const brand = await screen.findByRole('link', { name: /slide machine/i })
+    expect(brand).toHaveAttribute('href', '/')
+    expect(brand.querySelector('img')).toBeInTheDocument()
+    // The words are gone; the lecture's own title has the space
+    expect(brand).toHaveTextContent('')
+    expect(await screen.findByText('Waves')).toBeInTheDocument()
   })
 })

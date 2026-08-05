@@ -305,6 +305,7 @@
   },
   "home": {
     "welcome": "Здравствуйте, {name}",
+    "createNew": "Создать",
     "yourWork": "Ваша работа",
     "showAll": "{count, plural, one {Показать # лекцию} few {Показать все # лекции} many {Показать все # лекций} other {Показать все # лекции}}",
     "otherLectures": "Другие лекции",
@@ -668,7 +669,7 @@
   },
   "deck": {
     "meta": "{count, plural, one {# слайд} few {# слайда} many {# слайдов} other {# слайда}} · изменено {age}",
-    "byAuthor": "· от",
+    "byAuthor": "от",
     "share": "Поделиться",
     "shareLabel": "Поделиться лекцией",
     "addSlide": "Добавить слайд",

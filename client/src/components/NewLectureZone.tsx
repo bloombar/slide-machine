@@ -1,11 +1,12 @@
 /**
  * The "New lecture" affordance shared by the home screen and a project
- * page: a dashed row, pinned to the top of a lecture list, whose
- * link-styled button starts a new untitled lecture in the project.
+ * page: a dashed row, pinned to the top of a lecture list, that starts a
+ * new untitled lecture in the project. The button fills the row, so the
+ * whole dashed area is the click target rather than just its label.
  *
- * Starting a lecture is the only thing here. Importing one (EXP-3) is a
- * project-level action and lives in the project's menu, so this row stays a
- * single, obvious call to action.
+ * Starting a lecture is the only thing here. Importing one (EXP-3) lives
+ * in the "+" menu beside the heading above, so this row stays a single,
+ * obvious call to action.
  */
 import { useTranslation } from 'react-i18next'
 import { Plus } from 'lucide-react'
@@ -21,7 +22,7 @@ export default function NewLectureZone({ projectTitle, onStart }: Props) {
   const { t } = useTranslation()
 
   return (
-    <li className="flex items-center justify-center rounded-md border border-dashed border-slate-300 px-4 py-2 hover:border-slate-400 hover:bg-slate-50">
+    <li className="rounded-md border border-dashed border-slate-300 hover:border-slate-400 hover:bg-slate-50">
       <button
         aria-label={
           projectTitle
@@ -29,7 +30,7 @@ export default function NewLectureZone({ projectTitle, onStart }: Props) {
             : t('lecture.new.label')
         }
         onClick={onStart}
-        className="flex items-center gap-1 text-sm font-medium text-indigo-600 hover:underline"
+        className="flex w-full items-center justify-center gap-1 rounded-md px-4 py-2 text-sm font-medium text-indigo-600 hover:underline"
       >
         <Plus className="h-4 w-4" aria-hidden />
         {t('lecture.new.action')}

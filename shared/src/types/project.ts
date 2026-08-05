@@ -9,6 +9,10 @@ import type { Visibility } from './deck'
 export interface Project {
   id: string
   ownerId: string
+  /** Who owns it, for a byline that links to their profile (SOC-4).
+   * Only project.get fills this in — a list would need a user lookup per
+   * row for something no list shows. */
+  owner?: { id: string; displayName: string }
   title: string
   course?: string
   description?: string

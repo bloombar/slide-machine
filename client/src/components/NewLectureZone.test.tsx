@@ -17,4 +17,13 @@ describe('NewLectureZone', () => {
     )
     expect(onStart).toHaveBeenCalledOnce()
   })
+
+  it('fills the dashed row with the button, so all of it is clickable', () => {
+    render(<NewLectureZone onStart={vi.fn()} />)
+    const button = screen.getByRole('button', { name: 'Start a new lecture' })
+    // jsdom has no layout, so the mechanism is what can be asserted: the
+    // button carries the row's padding and spans its width.
+    expect(button).toHaveClass('w-full', 'px-4', 'py-2')
+    expect(button.parentElement?.className).not.toMatch(/\bp[xy]?-/)
+  })
 })

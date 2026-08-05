@@ -96,6 +96,32 @@ describe('EditableText', () => {
     expect(onSave).toHaveBeenLastCalledWith('Hello')
   })
 
+  it('truncates as a block, so the text keeps the baseline beside it', () => {
+    // jsdom has no layout: the mechanism is the assertion. A truncating
+    // inline-block sits on the line by its bottom edge (hidden overflow),
+    // which lifts the text above whatever it sits next to — the lecture
+    // title beside its project in the nav. It also drops the padding that
+    // would ellipsize text that fits.
+    const { rerender } = render(
+      <EditableText value="Hello" label="Slide title" onSave={vi.fn()} />,
+    )
+    expect(screen.getByTitle('Click to edit Slide title')).toHaveClass(
+      'inline-block',
+    )
+
+    rerender(
+      <EditableText
+        value="Hello"
+        label="Slide title"
+        onSave={vi.fn()}
+        truncate
+      />,
+    )
+    const display = screen.getByTitle('Click to edit Slide title')
+    expect(display).toHaveClass('block', 'truncate', 'max-w-full')
+    expect(display).not.toHaveClass('inline-block', 'px-1', '-mx-1')
+  })
+
   it('uses a textarea with Cmd/Ctrl+Enter flush when multiline', () => {
     const onSave = vi.fn()
     render(

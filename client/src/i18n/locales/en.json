@@ -305,6 +305,7 @@
   },
   "home": {
     "welcome": "Welcome, {name}",
+    "createNew": "Create new",
     "yourWork": "Your work",
     "showAll": "{count, plural, one {Show the # lecture} other {Show all # lectures}}",
     "otherLectures": "Other lectures",
@@ -668,7 +669,7 @@
   },
   "deck": {
     "meta": "{count, plural, one {# slide} other {# slides}} · edited {age}",
-    "byAuthor": "· by",
+    "byAuthor": "by",
     "share": "Share",
     "shareLabel": "Share deck",
     "addSlide": "Add slide",

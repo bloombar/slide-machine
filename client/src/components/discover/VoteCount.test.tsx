@@ -35,4 +35,9 @@ describe('VoteCount', () => {
     render(<VoteCount up={3} down={2} />)
     expect(screen.queryByRole('button')).toBeNull()
   })
+
+  it('is words alone, with no icon beside the number', () => {
+    const { container } = render(<VoteCount up={3} down={2} />)
+    expect(container.querySelector('svg')).toBeNull()
+  })
 })

@@ -305,6 +305,7 @@
   },
   "home": {
     "welcome": "Bienvenido, {name}",
+    "createNew": "Crear nuevo",
     "yourWork": "Tu trabajo",
     "showAll": "{count, plural, one {Ver la # clase} other {Ver las # clases}}",
     "otherLectures": "Otras clases",
@@ -668,7 +669,7 @@
   },
   "deck": {
     "meta": "{count, plural, one {# diapositiva} other {# diapositivas}} · editada {age}",
-    "byAuthor": "· por",
+    "byAuthor": "por",
     "share": "Compartir",
     "shareLabel": "Compartir la clase",
     "addSlide": "Añadir una diapositiva",

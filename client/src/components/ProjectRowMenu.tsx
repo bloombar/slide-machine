@@ -26,7 +26,9 @@ export default function ProjectRowMenu({
    * passes a handler that opens its own modal. */
   onOpenSettings?: (tab: 'general' | 'sharing') => void
   /** Receives a chosen deck-export file to import as a new lecture (EXP-3).
-   * Omitted for a project the viewer cannot add to. */
+   * The home screen passes it, since a project's row is the only place to
+   * aim an import there; the project page omits it and offers the import in
+   * the "+" menu on its Lectures row instead. */
   onImport?: (file: File) => void
 }) {
   const navigate = useNavigate()
