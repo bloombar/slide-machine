@@ -243,7 +243,8 @@ const purgeDeckContents = async (
     RefineJobModel.deleteMany(by),
     // Votes on the purged decks (SOC-1) — nothing to restore, so drop them.
     VoteModel.deleteMany({ targetType: 'deck', targetId: { $in: deckIds } }),
-    SlideTranslationModel.deleteMany(by),])
+    SlideTranslationModel.deleteMany(by),
+  ])
 }
 
 /**
