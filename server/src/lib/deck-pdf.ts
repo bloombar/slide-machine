@@ -21,6 +21,7 @@ import {
   type PDFImage,
   type PDFPage,
 } from 'pdf-lib'
+import type { Layout } from '@slide-machine/shared'
 import type { ExportDeck, ExportSlide } from './deck-yaml'
 import { visibleStrokes, hexToRgb01, HIGHLIGHTER_ALPHA } from './deck-drawings'
 import { fetchSlideImages } from './deck-image'
@@ -151,8 +152,9 @@ const drawSlide = (
   page: PDFPage,
   slide: ExportSlide,
   image?: PDFImage,
+  layout?: Layout,
 ): void => {
-  for (const box of computeLayout(slide)) {
+  for (const box of computeLayout(slide, layout)) {
     if (box.kind === 'text') {
       drawTextBox(page, box)
     } else if (box.kind === 'rule') {
@@ -232,7 +234,9 @@ export const deckToPdf = async (deck: ExportDeck): Promise<Uint8Array> => {
 
   // Only fetch images for slides whose layout actually shows one (content/list
   // etc. never display an image), then embed the fetched bytes.
-  const layouts = deck.slides.map(computeLayout)
+  const layoutFor = (slide: ExportSlide) =>
+    deck.layouts?.find(l => l.type === slide.layoutType)
+  const layouts = deck.slides.map(s => computeLayout(s, layoutFor(s)))
   const urls = deck.slides.map((s, i) =>
     layouts[i]!.some(b => b.kind === 'image') ? s.imageRef : undefined,
   )
@@ -256,7 +260,7 @@ export const deckToPdf = async (deck: ExportDeck): Promise<Uint8Array> => {
       height: PAGE_HEIGHT,
       color: background,
     })
-    drawSlide(page, slide, images[i])
+    drawSlide(page, slide, images[i], layoutFor(slide))
   })
   if (doc.getPageCount() === 0) {
     doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]).drawRectangle({

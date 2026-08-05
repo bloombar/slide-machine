@@ -56,6 +56,7 @@ import { deckToPdf } from '../lib/deck-pdf'
 import { visibleStrokes } from '../lib/deck-drawings'
 import { resolveTemplateTheme } from '../lib/deck-theme'
 import { resolveTemplate } from '../templates/resolve'
+import { slotsOf } from '../lib/slide-slots'
 import {
   uploadFileToDriveLive,
   createGoogleSlidesLive,
@@ -145,11 +146,15 @@ const buildExportDeck = async (
         body: doc.body,
         bullets: doc.bullets,
         caption: doc.caption,
+        slots: slotsOf(doc),
       },
       translation[doc._id.toString()],
     )
     return {
       layoutType: doc.layoutType,
+      // Carried whole so an arranged layout exports from its own boxes,
+      // including slots the template's author named (TMPL-9).
+      slots: s.slots,
       title: s.title,
       body: s.body,
       bullets: s.bullets,
@@ -176,6 +181,9 @@ const buildExportDeck = async (
     title: deck.title,
     templateId: deck.templateId,
     theme: resolveTemplateTheme(template?.theme),
+    // The renderers read an arrangement from these; a layout with none keeps
+    // its hand-tuned arrangement, exactly as on screen.
+    layouts: template?.layouts,
     ...(hasSettings ? { settings } : {}),
     slides,
   }

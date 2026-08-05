@@ -11,6 +11,7 @@
  * container units), so each renderer multiplies by its own page width and the
  * relative sizes come out the same.
  */
+import type { Layout, SlotBox, SlotValue } from '@slide-machine/shared'
 import type { ExportSlide } from './deck-yaml'
 
 export type ColorRole = 'ink' | 'accent' | 'muted'
@@ -56,7 +57,9 @@ export interface RuleBox {
 export type LayoutBox = TextBox | ImageBox | RuleBox
 
 /** The image slot only appears in these layouts (matching the app: content/
- * list/title/etc. never render an image, even if the slide carries one). */
+ * list/title/etc. never render an image, even if the slide carries one).
+ * Conventional layouts only — an arranged layout says for itself which of its
+ * slots hold pictures. */
 export const LAYOUT_HAS_IMAGE = new Set(['image-heavy', 'two-column'])
 
 const titleRun = (
@@ -123,11 +126,99 @@ const captionBox = (
   ]
 }
 
+/** A box's colour, mapped onto the three roles an export can draw in. */
+const roleOf = (color: string | undefined): ColorRole | undefined => {
+  if (color === 'accent' || color === 'muted') return color
+  return color ? 'ink' : undefined
+}
+
+/** The paragraphs one slot contributes, whatever kind it holds. */
+const runsForSlot = (
+  value: SlotValue | undefined,
+  box: SlotBox,
+): LayoutRun[] => {
+  // A box's fontSize is `cqi` — a percent of slide width — and the export
+  // model measures type as a fraction of that same width, so this is /100
+  // rather than a guess.
+  const sizeFrac = (box.fontSize ?? 4) / 100
+  const color = roleOf(box.color)
+  const bold = (box.fontWeight ?? 400) >= 600 ? true : undefined
+  if (!value) return []
+  switch (value.kind) {
+    case 'text':
+    case 'preformatted':
+      return value.value ? [{ text: value.value, sizeFrac, bold, color }] : []
+    case 'bullets':
+      return value.items.map(text => ({
+        text,
+        sizeFrac,
+        bullet: true,
+        color,
+        spaceAfterFrac: sizeFrac * 0.3,
+      }))
+    case 'code':
+      return value.source
+        ? [{ text: value.source, sizeFrac, color: 'muted' }]
+        : []
+    case 'math':
+      return value.tex ? [{ text: value.tex, sizeFrac, color }] : []
+    case 'table':
+      // Rendered as lines until the table renderer lands (plan Phase 4)
+      return value.rows.map(row => ({ text: row.join('  '), sizeFrac, color }))
+    default:
+      return []
+  }
+}
+
 /**
- * Computes the layout boxes for a slide. `hasImage` says whether an image was
- * actually fetched, so image-only layouts still reserve space but skip drawing.
+ * The boxes an ARRANGED layout asks for (TMPL-4). The template placed every
+ * slot itself, so the export draws exactly that instead of the hand-tuned
+ * arrangement below — which is what makes a PDF match the screen.
  */
-export const computeLayout = (slide: ExportSlide): LayoutBox[] => {
+const arrangedLayout = (
+  slide: ExportSlide,
+  layout: Layout,
+): LayoutBox[] | null => {
+  const positions = layout.elementPositions ?? {}
+  if (!Object.keys(positions).length) return null
+  const boxes: LayoutBox[] = []
+  // Declaration order decides paint order, exactly as it does on screen.
+  for (const spec of layout.slots) {
+    const box = positions[spec.name]
+    if (!box) continue
+    const geometry = { x: box.x, y: box.y, w: box.w, h: box.h }
+    if (spec.kind === 'image') {
+      boxes.push({ kind: 'image', ...geometry })
+      continue
+    }
+    const runs = runsForSlot(slide.slots?.[spec.name], box)
+    if (!runs.length) continue
+    boxes.push({
+      kind: 'text',
+      ...geometry,
+      align: box.align === 'center' ? 'center' : 'left',
+      valign: box.vAlign === 'center' ? 'middle' : 'top',
+      runs,
+    })
+  }
+  return boxes
+}
+
+/**
+ * Computes the layout boxes for a slide.
+ *
+ * A template that arranged this layout is drawn from its own boxes; the
+ * switch below is the hand-tuned arrangement the built-ins rely on, and stays
+ * the fallback for any layout that carries no geometry.
+ */
+export const computeLayout = (
+  slide: ExportSlide,
+  layout?: Layout,
+): LayoutBox[] => {
+  if (layout) {
+    const arranged = arrangedLayout(slide, layout)
+    if (arranged) return arranged
+  }
   switch (slide.layoutType) {
     case 'title':
       return [

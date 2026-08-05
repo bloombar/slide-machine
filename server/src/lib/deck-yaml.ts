@@ -12,6 +12,8 @@ import YAML from 'yaml'
 import type {
   ExportedDeckSettings,
   ImageAttribution,
+  Layout,
+  SlotValue,
   Stroke,
 } from '@slide-machine/shared'
 import type { ExportTheme } from './deck-theme'
@@ -26,6 +28,9 @@ export const DECK_YAML_VERSION = 1
  * deckToYaml). */
 export interface ExportSlide {
   layoutType: string
+  /** The slide's content by slot name, so a layout the author arranged can be
+   * drawn from its own boxes rather than a hardcoded arrangement. */
+  slots?: Record<string, SlotValue>
   title?: string
   body?: string
   bullets?: string[]
@@ -46,6 +51,9 @@ export interface ExportSlide {
 export interface ExportDeck {
   title: string
   templateId: string
+  /** The template's layouts, for the renderers to read an arrangement from.
+   * Not serialized into the YAML — the file carries content, not design. */
+  layouts?: Layout[]
   visibility?: string
   theme?: ExportTheme
   settings?: ExportedDeckSettings
