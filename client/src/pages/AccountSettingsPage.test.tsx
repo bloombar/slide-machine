@@ -89,7 +89,7 @@ describe('AccountSettingsPage', () => {
     // is one tab over rather than mixed in with the bio.
     expect(screen.queryByText('Free')).toBeNull()
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Plan' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Plan & Usage' }))
 
     expect(await screen.findByText('Free')).toBeVisible()
   })
@@ -100,7 +100,7 @@ describe('AccountSettingsPage', () => {
     renderSettings({}, '/app/settings?tab=plan')
 
     expect(await screen.findByText('Free')).toBeVisible()
-    expect(screen.getByRole('tab', { name: 'Plan' })).toHaveAttribute(
+    expect(screen.getByRole('tab', { name: 'Plan & Usage' })).toHaveAttribute(
       'aria-selected',
       'true',
     )
@@ -349,9 +349,9 @@ describe('AccountSettingsPage', () => {
   it('offers no sign out — it lives in the shell menu, on every page', async () => {
     renderSettings()
 
-    await screen.findByRole('tab', { name: 'Plan' })
+    await screen.findByRole('tab', { name: 'Plan & Usage' })
     expect(screen.queryByRole('button', { name: /sign out/i })).toBeNull()
-    fireEvent.click(screen.getByRole('tab', { name: 'Plan' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Plan & Usage' }))
     expect(screen.queryByRole('button', { name: /sign out/i })).toBeNull()
   })
 
@@ -435,7 +435,7 @@ describe('AccountSettingsPage as an admin (ADMIN-5)', () => {
   it("shows the target's account behind the audit banner", async () => {
     await renderAsAdmin()
     expect(await screen.findByText('grace@example.com')).toBeVisible()
-    fireEvent.click(screen.getByRole('tab', { name: 'Plan' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Plan & Usage' }))
     expect(await screen.findByText('Pro')).toBeVisible()
     expect(screen.getByRole('status')).toHaveTextContent(
       /editing another user's account as an admin/i,
@@ -503,7 +503,7 @@ describe('AccountSettingsPage as an admin (ADMIN-5)', () => {
     // would print the admin's numbers under another person's name.
     await renderAsAdmin()
     await screen.findByText('grace@example.com')
-    fireEvent.click(screen.getByRole('tab', { name: 'Plan' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Plan & Usage' }))
 
     expect(screen.queryByTestId('usage-panel')).toBeNull()
   })
