@@ -108,12 +108,32 @@ test('translated viewing: an editor cannot edit while reading a translation', as
   await page.getByRole('button', { name: 'Speak' }).click()
   await expect(page.getByTestId('slide')).toBeVisible()
 
+  // The live session opened by "Start lecture" is still running here
+  await expect(
+    page.getByRole('button', { name: 'Live session' }),
+  ).toHaveAttribute('aria-pressed', 'true')
+
   await page.getByRole('button', { name: /Slide language/ }).click()
   await page.getByRole('menuitemradio', { name: /Español/ }).click()
   await expect(page.getByTestId('slide')).toContainText('[es]')
+
+  // Speaking new slides into the deck is editing, so it goes quiet with the
+  // rest of it — and the session that was running ends rather than recording
+  // on with no control left to stop it
+  await expect(page.getByRole('button', { name: 'Live session' })).toHaveCount(
+    0,
+  )
+  await expect(
+    page.getByRole('textbox', { name: 'Spoken phrase' }),
+  ).toHaveCount(0)
 
   // The owner is told why the editing surface has gone quiet, and can undo it
   await expect(page.getByText(/editing is off/)).toBeVisible()
   await page.getByRole('button', { name: 'Show original' }).click()
   await expect(page.getByTestId('slide')).not.toContainText('[es]')
+
+  // Back on the original the microphone is offered again, switched off
+  await expect(
+    page.getByRole('button', { name: 'Live session' }),
+  ).toHaveAttribute('aria-pressed', 'false')
 })

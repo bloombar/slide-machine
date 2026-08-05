@@ -534,6 +534,7 @@ When viewing a saved deck, students and instructors can switch the **displayed l
 - **Non-destructive** — the translated text is an alternate view layered over the deck; the original authored/generated content is preserved and remains authoritative (machine translation may be imperfect).
 - Translations are computed on demand and **cached per deck + locale** ([§15](#15-data-models)), so repeat views are fast and the work is metered once ([BILL-3](#bill-3-usage-caps--metering)).
 - Only **slide content** is translated (not quizzes). Translated text is lecture-derived and de-identified, consistent with [P-2](#16-privacy-security--compliance).
+- **A translated view is read-only**, for editors as well as viewers: in-place editing ([EDIT-1](#edit-1-full-content-editing)), annotation ([EDIT-4](#edit-4-whiteboard-annotation)) and speaking new slides into the lecture ([GEN-1](#gen-1-speech-to-slide-generation)) all wait until the reader returns to the original. Edits made against machine-translated words would be saved into the authored deck, and a live session already running ends when a translation is chosen. The notice on screen says so and offers the way back.
 
 ### 11. Export/Import, Voting & Social
 

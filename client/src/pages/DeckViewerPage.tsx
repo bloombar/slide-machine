@@ -31,6 +31,7 @@ import type {
   DeckRefineSlideResult,
   DeckViewResponse,
   ImageSearchCandidate,
+  Locale,
   Slide,
   SlideEvent,
   SlideRefineOptions,
@@ -1238,6 +1239,21 @@ export default function DeckViewerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeLanguage, listening])
 
+  /**
+   * Changes the language the slides are read in, ending any live session
+   * first. The microphone leaves the toolbar with the rest of the editing
+   * surface, so a session left running would keep recording — and keep
+   * adding slides — with nothing on screen to stop it.
+   */
+  const setSlideLanguage = (next: Locale | null) => {
+    const translating = next !== null && next !== sourceLocale
+    if (translating && (speaking || listening)) {
+      stopListening()
+      setSpeaking(false)
+    }
+    translation.setLocale(next)
+  }
+
   // A click on the page background — not the slide, a control, or a
   // modal backdrop — briefly reveals blank slots (styled in index.css),
   // which hide again on their own half a second later
@@ -1694,7 +1710,7 @@ export default function DeckViewerPage() {
           <SlideLanguageSwitcher
             source={sourceLocale}
             value={translation.locale}
-            onChange={translation.setLocale}
+            onChange={setSlideLanguage}
             busy={translation.busy}
           />
         )}
@@ -1777,38 +1793,44 @@ export default function DeckViewerPage() {
                     </button>
                   </Tooltip>
                 )}
-                <Tooltip
-                  label={
-                    listening
-                      ? t('deck.record.stopHint')
-                      : t('deck.record.startHint')
-                  }
-                >
-                  <button
-                    aria-label={t('deck.liveSession')}
-                    aria-pressed={speaking}
-                    onClick={() => {
-                      // One toggle: the bar and the microphone together
-                      if (speaking) stopListening()
-                      else {
-                        tts.stop() // never record while speaking (and vice-versa)
-                        startListening()
-                      }
-                      setSpeaking(s => !s)
-                    }}
-                    // Recording fills solid red and pulses: the audience is
-                    // live, so the state has to be unmissable at a glance
-                    className={`rounded-md p-2 ${
+                {/* Speaking new slides into the deck is editing, so it is
+                    held back with the rest of the editing surface while a
+                    translation is shown: dictated slides would arrive in the
+                    authored language and sit untranslated among the rest. */}
+                {!showingTranslation && (
+                  <Tooltip
+                    label={
                       listening
-                        ? 'animate-pulse bg-red-600 text-white ring-2 ring-red-300'
-                        : speaking
-                          ? 'bg-indigo-50 text-indigo-600'
-                          : 'text-slate-500 hover:text-slate-900'
-                    }`}
+                        ? t('deck.record.stopHint')
+                        : t('deck.record.startHint')
+                    }
                   >
-                    <Mic className="h-5 w-5" aria-hidden />
-                  </button>
-                </Tooltip>
+                    <button
+                      aria-label={t('deck.liveSession')}
+                      aria-pressed={speaking}
+                      onClick={() => {
+                        // One toggle: the bar and the microphone together
+                        if (speaking) stopListening()
+                        else {
+                          tts.stop() // never record while speaking (and vice-versa)
+                          startListening()
+                        }
+                        setSpeaking(s => !s)
+                      }}
+                      // Recording fills solid red and pulses: the audience is
+                      // live, so the state has to be unmissable at a glance
+                      className={`rounded-md p-2 ${
+                        listening
+                          ? 'animate-pulse bg-red-600 text-white ring-2 ring-red-300'
+                          : speaking
+                            ? 'bg-indigo-50 text-indigo-600'
+                            : 'text-slate-500 hover:text-slate-900'
+                      }`}
+                    >
+                      <Mic className="h-5 w-5" aria-hidden />
+                    </button>
+                  </Tooltip>
+                )}
               </>
             )}
           </>
