@@ -50,9 +50,15 @@ export default function BillingPanel() {
     setSummary(body)
     // The tier lives on the account everywhere else in the app; a plan that
     // changed while this page was open would otherwise leave the header and
-    // the usage bars quoting the old one until the next sign-in.
-    if (user && body.tier !== user.planTier) {
-      updateUser({ ...user, planTier: body.tier })
+    // the usage bars quoting the old one until the next sign-in. The grant
+    // travels with it (ADMIN-9): the two are one fact about what the account
+    // may spend, and a tier updated without it would explain itself wrongly.
+    if (
+      user &&
+      (body.tier !== user.planTier ||
+        body.planGrant?.expiresAt !== user.planGrant?.expiresAt)
+    ) {
+      updateUser({ ...user, planTier: body.tier, planGrant: body.planGrant })
     }
   }, [user, updateUser])
 
@@ -127,7 +133,27 @@ export default function BillingPanel() {
       )}
 
       <div className="text-sm text-slate-600">
-        {summary.status === null && <p>{t('billing.status.none')}</p>}
+        {/* A complimentary plan (ADMIN-9) is entitlement with no subscription
+            behind it, so it is stated before the subscription lines below —
+            which describe what is being *paid* for and are unaffected by it.
+            Without this, an account on a comped plan would read "you are on
+            the free plan" while using Pro allowances. */}
+        {summary.planGrant && (
+          <p className="font-medium text-emerald-800">
+            {t('plan.grant.notice', {
+              tier: t(`plan.tier.${summary.planGrant.tier}`, {
+                defaultValue: summary.planGrant.tier,
+              }),
+              date: formatDate(summary.planGrant.expiresAt),
+              revertsTo: t(`plan.tier.${summary.planGrant.revertsTo}`, {
+                defaultValue: summary.planGrant.revertsTo,
+              }),
+            })}
+          </p>
+        )}
+        {summary.status === null && !summary.planGrant && (
+          <p>{t('billing.status.none')}</p>
+        )}
         {summary.status === 'past_due' && (
           <p role="alert" className="font-medium text-amber-700">
             {t('billing.status.pastDue')}

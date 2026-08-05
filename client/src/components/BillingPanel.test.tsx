@@ -114,6 +114,28 @@ describe('BillingPanel', () => {
     expect(screen.queryByRole('button', { name: /Upgrade/ })).toBeNull()
   })
 
+  // A complimentary plan (ADMIN-9) is entitlement with no subscription behind
+  // it, so both halves matter: what the account has, and that it ends.
+  it('explains a complimentary plan and when it reverts', async () => {
+    renderPanel(
+      summary({
+        tier: 'pro',
+        planGrant: {
+          tier: 'pro',
+          expiresAt: '2026-09-30T23:59:59.999Z',
+          revertsTo: 'free',
+        },
+      }),
+    )
+
+    const notice = await screen.findByText(/Pro at no charge until/i)
+    expect(notice).toHaveTextContent(/returns to Free/i)
+    // "You are on the free plan — no subscription" is true of the billing and
+    // false of the plan; with a grant in effect it would read as a denial of
+    // the very thing the line above just granted.
+    expect(screen.queryByText(/free plan — no subscription/i)).toBeNull()
+  })
+
   it('hides the portal until there is a billing record to manage', async () => {
     renderPanel()
 
