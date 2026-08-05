@@ -101,6 +101,26 @@ const asDate = (iso: string): string =>
     minute: '2-digit',
   })
 
+/**
+ * The Plan row: the tier the account may spend against, and — when a
+ * complimentary grant is what put it there (ADMIN-9) — what it is paying for
+ * underneath and when it goes back to it. A lapsed grant is named as history
+ * rather than dropped: knowing an account *was* comped until last month is
+ * what explains the usage on it.
+ *
+ * Granting one is not done here. Like every other account setting, it is done
+ * in the product view this page links to (ADMIN-5) — the Plan tab of the
+ * user's settings page.
+ */
+const planValue = (detail: AdminUserDetailResponse): string => {
+  const { user, billingTier, planGrant } = detail
+  if (!planGrant) return user.planTier
+  const until = `until ${asDate(planGrant.expiresAt)}`
+  return planGrant.inEffect
+    ? `${user.planTier} — complimentary ${until}, then ${billingTier}`
+    : `${user.planTier} (complimentary ${planGrant.tier} ended ${asDate(planGrant.expiresAt)})`
+}
+
 /** Newest of a project's own edit and any of its lectures' edits — so the
  * date reflects editing the project OR one of its lectures. ISO strings
  * sort chronologically, so a lexical max is a chronological one. */
@@ -446,7 +466,8 @@ export default function AdminUserDetailPage() {
           <Link to={`/app/settings/${user.id}`} className="underline">
             Account Settings
           </Link>{' '}
-          page. Every change you make there is recorded in the{' '}
+          page. Its Plan tab is also where an account is given a complimentary
+          plan. Every change you make there is recorded in the{' '}
           <Link to="/app/admin/logs" className="underline">
             audit log
           </Link>
@@ -458,7 +479,7 @@ export default function AdminUserDetailPage() {
         <h2 className="mb-2 text-lg font-semibold text-slate-700">Details</h2>
         <dl>
           <DetailRow label="Joined" value={joinedAt(user.createdAt)} />
-          <DetailRow label="Plan" value={user.planTier} />
+          <DetailRow label="Plan" value={planValue(detail)} />
           <DetailRow
             label="Email verified"
             value={user.emailVerified ? 'Yes' : 'No'}

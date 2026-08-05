@@ -5,7 +5,9 @@
  */
 import type {
   AdminLogsResponse,
+  AdminPlanGrant,
   AdminUserSettingsPatch,
+  PlanTier,
   Project,
   SafeUser,
   SeedAsset,
@@ -53,6 +55,13 @@ export interface AdminUserDetailResponse {
   deckCount: number
   /** Whether the account's email is on the banned list. */
   banned: boolean
+  /** What the account's own billing entitles it to — `user.planTier` is the
+   * effective tier, which a complimentary grant can raise (ADMIN-9). This is
+   * where it lands when the grant ends. */
+  billingTier: PlanTier
+  /** The standing complimentary grant, lapsed ones included; `inEffect` says
+   * whether it is deciding anything right now. */
+  planGrant?: AdminPlanGrant
   /** Soft-delete timestamp; absent while the account is live (ADMIN-6).
    * It sits on the envelope rather than inside `user` so the tombstone
    * never leaks into the shared User type the product reads. */
