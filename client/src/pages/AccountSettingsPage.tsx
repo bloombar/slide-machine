@@ -319,7 +319,7 @@ export default function AccountSettingsPage() {
       {/* Signing out lives only in the shell's hamburger menu now, so it is
           reachable from every page instead of just this one. */}
       <div className="mb-6 flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold">{t('common.settings')}</h1>
+        <h1 className="text-2xl font-bold">{t('common.accountSettings')}</h1>
       </div>
 
       {adminUserId && <AdminEditNotice entity="account" />}
