@@ -3,8 +3,14 @@
 A template is **data** (theme, layouts, slots, validation — all of it in
 one place) plus, for now, a small amount of **code** (the visual
 arrangement of each layout). This page documents how that works today
-and how it changes once the WYSIWYG template editor (SPEC [TMPL-4](SPEC.md#tmpl-4-custom-templates-create--edit--save))
-exists.
+and what remains before the arrangement is data too.
+
+Templates come from two places and behave identically once loaded: the
+JSON files a deployment ships, and the ones users author
+([TMPL-4](SPEC.md#tmpl-4-custom-templates-create--edit--save)), stored in
+MongoDB. Everything downstream resolves a template by id through
+[`templates/resolve.ts`](../server/src/templates/resolve.ts) and never
+learns which store it came from.
 
 ## How it works today
 
@@ -49,6 +55,35 @@ generation prompt and server-side
 words, so budgets hold in unspaced languages like Mandarin), `maxBullets`, plus
 `maxBodyLength` (legacy chars) and `imageRequired`.
 
+### User templates: MongoDB
+
+A user's own templates live in the `templates` collection
+([model](../server/src/models/template.ts)) with the same shape as a file:
+`name`, `theme`, `layouts`. They are validated by the **same zod schema the
+file loader uses**, so a saved template cannot be shaped differently from a
+shipped one — including the required `whiteboard` layout
+([TMPL-7](SPEC.md#tmpl-7-whiteboard-layout)).
+
+| Action | |
+| --- | --- |
+| `template.list` | The caller's library: their own templates first, then the built-ins. |
+| `template.duplicate` | Copies any template they can see into their library. **This is how a template is created** — starting from one that already renders means no starter theme or layout set is written into code. |
+| `template.update` | Name, theme, layout labels and purposes, which layouts the template has, and who may use it. |
+| `template.delete` | Tombstones it (P-10). |
+
+Built-ins are read-only: they come from files a deployment controls, and
+editing one into the database would silently diverge from its file.
+
+**Nothing in code names a template.** The fallback for a new project or an
+unresolvable id is `DEFAULT_TEMPLATE_ID`, defaulting to the first template in
+`TEMPLATES_DIR` — a deployment can replace the starter set entirely without a
+code change.
+
+**A deleted template never breaks a lecture.** Read paths
+(`resolveTemplateForRead`) fall back to that default while the deck keeps its
+`templateId`, so restoring the template brings its look back. Validation paths
+still reject an id that names nothing.
+
 ### The code: `client/src/components/slide/layouts/`
 
 The one template-related thing that is not data: **presentation
@@ -84,25 +119,49 @@ invisible content or never-filled slots.
 entry + declaring the layout in a template file (the contract test binds
 them).
 
-## How it will work with the WYSIWYG editor ([TMPL-4](SPEC.md#tmpl-4-custom-templates-create--edit--save))
+## Arrangement is data ([TMPL-4](SPEC.md#tmpl-4-custom-templates-create--edit--save))
 
-Users will create templates visually: add text/image/media slots, style
-them, attach labels, metadata, and validation (word limits etc.), and
-arrange them on the canvas. That changes three things and — deliberately
-— nothing else:
+A layout can carry its own **arrangement**: a box per slot, in percentages of
+the slide, stored in `elementPositions` and keyed by slot name.
 
-1. **Storage moves to MongoDB.** The document schema is exactly today's
-   file schema (that's why the starter files use the canonical object
-   form). The loader becomes a query; every consumer downstream is
-   untouched.
-2. **Arrangement becomes data.** Users can't ship React components, so
+```json
+"elementPositions": { "title": { "x": 10, "y": 5, "w": 80, "h": 20 } }
+```
+
+[`PositionedLayout`](../client/src/components/slide/layouts/PositionedLayout.tsx)
+turns that data into DOM — one renderer, any arrangement. Percentages rather
+than pixels, so an arrangement holds at any size: the thumbnail in the library
+and the full-bleed viewer are the same layout scaled.
+
+**Both worlds coexist, on purpose.** `rendererFor(type, layout)` picks the
+engine when a layout has positions and the hand-tuned component when it does
+not. Every built-in still has none, so nothing about them changed. That is the
+seam the demolition below runs through: a layout moves to data on its own,
+and can move back by clearing its positions.
+
+Boxes are validated by the same zod schema as everything else in a template —
+inside the slide, and naming only slots the layout declares — so an
+arrangement cannot hide content where nobody can reach it. The editor keeps
+boxes in bounds while you drag, and offers the same numbers as inputs, because
+a drag is not reachable from a keyboard.
+
+### What is still to come
+
+1. ~~**Storage moves to MongoDB.**~~ Done — see "User templates" above.
+2. ~~**Arrangement becomes data.**~~ Done — the engine above. Two pieces of the
+   original plan remain, and only matter once users invent slots of their own:
+   `LayoutType` widening from the seven-value union to open strings, and slide
+   content moving from fixed fields to a slot-name map. Positioning the
+   conventional slots (`title`, `body`, `image`, `caption`) needs neither,
+   which is why it landed first.
+3. **The rest of the original plan.** Users can't ship React components, so
    the editor writes each layout's geometry into the reserved
    `elementPositions` field (regions, placement, per-slot styling), and
    a **data-driven rendering engine** — grown from today's
    `GenericLayout` fallback — turns it into DOM. `LayoutType` widens
    from the seven-value union to open strings, and slide content moves
    from fixed fields to a slot-name map so custom slots can persist.
-3. **The hand-tuned layout components become removable.** They are
+4. **The hand-tuned layout components become removable.** They are
    scaffolding with a planned demolition: once the engine exists, we
    convert one built-in layout to `elementPositions` data, compare it
    side by side with its component, and when the data version is

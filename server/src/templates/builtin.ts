@@ -41,7 +41,9 @@ const slotFileSchema = z.union([
   }),
 ])
 
-const normalizeSlot = (raw: z.infer<typeof slotFileSchema>): SlotSpec => {
+export const normalizeSlot = (
+  raw: z.infer<typeof slotFileSchema>,
+): SlotSpec => {
   const name = typeof raw === 'string' ? raw : raw.name
   const conventional = SLOT_DESCRIPTORS[name as LayoutSlot] as
     (typeof SLOT_DESCRIPTORS)[LayoutSlot] | undefined
@@ -68,7 +70,7 @@ const normalizeSlot = (raw: z.infer<typeof slotFileSchema>): SlotSpec => {
   }
 }
 
-const layoutSchema = z
+export const layoutSchema = z
   .object({
     type: z.enum(LAYOUT_TYPES),
     label: z.string().min(1),
@@ -86,7 +88,21 @@ const layoutSchema = z
         imageRequired: z.boolean().optional(),
       })
       .optional(),
-    elementPositions: z.record(z.string(), z.unknown()).default({}),
+    // Where each slot sits, as percentages of the slide (TMPL-4). Validated
+    // here rather than trusted from the editor: a box outside the slide, or
+    // one naming a slot the layout does not have, would render a slide with
+    // content nobody can see.
+    elementPositions: z
+      .record(
+        z.string(),
+        z.object({
+          x: z.number().min(0).max(100),
+          y: z.number().min(0).max(100),
+          w: z.number().min(1).max(100),
+          h: z.number().min(1).max(100),
+        }),
+      )
+      .default({}),
   })
   .superRefine((layout, ctx) => {
     if (layout.type !== WHITEBOARD_LAYOUT_TYPE && layout.slots.length < 1) {
@@ -95,6 +111,27 @@ const layoutSchema = z
         message: 'layout must declare at least one slot',
         path: ['slots'],
       })
+    }
+    const names = new Set(
+      layout.slots.map(s => (typeof s === 'string' ? s : s.name)),
+    )
+    for (const [name, box] of Object.entries(layout.elementPositions ?? {})) {
+      if (!names.has(name)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `positioned slot "${name}" is not declared by this layout`,
+          path: ['elementPositions', name],
+        })
+        continue
+      }
+      // A box that starts inside but runs past the edge hides its own content.
+      if (box.x + box.w > 100 || box.y + box.h > 100) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `slot "${name}" extends past the slide`,
+          path: ['elementPositions', name],
+        })
+      }
     }
   })
 
@@ -107,17 +144,30 @@ const templateFileSchema = z
   })
   // Every template — built-in or user-authored — must provide the blank
   // whiteboard slate so the drawing tools always have a canvas (WB-1).
-  .superRefine((template, ctx) => {
-    if (!template.layouts.some(l => l.type === WHITEBOARD_LAYOUT_TYPE)) {
-      ctx.addIssue({
-        code: 'custom',
-        message: `template must include a '${WHITEBOARD_LAYOUT_TYPE}' layout`,
-        path: ['layouts'],
-      })
-    }
-  })
+  .superRefine((template, ctx) =>
+    requireWhiteboardLayout(template.layouts, ctx),
+  )
 
 let cache: Template[] | undefined
+
+/**
+ * The rule every template must satisfy, file-based or user-authored: a blank
+ * whiteboard slate, so the drawing tools always have a canvas (WB-1/TMPL-7).
+ * Shared so a template saved through the editor cannot be shaped differently
+ * from one shipped as a file.
+ */
+export const requireWhiteboardLayout = (
+  layouts: { type: string }[],
+  ctx: z.RefinementCtx,
+): void => {
+  if (!layouts.some(l => l.type === WHITEBOARD_LAYOUT_TYPE)) {
+    ctx.addIssue({
+      code: 'custom',
+      message: `template must include a '${WHITEBOARD_LAYOUT_TYPE}' layout`,
+      path: ['layouts'],
+    })
+  }
+}
 
 /** Loads and validates every *.json in the templates directory. */
 export const loadBuiltinTemplates = (
@@ -163,6 +213,20 @@ export const listBuiltinTemplates = (): Template[] => templates()
 
 export const getBuiltinTemplate = (id: string): Template | undefined =>
   templates().find(t => t.id === id)
+
+/**
+ * The template to fall back on: the deployment's configured default, or the
+ * first one it ships. Never a literal id — a deployment may replace the
+ * starter set entirely, and nothing in code should assume a template it does
+ * not necessarily have.
+ */
+export const defaultTemplateId = (): string => {
+  const configured = env.DEFAULT_TEMPLATE_ID
+  if (configured && getBuiltinTemplate(configured)) return configured
+  const first = templates()[0]
+  if (!first) throw new Error('No templates available')
+  return first.id
+}
 
 /** The AI-facing option set for a template (GEN-6). The whiteboard layout
  * is a manual blank slate, so it is withheld from the model — generation

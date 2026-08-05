@@ -52,7 +52,8 @@ import { SlideModel, toSlideDto, type SlideDb } from '../models/slide'
 import { DeckModel, loadDeckAcl, touchDeck, type DeckDb } from '../models/deck'
 import { canEditAcl } from '../lib/access'
 import { RefineJobModel } from '../models/refine-job'
-import { getBuiltinTemplate, layoutDescriptors } from '../templates/builtin'
+import { layoutDescriptors } from '../templates/builtin'
+import { resolveTemplate } from '../templates/resolve'
 import { assignSpeakers } from '../lib/diarization-join'
 import { mapSpeakerRoles } from '../lib/speaker-roles'
 import { planReformat } from '../lib/reformat-plan'
@@ -425,7 +426,7 @@ export const deckReformat = defineAction<DeckReformatInput, DeckReformatResult>(
     input: z.object({ deckId: z.string().min(1) }),
     execute: async (ctx, input) => {
       const { deck } = await loadEditableDeck(ctx, input.deckId)
-      const template = getBuiltinTemplate(deck.templateId)
+      const template = await resolveTemplate(deck.templateId)
       const descriptors = template ? layoutDescriptors(template) : []
       const gen = registry.get<GenerationProvider>('generation')
       const { reframed, kept, protectedCount } = await reformatStudentSlides(
@@ -665,7 +666,7 @@ const runRefine = async (
   try {
     const deck = await DeckModel.findById(deckId)
     if (!deck) throw new Error('Deck no longer exists')
-    const template = getBuiltinTemplate(deck.templateId)
+    const template = await resolveTemplate(deck.templateId)
     const descriptors = template ? layoutDescriptors(template) : []
     const gen = registry.get<GenerationProvider>('generation')
 
@@ -905,7 +906,7 @@ export const deckRefineSlide = defineAction<
     })
     if (!slide) throw new ActionForbiddenError()
 
-    const template = getBuiltinTemplate(deck.templateId)
+    const template = await resolveTemplate(deck.templateId)
     const descriptors = template ? layoutDescriptors(template) : []
     const gen = registry.get<GenerationProvider>('generation')
 

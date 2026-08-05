@@ -27,7 +27,7 @@ import {
 import type { ActionContext } from './context'
 import { SlideModel, toSlideDto, type SlideDb } from '../models/slide'
 import { DeckModel, loadDeckAcl, touchDeck, type DeckDb } from '../models/deck'
-import { getBuiltinTemplate } from '../templates/builtin'
+import { resolveTemplate } from '../templates/resolve'
 import { canEditAcl } from '../lib/access'
 import { layoutHasImageSlot } from '../lib/image-layout'
 import { enrichSlideImage } from '../enrichment/enrich'
@@ -133,7 +133,7 @@ export const slideSetLayout = defineAction<SlideSetLayoutInput, Slide>({
   }),
   execute: async (ctx, input) => {
     const { slide, deck } = await loadOwnedSlide(ctx, input.slideId)
-    const template = getBuiltinTemplate(deck.templateId)
+    const template = await resolveTemplate(deck.templateId)
     if (!template?.layouts.some(l => l.type === input.layoutType)) {
       throw new ActionValidationError('slide.setLayout', [
         'layoutType: not a layout of this template',

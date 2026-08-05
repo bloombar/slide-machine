@@ -168,7 +168,64 @@
       "seminar": "Séminaire"
     },
     "exportYaml": "Exporter le modèle en YAML",
-    "exportYamlHint": "Téléchargez le style et les mises en page de ce modèle dans un fichier YAML réimportable."
+    "exportYamlHint": "Téléchargez le style et les mises en page de ce modèle dans un fichier YAML réimportable.",
+    "custom": "Perso",
+    "duplicate": "Dupliquer",
+    "duplicateNamed": "Dupliquer {name}",
+    "edit": "Modifier",
+    "editNamed": "Modifier {name}",
+    "deleteNamed": "Supprimer {name}",
+    "nameLabel": "Nom du modèle",
+    "themeLabel": "Couleurs",
+    "layoutsLabel": "Dispositions",
+    "layoutsHint": "L’usage de chaque disposition indique à l’IA quand la choisir pendant la génération.",
+    "layoutName": "Nom",
+    "layoutPurpose": "Quand l’utiliser",
+    "theme": {
+      "background": "Arrière-plan",
+      "surface": "Surface",
+      "text": "Texte",
+      "muted": "Texte atténué",
+      "accent": "Accent",
+      "penColor": "Stylo",
+      "highlighterColor": "Surligneur"
+    },
+    "preview": {
+      "title": "Une diapositive dans ce style",
+      "body": "Une ou deux phrases de texte, pour juger d’un coup d’œil la typographie et les espacements.",
+      "bullet1": "Un premier point",
+      "bullet2": "Un deuxième point",
+      "bullet3": "Un troisième point",
+      "caption": "Une légende"
+    },
+    "delete": {
+      "title": "Supprimer le modèle ?",
+      "message": "« {name} » sera retiré de votre bibliothèque. Les cours qui l’utilisent déjà conservent leur style."
+    },
+    "errors": {
+      "duplicate": "Impossible de dupliquer ce modèle",
+      "save": "Impossible d’enregistrer le modèle",
+      "delete": "Impossible de supprimer le modèle"
+    },
+    "visibilityLabel": "Qui peut l’utiliser",
+    "addLayout": "Ajouter une disposition",
+    "addLayoutChoose": "Choisir un type…",
+    "removeLayout": "Retirer la disposition {name}",
+    "visibility": {
+      "private": "Moi seul",
+      "unlisted": "Toute personne ayant le lien",
+      "public": "Publique"
+    },
+    "visibilityHint": {
+      "private": "À vous seul. Personne d’autre ne peut la trouver ni la copier.",
+      "unlisted": "Quiconque reçoit le lien peut la copier.",
+      "public": "Visible dans la bibliothèque publique, copiable par tous."
+    },
+    "arrange": "Positionner cette disposition",
+    "arrangeHint": "Placez les zones vous-même au lieu d’utiliser la disposition intégrée.",
+    "arrangeDragHint": "Faites glisser une zone pour la déplacer, ou son coin pour la redimensionner. Les flèches la déplacent, Maj + flèches la redimensionnent.",
+    "arrangeReset": "Utiliser la disposition intégrée",
+    "boxAt": "{slot} : {x}% depuis la gauche, {y}% depuis le haut, {w}% de large, {h}% de haut"
   },
   "layout": {
     "change": "Changer la mise en page",

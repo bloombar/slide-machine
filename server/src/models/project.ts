@@ -8,6 +8,7 @@ import { LOCALES } from '@slide-machine/shared'
 import type { ResolvedAcl } from '../lib/access'
 import { env } from '../config/env'
 import { softDeletePlugin } from './plugins/soft-delete'
+import { defaultTemplateId } from '../templates/builtin'
 
 export interface ProjectDb extends Omit<
   Project,
@@ -44,7 +45,9 @@ const projectSchema = new Schema<ProjectDb>(
       enum: ['restricted', 'public'],
       default: 'public',
     },
-    templateId: { type: String, default: 'classic' },
+    // Resolved when a project is created, so a deployment shipping its own
+    // template set does not need this file changed (docs/TEMPLATES.md).
+    templateId: { type: String, default: () => defaultTemplateId() },
     // Absent = server default; stored only when explicitly set
     generationFreedom: { type: Number, min: 1, max: 5, default: undefined },
     // Explicit lecturing language only; absent = inherit (owner profile,

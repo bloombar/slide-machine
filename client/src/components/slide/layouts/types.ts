@@ -7,12 +7,16 @@
  * template's theme. Register renderers in ./index.tsx.
  */
 import type { ReactNode } from 'react'
-import type { LayoutSlot, Slide } from '@slide-machine/shared'
+import type { Layout, LayoutSlot, Slide } from '@slide-machine/shared'
 import type { ThemeColors } from '../theme'
 
 export interface LayoutProps {
   slide: Slide
   colors: ThemeColors
+  /** The layout's own definition. The arrangement engine reads its
+   * `elementPositions`; hand-tuned components have no use for it. Absent when
+   * the template does not declare this layout type. */
+  layout?: Layout
   /** True when the viewer may edit: layouts must then render even
    * their EMPTY conditional slots (as clickable placeholders) so a
    * layout switch never strands content the user can't reach. */

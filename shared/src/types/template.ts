@@ -102,6 +102,32 @@ export interface SlotSpec {
 }
 
 /**
+ * Where one slot sits on a layout, as percentages of the slide (TMPL-4).
+ *
+ * Percentages rather than pixels because a slide is rendered at whatever size
+ * its container gives it — a thumbnail in the library, full-bleed in the
+ * viewer — so an arrangement has to survive being scaled.
+ */
+export interface SlotBox {
+  /** Distance from the left edge, 0-100. */
+  x: number
+  /** Distance from the top edge, 0-100. */
+  y: number
+  /** Width, 1-100. */
+  w: number
+  /** Height, 1-100. */
+  h: number
+}
+
+/**
+ * A layout's arrangement: a box per slot name. A layout with no entries is
+ * drawn by its hand-tuned component instead, which is what every built-in
+ * does today — the two coexist so layouts can move to data one at a time
+ * (docs/TEMPLATES.md).
+ */
+export type ElementPositions = Record<string, SlotBox>
+
+/**
  * A single layout within a template. `purpose`, `slots`, and `constraints`
  * form the machine-readable descriptor serialized into generation requests.
  */
@@ -111,8 +137,9 @@ export interface Layout {
   purpose: string
   slots: SlotSpec[]
   constraints?: LayoutConstraints
-  /** Positioning of content elements; shape is renderer-defined for now. */
-  elementPositions: Record<string, unknown>
+  /** Where each slot sits, keyed by slot name. Empty means "arrange this
+   * layout with its hand-tuned component" (TMPL-4). */
+  elementPositions: ElementPositions
 }
 
 /** The AI-facing subset of a Layout sent with generation requests (GEN-6). */

@@ -40,7 +40,7 @@ import { recordSettingsChange } from '../audit/settings-log'
 import { projectSettingsSnapshot } from '../lib/settings-snapshot'
 import { ttsVoiceIdSchema } from '../lib/tts-voice'
 import { sharesOfAcl } from '../lib/shares'
-import { getBuiltinTemplate } from '../templates/builtin'
+import { templateExists } from '../templates/resolve'
 import type { HydratedDocument, Types } from 'mongoose'
 import { DeckModel } from '../models/deck'
 import { deleteProjectCascade } from '../lib/cascade'
@@ -283,7 +283,7 @@ export const projectSwitchTemplate = defineAction<
   }),
   execute: (ctx, input) =>
     editProjectSettings(ctx, input.projectId, async doc => {
-      if (!getBuiltinTemplate(input.templateId)) {
+      if (!(await templateExists(input.templateId))) {
         throw new ActionValidationError('project.switchTemplate', [
           'templateId: unknown template',
         ])

@@ -168,7 +168,64 @@
       "seminar": "Seminar"
     },
     "exportYaml": "Export template as YAML",
-    "exportYamlHint": "Download this template’s style and layouts as a re-importable YAML file."
+    "exportYamlHint": "Download this template’s style and layouts as a re-importable YAML file.",
+    "custom": "Custom",
+    "duplicate": "Duplicate",
+    "duplicateNamed": "Duplicate {name}",
+    "edit": "Edit",
+    "editNamed": "Edit {name}",
+    "deleteNamed": "Delete {name}",
+    "nameLabel": "Template name",
+    "themeLabel": "Colours",
+    "layoutsLabel": "Layouts",
+    "layoutsHint": "Each layout's purpose tells the AI when to choose it while a lecture is generated.",
+    "layoutName": "Name",
+    "layoutPurpose": "When to use it",
+    "theme": {
+      "background": "Background",
+      "surface": "Surface",
+      "text": "Text",
+      "muted": "Muted text",
+      "accent": "Accent",
+      "penColor": "Pen",
+      "highlighterColor": "Highlighter"
+    },
+    "preview": {
+      "title": "A slide in this style",
+      "body": "A sentence or two of body text, so the type and spacing show at a glance.",
+      "bullet1": "A first point",
+      "bullet2": "A second point",
+      "bullet3": "A third point",
+      "caption": "A caption"
+    },
+    "delete": {
+      "title": "Delete template?",
+      "message": "“{name}” will be removed from your library. Lectures already using it keep their own copy of the style."
+    },
+    "errors": {
+      "duplicate": "Could not duplicate that template",
+      "save": "Could not save the template",
+      "delete": "Could not delete the template"
+    },
+    "visibilityLabel": "Who can use it",
+    "addLayout": "Add a layout",
+    "addLayoutChoose": "Choose a type…",
+    "removeLayout": "Remove the {name} layout",
+    "visibility": {
+      "private": "Only me",
+      "unlisted": "Anyone with the link",
+      "public": "Listed publicly"
+    },
+    "visibilityHint": {
+      "private": "Yours alone. Nobody else can find or copy it.",
+      "unlisted": "Anyone you send the link to can copy it.",
+      "public": "Shown in the public template library for anyone to copy."
+    },
+    "arrange": "Arrange this layout",
+    "arrangeHint": "Place the slots yourself instead of using the built-in arrangement.",
+    "arrangeDragHint": "Drag a box to move it, or its corner to resize. Arrows nudge, shift and arrows resize.",
+    "arrangeReset": "Use the built-in arrangement",
+    "boxAt": "{slot}: {x}% from the left, {y}% down, {w}% wide, {h}% tall"
   },
   "layout": {
     "change": "Change slide layout",

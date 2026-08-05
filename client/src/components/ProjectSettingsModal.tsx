@@ -13,7 +13,7 @@
  * the exception — uploading files into another user's project is content
  * authoring, not a settings edit, so that section stays with its owner.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import type { Project, Template } from '@slide-machine/shared'
@@ -29,7 +29,7 @@ import FreedomSlider from './FreedomSlider'
 import LanguageSelect from './LanguageSelect'
 import VoiceSelect from './VoiceSelect'
 import { getTtsEnabled } from '../runtime-config'
-import TemplatePicker from './TemplatePicker'
+import TemplateDesignPanel from './template/TemplateDesignPanel'
 
 /** The tabs in order; each id also keys its label under
  * `deck.settings.tabs.<id>` — the same names the lecture settings use. */
@@ -67,6 +67,14 @@ export default function ProjectSettingsModal({
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [tab, setTab] = useState<TabId>(initialTab)
   const [templates, setTemplates] = useState<Template[]>([])
+
+  const loadTemplates = useCallback(() => {
+    dispatchAction<Template[]>('template.list')
+      .then(setTemplates)
+      .catch(() => {
+        // Quiet failure: the section simply stays empty
+      })
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -178,9 +186,10 @@ export default function ProjectSettingsModal({
           <p className="mb-4 text-sm text-slate-500">
             {t('project.settings.templateHint')}
           </p>
-          <TemplatePicker
+          <TemplateDesignPanel
             templates={templates}
             value={project.templateId}
+            onLibraryChanged={loadTemplates}
             onChange={templateId => {
               dispatchAction<Project>('project.switchTemplate', {
                 projectId: project.id,

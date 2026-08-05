@@ -93,7 +93,12 @@ import { isAllowlistedAdmin } from '../lib/admin-view'
 import { editDeckSettings } from '../lib/admin-edit'
 import { recordSettingsChange } from '../audit/settings-log'
 import { deckSettingsSnapshot } from '../lib/settings-snapshot'
-import { getBuiltinTemplate, layoutDescriptors } from '../templates/builtin'
+import { defaultTemplateId, layoutDescriptors } from '../templates/builtin'
+import {
+  resolveTemplate,
+  resolveTemplateForRead,
+  templateExists,
+} from '../templates/resolve'
 import { buildDeckStructure, headerLayoutTypes } from '../lib/deck-structure'
 import { registry } from '../providers/registry'
 import { permalinkSlug } from '../lib/slug'
@@ -228,9 +233,9 @@ export const deckCreate = defineAction<DeckCreateInput, Deck>({
     // The project's template is the creation-time default; the lecture
     // stores its own copy and can switch independently afterwards
     const project = await ProjectModel.findById(input.projectId)
-    const templateId = getBuiltinTemplate(project?.templateId ?? '')
+    const templateId = (await templateExists(project?.templateId ?? ''))
       ? project!.templateId
-      : 'classic'
+      : defaultTemplateId()
     const deck = await DeckModel.create({
       projectId: input.projectId,
       ownerId: ctx.userId,
@@ -291,7 +296,7 @@ export const deckGet = defineAction<DeckGetInput, DeckViewResponse>({
     if (!deck) throw new ActionForbiddenError()
     const acl = await loadDeckAcl(deck)
     if (!canViewAcl(acl, userId)) throw new ActionForbiddenError()
-    const template = getBuiltinTemplate(deck.templateId)
+    const template = await resolveTemplateForRead(deck.templateId)
     if (!template)
       throw new ActionValidationError('deck.get', ['template no longer exists'])
     const slides = await SlideModel.find({ deckId: deck._id }).sort({
@@ -339,7 +344,7 @@ export const slideAdd = defineAction<SlideAddInput, Slide>({
     const { deck } = await loadEditableDeck(ctx, input.deckId)
     let layoutType: LayoutType = 'content'
     if (input.layoutType) {
-      const template = getBuiltinTemplate(deck.templateId)
+      const template = await resolveTemplate(deck.templateId)
       if (!template?.layouts.some(l => l.type === input.layoutType)) {
         throw new ActionValidationError('slide.add', [
           'layoutType: not a layout of this template',
@@ -393,7 +398,7 @@ export const deckSwitchTemplate = defineAction<DeckSwitchTemplateInput, Deck>({
   }),
   execute: (ctx, input) =>
     editDeckSettings(ctx, input.deckId, async (deck, acl) => {
-      if (!getBuiltinTemplate(input.templateId)) {
+      if (!(await templateExists(input.templateId))) {
         throw new ActionValidationError('deck.switchTemplate', [
           'templateId: unknown template',
         ])
@@ -472,7 +477,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
   }),
   execute: async (ctx, input) => {
     const { deck } = await loadEditableDeck(ctx, input.deckId)
-    const template = getBuiltinTemplate(deck.templateId)
+    const template = await resolveTemplate(deck.templateId)
     if (!template)
       throw new ActionValidationError('session.phrase', [
         'template no longer exists',

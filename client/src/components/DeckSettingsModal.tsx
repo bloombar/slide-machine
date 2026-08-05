@@ -13,7 +13,7 @@
  * material, running a refine over the owner's slides, and the Quiz and
  * Export tabs, which act through the admin's own Google account.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { Trans, useTranslation } from 'react-i18next'
 import { Download, X } from 'lucide-react'
@@ -30,7 +30,7 @@ import {
 } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import { downloadExport } from '../lib/download'
-import TemplatePicker from './TemplatePicker'
+import TemplateDesignPanel from './template/TemplateDesignPanel'
 import AccessSettings from './AccessSettings'
 import QuizPanel from './QuizPanel'
 import ExportPanel from './ExportPanel'
@@ -208,6 +208,14 @@ export default function DeckSettingsModal({
   useEffect(() => () => window.clearTimeout(persistTimer.current), [])
   const closeRef = useRef<HTMLButtonElement>(null)
   const tabRefs = useRef(new Map<TabId, HTMLButtonElement>())
+
+  const loadTemplates = useCallback(() => {
+    dispatchAction<Template[]>('template.list')
+      .then(setTemplates)
+      .catch(() => {
+        // Quiet failure: the section simply stays empty
+      })
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -600,10 +608,11 @@ export default function DeckSettingsModal({
           <h3 className="mb-4 text-lg font-semibold text-slate-700">
             {t('template.heading')}
           </h3>
-          <TemplatePicker
+          <TemplateDesignPanel
             templates={templates}
             value={deck.templateId}
             onChange={switchTemplate}
+            onLibraryChanged={loadTemplates}
           />
           <div className="mt-6 border-t border-slate-100 pt-4">
             <button

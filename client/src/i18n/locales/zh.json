@@ -168,7 +168,64 @@
       "seminar": "研讨会"
     },
     "exportYaml": "将模板导出为 YAML",
-    "exportYamlHint": "将该模板的样式和版式下载为可重新导入的 YAML 文件。"
+    "exportYamlHint": "将该模板的样式和版式下载为可重新导入的 YAML 文件。",
+    "custom": "自定义",
+    "duplicate": "复制",
+    "duplicateNamed": "复制{name}",
+    "edit": "编辑",
+    "editNamed": "编辑{name}",
+    "deleteNamed": "删除{name}",
+    "nameLabel": "模板名称",
+    "themeLabel": "颜色",
+    "layoutsLabel": "版式",
+    "layoutsHint": "每个版式的用途会告诉 AI 在生成讲座时何时选用它。",
+    "layoutName": "名称",
+    "layoutPurpose": "何时使用",
+    "theme": {
+      "background": "背景",
+      "surface": "表面",
+      "text": "文字",
+      "muted": "次要文字",
+      "accent": "强调色",
+      "penColor": "画笔",
+      "highlighterColor": "荧光笔"
+    },
+    "preview": {
+      "title": "此风格的幻灯片",
+      "body": "一两句正文，便于一眼看清字体与间距。",
+      "bullet1": "第一点",
+      "bullet2": "第二点",
+      "bullet3": "第三点",
+      "caption": "图注"
+    },
+    "delete": {
+      "title": "删除模板？",
+      "message": "“{name}”将从你的库中移除。已经使用它的讲座会保留自己的样式。"
+    },
+    "errors": {
+      "duplicate": "无法复制该模板",
+      "save": "无法保存模板",
+      "delete": "无法删除模板"
+    },
+    "visibilityLabel": "谁可以使用",
+    "addLayout": "添加版式",
+    "addLayoutChoose": "选择类型…",
+    "removeLayout": "移除{name}版式",
+    "visibility": {
+      "private": "仅自己",
+      "unlisted": "知道链接的人",
+      "public": "公开"
+    },
+    "visibilityHint": {
+      "private": "仅你可用，他人无法找到或复制。",
+      "unlisted": "收到链接的人都可以复制。",
+      "public": "显示在公共模板库中，任何人都可以复制。"
+    },
+    "arrange": "自定义排布",
+    "arrangeHint": "自己摆放各个区域，而不使用内置排布。",
+    "arrangeDragHint": "拖动方块可移动，拖动右下角可调整大小。方向键移动，Shift 加方向键调整大小。",
+    "arrangeReset": "使用内置排布",
+    "boxAt": "{slot}：距左 {x}%，距顶 {y}%，宽 {w}%，高 {h}%"
   },
   "layout": {
     "change": "更改幻灯片版式",

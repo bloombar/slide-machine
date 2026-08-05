@@ -28,7 +28,8 @@ import { meterUsage } from '../billing/usage-context'
 import { BYTES_PER_MB } from '../billing/usage'
 import { parseDeckImport, type ImportedDeck } from '../lib/deck-import'
 import { permalinkSlug } from '../lib/slug'
-import { getBuiltinTemplate } from '../templates/builtin'
+import { defaultTemplateId } from '../templates/builtin'
+import { templateExists } from '../templates/resolve'
 import { ttsVoiceIdSchema } from '../lib/tts-voice'
 import { DeckModel, resolveDeckAcl, toDeckDto } from '../models/deck'
 import { SlideModel } from '../models/slide'
@@ -46,18 +47,21 @@ interface ResolvedSettings {
 /**
  * Validates the imported template + General-tab settings against what the app
  * accepts, keeping the valid ones and collecting a warning for each dropped or
- * substituted value. An unknown template falls back to `classic` rather than
- * failing the whole import (EXP-3 "restore faithfully… if possible").
+ * substituted value. An unknown template falls back to the deployment's
+ * default rather than failing the whole import (EXP-3 "restore faithfully…
+ * if possible"). Async because a template may be user-authored and stored.
  */
-const resolveSettings = (doc: ImportedDeck): ResolvedSettings => {
+const resolveSettings = async (
+  doc: ImportedDeck,
+): Promise<ResolvedSettings> => {
   const warnings: string[] = []
 
   let templateId = doc.templateId
-  if (!getBuiltinTemplate(templateId)) {
+  if (!(await templateExists(templateId))) {
     warnings.push(
       `Unknown template "${templateId}" — using the default template instead.`,
     )
-    templateId = 'classic'
+    templateId = defaultTemplateId()
   }
 
   const s = doc.settings ?? {}
@@ -131,7 +135,7 @@ export const deckImport = defineAction<
     const project = await ProjectModel.findById(input.projectId)
     if (!project) throw new ActionForbiddenError()
 
-    const settings = resolveSettings(doc)
+    const settings = await resolveSettings(doc)
     const title = doc.title.trim()
 
     // Create the new lecture. A titled import is treated as user-named so the
