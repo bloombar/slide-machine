@@ -179,6 +179,69 @@ describe('template.duplicate (TMPL-4)', () => {
   })
 })
 
+describe('template.get and permalinks (TMPL-4)', () => {
+  const own = async (name = 'Mine') =>
+    (await act(ada, 'template.duplicate', { templateId: builtinId(), name }))
+      .body
+
+  it('gives a new template a readable permalink of its own', async () => {
+    const made = await own('Lab Style')
+    expect(made.permalinkSlug).toMatch(/^lab-style-[0-9a-f]{8}$/)
+  })
+
+  it('keeps the permalink when the design is renamed', async () => {
+    const made = await own('Lab Style')
+    const res = await act(ada, 'template.update', {
+      templateId: made.id,
+      name: 'Something Else',
+      theme: made.theme,
+      layouts: made.layouts,
+    })
+    expect(res.status).toBe(200)
+    // A link to a design must survive its author renaming it
+    expect(res.body.permalinkSlug).toBe(made.permalinkSlug)
+  })
+
+  it('reads a template by its permalink, naming the author', async () => {
+    const made = await own()
+    const res = await act(ada, 'template.get', { slug: made.permalinkSlug })
+    expect(res.status).toBe(200)
+    expect(res.body.id).toBe(made.id)
+    expect(res.body.owner).toEqual({
+      id: expect.any(String),
+      displayName: 'ada',
+    })
+  })
+
+  it('reads a built-in by its id, which is its permalink', async () => {
+    const res = await act(ada, 'template.get', { slug: builtinId() })
+    expect(res.status).toBe(200)
+    expect(res.body.id).toBe(builtinId())
+  })
+
+  it("refuses someone else's private design, and a missing one, alike", async () => {
+    const made = await own()
+    const mine = await act(bob, 'template.get', { slug: made.permalinkSlug })
+    const missing = await act(bob, 'template.get', { slug: 'no-such-design' })
+    expect(mine.status).toBe(403)
+    expect(missing.status).toBe(403)
+  })
+
+  it('lets anyone read a design its author shared', async () => {
+    const made = await own()
+    await act(ada, 'template.update', {
+      templateId: made.id,
+      name: made.name,
+      theme: made.theme,
+      layouts: made.layouts,
+      visibility: 'unlisted',
+    })
+    const res = await act(bob, 'template.get', { slug: made.permalinkSlug })
+    expect(res.status).toBe(200)
+    expect(res.body.name).toBe('Mine')
+  })
+})
+
 describe('template.update (TMPL-4)', () => {
   const own = async () =>
     (

@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
-import { MemoryRouter, Routes, Route } from 'react-router'
+import { MemoryRouter, Routes, Route, useParams } from 'react-router'
 import { AuthProvider } from '../auth/AuthContext'
 import { setAccessToken } from '../auth/token'
 import DeckViewerPage from './DeckViewerPage'
@@ -1830,12 +1830,20 @@ describe('DeckViewerPage settings modal', () => {
 
   let seedNotesBody: unknown
 
+  /** Stands in for a template's own page, which the Design tab navigates to
+   * rather than opening an editor in place. */
+  function TemplatePageStub() {
+    const { slug } = useParams<{ slug: string }>()
+    return <p>{`template page: ${slug}`}</p>
+  }
+
   const renderWithSettings = () =>
     render(
       <MemoryRouter initialEntries={['/d/shared-abc123']}>
         <AuthProvider>
           <Routes>
             <Route path="/d/:slug" element={<DeckViewerPage />} />
+            <Route path="/t/:slug" element={<TemplatePageStub />} />
           </Routes>
         </AuthProvider>
       </MemoryRouter>,
@@ -2308,6 +2316,7 @@ describe('DeckViewerPage settings modal', () => {
   const own = {
     ...deckView.template,
     id: 'mine1',
+    permalinkSlug: 'my-style-ab12',
     ownerId: 'u1',
     name: 'My Style',
     layouts: [
@@ -2320,7 +2329,12 @@ describe('DeckViewerPage settings modal', () => {
       },
     ],
   }
-  const copy = { ...own, id: 'copy1', name: 'My Style 2' }
+  const copy = {
+    ...own,
+    id: 'copy1',
+    permalinkSlug: 'my-style-2-cd34',
+    name: 'My Style 2',
+  }
 
   /** Routes for the Design tab where the user has a template of their own;
    * the library gains the copy once one has been made. */
@@ -2371,22 +2385,15 @@ describe('DeckViewerPage settings modal', () => {
     fireEvent.click(screen.getByLabelText('Duplicate My Style'))
 
     // The copy is what the author is now working on, so the lecture is
-    // already using it by the time its editor opens.
+    // already using it by the time they get to its page.
     await vi.waitFor(() =>
       expect(switched.body).toEqual({ deckId: 'deck1', templateId: 'copy1' }),
     )
-    expect(await screen.findByLabelText('Template name')).toHaveValue(
-      'My Style 2',
-    )
-
-    // Leaving the editor shows the library agreeing: the copy is chosen.
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    await vi.waitFor(() =>
-      expect(screen.getByRole('radio', { name: /My Style 2/ })).toHaveAttribute(
-        'aria-checked',
-        'true',
-      ),
-    )
+    // And the editor is that page, not something inside these settings.
+    expect(
+      await screen.findByText('template page: my-style-2-cd34'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('applies a template to the lecture when its settings are opened', async () => {
@@ -2399,17 +2406,9 @@ describe('DeckViewerPage settings modal', () => {
     await vi.waitFor(() =>
       expect(switched.body).toEqual({ deckId: 'deck1', templateId: 'mine1' }),
     )
-    expect(await screen.findByLabelText('Template name')).toHaveValue(
-      'My Style',
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    await vi.waitFor(() =>
-      expect(screen.getByRole('radio', { name: /My Style/ })).toHaveAttribute(
-        'aria-checked',
-        'true',
-      ),
-    )
+    expect(
+      await screen.findByText('template page: my-style-ab12'),
+    ).toBeInTheDocument()
   })
 
   it('closes on Escape', async () => {

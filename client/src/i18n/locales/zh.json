@@ -5,6 +5,7 @@
     "note": "机器翻译，尚未经母语者校对。缺失的键会回退到英文。"
   },
   "common": {
+    "back": "返回",
     "loading": "加载中…",
     "save": "保存",
     "saving": "保存中…",
@@ -207,8 +208,14 @@
     },
     "errors": {
       "duplicate": "无法复制该模板",
+      "load": "无法加载该设计",
       "save": "无法保存模板",
       "delete": "无法删除模板"
+    },
+    "page": {
+      "saved": "已保存",
+      "readOnly": "该设计不属于你，无法修改。在课程的“设计”标签页中复制一份，即可拥有自己的版本。",
+      "missing": "该设计不存在，或为私有。"
     },
     "visibilityLabel": "谁可以使用",
     "addLayout": "添加版式",
@@ -343,10 +350,10 @@
     "arrangement": "排列方式",
     "unsaved": "未保存的更改",
     "discard": {
-      "title": "不保存就关闭吗？",
-      "message": "该模板有未保存的更改，现在关闭将会丢失。",
+      "title": "离开而不保存吗？",
+      "message": "该设计有未保存的更改，现在离开将会丢失。",
       "confirm": "放弃更改",
-      "save": "保存并关闭"
+      "save": "保存并离开"
     },
     "clearFill": "不填充",
     "placedByParent": "由父级文本框自动定位",

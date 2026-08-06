@@ -5,6 +5,7 @@
     "note": "Traduction automatique, non relue par un locuteur natif. Toute clé absente retombe sur l'anglais."
   },
   "common": {
+    "back": "Retour",
     "loading": "Chargement…",
     "save": "Enregistrer",
     "saving": "Enregistrement…",
@@ -207,8 +208,14 @@
     },
     "errors": {
       "duplicate": "Impossible de dupliquer ce modèle",
+      "load": "Impossible de charger ce modèle",
       "save": "Impossible d’enregistrer le modèle",
       "delete": "Impossible de supprimer le modèle"
+    },
+    "page": {
+      "saved": "Enregistré",
+      "readOnly": "Ce modèle ne vous appartient pas. Dupliquez-le depuis l’onglet Conception d’un cours pour en avoir un à vous.",
+      "missing": "Ce modèle n’existe pas ou est privé."
     },
     "visibilityLabel": "Qui peut l’utiliser",
     "addLayout": "Ajouter une disposition",
@@ -343,10 +350,10 @@
     "arrangement": "Agencement",
     "unsaved": "Modifications non enregistrées",
     "discard": {
-      "title": "Fermer sans enregistrer ?",
-      "message": "Le modèle comporte des modifications non enregistrées. Fermer maintenant les perdra.",
+      "title": "Quitter sans enregistrer ?",
+      "message": "Ce modèle comporte des modifications non enregistrées. Quitter maintenant les perdra.",
       "confirm": "Abandonner les modifications",
-      "save": "Enregistrer et fermer"
+      "save": "Enregistrer et quitter"
     },
     "clearFill": "Aucun fond",
     "placedByParent": "Positionné automatiquement par le bloc parent",

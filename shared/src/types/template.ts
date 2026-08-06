@@ -351,6 +351,14 @@ export type TemplateRenderMode = 'components' | 'positioned'
 export interface Template {
   id: string
   ownerId: string
+  /** Where the template lives: `/t/:permalinkSlug`, the same shape a lecture
+   * permalink has. A built-in's slug is its id; a stored one gets a readable
+   * slug when it is made, and keeps it however often it is renamed. */
+  permalinkSlug: string
+  /** Who authored it, for a byline that links to their profile (SOC-4).
+   * Only template.get fills this in — the library shows no bylines, and a
+   * list would need a user lookup per row for nothing. */
+  owner?: { id: string; displayName: string }
   name: string
   /** Absent means `components`: the hand-tuned layout components. */
   renderMode?: TemplateRenderMode

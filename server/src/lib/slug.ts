@@ -4,12 +4,17 @@
  */
 import { randomBytes } from 'node:crypto'
 
-export const permalinkSlug = (title: string): string => {
+/**
+ * A slug for `title`. `fallback` names what is being addressed when the title
+ * has nothing sluggable in it — an untitled lecture, a template named only in
+ * a script that has no Latin letters.
+ */
+export const permalinkSlug = (title: string, fallback = 'deck'): string => {
   const base =
     title
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '')
-      .slice(0, 40) || 'deck'
+      .slice(0, 40) || fallback
   return `${base}-${randomBytes(4).toString('hex')}`
 }

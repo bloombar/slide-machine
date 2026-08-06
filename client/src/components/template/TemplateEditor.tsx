@@ -221,6 +221,24 @@ export default function TemplateEditor({
   const [confirmLayout, setConfirmLayout] = useState<number | null>(null)
   const canvasHost = useRef<HTMLDivElement>(null)
 
+  /**
+   * Adopts a newly saved template as the draft.
+   *
+   * Saving measures the drawn geometry into every layout, so what comes back
+   * is not quite what was sent — enough to keep reading as unsaved work on a
+   * surface that stays open afterwards. Which layout is on screen and what
+   * undo can reach are left alone: nothing about them changed.
+   */
+  const adopted = useRef(template)
+  useEffect(() => {
+    if (adopted.current === template) return
+    adopted.current = template
+    setName(template.name)
+    setTheme(template.theme)
+    setLayouts(template.layouts)
+    setVisibility(template.visibility)
+  }, [template])
+
   const images = usePreviewImages()
   const metrics = themeMetrics(theme)
   const textStyles = themeTextStyles(theme)
@@ -712,11 +730,17 @@ export default function TemplateEditor({
         </p>
       )}
 
-      {/* Pinned to the bottom of the sheet. The editor is taller than the
-          screen, and the settings sheet's own close button is always visible
-          — a Save that scrolls away is a Save that gets missed, and nothing
-          here writes anything by itself. */}
-      <div className="sticky bottom-0 -mx-6 flex items-center gap-2 border-t border-slate-200 bg-white/95 px-6 py-3 backdrop-blur">
+      {/* Pinned to the bottom of the screen. The editor is taller than the
+          screen — a Save that scrolls away is a Save that gets missed, and
+          nothing here writes anything by itself.
+
+          `bottom-8` clears the app's own sticky status footer (h-8), so the
+          two stack rather than overlap, and the shared z-30 keeps this bar
+          over the page it floats above without reaching a dialog (z-40). */}
+      <div
+        data-testid="template-editor-actions"
+        className="sticky bottom-8 z-30 -mx-6 flex items-center gap-2 border-t border-slate-200 bg-white/95 px-6 py-3 backdrop-blur"
+      >
         {/* The keyboard must not be the only route to undo. */}
         <button
           type="button"

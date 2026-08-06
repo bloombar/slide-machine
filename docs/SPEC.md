@@ -276,6 +276,8 @@ Ship several polished, ready-to-use templates covering common lecture styles.
 
 Users can create, edit, save, and name their own templates — defining layouts and the **positioning** of slide content elements (title, body, image, caption) on each layout. Custom templates appear in the user's library and may be shared/published.
 
+A template belongs to its author rather than to any deck using it, so it has a **page of its own at a stable permalink** — `/t/:slug`, alongside a deck's `/d/:slug` ([SHARE-1](#share-1-saved-deck-viewer--permalink)). That page is where a template is edited; the library in a deck's or project's Design settings chooses and duplicates, then sends the author there. The permalink is fixed when the template is created and survives renaming. Who may open it follows the template's visibility: its author always, a shared one anyone with the link, and a private one nobody else — refused identically to one that does not exist. A reader who cannot edit it sees the design rather than the editor: each layout rendered as a slide.
+
 #### TMPL-5 Template application
 
 A template (and any specific layout) can be applied at deck level and overridden per slide (see EDIT-3).

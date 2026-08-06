@@ -34,6 +34,7 @@ const layout = (type: string, label: string, slots: string[]): Layout =>
 
 const template = (over: Partial<Template> = {}): Template => ({
   id: 'mine-1',
+  permalinkSlug: 'mine-1',
   ownerId: 'u1',
   name: 'My Style',
   theme: { background: '#ffffff', text: '#000000', accent: '#ff0000' },
