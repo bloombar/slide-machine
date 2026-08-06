@@ -23,7 +23,9 @@ import {
   SETTINGS_LOGS_PAGE_SIZE,
   SETTINGS_LOGS_PAGE_SIZES,
   type SettingsLogEntityFilter,
+  type SettingsLogsSort,
 } from '../api/admin'
+import SortHeader from '../components/admin/SortHeader'
 import { config } from '../config'
 
 const changedAt = (iso: string): string =>
@@ -151,6 +153,7 @@ export default function AdminSettingsLogsPage() {
   const [entityType, setEntityType] = useState<
     SettingsLogEntityFilter | undefined
   >(undefined)
+  const [sort, setSort] = useState<SettingsLogsSort>('time:desc')
   const [data, setData] = useState<SettingsLogsResponse | null>(null)
   const [error, setError] = useState(false)
   const [downloading, setDownloading] = useState(false)
@@ -160,7 +163,7 @@ export default function AdminSettingsLogsPage() {
   // trigger one, so a stale error can never linger past a new response
   useEffect(() => {
     let cancelled = false
-    listSettingsLogs(page, limit, entityType)
+    listSettingsLogs(page, limit, entityType, sort)
       .then(res => {
         if (!cancelled) setData(res)
       })
@@ -170,7 +173,7 @@ export default function AdminSettingsLogsPage() {
     return () => {
       cancelled = true
     }
-  }, [page, limit, entityType])
+  }, [page, limit, entityType, sort])
 
   const onDownload = async () => {
     setDownloading(true)
@@ -192,6 +195,12 @@ export default function AdminSettingsLogsPage() {
   }
 
   const pageCount = Math.max(1, Math.ceil(data.total / data.limit))
+
+  // Any sort change starts the listing over from the first page.
+  const changeSort = (next: SettingsLogsSort) => {
+    setSort(next)
+    setPage(1)
+  }
 
   return (
     <div>
@@ -262,15 +271,27 @@ export default function AdminSettingsLogsPage() {
         <table className="w-full text-left text-sm">
           <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500 uppercase">
             <tr>
-              <th scope="col" className="px-4 py-3">
-                Time
-              </th>
-              <th scope="col" className="px-4 py-3">
-                Changed by
-              </th>
-              <th scope="col" className="px-4 py-3">
-                Settings
-              </th>
+              <SortHeader
+                label="Time"
+                field="time"
+                sort={sort}
+                onSort={changeSort}
+                chronological
+              />
+              <SortHeader
+                label="Changed by"
+                field="actor"
+                sort={sort}
+                onSort={changeSort}
+              />
+              <SortHeader
+                label="Settings"
+                field="entity"
+                sort={sort}
+                onSort={changeSort}
+              />
+              {/* A set of changed fields has no meaningful order, so this
+                  column alone does not sort. */}
               <th scope="col" className="px-4 py-3">
                 What changed
               </th>

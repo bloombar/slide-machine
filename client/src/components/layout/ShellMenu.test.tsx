@@ -15,10 +15,11 @@ import { AuthProvider } from '../../auth/AuthContext'
 import { setAccessToken } from '../../auth/token'
 import { resetAdminStatus } from '../../hooks/useIsAdmin'
 import { i18n } from '../../i18n'
+import * as runtimeConfig from '../../runtime-config'
 import ShellMenu from './ShellMenu'
 import { mockFetchRoutes } from '../../test/fetch-mock'
 
-const renderMenu = (authed: boolean, isAdmin = false) => {
+const renderMenu = (authed: boolean, isAdmin = false, at = '/') => {
   mockFetchRoutes({
     '/api/auth/refresh': () =>
       authed
@@ -32,7 +33,7 @@ const renderMenu = (authed: boolean, isAdmin = false) => {
       isAdmin ? { status: 200, body: { isAdmin: true } } : { status: 403 },
   })
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[at]}>
       <AuthProvider>
         <ShellMenu />
       </AuthProvider>
@@ -43,8 +44,14 @@ const renderMenu = (authed: boolean, isAdmin = false) => {
 beforeEach(() => {
   setAccessToken(null)
   resetAdminStatus()
+  // The feedback entry is gated on the server being able to send mail; most
+  // cases here want it present, and the one that does not says so.
+  vi.spyOn(runtimeConfig, 'getFeedbackEnabled').mockReturnValue(true)
 })
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
 
 describe('ShellMenu', () => {
   it('points Profile at the signed-in user’s own profile page', async () => {
@@ -97,6 +104,80 @@ describe('ShellMenu', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('lists the static pages between Account settings and Admin', async () => {
+    renderMenu(true, true)
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    await screen.findByRole('menuitem', { name: 'Admin' })
+    const labels = screen
+      .getAllByRole('menuitem')
+      .map(el => el.textContent?.trim())
+    expect(labels).toEqual([
+      'Home',
+      'Profile',
+      'Account settings',
+      'About us',
+      'Send feedback',
+      'Privacy policy',
+      'Terms & conditions',
+      'Admin',
+      'Log out',
+    ])
+  })
+
+  it('points each static entry at its page', async () => {
+    renderMenu(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    const href = async (name: string) =>
+      (await screen.findByRole('menuitem', { name })).getAttribute('href')
+    expect(await href('About us')).toBe('/about')
+    expect(await href('Send feedback')).toBe('/feedback')
+    expect(await href('Privacy policy')).toBe('/privacy')
+    expect(await href('Terms & conditions')).toBe('/terms')
+  })
+
+  // A policy that needs an account to read is not a policy, and someone who
+  // cannot sign in is exactly who needs the feedback form.
+  it('offers the static pages when signed out too', () => {
+    renderMenu(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    const labels = screen
+      .getAllByRole('menuitem')
+      .map(el => el.textContent?.trim())
+    expect(labels).toEqual([
+      'Home',
+      'Log in',
+      'About us',
+      'Send feedback',
+      'Privacy policy',
+      'Terms & conditions',
+    ])
+  })
+
+  // Nothing else in the group depends on mail, so only that one entry goes —
+  // and its group's rule stays, because About us is still in it.
+  it('drops Send feedback when the server cannot send mail', () => {
+    vi.spyOn(runtimeConfig, 'getFeedbackEnabled').mockReturnValue(false)
+    renderMenu(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    expect(
+      screen.queryByRole('menuitem', { name: 'Send feedback' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'About us' })).toBeVisible()
+    expect(screen.getAllByRole('separator')).toHaveLength(2)
+  })
+
+  // The static pages are English-only documents (content/document.ts), so
+  // the way in stays English as well — the same call as the Admin entry.
+  it('keeps the static entries English in a translated interface', async () => {
+    await i18n.changeLanguage('fr')
+    renderMenu(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    expect(screen.getByRole('menuitem', { name: 'Accueil' })).toBeVisible()
+    expect(
+      screen.getByRole('menuitem', { name: 'Privacy policy' }),
+    ).toBeVisible()
+  })
+
   it('closes on Escape', () => {
     renderMenu(false)
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
@@ -131,22 +212,24 @@ describe('ShellMenu', () => {
     renderMenu(true, true)
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
     const admin = await screen.findByRole('menuitem', { name: 'Admin' })
+    // Two above the static pages, then one directly above the Admin entry
+    // and one directly below it
     const separators = screen.getAllByRole('separator')
-    expect(separators).toHaveLength(2)
-    // One directly above the entry, one directly below
+    expect(separators).toHaveLength(4)
     const items = Array.from(screen.getByRole('menu').children)
     const at = (el: Element) => items.indexOf(el)
     const entry = at(admin.closest('.relative')!)
-    expect(at(separators[0]!)).toBe(entry - 1)
-    expect(at(separators[1]!)).toBe(entry + 1)
+    expect(at(separators[2]!)).toBe(entry - 1)
+    expect(at(separators[3]!)).toBe(entry + 1)
   })
 
-  it('leaves out the separators when there is no Admin entry', async () => {
+  it('leaves out the Admin separators when there is no Admin entry', async () => {
     renderMenu(true, false)
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
     await screen.findByRole('menuitem', { name: 'Profile' })
+    // Only the two the static-page groups bring with them
     await vi.waitFor(() =>
-      expect(screen.queryByRole('separator')).not.toBeInTheDocument(),
+      expect(screen.getAllByRole('separator')).toHaveLength(2),
     )
   })
 

@@ -71,6 +71,24 @@ const cellClass = 'px-4 py-3 text-center text-sm text-slate-700'
 const rowHeaderClass =
   'px-4 py-3 text-left text-sm font-normal text-slate-700 sm:w-64'
 
+/**
+ * The tier row stays put while the rows pass under it, so an allowance read
+ * halfway down the table still has a plan name and its button above it.
+ *
+ * `top-14` is the height of the shell's own sticky header, which this row
+ * comes to rest beneath; `z-30` keeps it under that header rather than over
+ * it. The background has to be opaque and the border explicit — a pinned row
+ * is the only thing between the viewer and the rows sliding beneath it.
+ *
+ * Pinned only from `lg`, the same width at which the table stops scrolling
+ * sideways, and not merely because the pin would be inert below it: a sticky
+ * box inside a container that never scrolls vertically is pushed *down* by
+ * its own offset, which would sit the tier row squarely on top of the first
+ * rows of the table.
+ */
+const headCellClass =
+  'border-b border-slate-200 px-4 py-3 lg:sticky lg:top-14 lg:z-30'
+
 export default function PlanPricingPage() {
   const { t } = useTranslation()
   const { user, updateUser } = useAuth()
@@ -481,8 +499,14 @@ export default function PlanPricingPage() {
       )}
 
       {/* The table scrolls on its own where four columns will not fit, rather
-          than making the whole page scroll sideways. */}
-      <div className="mt-6 overflow-x-auto">
+          than making the whole page scroll sideways. Sideways scrolling makes
+          this a scroll container, though, and a sticky row inside one pins to
+          the container rather than to the page — so where the columns do fit,
+          the overflow is dropped and the tier row can pin as the page
+          scrolls. Below that width it scrolls with the table, which is the
+          lesser loss: a table read by dragging it sideways is being read a
+          column at a time anyway. */}
+      <div className="mt-6 overflow-x-auto lg:overflow-x-visible lg:overflow-y-visible">
         <table
           data-testid="plan-table"
           className="min-w-full border-separate border-spacing-0"
@@ -492,7 +516,10 @@ export default function PlanPricingPage() {
           </caption>
           <thead>
             <tr>
-              <th scope="col" className="px-4 py-3 text-left text-sm">
+              <th
+                scope="col"
+                className={`${headCellClass} bg-white text-left text-sm`}
+              >
                 <span className="sr-only">
                   {t('plan.pricing.featureColumn')}
                 </span>
@@ -501,8 +528,11 @@ export default function PlanPricingPage() {
                 <th
                   key={plan.tier}
                   scope="col"
-                  className={`px-4 py-3 text-center ${
-                    plan.tier === current ? 'bg-indigo-50/50' : ''
+                  className={`${headCellClass} text-center ${
+                    // Solid rather than the half-tint it was: the row is
+                    // pinned now, and rows would show through a translucent
+                    // one as they pass beneath.
+                    plan.tier === current ? 'bg-indigo-50' : 'bg-white'
                   }`}
                 >
                   <div className="text-base font-semibold text-slate-900">

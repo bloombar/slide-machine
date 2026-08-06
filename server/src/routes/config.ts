@@ -8,6 +8,7 @@ import type { RuntimeConfig, SttEngine } from '@slide-machine/shared'
 import { env } from '../config/env'
 import { serverTranscriptionAvailable } from '../lib/transcribe-audio'
 import { translationEnabled } from '../lib/translate-slides'
+import { feedbackEnabled } from './feedback'
 
 export const configRouter = Router()
 
@@ -38,6 +39,13 @@ configRouter.get('/config', (_req, res) => {
     sttEngine: sttEngine(),
     ttsEnabled: ttsEnabled(),
     translationEnabled: translationEnabled(),
+    feedbackEnabled: feedbackEnabled(),
+    operator: {
+      name: env.OPERATOR_NAME,
+      jurisdiction: env.OPERATOR_JURISDICTION,
+      contactEmail: env.OPERATOR_CONTACT_EMAIL,
+      postalAddress: env.OPERATOR_POSTAL_ADDRESS,
+    },
     refineSlidesDefaultLevel: env.REFINE_SLIDES_DEFAULT_LEVEL,
     refineTranscriptDefaultLevel: env.REFINE_TRANSCRIPT_DEFAULT_LEVEL,
     simulatedSpeechEnabled: env.SIMULATED_SPEECH_ENABLED,

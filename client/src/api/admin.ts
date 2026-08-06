@@ -267,12 +267,21 @@ export const fetchAdminDeck = (
 export const ADMIN_LOGS_PAGE_SIZES = ADMIN_USERS_PAGE_SIZES
 export const ADMIN_LOGS_PAGE_SIZE = 100
 
-/** Newest-first page of the admin action audit log. */
+/** A column the audit log can be ordered by — every column the table
+ * shows but Details, whose action-specific context has no order. Ordering
+ * happens server-side, over the whole log rather than the loaded page. */
+export type AdminLogsSortField = 'time' | 'admin' | 'action' | 'target'
+export type AdminLogsSort = `${AdminLogsSortField}:${AdminUsersSortDir}`
+
+/** One page of the admin action audit log, newest first by default. */
 export const listAdminLogs = (
   page = 1,
   limit: number = ADMIN_LOGS_PAGE_SIZE,
+  sort: AdminLogsSort = 'time:desc',
 ): Promise<AdminLogsResponse> =>
-  apiFetch<AdminLogsResponse>(`/api/admin/logs?page=${page}&limit=${limit}`)
+  apiFetch<AdminLogsResponse>(
+    `/api/admin/logs?page=${page}&limit=${limit}&sort=${sort}`,
+  )
 
 /** The full audit log as a CSV blob, for a client-side download. */
 export const downloadAdminLogsCsv = (): Promise<Blob> =>
@@ -293,14 +302,21 @@ export const SETTINGS_LOGS_PAGE_SIZE = 100
 const entityTypeParam = (entityType?: SettingsLogEntityFilter): string =>
   entityType ? `&entityType=${entityType}` : ''
 
-/** Newest-first page of the settings change log. */
+/** A column the settings log can be ordered by — every column the table
+ * shows but "What changed", a set of fields with no meaningful order.
+ * `actor` is the Changed by column, `entity` the Settings column. */
+export type SettingsLogsSortField = 'time' | 'actor' | 'entity'
+export type SettingsLogsSort = `${SettingsLogsSortField}:${AdminUsersSortDir}`
+
+/** One page of the settings change log, newest first by default. */
 export const listSettingsLogs = (
   page = 1,
   limit: number = SETTINGS_LOGS_PAGE_SIZE,
   entityType?: SettingsLogEntityFilter,
+  sort: SettingsLogsSort = 'time:desc',
 ): Promise<SettingsLogsResponse> =>
   apiFetch<SettingsLogsResponse>(
-    `/api/admin/settings-logs?page=${page}&limit=${limit}${entityTypeParam(entityType)}`,
+    `/api/admin/settings-logs?page=${page}&limit=${limit}&sort=${sort}${entityTypeParam(entityType)}`,
   )
 
 /** The settings change log as a CSV blob, honouring the same filter as

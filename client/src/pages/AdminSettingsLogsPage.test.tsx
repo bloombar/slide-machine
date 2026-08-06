@@ -161,6 +161,39 @@ describe('AdminSettingsLogsPage', () => {
     await waitFor(() => expect(calls.at(-1)).not.toContain('entityType='))
   })
 
+  it('sorts newest first, and each column heading re-sorts from page 1', async () => {
+    const { calls } = renderPage()
+    await screen.findByText('Page 1 of 1')
+    expect(calls.at(-1)).toContain('sort=time:desc')
+
+    // The arrow glyph is aria-hidden, so the header button's accessible
+    // name is exactly the column label.
+    for (const [label, field] of [
+      ['Changed by', 'actor'],
+      ['Settings', 'entity'],
+    ] as const) {
+      fireEvent.click(screen.getByRole('button', { name: label }))
+      await waitFor(() => expect(calls.at(-1)).toContain(`sort=${field}:asc`))
+      expect(calls.at(-1)).toContain('page=1')
+    }
+
+    // A second click on the sorting column flips the direction
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    await waitFor(() => expect(calls.at(-1)).toContain('sort=entity:desc'))
+  })
+
+  it('offers no sort on What changed, a set of fields with no order', async () => {
+    renderPage()
+    await screen.findByText('Page 1 of 1')
+
+    // No aria-sort at all, rather than "none": the column does not sort,
+    // as against a sortable one that simply is not sorting right now.
+    expect(
+      screen.getByRole('columnheader', { name: 'What changed' }),
+    ).not.toHaveAttribute('aria-sort')
+    expect(screen.queryByRole('button', { name: 'What changed' })).toBeNull()
+  })
+
   it('shows the empty state', async () => {
     renderPage(() => ({
       status: 200,

@@ -158,9 +158,87 @@ describe('GET /api/admin/logs', () => {
     }
 
     const oldest = await request(server)
-      .get('/api/admin/logs?sort=oldest&limit=1')
+      .get('/api/admin/logs?sort=time:asc&limit=1')
       .set('Authorization', `Bearer ${token}`)
     expect(oldest.body.logs[0].targetId).toBe('target-0')
+  })
+
+  it('sorts by each column the page offers, in both directions', async () => {
+    const { admin, token } = await asAdmin()
+    const actorId = admin._id.toString()
+    // Seeded so no two columns agree on an order: whichever column is
+    // asked for, a wrong one would produce a visibly different sequence.
+    await logAdminAction({
+      actorId,
+      actorEmail: 'carol@example.com',
+      action: 'deck.delete',
+      targetType: 'user',
+      targetId: 'u-1',
+      details: { email: 'zoe@example.com' },
+    })
+    await logAdminAction({
+      actorId,
+      actorEmail: 'alice@example.com',
+      action: 'user.delete',
+      targetType: 'project',
+      targetId: 'p-1',
+      details: { title: 'Zebras' },
+    })
+    await logAdminAction({
+      actorId,
+      actorEmail: 'bob@example.com',
+      action: 'project.restore',
+      targetType: 'deck',
+      targetId: 'd-1',
+      details: { title: 'Amber' },
+    })
+
+    const order = async (sort: string): Promise<string[]> => {
+      const res = await request(server)
+        .get(`/api/admin/logs?sort=${sort}`)
+        .set('Authorization', `Bearer ${token}`)
+      expect(res.status).toBe(200)
+      return res.body.logs.map((l: { targetId: string }) => l.targetId)
+    }
+
+    expect(await order('admin:asc')).toEqual(['p-1', 'd-1', 'u-1'])
+    expect(await order('admin:desc')).toEqual(['u-1', 'd-1', 'p-1'])
+    expect(await order('action:asc')).toEqual(['u-1', 'd-1', 'p-1'])
+    expect(await order('action:desc')).toEqual(['p-1', 'd-1', 'u-1'])
+    expect(await order('target:asc')).toEqual(['d-1', 'p-1', 'u-1'])
+    expect(await order('target:desc')).toEqual(['u-1', 'p-1', 'd-1'])
+  })
+
+  it('orders the target column by kind, then by the name it shows', async () => {
+    const { admin, token } = await asAdmin()
+    const actorId = admin._id.toString()
+    // Names live in details — an email for users, a title for the rest —
+    // so the column has to read both to order what it displays.
+    for (const entry of [
+      { targetType: 'project', targetId: 'p-zebras', title: 'Zebras' },
+      { targetType: 'user', targetId: 'u-1' },
+      { targetType: 'project', targetId: 'p-amber', title: 'Amber' },
+    ]) {
+      await logAdminAction({
+        actorId,
+        actorEmail: ADMIN_EMAIL,
+        action: `${entry.targetType}.delete`,
+        targetType: entry.targetType,
+        targetId: entry.targetId,
+        details: entry.title
+          ? { title: entry.title }
+          : { email: 'anna@example.com' },
+      })
+    }
+
+    const res = await request(server)
+      .get('/api/admin/logs?sort=target:asc')
+      .set('Authorization', `Bearer ${token}`)
+    expect(res.body.logs.map((l: { targetId: string }) => l.targetId)).toEqual([
+      'p-amber',
+      'p-zebras',
+      'u-1',
+    ])
   })
 
   it('400s on an invalid query', async () => {
