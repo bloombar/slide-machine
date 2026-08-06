@@ -26,6 +26,23 @@ import type {
 const imageSlots = (descriptor: LayoutDescriptor | undefined): string[] =>
   descriptor?.slots.filter(s => s.kind === 'image').map(s => s.name) ?? []
 
+/**
+ * Whether one picture box on a slide already holds something.
+ *
+ * Reads the slot map, and falls back to the legacy top-level `imageRef` for
+ * the conventional `image` box — slides saved before content moved into the
+ * map still keep their picture there, and treating those as empty would
+ * source a second picture over one the slide already shows.
+ */
+export const slotHasImage = (
+  slide: { slots?: Record<string, unknown>; imageRef?: string | null },
+  name: string,
+): boolean => {
+  const value = slide.slots?.[name] as { ref?: string } | undefined
+  if (value?.ref) return true
+  return name === 'image' && Boolean(slide.imageRef)
+}
+
 /** The image slots of one layout type, in declaration order (IMG-6). */
 export const imageSlotNames = (
   type: string,
