@@ -283,3 +283,50 @@ test('arranging boxes freely, with rulers and guides', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Cancel' }).click()
 })
+
+test('a box carries the author’s instruction to the AI (TMPL-10)', async ({
+  page,
+}) => {
+  // The point of the requirement: a template teaches the AI what each box is
+  // for, in the author's own words, and that survives being saved.
+  const own = `Instructed ${stamp}`
+  await page.goto('/login')
+  await page.getByLabel('Email').fill(user.email)
+  await page.getByLabel('Password').fill(password)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page).toHaveURL(/\/app$/)
+
+  await openProjectSettings(page, projectName)
+  await page.getByRole('tab', { name: 'Design' }).click()
+  await page
+    .getByRole('button', { name: /^Duplicate / })
+    .first()
+    .click()
+  await page.getByLabel('Template name').fill(own)
+
+  const boxes = () => page.getByRole('list').last()
+  await boxes().getByText('Slide title').click()
+
+  const instruction = 'Only the concept being introduced, in three words.'
+  await page.getByLabel('What goes in it (for the AI)').fill(instruction)
+  await page.getByLabel('Max words').fill('6')
+  await page.getByLabel('The slide should always fill this').check()
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByLabel('Template name')).toHaveCount(0)
+
+  // Reopen from scratch: what the author wrote is what the template holds
+  await page.getByRole('button', { name: 'Close settings' }).click()
+  await openProjectSettings(page, projectName)
+  await page.getByRole('tab', { name: 'Design' }).click()
+  await page.getByRole('button', { name: `Edit ${own}` }).click()
+  await boxes().getByText('Slide title').click()
+
+  await expect(page.getByLabel('What goes in it (for the AI)')).toHaveValue(
+    instruction,
+  )
+  await expect(page.getByLabel('Max words')).toHaveValue('6')
+  await expect(
+    page.getByLabel('The slide should always fill this'),
+  ).toBeChecked()
+  await page.getByRole('button', { name: 'Cancel' }).click()
+})

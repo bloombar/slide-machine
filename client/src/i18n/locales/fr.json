@@ -391,7 +391,11 @@
     "maxChars": "Caractères max",
     "maxItems": "Points max",
     "styleChars": "Caractères max pour {style}",
-    "styleItems": "Points max pour {style}"
+    "styleItems": "Points max pour {style}",
+    "slotInstructions": "Ce qu’il contient (pour l’IA)",
+    "slotInstructionsHint": "p. ex. un extrait Python exécutable, huit lignes au plus",
+    "slotRequired": "La diapositive devrait toujours le remplir",
+    "maxWords": "Mots max."
   },
   "layout": {
     "change": "Changer la mise en page",

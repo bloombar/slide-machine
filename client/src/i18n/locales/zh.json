@@ -391,7 +391,11 @@
     "maxChars": "最多字符",
     "maxItems": "最多要点",
     "styleChars": "{style} 的最多字符",
-    "styleItems": "{style} 的最多要点"
+    "styleItems": "{style} 的最多要点",
+    "slotInstructions": "里面放什么（给 AI 看）",
+    "slotInstructionsHint": "例如：一段可运行的 Python 代码，不超过八行",
+    "slotRequired": "幻灯片应始终填写这一项",
+    "maxWords": "最多字数"
   },
   "layout": {
     "change": "更改幻灯片版式",

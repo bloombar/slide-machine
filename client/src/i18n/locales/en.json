@@ -391,7 +391,11 @@
     "maxChars": "Max characters",
     "maxItems": "Max points",
     "styleChars": "Max characters for {style}",
-    "styleItems": "Max points for {style}"
+    "styleItems": "Max points for {style}",
+    "slotInstructions": "What goes in it (for the AI)",
+    "slotInstructionsHint": "e.g. a runnable Python snippet, no more than eight lines",
+    "slotRequired": "The slide should always fill this",
+    "maxWords": "Max words"
   },
   "layout": {
     "change": "Change slide layout",

@@ -391,7 +391,11 @@
     "maxChars": "Макс. знаков",
     "maxItems": "Макс. пунктов",
     "styleChars": "Макс. знаков для «{style}»",
-    "styleItems": "Макс. пунктов для «{style}»"
+    "styleItems": "Макс. пунктов для «{style}»",
+    "slotInstructions": "Что в нём (для ИИ)",
+    "slotInstructionsHint": "например, рабочий фрагмент на Python, не более восьми строк",
+    "slotRequired": "Слайд должен всегда его заполнять",
+    "maxWords": "Макс. слов"
   },
   "layout": {
     "change": "Изменить макет слайда",

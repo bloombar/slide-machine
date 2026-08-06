@@ -18,7 +18,7 @@ import type {
   SlotKind,
   SlotSpec,
 } from '@slide-machine/shared'
-import { TEXT_STYLE_ROLES } from '@slide-machine/shared'
+import { MAX_SLOT_DESCRIPTION, TEXT_STYLE_ROLES } from '@slide-machine/shared'
 import { FONT_STACKS } from '../slide/fonts'
 import type { ThemeTextStyles } from '../slide/theme'
 
@@ -545,6 +545,37 @@ export default function SlotInspector({
               className="h-8 w-12 shrink-0 rounded border border-slate-300"
             />
           </Field>
+          {/* What the AI should put here, and how much — the author's own
+              words, then the ceilings that hold whatever it returns
+              (TMPL-10). Kept together because they are read together. */}
+          {spec && (
+            <Field label={t('template.slotInstructions')}>
+              <textarea
+                rows={2}
+                maxLength={MAX_SLOT_DESCRIPTION}
+                placeholder={t('template.slotInstructionsHint')}
+                value={spec.description ?? ''}
+                onFocus={() => onRecord(`slot-description:${spec.name}`)}
+                onChange={e =>
+                  onSpec({ description: e.target.value || undefined })
+                }
+                className={inputClass}
+              />
+            </Field>
+          )}
+          {spec && (
+            <label className="flex items-center gap-2 text-xs text-slate-600">
+              <input
+                type="checkbox"
+                checked={Boolean(spec.required)}
+                onChange={e => {
+                  onRecord()
+                  onSpec({ required: e.target.checked || undefined })
+                }}
+              />
+              {t('template.slotRequired')}
+            </label>
+          )}
           {spec && (
             <Field label={t('template.maxChars')}>
               <input
@@ -554,6 +585,18 @@ export default function SlotInspector({
                 value={spec.maxChars ?? ''}
                 onFocus={() => onRecord(`maxchars:${spec.name}`)}
                 onChange={e => onSpec({ maxChars: toNumber(e.target.value) })}
+                className={inputClass}
+              />
+            </Field>
+          )}
+          {spec && spec.kind !== 'image' && (
+            <Field label={t('template.maxWords')}>
+              <input
+                type="number"
+                min={1}
+                value={spec.maxWords ?? ''}
+                onFocus={() => onRecord(`maxwords:${spec.name}`)}
+                onChange={e => onSpec({ maxWords: toNumber(e.target.value) })}
                 className={inputClass}
               />
             </Field>

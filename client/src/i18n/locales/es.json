@@ -391,7 +391,11 @@
     "maxChars": "Máx. caracteres",
     "maxItems": "Máx. puntos",
     "styleChars": "Máx. caracteres para {style}",
-    "styleItems": "Máx. puntos para {style}"
+    "styleItems": "Máx. puntos para {style}",
+    "slotInstructions": "Qué contiene (para la IA)",
+    "slotInstructionsHint": "p. ej. un fragmento de Python ejecutable, no más de ocho líneas",
+    "slotRequired": "La diapositiva siempre debería rellenarlo",
+    "maxWords": "Máx. palabras"
   },
   "layout": {
     "change": "Cambiar el diseño de la diapositiva",

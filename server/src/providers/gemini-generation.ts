@@ -28,6 +28,7 @@ import type {
   SlideRefitResult,
   RefitSlotDescriptor,
   LayoutType,
+  SlotSpec,
 } from '@slide-machine/shared'
 import { isVoiceCommand, WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
 import type { HealthComponent } from '@slide-machine/shared'
@@ -145,17 +146,70 @@ const normalizeAction = (
   return ACTION_SYNONYMS[key] ?? 'none'
 }
 
-const instructions = (req: SlideGenerationRequest): string => {
-  const layouts = req.layoutDescriptors
+/**
+ * One box, as the model sees it (TMPL-10).
+ *
+ * The author's instruction is what makes a subject-specific template produce
+ * subject-appropriate slides, so it is the part worth spending prompt on. It
+ * is quoted and labelled as a description so it reads as a statement ABOUT the
+ * box rather than an instruction to the model — an author's words are data,
+ * and the surrounding prompt is what tells the model what to do with them.
+ */
+const describeSlot = (s: SlotSpec, withDescription = true): string => {
+  const limits: string[] = []
+  if (s.maxChars) limits.push(`max ${s.maxChars} chars`)
+  if (s.maxWords) limits.push(`max ${s.maxWords} words`)
+  if (s.maxItems) limits.push(`max ${s.maxItems} items`)
+  if (s.required) limits.push('required')
+  const detail = limits.length ? ` (${limits.join(', ')})` : ''
+  // A conventional slot's name says what it is; only an authored instruction
+  // adds anything, so the budget is spent on those.
+  const purpose =
+    withDescription && s.description ? ` — "${s.description}"` : ''
+  return `${s.name}${detail}${purpose}`
+}
+
+/**
+ * How much prompt the layout menu may occupy (docs/TEMPLATES.md §3).
+ *
+ * Generation runs once per finalized phrase in a live lecture, so descriptor
+ * bloat is latency the audience sees. A template with many layouts, each with
+ * many described boxes, can outgrow that — so the block is bounded, and what
+ * gives way first is the authoring instructions, since a box's name and limits
+ * are what the model cannot work without.
+ */
+const MAX_DESCRIPTOR_CHARS = 4000
+
+/** The layout menu, with or without the authors' instructions. */
+const renderLayouts = (
+  descriptors: SlideGenerationRequest['layoutDescriptors'],
+  withDescriptions: boolean,
+): string =>
+  descriptors
     .map(d => {
       const slots = d.slots
-        .map(s => (s.maxChars ? `${s.name} (max ${s.maxChars} chars)` : s.name))
+        .map(s => describeSlot(s, withDescriptions))
         .join(', ')
       return `- "${d.type}" (${d.label}): ${d.purpose}. Slots: ${slots}${
         d.constraints ? `. Constraints: ${JSON.stringify(d.constraints)}` : ''
       }`
     })
     .join('\n')
+
+const instructions = (req: SlideGenerationRequest): string => {
+  let layouts = renderLayouts(req.layoutDescriptors, true)
+  if (layouts.length > MAX_DESCRIPTOR_CHARS) {
+    const terse = renderLayouts(req.layoutDescriptors, false)
+    // Said out loud rather than trimmed quietly: a template whose
+    // instructions stop reaching the model produces worse slides, and the
+    // author has no other way to find out.
+    console.warn(
+      `Layout descriptors exceeded ${MAX_DESCRIPTOR_CHARS} chars ` +
+        `(${layouts.length}); dropped slot instructions for this request ` +
+        `(now ${terse.length}). Shorten them in the template editor.`,
+    )
+    layouts = terse
+  }
 
   const seededImages = req.seededImages?.length
     ? `\nInstructor-provided images (set imageGuidance.seededImageId to an id ONLY when one clearly fits the slide):\n${req.seededImages
