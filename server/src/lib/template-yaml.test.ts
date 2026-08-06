@@ -11,6 +11,7 @@ import { templateToYaml, TEMPLATE_YAML_VERSION } from './template-yaml'
 const template: Template = {
   id: 'classic',
   ownerId: 'system',
+  permalinkSlug: 'classic',
   name: 'Classic',
   theme: { background: '#fefce8', accent: '#b45309', text: '#1c1917' },
   layouts: [

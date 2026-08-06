@@ -9,6 +9,7 @@ import SlideView from './SlideView'
 
 const template: Template = {
   id: 'test',
+  permalinkSlug: 'test',
   ownerId: 'system',
   name: 'Test',
   theme: {

@@ -37,6 +37,22 @@ export const resolveTemplate = async (
   return doc ? toTemplateDto(doc) : undefined
 }
 
+/**
+ * The template a `/t/:slug` permalink addresses, or undefined.
+ *
+ * Falls back to reading the slug as an id, which covers built-ins (whose id
+ * is their slug) and the templates authored before permalinks existed, whose
+ * document id is what `toTemplateDto` reports as their slug.
+ */
+export const resolveTemplateBySlug = async (
+  slug: string,
+): Promise<Template | undefined> => {
+  const doc = await TemplateModel.findOne({ permalinkSlug: slug }).catch(
+    () => null,
+  )
+  return doc ? toTemplateDto(doc) : resolveTemplate(slug)
+}
+
 /** True when a template with this id exists; cheaper to read at call sites
  * that only need to validate a reference. */
 export const templateExists = async (id: string): Promise<boolean> =>

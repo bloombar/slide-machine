@@ -7,13 +7,17 @@
  * layout contains, in the order it is painted. Hovering a row lights the
  * matching box on the slide, so the two views are never ambiguous.
  *
+ * Each row carries what can be done to that box: adding one inside it, and
+ * deleting it. Deleting asks nothing first — the row is right there under the
+ * pointer, and undo takes it back.
+ *
  * It is also where boxes are reordered — a whole row is the drag surface, the
  * same as reordering slides (DraggableListRow), with Alt+arrows as the
  * keyboard path. In a flex or grid container that order is the flow; in a
  * free one it is the paint order, which is what "bring forward" means.
  */
 import { useTranslation } from 'react-i18next'
-import { GripVertical, Plus } from 'lucide-react'
+import { GripVertical, Plus, Trash2 } from 'lucide-react'
 import type { LayoutNode, SlotSpec } from '@slide-machine/shared'
 import DraggableListRow from '../DraggableListRow'
 
@@ -73,6 +77,7 @@ export default function LayoutTreeOutline({
   onMove,
   onDropOn,
   onAddChild,
+  onDelete,
 }: {
   tree: LayoutNode
   specs: SlotSpec[]
@@ -85,6 +90,9 @@ export default function LayoutTreeOutline({
   /** A row dropped onto another: put it at that row's place. */
   onDropOn: (sourceId: string, targetId: string) => void
   onAddChild: (parentId: string) => void
+  /** Deletes a box outright. No confirmation: a box is one undo away, and
+   * asking about every one of them would be in the way of designing. */
+  onDelete: (id: string) => void
 }) {
   const { t } = useTranslation()
   const rows = flatten(tree)
@@ -113,7 +121,7 @@ export default function LayoutTreeOutline({
                 onSelect(node.id)
               }}
               aria-current={node.id === selectedId}
-              className={`flex cursor-pointer items-center gap-1 rounded ${
+              className={`group flex cursor-pointer items-center gap-1 rounded ${
                 node.id === selectedId ? 'bg-indigo-50' : 'hover:bg-slate-50'
               }`}
               style={{ paddingLeft: `${depth * 0.75}rem` }}
@@ -150,6 +158,25 @@ export default function LayoutTreeOutline({
                   className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                 >
                   <Plus className="h-3 w-3" aria-hidden />
+                </button>
+              )}
+              {/* The root is the layout itself, which the rail deletes; only
+                  the boxes in it go from here. Hidden until the row is
+                  pointed at, and brought back for the keyboard, which never
+                  hovers anything. */}
+              {movable && (
+                <button
+                  type="button"
+                  // Deleting must not first select the row it is deleting.
+                  onClick={e => {
+                    e.stopPropagation()
+                    onDelete(node.id)
+                  }}
+                  aria-label={t('template.removeBox', { name: label })}
+                  title={t('template.removeBox', { name: label })}
+                  className="rounded p-1 text-slate-400 opacity-0 hover:bg-slate-100 hover:text-red-700 focus-visible:opacity-100 group-hover:opacity-100"
+                >
+                  <Trash2 className="h-3 w-3" aria-hidden />
                 </button>
               )}
             </div>

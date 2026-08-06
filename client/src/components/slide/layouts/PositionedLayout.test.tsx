@@ -38,6 +38,7 @@ const arranged = layout({
 
 const template = (l: Layout): Template => ({
   id: 't1',
+  permalinkSlug: 't1',
   ownerId: 'u1',
   name: 'Mine',
   theme: { background: '#ffffff', text: '#111111' },

@@ -5,6 +5,7 @@
     "note": "Traducción automática, sin revisión de un hablante nativo. Cualquier clave ausente recurre al inglés."
   },
   "common": {
+    "back": "Atrás",
     "loading": "Cargando…",
     "save": "Guardar",
     "saving": "Guardando…",
@@ -244,8 +245,14 @@
     },
     "errors": {
       "duplicate": "No se pudo duplicar la plantilla",
+      "load": "No se pudo cargar este diseño",
       "save": "No se pudo guardar la plantilla",
       "delete": "No se pudo eliminar la plantilla"
+    },
+    "page": {
+      "saved": "Guardado",
+      "readOnly": "Este diseño no es tuyo para cambiarlo. Duplícalo desde la pestaña Diseño de una clase para tener uno propio.",
+      "missing": "Este diseño no existe o es privado."
     },
     "visibilityLabel": "Quién puede usarla",
     "addLayout": "Añadir un diseño",
@@ -269,7 +276,6 @@
       "bullets": "Viñetas",
       "image": "Imagen"
     },
-    "removeSlot": "Eliminar esta caja",
     "newLayoutAdd": "Añadir diseño",
     "layoutSettings": "Diseño",
     "boxSettings": "Caja",
@@ -282,6 +288,7 @@
     "decoration": "Decoración",
     "newBoxName": "Caja nueva",
     "addBoxTo": "Añadir una caja dentro de {name}",
+    "removeBox": "Eliminar la caja {name}",
     "direction": "Dirección",
     "directions": {
       "row": "En horizontal",
@@ -367,7 +374,6 @@
     "placement": "Posición",
     "placeFreely": "Posicionar esta caja libremente",
     "placeFreelyOn": "Arrástrala a cualquier punto de la diapositiva. No ocupa espacio de las cajas de alrededor.",
-    "removeLayoutButton": "Eliminar este diseño",
     "layoutNumbered": "Diseño {number}",
     "contentLayouts": {
       "column": "Una columna de contenido",
@@ -381,10 +387,10 @@
     "arrangement": "Disposición",
     "unsaved": "Cambios sin guardar",
     "discard": {
-      "title": "¿Cerrar sin guardar?",
-      "message": "La plantilla tiene cambios sin guardar. Cerrar ahora los pierde.",
+      "title": "¿Salir sin guardar?",
+      "message": "Este diseño tiene cambios sin guardar. Salir ahora los pierde.",
       "confirm": "Descartar cambios",
-      "save": "Guardar y cerrar"
+      "save": "Guardar y salir"
     },
     "clearFill": "Sin relleno",
     "placedByParent": "Posicionada automáticamente por la caja contenedora",

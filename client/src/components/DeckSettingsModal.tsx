@@ -42,7 +42,6 @@ import FreedomSlider from './FreedomSlider'
 import LanguageSelect from './LanguageSelect'
 import VoiceSelect from './VoiceSelect'
 import ConfirmDialog from './ConfirmDialog'
-import UnsavedChangesDialog from './UnsavedChangesDialog'
 import Modal from './Modal'
 import {
   RefineLevelSlider,
@@ -237,10 +236,16 @@ export default function DeckSettingsModal({
     }
   }, [])
 
-  const switchTemplate = (templateId: string) => {
+  const switchTemplate = (templateId: string, known?: Template) => {
     dispatchAction<Deck>('deck.switchTemplate', { deckId: deck.id, templateId })
       .then(updated => {
-        const template = templates.find(t => t.id === updated.templateId)
+        // A template just made by duplicating is not in the list yet, so the
+        // panel hands it over; the slides should not wait for a reload to
+        // show what the lecture is now using.
+        const template =
+          known?.id === updated.templateId
+            ? known
+            : templates.find(t => t.id === updated.templateId)
         if (template) onTemplateChange(updated, template)
       })
       .catch(() => {
@@ -361,23 +366,11 @@ export default function DeckSettingsModal({
     tabRefs.current.get(next.id)?.focus()
   }
 
-  // Nothing in the template editor saves by itself, and this sheet's close
-  // button never scrolls away — so closing it is the easiest way to lose
-  // work. Ask first when there is any.
-  const [templateDirty, setTemplateDirty] = useState(false)
-  const [confirmingClose, setConfirmingClose] = useState(false)
-  const [savingOnClose, setSavingOnClose] = useState(false)
-  const templateSave = useRef<(() => Promise<boolean>) | null>(null)
-  const closeOrConfirm = () => {
-    if (templateDirty) setConfirmingClose(true)
-    else onClose()
-  }
-
   return (
     <Modal
       variant="sheet"
       ariaLabel={t('deck.settings.title')}
-      onClose={closeOrConfirm}
+      onClose={onClose}
       initialFocusRef={closeRef}
       escapeCapture={false}
       escapeIgnoreTyping
@@ -406,7 +399,7 @@ export default function DeckSettingsModal({
           ref={closeRef}
           aria-label={t('deck.settings.close')}
           title={t('common.closeEsc')}
-          onClick={closeOrConfirm}
+          onClick={onClose}
           className="rounded-md p-2 text-slate-500 hover:text-slate-900"
         >
           <X className="h-5 w-5" aria-hidden />
@@ -627,13 +620,6 @@ export default function DeckSettingsModal({
             {t('template.heading')}
           </h3>
           <TemplateDesignPanel
-            onDirtyChange={setTemplateDirty}
-            saveRef={templateSave}
-            onSaved={saved => {
-              // Editing the template this lecture is already using: its
-              // slides re-render now rather than after a reload.
-              if (saved.id === deck.templateId) onTemplateChange(deck, saved)
-            }}
             templates={templates}
             value={deck.templateId}
             onChange={switchTemplate}
@@ -809,30 +795,6 @@ export default function DeckSettingsModal({
             onChange={updated => onDeckChange(updated as Deck)}
           />
         </section>
-      )}
-      {confirmingClose && (
-        <UnsavedChangesDialog
-          title={t('template.discard.title')}
-          message={t('template.discard.message')}
-          saveLabel={t('template.discard.save')}
-          discardLabel={t('template.discard.confirm')}
-          saving={savingOnClose}
-          onSave={() => {
-            setSavingOnClose(true)
-            void templateSave.current?.().then(saved => {
-              setSavingOnClose(false)
-              setConfirmingClose(false)
-              // Only when it was actually written: a refused save that closed
-              // the sheet would lose the very work this dialog is protecting.
-              if (saved) onClose()
-            })
-          }}
-          onDiscard={() => {
-            setConfirmingClose(false)
-            onClose()
-          }}
-          onCancel={() => setConfirmingClose(false)}
-        />
       )}
     </Modal>
   )

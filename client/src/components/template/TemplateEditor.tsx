@@ -217,8 +217,27 @@ export default function TemplateEditor({
   const [layoutIndex, setLayoutIndex] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
-  const [confirmDelete, setConfirmDelete] = useState(false)
+  /** The layout the rail asked to delete, until the author says yes. */
+  const [confirmLayout, setConfirmLayout] = useState<number | null>(null)
   const canvasHost = useRef<HTMLDivElement>(null)
+
+  /**
+   * Adopts a newly saved template as the draft.
+   *
+   * Saving measures the drawn geometry into every layout, so what comes back
+   * is not quite what was sent — enough to keep reading as unsaved work on a
+   * surface that stays open afterwards. Which layout is on screen and what
+   * undo can reach are left alone: nothing about them changed.
+   */
+  const adopted = useRef(template)
+  useEffect(() => {
+    if (adopted.current === template) return
+    adopted.current = template
+    setName(template.name)
+    setTheme(template.theme)
+    setLayouts(template.layouts)
+    setVisibility(template.visibility)
+  }, [template])
 
   const images = usePreviewImages()
   const metrics = themeMetrics(theme)
@@ -229,6 +248,12 @@ export default function TemplateEditor({
   // a blank slate with nothing to edit and no tab marked selected.
   const shownIndex = editableIndex(layouts, layoutIndex)
   const layout = layouts[shownIndex]
+  // The layout the confirmation is about, paired with where it sits.
+  const asked = confirmLayout === null ? undefined : layouts[confirmLayout]
+  const pending =
+    asked && confirmLayout !== null
+      ? { index: confirmLayout, layout: asked }
+      : null
 
   const snapshot = useCallback(
     (): Draft => ({
@@ -302,14 +327,25 @@ export default function TemplateEditor({
     setSelectedId(null)
   }
 
-  const deleteLayout = () => {
+  /** Removes a layout — any of them, since the rail can ask about a layout
+   * that is not the one on screen. */
+  const deleteLayout = (index: number) => {
     history.record()
-    const remaining = layouts.filter((_, i) => i !== shownIndex)
+    const remaining = layouts.filter((_, i) => i !== index)
     setLayouts(remaining)
-    // The one that took its place, or the one before it if it was the last.
-    setLayoutIndex(editableIndex(remaining, shownIndex))
-    setSelectedId(null)
-    setConfirmDelete(false)
+    // Stay on the layout being looked at, which has shifted down one if the
+    // deleted one was before it. Deleting the one on screen lands on what
+    // took its place, or on the one before it if it was the last.
+    setLayoutIndex(
+      editableIndex(
+        remaining,
+        index < shownIndex ? shownIndex - 1 : shownIndex,
+      ),
+    )
+    // The selection belongs to the layout it was made in; it only survives if
+    // that layout does.
+    if (index === shownIndex) setSelectedId(null)
+    setConfirmLayout(null)
   }
 
   const selected = layout?.tree
@@ -398,17 +434,30 @@ export default function TemplateEditor({
     )
   }
 
-  const deleteBox = () => {
-    if (!layout?.tree || !selectedId || !selected) return
+  /**
+   * Removes a box, and everything it held with it: a container's children
+   * have nothing left to arrange them, so their slots go too. One undo away,
+   * which is why nothing asks first.
+   */
+  const deleteBox = (id: string) => {
+    if (!layout?.tree) return
+    const found = findNode(layout.tree, id)
+    // The root is the layout itself, which is deleted from the rail.
+    if (!found?.parent) return
     history.record()
-    const slotName = selected.node.slot
+    const gone = new Set<string>()
+    const collect = (node: LayoutNode) => {
+      if (node.slot) gone.add(node.slot)
+      for (const child of node.children ?? []) collect(child)
+    }
+    collect(found.node)
+    const tree = removeNode(layout.tree, id)
     setLayout(shownIndex, {
-      tree: removeNode(layout.tree, selectedId),
-      slots: slotName
-        ? layout.slots.filter(s => s.name !== slotName)
-        : layout.slots,
+      tree,
+      slots: layout.slots.filter(s => !gone.has(s.name)),
     })
-    setSelectedId(null)
+    // Whatever was selected inside it went with it.
+    if (selectedId && !findNode(tree, selectedId)) setSelectedId(null)
   }
 
   const patchNode = (patch: Partial<LayoutNode>) => {
@@ -592,6 +641,7 @@ export default function TemplateEditor({
             setLayoutIndex(i)
             setSelectedId(null)
           }}
+          onDelete={setConfirmLayout}
           addable={[...addable]}
           onAddType={addLayoutOfType}
           onAddOwn={addOwnLayout}
@@ -630,6 +680,7 @@ export default function TemplateEditor({
               onMove={moveBox}
               onDropOn={dropBoxOn}
               onAddChild={addBox}
+              onDelete={deleteBox}
             />
           )}
 
@@ -649,7 +700,6 @@ export default function TemplateEditor({
                 onContentType={setContentType}
                 onContainer={patchContainer}
                 onReorder={delta => moveBox(selectedId, delta)}
-                onDelete={deleteBox}
                 onClose={() => setSelectedId(null)}
                 onRecord={history.record}
                 textStyles={textStyles}
@@ -658,7 +708,6 @@ export default function TemplateEditor({
               <LayoutInspector
                 layout={layout}
                 onChange={patch => setLayout(shownIndex, patch)}
-                onDelete={() => setConfirmDelete(true)}
                 onRecord={history.record}
               />
             ))}
@@ -681,11 +730,17 @@ export default function TemplateEditor({
         </p>
       )}
 
-      {/* Pinned to the bottom of the sheet. The editor is taller than the
-          screen, and the settings sheet's own close button is always visible
-          — a Save that scrolls away is a Save that gets missed, and nothing
-          here writes anything by itself. */}
-      <div className="sticky bottom-0 -mx-6 flex items-center gap-2 border-t border-slate-200 bg-white/95 px-6 py-3 backdrop-blur">
+      {/* Pinned to the bottom of the screen. The editor is taller than the
+          screen — a Save that scrolls away is a Save that gets missed, and
+          nothing here writes anything by itself.
+
+          `bottom-8` clears the app's own sticky status footer (h-8), so the
+          two stack rather than overlap, and the shared z-30 keeps this bar
+          over the page it floats above without reaching a dialog (z-40). */}
+      <div
+        data-testid="template-editor-actions"
+        className="sticky bottom-8 z-30 -mx-6 flex items-center gap-2 border-t border-slate-200 bg-white/95 px-6 py-3 backdrop-blur"
+      >
         {/* The keyboard must not be the only route to undo. */}
         <button
           type="button"
@@ -727,13 +782,17 @@ export default function TemplateEditor({
         </button>
       </div>
 
-      {confirmDelete && layout && (
+      {/* A layout is a whole design, and deleting one takes the boxes and
+          settings in it: worth a question, unlike a single box. */}
+      {pending && (
         <ConfirmDialog
-          title={t('template.removeLayout', { name: layout.label })}
-          message={t('template.removeLayoutConfirm', { name: layout.label })}
+          title={t('template.removeLayout', { name: pending.layout.label })}
+          message={t('template.removeLayoutConfirm', {
+            name: pending.layout.label,
+          })}
           confirmLabel={t('common.delete')}
-          onConfirm={deleteLayout}
-          onCancel={() => setConfirmDelete(false)}
+          onConfirm={() => deleteLayout(pending.index)}
+          onCancel={() => setConfirmLayout(null)}
         />
       )}
     </form>

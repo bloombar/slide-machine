@@ -5,6 +5,7 @@
     "note": "Traduction automatique, non relue par un locuteur natif. Toute clé absente retombe sur l'anglais."
   },
   "common": {
+    "back": "Retour",
     "loading": "Chargement…",
     "save": "Enregistrer",
     "saving": "Enregistrement…",
@@ -244,8 +245,14 @@
     },
     "errors": {
       "duplicate": "Impossible de dupliquer ce modèle",
+      "load": "Impossible de charger ce modèle",
       "save": "Impossible d’enregistrer le modèle",
       "delete": "Impossible de supprimer le modèle"
+    },
+    "page": {
+      "saved": "Enregistré",
+      "readOnly": "Ce modèle ne vous appartient pas. Dupliquez-le depuis l’onglet Conception d’un cours pour en avoir un à vous.",
+      "missing": "Ce modèle n’existe pas ou est privé."
     },
     "visibilityLabel": "Qui peut l’utiliser",
     "addLayout": "Ajouter une disposition",
@@ -269,7 +276,6 @@
       "bullets": "Puces",
       "image": "Image"
     },
-    "removeSlot": "Supprimer ce bloc",
     "newLayoutAdd": "Ajouter la mise en page",
     "layoutSettings": "Disposition",
     "boxSettings": "Bloc",
@@ -282,6 +288,7 @@
     "decoration": "Décoration",
     "newBoxName": "Nouveau bloc",
     "addBoxTo": "Ajouter un bloc dans {name}",
+    "removeBox": "Supprimer le bloc {name}",
     "direction": "Direction",
     "directions": {
       "row": "En largeur",
@@ -367,7 +374,6 @@
     "placement": "Position",
     "placeFreely": "Positionner ce bloc librement",
     "placeFreelyOn": "Faites-le glisser où vous voulez sur la diapositive. Il ne prend aucune place aux blocs voisins.",
-    "removeLayoutButton": "Supprimer cette disposition",
     "layoutNumbered": "Disposition {number}",
     "contentLayouts": {
       "column": "Une colonne de contenu",
@@ -381,10 +387,10 @@
     "arrangement": "Agencement",
     "unsaved": "Modifications non enregistrées",
     "discard": {
-      "title": "Fermer sans enregistrer ?",
-      "message": "Le modèle comporte des modifications non enregistrées. Fermer maintenant les perdra.",
+      "title": "Quitter sans enregistrer ?",
+      "message": "Ce modèle comporte des modifications non enregistrées. Quitter maintenant les perdra.",
       "confirm": "Abandonner les modifications",
-      "save": "Enregistrer et fermer"
+      "save": "Enregistrer et quitter"
     },
     "clearFill": "Aucun fond",
     "placedByParent": "Positionné automatiquement par le bloc parent",

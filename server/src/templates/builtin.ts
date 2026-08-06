@@ -460,6 +460,8 @@ export const loadBuiltinTemplates = (
         })),
       ) as Layout[],
       ownerId: 'system',
+      // A built-in's id is already a readable slug, so it is its permalink.
+      permalinkSlug: parsed.data.id,
       visibility: 'public' as const,
       voteScore: 0,
       createdAt: '2026-07-01T00:00:00.000Z',
