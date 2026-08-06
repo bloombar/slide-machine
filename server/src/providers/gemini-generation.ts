@@ -24,6 +24,9 @@ import type {
   SlideRefineResult,
   SlideNarrateRequest,
   SlideNarrateResult,
+  SlideRefitRequest,
+  SlideRefitResult,
+  RefitSlotDescriptor,
   LayoutType,
 } from '@slide-machine/shared'
 import { isVoiceCommand, WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
@@ -37,6 +40,7 @@ import {
   renderRefinePrompt,
   renderNarratePrompt,
   renderReformatPrompt,
+  renderRefitPrompt,
 } from './refine-prompts'
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
@@ -411,6 +415,58 @@ const refinePrompt = (req: SlideRefineRequest): string =>
     layouts: layoutMenu(req.layoutDescriptors),
   })
 
+const refitResultSchema = z.object({
+  slots: z.record(
+    z.string(),
+    z.union([z.string(), z.array(z.string()), z.number(), z.boolean()]),
+  ),
+})
+
+/** One box, as the refit prompt lists it: what it is, its limits, and what
+ * it holds. Limits are stated inline so the model reads them beside the
+ * box they apply to rather than in a separate table. */
+const refitSlotLine = (slot: RefitSlotDescriptor): string => {
+  const limits = [
+    slot.maxChars ? `max ${slot.maxChars} chars` : '',
+    slot.maxItems ? `max ${slot.maxItems} items` : '',
+  ]
+    .filter(Boolean)
+    .join(', ')
+  const held =
+    slot.value === undefined
+      ? 'empty'
+      : Array.isArray(slot.value)
+        ? JSON.stringify(slot.value)
+        : JSON.stringify(slot.value)
+  return `- "${slot.name}" (${slot.label}; ${slot.kind}${
+    slot.textStyle ? `, styled ${slot.textStyle}` : ''
+  }${limits ? `; ${limits}` : ''}): ${held}`
+}
+
+/** Layout-refit prompt: fill only the boxes the switch left empty (GEN-9).
+ * Wording lives in config/prompts/refit.txt. */
+const refitPrompt = (req: SlideRefitRequest): string =>
+  renderRefitPrompt({
+    fromLayout: req.from.label,
+    fromSlots: req.from.slots.map(refitSlotLine).join('\n'),
+    toLayout: req.to.label,
+    toPurpose: req.to.purpose,
+    toSlots: req.to.slots.map(refitSlotLine).join('\n'),
+    fill: req.fill
+      .map(name => {
+        const spec = req.to.slots.find(s => s.name === name)
+        return spec ? refitSlotLine(spec) : `- "${name}"`
+      })
+      .join('\n'),
+    orphaned: req.orphaned.length
+      ? `\nContent that no longer has a box (use this first):\n${req.orphaned
+          .map(refitSlotLine)
+          .join('\n')}`
+      : '',
+    context: contextFragment(req.seedContext),
+    language: languageFragment(req.language),
+  })
+
 const narrateResultSchema = z.object({ transcript: z.string() })
 
 /** A plain narration built straight from the slide's text — the fallback when
@@ -734,6 +790,50 @@ export class GeminiGenerationProvider implements GenerationProvider {
           }
         : undefined,
     }
+  }
+
+  async refitSlideLayout(req: SlideRefitRequest): Promise<SlideRefitResult> {
+    // Nothing filled is always a valid answer: the boxes stay empty and the
+    // user types into them. Never a reason to fail the layout switch.
+    const empty: SlideRefitResult = { slots: {} }
+    let raw: unknown
+    try {
+      raw = JSON.parse(await callGemini(refitPrompt(req), 'Layout refit'))
+    } catch (error) {
+      if (error instanceof GenerationUnavailableError) throw error
+      return empty
+    }
+    const parsed = refitResultSchema.safeParse(raw)
+    if (!parsed.success) {
+      console.warn('Refit output failed validation:', parsed.error.issues)
+      return empty
+    }
+    // Only the boxes that were asked for, shaped as those boxes hold things.
+    // A model that answers for a box it was not asked about would overwrite
+    // content that was carried across intact, which is the one thing this
+    // pass must never do.
+    const wanted = new Map(
+      req.to.slots.filter(s => req.fill.includes(s.name)).map(s => [s.name, s]),
+    )
+    const slots: Record<string, string | string[]> = {}
+    for (const [name, value] of Object.entries(parsed.data.slots)) {
+      const spec = wanted.get(name)
+      if (!spec) continue
+      if (spec.kind === 'bullets') {
+        const items = (Array.isArray(value) ? value : [value])
+          .map(v => String(v).trim())
+          .filter(Boolean)
+        if (items.length)
+          slots[name] = spec.maxItems ? items.slice(0, spec.maxItems) : items
+        continue
+      }
+      if (spec.kind !== 'text') continue
+      const text = (
+        Array.isArray(value) ? value.join(' ') : String(value)
+      ).trim()
+      if (text) slots[name] = text
+    }
+    return { slots }
   }
 
   async narrateSlide(req: SlideNarrateRequest): Promise<SlideNarrateResult> {

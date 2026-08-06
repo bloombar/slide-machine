@@ -463,6 +463,26 @@ export interface SlideSetLayoutInput {
   layoutType: string
 }
 
+/**
+ * Fills the boxes a layout switch left empty (GEN-9). Sent right after
+ * `slide.setLayout`; the server decides whether there is anything to do, so
+ * a switch that carried across cleanly costs no AI call.
+ */
+export interface SlideRefitLayoutInput {
+  slideId: string
+  /** The layout the slide just came from, so the request can describe what
+   * the content used to sit in. */
+  fromLayoutType?: string
+}
+
+/** The refit's outcome, so the client knows whether to offer an undo. */
+export interface SlideRefitLayoutResult {
+  slide: Slide
+  /** Boxes the refit wrote into. Empty when nothing needed filling or the
+   * model declined — in both cases the slide came back unchanged. */
+  filled: string[]
+}
+
 /** Appends a blank starter slide at the end of the deck. */
 export interface SlideAddInput {
   deckId: string

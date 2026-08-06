@@ -501,6 +501,67 @@ describe('slide.setLayout', () => {
     expect(view.body.slides[0].title).toBeTruthy()
   })
 
+  it('carries content onto a box the new layout names differently', async () => {
+    // A layout whose headline box is called `headline`, not `title` (TMPL-9).
+    // Without the GEN-9 pairing the text would sit under a name this layout
+    // never declares, and the slide would come up blank.
+    const copy = await act(ada, 'template.duplicate', { templateId: 'classic' })
+    const template = copy.body
+    await act(ada, 'template.update', {
+      templateId: template.id,
+      name: template.name,
+      theme: template.theme,
+      layouts: [
+        ...template.layouts,
+        {
+          type: 'billboard',
+          label: 'Billboard',
+          purpose: 'One large statement',
+          slots: [{ name: 'headline', kind: 'text', label: 'Headline' }],
+          elementPositions: {},
+        },
+      ],
+    })
+    const project = await act(ada, 'project.create', { title: 'Renamed' })
+    await act(ada, 'project.switchTemplate', {
+      projectId: project.body.id,
+      templateId: template.id,
+    })
+    const deck = await act(ada, 'deck.create', { projectId: project.body.id })
+    const slide = await act(ada, 'slide.add', {
+      deckId: deck.body.id,
+      layoutType: 'content',
+    })
+    await act(ada, 'slide.editContent', {
+      slideId: slide.body.id,
+      title: 'Osmosis',
+    })
+
+    const res = await act(ada, 'slide.setLayout', {
+      slideId: slide.body.id,
+      layoutType: 'billboard',
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.body.slots.headline).toEqual({
+      kind: 'text',
+      value: 'Osmosis',
+    })
+  })
+
+  it('leaves content alone when both layouts name the box the same', async () => {
+    const before = await act(ada, 'deck.get', { deckId })
+    const title = before.body.slides[0].title
+
+    await act(ada, 'slide.setLayout', {
+      slideId: slideIds[0],
+      layoutType: 'section',
+    })
+
+    const after = await act(ada, 'deck.get', { deckId })
+    expect(after.body.slides[0].title).toBe(title)
+  })
+
   it('rejects layouts the template does not offer and foreign slides', async () => {
     expect(
       (
@@ -520,6 +581,62 @@ describe('slide.setLayout', () => {
         })
       ).status,
     ).toBe(403)
+  })
+})
+
+describe('slide.refitLayout', () => {
+  it('fills a hole from the content the switch could not place', async () => {
+    // content -> list: the paragraph has no box in the new layout (prose vs
+    // list), and the bullet box has nothing in it. Exactly the lossy case.
+    await act(ada, 'slide.editContent', {
+      slideId: slideIds[0],
+      title: 'Osmosis',
+      body: 'Water crosses the membrane. Solutes stay behind.',
+    })
+    await act(ada, 'slide.setLayout', {
+      slideId: slideIds[0],
+      layoutType: 'list',
+    })
+
+    const res = await act(ada, 'slide.refitLayout', {
+      slideId: slideIds[0],
+      fromLayoutType: 'content',
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.body.filled).toEqual(['bullets'])
+    expect(res.body.slide.bullets.length).toBeGreaterThan(0)
+    // The box that carried across is untouched — this pass fills holes only
+    expect(res.body.slide.title).toBe('Osmosis')
+  })
+
+  it('does nothing, and calls no model, when the switch lost nothing', async () => {
+    // content -> section: `title` is in both, and the section layout has no
+    // other box, so there is no hole to fill and nothing orphaned.
+    await act(ada, 'slide.editContent', {
+      slideId: slideIds[0],
+      title: 'Osmosis',
+      body: '',
+    })
+    await act(ada, 'slide.setLayout', {
+      slideId: slideIds[0],
+      layoutType: 'section',
+    })
+
+    const res = await act(ada, 'slide.refitLayout', {
+      slideId: slideIds[0],
+      fromLayoutType: 'content',
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.body.filled).toEqual([])
+    expect(res.body.slide.title).toBe('Osmosis')
+  })
+
+  it('refuses a slide the caller does not own', async () => {
+    const bob = await registerUser('bob-refit@example.com')
+    const res = await act(bob, 'slide.refitLayout', { slideId: slideIds[0] })
+    expect(res.status).toBe(403)
   })
 })
 

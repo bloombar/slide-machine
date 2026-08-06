@@ -29,6 +29,8 @@ import type {
   SlideRefineResult,
   SlideNarrateRequest,
   SlideNarrateResult,
+  SlideRefitRequest,
+  SlideRefitResult,
   VoiceCommand,
 } from '@slide-machine/shared'
 import { registry } from './registry'
@@ -245,6 +247,47 @@ export class MockGenerationProvider implements GenerationProvider {
   /** Deterministic slide refine (GEN-4): preserves content and stamps the
    * caption with the refinement level, so tests can assert a slide was
    * refined at a chosen strength. */
+  /**
+   * Deterministic layout refit (GEN-9): writes the content the old layout had
+   * nowhere to put into the first box that can hold it, so tests can assert
+   * the wiring without a live model. A bullet box splits the source on
+   * sentences; a text box takes it whole.
+   *
+   * One box, not every empty one. There is a single piece of source material
+   * here, and copying it into each hole would put the same sentence in the
+   * body AND the caption — which is what the prompt tells a real model not to
+   * do ("an empty box is better than filler"). The mock stands in for that
+   * model, so it has to follow the same rule.
+   */
+  async refitSlideLayout(req: SlideRefitRequest): Promise<SlideRefitResult> {
+    const source = req.orphaned
+      .map(s => (Array.isArray(s.value) ? s.value.join('. ') : (s.value ?? '')))
+      .filter(Boolean)
+      .join('. ')
+    if (!source) return { slots: {} }
+    for (const name of req.fill) {
+      const spec = req.to.slots.find(s => s.name === name)
+      if (!spec || spec.kind === 'image') continue
+      if (spec.kind === 'bullets') {
+        const items = source
+          .split(/(?<=\.)\s+/)
+          .map(s => s.replace(/\.$/, '').trim())
+          .filter(Boolean)
+        return {
+          slots: {
+            [name]: spec.maxItems ? items.slice(0, spec.maxItems) : items,
+          },
+        }
+      }
+      return {
+        slots: {
+          [name]: spec.maxChars ? source.slice(0, spec.maxChars) : source,
+        },
+      }
+    }
+    return { slots: {} }
+  }
+
   async refineSlide(req: SlideRefineRequest): Promise<SlideRefineResult> {
     return {
       layoutType: req.current.layoutType,

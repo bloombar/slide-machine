@@ -16,7 +16,14 @@ import type {
   SlideRegenerateTranscriptInput,
   SlideRegenerateTranscriptResult,
   SlideSetLayoutInput,
+  SlideRefitLayoutInput,
+  SlideRefitLayoutResult,
+  RefitSlotDescriptor,
+  GenerationProvider,
+  SlotSpec,
+  SlotValue,
 } from '@slide-machine/shared'
+import { pairSlots, textStylesBySlot } from '@slide-machine/shared'
 import { defineAction } from './define'
 import {
   registerAction,
@@ -28,9 +35,16 @@ import { SlideModel, toSlideDto, type SlideDb } from '../models/slide'
 import { DeckModel, loadDeckAcl, touchDeck, type DeckDb } from '../models/deck'
 import { resolveTemplate } from '../templates/resolve'
 import { layoutDescriptors } from '../templates/builtin'
+import { registry } from '../providers/registry'
+import { requireAiTokens } from '../billing/meter-hooks'
 import { canEditAcl } from '../lib/access'
-import { patchSlot, slotValueSchema, slotsOf } from '../lib/slide-slots'
-import { imageSlotNames, layoutHasImageSlot } from '../lib/image-layout'
+import {
+  patchSlot,
+  remapSlots,
+  slotValueSchema,
+  slotsOf,
+} from '../lib/slide-slots'
+import { imageSlotNames, slotHasImage } from '../lib/image-layout'
 import { enrichSlideImages } from '../enrichment/enrich'
 import type { SlideImageContext } from '../enrichment/types'
 import { deriveImageKeywords } from '../enrichment/keywords'
@@ -171,16 +185,38 @@ export const slideSetLayout = defineAction<SlideSetLayoutInput, Slide>({
         'layoutType: not a layout of this template',
       ])
     }
+    // Carry the content onto the new layout's boxes before the switch (GEN-9).
+    // Layouts that share the conventional slot names pair name-for-name and
+    // nothing moves; layouts that name their boxes differently pair on what
+    // each box holds, so a heading stays a heading instead of being stranded
+    // under a name the new layout never declares. `pairSlots` is shared with
+    // the client's transition animation so the two cannot disagree about
+    // which box became which.
+    const fromLayout = template.layouts.find(l => l.type === slide.layoutType)
+    const toLayout = template.layouts.find(l => l.type === input.layoutType)!
+    if (fromLayout && fromLayout.type !== toLayout.type) {
+      const { pairs } = pairSlots(fromLayout, toLayout)
+      slide.slots = remapSlots(slotsOf(slide), pairs)
+      slide.markModified('slots')
+    }
+
     slide.layoutType = input.layoutType
 
-    // Switching onto a layout with an image slot on a slide that has no
-    // image yet: source one via enrichment. Derive keywords from the
-    // slide's own text when the model left none, and persist them so the
-    // intent survives a reload and the client polls for the arriving image.
+    // Switching onto a layout with picture boxes still empty: source them via
+    // enrichment. Derive keywords from the slide's own text when the model
+    // left none, and persist them so the intent survives a reload and the
+    // client polls for the arriving images.
+    //
+    // Asked per box, not of the slide as a whole. A layout an author built
+    // may have several picture boxes (IMG-6/TMPL-9), and a slide that already
+    // carries one picture still has two empty holes — gating on "does this
+    // slide have an image" would leave them empty for good.
+    const emptyImageSlots = imageSlotNames(
+      input.layoutType,
+      layoutDescriptors(template),
+    ).filter(name => !slotHasImage(slide, name))
     const shouldSource =
-      env.IMAGE_ENRICHMENT_ENABLED &&
-      !slide.imageRef &&
-      layoutHasImageSlot(input.layoutType, template.layouts)
+      env.IMAGE_ENRICHMENT_ENABLED && emptyImageSlots.length > 0
     if (shouldSource && !slide.imageKeywords?.length) {
       const derived = deriveImageKeywords(slide)
       if (derived.length) slide.imageKeywords = derived
@@ -213,7 +249,9 @@ export const slideSetLayout = defineAction<SlideSetLayoutInput, Slide>({
         .then(assets =>
           enrichSlideImages(
             slideId,
-            imageSlotNames(input.layoutType, layoutDescriptors(template)),
+            // Only the empty ones: a lookup is metered, and a box that
+            // already holds a picture keeps it (IMG-3).
+            emptyImageSlots,
             keywords,
             [
               ...seededImageCandidates(assets.project),
@@ -226,6 +264,156 @@ export const slideSetLayout = defineAction<SlideSetLayoutInput, Slide>({
     }
 
     return toSlideDto(slide)
+  },
+})
+
+/** The text a slot holds, in the shape the refit request describes it. */
+const refitValueOf = (
+  value: SlotValue | undefined,
+): string | string[] | undefined => {
+  if (!value) return undefined
+  if (value.kind === 'text' || value.kind === 'preformatted') return value.value
+  if (value.kind === 'bullets') return value.items
+  if (value.kind === 'code') return value.source
+  if (value.kind === 'math') return value.tex
+  return undefined
+}
+
+/** One box, described for the refit request: its spec plus what it holds. */
+const refitSlot = (
+  spec: SlotSpec,
+  textStyle: string | undefined,
+  value: SlotValue | undefined,
+): RefitSlotDescriptor => ({
+  name: spec.name,
+  kind: spec.kind,
+  label: spec.label,
+  textStyle,
+  maxChars: spec.maxChars,
+  maxItems: spec.maxItems,
+  value: refitValueOf(value),
+})
+
+/**
+ * slide.refitLayout — writes content for the boxes a layout switch left
+ * empty (GEN-9).
+ *
+ * NOT the GEN-8 "layout re-fit" (GENERATION_LAYOUT_REFIT), which is the
+ * model choosing a different layout for a slide it is updating mid-lecture
+ * and rewriting the whole thing. This runs after the USER switched the
+ * layout by hand, and only fills what that switch left empty.
+ *
+ * Deliberately narrow. `slide.setLayout` has already carried every box that
+ * paired across, untouched; this asks the model only for the holes, with the
+ * content the old layout had nowhere to put as its source. Two consequences
+ * worth keeping: text the user wrote by hand is never rewritten, and a
+ * switch between layouts that pair cleanly — every built-in pair does —
+ * makes no AI call at all and returns the slide as it stands.
+ */
+export const slideRefitLayout = defineAction<
+  SlideRefitLayoutInput,
+  SlideRefitLayoutResult
+>({
+  name: 'slide.refitLayout',
+  meter: requireAiTokens,
+  input: z.object({
+    slideId: z.string().min(1),
+    fromLayoutType: z.string().min(1).optional(),
+  }),
+  execute: async (ctx, input) => {
+    const { slide, deck } = await loadOwnedSlide(ctx, input.slideId)
+    const template = await resolveTemplate(deck.templateId)
+    const layout = template?.layouts.find(l => l.type === slide.layoutType)
+    const unchanged = { slide: toSlideDto(slide), filled: [] as string[] }
+    if (!template || !layout) return unchanged
+
+    const content = slotsOf(slide)
+    const declared = new Set(layout.slots.map(s => s.name))
+
+    // A hole is a box this layout declares and nothing filled. Pictures are
+    // excluded: they are sourced by image enrichment, not written by a
+    // language model.
+    const holes = layout.slots.filter(
+      s => s.kind !== 'image' && refitValueOf(content[s.name]) === undefined,
+    )
+    // Content the switch could not place: the material to write the holes
+    // from. Anything stored under a name this layout does not declare.
+    const orphanNames = Object.keys(content).filter(n => !declared.has(n))
+    if (!holes.length || !orphanNames.length) return unchanged
+
+    const toStyles = textStylesBySlot(layout)
+    const from = input.fromLayoutType
+      ? template.layouts.find(l => l.type === input.fromLayoutType)
+      : undefined
+    const fromStyles = from ? textStylesBySlot(from) : {}
+
+    const orphaned = orphanNames
+      .map(name => {
+        const spec = from?.slots.find(s => s.name === name) ?? {
+          name,
+          kind: (content[name]?.kind === 'bullets' ? 'bullets' : 'text') as
+            'bullets' | 'text',
+          label: name,
+        }
+        return refitSlot(spec, fromStyles[name], content[name])
+      })
+      .filter(s => s.value !== undefined)
+    if (!orphaned.length) return unchanged
+
+    const gen = registry.get<GenerationProvider>('generation')
+    const result = await gen.refitSlideLayout({
+      from: {
+        layoutType: from?.type ?? input.fromLayoutType ?? 'unknown',
+        label: from?.label ?? input.fromLayoutType ?? 'the previous layout',
+        slots: (from?.slots ?? []).map(spec =>
+          refitSlot(spec, fromStyles[spec.name], content[spec.name]),
+        ),
+      },
+      to: {
+        layoutType: layout.type,
+        label: layout.label,
+        purpose: layout.purpose,
+        slots: layout.slots.map(spec =>
+          refitSlot(spec, toStyles[spec.name], content[spec.name]),
+        ),
+      },
+      fill: holes.map(s => s.name),
+      orphaned,
+      language: deck.language,
+      seedContext: { deck: deck.seedContext },
+    })
+
+    // Only the holes, and only in the shape the box holds. A reply naming any
+    // other box is dropped rather than trusted: everything else on this slide
+    // was carried over intact and must stay that way.
+    const byName = new Map(holes.map(s => [s.name, s]))
+    let next = content
+    const filled: string[] = []
+    for (const [name, value] of Object.entries(result.slots)) {
+      const spec = byName.get(name)
+      if (!spec) continue
+      if (spec.kind === 'bullets') {
+        const items = (Array.isArray(value) ? value : [value])
+          .map(v => String(v).trim())
+          .filter(Boolean)
+        if (!items.length) continue
+        next = patchSlot(next, name, { kind: 'bullets', items })
+      } else {
+        const text = (
+          Array.isArray(value) ? value.join(' ') : String(value)
+        ).trim()
+        if (!text) continue
+        next = patchSlot(next, name, { kind: 'text', value: text })
+      }
+      filled.push(name)
+    }
+    if (!filled.length) return unchanged
+
+    slide.slots = next
+    slide.markModified('slots')
+    await slide.save()
+    await touchDeck(slide.deckId)
+    return { slide: toSlideDto(slide), filled }
   },
 })
 
@@ -384,4 +572,5 @@ registerAction(slideEditDrawings)
 registerAction(slideEditTranscript)
 registerAction(slideRegenerateTranscript)
 registerAction(slideSetLayout)
+registerAction(slideRefitLayout)
 registerAction(slideDelete)
