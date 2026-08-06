@@ -562,7 +562,7 @@ describe('AccountSettingsPage as an admin (ADMIN-5)', () => {
   it('offers a complimentary plan on the Plan tab', async () => {
     await renderAsAdmin()
     await screen.findByText('grace@example.com')
-    fireEvent.click(screen.getByRole('tab', { name: 'Plan' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Plan & Usage' }))
 
     expect(await screen.findByText('Complimentary plan')).toBeVisible()
     // Grace pays for Pro, so only Max is left to give.
@@ -603,7 +603,7 @@ describe('AccountSettingsPage as an admin (ADMIN-5)', () => {
       },
     })
     await screen.findByText('grace@example.com')
-    fireEvent.click(screen.getByRole('tab', { name: 'Plan' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Plan & Usage' }))
 
     fireEvent.change(await screen.findByLabelText('Last day'), {
       target: { value: '2026-09-30' },

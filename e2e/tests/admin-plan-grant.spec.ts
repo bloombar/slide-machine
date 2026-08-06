@@ -57,7 +57,7 @@ const openPlanTabAsAdmin = async (page: Page) => {
   await page.getByRole('link', { name: 'View public profile' }).click()
   await page.getByRole('link', { name: 'Settings', exact: true }).click()
   await page.getByRole('button', { name: 'Edit settings' }).click()
-  await page.getByRole('tab', { name: 'Plan' }).click()
+  await page.getByRole('tab', { name: 'Plan & Usage' }).click()
   return page.getByRole('main')
 }
 
