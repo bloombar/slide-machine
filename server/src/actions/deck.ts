@@ -27,7 +27,10 @@ import type {
   DeckRenameInput,
   DeckReorderInput,
   DeckSwitchTemplateInput,
+  DeckTemplateUpdateStatusInput,
+  DeckApplyTemplateUpdateInput,
   DeckViewResponse,
+  TemplateUpdateStatus,
   GenerationProvider,
   SessionPhraseInput,
   Slide,
@@ -98,11 +101,21 @@ import { editDeckSettings } from '../lib/admin-edit'
 import { recordSettingsChange } from '../audit/settings-log'
 import { deckSettingsSnapshot } from '../lib/settings-snapshot'
 import { defaultTemplateId, layoutDescriptors } from '../templates/builtin'
+import { resolveTemplateForRead, templateExists } from '../templates/resolve'
 import {
-  resolveTemplate,
-  resolveTemplateForRead,
-  templateExists,
-} from '../templates/resolve'
+  resolveDeckTemplate,
+  pinDeckToCurrent,
+  currentVersionIdFor,
+  ensureVersion,
+  getVersion,
+} from '../templates/versions'
+import {
+  planUpdate,
+  templateUpdateStatus,
+  pendingTemplateFor,
+} from '../templates/template-update'
+import { slotsOf, remapSlots } from '../lib/slide-slots'
+import { remapSlideTranslations } from '../lib/translate-slides'
 import { buildDeckStructure, headerLayoutTypes } from '../lib/deck-structure'
 import { registry } from '../providers/registry'
 import { permalinkSlug } from '../lib/slug'
@@ -276,6 +289,9 @@ export const deckCreate = defineAction<DeckCreateInput, Deck>({
       // A lecture named at creation is user-set; the AI must not retitle it.
       titleLocked: Boolean(input.title?.trim()),
       templateId,
+      // Pin the template as it stands now (TMPL-11), so later edits to it are
+      // offered to this lecture rather than applied to it.
+      templateVersionId: await currentVersionIdFor(templateId),
       permalinkSlug: permalinkSlug(input.title || 'untitled'),
     })
     return toDeckDto(deck, await loadDeckAcl(deck))
@@ -377,7 +393,7 @@ export const slideAdd = defineAction<SlideAddInput, Slide>({
     const { deck } = await loadEditableDeck(ctx, input.deckId)
     let layoutType = 'content'
     if (input.layoutType) {
-      const template = await resolveTemplate(deck.templateId)
+      const template = await resolveDeckTemplate(deck)
       if (!template?.layouts.some(l => l.type === input.layoutType)) {
         throw new ActionValidationError('slide.add', [
           'layoutType: not a layout of this template',
@@ -423,6 +439,106 @@ export const deckRename = defineAction<DeckRenameInput, Deck>({
     }),
 })
 
+/**
+ * Whether the lecture's template has been edited since it was pinned, and
+ * what taking that edit would cost (TMPL-11).
+ *
+ * Read-only, and safe to call whenever the settings pane opens: it compares
+ * two fingerprints and only walks slides when they differ.
+ */
+export const deckTemplateUpdateStatus = defineAction<
+  DeckTemplateUpdateStatusInput,
+  TemplateUpdateStatus
+>({
+  name: 'deck.templateUpdateStatus',
+  input: z.object({ deckId: z.string().min(1) }),
+  execute: async (ctx, input) => {
+    const { deck } = await loadEditableDeck(ctx, input.deckId)
+    const slides = await SlideModel.find({ deckId: deck._id }).select(
+      '_id layoutType slots title body bullets caption imageRef',
+    )
+    return templateUpdateStatus(
+      deck,
+      slides.map(slide => ({
+        id: slide._id.toString(),
+        layoutType: slide.layoutType,
+        slots: slotsOf(slide),
+      })),
+    )
+  },
+})
+
+/**
+ * Rebuilds the lecture on its template's current structure (TMPL-11).
+ *
+ * The move is `pairSlots`, the same pairing that carries content across a
+ * per-slide layout switch and drives the transition animation — so a box
+ * keeps its content wherever the updated layout still has somewhere to put
+ * it, by name first and by what it holds second.
+ *
+ * Content that pairs with nothing is deliberately **left on the slide** by
+ * `remapSlots` rather than deleted. The updated layout simply does not draw
+ * it, so the cost of a bad update is content that needs re-placing, not
+ * content that is gone — which is what the confirmation dialog promises.
+ *
+ * A layout the update removes outright is left alone: its slides keep both
+ * their content and their layout name rather than being forced onto some
+ * other layout this code would have to invent. They are reported ahead of
+ * time so the choice is the user's.
+ */
+export const deckApplyTemplateUpdate = defineAction<
+  DeckApplyTemplateUpdateInput,
+  Deck
+>({
+  name: 'deck.applyTemplateUpdate',
+  input: z.object({ deckId: z.string().min(1) }),
+  execute: async (ctx, input) => {
+    const { deck, acl } = await loadEditableDeck(ctx, input.deckId)
+    const pinned = await getVersion(deck.templateVersionId ?? undefined)
+    if (!pinned) {
+      throw new ActionValidationError('deck.applyTemplateUpdate', [
+        'this lecture does not pin a template version',
+      ])
+    }
+    const live = await pendingTemplateFor(deck, pinned)
+    if (!live) {
+      throw new ActionValidationError('deck.applyTemplateUpdate', [
+        'this template has no update to apply',
+      ])
+    }
+
+    const slides = await SlideModel.find({ deckId: deck._id })
+    const plans = planUpdate(
+      pinned,
+      live,
+      new Set(slides.map(s => s.layoutType)),
+    )
+
+    for (const slide of slides) {
+      const plan = plans.get(slide.layoutType)
+      if (!plan || plan.layoutRemoved) continue
+      const moved = Object.entries(plan.pairs).some(([from, to]) => from !== to)
+      if (!moved) continue
+      const before = slotsOf(slide)
+      slide.slots = remapSlots(before, plan.pairs)
+      slide.markModified('slots')
+      await slide.save()
+      // The words did not change, only the box they sit in — carry the
+      // cached translations across with them rather than paying to
+      // translate the same text again (SHARE-2).
+      await remapSlideTranslations(deck._id, slide._id.toString(), plan.pairs, {
+        id: slide._id.toString(),
+        slots: before,
+      })
+    }
+
+    const next = await ensureVersion(live)
+    deck.templateVersionId = next.id
+    await deck.save()
+    return toDeckDto(deck, acl)
+  },
+})
+
 export const deckSwitchTemplate = defineAction<DeckSwitchTemplateInput, Deck>({
   name: 'deck.switchTemplate',
   input: z.object({
@@ -437,6 +553,10 @@ export const deckSwitchTemplate = defineAction<DeckSwitchTemplateInput, Deck>({
         ])
       }
       deck.templateId = input.templateId
+      // Switching templates pins the new one as it stands (TMPL-11) — the
+      // lecture is being rebuilt on it deliberately, which is exactly when
+      // taking its current structure is what the user asked for.
+      await pinDeckToCurrent(deck)
       await deck.save()
       return toDeckDto(deck, acl)
     }),
@@ -510,7 +630,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
   }),
   execute: async (ctx, input) => {
     const { deck } = await loadEditableDeck(ctx, input.deckId)
-    const template = await resolveTemplate(deck.templateId)
+    const template = await resolveDeckTemplate(deck)
     if (!template)
       throw new ActionValidationError('session.phrase', [
         'template no longer exists',
@@ -1408,6 +1528,8 @@ registerAction(deckList)
 registerAction(deckGet)
 registerAction(deckRename)
 registerAction(deckSwitchTemplate)
+registerAction(deckTemplateUpdateStatus)
+registerAction(deckApplyTemplateUpdate)
 registerAction(slideAdd)
 registerAction(deckReorderSlides)
 registerAction(sessionPhrase)

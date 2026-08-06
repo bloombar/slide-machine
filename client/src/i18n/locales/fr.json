@@ -220,6 +220,8 @@
     "nameLabel": "Nom du modèle",
     "themeLabel": "Couleurs par défaut",
     "layoutsLabel": "Dispositions",
+    "atCapacity": "Remplir chaque bloc au maximum",
+    "atCapacityHint": "Montre la diapositive avec tout le texte qu’elle peut contenir. Vous pouvez régler la capacité de chaque bloc dans ses réglages.",
     "layoutName": "Nom",
     "layoutPurpose": "Quand l’utiliser",
     "theme": {

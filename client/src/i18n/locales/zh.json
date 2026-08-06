@@ -220,6 +220,8 @@
     "nameLabel": "模板名称",
     "themeLabel": "默认颜色",
     "layoutsLabel": "版式",
+    "atCapacity": "把每个框填到上限",
+    "atCapacityHint": "显示这张幻灯片能容纳的最多文字。每个框的容量可在其设置中调整。",
     "layoutName": "名称",
     "layoutPurpose": "何时使用",
     "theme": {

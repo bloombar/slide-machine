@@ -627,6 +627,66 @@ describe('template settings', () => {
   })
 })
 
+describe('previewing a layout at its limits', () => {
+  /** A layout whose boxes say how much they hold, so there is a limit to
+   * fill them to. */
+  const bounded = (): Partial<Template> => ({
+    layouts: [
+      {
+        ...layout('content', 'Content', ['title']),
+        slots: [
+          { name: 'title', kind: 'text', label: 'title', maxChars: 90 },
+          { name: 'points', kind: 'bullets', label: 'points', maxItems: 5 },
+        ],
+        tree: tree([
+          { id: 'title', slot: 'title' },
+          { id: 'points', slot: 'points' },
+        ]),
+      } as Layout,
+      layout('whiteboard', 'Whiteboard', []),
+    ],
+  })
+
+  const canvas = () => screen.getByTestId('template-canvas')
+  const box = (id: string) =>
+    canvas().querySelector(`[data-node-id="${id}"]`) as HTMLElement
+
+  it('starts on the comfortable sample', () => {
+    renderEditor(vi.fn(), bounded())
+    expect(
+      screen.getByRole('checkbox', { name: /Fill every box to its limit/ }),
+    ).not.toBeChecked()
+    expect(box('title').textContent).toBe('A slide in this style')
+  })
+
+  it('fills every box to what the template says it holds', () => {
+    renderEditor(vi.fn(), bounded())
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /Fill every box to its limit/ }),
+    )
+
+    // The title box says 90 characters, so that is about what it shows —
+    // far more than the sample sentence it held a moment ago.
+    const filled = box('title').textContent ?? ''
+    expect(filled.length).toBeLessThanOrEqual(90)
+    expect(filled.length).toBeGreaterThan(87)
+    // …and the list box says five points, so it lists five
+    expect(box('points').querySelectorAll('li')).toHaveLength(5)
+  })
+
+  it('is a way of looking, not an edit: nothing about it is saved', () => {
+    const onSave = renderEditor(vi.fn(), bounded())
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /Fill every box to its limit/ }),
+    )
+    const draft = saved(onSave)
+    expect(draft.layouts[0]!.slots).toEqual([
+      { name: 'title', kind: 'text', label: 'title', maxChars: 90 },
+      { name: 'points', kind: 'bullets', label: 'points', maxItems: 5 },
+    ])
+  })
+})
+
 describe('undo', () => {
   it('is offered as a button, not only as a shortcut', () => {
     renderEditor()

@@ -27,13 +27,17 @@ export interface SlideTranslationDb {
   updatedAt: Date
 }
 
-/** One slide's translated fields; id-less, it is keyed by slide id above. */
+/**
+ * One slide's translated slots; id-less, it is keyed by slide id above.
+ *
+ * `slots` is Mixed for the same reason a slide's own map is: the set of boxes
+ * is data a template author writes, not a shape this schema can know ahead of
+ * time (see models/slide.ts). Entries whose hash predates the slot map read as
+ * stale and are simply re-translated, so no migration is needed to get here.
+ */
 const entrySchema = new Schema<SlideTranslationEntry>(
   {
-    title: String,
-    body: String,
-    bullets: { type: [String], default: undefined },
-    caption: String,
+    slots: { type: Schema.Types.Mixed, default: () => ({}) },
     sourceHash: String,
   },
   { _id: false },

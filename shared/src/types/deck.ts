@@ -31,6 +31,20 @@ export interface Deck {
   /** Always stored on the lecture; initialized from the project's
    * default template at creation (TMPL-2). */
   templateId: string
+  /**
+   * The template snapshot this lecture is actually drawn with (TMPL-11).
+   *
+   * `templateId` says which template the lecture belongs to — it is what the
+   * settings pane shows and what an update is offered from. This says which
+   * *version* of it the slides were built against, and it is what every
+   * render, export and layout switch resolves. Editing the template moves the
+   * template forward and leaves this where it is, until the owner applies the
+   * update.
+   *
+   * Absent only on lectures written before versions existed, which resolve
+   * live and are pinned on first write.
+   */
+  templateVersionId?: string
   /** EFFECTIVE general access: the lecture's own override when one
    * exists, otherwise inherited from its project. */
   visibility: Visibility
@@ -132,6 +146,33 @@ export type SlotValue =
   | { kind: 'code'; source: string; language?: string }
   | { kind: 'math'; tex: string; display?: boolean }
   | { kind: 'table'; header?: string[]; rows: string[][] }
+
+/**
+ * Which slot kinds translated viewing covers (SHARE-2).
+ *
+ * Prose travels. Code and mathematics do not: a program listing stops running
+ * and a formula stops parsing once its tokens are translated, and both are
+ * read as notation rather than language. An image has no words of its own —
+ * its caption is a slot in its own right and travels as one.
+ *
+ * Written as a total map over the kinds rather than a list of exceptions, so
+ * adding a kind to `SlotValue` fails to compile here until somebody decides
+ * which side of the line it falls on. A new kind cannot quietly default into
+ * being sent to a translator.
+ */
+export const TRANSLATABLE_SLOT_KINDS: Record<SlotValue['kind'], boolean> = {
+  text: true,
+  preformatted: true,
+  bullets: true,
+  table: true,
+  image: false,
+  code: false,
+  math: false,
+}
+
+/** True when a slot's content is the sort of thing that gets translated. */
+export const isTranslatableSlot = (value: SlotValue): boolean =>
+  TRANSLATABLE_SLOT_KINDS[value.kind]
 
 /** The conventional slot names, which keep derived fields on the DTO. */
 export const CONVENTIONAL_SLOTS = [
@@ -298,17 +339,38 @@ export interface TranscriptSegment {
   createdAt: string
 }
 
-/** One slide's translated text, plus the fingerprint of what was translated. */
+/**
+ * One slot's translated content.
+ *
+ * Mirrors the shape of the `SlotValue` it translates, so a list comes back a
+ * list and a table keeps its grid — the viewer lays it over the slide without
+ * needing to know which kind it is looking at. Only the kinds that hold prose
+ * appear: see `TRANSLATABLE_SLOT_KINDS`.
+ */
+export type TranslatedSlot =
+  | { kind: 'text' | 'preformatted'; value: string }
+  | { kind: 'bullets'; items: string[] }
+  | { kind: 'table'; header?: string[]; rows: string[][] }
+
+/** One slide's translated slots, plus the fingerprint of what was translated. */
 export interface SlideTranslationEntry {
-  title?: string
-  body?: string
-  bullets?: string[]
-  caption?: string
   /**
-   * Hash of the source fields this entry was translated from. Slides stay
-   * editable (EDIT-1), so an entry whose hash no longer matches its slide is
-   * stale and is re-translated on the next view — one edited slide costs one
-   * slide's translation, not the whole deck's.
+   * Keyed by slot name, like the slide itself (TMPL-9), so a layout with two
+   * code samples and three paragraphs translates the paragraphs and leaves
+   * the code alone — which five fixed fields could never express.
+   */
+  slots: Record<string, TranslatedSlot>
+  /**
+   * Hash of the slots this entry was translated from — their names, kinds and
+   * text. Slides stay editable (EDIT-1), so an entry whose hash no longer
+   * matches its slide is stale and is re-translated on the next view: one
+   * edited slide costs one slide's translation, not the whole deck's.
+   *
+   * Names are in the hash on purpose. Content can move between boxes (a
+   * layout switch, a template update), and a hash over text alone would still
+   * match while the entry was keyed to boxes the slide no longer uses — a
+   * cache that looks fresh and reads wrong. Any move either carries the entry
+   * across explicitly or invalidates it.
    */
   sourceHash?: string
 }

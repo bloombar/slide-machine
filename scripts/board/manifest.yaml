@@ -377,7 +377,13 @@
   review: false
 - id: TMPL-3
   title: Pre-made templates
-  full: Ship several polished, ready-to-use templates covering common lecture styles.
+  full: "Ship several polished, ready-to-use templates covering common lecture
+    styles. Built-ins ship as files rather than as user-owned records — nobody
+    may edit or delete one, and a deployment can add its own. They are
+    nonetheless versioned like any other template (TMPL-11): a lecture pins the
+    built-in as it stood when it was created, so shipping a revised starter
+    template offers an update to existing lectures instead of restructuring them
+    on deploy."
   section: §7 Style Template Library
   family: TMPL
   phase: 1
@@ -1206,10 +1212,16 @@
   review: false
 - id: TMPL-4
   title: Custom templates (create / edit / save)
-  full: Users can create, edit, save, and name their own templates — defining
+  full: "Users can create, edit, save, and name their own templates — defining
     layouts and the positioning of slide content elements (title, body, image,
     caption) on each layout. Custom templates appear in the user's library and
-    may be shared/published.
+    may be shared/published. A template belongs to its author rather than to any
+    deck using it, so it has a page of its own at a stable permalink — /t/:slug,
+    alongside a deck's /d/:slug (SHARE-1). That page is where a template is
+    edited; the library in a deck's or project's Design settings chooses and
+    duplicates, then sends the author there. The permalink is fixed when the
+    template is created and survives renaming. Who may open it follows the
+    template's visibility: its author…"
   section: §7 Style Template Library
   family: TMPL
   phase: 2
@@ -1289,6 +1301,23 @@
   family: TMPL
   phase: 2
   status: Backlog
+  review: false
+- id: TMPL-11
+  title: Template versions & opt-in updates
+  full: A template is a living thing; a lecture already built on one is not. A
+    lecture is drawn with the version of its template that it pinned, not with
+    whatever the template says today. Editing a template — or deploying a
+    changed built-in — never reaches back into lectures already built on it, so
+    boxes are not renamed out from under saved content and an author cannot
+    restructure someone else's lecture by editing a template they shared.
+    Versions are immutable and shared. A save that changes nothing structural
+    resolves to the version already stored, so a template nobody edits costs one
+    version however many lectures use it. Applying an update repoints a lecture
+    at a newer version rather than…
+  section: §7 Style Template Library
+  family: TMPL
+  phase: 2
+  status: In progress
   review: false
 - id: AUTH-1a
   title: GitHub sign-in

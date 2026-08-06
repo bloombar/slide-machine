@@ -497,7 +497,9 @@ export const defaultTemplateId = (): string => {
 /** The AI-facing option set for a template (GEN-6). The whiteboard layout
  * is a manual blank slate, so it is withheld from the model — generation
  * never auto-selects it; users add it via the layout picker. */
-export const layoutDescriptors = (template: Template): LayoutDescriptor[] => {
+export const layoutDescriptors = (
+  template: Pick<Template, 'theme' | 'layouts'>,
+): LayoutDescriptor[] => {
   const styles = themeTextStyles(template.theme)
   return template.layouts
     .filter(l => l.type !== WHITEBOARD_LAYOUT_TYPE)

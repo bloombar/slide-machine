@@ -30,6 +30,7 @@ import { parseDeckImport, type ImportedDeck } from '../lib/deck-import'
 import { permalinkSlug } from '../lib/slug'
 import { defaultTemplateId } from '../templates/builtin'
 import { templateExists } from '../templates/resolve'
+import { currentVersionIdFor } from '../templates/versions'
 import { ttsVoiceIdSchema } from '../lib/tts-voice'
 import { DeckModel, resolveDeckAcl, toDeckDto } from '../models/deck'
 import { SlideModel } from '../models/slide'
@@ -146,6 +147,8 @@ export const deckImport = defineAction<
       title,
       titleLocked: Boolean(title),
       templateId: settings.templateId,
+      // Pin the template as it stands at import (TMPL-11).
+      templateVersionId: await currentVersionIdFor(settings.templateId),
       permalinkSlug: permalinkSlug(title || 'untitled'),
       language: settings.language,
       generationFreedom: settings.generationFreedom,

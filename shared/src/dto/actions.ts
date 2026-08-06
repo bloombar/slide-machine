@@ -66,6 +66,16 @@ export interface DeckSwitchTemplateInput {
   templateId: string
 }
 
+/** Whether the lecture's template has moved on since it was pinned (TMPL-11). */
+export interface DeckTemplateUpdateStatusInput {
+  deckId: string
+}
+
+/** Take the template's current structure onto every slide (TMPL-11). */
+export interface DeckApplyTemplateUpdateInput {
+  deckId: string
+}
+
 /** Lists seed assets at one level: a project's own, or a lecture's. */
 export interface SeedAssetListInput {
   projectId?: string
