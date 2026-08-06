@@ -5,7 +5,13 @@
  * it (docs/plans/extensible-templates-plan.md).
  */
 import { describe, it, expect } from 'vitest'
-import { foldLegacy, legacyFrom, patchSlot, slotsOf } from './slide-slots'
+import {
+  foldLegacy,
+  legacyFrom,
+  patchSlot,
+  remapSlots,
+  slotsOf,
+} from './slide-slots'
 
 const changedNothing = () => false
 const changedEverything = () => true
@@ -147,5 +153,40 @@ describe('patchSlot', () => {
     const before = { 'photo-1': { kind: 'image' as const, ref: 'a.png' } }
     const after = patchSlot(before, 'photo-2', { kind: 'image', ref: 'b.png' })
     expect(after['photo-1']).toEqual({ kind: 'image', ref: 'a.png' })
+  })
+})
+
+describe('remapSlots', () => {
+  const slots = {
+    title: { kind: 'text' as const, value: 'Osmosis' },
+    body: { kind: 'text' as const, value: 'Water moves' },
+  }
+
+  it('moves a value onto the box the pairing named', () => {
+    const next = remapSlots(slots, { title: 'headline' })
+    expect(next.headline).toEqual({ kind: 'text', value: 'Osmosis' })
+  })
+
+  it('leaves a box that paired with itself exactly where it is', () => {
+    expect(remapSlots(slots, { title: 'title', body: 'body' })).toEqual(slots)
+  })
+
+  it('keeps the old key, so switching back finds its content again', () => {
+    // Unreachable while the new layout is on (it declares no such box), and
+    // the source the refit pass writes the new layout's holes from.
+    const next = remapSlots(slots, { title: 'headline' })
+    expect(next.title).toEqual({ kind: 'text', value: 'Osmosis' })
+  })
+
+  it('ignores a pairing for a box that holds nothing', () => {
+    const next = remapSlots(slots, { caption: 'credit' })
+    expect(next.credit).toBeUndefined()
+    expect(next).toEqual(slots)
+  })
+
+  it('does not mutate the map it was given', () => {
+    const before = { ...slots }
+    remapSlots(slots, { title: 'headline' })
+    expect(slots).toEqual(before)
   })
 })

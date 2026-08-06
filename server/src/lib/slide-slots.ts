@@ -183,6 +183,30 @@ export const foldLegacy = (
   return next
 }
 
+/**
+ * Moves a slide's content onto another layout's boxes (GEN-9).
+ *
+ * `pairs` comes from `pairSlots` in shared, so the content lands exactly
+ * where the transition animation says it landed. A box that paired keeps its
+ * value; a box that did not is left where it is rather than deleted, for two
+ * reasons: the refit pass reads it as the source for the holes it fills, and
+ * switching back to the old layout finds its own content still there. Slots
+ * the current layout does not declare are simply never drawn.
+ */
+export const remapSlots = (
+  slots: Record<string, SlotValue>,
+  pairs: Record<string, string>,
+): Record<string, SlotValue> => {
+  const next = { ...slots }
+  for (const [from, to] of Object.entries(pairs)) {
+    if (from === to) continue
+    const value = slots[from]
+    if (value === undefined) continue
+    next[to] = value
+  }
+  return next
+}
+
 /** Applies one slot's patch. An empty value takes the slot back to empty. */
 export const patchSlot = (
   slots: Record<string, SlotValue>,
