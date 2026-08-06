@@ -1,7 +1,9 @@
 /**
  * Shared e2e helpers.
  */
+import { readFileSync } from 'node:fs'
 import { expect, type Page } from '@playwright/test'
+import { MAIL_LOG } from '../playwright.config'
 
 /**
  * Create a project through the home-page "New project" modal, reached from
@@ -39,4 +41,34 @@ export async function openProjectMenu(page: Page, projectTitle: string) {
 export async function openProjectSettings(page: Page, projectTitle: string) {
   await openProjectMenu(page, projectTitle)
   await page.getByRole('menuitem', { name: 'Settings' }).click()
+}
+
+/**
+ * Confirms a freshly registered account by following the link the server
+ * mailed it (AUTH-3).
+ *
+ * Specs that publish or share need this: an unconfirmed account's projects
+ * start restricted, which is the point of the requirement. The link is read
+ * out of the message the server actually sent — the token is stored hashed,
+ * so there is nothing else to read — and matched by recipient, so parallel
+ * specs cannot pick up each other's.
+ */
+export function verificationTokenFor(email: string): string {
+  const log = readFileSync(MAIL_LOG, 'utf8')
+  const forThisUser = log
+    .split('\n---\n')
+    .filter(block => block.includes(`to=${email}`))
+    .at(-1)
+  const token = forThisUser?.match(/\/verify-email\?token=(\S+)/)?.[1]
+  if (!token) throw new Error(`no verification link was mailed to ${email}`)
+  return decodeURIComponent(token)
+}
+
+export async function verifyEmail(page: Page, email: string) {
+  // Confirming is a detour, so put the caller back where it was — otherwise
+  // every spec would have to navigate home again afterwards.
+  const wasAt = page.url()
+  await page.goto(`/verify-email?token=${verificationTokenFor(email)}`)
+  await expect(page.getByText(/your address is confirmed/i)).toBeVisible()
+  await page.goto(wasAt)
 }

@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next'
 import type { DeckShare, ShareRole, Visibility } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import ConfirmDialog from './ConfirmDialog'
+import { apiErrorMessage } from '../i18n/apiError'
 
 /** The general-access choices, in order. Each value keys its own label
  * and hint under `access.general.<value>` in the locale bundles. */
@@ -51,6 +52,7 @@ export default function AccessSettings({
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<ShareRole>('viewer')
   const [shareError, setShareError] = useState<string | null>(null)
+  const [accessError, setAccessError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirmingTransfer, setConfirmingTransfer] =
     useState<DeckShare | null>(null)
@@ -74,10 +76,14 @@ export default function AccessSettings({
   }, [entity, subject.id])
 
   const setGeneralAccess = (visibility: Visibility) => {
+    setAccessError(null)
     dispatchAction(action('setAccess'), { ...idInput, visibility })
       .then(onChange)
-      .catch(() => {
-        // Quiet failure: the radios revert to the saved value on rerender
+      .catch(err => {
+        // The radios revert to the saved value on rerender, but a refusal
+        // the user can act on must say so — an unconfirmed account is told
+        // to confirm its address rather than left wondering (AUTH-3).
+        setAccessError(apiErrorMessage(err, t, 'access.errors.setAccess'))
       })
   }
 
@@ -285,6 +291,11 @@ export default function AccessSettings({
               </label>
             ))}
           </div>
+          {accessError && (
+            <p role="alert" className="mt-2 text-sm text-red-600">
+              {accessError}
+            </p>
+          )}
         </fieldset>
       </div>
 

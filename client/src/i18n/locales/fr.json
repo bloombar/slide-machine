@@ -65,6 +65,43 @@
       "google": "Connexion avec Google impossible — réessayez",
       "signIn": "Une erreur s'est produite — réessayez",
       "register": "Une erreur s'est produite — réessayez"
+    },
+    "forgotPassword": "Mot de passe oublié ?",
+    "forgot": {
+      "title": "Réinitialisez votre mot de passe",
+      "intro": "Indiquez l’adresse utilisée à l’inscription et nous vous enverrons un lien pour choisir un nouveau mot de passe.",
+      "submit": "Envoyer le lien",
+      "sending": "Envoi…",
+      "sent": "Si cette adresse a un compte, un lien est en route. Consultez votre messagerie : le lien est valable une heure.",
+      "unavailable": "Ce serveur ne peut pas envoyer d’e-mails, les liens de mot de passe sont donc indisponibles. Demandez de l’aide à son administrateur.",
+      "error": "Impossible d’envoyer le lien — réessayez",
+      "backToSignIn": "Retour à la connexion"
+    },
+    "reset": {
+      "title": "Choisissez un nouveau mot de passe",
+      "newPassword": "Nouveau mot de passe",
+      "submit": "Enregistrer le mot de passe",
+      "saving": "Enregistrement…",
+      "done": "Votre mot de passe est défini. Connectez-vous avec : vous avez été déconnecté partout ailleurs.",
+      "missingToken": "Il manque le jeton de ce lien. Demandez-en un nouveau.",
+      "error": "Impossible de définir ce mot de passe — le lien a peut-être expiré"
+    },
+    "verify": {
+      "title": "Confirmation de votre adresse",
+      "checking": "Vérification du lien…",
+      "done": "Merci, votre adresse est confirmée.",
+      "error": "Ce lien n’est plus valable. Demandez-en un nouveau depuis les paramètres de votre compte.",
+      "missingToken": "Il manque le jeton de ce lien.",
+      "continue": "Continuer",
+      "pendingTitle": "Confirmez votre adresse e-mail",
+      "pending": "Nous avons envoyé un lien à {email}. Confirmez-le pour publier des cours publiquement.",
+      "resend": "Envoyer un autre lien",
+      "resending": "Envoi…",
+      "resent": "Envoyé — consultez votre messagerie.",
+      "already": "Votre adresse est déjà confirmée.",
+      "resendError": "Impossible d’envoyer un autre lien — réessayez",
+      "unavailable": "Ce serveur ne peut pas envoyer d’e-mails, le lien ne peut donc pas être renvoyé.",
+      "confirmed": "Confirmée"
     }
   },
   "health": {
@@ -799,7 +836,8 @@
       "action": "Transférer"
     },
     "errors": {
-      "noAccount": "Aucun compte avec cette adresse e-mail"
+      "noAccount": "Aucun compte avec cette adresse e-mail",
+      "setAccess": "Impossible de modifier qui peut le voir — réessayez"
     }
   },
   "deck": {
@@ -1061,7 +1099,8 @@
     "unauthorized": "Votre session a expiré — reconnectez-vous",
     "forbidden": "Vous n'avez pas l'autorisation de faire cela",
     "internal_error": "Une erreur s'est produite de notre côté — réessayez",
-    "unknown_error": "Une erreur s'est produite — réessayez"
+    "unknown_error": "Une erreur s'est produite — réessayez",
+    "email_unverified": "Confirmez d’abord votre adresse e-mail — vérifiez votre boîte de réception ou envoyez un nouveau lien depuis les paramètres de votre compte"
   },
   "usage": {
     "title": "Utilisation du forfait",

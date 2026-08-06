@@ -5,7 +5,7 @@
  * project settings" re-attaches it.
  */
 import { test, expect, type Browser, type Page } from '@playwright/test'
-import { createProject, openProjectSettings } from './helpers'
+import { createProject, openProjectSettings, verifyEmail } from './helpers'
 
 const stamp = Date.now()
 const owner = { email: `powner-${stamp}@example.com`, name: 'Powner' }
@@ -22,6 +22,9 @@ const newUserPage = async (
   await page.getByLabel('Password').fill(user.email)
   await page.getByRole('button', { name: 'Create account' }).click()
   await expect(page).toHaveURL(/\/app$/)
+  // Sharing needs a confirmed address: an unconfirmed account's projects
+  // start restricted (AUTH-3).
+  await verifyEmail(page, user.email)
   return page
 }
 

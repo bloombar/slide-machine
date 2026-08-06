@@ -24,6 +24,8 @@ import {
   connectReturnUrl,
 } from './google-connect'
 import { UserModel, toUserDto } from '../models/user'
+import { appOrigin } from '../lib/app-origin'
+import { createRateLimiter } from '../lib/rate-limit'
 
 export const REFRESH_COOKIE = 'sm_refresh'
 export const OAUTH_STATE_COOKIE = 'sm_oauth_state'
@@ -62,6 +64,17 @@ const loginSchema = z.object({
   password: z.string().min(1),
 })
 
+const tokenSchema = z.object({ token: z.string().min(1) })
+
+const forgotSchema = z.object({ email: z.email() })
+
+const resetSchema = z.object({
+  token: z.string().min(1),
+  // The same floor registration enforces: a reset must not be a way to set a
+  // weaker password than sign-up allows.
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+})
+
 /** Parses a request body or throws a 400 HttpError with per-field details. */
 const parseBody = <T>(schema: z.ZodType<T>, body: unknown): T => {
   const result = schema.safeParse(body)
@@ -74,6 +87,38 @@ const parseBody = <T>(schema: z.ZodType<T>, body: unknown): T => {
   return result.data
 }
 
+/**
+ * Both mailed flows are open endpoints that send an email, so they carry the
+ * same nuisance guard the feedback form does: enough to make scripting them
+ * pointless, loose enough that nobody who genuinely mislaid a password
+ * notices. Without it, either one is a way to have this server mail an
+ * address of the caller's choosing, over and over.
+ */
+const MAIL_RATE_LIMIT = 5
+const MAIL_RATE_WINDOW_MS = 15 * 60 * 1000
+
+const mailLimiter = createRateLimiter({
+  limit: MAIL_RATE_LIMIT,
+  windowMs: MAIL_RATE_WINDOW_MS,
+})
+
+/** Test seam: each case starts with a fresh window. */
+export const resetAuthMailRateLimit = (): void => mailLimiter.reset()
+
+/** Refuses once a caller has asked for too many messages in a window. Keyed
+ * on the caller's address; behind a proxy that is the proxy's, which makes
+ * the limit shared rather than per-visitor — stricter than intended, never
+ * looser, which is the right way for a nuisance guard to be wrong. */
+const takeMailAllowance = (req: Request): void => {
+  if (!mailLimiter.take(req.ip ?? 'unknown')) {
+    throw new HttpError(
+      429,
+      'too_many_requests',
+      'Too many requests just now — please try again in a little while',
+    )
+  }
+}
+
 export const authRouter = Router()
 
 authRouter.post('/register', async (req, res) => {
@@ -83,6 +128,7 @@ authRouter.post('/register', async (req, res) => {
     input.password,
     input.displayName,
     input.locale,
+    appOrigin(req),
   )
   setRefreshCookie(res, result.refreshRaw)
   const body: AuthResponse = {
@@ -90,6 +136,51 @@ authRouter.post('/register', async (req, res) => {
     accessToken: result.accessToken,
   }
   res.status(201).json(body)
+})
+
+/**
+ * Confirms an address from the mailed link (AUTH-3). Open by design: someone
+ * may click the link in a browser they are not signed in on, and the token
+ * itself is the credential.
+ */
+authRouter.post('/verify-email', async (req, res) => {
+  const input = parseBody(tokenSchema, req.body)
+  const user = await authService.verifyEmail(input.token)
+  res.json(user)
+})
+
+/** Mails a fresh verification link to the signed-in user (AUTH-3). */
+authRouter.post('/verify-email/resend', requireAuth, async (req, res) => {
+  takeMailAllowance(req)
+  const result = await authService.resendVerification(
+    req.userId!,
+    appOrigin(req),
+  )
+  res.json(result)
+})
+
+/**
+ * Starts a password reset (AUTH-4). Always 204, whether or not the address
+ * has an account: any other answer would turn this into a way to find out who
+ * is registered.
+ */
+authRouter.post('/forgot-password', async (req, res) => {
+  takeMailAllowance(req)
+  const input = parseBody(forgotSchema, req.body)
+  await authService.requestPasswordReset(input.email, appOrigin(req))
+  res.status(204).end()
+})
+
+/**
+ * Finishes a reset (AUTH-4). Every session ends, including any the caller
+ * holds, so they are left to sign in with the new password — which is the
+ * point when the reset is someone recovering a stolen account.
+ */
+authRouter.post('/reset-password', async (req, res) => {
+  const input = parseBody(resetSchema, req.body)
+  await authService.resetPassword(input.token, input.password)
+  clearRefreshCookie(res)
+  res.status(204).end()
 })
 
 authRouter.post('/login', async (req, res) => {
