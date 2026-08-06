@@ -33,6 +33,7 @@ import {
   type ProjectDb,
 } from '../models/project'
 import { UserModel } from '../models/user'
+import { emailVerified, requireVerifiedEmail } from '../auth/verified'
 import { canEditAcl, isAclMember } from '../lib/access'
 import { isAllowlistedAdmin } from '../lib/admin-view'
 import { editProjectSettings } from '../lib/admin-edit'
@@ -71,9 +72,15 @@ export const projectCreate = defineAction<ProjectCreateInput, Project>({
     seedContext: z.string().optional(),
   }),
   execute: async (ctx, input) => {
+    const ownerId = requireUser(ctx)
+    // Projects are public by default, which for an unconfirmed account would
+    // be publishing without ever asking to (AUTH-3). Theirs start restricted
+    // instead; confirming the address lets them open it up.
+    const verified = await emailVerified(ownerId)
     const doc = await ProjectModel.create({
       ...input,
-      ownerId: requireUser(ctx),
+      ownerId,
+      ...(verified ? {} : { visibility: 'restricted' }),
     })
     return toProjectDto(doc)
   },
@@ -209,12 +216,18 @@ export const projectSetAccess = defineAction<ProjectSetAccessInput, Project>({
     projectId: z.string().min(1),
     visibility: z.enum(['restricted', 'public']),
   }),
-  execute: (ctx, input) =>
-    editProjectSettings(ctx, input.projectId, async doc => {
+  execute: async (ctx, input) => {
+    // Publishing to everyone is the one capability an unconfirmed account
+    // does not get (AUTH-3). Going back to restricted is always allowed.
+    if (input.visibility === 'public' && ctx.userId) {
+      await requireVerifiedEmail(ctx.userId)
+    }
+    return editProjectSettings(ctx, input.projectId, async doc => {
       doc.visibility = input.visibility
       await doc.save()
       return toProjectDto(doc)
-    }),
+    })
+  },
 })
 
 export const projectShare = defineAction<ProjectShareInput, DeckShare[]>({

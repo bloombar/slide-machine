@@ -233,6 +233,24 @@ The form is hidden unless the server can deliver it: set the `SMTP_*` set,
 bug reports and feature requests (`MAIL_FROM` if the envelope sender differs
 from `SMTP_USER`). Nothing is stored — the inbox is the record.
 
+### Email verification and password reset
+
+Both ride on the same `SMTP_*` / `MAIL_PROVIDER` settings as the feedback
+form — no separate account, no extra key.
+
+**Without mail configured the app still works.** Registration succeeds, and
+"I forgot my password" still answers the same way it always does; there is
+simply no link to deliver, and the account pages say so rather than promising
+one. What an unconfirmed account cannot do is publish to everyone (AUTH-3):
+its projects start restricted, and setting a project or lecture to public is
+refused until the address is confirmed. So on a server with no relay, plan to
+confirm addresses another way — an operator can set `emailVerified` directly —
+or accept that everything stays private and shared by name.
+
+With `MAIL_PROVIDER=log` (the dev and e2e default) the whole flow works
+end to end: the message, link and all, goes to the server's own output, and
+the link can be pasted into a browser.
+
 ### Before launch: the static pages
 
 The privacy policy and terms name whoever runs the deployment, and they read

@@ -219,6 +219,12 @@ const envSchema = z.object({
   // altogether. Mail-backed features report themselves unavailable rather
   // than failing at send time when the transport cannot deliver.
   MAIL_PROVIDER: z.enum(['smtp', 'log', 'none']).default('smtp'),
+  // With MAIL_PROVIDER=log, also append each message to this file. Set only
+  // by the e2e run, which needs to read a real verification / reset link out
+  // of a message the server sent (AUTH-3/AUTH-4) — the token is stored
+  // hashed, so there is nothing in the database to read instead. Reveals no
+  // more than `log` already prints to the server's own output.
+  MAIL_LOG_FILE: z.string().optional(),
   // Envelope sender for mail the app originates. Unset falls back to
   // SMTP_USER, which is the account most relays require to be the sender
   // anyway.

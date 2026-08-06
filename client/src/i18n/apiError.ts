@@ -20,6 +20,9 @@ export const GLOBAL_ERROR_CODES = [
   'invalid_credentials',
   'account_banned',
   'unauthorized',
+  // Means one thing wherever it is thrown: confirm your address first
+  // (AUTH-3), and here is how.
+  'email_unverified',
   'forbidden',
   'internal_error',
   'unknown_error',

@@ -63,6 +63,7 @@ describe('GET /api/config', () => {
       sttCaptureSampleRate: 24000,
       translationEnabled: false,
       feedbackEnabled: false,
+      mailEnabled: false,
       operator: {
         name: '',
         jurisdiction: '',

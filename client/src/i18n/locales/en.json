@@ -62,6 +62,43 @@
       "google": "Could not sign in with Google — try again",
       "signIn": "Something went wrong — try again",
       "register": "Something went wrong — try again"
+    },
+    "forgotPassword": "Forgot your password?",
+    "forgot": {
+      "title": "Reset your password",
+      "intro": "Tell us the address you signed up with and we will send you a link to choose a new password.",
+      "submit": "Send the link",
+      "sending": "Sending…",
+      "sent": "If that address has an account, a link is on its way. Check your email — the link works for one hour.",
+      "unavailable": "This server cannot send email, so password links are unavailable. Ask whoever runs it for help.",
+      "error": "Could not send the link — try again",
+      "backToSignIn": "Back to sign in"
+    },
+    "reset": {
+      "title": "Choose a new password",
+      "newPassword": "New password",
+      "submit": "Save the new password",
+      "saving": "Saving…",
+      "done": "Your password is set. Sign in with it — you have been signed out everywhere else.",
+      "missingToken": "This link is missing its token. Ask for a new one.",
+      "error": "Could not set that password — the link may have expired"
+    },
+    "verify": {
+      "title": "Confirming your address",
+      "checking": "Checking your link…",
+      "done": "Thanks — your address is confirmed.",
+      "error": "This link is no longer valid. Ask for a new one from your account settings.",
+      "missingToken": "This link is missing its token.",
+      "continue": "Continue",
+      "pendingTitle": "Confirm your email address",
+      "pending": "We sent a link to {email}. Confirm it to publish lectures publicly.",
+      "resend": "Send another link",
+      "resending": "Sending…",
+      "resent": "Sent — check your email.",
+      "already": "Your address is already confirmed.",
+      "resendError": "Could not send another link — try again",
+      "unavailable": "This server cannot send email, so the link cannot be re-sent.",
+      "confirmed": "Confirmed"
     }
   },
   "health": {
@@ -609,7 +646,8 @@
       "action": "Transfer"
     },
     "errors": {
-      "noAccount": "No account with that email"
+      "noAccount": "No account with that email",
+      "setAccess": "Could not change who can see this — try again"
     }
   },
   "deck": {
@@ -870,7 +908,8 @@
     "unauthorized": "Your session has ended — sign in again",
     "forbidden": "You do not have permission to do that",
     "internal_error": "Something went wrong on our end — try again",
-    "unknown_error": "Something went wrong — try again"
+    "unknown_error": "Something went wrong — try again",
+    "email_unverified": "Confirm your email address first — check your inbox, or send a new link from your account settings"
   },
   "usage": {
     "title": "Plan usage",

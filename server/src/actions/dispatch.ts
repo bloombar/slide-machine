@@ -21,6 +21,21 @@ export class ActionForbiddenError extends Error {
   }
 }
 
+/**
+ * The account has not confirmed its email address, and the thing it asked for
+ * needs that (AUTH-3). Its own class, not a plain forbidden, because the user
+ * can fix it themselves — the client turns this into "confirm your address"
+ * with a resend button rather than a flat refusal.
+ */
+export class EmailUnverifiedError extends Error {
+  constructor(
+    message = 'Confirm your email address before publishing publicly',
+  ) {
+    super(message)
+    this.name = 'EmailUnverifiedError'
+  }
+}
+
 export class ActionValidationError extends Error {
   constructor(
     actionName: string,

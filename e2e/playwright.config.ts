@@ -1,5 +1,9 @@
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { defineConfig, devices } from '@playwright/test'
 import { config as loadDotenv } from 'dotenv'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // Pick up MONGODB_TEST_URI from server/.env so local e2e runs hit the
 // developer's authenticated MongoDB; CI provides its own env.
@@ -16,6 +20,9 @@ loadDotenv({ path: '../server/.env', quiet: true })
  */
 const PORT = 4173
 const STT_PORT = 4174
+
+/** Where the log mail transport writes, for the auth specs to read. */
+export const MAIL_LOG = path.resolve(__dirname, '.mail-e2e.log')
 
 /** Shared hermetic server env; `over` sets the port/storage/STT per topology. */
 const serverEnv = (over: Record<string, string>): Record<string, string> => ({
@@ -43,6 +50,11 @@ const serverEnv = (over: Record<string, string>): Record<string, string> => ({
   // Feedback is mailed. The log transport keeps the run hermetic — no relay
   // is contacted — while still exercising the whole form-to-send path.
   MAIL_PROVIDER: 'log',
+  // The mailed verification / reset links (AUTH-3/AUTH-4) carry a token that
+  // is stored hashed, so there is nothing in the database for a spec to read.
+  // The log transport appends each message here and the spec reads the link
+  // out of it — the same link a real inbox would receive.
+  MAIL_LOG_FILE: MAIL_LOG,
   FEEDBACK_EMAIL: 'e2e-feedback@example.com',
   // Who the privacy policy and the terms name. Set here so the specs can
   // prove the pages really take it from the server rather than from source.

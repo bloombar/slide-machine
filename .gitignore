@@ -33,3 +33,6 @@ docs/grant_proposal.pdf
 
 # Scratch space for throwaway probe scripts — local only, never committed
 server/__p/
+
+# Mail the e2e run captures to read verification / reset links (AUTH-3/AUTH-4)
+e2e/.mail-e2e.log

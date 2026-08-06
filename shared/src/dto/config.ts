@@ -44,6 +44,10 @@ export interface RuntimeConfig {
    * the entry point out of the menu rather than offering a form that would
    * refuse the message. */
   feedbackEnabled: boolean
+  /** Whether the server can send mail at all. The account pages phrase
+   * verification and password recovery around this rather than promising a
+   * link a deployment with no relay could never deliver (AUTH-3/AUTH-4). */
+  mailEnabled: boolean
   /** Who runs this deployment, named by the privacy policy and the terms.
    * Blank fields fall back to the client's placeholders, which read as the
    * draft they are. */

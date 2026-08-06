@@ -33,6 +33,9 @@ const registerUser = async (email: string): Promise<string> => {
   const res = await request(server)
     .post('/api/auth/register')
     .send({ email, password: 'longenough1', displayName: email.split('@')[0] })
+  // These accounts are ordinary users of a running app, so their address is
+  // confirmed: an unconfirmed one keeps its projects restricted (AUTH-3).
+  await UserModel.updateOne({ email }, { emailVerified: true })
   return res.body.accessToken as string
 }
 

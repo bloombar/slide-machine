@@ -16,6 +16,7 @@
  * The transport is built once, on first send, so a server with no mail
  * configured never constructs one.
  */
+import { appendFileSync } from 'node:fs'
 import { createTransport, type Transporter } from 'nodemailer'
 import { env } from '../config/env'
 
@@ -98,10 +99,20 @@ export const sendMail = async (mail: OutgoingMail): Promise<void> => {
   if (env.MAIL_PROVIDER === 'log') {
     // The whole message, so a developer reading the log sees exactly what a
     // configured server would have delivered.
-    console.info(
+    const rendered =
       `[mail] to=${message.to} subject=${message.subject}` +
-        `${message.replyTo ? ` reply-to=${message.replyTo}` : ''}\n${message.text}`,
-    )
+      `${message.replyTo ? ` reply-to=${message.replyTo}` : ''}\n${message.text}`
+    console.info(rendered)
+    // The e2e run reads links out of this file, because a mailed token is
+    // stored hashed and so cannot be recovered from the database. Best
+    // effort: an unwritable path must not fail the send.
+    if (env.MAIL_LOG_FILE) {
+      try {
+        appendFileSync(env.MAIL_LOG_FILE, `${rendered}\n---\n`)
+      } catch (error) {
+        console.warn('Could not append to MAIL_LOG_FILE:', error)
+      }
+    }
     return
   }
 

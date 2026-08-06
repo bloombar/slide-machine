@@ -6,7 +6,7 @@
  * only what the viewer may see.
  */
 import { test, expect, type Browser, type Page } from '@playwright/test'
-import { createProject } from './helpers'
+import { createProject, verifyEmail } from './helpers'
 
 const stamp = Date.now()
 const owner = { email: `owner-${stamp}@example.com`, name: 'Owner' }
@@ -20,6 +20,9 @@ const register = async (page: Page, user: { email: string; name: string }) => {
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Create account' }).click()
   await expect(page).toHaveURL(/\/app$/)
+  // Sharing needs a confirmed address: an unconfirmed account's projects
+  // start restricted (AUTH-3).
+  await verifyEmail(page, user.email)
 }
 
 const newUserPage = async (

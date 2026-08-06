@@ -44,6 +44,9 @@ const registerUser = async (email: string): Promise<string> => {
     .post('/api/auth/register')
     .send({ email, password: 'longenough1', displayName: email.split('@')[0] })
   if (res.status !== 201) throw new Error(`registration failed: ${res.status}`)
+  // These accounts are ordinary users of a running app, so their address is
+  // confirmed: an unconfirmed one keeps its projects restricted (AUTH-3).
+  await UserModel.updateOne({ email }, { emailVerified: true })
   return res.body.accessToken as string
 }
 
