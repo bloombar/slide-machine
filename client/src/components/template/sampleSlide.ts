@@ -11,76 +11,19 @@
  * label, so a layout of their own previews as itself rather than as a blank.
  *
  * Given `budgets`, each box is filled to the most it is ever allowed to hold
- * instead (`slotBudgets`) — the case a design has to survive and the one a
- * comfortable sample never shows.
+ * instead (`slotLimits`, shared with the server so the preview shows the
+ * capacity generation actually writes to) — the case a design has to survive
+ * and the one a comfortable sample never shows. A box no limit reaches
+ * previews at its sample length however the checkbox is set: there is no "too
+ * much" to show for a box nothing bounds.
  */
-import type { Layout, LayoutNode, Slide } from '@slide-machine/shared'
-import type { ThemeTextStyles } from '@slide-machine/shared'
+import type { Layout, Slide, SlotLimits } from '@slide-machine/shared'
 
 export interface SampleText {
   title: string
   body: string
   caption: string
   bullets: string[]
-}
-
-/** The most one box may hold: characters of text, and for a list, points. */
-export interface SlotBudget {
-  chars?: number
-  items?: number
-}
-
-/** Which text style each box that holds a slot is set in, so the style's own
- * limits can be read for it. */
-const stylesBySlot = (
-  node: LayoutNode | undefined,
-  out: Record<string, string> = {},
-): Record<string, string> => {
-  if (!node) return out
-  if (node.slot && node.style?.textStyle) out[node.slot] = node.style.textStyle
-  for (const child of node.children ?? []) stylesBySlot(child, out)
-  return out
-}
-
-/**
- * The most each of a layout's boxes may hold.
- *
- * The same precedence the server fits generated slides to
- * (`server/src/lib/slide-fit.ts`): the box's own limit first, then the
- * layout's constraint for that conventional slot, then the limits that come
- * with the text style the box is set in. A box no rule reaches has no budget,
- * and previews at its sample length however the checkbox is set — there is no
- * "too much" to show for a box nothing bounds.
- */
-export const slotBudgets = (
-  layout: Layout,
-  textStyles: ThemeTextStyles,
-): Record<string, SlotBudget> => {
-  const c = layout.constraints ?? {}
-  const byName: Record<string, number | undefined> = {
-    title: c.maxTitleChars,
-    body: c.maxBodyChars,
-    caption: c.maxCaptionChars,
-  }
-  const roles = stylesBySlot(layout.tree)
-  const out: Record<string, SlotBudget> = {}
-  for (const spec of layout.slots) {
-    if (spec.kind === 'image') continue
-    const role = roles[spec.name]
-    const style = role ? textStyles[role] : undefined
-    const bullets = spec.kind === 'bullets'
-    const chars =
-      spec.maxChars ??
-      (bullets ? c.maxBulletChars : byName[spec.name]) ??
-      style?.maxChars
-    const items = bullets
-      ? (spec.maxItems ?? c.maxBullets ?? style?.maxItems)
-      : undefined
-    if (chars !== undefined || items !== undefined) {
-      out[spec.name] = { chars, items }
-    }
-  }
-  return out
 }
 
 /**
@@ -112,7 +55,7 @@ export const sampleSlide = (
   text: SampleText,
   images: string[] = [],
   id = 'preview',
-  budgets?: Record<string, SlotBudget>,
+  budgets?: Record<string, SlotLimits>,
 ): Slide => {
   const named: Record<string, string> = {
     title: text.title,
@@ -124,7 +67,7 @@ export const sampleSlide = (
   for (const spec of layout.slots) {
     const budget = budgets?.[spec.name]
     if (spec.kind === 'bullets') {
-      const count = budget?.items ?? text.bullets.length
+      const count = budget?.maxItems ?? text.bullets.length
       const items = Array.from(
         { length: Math.max(1, count) },
         (_, i) =>
@@ -132,8 +75,8 @@ export const sampleSlide = (
       )
       slots[spec.name] = {
         kind: 'bullets',
-        items: budget?.chars
-          ? items.map(item => grown(item, budget.chars!))
+        items: budget?.maxChars
+          ? items.map(item => grown(item, budget.maxChars!))
           : items,
       }
     } else if (spec.kind === 'image') {
@@ -143,7 +86,7 @@ export const sampleSlide = (
       const value = named[spec.name] ?? spec.label
       slots[spec.name] = {
         kind: 'text',
-        value: budget?.chars ? grown(value, budget.chars) : value,
+        value: budget?.maxChars ? grown(value, budget.maxChars) : value,
       }
     }
   }

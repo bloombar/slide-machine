@@ -20,10 +20,16 @@ import type {
   SlideRefitLayoutResult,
   RefitSlotDescriptor,
   GenerationProvider,
+  SlotLimits,
   SlotSpec,
   SlotValue,
 } from '@slide-machine/shared'
-import { pairSlots, textStylesBySlot } from '@slide-machine/shared'
+import {
+  pairSlots,
+  slotLimits,
+  textStylesBySlot,
+  themeTextStyles,
+} from '@slide-machine/shared'
 import { defineAction } from './define'
 import {
   registerAction,
@@ -288,18 +294,26 @@ const refitValueOf = (
   return undefined
 }
 
-/** One box, described for the refit request: its spec plus what it holds. */
+/**
+ * One box, described for the refit request: its spec plus what it holds.
+ *
+ * `limits` are the resolved ones (`slotLimits`), not the box's own: a
+ * built-in layout states its capacity through its text styles and its
+ * constraints, so reading only the box would tell the model a title box has
+ * no limit at all and invite one that overflows.
+ */
 const refitSlot = (
   spec: SlotSpec,
   textStyle: string | undefined,
   value: SlotValue | undefined,
+  limits: SlotLimits | undefined,
 ): RefitSlotDescriptor => ({
   name: spec.name,
   kind: spec.kind,
   label: spec.label,
   textStyle,
-  maxChars: spec.maxChars,
-  maxItems: spec.maxItems,
+  maxChars: limits?.maxChars,
+  maxItems: limits?.maxItems,
   value: refitValueOf(value),
 })
 
@@ -350,11 +364,14 @@ export const slideRefitLayout = defineAction<
     const orphanNames = Object.keys(content).filter(n => !declared.has(n))
     if (!holes.length || !orphanNames.length) return unchanged
 
+    const styles = themeTextStyles(template.theme)
     const toStyles = textStylesBySlot(layout)
+    const toLimits = slotLimits(layout, styles)
     const from = input.fromLayoutType
       ? template.layouts.find(l => l.type === input.fromLayoutType)
       : undefined
     const fromStyles = from ? textStylesBySlot(from) : {}
+    const fromLimits = from ? slotLimits(from, styles) : {}
 
     const orphaned = orphanNames
       .map(name => {
@@ -364,7 +381,12 @@ export const slideRefitLayout = defineAction<
             'bullets' | 'text',
           label: name,
         }
-        return refitSlot(spec, fromStyles[name], content[name])
+        return refitSlot(
+          spec,
+          fromStyles[name],
+          content[name],
+          fromLimits[name],
+        )
       })
       .filter(s => s.value !== undefined)
     if (!orphaned.length) return unchanged
@@ -375,7 +397,12 @@ export const slideRefitLayout = defineAction<
         layoutType: from?.type ?? input.fromLayoutType ?? 'unknown',
         label: from?.label ?? input.fromLayoutType ?? 'the previous layout',
         slots: (from?.slots ?? []).map(spec =>
-          refitSlot(spec, fromStyles[spec.name], content[spec.name]),
+          refitSlot(
+            spec,
+            fromStyles[spec.name],
+            content[spec.name],
+            fromLimits[spec.name],
+          ),
         ),
       },
       to: {
@@ -383,7 +410,12 @@ export const slideRefitLayout = defineAction<
         label: layout.label,
         purpose: layout.purpose,
         slots: layout.slots.map(spec =>
-          refitSlot(spec, toStyles[spec.name], content[spec.name]),
+          refitSlot(
+            spec,
+            toStyles[spec.name],
+            content[spec.name],
+            toLimits[spec.name],
+          ),
         ),
       },
       fill: holes.map(s => s.name),

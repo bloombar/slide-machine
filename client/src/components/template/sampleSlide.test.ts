@@ -1,12 +1,13 @@
 /**
  * Unit tests for the preview's stand-in slide, and for the "fill every box to
- * its limit" reading of it (TMPL-4): which limit applies to a box, and what
- * the slide holds once every one of them is taken at its word.
+ * its limit" reading of it (TMPL-4): what the slide holds once every limit is
+ * taken at its word. Which limit applies to a box is `slotLimits`, tested in
+ * shared/src/types/slot-limits.test.ts.
  */
 import { describe, it, expect } from 'vitest'
 import type { Layout, LayoutNode, SlotSpec } from '@slide-machine/shared'
-import { DEFAULT_TEXT_STYLES } from '@slide-machine/shared'
-import { sampleSlide, slotBudgets } from './sampleSlide'
+import { DEFAULT_TEXT_STYLES, slotLimits } from '@slide-machine/shared'
+import { sampleSlide } from './sampleSlide'
 
 const text = {
   title: 'A slide in this style',
@@ -35,66 +36,7 @@ const layout = (
   }) as Layout
 
 const title: SlotSpec = { name: 'title', kind: 'text', label: 'Slide title' }
-const body: SlotSpec = { name: 'body', kind: 'text', label: 'Slide body' }
 const points: SlotSpec = { name: 'bullets', kind: 'bullets', label: 'Points' }
-
-describe('slotBudgets', () => {
-  it('takes the box’s own limit over everything else', () => {
-    const l = layout([{ ...title, maxChars: 12 }], {
-      constraints: { maxTitleChars: 60 },
-    })
-    expect(slotBudgets(l, DEFAULT_TEXT_STYLES).title?.chars).toBe(12)
-  })
-
-  it('falls back to the layout’s constraint for a conventional box', () => {
-    const l = layout([title, body], {
-      constraints: { maxTitleChars: 40, maxBodyChars: 200 },
-    })
-    const budgets = slotBudgets(l, DEFAULT_TEXT_STYLES)
-    expect(budgets.title?.chars).toBe(40)
-    expect(budgets.body?.chars).toBe(200)
-  })
-
-  it('falls back to the text style the box is set in', () => {
-    // Nothing else says how much fits, but the box is set in `caption`
-    const l = layout([{ name: 'note', kind: 'text', label: 'Note' }], {}, {
-      id: 'root',
-      children: [{ id: 'note', slot: 'note', style: { textStyle: 'caption' } }],
-    } as LayoutNode)
-    expect(slotBudgets(l, DEFAULT_TEXT_STYLES).note?.chars).toBe(
-      DEFAULT_TEXT_STYLES.caption!.maxChars,
-    )
-  })
-
-  it('leaves a box nothing bounds without a budget', () => {
-    const l = layout([{ name: 'note', kind: 'text', label: 'Note' }])
-    expect(slotBudgets(l, DEFAULT_TEXT_STYLES).note).toBeUndefined()
-  })
-
-  it('counts a list’s points as well as its characters', () => {
-    const l = layout([points], {
-      constraints: { maxBullets: 5, maxBulletChars: 30 },
-    })
-    expect(slotBudgets(l, DEFAULT_TEXT_STYLES).bullets).toEqual({
-      chars: 30,
-      items: 5,
-    })
-  })
-
-  it('lets a list box say how many points it holds', () => {
-    const l = layout([{ ...points, maxItems: 8 }], {
-      constraints: { maxBullets: 5 },
-    })
-    expect(slotBudgets(l, DEFAULT_TEXT_STYLES).bullets?.items).toBe(8)
-  })
-
-  it('bounds no picture', () => {
-    const l = layout([{ name: 'image', kind: 'image', label: 'Picture' }], {
-      constraints: { maxTitleChars: 40 },
-    })
-    expect(slotBudgets(l, DEFAULT_TEXT_STYLES).image).toBeUndefined()
-  })
-})
 
 describe('sampleSlide at capacity', () => {
   it('fills a text box to exactly its limit', () => {
@@ -104,7 +46,7 @@ describe('sampleSlide at capacity', () => {
       text,
       [],
       'p',
-      slotBudgets(l, DEFAULT_TEXT_STYLES),
+      slotLimits(l, DEFAULT_TEXT_STYLES),
     )
     const value = (slide.slots?.title as { value: string }).value
     // Filled to the budget, give or take a trailing space the cut dropped
@@ -122,7 +64,7 @@ describe('sampleSlide at capacity', () => {
       text,
       [],
       'p',
-      slotBudgets(l, DEFAULT_TEXT_STYLES),
+      slotLimits(l, DEFAULT_TEXT_STYLES),
     )
     const items = (slide.slots?.bullets as { items: string[] }).items
     expect(items).toHaveLength(5)
@@ -130,6 +72,25 @@ describe('sampleSlide at capacity', () => {
       expect(item.length).toBeLessThanOrEqual(30)
       expect(item.length).toBeGreaterThan(27)
     }
+  })
+
+  it('follows the text style a list is set in over the layout’s count', () => {
+    // The case the editor's "Default text styles" edits: retuning the bullet
+    // style has to change how many points the preview draws.
+    const l = layout([points], { constraints: { maxBullets: 6 } }, {
+      id: 'root',
+      children: [
+        { id: 'bullets', slot: 'bullets', style: { textStyle: 'bullet' } },
+      ],
+    } as LayoutNode)
+    const styles = {
+      ...DEFAULT_TEXT_STYLES,
+      bullet: { ...DEFAULT_TEXT_STYLES.bullet, maxItems: 2, maxChars: 20 },
+    }
+    const slide = sampleSlide(l, text, [], 'p', slotLimits(l, styles))
+    const items = (slide.slots?.bullets as { items: string[] }).items
+    expect(items).toHaveLength(2)
+    for (const item of items) expect(item.length).toBeLessThanOrEqual(20)
   })
 
   it('leaves the sample alone without budgets', () => {
@@ -152,7 +113,7 @@ describe('sampleSlide at capacity', () => {
       text,
       [],
       'p',
-      slotBudgets(l, DEFAULT_TEXT_STYLES),
+      slotLimits(l, DEFAULT_TEXT_STYLES),
     )
     expect((slide.slots?.title as { value: string }).value).toBe('A sli')
   })

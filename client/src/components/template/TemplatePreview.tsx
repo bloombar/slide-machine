@@ -15,10 +15,10 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Layout, Template } from '@slide-machine/shared'
-import { WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
+import { WHITEBOARD_LAYOUT_TYPE, slotLimits } from '@slide-machine/shared'
 import SlideView from '../SlideView'
 import { themeColors, themeTextStyles } from '../slide/theme'
-import { sampleSlide, slotBudgets } from './sampleSlide'
+import { sampleSlide } from './sampleSlide'
 
 /** The layout to show when the caller has no opinion, preferring one that
  * exercises the theme: a title-and-body slide says more about a template than
@@ -67,7 +67,7 @@ export default function TemplatePreview({
   const budgets = useMemo(
     () =>
       shown && atCapacity
-        ? slotBudgets(shown, themeTextStyles(template.theme))
+        ? slotLimits(shown, themeTextStyles(template.theme))
         : undefined,
     [shown, atCapacity, template.theme],
   )

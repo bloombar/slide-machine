@@ -69,6 +69,28 @@ describe('limits reaching the model', () => {
     expect(contentOf(t).slots.find(s => s.name === 'title')?.maxChars).toBe(25)
   })
 
+  it('lets a style outrank the layout’s own constraint', () => {
+    // The style is the one an author can edit; the constraint is written into
+    // the template file. The editor's preview resolves it the same way, so
+    // what a design is drawn at is what it is generated at.
+    const t = template({
+      theme: {
+        textStyles: { heading: { maxChars: 40 }, bullet: { maxItems: 3 } },
+      },
+    })
+    t.layouts[0]!.constraints = { maxTitleChars: 50, maxBullets: 6 }
+    const d = contentOf(t)
+    expect(d.slots.find(s => s.name === 'title')?.maxChars).toBe(40)
+    expect(d.constraints?.maxBullets).toBe(3)
+  })
+
+  it('holds a box in no style to the layout’s constraint', () => {
+    const t = template()
+    delete t.layouts[0]!.tree!.children![0]!.style
+    t.layouts[0]!.constraints = { maxTitleChars: 50 }
+    expect(contentOf(t).slots.find(s => s.name === 'title')?.maxChars).toBe(50)
+  })
+
   it('leaves a box following no style without an invented budget', () => {
     const t = template()
     delete t.layouts[0]!.tree!.children![0]!.style

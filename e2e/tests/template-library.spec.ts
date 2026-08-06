@@ -437,3 +437,60 @@ test('arranging boxes freely, with rulers and guides', async ({ page }) => {
     await expect(page).toHaveURL(/\/app\/projects\//)
   })
 })
+
+test('previewing at capacity follows the limits the template sets', async ({
+  page,
+}) => {
+  // The checkbox is there to judge a design at its worst, so the numbers it
+  // draws have to be the template's own. A limit typed in "Default text
+  // styles" must move the preview immediately, and mean the same thing after
+  // the template is saved and reopened — only a browser can say that.
+  const own = `Capacity ${stamp}`
+  await page.goto('/login')
+  await page.getByLabel('Email').fill(user.email)
+  await page.getByLabel('Password').fill(password)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page).toHaveURL(/\/app$/)
+
+  await openProjectSettings(page, projectName)
+  await page.getByRole('tab', { name: 'Design' }).click()
+  await page
+    .getByRole('button', { name: /^Duplicate / })
+    .first()
+    .click()
+  await expect(page).toHaveURL(/\/t\//)
+  await page.getByLabel('Template name').fill(own)
+
+  const canvas = page.getByTestId('template-canvas')
+  const bullets = canvas.locator('li')
+  await page.getByRole('tab', { name: /Bullet list/ }).click()
+
+  const atCapacity = page.getByRole('checkbox', {
+    name: /Preview with every box at its limit/,
+  })
+  await atCapacity.check()
+  // The shipped list layout holds more than the two asked for below, so the
+  // change that follows is a real one rather than a coincidence.
+  expect(await bullets.count()).toBeGreaterThan(2)
+
+  await test.step('a retuned bullet style redraws the slide at once', async () => {
+    await page.getByLabel('Max points for Bullets').fill('2')
+    await expect(bullets).toHaveCount(2)
+    await page.getByLabel('Max characters for Bullets').fill('25')
+    await expect
+      .poll(async () => (await bullets.first().innerText()).length)
+      .toBeLessThanOrEqual(25)
+  })
+
+  await test.step('the same limits come back with the saved template', async () => {
+    await page.getByRole('button', { name: 'Save' }).click()
+    await expect(page.getByTestId('template-saved')).toHaveText('Saved')
+    await page.reload()
+    await page.getByRole('tab', { name: /Bullet list/ }).click()
+    await page
+      .getByRole('checkbox', { name: /Preview with every box at its limit/ })
+      .check()
+    await expect(page.getByLabel('Max points for Bullets')).toHaveValue('2')
+    await expect(canvas.locator('li')).toHaveCount(2)
+  })
+})
