@@ -805,6 +805,7 @@
     "addSlideHint": "添加一张幻灯片",
     "liveSession": "实时会话",
     "playingOriginal": "正在播放原始音频…",
+    "layoutRefit": "已填充此版式新增的文本框",
     "play": {
       "play": "播放演示文稿",
       "pause": "暂停播放",

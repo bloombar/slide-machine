@@ -805,6 +805,7 @@
     "addSlideHint": "Ajouter une diapositive",
     "liveSession": "Session en direct",
     "playingOriginal": "Lecture de l'audio d'origine…",
+    "layoutRefit": "Les blocs ajoutés par cette mise en page ont été remplis",
     "play": {
       "play": "Lire le diaporama",
       "pause": "Mettre la lecture en pause",

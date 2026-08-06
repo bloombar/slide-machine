@@ -805,6 +805,7 @@
     "addSlideHint": "Añadir una diapositiva",
     "liveSession": "Sesión en directo",
     "playingOriginal": "Reproduciendo el audio original…",
+    "layoutRefit": "Se rellenaron los cuadros que añadió este diseño",
     "play": {
       "play": "Reproducir la presentación",
       "pause": "Pausar la reproducción",

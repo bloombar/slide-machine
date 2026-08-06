@@ -805,6 +805,7 @@
     "addSlideHint": "Add a slide",
     "liveSession": "Live session",
     "playingOriginal": "Playing original audio…",
+    "layoutRefit": "Filled the boxes this layout added",
     "play": {
       "play": "Play deck",
       "pause": "Pause playback",
