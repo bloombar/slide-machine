@@ -1164,12 +1164,12 @@
     committed), including: OPENAI_API_KEY _(legacy)_ / GEMINI_API_KEY
     _(post-migration)_ and model/endpoint settings.
     GOOGLE_APPLICATION_CREDENTIALS (service account for real-time Speech-to-Text
-    streaming) and GOOGLE_CLOUD_TRANSLATION_KEY. GOOGLE_OAUTH_CLIENT_ID/SECRET —
-    used both for Google sign-in (AUTH-1) and for connected Google Drive
-    import/export with broader scopes (EXP-4); plus any service-account
-    credentials for Docs/Slides. GITHUB_OAUTH_CLIENT_ID/SECRET — used both for
-    GitHub sign-in (AUTH-1) and for connected GitHub repo/gist import/export
-    (EXP-4). CONNECTED_ACCOUNT_TOKEN_ENC_KEY — key for encrypting stored…"
+    streaming) and GOOGLE_CLOUD_TRANSLATION_KEY. TRANSLATION_PROVIDER — the
+    active slide-content translation adapter (SHARE-2): google-cloud (default,
+    needs the key above), none to disable translated viewing, or mock for tests.
+    Without a usable key the client hides the viewer's slide-language switcher.
+    GOOGLE_OAUTH_CLIENT_ID/SECRET — used both for Google sign-in (AUTH-1) and
+    for connected Google Drive import/export with broader scopes…"
   section: §14 Technical Stack & Conventions
   family: TECH
   phase: 2
@@ -1761,7 +1761,7 @@
 - id: FUTURE-teamorganization-seat-based-billing-and-
   title: Team/organization (seat-based) billing and institutional licensing beyond…
   full: Team/organization (seat-based) billing and institutional licensing beyond
-    individual Free/Pro/Max plans.
+    individual Free/Fresh/Pro/Max plans.
   section: §18 Future Work
   family: FUTURE
   phase: 4
