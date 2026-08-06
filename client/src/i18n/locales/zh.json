@@ -25,7 +25,9 @@
     "dangerZone": "危险操作",
     "resetToDefault": "恢复默认值",
     "listSeparator": "、",
-    "adminEditNotice": "你正以管理员身份编辑其他用户的{entity, select, account {账户} project {项目} lecture {课程} other {设置}}。你在此做的每一处更改都会记入审计日志。"
+    "adminEditNotice": "你正以管理员身份编辑其他用户的{entity, select, account {账户} project {项目} lecture {课程} other {设置}}。你在此做的每一处更改都会记入审计日志。",
+    "undo": "撤销",
+    "redo": "重做"
   },
   "nav": {
     "brand": "The Slide Machine",
@@ -207,7 +209,189 @@
       "seminar": "研讨会"
     },
     "exportYaml": "将模板导出为 YAML",
-    "exportYamlHint": "将该模板的样式和版式下载为可重新导入的 YAML 文件。"
+    "exportYamlHint": "将该模板的样式和版式下载为可重新导入的 YAML 文件。",
+    "custom": "自定义",
+    "duplicate": "复制",
+    "duplicateNamed": "复制{name}",
+    "edit": "编辑",
+    "editNamed": "编辑{name}",
+    "deleteNamed": "删除{name}",
+    "nameLabel": "模板名称",
+    "themeLabel": "默认颜色",
+    "layoutsLabel": "版式",
+    "layoutName": "名称",
+    "layoutPurpose": "何时使用",
+    "theme": {
+      "background": "背景",
+      "surface": "表面",
+      "text": "文字",
+      "muted": "次要文字",
+      "accent": "强调色",
+      "penColor": "白板笔",
+      "highlighterColor": "白板荧光笔"
+    },
+    "preview": {
+      "title": "此风格的幻灯片",
+      "body": "一两句正文，便于一眼看清字体与间距。",
+      "bullet1": "第一点",
+      "bullet2": "第二点",
+      "bullet3": "第三点",
+      "caption": "图注"
+    },
+    "delete": {
+      "title": "删除模板？",
+      "message": "“{name}”将从你的库中移除。已经使用它的讲座会保留自己的样式。"
+    },
+    "errors": {
+      "duplicate": "无法复制该模板",
+      "save": "无法保存模板",
+      "delete": "无法删除模板"
+    },
+    "visibilityLabel": "谁可以使用",
+    "addLayout": "添加版式",
+    "addLayoutChoose": "选择类型…",
+    "removeLayout": "移除{name}版式",
+    "visibility": {
+      "private": "仅自己",
+      "unlisted": "知道链接的人",
+      "public": "公开"
+    },
+    "visibilityHint": {
+      "private": "仅你可用，他人无法找到或复制。",
+      "unlisted": "收到链接的人都可以复制。",
+      "public": "显示在公共模板库中，任何人都可以复制。"
+    },
+    "boxAt": "{slot}：距左 {x}%，距顶 {y}%，宽 {w}%，高 {h}%",
+    "slotLabel": "名称",
+    "slotKind": "这是什么",
+    "slotKinds": {
+      "text": "文字",
+      "bullets": "要点",
+      "image": "图片"
+    },
+    "removeSlot": "删除此文本框",
+    "newLayoutAdd": "添加版式",
+    "layoutSettings": "版式",
+    "boxSettings": "文本框",
+    "templateSettings": "模板设置",
+    "backToLayout": "返回版式设置",
+    "layoutPurposeHint": "AI 在为幻灯片选择版式时会读取这段文字。",
+    "removeLayoutConfirm": "“{name}”将从此模板中移除。已使用它的幻灯片会保留内容。",
+    "whiteboardHint": "每个模板都保留一块可书写的空白板，因此此版式不能删除，也不能添加文本框。",
+    "outline": "此版式中的文本框",
+    "decoration": "装饰",
+    "newBoxName": "新文本框",
+    "addBoxTo": "在 {name} 中添加文本框",
+    "direction": "方向",
+    "directions": {
+      "row": "横向",
+      "column": "纵向"
+    },
+    "wrap": "换行排列",
+    "columns": "列数",
+    "rows": "行数",
+    "gap": "间距",
+    "justify": "分布",
+    "alignItems": "对齐",
+    "justifyValues": {
+      "start": "起始",
+      "center": "居中",
+      "end": "末尾",
+      "between": "两端对齐",
+      "around": "环绕分布",
+      "evenly": "均匀分布"
+    },
+    "alignValues": {
+      "start": "起始",
+      "center": "居中",
+      "end": "末尾",
+      "stretch": "填满"
+    },
+    "sizing": "占用空间",
+    "grow": "占用剩余空间",
+    "colSpan": "跨列数",
+    "rowSpan": "跨行数",
+    "width": "宽度 %",
+    "height": "高度 %",
+    "textLabel": "文字",
+    "textStyle": "文字样式",
+    "textStyleCustom": "自定义",
+    "inherit": "继承",
+    "fontFamily": "字体",
+    "fontSize": "文字大小",
+    "fontWeight": "字重",
+    "align": "水平对齐",
+    "vAlign": "垂直对齐",
+    "textStyles": {
+      "title": "课程标题",
+      "sectionTitle": "章节标题",
+      "heading": "幻灯片标题",
+      "body": "正文",
+      "bullet": "要点",
+      "caption": "说明文字",
+      "quote": "引文"
+    },
+    "textStylesLabel": "默认文字样式",
+    "textStylesHint": "文本框按名称沿用其中一种样式，因此修改一处会同时改变所有沿用它的文本框。",
+    "styleFont": "{style} 的字体",
+    "styleSize": "{style} 的文字大小",
+    "textColor": "文字颜色",
+    "background": "填充颜色",
+    "padding": "内边距",
+    "radius": "圆角",
+    "arrangeOrder": "顺序",
+    "bringForward": "上移一层",
+    "sendBackward": "下移一层",
+    "spacingLabel": "默认页边距",
+    "spacingHint": "编辑时作为参考线显示，文本框会吸附到它们。已创建的幻灯片不受影响。",
+    "metric": {
+      "marginX": "左右 %",
+      "marginY": "上下 %",
+      "gap": "框间距 %"
+    },
+    "ruler": {
+      "bottom": "底部标尺 — 向上拖动可创建水平参考线",
+      "right": "右侧标尺 — 向左拖动可创建垂直参考线"
+    },
+    "guideAt": {
+      "x": "垂直参考线，位于 {percent}%",
+      "y": "水平参考线，位于 {percent}%"
+    },
+    "boxRow": "{name} — 拖动以重新排序",
+    "position": "内容位置",
+    "containerNames": {
+      "row": "行",
+      "column": "列",
+      "grid": "网格"
+    },
+    "placement": "位置",
+    "placeFreely": "自由定位此文本框",
+    "placeFreelyOn": "可拖动到幻灯片上的任意位置，不占用周围文本框的空间。",
+    "removeLayoutButton": "删除此版式",
+    "layoutNumbered": "版式 {number}",
+    "contentLayouts": {
+      "column": "一列内容",
+      "row": "一行内容",
+      "grid": "一个内容网格"
+    },
+    "contentGroup": {
+      "holds": "内容",
+      "arranges": "容器"
+    },
+    "arrangement": "排列方式",
+    "unsaved": "未保存的更改",
+    "discard": {
+      "title": "不保存就关闭吗？",
+      "message": "该模板有未保存的更改，现在关闭将会丢失。",
+      "confirm": "放弃更改",
+      "save": "保存并关闭"
+    },
+    "clearFill": "不填充",
+    "placedByParent": "由父级文本框自动定位",
+    "maxChars": "最多字符",
+    "maxItems": "最多要点",
+    "styleChars": "{style} 的最多字符",
+    "styleItems": "{style} 的最多要点"
   },
   "layout": {
     "change": "更改幻灯片版式",
@@ -659,6 +843,7 @@
     "addSlideHint": "添加一张幻灯片",
     "liveSession": "实时会话",
     "playingOriginal": "正在播放原始音频…",
+    "layoutRefit": "已填充此版式新增的文本框",
     "play": {
       "play": "播放演示文稿",
       "pause": "暂停播放",

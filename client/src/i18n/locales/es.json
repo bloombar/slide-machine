@@ -25,7 +25,9 @@
     "dangerZone": "Zona de riesgo",
     "resetToDefault": "Restablecer el valor predeterminado",
     "listSeparator": ", ",
-    "adminEditNotice": "Estás editando {entity, select, account {la cuenta} project {el proyecto} lecture {la clase} other {los ajustes}} de otra persona como administrador. Cada cambio que hagas aquí queda registrado en el registro de auditoría."
+    "adminEditNotice": "Estás editando {entity, select, account {la cuenta} project {el proyecto} lecture {la clase} other {los ajustes}} de otra persona como administrador. Cada cambio que hagas aquí queda registrado en el registro de auditoría.",
+    "undo": "Deshacer",
+    "redo": "Rehacer"
   },
   "nav": {
     "brand": "The Slide Machine",
@@ -207,7 +209,189 @@
       "seminar": "Seminario"
     },
     "exportYaml": "Exportar la plantilla como YAML",
-    "exportYamlHint": "Descarga el estilo y los diseños de esta plantilla en un archivo YAML reimportable."
+    "exportYamlHint": "Descarga el estilo y los diseños de esta plantilla en un archivo YAML reimportable.",
+    "custom": "Propia",
+    "duplicate": "Duplicar",
+    "duplicateNamed": "Duplicar {name}",
+    "edit": "Editar",
+    "editNamed": "Editar {name}",
+    "deleteNamed": "Eliminar {name}",
+    "nameLabel": "Nombre de la plantilla",
+    "themeLabel": "Colores por defecto",
+    "layoutsLabel": "Diseños",
+    "layoutName": "Nombre",
+    "layoutPurpose": "Cuándo usarlo",
+    "theme": {
+      "background": "Fondo",
+      "surface": "Superficie",
+      "text": "Texto",
+      "muted": "Texto atenuado",
+      "accent": "Acento",
+      "penColor": "Rotulador de pizarra",
+      "highlighterColor": "Marcador de pizarra"
+    },
+    "preview": {
+      "title": "Una diapositiva con este estilo",
+      "body": "Una o dos frases de texto, para ver de un vistazo la tipografía y el espaciado.",
+      "bullet1": "Un primer punto",
+      "bullet2": "Un segundo punto",
+      "bullet3": "Un tercer punto",
+      "caption": "Un pie de foto"
+    },
+    "delete": {
+      "title": "¿Eliminar la plantilla?",
+      "message": "«{name}» se quitará de tu biblioteca. Las clases que ya la usan conservan su propio estilo."
+    },
+    "errors": {
+      "duplicate": "No se pudo duplicar la plantilla",
+      "save": "No se pudo guardar la plantilla",
+      "delete": "No se pudo eliminar la plantilla"
+    },
+    "visibilityLabel": "Quién puede usarla",
+    "addLayout": "Añadir un diseño",
+    "addLayoutChoose": "Elige un tipo…",
+    "removeLayout": "Quitar el diseño {name}",
+    "visibility": {
+      "private": "Solo yo",
+      "unlisted": "Cualquiera con el enlace",
+      "public": "Pública"
+    },
+    "visibilityHint": {
+      "private": "Solo tuya. Nadie más puede encontrarla ni copiarla.",
+      "unlisted": "Quien reciba el enlace podrá copiarla.",
+      "public": "Aparece en la biblioteca pública para que cualquiera la copie."
+    },
+    "boxAt": "{slot}: {x}% desde la izquierda, {y}% desde arriba, {w}% de ancho, {h}% de alto",
+    "slotLabel": "Cómo se llama",
+    "slotKind": "Qué es",
+    "slotKinds": {
+      "text": "Texto",
+      "bullets": "Viñetas",
+      "image": "Imagen"
+    },
+    "removeSlot": "Eliminar esta caja",
+    "newLayoutAdd": "Añadir diseño",
+    "layoutSettings": "Diseño",
+    "boxSettings": "Caja",
+    "templateSettings": "Ajustes de la plantilla",
+    "backToLayout": "Volver a los ajustes del diseño",
+    "layoutPurposeHint": "La IA lee esto al elegir un diseño para una diapositiva.",
+    "removeLayoutConfirm": "«{name}» se eliminará de esta plantilla. Las diapositivas que ya lo usan conservan su contenido.",
+    "whiteboardHint": "Cada plantilla conserva una pizarra en blanco para dibujar, así que esta no se puede eliminar ni recibir cajas.",
+    "outline": "Cajas de este diseño",
+    "decoration": "Decoración",
+    "newBoxName": "Caja nueva",
+    "addBoxTo": "Añadir una caja dentro de {name}",
+    "direction": "Dirección",
+    "directions": {
+      "row": "En horizontal",
+      "column": "En vertical"
+    },
+    "wrap": "Ajustar en más líneas",
+    "columns": "Columnas",
+    "rows": "Filas",
+    "gap": "Espacio",
+    "justify": "Distribución",
+    "alignItems": "Alineación",
+    "justifyValues": {
+      "start": "Al principio",
+      "center": "En el centro",
+      "end": "Al final",
+      "between": "Separadas",
+      "around": "Con espacio alrededor",
+      "evenly": "Espaciado uniforme"
+    },
+    "alignValues": {
+      "start": "Inicio",
+      "center": "Centro",
+      "end": "Fin",
+      "stretch": "Rellenar"
+    },
+    "sizing": "Espacio que ocupa",
+    "grow": "Ocupa el espacio libre",
+    "colSpan": "Columnas de ancho",
+    "rowSpan": "Filas de alto",
+    "width": "Ancho %",
+    "height": "Alto %",
+    "textLabel": "Texto",
+    "textStyle": "Estilo de texto",
+    "textStyleCustom": "Personalizado",
+    "inherit": "Como se hereda",
+    "fontFamily": "Tipografía",
+    "fontSize": "Tamaño del texto",
+    "fontWeight": "Grosor",
+    "align": "En horizontal",
+    "vAlign": "En vertical",
+    "textStyles": {
+      "title": "Título de la clase",
+      "sectionTitle": "Título de sección",
+      "heading": "Encabezado de diapositiva",
+      "body": "Cuerpo",
+      "bullet": "Viñetas",
+      "caption": "Pie",
+      "quote": "Cita"
+    },
+    "textStylesLabel": "Estilos de texto por defecto",
+    "textStylesHint": "Cada caja sigue uno de estos por su nombre, así que cambiar uno reestiliza todas las cajas que lo siguen.",
+    "styleFont": "Tipografía para {style}",
+    "styleSize": "Tamaño del texto para {style}",
+    "textColor": "Color del texto",
+    "background": "Color de relleno",
+    "padding": "Espacio interior",
+    "radius": "Esquinas redondeadas",
+    "arrangeOrder": "Orden",
+    "bringForward": "Traer adelante",
+    "sendBackward": "Enviar atrás",
+    "spacingLabel": "Márgenes por defecto",
+    "spacingHint": "Se dibujan como guías mientras trabajas y las cajas se ajustan a ellas. Las diapositivas ya creadas no cambian.",
+    "metric": {
+      "marginX": "Laterales %",
+      "marginY": "Arriba y abajo %",
+      "gap": "Entre cajas %"
+    },
+    "ruler": {
+      "bottom": "Regla inferior: arrastra hacia arriba para una guía horizontal",
+      "right": "Regla derecha: arrastra hacia la izquierda para una guía vertical"
+    },
+    "guideAt": {
+      "x": "Guía vertical al {percent}%",
+      "y": "Guía horizontal al {percent}%"
+    },
+    "boxRow": "{name}: arrastra para reordenar",
+    "position": "El contenido se sitúa",
+    "containerNames": {
+      "row": "Fila",
+      "column": "Columna",
+      "grid": "Cuadrícula"
+    },
+    "placement": "Posición",
+    "placeFreely": "Posicionar esta caja libremente",
+    "placeFreelyOn": "Arrástrala a cualquier punto de la diapositiva. No ocupa espacio de las cajas de alrededor.",
+    "removeLayoutButton": "Eliminar este diseño",
+    "layoutNumbered": "Diseño {number}",
+    "contentLayouts": {
+      "column": "Una columna de contenido",
+      "row": "Una fila de contenido",
+      "grid": "Una cuadrícula de contenido"
+    },
+    "contentGroup": {
+      "holds": "Contenido",
+      "arranges": "Un contenedor"
+    },
+    "arrangement": "Disposición",
+    "unsaved": "Cambios sin guardar",
+    "discard": {
+      "title": "¿Cerrar sin guardar?",
+      "message": "La plantilla tiene cambios sin guardar. Cerrar ahora los pierde.",
+      "confirm": "Descartar cambios",
+      "save": "Guardar y cerrar"
+    },
+    "clearFill": "Sin relleno",
+    "placedByParent": "Posicionada automáticamente por la caja contenedora",
+    "maxChars": "Máx. caracteres",
+    "maxItems": "Máx. puntos",
+    "styleChars": "Máx. caracteres para {style}",
+    "styleItems": "Máx. puntos para {style}"
   },
   "layout": {
     "change": "Cambiar el diseño de la diapositiva",
@@ -659,6 +843,7 @@
     "addSlideHint": "Añadir una diapositiva",
     "liveSession": "Sesión en directo",
     "playingOriginal": "Reproduciendo el audio original…",
+    "layoutRefit": "Se rellenaron los cuadros que añadió este diseño",
     "play": {
       "play": "Reproducir la presentación",
       "pause": "Pausar la reproducción",

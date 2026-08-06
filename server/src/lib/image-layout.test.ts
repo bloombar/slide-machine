@@ -10,13 +10,31 @@ import type {
 } from '@slide-machine/shared'
 import { layoutHasImageSlot, reconcileImageLayout } from './image-layout'
 
-/** The built-in template's layouts, trimmed to the slots each renders. */
+/** The built-in template's layouts, trimmed to the slots each renders. A
+ * slot holds a picture because of its kind, so the conventional `image` name
+ * carries `kind: 'image'` here exactly as a real template does. */
 const layout = (type: string, slots: string[]): LayoutDescriptor => ({
   type: type as LayoutDescriptor['type'],
   label: type,
   purpose: type,
-  slots: slots.map(name => ({ name, kind: 'text', label: name })),
+  slots: slots.map(name => ({
+    name,
+    kind: name === 'image' ? ('image' as const) : ('text' as const),
+    label: name,
+  })),
 })
+
+/** A layout an author built themselves: two pictures, named their way. */
+const authored: LayoutDescriptor = {
+  type: 'two-photos' as LayoutDescriptor['type'],
+  label: 'Two photos',
+  purpose: 'Two pictures side by side',
+  slots: [
+    { name: 'title', kind: 'text', label: 'Slide title' },
+    { name: 'photo-left', kind: 'image', label: 'Photo left' },
+    { name: 'photo-right', kind: 'image', label: 'Photo right' },
+  ],
+}
 
 const DESCRIPTORS: LayoutDescriptor[] = [
   layout('title', ['title', 'caption']),
@@ -43,6 +61,15 @@ describe('layoutHasImageSlot', () => {
     expect(layoutHasImageSlot('image-heavy', DESCRIPTORS)).toBe(true)
     expect(layoutHasImageSlot('content', DESCRIPTORS)).toBe(false)
     expect(layoutHasImageSlot('list', DESCRIPTORS)).toBe(false)
+  })
+
+  it('recognizes an image slot the author named themselves (TMPL-9)', () => {
+    // A slot holds a picture because of its kind, not because it is called
+    // 'image' — otherwise an author's layout would be swapped out from
+    // under them the moment the model asked for a picture.
+    expect(layoutHasImageSlot('two-photos', [...DESCRIPTORS, authored])).toBe(
+      true,
+    )
     expect(layoutHasImageSlot('unknown', DESCRIPTORS)).toBe(false)
   })
 })

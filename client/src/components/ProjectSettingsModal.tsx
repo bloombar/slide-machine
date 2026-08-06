@@ -13,7 +13,7 @@
  * the exception — uploading files into another user's project is content
  * authoring, not a settings edit, so that section stays with its owner.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import type { Project, Template } from '@slide-machine/shared'
@@ -23,13 +23,14 @@ import SeedNotesEditor from './SeedNotesEditor'
 import SeedMaterial from './SeedMaterial'
 import AdminEditNotice from './AdminEditNotice'
 import ConfirmDialog from './ConfirmDialog'
+import UnsavedChangesDialog from './UnsavedChangesDialog'
 import Modal from './Modal'
 import AccessSettings from './AccessSettings'
 import FreedomSlider from './FreedomSlider'
 import LanguageSelect from './LanguageSelect'
 import VoiceSelect from './VoiceSelect'
 import { getTtsEnabled } from '../runtime-config'
-import TemplatePicker from './TemplatePicker'
+import TemplateDesignPanel from './template/TemplateDesignPanel'
 
 /** The tabs in order; each id also keys its label under
  * `deck.settings.tabs.<id>` — the same names the lecture settings use. */
@@ -67,6 +68,14 @@ export default function ProjectSettingsModal({
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [tab, setTab] = useState<TabId>(initialTab)
   const [templates, setTemplates] = useState<Template[]>([])
+
+  const loadTemplates = useCallback(() => {
+    dispatchAction<Template[]>('template.list')
+      .then(setTemplates)
+      .catch(() => {
+        // Quiet failure: the section simply stays empty
+      })
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -112,11 +121,23 @@ export default function ProjectSettingsModal({
       })
   }
 
+  // Nothing in the template editor saves by itself, and this sheet's close
+  // button never scrolls away — so closing it is the easiest way to lose
+  // work. Ask first when there is any.
+  const [templateDirty, setTemplateDirty] = useState(false)
+  const [confirmingClose, setConfirmingClose] = useState(false)
+  const [savingOnClose, setSavingOnClose] = useState(false)
+  const templateSave = useRef<(() => Promise<boolean>) | null>(null)
+  const closeOrConfirm = () => {
+    if (templateDirty) setConfirmingClose(true)
+    else onClose()
+  }
+
   return (
     <Modal
       variant="sheet"
       ariaLabel={t('project.settings.title')}
-      onClose={onClose}
+      onClose={closeOrConfirm}
       initialFocusRef={closeRef}
       escapeCapture={false}
       escapeIgnoreTyping
@@ -132,7 +153,7 @@ export default function ProjectSettingsModal({
           ref={closeRef}
           aria-label={t('deck.settings.close')}
           title={t('common.closeEsc')}
-          onClick={onClose}
+          onClick={closeOrConfirm}
           className="rounded-md p-2 text-slate-500 hover:text-slate-900"
         >
           <X className="h-5 w-5" aria-hidden />
@@ -178,9 +199,12 @@ export default function ProjectSettingsModal({
           <p className="mb-4 text-sm text-slate-500">
             {t('project.settings.templateHint')}
           </p>
-          <TemplatePicker
+          <TemplateDesignPanel
+            onDirtyChange={setTemplateDirty}
+            saveRef={templateSave}
             templates={templates}
             value={project.templateId}
+            onLibraryChanged={loadTemplates}
             onChange={templateId => {
               dispatchAction<Project>('project.switchTemplate', {
                 projectId: project.id,
@@ -374,6 +398,30 @@ export default function ProjectSettingsModal({
           confirmLabel={t('common.delete')}
           onConfirm={deleteProject}
           onCancel={() => setConfirmingDelete(false)}
+        />
+      )}
+      {confirmingClose && (
+        <UnsavedChangesDialog
+          title={t('template.discard.title')}
+          message={t('template.discard.message')}
+          saveLabel={t('template.discard.save')}
+          discardLabel={t('template.discard.confirm')}
+          saving={savingOnClose}
+          onSave={() => {
+            setSavingOnClose(true)
+            void templateSave.current?.().then(saved => {
+              setSavingOnClose(false)
+              setConfirmingClose(false)
+              // Only when it was actually written: a refused save that closed
+              // the sheet would lose the very work this dialog is protecting.
+              if (saved) onClose()
+            })
+          }}
+          onDiscard={() => {
+            setConfirmingClose(false)
+            onClose()
+          }}
+          onCancel={() => setConfirmingClose(false)}
         />
       )}
     </Modal>

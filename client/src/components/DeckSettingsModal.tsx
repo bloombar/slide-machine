@@ -13,7 +13,7 @@
  * material, running a refine over the owner's slides, and the Quiz and
  * Export tabs, which act through the admin's own Google account.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { Trans, useTranslation } from 'react-i18next'
 import { Download, X } from 'lucide-react'
@@ -31,7 +31,7 @@ import {
 } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import { downloadExport } from '../lib/download'
-import TemplatePicker from './TemplatePicker'
+import TemplateDesignPanel from './template/TemplateDesignPanel'
 import AccessSettings from './AccessSettings'
 import QuizPanel from './QuizPanel'
 import ExportPanel from './ExportPanel'
@@ -42,6 +42,7 @@ import FreedomSlider from './FreedomSlider'
 import LanguageSelect from './LanguageSelect'
 import VoiceSelect from './VoiceSelect'
 import ConfirmDialog from './ConfirmDialog'
+import UnsavedChangesDialog from './UnsavedChangesDialog'
 import Modal from './Modal'
 import {
   RefineLevelSlider,
@@ -214,6 +215,14 @@ export default function DeckSettingsModal({
   const closeRef = useRef<HTMLButtonElement>(null)
   const tabRefs = useRef(new Map<TabId, HTMLButtonElement>())
 
+  const loadTemplates = useCallback(() => {
+    dispatchAction<Template[]>('template.list')
+      .then(setTemplates)
+      .catch(() => {
+        // Quiet failure: the section simply stays empty
+      })
+  }, [])
+
   useEffect(() => {
     let cancelled = false
     dispatchAction<Template[]>('template.list')
@@ -352,11 +361,23 @@ export default function DeckSettingsModal({
     tabRefs.current.get(next.id)?.focus()
   }
 
+  // Nothing in the template editor saves by itself, and this sheet's close
+  // button never scrolls away — so closing it is the easiest way to lose
+  // work. Ask first when there is any.
+  const [templateDirty, setTemplateDirty] = useState(false)
+  const [confirmingClose, setConfirmingClose] = useState(false)
+  const [savingOnClose, setSavingOnClose] = useState(false)
+  const templateSave = useRef<(() => Promise<boolean>) | null>(null)
+  const closeOrConfirm = () => {
+    if (templateDirty) setConfirmingClose(true)
+    else onClose()
+  }
+
   return (
     <Modal
       variant="sheet"
       ariaLabel={t('deck.settings.title')}
-      onClose={onClose}
+      onClose={closeOrConfirm}
       initialFocusRef={closeRef}
       escapeCapture={false}
       escapeIgnoreTyping
@@ -385,7 +406,7 @@ export default function DeckSettingsModal({
           ref={closeRef}
           aria-label={t('deck.settings.close')}
           title={t('common.closeEsc')}
-          onClick={onClose}
+          onClick={closeOrConfirm}
           className="rounded-md p-2 text-slate-500 hover:text-slate-900"
         >
           <X className="h-5 w-5" aria-hidden />
@@ -605,10 +626,18 @@ export default function DeckSettingsModal({
           <h3 className="mb-4 text-lg font-semibold text-slate-700">
             {t('template.heading')}
           </h3>
-          <TemplatePicker
+          <TemplateDesignPanel
+            onDirtyChange={setTemplateDirty}
+            saveRef={templateSave}
+            onSaved={saved => {
+              // Editing the template this lecture is already using: its
+              // slides re-render now rather than after a reload.
+              if (saved.id === deck.templateId) onTemplateChange(deck, saved)
+            }}
             templates={templates}
             value={deck.templateId}
             onChange={switchTemplate}
+            onLibraryChanged={loadTemplates}
           />
           <div className="mt-6 border-t border-slate-100 pt-4">
             <button
@@ -780,6 +809,30 @@ export default function DeckSettingsModal({
             onChange={updated => onDeckChange(updated as Deck)}
           />
         </section>
+      )}
+      {confirmingClose && (
+        <UnsavedChangesDialog
+          title={t('template.discard.title')}
+          message={t('template.discard.message')}
+          saveLabel={t('template.discard.save')}
+          discardLabel={t('template.discard.confirm')}
+          saving={savingOnClose}
+          onSave={() => {
+            setSavingOnClose(true)
+            void templateSave.current?.().then(saved => {
+              setSavingOnClose(false)
+              setConfirmingClose(false)
+              // Only when it was actually written: a refused save that closed
+              // the sheet would lose the very work this dialog is protecting.
+              if (saved) onClose()
+            })
+          }}
+          onDiscard={() => {
+            setConfirmingClose(false)
+            onClose()
+          }}
+          onCancel={() => setConfirmingClose(false)}
+        />
       )}
     </Modal>
   )

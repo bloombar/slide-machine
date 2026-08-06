@@ -31,6 +31,7 @@ const slide = (overrides: Partial<Slide>): Slide => ({
   deckId: 'd1',
   index: 0,
   layoutType: 'content',
+  slots: {},
   ...overrides,
 })
 
@@ -66,7 +67,9 @@ describe('SlideSlot', () => {
       key: 'Enter',
     })
     vi.runAllTimers()
-    expect(onEdit).toHaveBeenCalledWith({ caption: 'A plant cell' })
+    expect(onEdit).toHaveBeenCalledWith({
+      slots: { caption: { kind: 'text', value: 'A plant cell' } },
+    })
     vi.useRealTimers()
   })
 
@@ -86,17 +89,44 @@ describe('SlideSlot', () => {
     fireEvent.change(box, { target: { value: 'sun\nwater\nCO2' } })
     fireEvent.keyDown(box, { key: 'Enter', ctrlKey: true })
     vi.runAllTimers()
-    expect(onEdit).toHaveBeenCalledWith({ bullets: ['sun', 'water', 'CO2'] })
+    expect(onEdit).toHaveBeenCalledWith({
+      slots: { bullets: { kind: 'bullets', items: ['sun', 'water', 'CO2'] } },
+    })
     vi.useRealTimers()
   })
 
-  it('keeps image slots reserved: skeleton while pending, quiet block after', () => {
-    const { rerender } = render(
+  it('reserves an image slot while a picture may still arrive', () => {
+    render(
       <SlideSlot slot="image" slide={slide({})} colors={colors} imagePending />,
     )
     expect(screen.getByTestId('image-skeleton')).toBeInTheDocument()
-    rerender(<SlideSlot slot="image" slide={slide({})} colors={colors} />)
+  })
+
+  it('shows a viewer nothing where there is no picture', () => {
+    // A reserved block reads as a picture that failed to load, and a viewer
+    // has no way to put one there
+    const { container } = render(
+      <SlideSlot slot="image" slide={slide({})} colors={colors} />,
+    )
+    expect(screen.queryByTestId('image-fallback')).toBeNull()
+    expect(container.querySelector('img')).toBeNull()
+  })
+
+  it('still gives an editor the block to drop a picture onto', () => {
+    render(
+      <SlideSlot
+        slot="image"
+        slide={slide({})}
+        colors={colors}
+        onReplaceImage={vi.fn()}
+        onPickImageCandidate={vi.fn()}
+        onRemoveImage={vi.fn()}
+      />,
+    )
     expect(screen.getByTestId('image-fallback')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Add image' }),
+    ).toBeInTheDocument()
   })
 
   const imageEditor = (over: Partial<Slide> = {}) => ({
@@ -134,7 +164,7 @@ describe('SlideSlot', () => {
     fireEvent.change(await screen.findByLabelText('Upload image file'), {
       target: { files: [file] },
     })
-    expect(props.onReplaceImage).toHaveBeenCalledWith(file)
+    expect(props.onReplaceImage).toHaveBeenCalledWith(file, 'image')
   })
 
   it('uploads a dropped file to replace the image', () => {
@@ -143,7 +173,7 @@ describe('SlideSlot', () => {
     const zone = container.querySelector('.group')!
     const file = new File(['x'], 'drop.png', { type: 'image/png' })
     fireEvent.drop(zone, { dataTransfer: { files: [file] } })
-    expect(props.onReplaceImage).toHaveBeenCalledWith(file)
+    expect(props.onReplaceImage).toHaveBeenCalledWith(file, 'image')
   })
 
   it('asks the page to remove the image', () => {
@@ -165,7 +195,7 @@ describe('SlideSlot', () => {
     fireEvent.change(screen.getByLabelText('Upload image file'), {
       target: { files: [file] },
     })
-    expect(props.onReplaceImage).toHaveBeenCalledWith(file)
+    expect(props.onReplaceImage).toHaveBeenCalledWith(file, 'image')
   })
 
   it('seeds the search from the primary image keyword, not the "New slide" placeholder', async () => {
@@ -296,10 +326,15 @@ describe('SlideSlot', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(onEdit).toHaveBeenCalledWith({
-      attribution: {
-        sourceUrl: undefined,
-        creator: 'Grace',
-        license: undefined,
+      slots: {
+        image: {
+          kind: 'image',
+          attribution: {
+            sourceUrl: undefined,
+            creator: 'Grace',
+            license: undefined,
+          },
+        },
       },
     })
   })
@@ -396,5 +431,139 @@ describe('SlideSlot', () => {
       />,
     )
     expect(container).toBeEmptyDOMElement()
+  })
+})
+
+/**
+ * Slots a template author added themselves (TMPL-4). They have no field of
+ * their own on the slide, so their content is keyed by name — and everything
+ * else about them behaves exactly like a conventional slot.
+ */
+describe('a slot the template author defined', () => {
+  const photo = { name: 'photo-2', kind: 'image' as const, label: 'Photo 2' }
+  const note = { name: 'note', kind: 'text' as const, label: 'Note' }
+
+  it('shows what the slide stored under its name', () => {
+    render(
+      <SlideSlot
+        slot="note"
+        spec={note}
+        slide={slide({
+          slots: { note: { kind: 'text', value: 'Read chapter 4' } },
+        })}
+        colors={colors}
+      />,
+    )
+    expect(screen.getByText('Read chapter 4')).toBeInTheDocument()
+  })
+
+  it('patches by name rather than by slide field', () => {
+    vi.useFakeTimers()
+    const onEdit = vi.fn()
+    render(
+      <SlideSlot
+        slot="note"
+        spec={note}
+        slide={slide({
+          slots: { note: { kind: 'text', value: 'Read chapter 4' } },
+        })}
+        colors={colors}
+        onEdit={onEdit}
+      />,
+    )
+    fireEvent.click(screen.getByTitle('Click to edit Note'))
+    const box = screen.getByRole('textbox', { name: 'Note' })
+    fireEvent.change(box, { target: { value: 'Read chapter 5' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    vi.runAllTimers()
+    expect(onEdit).toHaveBeenCalledWith({
+      slots: { note: { kind: 'text', value: 'Read chapter 5' } },
+    })
+    vi.useRealTimers()
+  })
+
+  it('draws its own picture, not the slide’s', () => {
+    render(
+      <SlideSlot
+        slot="photo-2"
+        spec={photo}
+        slide={slide({
+          imageRef: 'http://img/first.png',
+          slots: {
+            'photo-2': { kind: 'image', ref: 'http://img/second.png' },
+          },
+        })}
+        colors={colors}
+      />,
+    )
+    expect(screen.getByRole('img')).toHaveAttribute(
+      'src',
+      'http://img/second.png',
+    )
+  })
+
+  it('uploads into the box that was dropped on', () => {
+    const onReplaceImage = vi.fn()
+    const { container } = render(
+      <SlideSlot
+        slot="photo-2"
+        spec={photo}
+        slide={slide({})}
+        colors={colors}
+        onReplaceImage={onReplaceImage}
+        onPickImageCandidate={vi.fn()}
+        onRemoveImage={vi.fn()}
+      />,
+    )
+    const file = new File(['x'], 'second.png', { type: 'image/png' })
+    fireEvent.drop(container.querySelector('.group')!, {
+      dataTransfer: { files: [file] },
+    })
+    expect(onReplaceImage).toHaveBeenCalledWith(file, 'photo-2')
+  })
+
+  it('empties the box that was cleared', () => {
+    const onRemoveImage = vi.fn()
+    render(
+      <SlideSlot
+        slot="photo-2"
+        spec={photo}
+        slide={slide({
+          slots: {
+            'photo-2': { kind: 'image', ref: 'http://img/second.png' },
+          },
+        })}
+        colors={colors}
+        onReplaceImage={vi.fn()}
+        onPickImageCandidate={vi.fn()}
+        onRemoveImage={onRemoveImage}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Remove image' }))
+    expect(onRemoveImage).toHaveBeenCalledWith('photo-2')
+  })
+
+  it('offers Remove on a box the author added, like any other', () => {
+    render(
+      <SlideSlot
+        slot="photo-2"
+        spec={photo}
+        slide={slide({
+          slots: {
+            'photo-2': { kind: 'image', ref: 'http://img/second.png' },
+          },
+        })}
+        colors={colors}
+        onReplaceImage={vi.fn()}
+        onPickImageCandidate={vi.fn()}
+        onRemoveImage={vi.fn()}
+      />,
+    )
+    expect(
+      screen.getByRole('button', { name: 'Remove image' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Replace image' }),
+    ).toBeInTheDocument()
   })
 })

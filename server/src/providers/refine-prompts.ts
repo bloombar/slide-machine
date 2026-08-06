@@ -7,6 +7,7 @@
  * - narrate.txt  — rewrite a slide's spoken narration at a 1-5 eloquence.
  * - reformat.txt — reframe a slide once speakers are known (student turns as
  *   questions/feedback).
+ * - refit.txt    — fill the boxes a layout switch left empty (GEN-9).
  *
  * `{{slot}}` placeholders are filled per request; each file is read once and
  * cached (PROMPTS_DIR overrides the location).
@@ -46,6 +47,9 @@ export const renderNarratePrompt = (slots: Record<string, string>): string =>
 
 export const renderReformatPrompt = (slots: Record<string, string>): string =>
   fill('reformat.txt', slots)
+
+export const renderRefitPrompt = (slots: Record<string, string>): string =>
+  fill('refit.txt', slots)
 
 /** Test hook: drop the cache so template edits are re-read. */
 export const resetRefinePromptCache = (): void => cache.clear()

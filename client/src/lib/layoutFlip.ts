@@ -29,7 +29,14 @@
  *
  * Slot wrappers are tagged by the slot system (slide/slots): every slot
  * carries data-flip-slot (its name) and data-flip-id (slide-scoped
- * identity used to match a slot to itself across the swap).
+ * identity used to match a slot to itself across the swap). The box the
+ * layout placed around it carries data-flip-tier — what that box holds.
+ *
+ * Matching runs on identity first and tier second, so two layouts that name
+ * the same box differently still morph (see shared/types/slot-pairing for
+ * the rule and why tier rather than the text style itself). The content
+ * remap on the server pairs boxes the same way, which is the point: a morph
+ * says "this text moved here", so it has to be where the text went.
  */
 import { flushSync } from 'react-dom'
 import { gsap } from 'gsap'
@@ -48,6 +55,8 @@ const prefersReducedMotion = () =>
 interface BeforeSlot {
   id: string
   slot: string
+  /** What the box holds, for matching a box whose name changed. */
+  tier: string
   rect: DOMRect
   /** On-screen font size, the size text morphs are matched on. */
   font: number
@@ -57,12 +66,24 @@ interface BeforeSlot {
   radius: string
 }
 
-/** The in-flight image clone per slide, so a rapid second layout switch
- * retargets from the clone's current position instead of jumping. */
-const activeImageFlips = new Map<string, { clone: HTMLElement }>()
+/** The in-flight image clones per slide, one per picture box, so a rapid
+ * second layout switch retargets from where each is instead of jumping. */
+const activeImageFlips = new Map<string, { id: string; clone: HTMLElement }[]>()
 
 const slotsIn = (container: Element): HTMLElement[] =>
   Array.from(container.querySelectorAll<HTMLElement>('[data-flip-slot]'))
+
+/**
+ * What a slot's box holds, as the renderers tag it (`data-flip-tier` on the
+ * box the layout placed, which is the slot wrapper's ancestor).
+ *
+ * The fallback keeps a renderer that tags nothing working as it always did:
+ * pictures were already identifiable because the slot system writes the
+ * literal `image` for them whatever the slot is named.
+ */
+const tierOf = (el: HTMLElement): string =>
+  el.closest<HTMLElement>('[data-flip-tier]')?.dataset.flipTier ??
+  (el.dataset.flipSlot === 'image' ? 'image' : '')
 
 /** The corner rounding a slot inherits from its layout container. */
 const radiusOf = (el: HTMLElement): string =>
@@ -182,6 +203,7 @@ export function runLayoutFlip(
     before.set(id, {
       id,
       slot: el.dataset.flipSlot ?? '',
+      tier: tierOf(el),
       rect: el.getBoundingClientRect(),
       font: visualFontSize(el),
       clone,
@@ -189,23 +211,55 @@ export function runLayoutFlip(
     })
   }
 
-  // A second switch mid-flight: continue the image from the flying
-  // clone's current spot, and clear the previous flight.
-  const prior = activeImageFlips.get(slideId)
-  const imageBefore = [...before.values()].find(s => s.slot === 'image')
-  if (prior && imageBefore) {
-    imageBefore.rect = prior.clone.getBoundingClientRect()
-    imageBefore.radius = getComputedStyle(prior.clone).borderRadius
+  // A second switch mid-flight: continue each picture from the spot its
+  // flying clone reached, and clear the previous flight.
+  for (const prior of activeImageFlips.get(slideId) ?? []) {
+    const slot = before.get(prior.id)
+    if (slot) {
+      slot.rect = prior.clone.getBoundingClientRect()
+      slot.radius = getComputedStyle(prior.clone).borderRadius
+    }
+    prior.clone.remove()
   }
-  prior?.clone.remove()
   activeImageFlips.delete(slideId)
 
   flushSync(update)
 
   const afterEls = slotsIn(container)
-  const afterIds = new Set(
-    afterEls.map(el => el.dataset.flipId).filter(Boolean),
-  )
+
+  // Which old box each new box continues (GEN-9).
+  //
+  // Identity first: the same slot name on both sides is the same box, so
+  // every layout that shares the conventional names pairs exactly and
+  // nothing below runs. What is left pairs on tier — what the box holds —
+  // so a box the two layouts name differently still morphs rather than
+  // cross-fading.
+  //
+  // Deliberately the same rule, in the same order, as the content remap in
+  // shared/types/slot-pairing: a morph asserts that this text moved here, so
+  // it must be the box the content actually moved to. Document order is the
+  // tiebreak on both sides.
+  const claimed = new Set<string>()
+  const partnerOf = new Map<HTMLElement, BeforeSlot>()
+  for (const el of afterEls) {
+    const id = el.dataset.flipId
+    const exact = id ? before.get(id) : undefined
+    if (!exact) continue
+    partnerOf.set(el, exact)
+    claimed.add(exact.id)
+  }
+  for (const el of afterEls) {
+    if (partnerOf.has(el)) continue
+    const tier = tierOf(el)
+    if (!tier) continue
+    const partner = [...before.values()].find(
+      s => !claimed.has(s.id) && s.tier === tier,
+    )
+    if (!partner) continue
+    partnerOf.set(el, partner)
+    claimed.add(partner.id)
+  }
+
   const animations: unknown[] = []
   const fadeIn = (els: gsap.TweenTarget) =>
     animations.push(
@@ -217,7 +271,7 @@ export function runLayoutFlip(
     )
 
   // Text slots morph to their new place; brand-new ones fade in
-  const textAfter = afterEls.filter(el => el.dataset.flipSlot !== 'image')
+  const textAfter = afterEls.filter(el => tierOf(el) !== 'image')
   // Drop what a still-running morph left on these elements first, so the
   // rects read below are the settled layout and not a mid-flight one.
   for (const el of textAfter) {
@@ -225,8 +279,7 @@ export function runLayoutFlip(
     gsap.set(el, { clearProps: 'transform' })
   }
   for (const el of textAfter) {
-    const id = el.dataset.flipId
-    const from = id ? before.get(id) : undefined
+    const from = partnerOf.get(el)
     if (!from) {
       fadeIn(el)
       continue
@@ -298,23 +351,34 @@ export function runLayoutFlip(
     )
   }
 
-  // The image slot morphs as a fixed clone so cover re-crops each frame
-  const imageAfter = afterEls.find(el => el.dataset.flipSlot === 'image')
-  if (imageAfter && imageBefore && afterIds.has(imageBefore.id)) {
+  // Picture boxes morph as fixed clones so cover re-crops each frame. Every
+  // one of them, not just the first: a layout an author built may hold
+  // several (TMPL-9/IMG-6), and animating one of three looks like a fault.
+  const inFlight: { id: string; clone: HTMLElement }[] = []
+  for (const imageAfter of afterEls.filter(el => tierOf(el) === 'image')) {
+    const imageBefore = partnerOf.get(imageAfter)
+    if (!imageBefore) {
+      fadeIn(imageAfter)
+      continue
+    }
     const toRect = imageAfter.getBoundingClientRect()
     const toRadius = radiusOf(imageAfter)
     const clone = imageAfter.cloneNode(true) as HTMLElement
+    const afterId = imageAfter.dataset.flipId ?? imageBefore.id
     pinToRect(clone, imageBefore.rect, imageBefore.radius)
     document.body.appendChild(clone)
     imageAfter.style.visibility = 'hidden'
-    activeImageFlips.set(slideId, { clone })
+    inFlight.push({ id: afterId, clone })
     const cleanup = () => {
       clone.remove()
-      if (activeImageFlips.get(slideId)?.clone === clone)
-        activeImageFlips.delete(slideId)
+      const rest = (activeImageFlips.get(slideId) ?? []).filter(
+        f => f.clone !== clone,
+      )
+      if (rest.length) activeImageFlips.set(slideId, rest)
+      else activeImageFlips.delete(slideId)
       // Re-query: React may have replaced the wrapper mid-flight
       const el = container.querySelector<HTMLElement>(
-        `[data-flip-id="${imageBefore.id}"]`,
+        `[data-flip-id="${CSS.escape(afterId)}"]`,
       )
       if (el) el.style.visibility = ''
     }
@@ -331,13 +395,12 @@ export function runLayoutFlip(
         onInterrupt: cleanup,
       }),
     )
-  } else if (imageAfter && !imageBefore) {
-    fadeIn(imageAfter)
   }
+  if (inFlight.length) activeImageFlips.set(slideId, inFlight)
 
   // Slots that left the layout fade out as static clones in place
   for (const slot of before.values()) {
-    if (afterIds.has(slot.id)) continue
+    if (claimed.has(slot.id)) continue
     pinToRect(slot.clone, slot.rect, slot.radius)
     document.body.appendChild(slot.clone)
     animations.push(

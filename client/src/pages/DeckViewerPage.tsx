@@ -35,6 +35,8 @@ import type {
   Slide,
   SlideEvent,
   SlideRefineOptions,
+  SlideRefitLayoutResult,
+  SlotValue,
   Stroke,
   StrokeAnchor,
   WordTiming,
@@ -306,6 +308,16 @@ export default function DeckViewerPage() {
   const [pendingImages, setPendingImages] = useState<Set<string>>(new Set())
   // The slide currently being refined via its kebab (drives a status toast)
   const [refiningSlideId, setRefiningSlideId] = useState<string | null>(null)
+  /** The last layout refit (GEN-9), while its undo is still offered: the
+   * slide as it stood before, and the emptying patch that puts it back. */
+  const [refitUndo, setRefitUndo] = useState<{
+    slide: Slide
+    cleared: Record<string, SlotValue>
+  } | null>(null)
+  const refitUndoTimerRef = useRef<number | null>(null)
+  /** How long the refit's undo stays on offer. Longer than the other pills:
+   * it is asking the user to read what was written before deciding. */
+  const REFIT_UNDO_PILL_MS = 8000
   // The slide whose "Refine this slide with AI" dialog is open (GEN-4).
   const [refineSlideFor, setRefineSlideFor] = useState<string | null>(null)
   // Content-generation pause pill (WB-3): 'paused' while the user is actively
@@ -661,28 +673,90 @@ export default function DeckViewerPage() {
     )
   }
 
+  /** Replaces one slide in the view, by id. */
+  const putSlide = (next: Slide) =>
+    setView(v =>
+      v
+        ? { ...v, slides: v.slides.map(s => (s.id === next.id ? next : s)) }
+        : v,
+    )
+
+  /**
+   * Fills the boxes a layout switch left empty (GEN-9), once the switch
+   * itself has landed and animated.
+   *
+   * Off the critical path on purpose: the server has already carried every
+   * box that paired across, so the slide is correct and on screen before
+   * this runs. It also costs nothing when there is nothing to do — the
+   * action makes no AI call unless the new layout has holes AND the old one
+   * left content behind, which no switch between the built-ins does.
+   *
+   * What it writes is undoable, because it is the one part of a layout
+   * switch the user did not spell out.
+   */
+  const refitSlideLayout = async (slide: Slide, fromLayoutType: string) => {
+    try {
+      const res = await dispatchAction<SlideRefitLayoutResult>(
+        'slide.refitLayout',
+        { slideId: slide.id, fromLayoutType },
+      )
+      if (!res.filled.length) return
+      putSlide(res.slide)
+      // The pre-refit slide is what "undo" restores: the switch stays, only
+      // the boxes the refit wrote into go back to empty. Emptying exactly
+      // those is safe whatever the user does next — it never touches a box
+      // the refit did not write.
+      const cleared = Object.fromEntries(
+        res.filled.map(name => [
+          name,
+          res.slide.slots?.[name]?.kind === 'bullets'
+            ? ({ kind: 'bullets', items: [] } as SlotValue)
+            : ({ kind: 'text', value: '' } as SlotValue),
+        ]),
+      )
+      setRefitUndo({ slide, cleared })
+      // The offer expires: a pill that never leaves reads as an error, and
+      // by then the user has moved on and the written text is theirs.
+      if (refitUndoTimerRef.current)
+        window.clearTimeout(refitUndoTimerRef.current)
+      refitUndoTimerRef.current = window.setTimeout(
+        () => setRefitUndo(null),
+        REFIT_UNDO_PILL_MS,
+      )
+      touchDeckLocally()
+    } catch {
+      // Quiet failure: the boxes stay empty and the user can type into them
+    }
+  }
+
+  /** Puts back the slide as it stood before the refit wrote into it. */
+  const undoRefit = () => {
+    const undo = refitUndo
+    setRefitUndo(null)
+    if (refitUndoTimerRef.current)
+      window.clearTimeout(refitUndoTimerRef.current)
+    if (!undo) return
+    putSlide(undo.slide)
+    void dispatchAction<Slide>('slide.editContent', {
+      slideId: undo.slide.id,
+      slots: undo.cleared,
+    }).catch(() => undefined)
+  }
+
   /** Per-slide layout switch (EDIT-3): content stays, arrangement changes.
    * The swap animates as a layout morph (GEN-9): the slots glide to their
    * new places rather than jumping. */
   const setSlideLayout = (slideId: string, layoutType: string) => {
+    const from = viewRef.current?.slides.find(s => s.id === slideId)?.layoutType
     dispatchAction<Slide>('slide.setLayout', { slideId, layoutType })
       .then(updated => {
-        void runLayoutFlip(updated.id, () =>
-          setView(v =>
-            v
-              ? {
-                  ...v,
-                  slides: v.slides.map(s =>
-                    s.id === updated.id ? updated : s,
-                  ),
-                }
-              : v,
-          ),
-        )
+        void runLayoutFlip(updated.id, () => putSlide(updated))
         // Switching onto an image layout sources an image server-side; the
         // returned slide carries the search intent, so poll for it to land.
         watchImage(updated)
         touchDeckLocally()
+        if (from && from !== updated.layoutType)
+          void refitSlideLayout(updated, from)
       })
       .catch(() => {
         // Quiet failure: the slide keeps its layout
@@ -1429,18 +1503,24 @@ export default function DeckViewerPage() {
   }
 
   /** Uploads a file to replace (or set) a slide's image (EDIT-1). */
-  const replaceSlideImage = (slideId: string) => (file: File) => {
-    setImageError(null)
-    uploadSlideImage(slideId, file)
-      .then(applySlide)
-      .catch(() => setImageError('Could not upload the image — try again'))
-  }
+  const replaceSlideImage =
+    (slideId: string) => (file: File, slot?: string) => {
+      setImageError(null)
+      uploadSlideImage(slideId, file, slot)
+        .then(applySlide)
+        .catch(() => setImageError('Could not upload the image — try again'))
+    }
 
   /** Applies a chosen web-search image to a slide (EDIT-1). */
   const pickSlideImageCandidate =
-    (slideId: string) => (candidate: ImageSearchCandidate) => {
+    (slideId: string) => (candidate: ImageSearchCandidate, slot?: string) => {
       setImageError(null)
-      applySlideImageFromSource(slideId, candidate.url, candidate.attribution)
+      applySlideImageFromSource(
+        slideId,
+        candidate.url,
+        candidate.attribution,
+        slot,
+      )
         .then(applySlide)
         .catch(() => setImageError('Could not set that image — try again'))
     }
@@ -1451,14 +1531,18 @@ export default function DeckViewerPage() {
    * layout is deliberately NOT switched and the slide is never deleted — even
    * an image-only layout just shows its empty image slot.
    */
-  const removeSlideImage = (target: Slide) => () => {
-    dispatchAction<Slide>('slide.editContent', {
-      slideId: target.id,
-      imageRef: '',
-    })
-      .then(applySlide)
-      .catch(() => setImageError('Could not remove the image — try again'))
-  }
+  const removeSlideImage =
+    (target: Slide) =>
+    (slot = 'image') => {
+      dispatchAction<Slide>('slide.editContent', {
+        slideId: target.id,
+        // Every picture lives in a slot of its own, so emptying one addresses
+        // it by name — a layout may hold several (TMPL-9).
+        slots: { [slot]: { kind: 'image', ref: '' } },
+      })
+        .then(applySlide)
+        .catch(() => setImageError('Could not remove the image — try again'))
+    }
 
   /** Renames the lecture through the action layer (owner only). */
   const renameDeck = (title: string) => {
@@ -2093,6 +2177,14 @@ export default function DeckViewerPage() {
 
       {refiningSlideId && (
         <NotificationPill>{t('refine.slide.running')}</NotificationPill>
+      )}
+
+      {refitUndo && (
+        <NotificationPill
+          action={{ label: t('common.undo'), onClick: undoRefit }}
+        >
+          {t('deck.layoutRefit')}
+        </NotificationPill>
       )}
 
       {playingOriginalId && (

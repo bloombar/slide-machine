@@ -3,7 +3,13 @@
  * Results reuse the shared data-model types (e.g. Project).
  */
 import type { Locale } from '../types/locale'
-import type { ImageAttribution, Slide, Stroke, Visibility } from '../types/deck'
+import type {
+  ImageAttribution,
+  Slide,
+  SlotValue,
+  Stroke,
+  Visibility,
+} from '../types/deck'
 import type { ProfileVisibility } from '../types/user'
 import type { WordTiming } from '../providers/transcription'
 
@@ -410,6 +416,10 @@ export interface SlideEditInput {
   imageRef?: string
   /** Image credit/licensing edited from the attribution dialog (IMG-5). */
   attribution?: ImageAttribution
+  /** Edits keyed by slot name, for any slot the layout declares — including
+   * ones the template's author named (TMPL-9). Merged per slot, so patching
+   * one leaves the rest alone. */
+  slots?: Record<string, SlotValue>
 }
 
 /** Replaces a slide's spoken narration (EDIT-6). The transcript drives TTS
@@ -451,6 +461,26 @@ export interface SlideDeleteInput {
 export interface SlideSetLayoutInput {
   slideId: string
   layoutType: string
+}
+
+/**
+ * Fills the boxes a layout switch left empty (GEN-9). Sent right after
+ * `slide.setLayout`; the server decides whether there is anything to do, so
+ * a switch that carried across cleanly costs no AI call.
+ */
+export interface SlideRefitLayoutInput {
+  slideId: string
+  /** The layout the slide just came from, so the request can describe what
+   * the content used to sit in. */
+  fromLayoutType?: string
+}
+
+/** The refit's outcome, so the client knows whether to offer an undo. */
+export interface SlideRefitLayoutResult {
+  slide: Slide
+  /** Boxes the refit wrote into. Empty when nothing needed filling or the
+   * model declined — in both cases the slide came back unchanged. */
+  filled: string[]
 }
 
 /** Appends a blank starter slide at the end of the deck. */

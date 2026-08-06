@@ -31,7 +31,7 @@ import { isAllowlistedAdmin } from '../lib/admin-view'
 import { canEditAcl, canViewAcl } from '../lib/access'
 import { SlideModel, toSlideDto } from '../models/slide'
 import { TranscriptSegmentModel } from '../models/transcript-segment'
-import { getBuiltinTemplate } from '../templates/builtin'
+import { resolveTemplateForRead } from '../templates/resolve'
 import { translateSlides, translationEnabled } from '../lib/translate-slides'
 import { verifyAccessToken } from '../auth/tokens'
 import { ProjectModel } from '../models/project'
@@ -109,7 +109,7 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
   const deck = await loadViewableDeck(String(req.params.slug), req.userId)
   const acl = await loadDeckAcl(deck)
 
-  const template = getBuiltinTemplate(deck.templateId)
+  const template = await resolveTemplateForRead(deck.templateId)
   if (!template) throw notFound
 
   const isOwner = acl.ownerId === req.userId

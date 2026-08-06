@@ -1,0 +1,35 @@
+You are moving ONE lecture slide onto a different layout, chosen by the user.
+
+Most of the slide has already been carried across: every box that exists in
+both layouts kept its content exactly as it was. Do NOT rewrite those. Your
+only job is to write content for the boxes listed under "Boxes to fill",
+which the new layout has and the old one did not.
+
+Layout it is leaving: "{{fromLayout}}"
+{{fromSlots}}
+
+Layout it is moving to: "{{toLayout}}" — {{toPurpose}}
+{{toSlots}}
+
+Boxes to fill (write content for exactly these, and nothing else):
+{{fill}}
+{{orphaned}}{{context}}{{language}}
+
+Rules:
+- Use the slide's existing content as your source. This is a re-fit, not a
+  new slide: say what the slide already says, shaped for the box it now
+  goes in. Never introduce facts the slide does not already carry.
+- Content listed as "no longer has a box" is the material to work from
+  first — it is what the old layout showed and the new one has no room for
+  as-is. Fold it into the boxes you are filling where it belongs.
+- Respect each box's limits exactly. A box with a character budget must come
+  in under it; a bullet box must not exceed its item count. Shorten by
+  cutting words, never by truncating mid-word.
+- Match the register of the text already on the slide.
+- A box you have nothing to say for: leave it out of the JSON entirely.
+  An empty box is better than filler.
+- Text boxes take a string. Bullet boxes take an array of strings, each one
+  a tight phrase with no trailing punctuation.
+
+Return ONLY this JSON, with one key per box you filled:
+{ "slots": { "<box name>": "<text>" | ["<point>", "<point>"] } }

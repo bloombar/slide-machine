@@ -6,6 +6,11 @@
  * how a slot is edited — adding an editable media type later means
  * extending SlotKind, describing the slot in shared, and registering
  * an editor here.
+ *
+ * A slide's content is a map keyed by the slot names its layout declares
+ * (`slide.slots`), so a layout may hold four pictures or three code samples.
+ * Reading and writing go through `slotValue`/`patchSlot`, so a slot the
+ * author named behaves exactly like a conventional one.
  */
 import { useState, type ComponentType } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -19,6 +24,7 @@ import {
   type LayoutSlot,
   type Slide,
   type SlideEditInput,
+  type SlotValue,
   type SlotDescriptor,
   type SlotKind,
   type SlotSpec,
@@ -37,17 +43,75 @@ export type SlideContentPatch = Omit<SlideEditInput, 'slideId'>
  */
 const PLACEHOLDER_SLIDE_TITLE = 'New slide'
 
-/** The slide field backing each slot (image edits will target imageRef). */
-const SLOT_FIELDS: Partial<Record<LayoutSlot, keyof Slide>> = {
-  title: 'title',
-  body: 'body',
-  bullets: 'bullets',
-  caption: 'caption',
-  image: 'imageRef',
+/** What one slot holds, flattened for the editors below. The slide stores a
+ * kind-tagged value; this is the shape every editor here works in. */
+interface SlotContent {
+  text?: string
+  bullets?: string[]
+  imageRef?: string
+  imageSource?: Slide['imageSource']
+  attribution?: Slide['attribution']
+}
+
+/** The conventional slots, which the DTO also carries as fields of their own.
+ * Reading falls back to those, so a slide from any older reader still shows
+ * its content (docs/plans/extensible-templates-plan.md's migration lever). */
+const LEGACY_READ: Record<string, (slide: Slide) => SlotContent> = {
+  title: s => ({ text: s.title }),
+  body: s => ({ text: s.body }),
+  caption: s => ({ text: s.caption }),
+  bullets: s => ({ bullets: s.bullets }),
+  image: s => ({
+    imageRef: s.imageRef,
+    imageSource: s.imageSource,
+    attribution: s.attribution,
+  }),
+}
+
+/** What a slot holds, read from the slide's slot map. */
+export const slotValue = (slide: Slide, slot: string): SlotContent => {
+  const value = slide.slots?.[slot]
+  if (!value) return LEGACY_READ[slot]?.(slide) ?? {}
+  switch (value.kind) {
+    case 'text':
+    case 'preformatted':
+      return { text: value.value }
+    case 'bullets':
+      return { bullets: value.items }
+    case 'image':
+      return {
+        imageRef: value.ref,
+        imageSource: value.source,
+        attribution: value.attribution,
+      }
+    default:
+      return {}
+  }
+}
+
+/** An edit to a slot, addressed to the slot map by name. */
+export const patchSlot = (
+  slot: string,
+  value: SlotContent,
+): SlideContentPatch => {
+  const slotValue: SlotValue =
+    value.bullets !== undefined
+      ? { kind: 'bullets', items: value.bullets }
+      : value.imageRef !== undefined || value.attribution !== undefined
+        ? {
+            kind: 'image',
+            ...(value.imageRef !== undefined ? { ref: value.imageRef } : {}),
+            ...(value.attribution !== undefined
+              ? { attribution: value.attribution }
+              : {}),
+          }
+        : { kind: 'text', value: value.text ?? '' }
+  return { slots: { [slot]: slotValue } }
 }
 
 export interface SlotEditorProps {
-  slot: LayoutSlot
+  /** A conventional slot name, or one a template author chose (TMPL-4). */
+  slot: string
   /** The template's own spec for this slot, when it declares one —
    * kind/label/validation from the template file (WYSIWYG-ready). */
   spec?: SlotSpec
@@ -58,19 +122,17 @@ export interface SlotEditorProps {
   onEdit?: (patch: SlideContentPatch) => void
   /** True while background enrichment may still deliver an image. */
   imagePending?: boolean
-  /** Owner-only: uploads a file to replace/set this slide's image. */
-  onReplaceImage?: (file: File) => void
-  /** Owner-only: applies a web search result as this slide's image (EDIT-1). */
-  onPickImageCandidate?: (candidate: ImageSearchCandidate) => void
-  /** Owner-only: removes this slide's image (may delete or re-layout the slide). */
-  onRemoveImage?: () => void
+  /** Owner-only: uploads a file into this slot. The slot name is passed on,
+   * since a layout may have several image slots (TMPL-4). */
+  onReplaceImage?: (file: File, slot: string) => void
+  /** Owner-only: applies a web search result to this slot (EDIT-1). */
+  onPickImageCandidate?: (candidate: ImageSearchCandidate, slot: string) => void
+  /** Owner-only: empties this slot's image. */
+  onRemoveImage?: (slot: string) => void
 }
 
-const textValue = (slide: Slide, slot: LayoutSlot): string => {
-  const field = SLOT_FIELDS[slot]
-  const value = field ? slide[field] : undefined
-  return typeof value === 'string' ? value : ''
-}
+const textValue = (slide: Slide, slot: string): string =>
+  slotValue(slide, slot).text ?? ''
 
 /** A text slot: markdown normally, in-place editable for owners. */
 function TextSlot({ slot, descriptor, slide, onEdit }: SlotEditorProps) {
@@ -92,15 +154,15 @@ function TextSlot({ slot, descriptor, slide, onEdit }: SlotEditorProps) {
         name: descriptor.label.toLocaleLowerCase(),
       })}
       placeholderStyle
-      onSave={v => onEdit({ [slot]: v } as SlideContentPatch)}
+      onSave={v => onEdit(patchSlot(slot, { text: v }))}
     />
   )
 }
 
 /** The bullet list edits as a whole: one line per bullet. */
-function BulletsSlot({ descriptor, slide, onEdit }: SlotEditorProps) {
+function BulletsSlot({ slot, descriptor, slide, onEdit }: SlotEditorProps) {
   const { t } = useTranslation()
-  const items = slide.bullets ?? []
+  const items = slotValue(slide, slot).bullets ?? []
   const rendered = (bullets: string[]) => (
     <ul className="flex list-disc flex-col gap-[1.5cqi] ps-[4cqi] text-start text-[2.75cqi]">
       {bullets.map((b, i) => (
@@ -121,7 +183,11 @@ function BulletsSlot({ descriptor, slide, onEdit }: SlotEditorProps) {
         name: descriptor.label.toLocaleLowerCase(),
       })}
       placeholderStyle
-      onSave={v => onEdit({ bullets: v.split('\n').filter(b => b.trim()) })}
+      onSave={v =>
+        onEdit(
+          patchSlot(slot, { bullets: v.split('\n').filter(b => b.trim()) }),
+        )
+      }
     />
   )
 }
@@ -135,6 +201,7 @@ function BulletsSlot({ descriptor, slide, onEdit }: SlotEditorProps) {
  * it to a text layout depending on the layout.
  */
 function ImageSlot({
+  slot,
   slide,
   colors,
   imagePending,
@@ -152,7 +219,9 @@ function ImageSlot({
   const [attrOpen, setAttrOpen] = useState(false)
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
   const editable = Boolean(onReplaceImage && onRemoveImage)
-  const hasImage = Boolean(slide.imageRef) && failedSrc !== slide.imageRef
+  const content = slotValue(slide, slot)
+  const imageRef = content.imageRef
+  const hasImage = Boolean(imageRef) && failedSrc !== imageRef
   // Seed the dialog's web search only from meaningful context: the AI's
   // image keywords, or a real slide title. A fresh slide's placeholder
   // title is not context, so its search starts blank and the user
@@ -167,7 +236,7 @@ function ImageSlot({
   // nothing. The user can edit the comma-separated list to refine.
   const searchQuery = slide.imageKeywords?.join(', ') || titleSeed
 
-  const attribution = slide.attribution
+  const attribution = content.attribution
   const hasAttribution = Boolean(
     attribution?.sourceUrl || attribution?.creator || attribution?.license,
   )
@@ -175,7 +244,7 @@ function ImageSlot({
   // so it is shown but not editable; the instructor's own images (seeded
   // or uploaded) stay editable (IMG-5).
   const aiSourced =
-    slide.imageSource === 'stock' || slide.imageSource === 'generated'
+    content.imageSource === 'stock' || content.imageSource === 'generated'
   const canEditAttribution = Boolean(onEdit) && !aiSourced
   // Owners can open the dialog to add/correct their own credit; anyone
   // sees the "i" when there is credit to read (IMG-5)
@@ -183,9 +252,9 @@ function ImageSlot({
 
   const image = (
     <img
-      src={slide.imageRef}
+      src={imageRef}
       alt={slide.caption ?? slide.title ?? t('slide.image.alt')}
-      onError={() => setFailedSrc(slide.imageRef ?? null)}
+      onError={() => setFailedSrc(imageRef ?? null)}
       className="h-full w-full object-cover transition-opacity duration-500"
     />
   )
@@ -194,14 +263,6 @@ function ImageSlot({
       aria-hidden
       data-testid="image-skeleton"
       className="h-full min-h-[16cqi] w-full animate-pulse rounded-lg"
-      style={{ backgroundColor: colors.surface }}
-    />
-  )
-  const fallback = (
-    <div
-      aria-hidden
-      data-testid="image-fallback"
-      className="h-full min-h-[16cqi] w-full rounded-lg"
       style={{ backgroundColor: colors.surface }}
     />
   )
@@ -231,7 +292,7 @@ function ImageSlot({
       attribution={attribution}
       editable={canEditAttribution}
       onSave={next => {
-        onEdit?.({ attribution: next })
+        onEdit?.(patchSlot(slot, { attribution: next }))
         setAttrOpen(false)
       }}
       onClose={() => setAttrOpen(false)}
@@ -248,12 +309,15 @@ function ImageSlot({
           {infoDialog}
         </div>
       )
-    return imagePending ? skeleton : fallback
+    // Nothing is coming: a reserved block would read as a picture that failed
+    // to load. Editors still get the block below, since it is what they drop
+    // a new picture onto.
+    return imagePending ? skeleton : null
   }
 
   // A file dropped straight onto the slot uploads without the dialog
   const acceptFile = (file?: File | null) => {
-    if (file) onReplaceImage!(file)
+    if (file) onReplaceImage!(file, slot)
   }
 
   return (
@@ -292,7 +356,7 @@ function ImageSlot({
             <Tooltip label={t(`image.removeTooltip`)} align="end">
               <button
                 aria-label={t(`image.remove`)}
-                onClick={onRemoveImage}
+                onClick={() => onRemoveImage!(slot)}
                 className="rounded-md bg-white/90 p-1.5 text-slate-700 shadow hover:bg-white hover:text-red-600"
               >
                 <X className="h-4 w-4" aria-hidden />
@@ -343,8 +407,8 @@ function ImageSlot({
           slideId={slide.id}
           title={hasImage ? t('image.replace') : t('image.add')}
           initialQuery={searchQuery}
-          onUpload={onReplaceImage}
-          onPickCandidate={onPickImageCandidate}
+          onUpload={file => onReplaceImage(file, slot)}
+          onPickCandidate={candidate => onPickImageCandidate(candidate, slot)}
           onClose={() => setImageDialogOpen(false)}
         />
       )}
@@ -365,7 +429,7 @@ const EDITORS: Record<SlotKind, ComponentType<SlotEditorProps>> = {
  * and validation flow into the editor. */
 export default function SlideSlot(props: Omit<SlotEditorProps, 'descriptor'>) {
   const { t } = useTranslation()
-  const conventional = SLOT_DESCRIPTORS[props.slot] as
+  const conventional = SLOT_DESCRIPTORS[props.slot as LayoutSlot] as
     SlotDescriptor | undefined
   // A label a template author wrote is data and is shown as written
   // (docs/I18N.md) — but the server normalizes a bare-name conventional
@@ -377,8 +441,12 @@ export default function SlideSlot(props: Omit<SlotEditorProps, 'descriptor'>) {
     props.spec && props.spec.label !== conventional?.label
       ? props.spec.label
       : undefined
+  // A slot the author named has no bundle key, so its own label is shown
   const label =
-    authored ?? (conventional ? t(`slot.${props.slot}`) : props.slot)
+    authored ??
+    (conventional
+      ? t(`slot.${props.slot as LayoutSlot}`)
+      : (props.spec?.label ?? props.slot))
   const descriptor: SlotDescriptor | undefined = props.spec
     ? {
         kind: props.spec.kind,

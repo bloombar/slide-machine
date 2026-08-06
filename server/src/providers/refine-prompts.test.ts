@@ -13,6 +13,7 @@ import {
   renderRefinePrompt,
   renderNarratePrompt,
   renderReformatPrompt,
+  renderRefitPrompt,
   resetRefinePromptCache,
 } from './refine-prompts'
 
@@ -101,6 +102,48 @@ describe('renderReformatPrompt', () => {
     expect(prompt).toContain('speakers are known')
     expect(prompt).toContain('[STUDENT] why?')
     expect(prompt).toContain('- quote: A single statement')
+  })
+})
+
+describe('renderRefitPrompt', () => {
+  it('names both layouts, the boxes to fill, and the orphaned content', () => {
+    const prompt = renderRefitPrompt({
+      fromLayout: 'Content',
+      fromSlots: '- "body" (Slide body; text): "A paragraph"',
+      toLayout: 'List',
+      toPurpose: 'A title plus bullet points',
+      toSlots: '- "bullets" (Slide bullets; bullets; max 5 items): empty',
+      fill: '- "bullets" (Slide bullets; bullets; max 5 items): empty',
+      orphaned:
+        '\nContent that no longer has a box (use this first):\n- "body" (Slide body; text): "A paragraph"',
+      context: '',
+      language: '',
+    })
+    expect(prompt).toContain('"Content"')
+    expect(prompt).toContain('"List" — A title plus bullet points')
+    expect(prompt).toContain('Boxes to fill')
+    expect(prompt).toContain('no longer has a box')
+    // The instruction that keeps carried-over content safe must survive
+    // any re-wording of the file.
+    expect(prompt).toContain('Do NOT rewrite those')
+  })
+
+  it('collapses the orphan and context fragments when empty', () => {
+    const prompt = renderRefitPrompt({
+      fromLayout: 'Content',
+      fromSlots: '- "title"',
+      toLayout: 'List',
+      toPurpose: 'Points',
+      toSlots: '- "bullets"',
+      fill: '- "bullets"',
+      orphaned: '',
+      context: '',
+      language: '',
+    })
+    // The rules still explain what orphaned content is; what collapses is
+    // the section that would have listed some.
+    expect(prompt).not.toContain('Content that no longer has a box (use')
+    expect(prompt).not.toContain('Lecture context')
   })
 })
 

@@ -6,6 +6,7 @@
  * (if any) is persisted for the client to pick up.
  */
 import { SlideModel } from '../models/slide'
+import { slotsOf } from '../lib/slide-slots'
 import { env } from '../config/env'
 import { currentUsageUser } from '../billing/usage-context'
 import { userHasCapacity } from '../billing/meter-hooks'
@@ -32,13 +33,16 @@ export const enrichImage = async (
   keywords: string[],
   seeded: ImageCandidate[] = [],
   context?: SlideImageContext,
+  /** Pictures already on the slide. Several image slots sourced from one
+   * brief would otherwise all pick the same winner (IMG-6). */
+  exclude: ReadonlySet<string> = new Set(),
 ): Promise<EnrichedImage | null> => {
   if (!keywords.length) return null
 
   const pool = [
     ...seeded,
     ...(await gatherCandidates(keywords, SOURCE_TIMEOUT_MS)),
-  ]
+  ].filter(c => !exclude.has(c.url))
 
   // Shortlist the top-scored, projector-sized candidates for the AI to judge.
   const shortlist = pool
@@ -67,6 +71,19 @@ export const enrichImage = async (
   return { url: best.url, source: best.source, attribution: best.attribution }
 }
 
+/** The picture URLs a slide already holds, in any of its slots. */
+const usedImageUrls = async (slideId: string): Promise<Set<string>> => {
+  const slide = await SlideModel.findById(slideId, {
+    imageRef: 1,
+    slots: 1,
+  }).catch(() => null)
+  if (!slide) return new Set()
+  const urls = Object.values(slotsOf(slide))
+    .filter(v => v.kind === 'image')
+    .map(v => (v.kind === 'image' ? v.ref : undefined))
+  return new Set([slide.imageRef, ...urls].filter((u): u is string => !!u))
+}
+
 /** Drops undefined fields so a partially-populated credit doesn't persist
  * a subdocument full of null keys; returns undefined when nothing is set. */
 const compactAttribution = (
@@ -90,17 +107,40 @@ const compactAttribution = (
  * same outcome enrichment already produces whenever no source has a good
  * match, so it degrades along a path the UI already handles.
  */
+/**
+ * Sources every image slot a layout declares (IMG-6). A layout with two
+ * pictures gets two, one at a time so each sees what the previous one took
+ * and no slot ends up with the same picture as its neighbour. One slot
+ * failing never stops the next — `enrichSlideImage` swallows its own errors.
+ */
+export const enrichSlideImages = async (
+  slideId: string,
+  slots: string[],
+  keywords: string[],
+  seeded: ImageCandidate[] = [],
+  context?: SlideImageContext,
+): Promise<void> => {
+  for (const slot of slots.length ? slots : ['image']) {
+    await enrichSlideImage(slideId, keywords, seeded, context, slot)
+  }
+}
+
 export const enrichSlideImage = async (
   slideId: string,
   keywords: string[],
   seeded: ImageCandidate[] = [],
   context?: SlideImageContext,
+  slot = 'image',
 ): Promise<void> => {
   try {
     const payer = currentUsageUser()
     if (payer && !(await userHasCapacity(payer, 'imageLookups'))) return
 
-    const image = await enrichImage(keywords, seeded, context)
+    // A layout may declare several image slots (IMG-6), and each is sourced
+    // on its own. Pictures already on the slide are excluded so two slots
+    // filled from one brief do not come back as the same picture twice.
+    const taken = await usedImageUrls(slideId)
+    const image = await enrichImage(keywords, seeded, context, taken)
     if (!image) return
 
     // 'fill': only set a caption the slide doesn't already have (manual
@@ -125,12 +165,38 @@ export const enrichSlideImage = async (
       image.caption && context?.captionMode === 'replace'
         ? { caption: image.caption }
         : {}
+    const path = `slots.${slot}`
     await SlideModel.updateOne(
-      { _id: slideId, imageRef: { $in: [null, ''] } },
       {
-        imageRef: image.url,
-        imageSource: image.source === 'seeded' ? 'seeded' : 'stock',
-        attribution: compactAttribution(image.attribution),
+        _id: slideId,
+        $and: [
+          {
+            $or: [
+              { [`${path}.ref`]: { $in: [null, ''] } },
+              { [path]: { $exists: false } },
+            ],
+          },
+          // A slide written before the map holds its picture in the old
+          // field alone, and that picture is still the user's (IMG-3).
+          ...(slot === 'image' ? [{ imageRef: { $in: [null, ''] } }] : []),
+        ],
+      },
+      {
+        [path]: {
+          kind: 'image',
+          ref: image.url,
+          source: image.source === 'seeded' ? 'seeded' : 'stock',
+          attribution: compactAttribution(image.attribution),
+        },
+        // The conventional slot keeps its derived fields in step, since the
+        // atomic update bypasses the model's save hook.
+        ...(slot === 'image'
+          ? {
+              imageRef: image.url,
+              imageSource: image.source === 'seeded' ? 'seeded' : 'stock',
+              attribution: compactAttribution(image.attribution),
+            }
+          : {}),
         ...replaceCaption,
       },
     )

@@ -17,7 +17,10 @@ import request from 'supertest'
 import { env } from '../../src/config/env'
 import { connectMongo, disconnectMongo } from '../../src/db/mongoose'
 import { createApp } from '../../src/app'
-import { enrichSlideImage } from '../../src/enrichment/enrich'
+import {
+  enrichSlideImage,
+  enrichSlideImages,
+} from '../../src/enrichment/enrich'
 import { UserModel } from '../../src/models/user'
 import { ProjectModel } from '../../src/models/project'
 import { DeckModel } from '../../src/models/deck'
@@ -152,6 +155,68 @@ describe('enrichSlideImage', () => {
 
     const slide = await act(ada, 'slide.get', { slideId })
     expect(slide.body.imageRef).toBe('http://original.png')
+  })
+
+  it('fills every image slot a layout declares, with a picture each (IMG-6)', async () => {
+    // Two pictures on one slide is a layout the author built (TMPL-9), so
+    // enrichment runs per slot rather than once per slide.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('wikimedia')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              query: {
+                pages: {
+                  '1': {
+                    title: 'File:Sun.png',
+                    imageinfo: [
+                      { thumburl: 'http://wiki/sun-1.png', thumbwidth: 1600 },
+                    ],
+                  },
+                  '2': {
+                    title: 'File:Sun rising.png',
+                    imageinfo: [
+                      { thumburl: 'http://wiki/sun-2.png', thumbwidth: 1500 },
+                    ],
+                  },
+                },
+              },
+            }),
+          } as Response
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ results: [] }),
+        } as Response
+      }),
+    )
+
+    await enrichSlideImages(slideId, ['photo-left', 'photo-right'], ['sun'])
+
+    const slide = await act(ada, 'slide.get', { slideId })
+    const left = slide.body.slots['photo-left']
+    const right = slide.body.slots['photo-right']
+    expect(left.ref).toBeTruthy()
+    expect(right.ref).toBeTruthy()
+    // Two boxes showing the same picture is not two pictures
+    expect(left.ref).not.toBe(right.ref)
+  })
+
+  it('leaves a slot alone once it holds a picture (IMG-3, per slot)', async () => {
+    await act(ada, 'slide.editContent', {
+      slideId,
+      slots: { image: { kind: 'image', ref: 'http://mine.png' } },
+    })
+    stubImageApis()
+    await enrichSlideImages(slideId, ['image'], ['mitochondria'])
+
+    const slide = await act(ada, 'slide.get', { slideId })
+    expect(slide.body.slots.image.ref).toBe('http://mine.png')
   })
 
   it('leaves the slide untouched when enrichment finds nothing', async () => {

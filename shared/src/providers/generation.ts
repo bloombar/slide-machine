@@ -3,7 +3,7 @@
  * (SPEC GEN-1/GEN-6/GEN-7/GEN-8 / TECH-8). Gemini is the pilot adapter.
  * Interface is minimal and expected to evolve with the first adapter.
  */
-import type { LayoutDescriptor, LayoutType } from '../types/template'
+import type { LayoutDescriptor } from '../types/template'
 import type {
   VoiceCommand,
   VoiceCommandDescriptor,
@@ -34,7 +34,7 @@ export interface SlideGenerationRequest {
     /** A title slide already opened the deck. */
     hasTitleSlide: boolean
     /** The heading (title/section) slides so far, in order. */
-    outline: { position: number; layoutType: LayoutType; title: string }[]
+    outline: { position: number; layoutType: string; title: string }[]
   }
   /** Seed context layers (typed notes, imported docs, honed concepts).
    * Deck-level notes are more specific and outrank project-level ones. */
@@ -58,7 +58,7 @@ export interface SlideGenerationRequest {
   /** Snapshot of the current (last) slide so the model can judge
    * whether an update still fits or a new slide is due (GEN-8). */
   currentSlide?: {
-    layoutType: LayoutType
+    layoutType: string
     bulletCount: number
     bodyChars: number
     /** The slide's exact slot content — present when layout re-fit is
@@ -119,7 +119,7 @@ export interface SlideGenerationResult {
    * changes nothing (GEN-8) — or, when voice commands were offered, is
    * an operational command addressed to the slide system. */
   action: 'new' | 'update' | 'none' | 'command'
-  layoutType: LayoutType
+  layoutType: string
   /** Content mapped to the chosen layout's slots. */
   slots: {
     title?: string
@@ -154,7 +154,7 @@ export interface ReformatTurn {
 export interface SlideReformatRequest {
   /** The slide's current content, to revise in place. */
   current: {
-    layoutType: LayoutType
+    layoutType: string
     title?: string
     body?: string
     bullets?: string[]
@@ -173,7 +173,7 @@ export interface SlideReformatRequest {
 
 /** Revised slide content from a reformat. */
 export interface SlideReformatResult {
-  layoutType: LayoutType
+  layoutType: string
   slots: {
     title?: string
     body?: string
@@ -185,7 +185,7 @@ export interface SlideReformatResult {
 
 /** The slide content the refine/narrate passes operate on. */
 export interface SlideContent {
-  layoutType: LayoutType
+  layoutType: string
   title?: string
   body?: string
   bullets?: string[]
@@ -215,7 +215,7 @@ export interface SlideRefineRequest {
 }
 
 export interface SlideRefineResult {
-  layoutType: LayoutType
+  layoutType: string
   slots: {
     title?: string
     body?: string
@@ -257,6 +257,67 @@ export interface SlideNarrateResult {
   transcript: string
 }
 
+/**
+ * One box in a layout-refit request: what it is, what it will hold, and what
+ * it currently holds. Sent for both sides of the switch, so the model can see
+ * that a paragraph is becoming a bullet list rather than guessing from names.
+ */
+export interface RefitSlotDescriptor {
+  name: string
+  kind: 'text' | 'bullets' | 'image'
+  /** The author's name for the box ("Key points"), which often says what it
+   * is for better than the slot name does. */
+  label: string
+  /** The style role it follows, when it has one ('heading', 'caption', …). */
+  textStyle?: string
+  maxChars?: number
+  maxItems?: number
+  /** What the box holds right now. Text and lists only — a picture is moved
+   * by the pairing, never re-written by the model. */
+  value?: string | string[]
+}
+
+/**
+ * Filling the boxes a layout switch left empty (GEN-9).
+ *
+ * Deliberately narrow: boxes that paired keep their content untouched, so
+ * this asks only for the holes. That keeps hand-edited text safe, keeps the
+ * call small, and means the answer can be applied without diffing.
+ */
+export interface SlideRefitRequest {
+  /** The layout being left, with the content each of its boxes held. */
+  from: {
+    layoutType: string
+    label: string
+    slots: RefitSlotDescriptor[]
+  }
+  /** The layout being moved to: every box, so the model can see what the
+   * holes sit among. */
+  to: {
+    layoutType: string
+    label: string
+    purpose: string
+    slots: RefitSlotDescriptor[]
+  }
+  /** The boxes to write content for — names from `to.slots`. Everything
+   * else is already filled and must not be rewritten. */
+  fill: string[]
+  /** Content from the old layout that no box in the new one took: the
+   * source material the holes should be written from where it fits. */
+  orphaned: RefitSlotDescriptor[]
+  language?: string
+  seedContext?: {
+    project?: string
+    deck?: string
+  }
+}
+
+/** Content for the holes, keyed by slot name. Slots outside the request's
+ * `fill` list are ignored by the caller. */
+export interface SlideRefitResult {
+  slots: Record<string, string | string[]>
+}
+
 export interface GenerationProvider {
   readonly name: string
   generateSlideContent(
@@ -264,6 +325,8 @@ export interface GenerationProvider {
   ): Promise<SlideGenerationResult>
   /** Post-lecture reformat of one slide with speaker roles (GEN-4 Phase 4). */
   reformatSlide(request: SlideReformatRequest): Promise<SlideReformatResult>
+  /** Write content for boxes a layout switch left empty (GEN-9). */
+  refitSlideLayout(request: SlideRefitRequest): Promise<SlideRefitResult>
   /** Improve one slide's content/layout/image (GEN-4 Refine). */
   refineSlide(request: SlideRefineRequest): Promise<SlideRefineResult>
   /** Spoken narration for a slide, kept in-line with its content (GEN-4 Refine). */

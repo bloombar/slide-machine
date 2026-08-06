@@ -1,0 +1,60 @@
+/**
+ * The font stacks a template may choose from.
+ *
+ * Deliberately a short fixed list of stacks already on the reader's machine,
+ * never a family fetched at display time: a webfont request would tell a third
+ * party who is viewing which slide, on every slide view, and would leave the
+ * deck unreadable offline or behind a restricted network (docs/TEMPLATES.md
+ * §5). The cost is that a template approximates a typeface rather than
+ * reproducing it, which is the trade we choose.
+ *
+ * The key is what gets stored; the stack is what CSS sees.
+ */
+export interface FontStack {
+  /** Stored on the template. Stable — renaming one restyles saved decks. */
+  key: string
+  /** Shown in the picker. Not translated: these are typeface names. */
+  label: string
+  /** The CSS `font-family` value. */
+  stack: string
+}
+
+export const FONT_STACKS: FontStack[] = [
+  {
+    key: 'sans',
+    label: 'System sans',
+    stack:
+      'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  },
+  {
+    key: 'serif',
+    label: 'System serif',
+    stack: 'ui-serif, Georgia, Cambria, "Times New Roman", Times, serif',
+  },
+  {
+    key: 'humanist',
+    label: 'Humanist',
+    stack:
+      'Optima, Candara, "Gill Sans", "Gill Sans MT", "Trebuchet MS", sans-serif',
+  },
+  {
+    key: 'geometric',
+    label: 'Geometric',
+    stack:
+      'Futura, "Century Gothic", "Avenir Next", Avenir, "Nunito Sans", sans-serif',
+  },
+  {
+    key: 'mono',
+    label: 'Monospace',
+    stack:
+      'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+  },
+]
+
+/** The stack a template's stored key means. An unknown key falls back to the
+ * first stack rather than to the browser default, so a template saved by a
+ * newer client still reads as a deliberate choice. */
+export const fontStack = (key: string | undefined): string | undefined => {
+  if (!key) return undefined
+  return (FONT_STACKS.find(f => f.key === key) ?? FONT_STACKS[0]!).stack
+}

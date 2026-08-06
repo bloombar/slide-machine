@@ -29,6 +29,7 @@ const slide = (overrides: Partial<Slide>): Slide => ({
   deckId: 'd1',
   index: 0,
   layoutType: 'content',
+  slots: {},
   ...overrides,
 })
 
@@ -104,14 +105,16 @@ describe('SlideView', () => {
     expect(screen.getByTestId('image-skeleton')).toBeInTheDocument()
   })
 
-  it('shows a quiet static fallback when no image is pending or found', () => {
+  it('shows a viewer no placeholder when no image is pending or found', () => {
+    // An empty reserved block reads as a picture that failed to load, and a
+    // viewer has no way to fill it
     render(
       <SlideView
         slide={slide({ layoutType: 'two-column', title: 'T', body: 'B' })}
         template={template}
       />,
     )
-    expect(screen.getByTestId('image-fallback')).toBeInTheDocument()
+    expect(screen.queryByTestId('image-fallback')).not.toBeInTheDocument()
     expect(screen.queryByTestId('image-skeleton')).not.toBeInTheDocument()
   })
 
@@ -149,7 +152,9 @@ describe('SlideView in-place editing', () => {
     })
     fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
 
-    expect(onEdit).toHaveBeenCalledWith({ title: 'Photosynthesis 101' })
+    expect(onEdit).toHaveBeenCalledWith({
+      slots: { title: { kind: 'text', value: 'Photosynthesis 101' } },
+    })
   })
 
   it('edits the bullet list as a whole, one line per bullet', () => {
@@ -176,7 +181,9 @@ describe('SlideView in-place editing', () => {
     fireEvent.keyDown(box, { key: 'Enter', metaKey: true })
 
     expect(onEdit).toHaveBeenCalledWith({
-      bullets: ['sun', 'fresh water', 'soil'],
+      slots: {
+        bullets: { kind: 'bullets', items: ['sun', 'fresh water', 'soil'] },
+      },
     })
   })
 
@@ -215,7 +222,9 @@ describe('SlideView in-place editing', () => {
     })
     fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
 
-    expect(onEdit).toHaveBeenCalledWith({ caption: 'An overview' })
+    expect(onEdit).toHaveBeenCalledWith({
+      slots: { caption: { kind: 'text', value: 'An overview' } },
+    })
   })
 
   it('keeps empty conditional slots hidden from viewers', () => {
@@ -248,6 +257,30 @@ describe('SlideView layout-flip slot tagging (GEN-9)', () => {
     // The flip id is slide-scoped so a multi-slide list view never
     // matches slots across different slides.
     expect(title.dataset.flipId).toBe('s1:title')
+    // The box the layout placed says what it holds, so a transition can
+    // match this box to another layout's headline under a different name.
+    expect(title.closest('[data-flip-tier]')).toHaveAttribute(
+      'data-flip-tier',
+      'headline',
+    )
+  })
+
+  it('tags each box with the tier the transition matches on', () => {
+    render(
+      <SlideView
+        slide={slide({
+          layoutType: 'image-heavy',
+          imageRef: 'http://img/x.jpg',
+          caption: 'A cell',
+        })}
+        template={template}
+      />,
+    )
+    const tiers = Array.from(document.querySelectorAll('[data-flip-tier]')).map(
+      el => (el as HTMLElement).dataset.flipTier,
+    )
+    expect(tiers).toContain('image')
+    expect(tiers).toContain('caption')
   })
 
   it('keeps the full-size wrapper for image slots, which fill their frame', () => {
