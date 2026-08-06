@@ -3245,8 +3245,13 @@ describe('DeckViewerPage live session under translated viewing (SHARE-2)', () =>
           locale: 'fr',
           source: 'en',
           perSlide: {
-            s1: { title: 'Bonjour' },
-            s2: { title: 'Deuxième', body: 'Plus de détail' },
+            s1: { slots: { title: { kind: 'text', value: 'Bonjour' } } },
+            s2: {
+              slots: {
+                title: { kind: 'text', value: 'Deuxième' },
+                body: { kind: 'text', value: 'Plus de détail' },
+              },
+            },
           },
         },
       }),

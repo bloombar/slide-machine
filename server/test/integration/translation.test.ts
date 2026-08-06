@@ -133,15 +133,15 @@ describe('translated viewing', () => {
     expect(res.body.locale).toBe('fr')
     expect(res.body.source).toBe('en')
     const entry = res.body.perSlide[slideId]
-    expect(entry.title).toContain('[fr]')
-    expect(entry.bullets).toHaveLength(2)
-    expect(entry.caption).toContain('[fr]')
+    expect(entry.slots.title.value).toContain('[fr]')
+    expect(entry.slots.bullets.items).toHaveLength(2)
+    expect(entry.slots.caption.value).toContain('[fr]')
   })
 
   it('preserves markdown formatting through the round trip', async () => {
     const entry = (await translateAnon(slug, 'fr')).body.perSlide[slideId]
     // The emphasis survives translation rather than being flattened
-    expect(entry.body).toContain('**stays**')
+    expect(entry.slots.body.value).toContain('**stays**')
   })
 
   it('never touches the stored slides', async () => {
@@ -181,12 +181,92 @@ describe('translation caching', () => {
     try {
       const second = await translateAnon(slug, 'fr')
       expect(second.status).toBe(200)
-      expect(second.body.perSlide[slideId].title).toContain('[fr]')
+      expect(second.body.perSlide[slideId].slots.title.value).toContain('[fr]')
       expect(counter.calls).toBe(0)
     } finally {
       counter.restore()
     }
     expect(await SlideTranslationModel.countDocuments({ deckId })).toBe(1)
+  })
+
+  it('leaves code and mathematics untranslated', async () => {
+    // Translating a listing stops it running and a formula stops it parsing.
+    // The kind allowlist is what prevents it; this is the assertion that
+    // would fail if somebody generalized the walk without it.
+    const technical = await SlideModel.create({
+      deckId,
+      index: 1,
+      layoutType: 'content',
+      slots: {
+        title: { kind: 'text', value: 'Loops' },
+        sample: { kind: 'code', source: 'for i in range(3): print(i)' },
+        formula: { kind: 'math', tex: 'e^{i\\pi} + 1 = 0' },
+      },
+    })
+    const res = await translateAnon(slug, 'fr')
+    const entry = res.body.perSlide[technical._id.toString()]
+    expect(entry.slots.title.value).toContain('[fr]')
+    expect(entry.slots.sample).toBeUndefined()
+    expect(entry.slots.formula).toBeUndefined()
+  })
+
+  it('translates a box the template author named, and a table cell by cell', () =>
+    (async () => {
+      const custom = await SlideModel.create({
+        deckId,
+        index: 1,
+        layoutType: 'content',
+        slots: {
+          definition: { kind: 'text', value: 'A standing wave' },
+          grid: {
+            kind: 'table',
+            header: ['Term', 'Meaning'],
+            rows: [['Node', 'No motion']],
+          },
+        },
+      })
+      const res = await translateAnon(slug, 'fr')
+      const entry = res.body.perSlide[custom._id.toString()]
+      // Nothing here is a conventional slot name; the walk found them anyway.
+      expect(entry.slots.definition.value).toContain('[fr]')
+      expect(entry.slots.grid.header[0]).toContain('[fr]')
+      expect(entry.slots.grid.rows[0][0]).toContain('[fr]')
+      expect(entry.slots.grid.rows[0]).toHaveLength(2)
+    })())
+
+  it('carries a translation across a layout switch instead of re-buying it', async () => {
+    await translateAnon(slug, 'fr')
+    const counter = countingProvider()
+    try {
+      // A switch between layouts that share the conventional names moves
+      // nothing, so the cache must still be valid afterwards.
+      await act(ada, 'slide.setLayout', { slideId, layoutType: 'title' })
+      await translateAnon(slug, 'fr')
+      expect(counter.calls).toBe(0)
+    } finally {
+      counter.restore()
+    }
+  })
+
+  it('does not restamp a translation that was already stale', async () => {
+    // The guard that matters: an entry whose slide was edited after it was
+    // translated must not be carried across a move and stamped fresh, or the
+    // viewer would be shown last week's words indefinitely.
+    await translateAnon(slug, 'fr')
+    await act(ada, 'slide.editContent', { slideId, title: 'Travelling waves' })
+    await act(ada, 'slide.setLayout', { slideId, layoutType: 'title' })
+
+    const doc = await SlideTranslationModel.findOne({ deckId, locale: 'fr' })
+    const title = doc!.perSlide.get(slideId)!.slots.title
+    // Still keyed to the pre-edit text, so the next view re-translates it.
+    expect(title?.kind === 'text' ? title.value : '').toContain(
+      'Standing waves',
+    )
+
+    const res = await translateAnon(slug, 'fr')
+    expect(res.body.perSlide[slideId].slots.title.value).toContain(
+      'Travelling waves',
+    )
   })
 
   it('keeps one document per deck and locale', async () => {
@@ -224,7 +304,9 @@ describe('translation caching', () => {
       // Only the edited slide's segments went to the provider
       expect(sentTexts.some(t => t.includes('Travelling waves'))).toBe(true)
       expect(sentTexts.some(t => t.includes('Second slide'))).toBe(false)
-      expect(res.body.perSlide[slideId].title).toContain('Travelling waves')
+      expect(res.body.perSlide[slideId].slots.title.value).toContain(
+        'Travelling waves',
+      )
     } finally {
       provider.translate = original
       counter.restore()

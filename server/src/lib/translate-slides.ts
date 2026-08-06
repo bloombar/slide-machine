@@ -18,13 +18,16 @@ import type { Types } from 'mongoose'
 import type {
   Locale,
   SlideTranslationEntry,
+  SlotValue,
   TranslationProvider,
 } from '@slide-machine/shared'
+import { isTranslatableSlot } from '@slide-machine/shared'
 import {
   htmlToMarkdown,
   markdownToHtml,
   restoreLinkHrefs,
 } from './markdown-html'
+import { slotsOf, remapSlots, type LegacyContent } from './slide-slots'
 import { registry } from '../providers/registry'
 import { env } from '../config/env'
 import {
@@ -45,15 +48,19 @@ export const translationEnabled = (): boolean => {
   return true
 }
 
-/** The slide fields translated viewing covers — content only, never the
- * spoken transcript (narration stays in the lecture's own language). */
-export interface TranslatableSlide {
+/** The slide content translated viewing covers — never the spoken transcript
+ * (narration stays in the lecture's own language). */
+export interface TranslatableSlide extends LegacyContent {
   id: string
-  title?: string
-  body?: string
-  bullets?: string[]
-  caption?: string
+  /** Absent on slides written before the slot map; derived from the fields. */
+  slots?: Record<string, SlotValue> | null
 }
+
+/** The slots of a slide that translated viewing actually covers, by name. */
+const translatableSlotsOf = (slide: TranslatableSlide): [string, SlotValue][] =>
+  Object.entries(slotsOf(slide))
+    .filter(([, value]) => isTranslatableSlot(value))
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
 
 /**
  * Bumped when the conversion or segmentation changes in a way that makes
@@ -61,74 +68,269 @@ export interface TranslatableSlide {
  * the whole cache generation without a migration — the same trick the TTS
  * cache key uses.
  */
-const HASH_VERSION = 'v1'
+const HASH_VERSION = 'v2'
 
 /**
- * Fingerprint of the source text an entry was translated from. Editing any
- * translated field changes it; editing the image, layout, or transcript does
- * not, so unrelated edits never spend a translation call.
+ * Fingerprint of the content an entry was translated from.
+ *
+ * Covers each translatable slot's NAME, KIND and text. Editing translated
+ * content changes it; editing a picture, a code sample, the layout or the
+ * transcript does not, so unrelated edits never spend a translation call.
+ *
+ * Names and kinds are in the hash because content moves between boxes — a
+ * layout switch, a template update — without any of the words changing. A
+ * hash over text alone would still match afterwards while the entry was keyed
+ * to boxes the slide no longer uses, which is a cache that looks fresh and
+ * reads wrong. With names in it, any move that is not carried across
+ * explicitly simply invalidates and re-translates.
  */
 export const slideSourceHash = (slide: TranslatableSlide): string =>
   createHash('sha256')
     .update(
       JSON.stringify([
         HASH_VERSION,
-        slide.title ?? '',
-        slide.body ?? '',
-        slide.bullets ?? [],
-        slide.caption ?? '',
+        translatableSlotsOf(slide).map(([name, value]) => [
+          name,
+          value.kind,
+          translatableTextOf(value),
+        ]),
       ]),
     )
     .digest('hex')
 
+/** The words of a slot, in a shape that is stable to hash. */
+const translatableTextOf = (value: SlotValue): unknown => {
+  switch (value.kind) {
+    case 'text':
+    case 'preformatted':
+      return value.value
+    case 'bullets':
+      return value.items
+    case 'table':
+      return [value.header ?? [], value.rows]
+    default:
+      return null
+  }
+}
+
+/**
+ * Preformatted text rides the same HTML batch as everything else, but as
+ * escaped characters rather than converted Markdown — its spacing and its
+ * punctuation are the author's, not markup to be interpreted.
+ *
+ * Its alignment still will not survive: translated words are not the same
+ * length as the words they replace, so an ASCII table comes back readable but
+ * no longer squared up. That is inherent to translating text whose layout is
+ * made of spaces, and the alternative — refusing to translate it — was the
+ * call that was made the other way.
+ */
+const escapeHtml = (text: string): string =>
+  text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+const unescapeHtml = (html: string): string =>
+  html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#(?:39|x27);/g, "'")
+    .replace(/&amp;/g, '&')
+
+/** Where inside a slot one translatable string lives. */
+type SegmentPath =
+  | { at: 'value' }
+  | { at: 'item'; index: number }
+  | { at: 'header'; col: number }
+  | { at: 'cell'; row: number; col: number }
+
 /** One translatable string and where it belongs on its slide. */
 interface Segment {
   slideId: string
-  field: 'title' | 'body' | 'bullets' | 'caption'
-  /** Position within `bullets`; absent for the single-value fields. */
-  index?: number
+  slot: string
+  path: SegmentPath
   markdown: string
-  /** Titles, captions and bullets render inline — no wrapping paragraph. */
+  /** Titles, captions, bullets and table cells render inline — no wrapping
+   * paragraph. */
   inline: boolean
+  /**
+   * Preformatted text is sent as characters, not as Markdown. Running it
+   * through the Markdown round trip would read its leading spaces as a code
+   * block and its asterisks as emphasis, and hand back something the author
+   * never wrote.
+   */
+  literal: boolean
 }
 
-/** Splits a slide into the segments that need translating, skipping blanks. */
+/**
+ * Splits a slide into the segments that need translating, skipping blanks.
+ *
+ * Walks the slot map rather than a fixed field list, so a layout an author
+ * built translates whatever prose boxes it declares, under whatever names it
+ * gave them. Kinds that are not prose never reach here — `translatableSlotsOf`
+ * has already dropped them.
+ */
 const segmentsOf = (slide: TranslatableSlide): Segment[] => {
   const segments: Segment[] = []
   const push = (
-    field: Segment['field'],
+    slot: string,
+    path: SegmentPath,
     markdown: string | undefined,
     inline: boolean,
-    index?: number,
+    literal = false,
   ): void => {
     if (markdown?.trim())
-      segments.push({ slideId: slide.id, field, markdown, inline, index })
+      segments.push({
+        slideId: slide.id,
+        slot,
+        path,
+        markdown,
+        inline,
+        literal,
+      })
   }
-  push('title', slide.title, true)
-  push('body', slide.body, false)
-  slide.bullets?.forEach((bullet, i) => push('bullets', bullet, true, i))
-  push('caption', slide.caption, true)
+  for (const [name, value] of translatableSlotsOf(slide)) {
+    switch (value.kind) {
+      case 'text':
+        // A body reads as a block, a title or caption as one line. Multi-line
+        // text is the only thing that wants a wrapping paragraph.
+        push(name, { at: 'value' }, value.value, !value.value.includes('\n'))
+        break
+      case 'preformatted':
+        push(name, { at: 'value' }, value.value, false, true)
+        break
+      case 'bullets':
+        value.items.forEach((item, index) =>
+          push(name, { at: 'item', index }, item, true),
+        )
+        break
+      case 'table':
+        value.header?.forEach((cell, col) =>
+          push(name, { at: 'header', col }, cell, true),
+        )
+        value.rows.forEach((row, rowIndex) =>
+          row.forEach((cell, col) =>
+            push(name, { at: 'cell', row: rowIndex, col }, cell, true),
+          ),
+        )
+        break
+    }
+  }
   return segments
 }
 
-/** Rebuilds one slide's cache entry from its translated segments. */
+/**
+ * Rebuilds one slide's cache entry from its translated segments.
+ *
+ * Lists and tables are seeded from the source before translated strings are
+ * written into them, so a cell or bullet the translator returned nothing for
+ * falls back to the author's words rather than collapsing the shape.
+ */
 const entryOf = (
   slide: TranslatableSlide,
   translated: Map<Segment, string>,
 ): SlideTranslationEntry => {
-  const entry: SlideTranslationEntry = { sourceHash: slideSourceHash(slide) }
-  for (const [segment, markdown] of translated) {
+  const slots = slotsOf(slide)
+  const entry: SlideTranslationEntry = {
+    slots: {},
+    sourceHash: slideSourceHash(slide),
+  }
+  for (const [segment, text] of translated) {
     if (segment.slideId !== slide.id) continue
-    if (segment.field === 'bullets') {
-      // Keep the original list length and order: an untranslated bullet
-      // falls back to its source rather than collapsing the list.
-      entry.bullets ??= [...(slide.bullets ?? [])]
-      entry.bullets[segment.index!] = markdown
-    } else {
-      entry[segment.field] = markdown
+    const source = slots[segment.slot]
+    if (!source) continue
+    const path = segment.path
+    if (
+      path.at === 'value' &&
+      (source.kind === 'text' || source.kind === 'preformatted')
+    ) {
+      entry.slots[segment.slot] = { kind: source.kind, value: text }
+      continue
+    }
+    if (path.at === 'item' && source.kind === 'bullets') {
+      const current = entry.slots[segment.slot]
+      const items =
+        current?.kind === 'bullets' ? current.items : [...source.items]
+      items[path.index] = text
+      entry.slots[segment.slot] = { kind: 'bullets', items }
+      continue
+    }
+    if (source.kind === 'table' && path.at !== 'value' && path.at !== 'item') {
+      const current = entry.slots[segment.slot]
+      const table =
+        current?.kind === 'table'
+          ? current
+          : {
+              kind: 'table' as const,
+              ...(source.header ? { header: [...source.header] } : {}),
+              rows: source.rows.map(row => [...row]),
+            }
+      if (path.at === 'header' && table.header) table.header[path.col] = text
+      if (path.at === 'cell') {
+        const row = table.rows[path.row]
+        if (row) row[path.col] = text
+      }
+      entry.slots[segment.slot] = table
     }
   }
   return entry
+}
+
+/**
+ * Carries a slide's cached translations across a move between boxes.
+ *
+ * Content moves without changing — a per-slide layout switch (GEN-9), a
+ * template update (TMPL-11) — and the words are the same words afterwards,
+ * just under different slot names. Because the hash covers those names, doing
+ * nothing here would leave every locale looking stale and re-translating text
+ * the owner has already paid for (BILL-3). Applying the same pairing the
+ * content followed, and restamping the hash from the slide as it now stands,
+ * keeps what was already bought.
+ *
+ * Two things make this safe rather than merely cheap:
+ *
+ *   - It refuses entries that were **already** stale before the move. Their
+ *     hash will not match `before`, and restamping one would pin a fresh hash
+ *     onto a translation of text that has since been edited — wrong words,
+ *     shown indefinitely. Those are left to re-translate normally.
+ *   - It copies rather than moves, mirroring `remapSlots`, so switching back
+ *     to the old layout finds its translation still there.
+ *
+ * `before` is the slide as it was when the entry was made — the caller has it
+ * in hand, since it is the same map it just remapped.
+ */
+export const remapSlideTranslations = async (
+  deckId: Types.ObjectId,
+  slideId: string,
+  pairs: Record<string, string>,
+  before: TranslatableSlide,
+): Promise<void> => {
+  const moves = Object.entries(pairs).filter(([from, to]) => from !== to)
+  if (!moves.length) return
+
+  const beforeHash = slideSourceHash(before)
+  const after: TranslatableSlide = {
+    id: before.id,
+    slots: remapSlots(slotsOf(before), pairs),
+  }
+  const afterHash = slideSourceHash(after)
+  // Nothing translatable actually moved (the pairs only touched pictures or
+  // code, say), so every entry is still correct as it stands.
+  if (beforeHash === afterHash) return
+
+  const docs = await SlideTranslationModel.find({ deckId })
+  for (const doc of docs) {
+    const entry = doc.perSlide?.get(slideId)
+    if (!entry || entry.sourceHash !== beforeHash) continue
+    const slots = { ...(entry.slots ?? {}) }
+    for (const [from, to] of moves) {
+      const value = entry.slots?.[from]
+      if (value !== undefined) slots[to] = value
+    }
+    doc.perSlide.set(slideId, { slots, sourceHash: afterHash })
+    doc.markModified('perSlide')
+    await doc.save()
+  }
 }
 
 /**
@@ -161,7 +363,9 @@ export const translateSlides = async (
     const translatedBySegment = new Map<Segment, string>()
     if (segments.length) {
       const sourceHtml = segments.map(s =>
-        markdownToHtml(s.markdown, { inline: s.inline }),
+        s.literal
+          ? escapeHtml(s.markdown)
+          : markdownToHtml(s.markdown, { inline: s.inline }),
       )
       const provider = registry.get<TranslationProvider>('translation')
       const translatedHtml = await provider.translate({
@@ -179,7 +383,9 @@ export const translateSlides = async (
         // back to the words the author actually wrote.
         translatedBySegment.set(
           segment,
-          htmlToMarkdown(repaired) || segment.markdown,
+          (segment.literal
+            ? unescapeHtml(repaired)
+            : htmlToMarkdown(repaired)) || segment.markdown,
         )
       })
     }

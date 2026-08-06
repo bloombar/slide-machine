@@ -33,7 +33,7 @@ import {
 import type { ActionContext } from './context'
 import { SlideModel, toSlideDto, type SlideDb } from '../models/slide'
 import { DeckModel, loadDeckAcl, touchDeck, type DeckDb } from '../models/deck'
-import { resolveTemplate } from '../templates/resolve'
+import { resolveDeckTemplate } from '../templates/versions'
 import { layoutDescriptors } from '../templates/builtin'
 import { registry } from '../providers/registry'
 import { requireAiTokens } from '../billing/meter-hooks'
@@ -44,6 +44,7 @@ import {
   slotValueSchema,
   slotsOf,
 } from '../lib/slide-slots'
+import { remapSlideTranslations } from '../lib/translate-slides'
 import { imageSlotNames, slotHasImage } from '../lib/image-layout'
 import { enrichSlideImages } from '../enrichment/enrich'
 import type { SlideImageContext } from '../enrichment/types'
@@ -142,7 +143,7 @@ export const slideEditContent = defineAction<SlideEditInput, Slide>({
     // slide must never hold content the template cannot show.
     if (input.slots) {
       const deck = await DeckModel.findById(slide.deckId)
-      const template = deck ? await resolveTemplate(deck.templateId) : undefined
+      const template = deck ? await resolveDeckTemplate(deck) : undefined
       const declared = new Set(
         template?.layouts
           .find(l => l.type === slide.layoutType)
@@ -179,7 +180,7 @@ export const slideSetLayout = defineAction<SlideSetLayoutInput, Slide>({
   }),
   execute: async (ctx, input) => {
     const { slide, deck } = await loadOwnedSlide(ctx, input.slideId)
-    const template = await resolveTemplate(deck.templateId)
+    const template = await resolveDeckTemplate(deck)
     if (!template?.layouts.some(l => l.type === input.layoutType)) {
       throw new ActionValidationError('slide.setLayout', [
         'layoutType: not a layout of this template',
@@ -196,8 +197,16 @@ export const slideSetLayout = defineAction<SlideSetLayoutInput, Slide>({
     const toLayout = template.layouts.find(l => l.type === input.layoutType)!
     if (fromLayout && fromLayout.type !== toLayout.type) {
       const { pairs } = pairSlots(fromLayout, toLayout)
-      slide.slots = remapSlots(slotsOf(slide), pairs)
+      const before = slotsOf(slide)
+      slide.slots = remapSlots(before, pairs)
       slide.markModified('slots')
+      // The words did not change, only the box they sit in — carry any cached
+      // translations across with them rather than paying to translate the
+      // same text again (SHARE-2).
+      await remapSlideTranslations(deck._id, slide._id.toString(), pairs, {
+        id: slide._id.toString(),
+        slots: before,
+      })
     }
 
     slide.layoutType = input.layoutType
@@ -322,7 +331,7 @@ export const slideRefitLayout = defineAction<
   }),
   execute: async (ctx, input) => {
     const { slide, deck } = await loadOwnedSlide(ctx, input.slideId)
-    const template = await resolveTemplate(deck.templateId)
+    const template = await resolveDeckTemplate(deck)
     const layout = template?.layouts.find(l => l.type === slide.layoutType)
     const unchanged = { slide: toSlideDto(slide), filled: [] as string[] }
     if (!template || !layout) return unchanged

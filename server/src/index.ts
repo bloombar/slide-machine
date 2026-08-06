@@ -10,6 +10,7 @@ import { reportListen } from './lib/listen'
 import { attachAudioSocket } from './ws/audio-socket'
 import { startAudioRetentionSweep } from './jobs/audio-cleanup'
 import { startSoftDeletePurgeSweep } from './jobs/soft-delete-purge'
+import { startTemplateVersionBackfill } from './jobs/pin-template-versions'
 
 const main = async (): Promise<void> => {
   try {
@@ -31,6 +32,9 @@ const main = async (): Promise<void> => {
   startAudioRetentionSweep()
   // Daily purge of soft-deleted records past DELETED_DATA_RETENTION_DAYS (P-11).
   startSoftDeletePurgeSweep()
+  // Pin any lecture that predates template versions, so a template edit stops
+  // reaching into it (TMPL-11). No-op once every lecture is pinned.
+  startTemplateVersionBackfill()
 }
 
 main()
