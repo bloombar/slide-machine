@@ -219,6 +219,9 @@ export default function TemplateEditor({
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   /** The layout the rail asked to delete, until the author says yes. */
   const [confirmLayout, setConfirmLayout] = useState<number | null>(null)
+  /** Draw the slide as full as the template allows rather than as the sample
+   * fills it. A way of looking, not part of the design: never saved. */
+  const [atCapacity, setAtCapacity] = useState(false)
   const canvasHost = useRef<HTMLDivElement>(null)
 
   /**
@@ -649,20 +652,41 @@ export default function TemplateEditor({
 
         <div ref={canvasHost} className="min-w-0 flex-1">
           {layout && (
-            <LayoutCanvas
-              template={draft}
-              layoutIndex={shownIndex}
-              images={images}
-              metrics={metrics}
-              selectedId={selectedId}
-              hoveredId={hoveredId}
-              onSelect={setSelectedId}
-              onTree={setTree}
-              onGuides={(guides: LayoutGuides) =>
-                setLayout(shownIndex, { guides })
-              }
-              onRecord={history.record}
-            />
+            <>
+              <LayoutCanvas
+                template={draft}
+                layoutIndex={shownIndex}
+                images={images}
+                metrics={metrics}
+                atCapacity={atCapacity}
+                selectedId={selectedId}
+                hoveredId={hoveredId}
+                onSelect={setSelectedId}
+                onTree={setTree}
+                onGuides={(guides: LayoutGuides) =>
+                  setLayout(shownIndex, { guides })
+                }
+                onRecord={history.record}
+              />
+              {/* A design is judged by the slide that nearly does not fit. The
+                  sample text sits comfortably in most layouts, which is
+                  exactly the case that never reveals a box too small for what
+                  the template says it may hold. */}
+              <label className="mt-10 ml-4 flex items-start gap-2 text-sm text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={atCapacity}
+                  onChange={e => setAtCapacity(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300"
+                />
+                <span>
+                  {t('template.atCapacity')}
+                  <span className="block text-xs text-slate-500">
+                    {t('template.atCapacityHint')}
+                  </span>
+                </span>
+              </label>
+            </>
           )}
         </div>
 

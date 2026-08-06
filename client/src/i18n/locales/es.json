@@ -220,6 +220,8 @@
     "nameLabel": "Nombre de la plantilla",
     "themeLabel": "Colores por defecto",
     "layoutsLabel": "Diseños",
+    "atCapacity": "Llenar cada caja hasta su límite",
+    "atCapacityHint": "Muestra la diapositiva con todo el texto que puede contener. Puedes ajustar la capacidad de cada caja en sus ajustes.",
     "layoutName": "Nombre",
     "layoutPurpose": "Cuándo usarlo",
     "theme": {

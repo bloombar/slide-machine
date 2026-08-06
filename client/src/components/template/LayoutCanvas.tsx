@@ -80,6 +80,7 @@ export default function LayoutCanvas({
   layoutIndex,
   images,
   metrics,
+  atCapacity,
   selectedId,
   hoveredId,
   onSelect,
@@ -92,6 +93,9 @@ export default function LayoutCanvas({
   layoutIndex: number
   images: string[]
   metrics: ThemeMetricsLike
+  /** Draw every bounded box as full as it may ever be, rather than as the
+   * sample happens to fill it. */
+  atCapacity?: boolean
   selectedId: string | null
   /** The box the pointer is over in the outline, lit on the slide. */
   hoveredId?: string | null
@@ -214,6 +218,7 @@ export default function LayoutCanvas({
           layout={layout}
           images={images}
           interactive
+          atCapacity={atCapacity}
           testId="template-canvas"
         />
 
