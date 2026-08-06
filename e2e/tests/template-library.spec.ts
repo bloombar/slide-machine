@@ -466,13 +466,13 @@ test('a box carries the author’s instruction to the AI (TMPL-10)', async ({
   await page.getByLabel('Max words').fill('6')
   await page.getByLabel('The slide should always fill this').check()
   await page.getByRole('button', { name: 'Save' }).click()
-  await expect(page.getByLabel('Template name')).toHaveCount(0)
+  // A refused save says so instead; "Saved" is the check it was accepted
+  await expect(page.getByTestId('template-saved')).toHaveText('Saved')
+  const permalink = page.url()
 
-  // Reopen from scratch: what the author wrote is what the template holds
-  await page.getByRole('button', { name: 'Close settings' }).click()
-  await openProjectSettings(page, projectName)
-  await page.getByRole('tab', { name: 'Design' }).click()
-  await page.getByRole('button', { name: `Edit ${own}` }).click()
+  // Reopen from scratch: what the author wrote is what the design holds
+  await page.goto('/app')
+  await page.goto(permalink)
   await boxes().getByText('Slide title').click()
 
   await expect(page.getByLabel('What goes in it (for the AI)')).toHaveValue(
@@ -482,5 +482,4 @@ test('a box carries the author’s instruction to the AI (TMPL-10)', async ({
   await expect(
     page.getByLabel('The slide should always fill this'),
   ).toBeChecked()
-  await page.getByRole('button', { name: 'Cancel' }).click()
 })
