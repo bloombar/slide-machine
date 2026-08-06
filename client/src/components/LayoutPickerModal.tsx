@@ -85,7 +85,12 @@ export default function LayoutPickerModal({
                   : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
               }`}
             >
-              <span className="block text-sm font-medium">{layout.label}</span>
+              {/* A layout with no readable name would be an empty button:
+                  invisible here, yet still reachable with the "[" and "]"
+                  keys, which pick by type. Its type is at least something. */}
+              <span className="block text-sm font-medium">
+                {layout.label.trim() || layout.type}
+              </span>
               <span className="block text-xs text-slate-500">
                 {layout.purpose}
               </span>

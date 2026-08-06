@@ -16,7 +16,7 @@ import type {
   Template,
 } from '@slide-machine/shared'
 import SlideSlot, { type SlideContentPatch } from './slide/slots'
-import { themeColors } from './slide/theme'
+import { themeColors, themeMetrics, themeTextStyles } from './slide/theme'
 import { rendererFor } from './slide/layouts'
 
 export type { SlideContentPatch }
@@ -49,6 +49,8 @@ export default function SlideView({
   onRemoveImage?: (slot: string) => void
 }) {
   const colors = themeColors(template.theme)
+  const textStyles = themeTextStyles(template.theme)
+  const metrics = themeMetrics(template.theme)
   const layoutDef = template.layouts.find(l => l.type === slide.layoutType)
 
   /** A named content slot, editable when the owner is viewing. The
@@ -76,16 +78,16 @@ export default function SlideView({
       className="@container aspect-video w-full overflow-hidden rounded-xl shadow-2xl"
       style={{ backgroundColor: colors.background, color: colors.text }}
     >
-      {createElement(
-        rendererFor(slide.layoutType, template.renderMode, layoutDef),
-        {
-          slide,
-          colors,
-          layout: layoutDef,
-          editable: Boolean(editable && onEdit),
-          slot,
-        },
-      )}
+      {createElement(rendererFor(slide.layoutType, layoutDef), {
+        slide,
+        colors,
+        textStyles,
+        metrics,
+        layout: layoutDef,
+        editable: Boolean(editable && onEdit),
+        imagePending,
+        slot,
+      })}
     </div>
   )
 }
