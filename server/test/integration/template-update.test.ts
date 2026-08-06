@@ -199,6 +199,39 @@ describe('pinning', () => {
   })
 })
 
+describe('what the viewer is served', () => {
+  it('renders a lecture with the structure it pinned, not the latest', async () => {
+    // The regression this exists for: the viewer draws from
+    // DeckViewResponse.template, so resolving that live would restructure
+    // lectures the moment their template was edited — exactly what pinning
+    // is meant to prevent, and invisible to every other test.
+    await editTemplate(layouts => {
+      renameSlot(contentLayout(layouts), 'body', 'prose')
+      return layouts
+    })
+    const res = await act(ada, 'deck.get', { deckId })
+    expect(res.status).toBe(200)
+    const layout = (res.body.template.layouts as Layout[]).find(
+      l => l.type === 'content',
+    )!
+    expect(layout.slots.map(s => s.name)).toContain('body')
+    expect(layout.slots.map(s => s.name)).not.toContain('prose')
+  })
+
+  it('serves the latest structure once the update is applied', async () => {
+    await editTemplate(layouts => {
+      renameSlot(contentLayout(layouts), 'body', 'prose')
+      return layouts
+    })
+    await act(ada, 'deck.applyTemplateUpdate', { deckId })
+    const res = await act(ada, 'deck.get', { deckId })
+    const layout = (res.body.template.layouts as Layout[]).find(
+      l => l.type === 'content',
+    )!
+    expect(layout.slots.map(s => s.name)).toContain('prose')
+  })
+})
+
 describe('the update notice', () => {
   it('reports nothing while the template is untouched', async () => {
     const res = await act(ada, 'deck.templateUpdateStatus', { deckId })

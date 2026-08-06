@@ -399,7 +399,18 @@
     "maxChars": "最多字符",
     "maxItems": "最多要点",
     "styleChars": "{style} 的最多字符",
-    "styleItems": "{style} 的最多要点"
+    "styleItems": "{style} 的最多要点",
+    "update": {
+      "heading": "此设计已更新",
+      "hintClean": "改动仅涉及外观，幻灯片内容无需调整。",
+      "hintAffected": "{count, plural, other {# 张幻灯片的内容可能需要调整。}}",
+      "apply": "更新本课程",
+      "confirmTitle": "更新本课程的设计？",
+      "confirmIntro": "幻灯片将按此设计的最新版本重建。文字和图片会移到新版式中对应的框内。",
+      "confirmUnplaced": "{count, plural, other {在 # 张幻灯片中，以下框在新设计中没有对应位置：}}",
+      "confirmRemovedLayouts": "{count, plural, other {# 张幻灯片使用了新设计中已不存在的版式，将保持原样。}}",
+      "confirmKept": "不会删除任何内容。没有对应位置的内容仍保留在幻灯片上，只是不再显示，你可以把它放回想要的位置。"
+    }
   },
   "layout": {
     "change": "更改幻灯片版式",

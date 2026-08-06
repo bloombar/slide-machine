@@ -399,7 +399,18 @@
     "maxChars": "Max characters",
     "maxItems": "Max points",
     "styleChars": "Max characters for {style}",
-    "styleItems": "Max points for {style}"
+    "styleItems": "Max points for {style}",
+    "update": {
+      "heading": "This design has been updated",
+      "hintClean": "The changes are visual only — nothing on your slides needs adjusting.",
+      "hintAffected": "{count, plural, one {Content on # slide may need adjusting.} other {Content on # slides may need adjusting.}}",
+      "apply": "Update this lecture",
+      "confirmTitle": "Update this lecture's design?",
+      "confirmIntro": "Your slides will be rebuilt on the latest version of this design. Text and pictures move to the matching boxes in the new layouts.",
+      "confirmUnplaced": "{count, plural, one {On # slide, these boxes have no match in the new design:} other {On # slides, these boxes have no match in the new design:}}",
+      "confirmRemovedLayouts": "{count, plural, one {# slide uses a layout the new design no longer has, and will be left as it is.} other {# slides use layouts the new design no longer has, and will be left as they are.}}",
+      "confirmKept": "Nothing is deleted. Anything without a match stays on its slide and simply stops being shown, so you can put it back where you want it."
+    }
   },
   "layout": {
     "change": "Change slide layout",

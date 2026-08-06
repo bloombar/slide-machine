@@ -399,7 +399,18 @@
     "maxChars": "Máx. caracteres",
     "maxItems": "Máx. puntos",
     "styleChars": "Máx. caracteres para {style}",
-    "styleItems": "Máx. puntos para {style}"
+    "styleItems": "Máx. puntos para {style}",
+    "update": {
+      "heading": "Este diseño se ha actualizado",
+      "hintClean": "Los cambios son solo visuales: no hay nada que ajustar en tus diapositivas.",
+      "hintAffected": "{count, plural, one {El contenido de # diapositiva podría necesitar ajustes.} other {El contenido de # diapositivas podría necesitar ajustes.}}",
+      "apply": "Actualizar esta clase",
+      "confirmTitle": "¿Actualizar el diseño de esta clase?",
+      "confirmIntro": "Tus diapositivas se reconstruirán con la última versión de este diseño. El texto y las imágenes pasan a las cajas equivalentes de los nuevos diseños.",
+      "confirmUnplaced": "{count, plural, one {En # diapositiva, estas cajas no tienen equivalente en el nuevo diseño:} other {En # diapositivas, estas cajas no tienen equivalente en el nuevo diseño:}}",
+      "confirmRemovedLayouts": "{count, plural, one {# diapositiva usa un diseño que ya no existe y se dejará como está.} other {# diapositivas usan diseños que ya no existen y se dejarán como están.}}",
+      "confirmKept": "No se elimina nada. Lo que no tenga equivalente permanece en su diapositiva y solo deja de mostrarse, así que puedes recolocarlo donde quieras."
+    }
   },
   "layout": {
     "change": "Cambiar el diseño de la diapositiva",
