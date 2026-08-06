@@ -118,10 +118,27 @@ describe('template.duplicate (TMPL-4)', () => {
     expect(res.body.visibility).toBe('private')
   })
 
-  it('keeps the source name when none is given', async () => {
+  it('numbers a copy from the one it came from', async () => {
+    // The original is the first, so the copy is the second — never "X 1".
     const source = listBuiltinTemplates()[0]!
-    const res = await act(ada, 'template.duplicate', { templateId: source.id })
-    expect(res.body.name).toBe(source.name)
+    const first = await act(ada, 'template.duplicate', {
+      templateId: source.id,
+    })
+    expect(first.body.name).toBe(`${source.name} 2`)
+
+    const second = await act(ada, 'template.duplicate', {
+      templateId: source.id,
+    })
+    expect(second.body.name).toBe(`${source.name} 3`)
+  })
+
+  it('counts on from a copy rather than stacking suffixes', async () => {
+    const source = listBuiltinTemplates()[0]!
+    const copy = await act(ada, 'template.duplicate', { templateId: source.id })
+    const again = await act(ada, 'template.duplicate', {
+      templateId: copy.body.id,
+    })
+    expect(again.body.name).toBe(`${source.name} 3`)
   })
 
   it('can duplicate a template the caller already authored', async () => {
@@ -387,20 +404,104 @@ describe('arrangement (TMPL-4 positioning)', () => {
     expect(copy.body.renderMode).toBe('positioned')
   })
 
+  it('keeps a custom layout’s design across a save and a re-read', async () => {
+    const template = await own()
+    const custom = {
+      type: 'content-image',
+      label: 'Content + Image',
+      purpose: 'Content beside a picture',
+      slots: [
+        { name: 'title', kind: 'text' as const, label: 'Slide title' },
+        { name: 'picture', kind: 'image' as const, label: 'Image' },
+      ],
+      tree: {
+        id: 'root',
+        container: { mode: 'flex', direction: 'row', gap: 3 },
+        style: { paddingX: 6 },
+        children: [
+          { id: 'title', slot: 'title', style: { textStyle: 'heading' } },
+          { id: 'picture', slot: 'picture', grow: 1, style: { radius: 1 } },
+        ],
+      },
+      elementPositions: {},
+    }
+    const saved = await act(ada, 'template.update', {
+      templateId: template.id,
+      name: template.name,
+      theme: template.theme,
+      layouts: [...template.layouts, custom],
+    })
+    expect(saved.status).toBe(200)
+
+    // Read it back the way reopening the editor does.
+    const list = await act(ada, 'template.list')
+    const reread = list.body
+      .find((t: { id: string }) => t.id === template.id)
+      .layouts.find((l: { type: string }) => l.type === 'content-image')
+    // The design, not just the slots: how it is arranged and how each box is
+    // set are what an author would notice losing.
+    expect(reread.tree).toEqual(custom.tree)
+  })
+
+  it('gives a custom layout that lost its tree something to edit again', async () => {
+    // A layout an author named has no conventional definition to fall back
+    // on, so one saved without a tree would come back with no boxes at all —
+    // a dead end rather than a starting point.
+    const template = await own()
+    await TemplateModel.updateOne(
+      { _id: template.id },
+      {
+        $set: {
+          layouts: [
+            ...template.layouts,
+            {
+              type: 'content-image',
+              label: 'Content + Image',
+              purpose: 'Content beside a picture',
+              slots: [
+                { name: 'title', kind: 'text', label: 'Slide title' },
+                { name: 'picture', kind: 'image', label: 'Image' },
+              ],
+              elementPositions: {},
+            },
+          ],
+        },
+      },
+    )
+    const list = await act(ada, 'template.list')
+    const rescued = list.body
+      .find((t: { id: string }) => t.id === template.id)
+      .layouts.find((l: { type: string }) => l.type === 'content-image')
+    expect(rescued.tree).toBeDefined()
+    expect(rescued.tree.children.map((c: { slot: string }) => c.slot)).toEqual([
+      'title',
+      'picture',
+    ])
+  })
+
   it('takes a layout the author gave four pictures (TMPL-4)', async () => {
     const template = await own()
-    const photos = [1, 2, 3, 4].map(n => ({
-      name: `photo-${n}`,
+    const images = [1, 2, 3, 4].map(n => ({
+      name: `image-${n}`,
       kind: 'image' as const,
-      label: `Photo ${n}`,
+      label: `Image ${n}`,
     }))
     const layouts = template.layouts.map((l: { type: string }) =>
       l.type === 'content'
         ? {
             ...l,
-            slots: photos,
+            slots: images,
+            // The tree is replaced along with the slots. A layout that showed
+            // a title and a body cannot keep showing them once neither
+            // exists, and the editor removes a box and its slot together.
+            tree: {
+              id: 'root',
+              container: { mode: 'grid', columns: 2, gap: 2 },
+              style: { padding: 4 },
+              children: images.map(p => ({ id: p.name, slot: p.name })),
+            },
             elementPositions: Object.fromEntries(
-              photos.map((p, i) => [
+              images.map((p, i) => [
                 p.name,
                 {
                   x: i % 2 === 0 ? 0.04 : 0.52,

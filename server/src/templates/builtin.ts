@@ -16,6 +16,10 @@ import { z } from 'zod'
 import {
   SLOT_DESCRIPTORS,
   WHITEBOARD_LAYOUT_TYPE,
+  defaultLayoutTree,
+  themeTextStyles,
+  treeFromSlots,
+  type LayoutNode,
   type Layout,
   type LayoutDescriptor,
   type LayoutSlot,
@@ -35,6 +39,7 @@ const slotFileSchema = z.union([
     label: z.string().min(1).optional(),
     multiline: z.boolean().optional(),
     maxChars: z.number().int().positive().optional(),
+    maxItems: z.number().int().positive().max(50).optional(),
     style: z.record(z.string(), z.unknown()).optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
   }),
@@ -64,6 +69,7 @@ export const normalizeSlot = (
     label: raw.label ?? conventional?.label ?? name,
     multiline: raw.multiline ?? conventional?.multiline,
     maxChars: raw.maxChars,
+    maxItems: raw.maxItems,
     style: raw.style,
     metadata: raw.metadata,
   }
@@ -84,6 +90,129 @@ const layoutTypeSchema = z
     'layout type must be lowercase words joined by hyphens',
   )
 
+/**
+ * How a box paints itself and sets type inside it. Sizes are in `cqi` — a
+ * percent of the slide's width — so they scale with the slide; colors are a
+ * hex value or a theme key such as `accent`.
+ */
+const boxStyleSchema = z.object({
+  align: z.enum(['start', 'center', 'end']).optional(),
+  vAlign: z.enum(['start', 'center', 'end']).optional(),
+  textStyle: z.string().min(1).max(40).optional(),
+  fontSize: z.number().positive().max(100).optional(),
+  fontWeight: z.number().int().min(100).max(900).optional(),
+  italic: z.boolean().optional(),
+  lineHeight: z.number().min(0.5).max(4).optional(),
+  fontFamily: z.string().min(1).max(40).optional(),
+  color: z.string().min(1).max(40).optional(),
+  background: z.string().min(1).max(40).optional(),
+  padding: z.number().min(0).max(50).optional(),
+  paddingX: z.number().min(0).max(50).optional(),
+  paddingY: z.number().min(0).max(50).optional(),
+  radius: z.number().min(0).max(50).optional(),
+  borderColor: z.string().min(1).max(40).optional(),
+  borderWidth: z.number().min(0).max(50).optional(),
+})
+
+const containerSpecSchema = z.object({
+  mode: z.enum(['flex', 'grid']),
+  direction: z.enum(['row', 'column']).optional(),
+  wrap: z.boolean().optional(),
+  columns: z.number().int().min(1).max(24).optional(),
+  rows: z.number().int().min(1).max(24).optional(),
+  gap: z.number().min(0).max(50).optional(),
+  gapX: z.number().min(0).max(50).optional(),
+  gapY: z.number().min(0).max(50).optional(),
+  justify: z
+    .enum(['start', 'center', 'end', 'between', 'around', 'evenly'])
+    .optional(),
+  alignItems: z.enum(['start', 'center', 'end', 'stretch']).optional(),
+})
+
+/** How deep a layout may nest. Generous for any real design, and a bound at
+ * all so a cyclic or hand-edited document cannot make the renderer recurse
+ * forever. */
+const MAX_TREE_DEPTH = 8
+
+/**
+ * One node of a layout's tree. Recursive, so declared with `z.lazy` and given
+ * an explicit type — zod cannot infer through the cycle.
+ */
+const layoutNodeSchema: z.ZodType<unknown> = z.lazy(() =>
+  z.object({
+    id: z.string().min(1).max(60),
+    slot: z.string().min(1).max(60).optional(),
+    before: z.string().max(8).optional(),
+    after: z.string().max(8).optional(),
+    container: containerSpecSchema.optional(),
+    children: z.array(layoutNodeSchema).max(64).optional(),
+    grow: z.number().min(0).max(100).optional(),
+    shrink: z.number().min(0).max(100).optional(),
+    basis: z.number().min(0).max(1).optional(),
+    colSpan: z.number().int().min(1).max(24).optional(),
+    rowSpan: z.number().int().min(1).max(24).optional(),
+    width: z.number().min(0).max(1).optional(),
+    height: z.number().min(0).max(1).optional(),
+    free: z.boolean().optional(),
+    box: z
+      .object({
+        x: z.number().min(0).max(1),
+        y: z.number().min(0).max(1),
+        w: z.number().min(0.01).max(1),
+        h: z.number().min(0.01).max(1),
+      })
+      .optional(),
+    style: boxStyleSchema.optional(),
+  }),
+)
+
+/** Walks a tree, reporting every problem the schema cannot express on its
+ * own: a slot the layout never declared, a duplicate id, or nesting past the
+ * depth bound. */
+const checkTree = (
+  node: unknown,
+  slotNames: Set<string>,
+  ctx: z.RefinementCtx,
+  seenIds: Set<string>,
+  depth = 0,
+): void => {
+  const n = node as {
+    id?: string
+    slot?: string
+    children?: unknown[]
+  }
+  if (depth > MAX_TREE_DEPTH) {
+    ctx.addIssue({
+      code: 'custom',
+      message: `layout tree nests deeper than ${MAX_TREE_DEPTH} levels`,
+      path: ['tree'],
+    })
+    return
+  }
+  if (n.id) {
+    // Ids address a node in the editor, so two the same make one unreachable.
+    if (seenIds.has(n.id)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `duplicate node id "${n.id}" in the layout tree`,
+        path: ['tree'],
+      })
+    }
+    seenIds.add(n.id)
+  }
+  // A node naming a slot the layout does not declare would render nothing and
+  // give the author no way to see why.
+  if (n.slot && !slotNames.has(n.slot)) {
+    ctx.addIssue({
+      code: 'custom',
+      message: `tree node shows slot "${n.slot}", which this layout does not declare`,
+      path: ['tree'],
+    })
+  }
+  for (const child of n.children ?? [])
+    checkTree(child, slotNames, ctx, seenIds, depth + 1)
+}
+
 export const layoutSchema = z
   .object({
     type: layoutTypeSchema,
@@ -102,29 +231,32 @@ export const layoutSchema = z
         imageRequired: z.boolean().optional(),
       })
       .optional(),
-    // Where each slot sits, as a fraction of the slide, 0–1 (TMPL-4, see
-    // docs/TEMPLATES.md §4). Validated here rather than trusted from the
-    // editor: a box outside the slide, or one naming a slot the layout does
+    // How the layout is built: containers and boxes (TMPL-4). This is what
+    // the author edits and what the renderer draws.
+    tree: layoutNodeSchema.optional(),
+    // Where each slot ends up, as a fraction of the slide, 0–1 (TMPL-4, see
+    // docs/TEMPLATES.md §4). Derived from the tree by the editor, and kept
+    // because the exporters cannot run CSS. Validated here rather than
+    // trusted: a box outside the slide, or one naming a slot the layout does
     // not have, would render a slide with content nobody can see.
     elementPositions: z
       .record(
         z.string(),
-        z.object({
+        boxStyleSchema.extend({
           x: z.number().min(0).max(1),
           y: z.number().min(0).max(1),
           w: z.number().min(0.01).max(1),
           h: z.number().min(0.01).max(1),
-          align: z.enum(['start', 'center', 'end']).optional(),
-          vAlign: z.enum(['start', 'center', 'end']).optional(),
-          /** Font size in `cqi` — a percent of the slide's width, so type
-           * scales with the slide rather than the window. */
-          fontSize: z.number().positive().max(100).optional(),
-          fontWeight: z.number().int().min(100).max(900).optional(),
-          /** A hex value, or a theme key such as `accent`. */
-          color: z.string().min(1).max(40).optional(),
         }),
       )
       .default({}),
+    // Authoring guidelines the editor snaps to. Never drawn on a slide.
+    guides: z
+      .object({
+        x: z.array(z.number().min(0).max(1)).max(40),
+        y: z.array(z.number().min(0).max(1)).max(40),
+      })
+      .optional(),
   })
   .superRefine((layout, ctx) => {
     if (layout.type !== WHITEBOARD_LAYOUT_TYPE && layout.slots.length < 1) {
@@ -155,6 +287,7 @@ export const layoutSchema = z
         })
       }
     }
+    if (layout.tree) checkTree(layout.tree, names, ctx, new Set())
   })
 
 const templateFileSchema = z
@@ -215,6 +348,43 @@ export const normalizePositions = <T extends { elementPositions?: unknown }>(
   })
 
 /**
+ * Gives a layout the conventional tree for its type, when it has nothing else
+ * to be drawn from.
+ *
+ * A template someone duplicated before layouts became trees carries no tree
+ * and no geometry — it relied on a component that no longer exists, and left
+ * alone it would fall through to the generic fallback and visibly change. Its
+ * type still says what it is, so the matching default is exactly what it used
+ * to look like.
+ *
+ * Applied on read, next to `normalizePositions`, so no stored document has to
+ * be rewritten. A layout that has a tree, or has geometry of its own (a design
+ * imported from Google Slides), is left alone — both already say how they are
+ * drawn.
+ */
+export const adoptDefaultTree = <
+  T extends {
+    type: string
+    tree?: unknown
+    slots?: { name: string; kind?: string }[]
+    elementPositions?: Record<string, unknown>
+  },
+>(
+  layouts: T[],
+): T[] =>
+  layouts.map(layout => {
+    if (layout.tree) return layout
+    if (Object.keys(layout.elementPositions ?? {}).length > 0) return layout
+    // A conventional type is exactly what it always was; a layout an author
+    // named themselves has no such definition, so one is built from the slots
+    // it declares. Either way it comes back with something to draw and edit
+    // rather than nothing.
+    const tree =
+      defaultLayoutTree(layout.type) ?? treeFromSlots(layout.slots ?? [])
+    return tree ? { ...layout, tree } : layout
+  })
+
+/**
  * The rule every template must satisfy, file-based or user-authored: a blank
  * whiteboard slate, so the drawing tools always have a canvas (WB-1/TMPL-7).
  * Shared so a template saved through the editor cannot be shaped differently
@@ -268,10 +438,15 @@ export const loadBuiltinTemplates = (
     }
     return {
       ...parsed.data,
-      layouts: parsed.data.layouts.map(layout => ({
-        ...layout,
-        slots: layout.slots.map(normalizeSlot),
-      })) as Layout[],
+      // A file that names a conventional layout gets that layout's tree
+      // without writing it out, so the starter templates stay readable and a
+      // deployment's own file only describes what it does differently.
+      layouts: adoptDefaultTree(
+        parsed.data.layouts.map(layout => ({
+          ...layout,
+          slots: layout.slots.map(normalizeSlot),
+        })),
+      ) as Layout[],
       ownerId: 'system',
       visibility: 'public' as const,
       voteScore: 0,
@@ -308,16 +483,45 @@ export const defaultTemplateId = (): string => {
 /** The AI-facing option set for a template (GEN-6). The whiteboard layout
  * is a manual blank slate, so it is withheld from the model — generation
  * never auto-selects it; users add it via the layout picker. */
-export const layoutDescriptors = (template: Template): LayoutDescriptor[] =>
-  template.layouts
+export const layoutDescriptors = (template: Template): LayoutDescriptor[] => {
+  const styles = themeTextStyles(template.theme)
+  return template.layouts
     .filter(l => l.type !== WHITEBOARD_LAYOUT_TYPE)
-    .map(({ type, label, purpose, slots, constraints }) => ({
-      type,
-      label,
-      purpose,
-      slots,
-      constraints,
-    }))
+    .map(({ type, label, purpose, slots, constraints, tree }) => {
+      // Which named style each box follows, so a slot that states no budget
+      // of its own inherits the one its style carries.
+      const styleOf = new Map<string, string>()
+      const walk = (node: LayoutNode | undefined): void => {
+        if (!node) return
+        if (node.slot && node.style?.textStyle)
+          styleOf.set(node.slot, node.style.textStyle)
+        for (const child of node.children ?? []) walk(child)
+      }
+      walk(tree)
+
+      const resolved = slots.map(slot => {
+        const style = styles[styleOf.get(slot.name) ?? '']
+        return {
+          ...slot,
+          maxChars: slot.maxChars ?? style?.maxChars,
+          maxItems: slot.maxItems ?? style?.maxItems,
+        }
+      })
+
+      // A bullet box's own limit is more specific than the layout's, so it
+      // wins where it says anything.
+      const bullets = resolved.find(s => s.kind === 'bullets')?.maxItems
+      return {
+        type,
+        label,
+        purpose,
+        slots: resolved,
+        constraints: bullets
+          ? { ...constraints, maxBullets: bullets }
+          : constraints,
+      }
+    })
+}
 
 /** Test hook: re-read template files. */
 export const resetTemplateCache = (): void => {

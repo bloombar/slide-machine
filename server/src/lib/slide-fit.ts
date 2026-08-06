@@ -41,8 +41,12 @@ const budgetsFor = (
   const constraints = layout?.constraints ?? {}
   const slotChars = (name: string): number | undefined =>
     layout?.slots.find(s => s.name === name)?.maxChars
+  // A bullet box may say how many points it holds; that is more specific than
+  // the layout's own count, so it wins.
+  const slotBullets = layout?.slots.find(s => s.kind === 'bullets')?.maxItems
   return {
     ...constraints,
+    maxBullets: slotBullets ?? constraints.maxBullets,
     maxTitleChars: slotChars('title') ?? constraints.maxTitleChars,
     maxBodyChars: slotChars('body') ?? constraints.maxBodyChars,
     maxBulletChars: slotChars('bullets') ?? constraints.maxBulletChars,

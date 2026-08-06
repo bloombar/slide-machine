@@ -155,31 +155,98 @@ silently truncated.
 
 ## 4. Rendering
 
-Two renderer paths. A template's `renderMode` decides which, and it is an **explicit
-property rather than an inference**.
+**A layout is data, not code.** It carries a `tree` — containers and boxes — and
+[FlowLayout](../client/src/components/slide/layouts/FlowLayout.tsx) draws it. There used to be
+a hand-written React component per layout type; those are gone, so a layout an instructor
+builds in the editor and one the app ships are the same kind of thing, and nothing an author
+can make is second class.
 
-**`components`** — one hand-tuned React/Tailwind component per layout type (grid vs. stack,
-`cqi` sizes, alignment), registered by name in
-[layouts/index.tsx](../client/src/components/slide/layouts/index.tsx). This is what the
-built-ins use. Unknown layout types fall back to `GenericLayout` — degraded, never blank.
+Two renderers remain beside it, and both are fallbacks rather than alternatives:
 
-**`positioned`** — a single data-driven renderer that reads `elementPositions` and places
-each slot itself. This is what imported templates use, since a user cannot ship React
-components.
+| Renderer | When |
+| --- | --- |
+| `FlowLayout` | The layout has a `tree`. Everything, now. |
+| `PositionedLayout` | Geometry but no tree — a design imported from Google Slides ([§6](#6-importing-from-google-slides)) |
+| `GenericLayout` | Neither. Stacks whatever the slide holds: degraded, never blank. |
 
-> **Why an explicit field.** Geometry has two independent consumers: the positioned renderer
-> and the pptx exporter ([§8](#8-exporting)). If rendering were keyed off "does this template
-> have geometry", then giving a built-in geometry so it could export with layouts would
-> silently change how it looks. One field keeps the two concerns apart.
+`rendererFor` checks the whiteboard first and never lets it fall through: it is a blank slate
+by definition (WB-1), and the generic fallback would offer an editor for content it must
+never hold.
 
-Both implement the same `LayoutProps { slide, colors, editable, slot }` contract:
-components decide *where* things go, while *what* each slot contains and *how it edits*
-flows in through the `slot(name)` callback.
+> **`renderMode` is now vestigial.** It existed to keep "has geometry" from meaning "draw
+> from geometry", back when giving a built-in boxes purely to improve its PDF would have
+> redesigned it on screen. Every layout carries a tree and geometry is derived from it, so
+> the ambiguity is gone. The field stays because it is persisted on existing templates and
+> removing it would be a migration for no gain.
+
+### The tree
+
+```ts
+{ id, container: { mode: 'flex' | 'grid' | 'free', direction, gap, columns, justify, alignItems },
+  children: [ { id, slot, style, grow, colSpan, box } ] }
+```
+
+A node's **placement is decided by its parent's container**: children of a flex or grid
+container carry flow sizing (`grow`, `basis`, `colSpan`), children of a `free` one carry an
+absolute `box`. One rule, so the two models live in one tree without a tagged union at every
+level.
+
+`free` is first-class rather than a legacy path — a design imported from Google Slides arrives
+as absolute geometry with no flow to fall back on.
+
+Two node shapes beyond a plain slot:
+
+- A node with **no slot and no children** is decoration — a rule, band, or panel, drawn from
+  its style alone. A section heading's accent bar is one.
+- `before`/`after` print **literal characters** around a slot's content, which is what the
+  quotation marks on a quote layout are. Neither is content, and both would have been lost
+  without somewhere to put them.
+
+A slot with nothing in it **renders nothing and takes no space**, so a container's gap does
+not reserve a hole where an absent caption would go. The editor overrides that, since an
+empty slot still needs to be clickable.
+
+### Sizes are `cqi` or fractions, never `px`
+
+`gap`, `padding`, `radius`, `borderWidth` and `fontSize` are in `cqi` — a percent of the
+slide's **width** — so type and spacing scale with the slide rather than the window, and
+`deck-layout.ts` converts back by dividing by 100. Boxes, `basis`, `width` and `height` are
+fractions of their container, 0–1. Anything in `px` or `rem` would stop scaling and land
+wrong in a PDF.
+
+**Tailwind cannot see an interpolated class.** `grid-cols-${n}` and `gap-[${v}cqi]` compile in
+dev and vanish from a production build, so `FlowLayout` maps every fixed choice through a
+literal lookup and emits everything numeric as an inline style.
+
+### Text styles
+
+A box names a role — `heading`, `body`, `caption` — and the template's `theme.textStyles`
+decides what that means, with any field the box sets itself overriding it. Changing "body"
+restyles every body box in every layout, instead of sending an author round eight tabs to
+make the same edit. Defaults are in
+[theme.ts](../client/src/components/slide/theme.ts) and reproduce what the built-in layouts
+were written with.
+
+### How much a box holds
+
+A text style also carries a **budget** — roughly how many characters fit a box
+set in it, and for a list how many points. It is what the model is told a box
+holds and what `slide-fit.ts` trims to, so generation and rendering work to the
+same number rather than each to their own.
+
+Resolution runs box → style → nothing: a slot's own `maxChars`/`maxItems` wins,
+else the style it follows, else no limit. `layoutDescriptors` does that
+resolution, so the prompt sees the effective figure whether or not the box
+states one.
+
+This is why the budget lives on the style rather than only on the box: a
+layout an author builds inherits sensible limits from the moment it exists,
+instead of leaving the model to guess how much text belongs on a slide it has
+never seen.
 
 ### The geometry schema
 
-`elementPositions` maps a slot name to its box. Coordinates are **normalized 0–1 from the
-top-left**, so a layout is resolution-independent and survives aspect changes:
+`elementPositions` maps a slot name to its box, **normalized 0–1 from the top-left**:
 
 ```json
 { "title": { "x": 0.08, "y": 0.12, "w": 0.84, "h": 0.18,
@@ -187,24 +254,30 @@ top-left**, so a layout is resolution-independent and survives aspect changes:
              "fontSize": 4.5, "fontWeight": 600, "color": "accent" } }
 ```
 
-`fontSize` is in `cqi` so text scales with the slide container, matching how the hand-tuned
-components size type. `color` is either a hex value or a theme key (`accent`, `muted`, …),
-so a template's palette stays the single source of truth.
+It is now **derived from the tree**, not authored: on save the editor measures what the
+browser drew and writes the result here. That is because its readers cannot run CSS — the
+PDF, pptx and Slides exporters ([§8](#8-exporting)), and any future non-browser consumer. A
+slide is always 16:9 and every size is a fraction or a `cqi`, so a layout measured at any
+width normalizes to the same numbers. A layout whose tab was never opened keeps the geometry
+it had rather than losing it.
 
 `decorations` holds a layout's **static, non-editable** elements — logos, rules, background
-bands — as `{ kind: 'image' | 'rect', position, src?, fill? }`. They paint beneath the slots
-and are never editable content.
+bands — as `{ kind: 'image' | 'rect', position, src?, fill? }`. Simple rules and panels are
+covered by decoration nodes in the tree; this remains specified for images.
 
-A contract test
-([contract.test.tsx](../client/src/components/slide/layouts/contract.test.tsx)) renders every
-registered layout against every template file and fails if declared and rendered slot sets
-differ — drift in either direction means invisible content or never-filled slots. It applies
-to `components` templates, where a named component is what could drift; a `positioned`
-template has no component to compare against, so it is checked against the positioned
-renderer's own output instead.
+Three tests bind the halves together:
 
-**Adding a layout type** = one renderer component + one registry entry + declaring the
-layout in a template file (the contract test binds them).
+- [contract.test.tsx](../client/src/components/slide/layouts/contract.test.tsx) — every tree
+  shows exactly the slots its layout declares. Drift in either direction means invisible
+  content or never-filled slots.
+- [migration.test.tsx](../client/src/components/slide/layouts/migration.test.tsx) — each
+  built-in tree still emits the CSS its old component did, class for class.
+- [builtin-layouts.spec.ts](../e2e/tests/builtin-layouts.spec.ts) — and still puts the boxes
+  in the same places, measured in a real browser. jsdom lays nothing out, so the unit tests
+  prove the CSS and only this proves the pixels.
+
+**Adding a layout type** = declaring it in a template file with a tree. No component, no
+registry entry.
 
 ## 5. Theme resolution
 
@@ -215,14 +288,25 @@ The theme is a free-form object resolved into a known set with fallbacks
 | --- | --- |
 | `background`, `surface`, `text`, `muted`, `accent` | The slide palette. |
 | `penColor`, `highlighterColor` | Whiteboard defaults; fall back to `text` and `accent`. |
-| `fontFamily`, `headingFontFamily` | Resolved CSS font stacks. |
+| `textStyles` | Named type roles a layout's boxes refer to ([§4](#text-styles)). |
+| `marginX`, `marginY`, `gap` | Authoring metrics, editor-only (below). |
 | `backgroundImage` | Object-storage URL for an imported background. |
 
-**Fonts resolve to bundled stacks, never to a runtime fetch.** An imported template records
-the source font family name and maps it to the nearest available stack. Fetching a font from
-a third party at display time would leak viewers to an external host on every slide view and
+`textStyles` replaces the `fontFamily` / `headingFontFamily` pair this table used to
+describe, which nothing ever read. A role carries a family, size, weight, slant and colour,
+and a box names the role — so a template has one type scale rather than a size written on
+every box.
+
+**Fonts resolve to bundled stacks, never to a runtime fetch.** A template picks from the
+short list in [fonts.ts](../client/src/components/slide/fonts.ts), and an imported one records
+the source family name and maps it to the nearest available stack. Fetching a font from a
+third party at display time would leak viewers to an external host on every slide view and
 break offline and restricted-network use, so it is not done — the cost is that an imported
 template approximates its original typeface rather than reproducing it.
+
+**The metrics are an authoring aid and nothing else.** The editor draws them as guidelines and
+snaps dragged boxes to them; no renderer reads them. That is deliberate: changing a margin
+must not move a slide in a lecture someone already gave.
 
 ## 6. Importing from Google Slides
 

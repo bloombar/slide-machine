@@ -35,10 +35,27 @@ import {
   resolveTemplate,
 } from '../templates/resolve'
 import { templateToYaml } from '../lib/template-yaml'
+import { previewImageUrls } from '../enrichment/preview-images'
 
 const requireUser = (ctx: ActionContext): string => {
   if (!ctx.userId) throw new ActionForbiddenError('Sign in to continue')
   return ctx.userId
+}
+
+/**
+ * A name for a copy that says what it came from and which one it is.
+ *
+ * "Midnight" becomes "Midnight 2", and the next "Midnight 3" — never
+ * "Midnight 1", since the original is the first one. Copying a copy counts
+ * on from it rather than stacking suffixes, so "Midnight 2" yields
+ * "Midnight 3" and not "Midnight 2 2".
+ */
+export const copyName = (source: string, taken: string[]): string => {
+  const base = source.trim().replace(/\s+\d+$/, '') || source.trim()
+  const used = new Set(taken.map(n => n.trim()))
+  let n = 2
+  while (used.has(`${base} ${n}`)) n++
+  return `${base} ${n}`
 }
 
 /** The editable body of a template, validated exactly as a template file is,
@@ -142,9 +159,17 @@ export const templateDuplicate = defineAction<
     ) {
       throw new ActionForbiddenError()
     }
+    // Named against everything the caller can already see, so a copy never
+    // arrives sharing a name with the thing it was copied from.
+    const library = await listTemplatesFor(userId)
     const doc = await TemplateModel.create({
       ownerId: userId,
-      name: input.name ?? source.name,
+      name:
+        input.name ??
+        copyName(
+          source.name,
+          library.map(t => t.name),
+        ),
       renderMode: source.renderMode,
       theme: source.theme,
       layouts: source.layouts,
@@ -204,8 +229,34 @@ export const templateDelete = defineAction<
   },
 })
 
+/**
+ * Placeholder pictures for the template editor's preview (TMPL-4).
+ *
+ * A layout with an empty picture-shaped hole says little about how it looks,
+ * so the editor fills its image slots while an author works. Unlike the image
+ * picker on a real slide, this costs the caller nothing: nobody browsing their
+ * own template should spend an image lookup on a picture that is only there to
+ * show what a layout does with one. The results are cached, so clicking
+ * between layout tabs makes no request at all.
+ */
+export const templatePreviewImage = defineAction<
+  { query?: string; count?: number },
+  { urls: string[] }
+>({
+  name: 'template.previewImage',
+  input: z.object({
+    query: z.string().trim().min(1).max(60).optional(),
+    count: z.number().int().min(1).max(8).optional(),
+  }),
+  execute: async (ctx, input) => {
+    requireUser(ctx)
+    return { urls: await previewImageUrls(input.query, input.count ?? 1) }
+  },
+})
+
 registerAction(templateList)
 registerAction(templateExport)
+registerAction(templatePreviewImage)
 registerAction(templateDuplicate)
 registerAction(templateUpdate)
 registerAction(templateDelete)

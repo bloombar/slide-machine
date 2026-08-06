@@ -17,7 +17,7 @@ import type {
   TemplateRenderMode,
 } from '@slide-machine/shared'
 import { softDeletePlugin } from './plugins/soft-delete'
-import { normalizePositions } from '../templates/builtin'
+import { adoptDefaultTree, normalizePositions } from '../templates/builtin'
 
 export interface TemplateDb {
   ownerId: Types.ObjectId
@@ -73,9 +73,11 @@ export const toTemplateDto = (doc: HydratedDocument<TemplateDb>): Template => ({
   name: doc.name,
   renderMode: doc.renderMode,
   theme: doc.theme,
-  // Templates saved before boxes were fractions still hold percentages, and
-  // would otherwise be drawn far off the slide.
-  layouts: normalizePositions(doc.layouts),
+  // Two rescues, both for templates saved before the model changed under
+  // them: boxes that still hold percentages would be drawn far off the slide,
+  // and a layout with neither tree nor geometry relied on a component that no
+  // longer exists. Applied on read, so no stored document is rewritten.
+  layouts: adoptDefaultTree(normalizePositions(doc.layouts)),
   visibility: doc.visibility,
   voteScore: doc.voteScore,
   createdAt: doc.createdAt.toISOString(),
