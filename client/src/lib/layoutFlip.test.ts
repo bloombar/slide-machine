@@ -266,6 +266,146 @@ describe('runLayoutFlip', () => {
     expect(clone.style.position).toBe('fixed')
   })
 
+  it('morphs a box the two layouts name differently but style alike', async () => {
+    // The GEN-9 tier match: `title` in one layout, `headline` in the other,
+    // both the headline of their slide. Matching on name alone would call
+    // this one box leaving and another arriving, and cross-fade.
+    const container = mountSlide(
+      '<div data-flip-tier="headline">' +
+        '<span data-flip-slot="title" data-flip-id="s1:title">Cells</span>' +
+        '</div>',
+    )
+    stubRect(slotIn(container, 'title'), BIG_BOX)
+
+    await runLayoutFlip('s1', () => {
+      container.innerHTML =
+        '<div data-flip-tier="headline">' +
+        '<span data-flip-slot="headline" data-flip-id="s1:headline">Cells</span>' +
+        '</div>'
+      // Same size in a new place: the text did not re-wrap, so a paired box
+      // takes the pure glide rather than the dissolve.
+      stubRect(slotIn(container, 'headline'), {
+        ...BIG_BOX,
+        left: 300,
+        top: 200,
+      })
+    })
+
+    // One morph, and nothing fading out: the box was carried over, not swapped
+    const morph = vi
+      .mocked(gsap.fromTo)
+      .mock.calls.find(
+        c => (c[0] as HTMLElement).dataset.flipSlot === 'headline',
+      )
+    expect(morph).toBeDefined()
+    expect((morph![1] as { opacity?: number }).opacity).toBeUndefined()
+    const fadeOuts = vi
+      .mocked(gsap.to)
+      .mock.calls.filter(c => (c[1] as { opacity?: number }).opacity === 0)
+    expect(fadeOuts).toHaveLength(0)
+  })
+
+  it('does not pair boxes that hold different things', async () => {
+    // A headline must not morph into a caption just because both are text.
+    const container = mountSlide(
+      '<div data-flip-tier="headline">' +
+        '<span data-flip-slot="title" data-flip-id="s1:title">Cells</span>' +
+        '</div>',
+    )
+
+    await runLayoutFlip('s1', () => {
+      container.innerHTML =
+        '<div data-flip-tier="caption">' +
+        '<span data-flip-slot="credit" data-flip-id="s1:credit">A cell</span>' +
+        '</div>'
+    })
+
+    // The old one leaves, the new one arrives — no morph between them
+    const fadeIn = vi
+      .mocked(gsap.fromTo)
+      .mock.calls.find(c => (c[1] as { opacity?: number }).opacity === 0)
+    expect((fadeIn?.[0] as HTMLElement).dataset.flipSlot).toBe('credit')
+    const fadeOut = vi
+      .mocked(gsap.to)
+      .mock.calls.find(c => (c[1] as { opacity?: number }).opacity === 0)
+    expect((fadeOut?.[0] as HTMLElement).dataset.flipId).toBe('s1:title')
+  })
+
+  it('prefers the same name over a same-tier box elsewhere', async () => {
+    const container = mountSlide(
+      '<div data-flip-tier="headline">' +
+        '<span data-flip-slot="title" data-flip-id="s1:title">Cells</span>' +
+        '</div>',
+    )
+
+    await runLayoutFlip('s1', () => {
+      container.innerHTML =
+        '<div data-flip-tier="headline">' +
+        '<span data-flip-slot="other" data-flip-id="s1:other">Other</span>' +
+        '</div>' +
+        '<div data-flip-tier="headline">' +
+        '<span data-flip-slot="title" data-flip-id="s1:title">Cells</span>' +
+        '</div>'
+    })
+
+    // `title` claims `title`; the extra headline has nothing left to pair with
+    const fadeIn = vi
+      .mocked(gsap.fromTo)
+      .mock.calls.find(c => (c[1] as { opacity?: number }).opacity === 0)
+    expect((fadeIn?.[0] as HTMLElement).dataset.flipSlot).toBe('other')
+  })
+
+  it('morphs a picture whose slot the new layout names differently', async () => {
+    // The old gate compared slot NAMES while the wrapper tags pictures by
+    // kind, so a renamed picture box animated not at all and left a ghost.
+    const container = mountSlide(
+      '<div data-flip-tier="image" data-flip-slot="image" data-flip-id="s1:image">' +
+        '<img src="x.jpg"/></div>',
+    )
+
+    await runLayoutFlip('s1', () => {
+      container.innerHTML =
+        '<div data-flip-tier="image" data-flip-slot="image" data-flip-id="s1:photo">' +
+        '<img src="x.jpg"/></div>'
+    })
+
+    const real = container.querySelector<HTMLElement>(
+      '[data-flip-id="s1:photo"]',
+    )!
+    expect(real.style.visibility).toBe('hidden')
+    const morph = vi
+      .mocked(gsap.to)
+      .mock.calls.find(c => (c[1] as { width?: number }).width !== undefined)
+    expect(morph).toBeDefined()
+    // and no leftover ghost fading out
+    const fadeOuts = vi
+      .mocked(gsap.to)
+      .mock.calls.filter(c => (c[1] as { opacity?: number }).opacity === 0)
+    expect(fadeOuts).toHaveLength(0)
+  })
+
+  it('morphs every picture box, not just the first', async () => {
+    const twoImages = (a: string, b: string) =>
+      `<div data-flip-tier="image" data-flip-slot="image" data-flip-id="s1:${a}"><img src="a.jpg"/></div>` +
+      `<div data-flip-tier="image" data-flip-slot="image" data-flip-id="s1:${b}"><img src="b.jpg"/></div>`
+    const container = mountSlide(twoImages('one', 'two'))
+
+    await runLayoutFlip('s1', () => {
+      container.innerHTML = twoImages('one', 'two')
+    })
+
+    const morphs = vi
+      .mocked(gsap.to)
+      .mock.calls.filter(c => (c[1] as { width?: number }).width !== undefined)
+    expect(morphs).toHaveLength(2)
+    for (const id of ['s1:one', 's1:two']) {
+      expect(
+        container.querySelector<HTMLElement>(`[data-flip-id="${id}"]`)!.style
+          .visibility,
+      ).toBe('hidden')
+    }
+  })
+
   it('freezes a leaving clone’s text styling so it fades unchanged', async () => {
     const style = document.createElement('style')
     style.textContent =

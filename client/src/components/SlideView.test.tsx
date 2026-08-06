@@ -257,6 +257,30 @@ describe('SlideView layout-flip slot tagging (GEN-9)', () => {
     // The flip id is slide-scoped so a multi-slide list view never
     // matches slots across different slides.
     expect(title.dataset.flipId).toBe('s1:title')
+    // The box the layout placed says what it holds, so a transition can
+    // match this box to another layout's headline under a different name.
+    expect(title.closest('[data-flip-tier]')).toHaveAttribute(
+      'data-flip-tier',
+      'headline',
+    )
+  })
+
+  it('tags each box with the tier the transition matches on', () => {
+    render(
+      <SlideView
+        slide={slide({
+          layoutType: 'image-heavy',
+          imageRef: 'http://img/x.jpg',
+          caption: 'A cell',
+        })}
+        template={template}
+      />,
+    )
+    const tiers = Array.from(document.querySelectorAll('[data-flip-tier]')).map(
+      el => (el as HTMLElement).dataset.flipTier,
+    )
+    expect(tiers).toContain('image')
+    expect(tiers).toContain('caption')
   })
 
   it('keeps the full-size wrapper for image slots, which fill their frame', () => {
