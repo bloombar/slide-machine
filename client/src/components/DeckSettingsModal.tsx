@@ -237,10 +237,16 @@ export default function DeckSettingsModal({
     }
   }, [])
 
-  const switchTemplate = (templateId: string) => {
+  const switchTemplate = (templateId: string, known?: Template) => {
     dispatchAction<Deck>('deck.switchTemplate', { deckId: deck.id, templateId })
       .then(updated => {
-        const template = templates.find(t => t.id === updated.templateId)
+        // A template just made by duplicating is not in the list yet, so the
+        // panel hands it over; the slides should not wait for a reload to
+        // show what the lecture is now using.
+        const template =
+          known?.id === updated.templateId
+            ? known
+            : templates.find(t => t.id === updated.templateId)
         if (template) onTemplateChange(updated, template)
       })
       .catch(() => {

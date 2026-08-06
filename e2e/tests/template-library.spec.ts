@@ -199,6 +199,59 @@ test('a layout of the author’s own survives leaving and returning', async ({
   await page.getByRole('button', { name: 'Cancel' }).click()
 })
 
+test('a lecture uses the design it duplicates or opens for editing', async ({
+  page,
+}) => {
+  // Working on a design is done to see it on the slides, so the Design tab
+  // applies whichever template the author starts working on: the copy the
+  // moment it is made, and the one whose settings are opened.
+  const first = `Lecture Style ${stamp}`
+  const second = `Lecture Style B ${stamp}`
+  await page.goto('/login')
+  await page.getByLabel('Email').fill(user.email)
+  await page.getByLabel('Password').fill(password)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page).toHaveURL(/\/app$/)
+
+  await page
+    .getByRole('button', { name: `Start a new lecture in ${projectName}` })
+    .click()
+  await expect(page).toHaveURL(/\/d\//)
+  await page.getByRole('button', { name: 'Start lecture' }).click()
+
+  const openDesign = async () => {
+    await page.getByRole('button', { name: 'Lecture settings' }).click()
+    await page.getByRole('tab', { name: 'Design' }).click()
+  }
+  const chosen = (name: string) =>
+    page.getByRole('radio', { name: new RegExp(name) })
+
+  await openDesign()
+  await page.getByRole('button', { name: 'Duplicate Classic' }).click()
+  await page.getByLabel('Template name').fill(first)
+  await page.getByRole('button', { name: 'Save' }).click()
+  // Saving does not choose anything — the duplicate did, when it was made.
+  await expect(chosen(first)).toHaveAttribute('aria-checked', 'true')
+
+  // A second copy, so the one to edit is not the one already in use
+  await page.getByRole('button', { name: `Duplicate ${first}` }).click()
+  await page.getByLabel('Template name').fill(second)
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(chosen(second)).toHaveAttribute('aria-checked', 'true')
+
+  // Opening the first one's settings puts the lecture back on it, even
+  // though the editor is left without saving anything
+  await page.getByRole('button', { name: `Edit ${first}` }).click()
+  await expect(page.getByLabel('Template name')).toHaveValue(first)
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await expect(chosen(first)).toHaveAttribute('aria-checked', 'true')
+
+  // It is the lecture that changed, not just the picker
+  await page.reload()
+  await openDesign()
+  await expect(chosen(first)).toHaveAttribute('aria-checked', 'true')
+})
+
 test('arranging boxes freely, with rulers and guides', async ({ page }) => {
   const own = `Freeform ${stamp}`
   await page.goto('/login')

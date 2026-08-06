@@ -32,7 +32,10 @@ export default function TemplateDesignPanel({
 }: {
   templates: Template[]
   value: string
-  onChange: (templateId: string) => void
+  /** Chooses a template. The template itself comes along when the caller
+   * cannot yet have it — a fresh duplicate is not in `templates` until the
+   * library reloads, and whatever it is applied to should not wait. */
+  onChange: (templateId: string, template?: Template) => void
   /** Reloads the library after a template is added, changed or removed. */
   onLibraryChanged: () => void
   /** True while the editor holds unsaved work — nothing here saves by
@@ -61,12 +64,24 @@ export default function TemplateDesignPanel({
     })
       .then(copy => {
         onLibraryChanged()
+        // The copy is what the author is now working on, so it is what they
+        // are working on it for: chosen straight away, and every change to it
+        // from here shows where it is applied.
+        onChange(copy.id, copy)
         // Straight into editing: a copy exists to be changed, and its name is
         // the first thing anyone will want to change.
         setEditing(copy)
       })
       .catch(() => setError(t('template.errors.duplicate')))
       .finally(() => setBusyId(undefined))
+  }
+
+  /** Opening a template's settings chooses it too: editing a design is done
+   * to see it in place, and the editor's own preview is not that. */
+  const edit = (template: Template) => {
+    setError(null)
+    if (template.id !== value) onChange(template.id, template)
+    setEditing(template)
   }
 
   /** Resolves true when the template was written. Callers use that to decide
@@ -151,7 +166,7 @@ export default function TemplateDesignPanel({
         userId={user?.id}
         busyId={busyId}
         onDuplicate={duplicate}
-        onEdit={setEditing}
+        onEdit={edit}
         onDelete={setConfirming}
       />
       {confirming && (

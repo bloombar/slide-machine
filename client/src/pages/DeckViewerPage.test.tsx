@@ -2303,6 +2303,115 @@ describe('DeckViewerPage settings modal', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
+  /** A design the signed-in user authored, so the Design tab offers to edit
+   * it, plus the copy duplicating one produces. */
+  const own = {
+    ...deckView.template,
+    id: 'mine1',
+    ownerId: 'u1',
+    name: 'My Style',
+    layouts: [
+      {
+        type: 'content',
+        label: 'Content',
+        purpose: 'Body slide',
+        slots: [],
+        elementPositions: {},
+      },
+    ],
+  }
+  const copy = { ...own, id: 'copy1', name: 'My Style 2' }
+
+  /** Routes for the Design tab where the user has a template of their own;
+   * the library gains the copy once one has been made. */
+  const withOwnTemplateRoutes = (switched: { body?: unknown }) => {
+    let duplicated = false
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+      '/api/actions/template.list': () => ({
+        status: 200,
+        body: duplicated
+          ? [deckView.template, own, copy]
+          : [deckView.template, own],
+      }),
+      '/api/actions/template.duplicate': () => {
+        duplicated = true
+        return { status: 200, body: copy }
+      },
+      '/api/actions/deck.switchTemplate': init => {
+        switched.body = JSON.parse(String(init?.body))
+        const { templateId } = switched.body as { templateId: string }
+        return { status: 200, body: { ...deckView.deck, templateId } }
+      },
+      '/api/actions/deck.shares': () => ({ status: 200, body: [] }),
+    })
+  }
+
+  /** Opens the lecture's Design tab on a library of the user's own designs. */
+  const openDesignTab = async () => {
+    renderWithSettings()
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Lecture settings' }))
+    fireEvent.click(await screen.findByRole('tab', { name: 'Design' }))
+    await screen.findByRole('radio', { name: /My Style/ })
+  }
+
+  it('applies a duplicated template to the lecture as soon as it is made', async () => {
+    const switched: { body?: unknown } = {}
+    withOwnTemplateRoutes(switched)
+    await openDesignTab()
+
+    fireEvent.click(screen.getByLabelText('Duplicate My Style'))
+
+    // The copy is what the author is now working on, so the lecture is
+    // already using it by the time its editor opens.
+    await vi.waitFor(() =>
+      expect(switched.body).toEqual({ deckId: 'deck1', templateId: 'copy1' }),
+    )
+    expect(await screen.findByLabelText('Template name')).toHaveValue(
+      'My Style 2',
+    )
+
+    // Leaving the editor shows the library agreeing: the copy is chosen.
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await vi.waitFor(() =>
+      expect(screen.getByRole('radio', { name: /My Style 2/ })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      ),
+    )
+  })
+
+  it('applies a template to the lecture when its settings are opened', async () => {
+    const switched: { body?: unknown } = {}
+    withOwnTemplateRoutes(switched)
+    await openDesignTab()
+
+    fireEvent.click(screen.getByLabelText('Edit My Style'))
+
+    await vi.waitFor(() =>
+      expect(switched.body).toEqual({ deckId: 'deck1', templateId: 'mine1' }),
+    )
+    expect(await screen.findByLabelText('Template name')).toHaveValue(
+      'My Style',
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await vi.waitFor(() =>
+      expect(screen.getByRole('radio', { name: /My Style/ })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      ),
+    )
+  })
+
   it('closes on Escape', async () => {
     withSettingsRoutes()
     renderWithSettings()
