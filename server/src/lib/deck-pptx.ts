@@ -13,6 +13,7 @@
  * fetched best-effort (shared with the PDF export) and skipped if unavailable.
  */
 import PptxGenJSImport from 'pptxgenjs'
+import type { Layout } from '@slide-machine/shared'
 import type { ExportDeck, ExportSlide } from './deck-yaml'
 import { visibleStrokes, hexForPptx, HIGHLIGHTER_ALPHA } from './deck-drawings'
 import { fetchSlideImages, toDataUri } from './deck-image'
@@ -44,8 +45,9 @@ const renderSlide = (
   slide: ExportSlide,
   hex: Record<ColorRole, string>,
   image?: string,
+  layout?: Layout,
 ): void => {
-  for (const box of computeLayout(slide)) {
+  for (const box of computeLayout(slide, layout)) {
     if (box.kind === 'text') {
       const runs = box.runs.map(r => ({
         text: r.text,
@@ -158,7 +160,9 @@ export const deckToPptx = async (deck: ExportDeck): Promise<Uint8Array> => {
   const background = { color: noHash(theme.background) }
 
   // Only fetch images for slides whose layout shows one; then to data URIs.
-  const layouts = deck.slides.map(computeLayout)
+  const layoutFor = (slide: ExportSlide) =>
+    deck.layouts?.find(l => l.type === slide.layoutType)
+  const layouts = deck.slides.map(s => computeLayout(s, layoutFor(s)))
   const urls = deck.slides.map((slide, i) =>
     layouts[i]!.some(b => b.kind === 'image') ? slide.imageRef : undefined,
   )
@@ -168,7 +172,7 @@ export const deckToPptx = async (deck: ExportDeck): Promise<Uint8Array> => {
   deck.slides.forEach((slide, i) => {
     const s = pptx.addSlide()
     s.background = background
-    renderSlide(pptx, s, slide, hex, images[i])
+    renderSlide(pptx, s, slide, hex, images[i], layoutFor(slide))
   })
 
   // pptxgenjs returns a Node Buffer for the 'nodebuffer' output type.

@@ -1,6 +1,12 @@
 /**
- * Resolves a template's free-form theme object into the color set the
- * slide renderer and slot editors rely on, with safe fallbacks.
+ * Resolves a template's free-form theme object into the sets the slide
+ * renderer and the editor rely on, with safe fallbacks: colors, the spacing
+ * metrics the editor lays guides on, and the named text styles layouts refer
+ * to by name.
+ *
+ * The theme is free-form on the wire, so every reader here is a typed getter
+ * with a fallback — a template missing a key looks like the defaults rather
+ * than like a bug.
  */
 export interface ThemeColors {
   background: string
@@ -36,3 +42,53 @@ export const themeColors = (theme: Record<string, unknown>): ThemeColors => {
     highlighterColor: color(theme, 'highlighterColor', accent),
   }
 }
+
+/**
+ * A template's default spacing, as fractions of the slide.
+ *
+ * These are an **authoring aid**: the editor draws them as guidelines and
+ * snaps dragged boxes to them. Nothing on the render path reads them, so
+ * changing a margin cannot move a slide in a deck that is already saved.
+ */
+export interface ThemeMetrics {
+  /** Safe area from the left and right edges, 0–1. */
+  marginX: number
+  /** Safe area from the top and bottom edges, 0–1. */
+  marginY: number
+  /** Default space between boxes stacked in a new layout, 0–1. */
+  gap: number
+  /** Advisory inner padding, drawn as a guide only, 0–1. */
+  padding: number
+}
+
+const metric = (
+  theme: Record<string, unknown>,
+  key: string,
+  fallback: number,
+): number => {
+  const raw = theme[key]
+  // Clamped rather than trusted: a margin over half the slide leaves no
+  // safe area at all, and a negative one draws off the edge.
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return fallback
+  return Math.min(0.45, Math.max(0, raw))
+}
+
+export const themeMetrics = (theme: Record<string, unknown>): ThemeMetrics => ({
+  // The fallbacks reproduce the margins the editor has always seeded a new
+  // arrangement with, so a template that never sets them is unchanged.
+  marginX: metric(theme, 'marginX', 0.06),
+  marginY: metric(theme, 'marginY', 0.06),
+  gap: metric(theme, 'gap', 0.03),
+  padding: metric(theme, 'padding', 0.02),
+})
+
+/**
+ * Text styles live in the shared package: the server reads the same answers
+ * to tell the AI how much a box holds and to trim what comes back, and a
+ * second copy here would let generation and rendering drift apart.
+ */
+export {
+  DEFAULT_TEXT_STYLES,
+  themeTextStyles,
+  type ThemeTextStyles,
+} from '@slide-machine/shared'

@@ -739,6 +739,122 @@ describe('GeminiGenerationProvider', () => {
   })
 })
 
+describe('refitSlideLayout', () => {
+  const refitRequest = (overrides = {}) => ({
+    from: {
+      layoutType: 'content',
+      label: 'Content',
+      slots: [
+        {
+          name: 'body',
+          kind: 'text' as const,
+          label: 'Slide body',
+          textStyle: 'body',
+          value: 'Water moves across a membrane. Solutes stay put.',
+        },
+      ],
+    },
+    to: {
+      layoutType: 'list',
+      label: 'Bullet list',
+      purpose: '3-6 parallel points',
+      slots: [
+        {
+          name: 'bullets',
+          kind: 'bullets' as const,
+          label: 'Slide bullets',
+          textStyle: 'bullet',
+          maxItems: 2,
+        },
+        { name: 'title', kind: 'text' as const, label: 'Slide title' },
+      ],
+    },
+    fill: ['bullets'],
+    orphaned: [
+      {
+        name: 'body',
+        kind: 'text' as const,
+        label: 'Slide body',
+        value: 'Water moves across a membrane. Solutes stay put.',
+      },
+    ],
+    ...overrides,
+  })
+
+  it('describes both layouts, the holes, and the orphaned content', async () => {
+    fetchMock.mockResolvedValue(geminiReply({ slots: { bullets: ['A'] } }))
+
+    await provider.refitSlideLayout(refitRequest())
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+    const prompt = body.contents[0].parts[0].text as string
+    expect(prompt).toContain('Boxes to fill')
+    expect(prompt).toContain(
+      '"bullets" (Slide bullets; bullets, styled bullet; max 2 items)',
+    )
+    expect(prompt).toContain('Water moves across a membrane')
+    // The instruction that protects the boxes which carried over intact
+    expect(prompt).toContain('Do NOT rewrite those')
+  })
+
+  it('keeps only the boxes it was asked to fill', async () => {
+    // A model that also answers for `title` would overwrite content the
+    // switch carried across untouched — the one thing this pass must not do.
+    fetchMock.mockResolvedValue(
+      geminiReply({ slots: { bullets: ['A', 'B'], title: 'Sneaky' } }),
+    )
+
+    const result = await provider.refitSlideLayout(refitRequest())
+
+    expect(result.slots).toEqual({ bullets: ['A', 'B'] })
+  })
+
+  it('trims a bullet box to the items it declares room for', async () => {
+    fetchMock.mockResolvedValue(
+      geminiReply({ slots: { bullets: ['A', 'B', 'C', 'D'] } }),
+    )
+
+    const result = await provider.refitSlideLayout(refitRequest())
+
+    expect(result.slots.bullets).toEqual(['A', 'B'])
+  })
+
+  it('coerces a string reply for a bullet box into one item', async () => {
+    fetchMock.mockResolvedValue(geminiReply({ slots: { bullets: 'Just one' } }))
+
+    const result = await provider.refitSlideLayout(refitRequest())
+
+    expect(result.slots.bullets).toEqual(['Just one'])
+  })
+
+  it('drops empty answers rather than writing blank boxes', async () => {
+    fetchMock.mockResolvedValue(geminiReply({ slots: { bullets: ['', '  '] } }))
+
+    const result = await provider.refitSlideLayout(refitRequest())
+
+    expect(result.slots).toEqual({})
+  })
+
+  it('fills nothing when the reply is unusable', async () => {
+    fetchMock.mockResolvedValue(geminiReply({ nonsense: true }))
+
+    expect((await provider.refitSlideLayout(refitRequest())).slots).toEqual({})
+  })
+
+  it('still raises a quota failure, which is not a content problem', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 429,
+      text: async () => 'quota',
+      json: async () => ({}),
+    })
+
+    await expect(
+      provider.refitSlideLayout(refitRequest()),
+    ).rejects.toBeInstanceOf(GenerationUnavailableError)
+  })
+})
+
 describe('pingGemini', () => {
   it('reports disabled when no API key is configured', async () => {
     testEnv.GEMINI_API_KEY = undefined

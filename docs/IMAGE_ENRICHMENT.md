@@ -52,6 +52,25 @@ This covers image *search* only. Image *generation* (IMG-4) is scaffolded
 (`IMAGE_GEN_PROVIDER`, unimplemented stub) but not yet supported: the model
 is never asked to generate an image and nothing consumes such an instruction.
 
+### One consumer is cached and unmetered
+
+The template editor fills a preview's picture boxes so a layout can be judged
+full rather than empty ([preview-images.ts](../server/src/enrichment/preview-images.ts)).
+Those are not a slide's pictures — nobody chose them and nothing keeps them —
+so that path differs from real enrichment in two ways:
+
+- **Unmetered.** `gatherCandidates` meters an image lookup, rightly, since it
+  cannot know who asked. Browsing your own template is not spending one, so
+  the search runs inside `runUnmetered` and finds no user to charge.
+- **Cached**, six hours on a hit and five minutes on a miss, with in-flight
+  requests shared. Clicking between layout tabs therefore costs nothing, and
+  an image host being down costs one attempt every few minutes rather than one
+  per click.
+
+Real enrichment must stay uncached — two slides asking the same question
+deserve their own answers — which is why this lives in a module of its own
+rather than inside `search.ts`.
+
 ## 1. Wikimedia Commons — nothing to do
 
 Public MediaWiki API, no account or key. Subject to Wikimedia's general

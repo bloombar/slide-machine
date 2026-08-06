@@ -59,6 +59,11 @@ const envSchema = z.object({
   TEMPLATES_DIR: z
     .string()
     .default(path.join(serverRoot, 'config', 'templates')),
+  /** Which built-in a new project starts on, and what an unknown template id
+   * falls back to. Empty (the default) means the first template in
+   * TEMPLATES_DIR, so a deployment that ships its own set needs no code
+   * change — and none is named in code. */
+  DEFAULT_TEMPLATE_ID: z.string().default(''),
 
   // Active transcription adapter (SPEC TECH-8) — also drives the client STT
   // engine via GET /api/config, so one server flip switches the whole app

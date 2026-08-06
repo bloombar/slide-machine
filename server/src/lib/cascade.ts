@@ -25,6 +25,7 @@ import { SlideTranslationModel } from '../models/slide-translation'
 import { RefreshTokenModel } from '../models/refresh-token'
 import { UserModel } from '../models/user'
 import { VoteModel } from '../models/vote'
+import { TemplateModel } from '../models/template'
 import { releaseTtsObjects } from '../models/tts-object'
 import { adjustGauge, BYTES_PER_MB } from '../billing/usage'
 import { pcmBytesFor } from './wav'
@@ -106,6 +107,10 @@ export const deleteUserCascade = async (userId: string): Promise<void> => {
 
   // Scrub the id from everyone else's sharing lists (a banned/deleted user
   // must not retain access) and end all sessions immediately.
+  // Style templates they authored (TMPL-4) tombstone with the account; decks
+  // still naming one fall back the way they would for any unknown template.
+  await TemplateModel.updateMany({ ownerId: userId }, { deletedAt: at })
+
   await Promise.all([
     ProjectModel.updateMany(
       {},

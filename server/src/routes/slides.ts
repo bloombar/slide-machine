@@ -9,13 +9,15 @@
 import { randomUUID } from 'node:crypto'
 import { Router } from 'express'
 import multer from 'multer'
+import type { HydratedDocument } from 'mongoose'
 import type {
   ImageAttribution,
   ImageSearchCandidate,
+  ImageSource,
 } from '@slide-machine/shared'
 import { requireAuth } from '../middleware/auth'
 import { HttpError } from '../middleware/error'
-import { SlideModel, toSlideDto } from '../models/slide'
+import { SlideModel, toSlideDto, type SlideDb } from '../models/slide'
 import { DeckModel, loadDeckAcl } from '../models/deck'
 import { buildSlideAudio, slideAudioWav } from '../lib/slide-audio'
 import { SeedAssetModel } from '../models/seed-asset'
@@ -25,6 +27,7 @@ import { assertUserCapacity } from '../billing/meter-hooks'
 import { runWithUsage } from '../billing/usage-context'
 import { canEditAcl } from '../lib/access'
 import { getStorage } from '../storage'
+import { patchSlot, slotsOf } from '../lib/slide-slots'
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 
@@ -34,6 +37,35 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_UPLOAD_BYTES },
 })
+
+/**
+ * Where an image lands on a slide. A layout may declare several image slots
+ * (TMPL-9), so the request names the one it means; without a name it is the
+ * conventional `image` slot.
+ */
+const setSlotImage = (
+  slide: HydratedDocument<SlideDb>,
+  slot: string | undefined,
+  value: {
+    imageRef: string
+    imageSource: ImageSource
+    attribution?: ImageAttribution
+  },
+) => {
+  slide.slots = patchSlot(slotsOf(slide), slot || 'image', {
+    kind: 'image',
+    ref: value.imageRef,
+    source: value.imageSource,
+    attribution: value.attribution,
+  })
+  slide.markModified('slots')
+}
+
+/** The slot an image request names, if any. */
+const requestedSlot = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.trim()
+    ? value.trim().slice(0, 60)
+    : undefined
 
 export const slidesRouter = Router()
 
@@ -68,12 +100,14 @@ slidesRouter.post(
     await storage.put(key, file.buffer, file.mimetype)
     const publicUrl = storage.publicUrl(key)
 
-    slide.imageRef = publicUrl
     // The instructor supplied this image, so it is their own to credit —
     // mark it user-provided (not AI 'stock') so its attribution stays
     // editable, and clear any credit carried over from a replaced image
-    slide.imageSource = 'seeded'
-    slide.attribution = undefined
+    setSlotImage(slide, requestedSlot(req.body?.slot), {
+      imageRef: publicUrl,
+      imageSource: 'seeded',
+      attribution: undefined,
+    })
     await slide.save()
 
     // Also register the upload as lecture seed material (SEED-2), so it
@@ -201,9 +235,11 @@ slidesRouter.post(
       String(req.params.slideId),
       req.userId,
     )
-    slide.imageRef = url
-    slide.imageSource = 'stock'
-    slide.attribution = compactAttribution(req.body?.attribution)
+    setSlotImage(slide, requestedSlot(req.body?.slot), {
+      imageRef: url,
+      imageSource: 'stock',
+      attribution: compactAttribution(req.body?.attribution),
+    })
     await slide.save()
     res.json(toSlideDto(slide))
   },

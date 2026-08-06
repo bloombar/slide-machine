@@ -31,6 +31,24 @@ export const runWithUsage = <T>(
   fn: () => Promise<T>,
 ): Promise<T> => storage.run({ userId }, fn)
 
+/**
+ * Runs `fn` with no one to attribute usage to, even inside a context that has
+ * one.
+ *
+ * For work the app does for its own chrome rather than for a lecture: the
+ * placeholder pictures in the template editor's preview are the case this
+ * exists for. They go through the same image search a real slide does, and
+ * that search meters itself — correctly, since it has no way to know who
+ * asked. Nobody browsing their own template should spend an image lookup on a
+ * picture that is only there to show what a layout looks like.
+ *
+ * `AsyncLocalStorage.exit` drops the store for the callback and everything it
+ * awaits, so `meterUsage` deep inside finds no user and no-ops by its own
+ * documented rule.
+ */
+export const runUnmetered = <T>(fn: () => Promise<T>): Promise<T> =>
+  storage.exit(fn)
+
 /** The user currently being metered, if any. */
 export const currentUsageUser = (): string | undefined =>
   storage.getStore()?.userId

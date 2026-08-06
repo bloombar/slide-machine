@@ -89,6 +89,46 @@ beforeEach(async () => {
   }
 })
 
+/**
+ * A deck whose template declares slots the author named themselves: one text
+ * box and two pictures on a `two-photos` layout (TMPL-9). Returns a slide on
+ * that layout, which is what author-defined content needs to exist at all.
+ */
+const deckWithAuthoredLayout = async () => {
+  const copy = await act(ada, 'template.duplicate', { templateId: 'classic' })
+  const template = copy.body
+  await act(ada, 'template.update', {
+    templateId: template.id,
+    name: template.name,
+    theme: template.theme,
+    layouts: [
+      ...template.layouts,
+      {
+        type: 'two-photos',
+        label: 'Two photos',
+        purpose: 'Two pictures side by side, with a note',
+        slots: [
+          { name: 'note', kind: 'text', label: 'Note' },
+          { name: 'photo-1', kind: 'image', label: 'Photo 1' },
+          { name: 'photo-2', kind: 'image', label: 'Photo 2' },
+        ],
+        elementPositions: {},
+      },
+    ],
+  })
+  const project = await act(ada, 'project.create', { title: 'Authored' })
+  await act(ada, 'project.switchTemplate', {
+    projectId: project.body.id,
+    templateId: template.id,
+  })
+  const deck = await act(ada, 'deck.create', { projectId: project.body.id })
+  const slide = await act(ada, 'slide.add', {
+    deckId: deck.body.id,
+    layoutType: 'two-photos',
+  })
+  return slide.body.id as string
+}
+
 describe('slide.editContent', () => {
   it('updates only the provided fields', async () => {
     const res = await act(ada, 'slide.editContent', {
@@ -137,6 +177,48 @@ describe('slide.editContent', () => {
       attribution: {},
     })
     expect(cleared.body.attribution).toBeFalsy()
+  })
+
+  it('fills a box the template author defined, by its name (TMPL-9)', async () => {
+    const slideId = await deckWithAuthoredLayout()
+    const res = await act(ada, 'slide.editContent', {
+      slideId,
+      slots: { note: { kind: 'text', value: 'Read chapter 4' } },
+    })
+    expect(res.status).toBe(200)
+    expect(res.body.slots.note).toEqual({
+      kind: 'text',
+      value: 'Read chapter 4',
+    })
+    // Hand-written content, so the post-lecture reformat must not overwrite it
+    expect(res.body.manuallyEdited).toBe(true)
+  })
+
+  it('edits one box without disturbing the others', async () => {
+    const slideId = await deckWithAuthoredLayout()
+    await act(ada, 'slide.editContent', {
+      slideId,
+      slots: {
+        'photo-1': { kind: 'image', ref: 'http://example.test/a.png' },
+        'photo-2': { kind: 'image', ref: 'http://example.test/b.png' },
+      },
+    })
+    const res = await act(ada, 'slide.editContent', {
+      slideId,
+      slots: { 'photo-2': { kind: 'image', ref: '' } },
+    })
+    expect(res.body.slots['photo-1'].ref).toBe('http://example.test/a.png')
+    expect(res.body.slots['photo-2'].ref).toBe('')
+  })
+
+  it('refuses content for a slot the layout does not declare', async () => {
+    const slideId = await deckWithAuthoredLayout()
+    const res = await act(ada, 'slide.editContent', {
+      slideId,
+      slots: { hologram: { kind: 'text', value: 'nowhere to show this' } },
+    })
+    // A slide must never hold content its template cannot show
+    expect(res.status).toBe(400)
   })
 
   it("403s editing another user's slide", async () => {
@@ -419,6 +501,67 @@ describe('slide.setLayout', () => {
     expect(view.body.slides[0].title).toBeTruthy()
   })
 
+  it('carries content onto a box the new layout names differently', async () => {
+    // A layout whose headline box is called `headline`, not `title` (TMPL-9).
+    // Without the GEN-9 pairing the text would sit under a name this layout
+    // never declares, and the slide would come up blank.
+    const copy = await act(ada, 'template.duplicate', { templateId: 'classic' })
+    const template = copy.body
+    await act(ada, 'template.update', {
+      templateId: template.id,
+      name: template.name,
+      theme: template.theme,
+      layouts: [
+        ...template.layouts,
+        {
+          type: 'billboard',
+          label: 'Billboard',
+          purpose: 'One large statement',
+          slots: [{ name: 'headline', kind: 'text', label: 'Headline' }],
+          elementPositions: {},
+        },
+      ],
+    })
+    const project = await act(ada, 'project.create', { title: 'Renamed' })
+    await act(ada, 'project.switchTemplate', {
+      projectId: project.body.id,
+      templateId: template.id,
+    })
+    const deck = await act(ada, 'deck.create', { projectId: project.body.id })
+    const slide = await act(ada, 'slide.add', {
+      deckId: deck.body.id,
+      layoutType: 'content',
+    })
+    await act(ada, 'slide.editContent', {
+      slideId: slide.body.id,
+      title: 'Osmosis',
+    })
+
+    const res = await act(ada, 'slide.setLayout', {
+      slideId: slide.body.id,
+      layoutType: 'billboard',
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.body.slots.headline).toEqual({
+      kind: 'text',
+      value: 'Osmosis',
+    })
+  })
+
+  it('leaves content alone when both layouts name the box the same', async () => {
+    const before = await act(ada, 'deck.get', { deckId })
+    const title = before.body.slides[0].title
+
+    await act(ada, 'slide.setLayout', {
+      slideId: slideIds[0],
+      layoutType: 'section',
+    })
+
+    const after = await act(ada, 'deck.get', { deckId })
+    expect(after.body.slides[0].title).toBe(title)
+  })
+
   it('rejects layouts the template does not offer and foreign slides', async () => {
     expect(
       (
@@ -438,6 +581,62 @@ describe('slide.setLayout', () => {
         })
       ).status,
     ).toBe(403)
+  })
+})
+
+describe('slide.refitLayout', () => {
+  it('fills a hole from the content the switch could not place', async () => {
+    // content -> list: the paragraph has no box in the new layout (prose vs
+    // list), and the bullet box has nothing in it. Exactly the lossy case.
+    await act(ada, 'slide.editContent', {
+      slideId: slideIds[0],
+      title: 'Osmosis',
+      body: 'Water crosses the membrane. Solutes stay behind.',
+    })
+    await act(ada, 'slide.setLayout', {
+      slideId: slideIds[0],
+      layoutType: 'list',
+    })
+
+    const res = await act(ada, 'slide.refitLayout', {
+      slideId: slideIds[0],
+      fromLayoutType: 'content',
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.body.filled).toEqual(['bullets'])
+    expect(res.body.slide.bullets.length).toBeGreaterThan(0)
+    // The box that carried across is untouched — this pass fills holes only
+    expect(res.body.slide.title).toBe('Osmosis')
+  })
+
+  it('does nothing, and calls no model, when the switch lost nothing', async () => {
+    // content -> section: `title` is in both, and the section layout has no
+    // other box, so there is no hole to fill and nothing orphaned.
+    await act(ada, 'slide.editContent', {
+      slideId: slideIds[0],
+      title: 'Osmosis',
+      body: '',
+    })
+    await act(ada, 'slide.setLayout', {
+      slideId: slideIds[0],
+      layoutType: 'section',
+    })
+
+    const res = await act(ada, 'slide.refitLayout', {
+      slideId: slideIds[0],
+      fromLayoutType: 'content',
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.body.filled).toEqual([])
+    expect(res.body.slide.title).toBe('Osmosis')
+  })
+
+  it('refuses a slide the caller does not own', async () => {
+    const bob = await registerUser('bob-refit@example.com')
+    const res = await act(bob, 'slide.refitLayout', { slideId: slideIds[0] })
+    expect(res.status).toBe(403)
   })
 })
 
@@ -594,6 +793,28 @@ describe('POST /slides/:slideId/image (EDIT-1)', () => {
           a.type === 'image' && a.imageUrl === res.body.imageRef,
       ),
     ).toBe(true)
+  })
+
+  it('lands in the box the request named, leaving the others alone', async () => {
+    // A template author's layout can hold several pictures (TMPL-9), so an
+    // upload says which one it is for.
+    const slideId = await deckWithAuthoredLayout()
+    const first = await request(server)
+      .post(`/api/slides/${slideId}/image`)
+      .set('Authorization', `Bearer ${ada}`)
+      .field('slot', 'photo-1')
+      .attach('file', PNG, { filename: 'first.png', contentType: 'image/png' })
+    expect(first.status).toBe(201)
+    const res = await request(server)
+      .post(`/api/slides/${slideId}/image`)
+      .set('Authorization', `Bearer ${ada}`)
+      .field('slot', 'photo-2')
+      .attach('file', PNG, { filename: 'second.png', contentType: 'image/png' })
+    expect(res.status).toBe(201)
+    expect(res.body.slots['photo-2'].ref).toBeTruthy()
+    expect(res.body.slots['photo-2'].source).toBe('seeded')
+    // The first picture is untouched
+    expect(res.body.slots['photo-1'].ref).toBe(first.body.slots['photo-1'].ref)
   })
 
   it('rejects a non-image file', async () => {

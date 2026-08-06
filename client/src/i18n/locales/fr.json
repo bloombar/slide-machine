@@ -25,7 +25,9 @@
     "dangerZone": "Zone sensible",
     "resetToDefault": "Rétablir la valeur par défaut",
     "listSeparator": ", ",
-    "adminEditNotice": "Vous modifiez {entity, select, account {le compte} project {le projet} lecture {le cours} other {les paramètres}} d'un autre utilisateur en tant qu'administrateur. Chaque modification est consignée dans le journal d'audit."
+    "adminEditNotice": "Vous modifiez {entity, select, account {le compte} project {le projet} lecture {le cours} other {les paramètres}} d'un autre utilisateur en tant qu'administrateur. Chaque modification est consignée dans le journal d'audit.",
+    "undo": "Annuler",
+    "redo": "Rétablir"
   },
   "nav": {
     "brand": "The Slide Machine",
@@ -170,7 +172,189 @@
       "seminar": "Séminaire"
     },
     "exportYaml": "Exporter le modèle en YAML",
-    "exportYamlHint": "Téléchargez le style et les mises en page de ce modèle dans un fichier YAML réimportable."
+    "exportYamlHint": "Téléchargez le style et les mises en page de ce modèle dans un fichier YAML réimportable.",
+    "custom": "Perso",
+    "duplicate": "Dupliquer",
+    "duplicateNamed": "Dupliquer {name}",
+    "edit": "Modifier",
+    "editNamed": "Modifier {name}",
+    "deleteNamed": "Supprimer {name}",
+    "nameLabel": "Nom du modèle",
+    "themeLabel": "Couleurs par défaut",
+    "layoutsLabel": "Dispositions",
+    "layoutName": "Nom",
+    "layoutPurpose": "Quand l’utiliser",
+    "theme": {
+      "background": "Arrière-plan",
+      "surface": "Surface",
+      "text": "Texte",
+      "muted": "Texte atténué",
+      "accent": "Accent",
+      "penColor": "Stylo du tableau",
+      "highlighterColor": "Surligneur du tableau"
+    },
+    "preview": {
+      "title": "Une diapositive dans ce style",
+      "body": "Une ou deux phrases de texte, pour juger d’un coup d’œil la typographie et les espacements.",
+      "bullet1": "Un premier point",
+      "bullet2": "Un deuxième point",
+      "bullet3": "Un troisième point",
+      "caption": "Une légende"
+    },
+    "delete": {
+      "title": "Supprimer le modèle ?",
+      "message": "« {name} » sera retiré de votre bibliothèque. Les cours qui l’utilisent déjà conservent leur style."
+    },
+    "errors": {
+      "duplicate": "Impossible de dupliquer ce modèle",
+      "save": "Impossible d’enregistrer le modèle",
+      "delete": "Impossible de supprimer le modèle"
+    },
+    "visibilityLabel": "Qui peut l’utiliser",
+    "addLayout": "Ajouter une disposition",
+    "addLayoutChoose": "Choisir un type…",
+    "removeLayout": "Retirer la disposition {name}",
+    "visibility": {
+      "private": "Moi seul",
+      "unlisted": "Toute personne ayant le lien",
+      "public": "Publique"
+    },
+    "visibilityHint": {
+      "private": "À vous seul. Personne d’autre ne peut la trouver ni la copier.",
+      "unlisted": "Quiconque reçoit le lien peut la copier.",
+      "public": "Visible dans la bibliothèque publique, copiable par tous."
+    },
+    "boxAt": "{slot} : {x}% depuis la gauche, {y}% depuis le haut, {w}% de large, {h}% de haut",
+    "slotLabel": "Son nom",
+    "slotKind": "Ce que c’est",
+    "slotKinds": {
+      "text": "Texte",
+      "bullets": "Puces",
+      "image": "Image"
+    },
+    "removeSlot": "Supprimer ce bloc",
+    "newLayoutAdd": "Ajouter la mise en page",
+    "layoutSettings": "Disposition",
+    "boxSettings": "Bloc",
+    "templateSettings": "Réglages du modèle",
+    "backToLayout": "Revenir aux réglages de la disposition",
+    "layoutPurposeHint": "L’IA lit ceci pour choisir une disposition de diapositive.",
+    "removeLayoutConfirm": "« {name} » sera retiré de ce modèle. Les diapositives qui l’utilisent gardent leur contenu.",
+    "whiteboardHint": "Chaque modèle garde une ardoise vierge pour dessiner : celle-ci ne peut être ni supprimée ni remplie de blocs.",
+    "outline": "Blocs de cette disposition",
+    "decoration": "Décoration",
+    "newBoxName": "Nouveau bloc",
+    "addBoxTo": "Ajouter un bloc dans {name}",
+    "direction": "Direction",
+    "directions": {
+      "row": "En largeur",
+      "column": "En hauteur"
+    },
+    "wrap": "Passer à la ligne",
+    "columns": "Colonnes",
+    "rows": "Lignes",
+    "gap": "Écart",
+    "justify": "Répartition",
+    "alignItems": "Alignement",
+    "justifyValues": {
+      "start": "Au début",
+      "center": "Au centre",
+      "end": "À la fin",
+      "between": "Espacés",
+      "around": "Espacés autour",
+      "evenly": "Espacement égal"
+    },
+    "alignValues": {
+      "start": "Début",
+      "center": "Centre",
+      "end": "Fin",
+      "stretch": "Remplir"
+    },
+    "sizing": "Espace occupé",
+    "grow": "Occupe l’espace libre",
+    "colSpan": "Colonnes de large",
+    "rowSpan": "Lignes de haut",
+    "width": "Largeur %",
+    "height": "Hauteur %",
+    "textLabel": "Texte",
+    "textStyle": "Style de texte",
+    "textStyleCustom": "Personnalisé",
+    "inherit": "Comme hérité",
+    "fontFamily": "Police",
+    "fontSize": "Taille du texte",
+    "fontWeight": "Graisse",
+    "align": "En largeur",
+    "vAlign": "En hauteur",
+    "textStyles": {
+      "title": "Titre du cours",
+      "sectionTitle": "Titre de section",
+      "heading": "Titre de diapositive",
+      "body": "Corps",
+      "bullet": "Puces",
+      "caption": "Légende",
+      "quote": "Citation"
+    },
+    "textStylesLabel": "Styles de texte par défaut",
+    "textStylesHint": "Un bloc suit l’un de ces styles par son nom : en modifier un restyle tous les blocs qui le suivent.",
+    "styleFont": "Police pour {style}",
+    "styleSize": "Taille du texte pour {style}",
+    "textColor": "Couleur du texte",
+    "background": "Couleur de fond",
+    "padding": "Espace intérieur",
+    "radius": "Coins arrondis",
+    "arrangeOrder": "Ordre",
+    "bringForward": "Avancer",
+    "sendBackward": "Reculer",
+    "spacingLabel": "Marges par défaut",
+    "spacingHint": "Affichées comme repères pendant le travail ; les blocs s’y aimantent. Les diapositives déjà créées ne changent pas.",
+    "metric": {
+      "marginX": "Côtés %",
+      "marginY": "Haut et bas %",
+      "gap": "Entre blocs %"
+    },
+    "ruler": {
+      "bottom": "Règle du bas — faites glisser vers le haut pour un repère horizontal",
+      "right": "Règle de droite — faites glisser vers la gauche pour un repère vertical"
+    },
+    "guideAt": {
+      "x": "Repère vertical à {percent} %",
+      "y": "Repère horizontal à {percent} %"
+    },
+    "boxRow": "{name} — faites glisser pour réorganiser",
+    "position": "Le contenu se place",
+    "containerNames": {
+      "row": "Ligne",
+      "column": "Colonne",
+      "grid": "Grille"
+    },
+    "placement": "Position",
+    "placeFreely": "Positionner ce bloc librement",
+    "placeFreelyOn": "Faites-le glisser où vous voulez sur la diapositive. Il ne prend aucune place aux blocs voisins.",
+    "removeLayoutButton": "Supprimer cette disposition",
+    "layoutNumbered": "Disposition {number}",
+    "contentLayouts": {
+      "column": "Une colonne de contenu",
+      "row": "Une ligne de contenu",
+      "grid": "Une grille de contenu"
+    },
+    "contentGroup": {
+      "holds": "Contenu",
+      "arranges": "Un conteneur"
+    },
+    "arrangement": "Agencement",
+    "unsaved": "Modifications non enregistrées",
+    "discard": {
+      "title": "Fermer sans enregistrer ?",
+      "message": "Le modèle comporte des modifications non enregistrées. Fermer maintenant les perdra.",
+      "confirm": "Abandonner les modifications",
+      "save": "Enregistrer et fermer"
+    },
+    "clearFill": "Aucun fond",
+    "placedByParent": "Positionné automatiquement par le bloc parent",
+    "maxChars": "Caractères max",
+    "maxItems": "Points max",
+    "styleChars": "Caractères max pour {style}",
+    "styleItems": "Points max pour {style}"
   },
   "layout": {
     "change": "Changer la mise en page",
@@ -621,6 +805,7 @@
     "addSlideHint": "Ajouter une diapositive",
     "liveSession": "Session en direct",
     "playingOriginal": "Lecture de l'audio d'origine…",
+    "layoutRefit": "Les blocs ajoutés par cette mise en page ont été remplis",
     "play": {
       "play": "Lire le diaporama",
       "pause": "Mettre la lecture en pause",

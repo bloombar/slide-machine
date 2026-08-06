@@ -105,3 +105,67 @@ describe('computeLayout', () => {
     ).toContain('image')
   })
 })
+
+/**
+ * A template that arranged a layout exports from its own boxes (TMPL-4), so a
+ * PDF matches the screen. A layout with no arrangement keeps the hand-tuned
+ * one below — that is what every built-in relies on.
+ */
+describe('an arranged layout', () => {
+  const arranged = {
+    type: 'two-photos',
+    label: 'Two photos',
+    purpose: 'Two pictures side by side',
+    slots: [
+      { name: 'heading', kind: 'text' as const, label: 'Heading' },
+      { name: 'photo-left', kind: 'image' as const, label: 'Left' },
+      { name: 'photo-right', kind: 'image' as const, label: 'Right' },
+    ],
+    elementPositions: {
+      heading: { x: 0.05, y: 0.05, w: 0.9, h: 0.15, fontSize: 6 },
+      'photo-left': { x: 0.05, y: 0.25, w: 0.42, h: 0.6 },
+      'photo-right': { x: 0.53, y: 0.25, w: 0.42, h: 0.6 },
+    },
+  }
+
+  const slide = {
+    layoutType: 'two-photos',
+    slots: {
+      heading: { kind: 'text' as const, value: 'Two suns' },
+      'photo-left': { kind: 'image' as const, ref: 'http://a.png' },
+      'photo-right': { kind: 'image' as const, ref: 'http://b.png' },
+    },
+  }
+
+  it('draws every box the template placed, where it placed it', () => {
+    const boxes = computeLayout(slide, arranged)
+    expect(boxes).toHaveLength(3)
+    expect(boxes[1]).toMatchObject({ kind: 'image', x: 0.05, w: 0.42 })
+    expect(boxes[2]).toMatchObject({ kind: 'image', x: 0.53, w: 0.42 })
+  })
+
+  it('carries a box’s type size across, as a fraction of the width', () => {
+    const [heading] = computeLayout(slide, arranged)
+    // 6cqi is 6% of the slide width, and the export measures type the same way
+    expect(heading).toMatchObject({ kind: 'text' })
+    expect(
+      (heading as { runs: { sizeFrac: number }[] }).runs[0]!.sizeFrac,
+    ).toBe(0.06)
+  })
+
+  it('leaves out a box whose slot the slide never filled', () => {
+    const boxes = computeLayout(
+      { layoutType: 'two-photos', slots: {} },
+      arranged,
+    )
+    // The pictures still reserve their space; the empty heading does not
+    expect(boxes.every(b => b.kind === 'image')).toBe(true)
+  })
+
+  it('keeps the hand-tuned arrangement when the layout has no boxes', () => {
+    const plain = { ...arranged, elementPositions: {} }
+    expect(computeLayout({ layoutType: 'content', title: 'T' }, plain)).toEqual(
+      computeLayout({ layoutType: 'content', title: 'T' }),
+    )
+  })
+})

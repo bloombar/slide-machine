@@ -18,13 +18,19 @@ import { dispatchAction } from './actions'
 import { config } from '../config'
 import { getAccessToken, refreshSession } from '../auth/token'
 
-/** Replaces (or sets) a slide's image from an uploaded file (EDIT-1). */
+/**
+ * Replaces (or sets) a slide's image from an uploaded file (EDIT-1). `slot`
+ * names which image box it belongs to — a template author's layout may have
+ * several (TMPL-4); omitted means the conventional one.
+ */
 export const uploadSlideImage = (
   slideId: string,
   file: File,
+  slot?: string,
 ): Promise<Slide> => {
   const form = new FormData()
   form.append('file', file)
+  if (slot) form.append('slot', slot)
   return apiFetch<Slide>(`/api/slides/${slideId}/image`, {
     method: 'POST',
     body: form,
@@ -50,10 +56,11 @@ export const applySlideImageFromSource = (
   slideId: string,
   url: string,
   attribution?: ImageAttribution,
+  slot?: string,
 ): Promise<Slide> =>
   apiFetch<Slide>(`/api/slides/${slideId}/image-from-source`, {
     method: 'POST',
-    body: JSON.stringify({ url, attribution }),
+    body: JSON.stringify({ url, attribution, slot }),
   })
 
 /**

@@ -2799,7 +2799,9 @@ describe('DeckViewerPage image editing', () => {
       screen.queryByRole('alertdialog', { name: 'Delete this slide?' }),
     ).not.toBeInTheDocument()
     await vi.waitFor(() =>
-      expect(calls).toEqual([{ slideId: 's1', imageRef: '' }]),
+      expect(calls).toEqual([
+        { slideId: 's1', slots: { image: { kind: 'image', ref: '' } } },
+      ]),
     )
     expect(deleted).toBe(false)
   })
@@ -2854,7 +2856,10 @@ describe('DeckViewerPage image editing', () => {
     // Only the image is cleared; the layout is NOT switched.
     await vi.waitFor(() =>
       expect(calls).toEqual([
-        { url: 'editContent', body: { slideId: 's1', imageRef: '' } },
+        {
+          url: 'editContent',
+          body: { slideId: 's1', slots: { image: { kind: 'image', ref: '' } } },
+        },
       ]),
     )
     expect(calls.some(c => c.url === 'setLayout')).toBe(false)

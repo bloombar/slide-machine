@@ -55,7 +55,8 @@ import { deckToYaml, type ExportDeck, type ExportSlide } from '../lib/deck-yaml'
 import { deckToPdf } from '../lib/deck-pdf'
 import { visibleStrokes } from '../lib/deck-drawings'
 import { resolveTemplateTheme } from '../lib/deck-theme'
-import { getBuiltinTemplate } from '../templates/builtin'
+import { resolveTemplate } from '../templates/resolve'
+import { slotsOf } from '../lib/slide-slots'
 import {
   uploadFileToDriveLive,
   createGoogleSlidesLive,
@@ -145,11 +146,15 @@ const buildExportDeck = async (
         body: doc.body,
         bullets: doc.bullets,
         caption: doc.caption,
+        slots: slotsOf(doc),
       },
       translation[doc._id.toString()],
     )
     return {
       layoutType: doc.layoutType,
+      // Carried whole so an arranged layout exports from its own boxes,
+      // including slots the template's author named (TMPL-9).
+      slots: s.slots,
       title: s.title,
       body: s.body,
       bullets: s.bullets,
@@ -162,7 +167,7 @@ const buildExportDeck = async (
   })
   // Resolve the template's theme so the export carries the same colors the
   // viewer shows (background, text, accent, muted).
-  const template = getBuiltinTemplate(deck.templateId)
+  const template = await resolveTemplate(deck.templateId)
   // General-tab settings make the export import-compatible (EXP-3). Seed notes
   // and seed material are deliberately excluded — they can hold private or
   // copyrighted content that should not travel in a shareable file.
@@ -176,6 +181,9 @@ const buildExportDeck = async (
     title: deck.title,
     templateId: deck.templateId,
     theme: resolveTemplateTheme(template?.theme),
+    // The renderers read an arrangement from these; a layout with none keeps
+    // its hand-tuned arrangement, exactly as on screen.
+    layouts: template?.layouts,
     ...(hasSettings ? { settings } : {}),
     slides,
   }
