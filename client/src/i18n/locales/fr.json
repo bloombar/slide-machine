@@ -232,7 +232,6 @@
       "bullets": "Puces",
       "image": "Image"
     },
-    "removeSlot": "Supprimer ce bloc",
     "newLayoutAdd": "Ajouter la mise en page",
     "layoutSettings": "Disposition",
     "boxSettings": "Bloc",
@@ -245,6 +244,7 @@
     "decoration": "Décoration",
     "newBoxName": "Nouveau bloc",
     "addBoxTo": "Ajouter un bloc dans {name}",
+    "removeBox": "Supprimer le bloc {name}",
     "direction": "Direction",
     "directions": {
       "row": "En largeur",
@@ -330,7 +330,6 @@
     "placement": "Position",
     "placeFreely": "Positionner ce bloc librement",
     "placeFreelyOn": "Faites-le glisser où vous voulez sur la diapositive. Il ne prend aucune place aux blocs voisins.",
-    "removeLayoutButton": "Supprimer cette disposition",
     "layoutNumbered": "Disposition {number}",
     "contentLayouts": {
       "column": "Une colonne de contenu",

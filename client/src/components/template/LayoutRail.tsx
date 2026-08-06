@@ -13,6 +13,7 @@
  * it is always reachable however many layouts a template has.
  */
 import { useTranslation } from 'react-i18next'
+import { Trash2 } from 'lucide-react'
 import type { Layout } from '@slide-machine/shared'
 import { WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
 
@@ -20,6 +21,7 @@ export default function LayoutRail({
   layouts,
   selected,
   onSelect,
+  onDelete,
   addable,
   onAddType,
   onAddOwn,
@@ -27,6 +29,9 @@ export default function LayoutRail({
   layouts: Layout[]
   selected: number
   onSelect: (index: number) => void
+  /** Removes a layout from the template. The rail only asks; whether to
+   * confirm first is the editor's business. */
+  onDelete: (index: number) => void
   /** Conventional types this template does not have yet. */
   addable: string[]
   onAddType: (type: string) => void
@@ -43,6 +48,16 @@ export default function LayoutRail({
     .map((layout, index) => ({ layout, index }))
     .filter(({ layout }) => layout.type !== WHITEBOARD_LAYOUT_TYPE)
 
+  /** What a layout is called in the list, and in what deleting it asks. */
+  const nameOf = (layout: Layout) => layout.label.trim() || layout.type
+  // Named only when it is a layout that may go: every template keeps its
+  // whiteboard (TMPL-7), so nothing offers to delete one.
+  const selectedLayout = layouts[selected]
+  const selectedName =
+    selectedLayout && selectedLayout.type !== WHITEBOARD_LAYOUT_TYPE
+      ? nameOf(selectedLayout)
+      : undefined
+
   // `self-start`: the column is as tall as its own content. Stretched to
   // match the inspector beside it, "Add layout" would float far below the
   // last layout with nothing in between.
@@ -55,23 +70,37 @@ export default function LayoutRail({
       </h4>
       {/* Narrow screens stack the editor, and a column of tabs above the
           slide would push the preview off the first screenful. A select says
-          the same thing in one line. */}
-      <label className="flex flex-col gap-1 lg:hidden">
-        <span className="text-xs text-slate-600">
-          {t('template.layoutsLabel')}
-        </span>
-        <select
-          value={selected}
-          onChange={e => onSelect(Number(e.target.value))}
-          className="rounded-md border border-slate-300 px-2 py-1 text-sm"
-        >
-          {shown.map(({ layout, index }) => (
-            <option key={layout.type} value={index}>
-              {layout.label.trim() || layout.type}
-            </option>
-          ))}
-        </select>
-      </label>
+          the same thing in one line. Deleting is beside it rather than on
+          hover: there is no hovering on a touch screen. */}
+      <div className="flex items-end gap-1 lg:hidden">
+        <label className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="text-xs text-slate-600">
+            {t('template.layoutsLabel')}
+          </span>
+          <select
+            value={selected}
+            onChange={e => onSelect(Number(e.target.value))}
+            className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
+          >
+            {shown.map(({ layout, index }) => (
+              <option key={layout.type} value={index}>
+                {nameOf(layout)}
+              </option>
+            ))}
+          </select>
+        </label>
+        {selectedName && (
+          <button
+            type="button"
+            onClick={() => onDelete(selected)}
+            aria-label={t('template.removeLayout', { name: selectedName })}
+            title={t('template.removeLayout', { name: selectedName })}
+            className="rounded-md border border-slate-300 p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-700"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden />
+          </button>
+        )}
+      </div>
 
       <div
         role="tablist"
@@ -80,20 +109,36 @@ export default function LayoutRail({
         className="hidden max-h-80 min-h-0 flex-col gap-1 overflow-y-auto lg:flex"
       >
         {shown.map(({ layout, index }) => (
-          <button
-            key={layout.type}
-            type="button"
-            role="tab"
-            aria-selected={index === selected}
-            onClick={() => onSelect(index)}
-            className={`w-full truncate rounded-md px-3 py-2 text-left text-sm ${
-              index === selected
-                ? 'bg-indigo-50 font-medium text-indigo-700'
-                : 'text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            {layout.label.trim() || layout.type}
-          </button>
+          // The tab fills the row and the delete icon sits over its end, so
+          // the whole row still switches layout — the icon is an extra on the
+          // row, not a slice taken out of it.
+          <div key={layout.type} className="group relative flex items-center">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={index === selected}
+              onClick={() => onSelect(index)}
+              className={`w-full truncate rounded-md py-2 pl-3 pr-9 text-left text-sm ${
+                index === selected
+                  ? 'bg-indigo-50 font-medium text-indigo-700'
+                  : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              {nameOf(layout)}
+            </button>
+            {/* Hidden until the row is pointed at, so the list reads as a
+                list. `focus-visible` brings it back for the keyboard, which
+                never hovers anything. */}
+            <button
+              type="button"
+              onClick={() => onDelete(index)}
+              aria-label={t('template.removeLayout', { name: nameOf(layout) })}
+              title={t('template.removeLayout', { name: nameOf(layout) })}
+              className="absolute right-1 rounded p-1 text-slate-400 opacity-0 hover:bg-white hover:text-red-700 focus-visible:opacity-100 group-hover:opacity-100"
+            >
+              <Trash2 className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          </div>
         ))}
       </div>
 

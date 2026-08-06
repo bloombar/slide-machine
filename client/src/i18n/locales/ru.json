@@ -232,7 +232,6 @@
       "bullets": "Список",
       "image": "Изображение"
     },
-    "removeSlot": "Удалить этот блок",
     "newLayoutAdd": "Добавить макет",
     "layoutSettings": "Макет",
     "boxSettings": "Блок",
@@ -245,6 +244,7 @@
     "decoration": "Оформление",
     "newBoxName": "Новый блок",
     "addBoxTo": "Добавить блок внутрь {name}",
+    "removeBox": "Удалить блок «{name}»",
     "direction": "Направление",
     "directions": {
       "row": "По горизонтали",
@@ -330,7 +330,6 @@
     "placement": "Положение",
     "placeFreely": "Разместить этот блок свободно",
     "placeFreelyOn": "Перетащите его в любое место слайда. Он не занимает места у соседних блоков.",
-    "removeLayoutButton": "Удалить этот макет",
     "layoutNumbered": "Макет {number}",
     "contentLayouts": {
       "column": "Столбец содержимого",

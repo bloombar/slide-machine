@@ -232,7 +232,6 @@
       "bullets": "要点",
       "image": "图片"
     },
-    "removeSlot": "删除此文本框",
     "newLayoutAdd": "添加版式",
     "layoutSettings": "版式",
     "boxSettings": "文本框",
@@ -245,6 +244,7 @@
     "decoration": "装饰",
     "newBoxName": "新文本框",
     "addBoxTo": "在 {name} 中添加文本框",
+    "removeBox": "删除“{name}”文本框",
     "direction": "方向",
     "directions": {
       "row": "横向",
@@ -330,7 +330,6 @@
     "placement": "位置",
     "placeFreely": "自由定位此文本框",
     "placeFreelyOn": "可拖动到幻灯片上的任意位置，不占用周围文本框的空间。",
-    "removeLayoutButton": "删除此版式",
     "layoutNumbered": "版式 {number}",
     "contentLayouts": {
       "column": "一列内容",

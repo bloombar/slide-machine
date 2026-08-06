@@ -109,6 +109,48 @@ test('template library: duplicate, edit, apply, delete', async ({ page }) => {
     await expect(page.getByRole('tab', { name: /Lab safety/ })).toBeVisible()
   })
 
+  await test.step('a layout is deleted from its own row, after a question', async () => {
+    // Only a browser can say the icon is hidden until the row is pointed at:
+    // jsdom applies no styles, so every one of them is "there" to it.
+    const tab = page.getByRole('tab', { name: /Lab safety/ })
+    const remove = page
+      .getByRole('tablist')
+      .getByRole('button', { name: 'Remove the Lab safety layout' })
+    await expect(remove).toHaveCSS('opacity', '0')
+    await tab.hover()
+    await expect(remove).toHaveCSS('opacity', '1')
+
+    await remove.click()
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Delete' })
+      .click()
+    await expect(page.getByRole('tab', { name: /Lab safety/ })).toHaveCount(0)
+    // A whole design is worth putting back, so undo reaches it too.
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect(page.getByRole('tab', { name: /Lab safety/ })).toBeVisible()
+  })
+
+  await test.step('a box is deleted from its row, with no question asked', async () => {
+    await page.getByRole('tab', { name: /Content/ }).click()
+    const row = page.getByRole('listitem', { name: /^Image 2/ })
+    const remove = page.getByRole('button', {
+      name: 'Remove the Image 2 box',
+    })
+    await expect(remove).toHaveCSS('opacity', '0')
+    await row.hover()
+    await expect(remove).toHaveCSS('opacity', '1')
+
+    await remove.click()
+    await expect(page.getByRole('alertdialog')).toHaveCount(0)
+    await expect(page.getByRole('listitem', { name: /^Image 2/ })).toHaveCount(
+      0,
+    )
+    // Which is why nothing asks first: undo is the way back.
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect(page.getByRole('listitem', { name: /^Image 2/ })).toBeVisible()
+  })
+
   await page.getByRole('button', { name: 'Save' }).click()
 
   // Back in the library, the copy is there and marked as the user's own
