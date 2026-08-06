@@ -25,7 +25,9 @@
     "dangerZone": "Danger zone",
     "resetToDefault": "Reset to default",
     "listSeparator": ", ",
-    "adminEditNotice": "You are editing another user's {entity, select, account {account} project {project} lecture {lecture} other {settings}} as an admin. Every change you make here is recorded in the audit log."
+    "adminEditNotice": "You are editing another user's {entity, select, account {account} project {project} lecture {lecture} other {settings}} as an admin. Every change you make here is recorded in the audit log.",
+    "undo": "Undo",
+    "redo": "Redo"
   },
   "nav": {
     "brand": "The Slide Machine",
@@ -178,9 +180,8 @@
     "editNamed": "Edit {name}",
     "deleteNamed": "Delete {name}",
     "nameLabel": "Template name",
-    "themeLabel": "Colours",
+    "themeLabel": "Default colours",
     "layoutsLabel": "Layouts",
-    "layoutsHint": "Each layout's purpose tells the AI when to choose it while a lecture is generated.",
     "layoutName": "Name",
     "layoutPurpose": "When to use it",
     "theme": {
@@ -189,8 +190,8 @@
       "text": "Text",
       "muted": "Muted text",
       "accent": "Accent",
-      "penColor": "Pen",
-      "highlighterColor": "Highlighter"
+      "penColor": "Whiteboard pen",
+      "highlighterColor": "Whiteboard highlighter"
     },
     "preview": {
       "title": "A slide in this style",
@@ -223,28 +224,137 @@
       "unlisted": "Anyone you send the link to can copy it.",
       "public": "Shown in the public template library for anyone to copy."
     },
-    "arrange": "Arrange this layout",
-    "arrangeHint": "Place the slots yourself instead of using the built-in arrangement.",
-    "arrangeDragHint": "Drag a box to move it, or its corner to resize. Arrows nudge, shift and arrows resize.",
-    "arrangeReset": "Use the built-in arrangement",
     "boxAt": "{slot}: {x}% from the left, {y}% down, {w}% wide, {h}% tall",
-    "slotsLabel": "What goes on this slide",
-    "slotsHint": "Add a box for each thing the slide holds — a heading, a paragraph, or a picture. A slide can have several pictures.",
     "slotLabel": "What it is called",
-    "slotKind": "What goes in it",
+    "slotKind": "What is it",
     "slotKinds": {
       "text": "Text",
       "bullets": "Bullet points",
-      "image": "Picture"
+      "image": "Image"
     },
-    "addSlot": "Add a box",
-    "addSlotName": "Name this box",
-    "removeSlot": "Remove the {name} box",
-    "boxCount": "{count, plural, one {# box} other {# boxes}}",
-    "newLayout": "Or make a layout of your own",
-    "newLayoutName": "Name this layout",
+    "removeSlot": "Remove this box",
     "newLayoutAdd": "Add layout",
-    "newLayoutPurpose": "When to use it"
+    "layoutSettings": "Layout",
+    "boxSettings": "Box",
+    "templateSettings": "Template settings",
+    "backToLayout": "Back to layout settings",
+    "layoutPurposeHint": "The AI reads this when choosing a layout for a slide.",
+    "removeLayoutConfirm": "“{name}” will be removed from this template. Slides already using it keep their content.",
+    "whiteboardHint": "Every template keeps a blank slate to draw on, so this one cannot be removed or given boxes.",
+    "outline": "Boxes in this layout",
+    "decoration": "Decoration",
+    "newBoxName": "New box",
+    "addBoxTo": "Add a box inside {name}",
+    "direction": "Direction",
+    "directions": {
+      "row": "Across",
+      "column": "Down"
+    },
+    "wrap": "Wrap onto more lines",
+    "columns": "Columns",
+    "rows": "Rows",
+    "gap": "Gap",
+    "justify": "Spread",
+    "alignItems": "Line up",
+    "justifyValues": {
+      "start": "At the start",
+      "center": "In the middle",
+      "end": "At the end",
+      "between": "Spaced apart",
+      "around": "Spaced around",
+      "evenly": "Evenly spaced"
+    },
+    "alignValues": {
+      "start": "Start",
+      "center": "Centre",
+      "end": "End",
+      "stretch": "Fill"
+    },
+    "sizing": "Space it takes",
+    "grow": "Takes spare room",
+    "colSpan": "Columns wide",
+    "rowSpan": "Rows tall",
+    "width": "Width %",
+    "height": "Height %",
+    "textLabel": "Text",
+    "textStyle": "Text style",
+    "textStyleCustom": "Custom",
+    "inherit": "As inherited",
+    "fontFamily": "Typeface",
+    "fontSize": "Text size",
+    "fontWeight": "Weight",
+    "align": "Across",
+    "vAlign": "Down",
+    "textStyles": {
+      "title": "Lecture title",
+      "sectionTitle": "Section title",
+      "heading": "Slide heading",
+      "body": "Body",
+      "bullet": "Bullets",
+      "caption": "Caption",
+      "quote": "Quotation"
+    },
+    "textStylesLabel": "Default text styles",
+    "textStylesHint": "A box follows one of these by name, so changing one restyles every box that follows it.",
+    "styleFont": "Typeface for {style}",
+    "styleSize": "Text size for {style}",
+    "textColor": "Text colour",
+    "background": "Fill colour",
+    "padding": "Inner space",
+    "radius": "Rounded corners",
+    "arrangeOrder": "Order",
+    "bringForward": "Bring forward",
+    "sendBackward": "Send backward",
+    "spacingLabel": "Default margins",
+    "spacingHint": "Drawn as guides while you work, and boxes snap to them. Slides already made are unaffected.",
+    "metric": {
+      "marginX": "Sides %",
+      "marginY": "Top and bottom %",
+      "gap": "Between boxes %"
+    },
+    "ruler": {
+      "bottom": "Bottom ruler — drag up for a horizontal guide",
+      "right": "Right ruler — drag left for a vertical guide"
+    },
+    "guideAt": {
+      "x": "Vertical guide at {percent}%",
+      "y": "Horizontal guide at {percent}%"
+    },
+    "boxRow": "{name} — drag to reorder",
+    "position": "Contents sit",
+    "containerNames": {
+      "row": "Row",
+      "column": "Column",
+      "grid": "Grid"
+    },
+    "placement": "Position",
+    "placeFreely": "Position this box freely",
+    "placeFreelyOn": "Drag it anywhere on the slide. It takes no room from the boxes around it.",
+    "removeLayoutButton": "Remove this layout",
+    "layoutNumbered": "Layout {number}",
+    "contentLayouts": {
+      "column": "A column of content",
+      "row": "A row of content",
+      "grid": "A grid of content"
+    },
+    "contentGroup": {
+      "holds": "Content",
+      "arranges": "A container"
+    },
+    "arrangement": "Arrangement",
+    "unsaved": "Unsaved changes",
+    "discard": {
+      "title": "Close without saving?",
+      "message": "The template has changes that have not been saved. Closing now loses them.",
+      "confirm": "Discard changes",
+      "save": "Save and close"
+    },
+    "clearFill": "Use no fill",
+    "placedByParent": "Automatically positioned by parent box",
+    "maxChars": "Max characters",
+    "maxItems": "Max points",
+    "styleChars": "Max characters for {style}",
+    "styleItems": "Max points for {style}"
   },
   "layout": {
     "change": "Change slide layout",
@@ -574,7 +684,7 @@
       },
       "imagery": {
         "label": "Refine slide imagery",
-        "description": "Find a picture when the layout has an image slot and none is placed."
+        "description": "Find an image when the layout has an image box and none is placed."
       }
     },
     "speakers": {

@@ -23,6 +23,7 @@ import SeedNotesEditor from './SeedNotesEditor'
 import SeedMaterial from './SeedMaterial'
 import AdminEditNotice from './AdminEditNotice'
 import ConfirmDialog from './ConfirmDialog'
+import UnsavedChangesDialog from './UnsavedChangesDialog'
 import Modal from './Modal'
 import AccessSettings from './AccessSettings'
 import FreedomSlider from './FreedomSlider'
@@ -120,11 +121,23 @@ export default function ProjectSettingsModal({
       })
   }
 
+  // Nothing in the template editor saves by itself, and this sheet's close
+  // button never scrolls away — so closing it is the easiest way to lose
+  // work. Ask first when there is any.
+  const [templateDirty, setTemplateDirty] = useState(false)
+  const [confirmingClose, setConfirmingClose] = useState(false)
+  const [savingOnClose, setSavingOnClose] = useState(false)
+  const templateSave = useRef<(() => Promise<boolean>) | null>(null)
+  const closeOrConfirm = () => {
+    if (templateDirty) setConfirmingClose(true)
+    else onClose()
+  }
+
   return (
     <Modal
       variant="sheet"
       ariaLabel={t('project.settings.title')}
-      onClose={onClose}
+      onClose={closeOrConfirm}
       initialFocusRef={closeRef}
       escapeCapture={false}
       escapeIgnoreTyping
@@ -140,7 +153,7 @@ export default function ProjectSettingsModal({
           ref={closeRef}
           aria-label={t('deck.settings.close')}
           title={t('common.closeEsc')}
-          onClick={onClose}
+          onClick={closeOrConfirm}
           className="rounded-md p-2 text-slate-500 hover:text-slate-900"
         >
           <X className="h-5 w-5" aria-hidden />
@@ -187,6 +200,8 @@ export default function ProjectSettingsModal({
             {t('project.settings.templateHint')}
           </p>
           <TemplateDesignPanel
+            onDirtyChange={setTemplateDirty}
+            saveRef={templateSave}
             templates={templates}
             value={project.templateId}
             onLibraryChanged={loadTemplates}
@@ -383,6 +398,30 @@ export default function ProjectSettingsModal({
           confirmLabel={t('common.delete')}
           onConfirm={deleteProject}
           onCancel={() => setConfirmingDelete(false)}
+        />
+      )}
+      {confirmingClose && (
+        <UnsavedChangesDialog
+          title={t('template.discard.title')}
+          message={t('template.discard.message')}
+          saveLabel={t('template.discard.save')}
+          discardLabel={t('template.discard.confirm')}
+          saving={savingOnClose}
+          onSave={() => {
+            setSavingOnClose(true)
+            void templateSave.current?.().then(saved => {
+              setSavingOnClose(false)
+              setConfirmingClose(false)
+              // Only when it was actually written: a refused save that closed
+              // the sheet would lose the very work this dialog is protecting.
+              if (saved) onClose()
+            })
+          }}
+          onDiscard={() => {
+            setConfirmingClose(false)
+            onClose()
+          }}
+          onCancel={() => setConfirmingClose(false)}
         />
       )}
     </Modal>

@@ -1,0 +1,496 @@
+/**
+ * Unit tests for the template editor (TMPL-4).
+ *
+ * The editor is a slide you edit by looking at it: pick a layout from the
+ * rail, click a box on the slide to change what it holds and how it is set,
+ * and change what the whole template shares underneath. These cover what is
+ * provable without layout — jsdom lays nothing out, so where a box *ends up*
+ * is asserted in a browser instead (e2e/tests/template-library.spec.ts).
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent, within } from '@testing-library/react'
+import type { Layout, LayoutNode, Template } from '@slide-machine/shared'
+import TemplateEditor from './TemplateEditor'
+import { resetPreviewImages } from './usePreviewImages'
+import { dispatchAction } from '../../api/actions'
+
+vi.mock('../../api/actions')
+
+const tree = (children: LayoutNode[]): LayoutNode => ({
+  id: 'root',
+  container: { mode: 'flex', direction: 'column', gap: 3 },
+  children,
+})
+
+const layout = (type: string, label: string, slots: string[]): Layout =>
+  ({
+    type,
+    label,
+    purpose: `use for ${type}`,
+    slots: slots.map(name => ({ name, kind: 'text', label: name })),
+    tree: tree(slots.map(name => ({ id: name, slot: name }))),
+    elementPositions: {},
+  }) as Layout
+
+const template = (over: Partial<Template> = {}): Template => ({
+  id: 'mine-1',
+  ownerId: 'u1',
+  name: 'My Style',
+  theme: { background: '#ffffff', text: '#000000', accent: '#ff0000' },
+  layouts: [
+    layout('content', 'Content', ['title', 'body']),
+    layout('whiteboard', 'Whiteboard', []),
+  ],
+  visibility: 'private',
+  voteScore: 0,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  ...over,
+})
+
+const renderEditor = (onSave = vi.fn(), over: Partial<Template> = {}) => {
+  render(
+    <TemplateEditor
+      template={template(over)}
+      layoutSources={[template()]}
+      onSave={onSave}
+      onCancel={vi.fn()}
+    />,
+  )
+  return onSave
+}
+
+/** The draft the editor handed to `onSave`. */
+const saved = (onSave: ReturnType<typeof vi.fn>) => {
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+  return onSave.mock.calls[0]![0] as {
+    name: string
+    theme: Record<string, unknown>
+    layouts: Layout[]
+    visibility: Template['visibility']
+  }
+}
+
+/** Selects a box by clicking its row in the outline, which is the route that
+ * does not depend on anything having a size. The whole row is the target —
+ * the name is plain text, so that a drag can start anywhere along it. */
+const selectBox = (name: string) => {
+  const row = screen.getByRole('listitem', { name: new RegExp(`^${name}`) })
+  fireEvent.click(within(row).getByText(name))
+}
+
+beforeEach(() => {
+  resetPreviewImages()
+  vi.mocked(dispatchAction).mockResolvedValue({ urls: [] } as never)
+})
+
+describe('the layout rail', () => {
+  it('lists every layout as a tab, so one is worked on at a time', () => {
+    renderEditor()
+    expect(screen.getByRole('tab', { name: /Content/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+  })
+
+  it('switches which layout the slide shows', () => {
+    renderEditor()
+    fireEvent.click(screen.getByRole('button', { name: 'Add layout' }))
+    expect(screen.getByRole('tab', { name: /Layout 2/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+  })
+
+  it('makes a layout of the author’s own when none of the conventional ones fits (TMPL-9)', () => {
+    const onSave = renderEditor()
+    fireEvent.click(screen.getByRole('button', { name: 'Add layout' }))
+    const draft = saved(onSave)
+    // Named for its place in the list, so there is something to look at
+    // before there is anything to type.
+    const added = draft.layouts.at(-1)!
+    expect(added.label).toBe('Layout 2')
+    // It has to hold something, and be drawable, from the moment it exists.
+    expect(added.slots).toHaveLength(1)
+    expect(added.tree).toBeDefined()
+  })
+
+  it('leaves the whiteboard out: it holds nothing and cannot be changed', () => {
+    renderEditor()
+    // Every template has one (TMPL-7); listing it would offer a choice that
+    // leads to a blank slate with nothing to do.
+    expect(screen.getAllByRole('tab')).toHaveLength(1)
+    expect(screen.queryByRole('tab', { name: /Whiteboard/ })).toBeNull()
+  })
+})
+
+describe('the layout inspector', () => {
+  it('edits the purpose the AI reads when choosing a layout (TMPL-6)', () => {
+    const onSave = renderEditor()
+    fireEvent.change(screen.getByDisplayValue('use for content'), {
+      target: { value: 'when a slide is mostly prose' },
+    })
+    expect(saved(onSave).layouts[0]!.purpose).toBe(
+      'when a slide is mostly prose',
+    )
+  })
+
+  it('removes a layout, once the author confirms', () => {
+    const onSave = renderEditor()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove this layout' }))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Delete',
+      }),
+    )
+    expect(saved(onSave).layouts.map(l => l.type)).toEqual(['whiteboard'])
+  })
+
+  it('never lands on the whiteboard after deleting the layout before it', () => {
+    // The whiteboard sits last on every template and is not listed, so an
+    // index that walked onto it would show a blank slate with nothing to
+    // edit and no tab selected.
+    const onSave = renderEditor(vi.fn(), {
+      layouts: [
+        layout('content', 'Content', ['title', 'body']),
+        layout('list', 'List', ['title', 'bullets']),
+        layout('whiteboard', 'Whiteboard', []),
+      ],
+    })
+    // Delete the last listed layout, whose neighbour is the whiteboard.
+    fireEvent.click(screen.getByRole('tab', { name: /List/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove this layout' }))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Delete',
+      }),
+    )
+    expect(screen.getByRole('tab', { name: /Content/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    // ...and the whiteboard is still on the template (TMPL-7).
+    expect(saved(onSave).layouts.map(l => l.type)).toEqual([
+      'content',
+      'whiteboard',
+    ])
+  })
+
+  it('keeps the whiteboard on the template even though it is not listed', () => {
+    // It is required of every template (TMPL-7), so saving must not drop it.
+    const onSave = renderEditor()
+    expect(saved(onSave).layouts.map(l => l.type)).toContain('whiteboard')
+  })
+})
+
+describe('the box inspector', () => {
+  it('opens on the box you clicked, in place of the layout’s settings', () => {
+    renderEditor()
+    selectBox('title')
+    expect(screen.getByText('Box')).toBeInTheDocument()
+    expect(screen.queryByLabelText('What is it')).toBeInTheDocument()
+  })
+
+  it('hands the column back to the layout', () => {
+    renderEditor()
+    selectBox('title')
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Back to layout settings' }),
+    )
+    expect(screen.getByDisplayValue('use for content')).toBeInTheDocument()
+  })
+
+  it('changes what a box holds', () => {
+    const onSave = renderEditor()
+    selectBox('body')
+    fireEvent.change(screen.getByLabelText('What is it'), {
+      target: { value: 'image' },
+    })
+    const body = saved(onSave).layouts[0]!.slots.find(s => s.name === 'body')
+    expect(body?.kind).toBe('image')
+  })
+
+  it('sets a box’s type from a named style, so the template stays consistent', () => {
+    const onSave = renderEditor()
+    selectBox('title')
+    fireEvent.change(screen.getByLabelText('Text style'), {
+      target: { value: 'heading' },
+    })
+    const node = saved(onSave).layouts[0]!.tree!.children![0]!
+    expect(node.style?.textStyle).toBe('heading')
+  })
+
+  it('lets a box override one thing about the style it follows', () => {
+    const onSave = renderEditor()
+    selectBox('title')
+    fireEvent.change(screen.getByLabelText('Text style'), {
+      target: { value: 'heading' },
+    })
+    fireEvent.change(screen.getByLabelText('Text size'), {
+      target: { value: '9' },
+    })
+    const node = saved(onSave).layouts[0]!.tree!.children![0]!
+    expect(node.style).toMatchObject({ textStyle: 'heading', fontSize: 9 })
+  })
+
+  it('removes a box, and the slot it showed', () => {
+    const onSave = renderEditor()
+    selectBox('body')
+    fireEvent.click(screen.getByRole('button', { name: 'Remove this box' }))
+    const draft = saved(onSave).layouts[0]!
+    expect(draft.slots.map(s => s.name)).toEqual(['title'])
+    expect(draft.tree!.children!.map(c => c.id)).toEqual(['title'])
+  })
+
+  it('turns a box into a row of other boxes', () => {
+    // One question, not two: a box either shows something or arranges things
+    // that do.
+    const onSave = renderEditor()
+    selectBox('body')
+    fireEvent.change(screen.getByLabelText('What is it'), {
+      target: { value: 'row' },
+    })
+    const draft = saved(onSave).layouts[0]!
+    const node = draft.tree!.children![1]!
+    expect(node.container).toMatchObject({ mode: 'flex', direction: 'row' })
+    // It no longer shows anything, so the slot it showed is gone with it.
+    expect(node.slot).toBeUndefined()
+    expect(draft.slots.map(s => s.name)).toEqual(['title'])
+  })
+
+  it('divides a new row evenly among its boxes', () => {
+    // What someone making a row almost always means by it. Written onto the
+    // boxes rather than assumed by the renderer, so it shows in their own
+    // settings and can be changed there.
+    const onSave = renderEditor()
+    selectBox('body')
+    fireEvent.change(screen.getByLabelText('What is it'), {
+      target: { value: 'row' },
+    })
+    fireEvent.click(
+      screen.getAllByRole('button', { name: /^Add a box inside/ }).at(-1)!,
+    )
+    fireEvent.click(
+      screen.getAllByRole('button', { name: /^Add a box inside/ }).at(-1)!,
+    )
+    const row = saved(onSave).layouts[0]!.tree!.children![1]!
+    expect(row.children).toHaveLength(2)
+    // An equal share means starting from nothing, not sharing the leftovers.
+    for (const child of row.children!)
+      expect(child).toMatchObject({ grow: 1, basis: 0 })
+  })
+
+  it('leaves a layout that already sizes its boxes alone', () => {
+    // The built-ins say how much room each box takes; an even split would be
+    // a redesign of every slide already made with them.
+    const onSave = renderEditor()
+    const before = saved(onSave).layouts[0]!.tree!.children!
+    for (const child of before) expect(child.grow).toBeUndefined()
+  })
+
+  it('turns an arrangement back into content, and its boxes go with it', () => {
+    const onSave = renderEditor()
+    selectBox('body')
+    fireEvent.change(screen.getByLabelText('What is it'), {
+      target: { value: 'grid' },
+    })
+    fireEvent.click(
+      screen.getAllByRole('button', { name: /^Add a box inside/ }).at(-1)!,
+    )
+    // It is called "Grid" in the outline now — the name says what it is.
+    selectBox('Grid')
+    fireEvent.change(screen.getByLabelText('What is it'), {
+      target: { value: 'text' },
+    })
+    const draft = saved(onSave).layouts[0]!
+    const node = draft.tree!.children![1]!
+    expect(node.container).toBeUndefined()
+    expect(node.children).toBeUndefined()
+    // Nothing is left to arrange the box it held, so its slot went too.
+    expect(draft.slots).toHaveLength(2)
+  })
+})
+
+describe('boxes of the author’s own', () => {
+  it('takes four pictures on one slide (the professor’s case)', () => {
+    const onSave = renderEditor()
+    for (let i = 0; i < 4; i++) {
+      // Queried fresh each time: adding a box re-renders the outline.
+      fireEvent.click(
+        screen.getAllByRole('button', { name: /^Add a box inside/ })[0]!,
+      )
+      fireEvent.change(screen.getByLabelText('What is it'), {
+        target: { value: 'image' },
+      })
+    }
+    const draft = saved(onSave).layouts[0]!
+    expect(draft.slots.filter(s => s.kind === 'image')).toHaveLength(4)
+    // Every one of them is drawn, not just declared.
+    expect(draft.tree!.children).toHaveLength(6)
+  })
+
+  it('keeps each added box under a name of its own', () => {
+    const onSave = renderEditor()
+    for (let i = 0; i < 2; i++)
+      fireEvent.click(
+        screen.getAllByRole('button', { name: /^Add a box inside/ })[0]!,
+      )
+    const names = saved(onSave).layouts[0]!.slots.map(s => s.name)
+    expect(new Set(names).size).toBe(names.length)
+  })
+
+  it('reorders boxes, which is both the flow and the paint order', () => {
+    // A whole row is the drag surface; Alt+arrows is the keyboard route, the
+    // same as reordering slides.
+    const onSave = renderEditor()
+    fireEvent.keyDown(screen.getByRole('listitem', { name: /^body/ }), {
+      key: 'ArrowUp',
+      altKey: true,
+    })
+    expect(saved(onSave).layouts[0]!.tree!.children!.map(c => c.id)).toEqual([
+      'body',
+      'title',
+    ])
+  })
+})
+
+describe('how much a box holds', () => {
+  it('shows the budget it inherits without claiming it as its own', () => {
+    // The placeholder is the style's number; the field stays empty, so
+    // saving does not freeze an inherited value onto the box.
+    renderEditor()
+    selectBox('title')
+    fireEvent.change(screen.getByLabelText('Text style'), {
+      target: { value: 'heading' },
+    })
+    const field = screen.getByLabelText('Max characters')
+    expect(field).toHaveValue(null)
+    expect(field).toHaveAttribute('placeholder', '80')
+  })
+
+  it('lets a box state a budget of its own', () => {
+    const onSave = renderEditor()
+    selectBox('title')
+    fireEvent.change(screen.getByLabelText('Max characters'), {
+      target: { value: '25' },
+    })
+    expect(saved(onSave).layouts[0]!.slots[0]!.maxChars).toBe(25)
+  })
+
+  it('offers a point count only to a list', () => {
+    renderEditor()
+    selectBox('title')
+    expect(screen.queryByLabelText('Max points')).toBeNull()
+    fireEvent.change(screen.getByLabelText('What is it'), {
+      target: { value: 'bullets' },
+    })
+    expect(screen.getByLabelText('Max points')).toBeInTheDocument()
+  })
+
+  it('changes what every box in a style holds, from the template settings', () => {
+    const onSave = renderEditor()
+    fireEvent.change(screen.getByLabelText('Max characters for Body'), {
+      target: { value: '200' },
+    })
+    const styles = saved(onSave).theme.textStyles as Record<
+      string,
+      { maxChars: number }
+    >
+    expect(styles.body!.maxChars).toBe(200)
+  })
+})
+
+describe('what the editor does not show', () => {
+  it('carries a layout’s AI constraints through a save untouched', () => {
+    // The editor has no controls for these — they steer generation, not
+    // appearance — but it must not drop what it cannot show. Saving a
+    // template would otherwise quietly lift every limit on it.
+    const constrained = layout('content', 'Content', ['title', 'body'])
+    constrained.constraints = { maxBullets: 6, maxTitleChars: 60 }
+    constrained.slots[0]!.maxChars = 60
+    const onSave = renderEditor(vi.fn(), {
+      layouts: [constrained, layout('whiteboard', 'Whiteboard', [])],
+    })
+    fireEvent.change(screen.getByLabelText('Template name'), {
+      target: { value: 'Renamed' },
+    })
+    const saved_ = saved(onSave).layouts[0]!
+    expect(saved_.constraints).toEqual({ maxBullets: 6, maxTitleChars: 60 })
+    expect(saved_.slots[0]!.maxChars).toBe(60)
+  })
+})
+
+describe('template settings', () => {
+  it('saves a new name', () => {
+    const onSave = renderEditor()
+    fireEvent.change(screen.getByLabelText('Template name'), {
+      target: { value: 'Renamed' },
+    })
+    expect(saved(onSave).name).toBe('Renamed')
+  })
+
+  it('saves a default colour', () => {
+    const onSave = renderEditor()
+    fireEvent.change(screen.getByLabelText('Accent'), {
+      target: { value: '#00ff00' },
+    })
+    expect(saved(onSave).theme.accent).toBe('#00ff00')
+  })
+
+  it('saves who may use it (TMPL-4 sharing)', () => {
+    const onSave = renderEditor()
+    fireEvent.change(screen.getByLabelText('Who can use it'), {
+      target: { value: 'public' },
+    })
+    expect(saved(onSave).visibility).toBe('public')
+  })
+
+  it('restyles every box that follows a text style, in one edit', () => {
+    const onSave = renderEditor()
+    fireEvent.change(screen.getByLabelText('Text size for Body'), {
+      target: { value: '5' },
+    })
+    const styles = saved(onSave).theme.textStyles as Record<
+      string,
+      { fontSize: number }
+    >
+    expect(styles.body!.fontSize).toBe(5)
+  })
+
+  it('saves margins as fractions, though they are typed as percentages', () => {
+    const onSave = renderEditor()
+    fireEvent.change(screen.getByLabelText('Sides %'), {
+      target: { value: '10' },
+    })
+    expect(saved(onSave).theme.marginX).toBeCloseTo(0.1, 5)
+  })
+})
+
+describe('undo', () => {
+  it('is offered as a button, not only as a shortcut', () => {
+    renderEditor()
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled()
+  })
+
+  it('takes back an edit, and puts it back again', () => {
+    const onSave = renderEditor()
+    const purpose = screen.getByDisplayValue('use for content')
+    // The snapshot is taken when a field is focused, so a whole typed word
+    // is one undo step rather than one per keystroke.
+    fireEvent.focus(purpose)
+    fireEvent.change(purpose, { target: { value: 'changed' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(screen.getByDisplayValue('use for content')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Redo' }))
+    expect(saved(onSave).layouts[0]!.purpose).toBe('changed')
+  })
+
+  it('restores the selection along with the edit', () => {
+    // Undoing a deletion that leaves nothing selected is disorienting.
+    renderEditor()
+    selectBox('body')
+    fireEvent.click(screen.getByRole('button', { name: 'Remove this box' }))
+    expect(screen.queryByLabelText('What is it')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(screen.getByLabelText('What is it')).toBeInTheDocument()
+  })
+})

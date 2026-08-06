@@ -14,6 +14,7 @@ import type {
   TemplateRenderMode,
 } from '@slide-machine/shared'
 import { dispatchAction } from '../../api/actions'
+import { ApiError } from '../../api/http'
 import { useAuth } from '../../auth/AuthContext'
 import { templateName } from '../../i18n/templateName'
 import ConfirmDialog from '../ConfirmDialog'
@@ -25,12 +26,24 @@ export default function TemplateDesignPanel({
   value,
   onChange,
   onLibraryChanged,
+  onDirtyChange,
+  saveRef,
+  onSaved,
 }: {
   templates: Template[]
   value: string
   onChange: (templateId: string) => void
   /** Reloads the library after a template is added, changed or removed. */
   onLibraryChanged: () => void
+  /** True while the editor holds unsaved work — nothing here saves by
+   * itself, so the settings sheet must not close it away silently. */
+  onDirtyChange?: (dirty: boolean) => void
+  /** Handed the editor's own save, so a surface asking "close without
+   * saving?" can offer to save rather than only to lose the work. */
+  saveRef?: React.RefObject<(() => Promise<boolean>) | null>
+  /** The template as saved. Editing the one a lecture is using should show
+   * on its slides at once — the point of an editor is seeing the effect. */
+  onSaved?: (template: Template) => void
 }) {
   const { t } = useTranslation()
   const { user } = useAuth()
@@ -56,26 +69,42 @@ export default function TemplateDesignPanel({
       .finally(() => setBusyId(undefined))
   }
 
+  /** Resolves true when the template was written. Callers use that to decide
+   * whether it is safe to close: a refused save must not close anything. */
   const save = (draft: {
     name: string
     renderMode: TemplateRenderMode
     theme: Record<string, unknown>
     layouts: Layout[]
     visibility: Template['visibility']
-  }) => {
-    if (!editing) return
+  }): Promise<boolean> => {
+    if (!editing) return Promise.resolve(false)
     setSaving(true)
     setError(null)
-    dispatchAction<Template>('template.update', {
-      templateId: editing.id,
-      ...draft,
-    })
-      .then(() => {
-        onLibraryChanged()
-        setEditing(null)
+    return (
+      dispatchAction<Template>('template.update', {
+        templateId: editing.id,
+        ...draft,
       })
-      .catch(() => setError(t('template.errors.save')))
-      .finally(() => setSaving(false))
+        .then(saved => {
+          onLibraryChanged()
+          onSaved?.(saved)
+          setEditing(null)
+          return true
+        })
+        // The server's own words when it has any. A refused save is almost
+        // always a specific thing about the design, and "could not be saved"
+        // leaves the author nothing to act on.
+        .catch((e: unknown) => {
+          setError(
+            e instanceof ApiError && e.message
+              ? e.message
+              : t('template.errors.save'),
+          )
+          return false
+        })
+        .finally(() => setSaving(false))
+    )
   }
 
   const remove = (template: Template) => {
@@ -96,6 +125,8 @@ export default function TemplateDesignPanel({
         template={editing}
         layoutSources={templates}
         onSave={save}
+        onDirtyChange={onDirtyChange}
+        saveRef={saveRef}
         onCancel={() => {
           setEditing(null)
           setError(null)

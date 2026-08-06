@@ -25,7 +25,9 @@
     "dangerZone": "Zona de riesgo",
     "resetToDefault": "Restablecer el valor predeterminado",
     "listSeparator": ", ",
-    "adminEditNotice": "Estás editando {entity, select, account {la cuenta} project {el proyecto} lecture {la clase} other {los ajustes}} de otra persona como administrador. Cada cambio que hagas aquí queda registrado en el registro de auditoría."
+    "adminEditNotice": "Estás editando {entity, select, account {la cuenta} project {el proyecto} lecture {la clase} other {los ajustes}} de otra persona como administrador. Cada cambio que hagas aquí queda registrado en el registro de auditoría.",
+    "undo": "Deshacer",
+    "redo": "Rehacer"
   },
   "nav": {
     "brand": "The Slide Machine",
@@ -178,9 +180,8 @@
     "editNamed": "Editar {name}",
     "deleteNamed": "Eliminar {name}",
     "nameLabel": "Nombre de la plantilla",
-    "themeLabel": "Colores",
+    "themeLabel": "Colores por defecto",
     "layoutsLabel": "Diseños",
-    "layoutsHint": "El propósito de cada diseño le indica a la IA cuándo elegirlo al generar una clase.",
     "layoutName": "Nombre",
     "layoutPurpose": "Cuándo usarlo",
     "theme": {
@@ -189,8 +190,8 @@
       "text": "Texto",
       "muted": "Texto atenuado",
       "accent": "Acento",
-      "penColor": "Lápiz",
-      "highlighterColor": "Marcador"
+      "penColor": "Rotulador de pizarra",
+      "highlighterColor": "Marcador de pizarra"
     },
     "preview": {
       "title": "Una diapositiva con este estilo",
@@ -223,28 +224,137 @@
       "unlisted": "Quien reciba el enlace podrá copiarla.",
       "public": "Aparece en la biblioteca pública para que cualquiera la copie."
     },
-    "arrange": "Colocar este diseño",
-    "arrangeHint": "Coloca tú las casillas en lugar de usar la disposición integrada.",
-    "arrangeDragHint": "Arrastra una casilla para moverla, o su esquina para redimensionarla. Las flechas la mueven; con Mayús la redimensionan.",
-    "arrangeReset": "Usar la disposición integrada",
     "boxAt": "{slot}: {x}% desde la izquierda, {y}% desde arriba, {w}% de ancho, {h}% de alto",
-    "slotsLabel": "Qué contiene esta diapositiva",
-    "slotsHint": "Añade un cuadro para cada elemento de la diapositiva: un título, un párrafo o una imagen. Una diapositiva puede tener varias imágenes.",
     "slotLabel": "Cómo se llama",
-    "slotKind": "Qué contiene",
+    "slotKind": "Qué es",
     "slotKinds": {
       "text": "Texto",
       "bullets": "Viñetas",
       "image": "Imagen"
     },
-    "addSlot": "Añadir un cuadro",
-    "addSlotName": "Nombra este cuadro",
-    "removeSlot": "Quitar el cuadro {name}",
-    "boxCount": "{count, plural, one {# cuadro} other {# cuadros}}",
-    "newLayout": "O crea un diseño propio",
-    "newLayoutName": "Nombra este diseño",
+    "removeSlot": "Eliminar esta caja",
     "newLayoutAdd": "Añadir diseño",
-    "newLayoutPurpose": "Cuándo usarlo"
+    "layoutSettings": "Diseño",
+    "boxSettings": "Caja",
+    "templateSettings": "Ajustes de la plantilla",
+    "backToLayout": "Volver a los ajustes del diseño",
+    "layoutPurposeHint": "La IA lee esto al elegir un diseño para una diapositiva.",
+    "removeLayoutConfirm": "«{name}» se eliminará de esta plantilla. Las diapositivas que ya lo usan conservan su contenido.",
+    "whiteboardHint": "Cada plantilla conserva una pizarra en blanco para dibujar, así que esta no se puede eliminar ni recibir cajas.",
+    "outline": "Cajas de este diseño",
+    "decoration": "Decoración",
+    "newBoxName": "Caja nueva",
+    "addBoxTo": "Añadir una caja dentro de {name}",
+    "direction": "Dirección",
+    "directions": {
+      "row": "En horizontal",
+      "column": "En vertical"
+    },
+    "wrap": "Ajustar en más líneas",
+    "columns": "Columnas",
+    "rows": "Filas",
+    "gap": "Espacio",
+    "justify": "Distribución",
+    "alignItems": "Alineación",
+    "justifyValues": {
+      "start": "Al principio",
+      "center": "En el centro",
+      "end": "Al final",
+      "between": "Separadas",
+      "around": "Con espacio alrededor",
+      "evenly": "Espaciado uniforme"
+    },
+    "alignValues": {
+      "start": "Inicio",
+      "center": "Centro",
+      "end": "Fin",
+      "stretch": "Rellenar"
+    },
+    "sizing": "Espacio que ocupa",
+    "grow": "Ocupa el espacio libre",
+    "colSpan": "Columnas de ancho",
+    "rowSpan": "Filas de alto",
+    "width": "Ancho %",
+    "height": "Alto %",
+    "textLabel": "Texto",
+    "textStyle": "Estilo de texto",
+    "textStyleCustom": "Personalizado",
+    "inherit": "Como se hereda",
+    "fontFamily": "Tipografía",
+    "fontSize": "Tamaño del texto",
+    "fontWeight": "Grosor",
+    "align": "En horizontal",
+    "vAlign": "En vertical",
+    "textStyles": {
+      "title": "Título de la clase",
+      "sectionTitle": "Título de sección",
+      "heading": "Encabezado de diapositiva",
+      "body": "Cuerpo",
+      "bullet": "Viñetas",
+      "caption": "Pie",
+      "quote": "Cita"
+    },
+    "textStylesLabel": "Estilos de texto por defecto",
+    "textStylesHint": "Cada caja sigue uno de estos por su nombre, así que cambiar uno reestiliza todas las cajas que lo siguen.",
+    "styleFont": "Tipografía para {style}",
+    "styleSize": "Tamaño del texto para {style}",
+    "textColor": "Color del texto",
+    "background": "Color de relleno",
+    "padding": "Espacio interior",
+    "radius": "Esquinas redondeadas",
+    "arrangeOrder": "Orden",
+    "bringForward": "Traer adelante",
+    "sendBackward": "Enviar atrás",
+    "spacingLabel": "Márgenes por defecto",
+    "spacingHint": "Se dibujan como guías mientras trabajas y las cajas se ajustan a ellas. Las diapositivas ya creadas no cambian.",
+    "metric": {
+      "marginX": "Laterales %",
+      "marginY": "Arriba y abajo %",
+      "gap": "Entre cajas %"
+    },
+    "ruler": {
+      "bottom": "Regla inferior: arrastra hacia arriba para una guía horizontal",
+      "right": "Regla derecha: arrastra hacia la izquierda para una guía vertical"
+    },
+    "guideAt": {
+      "x": "Guía vertical al {percent}%",
+      "y": "Guía horizontal al {percent}%"
+    },
+    "boxRow": "{name}: arrastra para reordenar",
+    "position": "El contenido se sitúa",
+    "containerNames": {
+      "row": "Fila",
+      "column": "Columna",
+      "grid": "Cuadrícula"
+    },
+    "placement": "Posición",
+    "placeFreely": "Posicionar esta caja libremente",
+    "placeFreelyOn": "Arrástrala a cualquier punto de la diapositiva. No ocupa espacio de las cajas de alrededor.",
+    "removeLayoutButton": "Eliminar este diseño",
+    "layoutNumbered": "Diseño {number}",
+    "contentLayouts": {
+      "column": "Una columna de contenido",
+      "row": "Una fila de contenido",
+      "grid": "Una cuadrícula de contenido"
+    },
+    "contentGroup": {
+      "holds": "Contenido",
+      "arranges": "Un contenedor"
+    },
+    "arrangement": "Disposición",
+    "unsaved": "Cambios sin guardar",
+    "discard": {
+      "title": "¿Cerrar sin guardar?",
+      "message": "La plantilla tiene cambios sin guardar. Cerrar ahora los pierde.",
+      "confirm": "Descartar cambios",
+      "save": "Guardar y cerrar"
+    },
+    "clearFill": "Sin relleno",
+    "placedByParent": "Posicionada automáticamente por la caja contenedora",
+    "maxChars": "Máx. caracteres",
+    "maxItems": "Máx. puntos",
+    "styleChars": "Máx. caracteres para {style}",
+    "styleItems": "Máx. puntos para {style}"
   },
   "layout": {
     "change": "Cambiar el diseño de la diapositiva",
