@@ -220,7 +220,7 @@
     "nameLabel": "Template name",
     "themeLabel": "Default colours",
     "layoutsLabel": "Layouts",
-    "atCapacity": "Fill every box to its limit",
+    "atCapacity": "Preview with every box at its limit",
     "atCapacityHint": "Shows the slide with as much text as it can hold. You can adjust the capacity of each box in its settings.",
     "layoutName": "Name",
     "layoutPurpose": "When to use it",

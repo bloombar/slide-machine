@@ -609,7 +609,9 @@ describe('previewing a layout at its limits', () => {
   it('starts on the comfortable sample', () => {
     renderEditor(vi.fn(), bounded())
     expect(
-      screen.getByRole('checkbox', { name: /Fill every box to its limit/ }),
+      screen.getByRole('checkbox', {
+        name: /Preview with every box at its limit/,
+      }),
     ).not.toBeChecked()
     expect(box('title').textContent).toBe('A slide in this style')
   })
@@ -617,7 +619,9 @@ describe('previewing a layout at its limits', () => {
   it('fills every box to what the template says it holds', () => {
     renderEditor(vi.fn(), bounded())
     fireEvent.click(
-      screen.getByRole('checkbox', { name: /Fill every box to its limit/ }),
+      screen.getByRole('checkbox', {
+        name: /Preview with every box at its limit/,
+      }),
     )
 
     // The title box says 90 characters, so that is about what it shows —
@@ -632,7 +636,9 @@ describe('previewing a layout at its limits', () => {
   it('is a way of looking, not an edit: nothing about it is saved', () => {
     const onSave = renderEditor(vi.fn(), bounded())
     fireEvent.click(
-      screen.getByRole('checkbox', { name: /Fill every box to its limit/ }),
+      screen.getByRole('checkbox', {
+        name: /Preview with every box at its limit/,
+      }),
     )
     const draft = saved(onSave)
     expect(draft.layouts[0]!.slots).toEqual([

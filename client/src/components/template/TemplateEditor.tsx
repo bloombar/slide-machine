@@ -83,13 +83,14 @@ const newLayout = (label: string, taken: string[]): Layout => {
     slots: [{ name: 'title', kind: 'text', label: 'Slide title' }],
     tree: {
       id: 'root',
+      // No padding of its own: a layout the author adds takes the template's
+      // margin, like every layout that ships with it.
       container: {
         mode: 'flex',
         direction: 'column',
         justify: 'center',
         gap: 3,
       },
-      style: { paddingX: 6 },
       children: [
         { id: 'title', slot: 'title', style: { textStyle: 'heading' } },
       ],

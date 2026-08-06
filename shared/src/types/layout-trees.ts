@@ -20,16 +20,17 @@
 import type { LayoutNode } from './template'
 
 /**
- * Slide margins the components used, in `cqi`. Named so the numbers below
- * read as decisions rather than as magic.
+ * A margin a layout asks for instead of the template's.
  *
- * These are side margins (`paddingX`): the components wrote `px-[6cqi]`, and
- * padding the top and bottom too would squeeze a vertically centred layout.
+ * Layouts used to state their own side margins, copied from the components
+ * they replaced (`px-[6cqi]`). They no longer do: a root that says nothing is
+ * given the template's own safe area, which is what makes every slide in a
+ * template share one margin and lets an author change it in one place
+ * (`withSafeArea`, client). What is left here is the one deliberate
+ * exception — a pull-quote is set large and centred, and a wider inset keeps
+ * the line length readable.
  */
-const PAD = 6
 const PAD_WIDE = 8
-/** The one layout that padded all four sides (`p-[4cqi]`). */
-const PAD_TIGHT = 4
 
 /**
  * The section rule was `0.4cqi` tall — a fraction of the slide's WIDTH.
@@ -48,7 +49,6 @@ const content: LayoutNode = {
     justify: 'center',
     gap: 3,
   },
-  style: { paddingX: PAD },
   children: [
     { id: 'title', slot: 'title', style: { textStyle: 'heading' } },
     { id: 'body', slot: 'body', style: { textStyle: 'body' } },
@@ -64,7 +64,6 @@ const list: LayoutNode = {
     justify: 'center',
     gap: 3,
   },
-  style: { paddingX: PAD },
   children: [
     { id: 'title', slot: 'title', style: { textStyle: 'heading' } },
     { id: 'bullets', slot: 'bullets', style: { textStyle: 'bullet' } },
@@ -130,7 +129,6 @@ const section: LayoutNode = {
 const twoColumn: LayoutNode = {
   id: 'root',
   container: { mode: 'grid', columns: 2, gap: 4, alignItems: 'center' },
-  style: { paddingX: PAD },
   children: [
     {
       id: 'text',
@@ -148,7 +146,6 @@ const twoColumn: LayoutNode = {
 const imageHeavy: LayoutNode = {
   id: 'root',
   container: { mode: 'flex', direction: 'column', gap: 1.5 },
-  style: { padding: PAD_TIGHT },
   children: [
     { id: 'image', slot: 'image', grow: 1, style: { radius: 1 } },
     {
@@ -239,7 +236,6 @@ export const treeFromSlots = (
       justify: 'center',
       gap: 3,
     },
-    style: { paddingX: PAD },
     children: slots.map((slot, i) => ({
       id: slot.name,
       slot: slot.name,
