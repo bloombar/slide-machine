@@ -119,8 +119,9 @@ test('the built-in layouts keep the geometry their components had', async ({
   await test.step('image-heavy: the picture takes the room the caption does not', async () => {
     const frame = await showLayout(page, 'image-heavy', /^Image/)
     const image = await fractionOf(frame, 'image')
-    // p-[4cqi] on all four sides, and flex-1 on the picture.
-    expect(image.x).toBeCloseTo(0.04, 2)
+    // The template's own margin now, not the component's tighter `p-[4cqi]`:
+    // one margin for every layout beats a picture 2% wider (TMPL-4).
+    expect(image.x).toBeCloseTo(0.06, 2)
     expect(image.h).toBeGreaterThan(0.7)
   })
 
@@ -130,5 +131,53 @@ test('the built-in layouts keep the geometry their components had', async ({
     // px-[8cqi], and the quotation marks are printed around the body.
     expect(body.x).toBeGreaterThanOrEqual(0.08)
     await expect(frame).toContainText('“')
+  })
+
+  await test.step('every layout keeps its contents inside the template’s margin', async () => {
+    // The reason the margin moved out of the layouts and into the template:
+    // one safe area, honoured by all of them. Measured rather than asserted
+    // per layout, because the interesting failure is the layout nobody
+    // thought to check.
+    const MARGIN_X = 0.06
+    // A fraction of the height, which is what the editor's dashed guide is
+    // drawn from; the renderer converts it through the 16:9 aspect.
+    const MARGIN_Y = 0.06
+    // A hair of tolerance: text is measured to the pixel, and a glyph's box
+    // is not its ink.
+    const SLACK = 0.005
+
+    for (const [type, pick] of [
+      ['content', /^Content/],
+      ['list', /^Bullet list/],
+      ['title', /^Title/],
+      ['section', /^Section/],
+      ['two-column', /^Two column/],
+      ['image-heavy', /^Image/],
+      ['quote', /^Quote/],
+    ] as const) {
+      const frame = await showLayout(page, type, pick)
+      const nodes = await frame.locator('[data-node-id]').all()
+      for (const node of nodes) {
+        const id = await node.getAttribute('data-node-id')
+        if (id === 'root') continue // the root IS the slide; its padding is the margin
+        const r = await fractionOf(frame, id!)
+        expect(
+          r.x,
+          `${type}/${id} crosses the left margin`,
+        ).toBeGreaterThanOrEqual(MARGIN_X - SLACK)
+        expect(
+          r.x + r.w,
+          `${type}/${id} crosses the right margin`,
+        ).toBeLessThanOrEqual(1 - MARGIN_X + SLACK)
+        expect(
+          r.y,
+          `${type}/${id} crosses the top margin`,
+        ).toBeGreaterThanOrEqual(MARGIN_Y - SLACK)
+        expect(
+          r.y + r.h,
+          `${type}/${id} crosses the bottom margin`,
+        ).toBeLessThanOrEqual(1 - MARGIN_Y + SLACK)
+      }
+    }
   })
 })

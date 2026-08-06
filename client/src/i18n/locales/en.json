@@ -220,7 +220,7 @@
     "nameLabel": "Template name",
     "themeLabel": "Default colours",
     "layoutsLabel": "Layouts",
-    "atCapacity": "Fill every box to its limit",
+    "atCapacity": "Preview with every box at its limit",
     "atCapacityHint": "Shows the slide with as much text as it can hold. You can adjust the capacity of each box in its settings.",
     "layoutName": "Name",
     "layoutPurpose": "When to use it",
@@ -403,7 +403,18 @@
     "slotInstructions": "What goes in it (for the AI)",
     "slotInstructionsHint": "e.g. a runnable Python snippet, no more than eight lines",
     "slotRequired": "The slide should always fill this",
-    "maxWords": "Max words"
+    "maxWords": "Max words",
+    "update": {
+      "heading": "This design has been updated",
+      "hintClean": "The changes are visual only — nothing on your slides needs adjusting.",
+      "hintAffected": "{count, plural, one {Content on # slide may need adjusting.} other {Content on # slides may need adjusting.}}",
+      "apply": "Update this lecture",
+      "confirmTitle": "Update this lecture's design?",
+      "confirmIntro": "Your slides will be rebuilt on the latest version of this design. Text and pictures move to the matching boxes in the new layouts.",
+      "confirmUnplaced": "{count, plural, one {On # slide, these boxes have no match in the new design:} other {On # slides, these boxes have no match in the new design:}}",
+      "confirmRemovedLayouts": "{count, plural, one {# slide uses a layout the new design no longer has, and will be left as it is.} other {# slides use layouts the new design no longer has, and will be left as they are.}}",
+      "confirmKept": "Nothing is deleted. Anything without a match stays on its slide and simply stops being shown, so you can put it back where you want it."
+    }
   },
   "layout": {
     "change": "Change slide layout",

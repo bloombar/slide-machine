@@ -220,7 +220,7 @@
     "nameLabel": "模板名称",
     "themeLabel": "默认颜色",
     "layoutsLabel": "版式",
-    "atCapacity": "把每个框填到上限",
+    "atCapacity": "以每个框的上限预览",
     "atCapacityHint": "显示这张幻灯片能容纳的最多文字。每个框的容量可在其设置中调整。",
     "layoutName": "名称",
     "layoutPurpose": "何时使用",
@@ -403,7 +403,18 @@
     "slotInstructions": "里面放什么（给 AI 看）",
     "slotInstructionsHint": "例如：一段可运行的 Python 代码，不超过八行",
     "slotRequired": "幻灯片应始终填写这一项",
-    "maxWords": "最多字数"
+    "maxWords": "最多字数",
+    "update": {
+      "heading": "此设计已更新",
+      "hintClean": "改动仅涉及外观，幻灯片内容无需调整。",
+      "hintAffected": "{count, plural, other {# 张幻灯片的内容可能需要调整。}}",
+      "apply": "更新本课程",
+      "confirmTitle": "更新本课程的设计？",
+      "confirmIntro": "幻灯片将按此设计的最新版本重建。文字和图片会移到新版式中对应的框内。",
+      "confirmUnplaced": "{count, plural, other {在 # 张幻灯片中，以下框在新设计中没有对应位置：}}",
+      "confirmRemovedLayouts": "{count, plural, other {# 张幻灯片使用了新设计中已不存在的版式，将保持原样。}}",
+      "confirmKept": "不会删除任何内容。没有对应位置的内容仍保留在幻灯片上，只是不再显示，你可以把它放回想要的位置。"
+    }
   },
   "layout": {
     "change": "更改幻灯片版式",

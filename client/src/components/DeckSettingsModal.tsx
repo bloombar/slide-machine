@@ -32,6 +32,7 @@ import {
 import { dispatchAction } from '../api/actions'
 import { downloadExport } from '../lib/download'
 import TemplateDesignPanel from './template/TemplateDesignPanel'
+import TemplateUpdateNotice from './template/TemplateUpdateNotice'
 import AccessSettings from './AccessSettings'
 import QuizPanel from './QuizPanel'
 import ExportPanel from './ExportPanel'
@@ -619,6 +620,15 @@ export default function DeckSettingsModal({
           <h3 className="mb-4 text-lg font-semibold text-slate-700">
             {t('template.heading')}
           </h3>
+          {/* The lecture is drawn with the version it pinned, so an edit to
+              its template is offered here rather than applied (TMPL-11). */}
+          <TemplateUpdateNotice
+            deckId={deck.id}
+            onApplied={updated => {
+              const template = templates.find(t => t.id === updated.templateId)
+              if (template) onTemplateChange(updated, template)
+            }}
+          />
           <TemplateDesignPanel
             templates={templates}
             value={deck.templateId}

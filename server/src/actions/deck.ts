@@ -101,9 +101,10 @@ import { editDeckSettings } from '../lib/admin-edit'
 import { recordSettingsChange } from '../audit/settings-log'
 import { deckSettingsSnapshot } from '../lib/settings-snapshot'
 import { defaultTemplateId, layoutDescriptors } from '../templates/builtin'
-import { resolveTemplateForRead, templateExists } from '../templates/resolve'
+import { templateExists } from '../templates/resolve'
 import {
   resolveDeckTemplate,
+  resolveDeckTemplateForRead,
   pinDeckToCurrent,
   currentVersionIdFor,
   ensureVersion,
@@ -345,7 +346,7 @@ export const deckGet = defineAction<DeckGetInput, DeckViewResponse>({
     if (!deck) throw new ActionForbiddenError()
     const acl = await loadDeckAcl(deck)
     if (!canViewAcl(acl, userId)) throw new ActionForbiddenError()
-    const template = await resolveTemplateForRead(deck.templateId)
+    const template = await resolveDeckTemplateForRead(deck)
     if (!template)
       throw new ActionValidationError('deck.get', ['template no longer exists'])
     const slides = await SlideModel.find({ deckId: deck._id }).sort({

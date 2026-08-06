@@ -17,9 +17,9 @@ import {
   SLOT_DESCRIPTORS,
   WHITEBOARD_LAYOUT_TYPE,
   defaultLayoutTree,
+  slotLimits,
   themeTextStyles,
   treeFromSlots,
-  type LayoutNode,
   type Layout,
   type LayoutDescriptor,
   type LayoutSlot,
@@ -503,26 +503,18 @@ export const layoutDescriptors = (
   const styles = themeTextStyles(template.theme)
   return template.layouts
     .filter(l => l.type !== WHITEBOARD_LAYOUT_TYPE)
-    .map(({ type, label, purpose, slots, constraints, tree }) => {
-      // Which named style each box follows, so a slot that states no budget
-      // of its own inherits the one its style carries.
-      const styleOf = new Map<string, string>()
-      const walk = (node: LayoutNode | undefined): void => {
-        if (!node) return
-        if (node.slot && node.style?.textStyle)
-          styleOf.set(node.slot, node.style.textStyle)
-        for (const child of node.children ?? []) walk(child)
-      }
-      walk(tree)
-
-      const resolved = slots.map(slot => {
-        const style = styles[styleOf.get(slot.name) ?? '']
-        return {
-          ...slot,
-          maxChars: slot.maxChars ?? style?.maxChars,
-          maxItems: slot.maxItems ?? style?.maxItems,
-        }
-      })
+    .map(layout => {
+      const { type, label, purpose, slots, constraints } = layout
+      // Every box's limit stated on the box itself, so the prompt reads one
+      // number per box rather than leaving the model to combine a style and a
+      // constraint it was never shown (`slotLimits`, shared with the editor's
+      // preview so the two cannot disagree).
+      const limits = slotLimits(layout, styles)
+      const resolved = slots.map(slot => ({
+        ...slot,
+        maxChars: limits[slot.name]?.maxChars,
+        maxItems: limits[slot.name]?.maxItems,
+      }))
 
       // A bullet box's own limit is more specific than the layout's, so it
       // wins where it says anything.

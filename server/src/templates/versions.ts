@@ -18,7 +18,11 @@ import {
   toTemplateVersionDto,
   couldBeVersionId,
 } from '../models/template-version'
-import { isBuiltinTemplate, resolveTemplate } from './resolve'
+import {
+  isBuiltinTemplate,
+  resolveTemplate,
+  resolveTemplateForRead,
+} from './resolve'
 
 /**
  * What a deck's own paths need off a template: how its slides are laid out
@@ -153,6 +157,30 @@ export const resolveDeckTemplate = async (
   const version = await getVersion(deck.templateVersionId ?? undefined)
   if (version) return templateFromVersion(version)
   return resolveTemplate(deck.templateId)
+}
+
+/**
+ * The template a lecture is drawn with, as a whole `Template` for the viewer.
+ *
+ * The viewer renders from what this returns, so it has to carry the pinned
+ * structure — otherwise editing a template would visibly restructure lectures
+ * already built on it, which is the very thing versions exist to prevent.
+ *
+ * Identity is taken from the living template (id, owner, permalink, sharing)
+ * and structure from the version, which is the same split as everywhere else:
+ * `templateId` says which template, `templateVersionId` says which shape. When
+ * the template is gone the read fallback supplies a default to carry identity,
+ * and the pinned structure still wins — a deleted template leaves its lectures
+ * looking exactly as they did.
+ */
+export const resolveDeckTemplateForRead = async (
+  deck: PinnableDeck,
+): Promise<Template | undefined> => {
+  const live = await resolveTemplateForRead(deck.templateId)
+  const version = await getVersion(deck.templateVersionId ?? undefined)
+  if (!version) return live
+  if (!live) return undefined
+  return { ...live, ...templateFromVersion(version), id: deck.templateId }
 }
 
 /**

@@ -17,7 +17,10 @@ import { DeckModel } from '../../src/models/deck'
 import { SlideModel } from '../../src/models/slide'
 import { TemplateModel } from '../../src/models/template'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
-import { listBuiltinTemplates } from '../../src/templates/builtin'
+import {
+  layoutDescriptors,
+  listBuiltinTemplates,
+} from '../../src/templates/builtin'
 import { deleteUserCascade } from '../../src/lib/cascade'
 
 const server = createApp().listen(0)
@@ -272,6 +275,29 @@ describe('template.update (TMPL-4)', () => {
       res.body.layouts.find((l: { type: string }) => l.type === 'content')
         .label,
     ).toBe('Main')
+  })
+
+  it('carries a retuned text style’s limits into generation', async () => {
+    // What the editor's "Default text styles" writes. The preview fills every
+    // box to the same numbers (`slotLimits`), so a design judged at capacity
+    // is judged at the capacity slides are actually generated to.
+    const template = await own()
+    const res = await act(ada, 'template.update', {
+      templateId: template.id,
+      name: template.name,
+      theme: {
+        ...template.theme,
+        textStyles: { bullet: { maxChars: 40, maxItems: 2 } },
+      },
+      layouts: template.layouts,
+    })
+    expect(res.status).toBe(200)
+    const list = layoutDescriptors(res.body).find(
+      (d: { type: string }) => d.type === 'list',
+    )!
+    // The style outranks the layout's own maxBullets, which no editor shows.
+    expect(list.constraints?.maxBullets).toBe(2)
+    expect(list.slots.find(s => s.kind === 'bullets')?.maxChars).toBe(40)
   })
 
   it('refuses to save a template without a whiteboard layout (TMPL-7)', async () => {
@@ -907,7 +933,7 @@ describe('a stored template behaves like a built-in', () => {
     expect(yaml).toContain('Exportable')
   })
 
-  it('a deck whose template was deleted still opens, in the default style', async () => {
+  it('a deck whose template was deleted still opens, in the style it pinned', async () => {
     const template = (
       await act(ada, 'template.duplicate', { templateId: builtinId() })
     ).body
@@ -927,12 +953,20 @@ describe('a stored template behaves like a built-in', () => {
       (await act(ada, 'template.delete', { templateId: template.id })).status,
     ).toBe(200)
 
-    // Deleting your own template must not make a lecture unopenable. The deck
-    // keeps its templateId, so a restore brings the look back; until then it
-    // renders in the deployment default.
+    // Deleting your own template must not make a lecture unopenable. It no
+    // longer drops the lecture to the deployment default either: the lecture
+    // pinned this template's structure (TMPL-11), and that outlives the
+    // template itself, so it keeps looking exactly as it did.
     const view = await act(ada, 'deck.get', { deckId: deck.body.id })
     expect(view.status).toBe(200)
-    expect(view.body.template.id).toBe(builtinId())
+    expect(view.body.template.id).toBe(template.id)
+    expect(view.body.template.name).toBe(template.name)
+    // Its own layouts, not the deployment default's. Compared by shape rather
+    // than deep equality: the DTO normalizes geometry on read, so the two
+    // objects are equivalent without being identical.
+    expect(
+      (view.body.template.layouts as { type: string }[]).map(l => l.type),
+    ).toEqual((template.layouts as { type: string }[]).map(l => l.type))
     const stored = await DeckModel.findById(deck.body.id)
     expect(stored!.templateId).toBe(template.id)
   })

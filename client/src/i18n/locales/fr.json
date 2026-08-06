@@ -220,7 +220,7 @@
     "nameLabel": "Nom du modèle",
     "themeLabel": "Couleurs par défaut",
     "layoutsLabel": "Dispositions",
-    "atCapacity": "Remplir chaque bloc au maximum",
+    "atCapacity": "Aperçu avec chaque bloc à sa limite",
     "atCapacityHint": "Montre la diapositive avec tout le texte qu’elle peut contenir. Vous pouvez régler la capacité de chaque bloc dans ses réglages.",
     "layoutName": "Nom",
     "layoutPurpose": "Quand l’utiliser",
@@ -403,7 +403,18 @@
     "slotInstructions": "Ce qu’il contient (pour l’IA)",
     "slotInstructionsHint": "p. ex. un extrait Python exécutable, huit lignes au plus",
     "slotRequired": "La diapositive devrait toujours le remplir",
-    "maxWords": "Mots max."
+    "maxWords": "Mots max.",
+    "update": {
+      "heading": "Ce modèle a été mis à jour",
+      "hintClean": "Les changements sont purement visuels — rien à ajuster sur vos diapositives.",
+      "hintAffected": "{count, plural, one {Le contenu de # diapositive pourrait nécessiter un ajustement.} other {Le contenu de # diapositives pourrait nécessiter un ajustement.}}",
+      "apply": "Mettre à jour ce cours",
+      "confirmTitle": "Mettre à jour le modèle de ce cours ?",
+      "confirmIntro": "Vos diapositives seront reconstruites sur la dernière version de ce modèle. Le texte et les images sont déplacés vers les zones correspondantes des nouvelles mises en page.",
+      "confirmUnplaced": "{count, plural, one {Sur # diapositive, ces zones n'ont pas d'équivalent dans le nouveau modèle :} other {Sur # diapositives, ces zones n'ont pas d'équivalent dans le nouveau modèle :}}",
+      "confirmRemovedLayouts": "{count, plural, one {# diapositive utilise une mise en page que le nouveau modèle ne propose plus ; elle restera telle quelle.} other {# diapositives utilisent des mises en page que le nouveau modèle ne propose plus ; elles resteront telles quelles.}}",
+      "confirmKept": "Rien n'est supprimé. Ce qui n'a pas d'équivalent reste sur sa diapositive et cesse simplement d'être affiché : vous pourrez le replacer où vous voulez."
+    }
   },
   "layout": {
     "change": "Changer la mise en page",

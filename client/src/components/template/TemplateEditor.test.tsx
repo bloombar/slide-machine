@@ -654,7 +654,9 @@ describe('previewing a layout at its limits', () => {
   it('starts on the comfortable sample', () => {
     renderEditor(vi.fn(), bounded())
     expect(
-      screen.getByRole('checkbox', { name: /Fill every box to its limit/ }),
+      screen.getByRole('checkbox', {
+        name: /Preview with every box at its limit/,
+      }),
     ).not.toBeChecked()
     expect(box('title').textContent).toBe('A slide in this style')
   })
@@ -662,7 +664,9 @@ describe('previewing a layout at its limits', () => {
   it('fills every box to what the template says it holds', () => {
     renderEditor(vi.fn(), bounded())
     fireEvent.click(
-      screen.getByRole('checkbox', { name: /Fill every box to its limit/ }),
+      screen.getByRole('checkbox', {
+        name: /Preview with every box at its limit/,
+      }),
     )
 
     // The title box says 90 characters, so that is about what it shows —
@@ -674,10 +678,85 @@ describe('previewing a layout at its limits', () => {
     expect(box('points').querySelectorAll('li')).toHaveLength(5)
   })
 
+  /** The same layout, saying nothing itself: its boxes are set in named text
+   * styles, and the layout carries the AI constraints a built-in ships with.
+   * How much fits is then the styles' business, which is what the editor
+   * lets an author change. */
+  const styled = (): Partial<Template> => ({
+    layouts: [
+      {
+        ...layout('content', 'Content', ['title']),
+        slots: [
+          { name: 'title', kind: 'text', label: 'title' },
+          { name: 'points', kind: 'bullets', label: 'points' },
+        ],
+        constraints: { maxTitleChars: 50, maxBullets: 6, maxBulletChars: 70 },
+        tree: tree([
+          { id: 'title', slot: 'title', style: { textStyle: 'heading' } },
+          { id: 'points', slot: 'points', style: { textStyle: 'bullet' } },
+        ]),
+      } as Layout,
+      layout('whiteboard', 'Whiteboard', []),
+    ],
+  })
+
+  it('follows a text style being retuned, over the layout’s constraint', () => {
+    // The reported case: the point count in "Default text styles" is the one
+    // control an author has over how many bullets a slide holds, so the
+    // preview has to move with it rather than stay on the layout's own
+    // maxBullets — which no editor shows.
+    renderEditor(vi.fn(), styled())
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: /Preview with every box at its limit/,
+      }),
+    )
+    expect(box('points').querySelectorAll('li')).toHaveLength(6)
+
+    fireEvent.change(screen.getByLabelText('Max points for Bullets'), {
+      target: { value: '2' },
+    })
+    expect(box('points').querySelectorAll('li')).toHaveLength(2)
+
+    // …and the same for characters, in a list box and a text box alike
+    fireEvent.change(screen.getByLabelText('Max characters for Bullets'), {
+      target: { value: '20' },
+    })
+    for (const item of box('points').querySelectorAll('li')) {
+      expect(item.textContent!.length).toBeLessThanOrEqual(20)
+    }
+    fireEvent.change(
+      screen.getByLabelText('Max characters for Slide heading'),
+      { target: { value: '30' } },
+    )
+    expect(box('title').textContent!.length).toBeLessThanOrEqual(30)
+  })
+
+  it('holds a box in no style to the layout’s own constraint', () => {
+    // Nothing else bounds it, so the constraint the template file carries is
+    // still what the box is filled to.
+    const bare = styled()
+    bare.layouts![0]!.tree = tree([
+      { id: 'title', slot: 'title' },
+      { id: 'points', slot: 'points' },
+    ])
+    renderEditor(vi.fn(), bare)
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: /Preview with every box at its limit/,
+      }),
+    )
+    expect(box('title').textContent!.length).toBeLessThanOrEqual(50)
+    expect(box('title').textContent!.length).toBeGreaterThan(47)
+    expect(box('points').querySelectorAll('li')).toHaveLength(6)
+  })
+
   it('is a way of looking, not an edit: nothing about it is saved', () => {
     const onSave = renderEditor(vi.fn(), bounded())
     fireEvent.click(
-      screen.getByRole('checkbox', { name: /Fill every box to its limit/ }),
+      screen.getByRole('checkbox', {
+        name: /Preview with every box at its limit/,
+      }),
     )
     const draft = saved(onSave)
     expect(draft.layouts[0]!.slots).toEqual([

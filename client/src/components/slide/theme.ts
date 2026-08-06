@@ -46,9 +46,14 @@ export const themeColors = (theme: Record<string, unknown>): ThemeColors => {
 /**
  * A template's default spacing, as fractions of the slide.
  *
- * These are an **authoring aid**: the editor draws them as guidelines and
- * snaps dragged boxes to them. Nothing on the render path reads them, so
- * changing a margin cannot move a slide in a deck that is already saved.
+ * `gap` and `padding` are an **authoring aid**: the editor draws them as
+ * guidelines and snaps dragged boxes to them, and nothing on the render path
+ * reads them.
+ *
+ * The margins are not. Every layout whose outermost box states no padding of
+ * its own is drawn inside them (`withSafeArea`), which is what gives a
+ * template one margin rather than one per layout — so changing a margin does
+ * move the slides of decks already made with that template, on purpose.
  */
 export interface ThemeMetrics {
   /** Safe area from the left and right edges, 0–1. */
