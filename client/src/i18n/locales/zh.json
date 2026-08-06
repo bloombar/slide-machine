@@ -64,6 +64,43 @@
       "google": "无法通过 Google 登录——请重试",
       "signIn": "出了点问题——请重试",
       "register": "出了点问题——请重试"
+    },
+    "forgotPassword": "忘记密码？",
+    "forgot": {
+      "title": "重置密码",
+      "intro": "告诉我们你注册时使用的邮箱地址，我们会发送一个链接让你设置新密码。",
+      "submit": "发送链接",
+      "sending": "发送中…",
+      "sent": "如果该地址有账户，链接已在路上。请查收邮件——链接一小时内有效。",
+      "unavailable": "此服务器无法发送邮件，因此无法使用密码链接。请联系管理员。",
+      "error": "无法发送链接——请重试",
+      "backToSignIn": "返回登录"
+    },
+    "reset": {
+      "title": "设置新密码",
+      "newPassword": "新密码",
+      "submit": "保存新密码",
+      "saving": "保存中…",
+      "done": "密码已设置。请用它登录——其他设备上的登录都已退出。",
+      "missingToken": "此链接缺少令牌。请重新获取。",
+      "error": "无法设置该密码——链接可能已过期"
+    },
+    "verify": {
+      "title": "正在确认你的邮箱",
+      "checking": "正在检查链接…",
+      "done": "谢谢，你的邮箱已确认。",
+      "error": "此链接已失效。请在账户设置中重新获取。",
+      "missingToken": "此链接缺少令牌。",
+      "continue": "继续",
+      "pendingTitle": "确认你的邮箱地址",
+      "pending": "我们已向 {email} 发送链接。确认后即可公开发布讲课。",
+      "resend": "再发一个链接",
+      "resending": "发送中…",
+      "resent": "已发送——请查收邮件。",
+      "already": "你的邮箱已确认。",
+      "resendError": "无法再发送链接——请重试",
+      "unavailable": "此服务器无法发送邮件，因此无法重新发送链接。",
+      "confirmed": "已确认"
     }
   },
   "health": {
@@ -793,7 +830,8 @@
       "action": "转让"
     },
     "errors": {
-      "noAccount": "没有使用该邮箱的账户"
+      "noAccount": "没有使用该邮箱的账户",
+      "setAccess": "无法更改可见范围——请重试"
     }
   },
   "deck": {
@@ -1055,7 +1093,8 @@
     "unauthorized": "你的会话已结束——请重新登录",
     "forbidden": "你没有执行该操作的权限",
     "internal_error": "我们这边出了点问题——请重试",
-    "unknown_error": "出了点问题——请重试"
+    "unknown_error": "出了点问题——请重试",
+    "email_unverified": "请先确认你的邮箱地址——查看收件箱，或在账户设置中发送新链接"
   },
   "usage": {
     "title": "套餐用量",

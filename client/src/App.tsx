@@ -9,6 +9,9 @@ import PublicShell from './components/layout/PublicShell'
 import AppShell from './components/layout/AppShell'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
+import VerifyEmailPage from './pages/VerifyEmailPage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
 import RegisterPage from './pages/RegisterPage'
 import HomePage from './pages/HomePage'
 import ProjectPage from './pages/ProjectPage'
@@ -47,6 +50,11 @@ export default function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        {/* Mailed links (AUTH-3/AUTH-4): the token in the URL is the
+            credential, so these are reachable signed out. */}
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/d/:slug" element={<DeckViewerPage />} />
         <Route path="/u/:userId" element={<ProfilePage />} />
         {/* Static pages. Public on purpose: a privacy policy nobody can read

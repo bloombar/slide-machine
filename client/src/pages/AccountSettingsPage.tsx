@@ -53,6 +53,7 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import LanguageSelect from '../components/LanguageSelect'
 import UsagePanel from '../components/UsagePanel'
 import BillingPanel from '../components/BillingPanel'
+import EmailVerificationNotice from '../components/EmailVerificationNotice'
 
 /** One settings change, as the account itself holds it: an absent
  * `language`/`locale` means "unchanged", an explicit `undefined` one
@@ -162,6 +163,8 @@ export default function AccountSettingsPage() {
   }, [adminUserId, confirmed])
 
   const user = adminUserId ? target : viewer
+  // An admin looking at someone else's settings cannot send their mail
+  const isSelf = !adminUserId
   // Derived, not seeded by an effect: the field shows what you typed if you
   // typed, and what the account holds otherwise.
   const displayName = edits.displayName ?? user?.displayName ?? ''
@@ -383,6 +386,15 @@ export default function AccountSettingsPage() {
             >
               <Section title={t('profile.accountSection')}>
                 <p className="text-sm text-slate-600">{user.email}</p>
+                {/* Whether the address is confirmed, and how to fix it if
+                    not (AUTH-3). Only for your own account: an admin looking
+                    at someone else's cannot send their mail. */}
+                {isSelf && (
+                  <EmailVerificationNotice
+                    email={user.email}
+                    verified={Boolean(user.emailVerified)}
+                  />
+                )}
               </Section>
 
               {/* The public profile — the fields strangers see (SHARE-1).

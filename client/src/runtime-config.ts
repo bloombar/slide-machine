@@ -31,6 +31,7 @@ let runtime: RuntimeConfig = {
   ttsEnabled: false,
   translationEnabled: false,
   feedbackEnabled: false,
+  mailEnabled: false,
   operator: NO_OPERATOR,
   refineSlidesDefaultLevel: 2,
   refineTranscriptDefaultLevel: 2,
@@ -66,6 +67,11 @@ export const getTranslationEnabled = (): boolean => runtime.translationEnabled
  * hidden) until config loads. A server with no mail transport or no address
  * to send to has no use for the form. */
 export const getFeedbackEnabled = (): boolean => runtime.feedbackEnabled
+
+/** Whether the server can send mail at all (AUTH-3/AUTH-4). The account and
+ * password pages say so plainly rather than promising a link that a server
+ * with no relay could never deliver. */
+export const getMailEnabled = (): boolean => runtime.mailEnabled
 
 /** Who runs this deployment, as the privacy policy and the terms name them.
  * Fields the server left blank are filled in by the documents themselves

@@ -5,6 +5,7 @@
  * arrives from the typed Speak bar or a streamed STT transport.
  */
 import { z } from 'zod'
+import { requireVerifiedEmail } from '../auth/verified'
 import type {
   Deck,
   DeckCreateInput,
@@ -1239,14 +1240,20 @@ export const deckSetAccess = defineAction<DeckSetAccessInput, Deck>({
     deckId: z.string().min(1),
     visibility: z.enum(['restricted', 'public']),
   }),
-  execute: (ctx, input) =>
-    editDeckSettings(ctx, input.deckId, async (deck, acl) => {
+  execute: async (ctx, input) => {
+    // Same gate as a project's (AUTH-3): an unconfirmed account may share a
+    // lecture with named people, but not with everyone.
+    if (input.visibility === 'public' && ctx.userId) {
+      await requireVerifiedEmail(ctx.userId)
+    }
+    return editDeckSettings(ctx, input.deckId, async (deck, acl) => {
       ensureDeckOverride(deck, acl)
       deck.accessOverride!.visibility = input.visibility
       deck.markModified('accessOverride')
       await deck.save()
       return toDeckDto(deck, resolveDeckAcl(deck, null))
-    }),
+    })
+  },
 })
 
 /** Drops the lecture's override so it follows its project again. */

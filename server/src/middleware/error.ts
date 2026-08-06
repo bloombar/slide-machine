@@ -8,6 +8,7 @@ import type { NextFunction, Request, Response } from 'express'
 import type { ApiErrorBody } from '@slide-machine/shared'
 import {
   ActionForbiddenError,
+  EmailUnverifiedError,
   ActionNotFoundError,
   ActionValidationError,
 } from '../actions/dispatch'
@@ -46,6 +47,11 @@ export const errorHandler = (
     res.status(err.status).json(body(err.code, err.message, err.details))
   } else if (err instanceof ActionValidationError) {
     res.status(400).json(body('invalid_input', err.message, err.issues))
+  } else if (err instanceof EmailUnverifiedError) {
+    // 403 with a code of its own: the user can lift this themselves by
+    // confirming their address (AUTH-3), so the client offers that rather
+    // than reporting a flat refusal.
+    res.status(403).json(body('email_unverified', err.message))
   } else if (err instanceof ActionForbiddenError) {
     res.status(403).json(body('forbidden', err.message))
   } else if (err instanceof ActionNotFoundError) {

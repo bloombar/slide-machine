@@ -84,6 +84,11 @@ export default function LoginPage() {
           {submitting ? t('auth.signingIn') : t('auth.signIn')}
         </button>
         <GoogleSignInButton action={t('auth.signIn')} />
+        <p className="text-sm">
+          <Link to="/forgot-password" className="text-indigo-600">
+            {t('auth.forgotPassword')}
+          </Link>
+        </p>
         <p className="text-sm text-slate-500">
           {t('auth.noAccount')}{' '}
           <Link to="/register" className="text-indigo-600">

@@ -7,7 +7,11 @@
  * no settings editor of their own.
  */
 import { test, expect, type Page } from '@playwright/test'
-import { createProject, openProjectSettings } from './helpers'
+import {
+  createProject,
+  openProjectSettings,
+  verificationTokenFor,
+} from './helpers'
 
 const password = 'sturdy-passw0rd'
 // The admin email is fixed (it must match ADMIN_EMAILS); the account may
@@ -87,6 +91,10 @@ test('a user owns a project with a lecture', async ({ request }) => {
   expect(registered.status()).toBe(201)
   const { accessToken } = (await registered.json()) as { accessToken: string }
   const headers = { Authorization: `Bearer ${accessToken}` }
+  // A public project needs a confirmed address (AUTH-3)
+  await request.post('/api/auth/verify-email', {
+    data: { token: verificationTokenFor(owner.email) },
+  })
 
   const project = await request.post('/api/actions/project.create', {
     headers,

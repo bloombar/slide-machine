@@ -12,9 +12,12 @@ import { isEmailBanned } from '../models/banned-email'
 import { HttpError } from '../middleware/error'
 import type { GoogleProfile } from './google'
 import { hashPassword, verifyPassword } from './password'
+import { consumeAuthToken, revokeAuthTokens } from './one-time-tokens'
+import { sendPasswordResetEmail, sendVerificationEmail } from './emails'
 import { signAccessToken } from './tokens'
 import {
   issueRefreshToken,
+  revokeAllSessions,
   revokeRefreshToken,
   rotateRefreshToken,
 } from './refresh-store'
@@ -36,6 +39,9 @@ export const register = async (
    * (TECH-12); omitted stores nothing, leaving the account following
    * whatever language the browser asks for. */
   locale?: Locale,
+  /** Where the verification link should point (AUTH-3). Omitted skips the
+   * mail — the account still exists and can ask for a link later. */
+  origin?: string,
 ): Promise<AuthResult> => {
   if (await isEmailBanned(email)) throw bannedError()
   const passwordHash = await hashPassword(password)
@@ -46,6 +52,17 @@ export const register = async (
       passwordHash,
       ...(locale ? { locale } : {}),
     })
+    // Best-effort, and deliberately awaited: the response tells the client
+    // whether to say "check your email", and the send is a local hand-off to
+    // the relay rather than a delivery wait.
+    if (origin) {
+      await sendVerificationEmail(
+        user._id.toString(),
+        user.email,
+        user.displayName,
+        origin,
+      )
+    }
     return {
       user: toUserDto(user),
       accessToken: await signAccessToken(user._id.toString()),
@@ -169,4 +186,110 @@ export const refresh = async (
 /** Idempotent: succeeds whether or not a valid session token is presented. */
 export const logout = async (refreshRaw: string | undefined): Promise<void> => {
   if (refreshRaw) await revokeRefreshToken(refreshRaw)
+}
+
+/**
+ * Marks an address as verified from a mailed link (AUTH-3). The token is
+ * spent whether or not the account still exists, so a link never works twice.
+ * An unknown or expired token is one error, not several — a link that says
+ * "expired" versus "unknown" tells a stranger which tokens once existed.
+ */
+export const verifyEmail = async (token: string): Promise<SafeUser> => {
+  const invalid = new HttpError(
+    400,
+    'invalid_token',
+    'This link is no longer valid. Ask for a new one.',
+  )
+  const userId = await consumeAuthToken(token, 'verify-email')
+  if (!userId) throw invalid
+  const user = await UserModel.findById(userId)
+  if (!user) throw invalid
+  if (!user.emailVerified) {
+    user.emailVerified = true
+    await user.save()
+  }
+  return toUserDto(user)
+}
+
+/**
+ * Mails a fresh verification link to the signed-in user (AUTH-3). Returns
+ * whether one was actually sent, so the client can say "check your email"
+ * only when it is true. Verifying again is a no-op rather than an error: a
+ * user who clicks the link in an old message should not see a failure.
+ */
+export const resendVerification = async (
+  userId: string,
+  origin: string,
+): Promise<{ sent: boolean; alreadyVerified: boolean }> => {
+  const user = await UserModel.findById(userId)
+  if (!user)
+    throw new HttpError(401, 'unauthorized', 'Account no longer exists')
+  if (user.emailVerified) {
+    // Nothing to prove, and any outstanding link is now pointless
+    await revokeAuthTokens(userId, 'verify-email')
+    return { sent: false, alreadyVerified: true }
+  }
+  const sent = await sendVerificationEmail(
+    userId,
+    user.email,
+    user.displayName,
+    origin,
+  )
+  return { sent, alreadyVerified: false }
+}
+
+/**
+ * Starts "I forgot my password" (AUTH-4).
+ *
+ * Returns nothing and never reports whether the address has an account: the
+ * caller answers the same way either way, so this form cannot be used to
+ * discover who is registered. An account with no password (Google-only) is
+ * skipped for the same reason — silently, since saying "use Google instead"
+ * would confirm the address.
+ */
+export const requestPasswordReset = async (
+  email: string,
+  origin: string,
+): Promise<void> => {
+  const user = await UserModel.findOne({
+    email: email.toLowerCase().trim(),
+  }).select('+passwordHash')
+  if (!user?.passwordHash) return
+  if (await isEmailBanned(user.email)) return
+  await sendPasswordResetEmail(
+    user._id.toString(),
+    user.email,
+    user.displayName,
+    origin,
+  )
+}
+
+/**
+ * Finishes a reset (AUTH-4): sets the new password and signs the account out
+ * everywhere, because whoever asked for the reset may be locking someone else
+ * out — a stolen session must not survive the recovery that was meant to end
+ * it. The caller is left signed out too, and signs in with the new password.
+ */
+export const resetPassword = async (
+  token: string,
+  password: string,
+): Promise<void> => {
+  const invalid = new HttpError(
+    400,
+    'invalid_token',
+    'This link is no longer valid. Ask for a new one.',
+  )
+  const userId = await consumeAuthToken(token, 'password-reset')
+  if (!userId) throw invalid
+  const user = await UserModel.findById(userId)
+  if (!user) throw invalid
+  if (await isEmailBanned(user.email)) throw bannedError()
+
+  user.passwordHash = await hashPassword(password)
+  // Reaching a mailed link proves the address as surely as the verification
+  // link does, so a reset settles verification too (AUTH-3).
+  user.emailVerified = true
+  await user.save()
+  await revokeAllSessions(userId)
+  await revokeAuthTokens(userId, 'verify-email')
 }

@@ -64,6 +64,43 @@
       "google": "No se pudo iniciar sesión con Google: inténtalo de nuevo",
       "signIn": "Algo salió mal: inténtalo de nuevo",
       "register": "Algo salió mal: inténtalo de nuevo"
+    },
+    "forgotPassword": "¿Olvidaste tu contraseña?",
+    "forgot": {
+      "title": "Restablece tu contraseña",
+      "intro": "Dinos con qué dirección te registraste y te enviaremos un enlace para elegir una nueva contraseña.",
+      "submit": "Enviar el enlace",
+      "sending": "Enviando…",
+      "sent": "Si esa dirección tiene una cuenta, el enlace va en camino. Revisa tu correo: el enlace dura una hora.",
+      "unavailable": "Este servidor no puede enviar correo, así que los enlaces de contraseña no están disponibles. Pide ayuda a quien lo administra.",
+      "error": "No se pudo enviar el enlace: inténtalo de nuevo",
+      "backToSignIn": "Volver a iniciar sesión"
+    },
+    "reset": {
+      "title": "Elige una contraseña nueva",
+      "newPassword": "Contraseña nueva",
+      "submit": "Guardar la contraseña",
+      "saving": "Guardando…",
+      "done": "Tu contraseña está lista. Inicia sesión con ella: se han cerrado las demás sesiones.",
+      "missingToken": "A este enlace le falta su token. Pide uno nuevo.",
+      "error": "No se pudo establecer esa contraseña: puede que el enlace haya caducado"
+    },
+    "verify": {
+      "title": "Confirmando tu dirección",
+      "checking": "Comprobando tu enlace…",
+      "done": "Gracias, tu dirección está confirmada.",
+      "error": "Este enlace ya no es válido. Pide uno nuevo desde los ajustes de tu cuenta.",
+      "missingToken": "A este enlace le falta su token.",
+      "continue": "Continuar",
+      "pendingTitle": "Confirma tu dirección de correo",
+      "pending": "Enviamos un enlace a {email}. Confírmalo para publicar clases públicamente.",
+      "resend": "Enviar otro enlace",
+      "resending": "Enviando…",
+      "resent": "Enviado: revisa tu correo.",
+      "already": "Tu dirección ya está confirmada.",
+      "resendError": "No se pudo enviar otro enlace: inténtalo de nuevo",
+      "unavailable": "Este servidor no puede enviar correo, así que no se puede reenviar el enlace.",
+      "confirmed": "Confirmada"
     }
   },
   "health": {
@@ -793,7 +830,8 @@
       "action": "Transferir"
     },
     "errors": {
-      "noAccount": "No hay ninguna cuenta con ese correo"
+      "noAccount": "No hay ninguna cuenta con ese correo",
+      "setAccess": "No se pudo cambiar quién puede verlo: inténtalo de nuevo"
     }
   },
   "deck": {
@@ -1055,7 +1093,8 @@
     "unauthorized": "Tu sesión ha terminado: vuelve a iniciar sesión",
     "forbidden": "No tienes permiso para hacer eso",
     "internal_error": "Algo salió mal por nuestra parte: inténtalo de nuevo",
-    "unknown_error": "Algo salió mal: inténtalo de nuevo"
+    "unknown_error": "Algo salió mal: inténtalo de nuevo",
+    "email_unverified": "Primero confirma tu dirección de correo: revisa tu bandeja de entrada o envía un enlace nuevo desde los ajustes de tu cuenta"
   },
   "usage": {
     "title": "Uso del plan",

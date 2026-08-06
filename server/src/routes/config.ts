@@ -9,6 +9,7 @@ import { env } from '../config/env'
 import { serverTranscriptionAvailable } from '../lib/transcribe-audio'
 import { translationEnabled } from '../lib/translate-slides'
 import { feedbackEnabled } from './feedback'
+import { mailerAvailable } from '../lib/mailer'
 
 export const configRouter = Router()
 
@@ -40,6 +41,7 @@ configRouter.get('/config', (_req, res) => {
     ttsEnabled: ttsEnabled(),
     translationEnabled: translationEnabled(),
     feedbackEnabled: feedbackEnabled(),
+    mailEnabled: mailerAvailable(),
     operator: {
       name: env.OPERATOR_NAME,
       jurisdiction: env.OPERATOR_JURISDICTION,
