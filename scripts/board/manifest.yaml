@@ -560,7 +560,7 @@
   section: §20 Administration, Operations & Moderation
   family: ADMIN
   phase: 2
-  status: Backlog
+  status: Done
   review: false
   note: administration & moderation
 - id: AUTH-3
@@ -1233,7 +1233,7 @@
   section: §14 Technical Stack & Conventions
   family: TECH
   phase: 2
-  status: Backlog
+  status: Done
   review: false
   note: billing-provider abstraction layer
 - id: TECH-12
@@ -1395,7 +1395,7 @@
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
-  status: Backlog
+  status: Done
   review: false
 - id: BILL-2
   title: Billing provider (Stripe) integration
@@ -1412,7 +1412,7 @@
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
-  status: Backlog
+  status: Done
   review: false
 - id: BILL-3
   title: Usage caps & metering
@@ -1429,7 +1429,7 @@
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
-  status: Backlog
+  status: Done
   review: false
 - id: BILL-4
   title: Enforcement & upgrade prompts
@@ -1446,7 +1446,7 @@
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
-  status: Backlog
+  status: Done
   review: false
 - id: BILL-5
   title: Plan management
@@ -1463,7 +1463,7 @@
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
-  status: Backlog
+  status: Done
   review: false
 - id: BILL-6
   title: Configurable pricing & caps
@@ -1480,7 +1480,7 @@
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
-  status: Backlog
+  status: Done
   review: false
 - id: BILL-7
   title: Cost attribution & admin cost reporting
@@ -1655,7 +1655,7 @@
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 3
-  status: Backlog
+  status: Done
   review: false
 - id: PLAY-3
   title: Narration in the translated language

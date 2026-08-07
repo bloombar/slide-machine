@@ -33,7 +33,7 @@ The PI reviews across every phase; the People column shows who builds.
 
 "Complete" = everything in the SDD **except** items already marked Future Work (SDD §18).
 
-### Current status (2026-07-23)
+### Current status (2026-08-06)
 
 Build-progress snapshot; the scope lists in [§5](#5-phase-1--mvp)–[§7](#7-phase-3--complete-all-non-future) define each item.
 
@@ -46,9 +46,12 @@ Build-progress snapshot; the scope lists in [§5](#5-phase-1--mvp)–[§7](#7-ph
 
   The template work above is **one program across two plans** — [plans/extensible-templates-plan.md](plans/extensible-templates-plan.md) (open slot model, content kinds, dynamic AI contract) and [plans/template-import-plan.md](plans/template-import-plan.md) (Slides import/export, template storage, positioned renderer, consolidation). The authoritative PR order is the *Merged sequence* table in the first; the slot model lands **before** the importer.
 
-**Phase 3 — Complete — ⬜ not started** (its early-delivered items are in Phase 2 above).
+**Phase 3 — Complete — 🟡 in progress.** Billing landed ahead of the phase window; the rest has not started. (Its other early-delivered items are in Phase 2 above.)
 
-- ⬜ Outstanding: `BILL-1..8` + Stripe + metering (including `translationCharacters`/`audienceLocales`, which `SHARE-2` shipped without recording); `PREP-1/2/3/4` (preflight + verbal); GitHub sign-in + connect; `PLAY-3` (narration in the translated language); `IMG-4` (AI imagery); `P-11` (retention purge sweep); `P-1..P-9` hardening, reduced-motion a11y, 100% coverage gate.
+- ✅ Done: `TECH-9` (billing-provider abstraction, listed in Phase 2); `BILL-1` (four tiers, every tier every service, pricing page); `BILL-2` (Stripe checkout, hosted portal, tier change, cancel, signature-verified webhooks); `BILL-3` (metering and attribution for every metric a shipped feature can spend — `translationCharacters`/`audienceLocales` included, closing the gap `SHARE-2` left); `BILL-4` (402 hard stop, home-page and account usage views, tier-appropriate call to action); `BILL-5` (upgrade/downgrade/cancel, with the audio-deletion warning a downgrade needs); `BILL-6` (plans and per-unit vendor prices in server config); `P-11` (retention purge sweep); `ADMIN-9` (complimentary plan grants, listed in Phase 2).
+- ⬜ Outstanding: `BILL-7` (cost attribution + admin cost reporting); `BILL-8` (cap notifications, email + in-app); `P-8` (payment-privacy verification over what `BILL-2` built); `PREP-1/2/3/4` (preflight + verbal); GitHub sign-in + connect; `PLAY-3` (narration in the translated language); `IMG-4` (AI imagery); `P-1..P-9` hardening, reduced-motion a11y, 100% coverage gate.
+
+  `aiImages` is the one cap with no meter behind it, because `IMG-4` has not been built — there is nothing yet to count. The cap, unit, display order, plan-table row, usage-panel label and per-image vendor price all already exist, so wiring it up when AI imagery lands is a `meterUsage('aiImages', n)` call inside the ambient usage context plus a cap guard on the action, and nothing else.
 
 Admin/operations (`ADMIN-1..9`, [SPEC §20](SPEC.md#20-administration-operations--moderation)) is **Phase 2** work — its done/outstanding items are folded into the Phase 2 snapshot above; operator detail is in [ADMINISTRATION.md](ADMINISTRATION.md).
 
@@ -109,11 +112,11 @@ Two streams joined by the **shared types**, split by how much skill the work nee
 
 ## 8. Risks & Cut-Line
 
-- **August is one developer on the biggest, most integration-heavy slice** (Stripe, i18n, translation, preflight) plus the 100% coverage gate. The PI reviews but doesn't build, so this doesn't add capacity. **Phase 3 probably won't fully land.** Plan for it.
+- **August is one developer on the biggest, most integration-heavy slice** (Stripe, i18n, translation, preflight) plus the 100% coverage gate. The PI reviews but doesn't build, so this doesn't add capacity. **Phase 3 probably won't fully land.** Plan for it. *(Partly retired: i18n, translation and Stripe self-serve all landed early — what remains of the integration-heavy slice is preflight and GitHub.)*
 - **RA2's unknown quality shifts load onto RA1.** Moving the renderer, layouts, and design system to RA1 (§5.1) means July's two developers don't produce 2×. The PI shares the review burden, but the rewrites still fall on RA1 — which is the main reason Phase 3 is at risk.
 - **RA2's work must be reviewed in July and owned by RA1.** RA1 and the PI review as it merges; if it isn't, RA1 loses August time fixing code no one checked. Make this an MVP exit criterion (§5.1).
 - **100% coverage across this surface in 9 weeks is a big cost on its own.** Enforce the gate only from Phase 3, with documented exclusions (SDD Open Q #9), or it drags every earlier phase.
-- **Cut order** if time runs short (cut from the top — none are needed for the pilot): [`IMG-4`](SPEC.md#img-4-ai-generated-imagery-optional) (AI imagery) → [`PLAY-3`](SPEC.md#play-3-narration-in-the-translated-language) (translated narration; translated **viewing** and the non-English bundles already shipped in Phase 2, so what is cuttable here is the spoken half) → [`PREP-4`](SPEC.md#prep-4-verbal-interaction-with-the-preflight) (voice preflight), then preflight depth [`PREP-1`](SPEC.md#prep-1-preflight-concept-extraction)/[`2`](SPEC.md#prep-2-instructor-review--honing)/[`3`](SPEC.md#prep-3-use-of-the-honed-concept-set) (optional, non-blocking) → GitHub sign-in/connect → [`SOC-3`](SPEC.md#soc-3-feeds)/[`4`](SPEC.md#soc-4-user-profiles) depth (keep [`SOC-1`](SPEC.md#soc-1-voting) voting) — scheduled in Phase 2 but still first among Phase-2 work to drop → reduce billing to simple tier-gating (defer full Stripe self-serve [`BILL-2`](SPEC.md#bill-2-billing-provider-stripe-integration)/[`5`](SPEC.md#bill-5-plan-management)).
+- **Cut order** if time runs short (cut from the top — none are needed for the pilot): [`IMG-4`](SPEC.md#img-4-ai-generated-imagery-optional) (AI imagery) → [`PLAY-3`](SPEC.md#play-3-narration-in-the-translated-language) (translated narration; translated **viewing** and the non-English bundles already shipped in Phase 2, so what is cuttable here is the spoken half) → [`PREP-4`](SPEC.md#prep-4-verbal-interaction-with-the-preflight) (voice preflight), then preflight depth [`PREP-1`](SPEC.md#prep-1-preflight-concept-extraction)/[`2`](SPEC.md#prep-2-instructor-review--honing)/[`3`](SPEC.md#prep-3-use-of-the-honed-concept-set) (optional, non-blocking) → GitHub sign-in/connect → [`SOC-3`](SPEC.md#soc-3-feeds)/[`4`](SPEC.md#soc-4-user-profiles) depth (keep [`SOC-1`](SPEC.md#soc-1-voting) voting) — scheduled in Phase 2 but still first among Phase-2 work to drop → ~~reduce billing to simple tier-gating (defer full Stripe self-serve [`BILL-2`](SPEC.md#bill-2-billing-provider-stripe-integration)/[`5`](SPEC.md#bill-5-plan-management))~~ **no longer available as a cut** — self-serve Stripe already shipped. What is still cuttable in billing is [`BILL-7`](SPEC.md#bill-7-cost-attribution--admin-cost-reporting) (operators can read cost off the vendors' own dashboards) before [`BILL-8`](SPEC.md#bill-8-cap-notifications-email--in-app) (a cap nobody saw coming reads as a broken feature, so this is the last of the two to go).
 - **Protect Phases 1–2.** They are the pilot. If the schedule slips, it slips into Phase 3 product features — never the core loop or quizzes.
 
 ## 9. Milestones
