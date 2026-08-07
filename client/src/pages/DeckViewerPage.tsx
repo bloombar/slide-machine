@@ -1948,7 +1948,25 @@ export default function DeckViewerPage() {
       )}
       {translation.failed && (
         <NotificationPill tone="error" role="alert">
-          {t('viewer.translationFailed')}
+          {/* An exhausted allowance is not an outage, and must not be reported
+              as one: "try again" is wrong advice for something that cannot
+              succeed until the plan changes (BILL-4). Only an editor sees it —
+              they are the only person who can act on it — and only they get
+              the upgrade path. A student keeps the neutral wording and learns
+              nothing about the owner's plan. */}
+          {translation.limitMessage && canEdit ? (
+            <>
+              {translation.limitMessage}{' '}
+              <Link
+                to="/app/plans"
+                className="font-medium text-indigo-700 hover:underline"
+              >
+                {t('viewer.translationSeePlans')}
+              </Link>
+            </>
+          ) : (
+            t('viewer.translationFailed')
+          )}
         </NotificationPill>
       )}
 

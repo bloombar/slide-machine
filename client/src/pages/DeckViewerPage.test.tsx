@@ -3301,6 +3301,64 @@ describe('DeckViewerPage live session under translated viewing (SHARE-2)', () =>
     ).toBeInTheDocument()
   })
 
+  /** Renders the deck with translation refused for a spent allowance (402). */
+  const refusedRoutes = (message: string, canEdit: boolean) => {
+    vi.spyOn(runtimeConfig, 'getTranslationEnabled').mockReturnValue(true)
+    return mockFetchRoutes({
+      '/api/decks/shared-abc123/translation': () => ({
+        status: 402,
+        body: {
+          error: {
+            code: 'plan_limit_exceeded',
+            message,
+            details: ['translationCharacters'],
+          },
+        },
+      }),
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit },
+      }),
+    })
+  }
+
+  it('tells an editor what ran out, and where to raise it', async () => {
+    // An exhausted allowance is not an outage (BILL-4): the owner is told what
+    // was spent and given the upgrade path, not told to try again.
+    const message =
+      'You have used all of this billing period’s translation. It resets at the start of your next period.'
+    localStorage.setItem('sm:slide-language:shared-abc123', 'fr')
+    refusedRoutes(message, true)
+    mount()
+
+    expect(
+      await screen.findByText(new RegExp(message.slice(0, 40))),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'See plans' })).toHaveAttribute(
+      'href',
+      '/app/plans',
+    )
+  })
+
+  it('tells a reader only that the lecture is not in that language', async () => {
+    // The viewer-safe rule: a student learns nothing about the owner's plan
+    // and is offered no upgrade that is not theirs to buy.
+    localStorage.setItem('sm:slide-language:shared-abc123', 'fr')
+    refusedRoutes('This lecture isn’t available in that language.', false)
+    mount()
+
+    expect(
+      await screen.findByText(/Could not translate this lecture/),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'See plans' }),
+    ).not.toBeInTheDocument()
+  })
+
   it('ends a running live session when the reader switches to a translation', async () => {
     translatableRoutes()
     mount()

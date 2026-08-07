@@ -21,6 +21,8 @@ import { DeckModel } from '../../src/models/deck'
 import { SlideModel } from '../../src/models/slide'
 import { SlideTranslationModel } from '../../src/models/slide-translation'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
+import { UsageRecordModel } from '../../src/models/usage-record'
+import { capFor, periodKeyFor, usedThisPeriod } from '../../src/billing/usage'
 import { deleteDeckCascade, purgeDeckCascade } from '../../src/lib/cascade'
 
 const server = createApp().listen(0)
@@ -75,6 +77,7 @@ const countingProvider = () => {
 }
 
 let ada: string
+let adaId: string
 let byron: string
 let projectId: string
 let deckId: string
@@ -102,8 +105,12 @@ beforeEach(async () => {
     SlideModel.deleteMany({}),
     SlideTranslationModel.deleteMany({}),
     RefreshTokenModel.deleteMany({}),
+    UsageRecordModel.deleteMany({}),
   ])
   ada = await registerUser('ada@example.com')
+  adaId = (await UserModel.findOne({
+    email: 'ada@example.com',
+  }))!._id.toString()
   byron = await registerUser('byron@example.com')
   const project = await act(ada, 'project.create', { title: 'Physics' })
   projectId = project.body.id as string
@@ -270,6 +277,10 @@ describe('translation caching', () => {
   })
 
   it('keeps one document per deck and locale', async () => {
+    // Two audience languages, so the owner needs a plan that sells two
+    // (BILL-3); on Free the second request is a deliberate 402, covered in the
+    // metering suite below.
+    await UserModel.updateOne({ _id: adaId }, { planTier: 'pro' })
     await translateAnon(slug, 'fr')
     await translateAnon(slug, 'es')
     await translateAnon(slug, 'fr')
@@ -376,6 +387,159 @@ describe('translation lifecycle', () => {
     await translateAnon(slug, 'fr')
     await purgeDeckCascade(deckId)
     expect(await SlideTranslationModel.countDocuments({ deckId })).toBe(0)
+  })
+})
+
+describe('translation metering', () => {
+  /** How much of a metric the deck's owner has spent this period. */
+  const spent = (metric: 'translationCharacters' | 'audienceLocales') =>
+    usedThisPeriod(adaId, metric)
+
+  /** Puts the owner exactly on a cap, as though they had spent it. */
+  const exhaust = async (
+    metric: 'translationCharacters' | 'audienceLocales',
+  ): Promise<void> => {
+    await UsageRecordModel.updateOne(
+      { userId: adaId, period: await periodKeyFor(adaId), metric },
+      { $set: { used: capFor('free', metric) ?? 0, updatedAt: new Date() } },
+      { upsert: true },
+    )
+  }
+
+  it('charges the owner for the characters they translate', async () => {
+    expect(await translateAs(ada, slug, 'fr')).toMatchObject({ status: 200 })
+    // The deck's words plus the markup they were sent inside — what the vendor
+    // bills for. The exact figure is the provider's business; that it is
+    // proportional to the deck is the contract.
+    expect(await spent('translationCharacters')).toBeGreaterThan(
+      'Standing waves'.length,
+    )
+    expect(await spent('audienceLocales')).toBe(0)
+  })
+
+  it('charges a reader’s first language to the audience allowance', async () => {
+    await translateAnon(slug, 'fr')
+    expect(await spent('audienceLocales')).toBe(1)
+    // Never the owner's own pool: a deck that finds an audience must not eat
+    // the allowance its author needs to prepare tomorrow's lecture (BILL-3).
+    expect(await spent('translationCharacters')).toBe(0)
+  })
+
+  it('charges one unit per language however many students read it', async () => {
+    await translateAnon(slug, 'fr')
+    await translateAnon(slug, 'fr')
+    await translateAs(byron, slug, 'fr')
+    expect(await spent('audienceLocales')).toBe(1)
+  })
+
+  it('charges a second language separately', async () => {
+    // Free allows exactly one audience language, which is what the next test
+    // covers; here the question is only that two languages cost two units.
+    await UserModel.updateOne({ _id: adaId }, { planTier: 'pro' })
+    await translateAnon(slug, 'fr')
+    await translateAnon(slug, 'es')
+    expect(await spent('audienceLocales')).toBe(2)
+  })
+
+  it('holds a free account to the one audience language it is sold', async () => {
+    await translateAnon(slug, 'fr')
+    expect((await translateAnon(slug, 'es')).status).toBe(402)
+    expect(await spent('audienceLocales')).toBe(1)
+  })
+
+  it('does not charge a reader for a language the owner already bought', async () => {
+    await translateAs(ada, slug, 'fr')
+    const before = await spent('translationCharacters')
+    await translateAnon(slug, 'fr')
+    expect(await spent('audienceLocales')).toBe(0)
+    expect(await spent('translationCharacters')).toBe(before)
+  })
+
+  it('records a cache hit without debiting it', async () => {
+    await translateAs(ada, slug, 'fr')
+    const charged = await spent('translationCharacters')
+    await translateAs(ada, slug, 'fr')
+    // Still exactly what the one real call cost, but a row now exists saying
+    // the read happened — the count BILL-7's averages divide by.
+    expect(await spent('translationCharacters')).toBe(charged)
+    expect(
+      await UsageRecordModel.countDocuments({
+        userId: adaId,
+        metric: 'translationCharacters',
+      }),
+    ).toBe(1)
+  })
+
+  it('refuses the owner once their translation allowance is spent', async () => {
+    await exhaust('translationCharacters')
+    const res = await translateAs(ada, slug, 'fr')
+    expect(res.status).toBe(402)
+    expect(res.body.error.code).toBe('plan_limit_exceeded')
+    expect(res.body.error.details).toEqual(['translationCharacters'])
+    expect(res.body.error.message).toMatch(/used all of this billing period/i)
+    // Hard stop, never overage: nothing was translated and nothing was cached.
+    expect(await SlideTranslationModel.countDocuments({ deckId })).toBe(0)
+  })
+
+  it('refuses a reader’s new language once the audience allowance is spent', async () => {
+    await exhaust('audienceLocales')
+    const res = await translateAnon(slug, 'fr')
+    expect(res.status).toBe(402)
+    // A student is told the lecture is not readable in that language, and
+    // learns nothing about their instructor's plan (BILL-4).
+    expect(res.body.error.message).toBe(
+      'This lecture isn’t available in that language.',
+    )
+    expect(res.body.error.message).not.toMatch(
+      /plan|billing|allowance|upgrade/i,
+    )
+  })
+
+  it('keeps serving a translation that already exists after the cap is reached', async () => {
+    // Hitting a cap degrades what can be *created*, never what already exists:
+    // students must not lose a translation their instructor already paid for.
+    await translateAs(ada, slug, 'fr')
+    await exhaust('audienceLocales')
+    const res = await translateAnon(slug, 'fr')
+    expect(res.status).toBe(200)
+    expect(res.body.perSlide[slideId].slots.title.value).toContain('[fr]')
+  })
+
+  it('re-translates an edited slide for readers of a language already bought', async () => {
+    // The audience allowance sells languages, so it may only refuse a new one.
+    // A student reading a lecture in a language it already publishes must not
+    // be shown last week's words because the owner is at their limit — the
+    // edit was the owner's doing, and this call is charged nothing.
+    await translateAnon(slug, 'fr')
+    expect(await spent('audienceLocales')).toBe(1) // free's whole allowance
+    await act(ada, 'slide.editContent', { slideId, title: 'Travelling waves' })
+
+    const res = await translateAnon(slug, 'fr')
+    expect(res.status).toBe(200)
+    expect(res.body.perSlide[slideId].slots.title.value).toContain(
+      'Travelling waves',
+    )
+    expect(await spent('audienceLocales')).toBe(1)
+  })
+
+  it('does not report an exhausted allowance as a provider outage', async () => {
+    // A 502 would tell the viewer to retry something that cannot succeed.
+    await exhaust('audienceLocales')
+    expect((await translateAnon(slug, 'fr')).status).not.toBe(502)
+  })
+
+  it('charges a translated export to the owner’s own allowance', async () => {
+    await act(ada, 'export.download', { deckId, format: 'yaml', locale: 'fr' })
+    expect(await spent('translationCharacters')).toBeGreaterThan(0)
+    // Exporting is authoring work, whoever the file is for.
+    expect(await spent('audienceLocales')).toBe(0)
+  })
+
+  it('spends nothing translating a deck into its own language', async () => {
+    await translateAs(ada, slug, 'en')
+    await translateAnon(slug, 'en')
+    expect(await spent('translationCharacters')).toBe(0)
+    expect(await spent('audienceLocales')).toBe(0)
   })
 })
 

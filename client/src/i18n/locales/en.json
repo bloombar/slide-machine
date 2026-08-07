@@ -995,7 +995,8 @@
     "showOriginal": "Show original",
     "translatedNotice": "Machine-translated — the original is authoritative",
     "translatedNoticeEditor": "Machine-translated view — editing is off until you show the original",
-    "translationFailed": "Could not translate this lecture. Showing the original."
+    "translationFailed": "Could not translate this lecture. Showing the original.",
+    "translationSeePlans": "See plans"
   },
   "quiz": {
     "heading": "Exit-ticket quiz",

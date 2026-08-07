@@ -33,6 +33,8 @@ import { SlideModel, toSlideDto } from '../models/slide'
 import { TranscriptSegmentModel } from '../models/transcript-segment'
 import { resolveDeckTemplateForRead } from '../templates/versions'
 import { translateSlides, translationEnabled } from '../lib/translate-slides'
+import { translationBillingFor } from '../billing/translation-usage'
+import { PlanLimitExceededError } from '../billing/limits'
 import { verifyAccessToken } from '../auth/tokens'
 import { ProjectModel } from '../models/project'
 import { UserModel } from '../models/user'
@@ -187,6 +189,15 @@ decksRouter.post('/decks/:slug/translation', optionalAuth, async (req, res) => {
   // the viewer renders the authored text and nothing is spent.
   if (locale === source) return res.json(body)
 
+  // Whoever asked, the owner's plan pays (BILL-3) — but an owner or editor
+  // preparing the lecture draws on a different allowance than a student
+  // reading it, so who triggered this decides the pool before anything else.
+  const acl = await loadDeckAcl(deck)
+  const billing = await translationBillingFor(
+    acl.ownerId,
+    canEditAcl(acl, req.userId) ? 'author' : 'audience',
+  )
+
   const slides = await SlideModel.find({ deckId: deck._id }).sort({ index: 1 })
   try {
     body.perSlide = await translateSlides(
@@ -194,8 +205,13 @@ decksRouter.post('/decks/:slug/translation', optionalAuth, async (req, res) => {
       slides.map(toSlideDto),
       source,
       locale,
+      billing,
     )
-  } catch {
+  } catch (error) {
+    // An exhausted allowance is not an upstream failure: it is a deliberate
+    // refusal with its own status and its own message, and rewriting it as a
+    // 502 would tell the reader to retry something that cannot succeed.
+    if (error instanceof PlanLimitExceededError) throw error
     // The provider failed or timed out. Report it as an upstream failure so
     // the viewer can fall back to the original text rather than showing a
     // half-translated deck.

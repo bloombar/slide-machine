@@ -995,7 +995,8 @@
     "showOriginal": "Mostrar el original",
     "translatedNotice": "Traducción automática — el original es la versión válida",
     "translatedNoticeEditor": "Vista traducida automáticamente — la edición está desactivada hasta que muestres el original",
-    "translationFailed": "No se pudo traducir esta clase. Se muestra el original."
+    "translationFailed": "No se pudo traducir esta clase. Se muestra el original.",
+    "translationSeePlans": "Ver planes"
   },
   "quiz": {
     "heading": "Cuestionario de salida",

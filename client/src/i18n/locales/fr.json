@@ -995,7 +995,8 @@
     "showOriginal": "Afficher l'original",
     "translatedNotice": "Traduction automatique — l'original fait foi",
     "translatedNoticeEditor": "Vue traduite automatiquement — la modification est désactivée tant que l'original n'est pas affiché",
-    "translationFailed": "Impossible de traduire ce cours. Affichage de l'original."
+    "translationFailed": "Impossible de traduire ce cours. Affichage de l'original.",
+    "translationSeePlans": "Voir les forfaits"
   },
   "quiz": {
     "heading": "Quiz de fin de cours",
