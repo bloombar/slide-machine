@@ -168,6 +168,9 @@
       "privacy": "Privacy"
     },
     "accountTypeSection": "Account type",
+    "planSection": "Plan",
+    "accountTypeSectionHint": "What you use Slide Machine for. It chooses the privacy your new lectures start with.",
+    "accountTypeUnset": "Not set",
     "publicProfileSectionHint": "Saved as you go. What strangers see on your profile page.",
     "privacySectionHint": "Who can see your profile page and the lectures on it.",
     "delete": {
@@ -175,6 +178,28 @@
       "hint": "Deleting your account permanently removes your projects, lectures, and slides. This cannot be undone.",
       "title": "Delete your account?",
       "message": "Your account and all of its projects, lectures, and slides will be permanently deleted."
+    }
+  },
+  "accountType": {
+    "student": {
+      "label": "Student",
+      "hint": "Your profile and new lectures start private."
+    },
+    "educator": {
+      "label": "Educator",
+      "hint": "Your profile and new lectures start public."
+    },
+    "other": {
+      "label": "Other",
+      "hint": "Your profile and new lectures start public."
+    }
+  },
+  "onboarding": {
+    "accountType": {
+      "title": "Which best describes you?",
+      "hint": "This only chooses the privacy your work starts with. Nothing is hidden from you either way.",
+      "changeable": "You can change this any time in Settings.",
+      "error": "Could not save your answer. Try again."
     }
   },
   "language": {

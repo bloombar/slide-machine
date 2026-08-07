@@ -6,7 +6,7 @@
  * Signed out throughout — these pages are public on purpose, and this is the
  * check that they really are.
  */
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from './fixtures'
 
 /** Opens the nav drawer and returns once its links are there. */
 const openMenu = async (page: Page) => {

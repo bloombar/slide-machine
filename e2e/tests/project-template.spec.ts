@@ -3,7 +3,7 @@
  * the project's template; each lecture keeps its own stored template,
  * so later project changes never rewrite existing lectures.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { createProject, openProjectSettings } from './helpers'
 
 const email = `ptmpl-${Date.now()}@example.com`

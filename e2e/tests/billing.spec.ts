@@ -15,7 +15,7 @@
  * file, prices from the billing provider, and the account's own tier from the
  * database.
  */
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from './fixtures'
 
 test.describe.configure({ mode: 'serial' })
 

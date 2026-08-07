@@ -4,7 +4,7 @@
  * unchanged and simply empties the image slot — no layout switch, and an
  * image-only slide is not deleted.
  */
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from './fixtures'
 import { createProject } from './helpers'
 
 const PNG = Buffer.from(

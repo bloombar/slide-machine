@@ -7,7 +7,7 @@
  * lecture directories (sorting them by every column), exports the audit
  * log as CSV, and moves between sections with the admin nav bar.
  */
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from './fixtures'
 import { createProject } from './helpers'
 
 const password = 'sturdy-passw0rd'

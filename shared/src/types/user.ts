@@ -15,6 +15,29 @@ export interface ProjectDefaults {
 /** Whether a user's profile page is visible to others. */
 export type ProfileVisibility = 'public' | 'private'
 
+/**
+ * What a user says they are, asked once after their first sign-in
+ * (AUTH-6). It is a self-declaration, not a permission: it only chooses
+ * the privacy defaults new work starts from.
+ */
+export type AccountType = 'student' | 'educator' | 'other'
+
+export const ACCOUNT_TYPES = ['student', 'educator', 'other'] as const
+
+/**
+ * Whether an account's work starts private (AUTH-6/P-1). Student
+ * accounts do: coursework is the student's own until they decide to
+ * publish it, and a default that publishes it for them is a decision
+ * they never made. Everyone else keeps the public default the product
+ * is built around.
+ *
+ * One predicate rather than a visibility value, because the two things
+ * it governs spell "private" differently: a profile is `private`, a
+ * project is `restricted`.
+ */
+export const accountDefaultsToPrivate = (accountType?: AccountType): boolean =>
+  accountType === 'student'
+
 export interface User {
   id: string
   email: string
@@ -22,6 +45,8 @@ export interface User {
   passwordHash?: string
   emailVerified: boolean
   profileVisibility: ProfileVisibility
+  /** Absent until the account answers the prompt shown after sign-in. */
+  accountType?: AccountType
   bio?: string
   avatarUrl?: string
   /** Interface language (TECH-12), only when explicitly chosen; absent

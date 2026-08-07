@@ -3,7 +3,7 @@
  * app's single editing surface. Covers list view, Markdown source
  * roundtrip, and persistence.
  */
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from './fixtures'
 import { createProject } from './helpers'
 
 const email = `edit-${Date.now()}@example.com`

@@ -5,7 +5,7 @@
  * lecture or project in the product view is confirmed and lands in the
  * audit log.
  */
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from './fixtures'
 
 const password = 'sturdy-passw0rd'
 // The admin email is fixed (it must match ADMIN_EMAILS); the account may

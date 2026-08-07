@@ -469,6 +469,12 @@ export default function AdminUserDetailPage() {
             label="Profile visibility"
             value={user.profileVisibility}
           />
+          {/* Why this account's work defaults the way it does (AUTH-6).
+              Read-only here: it is the holder's own statement. */}
+          <DetailRow
+            label="Account type"
+            value={user.accountType ?? 'Not answered'}
+          />
           <DetailRow
             label="Interface locale"
             value={localeLabel(user.locale)}

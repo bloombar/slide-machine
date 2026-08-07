@@ -3,7 +3,7 @@
  * as more is spoken, and the General settings tab lets the user set the title
  * by hand — which locks it so the AI never overwrites it again.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { createProject } from './helpers'
 
 const speak = async (page: import('@playwright/test').Page, phrase: string) => {

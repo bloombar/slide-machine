@@ -14,7 +14,7 @@
  * non-interactive spot — the slide's padding corner, not the editable
  * text (which is reserved for click-to-edit).
  */
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from './fixtures'
 import { createProject } from './helpers'
 
 test.use({ viewport: { width: 1280, height: 1600 } })

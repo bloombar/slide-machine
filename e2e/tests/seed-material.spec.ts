@@ -3,7 +3,7 @@
  * project page, extraction settles to Ready, the caption saves, the
  * asset toggles out of generation, and deletion clears the list.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { createProject, openProjectSettings } from './helpers'
 
 const email = `material-${Date.now()}@example.com`

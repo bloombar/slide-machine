@@ -5,7 +5,7 @@
  * (EXPORT_MODE defaults to mock), so the full flow runs with the live
  * front/back end and test DB; the PDF download is produced for real.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { createProject } from './helpers'
 
 test('export a lecture to PDF download and Google Slides in Drive', async ({

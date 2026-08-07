@@ -4,7 +4,7 @@
  * carrying whiteboard marks keeps them through a transcript edit (WB-2
  * re-anchoring), since the marks are timed by position in that very text.
  */
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from './fixtures'
 import { createProject } from './helpers'
 
 const password = 'sturdy-passw0rd'

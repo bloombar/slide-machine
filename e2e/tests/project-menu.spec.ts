@@ -3,7 +3,7 @@
  * project settings modal on the right tab, and Delete removes the project
  * after confirmation.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { createProject } from './helpers'
 
 const email = `project-menu-${Date.now()}@example.com`

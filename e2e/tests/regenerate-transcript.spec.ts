@@ -9,7 +9,7 @@
  * audio retention), since a slide can only be re-transcribed from audio the
  * server actually kept.
  */
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from './fixtures'
 import { createProject } from './helpers'
 
 const password = 'sturdy-passw0rd'

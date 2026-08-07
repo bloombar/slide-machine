@@ -4,7 +4,7 @@
  * inside it. Newly created projects sort by creation; a deck edit or a
  * project rename floats its project back to the top.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { createProject } from './helpers'
 
 const email = `home-order-${Date.now()}@example.com`
