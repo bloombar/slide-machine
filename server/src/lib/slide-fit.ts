@@ -8,6 +8,7 @@
  * languages (e.g. Mandarin) where "word" is undefined.
  */
 import type {
+  SlotSpec,
   LayoutConstraints,
   LayoutDescriptor,
   SlideGenerationResult,
@@ -31,8 +32,27 @@ const clampChars = (
   return `${(lastSpace > 0 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`
 }
 
-/** Effective budgets: per-slot maxChars (the WYSIWYG-ready form)
- * override the layout-level constraint for that slot. */
+/**
+ * The character ceiling a box actually has (TMPL-10).
+ *
+ * An author may set a limit in characters, in words, or both — words being how
+ * anyone thinks about prose. A word ceiling is converted at an average English
+ * word plus its space, which is approximate by design: these budgets are
+ * "about this long", and the fit is a trim at a word boundary, not a
+ * measurement. When both are set the tighter one wins, because an author who
+ * gave two limits meant both.
+ */
+const CHARS_PER_WORD = 6
+
+const slotCeiling = (spec: SlotSpec | undefined): number | undefined => {
+  if (!spec) return undefined
+  const fromWords = spec.maxWords ? spec.maxWords * CHARS_PER_WORD : undefined
+  if (spec.maxChars && fromWords) return Math.min(spec.maxChars, fromWords)
+  return spec.maxChars ?? fromWords
+}
+
+/** Effective budgets: a box's own limits (the WYSIWYG-ready form)
+ * override the layout-level constraint for that box. */
 const budgetsFor = (
   result: SlideGenerationResult,
   descriptors: LayoutDescriptor[],
@@ -40,7 +60,7 @@ const budgetsFor = (
   const layout = descriptors.find(d => d.type === result.layoutType)
   const constraints = layout?.constraints ?? {}
   const slotChars = (name: string): number | undefined =>
-    layout?.slots.find(s => s.name === name)?.maxChars
+    slotCeiling(layout?.slots.find(s => s.name === name))
   // A bullet box may say how many points it holds; that is more specific than
   // the layout's own count, so it wins.
   const slotBullets = layout?.slots.find(s => s.kind === 'bullets')?.maxItems

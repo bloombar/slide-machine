@@ -493,6 +493,51 @@ describe('how much a box holds', () => {
     expect(saved(onSave).layouts[0]!.slots[0]!.maxChars).toBe(25)
   })
 
+  it('takes an authoring instruction for the AI (TMPL-10)', () => {
+    const onSave = renderEditor()
+    selectBox('title')
+    fireEvent.change(screen.getByLabelText('What goes in it (for the AI)'), {
+      target: { value: 'A runnable Python snippet, at most eight lines.' },
+    })
+    expect(saved(onSave).layouts[0]!.slots[0]!.description).toBe(
+      'A runnable Python snippet, at most eight lines.',
+    )
+  })
+
+  it('caps the instruction, since it is sent with every phrase', () => {
+    renderEditor()
+    selectBox('title')
+    expect(
+      screen.getByLabelText('What goes in it (for the AI)'),
+    ).toHaveAttribute('maxlength', '200')
+  })
+
+  it('drops an instruction the author cleared', () => {
+    const onSave = renderEditor()
+    selectBox('title')
+    const field = screen.getByLabelText('What goes in it (for the AI)')
+    fireEvent.change(field, { target: { value: 'Something' } })
+    fireEvent.change(field, { target: { value: '' } })
+    // Absent, not empty: an empty quotation would still be sent
+    expect(saved(onSave).layouts[0]!.slots[0]!.description).toBeUndefined()
+  })
+
+  it('takes a word ceiling as well as a character one', () => {
+    const onSave = renderEditor()
+    selectBox('title')
+    fireEvent.change(screen.getByLabelText('Max words'), {
+      target: { value: '40' },
+    })
+    expect(saved(onSave).layouts[0]!.slots[0]!.maxWords).toBe(40)
+  })
+
+  it('marks a box the slide should always fill', () => {
+    const onSave = renderEditor()
+    selectBox('title')
+    fireEvent.click(screen.getByLabelText('The slide should always fill this'))
+    expect(saved(onSave).layouts[0]!.slots[0]!.required).toBe(true)
+  })
+
   it('offers a point count only to a list', () => {
     renderEditor()
     selectBox('title')

@@ -161,6 +161,58 @@ describe('per-slot budgets (WYSIWYG form)', () => {
   })
 })
 
+describe('a box’s own limits (TMPL-10)', () => {
+  /** A layout whose body box is limited the way an author would state it. */
+  const withBody = (spec: Record<string, unknown>): LayoutDescriptor[] => [
+    {
+      type: 'content',
+      label: 'Content',
+      purpose: 'body',
+      slots: [
+        { name: 'title', kind: 'text', label: 'Slide title' },
+        { name: 'body', kind: 'text', label: 'Slide body', ...spec },
+      ],
+    } as LayoutDescriptor,
+  ]
+
+  const body = (limits: Record<string, unknown>, text: string) =>
+    clampToBudget(
+      result({ action: 'new', layoutType: 'content', slots: { body: text } }),
+      withBody(limits),
+    ).slots.body!
+
+  it('honours a ceiling stated in words', () => {
+    // Authors think about prose in words; the system converts and trims
+    const trimmed = body({ maxWords: 3 }, 'one two three four five six seven')
+    expect(trimmed.length).toBeLessThan(
+      'one two three four five six seven'.length,
+    )
+    expect(trimmed).toContain('one two three')
+  })
+
+  it('takes the tighter of a word and a character ceiling', () => {
+    const long = 'alpha bravo charlie delta echo foxtrot golf hotel india'
+    // 3 words is tighter than 200 chars, so 3 words wins
+    const byWords = body({ maxWords: 3, maxChars: 200 }, long)
+    // ...and 10 chars is tighter than 50 words, so the chars win
+    const byChars = body({ maxWords: 50, maxChars: 10 }, long)
+    expect(byWords.length).toBeLessThan(long.length)
+    expect(byChars.length).toBeLessThanOrEqual(11)
+  })
+
+  it('leaves content alone when it is within both', () => {
+    expect(body({ maxWords: 20, maxChars: 200 }, 'short enough')).toBe(
+      'short enough',
+    )
+  })
+
+  it('holds the limit whatever the model returned', () => {
+    // The point of TMPL-10: instructions steer the model, limits bind it
+    const over = body({ maxChars: 12 }, 'x'.repeat(500))
+    expect(over.length).toBeLessThanOrEqual(13)
+  })
+})
+
 describe('helpers', () => {
   it('counts characters and synthesizes titles from phrases', () => {
     expect(charCount('  one two   three ')).toBe(15)

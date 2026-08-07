@@ -767,6 +767,86 @@ describe('layouts an author named themselves (TMPL-9)', () => {
   })
 })
 
+describe('slot metadata (TMPL-10)', () => {
+  const own = async () =>
+    (await act(ada, 'template.duplicate', { templateId: builtinId() })).body
+
+  /** The template's content layout with its first box annotated — which is
+   * what an author does: pick a box and say what it is for. */
+  const annotate = (
+    template: { layouts: { type: string; slots: unknown[] }[] },
+    metadata: Record<string, unknown>,
+  ) =>
+    template.layouts.map(l =>
+      l.type === 'content'
+        ? {
+            ...l,
+            slots: l.slots.map((s, i) =>
+              i === 0 ? { ...(s as object), ...metadata } : s,
+            ),
+          }
+        : l,
+    )
+
+  const authored = {
+    description: 'A runnable Python snippet, at most eight lines.',
+    maxChars: 400,
+    maxWords: 60,
+    required: true,
+    options: { language: 'python' },
+  }
+
+  it('saves what the author wrote and gives it back', async () => {
+    const template = await own()
+    const res = await act(ada, 'template.update', {
+      templateId: template.id,
+      name: template.name,
+      theme: template.theme,
+      layouts: annotate(template, authored),
+    })
+    expect(res.status, JSON.stringify(res.body)).toBe(200)
+    const content = res.body.layouts.find(
+      (l: { type: string }) => l.type === 'content',
+    )
+    expect(content.slots[0]).toMatchObject({
+      description: 'A runnable Python snippet, at most eight lines.',
+      maxChars: 400,
+      maxWords: 60,
+      required: true,
+      options: { language: 'python' },
+    })
+  })
+
+  it('refuses an instruction longer than the cap', async () => {
+    const template = await own()
+    const res = await act(ada, 'template.update', {
+      templateId: template.id,
+      name: template.name,
+      theme: template.theme,
+      // Untrusted author text on a per-phrase prompt
+      layouts: annotate(template, { description: 'x'.repeat(500) }),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('travels with the template through export', async () => {
+    const template = await own()
+    await act(ada, 'template.update', {
+      templateId: template.id,
+      name: template.name,
+      theme: template.theme,
+      layouts: annotate(template, authored),
+    })
+    const res = await act(ada, 'template.export', { templateId: template.id })
+    const yaml = Buffer.from(res.body.contentBase64, 'base64').toString('utf8')
+    // A template that exported without its instructions would come back a
+    // different template (TMPL-10 / EXP-2)
+    expect(yaml).toContain('A runnable Python snippet, at most eight lines.')
+    expect(yaml).toContain('maxWords')
+    expect(yaml).toContain('required')
+  })
+})
+
 describe('template.delete (TMPL-4)', () => {
   it('removes it from the library', async () => {
     const template = (

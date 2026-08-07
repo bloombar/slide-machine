@@ -92,19 +92,54 @@ export interface SlotSpec {
   name: string
   kind: SlotKind
   label: string
+  /**
+   * What this box is for, in the author's own words — "a runnable Python
+   * snippet, no more than eight lines"; "only a photograph of the figure
+   * under discussion" (TMPL-10).
+   *
+   * This is how a template teaches the AI to fill the box, and it is the
+   * mechanism by which a subject-specific template produces
+   * subject-appropriate slides. It is **data, never a command**: it describes
+   * the box to the model, is length-capped (`MAX_SLOT_DESCRIPTION`), and can
+   * never change how the system behaves. The system enforces the limits below
+   * whatever the model returns.
+   */
+  description?: string
   /** Text slots only: edit as a multi-line block. */
   multiline?: boolean
   /** Per-slot validation: approximate character ceiling. Overrides both the
    * layout-level constraint and the text style's default for this box. */
   maxChars?: number
+  /** Approximate word ceiling, for prose an author thinks of in words rather
+   * than characters. Applied alongside `maxChars`; the tighter one wins. */
+  maxWords?: number
   /** Bullet lists only: how many points this box holds. Overrides the
    * layout's `maxBullets` and the text style's default. */
   maxItems?: number
+  /** The layout expects this box filled. Advisory to the model, and reported
+   * rather than enforced — a half-filled slide is better than none. */
+  required?: boolean
+  /**
+   * Settings that only mean something for this box's kind — a code box's
+   * default language, a table's expected column count. Kept open because each
+   * kind defines its own, and validated per kind where one is known.
+   */
+  options?: Record<string, unknown>
   /** Reserved: per-slot styling authored in the template editor. */
   style?: Record<string, unknown>
   /** Reserved: arbitrary author metadata. */
   metadata?: Record<string, unknown>
 }
+
+/**
+ * How long an authoring instruction may be (TMPL-10).
+ *
+ * Live generation runs once per finalized phrase, so every descriptor byte
+ * costs latency; and an instruction is untrusted author text flowing into a
+ * prompt, which a cap bounds. Long enough for a real sentence, short enough
+ * that a layout's whole slot set stays cheap to send.
+ */
+export const MAX_SLOT_DESCRIPTION = 200
 
 /**
  * How one box paints itself and sets type inside it.

@@ -85,6 +85,90 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+describe('slot metadata reaching the model (TMPL-10)', () => {
+  /** The prompt the adapter actually sent. */
+  const promptFor = async (req: SlideGenerationRequest): Promise<string> => {
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'new', layoutType: 'content', slots: {} }),
+    )
+    await provider.generateSlideContent(req)
+    const [, init] = fetchMock.mock.calls[0]!
+    const body = JSON.parse(String(init.body))
+    return body.contents[0].parts[0].text as string
+  }
+
+  const authored = (slot: Record<string, unknown>) =>
+    request({
+      layoutDescriptors: [
+        {
+          type: 'content',
+          label: 'Content',
+          purpose: 'General slide',
+          slots: [
+            { name: 'title', kind: 'text', label: 'Slide title' },
+            { name: 'example', kind: 'text', label: 'Worked example', ...slot },
+          ],
+        },
+      ],
+    } as Partial<SlideGenerationRequest>)
+
+  it('sends the author’s instruction with the box it describes', async () => {
+    const prompt = await promptFor(
+      authored({ description: 'A runnable Python snippet, at most 8 lines.' }),
+    )
+    // The mechanism by which a subject-specific template produces
+    // subject-appropriate slides
+    expect(prompt).toContain('A runnable Python snippet, at most 8 lines.')
+    expect(prompt).toContain('example')
+  })
+
+  it('sends a word ceiling and a required flag alongside it', async () => {
+    const prompt = await promptFor(
+      authored({ maxWords: 40, required: true, description: 'A summary.' }),
+    )
+    expect(prompt).toContain('max 40 words')
+    expect(prompt).toContain('required')
+  })
+
+  it('says nothing extra for a box the author did not describe', async () => {
+    const prompt = await promptFor(authored({}))
+    // A conventional box's name says what it is; spending prompt on it
+    // would cost latency on every phrase for nothing
+    expect(prompt).toContain('title, example')
+  })
+
+  it('drops instructions rather than truncating, and says so', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const long = 'y'.repeat(190)
+    const manySlots = Array.from({ length: 40 }, (_, i) => ({
+      name: `box-${i}`,
+      kind: 'text' as const,
+      label: `Box ${i}`,
+      description: long,
+    }))
+    const prompt = await promptFor(
+      request({
+        layoutDescriptors: [
+          {
+            type: 'content',
+            label: 'Content',
+            purpose: 'General slide',
+            slots: manySlots,
+          },
+        ],
+      } as Partial<SlideGenerationRequest>),
+    )
+    // Every box is still offered — only the instructions gave way
+    expect(prompt).toContain('box-39')
+    expect(prompt).not.toContain(long)
+    // ...and never silently: the author has no other way to find out
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('dropped slot instructions'),
+    )
+    warn.mockRestore()
+  })
+})
+
 describe('GeminiGenerationProvider', () => {
   it('assembles the prompt from layers, layouts, and seeded images', async () => {
     fetchMock.mockResolvedValue(

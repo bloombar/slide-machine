@@ -25,6 +25,7 @@ import {
   type LayoutSlot,
   type SlotSpec,
   type Template,
+  MAX_SLOT_DESCRIPTION,
 } from '@slide-machine/shared'
 import { env } from '../config/env'
 
@@ -37,9 +38,16 @@ const slotFileSchema = z.union([
     name: z.string().min(1),
     kind: z.enum(['text', 'bullets', 'image']).optional(),
     label: z.string().min(1).optional(),
+    // The author's instruction to the AI (TMPL-10). Capped here rather than
+    // trusted: it is untrusted text that flows into a prompt, and every byte
+    // of it costs latency on a per-phrase call.
+    description: z.string().trim().max(MAX_SLOT_DESCRIPTION).optional(),
     multiline: z.boolean().optional(),
     maxChars: z.number().int().positive().optional(),
+    maxWords: z.number().int().positive().optional(),
     maxItems: z.number().int().positive().max(50).optional(),
+    required: z.boolean().optional(),
+    options: z.record(z.string(), z.unknown()).optional(),
     style: z.record(z.string(), z.unknown()).optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
   }),
@@ -67,9 +75,13 @@ export const normalizeSlot = (
     name,
     kind,
     label: raw.label ?? conventional?.label ?? name,
+    description: raw.description?.trim() || undefined,
     multiline: raw.multiline ?? conventional?.multiline,
     maxChars: raw.maxChars,
+    maxWords: raw.maxWords,
     maxItems: raw.maxItems,
+    required: raw.required,
+    options: raw.options,
     style: raw.style,
     metadata: raw.metadata,
   }

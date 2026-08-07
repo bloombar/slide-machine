@@ -400,6 +400,10 @@
     "maxItems": "Points max",
     "styleChars": "Caractères max pour {style}",
     "styleItems": "Points max pour {style}",
+    "slotInstructions": "Ce qu’il contient (pour l’IA)",
+    "slotInstructionsHint": "p. ex. un extrait Python exécutable, huit lignes au plus",
+    "slotRequired": "La diapositive devrait toujours le remplir",
+    "maxWords": "Mots max.",
     "update": {
       "heading": "Ce modèle a été mis à jour",
       "hintClean": "Les changements sont purement visuels — rien à ajuster sur vos diapositives.",
