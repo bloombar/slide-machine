@@ -18,6 +18,9 @@ import { loadPlans } from '../config/plans'
 import { UsageRecordModel } from '../models/usage-record'
 import { SubscriptionModel } from '../models/subscription'
 import { PlanLimitExceededError } from './limits'
+import { noteCapCrossing } from './cap-queue'
+import { recordCostEvent } from './cost-ledger'
+import type { PricingHint } from './pricing'
 
 /** Plans are read once: the file is deploy-time configuration, not per-request
  * state, and every metered call would otherwise re-read it from disk. */
@@ -130,6 +133,9 @@ export const adjustGauge = async (
       // update; without it the array is rejected as a malformed update object.
       { upsert: true, updatePipeline: true },
     )
+    // Only a gauge going *up* can approach a ceiling; giving space back never
+    // needs announcing.
+    if (delta > 0) noteCapCrossing(userId, metric, 'check')
   } catch (error) {
     console.error(`Failed to adjust ${metric} for ${userId}:`, error)
   }
@@ -142,12 +148,21 @@ export const adjustGauge = async (
  *
  * `billable: false` records the event at zero, so a cached hit still marks the
  * user as active without spending their allowance.
+ *
+ * Two things are written, and they are not the same thing. The counter is what
+ * the cap is checked against and is keyed to a billing period. The ledger row
+ * (BILL-7) is what the deployment spent and on whom, is keyed to nothing that
+ * resets, and outlives the entities it describes. Both are attempted here so
+ * that no metered call can update one and forget the other.
  */
 export const recordUsage = async (
   userId: string,
   metric: UsageMetric,
   quantity: number,
-  { billable = true }: { billable?: boolean } = {},
+  {
+    billable = true,
+    pricing,
+  }: { billable?: boolean; pricing?: PricingHint } = {},
 ): Promise<void> => {
   if (quantity < 0) return
   try {
@@ -161,9 +176,24 @@ export const recordUsage = async (
       },
       { upsert: true },
     )
+    // The counter moved, so the account may have crossed the point where it
+    // deserves a warning (BILL-8). Queued, never evaluated here: deciding
+    // needs the tier, and this runs on every metered call. A cache hit moves
+    // nothing and warrants nothing.
+    if (billable && quantity > 0) noteCapCrossing(userId, metric, 'check')
   } catch (error) {
     console.error(`Failed to record ${metric} usage for ${userId}:`, error)
   }
+  // Outside the try above: a counter that failed to move is still an event
+  // that happened, and the cost of it is still real. The ledger swallows its
+  // own failures, so this cannot throw either.
+  await recordCostEvent({
+    payerId: userId,
+    metric,
+    quantity,
+    billable,
+    pricing,
+  })
 }
 
 /** How much of a metric a user has spent this period — or, for a gauge, how
@@ -191,7 +221,15 @@ export const assertWithinCap = async (
   const cap = capFor(tier, metric)
   if (cap === null) return
   const used = await usedThisPeriod(userId, metric)
-  if (used >= cap) throw new PlanLimitExceededError(metric, cap, used, message)
+  if (used >= cap) {
+    // The refusal *is* the "reached" moment (BILL-8): a cap that blocks
+    // something is the point at which the payer has to be told, and it is the
+    // one place that knows work was actually turned away rather than merely
+    // that a counter is high. Queued, not sent — nobody waits on mail to be
+    // refused, and a viewer who triggered this is not the one notified.
+    noteCapCrossing(userId, metric, 'reached')
+    throw new PlanLimitExceededError(metric, cap, used, message)
+  }
 }
 
 /**

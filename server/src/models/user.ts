@@ -76,6 +76,12 @@ const userSchema = new Schema<UserDb>(
     // Lecturing/generation language: stored ONLY when explicitly chosen
     // (no default) — absent falls through to the browser's language
     language: { type: String, enum: LOCALES },
+    // Whether the account wants the advisory "you are close to a limit"
+    // email (BILL-8). Stored as an opt-OUT: everyone gets the warning until
+    // they say otherwise, because the whole point of it is reaching people who
+    // were not expecting a cap. The exhaustion notice has no switch — it
+    // explains why something the user just attempted did not happen.
+    notifyCapWarnings: { type: Boolean, default: true },
     projectDefaults: {
       type: { manualSlideAdvance: Boolean, animatedTransitions: Boolean },
       default: undefined,
@@ -140,6 +146,7 @@ export const toUserDto = (doc: HydratedDocument<UserDb>): SafeUser => ({
   locale: doc.locale,
   language: doc.language,
   projectDefaults: doc.projectDefaults,
+  notifyCapWarnings: doc.notifyCapWarnings !== false,
   planTier: effectivePlanTier(doc),
   planGrant: planGrantView(doc),
   billingProvider: doc.billingProvider,

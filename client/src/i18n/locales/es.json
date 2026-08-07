@@ -1174,7 +1174,8 @@
     "notice": {
       "approaching": "Estás cerca de algunos límites de tu plan",
       "reached": "Has alcanzado uno de los límites de tu plan",
-      "seeAll": "Ver todo el uso"
+      "seeAll": "Ver todo el uso",
+      "dismiss": "Descartar"
     },
     "metric": {
       "aiTokens": "Generación con IA",
@@ -1194,6 +1195,10 @@
     "errors": {
       "load": "No se pudo cargar tu uso"
     },
-    "plan": "Plan"
+    "plan": "Plan",
+    "settings": {
+      "warnEmails": "Avisarme por correo antes de agotarlo",
+      "warnEmailsHint": "Un aviso cuando un cupo está casi agotado. Los avisos de límite realmente alcanzado siempre se envían."
+    }
   }
 }

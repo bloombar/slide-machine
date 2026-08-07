@@ -6,6 +6,7 @@
 import type { Action } from './define'
 import type { ActionContext } from './context'
 import { runWithUsage } from '../billing/usage-context'
+import { entityFromInput } from '../billing/attribution-resolve'
 
 export class ActionNotFoundError extends Error {
   constructor(name: string) {
@@ -79,6 +80,23 @@ export const dispatch = async <O = unknown>(
   // Everything the action does — including provider calls several layers down —
   // is attributed to the acting user, so adapters can meter what they spend
   // without taking a userId through the vendor-neutral interfaces (BILL-3).
+  //
+  // Payer and actor are the same person here, and saying so explicitly is what
+  // lets the cost ledger separate an instructor's own spend from their
+  // audience's (BILL-7). The paths where they differ — a viewer's playback
+  // charged to a deck's owner — set their own attribution.
   const run = () => action.execute(ctx, parsed.data) as Promise<O>
-  return ctx.userId ? runWithUsage(ctx.userId, run) : run()
+  if (!ctx.userId) return run()
+
+  // Which lecture and project this belongs to, read off the input the action
+  // already declared (BILL-7). Doing it here rather than per action is what
+  // keeps sixty definitions from each needing an attribution hook that one of
+  // them would eventually forget. One indexed lookup, and only when the input
+  // names something; an action that names nothing attributes to the user
+  // alone, exactly as before.
+  const entity = await entityFromInput(parsed.data)
+  return runWithUsage(
+    { userId: ctx.userId, actorId: ctx.userId, ...entity },
+    run,
+  )
 }

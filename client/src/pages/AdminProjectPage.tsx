@@ -16,6 +16,7 @@
  */
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
+import CostPanel from '../components/admin/CostPanel'
 import {
   deleteAdminDeck,
   deleteAdminProject,
@@ -326,6 +327,8 @@ export default function AdminProjectPage() {
           </button>
         </section>
       )}
+
+      {projectId && <CostPanel scope={{ kind: 'project', id: projectId }} />}
 
       {pending && (
         <ConfirmDialog

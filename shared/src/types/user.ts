@@ -57,6 +57,14 @@ export interface User {
   language?: Locale
   projectDefaults?: ProjectDefaults
   /**
+   * Whether the advisory "you are close to a limit" email is wanted (BILL-8).
+   * Defaults to true and is an opt-out, because the warning exists precisely
+   * for people who were not expecting a cap. The exhaustion notice has no
+   * switch: it explains why something the user just attempted did not happen,
+   * which makes it transactional rather than advisory.
+   */
+  notifyCapWarnings: boolean
+  /**
    * What the account may spend against (BILL-3). On the wire this is the
    * **effective** tier: normally what its billing entitles it to, but the
    * granted tier while a complimentary grant is in effect (ADMIN-9). Stored,

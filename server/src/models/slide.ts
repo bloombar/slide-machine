@@ -2,7 +2,8 @@
  * Slide model (SPEC §15 / GEN-6/GEN-7). layoutType is AI-chosen from the
  * template's descriptors; imageSource records provenance (IMG-4).
  */
-import { Schema, model, Types, type HydratedDocument } from 'mongoose'
+import { Schema, Types, type HydratedDocument } from 'mongoose'
+import { defineModel } from './define-model'
 import {
   type ImageAttribution,
   type Slide,
@@ -149,7 +150,9 @@ slideSchema.index(
 
 slideSchema.plugin(softDeletePlugin)
 
-export const SlideModel = model<SlideDb>('Slide', slideSchema)
+// Reachable from the action graph — the dispatcher resolves a lecture and
+// project for cost attribution (BILL-7), which some specs re-evaluate.
+export const SlideModel = defineModel<SlideDb>('Slide', slideSchema)
 
 /**
  * Normalizes a stored attribution value to the DTO shape. Legacy rows

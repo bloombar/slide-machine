@@ -1174,7 +1174,8 @@
     "notice": {
       "approaching": "You are close to some of your plan's limits",
       "reached": "You have reached one of your plan's limits",
-      "seeAll": "See all usage"
+      "seeAll": "See all usage",
+      "dismiss": "Dismiss"
     },
     "metric": {
       "aiTokens": "AI generation",
@@ -1194,6 +1195,10 @@
     "errors": {
       "load": "Could not load your usage"
     },
-    "plan": "Plan"
+    "plan": "Plan",
+    "settings": {
+      "warnEmails": "Email me before I run out",
+      "warnEmailsHint": "A heads-up when an allowance is nearly spent. Notices about a limit that has actually been reached are always sent."
+    }
   }
 }

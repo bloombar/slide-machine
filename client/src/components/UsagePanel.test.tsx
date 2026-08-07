@@ -4,10 +4,21 @@
  * visibly apart.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { UsageMetricSummary } from '@slide-machine/shared'
+import { AuthProvider } from '../auth/AuthContext'
 import UsagePanel from './UsagePanel'
 import { mockFetchRoutes } from '../test/fetch-mock'
+
+/** The signed-in account the panel's notification toggle reads (BILL-8). */
+const user = {
+  id: 'u1',
+  displayName: 'Ada',
+  email: 'ada@example.com',
+  planTier: 'free',
+  profileVisibility: 'public',
+  notifyCapWarnings: true,
+}
 
 const metric = (
   over: Partial<UsageMetricSummary> = {},
@@ -27,6 +38,14 @@ const renderPanel = (
   { status = 200, tier = 'free' } = {},
 ) => {
   mockFetchRoutes({
+    '/api/auth/refresh': () => ({
+      status: 200,
+      body: { user, accessToken: 't' },
+    }),
+    '/api/actions/user.setCapWarnings': () => ({
+      status: 200,
+      body: { ...user, notifyCapWarnings: false },
+    }),
     '/api/actions/user.usage': () => ({
       status,
       body:
@@ -40,7 +59,11 @@ const renderPanel = (
           : { error: { code: 'server_error', message: 'no' } },
     }),
   })
-  render(<UsagePanel />)
+  render(
+    <AuthProvider>
+      <UsagePanel />
+    </AuthProvider>,
+  )
 }
 
 beforeEach(() => vi.clearAllMocks())
@@ -95,6 +118,23 @@ describe('UsagePanel', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Could not load your usage',
     )
+  })
+
+  it('offers to silence the early warning, and says what stays on', async () => {
+    // BILL-8: only the advisory email is switchable, and the panel says so
+    // rather than leaving the user to find out by missing something.
+    renderPanel()
+
+    const toggle = await screen.findByRole('checkbox', {
+      name: /Email me before I run out/,
+    })
+    expect(toggle).toBeChecked()
+    expect(
+      screen.getByText(/limit that has actually been reached are always sent/i),
+    ).toBeInTheDocument()
+
+    fireEvent.click(toggle)
+    await waitFor(() => expect(toggle).not.toBeChecked())
   })
 
   it('does not offer an upgrade to the largest plan', async () => {

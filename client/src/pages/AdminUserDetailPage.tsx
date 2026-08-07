@@ -22,6 +22,7 @@
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
+import CostPanel from '../components/admin/CostPanel'
 import { LOCALE_LABELS, type Locale } from '@slide-machine/shared'
 import {
   banAdminUserEmail,
@@ -505,6 +506,8 @@ export default function AdminUserDetailPage() {
           <DetailRow label="Lectures" value={String(detail.deckCount)} />
         </dl>
       </section>
+
+      {userId && <CostPanel scope={{ kind: 'user', id: userId }} />}
 
       <section className="mt-8">
         <div className="mb-3">
