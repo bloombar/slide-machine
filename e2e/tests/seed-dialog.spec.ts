@@ -5,7 +5,7 @@
  * toolbar reopens the dialog during the lecture. Dismissing begins the
  * live session.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { createProject } from './helpers'
 
 const email = `seeddialog-${Date.now()}@example.com`

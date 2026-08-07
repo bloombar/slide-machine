@@ -78,6 +78,17 @@ Standard "forgot password" flow: time-limited, single-use reset link sent by ema
 
 Each user has a profile (display name, bio, avatar, **preferred locale**) and owns their projects, decks, and templates. The preferred locale drives the UI language ([TECH-12](#tech-12-internationalization-i18n--localization)); it is stored only once the user picks one, and the browser's language decides until then. Authorization enforces that users may only modify their own resources (except admins — [§20](#20-administration-operations--moderation), whose authorization comes from the allowlist, not ownership).
 
+#### AUTH-6 Account type & privacy defaults
+
+After signing in, an account with no `accountType` yet is asked, once, which of **student**, **educator**, or **other** describes it ([§3](#3-personas--roles)). The answer is a self-declaration, not a permission — it grants and withholds nothing — and its only effect is to choose the **privacy defaults the account's work starts from**:
+
+- **Student** — the account defaults to **private**: its profile page is private ([SHARE-1](#share-1-saved-deck-viewer--permalink)) and each new project is created **restricted**, so lectures inside it are visible only to the owner and whoever they share with. Coursework is the student's own until they decide to publish it, and the public default would publish it for them ([P-1](#16-privacy-security--compliance)/[P-2](#16-privacy-security--compliance)).
+- **Educator** and **Other** — the public defaults the product is built around are kept: a public profile and public new projects, so a lecture can be shared by link the moment it exists.
+
+These are **defaults for new work, not a lock**. Every project and lecture keeps its own visibility control ([SHARE-1](#share-1-saved-deck-viewer--permalink)), the profile toggle stays where it was ([AUTH-5](#auth-5-profile--ownership)), and existing content is never re-scoped by an answer. The type itself is editable afterwards in account settings; changing it changes what new work starts as and deliberately leaves settings the user has since chosen alone. The **first** answer is the one that applies the defaults.
+
+The prompt is asked but not enforced — because all three answers are valid and "other" is the way past it, there is nothing to skip. It is asked of accounts that predate the question too, since they have no answer stored either. The unverified-email restriction ([AUTH-3](#auth-3-email-verification)) is independent and still applies: whichever is stricter wins, so an unverified educator's first projects are still restricted.
+
 ### 5. Plans, Billing & Usage Limits
 
 #### BILL-1 Subscription tiers
@@ -948,7 +959,7 @@ Every action in the action/command layer ([TECH-13](#tech-13-application-actionc
 
 Indicative MongoDB collections, expressed as shared TypeScript types ([TECH-6](#tech-6-shared-types--data-models)):
 
-- **User** — `{ id, email, displayName, passwordHash, emailVerified, bio, avatarUrl, locale: 'en'|'fr'|'es'|'ru'|'zh', projectDefaults?: { manualSlideAdvance?, animatedTransitions?, ... }, planTier: 'free'|'pro'|'max', planGrant?: { tier, expiresAt, grantedAt, grantedBy, grantedByEmail, note? }, billingProvider?, billingCustomerId?, createdAt }` (`projectDefaults` apply to all new projects unless overridden — GEN-8; `planTier` is what the account **pays** for and `planGrant` an admin's complimentary plan on top of it — what it may spend is the larger of the two, [ADMIN-9](#admin-9-complimentary-plan-grants))
+- **User** — `{ id, email, displayName, passwordHash, emailVerified, profileVisibility: 'public'|'private', accountType?: 'student'|'educator'|'other', bio, avatarUrl, locale: 'en'|'fr'|'es'|'ru'|'zh', projectDefaults?: { manualSlideAdvance?, animatedTransitions?, ... }, planTier: 'free'|'pro'|'max', planGrant?: { tier, expiresAt, grantedAt, grantedBy, grantedByEmail, note? }, billingProvider?, billingCustomerId?, createdAt }` (`projectDefaults` apply to all new projects unless overridden — GEN-8; `accountType` is absent until the post-sign-in prompt is answered, and chooses the account's privacy defaults — AUTH-6; `planTier` is what the account **pays** for and `planGrant` an admin's complimentary plan on top of it — what it may spend is the larger of the two, [ADMIN-9](#admin-9-complimentary-plan-grants))
 - **Subscription** — `{ id, userId, tier, billingProvider, billingCustomerId, providerSubscriptionId, status: 'active'|'past_due'|'canceled', currentPeriodStart, currentPeriodEnd, cancelAtPeriodEnd }` (provider-neutral by design — a discriminator plus opaque references, TECH-9)
 - **UsageRecord** — `{ id, userId, period, metric: 'aiTokens'|'sttMinutes'|'diarizationMinutes'|'ttsCharacters'|'ttsPremiumCharacters'|'aiImages'|'imageLookups'|'importMb'|'exports'|'translationCharacters'|'audioStorageMb'|'audienceTtsCharacters'|'audienceLocales', used, cap }` (BILL-3; `audioStorageMb` is a gauge — current holdings, not a per-period total)
 - **CostEvent** — `{ id, userId, actorUserId?, actorRole: 'instructor'|'student'|'anonymous', projectId?, deckId?, deckTitle, service, metric, eventKind: 'billable'|'cached', units, unitPrice, cost, createdAt }` (append-only cost ledger — BILL-7; cost frozen at write time, rows never cascade-deleted, `deckTitle` denormalized so a deleted lecture keeps its history)

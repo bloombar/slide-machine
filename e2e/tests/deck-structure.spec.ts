@@ -5,7 +5,7 @@
  * outline + positional signals the server now sends the model. Runs against the
  * built app + test MongoDB with the mock provider, like the other specs.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { createProject } from './helpers'
 
 const password = 'sturdy-passw0rd'

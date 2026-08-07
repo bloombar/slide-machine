@@ -158,6 +158,10 @@ describe('AdminUserDetailPage', () => {
     expect(
       screen.getByRole('link', { name: 'View public profile' }),
     ).toHaveAttribute('href', '/u/u1')
+    // The account type says why this account's work defaults as it does,
+    // and reads as unanswered rather than blank when it is (AUTH-6)
+    expect(within(details).getByText('Account type')).toBeVisible()
+    expect(within(details).getByText('Not answered')).toBeVisible()
   })
 
   it('edits no settings of its own, pointing at Account Settings', async () => {

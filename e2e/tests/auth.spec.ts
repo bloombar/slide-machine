@@ -3,7 +3,7 @@
  * the built app: register → authenticated home → session survives reload →
  * create project → logout → login → data still there.
  */
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from './fixtures'
 import { createProject } from './helpers'
 
 const email = `e2e-${Date.now()}@example.com`

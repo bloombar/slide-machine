@@ -12,7 +12,7 @@
  * the picture three quarters as tall as its row. If a tree drifts, one of
  * these moves.
  */
-import { test, expect, type Locator, type Page } from '@playwright/test'
+import { test, expect, type Locator, type Page } from './fixtures'
 import { createProject } from './helpers'
 
 const stamp = Date.now()

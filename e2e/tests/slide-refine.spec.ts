@@ -5,7 +5,7 @@
  * the level it refined at into the slide's caption, so the chosen strength is
  * checkable in the action's result.
  */
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from './fixtures'
 import { createProject } from './helpers'
 
 const password = 'sturdy-passw0rd'

@@ -3,7 +3,7 @@
  * lecture's Privacy & Sharing settings; Delete confirms in a dialog
  * and removes the lecture from the list.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { createProject } from './helpers'
 
 const email = `menu-${Date.now()}@example.com`

@@ -168,6 +168,9 @@
       "privacy": "Privacidad"
     },
     "accountTypeSection": "Tipo de cuenta",
+    "planSection": "Plan",
+    "accountTypeSectionHint": "Para qué usas Slide Machine. Determina la privacidad con la que empiezan tus nuevas clases.",
+    "accountTypeUnset": "Sin definir",
     "publicProfileSectionHint": "Se guarda al escribir. Lo que ven los desconocidos en tu perfil.",
     "privacySectionHint": "Quién puede ver tu perfil y las clases que aparecen en él.",
     "delete": {
@@ -175,6 +178,28 @@
       "hint": "Eliminar tu cuenta borra definitivamente tus proyectos, clases y diapositivas. Esta acción no se puede deshacer.",
       "title": "¿Eliminar tu cuenta?",
       "message": "Tu cuenta y todos sus proyectos, clases y diapositivas se eliminarán definitivamente."
+    }
+  },
+  "accountType": {
+    "student": {
+      "label": "Estudiante",
+      "hint": "Tu perfil y tus nuevas clases empiezan como privados."
+    },
+    "educator": {
+      "label": "Docente",
+      "hint": "Tu perfil y tus nuevas clases empiezan como públicos."
+    },
+    "other": {
+      "label": "Otro",
+      "hint": "Tu perfil y tus nuevas clases empiezan como públicos."
+    }
+  },
+  "onboarding": {
+    "accountType": {
+      "title": "¿Qué te describe mejor?",
+      "hint": "Esto solo determina la privacidad con la que empieza tu trabajo. En ningún caso se te oculta nada.",
+      "changeable": "Puedes cambiarlo cuando quieras en Ajustes.",
+      "error": "No se pudo guardar tu respuesta. Inténtalo de nuevo."
     }
   },
   "language": {

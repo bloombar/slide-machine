@@ -6,7 +6,7 @@
  * in the audit log. The console's user, project, and lecture pages carry
  * no settings editor of their own.
  */
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from './fixtures'
 import {
   createProject,
   openProjectSettings,

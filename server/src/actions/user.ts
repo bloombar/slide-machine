@@ -1,21 +1,27 @@
 /**
  * User account settings actions (AUTH-5): the display name and bio shown
  * on the profile, the profile visibility that gates the public profile
- * page (SHARE-1), and the lecturing and interface languages. Every change
- * is recorded in the settings change log — see docs/ADMINISTRATION.md
- * ("Settings change log").
+ * page (SHARE-1), the account type that chooses the account's privacy
+ * defaults (AUTH-6), and the lecturing and interface languages. Every
+ * change is recorded in the settings change log — see
+ * docs/ADMINISTRATION.md ("Settings change log").
  */
 import { z } from 'zod'
 import type { HydratedDocument } from 'mongoose'
 import type {
   SafeUser,
   UsageSummaryResponse,
+  UserSetAccountTypeInput,
   UserSetLanguageInput,
   UserSetLocaleInput,
   UserSetProfileVisibilityInput,
   UserUpdateProfileInput,
 } from '@slide-machine/shared'
-import { LOCALES } from '@slide-machine/shared'
+import {
+  ACCOUNT_TYPES,
+  LOCALES,
+  accountDefaultsToPrivate,
+} from '@slide-machine/shared'
 import { defineAction } from './define'
 import { self, type SelfAccess } from './access'
 import { registerAction } from './dispatch'
@@ -94,6 +100,41 @@ export const userSetProfileVisibility = defineAction<
 })
 
 registerAction(userSetProfileVisibility)
+
+/**
+ * Answers the post-sign-in prompt (AUTH-6) and, the first time only,
+ * settles the account's privacy defaults from it: a student's profile
+ * starts private, everyone else's stays public. Projects read the type
+ * directly when they are created (actions/project.ts), so nothing else
+ * has to be written here.
+ *
+ * Only the FIRST answer applies the defaults. Changing the type later
+ * changes what new work starts as, and deliberately leaves the profile
+ * alone: by then the visibility toggle beside it may hold a choice the
+ * user actually made, and silently reversing it would be worse than
+ * asking them to press one more control.
+ */
+export const userSetAccountType = defineAction<
+  UserSetAccountTypeInput,
+  SafeUser
+>({
+  name: 'user.setAccountType',
+  input: z.object({ accountType: z.enum(ACCOUNT_TYPES) }),
+  execute: async (ctx, input) => {
+    const user = await loadSelf(ctx.userId)
+    const before = userSettingsSnapshot(user)
+    const first = user.accountType === undefined
+    user.accountType = input.accountType
+    if (first && accountDefaultsToPrivate(input.accountType)) {
+      user.profileVisibility = 'private'
+    }
+    await user.save()
+    await recordSelfChange(user, before)
+    return toUserDto(user)
+  },
+})
+
+registerAction(userSetAccountType)
 
 /** Explicit lecturing/generation language on the profile; null clears
  * it so the browser default applies again. */

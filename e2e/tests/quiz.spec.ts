@@ -6,7 +6,7 @@
  * (QUIZ_PROVIDER=mock), so the full flow runs with the live front/back end and
  * test DB.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { createProject } from './helpers'
 
 // The copy button writes to the clipboard, which headless Chromium blocks
