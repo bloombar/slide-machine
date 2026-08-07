@@ -1143,7 +1143,8 @@
     "forbidden": "你没有执行该操作的权限",
     "internal_error": "我们这边出了点问题——请重试",
     "unknown_error": "出了点问题——请重试",
-    "email_unverified": "请先确认你的邮箱地址——查看收件箱，或在账户设置中发送新链接"
+    "email_unverified": "请先确认你的邮箱地址——查看收件箱，或在账户设置中发送新链接",
+    "capability_required": "请先关联 Google 账号 — 可在账号设置中完成"
   },
   "usage": {
     "title": "套餐用量",

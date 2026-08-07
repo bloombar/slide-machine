@@ -23,6 +23,10 @@ export const GLOBAL_ERROR_CODES = [
   // Means one thing wherever it is thrown: confirm your address first
   // (AUTH-3), and here is how.
   'email_unverified',
+  // The account may reach the thing but is not equipped for the operation —
+  // today, no Google account connected (TECH-14). Like email_unverified, the
+  // user can fix it, so it must not read as a flat refusal.
+  'capability_required',
   'forbidden',
   'internal_error',
   'unknown_error',

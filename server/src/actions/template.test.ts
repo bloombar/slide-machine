@@ -22,7 +22,7 @@ const ctx: ActionContext = {
 describe('template.export', () => {
   it('exports a built-in template as downloadable YAML', async () => {
     const id = listBuiltinTemplates()[0]!.id
-    const res = await templateExport.execute(ctx, { templateId: id })
+    const res = await templateExport.execute(ctx, { templateId: id }, undefined)
     expect(res.fileName).toMatch(/\.template\.yaml$/)
     expect(res.mimeType).toBe('application/x-yaml')
     const parsed = YAML.parse(
@@ -37,14 +37,18 @@ describe('template.export', () => {
   // other by probing.
   it('refuses an unknown template', async () => {
     await expect(
-      templateExport.execute(ctx, { templateId: 'does-not-exist' }),
+      templateExport.execute(ctx, { templateId: 'does-not-exist' }, undefined),
     ).rejects.toBeInstanceOf(ActionForbiddenError)
   })
 
   it('refuses an anonymous caller', async () => {
     const id = listBuiltinTemplates()[0]!.id
     await expect(
-      templateExport.execute({ requestId: 'test-request' }, { templateId: id }),
+      templateExport.execute(
+        { requestId: 'test-request' },
+        { templateId: id },
+        undefined,
+      ),
     ).rejects.toBeInstanceOf(ActionForbiddenError)
   })
 })
