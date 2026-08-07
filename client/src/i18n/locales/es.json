@@ -419,7 +419,11 @@
     "exportSlidesHint": "Guarda este diseño en tu Drive como una presentación cuyos diseños de diapositiva son sus maquetas, con una diapositiva de muestra por cada una.",
     "exportSlidesDone": "Guardado en Drive: abrir en Google Slides",
     "exportSlidesError": "No se pudo guardar el diseño en Drive: inténtalo de nuevo",
-    "exportSlidesConnect": "Conecta una cuenta de Google para guardar diseños en Drive."
+    "exportSlidesConnect": "Conecta una cuenta de Google para guardar diseños en Drive.",
+    "exportHeading": "Exportar este diseño",
+    "exportHint": "Llévatelo como archivo, o a tu Google Drive como una presentación cuyas maquetas son las suyas.",
+    "exportAsYaml": "Como YAML",
+    "exportToSlides": "Como Google Slides"
   },
   "layout": {
     "change": "Cambiar el diseño de la diapositiva",

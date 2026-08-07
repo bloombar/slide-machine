@@ -13,7 +13,7 @@
  * and NO extra OAuth scope — it works for any connected account.
  */
 import { deckToPptx } from './deck-pptx'
-import { templateToPptx } from './template-pptx'
+import { templateToPptx, templatePictures } from './template-pptx'
 import type { Template } from '@slide-machine/shared'
 import type { ExportDeck } from './deck-yaml'
 import { clientForRefreshToken } from '../auth/google-connect'
@@ -148,7 +148,7 @@ export const createGoogleSlidesFromTemplateLive = async (
   template: Template,
   folderId = 'root',
 ): Promise<DriveFile> => {
-  const pptx = await templateToPptx(template)
+  const pptx = await templateToPptx(template, await templatePictures(template))
   return uploadFileToDriveLive(
     refreshToken,
     {

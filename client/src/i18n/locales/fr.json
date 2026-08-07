@@ -419,7 +419,11 @@
     "exportSlidesHint": "Enregistre cette conception dans votre Drive sous forme de présentation dont les mises en page sont les siennes, avec une diapositive de démonstration pour chacune.",
     "exportSlidesDone": "Enregistré dans Drive — ouvrir dans Google Slides",
     "exportSlidesError": "Impossible d’enregistrer la conception dans Drive — réessayez",
-    "exportSlidesConnect": "Connectez un compte Google pour enregistrer des conceptions dans Drive."
+    "exportSlidesConnect": "Connectez un compte Google pour enregistrer des conceptions dans Drive.",
+    "exportHeading": "Exporter cette conception",
+    "exportHint": "Emportez-la sous forme de fichier, ou dans votre Google Drive en présentation dont les mises en page sont les siennes.",
+    "exportAsYaml": "En YAML",
+    "exportToSlides": "En Google Slides"
   },
   "layout": {
     "change": "Changer la mise en page",

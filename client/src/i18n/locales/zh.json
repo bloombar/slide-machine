@@ -419,7 +419,11 @@
     "exportSlidesHint": "把这个设计保存到你的云端硬盘，成为一份以它的版式为版式的演示文稿，每种版式配一张示例幻灯片。",
     "exportSlidesDone": "已保存到云端硬盘——在 Google Slides 中打开",
     "exportSlidesError": "无法把设计保存到云端硬盘——请重试",
-    "exportSlidesConnect": "连接 Google 账户后即可把设计保存到云端硬盘。"
+    "exportSlidesConnect": "连接 Google 账户后即可把设计保存到云端硬盘。",
+    "exportHeading": "导出这个设计",
+    "exportHint": "以文件形式带走，或存到你的 Google 云端硬盘，成为一份以它的版式为版式的演示文稿。",
+    "exportAsYaml": "导出为 YAML",
+    "exportToSlides": "导出为 Google Slides"
   },
   "layout": {
     "change": "更改幻灯片版式",

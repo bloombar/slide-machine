@@ -98,9 +98,7 @@ test('export a design to Google Slides in Drive (EXP-6)', async ({ page }) => {
   await dialog.getByRole('button', { name: 'Connect Google' }).click()
   await dialog.getByRole('tab', { name: 'Design' }).click()
 
-  await dialog
-    .getByRole('button', { name: 'Export design to Google Slides' })
-    .click()
+  await dialog.getByRole('button', { name: 'As Google Slides' }).click()
 
   const picker = page.getByRole('dialog', { name: 'Choose a Drive folder' })
   await expect(picker).toBeVisible()
