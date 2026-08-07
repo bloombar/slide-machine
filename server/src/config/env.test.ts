@@ -51,6 +51,36 @@ describe('parseEnv STT_CAPTURE_SAMPLE_RATE', () => {
   })
 })
 
+describe('parseEnv BILLING_PROVIDER production guard', () => {
+  // P-8. The webhook route is unauthenticated by necessity — its caller is a
+  // payment provider, not a user — so the signature is the only thing
+  // distinguishing the provider from a stranger. The mock adapter verifies
+  // nothing, which makes it a way to write a subscription row for any account
+  // a POST names. A deployment in that state cannot serve the route safely,
+  // so it does not start.
+  it('refuses the unsigned mock adapter in production', () => {
+    expect(() =>
+      parseEnv({ ...base, NODE_ENV: 'production', BILLING_PROVIDER: 'mock' }),
+    ).toThrow()
+  })
+
+  it('allows the mock adapter everywhere else', () => {
+    for (const NODE_ENV of ['development', 'test']) {
+      expect(
+        parseEnv({ ...base, NODE_ENV, BILLING_PROVIDER: 'mock' })
+          .BILLING_PROVIDER,
+      ).toBe('mock')
+    }
+  })
+
+  it('allows a real adapter in production', () => {
+    expect(
+      parseEnv({ ...base, NODE_ENV: 'production', BILLING_PROVIDER: 'stripe' })
+        .BILLING_PROVIDER,
+    ).toBe('stripe')
+  })
+})
+
 describe('parseEnv PUBLIC_BASE_URL normalization', () => {
   it('strips a trailing slash (DO ${_self.PUBLIC_URL} includes one)', () => {
     const env = parseEnv({

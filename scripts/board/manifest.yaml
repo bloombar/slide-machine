@@ -1622,7 +1622,11 @@
   full: Payments are processed by the configured billing provider (Stripe by
     default); the app stores no raw card data. Provider webhooks are
     signature-verified; only minimal, provider-neutral billing references
-    (billingCustomerId, subscription status) are stored.
+    (billingCustomerId, subscription status) are stored. The webhook route is
+    unauthenticated by necessity — its caller is the provider, not a user — so
+    the signature is the only thing separating the two, and an adapter that does
+    not check one (the in-memory mock) is refused at boot in production rather
+    than left to serve the endpoint.
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 3

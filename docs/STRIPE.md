@@ -17,7 +17,11 @@ dashboard; live mode additionally needs your business details submitted and
 approved before it can charge anyone.
 
 To skip Stripe entirely in development, set `BILLING_PROVIDER=mock` — an
-in-memory adapter with no network calls, which is what dev and e2e use.
+in-memory adapter with no network calls, which is what dev and e2e use. It
+accepts webhook deliveries unsigned, which is the point of it and also why the
+server **refuses to boot with it when `NODE_ENV=production`** ([P-8](SPEC.md#16-privacy-security--compliance)): the
+webhook route is unauthenticated by necessity, so without a signature to check,
+anyone who can reach it can put any account on any plan.
 
 ## 1. Create the product catalog
 
