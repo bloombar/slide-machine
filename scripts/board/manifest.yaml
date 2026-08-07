@@ -545,6 +545,24 @@
   status: Backlog
   review: true
   note: administration & moderation
+- id: ADMIN-9
+  title: Complimentary plan grants
+  full: 'An admin can put any account on a larger plan at no charge for a fixed
+    period — a pilot department, an instructor trialling Pro before their
+    institution buys it, an apology for an outage. It is the one exception to
+    "billing state is governed by §5" (ADMIN-5), and it is deliberately narrow:
+    it gives, it expires, and it never touches money. An expiry is mandatory,
+    and must be in the future. A grant without an end is an untracked discount
+    that outlives whoever approved it; requiring the date is what keeps a comped
+    account from silently becoming a permanent one. It can be ended early, which
+    lands in the same place expiry would. A grant only ever raises. What an
+    account may spend is the larger…'
+  section: §20 Administration, Operations & Moderation
+  family: ADMIN
+  phase: 2
+  status: Backlog
+  review: false
+  note: administration & moderation
 - id: AUTH-3
   title: Email verification
   full: Registration sends a verification link; unverified accounts have limited
@@ -996,7 +1014,8 @@
     provider-agnostic adapter (GEN-2 / TECH-8) and synthesized audio is cached
     per slide; usage is metered (BILL-3). Where a lecture's original audio was
     retained (P-6), the owner can also play a slide's original recording from
-    its menu."
+    its menu. A deck being read in a translated language is spoken in that
+    language (PLAY-3)."
   section: §10 Playback, Editing & Sharing
   family: PLAY
   phase: 2
@@ -1121,6 +1140,23 @@
   phase: 2
   status: Done
   review: false
+- id: SHARE-2
+  title: Post-lecture translated viewing
+  full: When viewing a saved deck, students and instructors can switch the
+    displayed language of the slide content to any supported locale (English,
+    French, Spanish, Russian, Mandarin — TECH-12). This is an on-demand,
+    post-lecture viewing option — distinct from the out-of-scope live/real-time
+    translated generation (§2.2). Translation uses Google Cloud Translation (key
+    already provisioned — TECH-4), behind a provider-agnostic adapter consistent
+    with GEN-2. Non-destructive — the translated text is an alternate view
+    layered over the deck; the original authored/generated content is preserved
+    and remains authoritative (machine translation may be imperfect).
+    Translations are computed on demand and cached…
+  section: §10 Playback, Editing & Sharing
+  family: SHARE
+  phase: 2
+  status: Done
+  review: false
 - id: SOC-1
   title: Voting
   full: Registered users can up/down-vote slide decks and style templates. Vote
@@ -1200,6 +1236,23 @@
   status: Backlog
   review: false
   note: billing-provider abstraction layer
+- id: TECH-12
+  title: Internationalization (i18n) & localization
+  full: "The application UI is fully internationalized — no hardcoded user-facing
+    strings. Supported locales at launch: English (en), French (fr), Spanish
+    (es), Russian (ru), and Mandarin Chinese (zh). All five are left-to-right;
+    the i18n layer should not preclude adding a right-to-left locale later (use
+    logical CSS properties and a per-document dir). Implementation — an i18n
+    library (e.g., react-i18next / FormatJS with ICU message format) with one
+    resource bundle per locale; pluralization and date/number/currency
+    formatting via the Intl API. Adding a locale is a resource-bundle addition,
+    not a code change. Locale selection — detected from the browser on every
+    visit and matched against the locales…"
+  section: §14 Technical Stack & Conventions
+  family: TECH
+  phase: 2
+  status: Done
+  review: false
 - id: TMPL-1
   title: Template library & preview
   full: A browsable template library lets users preview and select slide-style
@@ -1406,7 +1459,7 @@
     limit. The user is warned about what will be removed before confirming
     (P-10). There is no tier above Max. A Max user who needs more is directed to
     contact us for a custom arrangement rather than shown an upgrade that does
-    not exist.
+    not exist. An operator can give a…
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
@@ -1604,6 +1657,23 @@
   phase: 3
   status: Backlog
   review: false
+- id: PLAY-3
+  title: Narration in the translated language
+  full: A student reading a deck in a translated language (SHARE-2) can also hear
+    it in that language. Narration playback (PLAY-2) follows the language the
+    slides are being displayed in — whole deck or single slide, the same
+    controls, no separate switch. Reading the deck in its original language
+    narrates it as before. The spoken text is the slide's narration, translated
+    — sourceTranscript (§15) goes through the same translation adapter as the
+    slide's content and is cached in the same per-deck + locale entry (§15),
+    fingerprinted separately from the slide's content so that an edited
+    narration re-translates on its next play while the rest of the deck — and
+    the slide's own translated text — does not. A…
+  section: §10 Playback, Editing & Sharing
+  family: PLAY
+  phase: 3
+  status: Backlog
+  review: false
 - id: PREP-1
   title: Preflight concept extraction
   full: 'When a project has been seeded (SEED-1/SEED-2), the system can run an
@@ -1671,40 +1741,6 @@
   phase: 3
   status: Backlog
   review: false
-- id: SHARE-2
-  title: Post-lecture translated viewing
-  full: When viewing a saved deck, students and instructors can switch the
-    displayed language of the slide content to any supported locale (English,
-    French, Spanish, Russian, Mandarin — TECH-12). This is an on-demand,
-    post-lecture viewing option — distinct from the out-of-scope live/real-time
-    translated generation (§2.2). Translation uses Google Cloud Translation (key
-    already provisioned — TECH-4), behind a provider-agnostic adapter consistent
-    with GEN-2. Non-destructive — the translated text is an alternate view
-    layered over the deck; the original authored/generated content is preserved
-    and remains authoritative (machine translation may be imperfect).
-    Translations are computed on demand and cached…
-  section: §10 Playback, Editing & Sharing
-  family: SHARE
-  phase: 3
-  status: Backlog
-  review: false
-- id: TECH-12
-  title: Internationalization (i18n) & localization
-  full: "The application UI is fully internationalized — no hardcoded user-facing
-    strings. Supported locales at launch: English (en), French (fr), Spanish
-    (es), Russian (ru), and Mandarin Chinese (zh). All five are left-to-right;
-    the i18n layer should not preclude adding a right-to-left locale later (use
-    logical CSS properties and a per-document dir). Implementation — an i18n
-    library (e.g., react-i18next / FormatJS with ICU message format) with one
-    resource bundle per locale; pluralization and date/number/currency
-    formatting via the Intl API. Adding a locale is a resource-bundle addition,
-    not a code change. Locale selection — detected from the browser on every
-    visit and matched against the locales…"
-  section: §14 Technical Stack & Conventions
-  family: TECH
-  phase: 3
-  status: Backlog
-  review: false
 - id: FUTURE-a-remote-oauth-authenticated-multi-user-
   title: A remote, OAuth-authenticated, multi-user MCP server that exposes the…
   full: A remote, OAuth-authenticated, multi-user MCP server that exposes the
@@ -1738,18 +1774,6 @@
     grant addendum's long-term thesis) — the provider abstraction (GEN-2 /
     TECH-8) is built now so this is a configuration/adapter change later, not a
     rewrite.
-  section: §18 Future Work
-  family: FUTURE
-  phase: 4
-  status: Backlog
-  review: false
-- id: FUTURE-narrating-slides-in-the-students
-  title: Narrating slides in the student's translated language
-  full: Narrating slides in the student's translated language — pairing
-    text-to-speech narration (PLAY-2) with the post-lecture translated viewing
-    (SHARE-2) so a student can hear a deck spoken in their own locale (the base
-    narration and translated viewing exist; synthesizing the translated text is
-    the remaining step).
   section: §18 Future Work
   family: FUTURE
   phase: 4
