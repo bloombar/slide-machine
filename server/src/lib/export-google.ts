@@ -13,6 +13,8 @@
  * and NO extra OAuth scope — it works for any connected account.
  */
 import { deckToPptx } from './deck-pptx'
+import { templateToPptx, templatePictures } from './template-pptx'
+import type { Template } from '@slide-machine/shared'
 import type { ExportDeck } from './deck-yaml'
 import { clientForRefreshToken } from '../auth/google-connect'
 
@@ -127,6 +129,30 @@ export const createGoogleSlidesLive = async (
     refreshToken,
     {
       name: deck.title,
+      mimeType: PPTX_MIME,
+      data: pptx,
+      convertTo: GOOGLE_SLIDES_MIME,
+    },
+    folderId,
+  )
+}
+
+/**
+ * Creates a native Google Slides presentation from a style TEMPLATE (EXP-6):
+ * its layouts become the presentation's layouts, with one demonstration slide
+ * each. Same route as a deck — a .pptx uploaded with conversion — so it needs
+ * no Slides scope either.
+ */
+export const createGoogleSlidesFromTemplateLive = async (
+  refreshToken: string,
+  template: Template,
+  folderId = 'root',
+): Promise<DriveFile> => {
+  const pptx = await templateToPptx(template, await templatePictures(template))
+  return uploadFileToDriveLive(
+    refreshToken,
+    {
+      name: template.name,
       mimeType: PPTX_MIME,
       data: pptx,
       convertTo: GOOGLE_SLIDES_MIME,

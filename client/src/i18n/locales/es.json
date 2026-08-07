@@ -414,7 +414,16 @@
       "confirmUnplaced": "{count, plural, one {En # diapositiva, estas cajas no tienen equivalente en el nuevo diseño:} other {En # diapositivas, estas cajas no tienen equivalente en el nuevo diseño:}}",
       "confirmRemovedLayouts": "{count, plural, one {# diapositiva usa un diseño que ya no existe y se dejará como está.} other {# diapositivas usan diseños que ya no existen y se dejarán como están.}}",
       "confirmKept": "No se elimina nada. Lo que no tenga equivalente permanece en su diapositiva y solo deja de mostrarse, así que puedes recolocarlo donde quieras."
-    }
+    },
+    "exportSlides": "Exportar el diseño a Google Slides",
+    "exportSlidesHint": "Guarda este diseño en tu Drive como una presentación cuyos diseños de diapositiva son sus maquetas, con una diapositiva de muestra por cada una.",
+    "exportSlidesDone": "Guardado en Drive: abrir en Google Slides",
+    "exportSlidesError": "No se pudo guardar el diseño en Drive: inténtalo de nuevo",
+    "exportSlidesConnect": "Conecta una cuenta de Google para guardar diseños en Drive.",
+    "exportHeading": "Exportar este diseño",
+    "exportHint": "Llévatelo como archivo, o a tu Google Drive como una presentación cuyas maquetas son las suyas.",
+    "exportAsYaml": "Como YAML",
+    "exportToSlides": "Como Google Slides"
   },
   "layout": {
     "change": "Cambiar el diseño de la diapositiva",

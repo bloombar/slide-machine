@@ -2,8 +2,23 @@
  * Serializes a style template into a standards-based, human-readable YAML
  * document (SPEC EXP-2): both slide decks AND style templates can be exported.
  * The format captures the template's identity, its theme (colors/typography),
- * and its layout descriptors (structure), so the look can be shared or
- * re-imported (EXP-3) independently of a deck.
+ * and its layouts, so the look can be shared or re-imported (EXP-3)
+ * independently of a deck.
+ *
+ * "Its layouts" means the whole layout, not the descriptor. EXP-2 asks for a
+ * template's **geometry** — where each box sits and how it is styled — so the
+ * file describes the design fully enough to reconstruct it. A descriptor-only
+ * export says a layout has a picture box somewhere and nothing about where,
+ * which is a list of ingredients rather than a design, and cannot round-trip
+ * (EXP-3).
+ *
+ * So each layout carries:
+ *   - `slots` — name, kind, authoring instructions and limits (TMPL-9/TMPL-10)
+ *   - `tree` — the containers and boxes the design is built from, which is
+ *     what the author edits and what the renderer draws (TMPL-4)
+ *   - `elementPositions` — the same arrangement as absolute boxes, for the
+ *     readers that cannot run CSS, and the whole of an imported design (TMPL-8)
+ *   - `guides` — the guidelines its author worked to
  *
  * Produced with the `yaml` library (never hand-built) so output is always valid.
  */
@@ -21,15 +36,24 @@ export const templateToYaml = (template: Template): string => {
     id: template.id,
     name: template.name,
     visibility: template.visibility,
+    ...(template.renderMode ? { renderMode: template.renderMode } : {}),
     // The full visual theme (colors, typography) — the styling itself.
     theme: template.theme,
-    // The layout descriptors (structure): what each layout is for and its slots.
+    // Each layout in full: what it is for, what it holds, and how it is built.
     layouts: template.layouts.map(layout => ({
       type: layout.type,
       label: layout.label,
       purpose: layout.purpose,
       slots: layout.slots,
       ...(layout.constraints ? { constraints: layout.constraints } : {}),
+      ...(layout.tree ? { tree: layout.tree } : {}),
+      // Omitted when empty rather than written as `{}`: a layout that was
+      // never measured has no geometry to state, and saying so in the file
+      // would read as "it has none" instead of "it is in the tree".
+      ...(Object.keys(layout.elementPositions ?? {}).length
+        ? { elementPositions: layout.elementPositions }
+        : {}),
+      ...(layout.guides ? { guides: layout.guides } : {}),
     })),
   }
   return YAML.stringify(doc)

@@ -414,7 +414,16 @@
       "confirmUnplaced": "{count, plural, one {Sur # diapositive, ces zones n'ont pas d'équivalent dans le nouveau modèle :} other {Sur # diapositives, ces zones n'ont pas d'équivalent dans le nouveau modèle :}}",
       "confirmRemovedLayouts": "{count, plural, one {# diapositive utilise une mise en page que le nouveau modèle ne propose plus ; elle restera telle quelle.} other {# diapositives utilisent des mises en page que le nouveau modèle ne propose plus ; elles resteront telles quelles.}}",
       "confirmKept": "Rien n'est supprimé. Ce qui n'a pas d'équivalent reste sur sa diapositive et cesse simplement d'être affiché : vous pourrez le replacer où vous voulez."
-    }
+    },
+    "exportSlides": "Exporter la conception vers Google Slides",
+    "exportSlidesHint": "Enregistre cette conception dans votre Drive sous forme de présentation dont les mises en page sont les siennes, avec une diapositive de démonstration pour chacune.",
+    "exportSlidesDone": "Enregistré dans Drive — ouvrir dans Google Slides",
+    "exportSlidesError": "Impossible d’enregistrer la conception dans Drive — réessayez",
+    "exportSlidesConnect": "Connectez un compte Google pour enregistrer des conceptions dans Drive.",
+    "exportHeading": "Exporter cette conception",
+    "exportHint": "Emportez-la sous forme de fichier, ou dans votre Google Drive en présentation dont les mises en page sont les siennes.",
+    "exportAsYaml": "En YAML",
+    "exportToSlides": "En Google Slides"
   },
   "layout": {
     "change": "Changer la mise en page",
