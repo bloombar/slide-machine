@@ -1747,6 +1747,23 @@
   phase: 3
   status: Backlog
   review: false
+- id: TECH-14
+  title: Declarative action authorization
+  full: Every action in the action/command layer (TECH-13) declares how it is
+    authorized, drawn from a fixed vocabulary, rather than checking access in
+    the body of its handler. The declaration is part of the action's definition
+    alongside its input schema, and the dispatcher — not the action — enforces
+    it. Resolution happens once, before metering. The declared policy loads
+    whatever documents the decision needs, refuses if the caller may not
+    proceed, and hands those documents to the handler. So an action never pays
+    twice for the same lookup, and a caller with no rights to a lecture is
+    refused before they can be told anything about their plan — authorization
+    precedes plan-cap enforcement (BILL-3)…
+  section: §14 Technical Stack & Conventions
+  family: TECH
+  phase: 3
+  status: Backlog
+  review: false
 - id: FUTURE-a-remote-oauth-authenticated-multi-user-
   title: A remote, OAuth-authenticated, multi-user MCP server that exposes the…
   full: A remote, OAuth-authenticated, multi-user MCP server that exposes the
