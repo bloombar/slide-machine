@@ -95,6 +95,19 @@ describe('P-8: no provider reference reaches the client', () => {
     // presence of a vendor reference the client would have to interpret.
     expect(source).toMatch(/canManageBilling/)
   })
+
+  it('keeps the customer reference off the account DTO too', () => {
+    // The billing DTOs were careful about this from the start; the *user* DTO
+    // was not, and shipped `billingCustomerId` on every auth response to a
+    // client that never read it. Two places send account data, so both have
+    // to be checked.
+    const source = readFileSync(join(here, '../models/user.ts'), 'utf8')
+    const dto = source.slice(source.indexOf('export const toUserDto'))
+    expect(dto).not.toMatch(/billingCustomerId:/)
+    // The discriminator stays: it names an adapter, not a person, and the
+    // admin console reports it.
+    expect(dto).toMatch(/billingProvider:/)
+  })
 })
 
 describe('P-8: webhooks are signature-verified', () => {

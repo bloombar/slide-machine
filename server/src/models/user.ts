@@ -143,6 +143,7 @@ export const toUserDto = (doc: HydratedDocument<UserDb>): SafeUser => ({
   planTier: effectivePlanTier(doc),
   planGrant: planGrantView(doc),
   billingProvider: doc.billingProvider,
-  billingCustomerId: doc.billingCustomerId,
+  // `billingCustomerId` is deliberately absent: the provider issued it, the
+  // client has no use for it, and P-8 keeps vendor references server-side.
   createdAt: doc.createdAt.toISOString(),
 })
