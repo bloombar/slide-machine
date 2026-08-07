@@ -15,9 +15,9 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Layout, Template } from '@slide-machine/shared'
-import { WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
+import { WHITEBOARD_LAYOUT_TYPE, slotLimits } from '@slide-machine/shared'
 import SlideView from '../SlideView'
-import { themeColors } from '../slide/theme'
+import { themeColors, themeTextStyles } from '../slide/theme'
 import { sampleSlide } from './sampleSlide'
 
 /** The layout to show when the caller has no opinion, preferring one that
@@ -40,6 +40,7 @@ export default function TemplatePreview({
   layout,
   images,
   interactive,
+  atCapacity,
   className = '',
   testId = 'template-preview',
 }: {
@@ -52,11 +53,24 @@ export default function TemplatePreview({
   /** True in the editor, where the preview is the thing being edited rather
    * than a thumbnail of it. */
   interactive?: boolean
+  /** Fills every bounded box with the most it may ever hold, rather than with
+   * a comfortable sample — the case a design has to survive. */
+  atCapacity?: boolean
   className?: string
   testId?: string
 }) {
   const { t } = useTranslation()
   const shown = layout ?? previewLayout(template)
+
+  // The limits are the template's own, so they follow a text style being
+  // retuned in the editor as much as a box's limit being typed in.
+  const budgets = useMemo(
+    () =>
+      shown && atCapacity
+        ? slotLimits(shown, themeTextStyles(template.theme))
+        : undefined,
+    [shown, atCapacity, template.theme],
+  )
 
   const slide = useMemo(
     () =>
@@ -75,8 +89,9 @@ export default function TemplatePreview({
         },
         images,
         template.id,
+        budgets,
       ),
-    [shown, images, template.id, t],
+    [shown, images, template.id, budgets, t],
   )
 
   // A template with no layouts has nothing to show; render its background so

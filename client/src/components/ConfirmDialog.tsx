@@ -12,6 +12,14 @@ interface Props {
   /** Plain text, or any node — a settings confirm lists its changes. */
   message: ReactNode
   confirmLabel: string
+  /**
+   * How the confirm button reads. `danger` (the default) is for the
+   * irreversible: deleting a template, a lecture, an account. `neutral` is for
+   * a consequential-but-recoverable choice — taking a template update moves
+   * content between boxes without destroying any of it, and a red button
+   * would overstate that (TMPL-11).
+   */
+  tone?: 'danger' | 'neutral'
   onConfirm: () => void
   onCancel: () => void
 }
@@ -20,6 +28,7 @@ export default function ConfirmDialog({
   title,
   message,
   confirmLabel,
+  tone = 'danger',
   onConfirm,
   onCancel,
 }: Props) {
@@ -47,7 +56,11 @@ export default function ConfirmDialog({
         </button>
         <button
           onClick={onConfirm}
-          className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500"
+          className={`rounded-md px-4 py-2 text-sm font-medium text-white ${
+            tone === 'neutral'
+              ? 'bg-blue-600 hover:bg-blue-500'
+              : 'bg-red-600 hover:bg-red-500'
+          }`}
         >
           {confirmLabel}
         </button>

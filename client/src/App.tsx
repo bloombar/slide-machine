@@ -19,6 +19,7 @@ import ProfilePage from './pages/ProfilePage'
 import AccountSettingsPage from './pages/AccountSettingsPage'
 import PlanPricingPage from './pages/PlanPricingPage'
 import DeckViewerPage from './pages/DeckViewerPage'
+import TemplateEditorPage from './pages/TemplateEditorPage'
 import AboutPage from './pages/AboutPage'
 import FeedbackPage from './pages/FeedbackPage'
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
@@ -56,6 +57,9 @@ export default function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/d/:slug" element={<DeckViewerPage />} />
+        {/* A design has a permalink of its own, alongside a lecture's: it
+            belongs to its author rather than to any lecture using it. */}
+        <Route path="/t/:slug" element={<TemplateEditorPage />} />
         <Route path="/u/:userId" element={<ProfilePage />} />
         {/* Static pages. Public on purpose: a privacy policy nobody can read
             without an account is no policy, and the feedback form is most

@@ -5,6 +5,7 @@
     "note": "机器翻译，尚未经母语者校对。缺失的键会回退到英文。"
   },
   "common": {
+    "back": "返回",
     "loading": "加载中…",
     "save": "保存",
     "saving": "保存中…",
@@ -219,6 +220,8 @@
     "nameLabel": "模板名称",
     "themeLabel": "默认颜色",
     "layoutsLabel": "版式",
+    "atCapacity": "以每个框的上限预览",
+    "atCapacityHint": "显示这张幻灯片能容纳的最多文字。每个框的容量可在其设置中调整。",
     "layoutName": "名称",
     "layoutPurpose": "何时使用",
     "theme": {
@@ -244,8 +247,14 @@
     },
     "errors": {
       "duplicate": "无法复制该模板",
+      "load": "无法加载该设计",
       "save": "无法保存模板",
       "delete": "无法删除模板"
+    },
+    "page": {
+      "saved": "已保存",
+      "readOnly": "该设计不属于你，无法修改。在课程的“设计”标签页中复制一份，即可拥有自己的版本。",
+      "missing": "该设计不存在，或为私有。"
     },
     "visibilityLabel": "谁可以使用",
     "addLayout": "添加版式",
@@ -269,7 +278,6 @@
       "bullets": "要点",
       "image": "图片"
     },
-    "removeSlot": "删除此文本框",
     "newLayoutAdd": "添加版式",
     "layoutSettings": "版式",
     "boxSettings": "文本框",
@@ -282,6 +290,7 @@
     "decoration": "装饰",
     "newBoxName": "新文本框",
     "addBoxTo": "在 {name} 中添加文本框",
+    "removeBox": "删除“{name}”文本框",
     "direction": "方向",
     "directions": {
       "row": "横向",
@@ -367,7 +376,6 @@
     "placement": "位置",
     "placeFreely": "自由定位此文本框",
     "placeFreelyOn": "可拖动到幻灯片上的任意位置，不占用周围文本框的空间。",
-    "removeLayoutButton": "删除此版式",
     "layoutNumbered": "版式 {number}",
     "contentLayouts": {
       "column": "一列内容",
@@ -381,17 +389,28 @@
     "arrangement": "排列方式",
     "unsaved": "未保存的更改",
     "discard": {
-      "title": "不保存就关闭吗？",
-      "message": "该模板有未保存的更改，现在关闭将会丢失。",
+      "title": "离开而不保存吗？",
+      "message": "该设计有未保存的更改，现在离开将会丢失。",
       "confirm": "放弃更改",
-      "save": "保存并关闭"
+      "save": "保存并离开"
     },
     "clearFill": "不填充",
     "placedByParent": "由父级文本框自动定位",
     "maxChars": "最多字符",
     "maxItems": "最多要点",
     "styleChars": "{style} 的最多字符",
-    "styleItems": "{style} 的最多要点"
+    "styleItems": "{style} 的最多要点",
+    "update": {
+      "heading": "此设计已更新",
+      "hintClean": "改动仅涉及外观，幻灯片内容无需调整。",
+      "hintAffected": "{count, plural, other {# 张幻灯片的内容可能需要调整。}}",
+      "apply": "更新本课程",
+      "confirmTitle": "更新本课程的设计？",
+      "confirmIntro": "幻灯片将按此设计的最新版本重建。文字和图片会移到新版式中对应的框内。",
+      "confirmUnplaced": "{count, plural, other {在 # 张幻灯片中，以下框在新设计中没有对应位置：}}",
+      "confirmRemovedLayouts": "{count, plural, other {# 张幻灯片使用了新设计中已不存在的版式，将保持原样。}}",
+      "confirmKept": "不会删除任何内容。没有对应位置的内容仍保留在幻灯片上，只是不再显示，你可以把它放回想要的位置。"
+    }
   },
   "layout": {
     "change": "更改幻灯片版式",

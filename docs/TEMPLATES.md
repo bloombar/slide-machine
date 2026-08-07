@@ -36,9 +36,17 @@ templates are listed and mutated only by their owner.
 > including public permalinks, so *resolving* a template by id must work for anyone who can
 > see the deck. Ownership gates listing and mutation, never resolution.
 
+**A template has a page of its own**, at `/t/:permalinkSlug` — the same shape as a deck's
+`/d/:slug`. That page is the editor for its author and the design itself (each layout as a
+rendered slide) for anyone else who may read it; `template.get` serves it, applying the
+template's visibility. A built-in's slug is its id. A stored one gets a readable slug when
+it is created and keeps it through renames, so a link to a design stays good; templates
+predating permalinks read as their document id until their next save, which backfills one.
+
 | Field | Meaning |
 | --- | --- |
 | `id`, `name` | Stable id (referenced by decks/projects) and display name. |
+| `permalinkSlug` | Where the template's own page lives: `/t/:permalinkSlug`. |
 | `theme` | Colors, typography, background — see [§5](#5-theme-resolution). |
 | `layouts` | The layout set — see [§2](#2-layouts-and-slots). |
 | `renderMode` | Which renderer draws this template — see [§4](#4-rendering). |

@@ -201,6 +201,10 @@ const deckSchema = new Schema<DeckDb>(
     // Set when the user names the lecture by hand; the AI stops touching it.
     titleLocked: { type: Boolean, default: false },
     templateId: { type: String, required: true },
+    // The template snapshot this lecture is drawn with (TMPL-11). Not
+    // required: lectures written before versions existed have none and
+    // resolve their template live until the backfill pins them.
+    templateVersionId: { type: String },
     accessOverride: {
       type: {
         visibility: {
@@ -369,6 +373,7 @@ export const toDeckDto = (
   ownerId: doc.ownerId.toString(),
   title: doc.title,
   templateId: doc.templateId,
+  templateVersionId: doc.templateVersionId,
   visibility: acl.visibility,
   accessInherited: acl.inherited,
   viewers: acl.viewers,

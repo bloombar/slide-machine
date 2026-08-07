@@ -55,7 +55,7 @@ import { deckToYaml, type ExportDeck, type ExportSlide } from '../lib/deck-yaml'
 import { deckToPdf } from '../lib/deck-pdf'
 import { visibleStrokes } from '../lib/deck-drawings'
 import { resolveTemplateTheme } from '../lib/deck-theme'
-import { resolveTemplate } from '../templates/resolve'
+import { resolveDeckTemplate } from '../templates/versions'
 import { slotsOf } from '../lib/slide-slots'
 import {
   uploadFileToDriveLive,
@@ -167,7 +167,7 @@ const buildExportDeck = async (
   })
   // Resolve the template's theme so the export carries the same colors the
   // viewer shows (background, text, accent, muted).
-  const template = await resolveTemplate(deck.templateId)
+  const template = await resolveDeckTemplate(deck)
   // General-tab settings make the export import-compatible (EXP-3). Seed notes
   // and seed material are deliberately excluded — they can hold private or
   // copyrighted content that should not travel in a shareable file.

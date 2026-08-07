@@ -32,25 +32,66 @@ export interface TranslatableSlideText {
   slots?: Record<string, SlotValue>
 }
 
-/** The slot map with the translated conventional slots laid over it. The
- * renderer draws from the map, so a translation that only replaced the
- * derived fields would be invisible on screen. */
+/**
+ * The slot map with the translated slots laid over it. The renderer draws
+ * from the map, so a translation that only replaced the derived fields would
+ * be invisible on screen.
+ *
+ * A translated slot is applied only where the slide still has a box of that
+ * name holding that kind. Anything else — a box the layout dropped, or one
+ * whose kind changed under a stale entry — keeps the author's content rather
+ * than being overwritten with a translation of something else.
+ */
 const overlaySlots = (
   slots: Record<string, SlotValue> | undefined,
   entry: SlideTranslationEntry,
 ): Record<string, SlotValue> | undefined => {
   if (!slots) return slots
   const next = { ...slots }
-  const setText = (name: string, value: string | undefined) => {
-    if (value !== undefined) next[name] = { kind: 'text', value }
+  for (const [name, translated] of Object.entries(entry.slots ?? {})) {
+    const original = slots[name]
+    if (!original || original.kind !== translated.kind) continue
+    if (translated.kind === 'table' && original.kind === 'table') {
+      next[name] = {
+        ...original,
+        ...(translated.header ? { header: translated.header } : {}),
+        rows: translated.rows,
+      }
+      continue
+    }
+    next[name] = { ...original, ...translated } as SlotValue
   }
-  setText('title', entry.title)
-  setText('body', entry.body)
-  setText('caption', entry.caption)
-  if (entry.bullets) next.bullets = { kind: 'bullets', items: entry.bullets }
   return next
 }
 
+/** The translated text of one slot, when it holds prose. */
+const textAt = (
+  entry: SlideTranslationEntry,
+  name: string,
+): string | undefined => {
+  const value = entry.slots?.[name]
+  return value && (value.kind === 'text' || value.kind === 'preformatted')
+    ? value.value
+    : undefined
+}
+
+/** The translated items of one slot, when it holds a list. */
+const itemsAt = (
+  entry: SlideTranslationEntry,
+  name: string,
+): string[] | undefined => {
+  const value = entry.slots?.[name]
+  return value?.kind === 'bullets' ? value.items : undefined
+}
+
+/**
+ * Lays a translation over a slide.
+ *
+ * The slot map is the store, so that is what the overlay really replaces; the
+ * five conventional fields are derived from it afterwards for the readers
+ * still written against them, exactly the way `legacyFrom` derives them on
+ * the server.
+ */
 export const overlaySlideTranslation = <T extends TranslatableSlideText>(
   slide: T,
   entry: SlideTranslationEntry | undefined,
@@ -58,10 +99,10 @@ export const overlaySlideTranslation = <T extends TranslatableSlideText>(
   if (!entry) return slide
   return {
     ...slide,
-    title: entry.title ?? slide.title,
-    body: entry.body ?? slide.body,
-    bullets: entry.bullets ?? slide.bullets,
-    caption: entry.caption ?? slide.caption,
+    title: textAt(entry, 'title') ?? slide.title,
+    body: textAt(entry, 'body') ?? slide.body,
+    bullets: itemsAt(entry, 'bullets') ?? slide.bullets,
+    caption: textAt(entry, 'caption') ?? slide.caption,
     ...(slide.slots ? { slots: overlaySlots(slide.slots, entry) } : {}),
   }
 }

@@ -22,6 +22,11 @@ import { adoptDefaultTree, normalizePositions } from '../templates/builtin'
 export interface TemplateDb {
   ownerId: Types.ObjectId
   name: string
+  /** Where the template is reachable: `/t/:permalinkSlug`. Optional in the
+   * schema because templates authored before the editor had a page of its
+   * own have none; those read as their document id (see `toTemplateDto`) and
+   * are given a real slug the next time they are saved. */
+  permalinkSlug?: string
   /** How its layouts are drawn; absent means the hand-tuned components. */
   renderMode?: TemplateRenderMode
   theme: Record<string, unknown>
@@ -45,6 +50,9 @@ const templateSchema = new Schema<TemplateDb>(
       index: true,
     },
     name: { type: String, required: true, trim: true },
+    // Sparse: the templates that predate permalinks have no slug, and a
+    // unique index would otherwise treat them all as one collision.
+    permalinkSlug: { type: String, unique: true, sparse: true },
     renderMode: { type: String, enum: ['components', 'positioned'] },
     theme: { type: Schema.Types.Mixed, required: true },
     layouts: { type: Schema.Types.Mixed, required: true },
@@ -70,6 +78,9 @@ export const TemplateModel = model<TemplateDb>('Template', templateSchema)
 export const toTemplateDto = (doc: HydratedDocument<TemplateDb>): Template => ({
   id: doc._id.toString(),
   ownerId: doc.ownerId.toString(),
+  // A template made before permalinks existed is addressed by its id, so
+  // every template has a working `/t/:slug` whether or not it has a slug.
+  permalinkSlug: doc.permalinkSlug ?? doc._id.toString(),
   name: doc.name,
   renderMode: doc.renderMode,
   theme: doc.theme,

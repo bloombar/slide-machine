@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
-import { MemoryRouter, Routes, Route } from 'react-router'
+import { MemoryRouter, Routes, Route, useParams } from 'react-router'
 import { AuthProvider } from '../auth/AuthContext'
 import { setAccessToken } from '../auth/token'
 import DeckViewerPage from './DeckViewerPage'
@@ -1830,12 +1830,20 @@ describe('DeckViewerPage settings modal', () => {
 
   let seedNotesBody: unknown
 
+  /** Stands in for a template's own page, which the Design tab navigates to
+   * rather than opening an editor in place. */
+  function TemplatePageStub() {
+    const { slug } = useParams<{ slug: string }>()
+    return <p>{`template page: ${slug}`}</p>
+  }
+
   const renderWithSettings = () =>
     render(
       <MemoryRouter initialEntries={['/d/shared-abc123']}>
         <AuthProvider>
           <Routes>
             <Route path="/d/:slug" element={<DeckViewerPage />} />
+            <Route path="/t/:slug" element={<TemplatePageStub />} />
           </Routes>
         </AuthProvider>
       </MemoryRouter>,
@@ -2301,6 +2309,106 @@ describe('DeckViewerPage settings modal', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Close settings' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  /** A design the signed-in user authored, so the Design tab offers to edit
+   * it, plus the copy duplicating one produces. */
+  const own = {
+    ...deckView.template,
+    id: 'mine1',
+    permalinkSlug: 'my-style-ab12',
+    ownerId: 'u1',
+    name: 'My Style',
+    layouts: [
+      {
+        type: 'content',
+        label: 'Content',
+        purpose: 'Body slide',
+        slots: [],
+        elementPositions: {},
+      },
+    ],
+  }
+  const copy = {
+    ...own,
+    id: 'copy1',
+    permalinkSlug: 'my-style-2-cd34',
+    name: 'My Style 2',
+  }
+
+  /** Routes for the Design tab where the user has a template of their own;
+   * the library gains the copy once one has been made. */
+  const withOwnTemplateRoutes = (switched: { body?: unknown }) => {
+    let duplicated = false
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+      '/api/actions/template.list': () => ({
+        status: 200,
+        body: duplicated
+          ? [deckView.template, own, copy]
+          : [deckView.template, own],
+      }),
+      '/api/actions/template.duplicate': () => {
+        duplicated = true
+        return { status: 200, body: copy }
+      },
+      '/api/actions/deck.switchTemplate': init => {
+        switched.body = JSON.parse(String(init?.body))
+        const { templateId } = switched.body as { templateId: string }
+        return { status: 200, body: { ...deckView.deck, templateId } }
+      },
+      '/api/actions/deck.shares': () => ({ status: 200, body: [] }),
+    })
+  }
+
+  /** Opens the lecture's Design tab on a library of the user's own designs. */
+  const openDesignTab = async () => {
+    renderWithSettings()
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Lecture settings' }))
+    fireEvent.click(await screen.findByRole('tab', { name: 'Design' }))
+    await screen.findByRole('radio', { name: /My Style/ })
+  }
+
+  it('applies a duplicated template to the lecture as soon as it is made', async () => {
+    const switched: { body?: unknown } = {}
+    withOwnTemplateRoutes(switched)
+    await openDesignTab()
+
+    fireEvent.click(screen.getByLabelText('Duplicate My Style'))
+
+    // The copy is what the author is now working on, so the lecture is
+    // already using it by the time they get to its page.
+    await vi.waitFor(() =>
+      expect(switched.body).toEqual({ deckId: 'deck1', templateId: 'copy1' }),
+    )
+    // And the editor is that page, not something inside these settings.
+    expect(
+      await screen.findByText('template page: my-style-2-cd34'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('applies a template to the lecture when its settings are opened', async () => {
+    const switched: { body?: unknown } = {}
+    withOwnTemplateRoutes(switched)
+    await openDesignTab()
+
+    fireEvent.click(screen.getByLabelText('Edit My Style'))
+
+    await vi.waitFor(() =>
+      expect(switched.body).toEqual({ deckId: 'deck1', templateId: 'mine1' }),
+    )
+    expect(
+      await screen.findByText('template page: my-style-ab12'),
+    ).toBeInTheDocument()
   })
 
   it('closes on Escape', async () => {
@@ -3137,8 +3245,13 @@ describe('DeckViewerPage live session under translated viewing (SHARE-2)', () =>
           locale: 'fr',
           source: 'en',
           perSlide: {
-            s1: { title: 'Bonjour' },
-            s2: { title: 'Deuxième', body: 'Plus de détail' },
+            s1: { slots: { title: { kind: 'text', value: 'Bonjour' } } },
+            s2: {
+              slots: {
+                title: { kind: 'text', value: 'Deuxième' },
+                body: { kind: 'text', value: 'Plus de détail' },
+              },
+            },
           },
         },
       }),

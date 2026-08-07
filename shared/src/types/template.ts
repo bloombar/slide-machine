@@ -351,6 +351,14 @@ export type TemplateRenderMode = 'components' | 'positioned'
 export interface Template {
   id: string
   ownerId: string
+  /** Where the template lives: `/t/:permalinkSlug`, the same shape a lecture
+   * permalink has. A built-in's slug is its id; a stored one gets a readable
+   * slug when it is made, and keeps it however often it is renamed. */
+  permalinkSlug: string
+  /** Who authored it, for a byline that links to their profile (SOC-4).
+   * Only template.get fills this in — the library shows no bylines, and a
+   * list would need a user lookup per row for nothing. */
+  owner?: { id: string; displayName: string }
   name: string
   /** Absent means `components`: the hand-tuned layout components. */
   renderMode?: TemplateRenderMode
@@ -360,4 +368,67 @@ export interface Template {
   visibility: 'private' | 'unlisted' | 'public'
   voteScore: number
   createdAt: string
+}
+
+/**
+ * An immutable snapshot of the structure a deck is drawn with (TMPL-11).
+ *
+ * A deck pins one of these rather than following its template, so editing a
+ * template — or deploying a changed built-in — never reaches back into
+ * lectures already built on it. Boxes stop being renamed out from under
+ * saved content, and an author cannot alter someone else's lecture by
+ * editing a template they shared.
+ *
+ * Snapshots are shared, not copied per deck: two decks on the same unchanged
+ * template pin the same row. `contentHash` is what makes that work — a save
+ * that changes nothing structural resolves to the version already stored.
+ *
+ * Never updated once written. Applying an update repoints the deck at a newer
+ * version; it does not edit the old one, which is what lets the deck keep the
+ * version it came from.
+ */
+export interface TemplateVersion {
+  id: string
+  /** The template this snapshots: a built-in's slug, or a stored template's
+   * document id — the same values `templateId` takes on a deck. */
+  templateId: string
+  /** Built-ins are snapshotted too, so a deployment that ships a changed
+   * starter template cannot silently restructure existing lectures. */
+  source: 'builtin' | 'user'
+  /** Fingerprint of the structure below, over the fields that decide how a
+   * slide is laid out. Cosmetic edits that leave every slot alone still make
+   * a new version; nothing here tries to be clever about what "counts". */
+  contentHash: string
+  name: string
+  renderMode?: TemplateRenderMode
+  theme: Record<string, unknown>
+  layouts: Layout[]
+  createdAt: string
+}
+
+/** What a deck loses if it takes a template update, per layout it uses. */
+export interface TemplateUpdateImpact {
+  /** The layout, as the deck's slides name it. */
+  layoutType: string
+  /** How many of the deck's slides are on this layout. */
+  slideCount: number
+  /**
+   * Boxes whose content has nowhere to go in the updated layout — the labels
+   * an author would recognize, not raw slot names. Their content is kept on
+   * the slide and simply stops being drawn, so this is "needs adjusting",
+   * not "is deleted".
+   */
+  unplaced: string[]
+  /** True when the updated template drops this layout altogether. */
+  layoutRemoved: boolean
+}
+
+/** Whether a deck's template has moved on, and what applying it would cost. */
+export interface TemplateUpdateStatus {
+  available: boolean
+  /** Only the layouts the deck actually uses — a template can change ten
+   * layouts and touch nothing if the deck is on two of them. */
+  impact: TemplateUpdateImpact[]
+  /** Total slides whose content would need adjusting after the update. */
+  affectedSlides: number
 }

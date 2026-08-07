@@ -24,6 +24,7 @@ import {
 } from './dispatch'
 import type { ActionContext } from './context'
 import { TemplateModel, toTemplateDto } from '../models/template'
+import { UserModel } from '../models/user'
 import {
   layoutSchema,
   normalizeSlot,
@@ -33,7 +34,9 @@ import {
   isBuiltinTemplate,
   listTemplatesFor,
   resolveTemplate,
+  resolveTemplateBySlug,
 } from '../templates/resolve'
+import { permalinkSlug } from '../lib/slug'
 import { templateToYaml } from '../lib/template-yaml'
 import { previewImageUrls } from '../enrichment/preview-images'
 
@@ -103,6 +106,32 @@ export const templateList = defineAction<Record<string, never>, Template[]>({
 })
 
 /**
+ * One template by its permalink (TMPL-4), for the page it is edited on.
+ *
+ * Carries the author's name so the page can say whose design this is, the
+ * way a project page does (SOC-4). Who may read it follows the template's
+ * own visibility: its author always, a built-in or a shared one anyone, and
+ * a private one nobody else — refused identically to a template that does
+ * not exist, so the permalink cannot be used to discover what is there.
+ */
+export const templateGet = defineAction<{ slug: string }, Template>({
+  name: 'template.get',
+  input: z.object({ slug: z.string().min(1) }),
+  execute: async (ctx, input) => {
+    const template = await resolveTemplateBySlug(input.slug)
+    if (!template) throw new ActionForbiddenError()
+    const own = template.ownerId === ctx.userId
+    if (!own && template.visibility === 'private') {
+      throw new ActionForbiddenError()
+    }
+    const owner = await UserModel.findById(template.ownerId).catch(() => null)
+    return owner
+      ? { ...template, owner: { id: owner.id, displayName: owner.displayName } }
+      : template
+  },
+})
+
+/**
  * Exports a style template to a YAML file (EXP-2), returned inline for the
  * browser to download — the template's identity, theme, and layouts.
  */
@@ -162,14 +191,18 @@ export const templateDuplicate = defineAction<
     // Named against everything the caller can already see, so a copy never
     // arrives sharing a name with the thing it was copied from.
     const library = await listTemplatesFor(userId)
+    const name =
+      input.name ??
+      copyName(
+        source.name,
+        library.map(t => t.name),
+      )
     const doc = await TemplateModel.create({
       ownerId: userId,
-      name:
-        input.name ??
-        copyName(
-          source.name,
-          library.map(t => t.name),
-        ),
+      name,
+      // Its permalink, fixed here and never rewritten: a link to a design
+      // must keep working after its author renames it.
+      permalinkSlug: permalinkSlug(name, 'template'),
       renderMode: source.renderMode,
       theme: source.theme,
       layouts: source.layouts,
@@ -199,6 +232,9 @@ export const templateUpdate = defineAction<
   execute: async (ctx, input) => {
     const userId = requireUser(ctx)
     const doc = await loadOwn(userId, input.templateId)
+    // Templates authored before permalinks get one on their next save. An
+    // existing slug is left alone, renames included — see `templateDuplicate`.
+    doc.permalinkSlug ??= permalinkSlug(input.name, 'template')
     doc.name = input.name
     doc.renderMode = input.renderMode
     doc.theme = input.theme
@@ -255,6 +291,7 @@ export const templatePreviewImage = defineAction<
 })
 
 registerAction(templateList)
+registerAction(templateGet)
 registerAction(templateExport)
 registerAction(templatePreviewImage)
 registerAction(templateDuplicate)

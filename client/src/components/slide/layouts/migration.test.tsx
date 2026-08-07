@@ -7,6 +7,11 @@
  * class, so the conversion cannot drift and a later edit to a built-in cannot
  * silently move a slide in a deck someone already made.
  *
+ * One deliberate departure, recorded here rather than left to be discovered:
+ * the layouts no longer carry the side margins their components wrote. The
+ * margin comes from the template, so every layout in one shares it — see
+ * "the template's margin reaches every layout" at the end of this file.
+ *
  * The expectations below are transcribed from the deleted components; the
  * originals are in git at 663dbad if one needs checking. Writing them out
  * rather than importing them is the point: this file is the record of what
@@ -118,20 +123,22 @@ describe('content — was: flex h-full flex-col justify-center gap-[3cqi] px-[6c
     expect(at('body')).toHaveStyle({ fontSize: '2.75cqi', lineHeight: '1.625' })
   })
 
-  it('states its own side margins rather than inheriting the template’s', () => {
-    // `px-[6cqi]`, not `p-[6cqi]`: the layout decides its sides, and a
-    // uniform pad would have moved every box on the slide.
+  it('takes its side margins from the template rather than stating them', () => {
+    // The component wrote `px-[6cqi]` and the tree copied it. It no longer
+    // does: the margin comes from the template's own `marginX`, so every
+    // layout in a template shares one and an author changes it in one place.
+    // At the default 0.06 the drawn value is what the component had.
     const root = draw('content')('root')
     expect(root.style.paddingLeft).toBe('6cqi')
   })
 
-  it('is not padded top and bottom, because it centres its contents', () => {
-    // The template's safe area only reaches a container that pushes toward
-    // an edge. Padding a centred column would shorten the room its boxes
-    // divide up and move every slide already made with it.
+  it('is padded top and bottom too, so nothing reaches the edge', () => {
+    // A centred column is not near the margins until a box fills up, which
+    // is exactly when it runs off the slide. `cqi` is a percent of the WIDTH
+    // on both axes, so a 6% top margin is 6/(16:9) of it.
     const root = draw('content')('root')
-    expect(root.style.paddingTop).toBe('')
-    expect(root.style.paddingBottom).toBe('')
+    expect(root.style.paddingTop).toBe('3.375cqi')
+    expect(root.style.paddingBottom).toBe('3.375cqi')
   })
 })
 
@@ -145,11 +152,14 @@ describe('list — was: content, with bullets in place of the paragraph', () => 
 })
 
 describe('title — was: flex h-full flex-col items-center justify-center gap-[2cqi] text-center', () => {
-  it('centres on both axes with no side margins', () => {
+  it('centres on both axes, inside the template’s margin', () => {
+    // The component set no margin of its own — a centred title never came
+    // near one. It does once the title is long, so the margin applies here
+    // like anywhere else; centring is unaffected by it.
     const at = draw('title')
     expect(at('root').className).toContain('items-center')
     expect(at('root').className).toContain('justify-center')
-    expect(at('root')).toHaveStyle({ gap: '2cqi' })
+    expect(at('root')).toHaveStyle({ gap: '2cqi', paddingLeft: '6cqi' })
   })
 
   it('sets the h1 at 7cqi bold and the caption in muted', () => {
@@ -204,13 +214,17 @@ describe('two-column — was: grid h-full grid-cols-2 items-center gap-[4cqi] px
 })
 
 describe('image-heavy — was: flex h-full flex-col gap-[1.5cqi] p-[4cqi]', () => {
-  it('pads all four sides, which is the one layout that did', () => {
+  it('takes the template’s margin, though its component was tighter', () => {
+    // The one departure from the components: `p-[4cqi]` was tighter than the
+    // safe area, so the picture sat outside the margin the template asks for
+    // and the editor draws. A near-full-bleed picture is worth less than one
+    // margin an author can rely on, so this layout gives its exception up.
     const at = draw('image-heavy')
     expect(at('root')).toHaveStyle({
-      paddingLeft: '4cqi',
-      paddingRight: '4cqi',
-      paddingTop: '4cqi',
-      paddingBottom: '4cqi',
+      paddingLeft: '6cqi',
+      paddingRight: '6cqi',
+      paddingTop: '3.375cqi',
+      paddingBottom: '3.375cqi',
       gap: '1.5cqi',
     })
   })
@@ -256,5 +270,45 @@ describe('whiteboard', () => {
     const tree = defaultLayoutTree('whiteboard') as LayoutNode
     expect(tree.children ?? []).toHaveLength(0)
     expect(tree.slot).toBeUndefined()
+  })
+})
+
+/**
+ * The rule the layouts above are now written to: one margin per template,
+ * not one per layout. Worth its own suite because it is the thing that can
+ * regress quietly — a layout that starts stating its own padding again drops
+ * out of the template's safe area, and nothing else would notice.
+ */
+describe('the template’s margin reaches every layout', () => {
+  const bounded = ['content', 'list', 'title', 'section', 'two-column']
+
+  it.each(bounded)('insets %s by the template’s margin', type => {
+    const root = draw(type)('root')
+    // marginX 0.06 as a percent of the width; marginY 0.06 of the height,
+    // which in `cqi` — a percent of the width — is that over 16:9.
+    expect(root).toHaveStyle({
+      paddingLeft: '6cqi',
+      paddingRight: '6cqi',
+      paddingTop: '3.375cqi',
+      paddingBottom: '3.375cqi',
+    })
+  })
+
+  it('reaches a grid root as much as a column', () => {
+    // Two column is the grid, and it went unpadded vertically for exactly
+    // as long as the rule asked for flex.
+    expect(draw('two-column')('root').style.paddingTop).toBe('3.375cqi')
+  })
+
+  it('leaves a layout that asks for its own margin alone', () => {
+    // The pull-quote wants wider sides than the template's; it still gets
+    // the template's top and bottom, since it says nothing about those.
+    const root = draw('quote')('root')
+    expect(root.style.paddingLeft).toBe('8cqi')
+    expect(root.style.paddingTop).toBe('3.375cqi')
+  })
+
+  it('pads no whiteboard: there is nothing on it to keep off the edge', () => {
+    expect(draw('whiteboard')('root').style.paddingLeft).toBe('')
   })
 })

@@ -5,6 +5,7 @@
     "note": "Traduction automatique, non relue par un locuteur natif. Toute clé absente retombe sur l'anglais."
   },
   "common": {
+    "back": "Retour",
     "loading": "Chargement…",
     "save": "Enregistrer",
     "saving": "Enregistrement…",
@@ -219,6 +220,8 @@
     "nameLabel": "Nom du modèle",
     "themeLabel": "Couleurs par défaut",
     "layoutsLabel": "Dispositions",
+    "atCapacity": "Aperçu avec chaque bloc à sa limite",
+    "atCapacityHint": "Montre la diapositive avec tout le texte qu’elle peut contenir. Vous pouvez régler la capacité de chaque bloc dans ses réglages.",
     "layoutName": "Nom",
     "layoutPurpose": "Quand l’utiliser",
     "theme": {
@@ -244,8 +247,14 @@
     },
     "errors": {
       "duplicate": "Impossible de dupliquer ce modèle",
+      "load": "Impossible de charger ce modèle",
       "save": "Impossible d’enregistrer le modèle",
       "delete": "Impossible de supprimer le modèle"
+    },
+    "page": {
+      "saved": "Enregistré",
+      "readOnly": "Ce modèle ne vous appartient pas. Dupliquez-le depuis l’onglet Conception d’un cours pour en avoir un à vous.",
+      "missing": "Ce modèle n’existe pas ou est privé."
     },
     "visibilityLabel": "Qui peut l’utiliser",
     "addLayout": "Ajouter une disposition",
@@ -269,7 +278,6 @@
       "bullets": "Puces",
       "image": "Image"
     },
-    "removeSlot": "Supprimer ce bloc",
     "newLayoutAdd": "Ajouter la mise en page",
     "layoutSettings": "Disposition",
     "boxSettings": "Bloc",
@@ -282,6 +290,7 @@
     "decoration": "Décoration",
     "newBoxName": "Nouveau bloc",
     "addBoxTo": "Ajouter un bloc dans {name}",
+    "removeBox": "Supprimer le bloc {name}",
     "direction": "Direction",
     "directions": {
       "row": "En largeur",
@@ -367,7 +376,6 @@
     "placement": "Position",
     "placeFreely": "Positionner ce bloc librement",
     "placeFreelyOn": "Faites-le glisser où vous voulez sur la diapositive. Il ne prend aucune place aux blocs voisins.",
-    "removeLayoutButton": "Supprimer cette disposition",
     "layoutNumbered": "Disposition {number}",
     "contentLayouts": {
       "column": "Une colonne de contenu",
@@ -381,17 +389,28 @@
     "arrangement": "Agencement",
     "unsaved": "Modifications non enregistrées",
     "discard": {
-      "title": "Fermer sans enregistrer ?",
-      "message": "Le modèle comporte des modifications non enregistrées. Fermer maintenant les perdra.",
+      "title": "Quitter sans enregistrer ?",
+      "message": "Ce modèle comporte des modifications non enregistrées. Quitter maintenant les perdra.",
       "confirm": "Abandonner les modifications",
-      "save": "Enregistrer et fermer"
+      "save": "Enregistrer et quitter"
     },
     "clearFill": "Aucun fond",
     "placedByParent": "Positionné automatiquement par le bloc parent",
     "maxChars": "Caractères max",
     "maxItems": "Points max",
     "styleChars": "Caractères max pour {style}",
-    "styleItems": "Points max pour {style}"
+    "styleItems": "Points max pour {style}",
+    "update": {
+      "heading": "Ce modèle a été mis à jour",
+      "hintClean": "Les changements sont purement visuels — rien à ajuster sur vos diapositives.",
+      "hintAffected": "{count, plural, one {Le contenu de # diapositive pourrait nécessiter un ajustement.} other {Le contenu de # diapositives pourrait nécessiter un ajustement.}}",
+      "apply": "Mettre à jour ce cours",
+      "confirmTitle": "Mettre à jour le modèle de ce cours ?",
+      "confirmIntro": "Vos diapositives seront reconstruites sur la dernière version de ce modèle. Le texte et les images sont déplacés vers les zones correspondantes des nouvelles mises en page.",
+      "confirmUnplaced": "{count, plural, one {Sur # diapositive, ces zones n'ont pas d'équivalent dans le nouveau modèle :} other {Sur # diapositives, ces zones n'ont pas d'équivalent dans le nouveau modèle :}}",
+      "confirmRemovedLayouts": "{count, plural, one {# diapositive utilise une mise en page que le nouveau modèle ne propose plus ; elle restera telle quelle.} other {# diapositives utilisent des mises en page que le nouveau modèle ne propose plus ; elles resteront telles quelles.}}",
+      "confirmKept": "Rien n'est supprimé. Ce qui n'a pas d'équivalent reste sur sa diapositive et cesse simplement d'être affiché : vous pourrez le replacer où vous voulez."
+    }
   },
   "layout": {
     "change": "Changer la mise en page",

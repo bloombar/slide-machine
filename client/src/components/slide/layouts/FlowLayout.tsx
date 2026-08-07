@@ -258,27 +258,31 @@ function Node({
   )
 }
 
+/** Slides are always 16:9 (`aspect-video` on the frame). */
+const SLIDE_ASPECT = 16 / 9
+
 /**
  * The layout's outermost box, kept inside the template's safe area.
  *
- * Spreading a row or column pushes its contents to the ends of whatever
- * contains them, and for the outermost box that is the slide itself — so "at
- * the start" put text hard against the edge, outside the margins the template
- * asks for and the editor draws.
+ * Every layout in a template shares one margin, and it is the template's own:
+ * a root that says nothing about padding is given `marginX`/`marginY`. That
+ * is what makes the safe area the editor draws a promise the renderer keeps,
+ * on every layout rather than on the few that happened to qualify — and it is
+ * what lets an author change the margin of a whole template in one place.
  *
- * Two conditions, and both are the point:
+ * One condition, per axis: a root that states its own padding has already
+ * made that decision, and keeps it. The pull-quote is the only built-in that
+ * does, asking for wider sides than the template's.
  *
- *   - only where the layout pads nothing itself, per axis. A layout that
- *     states its own margins has already made that decision.
- *   - only where the contents are actually pushed toward an edge. A centred
- *     column is nowhere near the margins, and padding it would shrink the
- *     room its boxes divide up — which would resize the picture on every
- *     two-column slide anyone has already made.
+ * Container mode and alignment are deliberately not conditions. A grid needs
+ * a margin as much as a column does, and a centred column needs one to be
+ * bounded by: centring says where contents sit in the box, not how big the
+ * box is.
  */
 const withSafeArea = (tree: LayoutNode, metrics: ThemeMetrics): LayoutNode => {
-  const container = tree.container
-  if (!container || container.mode !== 'flex') return tree
-  if ((container.justify ?? 'start') === 'center') return tree
+  // A layout with no container is a blank slate (the whiteboard): nothing is
+  // arranged in it, so there is nothing to keep off the edges.
+  if (!tree.container) return tree
 
   const style = tree.style ?? {}
   const setsX = style.padding !== undefined || style.paddingX !== undefined
@@ -289,9 +293,13 @@ const withSafeArea = (tree: LayoutNode, metrics: ThemeMetrics): LayoutNode => {
     style: {
       ...style,
       // Margins are fractions of the slide; padding is `cqi`, a percent of
-      // its width. Same axis, so one is the other times a hundred.
+      // its WIDTH — on both axes. So a side margin is the fraction times a
+      // hundred, and a top margin, being a fraction of the height, is that
+      // divided by the aspect ratio. Without the divide, a 6% top margin
+      // would be drawn as 6% of the width: nearly eleven percent of the
+      // height, and adrift from the safe area the editor draws.
       ...(setsX ? {} : { paddingX: metrics.marginX * 100 }),
-      ...(setsY ? {} : { paddingY: metrics.marginY * 100 }),
+      ...(setsY ? {} : { paddingY: (metrics.marginY * 100) / SLIDE_ASPECT }),
     },
   }
 }

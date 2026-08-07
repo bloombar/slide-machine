@@ -10,7 +10,7 @@
  * label is theirs to change.
  */
 import { useTranslation } from 'react-i18next'
-import { Trash2, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import type {
   BoxStyle,
   ContainerSpec,
@@ -83,7 +83,6 @@ export default function SlotInspector({
   onContentType,
   onContainer,
   onReorder,
-  onDelete,
   onClose,
   onRecord,
   textStyles,
@@ -104,7 +103,6 @@ export default function SlotInspector({
   onContentType: (next: ContentType) => void
   onContainer: (patch: Partial<ContainerSpec>) => void
   onReorder: (delta: number) => void
-  onDelete: () => void
   onClose: () => void
   onRecord: (key?: string) => void
   /** The template's text styles, for the budget a box inherits. */
@@ -666,14 +664,8 @@ export default function SlotInspector({
         </fieldset>
       )}
 
-      <button
-        type="button"
-        onClick={onDelete}
-        className="mt-1 flex items-center gap-2 self-start rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-red-50 hover:text-red-700"
-      >
-        <Trash2 className="h-3.5 w-3.5" aria-hidden />
-        {t('template.removeSlot')}
-      </button>
+      {/* Deleting the box is not here: it is on its row in the outline, a
+          click away from wherever the pointer already is. */}
     </div>
   )
 }

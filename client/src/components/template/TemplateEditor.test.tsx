@@ -34,6 +34,7 @@ const layout = (type: string, label: string, slots: string[]): Layout =>
 
 const template = (over: Partial<Template> = {}): Template => ({
   id: 'mine-1',
+  permalinkSlug: 'mine-1',
   ownerId: 'u1',
   name: 'My Style',
   theme: { background: '#ffffff', text: '#000000', accent: '#ff0000' },
@@ -78,6 +79,26 @@ const selectBox = (name: string) => {
   fireEvent.click(within(row).getByText(name))
 }
 
+/** The delete icon on a layout's row in the rail. Scoped to the tab list:
+ * narrow screens get the same layouts as a select, with a delete of their own,
+ * and jsdom renders both. */
+const railDelete = (name: string) =>
+  within(screen.getByRole('tablist')).getByRole('button', {
+    name: `Remove the ${name} layout`,
+  })
+
+/** The delete icon on a box's row in the outline. */
+const boxDelete = (name: string) =>
+  screen.getByRole('button', { name: `Remove the ${name} box` })
+
+/** Says yes to whatever is being confirmed. */
+const confirm = () =>
+  fireEvent.click(
+    within(screen.getByRole('alertdialog')).getByRole('button', {
+      name: 'Delete',
+    }),
+  )
+
 beforeEach(() => {
   resetPreviewImages()
   vi.mocked(dispatchAction).mockResolvedValue({ urls: [] } as never)
@@ -121,28 +142,51 @@ describe('the layout rail', () => {
     expect(screen.getAllByRole('tab')).toHaveLength(1)
     expect(screen.queryByRole('tab', { name: /Whiteboard/ })).toBeNull()
   })
-})
 
-describe('the layout inspector', () => {
-  it('edits the purpose the AI reads when choosing a layout (TMPL-6)', () => {
+  it('removes a layout from its own row, once the author confirms', () => {
     const onSave = renderEditor()
-    fireEvent.change(screen.getByDisplayValue('use for content'), {
-      target: { value: 'when a slide is mostly prose' },
-    })
-    expect(saved(onSave).layouts[0]!.purpose).toBe(
-      'when a slide is mostly prose',
-    )
+    fireEvent.click(railDelete('Content'))
+    confirm()
+    expect(saved(onSave).layouts.map(l => l.type)).toEqual(['whiteboard'])
   })
 
-  it('removes a layout, once the author confirms', () => {
+  it('keeps the layout when the question is answered no', () => {
+    // A layout is a whole design; deleting one on a stray click would be
+    // expensive to put back.
     const onSave = renderEditor()
-    fireEvent.click(screen.getByRole('button', { name: 'Remove this layout' }))
+    fireEvent.click(railDelete('Content'))
     fireEvent.click(
       within(screen.getByRole('alertdialog')).getByRole('button', {
-        name: 'Delete',
+        name: 'Cancel',
       }),
     )
-    expect(saved(onSave).layouts.map(l => l.type)).toEqual(['whiteboard'])
+    expect(saved(onSave).layouts.map(l => l.type)).toEqual([
+      'content',
+      'whiteboard',
+    ])
+  })
+
+  it('deletes the layout whose row was clicked, not the one on screen', () => {
+    const onSave = renderEditor(vi.fn(), {
+      layouts: [
+        layout('content', 'Content', ['title', 'body']),
+        layout('list', 'List', ['title', 'bullets']),
+        layout('whiteboard', 'Whiteboard', []),
+      ],
+    })
+    // Looking at the second one, deleting the first.
+    fireEvent.click(screen.getByRole('tab', { name: /List/ }))
+    fireEvent.click(railDelete('Content'))
+    confirm()
+    expect(saved(onSave).layouts.map(l => l.type)).toEqual([
+      'list',
+      'whiteboard',
+    ])
+    // ...and it is still the one being looked at, though it has moved up.
+    expect(screen.getByRole('tab', { name: /List/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
   })
 
   it('never lands on the whiteboard after deleting the layout before it', () => {
@@ -158,12 +202,8 @@ describe('the layout inspector', () => {
     })
     // Delete the last listed layout, whose neighbour is the whiteboard.
     fireEvent.click(screen.getByRole('tab', { name: /List/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Remove this layout' }))
-    fireEvent.click(
-      within(screen.getByRole('alertdialog')).getByRole('button', {
-        name: 'Delete',
-      }),
-    )
+    fireEvent.click(railDelete('List'))
+    confirm()
     expect(screen.getByRole('tab', { name: /Content/ })).toHaveAttribute(
       'aria-selected',
       'true',
@@ -173,6 +213,23 @@ describe('the layout inspector', () => {
       'content',
       'whiteboard',
     ])
+  })
+})
+
+describe('the layout inspector', () => {
+  it('edits the purpose the AI reads when choosing a layout (TMPL-6)', () => {
+    const onSave = renderEditor()
+    fireEvent.change(screen.getByDisplayValue('use for content'), {
+      target: { value: 'when a slide is mostly prose' },
+    })
+    expect(saved(onSave).layouts[0]!.purpose).toBe(
+      'when a slide is mostly prose',
+    )
+  })
+
+  it('leaves deleting to the rail, where every layout can be reached', () => {
+    renderEditor()
+    expect(screen.queryByRole('button', { name: /^Remove this/ })).toBeNull()
   })
 
   it('keeps the whiteboard on the template even though it is not listed', () => {
@@ -232,13 +289,10 @@ describe('the box inspector', () => {
     expect(node.style).toMatchObject({ textStyle: 'heading', fontSize: 9 })
   })
 
-  it('removes a box, and the slot it showed', () => {
-    const onSave = renderEditor()
+  it('leaves deleting to the outline, where the box is already listed', () => {
+    renderEditor()
     selectBox('body')
-    fireEvent.click(screen.getByRole('button', { name: 'Remove this box' }))
-    const draft = saved(onSave).layouts[0]!
-    expect(draft.slots.map(s => s.name)).toEqual(['title'])
-    expect(draft.tree!.children!.map(c => c.id)).toEqual(['title'])
+    expect(screen.queryByRole('button', { name: 'Remove this box' })).toBeNull()
   })
 
   it('turns a box into a row of other boxes', () => {
@@ -350,6 +404,69 @@ describe('boxes of the author’s own', () => {
       'body',
       'title',
     ])
+  })
+})
+
+describe('deleting a box from the outline', () => {
+  it('removes it and the slot it showed, without asking', () => {
+    // A box is one undo away, so a question per box would only be in the way.
+    const onSave = renderEditor()
+    fireEvent.click(boxDelete('body'))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    const draft = saved(onSave).layouts[0]!
+    expect(draft.slots.map(s => s.name)).toEqual(['title'])
+    expect(draft.tree!.children!.map(c => c.id)).toEqual(['title'])
+  })
+
+  it('puts it back on undo', () => {
+    const onSave = renderEditor()
+    fireEvent.click(boxDelete('body'))
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    const draft = saved(onSave).layouts[0]!
+    expect(draft.slots.map(s => s.name)).toEqual(['title', 'body'])
+    expect(draft.tree!.children!.map(c => c.id)).toEqual(['title', 'body'])
+  })
+
+  it('takes what a container held with it', () => {
+    // Nothing is left to arrange those boxes, so their slots would be
+    // declared and never drawn.
+    const onSave = renderEditor()
+    selectBox('body')
+    fireEvent.change(screen.getByLabelText('What is it'), {
+      target: { value: 'row' },
+    })
+    fireEvent.click(
+      screen.getAllByRole('button', { name: /^Add a box inside/ }).at(-1)!,
+    )
+    fireEvent.click(boxDelete('Row'))
+    const draft = saved(onSave).layouts[0]!
+    expect(draft.slots.map(s => s.name)).toEqual(['title'])
+    expect(draft.tree!.children!.map(c => c.id)).toEqual(['title'])
+  })
+
+  it('drops the selection when the box selected is the one deleted', () => {
+    renderEditor()
+    selectBox('body')
+    fireEvent.click(boxDelete('body'))
+    // The column is back to the layout's own settings, not a box that is gone.
+    expect(screen.queryByLabelText('What is it')).toBeNull()
+    expect(screen.getByDisplayValue('use for content')).toBeInTheDocument()
+  })
+
+  it('keeps a selection the deletion did not touch', () => {
+    renderEditor()
+    selectBox('title')
+    fireEvent.click(boxDelete('body'))
+    expect(screen.getByLabelText('What is it')).toBeInTheDocument()
+  })
+
+  it('offers nothing to delete on the layout’s own row', () => {
+    // The root row is the layout itself; deleting that is the rail's job.
+    renderEditor()
+    // One per box — the two in this layout — and none for the root.
+    expect(
+      screen.getAllByRole('button', { name: /^Remove the .+ box$/ }),
+    ).toHaveLength(2)
   })
 })
 
@@ -465,6 +582,145 @@ describe('template settings', () => {
   })
 })
 
+describe('previewing a layout at its limits', () => {
+  /** A layout whose boxes say how much they hold, so there is a limit to
+   * fill them to. */
+  const bounded = (): Partial<Template> => ({
+    layouts: [
+      {
+        ...layout('content', 'Content', ['title']),
+        slots: [
+          { name: 'title', kind: 'text', label: 'title', maxChars: 90 },
+          { name: 'points', kind: 'bullets', label: 'points', maxItems: 5 },
+        ],
+        tree: tree([
+          { id: 'title', slot: 'title' },
+          { id: 'points', slot: 'points' },
+        ]),
+      } as Layout,
+      layout('whiteboard', 'Whiteboard', []),
+    ],
+  })
+
+  const canvas = () => screen.getByTestId('template-canvas')
+  const box = (id: string) =>
+    canvas().querySelector(`[data-node-id="${id}"]`) as HTMLElement
+
+  it('starts on the comfortable sample', () => {
+    renderEditor(vi.fn(), bounded())
+    expect(
+      screen.getByRole('checkbox', {
+        name: /Preview with every box at its limit/,
+      }),
+    ).not.toBeChecked()
+    expect(box('title').textContent).toBe('A slide in this style')
+  })
+
+  it('fills every box to what the template says it holds', () => {
+    renderEditor(vi.fn(), bounded())
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: /Preview with every box at its limit/,
+      }),
+    )
+
+    // The title box says 90 characters, so that is about what it shows —
+    // far more than the sample sentence it held a moment ago.
+    const filled = box('title').textContent ?? ''
+    expect(filled.length).toBeLessThanOrEqual(90)
+    expect(filled.length).toBeGreaterThan(87)
+    // …and the list box says five points, so it lists five
+    expect(box('points').querySelectorAll('li')).toHaveLength(5)
+  })
+
+  /** The same layout, saying nothing itself: its boxes are set in named text
+   * styles, and the layout carries the AI constraints a built-in ships with.
+   * How much fits is then the styles' business, which is what the editor
+   * lets an author change. */
+  const styled = (): Partial<Template> => ({
+    layouts: [
+      {
+        ...layout('content', 'Content', ['title']),
+        slots: [
+          { name: 'title', kind: 'text', label: 'title' },
+          { name: 'points', kind: 'bullets', label: 'points' },
+        ],
+        constraints: { maxTitleChars: 50, maxBullets: 6, maxBulletChars: 70 },
+        tree: tree([
+          { id: 'title', slot: 'title', style: { textStyle: 'heading' } },
+          { id: 'points', slot: 'points', style: { textStyle: 'bullet' } },
+        ]),
+      } as Layout,
+      layout('whiteboard', 'Whiteboard', []),
+    ],
+  })
+
+  it('follows a text style being retuned, over the layout’s constraint', () => {
+    // The reported case: the point count in "Default text styles" is the one
+    // control an author has over how many bullets a slide holds, so the
+    // preview has to move with it rather than stay on the layout's own
+    // maxBullets — which no editor shows.
+    renderEditor(vi.fn(), styled())
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: /Preview with every box at its limit/,
+      }),
+    )
+    expect(box('points').querySelectorAll('li')).toHaveLength(6)
+
+    fireEvent.change(screen.getByLabelText('Max points for Bullets'), {
+      target: { value: '2' },
+    })
+    expect(box('points').querySelectorAll('li')).toHaveLength(2)
+
+    // …and the same for characters, in a list box and a text box alike
+    fireEvent.change(screen.getByLabelText('Max characters for Bullets'), {
+      target: { value: '20' },
+    })
+    for (const item of box('points').querySelectorAll('li')) {
+      expect(item.textContent!.length).toBeLessThanOrEqual(20)
+    }
+    fireEvent.change(
+      screen.getByLabelText('Max characters for Slide heading'),
+      { target: { value: '30' } },
+    )
+    expect(box('title').textContent!.length).toBeLessThanOrEqual(30)
+  })
+
+  it('holds a box in no style to the layout’s own constraint', () => {
+    // Nothing else bounds it, so the constraint the template file carries is
+    // still what the box is filled to.
+    const bare = styled()
+    bare.layouts![0]!.tree = tree([
+      { id: 'title', slot: 'title' },
+      { id: 'points', slot: 'points' },
+    ])
+    renderEditor(vi.fn(), bare)
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: /Preview with every box at its limit/,
+      }),
+    )
+    expect(box('title').textContent!.length).toBeLessThanOrEqual(50)
+    expect(box('title').textContent!.length).toBeGreaterThan(47)
+    expect(box('points').querySelectorAll('li')).toHaveLength(6)
+  })
+
+  it('is a way of looking, not an edit: nothing about it is saved', () => {
+    const onSave = renderEditor(vi.fn(), bounded())
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: /Preview with every box at its limit/,
+      }),
+    )
+    const draft = saved(onSave)
+    expect(draft.layouts[0]!.slots).toEqual([
+      { name: 'title', kind: 'text', label: 'title', maxChars: 90 },
+      { name: 'points', kind: 'bullets', label: 'points', maxItems: 5 },
+    ])
+  })
+})
+
 describe('undo', () => {
   it('is offered as a button, not only as a shortcut', () => {
     renderEditor()
@@ -488,7 +744,7 @@ describe('undo', () => {
     // Undoing a deletion that leaves nothing selected is disorienting.
     renderEditor()
     selectBox('body')
-    fireEvent.click(screen.getByRole('button', { name: 'Remove this box' }))
+    fireEvent.click(boxDelete('body'))
     expect(screen.queryByLabelText('What is it')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
     expect(screen.getByLabelText('What is it')).toBeInTheDocument()

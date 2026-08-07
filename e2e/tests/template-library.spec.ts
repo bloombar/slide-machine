@@ -40,11 +40,14 @@ test('template library: duplicate, edit, apply, delete', async ({ page }) => {
   const shipped = await previews.count()
 
   // Duplicating is how a template is made: the copy opens straight in the
-  // editor, since its name is the first thing anyone changes (TMPL-4).
+  // editor, since its name is the first thing anyone changes (TMPL-4). The
+  // editor is the copy's own page, at its own permalink — a design belongs to
+  // its author, not to the project whose settings were open.
   await page
     .getByRole('button', { name: /^Duplicate / })
     .first()
     .click()
+  await expect(page).toHaveURL(/\/t\//)
 
   const nameField = page.getByLabel('Template name')
   await expect(nameField).toBeVisible()
@@ -58,6 +61,17 @@ test('template library: duplicate, edit, apply, delete', async ({ page }) => {
     'aria-selected',
     'true',
   )
+
+  await test.step('the Save bar sits above the status footer, not under it', async () => {
+    // Only a browser can say this: both bars are sticky to the bottom of the
+    // screen, and a Save hidden behind the footer is a Save nobody can click.
+    const actions = page.getByTestId('template-editor-actions')
+    const footer = page.getByRole('contentinfo')
+    const bar = (await actions.boundingBox())!
+    const status = (await footer.boundingBox())!
+    expect(bar.y + bar.height).toBeLessThanOrEqual(status.y + 1)
+    await expect(page.getByRole('button', { name: 'Save' })).toBeVisible()
+  })
 
   await test.step('a colour change shows on the slide, not just in a field', async () => {
     await page.getByLabel('Accent').fill('#00aa88')
@@ -109,9 +123,73 @@ test('template library: duplicate, edit, apply, delete', async ({ page }) => {
     await expect(page.getByRole('tab', { name: /Lab safety/ })).toBeVisible()
   })
 
+  await test.step('a layout is deleted from its own row, after a question', async () => {
+    // Only a browser can say the icon is hidden until the row is pointed at:
+    // jsdom applies no styles, so every one of them is "there" to it.
+    const tab = page.getByRole('tab', { name: /Lab safety/ })
+    const remove = page
+      .getByRole('tablist')
+      .getByRole('button', { name: 'Remove the Lab safety layout' })
+    await expect(remove).toHaveCSS('opacity', '0')
+    await tab.hover()
+    await expect(remove).toHaveCSS('opacity', '1')
+
+    await remove.click()
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Delete' })
+      .click()
+    await expect(page.getByRole('tab', { name: /Lab safety/ })).toHaveCount(0)
+    // A whole design is worth putting back, so undo reaches it too.
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect(page.getByRole('tab', { name: /Lab safety/ })).toBeVisible()
+  })
+
+  await test.step('a box is deleted from its row, with no question asked', async () => {
+    await page.getByRole('tab', { name: /Content/ }).click()
+    const row = page.getByRole('listitem', { name: /^Image 2/ })
+    const remove = page.getByRole('button', {
+      name: 'Remove the Image 2 box',
+    })
+    await expect(remove).toHaveCSS('opacity', '0')
+    await row.hover()
+    await expect(remove).toHaveCSS('opacity', '1')
+
+    await remove.click()
+    await expect(page.getByRole('alertdialog')).toHaveCount(0)
+    await expect(page.getByRole('listitem', { name: /^Image 2/ })).toHaveCount(
+      0,
+    )
+    // Which is why nothing asks first: undo is the way back.
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect(page.getByRole('listitem', { name: /^Image 2/ })).toBeVisible()
+  })
+
   await page.getByRole('button', { name: 'Save' }).click()
 
-  // Back in the library, the copy is there and marked as the user's own
+  await test.step('saving keeps the author on the design’s page, which its permalink reopens', async () => {
+    // A page is somewhere to keep working, not a dialog to get out of.
+    await expect(page.getByTestId('template-saved')).toHaveText('Saved')
+    await expect(page.getByLabel('Template name')).toBeVisible()
+    // The heading names the design and its author, who reads through to
+    // their profile; the URL is the design's own, and survives a reload.
+    await expect(
+      page.getByRole('heading', { name: templateName, level: 1 }),
+    ).toBeVisible()
+    await expect(page.getByRole('link', { name: user.name })).toBeVisible()
+    const permalink = page.url()
+    await page.reload()
+    expect(page.url()).toBe(permalink)
+    await expect(page.getByLabel('Template name')).toHaveValue(templateName)
+  })
+
+  // Back where the author came from: the project whose Design tab sent them
+  await page.getByRole('button', { name: 'Back', exact: true }).click()
+  await expect(page).toHaveURL(/\/app\/projects\//)
+  await openProjectSettings(page, projectName)
+  await page.getByRole('tab', { name: 'Design' }).click()
+
+  // In the library, the copy is there and marked as the user's own
   await expect(library.getByText(templateName)).toBeVisible()
   expect(await page.getByTestId('template-preview').count()).toBe(shipped + 1)
   await expect(library.getByText('Custom').first()).toBeVisible()
@@ -135,16 +213,21 @@ test('template library: duplicate, edit, apply, delete', async ({ page }) => {
 
   await test.step('the design survived the save', async () => {
     await page.getByRole('button', { name: `Edit ${templateName}` }).click()
+    await expect(page).toHaveURL(/\/t\//)
     await expect(page.getByRole('tab', { name: /Lab safety/ })).toBeVisible()
     await page.getByRole('tab', { name: /Content/ }).click()
     // The author's own box came back, and so did the colour.
     await expect(page.getByText('Image 2')).toBeVisible()
     await expect(page.getByLabel('Accent')).toHaveValue('#00aa88')
+    // Nothing changed, so leaving asks nothing.
     await page.getByRole('button', { name: 'Cancel' }).click()
+    await expect(page).toHaveURL(/\/app\/projects\//)
   })
 
   // Deleting the copy takes it out of the library, and the project page
   // still opens afterwards — a lecture must not break with its template
+  await openProjectSettings(page, projectName)
+  await page.getByRole('tab', { name: 'Design' }).click()
   await page.getByRole('button', { name: `Delete ${templateName}` }).click()
   await page.getByRole('button', { name: 'Delete' }).last().click()
   await expect(library.getByText(templateName)).toHaveCount(0)
@@ -183,11 +266,12 @@ test('a layout of the author’s own survives leaving and returning', async ({
   await boxes().getByText('Slide title').click()
   await page.getByLabel('Text size', { exact: true }).fill('9')
   await page.getByRole('button', { name: 'Save' }).click()
-  // A refused save keeps the editor open, so this is also the check that it
-  // was accepted at all.
-  await expect(page.getByLabel('Template name')).toHaveCount(0)
+  // A refused save says so instead; "Saved" is the check that it was
+  // accepted at all.
+  await expect(page.getByTestId('template-saved')).toHaveText('Saved')
 
-  await page.getByRole('button', { name: 'Close settings' }).click()
+  // Away entirely — back to the project, then in again by the library.
+  await page.getByRole('button', { name: 'Back', exact: true }).click()
   await openProjectSettings(page, projectName)
   await page.getByRole('tab', { name: 'Design' }).click()
   await page.getByRole('button', { name: `Edit ${own}` }).click()
@@ -197,6 +281,69 @@ test('a layout of the author’s own survives leaving and returning', async ({
   await boxes().getByText('Slide title').click()
   await expect(page.getByLabel('Text size', { exact: true })).toHaveValue('9')
   await page.getByRole('button', { name: 'Cancel' }).click()
+})
+
+test('a lecture uses the design it duplicates or opens for editing', async ({
+  page,
+}) => {
+  // Working on a design is done to see it on the slides, so the Design tab
+  // applies whichever template the author starts working on: the copy the
+  // moment it is made, and the one whose settings are opened.
+  const first = `Lecture Style ${stamp}`
+  const second = `Lecture Style B ${stamp}`
+  await page.goto('/login')
+  await page.getByLabel('Email').fill(user.email)
+  await page.getByLabel('Password').fill(password)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page).toHaveURL(/\/app$/)
+
+  await page
+    .getByRole('button', { name: `Start a new lecture in ${projectName}` })
+    .click()
+  await expect(page).toHaveURL(/\/d\//)
+  await page.getByRole('button', { name: 'Start lecture' }).click()
+
+  const openDesign = async () => {
+    await page.getByRole('button', { name: 'Lecture settings' }).click()
+    await page.getByRole('tab', { name: 'Design' }).click()
+  }
+  const chosen = (name: string) =>
+    page.getByRole('radio', { name: new RegExp(name) })
+
+  /** Names a copy on its own page, then comes back to the lecture. */
+  const nameAndReturn = async (name: string) => {
+    await page.getByLabel('Template name').fill(name)
+    await page.getByRole('button', { name: 'Save' }).click()
+    await expect(page.getByTestId('template-saved')).toHaveText('Saved')
+    await page.getByRole('button', { name: 'Back', exact: true }).click()
+    await expect(page).toHaveURL(/\/d\//)
+    await openDesign()
+  }
+
+  await openDesign()
+  await page.getByRole('button', { name: 'Duplicate Classic' }).click()
+  await nameAndReturn(first)
+  // Saving chose nothing — the duplicate did, when it was made.
+  await expect(chosen(first)).toHaveAttribute('aria-checked', 'true')
+
+  // A second copy, so the one to edit is not the one already in use
+  await page.getByRole('button', { name: `Duplicate ${first}` }).click()
+  await nameAndReturn(second)
+  await expect(chosen(second)).toHaveAttribute('aria-checked', 'true')
+
+  // Opening the first one's settings puts the lecture back on it, even
+  // though the editor is left without saving anything
+  await page.getByRole('button', { name: `Edit ${first}` }).click()
+  await expect(page.getByLabel('Template name')).toHaveValue(first)
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await expect(page).toHaveURL(/\/d\//)
+  await openDesign()
+  await expect(chosen(first)).toHaveAttribute('aria-checked', 'true')
+
+  // It is the lecture that changed, not just the picker
+  await page.reload()
+  await openDesign()
+  await expect(chosen(first)).toHaveAttribute('aria-checked', 'true')
 })
 
 test('arranging boxes freely, with rulers and guides', async ({ page }) => {
@@ -281,5 +428,69 @@ test('arranging boxes freely, with rulers and guides', async ({ page }) => {
     ).toHaveCount(0)
   })
 
-  await page.getByRole('button', { name: 'Cancel' }).click()
+  await test.step('leaving with unsaved work asks before losing it', async () => {
+    await page.getByRole('button', { name: 'Cancel' }).click()
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Discard changes' })
+      .click()
+    await expect(page).toHaveURL(/\/app\/projects\//)
+  })
+})
+
+test('previewing at capacity follows the limits the template sets', async ({
+  page,
+}) => {
+  // The checkbox is there to judge a design at its worst, so the numbers it
+  // draws have to be the template's own. A limit typed in "Default text
+  // styles" must move the preview immediately, and mean the same thing after
+  // the template is saved and reopened — only a browser can say that.
+  const own = `Capacity ${stamp}`
+  await page.goto('/login')
+  await page.getByLabel('Email').fill(user.email)
+  await page.getByLabel('Password').fill(password)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page).toHaveURL(/\/app$/)
+
+  await openProjectSettings(page, projectName)
+  await page.getByRole('tab', { name: 'Design' }).click()
+  await page
+    .getByRole('button', { name: /^Duplicate / })
+    .first()
+    .click()
+  await expect(page).toHaveURL(/\/t\//)
+  await page.getByLabel('Template name').fill(own)
+
+  const canvas = page.getByTestId('template-canvas')
+  const bullets = canvas.locator('li')
+  await page.getByRole('tab', { name: /Bullet list/ }).click()
+
+  const atCapacity = page.getByRole('checkbox', {
+    name: /Preview with every box at its limit/,
+  })
+  await atCapacity.check()
+  // The shipped list layout holds more than the two asked for below, so the
+  // change that follows is a real one rather than a coincidence.
+  expect(await bullets.count()).toBeGreaterThan(2)
+
+  await test.step('a retuned bullet style redraws the slide at once', async () => {
+    await page.getByLabel('Max points for Bullets').fill('2')
+    await expect(bullets).toHaveCount(2)
+    await page.getByLabel('Max characters for Bullets').fill('25')
+    await expect
+      .poll(async () => (await bullets.first().innerText()).length)
+      .toBeLessThanOrEqual(25)
+  })
+
+  await test.step('the same limits come back with the saved template', async () => {
+    await page.getByRole('button', { name: 'Save' }).click()
+    await expect(page.getByTestId('template-saved')).toHaveText('Saved')
+    await page.reload()
+    await page.getByRole('tab', { name: /Bullet list/ }).click()
+    await page
+      .getByRole('checkbox', { name: /Preview with every box at its limit/ })
+      .check()
+    await expect(page.getByLabel('Max points for Bullets')).toHaveValue('2')
+    await expect(canvas.locator('li')).toHaveCount(2)
+  })
 })

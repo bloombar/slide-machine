@@ -20,6 +20,7 @@ const layout = (type: string, label: string, slots: string[]): Layout =>
 
 const template = (over: Partial<Template> = {}): Template => ({
   id: 'built-1',
+  permalinkSlug: 'built-1',
   ownerId: 'system',
   name: 'Shipped',
   theme: { background: '#ffffff', text: '#000000', accent: '#ff0000' },

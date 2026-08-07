@@ -5,6 +5,7 @@
     "note": "Source bundle. Every other locale is derived from this one; bundles.test.ts fails if a key here has no counterpart there."
   },
   "common": {
+    "back": "Back",
     "loading": "Loading…",
     "save": "Save",
     "saving": "Saving…",
@@ -219,6 +220,8 @@
     "nameLabel": "Template name",
     "themeLabel": "Default colours",
     "layoutsLabel": "Layouts",
+    "atCapacity": "Preview with every box at its limit",
+    "atCapacityHint": "Shows the slide with as much text as it can hold. You can adjust the capacity of each box in its settings.",
     "layoutName": "Name",
     "layoutPurpose": "When to use it",
     "theme": {
@@ -244,8 +247,14 @@
     },
     "errors": {
       "duplicate": "Could not duplicate that template",
+      "load": "Could not load this design",
       "save": "Could not save the template",
       "delete": "Could not delete the template"
+    },
+    "page": {
+      "saved": "Saved",
+      "readOnly": "This design is not yours to change. Duplicate it from a lecture's Design tab to make one of your own.",
+      "missing": "This design does not exist, or is private."
     },
     "visibilityLabel": "Who can use it",
     "addLayout": "Add a layout",
@@ -269,7 +278,6 @@
       "bullets": "Bullet points",
       "image": "Image"
     },
-    "removeSlot": "Remove this box",
     "newLayoutAdd": "Add layout",
     "layoutSettings": "Layout",
     "boxSettings": "Box",
@@ -282,6 +290,7 @@
     "decoration": "Decoration",
     "newBoxName": "New box",
     "addBoxTo": "Add a box inside {name}",
+    "removeBox": "Remove the {name} box",
     "direction": "Direction",
     "directions": {
       "row": "Across",
@@ -367,7 +376,6 @@
     "placement": "Position",
     "placeFreely": "Position this box freely",
     "placeFreelyOn": "Drag it anywhere on the slide. It takes no room from the boxes around it.",
-    "removeLayoutButton": "Remove this layout",
     "layoutNumbered": "Layout {number}",
     "contentLayouts": {
       "column": "A column of content",
@@ -381,17 +389,28 @@
     "arrangement": "Arrangement",
     "unsaved": "Unsaved changes",
     "discard": {
-      "title": "Close without saving?",
-      "message": "The template has changes that have not been saved. Closing now loses them.",
+      "title": "Leave without saving?",
+      "message": "This design has changes that have not been saved. Leaving now loses them.",
       "confirm": "Discard changes",
-      "save": "Save and close"
+      "save": "Save and leave"
     },
     "clearFill": "Use no fill",
     "placedByParent": "Automatically positioned by parent box",
     "maxChars": "Max characters",
     "maxItems": "Max points",
     "styleChars": "Max characters for {style}",
-    "styleItems": "Max points for {style}"
+    "styleItems": "Max points for {style}",
+    "update": {
+      "heading": "This design has been updated",
+      "hintClean": "The changes are visual only — nothing on your slides needs adjusting.",
+      "hintAffected": "{count, plural, one {Content on # slide may need adjusting.} other {Content on # slides may need adjusting.}}",
+      "apply": "Update this lecture",
+      "confirmTitle": "Update this lecture's design?",
+      "confirmIntro": "Your slides will be rebuilt on the latest version of this design. Text and pictures move to the matching boxes in the new layouts.",
+      "confirmUnplaced": "{count, plural, one {On # slide, these boxes have no match in the new design:} other {On # slides, these boxes have no match in the new design:}}",
+      "confirmRemovedLayouts": "{count, plural, one {# slide uses a layout the new design no longer has, and will be left as it is.} other {# slides use layouts the new design no longer has, and will be left as they are.}}",
+      "confirmKept": "Nothing is deleted. Anything without a match stays on its slide and simply stops being shown, so you can put it back where you want it."
+    }
   },
   "layout": {
     "change": "Change slide layout",

@@ -20,10 +20,16 @@ import type {
   SlideRefitLayoutResult,
   RefitSlotDescriptor,
   GenerationProvider,
+  SlotLimits,
   SlotSpec,
   SlotValue,
 } from '@slide-machine/shared'
-import { pairSlots, textStylesBySlot } from '@slide-machine/shared'
+import {
+  pairSlots,
+  slotLimits,
+  textStylesBySlot,
+  themeTextStyles,
+} from '@slide-machine/shared'
 import { defineAction } from './define'
 import {
   registerAction,
@@ -33,7 +39,7 @@ import {
 import type { ActionContext } from './context'
 import { SlideModel, toSlideDto, type SlideDb } from '../models/slide'
 import { DeckModel, loadDeckAcl, touchDeck, type DeckDb } from '../models/deck'
-import { resolveTemplate } from '../templates/resolve'
+import { resolveDeckTemplate } from '../templates/versions'
 import { layoutDescriptors } from '../templates/builtin'
 import { registry } from '../providers/registry'
 import { requireAiTokens } from '../billing/meter-hooks'
@@ -44,6 +50,7 @@ import {
   slotValueSchema,
   slotsOf,
 } from '../lib/slide-slots'
+import { remapSlideTranslations } from '../lib/translate-slides'
 import { imageSlotNames, slotHasImage } from '../lib/image-layout'
 import { enrichSlideImages } from '../enrichment/enrich'
 import type { SlideImageContext } from '../enrichment/types'
@@ -142,7 +149,7 @@ export const slideEditContent = defineAction<SlideEditInput, Slide>({
     // slide must never hold content the template cannot show.
     if (input.slots) {
       const deck = await DeckModel.findById(slide.deckId)
-      const template = deck ? await resolveTemplate(deck.templateId) : undefined
+      const template = deck ? await resolveDeckTemplate(deck) : undefined
       const declared = new Set(
         template?.layouts
           .find(l => l.type === slide.layoutType)
@@ -179,7 +186,7 @@ export const slideSetLayout = defineAction<SlideSetLayoutInput, Slide>({
   }),
   execute: async (ctx, input) => {
     const { slide, deck } = await loadOwnedSlide(ctx, input.slideId)
-    const template = await resolveTemplate(deck.templateId)
+    const template = await resolveDeckTemplate(deck)
     if (!template?.layouts.some(l => l.type === input.layoutType)) {
       throw new ActionValidationError('slide.setLayout', [
         'layoutType: not a layout of this template',
@@ -196,8 +203,16 @@ export const slideSetLayout = defineAction<SlideSetLayoutInput, Slide>({
     const toLayout = template.layouts.find(l => l.type === input.layoutType)!
     if (fromLayout && fromLayout.type !== toLayout.type) {
       const { pairs } = pairSlots(fromLayout, toLayout)
-      slide.slots = remapSlots(slotsOf(slide), pairs)
+      const before = slotsOf(slide)
+      slide.slots = remapSlots(before, pairs)
       slide.markModified('slots')
+      // The words did not change, only the box they sit in — carry any cached
+      // translations across with them rather than paying to translate the
+      // same text again (SHARE-2).
+      await remapSlideTranslations(deck._id, slide._id.toString(), pairs, {
+        id: slide._id.toString(),
+        slots: before,
+      })
     }
 
     slide.layoutType = input.layoutType
@@ -279,18 +294,26 @@ const refitValueOf = (
   return undefined
 }
 
-/** One box, described for the refit request: its spec plus what it holds. */
+/**
+ * One box, described for the refit request: its spec plus what it holds.
+ *
+ * `limits` are the resolved ones (`slotLimits`), not the box's own: a
+ * built-in layout states its capacity through its text styles and its
+ * constraints, so reading only the box would tell the model a title box has
+ * no limit at all and invite one that overflows.
+ */
 const refitSlot = (
   spec: SlotSpec,
   textStyle: string | undefined,
   value: SlotValue | undefined,
+  limits: SlotLimits | undefined,
 ): RefitSlotDescriptor => ({
   name: spec.name,
   kind: spec.kind,
   label: spec.label,
   textStyle,
-  maxChars: spec.maxChars,
-  maxItems: spec.maxItems,
+  maxChars: limits?.maxChars,
+  maxItems: limits?.maxItems,
   value: refitValueOf(value),
 })
 
@@ -322,7 +345,7 @@ export const slideRefitLayout = defineAction<
   }),
   execute: async (ctx, input) => {
     const { slide, deck } = await loadOwnedSlide(ctx, input.slideId)
-    const template = await resolveTemplate(deck.templateId)
+    const template = await resolveDeckTemplate(deck)
     const layout = template?.layouts.find(l => l.type === slide.layoutType)
     const unchanged = { slide: toSlideDto(slide), filled: [] as string[] }
     if (!template || !layout) return unchanged
@@ -341,11 +364,14 @@ export const slideRefitLayout = defineAction<
     const orphanNames = Object.keys(content).filter(n => !declared.has(n))
     if (!holes.length || !orphanNames.length) return unchanged
 
+    const styles = themeTextStyles(template.theme)
     const toStyles = textStylesBySlot(layout)
+    const toLimits = slotLimits(layout, styles)
     const from = input.fromLayoutType
       ? template.layouts.find(l => l.type === input.fromLayoutType)
       : undefined
     const fromStyles = from ? textStylesBySlot(from) : {}
+    const fromLimits = from ? slotLimits(from, styles) : {}
 
     const orphaned = orphanNames
       .map(name => {
@@ -355,7 +381,12 @@ export const slideRefitLayout = defineAction<
             'bullets' | 'text',
           label: name,
         }
-        return refitSlot(spec, fromStyles[name], content[name])
+        return refitSlot(
+          spec,
+          fromStyles[name],
+          content[name],
+          fromLimits[name],
+        )
       })
       .filter(s => s.value !== undefined)
     if (!orphaned.length) return unchanged
@@ -366,7 +397,12 @@ export const slideRefitLayout = defineAction<
         layoutType: from?.type ?? input.fromLayoutType ?? 'unknown',
         label: from?.label ?? input.fromLayoutType ?? 'the previous layout',
         slots: (from?.slots ?? []).map(spec =>
-          refitSlot(spec, fromStyles[spec.name], content[spec.name]),
+          refitSlot(
+            spec,
+            fromStyles[spec.name],
+            content[spec.name],
+            fromLimits[spec.name],
+          ),
         ),
       },
       to: {
@@ -374,7 +410,12 @@ export const slideRefitLayout = defineAction<
         label: layout.label,
         purpose: layout.purpose,
         slots: layout.slots.map(spec =>
-          refitSlot(spec, toStyles[spec.name], content[spec.name]),
+          refitSlot(
+            spec,
+            toStyles[spec.name],
+            content[spec.name],
+            toLimits[spec.name],
+          ),
         ),
       },
       fill: holes.map(s => s.name),
