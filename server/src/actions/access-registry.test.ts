@@ -32,7 +32,16 @@ import type { AccessDescriptor } from './access/policy'
  * How every migrated action is guarded. One row per action; the test pins
  * each against the policy the action actually declares.
  */
-const ACCESS_INDEX: Record<string, AccessDescriptor> = {}
+const ACCESS_INDEX: Record<string, AccessDescriptor> = {
+  'slide.delete': { resource: 'slide', level: 'edit' },
+  'slide.editContent': { resource: 'slide', level: 'edit' },
+  'slide.editDrawings': { resource: 'slide', level: 'edit' },
+  'slide.editTranscript': { resource: 'slide', level: 'edit' },
+  'slide.get': { resource: 'slide', level: 'edit' },
+  'slide.refitLayout': { resource: 'slide', level: 'edit' },
+  'slide.regenerateTranscript': { resource: 'slide', level: 'edit' },
+  'slide.setLayout': { resource: 'slide', level: 'edit' },
+}
 
 /** Actions whose access rule is not one resource at one level. */
 const CUSTOM_ALLOWED = new Set<string>([])
@@ -104,14 +113,6 @@ const PENDING_MIGRATION = new Set<string>([
   'seedAsset.update',
   'session.phrase',
   'slide.add',
-  'slide.delete',
-  'slide.editContent',
-  'slide.editDrawings',
-  'slide.editTranscript',
-  'slide.get',
-  'slide.refitLayout',
-  'slide.regenerateTranscript',
-  'slide.setLayout',
   'social.search',
   'system.echo',
   'template.delete',
