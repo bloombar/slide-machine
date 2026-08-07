@@ -297,12 +297,22 @@ export const resolveDeckAcl = (
   }
 }
 
-/** Resolves a single deck's ACL, loading its project when inheriting. */
+/**
+ * Resolves a single deck's ACL, loading its project when inheriting.
+ *
+ * `withDeleted` lets the project lookup see a tombstoned project, so an
+ * inheriting lecture an admin is viewing after deletion (ADMIN-6) resolves
+ * its real visibility instead of the dangling-project fallback
+ * (`restricted`) — the batch loader below takes the same option.
+ */
 export const loadDeckAcl = async (
   deck: DeckLike & { projectId: Types.ObjectId },
+  opts: { withDeleted?: boolean } = {},
 ): Promise<ResolvedAcl> => {
   if (deck.accessOverride) return resolveDeckAcl(deck, null)
-  const project = await ProjectModel.findById(deck.projectId).catch(() => null)
+  const project = await ProjectModel.findById(deck.projectId)
+    .setOptions({ withDeleted: opts.withDeleted })
+    .catch(() => null)
   return resolveDeckAcl(deck, project)
 }
 

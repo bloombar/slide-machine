@@ -96,7 +96,7 @@ import type { MyVote } from '@slide-machine/shared'
 import { SlideModel, toSlideDto } from '../models/slide'
 import { TranscriptSegmentModel } from '../models/transcript-segment'
 import { ProjectModel, projectAcl } from '../models/project'
-import { isAllowlistedAdmin } from '../lib/admin-view'
+import { asOf, isAllowlistedAdmin, withDeleted } from '../lib/admin-view'
 import { editDeckSettings } from '../lib/admin-edit'
 import { recordSettingsChange } from '../audit/settings-log'
 import { deckSettingsSnapshot } from '../lib/settings-snapshot'
@@ -306,25 +306,44 @@ export const deckList = defineAction<DeckListInput, Deck[]>({
     const userId = requireUser(ctx)
     if (input.projectId) {
       // Project members see the project's (viewable) lectures
-      const project = await ProjectModel.findById(input.projectId).catch(
+      let project = await ProjectModel.findById(input.projectId).catch(
         () => null,
       )
-      if (!project) throw new ActionForbiddenError()
-      const member = isAclMember(projectAcl(project), userId)
       // Allowlisted admins get an always-on read bypass (lib/admin-view.ts).
       // They can already open any lecture in the viewer, so listing the
       // project's lectures here — private ones included — leaks nothing new.
-      const admin = !member && (await isAllowlistedAdmin(userId))
+      // The bypass covers a tombstoned project too, whose lectures went down
+      // with it (ADMIN-6); project.get is where that opening is audited.
+      let admin = false
+      if (!project) {
+        if (!(await isAllowlistedAdmin(userId)))
+          throw new ActionForbiddenError()
+        admin = true
+        project = await ProjectModel.findById(input.projectId)
+          .setOptions(withDeleted)
+          .catch(() => null)
+      }
+      if (!project) throw new ActionForbiddenError()
+      const member = isAclMember(projectAcl(project), userId)
+      if (!admin) admin = !member && (await isAllowlistedAdmin(userId))
       // A PUBLIC project is browsable by anyone (SOC discovery); the per-deck
       // ACL filter below still limits a non-member to its public lectures.
       const publicProject = !member && !admin && project.visibility === 'public'
       if (!member && !admin && !publicProject) {
         throw new ActionForbiddenError()
       }
-      const docs = await DeckModel.find({ projectId: input.projectId }).sort({
-        updatedAt: -1,
+      // A tombstoned project lists the lectures deleted with it, as its admin
+      // page does — the ones a restore would bring back.
+      const { filter, options } = asOf(project.deletedAt)
+      const docs = await DeckModel.find({
+        projectId: input.projectId,
+        ...filter,
       })
-      const acls = await loadDeckAcls(docs)
+        .sort({ updatedAt: -1 })
+        .setOptions(options)
+      const acls = await loadDeckAcls(docs, {
+        withDeleted: Boolean(project.deletedAt),
+      })
       return docs
         .filter(d => admin || canViewAcl(acls.get(d._id.toString())!, userId))
         .map(d => toDeckDto(d, acls.get(d._id.toString())!))

@@ -5,10 +5,11 @@
  * whole project). Every lecture, private or not, is listed; opening one
  * in the viewer is always allowed for admins.
  *
- * Soft-deleted content is listed too, badged and muted (ADMIN-6): opening
- * a deleted project is itself audited, its actions become Restore, and it
- * cannot be opened in the product view — nothing there reads tombstoned
- * records. Restores work until the retention sweep purges them (P-11).
+ * Soft-deleted content is listed too, badged and muted (ADMIN-6): a
+ * deleted project still opens in the product view, exactly as a live one
+ * does, and its own actions become Restore. Opening it is audited by the
+ * read itself, so it is confirmed here rather than logged here. Restores
+ * work until the retention sweep purges them (P-11).
  *
  * Settings are not edited here: "View project" opens the project in the
  * product view, where an admin edits its settings in the owner's own
@@ -42,6 +43,7 @@ type PendingAction =
   | { kind: 'delete-deck'; deck: AdminDeckSummary }
   | { kind: 'restore-deck'; deck: AdminDeckSummary }
   | { kind: 'view-private' }
+  | { kind: 'view-deleted' }
 
 export default function AdminProjectPage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -70,10 +72,17 @@ export default function AdminProjectPage() {
   }, [projectId, version])
 
   /** Opens the project's real (owner-facing) page. Public projects open
-   * straight away; opening a private one is confirmed first and recorded
-   * in the audit log, mirroring the always-on admin viewer bypass. */
+   * straight away; opening a private or deleted one is confirmed first,
+   * mirroring the always-on admin viewer bypass. A deleted project takes
+   * precedence in the copy — it is the more surprising thing about what is
+   * being opened — and the read that serves it writes its own audit entry,
+   * so nothing is logged from here. */
   const openProject = () => {
     if (!loaded) return
+    if (loaded.deletedAt) {
+      setPending({ kind: 'view-deleted' })
+      return
+    }
     if (loaded.project.visibility === 'public') {
       navigate(`/app/projects/${loaded.project.id}`)
       return
@@ -93,6 +102,11 @@ export default function AdminProjectPage() {
       if (action.kind === 'view-private') {
         // Log the private-project access before handing over to it
         await logAdminProjectView(projectId)
+        navigate(`/app/projects/${projectId}`)
+        return
+      }
+      if (action.kind === 'view-deleted') {
+        // The read logs this one itself (ADMIN-6), so just hand over
         navigate(`/app/projects/${projectId}`)
         return
       }
@@ -153,7 +167,7 @@ export default function AdminProjectPage() {
   }
 
   const { project, owner, decks } = loaded
-  // A deleted project has no product surface left to open, and its own
+  // A deleted project still opens in the product view, read-only; its own
   // actions become recovery (ADMIN-6).
   const projectDeleted = Boolean(loaded.deletedAt)
 
@@ -191,6 +205,12 @@ export default function AdminProjectPage() {
           message: `"${projectTitle(project)}" is a private project. Opening it as an admin is recorded in the audit log.`,
           confirmLabel: 'View project',
         }
+      case 'view-deleted':
+        return {
+          title: 'View this deleted project?',
+          message: `"${projectTitle(project)}" is deleted, so nobody else can open it. You will see it as its owner last did, and opening it as an admin is recorded in the audit log.`,
+          confirmLabel: 'View project',
+        }
     }
   }
 
@@ -216,7 +236,8 @@ export default function AdminProjectPage() {
           className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
         >
           This project is deleted, so it is hidden from its owner and everyone
-          else. Opening it is recorded in the{' '}
+          else. You can still open it as it last stood; doing so is recorded in
+          the{' '}
           <Link to="/app/admin/logs" className="underline">
             audit log
           </Link>
@@ -236,24 +257,25 @@ export default function AdminProjectPage() {
         </p>
       )}
 
+      <button
+        onClick={openProject}
+        className="inline-block rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+      >
+        View project
+      </button>
+      {/* A deleted project opens read-only: its settings modal saves through
+          endpoints that refuse a tombstoned target, so the editing note only
+          applies while it is live. */}
       {!projectDeleted && (
-        <>
-          <button
-            onClick={openProject}
-            className="inline-block rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
-          >
-            View project
-          </button>
-          <p className="mt-2 text-sm text-slate-500">
-            Settings are edited in the project itself: open it and use the
-            settings icon, as its owner would. Every change you make there is
-            recorded in the{' '}
-            <Link to="/app/admin/logs" className="underline">
-              audit log
-            </Link>
-            .
-          </p>
-        </>
+        <p className="mt-2 text-sm text-slate-500">
+          Settings are edited in the project itself: open it and use the
+          settings icon, as its owner would. Every change you make there is
+          recorded in the{' '}
+          <Link to="/app/admin/logs" className="underline">
+            audit log
+          </Link>
+          .
+        </p>
       )}
 
       <section className="mt-6 mb-6 rounded-lg border border-slate-200 p-4">
