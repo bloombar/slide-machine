@@ -10,6 +10,7 @@
 import type { UsageMetric } from '@slide-machine/shared'
 import type { Action } from '../actions/define'
 import { UserModel } from '../models/user'
+import { effectivePlanTier, PLAN_FIELDS } from './plan-grant'
 import { assertWithinCap, capFor, usedThisPeriod } from './usage'
 
 /**
@@ -28,15 +29,16 @@ export const assertUserCapacity = async (
   metric: UsageMetric,
   message: string,
 ): Promise<void> => {
-  const user = await UserModel.findById(userId).select('planTier')
+  const user = await UserModel.findById(userId).select(PLAN_FIELDS)
   if (!user) return
+  const tier = effectivePlanTier(user)
   // A cap of 0 is not an exhausted allowance, it is a capability the tier
   // never had — saying "you have used all of it" would be a lie to someone
   // who never had any.
-  const excluded = capFor(user.planTier, metric) === 0
+  const excluded = capFor(tier, metric) === 0
   await assertWithinCap(
     userId,
-    user.planTier,
+    tier,
     metric,
     excluded ? 'This feature is not included in your current plan.' : message,
   )
@@ -83,9 +85,9 @@ export const usedFractionOf = async (
   metric: UsageMetric,
 ): Promise<number | null> => {
   try {
-    const user = await UserModel.findById(userId).select('planTier')
+    const user = await UserModel.findById(userId).select(PLAN_FIELDS)
     if (!user) return null
-    const cap = capFor(user.planTier, metric)
+    const cap = capFor(effectivePlanTier(user), metric)
     if (cap === null || cap <= 0) return null
     return (await usedThisPeriod(userId, metric)) / cap
   } catch {
@@ -107,9 +109,9 @@ export const userHasCapacity = async (
   metric: UsageMetric,
 ): Promise<boolean> => {
   try {
-    const user = await UserModel.findById(userId).select('planTier')
+    const user = await UserModel.findById(userId).select(PLAN_FIELDS)
     if (!user) return true
-    const cap = capFor(user.planTier, metric)
+    const cap = capFor(effectivePlanTier(user), metric)
     if (cap === null) return true
     return (await usedThisPeriod(userId, metric)) < cap
   } catch (error) {

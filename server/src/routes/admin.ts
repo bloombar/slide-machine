@@ -1,8 +1,9 @@
 /**
  * Admin API: the user directory (each user's projects and lectures),
  * the admin action audit log and the settings change log (each with a
- * CSV export), and the moderation endpoints (delete user/project/lecture,
- * ban an email, reset a password) — every mutation records itself in the
+ * CSV export), the moderation endpoints (delete user/project/lecture,
+ * ban an email, reset a password), and complimentary plan grants
+ * (ADMIN-9, ./admin-plan.ts) — every mutation records itself in the
  * admin action log; settings edits also land in the settings log. Every
  * route is guarded inside the router by requireAuth + requireAdmin
  * (ADMIN_EMAILS allowlist), so mounting it is safe on its own. Intended
@@ -29,12 +30,15 @@ import { z } from 'zod'
 import type {
   AdminAction,
   AdminLogsResponse,
+  AdminPlanGrant,
+  PlanTier,
   Project,
   SafeUser,
   SeedAsset,
   Visibility,
 } from '@slide-machine/shared'
 import { UserModel, toUserDto, type UserDb } from '../models/user'
+import { adminPlanGrant, effectivePlanTier } from '../billing/plan-grant'
 import { ProjectModel, toProjectDto, type ProjectDb } from '../models/project'
 import { DeckModel, loadDeckAcls, type DeckDb } from '../models/deck'
 import {
@@ -76,6 +80,7 @@ import {
   loadDeletedUser,
   rejectAdminTarget,
 } from './admin-targets'
+import { adminPlanRouter } from './admin-plan'
 import { adminSettingsRouter } from './admin-settings'
 import { adminSettingsLogsRouter } from './admin-settings-logs'
 
@@ -115,6 +120,17 @@ export interface AdminUserDetailResponse {
   deckCount: number
   /** Whether the account's email is on the banned list. */
   banned: boolean
+  /**
+   * The tier the account's own billing entitles it to (BILL-2) — what
+   * `user.planTier` would be without a complimentary grant, and what it
+   * returns to when one ends (ADMIN-9). Equal to `user.planTier` unless a
+   * grant is in effect.
+   */
+  billingTier: PlanTier
+  /** The standing complimentary grant, if the account has ever had one —
+   * including a lapsed one, which stays on the record as history until it
+   * is replaced (ADMIN-9). `inEffect` says whether it is deciding anything. */
+  planGrant?: AdminPlanGrant
   /** Soft-delete timestamp; absent while the account is live (ADMIN-6).
    * It sits on the envelope rather than inside `user` so the tombstone
    * never leaks into the shared User type the product reads. */
@@ -253,7 +269,9 @@ const toAdminUserSummary = (
   email: doc.email,
   displayName: doc.displayName,
   emailVerified: doc.emailVerified,
-  planTier: doc.planTier,
+  // The effective tier, so the directory lists what each account may
+  // actually spend rather than what it happens to be paying for (ADMIN-9).
+  planTier: effectivePlanTier(doc),
   createdAt: doc.createdAt.toISOString(),
   deletedAt: tombstone(doc.deletedAt),
 })
@@ -551,10 +569,12 @@ const logDeletedView = async (
 export const adminRouter = Router()
 adminRouter.use(requireAuth, requireAdmin)
 
-// The audited settings-editing endpoints (ADMIN-5) and the settings
-// change log's read endpoints mount here, after the guards above, so they
-// are covered by exactly the same authorization.
+// The audited settings-editing endpoints (ADMIN-5), the complimentary
+// plan-grant endpoints (ADMIN-9), and the settings change log's read
+// endpoints mount here, after the guards above, so they are covered by
+// exactly the same authorization.
 adminRouter.use(adminSettingsRouter)
+adminRouter.use(adminPlanRouter)
 adminRouter.use(adminSettingsLogsRouter)
 
 /** Reachable only through the guards above, so 200 means "is an admin";
@@ -720,6 +740,11 @@ adminRouter.get('/users/:id', async (req, res) => {
     projectCount,
     deckCount,
     banned,
+    // `user.planTier` is the effective tier; these two are how the console
+    // explains it — what the account itself pays for, and the grant sitting
+    // on top of it (ADMIN-9).
+    billingTier: user.planTier,
+    planGrant: adminPlanGrant(user),
     deletedAt: tombstone(user.deletedAt),
   }
   res.json(body)

@@ -29,6 +29,7 @@ const detail = {
   projectCount: 1,
   deckCount: 2,
   banned: false,
+  billingTier: 'pro',
 }
 
 const projects = [
@@ -103,6 +104,45 @@ afterEach(() => {
 })
 
 describe('AdminUserDetailPage', () => {
+  // ADMIN-9. The Plan row has to answer two questions at once: what the
+  // account may spend, and whether anyone is paying for it.
+  it('explains a complimentary plan and what it reverts to', async () => {
+    renderPage(200, {
+      ...detail,
+      user: { ...detail.user, planTier: 'max' },
+      billingTier: 'pro',
+      planGrant: {
+        tier: 'max',
+        expiresAt: '2026-09-30T23:59:59.999Z',
+        grantedAt: '2026-08-01T00:00:00.000Z',
+        grantedByEmail: 'admin@example.com',
+        inEffect: true,
+      },
+    })
+
+    expect(
+      await screen.findByText(/max — complimentary until .*, then pro/i),
+    ).toBeVisible()
+  })
+
+  // History, not clutter: a lapsed grant is what explains last month's usage.
+  it('names a lapsed grant without implying it still applies', async () => {
+    renderPage(200, {
+      ...detail,
+      planGrant: {
+        tier: 'max',
+        expiresAt: '2026-07-30T23:59:59.999Z',
+        grantedAt: '2026-07-01T00:00:00.000Z',
+        grantedByEmail: 'admin@example.com',
+        inEffect: false,
+      },
+    })
+
+    expect(
+      await screen.findByText(/pro \(complimentary max ended/i),
+    ).toBeVisible()
+  })
+
   it('shows account details and a public-profile link', async () => {
     renderPage()
     expect(await screen.findByRole('heading', { name: 'Ada' })).toBeVisible()

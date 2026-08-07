@@ -20,6 +20,7 @@ import { defineAction } from './define'
 import { registerAction, ActionForbiddenError } from './dispatch'
 import { UserModel, toUserDto, type UserDb } from '../models/user'
 import { accountUsage } from '../billing/usage-view'
+import { effectivePlanTier } from '../billing/plan-grant'
 import { deleteUserCascade } from '../lib/cascade'
 import { recordSettingsChange } from '../audit/settings-log'
 import { userSettingsSnapshot } from '../lib/settings-snapshot'
@@ -149,7 +150,9 @@ export const userUsage = defineAction<
   input: z.object({}).strict(),
   execute: async ctx => {
     const user = await loadSelf(ctx.userId)
-    return accountUsage(user._id.toString(), user.planTier)
+    // The effective tier: a comped account is metered against the plan it was
+    // given, so the bars it reads are the caps it is actually held to.
+    return accountUsage(user._id.toString(), effectivePlanTier(user))
   },
 })
 

@@ -95,7 +95,7 @@ export const billingGetSummary = defineAction<
   input: z.object({}).strict(),
   execute: async ctx => {
     const user = await loadSelf(ctx.userId)
-    return billingSummary(user._id.toString(), user.planTier)
+    return billingSummary(user._id.toString(), user)
   },
 })
 
@@ -241,8 +241,15 @@ export const billingChange = defineAction<PlanChangeInput, PlanChangeResult>({
           })
 
     const applied = await applySubscriptionSnapshot(snapshot, provider.name)
+    // The tier just applied, not the one on the document we loaded before the
+    // change. The grant rides along untouched: changing what the account pays
+    // for neither grants nor revokes a complimentary plan (ADMIN-9), and a
+    // grant that still outranks the new tier keeps deciding what it may spend.
     return {
-      summary: await billingSummary(userId, applied.tier ?? user.planTier),
+      summary: await billingSummary(userId, {
+        planTier: applied.tier ?? user.planTier,
+        planGrant: user.planGrant,
+      }),
     }
   },
 })

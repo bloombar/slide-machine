@@ -15,6 +15,30 @@ export interface ProjectDefaults {
 /** Whether a user's profile page is visible to others. */
 export type ProfileVisibility = 'public' | 'private'
 
+/**
+ * A complimentary plan an admin granted an account, as the account itself
+ * sees it (ADMIN-9). Present only while the grant is actually *in effect*:
+ * it has not expired, and it is larger than what the account's own billing
+ * entitles it to. A grant is never a downgrade, so an account that buys a
+ * bigger plan mid-grant keeps the bigger plan and this disappears.
+ *
+ * Who granted it and why are deliberately absent — the account is told what
+ * it may spend and until when, which is what it can act on; the operator's
+ * side of the record lives in the admin audit log (ADMIN-7).
+ */
+export interface PlanGrant {
+  /** The tier the account is being given, and so its current `planTier`. */
+  tier: PlanTier
+  /** ISO-8601 instant the grant lapses at. */
+  expiresAt: string
+  /**
+   * The tier the account falls back to when it lapses — what its own billing
+   * entitles it to *today*. A statement about now, not a promise: subscribing
+   * or cancelling in the meantime changes it.
+   */
+  revertsTo: PlanTier
+}
+
 export interface User {
   id: string
   email: string
@@ -32,7 +56,15 @@ export interface User {
    * = browser default. Cascades: lecture ?? project ?? this ?? browser. */
   language?: Locale
   projectDefaults?: ProjectDefaults
+  /**
+   * What the account may spend against (BILL-3). On the wire this is the
+   * **effective** tier: normally what its billing entitles it to, but the
+   * granted tier while a complimentary grant is in effect (ADMIN-9). Stored,
+   * it is only ever the billing one — see `planGrant`.
+   */
   planTier: PlanTier
+  /** An admin's complimentary plan, while one is in effect (ADMIN-9). */
+  planGrant?: PlanGrant
   billingProvider?: string
   billingCustomerId?: string
   createdAt: string

@@ -555,6 +555,22 @@
         "apply": "No se pudo cambiar tu plan. Inténtalo de nuevo."
       }
     },
+    "grant": {
+      "title": "Plan de cortesía",
+      "hint": "Pasa esta cuenta a un plan mayor sin coste. Vuelve al plan que paga cuando termina la cortesía.",
+      "tier": "Plan",
+      "expires": "Último día",
+      "submit": "Conceder plan",
+      "replace": "Sustituir la cortesía",
+      "active": "Plan {tier} de cortesía hasta el {date}, después vuelve a {revertsTo}.",
+      "ended": "Un plan {tier} de cortesía terminó el {date}.",
+      "end": "Terminar ahora",
+      "clear": "Borrar",
+      "maxed": "Esta cuenta ya tiene el plan más alto.",
+      "expiresRequired": "Elige el último día en que se aplica el plan.",
+      "error": "No se pudo cambiar el plan de cortesía.",
+      "notice": "Tienes el plan {tier} sin coste hasta el {date}. Después tu plan volverá a {revertsTo}."
+    },
     "feature": {
       "liveCapture": "Diapositivas en directo mientras hablas",
       "voiceControl": "Comandos de voz",

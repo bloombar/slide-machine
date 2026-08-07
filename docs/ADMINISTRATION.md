@@ -185,7 +185,7 @@ rather than on entry, since the form is the page.)
 
 | Entity | Editable | Where | Not editable |
 | --- | --- | --- | --- |
-| User | Display name, bio, profile visibility, interface locale, lecturing language | The user's profile page — **Edit** for display name and bio, **Settings** for the rest | Plan tier (see Plans below), email, password (its own danger-zone action), email verification |
+| User | Display name, bio, profile visibility, interface locale, lecturing language, a complimentary plan | The user's profile page — **Edit** for display name and bio, **Settings** for the rest, its **Plan** tab for a complimentary plan | What the account **pays** for (see [Complimentary plans](#complimentary-plans)), email, password (its own danger-zone action), email verification |
 | Project | Title, seed notes, AI freedom, language, narration voice, template, visibility and the sharing list | Project settings modal | Seed material, ownership, deletion (a console action) |
 | Lecture | Title, seed notes, AI freedom, language, narration voice, template, the five Refine settings, visibility and the sharing list | Lecture settings modal | Seed material, running a refine, quizzes, exports, slides, ownership, deletion (a console action) |
 
@@ -206,6 +206,52 @@ Two things to know before editing:
   that. The audit entry spells it out as an `accessInherited` change.
 
 [ADMIN-3]: SPEC.md#admin-3-viewing-user-content--seed-material
+
+### Complimentary plans
+
+A plan is the one thing on that page an admin can change that its owner
+cannot ([ADMIN-9]). On the **Plan** tab of a user's settings, pick a tier
+and a **last day**: the account is on that plan, at no charge, through the
+end of that day. **End now** stops it early.
+
+It gives and it expires — nothing else:
+
+- **The expiry is required.** A grant without an end is an untracked
+  discount that outlives whoever approved it.
+- **Only larger plans are offered.** What the account may spend is the
+  larger of what it pays for and what it was granted, so a grant can never
+  demote anyone; the picker lists only tiers above its own, and the server
+  refuses the rest (`not_an_upgrade`).
+- **Nothing is charged and no subscription is touched.** Stripe is never
+  called. A comped account with no subscription still shows no bill, no
+  renewal date, and nothing to manage in the portal — because that is the
+  truth about its billing.
+- **When it ends, the account returns to whatever it is paying for then.**
+  Not to a snapshot from when the grant was issued: if it subscribed,
+  upgraded or cancelled in the meantime, that is where it lands. Nothing
+  runs to make this happen — the grant simply stops counting — so there is
+  no sweep to fail and no window where an unattended deployment leaves
+  someone on a plan nobody pays for.
+- **Caps follow it**, `audioRetentionDays` included. A comped account's
+  recordings are kept for the window it was promised, and start ageing out
+  on its own tier's terms once the grant ends.
+- **The user is told**: their plan, that it is at no charge, and the date
+  it reverts — never who granted it or the note you left.
+- **Not for admins.** Granting to an allowlisted email is refused
+  (`target_is_admin`), like every other action on an admin account.
+
+Both granting and ending are in the [audit log](#audit-log-appadminlogs)
+(`user.plan_grant`, `user.plan_grant_revoke`) with the tier, the expiry,
+the tier underneath, and your note. They are **not** settings changes and
+do not appear in the [settings change log](#settings-change-log-appadminsettings-logs)
+— a plan is not something an account *is*.
+
+A user's console page shows the result read-only, as
+`pro — complimentary until 30 Sep 2026, then free`; a grant that has
+lapsed stays listed as history, since it is what explains last month's
+usage.
+
+[ADMIN-9]: SPEC.md#admin-9-complimentary-plan-grants
 
 ### Private lectures
 
@@ -335,10 +381,18 @@ policy, and one cap per metered resource: `aiTokens`, `sttMinutes`,
 in [BILLING_COST_MODEL.md](BILLING_COST_MODEL.md). Edit and redeploy to change
 what a plan includes; the `priceId`s must match real Stripe prices for billing to work
 (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) — how to create them:
-[STRIPE.md](STRIPE.md). A user's `planTier` shows
-read-only in the console: the settings editor excludes it by design —
-billing state is governed by [SPEC §5](SPEC.md#5-plans-billing--usage-limits),
-not by moderation — so changing it is a database operation.
+[STRIPE.md](STRIPE.md).
+
+What an account **pays for** (`planTier`) is Stripe's to decide: it is
+written only by webhooks, shows read-only in the console, and the settings
+editor excludes it by design — billing state is governed by
+[SPEC §5](SPEC.md#5-plans-billing--usage-limits), not by moderation. Moving
+someone onto a paid plan outside Stripe is still a database operation.
+
+What an admin *can* do in the app is give a plan away for a while:
+[Complimentary plans](#complimentary-plans). That is stored beside
+`planTier` rather than in it, so a webhook and a grant can never overwrite
+each other, and what an account may spend is the larger of the two.
 
 ## Data retention and privacy
 

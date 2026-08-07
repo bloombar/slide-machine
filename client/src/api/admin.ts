@@ -5,7 +5,10 @@
  */
 import type {
   AdminLogsResponse,
+  AdminPlanGrant,
+  AdminPlanGrantInput,
   AdminUserSettingsPatch,
+  PlanTier,
   Project,
   SafeUser,
   SeedAsset,
@@ -53,6 +56,13 @@ export interface AdminUserDetailResponse {
   deckCount: number
   /** Whether the account's email is on the banned list. */
   banned: boolean
+  /** What the account's own billing entitles it to — `user.planTier` is the
+   * effective tier, which a complimentary grant can raise (ADMIN-9). This is
+   * where it lands when the grant ends. */
+  billingTier: PlanTier
+  /** The standing complimentary grant, lapsed ones included; `inEffect` says
+   * whether it is deciding anything right now. */
+  planGrant?: AdminPlanGrant
   /** Soft-delete timestamp; absent while the account is live (ADMIN-6).
    * It sits on the envelope rather than inside `user` so the tombstone
    * never leaks into the shared User type the product reads. */
@@ -412,7 +422,7 @@ export const restoreAdminDeck = (deckId: string): Promise<void> =>
 // owner uses (docs/ADMINISTRATION.md, "Editing settings").
 
 /** Updates a user's profile settings (not the plan tier, email, or
- * password — those are governed elsewhere). */
+ * password — those are governed elsewhere; the plan is below). */
 export const updateAdminUserSettings = (
   userId: string,
   patch: AdminUserSettingsPatch,
@@ -421,3 +431,29 @@ export const updateAdminUserSettings = (
     method: 'PATCH',
     body: JSON.stringify(patch),
   })
+
+// Complimentary plan grants (ADMIN-9): put an account on a larger plan for
+// a while at no charge. Separate from the settings patch above because a
+// plan is billing state, not a profile setting — it is audited as an admin
+// action, and never appears in the settings change log.
+
+/**
+ * Grants (or replaces) a complimentary plan. `expiresAt` may be a bare
+ * `YYYY-MM-DD`, which the server reads as the end of that day, and must be in
+ * the future; `tier` must be larger than what the account already pays for,
+ * or the call fails 400 `not_an_upgrade`. Nothing is charged, and the
+ * account's own subscription is untouched.
+ */
+export const grantAdminUserPlan = (
+  userId: string,
+  grant: AdminPlanGrantInput,
+): Promise<void> =>
+  apiFetch<void>(`/api/admin/users/${userId}/plan-grant`, {
+    method: 'PUT',
+    body: JSON.stringify(grant),
+  })
+
+/** Ends a grant now instead of waiting for it to lapse, dropping the account
+ * to whatever its own billing entitles it to. Idempotent. */
+export const revokeAdminUserPlan = (userId: string): Promise<void> =>
+  apiFetch<void>(`/api/admin/users/${userId}/plan-grant`, { method: 'DELETE' })

@@ -8,6 +8,7 @@
  * an adapter rather than this file.
  */
 import type { PlanFeature, PlanTier, UsageMetric } from '../types/plans'
+import type { PlanGrant } from '../types/user'
 import type { UsageAllowance, UsageUnit } from './usage'
 import type { PlanPrice, SubscriptionStatus } from '../billing/provider'
 
@@ -17,7 +18,16 @@ import type { PlanPrice, SubscriptionStatus } from '../billing/provider'
  * one, and the two read differently to whoever is looking at the page.
  */
 export interface BillingSummary {
+  /** What the account may spend against: the granted tier while a
+   * complimentary grant is in effect, its own tier otherwise. */
   tier: PlanTier
+  /**
+   * An admin's complimentary plan, while one is in effect (ADMIN-9). The
+   * subscription fields below describe what the account is *paying* for and
+   * are unaffected by it — a comped account with no subscription still reads
+   * `status: null`, because it has one plan and no bill.
+   */
+  planGrant?: PlanGrant
   status: SubscriptionStatus | null
   /** End of the paid period, ISO-8601; null without a subscription. */
   currentPeriodEnd: string | null

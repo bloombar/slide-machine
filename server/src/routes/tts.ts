@@ -49,6 +49,7 @@ import { env } from '../config/env'
 import { UserModel } from '../models/user'
 import { retainTtsObject, ttsStorageKeys } from '../models/tts-object'
 import { assertTtsCapacity, ttsMetricFor } from '../billing/tts-usage'
+import { effectivePlanTier, PLAN_FIELDS } from '../billing/plan-grant'
 import { recordUsage } from '../billing/usage'
 import { runWithUsage } from '../billing/usage-context'
 
@@ -218,12 +219,17 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
   // Cache miss: this call will spend money, so the owner's allowance decides
   // whether it happens.
   const owner = await UserModel.findById(acl.ownerId)
-    .select('planTier')
+    .select(PLAN_FIELDS)
     .catch(() => null)
   // An ownerless deck is not billable to anyone — its owner's account is gone,
   // so there is no allowance to check and nothing to debit.
   if (owner) {
-    await assertTtsCapacity(acl.ownerId, owner.planTier, actor, premium)
+    await assertTtsCapacity(
+      acl.ownerId,
+      effectivePlanTier(owner),
+      actor,
+      premium,
+    )
   }
 
   // Narration of a transcript-less slide calls Gemini, so the owner pays for

@@ -116,12 +116,65 @@ describe('AccountSettingsPage', () => {
     expect(screen.queryByRole('button', { name: /Upgrade to/i })).toBeNull()
   })
 
+  // ADMIN-9. Without this the badge would say Pro with nothing explaining
+  // why, and the day it reverts would arrive unannounced.
+  it('tells an account holder their plan is complimentary, and until when', async () => {
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: {
+          user: user({
+            planTier: 'pro',
+            planGrant: {
+              tier: 'pro',
+              expiresAt: '2026-09-30T23:59:59.999Z',
+              revertsTo: 'free',
+            },
+          }),
+          accessToken: 't',
+        },
+      }),
+      '/api/actions/user.usage': () => ({ status: 200, body: emptyUsage }),
+      // The notice is the billing panel's to state, once: the summary is
+      // what carries the grant, and saying it twice on one tab is what a
+      // second copy beside the badge would amount to.
+      '/api/actions/billing.summary': () => ({
+        status: 200,
+        body: {
+          ...freeBilling,
+          tier: 'pro',
+          planGrant: {
+            tier: 'pro',
+            expiresAt: '2026-09-30T23:59:59.999Z',
+            revertsTo: 'free',
+          },
+        },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/app/settings?tab=plan']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/app/settings" element={<AccountSettingsPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByText(/Pro at no charge until .*returns to Free/i),
+    ).toBeVisible()
+  })
+
   it('does not offer an admin a link to change someone else’s plan', async () => {
     renderSettings(
       {
         '/api/admin/users/u2': () => ({
           status: 200,
-          body: { user: user({ id: 'u2', email: 'bob@example.com' }) },
+          body: {
+            user: user({ id: 'u2', email: 'bob@example.com' }),
+            billingTier: 'free',
+          },
         }),
       },
       '/app/settings/u2?tab=plan',
@@ -399,7 +452,13 @@ describe('AccountSettingsPage as an admin (ADMIN-5)', () => {
       }),
       '/api/admin/users/u9': () => ({
         status: 200,
-        body: { user: target, projectCount: 1, deckCount: 2, banned: false },
+        body: {
+          user: target,
+          projectCount: 1,
+          deckCount: 2,
+          banned: false,
+          billingTier: 'pro',
+        },
       }),
       ...routes,
     })
@@ -496,6 +555,70 @@ describe('AccountSettingsPage as an admin (ADMIN-5)', () => {
     await screen.findByText('grace@example.com')
 
     expect(screen.queryByRole('button', { name: 'Delete account' })).toBeNull()
+  })
+
+  // ADMIN-9. The plan is the one thing on this page an admin can change that
+  // the owner cannot, so it appears only on the admin's path through it.
+  it('offers a complimentary plan on the Plan tab', async () => {
+    await renderAsAdmin()
+    await screen.findByText('grace@example.com')
+    fireEvent.click(screen.getByRole('tab', { name: 'Plan & Usage' }))
+
+    expect(await screen.findByText('Complimentary plan')).toBeVisible()
+    // Grace pays for Pro, so only Max is left to give.
+    expect(
+      screen.getAllByRole('option').map(o => (o as HTMLOptionElement).value),
+    ).toEqual(['max'])
+  })
+
+  it('re-reads the account after granting a plan', async () => {
+    let granted = false
+    // One handler for both verbs: the mock matches on a URL fragment, and
+    // `/plan-grant` hangs off the same path as the account itself.
+    const { fetchMock } = await renderAsAdmin({
+      '/api/admin/users/u9': init => {
+        if (init?.method === 'PUT') {
+          granted = true
+          return { status: 204 }
+        }
+        return {
+          status: 200,
+          body: {
+            user: { ...target, planTier: granted ? 'max' : 'pro' },
+            projectCount: 1,
+            deckCount: 2,
+            banned: false,
+            billingTier: 'pro',
+            planGrant: granted
+              ? {
+                  tier: 'max',
+                  expiresAt: '2026-09-30T23:59:59.999Z',
+                  grantedAt: '2026-08-01T00:00:00.000Z',
+                  grantedByEmail: 'root@example.com',
+                  inEffect: true,
+                }
+              : undefined,
+          },
+        }
+      },
+    })
+    await screen.findByText('grace@example.com')
+    fireEvent.click(screen.getByRole('tab', { name: 'Plan & Usage' }))
+
+    fireEvent.change(await screen.findByLabelText('Last day'), {
+      target: { value: '2026-09-30' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Grant plan' }))
+
+    // The endpoint answers 204 and the effective tier is the server's to
+    // decide, so the page re-reads rather than predicting it.
+    expect(await screen.findByText('Max')).toBeVisible()
+    expect(await screen.findByText(/Complimentary Max until/)).toBeVisible()
+    expect(
+      fetchMock.mock.calls.filter(([url]) =>
+        String(url).endsWith('/api/admin/users/u9'),
+      ),
+    ).toHaveLength(2)
   })
 
   it('shows no usage panel for someone else’s account', async () => {
