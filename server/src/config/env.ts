@@ -337,6 +337,19 @@ const envSchema = z
       .int()
       .nonnegative()
       .default(90),
+    /**
+     * How long raw cost-ledger events are kept before a complete month is
+     * rolled up and its rows removed (BILL-7/P-11). 0 = keep every event
+     * forever, which is fine for a small deployment and unwise for a busy one:
+     * this is the only collection that grows with usage rather than content.
+     * A year by default, so the reports have twelve months of detail behind
+     * them and everything older answers from the monthly summaries.
+     */
+    COST_LEDGER_RETENTION_DAYS: z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .default(365),
     // GCS bucket the diarization pass copies audio into — Google BatchRecognize
     // reads only from gs:// (GEN-4 Phase 3). Required for DIARIZATION_PROVIDER=
     // google-cloud; unused otherwise.

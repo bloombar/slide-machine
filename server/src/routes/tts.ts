@@ -52,6 +52,7 @@ import { assertTtsCapacity, ttsMetricFor } from '../billing/tts-usage'
 import { effectivePlanTier, PLAN_FIELDS } from '../billing/plan-grant'
 import { recordUsage } from '../billing/usage'
 import { runWithUsage } from '../billing/usage-context'
+import { attributionForDeck } from '../billing/attribution-resolve'
 
 export const ttsRouter = Router()
 
@@ -185,6 +186,16 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
   // to it. Decided before the cache is consulted, because a cache hit is still
   // recorded and has to land on the same metric a miss would have.
   const actor = canEditAcl(acl, req.userId) ? 'author' : 'audience'
+  // Who pays, who asked, and what for (BILL-7). This is the path where payer
+  // and actor genuinely differ — a student's playback is charged to the deck's
+  // owner — and the one where the actor may be nobody at all, since a shared
+  // lecture is played by people without accounts. `audience` is stated rather
+  // than inferred, so an anonymous listener is still recorded as audience
+  // activity instead of being mistaken for the owner's own work.
+  const attribution = attributionForDeck(acl.ownerId, deck, {
+    actorId: req.userId,
+    audience: actor === 'audience',
+  })
   // Premium only when the premium voice is really the one being sent: a voice
   // whose language does not match the lecture's is dropped in favour of the
   // provider's own default, which is a standard one.
@@ -206,9 +217,11 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
     //
     // No owner lookup, unlike the miss path below: this is the hot path, and a
     // row against a since-deleted owner is harmless when it is never debited.
-    await recordUsage(acl.ownerId, ttsMetricFor(actor, premium), 0, {
-      billable: false,
-    })
+    await runWithUsage(attribution, () =>
+      recordUsage(acl.ownerId, ttsMetricFor(actor, premium), 0, {
+        billable: false,
+      }),
+    )
     // A hit is how a second deck comes to share audio a first one paid for, so
     // this is the reference that keeps the file alive past the first deck's
     // deletion.
@@ -235,7 +248,7 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
   // Narration of a transcript-less slide calls Gemini, so the owner pays for
   // those tokens too — the ambient context is how the adapter attributes them.
   const text = owner
-    ? await runWithUsage(acl.ownerId, resolveText)
+    ? await runWithUsage(attribution, resolveText)
     : await resolveText()
   if (!text.trim()) return res.json({ url: null, marks: [] })
   const { audio, marks, billedCharacters } = await provider.synthesize({
@@ -248,10 +261,12 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
   // and the adapter reports what it was actually billed for rather than the
   // caller guessing from the plain text.
   if (owner) {
-    await recordUsage(
-      acl.ownerId,
-      ttsMetricFor(actor, premium),
-      billedCharacters ?? text.length,
+    await runWithUsage(attribution, () =>
+      recordUsage(
+        acl.ownerId,
+        ttsMetricFor(actor, premium),
+        billedCharacters ?? text.length,
+      ),
     )
   }
   await storage.put(storageKey, Buffer.from(audio), provider.audioMimeType)

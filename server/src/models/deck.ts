@@ -12,7 +12,8 @@
  * project until the override is reset. resolveDeckAcl/loadDeckAcl
  * produce the effective ACL; decisions run through lib/access.ts.
  */
-import { Schema, model, Types, type HydratedDocument } from 'mongoose'
+import { Schema, Types, type HydratedDocument } from 'mongoose'
+import { defineModel } from './define-model'
 import type {
   Deck,
   DiarizedSpeakerSegment,
@@ -259,7 +260,9 @@ deckSchema.index(
 
 deckSchema.plugin(softDeletePlugin)
 
-export const DeckModel = model<DeckDb>('Deck', deckSchema)
+// Reachable from the action graph — the dispatcher resolves a lecture and
+// project for cost attribution (BILL-7), which some specs re-evaluate.
+export const DeckModel = defineModel<DeckDb>('Deck', deckSchema)
 
 type DeckLike = Pick<DeckDb, 'ownerId' | 'accessOverride'>
 

@@ -19,6 +19,8 @@ import { UsageRecordModel } from '../models/usage-record'
 import { SubscriptionModel } from '../models/subscription'
 import { PlanLimitExceededError } from './limits'
 import { noteCapCrossing } from './cap-queue'
+import { recordCostEvent } from './cost-ledger'
+import type { PricingHint } from './pricing'
 
 /** Plans are read once: the file is deploy-time configuration, not per-request
  * state, and every metered call would otherwise re-read it from disk. */
@@ -146,12 +148,21 @@ export const adjustGauge = async (
  *
  * `billable: false` records the event at zero, so a cached hit still marks the
  * user as active without spending their allowance.
+ *
+ * Two things are written, and they are not the same thing. The counter is what
+ * the cap is checked against and is keyed to a billing period. The ledger row
+ * (BILL-7) is what the deployment spent and on whom, is keyed to nothing that
+ * resets, and outlives the entities it describes. Both are attempted here so
+ * that no metered call can update one and forget the other.
  */
 export const recordUsage = async (
   userId: string,
   metric: UsageMetric,
   quantity: number,
-  { billable = true }: { billable?: boolean } = {},
+  {
+    billable = true,
+    pricing,
+  }: { billable?: boolean; pricing?: PricingHint } = {},
 ): Promise<void> => {
   if (quantity < 0) return
   try {
@@ -173,6 +184,16 @@ export const recordUsage = async (
   } catch (error) {
     console.error(`Failed to record ${metric} usage for ${userId}:`, error)
   }
+  // Outside the try above: a counter that failed to move is still an event
+  // that happened, and the cost of it is still real. The ledger swallows its
+  // own failures, so this cannot throw either.
+  await recordCostEvent({
+    payerId: userId,
+    metric,
+    quantity,
+    billable,
+    pricing,
+  })
 }
 
 /** How much of a metric a user has spent this period — or, for a gauge, how
