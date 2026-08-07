@@ -123,12 +123,29 @@ describe('template.exportToDrive (EXP-6)', () => {
     expect(first.body.fileId).not.toBe(second.body.fileId)
   })
 
+  // Forbidden rather than invalid input: an unknown design and one the
+  // caller may not see answer identically, so an id cannot be probed to
+  // learn which it was.
   it('refuses an unknown design', async () => {
     await act(ada, 'quiz.connectGoogle')
     const res = await act(ada, 'template.exportToDrive', {
       templateId: 'no-such-design',
       driveFolderId: 'root',
     })
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(403)
+  })
+
+  it("refuses to export someone else's private design to Drive", async () => {
+    const bob = await registerUser('bob@example.com')
+    const owned = await act(ada, 'template.duplicate', {
+      templateId: builtinId(),
+      name: 'Ada Style',
+    })
+    await act(bob, 'quiz.connectGoogle')
+    const res = await act(bob, 'template.exportToDrive', {
+      templateId: owned.body.id,
+      driveFolderId: 'root',
+    })
+    expect(res.status).toBe(403)
   })
 })

@@ -258,6 +258,11 @@ deckSchema.index(
   { weights: { title: 10, transcript: 1 }, name: 'deck_text' },
 )
 
+// Which lectures a design draws. Asked when deciding whether someone editing
+// a lecture may read the private design behind it (TECH-14); without this the
+// question costs a scan of every lecture, including when the answer is none.
+deckSchema.index({ templateId: 1 })
+
 deckSchema.plugin(softDeletePlugin)
 
 // Reachable from the action graph — the dispatcher resolves a lecture and
