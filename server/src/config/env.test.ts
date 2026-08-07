@@ -79,6 +79,25 @@ describe('parseEnv BILLING_PROVIDER production guard', () => {
         .BILLING_PROVIDER,
     ).toBe('stripe')
   })
+
+  it('lets a test harness say the dangerous thing out loud', () => {
+    // The e2e suite runs the production *build* against mock billing, which
+    // is a real "production plus mock" that is not a production deployment.
+    // The way through is a variable named after exactly what it permits —
+    // nobody sets this on a real deployment by accident.
+    expect(
+      parseEnv({
+        ...base,
+        NODE_ENV: 'production',
+        BILLING_PROVIDER: 'mock',
+        ALLOW_UNSIGNED_BILLING_WEBHOOKS: 'true',
+      }).BILLING_PROVIDER,
+    ).toBe('mock')
+  })
+
+  it('defaults the escape hatch to closed', () => {
+    expect(parseEnv(base).ALLOW_UNSIGNED_BILLING_WEBHOOKS).toBe(false)
+  })
 })
 
 describe('parseEnv PUBLIC_BASE_URL normalization', () => {

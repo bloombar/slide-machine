@@ -118,6 +118,19 @@ const envSchema = z
     // and stay optional until billing goes live — 'mock' needs none, and the
     // Stripe adapter fails descriptively without them.
     BILLING_PROVIDER: z.string().default('stripe'),
+    /**
+     * Permits the unsigned mock billing adapter under `NODE_ENV=production`
+     * (P-8). Off by default, and the only way into that combination.
+     *
+     * It exists for the e2e suite, which runs the *production build* — that is
+     * the artifact worth testing — against mock billing, and so is a genuine
+     * "production plus mock" that is not a production deployment. Rather than
+     * weaken the guard to let that through implicitly, the escape hatch is
+     * named after exactly what it permits: nobody sets a variable called
+     * ALLOW_UNSIGNED_BILLING_WEBHOOKS on a real deployment by accident, and
+     * anyone who does has said the dangerous thing out loud.
+     */
+    ALLOW_UNSIGNED_BILLING_WEBHOOKS: z.stringbool().default(false),
 
     // Auth (AUTH-1/2): signing secrets are required; TTLs are tunable
     JWT_SECRET: z.string().min(32),
@@ -386,15 +399,18 @@ const envSchema = z
     // boot is the correct response: a deployment that reaches this state has
     // no safe way to serve the endpoint, and quietly starting would leave
     // every plan in the system forgeable.
+    // The one exception is an explicit opt-in, which the e2e suite uses to run
+    // the production build against mock billing. See the variable's own note.
     if (
       config.NODE_ENV === 'production' &&
-      config.BILLING_PROVIDER === 'mock'
+      config.BILLING_PROVIDER === 'mock' &&
+      !config.ALLOW_UNSIGNED_BILLING_WEBHOOKS
     ) {
       ctx.addIssue({
         code: 'custom',
         path: ['BILLING_PROVIDER'],
         message:
-          'the mock adapter accepts unsigned billing webhooks and must not run in production — set a real provider (P-8)',
+          'the mock adapter accepts unsigned billing webhooks and must not run in production — set a real provider, or ALLOW_UNSIGNED_BILLING_WEBHOOKS=true if this is a test harness (P-8)',
       })
     }
   })

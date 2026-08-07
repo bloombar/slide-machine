@@ -1626,7 +1626,9 @@
     unauthenticated by necessity — its caller is the provider, not a user — so
     the signature is the only thing separating the two, and an adapter that does
     not check one (the in-memory mock) is refused at boot in production rather
-    than left to serve the endpoint.
+    than left to serve the endpoint — overridable only by a setting named for
+    the risk it takes on, so a test harness running the production build can opt
+    in and a real deployment cannot drift into it.
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 3

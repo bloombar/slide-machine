@@ -23,6 +23,11 @@ server **refuses to boot with it when `NODE_ENV=production`** ([P-8](SPEC.md#16-
 webhook route is unauthenticated by necessity, so without a signature to check,
 anyone who can reach it can put any account on any plan.
 
+The one way through is `ALLOW_UNSIGNED_BILLING_WEBHOOKS=true`, which exists for
+a test harness running the production *build* against mock billing — the e2e
+suite sets it. It is named after exactly what it permits so that no real
+deployment ends up in that state without someone having said so.
+
 ## 1. Create the product catalog
 
 Three paid tiers need a product and a **recurring** price. (Free has no price;

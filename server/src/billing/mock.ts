@@ -192,11 +192,16 @@ export class MockBillingProvider implements BillingProvider {
    * refuses to boot in this state (`config/env.ts`); this is the second lock,
    * on the door itself, because the cost of being wrong here is every
    * subscription in the deployment.
+   *
+   * Both locks share one key — `ALLOW_UNSIGNED_BILLING_WEBHOOKS`, which the
+   * e2e suite sets because it runs the production build and needs mock
+   * billing to work. Sharing it is deliberate: two locks that could disagree
+   * would be a way for the door to be open while the config says it is shut.
    */
   async parseWebhook({
     rawBody,
   }: WebhookDelivery): Promise<BillingEvent | null> {
-    if (env.NODE_ENV === 'production') {
+    if (env.NODE_ENV === 'production' && !env.ALLOW_UNSIGNED_BILLING_WEBHOOKS) {
       throw new WebhookVerificationError(
         'The mock billing provider does not verify webhooks and is not usable in production',
       )

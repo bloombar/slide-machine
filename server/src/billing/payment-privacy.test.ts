@@ -24,6 +24,7 @@ const SECRET = 'whsec_test_secret'
 const testEnv = vi.hoisted(() => ({
   NODE_ENV: 'test' as string,
   BILLING_PROVIDER: 'stripe' as string,
+  ALLOW_UNSIGNED_BILLING_WEBHOOKS: false as boolean,
   STRIPE_SECRET_KEY: 'sk_test_123' as string | undefined,
   STRIPE_WEBHOOK_SECRET: 'whsec_test_secret' as string | undefined,
   // The real plans file, so the mock adapter's tier lookup resolves.
@@ -39,6 +40,7 @@ const here = import.meta.dirname
 beforeEach(() => {
   testEnv.STRIPE_WEBHOOK_SECRET = SECRET
   testEnv.NODE_ENV = 'test'
+  testEnv.ALLOW_UNSIGNED_BILLING_WEBHOOKS = false
 })
 
 describe('P-8: no raw card data is stored', () => {
@@ -181,6 +183,24 @@ describe('P-8: the unsigned adapter cannot serve production', () => {
         headers: {},
       }),
     ).rejects.toThrow(/not usable in production/i)
+  })
+
+  it('parses in production only when the harness says so out loud', async () => {
+    // The e2e suite's case: the production build, mock billing, and an
+    // explicit variable naming what it permits. Shared with the config guard
+    // deliberately — two locks that could disagree would be a way for the
+    // door to be open while the config says it is shut.
+    const { MockBillingProvider } = await import('./mock')
+    testEnv.NODE_ENV = 'production'
+    testEnv.ALLOW_UNSIGNED_BILLING_WEBHOOKS = true
+    const event = await new MockBillingProvider().parseWebhook({
+      rawBody: JSON.stringify({
+        type: 'subscription.active',
+        subscription: { userId: 'u1', tier: 'pro' },
+      }),
+      headers: {},
+    })
+    expect(event?.type).toBe('subscription.active')
   })
 
   it('still parses a delivery outside production', async () => {
