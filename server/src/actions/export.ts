@@ -51,6 +51,7 @@ import { SlideModel } from '../models/slide'
 import { ProjectModel } from '../models/project'
 import { type DeckExportDb, type DeckDb } from '../models/deck'
 import { translateSlides, translationEnabled } from '../lib/translate-slides'
+import { translationBillingFor } from '../billing/translation-usage'
 import { deckToYaml, type ExportDeck, type ExportSlide } from '../lib/deck-yaml'
 import { deckToPdf } from '../lib/deck-pdf'
 import { visibleStrokes } from '../lib/deck-drawings'
@@ -112,6 +113,12 @@ const slugifyTitle = (title: string): string =>
  * read-through path the viewer uses, so a translated export costs nothing extra
  * once someone has read the deck in that language. The stored slides are never
  * modified — only what this function hands the renderers changes.
+ *
+ * Exporting is always authoring work — the deck is editable to have got here —
+ * so a translation this triggers spends the owner's own allowance rather than
+ * the audience pool (BILL-3), and is refused with a 402 when that allowance is
+ * gone. The `exports` unit the caller counts is separate: one file produced is
+ * one export, whether or not translating it cost anything.
  */
 const buildExportDeck = async (
   deck: HydratedDocument<DeckDb>,
@@ -137,6 +144,7 @@ const buildExportDeck = async (
           })),
           source,
           locale,
+          await translationBillingFor(deck.ownerId.toString(), 'author'),
         )
       : {}
   const slides: ExportSlide[] = slideDocs.map(doc => {

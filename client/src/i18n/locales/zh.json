@@ -995,7 +995,8 @@
     "showOriginal": "显示原文",
     "translatedNotice": "机器翻译——以原文为准",
     "translatedNoticeEditor": "机器翻译视图——显示原文后方可编辑",
-    "translationFailed": "无法翻译本讲。正在显示原文。"
+    "translationFailed": "无法翻译本讲。正在显示原文。",
+    "translationSeePlans": "查看套餐"
   },
   "quiz": {
     "heading": "课后小测验",

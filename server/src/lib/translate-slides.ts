@@ -12,6 +12,10 @@
  * then back to Markdown, which is the one format the viewer, the exports, and
  * the editor all read. Nothing here writes to the slides themselves: the
  * authored content stays authoritative, and the translation is a layer over it.
+ *
+ * Because the cache decides what is paid for, it also decides what is metered:
+ * the owner's allowance is checked and charged here, on the miss path only
+ * (BILL-3/BILL-4 — see `billing/translation-usage.ts` for which pool pays).
  */
 import { createHash } from 'node:crypto'
 import type { Types } from 'mongoose'
@@ -29,6 +33,12 @@ import {
 } from './markdown-html'
 import { slotsOf, remapSlots, type LegacyContent } from './slide-slots'
 import { registry } from '../providers/registry'
+import {
+  assertTranslationCapacity,
+  recordCachedTranslation,
+  recordTranslationUsage,
+  type TranslationBilling,
+} from '../billing/translation-usage'
 import { env } from '../config/env'
 import {
   SlideTranslationModel,
@@ -339,12 +349,20 @@ export const remapSlideTranslations = async (
  *
  * Slides that have since been deleted are dropped from the cache on the way
  * through, so a long-lived entry cannot grow orphans.
+ *
+ * `billing` names who pays and out of which pool (BILL-3). It is optional
+ * because not every translation has an account behind it — a deck whose owner
+ * has been deleted, or a test — and because metering must never be the reason
+ * a caller cannot use this. When it is supplied, this function is the only
+ * place that knows whether the provider was actually called, which is why both
+ * the cap check and the counting happen here rather than at the call sites.
  */
 export const translateSlides = async (
   deckId: Types.ObjectId,
   slides: TranslatableSlide[],
   source: Locale,
   target: Locale,
+  billing?: TranslationBilling,
 ): Promise<Record<string, SlideTranslationEntry>> => {
   const existing = await SlideTranslationModel.findOne({
     deckId,
@@ -358,6 +376,9 @@ export const translateSlides = async (
   )
 
   const fresh = new Map<string, SlideTranslationEntry>()
+  /** Whether anything reached the provider — what separates a charge from a
+   * zero-cost record. Stale slides with no words in them do not count. */
+  let translated = false
   if (stale.length) {
     const segments = stale.flatMap(segmentsOf)
     const translatedBySegment = new Map<Segment, string>()
@@ -367,6 +388,10 @@ export const translateSlides = async (
           ? escapeHtml(s.markdown)
           : markdownToHtml(s.markdown, { inline: s.inline }),
       )
+      // Checked here, at the last moment before the call that spends money, and
+      // only when there is something to spend it on. Throws → 402 (BILL-4).
+      if (billing)
+        await assertTranslationCapacity(billing, { localeIsNew: !existing })
       const provider = registry.get<TranslationProvider>('translation')
       const translatedHtml = await provider.translate({
         texts: sourceHtml,
@@ -374,6 +399,18 @@ export const translateSlides = async (
         target,
         format: 'html',
       })
+      translated = true
+      // After the fact, like every other metric: only a call that returned is
+      // charged, and it is charged for what was really submitted.
+      if (billing) {
+        await recordTranslationUsage(billing, {
+          characters: sourceHtml.reduce(
+            (total, html) => total + html.length,
+            0,
+          ),
+          localeIsNew: !existing,
+        })
+      }
       segments.forEach((segment, i) => {
         const repaired = restoreLinkHrefs(
           sourceHtml[i] ?? '',
@@ -408,5 +445,9 @@ export const translateSlides = async (
       { upsert: true },
     )
   }
+  // Served from the cache. Recorded at zero so the read still counts towards
+  // how many people this deck reached (BILL-3/BILL-7), without spending an
+  // allowance on words nobody re-translated.
+  if (billing && !translated) await recordCachedTranslation(billing)
   return Object.fromEntries(merged)
 }
