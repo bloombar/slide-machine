@@ -56,8 +56,33 @@ describe('meterGeminiUsage', () => {
       'user-1',
       'aiTokens',
       2500,
-      undefined,
+      // The cap is charged the combined total; the split rides along only so
+      // the cost ledger can price input and output at their own rates.
+      expect.objectContaining({
+        pricing: expect.objectContaining({ kind: 'tokens' }),
+      }),
     )
+  })
+
+  it('hands the ledger the input/output split the metric flattens', async () => {
+    // `aiTokens` is one allowance, but the two halves bill at different rates
+    // (BILL-7). Thinking tokens go with output, which is how Gemini bills them.
+    await runWithUsage('user-1', () =>
+      meterGeminiUsage({
+        promptTokenCount: 100,
+        candidatesTokenCount: 20,
+        thoughtsTokenCount: 500,
+      }),
+    )
+
+    expect(recordUsage).toHaveBeenCalledWith('user-1', 'aiTokens', 620, {
+      pricing: {
+        kind: 'tokens',
+        inputTokens: 100,
+        outputTokens: 520,
+        model: undefined,
+      },
+    })
   })
 
   it('is a no-op outside a usage context, so background work is unbilled', async () => {
