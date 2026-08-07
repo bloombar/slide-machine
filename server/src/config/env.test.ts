@@ -51,6 +51,55 @@ describe('parseEnv STT_CAPTURE_SAMPLE_RATE', () => {
   })
 })
 
+describe('parseEnv BILLING_PROVIDER production guard', () => {
+  // P-8. The webhook route is unauthenticated by necessity — its caller is a
+  // payment provider, not a user — so the signature is the only thing
+  // distinguishing the provider from a stranger. The mock adapter verifies
+  // nothing, which makes it a way to write a subscription row for any account
+  // a POST names. A deployment in that state cannot serve the route safely,
+  // so it does not start.
+  it('refuses the unsigned mock adapter in production', () => {
+    expect(() =>
+      parseEnv({ ...base, NODE_ENV: 'production', BILLING_PROVIDER: 'mock' }),
+    ).toThrow()
+  })
+
+  it('allows the mock adapter everywhere else', () => {
+    for (const NODE_ENV of ['development', 'test']) {
+      expect(
+        parseEnv({ ...base, NODE_ENV, BILLING_PROVIDER: 'mock' })
+          .BILLING_PROVIDER,
+      ).toBe('mock')
+    }
+  })
+
+  it('allows a real adapter in production', () => {
+    expect(
+      parseEnv({ ...base, NODE_ENV: 'production', BILLING_PROVIDER: 'stripe' })
+        .BILLING_PROVIDER,
+    ).toBe('stripe')
+  })
+
+  it('lets a test harness say the dangerous thing out loud', () => {
+    // The e2e suite runs the production *build* against mock billing, which
+    // is a real "production plus mock" that is not a production deployment.
+    // The way through is a variable named after exactly what it permits —
+    // nobody sets this on a real deployment by accident.
+    expect(
+      parseEnv({
+        ...base,
+        NODE_ENV: 'production',
+        BILLING_PROVIDER: 'mock',
+        ALLOW_UNSIGNED_BILLING_WEBHOOKS: 'true',
+      }).BILLING_PROVIDER,
+    ).toBe('mock')
+  })
+
+  it('defaults the escape hatch to closed', () => {
+    expect(parseEnv(base).ALLOW_UNSIGNED_BILLING_WEBHOOKS).toBe(false)
+  })
+})
+
 describe('parseEnv PUBLIC_BASE_URL normalization', () => {
   it('strips a trailing slash (DO ${_self.PUBLIC_URL} includes one)', () => {
     const env = parseEnv({
