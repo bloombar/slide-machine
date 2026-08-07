@@ -10,6 +10,7 @@ import { reportListen } from './lib/listen'
 import { attachAudioSocket } from './ws/audio-socket'
 import { startAudioRetentionSweep } from './jobs/audio-cleanup'
 import { startSoftDeletePurgeSweep } from './jobs/soft-delete-purge'
+import { startCostRollupSweep } from './jobs/cost-rollup'
 import { startTemplateVersionBackfill } from './jobs/pin-template-versions'
 
 const main = async (): Promise<void> => {
@@ -32,6 +33,9 @@ const main = async (): Promise<void> => {
   startAudioRetentionSweep()
   // Daily purge of soft-deleted records past DELETED_DATA_RETENTION_DAYS (P-11).
   startSoftDeletePurgeSweep()
+  // Bounds the cost ledger: roll complete old months up, drop the rows behind
+  // them (BILL-7/P-11).
+  startCostRollupSweep()
   // Pin any lecture that predates template versions, so a template edit stops
   // reaching into it (TMPL-11). No-op once every lecture is pinned.
   startTemplateVersionBackfill()

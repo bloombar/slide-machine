@@ -2,7 +2,8 @@
  * Project model (SPEC §15 / PROJ-1). Settings override the owner's
  * projectDefaults per GEN-8/GEN-9.
  */
-import { Schema, model, Types, type HydratedDocument } from 'mongoose'
+import { Schema, Types, type HydratedDocument } from 'mongoose'
+import { defineModel } from './define-model'
 import type { Project, QuizGenerationOptions } from '@slide-machine/shared'
 import { LOCALES } from '@slide-machine/shared'
 import type { ResolvedAcl } from '../lib/access'
@@ -72,7 +73,9 @@ const projectSchema = new Schema<ProjectDb>(
 
 projectSchema.plugin(softDeletePlugin)
 
-export const ProjectModel = model<ProjectDb>('Project', projectSchema)
+// Reachable from the action graph — the dispatcher resolves a lecture and
+// project for cost attribution (BILL-7), which some specs re-evaluate.
+export const ProjectModel = defineModel<ProjectDb>('Project', projectSchema)
 
 /** A project's ACL is always its own (never inherited). */
 export const projectAcl = (

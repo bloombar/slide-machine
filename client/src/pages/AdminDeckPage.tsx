@@ -16,6 +16,7 @@
  */
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
+import CostPanel from '../components/admin/CostPanel'
 import {
   deleteAdminDeck,
   fetchAdminDeck,
@@ -366,6 +367,7 @@ export default function AdminDeckPage() {
           <SeedMaterialView seed={seed} projectTitle={projectTitle(project)} />
         </Modal>
       )}
+      {deckId && <CostPanel scope={{ kind: 'deck', id: deckId }} />}
     </div>
   )
 }
