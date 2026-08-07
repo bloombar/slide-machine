@@ -1174,7 +1174,8 @@
     "notice": {
       "approaching": "你已接近套餐的部分上限",
       "reached": "你已达到套餐的某项上限",
-      "seeAll": "查看全部用量"
+      "seeAll": "查看全部用量",
+      "dismiss": "关闭"
     },
     "metric": {
       "aiTokens": "AI 生成",
@@ -1194,6 +1195,10 @@
     "errors": {
       "load": "无法加载用量信息"
     },
-    "plan": "套餐"
+    "plan": "套餐",
+    "settings": {
+      "warnEmails": "额度用尽前发邮件提醒我",
+      "warnEmailsHint": "额度快用完时提前通知。已实际达到上限的通知则始终发送。"
+    }
   }
 }

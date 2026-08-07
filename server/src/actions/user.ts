@@ -137,6 +137,31 @@ export const userSetLocale = defineAction<UserSetLocaleInput, SafeUser>({
 registerAction(userSetLocale)
 
 /**
+ * Whether the account wants the advisory cap warning by email (BILL-8).
+ *
+ * Only the 80% notice is switchable. The message sent when a cap has actually
+ * blocked something stays on whatever this is set to, because it is not
+ * advice — it is the explanation for a thing the user just tried that did not
+ * happen, and an unexplained failure is the outcome BILL-8 exists to prevent.
+ * The in-app notices are likewise unaffected: they are derived from the
+ * counters and always appear.
+ */
+export const userSetCapWarnings = defineAction<{ enabled: boolean }, SafeUser>({
+  name: 'user.setCapWarnings',
+  input: z.object({ enabled: z.boolean() }),
+  execute: async (ctx, input) => {
+    const user = await loadSelf(ctx.userId)
+    const before = userSettingsSnapshot(user)
+    user.notifyCapWarnings = input.enabled
+    await user.save()
+    await recordSelfChange(user, before)
+    return toUserDto(user)
+  },
+})
+
+registerAction(userSetCapWarnings)
+
+/**
  * The account's own metered usage (BILL-4). Read-only, and scoped to the
  * caller: a plan's remaining quota is an account's own business, so there is
  * deliberately no way to ask for someone else's. An admin who needs to see it

@@ -4,7 +4,13 @@
  * reads, and then the one time a number matters it is missed.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import type { UsageMetricSummary } from '@slide-machine/shared'
 import { AuthProvider } from '../auth/AuthContext'
@@ -35,7 +41,7 @@ const metric = (
 
 const renderNotice = (
   metrics: UsageMetricSummary[],
-  { usageStatus = 200, tier = 'free' } = {},
+  { usageStatus = 200, tier = 'free', period = '2026-08' } = {},
 ) => {
   mockFetchRoutes({
     '/api/auth/refresh': () => ({
@@ -48,7 +54,7 @@ const renderNotice = (
         usageStatus === 200
           ? {
               tier,
-              period: '2026-08',
+              period,
               resetAt: '2026-09-01T00:00:00.000Z',
               metrics,
             }
@@ -109,5 +115,69 @@ describe('UsageNotice', () => {
     renderNotice([], { usageStatus: 500 })
 
     await waitFor(() => expect(screen.queryByTestId('usage-notice')).toBeNull())
+  })
+})
+
+describe('UsageNotice dismissal (BILL-8)', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('lets a warning be dismissed', async () => {
+    renderNotice([metric({ fraction: 0.85 })])
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }))
+    expect(screen.queryByTestId('usage-notice')).toBeNull()
+  })
+
+  it('stays dismissed on the next visit', async () => {
+    renderNotice([metric({ fraction: 0.85 })])
+    fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }))
+    cleanup()
+
+    renderNotice([metric({ fraction: 0.85 })])
+    await waitFor(() => expect(screen.queryByTestId('usage-notice')).toBeNull())
+  })
+
+  it('comes back when a different resource starts running out', async () => {
+    // "I have seen the AI warning" is not consent to be kept quiet about
+    // recording time.
+    renderNotice([metric({ fraction: 0.85 })])
+    fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }))
+    cleanup()
+
+    renderNotice([
+      metric({ fraction: 0.85 }),
+      metric({ metric: 'sttMinutes', fraction: 0.9, unit: 'minutes' }),
+    ])
+    expect(await screen.findByTestId('usage-notice')).toBeInTheDocument()
+  })
+
+  it('comes back when the allowances reset', async () => {
+    renderNotice([metric({ fraction: 0.85 })])
+    fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }))
+    cleanup()
+
+    // A dismissal cannot outlive the period it was about.
+    renderNotice([metric({ fraction: 0.85 })], { period: '2026-09' })
+    expect(await screen.findByTestId('usage-notice')).toBeInTheDocument()
+  })
+
+  it('cannot be dismissed once a limit is actually reached', async () => {
+    // Exhaustion is a standing condition, not an event: something is refusing
+    // to run right now, and it stops saying so when that stops being true.
+    renderNotice([metric({ fraction: 1 })])
+
+    expect(await screen.findByTestId('usage-notice')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Dismiss' })).toBeNull()
+  })
+
+  it('reappears when a dismissed warning becomes a block', async () => {
+    renderNotice([metric({ fraction: 0.85 })])
+    fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }))
+    cleanup()
+
+    renderNotice([metric({ fraction: 1 })])
+    expect(
+      await screen.findByText("You have reached one of your plan's limits"),
+    ).toBeInTheDocument()
   })
 })

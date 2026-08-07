@@ -1174,7 +1174,8 @@
     "notice": {
       "approaching": "Vous approchez de certaines limites de votre forfait",
       "reached": "Vous avez atteint une limite de votre forfait",
-      "seeAll": "Voir toute l'utilisation"
+      "seeAll": "Voir toute l'utilisation",
+      "dismiss": "Ignorer"
     },
     "metric": {
       "aiTokens": "Génération par IA",
@@ -1194,6 +1195,10 @@
     "errors": {
       "load": "Impossible de charger votre utilisation"
     },
-    "plan": "Forfait"
+    "plan": "Forfait",
+    "settings": {
+      "warnEmails": "M’avertir par e-mail avant épuisement",
+      "warnEmailsHint": "Un avis quand un quota est presque épuisé. Les avis de limite réellement atteinte sont toujours envoyés."
+    }
   }
 }
