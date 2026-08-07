@@ -14,8 +14,14 @@
  * editing one into the database would silently diverge from the file it came
  * from. Duplicating gives the user their own copy instead.
  */
+import { randomBytes } from 'node:crypto'
 import { z } from 'zod'
-import type { ExportDownload, Layout, Template } from '@slide-machine/shared'
+import type {
+  ExportDownload,
+  ExportToDriveResult,
+  Layout,
+  Template,
+} from '@slide-machine/shared'
 import { defineAction } from './define'
 import {
   registerAction,
@@ -38,6 +44,10 @@ import {
 } from '../templates/resolve'
 import { permalinkSlug } from '../lib/slug'
 import { templateToYaml } from '../lib/template-yaml'
+import { createGoogleSlidesFromTemplateLive } from '../lib/export-google'
+import { decryptToken } from '../lib/token-crypto'
+import { isConnected, isLive } from './export'
+import { requireExports } from '../billing/meter-hooks'
 import { previewImageUrls } from '../enrichment/preview-images'
 
 const requireUser = (ctx: ActionContext): string => {
@@ -290,6 +300,76 @@ export const templatePreviewImage = defineAction<
   },
 })
 
+/**
+ * Exports a template to the caller's Google Drive as a native Google Slides
+ * presentation whose layouts are the template's layouts (EXP-6).
+ *
+ * A template in Google Slides is not a document of a special kind — it is a
+ * presentation whose layouts define a design, which is what people copy and
+ * build on. So this produces exactly that, with one demonstration slide per
+ * layout so the design is visible on open.
+ *
+ * Metered like any other export, and needs no OAuth scope beyond the one
+ * already used to create files: the presentation is produced as a .pptx and
+ * converted by Drive.
+ */
+export const templateExportToDrive = defineAction<
+  { templateId: string; driveFolderId: string; driveFolderName?: string },
+  ExportToDriveResult
+>({
+  name: 'template.exportToDrive',
+  meter: requireExports,
+  input: z.object({
+    templateId: z.string().min(1),
+    driveFolderId: z.string().min(1),
+    driveFolderName: z.string().optional(),
+  }),
+  execute: async (ctx, input) => {
+    const userId = requireUser(ctx)
+    const user = await UserModel.findById(userId).select(
+      '+googleQuizRefreshToken',
+    )
+    if (!user || !isConnected(user)) {
+      throw new ActionForbiddenError('Connect a Google account first')
+    }
+    // A built-in is exportable too: taking a shipped design into Drive to
+    // build on is the same act as taking one you wrote.
+    const template = await resolveTemplate(input.templateId)
+    if (!template) {
+      throw new ActionValidationError('template.exportToDrive', [
+        'unknown template',
+      ])
+    }
+    const name = template.name.trim() || 'Untitled design'
+
+    let fileId: string
+    let fileUrl: string
+    if (!isLive()) {
+      // A random suffix keeps every mock export distinct, as the deck path does
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+      fileId = `mock-template-${slug}-${randomBytes(4).toString('hex')}`
+      fileUrl = `https://docs.google.com/presentation/d/${fileId}/edit`
+    } else {
+      const file = await createGoogleSlidesFromTemplateLive(
+        decryptToken(user.googleQuizRefreshToken!),
+        { ...template, name },
+        input.driveFolderId,
+      )
+      fileId = file.id
+      fileUrl = file.fileUrl
+    }
+
+    return {
+      fileId,
+      fileName: name,
+      fileUrl,
+      format: 'google-slides',
+      driveFolderName: input.driveFolderName,
+      exportedAt: new Date().toISOString(),
+    }
+  },
+})
+
 registerAction(templateList)
 registerAction(templateGet)
 registerAction(templateExport)
@@ -297,3 +377,4 @@ registerAction(templatePreviewImage)
 registerAction(templateDuplicate)
 registerAction(templateUpdate)
 registerAction(templateDelete)
+registerAction(templateExportToDrive)

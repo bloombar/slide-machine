@@ -70,3 +70,47 @@ test('export a lecture to PDF download and Google Slides in Drive', async ({
   // The saved export is listed and can be deleted.
   await expect(dialog.getByText('Saved to Drive')).toBeVisible()
 })
+
+test('export a design to Google Slides in Drive (EXP-6)', async ({ page }) => {
+  // A template in Google Slides is just a presentation whose layouts define a
+  // design, so exporting one has to produce exactly that — and only a live
+  // browser can say the whole flow reaches Drive.
+  await page.goto('/register')
+  await page.getByLabel('Display name').fill('Designer')
+  await page.getByLabel('Email').fill(`design-${Date.now()}@example.com`)
+  await page.getByLabel('Password').fill('sturdy-passw0rd')
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await createProject(page, 'DesignProj')
+  await page
+    .getByRole('button', { name: 'Start a new lecture in DesignProj' })
+    .click()
+  await expect(page).toHaveURL(/\/d\//)
+  await page.getByRole('button', { name: 'Start lecture' }).click()
+
+  await page.getByRole('button', { name: 'Lecture settings' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Lecture settings' })
+  await dialog.getByRole('tab', { name: 'Design' }).click()
+
+  // Drive-only, so it needs a connected account first — the Export tab is
+  // where connecting lives.
+  await dialog.getByRole('tab', { name: 'Export' }).click()
+  await dialog.getByRole('radio', { name: /Google Slides/ }).check()
+  await dialog.getByRole('button', { name: 'Connect Google' }).click()
+  await dialog.getByRole('tab', { name: 'Design' }).click()
+
+  await dialog
+    .getByRole('button', { name: 'Export design to Google Slides' })
+    .click()
+
+  const picker = page.getByRole('dialog', { name: 'Choose a Drive folder' })
+  await expect(picker).toBeVisible()
+  await picker.getByRole('button', { name: 'New folder' }).click()
+  await picker.getByLabel('New folder name').fill('E2E Designs')
+  await picker.getByRole('button', { name: 'Create' }).click()
+  await picker.getByRole('button', { name: 'Save here' }).click()
+
+  // The design is in Drive, and opens in Slides rather than as a file
+  const link = dialog.locator('a[href*="docs.google.com/presentation"]').first()
+  await expect(link).toBeVisible()
+  await expect(link).toHaveText(/open in google slides/i)
+})

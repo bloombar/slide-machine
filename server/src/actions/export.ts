@@ -64,7 +64,7 @@ import {
 } from '../lib/export-google'
 import { decryptToken } from '../lib/token-crypto'
 
-const isLive = (): boolean => env.EXPORT_MODE === 'live'
+export const isLive = (): boolean => env.EXPORT_MODE === 'live'
 
 /** MIME types for the downloadable formats. */
 const MIME = {
@@ -83,7 +83,7 @@ const requireUser = async (ctx: ActionContext) => {
 
 /** Whether the user can export to Drive. In live mode this needs a stored
  * refresh token; the mock-mode flag must not count once switched to live. */
-const isConnected = (user: {
+export const isConnected = (user: {
   googleConnected?: boolean
   googleQuizRefreshToken?: string
 }): boolean =>

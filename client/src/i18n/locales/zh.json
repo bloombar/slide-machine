@@ -414,7 +414,12 @@
       "confirmUnplaced": "{count, plural, other {在 # 张幻灯片中，以下框在新设计中没有对应位置：}}",
       "confirmRemovedLayouts": "{count, plural, other {# 张幻灯片使用了新设计中已不存在的版式，将保持原样。}}",
       "confirmKept": "不会删除任何内容。没有对应位置的内容仍保留在幻灯片上，只是不再显示，你可以把它放回想要的位置。"
-    }
+    },
+    "exportSlides": "将设计导出到 Google Slides",
+    "exportSlidesHint": "把这个设计保存到你的云端硬盘，成为一份以它的版式为版式的演示文稿，每种版式配一张示例幻灯片。",
+    "exportSlidesDone": "已保存到云端硬盘——在 Google Slides 中打开",
+    "exportSlidesError": "无法把设计保存到云端硬盘——请重试",
+    "exportSlidesConnect": "连接 Google 账户后即可把设计保存到云端硬盘。"
   },
   "layout": {
     "change": "更改幻灯片版式",

@@ -105,7 +105,7 @@ const saveToDisk = (file: ExportDownload): void => {
  * Reuses the quiz feature's Drive actions (a Google connection is all they
  * need).
  */
-function FolderPicker({
+export function FolderPicker({
   formatLabel,
   saving,
   onCancel,

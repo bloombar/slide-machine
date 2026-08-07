@@ -414,7 +414,12 @@
       "confirmUnplaced": "{count, plural, one {On # slide, these boxes have no match in the new design:} other {On # slides, these boxes have no match in the new design:}}",
       "confirmRemovedLayouts": "{count, plural, one {# slide uses a layout the new design no longer has, and will be left as it is.} other {# slides use layouts the new design no longer has, and will be left as they are.}}",
       "confirmKept": "Nothing is deleted. Anything without a match stays on its slide and simply stops being shown, so you can put it back where you want it."
-    }
+    },
+    "exportSlides": "Export design to Google Slides",
+    "exportSlidesHint": "Saves this design to your Drive as a presentation whose layouts are its layouts, with one slide showing each.",
+    "exportSlidesDone": "Saved to Drive — open in Google Slides",
+    "exportSlidesError": "Could not save the design to Drive — try again",
+    "exportSlidesConnect": "Connect a Google account to save designs to Drive."
   },
   "layout": {
     "change": "Change slide layout",
