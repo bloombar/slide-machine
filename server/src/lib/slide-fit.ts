@@ -8,7 +8,6 @@
  * languages (e.g. Mandarin) where "word" is undefined.
  */
 import type {
-  SlotSpec,
   LayoutConstraints,
   LayoutDescriptor,
   SlideGenerationResult,
@@ -33,22 +32,26 @@ const clampChars = (
 }
 
 /**
- * The character ceiling a box actually has (TMPL-10).
+ * Truncates to a word budget, keeping whole words (TMPL-10).
  *
- * An author may set a limit in characters, in words, or both — words being how
- * anyone thinks about prose. A word ceiling is converted at an average English
- * word plus its space, which is approximate by design: these budgets are
- * "about this long", and the fit is a trim at a word boundary, not a
- * measurement. When both are set the tighter one wins, because an author who
- * gave two limits meant both.
+ * Counted, not converted. An earlier version turned a word ceiling into a
+ * character one at an average word length, which broke exactly where authors
+ * are most precise: "max 1 word" became six characters, so "Photosynthesis"
+ * — one word — came back as "Photos…". A word limit means whole words, and
+ * however long they are is how long they are.
+ *
+ * No ellipsis, unlike the character clamp. A word ceiling is a design rule
+ * the author set — "titles in this design are three words" — so the result
+ * should read as the title it was meant to be, not as something cut off.
  */
-const CHARS_PER_WORD = 6
-
-const slotCeiling = (spec: SlotSpec | undefined): number | undefined => {
-  if (!spec) return undefined
-  const fromWords = spec.maxWords ? spec.maxWords * CHARS_PER_WORD : undefined
-  if (spec.maxChars && fromWords) return Math.min(spec.maxChars, fromWords)
-  return spec.maxChars ?? fromWords
+const clampWords = (
+  text: string | undefined,
+  max: number | undefined,
+): string | undefined => {
+  if (!text || !max) return text
+  const words = text.trim().split(/\s+/)
+  if (words.length <= max) return text
+  return words.slice(0, max).join(' ')
 }
 
 /** Effective budgets: a box's own limits (the WYSIWYG-ready form)
@@ -60,7 +63,7 @@ const budgetsFor = (
   const layout = descriptors.find(d => d.type === result.layoutType)
   const constraints = layout?.constraints ?? {}
   const slotChars = (name: string): number | undefined =>
-    slotCeiling(layout?.slots.find(s => s.name === name))
+    layout?.slots.find(s => s.name === name)?.maxChars
   // A bullet box may say how many points it holds; that is more specific than
   // the layout's own count, so it wins.
   const slotBullets = layout?.slots.find(s => s.kind === 'bullets')?.maxItems
@@ -71,6 +74,24 @@ const budgetsFor = (
     maxBodyChars: slotChars('body') ?? constraints.maxBodyChars,
     maxBulletChars: slotChars('bullets') ?? constraints.maxBulletChars,
     maxCaptionChars: slotChars('caption') ?? constraints.maxCaptionChars,
+  }
+}
+
+/** A box's word ceiling, by conventional slot name. Kept apart from the
+ * character budgets because it is counted rather than measured, and only a
+ * box states one — no style or layout constraint speaks in words (TMPL-10). */
+const wordBudgetsFor = (
+  result: SlideGenerationResult,
+  descriptors: LayoutDescriptor[],
+): Record<string, number | undefined> => {
+  const layout = descriptors.find(d => d.type === result.layoutType)
+  const words = (name: string) =>
+    layout?.slots.find(s => s.name === name)?.maxWords
+  return {
+    title: words('title'),
+    body: words('body'),
+    bullets: words('bullets'),
+    caption: words('caption'),
   }
 }
 
@@ -121,15 +142,23 @@ export const clampToBudget = (
   descriptors: LayoutDescriptor[],
 ): SlideGenerationResult => {
   const limits = budgetsFor(result, descriptors)
+  const words = wordBudgetsFor(result, descriptors)
+  // Both bind where both are given: words first, so a whole-word cut is what
+  // a character ceiling then measures.
+  const fit = (
+    text: string | undefined,
+    chars: number | undefined,
+    max: number | undefined,
+  ) => clampChars(clampWords(text, max), chars)
   return {
     ...result,
     slots: {
-      title: clampChars(result.slots.title, limits.maxTitleChars),
-      body: clampChars(result.slots.body, limits.maxBodyChars),
+      title: fit(result.slots.title, limits.maxTitleChars, words.title),
+      body: fit(result.slots.body, limits.maxBodyChars, words.body),
       bullets: result.slots.bullets
         ?.slice(0, limits.maxBullets ?? result.slots.bullets.length)
-        .map(b => clampChars(b, limits.maxBulletChars)!),
-      caption: clampChars(result.slots.caption, limits.maxCaptionChars),
+        .map(b => fit(b, limits.maxBulletChars, words.bullets)!),
+      caption: fit(result.slots.caption, limits.maxCaptionChars, words.caption),
     },
   }
 }
