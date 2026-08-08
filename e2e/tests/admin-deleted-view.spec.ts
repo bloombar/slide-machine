@@ -21,6 +21,12 @@ let slug = ''
 let projectId = ''
 let deckId = ''
 let ownerToken = ''
+// A second, untouched course for the project scenario. It needs its own
+// lecture: a lecture deleted BEFORE its project keeps the earlier
+// tombstone and stays hidden when the project is opened, which is the
+// rule this suite relies on elsewhere — so reusing the first course's
+// already-deleted lecture would be testing the opposite thing.
+let projectId2 = ''
 
 /** Signs the account in, creating it via the API when it doesn't exist
  * yet (registration also sets the session cookie), and lands on /app. */
@@ -70,6 +76,18 @@ test('a user owns a project with one lecture', async ({ request }) => {
   deckId = created.id
   slug = created.permalinkSlug
   expect(slug).toBeTruthy()
+
+  const other = await request.post('/api/actions/project.create', {
+    headers,
+    data: { title: 'Sunk Course' },
+  })
+  expect(other.status()).toBe(200)
+  projectId2 = ((await other.json()) as { id: string }).id
+  const otherDeck = await request.post('/api/actions/deck.create', {
+    headers,
+    data: { projectId: projectId2, title: 'Sunk Lecture' },
+  })
+  expect(otherDeck.status()).toBe(200)
 })
 
 test('the admin deletes the lecture, and it leaves the product', async ({
@@ -122,14 +140,19 @@ test('the admin still opens the deleted lecture, after an audited confirm', asyn
 test('the same holds for a deleted project', async ({ page }) => {
   await ensureSignedIn(page, admin)
 
-  await page.goto(`/app/admin/projects/${projectId}`)
+  await page.goto(`/app/admin/projects/${projectId2}`)
   await page.getByRole('button', { name: 'Delete project' }).click()
   await page
     .getByRole('alertdialog', { name: 'Delete this project?' })
     .getByRole('button', { name: 'Delete project' })
     .click()
+  // The page leaves for the owner once the delete has landed; reloading
+  // before that would find the project still live and offer the wrong
+  // confirm.
+  await expect(page).toHaveURL(/\/app\/admin\/users\//)
 
-  await page.goto(`/app/admin/projects/${projectId}`)
+  await page.goto(`/app/admin/projects/${projectId2}`)
+  await expect(page.getByText(/This project is deleted/)).toBeVisible()
   await page.getByRole('button', { name: 'View project' }).click()
   const dialog = page.getByRole('alertdialog', {
     name: 'View this deleted project?',
@@ -137,11 +160,11 @@ test('the same holds for a deleted project', async ({ page }) => {
   await expect(dialog).toBeVisible()
   await dialog.getByRole('button', { name: 'View project' }).click()
 
-  // The product project page opens, still listing the lectures that went
-  // down with it
+  // The product project page opens, still listing the lecture that went
+  // down with it in the same cascade
   await expect(page).toHaveURL(/\/app\/projects\//)
-  await expect(page.getByText('Doomed Course')).toBeVisible()
-  await expect(page.getByText('Doomed Lecture')).toBeVisible()
+  await expect(page.getByText('Sunk Course')).toBeVisible()
+  await expect(page.getByText('Sunk Lecture')).toBeVisible()
 
   await page.goto('/app/admin/logs')
   await expect(page.getByText('project.deleted_view').first()).toBeVisible()

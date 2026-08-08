@@ -223,6 +223,24 @@ describe('project.get over a soft-deleted project', () => {
   })
 })
 
+describe('a lecture deleted before its project', () => {
+  it('stays hidden when the project is opened, as a restore would leave it', async () => {
+    // The owner throws the lecture away first; the project follows later,
+    // so the lecture carries the earlier tombstone. Restoring the project
+    // would not bring it back, and neither does viewing the project.
+    await act(ada, 'deck.delete', { deckId })
+    const kept = await act(ada, 'deck.create', {
+      projectId,
+      title: 'Survivor',
+    })
+    await deleteProjectCascade(projectId)
+
+    const res = await act(admin, 'deck.list', { projectId })
+    expect(res.status).toBe(200)
+    expect(res.body.map((d: { id: string }) => d.id)).toEqual([kept.body.id])
+  })
+})
+
 describe('the profile of a soft-deleted account', () => {
   beforeEach(async () => {
     await deleteUserCascade(adaId)

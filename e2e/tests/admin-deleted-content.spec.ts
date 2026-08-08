@@ -100,16 +100,15 @@ test('opening the deleted project is audited, and the owner cannot reach it', as
   await page.getByRole('link', { name: PROJECT }).click()
 
   // The project's own admin page opens, badged, with recovery instead of
-  // the danger zone and no way to open it in the product.
+  // the danger zone. It still opens in the product — read-only, behind a
+  // confirm, and audited (ADMIN-6); admin-deleted-view.spec.ts walks that.
   await expect(page.getByRole('heading', { name: PROJECT })).toBeVisible()
   await expect(page.getByText('Deleted', { exact: true })).toBeVisible()
   await expect(page.getByText(/This project is deleted/)).toBeVisible()
   await expect(
     page.getByRole('button', { name: 'Restore project' }),
   ).toBeVisible()
-  await expect(page.getByRole('button', { name: 'View project' })).toHaveCount(
-    0,
-  )
+  await expect(page.getByRole('button', { name: 'View project' })).toBeVisible()
 
   // The opening itself is an access to deleted content, so it is logged.
   await page.goto('/app/admin/logs')
