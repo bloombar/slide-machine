@@ -45,6 +45,7 @@ import {
 } from '@slide-machine/shared'
 import type { HydratedDocument, Types } from 'mongoose'
 import { defineAction } from './define'
+import { deckEditor, type DeckAccess } from './access'
 import { requireAiTokens } from '../billing/meter-hooks'
 import {
   registerAction,
@@ -226,6 +227,9 @@ const requireUser = (ctx: ActionContext): string => {
   return ctx.userId
 }
 
+/** The content gate, shared by every action here that edits a lecture. */
+const byDeckId = deckEditor((input: { deckId: string }) => input.deckId)
+
 /** Loads a deck the acting user owns, or throws (no existence leaks). */
 const loadOwnedDeck = async (
   ctx: ActionContext,
@@ -403,14 +407,14 @@ export const deckGet = defineAction<DeckGetInput, DeckViewResponse>({
   },
 })
 
-export const slideAdd = defineAction<SlideAddInput, Slide>({
+export const slideAdd = defineAction<SlideAddInput, Slide, DeckAccess>({
   name: 'slide.add',
+  access: byDeckId,
   input: z.object({
     deckId: z.string().min(1),
     layoutType: z.string().min(1).optional(),
   }),
-  execute: async (ctx, input) => {
-    const { deck } = await loadEditableDeck(ctx, input.deckId)
+  execute: async (ctx, input, { deck }) => {
     let layoutType = 'content'
     if (input.layoutType) {
       const template = await resolveDeckTemplate(deck)
@@ -468,12 +472,13 @@ export const deckRename = defineAction<DeckRenameInput, Deck>({
  */
 export const deckTemplateUpdateStatus = defineAction<
   DeckTemplateUpdateStatusInput,
-  TemplateUpdateStatus
+  TemplateUpdateStatus,
+  DeckAccess
 >({
   name: 'deck.templateUpdateStatus',
+  access: byDeckId,
   input: z.object({ deckId: z.string().min(1) }),
-  execute: async (ctx, input) => {
-    const { deck } = await loadEditableDeck(ctx, input.deckId)
+  execute: async (ctx, input, { deck }) => {
     const slides = await SlideModel.find({ deckId: deck._id }).select(
       '_id layoutType slots title body bullets caption imageRef',
     )
@@ -508,12 +513,13 @@ export const deckTemplateUpdateStatus = defineAction<
  */
 export const deckApplyTemplateUpdate = defineAction<
   DeckApplyTemplateUpdateInput,
-  Deck
+  Deck,
+  DeckAccess
 >({
   name: 'deck.applyTemplateUpdate',
+  access: byDeckId,
   input: z.object({ deckId: z.string().min(1) }),
-  execute: async (ctx, input) => {
-    const { deck, acl } = await loadEditableDeck(ctx, input.deckId)
+  execute: async (ctx, input, { deck, acl }) => {
     const pinned = await getVersion(deck.templateVersionId ?? undefined)
     if (!pinned) {
       throw new ActionValidationError('deck.applyTemplateUpdate', [
@@ -582,14 +588,18 @@ export const deckSwitchTemplate = defineAction<DeckSwitchTemplateInput, Deck>({
     }),
 })
 
-export const deckReorderSlides = defineAction<DeckReorderInput, Deck>({
+export const deckReorderSlides = defineAction<
+  DeckReorderInput,
+  Deck,
+  DeckAccess
+>({
   name: 'deck.reorderSlides',
+  access: byDeckId,
   input: z.object({
     deckId: z.string().min(1),
     slideOrder: z.array(z.string().min(1)).min(1),
   }),
-  execute: async (ctx, input) => {
-    const { deck, acl } = await loadEditableDeck(ctx, input.deckId)
+  execute: async (ctx, input, { deck, acl }) => {
     const current = [...deck.slideOrder].sort()
     const proposed = [...input.slideOrder].sort()
     if (
@@ -617,8 +627,13 @@ export const deckReorderSlides = defineAction<DeckReorderInput, Deck>({
  * bloating the prompt on a long-dwelt slide. */
 const LIVE_TRANSCRIPT_CHARS = 4000
 
-export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
+export const sessionPhrase = defineAction<
+  SessionPhraseInput,
+  SlideEvent,
+  DeckAccess
+>({
   name: 'session.phrase',
+  access: byDeckId,
   meter: requireAiTokens,
   input: z.object({
     deckId: z.string().min(1),
@@ -648,8 +663,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
     // while the user is actively marking up a slide, or until they resume.
     pauseGeneration: z.boolean().optional(),
   }),
-  execute: async (ctx, input) => {
-    const { deck } = await loadEditableDeck(ctx, input.deckId)
+  execute: async (ctx, input, { deck }) => {
     const template = await resolveDeckTemplate(deck)
     if (!template)
       throw new ActionValidationError('session.phrase', [

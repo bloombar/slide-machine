@@ -55,12 +55,20 @@ beforeEach(async () => {
     title: 'Photosynthesis',
   })
   deckId = deck.body.id
-  await act(server, ada, 'session.phrase', {
+
+  // The slide is written directly rather than spoken into being through
+  // session.phrase. Generating one leaves background work running past the
+  // response, which then writes into a lecture the next test's wipe has
+  // already removed — and a fixture for an access test should not depend on
+  // the generation pipeline at all.
+  const slide = await SlideModel.create({
     deckId,
-    phrase: 'Photosynthesis occurs in chloroplasts',
+    index: 0,
+    layoutType: 'content',
+    slots: {},
   })
-  const slides = await DeckModel.findById(deckId)
-  slideId = slides!.slideOrder[0]!.toString()
+  slideId = slide._id.toString()
+  await DeckModel.updateOne({ _id: deckId }, { slideOrder: [slide._id] })
 
   // Cleo may read this lecture and nothing more.
   await act(server, ada, 'deck.share', {
@@ -187,6 +195,24 @@ describe('access is settled before the plan is', () => {
     expect(res.status).toBe(403)
     expect(res.body.error.code).toBe('forbidden')
   })
+
+  // The same order, for the family that meters AI generation rather than
+  // transcription — most of the metered population.
+  it.each(['deck.refine', 'deck.reformat', 'session.phrase'])(
+    'refuses a viewer of %s at an exhausted AI cap with 403, not 402',
+    async name => {
+      await UsageRecordModel.create({
+        userId: (await UserModel.findOne({ email: 'cleo@example.com' }))!._id,
+        period: new Date().toISOString().slice(0, 7),
+        metric: 'aiTokens',
+        used: 100_000_000,
+      })
+
+      const res = await act(server, cleo, name, { deckId, phrase: 'no' })
+      expect(res.status).toBe(403)
+      expect(res.body.error.code).toBe('forbidden')
+    },
+  )
 
   // ...and the cap is genuinely enforced for someone who MAY edit, which it
   // was not while the hook had to stay off.
