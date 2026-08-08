@@ -9,7 +9,7 @@ import { canEditAcl, canViewAcl, isAclMember } from '../../lib/access'
 import { ActionForbiddenError } from '../dispatch'
 import { definePolicy, type AccessPolicy, type PickId } from './policy'
 import { requireUser, overrideActor } from './common'
-import type { ProjectAccess, ProjectSettingsAccess } from './types'
+import type { AdminActor, ProjectAccess, ProjectSettingsAccess } from './types'
 
 /** Loads the project named by `pick` and its ACL, or refuses. */
 const loadProject = async (
@@ -66,6 +66,17 @@ export const projectOwner = <I>(
     return access
   })
 
+/**
+ * Admits the caller to a project's settings (ADMIN-5), returning the admin
+ * behind an override so a change can be filed against them. Refuses the rest.
+ */
+const settingsActor = async (
+  access: ProjectAccess,
+): Promise<AdminActor | null> =>
+  canEditAcl(access.acl, access.userId)
+    ? null
+    : overrideActor(access.userId, access.acl.ownerId)
+
 /** An owner or editor, otherwise an allowlisted admin overriding (ADMIN-5). */
 export const projectSettings = <I>(
   pick: PickId<I>,
@@ -74,9 +85,24 @@ export const projectSettings = <I>(
     { resource: 'project', level: 'settings' },
     async (ctx, input) => {
       const access = await loadProject(requireUser(ctx), pick(input))
-      const admin = canEditAcl(access.acl, access.userId)
-        ? null
-        : await overrideActor(access.userId, access.acl.ownerId)
-      return { ...access, admin }
+      return { ...access, admin: await settingsActor(access) }
+    },
+  )
+
+/**
+ * The same admission, for reading a project's settings rather than changing
+ * them — currently `project.shares`. Declared apart from `projectSettings` so
+ * a read is not routed through the audit wrapper it has no business in; see
+ * `deckSettingsView` for the reasoning.
+ */
+export const projectSettingsView = <I>(
+  pick: PickId<I>,
+): AccessPolicy<I, ProjectAccess> =>
+  definePolicy(
+    { resource: 'project', level: 'settingsView' },
+    async (ctx, input) => {
+      const access = await loadProject(requireUser(ctx), pick(input))
+      await settingsActor(access)
+      return access
     },
   )

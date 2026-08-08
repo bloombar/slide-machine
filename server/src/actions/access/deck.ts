@@ -14,7 +14,7 @@ import { canEditAcl, canViewAcl } from '../../lib/access'
 import { ActionForbiddenError } from '../dispatch'
 import { definePolicy, type AccessPolicy, type PickId } from './policy'
 import { requireUser, overrideActor } from './common'
-import type { DeckAccess, DeckSettingsAccess } from './types'
+import type { AdminActor, DeckAccess, DeckSettingsAccess } from './types'
 
 /**
  * Loads the lecture named by `pick` and its resolved ACL, or refuses.
@@ -62,18 +62,46 @@ export const deckOwner = <I>(pick: PickId<I>): AccessPolicy<I, DeckAccess> =>
   })
 
 /**
- * The settings gate (ADMIN-5): an owner or editor as usual, otherwise an
- * allowlisted admin overriding the ACL. Resolves who the admin is when one is
- * acting, so the audit half of the change can be filed against them without
- * loading the account a second time.
+ * Admits the caller to a lecture's settings (ADMIN-5): an owner or editor as
+ * usual, otherwise an allowlisted admin overriding the ACL — who is returned
+ * so the audit half of a change can be filed against them without loading the
+ * account a second time. Refuses anyone else.
+ */
+const settingsActor = async (access: DeckAccess): Promise<AdminActor | null> =>
+  canEditAcl(access.acl, access.userId)
+    ? null
+    : overrideActor(access.userId, access.acl.ownerId)
+
+/**
+ * The settings gate: an owner or editor, otherwise an allowlisted admin.
  */
 export const deckSettings = <I>(
   pick: PickId<I>,
 ): AccessPolicy<I, DeckSettingsAccess> =>
   definePolicy({ resource: 'deck', level: 'settings' }, async (ctx, input) => {
     const access = await loadDeck(requireUser(ctx), pick(input))
-    const admin = canEditAcl(access.acl, access.userId)
-      ? null
-      : await overrideActor(access.userId, access.acl.ownerId)
-    return { ...access, admin }
+    return { ...access, admin: await settingsActor(access) }
   })
+
+/**
+ * The settings gate for *reading* settings rather than changing them —
+ * currently `deck.shares`, which answers "who is this shared with?".
+ *
+ * Admission is identical to `deckSettings`, deliberately: the share list is
+ * management data, not content, and an admin looking at someone's settings
+ * page needs to see it. What differs is what the caller then does with it. A
+ * read declared this way skips the audit wrapper entirely, so it cannot file
+ * a settings-change entry — where before it filed one and relied on the diff
+ * coming out empty.
+ */
+export const deckSettingsView = <I>(
+  pick: PickId<I>,
+): AccessPolicy<I, DeckAccess> =>
+  definePolicy(
+    { resource: 'deck', level: 'settingsView' },
+    async (ctx, input) => {
+      const access = await loadDeck(requireUser(ctx), pick(input))
+      await settingsActor(access)
+      return access
+    },
+  )

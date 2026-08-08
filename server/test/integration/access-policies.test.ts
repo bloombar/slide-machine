@@ -26,8 +26,10 @@ import {
   deckEditor,
   deckViewer,
   deckOwner,
+  deckSettingsView,
   projectOwner,
   projectMember,
+  projectSettingsView,
   slideEditor,
   self,
   signedIn,
@@ -216,6 +218,81 @@ describe('deckOwner', () => {
     await expect(
       policy.authorize(ctxFor(bob), { deckId }),
     ).rejects.toBeInstanceOf(ActionForbiddenError)
+  })
+})
+
+/**
+ * The settings gate as a read. `deck.shares` and `project.shares` answer "who
+ * is this shared with?" — management data, so the bar is the settings bar and
+ * not `view`, and a public lecture does not open its share list to strangers.
+ * What the level buys is that a read cannot reach the audit wrapper; the
+ * admission rule is deliberately identical to the write gate's, which is what
+ * these assert.
+ */
+describe('settings read gates', () => {
+  const deckPolicy = deckSettingsView(pickDeck)
+  const projectPolicy = projectSettingsView(
+    (i: { projectId: string }) => i.projectId,
+  )
+
+  it('admits the owner and an editor', async () => {
+    await expect(
+      deckPolicy.authorize(ctxFor(ada), { deckId }),
+    ).resolves.toMatchObject({ userId: ada })
+    await DeckModel.updateOne(
+      { _id: deckId },
+      { 'accessOverride.editors': [bob] },
+    )
+    await expect(
+      deckPolicy.authorize(ctxFor(bob), { deckId }),
+    ).resolves.toMatchObject({ userId: bob })
+  })
+
+  it('refuses a viewer, who may read the lecture but not manage it', async () => {
+    await expect(
+      deckPolicy.authorize(ctxFor(cleo), { deckId }),
+    ).rejects.toBeInstanceOf(ActionForbiddenError)
+  })
+
+  it('refuses a stranger even once the lecture is public', async () => {
+    await DeckModel.updateOne(
+      { _id: deckId },
+      { 'accessOverride.visibility': 'public' },
+    )
+    await expect(
+      deckPolicy.authorize(ctxFor(bob), { deckId }),
+    ).rejects.toBeInstanceOf(ActionForbiddenError)
+  })
+
+  it('answers a missing lecture as it answers a forbidden one', async () => {
+    const missing = await deckPolicy
+      .authorize(ctxFor(bob), { deckId: ABSENT })
+      .catch((e: Error) => e)
+    const forbidden = await deckPolicy
+      .authorize(ctxFor(bob), { deckId })
+      .catch((e: Error) => e)
+    expect((missing as Error).message).toBe((forbidden as Error).message)
+  })
+
+  it('holds the same line on a project', async () => {
+    await expect(
+      projectPolicy.authorize(ctxFor(ada), { projectId }),
+    ).resolves.toMatchObject({ userId: ada })
+    await expect(
+      projectPolicy.authorize(ctxFor(bob), { projectId }),
+    ).rejects.toBeInstanceOf(ActionForbiddenError)
+  })
+
+  // The descriptor is what a reviewer reads to know a read from a write.
+  it('declares itself a read of the settings, not a write', () => {
+    expect(deckPolicy.descriptor).toEqual({
+      resource: 'deck',
+      level: 'settingsView',
+    })
+    expect(projectPolicy.descriptor).toEqual({
+      resource: 'project',
+      level: 'settingsView',
+    })
   })
 })
 

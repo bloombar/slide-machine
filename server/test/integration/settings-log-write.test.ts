@@ -339,7 +339,7 @@ describe('project settings', () => {
       language: 'es',
     })
     expect(refused.status).toBe(403)
-    // Opening the sharing tab reads through the same wrapper as an edit
+    // Opening the sharing tab takes the settings gate but writes nothing
     const read = await act(ada, 'project.shares', { projectId })
     expect(read.status).toBe(200)
 
@@ -431,13 +431,24 @@ describe('lecture settings', () => {
   // splitting it into an admitting half (the access policy) and this
   // bracketing half is exactly the change that could lose them (TECH-14).
 
-  // deck.shares only READS the share list, but rides the write wrapper to
-  // reuse its admission rule. It stays out of the log because its diff is
-  // empty — not because anything checks what it is.
+  // deck.shares and project.shares only READ the share list. They take the
+  // settings gate — the list is management data — but declare it as
+  // `settingsView`, so they never reach the audit wrapper. They used to ride
+  // it and stay out of the log only because their diff came out empty.
   it('writes nothing for an action that changes nothing', async () => {
     expect((await act(ada, 'deck.shares', { deckId })).status).toBe(200)
     expect((await act(ada, 'project.shares', { projectId })).status).toBe(200)
     expect(await SettingsChangeLogModel.countDocuments()).toBe(0)
+  })
+
+  // The admin override still admits the read — an admin opening someone
+  // else's settings page sees who it is shared with — and reading is not an
+  // administrative act, so neither log records it.
+  it('lets an admin read a share list without recording anything', async () => {
+    expect((await act(admin, 'deck.shares', { deckId })).status).toBe(200)
+    expect((await act(admin, 'project.shares', { projectId })).status).toBe(200)
+    expect(await SettingsChangeLogModel.countDocuments()).toBe(0)
+    expect(await AdminActionLogModel.countDocuments()).toBe(0)
   })
 
   // The "after" snapshot re-resolves the ACL, because dropping an override

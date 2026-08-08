@@ -17,13 +17,20 @@ export {
 export * from './types'
 
 export { requireUser, overrideActor } from './common'
-export { deckEditor, deckViewer, deckOwner, deckSettings } from './deck'
+export {
+  deckEditor,
+  deckViewer,
+  deckOwner,
+  deckSettings,
+  deckSettingsView,
+} from './deck'
 export {
   projectEditor,
   projectViewer,
   projectMember,
   projectOwner,
   projectSettings,
+  projectSettingsView,
 } from './project'
 export { slideEditor, refineJobEditor } from './slide'
 export { seedAssetEditor, seedAssetLevel } from './seed-asset'

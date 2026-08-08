@@ -50,6 +50,7 @@ import {
   deckEditor,
   deckOwner,
   deckSettings,
+  deckSettingsView,
   deckViewer,
   projectOwner,
   type DeckAccess,
@@ -244,6 +245,11 @@ const byDeckId = deckEditor((input: { deckId: string }) => input.deckId)
 /** The settings gate: an owner or editor, otherwise an allowlisted admin
  * overriding the ACL, whose edit is then audited (ADMIN-5). */
 const settingsOf = deckSettings((input: { deckId: string }) => input.deckId)
+
+/** The same admission, for an action that only reads the settings. */
+const settingsReadOf = deckSettingsView(
+  (input: { deckId: string }) => input.deckId,
+)
 
 /** Owner-only, deliberately stricter than the content gate: deleting a
  * lecture or handing it on is not something an editor may do. */
@@ -1549,16 +1555,20 @@ export const deckUnshare = defineAction<
     }),
 })
 
+/**
+ * Who a lecture is shared with. A read: it takes the settings gate because
+ * the share list is management data, but it changes nothing and so files no
+ * settings-change entry (TECH-14).
+ */
 export const deckShares = defineAction<
   DeckSharesInput,
   DeckShare[],
-  DeckSettingsAccess
+  DeckAccess
 >({
   name: 'deck.shares',
-  access: settingsOf,
+  access: settingsReadOf,
   input: z.object({ deckId: z.string().min(1) }),
-  execute: (ctx, input, access) =>
-    withDeckSettingsAudit(access, async (_deck, acl) => sharesOf(acl)),
+  execute: (ctx, input, { acl }) => sharesOf(acl),
 })
 
 export const deckDelete = defineAction<
