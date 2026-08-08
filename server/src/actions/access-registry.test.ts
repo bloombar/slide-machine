@@ -34,7 +34,7 @@ import type { AccessDescriptor } from './access/policy'
  * an action nobody got to: the reason is required, published here, and a new
  * name cannot join without editing this list.
  */
-const REASONS: Record<string, string> = {
+const REASONS = {
   'deck.list':
     'admission differs by whether a project is named, and an admin may list a deleted project’s lectures (ADMIN-6); a per-row filter then decides what is returned',
   'project.get':
@@ -43,7 +43,7 @@ const REASONS: Record<string, string> = {
     'the Mongo filter IS the authorization — publicDeckFilter reimplements deck ACL resolution at query level, so there is no single resource to resolve',
   'social.search':
     'the Mongo filter IS the authorization — the same publicDeckFilter, applied to a search rather than a listing',
-}
+} as const
 
 const CUSTOM_ALLOWED = new Set<string>(Object.keys(REASONS))
 
