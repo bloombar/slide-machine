@@ -5,11 +5,20 @@
 import { describe, it, expect } from 'vitest'
 import {
   dispatch,
+  runAction,
+  ActionForbiddenError,
   ActionNotFoundError,
   ActionValidationError,
   registerAction,
 } from './dispatch'
 import { defineAction } from './define'
+import { definePolicy } from './access/policy'
+
+/** The simplest declaration there is, for fixtures that guard nothing. */
+const openPolicy = definePolicy<Record<string, unknown>, undefined>(
+  { resource: 'none', level: 'open' },
+  async () => undefined,
+)
 import { z } from 'zod'
 import './system'
 
@@ -37,15 +46,16 @@ describe('dispatch', () => {
     )
   })
 
-  it('runs authorize and meter hooks before execute', async () => {
+  it('runs the access policy and meter hook before execute', async () => {
     const calls: string[] = []
     registerAction(
       defineAction({
         name: 'test.hooks',
         input: z.object({}),
-        authorize: async () => {
-          calls.push('authorize')
-        },
+        access: definePolicy({ resource: 'none', level: 'open' }, async () => {
+          calls.push('access')
+          return undefined
+        }),
         meter: async () => {
           calls.push('meter')
         },
@@ -56,6 +66,80 @@ describe('dispatch', () => {
       }),
     )
     await dispatch('test.hooks', {}, ctx)
-    expect(calls).toEqual(['authorize', 'meter', 'execute'])
+    expect(calls).toEqual(['access', 'meter', 'execute'])
+  })
+
+  // The ordering TECH-14 exists to fix. With the check inside execute, an
+  // exhausted plan answered before the ACL did — so someone with no rights to
+  // a lecture was told about billing instead of being refused.
+  it('authorizes before it meters', async () => {
+    const calls: string[] = []
+    registerAction(
+      defineAction({
+        name: 'test.hooks',
+        input: z.object({}),
+        access: definePolicy({ resource: 'none', level: 'open' }, async () => {
+          calls.push('access')
+          throw new ActionForbiddenError()
+        }),
+        meter: async () => {
+          calls.push('meter')
+        },
+        execute: async () => {
+          calls.push('execute')
+          return null
+        },
+      }),
+    )
+    await expect(dispatch('test.hooks', {}, ctx)).rejects.toBeInstanceOf(
+      ActionForbiddenError,
+    )
+    expect(calls).toEqual(['access'])
+  })
+
+  it('hands what the policy resolved to execute', async () => {
+    registerAction(
+      defineAction({
+        name: 'test.hooks',
+        input: z.object({}),
+        access: definePolicy({ resource: 'none', level: 'open' }, async () => ({
+          resolved: 'the loaded document',
+        })),
+        execute: async (_ctx, _input, access) => access.resolved,
+      }),
+    )
+    expect(await dispatch('test.hooks', {}, ctx)).toBe('the loaded document')
+  })
+
+  it('runs an action from a typed reference, and can skip metering', async () => {
+    const calls: string[] = []
+    const action = defineAction({
+      name: 'test.direct',
+      access: openPolicy,
+      input: z.object({ value: z.string() }),
+      meter: async () => {
+        calls.push('meter')
+      },
+      execute: async (_ctx, input) => input.value,
+    })
+    expect(await runAction(action, ctx, { value: 'ok' })).toBe('ok')
+    expect(calls).toEqual(['meter'])
+
+    expect(
+      await runAction(action, ctx, { value: 'ok' }, { meter: false }),
+    ).toBe('ok')
+    expect(calls).toEqual(['meter'])
+  })
+
+  it('validates input the same way when run from a reference', async () => {
+    const action = defineAction({
+      name: 'test.direct',
+      access: openPolicy,
+      input: z.object({ value: z.string() }),
+      execute: async (_ctx, input) => input.value,
+    })
+    await expect(
+      runAction(action, ctx, { value: 42 } as never),
+    ).rejects.toBeInstanceOf(ActionValidationError)
   })
 })

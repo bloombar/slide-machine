@@ -23,88 +23,44 @@ import type {
   Template,
 } from '@slide-machine/shared'
 import { defineAction } from './define'
-import {
-  registerAction,
-  ActionForbiddenError,
-  ActionValidationError,
-} from './dispatch'
-import type { ActionContext } from './context'
+import { registerAction } from './dispatch'
 import { TemplateModel, toTemplateDto } from '../models/template'
-import { DeckModel, loadDeckAcls } from '../models/deck'
 import { UserModel } from '../models/user'
-import { canEditAcl } from '../lib/access'
 import {
   layoutSchema,
   normalizeSlot,
   requireWhiteboardLayout,
 } from '../templates/builtin'
-import {
-  isBuiltinTemplate,
-  listTemplatesFor,
-  resolveTemplate,
-  resolveTemplateBySlug,
-} from '../templates/resolve'
+import { listTemplatesFor } from '../templates/resolve'
 import { permalinkSlug } from '../lib/slug'
 import { templateToYaml } from '../lib/template-yaml'
 import { createGoogleSlidesFromTemplateLive } from '../lib/export-google'
 import { decryptToken } from '../lib/token-crypto'
-import { isConnected, isLive } from './export'
+import {
+  requiresGoogleDrive,
+  signedIn,
+  templateAuthor,
+  templateReadable,
+  templateReadableBySlug,
+  type Signed,
+  type TemplateAccess,
+  type TemplateAuthorAccess,
+  type WithGoogle,
+} from './access'
+
+/** A design the caller may read: a built-in, their own, one its author
+ * shared, or one that draws a lecture they may edit. */
+const readableById = templateReadable(
+  (input: { templateId: string }) => input.templateId,
+)
+
+/** The author alone — renaming, retheming, deleting. */
+const authorOf = templateAuthor(
+  (input: { templateId: string }) => input.templateId,
+)
+import { isLive } from '../lib/export-mode'
 import { requireExports } from '../billing/meter-hooks'
 import { previewImageUrls } from '../enrichment/preview-images'
-
-const requireUser = (ctx: ActionContext): string => {
-  if (!ctx.userId) throw new ActionForbiddenError('Sign in to continue')
-  return ctx.userId
-}
-
-/**
- * True when a lecture the caller may edit is drawn with this template.
- *
- * Someone editing a shared lecture already sees its design on every slide,
- * so withholding the same design as a file would protect nothing while
- * breaking the export offered in that lecture's own settings. Reached only
- * for a private template belonging to someone else, which by definition
- * only its author can have applied — so the lectures searched here are that
- * one author's, not the whole collection.
- */
-const drawsAnEditableDeck = async (
-  userId: string,
-  templateId: string,
-): Promise<boolean> => {
-  const decks = await DeckModel.find({ templateId }).limit(200)
-  if (decks.length === 0) return false
-  const acls = await loadDeckAcls(decks)
-  return decks.some(deck => canEditAcl(acls.get(deck._id.toString())!, userId))
-}
-
-/**
- * Loads a template the caller may read, or refuses. Readable means a
- * built-in, one the caller authored, or one its author shared — the same
- * rule template.get applies to a permalink — plus one that draws a lecture
- * the caller may edit.
- *
- * A template that does not exist is refused identically to one the caller
- * may not see, so an id cannot be probed to learn which it was.
- */
-const loadReadable = async (
-  userId: string,
-  templateId: string,
-): Promise<Template> => {
-  const template = await resolveTemplate(templateId)
-  if (!template) throw new ActionForbiddenError()
-  const own = template.ownerId === userId
-  const builtin = template.ownerId === 'system'
-  const shared = template.visibility !== 'private'
-  if (
-    !own &&
-    !builtin &&
-    !shared &&
-    !(await drawsAnEditableDeck(userId, templateId))
-  ) {
-    throw new ActionForbiddenError()
-  }
-  return template
-}
 
 /**
  * A name for a copy that says what it came from and which one it is.
@@ -146,22 +102,13 @@ const normalizeLayouts = (
     slots: layout.slots.map(normalizeSlot),
   })) as Layout[]
 
-/** Loads a template the caller authored, or refuses. */
-const loadOwn = async (userId: string, templateId: string) => {
-  if (isBuiltinTemplate(templateId)) {
-    throw new ActionValidationError('template', [
-      'built-in templates cannot be changed; duplicate it first',
-    ])
-  }
-  const doc = await TemplateModel.findById(templateId).catch(() => null)
-  if (!doc || doc.ownerId.toString() !== userId) {
-    throw new ActionForbiddenError()
-  }
-  return doc
-}
-
-export const templateList = defineAction<Record<string, never>, Template[]>({
+export const templateList = defineAction<
+  Record<string, never>,
+  Template[],
+  Signed
+>({
   name: 'template.list',
+  access: signedIn(),
   input: z.object({}),
   execute: async ctx => listTemplatesFor(ctx.userId),
 })
@@ -175,16 +122,15 @@ export const templateList = defineAction<Record<string, never>, Template[]>({
  * a private one nobody else — refused identically to a template that does
  * not exist, so the permalink cannot be used to discover what is there.
  */
-export const templateGet = defineAction<{ slug: string }, Template>({
+export const templateGet = defineAction<
+  { slug: string },
+  Template,
+  TemplateAccess
+>({
   name: 'template.get',
+  access: templateReadableBySlug((input: { slug: string }) => input.slug),
   input: z.object({ slug: z.string().min(1) }),
-  execute: async (ctx, input) => {
-    const template = await resolveTemplateBySlug(input.slug)
-    if (!template) throw new ActionForbiddenError()
-    const own = template.ownerId === ctx.userId
-    if (!own && template.visibility === 'private') {
-      throw new ActionForbiddenError()
-    }
+  execute: async (ctx, input, { template }) => {
     const owner = await UserModel.findById(template.ownerId).catch(() => null)
     return owner
       ? { ...template, owner: { id: owner.id, displayName: owner.displayName } }
@@ -201,12 +147,13 @@ export const templateGet = defineAction<{ slug: string }, Template>({
  */
 export const templateExport = defineAction<
   { templateId: string },
-  ExportDownload
+  ExportDownload,
+  TemplateAccess
 >({
   name: 'template.export',
+  access: readableById,
   input: z.object({ templateId: z.string().min(1) }),
-  execute: async (ctx, input) => {
-    const template = await loadReadable(requireUser(ctx), input.templateId)
+  execute: async (ctx, input, { template }) => {
     const slug =
       template.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'template'
     return {
@@ -226,18 +173,16 @@ export const templateExport = defineAction<
  */
 export const templateDuplicate = defineAction<
   { templateId: string; name?: string },
-  Template
+  Template,
+  TemplateAccess
 >({
   name: 'template.duplicate',
+  access: readableById,
   input: z.object({
     templateId: z.string().min(1),
     name: z.string().trim().min(1).max(80).optional(),
   }),
-  execute: async (ctx, input) => {
-    const userId = requireUser(ctx)
-    // Someone else's private template is not a source to copy from, and a
-    // template that does not exist is refused the same way.
-    const source = await loadReadable(userId, input.templateId)
+  execute: async (ctx, input, { userId, template: source }) => {
     // Named against everything the caller can already see, so a copy never
     // arrives sharing a name with the thing it was copied from.
     const library = await listTemplatesFor(userId)
@@ -272,16 +217,16 @@ export const templateUpdate = defineAction<
     layouts: z.infer<typeof templateBody>['layouts']
     visibility?: 'private' | 'unlisted' | 'public'
   },
-  Template
+  Template,
+  TemplateAuthorAccess
 >({
   name: 'template.update',
+  access: authorOf,
   input: z
     .object({ templateId: z.string().min(1) })
     .extend(templateBody.shape)
     .superRefine((body, ctx) => requireWhiteboardLayout(body.layouts, ctx)),
-  execute: async (ctx, input) => {
-    const userId = requireUser(ctx)
-    const doc = await loadOwn(userId, input.templateId)
+  execute: async (ctx, input, { doc }) => {
     // Templates authored before permalinks get one on their next save. An
     // existing slug is left alone, renames included — see `templateDuplicate`.
     doc.permalinkSlug ??= permalinkSlug(input.name, 'template')
@@ -302,13 +247,13 @@ export const templateUpdate = defineAction<
  */
 export const templateDelete = defineAction<
   { templateId: string },
-  { id: string }
+  { id: string },
+  TemplateAuthorAccess
 >({
   name: 'template.delete',
+  access: authorOf,
   input: z.object({ templateId: z.string().min(1) }),
-  execute: async (ctx, input) => {
-    const userId = requireUser(ctx)
-    const doc = await loadOwn(userId, input.templateId)
+  execute: async (ctx, input, { doc }) => {
     doc.deletedAt = new Date()
     await doc.save()
     return { id: doc._id.toString() }
@@ -327,17 +272,18 @@ export const templateDelete = defineAction<
  */
 export const templatePreviewImage = defineAction<
   { query?: string; count?: number },
-  { urls: string[] }
+  { urls: string[] },
+  Signed
 >({
   name: 'template.previewImage',
+  access: signedIn(),
   input: z.object({
     query: z.string().trim().min(1).max(60).optional(),
     count: z.number().int().min(1).max(8).optional(),
   }),
-  execute: async (ctx, input) => {
-    requireUser(ctx)
-    return { urls: await previewImageUrls(input.query, input.count ?? 1) }
-  },
+  execute: async (_ctx, input) => ({
+    urls: await previewImageUrls(input.query, input.count ?? 1),
+  }),
 })
 
 /**
@@ -355,27 +301,22 @@ export const templatePreviewImage = defineAction<
  */
 export const templateExportToDrive = defineAction<
   { templateId: string; driveFolderId: string; driveFolderName?: string },
-  ExportToDriveResult
+  ExportToDriveResult,
+  WithGoogle<TemplateAccess>
 >({
   name: 'template.exportToDrive',
+  // Two requirements, and the order matters: the design must be one the
+  // caller may read before the account is asked for a Google connection.
+  // A built-in is exportable too — taking a shipped design into Drive to
+  // build on is the same act as taking one you wrote.
+  access: requiresGoogleDrive(readableById, 'export'),
   meter: requireExports,
   input: z.object({
     templateId: z.string().min(1),
     driveFolderId: z.string().min(1),
     driveFolderName: z.string().optional(),
   }),
-  execute: async (ctx, input) => {
-    const userId = requireUser(ctx)
-    const user = await UserModel.findById(userId).select(
-      '+googleQuizRefreshToken',
-    )
-    if (!user || !isConnected(user)) {
-      throw new ActionForbiddenError('Connect a Google account first')
-    }
-    // A built-in is exportable too: taking a shipped design into Drive to
-    // build on is the same act as taking one you wrote. Someone else's
-    // private design is not.
-    const template = await loadReadable(userId, input.templateId)
+  execute: async (ctx, input, { template, googleUser: user }) => {
     const name = template.name.trim() || 'Untitled design'
 
     let fileId: string

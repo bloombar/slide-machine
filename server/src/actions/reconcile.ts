@@ -43,13 +43,17 @@ import { defineAction } from './define'
 import { requireAiTokens, assertUserCapacity } from '../billing/meter-hooks'
 import { currentUsageUser, meterUsage } from '../billing/usage-context'
 import { registerAction, ActionForbiddenError } from './dispatch'
-import { loadEditableDeck } from './deck'
+import {
+  deckEditor,
+  refineJobEditor,
+  type DeckAccess,
+  type RefineJobAccess,
+} from './access'
 import { env } from '../config/env'
 import { registry } from '../providers/registry'
 import { TranscriptSegmentModel } from '../models/transcript-segment'
 import { SlideModel, toSlideDto, type SlideDb } from '../models/slide'
-import { DeckModel, loadDeckAcl, touchDeck, type DeckDb } from '../models/deck'
-import { canEditAcl } from '../lib/access'
+import { DeckModel, touchDeck, type DeckDb } from '../models/deck'
 import { RefineJobModel } from '../models/refine-job'
 import { layoutDescriptors } from '../templates/builtin'
 import { resolveDeckTemplate } from '../templates/versions'
@@ -408,36 +412,45 @@ const reformatStudentSlides = async (
   }
 }
 
-export const deckDiarize = defineAction<DeckDiarizeInput, DeckDiarizeResult>({
+/** The content gate, shared by every refine/reformat action here. */
+const byDeckId = deckEditor((input: { deckId: string }) => input.deckId)
+
+export const deckDiarize = defineAction<
+  DeckDiarizeInput,
+  DeckDiarizeResult,
+  DeckAccess
+>({
   name: 'deck.diarize',
+  access: byDeckId,
   input: z.object({ deckId: z.string().min(1) }),
-  execute: async (ctx, input) => {
-    const { deck } = await loadEditableDeck(ctx, input.deckId)
+  execute: async (ctx, input, { deck }) => {
     return diarizeDeckRecordings(deck)
   },
 })
 
 registerAction(deckDiarize)
 
-export const deckReformat = defineAction<DeckReformatInput, DeckReformatResult>(
-  {
-    name: 'deck.reformat',
-    meter: requireAiTokens,
-    input: z.object({ deckId: z.string().min(1) }),
-    execute: async (ctx, input) => {
-      const { deck } = await loadEditableDeck(ctx, input.deckId)
-      const template = await resolveDeckTemplate(deck)
-      const descriptors = template ? layoutDescriptors(template) : []
-      const gen = registry.get<GenerationProvider>('generation')
-      const { reframed, kept, protectedCount } = await reformatStudentSlides(
-        deck,
-        descriptors,
-        gen,
-      )
-      return { reformatted: reframed, kept, protectedCount }
-    },
+export const deckReformat = defineAction<
+  DeckReformatInput,
+  DeckReformatResult,
+  DeckAccess
+>({
+  name: 'deck.reformat',
+  access: byDeckId,
+  meter: requireAiTokens,
+  input: z.object({ deckId: z.string().min(1) }),
+  execute: async (ctx, input, { deck }) => {
+    const template = await resolveDeckTemplate(deck)
+    const descriptors = template ? layoutDescriptors(template) : []
+    const gen = registry.get<GenerationProvider>('generation')
+    const { reframed, kept, protectedCount } = await reformatStudentSlides(
+      deck,
+      descriptors,
+      gen,
+    )
+    return { reformatted: reframed, kept, protectedCount }
   },
-)
+})
 
 registerAction(deckReformat)
 
@@ -766,8 +779,13 @@ const runRefine = async (
   }
 }
 
-export const deckRefine = defineAction<DeckRefineInput, DeckRefineResult>({
+export const deckRefine = defineAction<
+  DeckRefineInput,
+  DeckRefineResult,
+  DeckAccess
+>({
   name: 'deck.refine',
+  access: byDeckId,
   meter: requireAiTokens,
   input: z.object({
     deckId: z.string().min(1),
@@ -788,8 +806,7 @@ export const deckRefine = defineAction<DeckRefineInput, DeckRefineResult>({
       .object({ level: z.number().int().min(1).max(5) })
       .optional(),
   }),
-  execute: async (ctx, input) => {
-    const { deck } = await loadEditableDeck(ctx, input.deckId)
+  execute: async (ctx, input, { deck }) => {
     const job = await RefineJobModel.create({
       deckId: deck._id,
       status: 'running',
@@ -804,20 +821,19 @@ registerAction(deckRefine)
 
 export const deckRefineStatus = defineAction<
   DeckRefineStatusInput,
-  DeckRefineStatusResult
+  DeckRefineStatusResult,
+  RefineJobAccess
 >({
   name: 'deck.refineStatus',
+  // The one action whose input names something other than what it
+  // authorizes: the job is reached, then its lecture is what decides.
+  access: refineJobEditor((input: { jobId: string }) => input.jobId),
   input: z.object({ jobId: z.string().min(1) }),
-  execute: async (ctx, input) => {
-    const job = await RefineJobModel.findById(input.jobId).catch(() => null)
-    if (!job) throw new ActionForbiddenError()
-    // Gate on edit access to the job's deck.
-    const deck = await DeckModel.findById(job.deckId).catch(() => null)
-    if (!deck) throw new ActionForbiddenError()
-    if (!canEditAcl(await loadDeckAcl(deck), ctx.userId))
-      throw new ActionForbiddenError()
-    return { status: job.status, summary: job.summary, error: job.error }
-  },
+  execute: async (_ctx, _input, { job }) => ({
+    status: job.status,
+    summary: job.summary,
+    error: job.error,
+  }),
 })
 
 registerAction(deckRefineStatus)
@@ -876,9 +892,11 @@ const identifySpeakersForSlide = async (
  */
 export const deckRefineSlide = defineAction<
   DeckRefineSlideInput,
-  DeckRefineSlideResult
+  DeckRefineSlideResult,
+  DeckAccess
 >({
   name: 'deck.refineSlide',
+  access: byDeckId,
   meter: requireAiTokens,
   input: z.object({
     deckId: z.string().min(1),
@@ -898,8 +916,7 @@ export const deckRefineSlide = defineAction<
       })
       .optional(),
   }),
-  execute: async (ctx, input) => {
-    const { deck } = await loadEditableDeck(ctx, input.deckId)
+  execute: async (ctx, input, { deck }) => {
     let slide = await SlideModel.findOne({
       _id: input.slideId,
       deckId: deck._id,
@@ -986,9 +1003,11 @@ registerAction(deckRefineSlide)
  */
 export const deckRefineSlideTranscript = defineAction<
   DeckRefineSlideTranscriptInput,
-  DeckRefineSlideTranscriptResult
+  DeckRefineSlideTranscriptResult,
+  DeckAccess
 >({
   name: 'deck.refineSlideTranscript',
+  access: byDeckId,
   // Rewrites narration with the generation model; it does not re-transcribe.
   meter: requireAiTokens,
   input: z.object({
@@ -996,8 +1015,7 @@ export const deckRefineSlideTranscript = defineAction<
     slideId: z.string().min(1),
     save: z.boolean().optional(),
   }),
-  execute: async (ctx, input) => {
-    const { deck } = await loadEditableDeck(ctx, input.deckId)
+  execute: async (ctx, input, { deck }) => {
     const slide = await SlideModel.findOne({
       _id: input.slideId,
       deckId: deck._id,

@@ -40,13 +40,17 @@ import {
   overlaySlideTranslation,
 } from '@slide-machine/shared'
 import { defineAction } from './define'
-import { registerAction, ActionForbiddenError } from './dispatch'
-import type { ActionContext } from './context'
-import { loadEditableDeck } from './deck'
+import { registerAction } from './dispatch'
+import {
+  deckEditor,
+  isConnected,
+  requiresGoogleDrive,
+  withGoogleAccount,
+  type DeckAccess,
+  type WithGoogle,
+} from './access'
 import { requireExports } from '../billing/meter-hooks'
 import { meterUsage } from '../billing/usage-context'
-import { env } from '../config/env'
-import { UserModel } from '../models/user'
 import { SlideModel } from '../models/slide'
 import { ProjectModel } from '../models/project'
 import { type DeckExportDb, type DeckDb } from '../models/deck'
@@ -65,7 +69,10 @@ import {
 } from '../lib/export-google'
 import { decryptToken } from '../lib/token-crypto'
 
-export const isLive = (): boolean => env.EXPORT_MODE === 'live'
+import { isLive } from '../lib/export-mode'
+
+// Re-exported for the modules that have always reached for it here.
+export { isLive }
 
 /** MIME types for the downloadable formats. */
 const MIME = {
@@ -73,24 +80,8 @@ const MIME = {
   yaml: 'application/x-yaml',
 } as const
 
-/** Loads the acting user (with the encrypted Google token) or throws. */
-const requireUser = async (ctx: ActionContext) => {
-  const user = await UserModel.findById(ctx.userId).select(
-    '+googleQuizRefreshToken',
-  )
-  if (!user) throw new ActionForbiddenError('Sign in required')
-  return user
-}
-
-/** Whether the user can export to Drive. In live mode this needs a stored
- * refresh token; the mock-mode flag must not count once switched to live. */
-export const isConnected = (user: {
-  googleConnected?: boolean
-  googleQuizRefreshToken?: string
-}): boolean =>
-  isLive()
-    ? Boolean(user.googleQuizRefreshToken)
-    : Boolean(user.googleConnected)
+/** The content gate, shared by every export action. */
+const byDeckId = deckEditor((input: { deckId: string }) => input.deckId)
 
 /** A filesystem-safe base name derived from the deck title. */
 const slugifyTitle = (title: string): string =>
@@ -212,12 +203,15 @@ const toExportedFile = (e: DeckExportDb): ExportedFile => ({
  * whether the deck has any whiteboard marks (so the include-whiteboard option
  * can be hidden when there are none), and the saved Drive exports.
  */
-export const exportStatus = defineAction<{ deckId: string }, ExportStatus>({
+export const exportStatus = defineAction<
+  { deckId: string },
+  ExportStatus,
+  WithGoogle<DeckAccess>
+>({
   name: 'export.status',
+  access: withGoogleAccount(byDeckId),
   input: z.object({ deckId: z.string().min(1) }),
-  execute: async (ctx, input) => {
-    const user = await requireUser(ctx)
-    const { deck } = await loadEditableDeck(ctx, input.deckId)
+  execute: async (ctx, input, { deck, googleUser }) => {
     // "Has whiteboard marks" must mean the same thing the exporter draws:
     // strokes that are still visible. The stored list also holds erased and
     // orphaned strokes, so narrow to slides that have any drawings, then keep
@@ -229,7 +223,7 @@ export const exportStatus = defineAction<{ deckId: string }, ExportStatus>({
     }).select('drawings')
     const hasWhiteboard = drawn.some(s => visibleStrokes(s.drawings).length > 0)
     return {
-      googleConnected: isConnected(user),
+      googleConnected: isConnected(googleUser, 'export'),
       deckTitle: deck.title,
       hasWhiteboard,
       exports: (deck.exports ?? []).map(toExportedFile),
@@ -252,9 +246,11 @@ export const exportDownload = defineAction<
     includeWhiteboard?: boolean
     locale?: Locale
   },
-  ExportDownload
+  ExportDownload,
+  DeckAccess
 >({
   name: 'export.download',
+  access: byDeckId,
   meter: requireExports,
   input: z.object({
     deckId: z.string().min(1),
@@ -264,11 +260,10 @@ export const exportDownload = defineAction<
     // the authored text.
     locale: z.enum(LOCALES).optional(),
   }),
-  execute: async (ctx, input) => {
+  execute: async (ctx, input, { deck: deckDoc }) => {
     // YAML has no visual surface, so whiteboard marks never apply to it.
     const includeWhiteboard =
       input.format === 'pdf' && input.includeWhiteboard !== false
-    const { deck: deckDoc } = await loadEditableDeck(ctx, input.deckId)
     const deck = await buildExportDeck(deckDoc, includeWhiteboard, input.locale)
     const base = slugifyTitle(deck.title)
     if (input.format === 'yaml') {
@@ -312,9 +307,11 @@ export const exportToDrive = defineAction<
     includeWhiteboard?: boolean
     locale?: Locale
   },
-  ExportToDriveResult
+  ExportToDriveResult,
+  WithGoogle<DeckAccess>
 >({
   name: 'export.toDrive',
+  access: requiresGoogleDrive(byDeckId, 'export'),
   meter: requireExports,
   input: z.object({
     deckId: z.string().min(1),
@@ -326,16 +323,9 @@ export const exportToDrive = defineAction<
     // authored text.
     locale: z.enum(LOCALES).optional(),
   }),
-  execute: async (ctx, input) => {
-    const user = await requireUser(ctx)
-    if (!isConnected(user)) {
-      throw new ActionForbiddenError('Connect a Google account first')
-    }
+  execute: async (ctx, input, { deck: deckDoc, googleUser: user }) => {
     const includeWhiteboard =
       whiteboardApplies(input.format) && input.includeWhiteboard !== false
-    // Load the editable deck once and reuse the document to record the export
-    // below (no second fetch + permission check per save).
-    const { deck: deckDoc } = await loadEditableDeck(ctx, input.deckId)
     const deck = await buildExportDeck(deckDoc, includeWhiteboard, input.locale)
     const base = slugifyTitle(deck.title)
     // A Google Slides file is named by the deck title; fall back to a non-empty
@@ -418,16 +408,16 @@ export const exportToDrive = defineAction<
  */
 export const exportDelete = defineAction<
   { deckId: string; fileId: string },
-  { deleted: boolean; remainsInOtherDrive?: boolean }
+  { deleted: boolean; remainsInOtherDrive?: boolean },
+  WithGoogle<DeckAccess>
 >({
   name: 'export.delete',
+  access: withGoogleAccount(byDeckId),
   input: z.object({
     deckId: z.string().min(1),
     fileId: z.string().min(1),
   }),
-  execute: async (ctx, input) => {
-    const user = await requireUser(ctx)
-    const { deck } = await loadEditableDeck(ctx, input.deckId)
+  execute: async (ctx, input, { deck, googleUser: user }) => {
     const existing = deck.exports ?? []
     const record = existing.find(e => e.fileId === input.fileId)
     if (!record) {

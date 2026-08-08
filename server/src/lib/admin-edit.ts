@@ -23,43 +23,21 @@
  */
 import type { HydratedDocument } from 'mongoose'
 import type { AdminAction, SettingsActorRole } from '@slide-machine/shared'
-import { ProjectModel, projectAcl, type ProjectDb } from '../models/project'
-import { DeckModel, loadDeckAcl, type DeckDb } from '../models/deck'
-import { UserModel } from '../models/user'
-import { isAdminEmail } from '../config/admin'
+import type { ProjectDb } from '../models/project'
+import { loadDeckAcl, type DeckDb } from '../models/deck'
 import { logAdminAction } from '../audit/log'
 import { recordSettingsChange } from '../audit/settings-log'
-import { canEditAcl, type ResolvedAcl } from './access'
+import type { ResolvedAcl } from './access'
+import type {
+  AdminActor,
+  DeckSettingsAccess,
+  ProjectSettingsAccess,
+} from '../actions/access'
 import { diffSettings } from './settings-diff'
 import {
   deckSettingsSnapshot,
   projectSettingsSnapshot,
 } from './settings-snapshot'
-import { ActionForbiddenError } from '../actions/dispatch'
-import type { ActionContext } from '../actions/context'
-
-/** The acting admin, as the audit log records them. */
-interface AdminActor {
-  id: string
-  email: string
-}
-
-/**
- * The admin behind an override, or a refusal. Two accounts are checked:
- * the actor must be allowlisted, and the entity's owner must not be —
- * admins moderate but are not moderated (ADMIN-1), so an admin's own
- * content is off limits here exactly as it is in the console.
- */
-const overrideActor = async (
-  userId: string,
-  ownerId: string,
-): Promise<AdminActor> => {
-  const actor = await UserModel.findById(userId).catch(() => null)
-  if (!actor || !isAdminEmail(actor.email)) throw new ActionForbiddenError()
-  const owner = await UserModel.findById(ownerId).catch(() => null)
-  if (owner && isAdminEmail(owner.email)) throw new ActionForbiddenError()
-  return { id: actor._id.toString(), email: actor.email }
-}
 
 /** How the actor was entitled to edit, for the settings change log: the
  * owner, an editor they shared with, or an admin overriding the ACL. */
@@ -96,31 +74,23 @@ const recordChanges = async <T extends object>(
   })
 }
 
-/** The acting user's id, or a refusal; every override starts signed in. */
-const requireUser = (ctx: ActionContext): string => {
-  if (!ctx.userId) throw new ActionForbiddenError('Sign in to continue')
-  return ctx.userId
-}
-
 /**
- * Runs `apply` against a project the actor may change the settings of:
- * an owner or editor as usual, otherwise an allowlisted admin. Throws
- * ActionForbiddenError for anyone else, and for a missing project (no
- * existence leaks). Whatever it changes is recorded in the settings
- * change log; an admin's edit is additionally audited.
+ * Records what `apply` changed about a project's settings.
+ *
+ * The admitting half of this — owner or editor, otherwise an allowlisted
+ * admin — is now the `projectSettings` access policy, so by the time this runs
+ * the actor is settled and the document is loaded. What is left is the part
+ * that has to bracket the change: snapshot, apply, diff, log.
+ *
+ * An admin's edit is additionally audited (ADMIN-5). An empty diff writes
+ * nothing, which is what keeps the read-only `project.shares` action — which
+ * rides this wrapper to reuse its admission rule — out of the logs.
  */
-export const editProjectSettings = async <T>(
-  ctx: ActionContext,
-  projectId: string,
+export const withProjectSettingsAudit = async <T>(
+  access: ProjectSettingsAccess,
   apply: (doc: HydratedDocument<ProjectDb>) => Promise<T>,
 ): Promise<T> => {
-  const userId = requireUser(ctx)
-  const doc = await ProjectModel.findById(projectId).catch(() => null)
-  if (!doc) throw new ActionForbiddenError()
-  const acl = projectAcl(doc)
-  const admin = canEditAcl(acl, userId)
-    ? null
-    : await overrideActor(userId, doc.ownerId.toString())
+  const { userId, project: doc, acl, admin } = access
 
   const before = projectSettingsSnapshot(doc)
   const result = await apply(doc)
@@ -149,25 +119,23 @@ export const editProjectSettings = async <T>(
 }
 
 /**
- * Runs `apply` against a lecture the actor may change the settings of:
- * an owner or editor as usual, otherwise an allowlisted admin. `apply`
- * receives the ACL resolved before it runs; the diff re-resolves it
- * afterwards, since dropping or adding an access override moves where the
- * effective access comes from. Whatever it changes is recorded in the
- * settings change log; an admin's edit is additionally audited.
+ * Records what `apply` changed about a lecture's settings.
+ *
+ * The admitting half is the `deckSettings` access policy; this is the
+ * bracketing half. `apply` receives the ACL resolved when the caller was
+ * authorized, and the "after" snapshot **re-resolves it**, because adding or
+ * dropping an access override moves where a lecture's effective access comes
+ * from — reusing the earlier value would record a diff that never happened
+ * for deck.setAccess and deck.resetAccess.
+ *
+ * An empty diff writes nothing, which is what keeps the read-only
+ * `deck.shares` action out of the logs.
  */
-export const editDeckSettings = async <T>(
-  ctx: ActionContext,
-  deckId: string,
+export const withDeckSettingsAudit = async <T>(
+  access: DeckSettingsAccess,
   apply: (doc: HydratedDocument<DeckDb>, acl: ResolvedAcl) => Promise<T>,
 ): Promise<T> => {
-  const userId = requireUser(ctx)
-  const doc = await DeckModel.findById(deckId).catch(() => null)
-  if (!doc) throw new ActionForbiddenError()
-  const acl = await loadDeckAcl(doc)
-  const admin = canEditAcl(acl, userId)
-    ? null
-    : await overrideActor(userId, doc.ownerId.toString())
+  const { userId, deck: doc, acl, admin } = access
 
   const before = deckSettingsSnapshot(doc, acl)
   const result = await apply(doc, acl)

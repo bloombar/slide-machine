@@ -6,9 +6,12 @@
 import { z } from 'zod'
 import { defineAction } from './define'
 import { registerAction } from './dispatch'
+import { open } from './access'
 
 export const systemEcho = defineAction({
   name: 'system.echo',
+  // A diagnostic that reads nothing and writes nothing.
+  access: open(),
   input: z.object({ message: z.string().min(1) }),
   execute: async (ctx, input) => ({
     message: input.message,

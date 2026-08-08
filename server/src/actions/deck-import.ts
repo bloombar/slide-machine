@@ -17,12 +17,8 @@ import {
   type Locale,
 } from '@slide-machine/shared'
 import { defineAction } from './define'
-import {
-  registerAction,
-  ActionForbiddenError,
-  ActionValidationError,
-} from './dispatch'
-import type { ActionContext } from './context'
+import { projectOwner, type ProjectAccess } from './access'
+import { registerAction, ActionValidationError } from './dispatch'
 import { requireImportVolume } from '../billing/meter-hooks'
 import { meterUsage } from '../billing/usage-context'
 import { BYTES_PER_MB } from '../billing/usage'
@@ -34,7 +30,6 @@ import { currentVersionIdFor } from '../templates/versions'
 import { ttsVoiceIdSchema } from '../lib/tts-voice'
 import { DeckModel, resolveDeckAcl, toDeckDto } from '../models/deck'
 import { SlideModel } from '../models/slide'
-import { ProjectModel } from '../models/project'
 import { deleteDeckCascade } from '../lib/cascade'
 
 interface ResolvedSettings {
@@ -110,31 +105,24 @@ const resolveSettings = async (
  */
 export const deckImport = defineAction<
   { projectId: string; content: string },
-  DeckImportResult
+  DeckImportResult,
+  ProjectAccess
 >({
   name: 'deck.import',
+  // The lecture does not exist yet, so what is authorized is the project it
+  // lands in — owner only, matching deck.create.
+  access: projectOwner((input: { projectId: string }) => input.projectId),
   meter: requireImportVolume,
   input: z.object({
     projectId: z.string().min(1),
     content: z.string().min(1),
   }),
-  authorize: async (ctx: ActionContext, input) => {
-    if (!ctx.userId) throw new ActionForbiddenError('Sign in to continue')
-    const project = await ProjectModel.findById(input.projectId).catch(
-      () => null,
-    )
-    if (!project || project.ownerId.toString() !== ctx.userId) {
-      throw new ActionForbiddenError()
-    }
-  },
-  execute: async (ctx, input) => {
+  execute: async (ctx, input, { project }) => {
     const parsed = parseDeckImport(input.content)
     if ('errors' in parsed) {
       throw new ActionValidationError('deck.import', parsed.errors)
     }
     const doc = parsed.data
-    const project = await ProjectModel.findById(input.projectId)
-    if (!project) throw new ActionForbiddenError()
 
     const settings = await resolveSettings(doc)
     const title = doc.title.trim()

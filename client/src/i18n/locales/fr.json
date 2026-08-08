@@ -1143,7 +1143,8 @@
     "forbidden": "Vous n'avez pas l'autorisation de faire cela",
     "internal_error": "Une erreur s'est produite de notre côté — réessayez",
     "unknown_error": "Une erreur s'est produite — réessayez",
-    "email_unverified": "Confirmez d’abord votre adresse e-mail — vérifiez votre boîte de réception ou envoyez un nouveau lien depuis les paramètres de votre compte"
+    "email_unverified": "Confirmez d’abord votre adresse e-mail — vérifiez votre boîte de réception ou envoyez un nouveau lien depuis les paramètres de votre compte",
+    "capability_required": "Connectez d’abord un compte Google — vous pouvez le faire depuis les paramètres de votre compte"
   },
   "usage": {
     "title": "Utilisation du forfait",

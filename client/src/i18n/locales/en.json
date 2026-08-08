@@ -1143,7 +1143,8 @@
     "forbidden": "You do not have permission to do that",
     "internal_error": "Something went wrong on our end — try again",
     "unknown_error": "Something went wrong — try again",
-    "email_unverified": "Confirm your email address first — check your inbox, or send a new link from your account settings"
+    "email_unverified": "Confirm your email address first — check your inbox, or send a new link from your account settings",
+    "capability_required": "Connect a Google account first — you can do that from your account settings"
   },
   "usage": {
     "title": "Plan usage",

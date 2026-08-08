@@ -1143,7 +1143,8 @@
     "forbidden": "No tienes permiso para hacer eso",
     "internal_error": "Algo salió mal por nuestra parte: inténtalo de nuevo",
     "unknown_error": "Algo salió mal: inténtalo de nuevo",
-    "email_unverified": "Primero confirma tu dirección de correo: revisa tu bandeja de entrada o envía un enlace nuevo desde los ajustes de tu cuenta"
+    "email_unverified": "Primero confirma tu dirección de correo: revisa tu bandeja de entrada o envía un enlace nuevo desde los ajustes de tu cuenta",
+    "capability_required": "Primero conecta una cuenta de Google — puedes hacerlo desde la configuración de tu cuenta"
   },
   "usage": {
     "title": "Uso del plan",

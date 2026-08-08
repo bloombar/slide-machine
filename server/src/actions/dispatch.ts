@@ -37,6 +37,27 @@ export class EmailUnverifiedError extends Error {
   }
 }
 
+/**
+ * The caller may touch the resource, but their account lacks something the
+ * operation needs — today, a connected Google account (EXP-4 / QUIZ-2). Its
+ * own class, not a plain forbidden, because the user can fix it themselves:
+ * the client offers a Connect button rather than reporting a refusal, exactly
+ * as EmailUnverifiedError does for confirming an address.
+ *
+ * Before this existed the two were the same class with the same status, so a
+ * client could only tell "not your lecture" from "connect an account" by
+ * reading the message text.
+ */
+export class CapabilityRequiredError extends Error {
+  constructor(
+    public readonly capability: 'google-drive',
+    message = 'Connect a Google account first',
+  ) {
+    super(message)
+    this.name = 'CapabilityRequiredError'
+  }
+}
+
 export class ActionValidationError extends Error {
   constructor(
     actionName: string,
@@ -47,12 +68,20 @@ export class ActionValidationError extends Error {
   }
 }
 
-const actions = new Map<string, Action<unknown, unknown>>()
+const actions = new Map<string, Action<unknown, unknown, unknown>>()
 
 /** Registers an action under its name; last registration wins (useful in tests). */
-export const registerAction = <I, O>(action: Action<I, O>): void => {
-  actions.set(action.name, action as Action<unknown, unknown>)
+export const registerAction = <I, O, R>(action: Action<I, O, R>): void => {
+  actions.set(action.name, action as Action<unknown, unknown, unknown>)
 }
+
+/**
+ * Every registered action, for the access-registry audit (TECH-14). Reading
+ * this needs the registry populated — import actions/register-all first.
+ */
+export const listActions = (): Action<unknown, unknown, unknown>[] => [
+  ...actions.values(),
+]
 
 /**
  * Dispatches a named action with raw (untrusted) input through the full
@@ -74,7 +103,11 @@ export const dispatch = async <O = unknown>(
     throw new ActionValidationError(name, issues)
   }
 
-  await action.authorize?.(ctx, parsed.data)
+  // Authorization first, metering second (TECH-14). A caller with no rights
+  // to the resource must be refused, not told their plan is exhausted — and
+  // whatever the policy loaded to decide is handed to execute, so the action
+  // does not fetch it a second time.
+  const access = await action.access?.authorize(ctx, parsed.data)
   await action.meter?.(ctx, parsed.data)
 
   // Everything the action does — including provider calls several layers down —
@@ -85,7 +118,7 @@ export const dispatch = async <O = unknown>(
   // lets the cost ledger separate an instructor's own spend from their
   // audience's (BILL-7). The paths where they differ — a viewer's playback
   // charged to a deck's owner — set their own attribution.
-  const run = () => action.execute(ctx, parsed.data) as Promise<O>
+  const run = () => action.execute(ctx, parsed.data, access) as Promise<O>
   if (!ctx.userId) return run()
 
   // Which lecture and project this belongs to, read off the input the action
@@ -94,6 +127,41 @@ export const dispatch = async <O = unknown>(
   // them would eventually forget. One indexed lookup, and only when the input
   // names something; an action that names nothing attributes to the user
   // alone, exactly as before.
+  const entity = await entityFromInput(parsed.data)
+  return runWithUsage(
+    { userId: ctx.userId, actorId: ctx.userId, ...entity },
+    run,
+  )
+}
+
+/**
+ * Runs an action in-process from a typed reference rather than a name, with
+ * the same pipeline — for callers inside the server that already hold the
+ * action, where going through `dispatch` by string would only lose the types.
+ *
+ * `meter: false` opts a trusted local caller out of plan caps. The HTTP path
+ * never may: it is offered for work the server does on its own behalf, such
+ * as seeding a development database, which should not be refused because the
+ * account it is writing for has spent its allowance.
+ */
+export const runAction = async <I, O, R>(
+  action: Action<I, O, R>,
+  ctx: ActionContext,
+  input: I,
+  options: { meter?: boolean } = {},
+): Promise<O> => {
+  const parsed = action.input.safeParse(input)
+  if (!parsed.success) {
+    throw new ActionValidationError(
+      action.name,
+      parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`),
+    )
+  }
+  const access = (await action.access?.authorize(ctx, parsed.data)) as R
+  if (options.meter !== false) await action.meter?.(ctx, parsed.data)
+
+  const run = () => action.execute(ctx, parsed.data, access)
+  if (!ctx.userId) return run()
   const entity = await entityFromInput(parsed.data)
   return runWithUsage(
     { userId: ctx.userId, actorId: ctx.userId, ...entity },
