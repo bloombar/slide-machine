@@ -405,10 +405,14 @@ describe('AdminUserDetailPage soft-deleted content', () => {
     ]) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
     }
-    // Nor is there a product surface left to open.
+    // The profile still opens, relabelled for what it now is (ADMIN-6) —
+    // so the "public" link is gone, but a product surface remains.
     expect(
       screen.queryByRole('link', { name: 'View public profile' }),
     ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: 'View deleted profile' }),
+    ).toHaveAttribute('href', '/u/u1')
     expect(screen.queryByText(/Settings are edited on the user/)).toBeNull()
   })
 
