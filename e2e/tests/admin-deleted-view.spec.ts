@@ -5,7 +5,7 @@
  * console, after a confirm that says the opening is audited, and each
  * opening lands in the audit log.
  */
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from './fixtures'
 
 const password = 'sturdy-passw0rd'
 // The admin email is fixed (it must match ADMIN_EMAILS); the account may

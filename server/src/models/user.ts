@@ -5,6 +5,7 @@
  */
 import { Schema, model, type HydratedDocument } from 'mongoose'
 import {
+  ACCOUNT_TYPES,
   LOCALES,
   PLAN_TIERS,
   type PublicUser,
@@ -66,6 +67,9 @@ const userSchema = new Schema<UserDb>(
       enum: ['public', 'private'],
       default: 'public',
     },
+    // No default: absent is what makes the prompt appear after sign-in
+    // (AUTH-6), so accounts that predate the question are asked too.
+    accountType: { type: String, enum: ACCOUNT_TYPES },
     bio: String,
     avatarUrl: String,
     // Interface language: stored ONLY when explicitly chosen (no default)
@@ -141,6 +145,7 @@ export const toUserDto = (doc: HydratedDocument<UserDb>): SafeUser => ({
   displayName: doc.displayName,
   emailVerified: doc.emailVerified,
   profileVisibility: doc.profileVisibility,
+  accountType: doc.accountType,
   bio: doc.bio,
   avatarUrl: doc.avatarUrl,
   locale: doc.locale,

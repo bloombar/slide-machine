@@ -4,7 +4,7 @@
  * from the "+" menu on the Lectures row, and a second lecture appears. Runs against the
  * live front/back end and test DB; the export is produced for real.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { createProject } from './helpers'
 
 test('round-trip: export a lecture to YAML and re-import it', async ({

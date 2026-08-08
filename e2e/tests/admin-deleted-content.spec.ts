@@ -6,7 +6,7 @@
  * opens it (which the audit log records as project.deleted_view), confirms
  * the owner can no longer reach it, restores it, and sees the badge clear.
  */
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from './fixtures'
 import { createProject } from './helpers'
 
 const password = 'sturdy-passw0rd'

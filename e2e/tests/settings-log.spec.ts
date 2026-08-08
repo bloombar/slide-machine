@@ -8,7 +8,7 @@
  * settings, not only what admins do — so nothing here is an admin edit;
  * that path is covered by admin-settings.spec.ts.
  */
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from './fixtures'
 import { createProject, openProjectSettings } from './helpers'
 
 const password = 'sturdy-passw0rd'

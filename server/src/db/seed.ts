@@ -607,6 +607,11 @@ const main = async (): Promise<void> => {
         passwordHash,
         emailVerified: true,
         profileVisibility: persona.profileVisibility,
+        // Every persona here is a lecturer with public lectures, which is
+        // what an educator account defaults to (AUTH-6). Answering for them
+        // also keeps the post-sign-in prompt from standing in front of the
+        // seeded demo the first time someone signs in as one.
+        accountType: 'educator',
         bio: persona.bio,
         locale: persona.locale,
         planTier: persona.planTier,

@@ -4,7 +4,7 @@
  * project.delete cascades through decks, slides, and seed material.
  */
 import { z } from 'zod'
-import { LOCALES } from '@slide-machine/shared'
+import { LOCALES, accountDefaultsToPrivate } from '@slide-machine/shared'
 import type {
   DeckShare,
   Project,
@@ -104,14 +104,20 @@ export const projectCreate = defineAction<ProjectCreateInput, Project, Signed>({
   }),
   execute: async (ctx, input) => {
     const ownerId = requireUser(ctx)
-    // Projects are public by default, which for an unconfirmed account would
-    // be publishing without ever asking to (AUTH-3). Theirs start restricted
-    // instead; confirming the address lets them open it up.
+    // Projects are public by default, but two things override that, and
+    // either one is enough to start a project restricted:
+    //  - an unconfirmed address (AUTH-3), because publishing on behalf of
+    //    an account nobody has proved they own is publishing without ever
+    //    being asked; confirming the address lets them open it up.
+    //  - a student account (AUTH-6/P-1), whose work stays theirs until
+    //    they choose to publish it.
+    const owner = await UserModel.findById(ownerId)
     const verified = await emailVerified(ownerId)
+    const restricted = !verified || accountDefaultsToPrivate(owner?.accountType)
     const doc = await ProjectModel.create({
       ...input,
       ownerId,
-      ...(verified ? {} : { visibility: 'restricted' }),
+      ...(restricted ? { visibility: 'restricted' } : {}),
     })
     return toProjectDto(doc)
   },

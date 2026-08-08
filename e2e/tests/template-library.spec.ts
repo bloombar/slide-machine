@@ -10,7 +10,7 @@
  * prove the editor writes the right numbers, and only a browser can say the
  * slide actually changed.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { createProject, openProjectSettings } from './helpers'
 
 const stamp = Date.now()

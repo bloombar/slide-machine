@@ -7,7 +7,7 @@
  *
  * Signed out is enough — the drawer is the same control on both shells.
  */
-import { test, expect, type Locator } from '@playwright/test'
+import { test, expect, type Locator } from './fixtures'
 
 /** Bounding box of a locator, failed loudly rather than nullable. */
 const box = async (locator: Locator) => {

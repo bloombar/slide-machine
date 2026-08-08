@@ -4,7 +4,7 @@
  * the interface shows "Untitled lecture" everywhere while the data
  * keeps an empty title, and naming it later works in place.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { createProject } from './helpers'
 
 const email = `untitled-${Date.now()}@example.com`

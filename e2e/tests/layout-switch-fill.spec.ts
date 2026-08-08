@@ -16,7 +16,7 @@
  * Runs against the live stack with the mock generation provider, whose fill
  * splits the orphaned paragraph on sentences.
  */
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from './fixtures'
 import { createProject } from './helpers'
 
 const stamp = Date.now()

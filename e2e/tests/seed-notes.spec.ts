@@ -3,7 +3,7 @@
  * auto-save from the project page, lecture notes from the settings
  * modal, and both survive a reload.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { createProject, openProjectSettings } from './helpers'
 
 const email = `seed-${Date.now()}@example.com`

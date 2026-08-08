@@ -9,7 +9,7 @@
  * so, which is the server metering it, not the page repeating a form), and
  * ending the grant really does put it back where it was.
  */
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from './fixtures'
 
 const password = 'sturdy-passw0rd'
 // The admin email is fixed (it must match ADMIN_EMAILS); the account may

@@ -6,12 +6,7 @@
  * (P-10), so the console keeps showing what was deleted, badged (ADMIN-6);
  * recovery itself is covered by admin-deleted-content.spec.ts.
  */
-import {
-  test,
-  expect,
-  type APIRequestContext,
-  type Page,
-} from '@playwright/test'
+import { test, expect, type APIRequestContext, type Page } from './fixtures'
 import { createProject } from './helpers'
 
 const password = 'sturdy-passw0rd'
