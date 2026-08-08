@@ -426,4 +426,37 @@ describe('lecture settings', () => {
     expect(res.status).toBe(200)
     expect(await SettingsChangeLogModel.countDocuments()).toBe(0)
   })
+
+  // Two properties the settings wrapper has always had, pinned here because
+  // splitting it into an admitting half (the access policy) and this
+  // bracketing half is exactly the change that could lose them (TECH-14).
+
+  // deck.shares only READS the share list, but rides the write wrapper to
+  // reuse its admission rule. It stays out of the log because its diff is
+  // empty — not because anything checks what it is.
+  it('writes nothing for an action that changes nothing', async () => {
+    expect((await act(ada, 'deck.shares', { deckId })).status).toBe(200)
+    expect((await act(ada, 'project.shares', { projectId })).status).toBe(200)
+    expect(await SettingsChangeLogModel.countDocuments()).toBe(0)
+  })
+
+  // The "after" snapshot re-resolves the ACL, because dropping an override
+  // moves where a lecture's access comes from. Reusing the ACL resolved at
+  // authorization time would record a diff that never happened.
+  it('records where access moved when an override is dropped', async () => {
+    // Sharing pins the lecture away from its project (copy-on-write), which
+    // is what gives resetAccess an override to drop. Publishing would do it
+    // too, but needs a confirmed address, which this suite's accounts skip.
+    await act(ada, 'deck.share', {
+      deckId,
+      email: 'bob@example.com',
+      role: 'viewer',
+    })
+    await SettingsChangeLogModel.deleteMany({})
+
+    expect((await act(ada, 'deck.resetAccess', { deckId })).status).toBe(200)
+    const entry = await onlyEntry()
+    expect(entry.changes).not.toEqual({})
+    expect(Object.keys(entry.changes!)).toContain('accessInherited')
+  })
 })

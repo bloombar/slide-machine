@@ -42,7 +42,8 @@ import {
   withDeleted,
   type AdminViewer,
 } from '../lib/admin-view'
-import { editProjectSettings } from '../lib/admin-edit'
+import { withProjectSettingsAudit } from '../lib/admin-edit'
+import { projectSettings, type ProjectSettingsAccess } from './access'
 import { recordSettingsChange } from '../audit/settings-log'
 import { projectSettingsSnapshot } from '../lib/settings-snapshot'
 import { ttsVoiceIdSchema } from '../lib/tts-voice'
@@ -51,6 +52,12 @@ import { templateExists } from '../templates/resolve'
 import type { HydratedDocument, Types } from 'mongoose'
 import { DeckModel } from '../models/deck'
 import { deleteProjectCascade } from '../lib/cascade'
+
+/** The settings gate: an owner or editor, otherwise an allowlisted admin
+ * overriding the ACL, whose edit is then audited (ADMIN-5). */
+const settingsOf = projectSettings(
+  (input: { projectId: string }) => input.projectId,
+)
 
 /** Returns the acting user's id or throws; actions requiring auth start here. */
 const requireUser = (ctx: ActionContext): string => {
@@ -204,8 +211,13 @@ export const projectGet = defineAction<{ projectId: string }, Project>({
   },
 })
 
-export const projectUpdate = defineAction<ProjectUpdateInput, Project>({
+export const projectUpdate = defineAction<
+  ProjectUpdateInput,
+  Project,
+  ProjectSettingsAccess
+>({
   name: 'project.update',
+  access: settingsOf,
   input: z.object({
     projectId: z.string().min(1),
     title: z.string().trim().min(1).optional(),
@@ -216,8 +228,8 @@ export const projectUpdate = defineAction<ProjectUpdateInput, Project>({
     language: z.enum(LOCALES).nullable().optional(),
     ttsVoice: ttsVoiceIdSchema.nullable().optional(),
   }),
-  execute: (ctx, input) =>
-    editProjectSettings(ctx, input.projectId, async doc => {
+  execute: (ctx, input, access) =>
+    withProjectSettingsAudit(access, async doc => {
       if (input.title !== undefined) doc.title = input.title
       if (input.course !== undefined) doc.course = input.course
       if (input.description !== undefined) doc.description = input.description
@@ -262,19 +274,24 @@ export const projectDelete = defineAction<
   },
 })
 
-export const projectSetAccess = defineAction<ProjectSetAccessInput, Project>({
+export const projectSetAccess = defineAction<
+  ProjectSetAccessInput,
+  Project,
+  ProjectSettingsAccess
+>({
   name: 'project.setAccess',
+  access: settingsOf,
   input: z.object({
     projectId: z.string().min(1),
     visibility: z.enum(['restricted', 'public']),
   }),
-  execute: async (ctx, input) => {
+  execute: async (ctx, input, access) => {
     // Publishing to everyone is the one capability an unconfirmed account
     // does not get (AUTH-3). Going back to restricted is always allowed.
     if (input.visibility === 'public' && ctx.userId) {
       await requireVerifiedEmail(ctx.userId)
     }
-    return editProjectSettings(ctx, input.projectId, async doc => {
+    return withProjectSettingsAudit(access, async doc => {
       doc.visibility = input.visibility
       await doc.save()
       return toProjectDto(doc)
@@ -282,15 +299,20 @@ export const projectSetAccess = defineAction<ProjectSetAccessInput, Project>({
   },
 })
 
-export const projectShare = defineAction<ProjectShareInput, DeckShare[]>({
+export const projectShare = defineAction<
+  ProjectShareInput,
+  DeckShare[],
+  ProjectSettingsAccess
+>({
   name: 'project.share',
+  access: settingsOf,
   input: z.object({
     projectId: z.string().min(1),
     email: z.email(),
     role: z.enum(['viewer', 'editor']),
   }),
-  execute: (ctx, input) =>
-    editProjectSettings(ctx, input.projectId, async doc => {
+  execute: (ctx, input, access) =>
+    withProjectSettingsAudit(access, async doc => {
       const user = await UserModel.findOne({
         email: input.email.toLowerCase().trim(),
       })
@@ -316,15 +338,20 @@ export const projectShare = defineAction<ProjectShareInput, DeckShare[]>({
     }),
 })
 
-export const projectUnshare = defineAction<ProjectUnshareInput, DeckShare[]>({
+export const projectUnshare = defineAction<
+  ProjectUnshareInput,
+  DeckShare[],
+  ProjectSettingsAccess
+>({
   name: 'project.unshare',
+  access: settingsOf,
   input: z.object({
     projectId: z.string().min(1),
     userId: z.string().min(1),
     role: z.enum(['viewer', 'editor']),
   }),
-  execute: (ctx, input) =>
-    editProjectSettings(ctx, input.projectId, async doc => {
+  execute: (ctx, input, access) =>
+    withProjectSettingsAudit(access, async doc => {
       const list = input.role === 'editor' ? doc.editors : doc.viewers
       const index = list.indexOf(input.userId)
       if (index >= 0) {
@@ -335,27 +362,32 @@ export const projectUnshare = defineAction<ProjectUnshareInput, DeckShare[]>({
     }),
 })
 
-export const projectShares = defineAction<ProjectSharesInput, DeckShare[]>({
+export const projectShares = defineAction<
+  ProjectSharesInput,
+  DeckShare[],
+  ProjectSettingsAccess
+>({
   name: 'project.shares',
+  access: settingsOf,
   input: z.object({ projectId: z.string().min(1) }),
-  execute: (ctx, input) =>
-    editProjectSettings(ctx, input.projectId, async doc =>
-      sharesOfAcl(projectAcl(doc)),
-    ),
+  execute: (ctx, input, access) =>
+    withProjectSettingsAudit(access, async doc => sharesOfAcl(projectAcl(doc))),
 })
 
 /** Sets the default template new lectures start from (TMPL-2). */
 export const projectSwitchTemplate = defineAction<
   ProjectSwitchTemplateInput,
-  Project
+  Project,
+  ProjectSettingsAccess
 >({
   name: 'project.switchTemplate',
+  access: settingsOf,
   input: z.object({
     projectId: z.string().min(1),
     templateId: z.string().min(1),
   }),
-  execute: (ctx, input) =>
-    editProjectSettings(ctx, input.projectId, async doc => {
+  execute: (ctx, input, access) =>
+    withProjectSettingsAudit(access, async doc => {
       if (!(await templateExists(input.templateId))) {
         throw new ActionValidationError('project.switchTemplate', [
           'templateId: unknown template',
