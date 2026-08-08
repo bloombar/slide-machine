@@ -5,10 +5,11 @@
  * deleting the lecture — confirmed first and recorded in the admin
  * audit log server-side.
  *
- * A soft-deleted lecture is shown too, badged (ADMIN-6): opening it is
- * itself audited, the danger zone becomes a Restore action, and the
- * slideshow link is withdrawn — the viewer reads no tombstoned records.
- * Seed material the owner removed is listed with its own badge.
+ * A soft-deleted lecture is shown too, badged (ADMIN-6): the slideshow
+ * still opens for an admin, exactly as a live one does, and the danger
+ * zone becomes a Restore action. Opening it is audited by the read itself,
+ * so it is confirmed here rather than logged here. Seed material the owner
+ * removed is listed with its own badge.
  *
  * Settings are not edited here: "View slideshow" opens the lecture in
  * the viewer, where an admin edits its settings in the owner's own
@@ -35,7 +36,10 @@ import { projectTitle } from '../lib/project'
 
 /** The action the admin has asked for but not yet confirmed. */
 type PendingAction =
-  { kind: 'delete' } | { kind: 'restore' } | { kind: 'view-private' }
+  | { kind: 'delete' }
+  | { kind: 'restore' }
+  | { kind: 'view-private' }
+  | { kind: 'view-deleted' }
 
 const asDate = (iso: string): string =>
   new Date(iso).toLocaleString(undefined, {
@@ -74,10 +78,16 @@ export default function AdminDeckPage() {
   }, [deckId, version])
 
   /** Opens the live slideshow. Public lectures open straight away; opening
-   * a private one is confirmed first and recorded in the audit log,
-   * mirroring the always-on admin viewer bypass. */
+   * a private or deleted one is confirmed first, mirroring the always-on
+   * admin viewer bypass. A deleted lecture takes precedence in the copy —
+   * it is the more surprising thing about what is being opened — and the
+   * viewer's own read audits it, so nothing is logged from here. */
   const openSlideshow = () => {
     if (!loaded) return
+    if (loaded.deck.deletedAt) {
+      setPending({ kind: 'view-deleted' })
+      return
+    }
     if (loaded.deck.visibility === 'public') {
       navigate(`/d/${loaded.deck.permalinkSlug}`)
       return
@@ -97,6 +107,11 @@ export default function AdminDeckPage() {
       if (action.kind === 'view-private') {
         // Log the private-lecture access before handing over to the viewer
         await logAdminDeckView(deckId)
+        navigate(`/d/${loaded.deck.permalinkSlug}`)
+        return
+      }
+      if (action.kind === 'view-deleted') {
+        // The viewer's own read logs this one (ADMIN-6), so just hand over
         navigate(`/d/${loaded.deck.permalinkSlug}`)
         return
       }
@@ -150,7 +165,7 @@ export default function AdminDeckPage() {
 
   const { deck, project, owner, seed } = loaded
   const title = deck.title.trim() || 'Untitled lecture'
-  // A deleted lecture has no viewer surface left, and its danger zone
+  // A deleted lecture still opens in the viewer, read-only; its danger zone
   // becomes recovery (ADMIN-6).
   const deckDeleted = Boolean(deck.deletedAt)
   // Any seed material at either level — the lecture's own or the project's.
@@ -180,6 +195,12 @@ export default function AdminDeckPage() {
         return {
           title: 'View this private lecture?',
           message: `"${title}" is a private lecture. Opening it as an admin is recorded in the audit log.`,
+          confirmLabel: 'View slideshow',
+        }
+      case 'view-deleted':
+        return {
+          title: 'View this deleted lecture?',
+          message: `"${title}" is deleted, so nobody else can open it. You will see it as its owner last did, and opening it as an admin is recorded in the audit log.`,
           confirmLabel: 'View slideshow',
         }
     }
@@ -219,37 +240,41 @@ export default function AdminDeckPage() {
         </p>
       )}
 
-      {deckDeleted ? (
+      {deckDeleted && (
         <p
           role="status"
           className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
         >
-          This lecture is deleted, so it is hidden from its owner and the
-          viewer. Opening it is recorded in the{' '}
+          This lecture is deleted, so it is hidden from its owner and from every
+          other viewer. You can still open the slideshow as it last stood; doing
+          so is recorded in the{' '}
           <Link to="/app/admin/logs" className="underline">
             audit log
           </Link>
           . Restore it below until the retention sweep purges it, after which it
           is gone for good.
         </p>
-      ) : (
-        <>
-          <button
-            onClick={openSlideshow}
-            className="inline-block rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
-          >
-            View slideshow
-          </button>
-          <p className="mt-2 text-sm text-slate-500">
-            Settings are edited in the lecture itself: open it and use the
-            settings icon, as its owner would. Every change you make there is
-            recorded in the{' '}
-            <Link to="/app/admin/logs" className="underline">
-              audit log
-            </Link>
-            .
-          </p>
-        </>
+      )}
+
+      <button
+        onClick={openSlideshow}
+        className="inline-block rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+      >
+        View slideshow
+      </button>
+      {/* A deleted lecture opens read-only: its settings modal saves through
+          endpoints that refuse a tombstoned target, so the editing note only
+          applies while it is live. */}
+      {!deckDeleted && (
+        <p className="mt-2 text-sm text-slate-500">
+          Settings are edited in the lecture itself: open it and use the
+          settings icon, as its owner would. Every change you make there is
+          recorded in the{' '}
+          <Link to="/app/admin/logs" className="underline">
+            audit log
+          </Link>
+          .
+        </p>
       )}
 
       <section className="mt-6 rounded-lg border border-slate-200 p-4">

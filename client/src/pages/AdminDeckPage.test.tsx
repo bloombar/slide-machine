@@ -318,7 +318,7 @@ describe('AdminDeckPage soft-deleted content', () => {
     deck: { ...detail.deck, deletedAt: '2026-07-20T09:00:00Z' },
   }
 
-  it('badges the lecture, withdraws the viewer link, and offers a restore', async () => {
+  it('badges the lecture, keeps the viewer link, and offers a restore', async () => {
     renderPage(200, deletedDetail)
     await screen.findByRole('heading', { name: 'Waves' })
 
@@ -327,13 +327,42 @@ describe('AdminDeckPage soft-deleted content', () => {
     expect(
       screen.getByRole('button', { name: 'Restore lecture' }),
     ).toBeEnabled()
-    // Nothing to open in the viewer, and nothing to delete again
-    expect(
-      screen.queryByRole('button', { name: 'View slideshow' }),
-    ).not.toBeInTheDocument()
+    // Still openable in the viewer (ADMIN-6), but nothing to delete again
+    expect(screen.getByRole('button', { name: 'View slideshow' })).toBeEnabled()
     expect(
       screen.queryByRole('button', { name: 'Delete lecture' }),
     ).not.toBeInTheDocument()
+  })
+
+  it('confirms before opening a deleted lecture, and leaves the logging to the viewer', async () => {
+    const { fetchMock } = renderPage(200, deletedDetail)
+    await screen.findByRole('heading', { name: 'Waves' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'View slideshow' }))
+    // The tombstone leads the copy, not the lecture's privacy
+    const dialog = screen.getByRole('alertdialog', {
+      name: 'View this deleted lecture?',
+    })
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'View slideshow' }),
+    )
+
+    expect(await screen.findByText('slideshow')).toBeVisible()
+    // The viewer's own read writes the audit entry, so nothing is posted here
+    expect(requested(fetchMock)).not.toContainEqual(
+      expect.stringMatching(/private-view/),
+    )
+  })
+
+  it('does not navigate when the deleted-view confirm is cancelled', async () => {
+    renderPage(200, deletedDetail)
+    await screen.findByRole('heading', { name: 'Waves' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'View slideshow' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.queryByText('slideshow')).not.toBeInTheDocument()
   })
 
   it('restores the lecture after a confirm and reports it', async () => {

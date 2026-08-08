@@ -252,7 +252,7 @@ describe('AdminProjectPage', () => {
 describe('AdminProjectPage soft-deleted content', () => {
   const deletedDetail = { ...detail, deletedAt: '2026-07-20T09:00:00Z' }
 
-  it('badges the project, withdraws the product view, and offers a restore', async () => {
+  it('badges the project, keeps the product view, and offers a restore', async () => {
     renderPage(200, deletedDetail)
     await screen.findByRole('heading', { name: 'Physics' })
 
@@ -261,13 +261,42 @@ describe('AdminProjectPage soft-deleted content', () => {
     expect(
       screen.getByRole('button', { name: 'Restore project' }),
     ).toBeEnabled()
-    // Nothing to open in the product, and nothing to delete again
-    expect(
-      screen.queryByRole('button', { name: 'View project' }),
-    ).not.toBeInTheDocument()
+    // Still openable in the product (ADMIN-6), but nothing to delete again
+    expect(screen.getByRole('button', { name: 'View project' })).toBeEnabled()
     expect(
       screen.queryByRole('button', { name: 'Delete project' }),
     ).not.toBeInTheDocument()
+  })
+
+  it('confirms before opening a deleted project, and leaves the logging to the read', async () => {
+    const { fetchMock } = renderPage(200, deletedDetail)
+    await screen.findByRole('heading', { name: 'Physics' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'View project' }))
+    // The tombstone leads the copy, not the project's privacy
+    const dialog = screen.getByRole('alertdialog', {
+      name: 'View this deleted project?',
+    })
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'View project' }),
+    )
+
+    expect(await screen.findByText('project page')).toBeVisible()
+    // The project read writes the audit entry, so nothing is posted here
+    expect(requested(fetchMock)).not.toContainEqual(
+      expect.stringMatching(/private-view/),
+    )
+  })
+
+  it('does not navigate when the deleted-view confirm is cancelled', async () => {
+    renderPage(200, deletedDetail)
+    await screen.findByRole('heading', { name: 'Physics' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'View project' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.queryByText('project page')).not.toBeInTheDocument()
   })
 
   it('restores the project after a confirm and reports it', async () => {
