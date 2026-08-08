@@ -16,10 +16,11 @@
  * Both entries are a diff of two snapshots taken around the mutation, not
  * of the input: mongoose setters and the lecture's copy-on-write ACL make
  * an input-vs-document comparison lie, and re-saving the same value costs
- * nothing this way. An edit that changes nothing writes no entry — which
- * is also what keeps the read-only actions routed through here (
- * `project.shares`, `deck.shares`) out of the logs. See
+ * nothing this way. An edit that changes nothing writes no entry. See
  * docs/ADMINISTRATION.md ("Editing settings", "Settings change log").
+ *
+ * Only writes come through here. Reading the settings takes the same gate
+ * without the bracket — the `settingsView` access level (TECH-14).
  */
 import type { HydratedDocument } from 'mongoose'
 import type { AdminAction, SettingsActorRole } from '@slide-machine/shared'
@@ -83,8 +84,7 @@ const recordChanges = async <T extends object>(
  * that has to bracket the change: snapshot, apply, diff, log.
  *
  * An admin's edit is additionally audited (ADMIN-5). An empty diff writes
- * nothing, which is what keeps the read-only `project.shares` action — which
- * rides this wrapper to reuse its admission rule — out of the logs.
+ * nothing, so re-saving a value a caller did not change is not an event.
  */
 export const withProjectSettingsAudit = async <T>(
   access: ProjectSettingsAccess,
@@ -128,8 +128,8 @@ export const withProjectSettingsAudit = async <T>(
  * from — reusing the earlier value would record a diff that never happened
  * for deck.setAccess and deck.resetAccess.
  *
- * An empty diff writes nothing, which is what keeps the read-only
- * `deck.shares` action out of the logs.
+ * An empty diff writes nothing, so re-saving an unchanged value is not an
+ * event.
  */
 export const withDeckSettingsAudit = async <T>(
   access: DeckSettingsAccess,

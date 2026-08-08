@@ -47,6 +47,7 @@ import {
   custom,
   projectOwner,
   projectSettings,
+  projectSettingsView,
   signedIn,
   type ProjectAccess,
   type Signed,
@@ -68,6 +69,11 @@ const settingsOf = projectSettings(
 )
 
 /** Owner-only, unlike the rest of access management. */
+/** The same admission, for an action that only reads the settings. */
+const settingsReadOf = projectSettingsView(
+  (input: { projectId: string }) => input.projectId,
+)
+
 const ownerOf = projectOwner((input: { projectId: string }) => input.projectId)
 
 /** Returns the acting user's id or throws; actions requiring auth start here. */
@@ -384,16 +390,17 @@ export const projectUnshare = defineAction<
     }),
 })
 
+/** Who a project is shared with — a read, on the settings gate; see
+ * `deck.shares`. */
 export const projectShares = defineAction<
   ProjectSharesInput,
   DeckShare[],
-  ProjectSettingsAccess
+  ProjectAccess
 >({
   name: 'project.shares',
-  access: settingsOf,
+  access: settingsReadOf,
   input: z.object({ projectId: z.string().min(1) }),
-  execute: (ctx, input, access) =>
-    withProjectSettingsAudit(access, async doc => sharesOfAcl(projectAcl(doc))),
+  execute: (ctx, input, { acl }) => sharesOfAcl(acl),
 })
 
 /** Sets the default template new lectures start from (TMPL-2). */

@@ -54,6 +54,8 @@ export type AccessLevel =
   | 'edit'
   /** canEditAcl OR an allowlisted admin, audited (ADMIN-5). */
   | 'settings'
+  /** The same admission as `settings`, for reading it. Writes no audit. */
+  | 'settingsView'
   /** ownerId alone — deliberately stricter than `edit`. */
   | 'own'
   /** A template's author. */
