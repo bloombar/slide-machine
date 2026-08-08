@@ -35,7 +35,13 @@ import {
 import { UserModel } from '../models/user'
 import { emailVerified, requireVerifiedEmail } from '../auth/verified'
 import { canEditAcl, isAclMember } from '../lib/access'
-import { isAllowlistedAdmin } from '../lib/admin-view'
+import {
+  adminViewer,
+  isAllowlistedAdmin,
+  logDeletedView,
+  withDeleted,
+  type AdminViewer,
+} from '../lib/admin-view'
 import { editProjectSettings } from '../lib/admin-edit'
 import { recordSettingsChange } from '../audit/settings-log'
 import { projectSettingsSnapshot } from '../lib/settings-snapshot'
@@ -114,19 +120,65 @@ export const projectList = defineAction<Record<string, never>, Project[]>({
   },
 })
 
+/**
+ * The project an id names for a reader: the live one, or — for an
+ * allowlisted admin alone — a soft-deleted one, which is refused to
+ * everyone else (ADMIN-6). Returns the admin a tombstone was opened for, so
+ * the caller can audit what the bypass exposed; null whenever the project is
+ * live. Throws when there is nothing to read either way.
+ */
+const loadReadableProject = async (
+  projectId: string,
+  userId: string,
+): Promise<{
+  doc: HydratedDocument<ProjectDb>
+  deletedFor: AdminViewer | null
+}> => {
+  const live = await ProjectModel.findById(projectId).catch(() => null)
+  if (live) return { doc: live, deletedFor: null }
+  const deletedFor = await adminViewer(userId)
+  if (!deletedFor) throw new ActionForbiddenError()
+  const doc = await ProjectModel.findById(projectId)
+    .setOptions(withDeleted)
+    .catch(() => null)
+  if (!doc) throw new ActionForbiddenError()
+  return { doc, deletedFor }
+}
+
 export const projectGet = defineAction<{ projectId: string }, Project>({
   name: 'project.get',
   input: z.object({ projectId: z.string().min(1) }),
   execute: async (ctx, input) => {
     const userId = requireUser(ctx)
-    const doc = await ProjectModel.findById(input.projectId).catch(() => null)
-    const acl = doc ? projectAcl(doc) : null
-    if (!doc || !acl) throw new ActionForbiddenError()
+    const { doc, deletedFor } = await loadReadableProject(
+      input.projectId,
+      userId,
+    )
+    const acl = projectAcl(doc)
+    // Opening a tombstoned project is audited, one entry per opening — the
+    // same treatment an admin's view of private content gets.
+    if (doc.deletedAt && deletedFor) {
+      await logDeletedView(
+        deletedFor,
+        'project.deleted_view',
+        'project',
+        doc._id.toString(),
+        {
+          title: doc.title,
+          ownerId: doc.ownerId.toString(),
+          deletedAt: doc.deletedAt.toISOString(),
+        },
+      )
+    }
     /** Names the owner on the page, linking to their profile (SOC-4). Every
      * reader of a project gets it: it says whose work this is, which is not
      * privileged the way seed notes and people lists are. */
     const withOwner = async (dto: Project): Promise<Project> => {
-      const owner = await UserModel.findById(dto.ownerId).catch(() => null)
+      // A tombstoned project usually went down with its owner's account, so
+      // the name still resolves for the admin reading it (ADMIN-6).
+      const owner = await UserModel.findById(dto.ownerId)
+        .setOptions(doc.deletedAt ? withDeleted : {})
+        .catch(() => null)
       if (!owner) return dto
       return { ...dto, owner: { id: owner.id, displayName: owner.displayName } }
     }

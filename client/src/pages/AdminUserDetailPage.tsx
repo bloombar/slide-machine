@@ -12,8 +12,9 @@
  * Soft-deleted content is listed too, badged and muted (ADMIN-6): opening
  * a deleted account is itself audited, its row actions become Restore, and
  * the moderation actions are withdrawn — a tombstoned record is recovered,
- * not moderated again. Restores work until the retention sweep purges the
- * tombstone (P-11).
+ * not moderated again. Its profile still opens in the product, showing the
+ * work tombstoned along with it. Restores work until the retention sweep
+ * purges the tombstone (P-11).
  *
  * The details are read-only: like a project's or a lecture's, account
  * settings are edited in the product itself, from the Settings button on
@@ -395,7 +396,7 @@ export default function AdminUserDetailPage() {
 
   const { detail, projects, decks } = loaded
   const { user } = detail
-  // A deleted account has no product surfaces left to open and cannot be
+  // A deleted account still opens in the product, read-only, but cannot be
   // moderated again — it is restored instead (ADMIN-6).
   const userDeleted = Boolean(detail.deletedAt)
   const byProject = new Map<string, AdminDeckSummary[]>()
@@ -416,14 +417,14 @@ export default function AdminUserDetailPage() {
       <BackToUsers />
       <div className="mb-1 flex items-baseline justify-between gap-4">
         <h1 className="text-2xl font-bold">{user.displayName}</h1>
-        {!userDeleted && (
-          <Link
-            to={`/u/${user.id}`}
-            className="text-sm text-slate-500 hover:underline"
-          >
-            View public profile
-          </Link>
-        )}
+        {/* A deleted account's profile still opens for an admin, showing the
+            work tombstoned along with it (ADMIN-6); the read audits it. */}
+        <Link
+          to={`/u/${user.id}`}
+          className="text-sm text-slate-500 hover:underline"
+        >
+          {userDeleted ? 'View deleted profile' : 'View public profile'}
+        </Link>
       </div>
       <p className="mb-6 text-slate-500">
         {user.email}
