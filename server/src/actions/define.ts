@@ -20,10 +20,13 @@ export interface Action<I = unknown, O = unknown, R = unknown> {
    * their plan — and hands whatever it loaded to `execute`, so no action pays
    * twice for the same lookup.
    *
-   * Optional only until the last action declares one, at which point this
-   * becomes required and a missing declaration is a compile error.
+   * Required. An action with no declaration does not compile, which is the
+   * whole point: before this, a missing authorization check failed nothing —
+   * not a test, not a type, not a lint — so it was indistinguishable from a
+   * deliberate one. Operations whose rule is genuinely not one resource at one
+   * level declare `custom(reason)`; silence is not an option.
    */
-  access?: AccessPolicy<I, R>
+  access: AccessPolicy<I, R>
   /** Plan-cap metering hook (BILL-3). Default is a no-op. */
   meter?: (ctx: ActionContext, input: I) => Promise<void>
   /**

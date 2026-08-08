@@ -13,6 +13,12 @@ import {
 } from './dispatch'
 import { defineAction } from './define'
 import { definePolicy } from './access/policy'
+
+/** The simplest declaration there is, for fixtures that guard nothing. */
+const openPolicy = definePolicy<Record<string, unknown>, undefined>(
+  { resource: 'none', level: 'open' },
+  async () => undefined,
+)
 import { z } from 'zod'
 import './system'
 
@@ -109,6 +115,7 @@ describe('dispatch', () => {
     const calls: string[] = []
     const action = defineAction({
       name: 'test.direct',
+      access: openPolicy,
       input: z.object({ value: z.string() }),
       meter: async () => {
         calls.push('meter')
@@ -127,6 +134,7 @@ describe('dispatch', () => {
   it('validates input the same way when run from a reference', async () => {
     const action = defineAction({
       name: 'test.direct',
+      access: openPolicy,
       input: z.object({ value: z.string() }),
       execute: async (_ctx, input) => input.value,
     })

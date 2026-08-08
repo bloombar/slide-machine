@@ -1,23 +1,21 @@
 /**
  * The access completeness audit (SPEC TECH-14).
  *
- * Every registered action must declare how it is authorized. Until this
- * existed, an action with no check at all failed nothing — not a test, not a
- * type, not a lint — so a missing guard was indistinguishable from a
- * deliberate one. This makes both visible:
+ * That every action *has* a declaration is now the Action type's job: `access`
+ * is required, so an action without one does not compile and CI never reaches
+ * this file. What is left for a test is everything the type cannot say:
  *
- *   - a NEW action with no declaration fails, because it is in neither
- *     ACCESS_INDEX nor PENDING_MIGRATION;
- *   - a WEAKENED guard fails, because ACCESS_INDEX pins the declared resource
- *     and level, so changing `deckEditor` to `deckViewer` is a one-line diff
- *     in a table a reviewer reads rather than a detail buried in a handler;
- *   - an action that authorizes itself must say why, and be listed.
+ *   - a WEAKENED guard fails, because ACCESS_INDEX pins each action's declared
+ *     resource and level. Changing `deckEditor` to `deckViewer` still
+ *     type-checks; it shows up here as a one-line diff in a table a reviewer
+ *     reads, rather than a detail buried in a handler;
+ *   - an action that authorizes itself must say WHY, and be named in a short
+ *     allowlist — so `custom` cannot quietly become the easy way out;
+ *   - the index cannot drift: a name here that no longer exists fails too.
  *
- * PENDING_MIGRATION is the un-migrated remainder. It may only shrink: an
- * action that has already been given a policy cannot be re-added to it, so
- * the list cannot rot into a permanent exemption. When it empties, `access`
- * becomes required on the Action type and this file loses its last special
- * case.
+ * Before any of this, an action with no check at all failed nothing — not a
+ * test, not a type, not a lint — so a missing guard was indistinguishable from
+ * a deliberate one.
  *
  * Scope: the action registry only. Routes that reach deck data outside the
  * action layer keep their own checks (see access/policy.ts) — a green run
@@ -181,13 +179,6 @@ const ACCESS_INDEX: Record<string, AccessDescriptor> = {
   'slide.setLayout': { resource: 'slide', level: 'edit' },
 }
 
-/**
- * Empty: every registered action declares its access. Kept as a named
- * constant so the assertions below still read as a ratchet — an action added
- * without a policy has nowhere to hide.
- */
-const PENDING_MIGRATION = new Set<string>([])
-
 const registered = () => listActions().filter(a => a.name !== 'test.hooks')
 
 describe('access registry (TECH-14)', () => {
@@ -197,28 +188,9 @@ describe('access registry (TECH-14)', () => {
     expect(names.length).toBeGreaterThan(0)
   })
 
-  // The gate. A new action lands in neither list, so it fails here until
-  // somebody states its rule.
-  it('every action either declares access or is a known remainder', () => {
-    const undeclared = registered()
-      .filter(a => !a.access && !PENDING_MIGRATION.has(a.name))
-      .map(a => a.name)
-    expect(undeclared).toEqual([])
-  })
-
-  // The ratchet. Once migrated, an action can never return to the remainder.
-  it('the migration remainder only shrinks', () => {
-    const regressed = registered()
-      .filter(a => a.access && PENDING_MIGRATION.has(a.name))
-      .map(a => a.name)
-    expect(regressed).toEqual([])
-  })
-
   it('lists no action that is not registered', () => {
     const names = new Set(registered().map(a => a.name))
-    const stale = [...PENDING_MIGRATION, ...Object.keys(ACCESS_INDEX)].filter(
-      n => !names.has(n),
-    )
+    const stale = Object.keys(ACCESS_INDEX).filter(n => !names.has(n))
     expect(stale).toEqual([])
   })
 
