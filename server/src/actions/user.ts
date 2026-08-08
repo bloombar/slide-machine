@@ -116,12 +116,13 @@ registerAction(userSetProfileVisibility)
  */
 export const userSetAccountType = defineAction<
   UserSetAccountTypeInput,
-  SafeUser
+  SafeUser,
+  SelfAccess
 >({
   name: 'user.setAccountType',
+  access: self(),
   input: z.object({ accountType: z.enum(ACCOUNT_TYPES) }),
-  execute: async (ctx, input) => {
-    const user = await loadSelf(ctx.userId)
+  execute: async (ctx, input, { user }) => {
     const before = userSettingsSnapshot(user)
     const first = user.accountType === undefined
     user.accountType = input.accountType

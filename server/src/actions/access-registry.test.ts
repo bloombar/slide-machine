@@ -28,7 +28,7 @@ import type { AccessDescriptor } from './access/policy'
 
 /**
  * Actions whose access rule is genuinely not one resource at one level, and
- * why. Four of eighty-six. Each is a decision somebody wrote down rather than
+ * why. Four of eighty-seven. Each is a decision somebody wrote down rather than
  * an action nobody got to: the reason is required, published here, and a new
  * name cannot join without editing this list.
  */
@@ -116,6 +116,7 @@ const ACCESS_INDEX: Record<string, AccessDescriptor> = {
   'billing.portal': { resource: 'self', level: 'self' },
   'billing.summary': { resource: 'self', level: 'self' },
   'user.deleteAccount': { resource: 'self', level: 'self' },
+  'user.setAccountType': { resource: 'self', level: 'self' },
   'user.setCapWarnings': { resource: 'self', level: 'self' },
   'user.setLanguage': { resource: 'self', level: 'self' },
   'user.setLocale': { resource: 'self', level: 'self' },
