@@ -37,7 +37,8 @@ import { loadEditableDeck } from './deck'
 import { env } from '../config/env'
 import { UserModel } from '../models/user'
 import { SlideModel } from '../models/slide'
-import { ProjectModel } from '../models/project'
+import { ProjectModel, projectAcl } from '../models/project'
+import { canEditAcl } from '../lib/access'
 import { registry } from '../providers/registry'
 import { publishQuiz } from '../lib/quiz-publish'
 import { splitPointsEqually } from '../lib/quiz-points'
@@ -404,19 +405,30 @@ export const quizPublish = defineAction<
 
     // Remember these options as the project's quiz defaults (QUIZ-2), so the
     // next quiz in this course pre-fills them.
-    await ProjectModel.updateOne(
-      { _id: deck.projectId },
-      {
-        quizDefaults: {
-          questionCount: input.questionCount,
-          totalPoints: input.totalPoints,
-          emailCollection: input.emailCollection,
-          includeTranscript: input.includeTranscript,
-          typeCounts: input.typeCounts,
-          customInstructions: input.customInstructions,
-        },
-      },
+    //
+    // Editing a lecture does not carry the right to edit its course: a
+    // lecture can be shared for editing on its own (SHARE-1), which would
+    // otherwise let a guest rewrite defaults for every other lecture in it.
+    // Skipped silently rather than refused — the quiz is published either
+    // way, and this is a convenience for next time, not part of the result.
+    const project = await ProjectModel.findById(deck.projectId).catch(
+      () => null,
     )
+    if (project && canEditAcl(projectAcl(project), ctx.userId)) {
+      await ProjectModel.updateOne(
+        { _id: project._id },
+        {
+          quizDefaults: {
+            questionCount: input.questionCount,
+            totalPoints: input.totalPoints,
+            emailCollection: input.emailCollection,
+            includeTranscript: input.includeTranscript,
+            typeCounts: input.typeCounts,
+            customInstructions: input.customInstructions,
+          },
+        },
+      )
+    }
 
     return toPublishedQuiz(deck.quiz)!
   },

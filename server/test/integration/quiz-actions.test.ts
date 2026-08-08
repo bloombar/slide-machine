@@ -111,6 +111,44 @@ describe('quiz actions', () => {
     expect(status.body.quiz.formUrl).toBe(publish.body.formUrl)
   })
 
+  // Being invited to edit one lecture is not being invited to edit the
+  // course it sits in: the publish succeeds, but the options are not
+  // remembered as defaults for every other lecture in the project (QUIZ-2).
+  it('does not let a lecture editor rewrite the course quiz defaults', async () => {
+    await act(ada, 'deck.share', {
+      deckId,
+      email: 'bob@example.com',
+      role: 'editor',
+    })
+    await act(bob, 'quiz.connectGoogle')
+    const publish = await act(bob, 'quiz.publish', {
+      deckId,
+      driveFolderId: 'root',
+      questionCount: 7,
+    })
+    expect(publish.status).toBe(200)
+
+    const project = await ProjectModel.findById(
+      (await DeckModel.findById(deckId))!.projectId,
+    )
+    expect(project!.quizDefaults).toBeUndefined()
+  })
+
+  it('remembers the owner’s options as the course defaults', async () => {
+    await act(ada, 'quiz.connectGoogle')
+    const publish = await act(ada, 'quiz.publish', {
+      deckId,
+      driveFolderId: 'root',
+      questionCount: 7,
+    })
+    expect(publish.status).toBe(200)
+
+    const project = await ProjectModel.findById(
+      (await DeckModel.findById(deckId))!.projectId,
+    )
+    expect(project!.quizDefaults?.questionCount).toBe(7)
+  })
+
   it('creates a new destination folder (mock)', async () => {
     await act(ada, 'quiz.connectGoogle')
     const res = await act(ada, 'quiz.createFolder', { name: 'Week 5' })

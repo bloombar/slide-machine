@@ -30,7 +30,9 @@ import {
 } from './dispatch'
 import type { ActionContext } from './context'
 import { TemplateModel, toTemplateDto } from '../models/template'
+import { DeckModel, loadDeckAcls } from '../models/deck'
 import { UserModel } from '../models/user'
+import { canEditAcl } from '../lib/access'
 import {
   layoutSchema,
   normalizeSlot,
@@ -53,6 +55,55 @@ import { previewImageUrls } from '../enrichment/preview-images'
 const requireUser = (ctx: ActionContext): string => {
   if (!ctx.userId) throw new ActionForbiddenError('Sign in to continue')
   return ctx.userId
+}
+
+/**
+ * True when a lecture the caller may edit is drawn with this template.
+ *
+ * Someone editing a shared lecture already sees its design on every slide,
+ * so withholding the same design as a file would protect nothing while
+ * breaking the export offered in that lecture's own settings. Reached only
+ * for a private template belonging to someone else, which by definition
+ * only its author can have applied — so the lectures searched here are that
+ * one author's, not the whole collection.
+ */
+const drawsAnEditableDeck = async (
+  userId: string,
+  templateId: string,
+): Promise<boolean> => {
+  const decks = await DeckModel.find({ templateId }).limit(200)
+  if (decks.length === 0) return false
+  const acls = await loadDeckAcls(decks)
+  return decks.some(deck => canEditAcl(acls.get(deck._id.toString())!, userId))
+}
+
+/**
+ * Loads a template the caller may read, or refuses. Readable means a
+ * built-in, one the caller authored, or one its author shared — the same
+ * rule template.get applies to a permalink — plus one that draws a lecture
+ * the caller may edit.
+ *
+ * A template that does not exist is refused identically to one the caller
+ * may not see, so an id cannot be probed to learn which it was.
+ */
+const loadReadable = async (
+  userId: string,
+  templateId: string,
+): Promise<Template> => {
+  const template = await resolveTemplate(templateId)
+  if (!template) throw new ActionForbiddenError()
+  const own = template.ownerId === userId
+  const builtin = template.ownerId === 'system'
+  const shared = template.visibility !== 'private'
+  if (
+    !own &&
+    !builtin &&
+    !shared &&
+    !(await drawsAnEditableDeck(userId, templateId))
+  ) {
+    throw new ActionForbiddenError()
+  }
+  return template
 }
 
 /**
@@ -144,6 +195,9 @@ export const templateGet = defineAction<{ slug: string }, Template>({
 /**
  * Exports a style template to a YAML file (EXP-2), returned inline for the
  * browser to download — the template's identity, theme, and layouts.
+ *
+ * Exporting is a read, so it is gated like one: a private design belongs to
+ * its author and to whoever edits a lecture drawn with it, nobody else.
  */
 export const templateExport = defineAction<
   { templateId: string },
@@ -151,11 +205,8 @@ export const templateExport = defineAction<
 >({
   name: 'template.export',
   input: z.object({ templateId: z.string().min(1) }),
-  execute: async (_ctx, input) => {
-    const template = await resolveTemplate(input.templateId)
-    if (!template) {
-      throw new ActionValidationError('template.export', ['unknown template'])
-    }
+  execute: async (ctx, input) => {
+    const template = await loadReadable(requireUser(ctx), input.templateId)
     const slug =
       template.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'template'
     return {
@@ -184,20 +235,9 @@ export const templateDuplicate = defineAction<
   }),
   execute: async (ctx, input) => {
     const userId = requireUser(ctx)
-    const source = await resolveTemplate(input.templateId)
-    if (!source) {
-      throw new ActionValidationError('template.duplicate', [
-        'unknown template',
-      ])
-    }
-    // Someone else's private template is not a source to copy from.
-    if (
-      source.ownerId !== 'system' &&
-      source.ownerId !== userId &&
-      source.visibility === 'private'
-    ) {
-      throw new ActionForbiddenError()
-    }
+    // Someone else's private template is not a source to copy from, and a
+    // template that does not exist is refused the same way.
+    const source = await loadReadable(userId, input.templateId)
     // Named against everything the caller can already see, so a copy never
     // arrives sharing a name with the thing it was copied from.
     const library = await listTemplatesFor(userId)
@@ -333,13 +373,9 @@ export const templateExportToDrive = defineAction<
       throw new ActionForbiddenError('Connect a Google account first')
     }
     // A built-in is exportable too: taking a shipped design into Drive to
-    // build on is the same act as taking one you wrote.
-    const template = await resolveTemplate(input.templateId)
-    if (!template) {
-      throw new ActionValidationError('template.exportToDrive', [
-        'unknown template',
-      ])
-    }
+    // build on is the same act as taking one you wrote. Someone else's
+    // private design is not.
+    const template = await loadReadable(userId, input.templateId)
     const name = template.name.trim() || 'Untitled design'
 
     let fileId: string
