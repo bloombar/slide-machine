@@ -20,7 +20,12 @@ import {
 } from '../models/deck'
 import { canViewAcl } from '../lib/access'
 import { isAdminEmail } from '../config/admin'
-import { isAllowlistedAdmin } from '../lib/admin-view'
+import {
+  adminViewer,
+  asOf,
+  logDeletedView,
+  withDeleted,
+} from '../lib/admin-view'
 import { verifyAccessToken } from '../auth/tokens'
 import { HttpError } from '../middleware/error'
 
@@ -50,23 +55,41 @@ usersRouter.get('/users/:id', optionalAuth, async (req, res) => {
   const id = String(req.params.id)
   if (!isValidObjectId(id)) throw notFound
 
-  const user = await UserModel.findById(id)
-  if (!user) throw notFound
   const isSelf = req.userId === id
   // Admins may edit any profile (ADMIN-5), so they must be able to open
   // a private one to do it — the same allowlist bypass the console uses.
   // Lecture visibility below is deliberately NOT bypassed: the admin
   // console is where an admin sees someone's private lectures.
-  const isAdmin = !isSelf && (await isAllowlistedAdmin(req.userId))
-  if (user.profileVisibility === 'private' && !isSelf && !isAdmin) {
+  const admin = isSelf ? null : await adminViewer(req.userId)
+  // A deleted account's profile is gone for everyone but an admin, who
+  // reads it as they would a live one until the retention sweep purges it
+  // (ADMIN-6); the opening is audited.
+  const user =
+    (await UserModel.findById(id)) ??
+    (admin ? await UserModel.findById(id).setOptions(withDeleted) : null)
+  if (!user) throw notFound
+  if (user.profileVisibility === 'private' && !isSelf && !admin) {
     throw notFound
   }
+  if (user.deletedAt && admin) {
+    await logDeletedView(admin, 'user.deleted_view', 'user', id, {
+      email: user.email,
+      deletedAt: user.deletedAt.toISOString(),
+    })
+  }
 
+  // A deleted account shows the work tombstoned along with it — what a
+  // restore would bring back — rather than an empty page.
+  const { filter, options } = asOf(user.deletedAt)
   const [projects, decks] = await Promise.all([
-    ProjectModel.find({ ownerId: id }),
-    DeckModel.find({ ownerId: id }).sort({ updatedAt: -1 }),
+    ProjectModel.find({ ownerId: id, ...filter }).setOptions(options),
+    DeckModel.find({ ownerId: id, ...filter })
+      .sort({ updatedAt: -1 })
+      .setOptions(options),
   ])
-  const acls = await loadDeckAcls(decks)
+  const acls = await loadDeckAcls(decks, {
+    withDeleted: Boolean(user.deletedAt),
+  })
   const visible = decks.filter(deck =>
     canViewAcl(acls.get(deck._id.toString())!, req.userId),
   )
@@ -110,7 +133,7 @@ usersRouter.get('/users/:id', optionalAuth, async (req, res) => {
     // Admins moderate but are not moderated: an allowlisted account's
     // profile is off-limits to other admins, matching the write path
     // (rejectAdminTarget) so the button never promises a refused save.
-    canEdit: isSelf || (isAdmin && !isAdminEmail(user.email)),
+    canEdit: isSelf || (Boolean(admin) && !isAdminEmail(user.email)),
   }
   res.json(body)
 })

@@ -4,8 +4,9 @@
  * auth); missing and forbidden are both 404 so existence never leaks.
  * The one exception is an allowlisted admin: admins may always open a
  * lecture read-only (the ADMIN_EMAILS gate is the authorization, as on
- * the admin API). canEdit tells the client whether to enable the
- * editing surface.
+ * the admin API), including one that has been soft-deleted, which every
+ * other reader is refused (ADMIN-6 — the opening is audited). canEdit
+ * tells the client whether to enable the editing surface.
  *
  * POST /api/decks/:slug/translation (SHARE-2) serves the same deck's slide
  * content in another language, behind the same view gate: translated reading
@@ -27,7 +28,13 @@ import {
   toSharedDeckDto,
   type DeckDb,
 } from '../models/deck'
-import { isAllowlistedAdmin } from '../lib/admin-view'
+import {
+  adminViewer,
+  asOf,
+  logDeletedView,
+  withDeleted,
+  type AdminViewer,
+} from '../lib/admin-view'
 import { canEditAcl, canViewAcl } from '../lib/access'
 import { SlideModel, toSlideDto } from '../models/slide'
 import { TranscriptSegmentModel } from '../models/transcript-segment'
@@ -88,40 +95,83 @@ export const decksRouter = Router()
  * Loads the deck behind a permalink and enforces the viewer ACL, or throws
  * 404 — missing and forbidden look identical so existence never leaks. Shared
  * by the view and translate routes so both gate viewing the same way.
+ *
+ * Returns the acting admin alongside the deck when an allowlisted admin got
+ * in on the bypass rather than on the ACL, so the caller can audit what the
+ * bypass exposed. A soft-deleted lecture is nowhere to be found for anyone
+ * else; for an admin it resolves like a live one (ADMIN-6).
  */
 const loadViewableDeck = async (
   slug: string,
   userId: string | undefined,
-): Promise<HydratedDocument<DeckDb>> => {
+): Promise<{ deck: HydratedDocument<DeckDb>; admin: AdminViewer | null }> => {
   const notFound = new HttpError(404, 'not_found', 'Deck not found')
-  const deck = await DeckModel.findOne({ permalinkSlug: slug })
-  if (!deck) throw notFound
-  const acl = await loadDeckAcl(deck)
-  if (!canViewAcl(acl, userId)) {
+  const live = await DeckModel.findOne({ permalinkSlug: slug })
+  if (live) {
+    const acl = await loadDeckAcl(live)
+    if (canViewAcl(acl, userId)) return { deck: live, admin: null }
     // Admin view bypass: allowlisted admins may always open a lecture
     // (read-only — canEdit still follows the ACL)
-    if (!(await isAllowlistedAdmin(userId))) throw notFound
+    const admin = await adminViewer(userId)
+    if (!admin) throw notFound
+    return { deck: live, admin }
   }
-  return deck
+  // Nothing live under this slug. It may still name a tombstoned lecture,
+  // which only an admin may open — and only until the retention sweep
+  // purges it.
+  const admin = await adminViewer(userId)
+  if (!admin) throw notFound
+  const deck = await DeckModel.findOne({ permalinkSlug: slug }).setOptions(
+    withDeleted,
+  )
+  if (!deck) throw notFound
+  return { deck, admin }
 }
 
 decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
   const notFound = new HttpError(404, 'not_found', 'Deck not found')
 
-  const deck = await loadViewableDeck(String(req.params.slug), req.userId)
-  const acl = await loadDeckAcl(deck)
+  const { deck, admin } = await loadViewableDeck(
+    String(req.params.slug),
+    req.userId,
+  )
+  // A tombstoned lecture reads through its own cascade: its slides, its
+  // project and its owner all went away with it, so they are resolved with
+  // tombstones visible (ADMIN-6). Opening it is audited — one entry per
+  // opening, as for an admin's view of private content.
+  const { filter, options } = asOf(deck.deletedAt)
+  const parents = deck.deletedAt ? withDeleted : {}
+  const acl = await loadDeckAcl(deck, { withDeleted: Boolean(deck.deletedAt) })
 
   const template = await resolveDeckTemplateForRead(deck)
   if (!template) throw notFound
 
   const isOwner = acl.ownerId === req.userId
   const canEdit = canEditAcl(acl, req.userId)
-  const slides = await SlideModel.find({ deckId: deck._id }).sort({ index: 1 })
-  const project = await ProjectModel.findById(deck.projectId).catch(() => null)
+  const slides = await SlideModel.find({ deckId: deck._id, ...filter })
+    .sort({ index: 1 })
+    .setOptions(options)
+  const project = await ProjectModel.findById(deck.projectId)
+    .setOptions(parents)
+    .catch(() => null)
   // Owner (SOC-4 link) and the viewer's own vote on this lecture (SOC-1).
   const owner = await UserModel.findById(deck.ownerId)
     .select('displayName')
+    .setOptions(parents)
     .catch(() => null)
+  if (deck.deletedAt && admin) {
+    await logDeletedView(
+      admin,
+      'deck.deleted_view',
+      'deck',
+      deck._id.toString(),
+      {
+        title: deck.title,
+        ownerId: deck.ownerId.toString(),
+        deletedAt: deck.deletedAt.toISOString(),
+      },
+    )
+  }
   const myVote: MyVote = req.userId
     ? ((
         await VoteModel.findOne({
@@ -180,8 +230,15 @@ decksRouter.post('/decks/:slug/translation', optionalAuth, async (req, res) => {
     throw new HttpError(400, 'bad_request', 'Unsupported language')
   }
 
-  const deck = await loadViewableDeck(String(req.params.slug), req.userId)
-  const project = await ProjectModel.findById(deck.projectId).catch(() => null)
+  // Switching language inside a lecture already opened is not a second
+  // opening, so a tombstoned one is served here without another audit entry
+  // — the view that got the admin here logged it.
+  const { deck } = await loadViewableDeck(String(req.params.slug), req.userId)
+  const { filter, options } = asOf(deck.deletedAt)
+  const parents = deck.deletedAt ? withDeleted : {}
+  const project = await ProjectModel.findById(deck.projectId)
+    .setOptions(parents)
+    .catch(() => null)
   const source = deckSourceLocale(deck.language, project?.language)
 
   const body: DeckTranslationResponse = { locale, source, perSlide: {} }
@@ -192,13 +249,15 @@ decksRouter.post('/decks/:slug/translation', optionalAuth, async (req, res) => {
   // Whoever asked, the owner's plan pays (BILL-3) — but an owner or editor
   // preparing the lecture draws on a different allowance than a student
   // reading it, so who triggered this decides the pool before anything else.
-  const acl = await loadDeckAcl(deck)
+  const acl = await loadDeckAcl(deck, { withDeleted: Boolean(deck.deletedAt) })
   const billing = await translationBillingFor(
     acl.ownerId,
     canEditAcl(acl, req.userId) ? 'author' : 'audience',
   )
 
-  const slides = await SlideModel.find({ deckId: deck._id }).sort({ index: 1 })
+  const slides = await SlideModel.find({ deckId: deck._id, ...filter })
+    .sort({ index: 1 })
+    .setOptions(options)
   try {
     body.perSlide = await translateSlides(
       deck._id,
