@@ -88,6 +88,11 @@ export interface TemplateAccess extends Signed {
   doc: HydratedDocument<TemplateDb> | null
 }
 
+/** A template the caller authored: always stored, never a built-in. */
+export interface TemplateAuthorAccess extends TemplateAccess {
+  doc: HydratedDocument<TemplateDb>
+}
+
 export interface SelfAccess extends Signed {
   user: HydratedDocument<UserDb>
 }

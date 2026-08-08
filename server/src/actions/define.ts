@@ -20,17 +20,10 @@ export interface Action<I = unknown, O = unknown, R = unknown> {
    * their plan — and hands whatever it loaded to `execute`, so no action pays
    * twice for the same lookup.
    *
-   * Optional only while the migration runs; every action will declare one,
-   * and a missing declaration becomes a compile error once they all do.
+   * Optional only until the last action declares one, at which point this
+   * becomes required and a missing declaration is a compile error.
    */
   access?: AccessPolicy<I, R>
-  /**
-   * Ownership/role check. Superseded by `access` — the remaining users are
-   * being converted, and this is removed when the last one is.
-   *
-   * @deprecated declare `access` instead
-   */
-  authorize?: (ctx: ActionContext, input: I) => Promise<void>
   /** Plan-cap metering hook (BILL-3). Default is a no-op. */
   meter?: (ctx: ActionContext, input: I) => Promise<void>
   /**

@@ -18,7 +18,7 @@ import {
 import { ActionForbiddenError, ActionValidationError } from '../dispatch'
 import { definePolicy, type AccessPolicy, type PickId } from './policy'
 import { requireUser } from './common'
-import type { TemplateAccess } from './types'
+import type { TemplateAccess, TemplateAuthorAccess } from './types'
 
 /**
  * True when a lecture the caller may edit is drawn with this design.
@@ -103,7 +103,7 @@ export const templateReadableBySlug = <I>(
  */
 export const templateAuthor = <I>(
   pick: PickId<I>,
-): AccessPolicy<I, TemplateAccess & { doc: HydratedDocument<TemplateDb> }> =>
+): AccessPolicy<I, TemplateAuthorAccess> =>
   definePolicy(
     { resource: 'template', level: 'author' },
     async (ctx, input) => {

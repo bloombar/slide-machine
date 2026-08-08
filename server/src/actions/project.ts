@@ -43,7 +43,14 @@ import {
   type AdminViewer,
 } from '../lib/admin-view'
 import { withProjectSettingsAudit } from '../lib/admin-edit'
-import { projectSettings, type ProjectSettingsAccess } from './access'
+import {
+  projectOwner,
+  projectSettings,
+  signedIn,
+  type ProjectAccess,
+  type Signed,
+  type ProjectSettingsAccess,
+} from './access'
 import { recordSettingsChange } from '../audit/settings-log'
 import { projectSettingsSnapshot } from '../lib/settings-snapshot'
 import { ttsVoiceIdSchema } from '../lib/tts-voice'
@@ -58,6 +65,9 @@ import { deleteProjectCascade } from '../lib/cascade'
 const settingsOf = projectSettings(
   (input: { projectId: string }) => input.projectId,
 )
+
+/** Owner-only, unlike the rest of access management. */
+const ownerOf = projectOwner((input: { projectId: string }) => input.projectId)
 
 /** Returns the acting user's id or throws; actions requiring auth start here. */
 const requireUser = (ctx: ActionContext): string => {
@@ -74,8 +84,9 @@ const requireUser = (ctx: ActionContext): string => {
  * owner-only and check for themselves.
  */
 
-export const projectCreate = defineAction<ProjectCreateInput, Project>({
+export const projectCreate = defineAction<ProjectCreateInput, Project, Signed>({
   name: 'project.create',
+  access: signedIn(),
   input: z.object({
     // Blank is allowed: a titleless project is the "default" one created
     // for a user's first lecture; the client shows a placeholder name.
@@ -99,8 +110,13 @@ export const projectCreate = defineAction<ProjectCreateInput, Project>({
   },
 })
 
-export const projectList = defineAction<Record<string, never>, Project[]>({
+export const projectList = defineAction<
+  Record<string, never>,
+  Project[],
+  Signed
+>({
   name: 'project.list',
+  access: signedIn(),
   input: z.object({}),
   execute: async ctx => {
     const docs = await ProjectModel.find({ ownerId: requireUser(ctx) })
@@ -253,18 +269,14 @@ export const projectUpdate = defineAction<
 
 export const projectDelete = defineAction<
   ProjectDeleteInput,
-  { deleted: true }
+  { deleted: true },
+  ProjectAccess
 >({
   name: 'project.delete',
+  // Owner-only, deliberately stricter than the editor gate its siblings
+  // use: deleting a course is not something a collaborator may do.
+  access: ownerOf,
   input: z.object({ projectId: z.string().min(1) }),
-  authorize: async (ctx, input) => {
-    const userId = requireUser(ctx)
-    const doc = await ProjectModel.findById(input.projectId)
-    if (!doc || doc.ownerId.toString() !== userId) {
-      // Same error for missing and foreign projects: no existence leaks
-      throw new ActionForbiddenError()
-    }
-  },
   execute: async (_ctx, input) => {
     // Cascade: every deck in the project, their slides, all seed
     // material at both levels (including stored files), transcripts,
@@ -401,19 +413,16 @@ export const projectSwitchTemplate = defineAction<
 
 export const projectTransferOwnership = defineAction<
   ProjectTransferOwnershipInput,
-  Project
+  Project,
+  ProjectAccess
 >({
   name: 'project.transferOwnership',
+  access: ownerOf,
   input: z.object({
     projectId: z.string().min(1),
     userId: z.string().min(1),
   }),
-  execute: async (ctx, input) => {
-    const userId = requireUser(ctx)
-    const doc = await ProjectModel.findById(input.projectId).catch(() => null)
-    // Owner-only, unlike the rest of access management
-    if (!doc || doc.ownerId.toString() !== userId)
-      throw new ActionForbiddenError()
+  execute: async (ctx, input, { userId, project: doc }) => {
     const target = await UserModel.findById(input.userId).catch(() => null)
     if (!target) {
       throw new ActionValidationError('project.transferOwnership', [

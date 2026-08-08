@@ -33,6 +33,26 @@ import type { AccessDescriptor } from './access/policy'
  * each against the policy the action actually declares.
  */
 const ACCESS_INDEX: Record<string, AccessDescriptor> = {
+  'deck.create': { resource: 'project', level: 'own' },
+  'deck.delete': { resource: 'deck', level: 'own' },
+  'deck.import': { resource: 'project', level: 'own' },
+  'deck.transferOwnership': { resource: 'deck', level: 'own' },
+  'deck.vote': { resource: 'deck', level: 'view' },
+  'project.create': { resource: 'none', level: 'signedIn' },
+  'project.delete': { resource: 'project', level: 'own' },
+  'project.list': { resource: 'none', level: 'signedIn' },
+  'project.transferOwnership': { resource: 'project', level: 'own' },
+  'seedAsset.delete': { resource: 'seedAsset', level: 'edit' },
+  'seedAsset.list': { resource: 'seedAsset', level: 'edit' },
+  'seedAsset.update': { resource: 'seedAsset', level: 'edit' },
+  'system.echo': { resource: 'none', level: 'open' },
+  'template.delete': { resource: 'template', level: 'author' },
+  'template.duplicate': { resource: 'template', level: 'readable' },
+  'template.export': { resource: 'template', level: 'readable' },
+  'template.get': { resource: 'template', level: 'readable' },
+  'template.list': { resource: 'none', level: 'signedIn' },
+  'template.previewImage': { resource: 'none', level: 'signedIn' },
+  'template.update': { resource: 'template', level: 'author' },
   'deck.rename': { resource: 'deck', level: 'settings' },
   'deck.resetAccess': { resource: 'deck', level: 'settings' },
   'deck.setAccess': { resource: 'deck', level: 'settings' },
@@ -129,31 +149,11 @@ const CUSTOM_ALLOWED = new Set<string>([])
  * nothing over the course of TECH-14; never grows.
  */
 const PENDING_MIGRATION = new Set<string>([
-  'deck.create',
-  'deck.delete',
   'deck.feed',
   'deck.get',
-  'deck.import',
   'deck.list',
-  'deck.transferOwnership',
-  'deck.vote',
-  'project.create',
-  'project.delete',
   'project.get',
-  'project.list',
-  'project.transferOwnership',
-  'seedAsset.delete',
-  'seedAsset.list',
-  'seedAsset.update',
   'social.search',
-  'system.echo',
-  'template.delete',
-  'template.duplicate',
-  'template.export',
-  'template.get',
-  'template.list',
-  'template.previewImage',
-  'template.update',
 ])
 
 const registered = () => listActions().filter(a => a.name !== 'test.hooks')
@@ -208,12 +208,5 @@ describe('access registry (TECH-14)', () => {
       expect(custom.reason.length).toBeGreaterThan(0)
       expect(CUSTOM_ALLOWED.has(action.name)).toBe(true)
     }
-  })
-
-  it('never declares both the policy and the legacy hook', () => {
-    const both = registered()
-      .filter(a => a.access && a.authorize)
-      .map(a => a.name)
-    expect(both).toEqual([])
   })
 })

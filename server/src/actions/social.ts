@@ -20,14 +20,17 @@ import {
   type VoteResult,
 } from '@slide-machine/shared'
 import { defineAction } from './define'
+import { deckViewer, type DeckAccess } from './access'
+
+/** Voting is a reader's act, so anyone who may see the lecture may vote. */
+const viewerOf = deckViewer((input: { deckId: string }) => input.deckId)
 import { registerAction, ActionForbiddenError } from './dispatch'
 import type { ActionContext } from './context'
-import { DeckModel, loadDeckAcl, type DeckDb } from '../models/deck'
+import { DeckModel, type DeckDb } from '../models/deck'
 import { ProjectModel } from '../models/project'
 import { SlideModel } from '../models/slide'
 import { UserModel } from '../models/user'
 import { VoteModel, voteBreakdown, voteBreakdowns } from '../models/vote'
-import { canViewAcl } from '../lib/access'
 
 /** Shared paging input for every browsable list (SOC-2): which order, and which
  * slice of it. `limit` is capped so one request cannot ask for everything. */
@@ -49,20 +52,16 @@ const requireUser = (ctx: ActionContext): string => {
  */
 export const deckVote = defineAction<
   { deckId: string; value: 1 | -1 | 0 },
-  VoteResult
+  VoteResult,
+  DeckAccess
 >({
   name: 'deck.vote',
+  access: viewerOf,
   input: z.object({
     deckId: z.string().min(1),
     value: z.union([z.literal(1), z.literal(-1), z.literal(0)]),
   }),
-  execute: async (ctx, input) => {
-    const userId = requireUser(ctx)
-    const deck = await DeckModel.findById(input.deckId).catch(() => null)
-    if (!deck) throw new ActionForbiddenError()
-    const acl = await loadDeckAcl(deck)
-    if (!canViewAcl(acl, userId)) throw new ActionForbiddenError()
-
+  execute: async (ctx, input, { userId, deck }) => {
     const key = {
       userId: new Types.ObjectId(userId),
       targetType: 'deck' as const,

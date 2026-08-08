@@ -40,15 +40,16 @@ describe('dispatch', () => {
     )
   })
 
-  it('runs authorize and meter hooks before execute', async () => {
+  it('runs the access policy and meter hook before execute', async () => {
     const calls: string[] = []
     registerAction(
       defineAction({
         name: 'test.hooks',
         input: z.object({}),
-        authorize: async () => {
-          calls.push('authorize')
-        },
+        access: definePolicy({ resource: 'none', level: 'open' }, async () => {
+          calls.push('access')
+          return undefined
+        }),
         meter: async () => {
           calls.push('meter')
         },
@@ -59,7 +60,7 @@ describe('dispatch', () => {
       }),
     )
     await dispatch('test.hooks', {}, ctx)
-    expect(calls).toEqual(['authorize', 'meter', 'execute'])
+    expect(calls).toEqual(['access', 'meter', 'execute'])
   })
 
   // The ordering TECH-14 exists to fix. With the check inside execute, an

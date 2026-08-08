@@ -107,11 +107,7 @@ export const dispatch = async <O = unknown>(
   // to the resource must be refused, not told their plan is exhausted — and
   // whatever the policy loaded to decide is handed to execute, so the action
   // does not fetch it a second time.
-  const access = action.access
-    ? await action.access.authorize(ctx, parsed.data)
-    : // Legacy hook, on its way out; the actions still using it check access
-      // inside execute, where meter's answer can beat it.
-      await action.authorize?.(ctx, parsed.data)
+  const access = await action.access?.authorize(ctx, parsed.data)
   await action.meter?.(ctx, parsed.data)
 
   // Everything the action does — including provider calls several layers down —
@@ -161,9 +157,7 @@ export const runAction = async <I, O, R>(
       parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`),
     )
   }
-  const access = action.access
-    ? await action.access.authorize(ctx, parsed.data)
-    : ((await action.authorize?.(ctx, parsed.data)) as R)
+  const access = (await action.access?.authorize(ctx, parsed.data)) as R
   if (options.meter !== false) await action.meter?.(ctx, parsed.data)
 
   const run = () => action.execute(ctx, parsed.data, access)

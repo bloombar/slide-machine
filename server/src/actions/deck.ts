@@ -47,9 +47,12 @@ import type { HydratedDocument, Types } from 'mongoose'
 import { defineAction } from './define'
 import {
   deckEditor,
+  deckOwner,
   deckSettings,
+  projectOwner,
   type DeckAccess,
   type DeckSettingsAccess,
+  type ProjectAccess,
 } from './access'
 import { requireAiTokens } from '../billing/meter-hooks'
 import {
@@ -239,17 +242,9 @@ const byDeckId = deckEditor((input: { deckId: string }) => input.deckId)
  * overriding the ACL, whose edit is then audited (ADMIN-5). */
 const settingsOf = deckSettings((input: { deckId: string }) => input.deckId)
 
-/** Loads a deck the acting user owns, or throws (no existence leaks). */
-const loadOwnedDeck = async (
-  ctx: ActionContext,
-  deckId: string,
-): Promise<HydratedDocument<DeckDb>> => {
-  const userId = requireUser(ctx)
-  const deck = await DeckModel.findById(deckId).catch(() => null)
-  if (!deck || deck.ownerId.toString() !== userId)
-    throw new ActionForbiddenError()
-  return deck
-}
+/** Owner-only, deliberately stricter than the content gate: deleting a
+ * lecture or handing it on is not something an editor may do. */
+const ownerOf = deckOwner((input: { deckId: string }) => input.deckId)
 
 /**
  * Loads a deck the acting user may edit — the owner or an editor,
@@ -274,25 +269,19 @@ export const loadEditableDeck = async (
   return { deck, acl }
 }
 
-export const deckCreate = defineAction<DeckCreateInput, Deck>({
+export const deckCreate = defineAction<DeckCreateInput, Deck, ProjectAccess>({
   name: 'deck.create',
   input: z.object({
     projectId: z.string().min(1),
     // Untitled lectures are fine; the UI labels them "Untitled lecture"
     title: z.string().trim().default(''),
   }),
-  authorize: async (ctx, input) => {
-    const userId = requireUser(ctx)
-    const project = await ProjectModel.findById(input.projectId).catch(
-      () => null,
-    )
-    if (!project || project.ownerId.toString() !== userId)
-      throw new ActionForbiddenError()
-  },
-  execute: async (ctx, input) => {
+  // The lecture does not exist yet, so what is authorized is the project it
+  // is being created in — owner only, as it has always been.
+  access: projectOwner((input: { projectId: string }) => input.projectId),
+  execute: async (ctx, input, { project }) => {
     // The project's template is the creation-time default; the lecture
     // stores its own copy and can switch independently afterwards
-    const project = await ProjectModel.findById(input.projectId)
     const templateId = (await templateExists(project?.templateId ?? ''))
       ? project!.templateId
       : defaultTemplateId()
@@ -1551,12 +1540,15 @@ export const deckShares = defineAction<
     withDeckSettingsAudit(access, async (_deck, acl) => sharesOf(acl)),
 })
 
-export const deckDelete = defineAction<DeckDeleteInput, { deleted: true }>({
+export const deckDelete = defineAction<
+  DeckDeleteInput,
+  { deleted: true },
+  DeckAccess
+>({
   name: 'deck.delete',
+  access: ownerOf,
   input: z.object({ deckId: z.string().min(1) }),
-  execute: async (ctx, input) => {
-    const deck = await loadOwnedDeck(ctx, input.deckId)
-
+  execute: async (ctx, input, { deck }) => {
     // Cascade: slides, lecture-level seed assets (and their stored
     // files), transcripts, refine jobs, retained recordings, then the
     // deck itself
@@ -1567,16 +1559,16 @@ export const deckDelete = defineAction<DeckDeleteInput, { deleted: true }>({
 
 export const deckTransferOwnership = defineAction<
   DeckTransferOwnershipInput,
-  Deck
+  Deck,
+  DeckAccess
 >({
   name: 'deck.transferOwnership',
+  access: ownerOf,
   input: z.object({
     deckId: z.string().min(1),
     userId: z.string().min(1),
   }),
-  execute: async (ctx, input) => {
-    const userId = requireUser(ctx)
-    const deck = await loadOwnedDeck(ctx, input.deckId)
+  execute: async (ctx, input, { userId, deck }) => {
     const target = await UserModel.findById(input.userId).catch(() => null)
     if (!target) {
       throw new ActionValidationError('deck.transferOwnership', [
