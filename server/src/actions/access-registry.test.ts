@@ -33,6 +33,19 @@ import type { AccessDescriptor } from './access/policy'
  * each against the policy the action actually declares.
  */
 const ACCESS_INDEX: Record<string, AccessDescriptor> = {
+  'billing.change': { resource: 'self', level: 'self' },
+  'billing.changePreview': { resource: 'self', level: 'self' },
+  'billing.checkout': { resource: 'self', level: 'self' },
+  'billing.plans': { resource: 'none', level: 'open' },
+  'billing.portal': { resource: 'self', level: 'self' },
+  'billing.summary': { resource: 'self', level: 'self' },
+  'user.deleteAccount': { resource: 'self', level: 'self' },
+  'user.setCapWarnings': { resource: 'self', level: 'self' },
+  'user.setLanguage': { resource: 'self', level: 'self' },
+  'user.setLocale': { resource: 'self', level: 'self' },
+  'user.setProfileVisibility': { resource: 'self', level: 'self' },
+  'user.updateProfile': { resource: 'self', level: 'self' },
+  'user.usage': { resource: 'self', level: 'self' },
   'export.delete': { resource: 'deck', level: 'edit' },
   'export.download': { resource: 'deck', level: 'edit' },
   'export.status': { resource: 'deck', level: 'edit' },
@@ -98,12 +111,6 @@ const CUSTOM_ALLOWED = new Set<string>([])
  * nothing over the course of TECH-14; never grows.
  */
 const PENDING_MIGRATION = new Set<string>([
-  'billing.change',
-  'billing.changePreview',
-  'billing.checkout',
-  'billing.plans',
-  'billing.portal',
-  'billing.summary',
   'deck.create',
   'deck.delete',
   'deck.feed',
@@ -147,13 +154,6 @@ const PENDING_MIGRATION = new Set<string>([
   'template.list',
   'template.previewImage',
   'template.update',
-  'user.deleteAccount',
-  'user.setCapWarnings',
-  'user.setLanguage',
-  'user.setLocale',
-  'user.setProfileVisibility',
-  'user.updateProfile',
-  'user.usage',
 ])
 
 const registered = () => listActions().filter(a => a.name !== 'test.hooks')

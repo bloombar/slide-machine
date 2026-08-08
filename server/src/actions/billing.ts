@@ -27,8 +27,8 @@ import type {
 } from '@slide-machine/shared'
 import { PLAN_TIERS } from '@slide-machine/shared'
 import { defineAction } from './define'
-import { registerAction, ActionForbiddenError } from './dispatch'
-import { UserModel } from '../models/user'
+import { open, self, type SelfAccess } from './access'
+import { registerAction } from './dispatch'
 import { billingRegistry } from '../billing/registry'
 import { BillingUnavailableError } from '../billing/errors'
 import {
@@ -56,14 +56,6 @@ const returnPath = z
 /** Where the Plan view lives, and so where checkout and the portal return. */
 const DEFAULT_RETURN_PATH = '/app/settings?tab=plan'
 
-/** The signed-in account, or a refusal. */
-const loadSelf = async (userId: string | undefined) => {
-  if (!userId) throw new ActionForbiddenError('Sign in to continue')
-  const user = await UserModel.findById(userId)
-  if (!user) throw new ActionForbiddenError()
-  return user
-}
-
 /**
  * Absolute URL for an in-app path, optionally carrying an outcome parameter,
  * or a refusal when the deployment has not been told what origin it is served
@@ -89,12 +81,13 @@ const returnUrl = (
 /** The account's plan and subscription state (BILL-2). Read-only. */
 export const billingGetSummary = defineAction<
   Record<string, never>,
-  BillingSummary
+  BillingSummary,
+  SelfAccess
 >({
   name: 'billing.summary',
+  access: self(),
   input: z.object({}).strict(),
-  execute: async ctx => {
-    const user = await loadSelf(ctx.userId)
+  execute: async (_ctx, _input, { user }) => {
     return billingSummary(user._id.toString(), user)
   },
 })
@@ -110,6 +103,9 @@ registerAction(billingGetSummary)
 export const billingGetPlans = defineAction<Record<string, never>, PlanCatalog>(
   {
     name: 'billing.plans',
+    // The published price list: the same for everyone, and it loads no
+    // account, so there is nothing further to decide.
+    access: open(),
     input: z.object({}).strict(),
     execute: () => planCatalog(),
   },
@@ -125,17 +121,18 @@ registerAction(billingGetPlans)
  */
 export const billingCheckout = defineAction<
   BillingCheckoutInput,
-  BillingRedirect
+  BillingRedirect,
+  SelfAccess
 >({
   name: 'billing.checkout',
+  access: self(),
   input: z
     .object({
       tier: z.enum(PLAN_TIERS),
       returnPath,
     })
     .strict(),
-  execute: async (ctx, input) => {
-    const user = await loadSelf(ctx.userId)
+  execute: async (ctx, input, { user }) => {
     // A tier with no price is not for sale — the free tier by definition, or
     // one this deployment has not finished configuring (BILL-6).
     if (!purchasableTiers().includes(input.tier)) {
@@ -173,12 +170,13 @@ registerAction(billingCheckout)
  */
 export const billingChangePreview = defineAction<
   PlanChangeInput,
-  PlanChangeImpact
+  PlanChangeImpact,
+  SelfAccess
 >({
   name: 'billing.changePreview',
+  access: self(),
   input: z.object({ tier: z.enum(PLAN_TIERS) }).strict(),
-  execute: async (ctx, input) => {
-    const user = await loadSelf(ctx.userId)
+  execute: async (ctx, input, { user }) => {
     return planChangeImpact(user._id.toString(), user.planTier, input.tier)
   },
 })
@@ -196,11 +194,15 @@ registerAction(billingChangePreview)
  * waited for — the webhook saying the same thing may arrive after the page has
  * already re-read the plan.
  */
-export const billingChange = defineAction<PlanChangeInput, PlanChangeResult>({
+export const billingChange = defineAction<
+  PlanChangeInput,
+  PlanChangeResult,
+  SelfAccess
+>({
   name: 'billing.change',
+  access: self(),
   input: z.object({ tier: z.enum(PLAN_TIERS) }).strict(),
-  execute: async (ctx, input) => {
-    const user = await loadSelf(ctx.userId)
+  execute: async (ctx, input, { user }) => {
     const userId = user._id.toString()
     const impact = await planChangeImpact(userId, user.planTier, input.tier)
     if (!impact.changeable) {
@@ -261,11 +263,15 @@ registerAction(billingChange)
  * reads invoices, and cancels (BILL-2/BILL-5). Requires a customer reference,
  * which only exists once the account has been through checkout.
  */
-export const billingPortal = defineAction<BillingPortalInput, BillingRedirect>({
+export const billingPortal = defineAction<
+  BillingPortalInput,
+  BillingRedirect,
+  SelfAccess
+>({
   name: 'billing.portal',
+  access: self(),
   input: z.object({ returnPath }).strict(),
-  execute: async (ctx, input) => {
-    const user = await loadSelf(ctx.userId)
+  execute: async (ctx, input, { user }) => {
     const billingCustomerId = await billingCustomerIdFor(user._id.toString())
     if (!billingCustomerId) {
       throw new BillingUnavailableError(
