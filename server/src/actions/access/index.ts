@@ -35,6 +35,7 @@ export {
 export { self, signedIn, open, custom } from './self'
 export {
   isConnected,
+  type GoogleSurface,
   withGoogleAccount,
   requiresGoogleDrive,
   alsoRequires,

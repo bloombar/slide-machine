@@ -48,7 +48,13 @@ import { permalinkSlug } from '../lib/slug'
 import { templateToYaml } from '../lib/template-yaml'
 import { createGoogleSlidesFromTemplateLive } from '../lib/export-google'
 import { decryptToken } from '../lib/token-crypto'
-import { isConnected, isLive } from './export'
+import {
+  requiresGoogleDrive,
+  templateReadable,
+  type TemplateAccess,
+  type WithGoogle,
+} from './access'
+import { isLive } from '../lib/export-mode'
 import { requireExports } from '../billing/meter-hooks'
 import { previewImageUrls } from '../enrichment/preview-images'
 
@@ -355,27 +361,25 @@ export const templatePreviewImage = defineAction<
  */
 export const templateExportToDrive = defineAction<
   { templateId: string; driveFolderId: string; driveFolderName?: string },
-  ExportToDriveResult
+  ExportToDriveResult,
+  WithGoogle<TemplateAccess>
 >({
   name: 'template.exportToDrive',
+  // Two requirements, and the order matters: the design must be one the
+  // caller may read before the account is asked for a Google connection.
+  // A built-in is exportable too — taking a shipped design into Drive to
+  // build on is the same act as taking one you wrote.
+  access: requiresGoogleDrive(
+    templateReadable((input: { templateId: string }) => input.templateId),
+    'export',
+  ),
   meter: requireExports,
   input: z.object({
     templateId: z.string().min(1),
     driveFolderId: z.string().min(1),
     driveFolderName: z.string().optional(),
   }),
-  execute: async (ctx, input) => {
-    const userId = requireUser(ctx)
-    const user = await UserModel.findById(userId).select(
-      '+googleQuizRefreshToken',
-    )
-    if (!user || !isConnected(user)) {
-      throw new ActionForbiddenError('Connect a Google account first')
-    }
-    // A built-in is exportable too: taking a shipped design into Drive to
-    // build on is the same act as taking one you wrote. Someone else's
-    // private design is not.
-    const template = await loadReadable(userId, input.templateId)
+  execute: async (ctx, input, { template, googleUser: user }) => {
     const name = template.name.trim() || 'Untitled design'
 
     let fileId: string

@@ -12,24 +12,15 @@
  * to connect an account they were never going to be allowed to use.
  */
 import { UserModel } from '../../models/user'
-import { isLive } from '../export'
+import { isConnected, type GoogleSurface } from '../../lib/google-connection'
 import { requireVerifiedEmail } from '../../auth/verified'
 import { CapabilityRequiredError } from '../dispatch'
 import { definePolicy, type AccessPolicy } from './policy'
 import type { WithGoogle } from './types'
 
-/**
- * Whether the account can reach Google Drive. In live mode this needs a
- * stored refresh token — the mock-mode `googleConnected` flag must NOT count
- * once switched to live, or publishing fails with no real grant behind it.
- */
-export const isConnected = (user: {
-  googleConnected?: boolean
-  googleQuizRefreshToken?: string
-}): boolean =>
-  isLive()
-    ? Boolean(user.googleQuizRefreshToken)
-    : Boolean(user.googleConnected)
+// The connection predicate itself is a pure function over env and lives in
+// lib/google-connection.ts; re-exported so callers keep one import.
+export { isConnected, type GoogleSurface }
 
 /** The acting account with its encrypted Google token, or a refusal. */
 const loadGoogleUser = async (userId: string) => {
@@ -47,9 +38,9 @@ const loadGoogleUser = async (userId: string) => {
  * connection — for actions that report whether one exists (quiz.status,
  * export.status) rather than needing one.
  */
-export const withGoogleAccount = <I, R>(
-  policy: AccessPolicy<I, R & { userId: string }>,
-): AccessPolicy<I, WithGoogle<R & { userId: string }>> =>
+export const withGoogleAccount = <I, R extends { userId: string }>(
+  policy: AccessPolicy<I, R>,
+): AccessPolicy<I, WithGoogle<R>> =>
   definePolicy(policy.descriptor, async (ctx, input) => {
     const access = await policy.authorize(ctx, input)
     return { ...access, googleUser: await loadGoogleUser(access.userId) }
@@ -63,15 +54,16 @@ export const withGoogleAccount = <I, R>(
  * — so a client could not tell "not your lecture" from "connect an account"
  * without reading the prose.
  */
-export const requiresGoogleDrive = <I, R>(
-  policy: AccessPolicy<I, R & { userId: string }>,
-): AccessPolicy<I, WithGoogle<R & { userId: string }>> =>
+export const requiresGoogleDrive = <I, R extends { userId: string }>(
+  policy: AccessPolicy<I, R>,
+  surface: GoogleSurface,
+): AccessPolicy<I, WithGoogle<R>> =>
   definePolicy(
     { ...policy.descriptor, capabilities: ['google-drive'] },
     async (ctx, input) => {
       const access = await policy.authorize(ctx, input)
       const googleUser = await loadGoogleUser(access.userId)
-      if (!isConnected(googleUser)) {
+      if (!isConnected(googleUser, surface)) {
         throw new CapabilityRequiredError('google-drive')
       }
       return { ...access, googleUser }
