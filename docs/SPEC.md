@@ -1113,8 +1113,9 @@ Every action here **asks for confirmation and writes an audit-log entry** ([ADMI
 
 #### ADMIN-6 Viewing soft-deleted content
 
-- Soft-deleted records are hidden from all normal reads ([P-10](#16-privacy-security--compliance)), but an admin can **view soft-deleted entities** (users, projects, lectures, and other owned records) in the console — for recovery or audit — until the retention sweep purges them ([P-11](#16-privacy-security--compliance)).
-- **Every access to soft-deleted content is audited** ([ADMIN-7](#admin-7-audit-log)).
+- Soft-deleted records are hidden from all normal reads ([P-10](#16-privacy-security--compliance)), but an admin can **view soft-deleted entities** (users, projects, lectures, and other owned records) — for recovery or audit — until the retention sweep purges them ([P-11](#16-privacy-security--compliance)).
+- This holds **in the console and in the product itself**: a tombstoned lecture opens in the deck viewer, a tombstoned project in the product project view, and a tombstoned account's profile on its profile page, on the same allowlist authority that opens private content ([ADMIN-3](#admin-3-viewing-user-content--seed-material)). A tombstoned record reads **as its owner last left it** — the children deleted along with it, and only those, exactly what a restore would bring back. It is **read-only**: the moderation and settings endpoints still refuse a tombstoned target, which is restored rather than edited.
+- **Every access to soft-deleted content is audited** ([ADMIN-7](#admin-7-audit-log)), the way an admin's view of private content is, and opening one from the console is **confirmed** first. The audit entry is written by the **read that serves the content**, not by the client that asked for it, so arriving at a tombstoned record by any route is recorded.
 
 #### ADMIN-7 Audit log
 

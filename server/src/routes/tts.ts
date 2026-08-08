@@ -77,11 +77,26 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
     )
   }
 
-  const slide = await SlideModel.findById(slideId).catch(() => null)
-  if (!slide) throw new HttpError(404, 'not_found', 'Slide not found')
-  const deck = await DeckModel.findById(slide.deckId).catch(() => null)
+  // Admins may open a soft-deleted lecture in the viewer (ADMIN-6), so its
+  // narration has to resolve too — otherwise the lecture is half-readable.
+  // Only a miss pays for the admin check, so the ordinary play stays one
+  // lookup. The opening is audited by the view that got the admin here; a
+  // play is not a second opening.
+  let admin = false
+  let slide = await SlideModel.findById(slideId).catch(() => null)
+  if (!slide) {
+    admin = await isAllowlistedAdmin(req.userId)
+    if (!admin) throw new HttpError(404, 'not_found', 'Slide not found')
+    slide = await SlideModel.findById(slideId)
+      .setOptions({ withDeleted: true })
+      .catch(() => null)
+    if (!slide) throw new HttpError(404, 'not_found', 'Slide not found')
+  }
+  const deck = await DeckModel.findById(slide.deckId)
+    .setOptions({ withDeleted: admin })
+    .catch(() => null)
   if (!deck) throw new HttpError(403, 'forbidden', 'Not allowed')
-  const acl = await loadDeckAcl(deck)
+  const acl = await loadDeckAcl(deck, { withDeleted: admin })
   // Speaking supplied words is an edit-side preview, so it takes edit rights —
   // no admin/view bypass. Everything else is part of viewing the lecture.
   if (supplied !== null) {
@@ -91,7 +106,7 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
   } else if (!canViewAcl(acl, req.userId)) {
     // Narration is part of viewing: admins may always listen, matching
     // the viewer bypass in routes/decks.ts
-    if (!(await isAllowlistedAdmin(req.userId))) {
+    if (!admin && !(await isAllowlistedAdmin(req.userId))) {
       throw new HttpError(403, 'forbidden', 'Not allowed')
     }
   }

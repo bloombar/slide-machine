@@ -53,6 +53,7 @@ import {
 import { BannedEmailModel, isEmailBanned } from '../models/banned-email'
 import { csvRow } from '../audit/csv'
 import { logAdminAction } from '../audit/log'
+import { logDeletedView as logAdminDeletedView } from '../lib/admin-view'
 import {
   deleteDeckCascade,
   deleteProjectCascade,
@@ -541,31 +542,20 @@ const seen = { withDeleted: true } as const
 
 /**
  * Records that an admin opened a soft-deleted record in the console — one
- * entry per opening, as ADMIN-6 requires every access to soft-deleted
- * content to be audited. Unlike the private-view log, this is written by
- * the read itself rather than by a POST the client volunteers: the deleted
- * content is in the response, so the audit trail must not depend on the
- * caller reporting it. A live record logs nothing, and only the primary
- * detail reads call this — the directories merely badge their rows, and
- * logging every page of them would bury the log.
+ * entry per opening, on the shared writer the product's own view paths use
+ * (lib/admin-view.ts), so a tombstone opened here and one opened in the
+ * viewer read the same way in the log. A live record logs nothing, and only
+ * the primary detail reads call this: the directories merely badge their
+ * rows, and logging every page of them would bury the log.
  */
-const logDeletedView = async (
+const logDeletedView = (
   req: { adminUser?: { id: string; email: string } },
   action: AdminAction,
   targetType: string,
   targetId: string,
   details: Record<string, unknown>,
-): Promise<void> => {
-  const admin = actor(req)
-  await logAdminAction({
-    actorId: admin.id,
-    actorEmail: admin.email,
-    action,
-    targetType,
-    targetId,
-    details,
-  })
-}
+): Promise<void> =>
+  logAdminDeletedView(actor(req), action, targetType, targetId, details)
 
 export const adminRouter = Router()
 adminRouter.use(requireAuth, requireAdmin)
