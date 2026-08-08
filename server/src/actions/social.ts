@@ -20,7 +20,7 @@ import {
   type VoteResult,
 } from '@slide-machine/shared'
 import { defineAction } from './define'
-import { deckViewer, type DeckAccess } from './access'
+import { custom, deckViewer, type DeckAccess, type Signed } from './access'
 
 /** Voting is a reader's act, so anyone who may see the lecture may vote. */
 const viewerOf = deckViewer((input: { deckId: string }) => input.deckId)
@@ -197,9 +197,15 @@ const pageOfDecks = async (
  */
 export const deckFeed = defineAction<
   { sort: FeedSort; offset: number; limit: number },
-  DeckFeedResponse
+  DeckFeedResponse,
+  Signed
 >({
   name: 'deck.feed',
+  // Nothing is fetched to decide: publicDeckFilter matches only lectures
+  // whose access already makes them public, and excludes the caller's own.
+  access: custom(
+    'the Mongo filter IS the authorization — publicDeckFilter reimplements deck ACL resolution at query level, so there is no single resource to resolve',
+  ),
   input: z.object(pagingInput),
   execute: async (ctx, input) => {
     const userId = requireUser(ctx)
@@ -303,9 +309,15 @@ const authorCandidates = async (
  */
 export const socialSearch = defineAction<
   { q: string; sort: FeedSort; offset: number; limit: number },
-  SearchResults
+  SearchResults,
+  Signed
 >({
   name: 'social.search',
+  // Nothing is fetched to decide: publicDeckFilter matches only lectures
+  // whose access already makes them public, and excludes the caller's own.
+  access: custom(
+    'the Mongo filter IS the authorization — the same publicDeckFilter, applied to a search rather than a listing',
+  ),
   input: z.object({
     q: z.string().trim().min(1).max(100),
     ...pagingInput,

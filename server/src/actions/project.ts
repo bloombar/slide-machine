@@ -44,6 +44,7 @@ import {
 } from '../lib/admin-view'
 import { withProjectSettingsAudit } from '../lib/admin-edit'
 import {
+  custom,
   projectOwner,
   projectSettings,
   signedIn,
@@ -168,8 +169,17 @@ const loadReadableProject = async (
   return { doc, deletedFor }
 }
 
-export const projectGet = defineAction<{ projectId: string }, Project>({
+export const projectGet = defineAction<{ projectId: string }, Project, Signed>({
   name: 'project.get',
+  // Admission and response shape are one decision here: a member reads the
+  // project in full, an allowlisted admin does too (and a TOMBSTONED one,
+  // whose opening is audited — ADMIN-6), a stranger reads a public project
+  // in its shareable shape with prep notes and people lists stripped, and
+  // anyone else is refused. No single level says 'readable, at one of
+  // several fidelities'.
+  access: custom(
+    'admission and response fidelity are the same decision — member, admin and public reader each get a different shape, and opening a deleted project is audited (ADMIN-6)',
+  ),
   input: z.object({ projectId: z.string().min(1) }),
   execute: async (ctx, input) => {
     const userId = requireUser(ctx)

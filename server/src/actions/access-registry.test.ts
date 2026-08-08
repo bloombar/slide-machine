@@ -29,10 +29,50 @@ import { listActions } from './dispatch'
 import type { AccessDescriptor } from './access/policy'
 
 /**
+ * Actions whose access rule is genuinely not one resource at one level, and
+ * why. Four of eighty-six. Each is a decision somebody wrote down rather than
+ * an action nobody got to: the reason is required, published here, and a new
+ * name cannot join without editing this list.
+ */
+const REASONS: Record<string, string> = {
+  'deck.list':
+    'admission differs by whether a project is named, and an admin may list a deleted project’s lectures (ADMIN-6); a per-row filter then decides what is returned',
+  'project.get':
+    'admission and response fidelity are the same decision — member, admin and public reader each get a different shape, and opening a deleted project is audited (ADMIN-6)',
+  'deck.feed':
+    'the Mongo filter IS the authorization — publicDeckFilter reimplements deck ACL resolution at query level, so there is no single resource to resolve',
+  'social.search':
+    'the Mongo filter IS the authorization — the same publicDeckFilter, applied to a search rather than a listing',
+}
+
+const CUSTOM_ALLOWED = new Set<string>(Object.keys(REASONS))
+
+/**
  * How every migrated action is guarded. One row per action; the test pins
  * each against the policy the action actually declares.
  */
 const ACCESS_INDEX: Record<string, AccessDescriptor> = {
+  'deck.feed': {
+    resource: 'none',
+    level: 'open',
+    custom: { reason: REASONS['deck.feed'] },
+  },
+  'deck.get': { resource: 'deck', level: 'view' },
+  'deck.list': {
+    resource: 'none',
+    level: 'open',
+    custom: { reason: REASONS['deck.list'] },
+  },
+  'project.get': {
+    resource: 'none',
+    level: 'open',
+    custom: { reason: REASONS['project.get'] },
+  },
+  'social.search': {
+    resource: 'none',
+    level: 'open',
+    custom: { reason: REASONS['social.search'] },
+  },
   'deck.create': { resource: 'project', level: 'own' },
   'deck.delete': { resource: 'deck', level: 'own' },
   'deck.import': { resource: 'project', level: 'own' },
@@ -141,20 +181,12 @@ const ACCESS_INDEX: Record<string, AccessDescriptor> = {
   'slide.setLayout': { resource: 'slide', level: 'edit' },
 }
 
-/** Actions whose access rule is not one resource at one level. */
-const CUSTOM_ALLOWED = new Set<string>([])
-
 /**
- * Not yet migrated — still checking access inside `execute`. Shrinks to
- * nothing over the course of TECH-14; never grows.
+ * Empty: every registered action declares its access. Kept as a named
+ * constant so the assertions below still read as a ratchet — an action added
+ * without a policy has nowhere to hide.
  */
-const PENDING_MIGRATION = new Set<string>([
-  'deck.feed',
-  'deck.get',
-  'deck.list',
-  'project.get',
-  'social.search',
-])
+const PENDING_MIGRATION = new Set<string>([])
 
 const registered = () => listActions().filter(a => a.name !== 'test.hooks')
 

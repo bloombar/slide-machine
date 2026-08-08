@@ -46,13 +46,16 @@ import {
 import type { HydratedDocument, Types } from 'mongoose'
 import { defineAction } from './define'
 import {
+  custom,
   deckEditor,
   deckOwner,
   deckSettings,
+  deckViewer,
   projectOwner,
   type DeckAccess,
   type DeckSettingsAccess,
   type ProjectAccess,
+  type Signed,
 } from './access'
 import { requireAiTokens } from '../billing/meter-hooks'
 import {
@@ -246,6 +249,9 @@ const settingsOf = deckSettings((input: { deckId: string }) => input.deckId)
  * lecture or handing it on is not something an editor may do. */
 const ownerOf = deckOwner((input: { deckId: string }) => input.deckId)
 
+/** Anyone who may read the lecture — public counts. */
+const viewerOf = deckViewer((input: { deckId: string }) => input.deckId)
+
 /**
  * Loads a deck the acting user may edit — the owner or an editor,
  * whether granted on the lecture itself or inherited from its project.
@@ -301,8 +307,17 @@ export const deckCreate = defineAction<DeckCreateInput, Deck, ProjectAccess>({
   },
 })
 
-export const deckList = defineAction<DeckListInput, Deck[]>({
+export const deckList = defineAction<DeckListInput, Deck[], Signed>({
   name: 'deck.list',
+  // Two admission models in one action, and no single resource to resolve:
+  // with a project id it admits a member, an allowlisted admin (including
+  // for a TOMBSTONED project, whose lectures went down with it — ADMIN-6),
+  // or anyone when the project is public; without one it lists only the
+  // caller's own, where the query is the check. A per-row ACL filter then
+  // decides what comes back, which no single level describes.
+  access: custom(
+    'admission differs by whether a project is named, and an admin may list a deleted project’s lectures (ADMIN-6); a per-row filter then decides what is returned',
+  ),
   input: z.object({ projectId: z.string().min(1).optional() }),
   execute: async (ctx, input) => {
     const userId = requireUser(ctx)
@@ -358,52 +373,58 @@ export const deckList = defineAction<DeckListInput, Deck[]>({
   },
 })
 
-export const deckGet = defineAction<DeckGetInput, DeckViewResponse>({
-  name: 'deck.get',
-  input: z.object({ deckId: z.string().min(1) }),
-  execute: async (ctx, input) => {
-    const userId = requireUser(ctx)
-    const deck = await DeckModel.findById(input.deckId).catch(() => null)
-    if (!deck) throw new ActionForbiddenError()
-    const acl = await loadDeckAcl(deck)
-    if (!canViewAcl(acl, userId)) throw new ActionForbiddenError()
-    const template = await resolveDeckTemplateForRead(deck)
-    if (!template)
-      throw new ActionValidationError('deck.get', ['template no longer exists'])
-    const slides = await SlideModel.find({ deckId: deck._id }).sort({
-      index: 1,
-    })
-    const isOwner = acl.ownerId === userId
-    const project = await ProjectModel.findById(deck.projectId).catch(
-      () => null,
-    )
-    const owner = await UserModel.findById(deck.ownerId)
-      .select('displayName')
-      .catch(() => null)
-    const myVote: MyVote =
-      (
-        await VoteModel.findOne({
-          userId,
-          targetType: 'deck',
-          targetId: deck._id,
-        })
-      )?.value ?? 0
-    const { up: voteUp, down: voteDown } = await voteBreakdown('deck', deck._id)
-    return {
-      deck: isOwner ? toDeckDto(deck, acl) : toSharedDeckDto(deck, acl),
-      slides: slides.map(toSlideDto),
-      template,
-      canEdit: canEditAcl(acl, userId),
-      projectGenerationFreedom:
-        project?.generationFreedom ?? env.GENERATION_FREEDOM,
-      owner: { id: acl.ownerId, displayName: owner?.displayName ?? '' },
-      project: { id: deck.projectId.toString(), title: project?.title ?? '' },
-      myVote,
-      voteUp,
-      voteDown,
-    }
+export const deckGet = defineAction<DeckGetInput, DeckViewResponse, DeckAccess>(
+  {
+    name: 'deck.get',
+    // Anyone who may read the lecture. Which SHAPE they get back — the owner's
+    // full view or the shared one — is not an access decision and stays below,
+    // reading the ACL this already resolved rather than loading it again.
+    access: viewerOf,
+    input: z.object({ deckId: z.string().min(1) }),
+    execute: async (ctx, input, { userId, deck, acl }) => {
+      const template = await resolveDeckTemplateForRead(deck)
+      if (!template)
+        throw new ActionValidationError('deck.get', [
+          'template no longer exists',
+        ])
+      const slides = await SlideModel.find({ deckId: deck._id }).sort({
+        index: 1,
+      })
+      const isOwner = acl.ownerId === userId
+      const project = await ProjectModel.findById(deck.projectId).catch(
+        () => null,
+      )
+      const owner = await UserModel.findById(deck.ownerId)
+        .select('displayName')
+        .catch(() => null)
+      const myVote: MyVote =
+        (
+          await VoteModel.findOne({
+            userId,
+            targetType: 'deck',
+            targetId: deck._id,
+          })
+        )?.value ?? 0
+      const { up: voteUp, down: voteDown } = await voteBreakdown(
+        'deck',
+        deck._id,
+      )
+      return {
+        deck: isOwner ? toDeckDto(deck, acl) : toSharedDeckDto(deck, acl),
+        slides: slides.map(toSlideDto),
+        template,
+        canEdit: canEditAcl(acl, userId),
+        projectGenerationFreedom:
+          project?.generationFreedom ?? env.GENERATION_FREEDOM,
+        owner: { id: acl.ownerId, displayName: owner?.displayName ?? '' },
+        project: { id: deck.projectId.toString(), title: project?.title ?? '' },
+        myVote,
+        voteUp,
+        voteDown,
+      }
+    },
   },
-})
+)
 
 export const slideAdd = defineAction<SlideAddInput, Slide, DeckAccess>({
   name: 'slide.add',
