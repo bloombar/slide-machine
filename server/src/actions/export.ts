@@ -111,7 +111,7 @@ const slugifyTitle = (title: string): string =>
  * gone. The `exports` unit the caller counts is separate: one file produced is
  * one export, whether or not translating it cost anything.
  */
-const buildExportDeck = async (
+export const buildExportDeck = async (
   deck: HydratedDocument<DeckDb>,
   includeWhiteboard: boolean,
   locale?: Locale,

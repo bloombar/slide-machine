@@ -14,15 +14,38 @@ import { describe, it, expect } from 'vitest'
 import AdmZip from 'adm-zip'
 import type { Template } from '@slide-machine/shared'
 import { templateToPptx } from './template-pptx'
+import { parseSlotMetadata, slotFromToken } from './slot-metadata'
 
-/** The distinct XML parts of a kind inside the generated file. */
-const parts = (bytes: Uint8Array, pattern: RegExp): Set<string> =>
-  new Set(Buffer.from(bytes).toString('latin1').match(pattern) ?? [])
+/** The parts of a kind inside the generated file. A .pptx is a zip of
+ * compressed XML, so the parts are read rather than the bytes scanned. */
+const parts = (bytes: Uint8Array, pattern: RegExp): string[] =>
+  new AdmZip(Buffer.from(bytes))
+    .getEntries()
+    .filter(e => !e.isDirectory && pattern.test(e.entryName))
+    .map(e => e.entryName)
 
 /** The presentation's own layouts, the built-in blank one included. */
 const layouts = (bytes: Uint8Array) =>
-  parts(bytes, /slideLayouts\/slideLayout\d+\.xml/g)
-const slides = (bytes: Uint8Array) => parts(bytes, /slides\/slide\d+\.xml/g)
+  parts(bytes, /^ppt\/slideLayouts\/slideLayout\d+\.xml$/)
+const slides = (bytes: Uint8Array) =>
+  parts(bytes, /^ppt\/slides\/slide\d+\.xml$/)
+
+/** Every layout and slide part's XML, joined — for asking whether something
+ * the design states reached the file at all. */
+const allXml = (bytes: Uint8Array): string => {
+  const zip = new AdmZip(Buffer.from(bytes))
+  return zip
+    .getEntries()
+    .filter(
+      e =>
+        !e.isDirectory &&
+        /^ppt\/(slideLayouts|slides|slideMasters)\/[^/]+\.xml$/.test(
+          e.entryName,
+        ),
+    )
+    .map(e => e.getData().toString('utf8'))
+    .join('')
+}
 
 const layout = (
   type: string,
@@ -88,13 +111,13 @@ describe('a template exported as a presentation', () => {
     const bytes = await templateToPptx(template())
     // These are what Drive converts into native Slides layouts — the whole
     // mechanism by which an exported template is a template over there
-    expect(layouts(bytes).size).toBe(2 + 1)
+    expect(layouts(bytes).length).toBe(2 + 1)
   })
 
   it('shows each layout on a demonstration slide', async () => {
     const bytes = await templateToPptx(template())
     // A deck of invisible placeholders would be useless to open
-    expect(slides(bytes).size).toBe(2)
+    expect(slides(bytes).length).toBe(2)
   })
 
   it('leaves the whiteboard layout out (TMPL-7)', async () => {
@@ -106,14 +129,14 @@ describe('a template exported as a presentation', () => {
     )
     // It is an app-only blank slate with no design to carry, and is
     // re-synthesized on import
-    expect(layouts(withWhiteboard).size).toBe(layouts(without).size)
+    expect(layouts(withWhiteboard).length).toBe(layouts(without).length)
   })
 
   it('names each layout after itself, so Slides shows it', async () => {
     const bytes = await templateToPptx(
       template({ layouts: [layout('lab-safety', [{ name: 'title' }])] }),
     )
-    expect(Buffer.from(bytes).toString('latin1')).toContain('LAB-SAFETY')
+    expect(allXml(bytes)).toContain('LAB-SAFETY')
   })
 
   it('carries the author’s own words as each box’s prompt', async () => {
@@ -121,7 +144,7 @@ describe('a template exported as a presentation', () => {
     withLabels.layouts[1]!.slots[1]!.label = 'Worked example'
     const bytes = await templateToPptx(withLabels)
     // A layout explains itself in Slides rather than showing "Click to add"
-    expect(Buffer.from(bytes).toString('latin1')).toContain('Worked example')
+    expect(allXml(bytes)).toContain('Worked example')
   })
 
   it('still produces an openable file when nothing has geometry', async () => {
@@ -135,7 +158,7 @@ describe('a template exported as a presentation', () => {
     // Nothing measured is the normal case, not an error: the layout's own
     // tree says where its boxes go, and it still becomes a real layout
     expect(bytes[0]).toBe(0x50)
-    expect(layouts(bytes).size).toBe(1 + 1)
+    expect(layouts(bytes).length).toBe(1 + 1)
   })
 
   it('shows each box once on the demonstration slide', async () => {
@@ -172,7 +195,7 @@ describe('a template exported as a presentation', () => {
         },
       ] as Template['layouts'],
     })
-    const xml = Buffer.from(await templateToPptx(unmeasured)).toString('latin1')
+    const xml = allXml(await templateToPptx(unmeasured))
     // EMUs: a placeholder that was placed has a non-zero extent
     expect(xml).toMatch(/<a:ext cx="[1-9]\d{4,}" cy="[1-9]\d{4,}"\/>/)
   })
@@ -187,7 +210,7 @@ describe('a template exported as a presentation', () => {
         ] as Template['layouts'],
       }),
     )
-    expect(Buffer.from(bytes).toString('latin1')).toContain('0055FF')
+    expect(allXml(bytes)).toContain('0055FF')
   })
 
   it('sets a title at title size rather than body size', async () => {
@@ -199,7 +222,7 @@ describe('a template exported as a presentation', () => {
       }),
     )
     // 7cqi of a 10in slide is 50.4pt, and pptx counts in hundredths
-    expect(Buffer.from(bytes).toString('latin1')).toContain('sz="5040"')
+    expect(allXml(bytes)).toContain('sz="5040"')
   })
 
   it('puts a picture in a picture box when it has one', async () => {
@@ -248,7 +271,7 @@ describe('a template exported as a presentation', () => {
     // illustrations, never the export
     const bytes = await templateToPptx(withImage, [])
     expect(bytes[0]).toBe(0x50)
-    expect(slides(bytes).size).toBe(1)
+    expect(slides(bytes).length).toBe(1)
   })
 
   it('keeps pictures off the layouts themselves', async () => {
@@ -275,6 +298,94 @@ describe('a template exported as a presentation', () => {
     )
     // Nothing to export, but Drive refuses to convert an empty file
     expect(bytes[0]).toBe(0x50)
-    expect(slides(bytes).size).toBe(1)
+    expect(slides(bytes).length).toBe(1)
+  })
+})
+
+describe('what an exported design says about itself (EXP-8)', () => {
+  /** Every shape description in a part — which is where a slot's identity and
+   * a layout's payload both end up. */
+  const descriptions = (bytes: Uint8Array, name: string): string[] => {
+    const xml = new AdmZip(Buffer.from(bytes)).readAsText(name)
+    return [...xml.matchAll(/descr="([^"]*)"/g)].map(m =>
+      m[1]!
+        .replace(/&quot;/g, '"')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&'),
+    )
+  }
+
+  // A layout its author named and composed themselves (TMPL-9), so both of
+  // its boxes are its own rather than borrowed from a conventional type.
+  const authored = () =>
+    template({
+      layouts: [
+        {
+          ...layout('worked-problem', [{ name: 'title' }, { name: 'example' }]),
+          slots: [
+            { name: 'title', kind: 'text' as const, label: 'Title' },
+            {
+              name: 'example',
+              kind: 'text' as const,
+              label: 'Worked example',
+              description: 'A runnable Python snippet, no more than 8 lines.',
+              maxWords: 40,
+              required: true,
+            },
+          ],
+        },
+      ] as Template['layouts'],
+    })
+
+  it('says which slot each shape is, on the layout', async () => {
+    const bytes = await templateToPptx(authored())
+    const found = descriptions(bytes, 'ppt/slideLayouts/slideLayout2.xml')
+      .map(slotFromToken)
+      .filter(Boolean)
+    // A layout carrying this is what lets a TEMPLATE round-trip, not just a
+    // deck — a slide's notes have no equivalent, since layouts have none
+    expect(found).toEqual(['title', 'example'])
+  })
+
+  it('says it on the demonstration slide too', async () => {
+    const bytes = await templateToPptx(authored())
+    const found = descriptions(bytes, 'ppt/slides/slide1.xml')
+      .map(slotFromToken)
+      .filter(Boolean)
+    expect(found).toEqual(['title', 'example'])
+  })
+
+  it('carries each slot’s kind, instruction and limits beside it', async () => {
+    const bytes = await templateToPptx(authored())
+    const payload = descriptions(bytes, 'ppt/slideLayouts/slideLayout2.xml')
+      .map(parseSlotMetadata)
+      .find(Boolean)
+    // The whole claim of EXP-8: what a box IS comes back, rather than being
+    // guessed from the rectangle it happened to occupy
+    expect(payload).toEqual([
+      { name: 'title', kind: 'text', label: 'Title' },
+      {
+        name: 'example',
+        kind: 'text',
+        label: 'Worked example',
+        description: 'A runnable Python snippet, no more than 8 lines.',
+        maxWords: 40,
+        required: true,
+      },
+    ])
+  })
+
+  it('keeps the payload off the canvas', async () => {
+    const bytes = await templateToPptx(authored())
+    const xml = new AdmZip(Buffer.from(bytes)).readAsText(
+      'ppt/slideLayouts/slideLayout2.xml',
+    )
+    // 10 inches is the slide's width in EMUs; the marker sits past it, so it
+    // is carried by the file and drawn over nothing
+    const offsets = [...xml.matchAll(/<a:off x="(-?\d+)"/g)].map(m =>
+      Number(m[1]),
+    )
+    expect(Math.max(...offsets)).toBeGreaterThan(10 * 914400)
   })
 })

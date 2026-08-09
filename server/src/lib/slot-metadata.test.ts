@@ -106,7 +106,9 @@ describe('a payload that cannot be trusted', () => {
 
   it('is nothing when it arrives half-eaten', () => {
     const encoded = encodeSlotMetadata([slot()])!
-    expect(parseSlotMetadata(encoded.slice(0, encoded.length - 8))).toBeUndefined()
+    expect(
+      parseSlotMetadata(encoded.slice(0, encoded.length - 8)),
+    ).toBeUndefined()
   })
 
   it('is nothing when it is JSON that is not ours', () => {

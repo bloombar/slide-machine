@@ -34,6 +34,9 @@ import { SlideModel } from '../../src/models/slide'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
 import { UsageRecordModel } from '../../src/models/usage-record'
 import { capFor, recordUsage, usedThisPeriod } from '../../src/billing/usage'
+import { buildExportDeck } from '../../src/actions/export'
+import { deckToPptx } from '../../src/lib/deck-pptx'
+import AdmZip from 'adm-zip'
 
 const server = createApp().listen(0)
 afterAll(() => server.close())
@@ -88,6 +91,7 @@ beforeEach(async () => {
     bullets: ['In chloroplasts'],
     imageRef: 'https://img/leaf.jpg',
     attribution: { creator: 'Ada', license: 'CC BY 4.0' },
+    sourceTranscript: 'Photosynthesis happens inside the chloroplasts.',
   })
 })
 
@@ -365,5 +369,27 @@ describe('export metering', () => {
 
     expect(res.status).toBeGreaterThanOrEqual(400)
     expect(await usedThisPeriod(id, 'exports')).toBe(0)
+  })
+})
+
+describe('what a deck carries into Google Slides (EXP-8)', () => {
+  it('puts what the instructor said into the speaker notes', async () => {
+    // The whole way from the stored transcript (EDIT-6) to the field a
+    // presenter opens the deck expecting to find it in
+    const deckDoc = await DeckModel.findById(deckId)
+    const deckForExport = await buildExportDeck(deckDoc!, false)
+    const bytes = await deckToPptx(deckForExport)
+    const notes = new AdmZip(Buffer.from(bytes)).readAsText(
+      'ppt/notesSlides/notesSlide1.xml',
+    )
+    expect(notes).toContain('Photosynthesis happens inside the chloroplasts.')
+  })
+
+  it('leaves the transcript out of the YAML', async () => {
+    // The YAML is the content someone shares; what was said over a slide is
+    // the instructor's own speech and does not belong in a file they hand out
+    const res = await act(ada, 'export.download', { deckId, format: 'yaml' })
+    const yaml = Buffer.from(res.body.contentBase64, 'base64').toString('utf8')
+    expect(yaml).not.toContain('Photosynthesis happens inside')
   })
 })
