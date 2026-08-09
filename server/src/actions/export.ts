@@ -181,6 +181,7 @@ export const buildExportDeck = async (
     title: deck.title,
     templateId: deck.templateId,
     theme: resolveTemplateTheme(template?.theme),
+    templateTheme: template?.theme,
     // The renderers read an arrangement from these; a layout with none keeps
     // its hand-tuned arrangement, exactly as on screen.
     layouts: template?.layouts,

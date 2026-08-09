@@ -58,6 +58,11 @@ export interface ExportDeck {
   /** The template's layouts, for the renderers to read an arrangement from.
    * Not serialized into the YAML — the file carries content, not design. */
   layouts?: Layout[]
+  /** The template's own theme object, unresolved: the named text styles a
+   * layout's boxes refer to, and the margins its safe area comes from. The
+   * exporters need it to resolve a layout tree the way the screen does; the
+   * resolved `theme` above is the colour set they paint with. */
+  templateTheme?: Record<string, unknown>
   visibility?: string
   theme?: ExportTheme
   settings?: ExportedDeckSettings

@@ -48,8 +48,9 @@ const renderSlide = (
   hex: Record<ColorRole, string>,
   image?: string,
   layout?: Layout,
+  templateTheme?: Record<string, unknown>,
 ): void => {
-  for (const box of computeLayout(slide, layout)) {
+  for (const box of computeLayout(slide, layout, templateTheme)) {
     if (box.kind === 'text') {
       const runs = box.runs.map(r => ({
         text: r.text,
@@ -170,7 +171,9 @@ export const deckToPptx = async (deck: ExportDeck): Promise<Uint8Array> => {
   // Only fetch images for slides whose layout shows one; then to data URIs.
   const layoutFor = (slide: ExportSlide) =>
     deck.layouts?.find(l => l.type === slide.layoutType)
-  const layouts = deck.slides.map(s => computeLayout(s, layoutFor(s)))
+  const layouts = deck.slides.map(s =>
+    computeLayout(s, layoutFor(s), deck.templateTheme),
+  )
   const urls = deck.slides.map((slide, i) =>
     layouts[i]!.some(b => b.kind === 'image') ? slide.imageRef : undefined,
   )
@@ -180,7 +183,15 @@ export const deckToPptx = async (deck: ExportDeck): Promise<Uint8Array> => {
   deck.slides.forEach((slide, i) => {
     const s = pptx.addSlide()
     s.background = background
-    renderSlide(pptx, s, slide, hex, images[i], layoutFor(slide))
+    renderSlide(
+      pptx,
+      s,
+      slide,
+      hex,
+      images[i],
+      layoutFor(slide),
+      deck.templateTheme,
+    )
     // The narration goes where a presenter expects to find it, and comes back
     // as narration on re-import (EXP-8/EDIT-6).
     if (slide.narration) s.addNotes(slide.narration)

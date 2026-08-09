@@ -13,6 +13,7 @@
  */
 import type { Layout, SlotBox, SlotValue } from '@slide-machine/shared'
 import type { ExportSlide } from './deck-yaml'
+import { resolveTreeBoxes } from './tree-boxes'
 
 export type ColorRole = 'ink' | 'accent' | 'muted'
 
@@ -177,6 +178,89 @@ const runsForSlot = (
 }
 
 /**
+ * What a slide will put in each box, one entry per paragraph.
+ *
+ * The tree is resolved against the slide's REAL content rather than a sample,
+ * so a box is as tall as the words it actually holds — which is the whole
+ * reason the export can match the screen.
+ */
+const linesOf =
+  (slide: ExportSlide) =>
+  (name: string): string[] => {
+    const value = slide.slots?.[name]
+    if (!value) return []
+    switch (value.kind) {
+      case 'bullets':
+        return value.items
+      case 'text':
+      case 'preformatted':
+        return value.value ? [value.value] : []
+      case 'code':
+        return value.source ? value.source.split('\n') : []
+      case 'math':
+        return value.tex ? [value.tex] : []
+      case 'table':
+        return value.rows.map(row => row.join('  '))
+      default:
+        return []
+    }
+  }
+
+/**
+ * The boxes a layout's TREE asks for — the same arrangement, resolved the same
+ * way, that the browser draws on screen (TMPL-4).
+ *
+ * This is read before `elementPositions` because the tree is the design and
+ * the geometry is derived from it. The derivation happens in the editor, by
+ * measuring what the browser drew *for the preview's sample content*: a
+ * centred box shrinks to fit what it held at that moment, so a title measured
+ * around three words is stored as a box three words wide. Drawing a real
+ * lecture's title in it puts the words somewhere the design never asked for,
+ * and the slide the audience saw and the slide in the export stop matching.
+ *
+ * `elementPositions` remains the fallback, because a design imported from
+ * Google Slides is absolute geometry with no tree to resolve (TMPL-8).
+ */
+const treeLayout = (
+  slide: ExportSlide,
+  layout: Layout,
+  theme: Record<string, unknown> | undefined,
+): LayoutBox[] | null => {
+  if (!layout.tree) return null
+  const boxes: LayoutBox[] = []
+  for (const box of resolveTreeBoxes(layout, theme ?? {}, linesOf(slide))) {
+    const geometry = { x: box.x, y: box.y, w: box.w, h: box.h }
+    if (!box.slot) {
+      // Decoration — a rule or band drawn from its style alone, like the
+      // accent bar a section break sits under.
+      boxes.push({
+        kind: 'rule',
+        ...geometry,
+        color: roleOf(box.style.background) ?? 'accent',
+      })
+      continue
+    }
+    if (box.kind === 'image') {
+      boxes.push({ kind: 'image', ...geometry, slot: box.slot })
+      continue
+    }
+    const runs = runsForSlot(slide.slots?.[box.slot], box.style as SlotBox)
+    if (!runs.length) continue
+    boxes.push({
+      kind: 'text',
+      ...geometry,
+      align: box.style.align === 'center' ? 'center' : 'left',
+      valign: box.style.vAlign === 'center' ? 'middle' : 'top',
+      runs,
+      slot: box.slot,
+    })
+  }
+  // A layout whose slots the slide left empty has nothing to draw, and the
+  // arrangements below still know what to do with a bare title.
+  return boxes.length ? boxes : null
+}
+
+/**
  * The boxes an ARRANGED layout asks for (TMPL-4). The template placed every
  * slot itself, so the export draws exactly that instead of the hand-tuned
  * arrangement below — which is what makes a PDF match the screen.
@@ -221,8 +305,14 @@ const arrangedLayout = (
 export const computeLayout = (
   slide: ExportSlide,
   layout?: Layout,
+  theme?: Record<string, unknown>,
 ): LayoutBox[] => {
   if (layout) {
+    // The same order the renderer picks in: the tree is the design, the
+    // measured geometry is derived from it, and the arrangements below are
+    // what a layout with neither still gets.
+    const drawn = treeLayout(slide, layout, theme)
+    if (drawn) return drawn
     const arranged = arrangedLayout(slide, layout)
     if (arranged) return arranged
   }
