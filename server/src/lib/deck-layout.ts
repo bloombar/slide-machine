@@ -38,6 +38,10 @@ export interface TextBox {
   align: 'left' | 'center'
   valign: 'top' | 'middle'
   runs: LayoutRun[]
+  /** The slot this box draws, where one named it. Carried so an export can
+   * say what a shape IS rather than only where it sits (EXP-8). Absent on the
+   * hand-tuned arrangements, whose boxes are not slots. */
+  slot?: string
 }
 export interface ImageBox {
   kind: 'image'
@@ -45,6 +49,8 @@ export interface ImageBox {
   y: number
   w: number
   h: number
+  /** As TextBox.slot. */
+  slot?: string
 }
 export interface RuleBox {
   kind: 'rule'
@@ -188,7 +194,7 @@ const arrangedLayout = (
     if (!box) continue
     const geometry = { x: box.x, y: box.y, w: box.w, h: box.h }
     if (spec.kind === 'image') {
-      boxes.push({ kind: 'image', ...geometry })
+      boxes.push({ kind: 'image', ...geometry, slot: spec.name })
       continue
     }
     const runs = runsForSlot(slide.slots?.[spec.name], box)
@@ -199,6 +205,7 @@ const arrangedLayout = (
       align: box.align === 'center' ? 'center' : 'left',
       valign: box.vAlign === 'center' ? 'middle' : 'top',
       runs,
+      slot: spec.name,
     })
   }
   return boxes

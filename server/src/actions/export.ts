@@ -162,6 +162,7 @@ const buildExportDeck = async (
       imageSource: doc.imageSource,
       caption: s.caption,
       attribution: doc.attribution,
+      narration: doc.sourceTranscript,
       drawings: includeWhiteboard ? visibleStrokes(doc.drawings) : undefined,
     }
   })

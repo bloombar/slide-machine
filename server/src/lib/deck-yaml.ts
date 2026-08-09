@@ -40,6 +40,10 @@ export interface ExportSlide {
   imageSource?: string
   caption?: string
   attribution?: ImageAttribution
+  /** What the instructor said over this slide (EDIT-6). Carried so a Google
+   * Slides export can put it in the speaker notes, which is what notes mean
+   * to a presenter, and bring it back as narration (EXP-8). */
+  narration?: string
   drawings?: Stroke[]
 }
 

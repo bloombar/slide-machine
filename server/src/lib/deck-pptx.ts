@@ -17,6 +17,8 @@ import type { Layout } from '@slide-machine/shared'
 import type { ExportDeck, ExportSlide } from './deck-yaml'
 import { visibleStrokes, hexForPptx, HIGHLIGHTER_ALPHA } from './deck-drawings'
 import { fetchSlideImages, toDataUri } from './deck-image'
+import { slotToken } from './slot-metadata'
+import { withSlotAltText } from './pptx-alt-text'
 import { computeLayout, type ColorRole } from './deck-layout'
 import { DEFAULT_THEME } from './deck-theme'
 
@@ -69,6 +71,9 @@ const renderSlide = (
         h: box.h * SLIDE_H,
         align: box.align,
         valign: box.valign === 'middle' ? 'middle' : 'top',
+        // What this shape IS, so a re-import knows the box without guessing
+        // (EXP-8). Only boxes a template named have one.
+        ...(box.slot ? { objectName: slotToken(box.slot) } : {}),
       })
     } else if (box.kind === 'rule') {
       s.addShape(pptx.ShapeType.rect, {
@@ -82,6 +87,9 @@ const renderSlide = (
     } else if (box.kind === 'image' && image) {
       s.addImage({
         data: image,
+        ...(box.slot
+          ? { objectName: slotToken(box.slot), altText: slotToken(box.slot) }
+          : {}),
         x: box.x * SLIDE_W,
         y: box.y * SLIDE_H,
         w: box.w * SLIDE_W,
@@ -173,9 +181,13 @@ export const deckToPptx = async (deck: ExportDeck): Promise<Uint8Array> => {
     const s = pptx.addSlide()
     s.background = background
     renderSlide(pptx, s, slide, hex, images[i], layoutFor(slide))
+    // The narration goes where a presenter expects to find it, and comes back
+    // as narration on re-import (EXP-8/EDIT-6).
+    if (slide.narration) s.addNotes(slide.narration)
   })
 
   // pptxgenjs returns a Node Buffer for the 'nodebuffer' output type.
   const out = (await pptx.write({ outputType: 'nodebuffer' })) as Buffer
-  return new Uint8Array(out)
+  // The generator writes no alt text on a text shape, so it is added after.
+  return withSlotAltText(new Uint8Array(out))
 }
