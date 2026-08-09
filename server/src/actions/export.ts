@@ -111,7 +111,7 @@ const slugifyTitle = (title: string): string =>
  * gone. The `exports` unit the caller counts is separate: one file produced is
  * one export, whether or not translating it cost anything.
  */
-const buildExportDeck = async (
+export const buildExportDeck = async (
   deck: HydratedDocument<DeckDb>,
   includeWhiteboard: boolean,
   locale?: Locale,
@@ -161,6 +161,7 @@ const buildExportDeck = async (
       imageSource: doc.imageSource,
       caption: s.caption,
       attribution: doc.attribution,
+      narration: doc.sourceTranscript,
       drawings: includeWhiteboard ? visibleStrokes(doc.drawings) : undefined,
     }
   })
@@ -180,6 +181,7 @@ const buildExportDeck = async (
     title: deck.title,
     templateId: deck.templateId,
     theme: resolveTemplateTheme(template?.theme),
+    templateTheme: template?.theme,
     // The renderers read an arrangement from these; a layout with none keeps
     // its hand-tuned arrangement, exactly as on screen.
     layouts: template?.layouts,

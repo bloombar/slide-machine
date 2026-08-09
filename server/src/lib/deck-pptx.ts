@@ -17,6 +17,8 @@ import type { Layout } from '@slide-machine/shared'
 import type { ExportDeck, ExportSlide } from './deck-yaml'
 import { visibleStrokes, hexForPptx, HIGHLIGHTER_ALPHA } from './deck-drawings'
 import { fetchSlideImages, toDataUri } from './deck-image'
+import { slotToken } from './slot-metadata'
+import { withSlotAltText } from './pptx-alt-text'
 import { computeLayout, type ColorRole } from './deck-layout'
 import { DEFAULT_THEME } from './deck-theme'
 
@@ -46,8 +48,9 @@ const renderSlide = (
   hex: Record<ColorRole, string>,
   image?: string,
   layout?: Layout,
+  templateTheme?: Record<string, unknown>,
 ): void => {
-  for (const box of computeLayout(slide, layout)) {
+  for (const box of computeLayout(slide, layout, templateTheme)) {
     if (box.kind === 'text') {
       const runs = box.runs.map(r => ({
         text: r.text,
@@ -69,6 +72,9 @@ const renderSlide = (
         h: box.h * SLIDE_H,
         align: box.align,
         valign: box.valign === 'middle' ? 'middle' : 'top',
+        // What this shape IS, so a re-import knows the box without guessing
+        // (EXP-8). Only boxes a template named have one.
+        ...(box.slot ? { objectName: slotToken(box.slot) } : {}),
       })
     } else if (box.kind === 'rule') {
       s.addShape(pptx.ShapeType.rect, {
@@ -82,6 +88,9 @@ const renderSlide = (
     } else if (box.kind === 'image' && image) {
       s.addImage({
         data: image,
+        ...(box.slot
+          ? { objectName: slotToken(box.slot), altText: slotToken(box.slot) }
+          : {}),
         x: box.x * SLIDE_W,
         y: box.y * SLIDE_H,
         w: box.w * SLIDE_W,
@@ -162,7 +171,9 @@ export const deckToPptx = async (deck: ExportDeck): Promise<Uint8Array> => {
   // Only fetch images for slides whose layout shows one; then to data URIs.
   const layoutFor = (slide: ExportSlide) =>
     deck.layouts?.find(l => l.type === slide.layoutType)
-  const layouts = deck.slides.map(s => computeLayout(s, layoutFor(s)))
+  const layouts = deck.slides.map(s =>
+    computeLayout(s, layoutFor(s), deck.templateTheme),
+  )
   const urls = deck.slides.map((slide, i) =>
     layouts[i]!.some(b => b.kind === 'image') ? slide.imageRef : undefined,
   )
@@ -172,10 +183,22 @@ export const deckToPptx = async (deck: ExportDeck): Promise<Uint8Array> => {
   deck.slides.forEach((slide, i) => {
     const s = pptx.addSlide()
     s.background = background
-    renderSlide(pptx, s, slide, hex, images[i], layoutFor(slide))
+    renderSlide(
+      pptx,
+      s,
+      slide,
+      hex,
+      images[i],
+      layoutFor(slide),
+      deck.templateTheme,
+    )
+    // The narration goes where a presenter expects to find it, and comes back
+    // as narration on re-import (EXP-8/EDIT-6).
+    if (slide.narration) s.addNotes(slide.narration)
   })
 
   // pptxgenjs returns a Node Buffer for the 'nodebuffer' output type.
   const out = (await pptx.write({ outputType: 'nodebuffer' })) as Buffer
-  return new Uint8Array(out)
+  // The generator writes no alt text on a text shape, so it is added after.
+  return withSlotAltText(new Uint8Array(out))
 }

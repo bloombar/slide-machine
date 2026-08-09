@@ -39,6 +39,8 @@ import {
 import { resolveTemplateTheme, type ExportTheme } from './deck-theme'
 import { resolveTreeBoxes, type ResolvedBox } from './tree-boxes'
 import { fetchSlideImages, toDataUri } from './deck-image'
+import { encodeSlotMetadata, slotToken } from './slot-metadata'
+import { withSlotAltText } from './pptx-alt-text'
 import { previewImageUrls } from '../enrichment/preview-images'
 
 // pptxgenjs ships CJS; the default export is the constructor under ESM.
@@ -155,6 +157,38 @@ const boxesOf = (layout: Layout, theme: Record<string, unknown>) => {
   })
 }
 
+/**
+ * Where a layout's slot metadata rides: one shape of its own, off the slide
+ * and empty, whose alt text is the versioned payload (EXP-8).
+ *
+ * It is a shape rather than the speaker notes because notes exist only on
+ * slides. A template's metadata belongs to its LAYOUTS — that is the whole
+ * point of carrying it — and layouts have no notes to put it in.
+ *
+ * Off the canvas so nothing is drawn over the design, and empty so there is
+ * nothing to read even if someone finds it.
+ */
+const metadataObject = (layout: Layout) => {
+  const payload = encodeSlotMetadata(layout.slots)
+  if (!payload) return []
+  return [
+    {
+      text: {
+        text: '',
+        options: {
+          x: SLIDE_W + 0.5,
+          y: 0,
+          w: 0.05,
+          h: 0.05,
+          // The payload is the shape's name, which `withSlotAltText` copies
+          // into its description — the field Google keeps and shows nowhere.
+          objectName: payload,
+        },
+      },
+    },
+  ]
+}
+
 /** The words a demonstration slide puts in a box, with whatever literal
  * characters the layout prints around them (the quote layout's marks). */
 const demoText = (box: ResolvedBox, layout: Layout): string => {
@@ -238,6 +272,7 @@ export const templateToPptx = async (
               line: { type: 'none' as const },
             },
           })),
+        ...metadataObject(layout),
         ...slots.map(box => ({
           placeholder: {
             options: {
@@ -246,6 +281,9 @@ export const templateToPptx = async (
               ...inches(box),
               ...(box.kind === 'image' ? {} : textOptions(box.style, palette)),
               ...(box.kind === 'bullets' ? { bullet: true } : {}),
+              // What this shape IS, so a re-import restores the slot rather
+              // than inferring one from the rectangle (EXP-8).
+              objectName: slotToken(box.slot!),
             },
             // What the box is for, shown until someone types in it — the
             // author's own label, so a layout explains itself in Slides.
@@ -268,13 +306,18 @@ export const templateToPptx = async (
         if (!picture) {
           // Claims the placeholder and leaves it empty, which is what a
           // picture nobody has chosen yet looks like.
-          slide.addText('', { placeholder: box.slot })
+          slide.addText('', {
+            placeholder: box.slot,
+            objectName: slotToken(box.slot!),
+          })
           continue
         }
         // Fills the placeholder rather than sitting over it, so the box is
         // still the layout's box and appears once.
         slide.addImage({
           placeholder: box.slot,
+          objectName: slotToken(box.slot!),
+          altText: slotToken(box.slot!),
           data: picture,
           ...inches(box),
           // Kept in proportion inside the box the design drew, as a slide's
@@ -293,11 +336,14 @@ export const templateToPptx = async (
             text,
             options: { bullet: true, breakLine: true },
           })),
-          { placeholder: box.slot },
+          { placeholder: box.slot, objectName: slotToken(box.slot!) },
         )
         continue
       }
-      slide.addText(demoText(box, layout), { placeholder: box.slot })
+      slide.addText(demoText(box, layout), {
+        placeholder: box.slot,
+        objectName: slotToken(box.slot!),
+      })
     }
   }
 
@@ -309,7 +355,9 @@ export const templateToPptx = async (
     slide.background = background
   }
 
-  return (await pptx.write({ outputType: 'nodebuffer' })) as Uint8Array
+  const bytes = (await pptx.write({ outputType: 'nodebuffer' })) as Uint8Array
+  // The generator writes no alt text on a text shape, so it is added after.
+  return withSlotAltText(bytes)
 }
 
 /**

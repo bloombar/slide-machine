@@ -153,8 +153,9 @@ const drawSlide = (
   slide: ExportSlide,
   image?: PDFImage,
   layout?: Layout,
+  templateTheme?: Record<string, unknown>,
 ): void => {
-  for (const box of computeLayout(slide, layout)) {
+  for (const box of computeLayout(slide, layout, templateTheme)) {
     if (box.kind === 'text') {
       drawTextBox(page, box)
     } else if (box.kind === 'rule') {
@@ -236,7 +237,9 @@ export const deckToPdf = async (deck: ExportDeck): Promise<Uint8Array> => {
   // etc. never display an image), then embed the fetched bytes.
   const layoutFor = (slide: ExportSlide) =>
     deck.layouts?.find(l => l.type === slide.layoutType)
-  const layouts = deck.slides.map(s => computeLayout(s, layoutFor(s)))
+  const layouts = deck.slides.map(s =>
+    computeLayout(s, layoutFor(s), deck.templateTheme),
+  )
   const urls = deck.slides.map((s, i) =>
     layouts[i]!.some(b => b.kind === 'image') ? s.imageRef : undefined,
   )
@@ -260,7 +263,7 @@ export const deckToPdf = async (deck: ExportDeck): Promise<Uint8Array> => {
       height: PAGE_HEIGHT,
       color: background,
     })
-    drawSlide(page, slide, images[i], layoutFor(slide))
+    drawSlide(page, slide, images[i], layoutFor(slide), deck.templateTheme)
   })
   if (doc.getPageCount() === 0) {
     doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]).drawRectangle({

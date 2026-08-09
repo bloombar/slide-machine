@@ -169,3 +169,123 @@ describe('an arranged layout', () => {
     )
   })
 })
+
+describe('a layout that carries its tree', () => {
+  /** The conventional title layout as every template has it: a centred column
+   * holding a title and a caption. */
+  const titleTree = {
+    id: 'root',
+    container: {
+      mode: 'flex' as const,
+      direction: 'column' as const,
+      justify: 'center' as const,
+      alignItems: 'center' as const,
+      gap: 2,
+    },
+    children: [
+      {
+        id: 'title',
+        slot: 'title',
+        style: { textStyle: 'title', align: 'center' as const },
+      },
+      {
+        id: 'caption',
+        slot: 'caption',
+        style: { textStyle: 'caption', align: 'center' as const },
+      },
+    ],
+  }
+
+  /** The same layout as the editor stored it: boxes measured around the
+   * PREVIEW's sample text, which a centred container shrinks to fit. */
+  const layout = {
+    type: 'title',
+    label: 'Title',
+    purpose: 'opening slide',
+    slots: [
+      { name: 'title', kind: 'text' as const, label: 'Title' },
+      { name: 'caption', kind: 'text' as const, label: 'Caption' },
+    ],
+    tree: titleTree,
+    elementPositions: {
+      title: { x: 0.196, y: 0.106, w: 0.582, h: 0.055, fontSize: 6.8 },
+      caption: { x: 0.443, y: 0.171, w: 0.087, h: 0.016, fontSize: 2 },
+    },
+  }
+
+  const slide = {
+    layoutType: 'title',
+    slots: {
+      title: { kind: 'text' as const, value: 'Rainwater Harvesting' },
+      caption: {
+        kind: 'text' as const,
+        value: 'Understanding the environmental and practical impacts',
+      },
+    },
+  }
+
+  it('draws the arrangement rather than the measurement', () => {
+    // The bug this guards: a real lecture's caption drawn in a box measured
+    // around a three-word sample wraps one word per line, over the title
+    const [title, caption] = computeLayout(slide, layout)
+    expect(title).toMatchObject({ x: 0.06, w: 0.88 })
+    expect(caption).toMatchObject({ x: 0.06, w: 0.88 })
+    expect(caption!.y).toBeGreaterThan(title!.y + title!.h)
+  })
+
+  it('sizes a box around the words it actually holds', () => {
+    const short = computeLayout(
+      { layoutType: 'title', slots: { title: slide.slots.title } },
+      layout,
+    )
+    const long = computeLayout(
+      {
+        layoutType: 'title',
+        slots: {
+          title: { kind: 'text' as const, value: 'Rainwater '.repeat(12) },
+        },
+      },
+      layout,
+    )
+    // What the browser does on screen, and what a frozen measurement cannot
+    expect(long[0]!.h).toBeGreaterThan(short[0]!.h)
+  })
+
+  it('takes the type from the style the box follows', () => {
+    const [title] = computeLayout(slide, layout)
+    // 7cqi is the title role's size; the measurement said 6.8 for the sample
+    expect(
+      (title as { runs: { sizeFrac: number }[] }).runs[0]!.sizeFrac,
+    ).toBeCloseTo(0.07, 3)
+  })
+
+  it('follows the template’s own margins', () => {
+    const [title] = computeLayout(slide, layout, { marginX: 0.2 })
+    expect(title!.x).toBeCloseTo(0.2, 3)
+  })
+
+  it('falls back to the measurement for a design with no tree', () => {
+    // An imported design is absolute geometry and nothing else (TMPL-8)
+    const imported = { ...layout, tree: undefined }
+    const [title] = computeLayout(slide, imported)
+    expect(title).toMatchObject({ x: 0.196, w: 0.582 })
+  })
+
+  it('leaves out a box whose slot the slide never filled', () => {
+    // A picture reserves its space because the design reserved it; an empty
+    // text box would be a hole where the audience saw nothing
+    const boxes = computeLayout(
+      { layoutType: 'title', slots: { title: slide.slots.title } },
+      layout,
+    )
+    expect(boxes).toHaveLength(1)
+  })
+
+  it('reads the tree even when nothing was ever measured', () => {
+    // Which is every built-in: the editor writes geometry only for a layout
+    // whose tab someone opened, so most templates carry none at all
+    const unmeasured = { ...layout, elementPositions: {} }
+    const [title] = computeLayout(slide, unmeasured)
+    expect(title).toMatchObject({ x: 0.06, w: 0.88 })
+  })
+})
