@@ -12,7 +12,8 @@
  * project until the override is reset. resolveDeckAcl/loadDeckAcl
  * produce the effective ACL; decisions run through lib/access.ts.
  */
-import { Schema, model, Types, type HydratedDocument } from 'mongoose'
+import { Schema, Types, type HydratedDocument } from 'mongoose'
+import { defineModel } from './define-model'
 import type {
   Deck,
   DiarizedSpeakerSegment,
@@ -257,9 +258,16 @@ deckSchema.index(
   { weights: { title: 10, transcript: 1 }, name: 'deck_text' },
 )
 
+// Which lectures a design draws. Asked when deciding whether someone editing
+// a lecture may read the private design behind it (TECH-14); without this the
+// question costs a scan of every lecture, including when the answer is none.
+deckSchema.index({ templateId: 1 })
+
 deckSchema.plugin(softDeletePlugin)
 
-export const DeckModel = model<DeckDb>('Deck', deckSchema)
+// Reachable from the action graph — the dispatcher resolves a lecture and
+// project for cost attribution (BILL-7), which some specs re-evaluate.
+export const DeckModel = defineModel<DeckDb>('Deck', deckSchema)
 
 type DeckLike = Pick<DeckDb, 'ownerId' | 'accessOverride'>
 
@@ -294,12 +302,22 @@ export const resolveDeckAcl = (
   }
 }
 
-/** Resolves a single deck's ACL, loading its project when inheriting. */
+/**
+ * Resolves a single deck's ACL, loading its project when inheriting.
+ *
+ * `withDeleted` lets the project lookup see a tombstoned project, so an
+ * inheriting lecture an admin is viewing after deletion (ADMIN-6) resolves
+ * its real visibility instead of the dangling-project fallback
+ * (`restricted`) — the batch loader below takes the same option.
+ */
 export const loadDeckAcl = async (
   deck: DeckLike & { projectId: Types.ObjectId },
+  opts: { withDeleted?: boolean } = {},
 ): Promise<ResolvedAcl> => {
   if (deck.accessOverride) return resolveDeckAcl(deck, null)
-  const project = await ProjectModel.findById(deck.projectId).catch(() => null)
+  const project = await ProjectModel.findById(deck.projectId)
+    .setOptions({ withDeleted: opts.withDeleted })
+    .catch(() => null)
   return resolveDeckAcl(deck, project)
 }
 

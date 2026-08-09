@@ -210,6 +210,45 @@ describe('strokeVisible', () => {
     expect(strokeVisible(synced(), 1, 100, progress(3))).toBe(false)
     expect(strokeVisible(synced(), 1, 100, progress(5))).toBe(true)
   })
+
+  describe('under a translated playback (PLAY-3)', () => {
+    const playing = { index: 0, fraction: 1 }
+
+    it('does not replay a transcript-timed mark', () => {
+      // Its anchor is a position inside the ORIGINAL transcript, and that
+      // position means nothing in the words now being spoken — so rather than
+      // appear at an arbitrary moment, it does not appear at all.
+      expect(
+        strokeVisible(synced(), 0, 100, playing, { translated: true }),
+      ).toBe(false)
+    })
+
+    it('still shows an untimed mark', () => {
+      // Marks made mic-off were never tied to speech, so translation costs
+      // them nothing.
+      expect(
+        strokeVisible(unsynced(), 0, 100, playing, { translated: true }),
+      ).toBe(true)
+    })
+
+    it('shows everything when nothing is playing', () => {
+      // Reading a translated deck without narration is unchanged from SHARE-2:
+      // the marks are all on the slide, as they are in the original.
+      expect(strokeVisible(synced(), 0, 100, null, { translated: true })).toBe(
+        true,
+      )
+      expect(
+        strokeVisible(unsynced(), 0, 100, null, { translated: true }),
+      ).toBe(true)
+    })
+
+    it('leaves an untranslated playback exactly as it was', () => {
+      expect(
+        strokeVisible(synced(), 0, 100, playing, { translated: false }),
+      ).toBe(true)
+      expect(strokeVisible(synced(), 0, 100, playing)).toBe(true)
+    })
+  })
 })
 
 describe('erasureReplays', () => {

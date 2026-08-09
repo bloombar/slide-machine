@@ -24,7 +24,7 @@ import type {
   SlideTranslationEntry,
 } from '@slide-machine/shared'
 import { isLocale } from '@slide-machine/shared'
-import { apiFetch } from '../api/http'
+import { ApiError, apiFetch } from '../api/http'
 
 const STORAGE_PREFIX = 'sm:slide-language:'
 
@@ -72,6 +72,17 @@ export interface SlideTranslationState {
   /** Set when a translation could not be fetched; the viewer stays on the
    * original text rather than showing a half-translated deck. */
   failed: boolean
+  /**
+   * The server's explanation when the failure was an exhausted plan allowance
+   * (402, BILL-4) rather than a provider outage. Carried because the two need
+   * different words: an outage says "try again", a spent allowance says what
+   * ran out, and only the second has anything the reader can act on.
+   *
+   * Safe to show to anyone — the server already writes a viewer-safe message
+   * for audience requests that reveals nothing about the owner's billing —
+   * but the viewer shows it only to editors, who are the ones who can act.
+   */
+  limitMessage: string | null
 }
 
 export function useSlideTranslation(
@@ -83,6 +94,7 @@ export function useSlideTranslation(
   )
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [failedLocale, setFailedLocale] = useState<Locale | null>(null)
+  const [limitMessage, setLimitMessage] = useState<string | null>(null)
 
   // Opening a different deck restores that deck's own remembered language.
   // Adjusted during render (React's documented pattern for state that
@@ -94,6 +106,7 @@ export function useSlideTranslation(
     setLocaleState(readStored(slug, enabled))
     setLoaded(null)
     setFailedLocale(null)
+    setLimitMessage(null)
   }
 
   const loadedLocale = loaded?.locale
@@ -108,12 +121,21 @@ export function useSlideTranslation(
       body: JSON.stringify({ locale }),
     })
       .then(res => {
-        if (!cancelled) setLoaded({ locale, perSlide: res.perSlide })
+        if (!cancelled) {
+          setLoaded({ locale, perSlide: res.perSlide })
+          setLimitMessage(null)
+        }
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         // Fall back to the authored text: a lecture nobody can read is worse
         // than a lecture in the wrong language.
-        if (!cancelled) setFailedLocale(locale)
+        if (cancelled) return
+        setFailedLocale(locale)
+        setLimitMessage(
+          error instanceof ApiError && error.status === 402
+            ? error.message
+            : null,
+        )
       })
     return () => {
       cancelled = true
@@ -125,6 +147,7 @@ export function useSlideTranslation(
       setLocaleState(next)
       // Clear the last failure so choosing the same language again retries.
       setFailedLocale(null)
+      setLimitMessage(null)
       if (slug) writeStored(slug, next)
     },
     [slug],
@@ -138,5 +161,6 @@ export function useSlideTranslation(
     perSlide: locale && loadedLocale === locale ? loaded!.perSlide : {},
     busy: locale !== null && !failed && loadedLocale !== locale,
     failed,
+    limitMessage: failed ? limitMessage : null,
   }
 }

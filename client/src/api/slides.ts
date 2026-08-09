@@ -8,6 +8,7 @@ import type {
   DeckRefineSlideTranscriptResult,
   ImageAttribution,
   ImageSearchCandidate,
+  Locale,
   Slide,
   SlideRegenerateTranscriptResult,
   Stroke,
@@ -126,21 +127,31 @@ export const refineSlideTranscript = (
  * Synthesizes speech for a slide and returns a playable audio URL (or null
  * when there's nothing to say). `content` speaks the rendered slide;
  * `transcript` speaks the stored lecture transcript (narrated from content by
- * the server when the slide has none). Passing `text` speaks exactly that
- * instead — how the transcript editor previews a narration before it is saved
- * (EDIT-6); it needs edit rights and shares the audio cache with playing the
- * same words back once saved.
+ * the server when the slide has none).
+ *
+ * `text` speaks exactly those words instead — how the transcript editor
+ * previews a narration before it is saved (EDIT-6); it needs edit rights and
+ * shares the audio cache with playing the same words back once saved.
+ *
+ * `locale` is the language the slides are being read in (PLAY-3): narration
+ * follows the screen, so the server translates the narration and speaks it in
+ * that language. Omitted when the deck is being read as it was written, which
+ * keeps the request identical to what it has always been.
  */
 export const synthesizeSlideTts = (
   slideId: string,
   mode: 'content' | 'transcript',
-  text?: string,
+  options: { text?: string; locale?: Locale | null } = {},
 ): Promise<{ url: string | null; marks: TtsMark[] }> =>
   apiFetch<{ url: string | null; marks: TtsMark[] }>(
     `/api/slides/${slideId}/tts`,
     {
       method: 'POST',
-      body: JSON.stringify(text === undefined ? { mode } : { mode, text }),
+      body: JSON.stringify({
+        mode,
+        ...(options.text === undefined ? {} : { text: options.text }),
+        ...(options.locale ? { locale: options.locale } : {}),
+      }),
     },
   )
 

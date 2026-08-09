@@ -2,7 +2,7 @@
  * The carousel/list view choice persists across a reload, so refreshing
  * keeps whichever view the user was reading in.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { createProject } from './helpers'
 
 test('the view mode is remembered across a refresh', async ({ page }) => {

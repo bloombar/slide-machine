@@ -28,8 +28,10 @@ export const userSettingsSnapshot = (doc: HydratedDocument<UserDb>) => ({
   displayName: doc.displayName,
   bio: doc.bio,
   profileVisibility: doc.profileVisibility,
+  accountType: doc.accountType,
   locale: doc.locale,
   language: doc.language,
+  notifyCapWarnings: doc.notifyCapWarnings,
 })
 
 /** The project settings reachable from the project settings modal,

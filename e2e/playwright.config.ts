@@ -65,6 +65,11 @@ const serverEnv = (over: Record<string, string>): Record<string, string> => ({
   // Billing runs on the in-memory adapter: no e2e run may reach Stripe, and
   // the mock drives the whole checkout → webhook path offline (BILL-2).
   BILLING_PROVIDER: 'mock',
+  // The mock parses webhooks unsigned, which the server refuses to do under
+  // NODE_ENV=production (P-8) — and this suite deliberately runs the
+  // production build, because that is the artifact worth testing. Saying so
+  // explicitly is the only way through that guard, which is the point of it.
+  ALLOW_UNSIGNED_BILLING_WEBHOOKS: 'true',
   STORAGE_PROVIDER: 'local',
   // Hermetic: the developer's local .env must not leak into e2e
   GENERATION_FREEDOM: '2',

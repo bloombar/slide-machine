@@ -168,6 +168,9 @@
       "privacy": "隐私"
     },
     "accountTypeSection": "账户类型",
+    "planSection": "套餐",
+    "accountTypeSectionHint": "你使用 Slide Machine 的身份。它决定新课程的初始隐私设置。",
+    "accountTypeUnset": "未设置",
     "publicProfileSectionHint": "编辑后自动保存。陌生人在你的个人资料页看到的内容。",
     "privacySectionHint": "谁可以查看你的个人资料页以及其中的课程。",
     "delete": {
@@ -175,6 +178,28 @@
       "hint": "删除账户将永久移除你的项目、课程和幻灯片。此操作无法撤销。",
       "title": "删除你的账户？",
       "message": "你的账户及其所有项目、课程和幻灯片将被永久删除。"
+    }
+  },
+  "accountType": {
+    "student": {
+      "label": "学生",
+      "hint": "你的个人资料页和新课程默认为私密。"
+    },
+    "educator": {
+      "label": "教师",
+      "hint": "你的个人资料页和新课程默认为公开。"
+    },
+    "other": {
+      "label": "其他",
+      "hint": "你的个人资料页和新课程默认为公开。"
+    }
+  },
+  "onboarding": {
+    "accountType": {
+      "title": "以下哪项最符合你？",
+      "hint": "这只决定你的作品初始的隐私设置，两种选择都不会对你隐藏任何内容。",
+      "changeable": "你可以随时在设置中更改。",
+      "error": "无法保存你的选择，请重试。"
     }
   },
   "language": {
@@ -995,7 +1020,9 @@
     "showOriginal": "显示原文",
     "translatedNotice": "机器翻译——以原文为准",
     "translatedNoticeEditor": "机器翻译视图——显示原文后方可编辑",
-    "translationFailed": "无法翻译本讲。正在显示原文。"
+    "translationFailed": "无法翻译本讲。正在显示原文。",
+    "narrationTranslationFailed": "无法用该语言朗读本讲。朗读已停止。",
+    "translationSeePlans": "查看套餐"
   },
   "quiz": {
     "heading": "课后小测验",
@@ -1142,7 +1169,8 @@
     "forbidden": "你没有执行该操作的权限",
     "internal_error": "我们这边出了点问题——请重试",
     "unknown_error": "出了点问题——请重试",
-    "email_unverified": "请先确认你的邮箱地址——查看收件箱，或在账户设置中发送新链接"
+    "email_unverified": "请先确认你的邮箱地址——查看收件箱，或在账户设置中发送新链接",
+    "capability_required": "请先关联 Google 账号 — 可在账号设置中完成"
   },
   "usage": {
     "title": "套餐用量",
@@ -1173,7 +1201,8 @@
     "notice": {
       "approaching": "你已接近套餐的部分上限",
       "reached": "你已达到套餐的某项上限",
-      "seeAll": "查看全部用量"
+      "seeAll": "查看全部用量",
+      "dismiss": "关闭"
     },
     "metric": {
       "aiTokens": "AI 生成",
@@ -1193,6 +1222,10 @@
     "errors": {
       "load": "无法加载用量信息"
     },
-    "plan": "套餐"
+    "plan": "套餐",
+    "settings": {
+      "warnEmails": "额度用尽前发邮件提醒我",
+      "warnEmailsHint": "额度快用完时提前通知。已实际达到上限的通知则始终发送。"
+    }
   }
 }

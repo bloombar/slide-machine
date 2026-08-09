@@ -45,6 +45,19 @@ import {
 } from '@slide-machine/shared'
 import type { HydratedDocument, Types } from 'mongoose'
 import { defineAction } from './define'
+import {
+  custom,
+  deckEditor,
+  deckOwner,
+  deckSettings,
+  deckSettingsView,
+  deckViewer,
+  projectOwner,
+  type DeckAccess,
+  type DeckSettingsAccess,
+  type ProjectAccess,
+  type Signed,
+} from './access'
 import { requireAiTokens } from '../billing/meter-hooks'
 import {
   registerAction,
@@ -96,8 +109,8 @@ import type { MyVote } from '@slide-machine/shared'
 import { SlideModel, toSlideDto } from '../models/slide'
 import { TranscriptSegmentModel } from '../models/transcript-segment'
 import { ProjectModel, projectAcl } from '../models/project'
-import { isAllowlistedAdmin } from '../lib/admin-view'
-import { editDeckSettings } from '../lib/admin-edit'
+import { asOf, isAllowlistedAdmin, withDeleted } from '../lib/admin-view'
+import { withDeckSettingsAudit } from '../lib/admin-edit'
 import { recordSettingsChange } from '../audit/settings-log'
 import { deckSettingsSnapshot } from '../lib/settings-snapshot'
 import { defaultTemplateId, layoutDescriptors } from '../templates/builtin'
@@ -226,17 +239,24 @@ const requireUser = (ctx: ActionContext): string => {
   return ctx.userId
 }
 
-/** Loads a deck the acting user owns, or throws (no existence leaks). */
-const loadOwnedDeck = async (
-  ctx: ActionContext,
-  deckId: string,
-): Promise<HydratedDocument<DeckDb>> => {
-  const userId = requireUser(ctx)
-  const deck = await DeckModel.findById(deckId).catch(() => null)
-  if (!deck || deck.ownerId.toString() !== userId)
-    throw new ActionForbiddenError()
-  return deck
-}
+/** The content gate, shared by every action here that edits a lecture. */
+const byDeckId = deckEditor((input: { deckId: string }) => input.deckId)
+
+/** The settings gate: an owner or editor, otherwise an allowlisted admin
+ * overriding the ACL, whose edit is then audited (ADMIN-5). */
+const settingsOf = deckSettings((input: { deckId: string }) => input.deckId)
+
+/** The same admission, for an action that only reads the settings. */
+const settingsReadOf = deckSettingsView(
+  (input: { deckId: string }) => input.deckId,
+)
+
+/** Owner-only, deliberately stricter than the content gate: deleting a
+ * lecture or handing it on is not something an editor may do. */
+const ownerOf = deckOwner((input: { deckId: string }) => input.deckId)
+
+/** Anyone who may read the lecture — public counts. */
+const viewerOf = deckViewer((input: { deckId: string }) => input.deckId)
 
 /**
  * Loads a deck the acting user may edit — the owner or an editor,
@@ -261,25 +281,19 @@ export const loadEditableDeck = async (
   return { deck, acl }
 }
 
-export const deckCreate = defineAction<DeckCreateInput, Deck>({
+export const deckCreate = defineAction<DeckCreateInput, Deck, ProjectAccess>({
   name: 'deck.create',
   input: z.object({
     projectId: z.string().min(1),
     // Untitled lectures are fine; the UI labels them "Untitled lecture"
     title: z.string().trim().default(''),
   }),
-  authorize: async (ctx, input) => {
-    const userId = requireUser(ctx)
-    const project = await ProjectModel.findById(input.projectId).catch(
-      () => null,
-    )
-    if (!project || project.ownerId.toString() !== userId)
-      throw new ActionForbiddenError()
-  },
-  execute: async (ctx, input) => {
+  // The lecture does not exist yet, so what is authorized is the project it
+  // is being created in — owner only, as it has always been.
+  access: projectOwner((input: { projectId: string }) => input.projectId),
+  execute: async (ctx, input, { project }) => {
     // The project's template is the creation-time default; the lecture
     // stores its own copy and can switch independently afterwards
-    const project = await ProjectModel.findById(input.projectId)
     const templateId = (await templateExists(project?.templateId ?? ''))
       ? project!.templateId
       : defaultTemplateId()
@@ -299,32 +313,60 @@ export const deckCreate = defineAction<DeckCreateInput, Deck>({
   },
 })
 
-export const deckList = defineAction<DeckListInput, Deck[]>({
+export const deckList = defineAction<DeckListInput, Deck[], Signed>({
   name: 'deck.list',
+  // Two admission models in one action, and no single resource to resolve:
+  // with a project id it admits a member, an allowlisted admin (including
+  // for a TOMBSTONED project, whose lectures went down with it — ADMIN-6),
+  // or anyone when the project is public; without one it lists only the
+  // caller's own, where the query is the check. A per-row ACL filter then
+  // decides what comes back, which no single level describes.
+  access: custom(
+    'admission differs by whether a project is named, and an admin may list a deleted project’s lectures (ADMIN-6); a per-row filter then decides what is returned',
+  ),
   input: z.object({ projectId: z.string().min(1).optional() }),
   execute: async (ctx, input) => {
     const userId = requireUser(ctx)
     if (input.projectId) {
       // Project members see the project's (viewable) lectures
-      const project = await ProjectModel.findById(input.projectId).catch(
+      let project = await ProjectModel.findById(input.projectId).catch(
         () => null,
       )
-      if (!project) throw new ActionForbiddenError()
-      const member = isAclMember(projectAcl(project), userId)
       // Allowlisted admins get an always-on read bypass (lib/admin-view.ts).
       // They can already open any lecture in the viewer, so listing the
       // project's lectures here — private ones included — leaks nothing new.
-      const admin = !member && (await isAllowlistedAdmin(userId))
+      // The bypass covers a tombstoned project too, whose lectures went down
+      // with it (ADMIN-6); project.get is where that opening is audited.
+      let admin = false
+      if (!project) {
+        if (!(await isAllowlistedAdmin(userId)))
+          throw new ActionForbiddenError()
+        admin = true
+        project = await ProjectModel.findById(input.projectId)
+          .setOptions(withDeleted)
+          .catch(() => null)
+      }
+      if (!project) throw new ActionForbiddenError()
+      const member = isAclMember(projectAcl(project), userId)
+      if (!admin) admin = !member && (await isAllowlistedAdmin(userId))
       // A PUBLIC project is browsable by anyone (SOC discovery); the per-deck
       // ACL filter below still limits a non-member to its public lectures.
       const publicProject = !member && !admin && project.visibility === 'public'
       if (!member && !admin && !publicProject) {
         throw new ActionForbiddenError()
       }
-      const docs = await DeckModel.find({ projectId: input.projectId }).sort({
-        updatedAt: -1,
+      // A tombstoned project lists the lectures deleted with it, as its admin
+      // page does — the ones a restore would bring back.
+      const { filter, options } = asOf(project.deletedAt)
+      const docs = await DeckModel.find({
+        projectId: input.projectId,
+        ...filter,
       })
-      const acls = await loadDeckAcls(docs)
+        .sort({ updatedAt: -1 })
+        .setOptions(options)
+      const acls = await loadDeckAcls(docs, {
+        withDeleted: Boolean(project.deletedAt),
+      })
       return docs
         .filter(d => admin || canViewAcl(acls.get(d._id.toString())!, userId))
         .map(d => toDeckDto(d, acls.get(d._id.toString())!))
@@ -337,61 +379,67 @@ export const deckList = defineAction<DeckListInput, Deck[]>({
   },
 })
 
-export const deckGet = defineAction<DeckGetInput, DeckViewResponse>({
-  name: 'deck.get',
-  input: z.object({ deckId: z.string().min(1) }),
-  execute: async (ctx, input) => {
-    const userId = requireUser(ctx)
-    const deck = await DeckModel.findById(input.deckId).catch(() => null)
-    if (!deck) throw new ActionForbiddenError()
-    const acl = await loadDeckAcl(deck)
-    if (!canViewAcl(acl, userId)) throw new ActionForbiddenError()
-    const template = await resolveDeckTemplateForRead(deck)
-    if (!template)
-      throw new ActionValidationError('deck.get', ['template no longer exists'])
-    const slides = await SlideModel.find({ deckId: deck._id }).sort({
-      index: 1,
-    })
-    const isOwner = acl.ownerId === userId
-    const project = await ProjectModel.findById(deck.projectId).catch(
-      () => null,
-    )
-    const owner = await UserModel.findById(deck.ownerId)
-      .select('displayName')
-      .catch(() => null)
-    const myVote: MyVote =
-      (
-        await VoteModel.findOne({
-          userId,
-          targetType: 'deck',
-          targetId: deck._id,
-        })
-      )?.value ?? 0
-    const { up: voteUp, down: voteDown } = await voteBreakdown('deck', deck._id)
-    return {
-      deck: isOwner ? toDeckDto(deck, acl) : toSharedDeckDto(deck, acl),
-      slides: slides.map(toSlideDto),
-      template,
-      canEdit: canEditAcl(acl, userId),
-      projectGenerationFreedom:
-        project?.generationFreedom ?? env.GENERATION_FREEDOM,
-      owner: { id: acl.ownerId, displayName: owner?.displayName ?? '' },
-      project: { id: deck.projectId.toString(), title: project?.title ?? '' },
-      myVote,
-      voteUp,
-      voteDown,
-    }
+export const deckGet = defineAction<DeckGetInput, DeckViewResponse, DeckAccess>(
+  {
+    name: 'deck.get',
+    // Anyone who may read the lecture. Which SHAPE they get back — the owner's
+    // full view or the shared one — is not an access decision and stays below,
+    // reading the ACL this already resolved rather than loading it again.
+    access: viewerOf,
+    input: z.object({ deckId: z.string().min(1) }),
+    execute: async (ctx, input, { userId, deck, acl }) => {
+      const template = await resolveDeckTemplateForRead(deck)
+      if (!template)
+        throw new ActionValidationError('deck.get', [
+          'template no longer exists',
+        ])
+      const slides = await SlideModel.find({ deckId: deck._id }).sort({
+        index: 1,
+      })
+      const isOwner = acl.ownerId === userId
+      const project = await ProjectModel.findById(deck.projectId).catch(
+        () => null,
+      )
+      const owner = await UserModel.findById(deck.ownerId)
+        .select('displayName')
+        .catch(() => null)
+      const myVote: MyVote =
+        (
+          await VoteModel.findOne({
+            userId,
+            targetType: 'deck',
+            targetId: deck._id,
+          })
+        )?.value ?? 0
+      const { up: voteUp, down: voteDown } = await voteBreakdown(
+        'deck',
+        deck._id,
+      )
+      return {
+        deck: isOwner ? toDeckDto(deck, acl) : toSharedDeckDto(deck, acl),
+        slides: slides.map(toSlideDto),
+        template,
+        canEdit: canEditAcl(acl, userId),
+        projectGenerationFreedom:
+          project?.generationFreedom ?? env.GENERATION_FREEDOM,
+        owner: { id: acl.ownerId, displayName: owner?.displayName ?? '' },
+        project: { id: deck.projectId.toString(), title: project?.title ?? '' },
+        myVote,
+        voteUp,
+        voteDown,
+      }
+    },
   },
-})
+)
 
-export const slideAdd = defineAction<SlideAddInput, Slide>({
+export const slideAdd = defineAction<SlideAddInput, Slide, DeckAccess>({
   name: 'slide.add',
+  access: byDeckId,
   input: z.object({
     deckId: z.string().min(1),
     layoutType: z.string().min(1).optional(),
   }),
-  execute: async (ctx, input) => {
-    const { deck } = await loadEditableDeck(ctx, input.deckId)
+  execute: async (ctx, input, { deck }) => {
     let layoutType = 'content'
     if (input.layoutType) {
       const template = await resolveDeckTemplate(deck)
@@ -420,8 +468,13 @@ export const slideAdd = defineAction<SlideAddInput, Slide>({
   },
 })
 
-export const deckRename = defineAction<DeckRenameInput, Deck>({
+export const deckRename = defineAction<
+  DeckRenameInput,
+  Deck,
+  DeckSettingsAccess
+>({
   name: 'deck.rename',
+  access: settingsOf,
   input: z.object({
     deckId: z.string().min(1),
     // Clearing the title is allowed; it displays as "Untitled lecture"
@@ -429,8 +482,8 @@ export const deckRename = defineAction<DeckRenameInput, Deck>({
   }),
   // A settings edit (the title field lives in the settings modal), so
   // admins may rename another user's lecture — audited, see below.
-  execute: (ctx, input) =>
-    editDeckSettings(ctx, input.deckId, async (deck, acl) => {
+  execute: (ctx, input, access) =>
+    withDeckSettingsAudit(access, async (deck, acl) => {
       deck.title = input.title
       // A hand-entered title locks out AI titling; clearing it back to empty
       // hands control back to the auto-title refinement.
@@ -449,12 +502,13 @@ export const deckRename = defineAction<DeckRenameInput, Deck>({
  */
 export const deckTemplateUpdateStatus = defineAction<
   DeckTemplateUpdateStatusInput,
-  TemplateUpdateStatus
+  TemplateUpdateStatus,
+  DeckAccess
 >({
   name: 'deck.templateUpdateStatus',
+  access: byDeckId,
   input: z.object({ deckId: z.string().min(1) }),
-  execute: async (ctx, input) => {
-    const { deck } = await loadEditableDeck(ctx, input.deckId)
+  execute: async (ctx, input, { deck }) => {
     const slides = await SlideModel.find({ deckId: deck._id }).select(
       '_id layoutType slots title body bullets caption imageRef',
     )
@@ -489,12 +543,13 @@ export const deckTemplateUpdateStatus = defineAction<
  */
 export const deckApplyTemplateUpdate = defineAction<
   DeckApplyTemplateUpdateInput,
-  Deck
+  Deck,
+  DeckAccess
 >({
   name: 'deck.applyTemplateUpdate',
+  access: byDeckId,
   input: z.object({ deckId: z.string().min(1) }),
-  execute: async (ctx, input) => {
-    const { deck, acl } = await loadEditableDeck(ctx, input.deckId)
+  execute: async (ctx, input, { deck, acl }) => {
     const pinned = await getVersion(deck.templateVersionId ?? undefined)
     if (!pinned) {
       throw new ActionValidationError('deck.applyTemplateUpdate', [
@@ -540,14 +595,19 @@ export const deckApplyTemplateUpdate = defineAction<
   },
 })
 
-export const deckSwitchTemplate = defineAction<DeckSwitchTemplateInput, Deck>({
+export const deckSwitchTemplate = defineAction<
+  DeckSwitchTemplateInput,
+  Deck,
+  DeckSettingsAccess
+>({
   name: 'deck.switchTemplate',
+  access: settingsOf,
   input: z.object({
     deckId: z.string().min(1),
     templateId: z.string().min(1),
   }),
-  execute: (ctx, input) =>
-    editDeckSettings(ctx, input.deckId, async (deck, acl) => {
+  execute: (ctx, input, access) =>
+    withDeckSettingsAudit(access, async (deck, acl) => {
       if (!(await templateExists(input.templateId))) {
         throw new ActionValidationError('deck.switchTemplate', [
           'templateId: unknown template',
@@ -563,14 +623,18 @@ export const deckSwitchTemplate = defineAction<DeckSwitchTemplateInput, Deck>({
     }),
 })
 
-export const deckReorderSlides = defineAction<DeckReorderInput, Deck>({
+export const deckReorderSlides = defineAction<
+  DeckReorderInput,
+  Deck,
+  DeckAccess
+>({
   name: 'deck.reorderSlides',
+  access: byDeckId,
   input: z.object({
     deckId: z.string().min(1),
     slideOrder: z.array(z.string().min(1)).min(1),
   }),
-  execute: async (ctx, input) => {
-    const { deck, acl } = await loadEditableDeck(ctx, input.deckId)
+  execute: async (ctx, input, { deck, acl }) => {
     const current = [...deck.slideOrder].sort()
     const proposed = [...input.slideOrder].sort()
     if (
@@ -598,8 +662,13 @@ export const deckReorderSlides = defineAction<DeckReorderInput, Deck>({
  * bloating the prompt on a long-dwelt slide. */
 const LIVE_TRANSCRIPT_CHARS = 4000
 
-export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
+export const sessionPhrase = defineAction<
+  SessionPhraseInput,
+  SlideEvent,
+  DeckAccess
+>({
   name: 'session.phrase',
+  access: byDeckId,
   meter: requireAiTokens,
   input: z.object({
     deckId: z.string().min(1),
@@ -629,8 +698,7 @@ export const sessionPhrase = defineAction<SessionPhraseInput, SlideEvent>({
     // while the user is actively marking up a slide, or until they resume.
     pauseGeneration: z.boolean().optional(),
   }),
-  execute: async (ctx, input) => {
-    const { deck } = await loadEditableDeck(ctx, input.deckId)
+  execute: async (ctx, input, { deck }) => {
     const template = await resolveDeckTemplate(deck)
     if (!template)
       throw new ActionValidationError('session.phrase', [
@@ -1262,15 +1330,17 @@ const sharesOf = sharesOfAcl
 /** Lecture-level AI freedom; null re-inherits the project's setting. */
 export const deckSetGenerationFreedom = defineAction<
   DeckSetGenerationFreedomInput,
-  Deck
+  Deck,
+  DeckSettingsAccess
 >({
   name: 'deck.setGenerationFreedom',
+  access: settingsOf,
   input: z.object({
     deckId: z.string().min(1),
     freedom: z.number().int().min(1).max(5).nullable(),
   }),
-  execute: (ctx, input) =>
-    editDeckSettings(ctx, input.deckId, async (deck, acl) => {
+  execute: (ctx, input, access) =>
+    withDeckSettingsAudit(access, async (deck, acl) => {
       deck.generationFreedom = input.freedom ?? undefined
       await deck.save()
       return toDeckDto(deck, acl)
@@ -1283,9 +1353,11 @@ export const deckSetGenerationFreedom = defineAction<
  * action can reuse the lecture's choices. */
 export const deckSetRefineSettings = defineAction<
   DeckSetRefineSettingsInput,
-  Deck
+  Deck,
+  DeckSettingsAccess
 >({
   name: 'deck.setRefineSettings',
+  access: settingsOf,
   input: z.object({
     deckId: z.string().min(1),
     identifySpeakers: z.boolean().nullable().optional(),
@@ -1294,8 +1366,8 @@ export const deckSetRefineSettings = defineAction<
     transcriptEnabled: z.boolean().nullable().optional(),
     transcriptLevel: z.number().int().min(1).max(5).nullable().optional(),
   }),
-  execute: (ctx, input) =>
-    editDeckSettings(ctx, input.deckId, async (deck, acl) => {
+  execute: (ctx, input, access) =>
+    withDeckSettingsAudit(access, async (deck, acl) => {
       if (input.identifySpeakers !== undefined)
         deck.refineIdentifySpeakers = input.identifySpeakers ?? undefined
       if (input.slidesEnabled !== undefined)
@@ -1312,14 +1384,19 @@ export const deckSetRefineSettings = defineAction<
 })
 
 /** Lecture-level language; null re-inherits project/profile/browser. */
-export const deckSetLanguage = defineAction<DeckSetLanguageInput, Deck>({
+export const deckSetLanguage = defineAction<
+  DeckSetLanguageInput,
+  Deck,
+  DeckSettingsAccess
+>({
   name: 'deck.setLanguage',
+  access: settingsOf,
   input: z.object({
     deckId: z.string().min(1),
     language: z.enum(LOCALES).nullable(),
   }),
-  execute: (ctx, input) =>
-    editDeckSettings(ctx, input.deckId, async (deck, acl) => {
+  execute: (ctx, input, access) =>
+    withDeckSettingsAudit(access, async (deck, acl) => {
       deck.language = input.language ?? undefined
       await deck.save()
       return toDeckDto(deck, acl)
@@ -1327,47 +1404,62 @@ export const deckSetLanguage = defineAction<DeckSetLanguageInput, Deck>({
 })
 
 /** Lecture-level narration voice; null re-inherits the project's. */
-export const deckSetTtsVoice = defineAction<DeckSetTtsVoiceInput, Deck>({
+export const deckSetTtsVoice = defineAction<
+  DeckSetTtsVoiceInput,
+  Deck,
+  DeckSettingsAccess
+>({
   name: 'deck.setTtsVoice',
+  access: settingsOf,
   input: z.object({
     deckId: z.string().min(1),
     voice: ttsVoiceIdSchema.nullable(),
   }),
-  execute: (ctx, input) =>
-    editDeckSettings(ctx, input.deckId, async (deck, acl) => {
+  execute: (ctx, input, access) =>
+    withDeckSettingsAudit(access, async (deck, acl) => {
       deck.ttsVoice = input.voice ?? undefined
       await deck.save()
       return toDeckDto(deck, acl)
     }),
 })
 
-export const deckSetSeedNotes = defineAction<DeckSetSeedNotesInput, Deck>({
+export const deckSetSeedNotes = defineAction<
+  DeckSetSeedNotesInput,
+  Deck,
+  DeckSettingsAccess
+>({
   name: 'deck.setSeedNotes',
+  access: settingsOf,
   input: z.object({
     deckId: z.string().min(1),
     seedContext: z.string().max(20_000),
   }),
-  execute: (ctx, input) =>
-    editDeckSettings(ctx, input.deckId, async (deck, acl) => {
+  execute: (ctx, input, access) =>
+    withDeckSettingsAudit(access, async (deck, acl) => {
       deck.seedContext = input.seedContext
       await deck.save()
       return toDeckDto(deck, acl)
     }),
 })
 
-export const deckSetAccess = defineAction<DeckSetAccessInput, Deck>({
+export const deckSetAccess = defineAction<
+  DeckSetAccessInput,
+  Deck,
+  DeckSettingsAccess
+>({
   name: 'deck.setAccess',
+  access: settingsOf,
   input: z.object({
     deckId: z.string().min(1),
     visibility: z.enum(['restricted', 'public']),
   }),
-  execute: async (ctx, input) => {
+  execute: async (ctx, input, access) => {
     // Same gate as a project's (AUTH-3): an unconfirmed account may share a
     // lecture with named people, but not with everyone.
     if (input.visibility === 'public' && ctx.userId) {
       await requireVerifiedEmail(ctx.userId)
     }
-    return editDeckSettings(ctx, input.deckId, async (deck, acl) => {
+    return withDeckSettingsAudit(access, async (deck, acl) => {
       ensureDeckOverride(deck, acl)
       deck.accessOverride!.visibility = input.visibility
       deck.markModified('accessOverride')
@@ -1378,11 +1470,16 @@ export const deckSetAccess = defineAction<DeckSetAccessInput, Deck>({
 })
 
 /** Drops the lecture's override so it follows its project again. */
-export const deckResetAccess = defineAction<DeckResetAccessInput, Deck>({
+export const deckResetAccess = defineAction<
+  DeckResetAccessInput,
+  Deck,
+  DeckSettingsAccess
+>({
   name: 'deck.resetAccess',
+  access: settingsOf,
   input: z.object({ deckId: z.string().min(1) }),
-  execute: (ctx, input) =>
-    editDeckSettings(ctx, input.deckId, async deck => {
+  execute: (ctx, input, access) =>
+    withDeckSettingsAudit(access, async deck => {
       deck.accessOverride = undefined
       deck.markModified('accessOverride')
       await deck.save()
@@ -1390,15 +1487,20 @@ export const deckResetAccess = defineAction<DeckResetAccessInput, Deck>({
     }),
 })
 
-export const deckShare = defineAction<DeckShareInput, DeckShare[]>({
+export const deckShare = defineAction<
+  DeckShareInput,
+  DeckShare[],
+  DeckSettingsAccess
+>({
   name: 'deck.share',
+  access: settingsOf,
   input: z.object({
     deckId: z.string().min(1),
     email: z.email(),
     role: z.enum(['viewer', 'editor']),
   }),
-  execute: (ctx, input) =>
-    editDeckSettings(ctx, input.deckId, async (deck, acl) => {
+  execute: (ctx, input, access) =>
+    withDeckSettingsAudit(access, async (deck, acl) => {
       const user = await UserModel.findOne({
         email: input.email.toLowerCase().trim(),
       })
@@ -1428,15 +1530,20 @@ export const deckShare = defineAction<DeckShareInput, DeckShare[]>({
     }),
 })
 
-export const deckUnshare = defineAction<DeckUnshareInput, DeckShare[]>({
+export const deckUnshare = defineAction<
+  DeckUnshareInput,
+  DeckShare[],
+  DeckSettingsAccess
+>({
   name: 'deck.unshare',
+  access: settingsOf,
   input: z.object({
     deckId: z.string().min(1),
     userId: z.string().min(1),
     role: z.enum(['viewer', 'editor']),
   }),
-  execute: (ctx, input) =>
-    editDeckSettings(ctx, input.deckId, async (deck, acl) => {
+  execute: (ctx, input, access) =>
+    withDeckSettingsAudit(access, async (deck, acl) => {
       ensureDeckOverride(deck, acl)
       const override = deck.accessOverride!
       const list = input.role === 'editor' ? override.editors : override.viewers
@@ -1448,19 +1555,31 @@ export const deckUnshare = defineAction<DeckUnshareInput, DeckShare[]>({
     }),
 })
 
-export const deckShares = defineAction<DeckSharesInput, DeckShare[]>({
+/**
+ * Who a lecture is shared with. A read: it takes the settings gate because
+ * the share list is management data, but it changes nothing and so files no
+ * settings-change entry (TECH-14).
+ */
+export const deckShares = defineAction<
+  DeckSharesInput,
+  DeckShare[],
+  DeckAccess
+>({
   name: 'deck.shares',
+  access: settingsReadOf,
   input: z.object({ deckId: z.string().min(1) }),
-  execute: (ctx, input) =>
-    editDeckSettings(ctx, input.deckId, async (_deck, acl) => sharesOf(acl)),
+  execute: (ctx, input, { acl }) => sharesOf(acl),
 })
 
-export const deckDelete = defineAction<DeckDeleteInput, { deleted: true }>({
+export const deckDelete = defineAction<
+  DeckDeleteInput,
+  { deleted: true },
+  DeckAccess
+>({
   name: 'deck.delete',
+  access: ownerOf,
   input: z.object({ deckId: z.string().min(1) }),
-  execute: async (ctx, input) => {
-    const deck = await loadOwnedDeck(ctx, input.deckId)
-
+  execute: async (ctx, input, { deck }) => {
     // Cascade: slides, lecture-level seed assets (and their stored
     // files), transcripts, refine jobs, retained recordings, then the
     // deck itself
@@ -1471,16 +1590,16 @@ export const deckDelete = defineAction<DeckDeleteInput, { deleted: true }>({
 
 export const deckTransferOwnership = defineAction<
   DeckTransferOwnershipInput,
-  Deck
+  Deck,
+  DeckAccess
 >({
   name: 'deck.transferOwnership',
+  access: ownerOf,
   input: z.object({
     deckId: z.string().min(1),
     userId: z.string().min(1),
   }),
-  execute: async (ctx, input) => {
-    const userId = requireUser(ctx)
-    const deck = await loadOwnedDeck(ctx, input.deckId)
+  execute: async (ctx, input, { userId, deck }) => {
     const target = await UserModel.findById(input.userId).catch(() => null)
     if (!target) {
       throw new ActionValidationError('deck.transferOwnership', [

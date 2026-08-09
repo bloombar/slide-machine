@@ -168,6 +168,9 @@
       "privacy": "Privacidad"
     },
     "accountTypeSection": "Tipo de cuenta",
+    "planSection": "Plan",
+    "accountTypeSectionHint": "Para qué usas Slide Machine. Determina la privacidad con la que empiezan tus nuevas clases.",
+    "accountTypeUnset": "Sin definir",
     "publicProfileSectionHint": "Se guarda al escribir. Lo que ven los desconocidos en tu perfil.",
     "privacySectionHint": "Quién puede ver tu perfil y las clases que aparecen en él.",
     "delete": {
@@ -175,6 +178,28 @@
       "hint": "Eliminar tu cuenta borra definitivamente tus proyectos, clases y diapositivas. Esta acción no se puede deshacer.",
       "title": "¿Eliminar tu cuenta?",
       "message": "Tu cuenta y todos sus proyectos, clases y diapositivas se eliminarán definitivamente."
+    }
+  },
+  "accountType": {
+    "student": {
+      "label": "Estudiante",
+      "hint": "Tu perfil y tus nuevas clases empiezan como privados."
+    },
+    "educator": {
+      "label": "Docente",
+      "hint": "Tu perfil y tus nuevas clases empiezan como públicos."
+    },
+    "other": {
+      "label": "Otro",
+      "hint": "Tu perfil y tus nuevas clases empiezan como públicos."
+    }
+  },
+  "onboarding": {
+    "accountType": {
+      "title": "¿Qué te describe mejor?",
+      "hint": "Esto solo determina la privacidad con la que empieza tu trabajo. En ningún caso se te oculta nada.",
+      "changeable": "Puedes cambiarlo cuando quieras en Ajustes.",
+      "error": "No se pudo guardar tu respuesta. Inténtalo de nuevo."
     }
   },
   "language": {
@@ -995,7 +1020,9 @@
     "showOriginal": "Mostrar el original",
     "translatedNotice": "Traducción automática — el original es la versión válida",
     "translatedNoticeEditor": "Vista traducida automáticamente — la edición está desactivada hasta que muestres el original",
-    "translationFailed": "No se pudo traducir esta clase. Se muestra el original."
+    "translationFailed": "No se pudo traducir esta clase. Se muestra el original.",
+    "narrationTranslationFailed": "No se pudo leer esta clase en voz alta en ese idioma. La narración se detuvo.",
+    "translationSeePlans": "Ver planes"
   },
   "quiz": {
     "heading": "Cuestionario de salida",
@@ -1142,7 +1169,8 @@
     "forbidden": "No tienes permiso para hacer eso",
     "internal_error": "Algo salió mal por nuestra parte: inténtalo de nuevo",
     "unknown_error": "Algo salió mal: inténtalo de nuevo",
-    "email_unverified": "Primero confirma tu dirección de correo: revisa tu bandeja de entrada o envía un enlace nuevo desde los ajustes de tu cuenta"
+    "email_unverified": "Primero confirma tu dirección de correo: revisa tu bandeja de entrada o envía un enlace nuevo desde los ajustes de tu cuenta",
+    "capability_required": "Primero conecta una cuenta de Google — puedes hacerlo desde la configuración de tu cuenta"
   },
   "usage": {
     "title": "Uso del plan",
@@ -1173,7 +1201,8 @@
     "notice": {
       "approaching": "Estás cerca de algunos límites de tu plan",
       "reached": "Has alcanzado uno de los límites de tu plan",
-      "seeAll": "Ver todo el uso"
+      "seeAll": "Ver todo el uso",
+      "dismiss": "Descartar"
     },
     "metric": {
       "aiTokens": "Generación con IA",
@@ -1193,6 +1222,10 @@
     "errors": {
       "load": "No se pudo cargar tu uso"
     },
-    "plan": "Plan"
+    "plan": "Plan",
+    "settings": {
+      "warnEmails": "Avisarme por correo antes de agotarlo",
+      "warnEmailsHint": "Un aviso cuando un cupo está casi agotado. Los avisos de límite realmente alcanzado siempre se envían."
+    }
   }
 }

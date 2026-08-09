@@ -5,7 +5,6 @@
  * edit rights, mirroring the upload route.
  */
 import { z } from 'zod'
-import type { HydratedDocument } from 'mongoose'
 import type {
   SeedAsset,
   SeedAssetDeleteInput,
@@ -14,77 +13,34 @@ import type {
 } from '@slide-machine/shared'
 import { defineAction } from './define'
 import {
-  registerAction,
-  ActionForbiddenError,
-  ActionValidationError,
-} from './dispatch'
-import type { ActionContext } from './context'
-import { ProjectModel, projectAcl } from '../models/project'
-import { DeckModel, loadDeckAcl } from '../models/deck'
-import { canEditAcl } from '../lib/access'
-import {
-  SeedAssetModel,
-  toSeedAssetDto,
-  type SeedAssetDb,
-} from '../models/seed-asset'
+  seedAssetEditor,
+  seedAssetLevel,
+  type SeedAssetAccess,
+  type SeedAssetLevel,
+} from './access'
+import { registerAction } from './dispatch'
+import { SeedAssetModel, toSeedAssetDto } from '../models/seed-asset'
 
-const requireUser = (ctx: ActionContext): string => {
-  if (!ctx.userId) throw new ActionForbiddenError('Sign in to continue')
-  return ctx.userId
-}
-
-/** May `ctx` manage assets at this level? Same rules as the upload route. */
-const authorizeLevel = async (
-  ctx: ActionContext,
-  projectId: string,
-  deckId?: string,
-): Promise<void> => {
-  const userId = requireUser(ctx)
-  if (deckId) {
-    const deck = await DeckModel.findById(deckId).catch(() => null)
-    if (!deck || !canEditAcl(await loadDeckAcl(deck), userId))
-      throw new ActionForbiddenError()
-    return
-  }
-  const project = await ProjectModel.findById(projectId).catch(() => null)
-  if (!project || !canEditAcl(projectAcl(project), userId))
-    throw new ActionForbiddenError()
-}
-
-const loadManagedAsset = async (
-  ctx: ActionContext,
-  assetId: string,
-): Promise<HydratedDocument<SeedAssetDb>> => {
-  const asset = await SeedAssetModel.findById(assetId).catch(() => null)
-  if (!asset) throw new ActionForbiddenError()
-  await authorizeLevel(
-    ctx,
-    asset.projectId.toString(),
-    asset.deckId?.toString(),
-  )
-  return asset
-}
-
-export const seedAssetList = defineAction<SeedAssetListInput, SeedAsset[]>({
+export const seedAssetList = defineAction<
+  SeedAssetListInput,
+  SeedAsset[],
+  { userId: string; level: SeedAssetLevel }
+>({
   name: 'seedAsset.list',
+  // The level is a property of the request: a lecture id names the lecture's
+  // own material, otherwise the project's.
+  access: seedAssetLevel(),
   input: z.object({
     projectId: z.string().min(1).optional(),
     deckId: z.string().min(1).optional(),
   }),
   execute: async (ctx, input) => {
-    if (!input.projectId && !input.deckId) {
-      throw new ActionValidationError('seedAsset.list', [
-        'provide projectId or deckId',
-      ])
-    }
     if (input.deckId) {
-      await authorizeLevel(ctx, '', input.deckId)
       const docs = await SeedAssetModel.find({ deckId: input.deckId }).sort({
         createdAt: -1,
       })
       return docs.map(toSeedAssetDto)
     }
-    await authorizeLevel(ctx, input.projectId!)
     const docs = await SeedAssetModel.find({
       projectId: input.projectId,
       deckId: { $exists: false },
@@ -93,15 +49,19 @@ export const seedAssetList = defineAction<SeedAssetListInput, SeedAsset[]>({
   },
 })
 
-export const seedAssetUpdate = defineAction<SeedAssetUpdateInput, SeedAsset>({
+export const seedAssetUpdate = defineAction<
+  SeedAssetUpdateInput,
+  SeedAsset,
+  SeedAssetAccess
+>({
   name: 'seedAsset.update',
+  access: seedAssetEditor(),
   input: z.object({
     assetId: z.string().min(1),
     caption: z.string().max(500).optional(),
     enabled: z.boolean().optional(),
   }),
-  execute: async (ctx, input) => {
-    const asset = await loadManagedAsset(ctx, input.assetId)
+  execute: async (ctx, input, { asset }) => {
     if (input.caption !== undefined) {
       asset.caption = input.caption
       // Captions double as search keywords for photo enrichment
@@ -124,12 +84,13 @@ export const seedAssetUpdate = defineAction<SeedAssetUpdateInput, SeedAsset>({
 
 export const seedAssetDelete = defineAction<
   SeedAssetDeleteInput,
-  { deleted: true }
+  { deleted: true },
+  SeedAssetAccess
 >({
   name: 'seedAsset.delete',
+  access: seedAssetEditor(),
   input: z.object({ assetId: z.string().min(1) }),
-  execute: async (ctx, input) => {
-    const asset = await loadManagedAsset(ctx, input.assetId)
+  execute: async (ctx, input, { asset }) => {
     // Soft delete (P-10): tombstone the asset; the stored file is kept for
     // restore and removed later by the retention purge.
     asset.deletedAt = new Date()

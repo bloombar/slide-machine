@@ -4,11 +4,16 @@
  * Profile, log out); pages can place their own controls on the right via
  * ShellActions. Presentation surfaces (live session, deck viewer)
  * intentionally do not use this shell.
+ *
+ * It is also where a signed-in account is asked what it is (AUTH-6), so
+ * the question is asked once at the app's front door rather than by each
+ * page that could be the first one landed on.
  */
 import { Link, Outlet } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import HealthFooter from './HealthFooter'
 import ShellMenu from './ShellMenu'
+import AccountTypePrompt from '../AccountTypePrompt'
 import { ShellDrawerFrame } from './ShellDrawer'
 import badgeUrl from '../../assets/badge.png'
 import { useShellTitleSlot } from './ShellTitle'
@@ -64,6 +69,7 @@ export default function AppShell() {
           <Outlet />
         </main>
         <HealthFooter />
+        <AccountTypePrompt />
       </div>
     </ShellDrawerFrame>
   )

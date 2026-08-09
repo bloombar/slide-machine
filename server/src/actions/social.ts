@@ -20,14 +20,17 @@ import {
   type VoteResult,
 } from '@slide-machine/shared'
 import { defineAction } from './define'
+import { custom, deckViewer, type DeckAccess, type Signed } from './access'
+
+/** Voting is a reader's act, so anyone who may see the lecture may vote. */
+const viewerOf = deckViewer((input: { deckId: string }) => input.deckId)
 import { registerAction, ActionForbiddenError } from './dispatch'
 import type { ActionContext } from './context'
-import { DeckModel, loadDeckAcl, type DeckDb } from '../models/deck'
+import { DeckModel, type DeckDb } from '../models/deck'
 import { ProjectModel } from '../models/project'
 import { SlideModel } from '../models/slide'
 import { UserModel } from '../models/user'
 import { VoteModel, voteBreakdown, voteBreakdowns } from '../models/vote'
-import { canViewAcl } from '../lib/access'
 
 /** Shared paging input for every browsable list (SOC-2): which order, and which
  * slice of it. `limit` is capped so one request cannot ask for everything. */
@@ -49,20 +52,16 @@ const requireUser = (ctx: ActionContext): string => {
  */
 export const deckVote = defineAction<
   { deckId: string; value: 1 | -1 | 0 },
-  VoteResult
+  VoteResult,
+  DeckAccess
 >({
   name: 'deck.vote',
+  access: viewerOf,
   input: z.object({
     deckId: z.string().min(1),
     value: z.union([z.literal(1), z.literal(-1), z.literal(0)]),
   }),
-  execute: async (ctx, input) => {
-    const userId = requireUser(ctx)
-    const deck = await DeckModel.findById(input.deckId).catch(() => null)
-    if (!deck) throw new ActionForbiddenError()
-    const acl = await loadDeckAcl(deck)
-    if (!canViewAcl(acl, userId)) throw new ActionForbiddenError()
-
+  execute: async (ctx, input, { userId, deck }) => {
     const key = {
       userId: new Types.ObjectId(userId),
       targetType: 'deck' as const,
@@ -198,9 +197,15 @@ const pageOfDecks = async (
  */
 export const deckFeed = defineAction<
   { sort: FeedSort; offset: number; limit: number },
-  DeckFeedResponse
+  DeckFeedResponse,
+  Signed
 >({
   name: 'deck.feed',
+  // Nothing is fetched to decide: publicDeckFilter matches only lectures
+  // whose access already makes them public, and excludes the caller's own.
+  access: custom(
+    'the Mongo filter IS the authorization — publicDeckFilter reimplements deck ACL resolution at query level, so there is no single resource to resolve',
+  ),
   input: z.object(pagingInput),
   execute: async (ctx, input) => {
     const userId = requireUser(ctx)
@@ -304,9 +309,15 @@ const authorCandidates = async (
  */
 export const socialSearch = defineAction<
   { q: string; sort: FeedSort; offset: number; limit: number },
-  SearchResults
+  SearchResults,
+  Signed
 >({
   name: 'social.search',
+  // Nothing is fetched to decide: publicDeckFilter matches only lectures
+  // whose access already makes them public, and excludes the caller's own.
+  access: custom(
+    'the Mongo filter IS the authorization — the same publicDeckFilter, applied to a search rather than a listing',
+  ),
   input: z.object({
     q: z.string().trim().min(1).max(100),
     ...pagingInput,

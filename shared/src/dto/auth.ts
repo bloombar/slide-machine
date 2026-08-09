@@ -5,7 +5,17 @@
 import type { Locale } from '../types/locale'
 import type { User } from '../types/user'
 
-export type SafeUser = Omit<User, 'passwordHash'>
+/**
+ * The account as the client is allowed to see it.
+ *
+ * `billingCustomerId` is omitted alongside the password hash, and for a
+ * related reason (P-8): it is an opaque reference the payment provider issued,
+ * the browser has no use for it, and the only thing shipping it can do is
+ * widen where a vendor identifier can end up. `billingProvider` stays — it
+ * names which adapter the deployment runs, not a person, and the admin console
+ * legitimately reports it.
+ */
+export type SafeUser = Omit<User, 'passwordHash' | 'billingCustomerId'>
 
 export interface RegisterRequest {
   email: string

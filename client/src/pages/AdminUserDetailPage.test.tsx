@@ -158,6 +158,10 @@ describe('AdminUserDetailPage', () => {
     expect(
       screen.getByRole('link', { name: 'View public profile' }),
     ).toHaveAttribute('href', '/u/u1')
+    // The account type says why this account's work defaults as it does,
+    // and reads as unanswered rather than blank when it is (AUTH-6)
+    expect(within(details).getByText('Account type')).toBeVisible()
+    expect(within(details).getByText('Not answered')).toBeVisible()
   })
 
   it('edits no settings of its own, pointing at Account Settings', async () => {
@@ -405,10 +409,14 @@ describe('AdminUserDetailPage soft-deleted content', () => {
     ]) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
     }
-    // Nor is there a product surface left to open.
+    // The profile still opens, relabelled for what it now is (ADMIN-6) —
+    // so the "public" link is gone, but a product surface remains.
     expect(
       screen.queryByRole('link', { name: 'View public profile' }),
     ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: 'View deleted profile' }),
+    ).toHaveAttribute('href', '/u/u1')
     expect(screen.queryByText(/Settings are edited on the user/)).toBeNull()
   })
 

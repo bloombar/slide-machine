@@ -168,6 +168,9 @@
       "privacy": "Confidentialité"
     },
     "accountTypeSection": "Type de compte",
+    "planSection": "Forfait",
+    "accountTypeSectionHint": "Ce pour quoi vous utilisez Slide Machine. Cela détermine la confidentialité initiale de vos nouveaux cours.",
+    "accountTypeUnset": "Non défini",
     "publicProfileSectionHint": "Enregistré au fil de la saisie. Ce que les inconnus voient sur votre profil.",
     "privacySectionHint": "Qui peut voir votre profil et les cours qui y figurent.",
     "delete": {
@@ -175,6 +178,28 @@
       "hint": "La suppression de votre compte efface définitivement vos projets, cours et diapositives. Cette action est irréversible.",
       "title": "Supprimer votre compte ?",
       "message": "Votre compte et tous ses projets, cours et diapositives seront définitivement supprimés."
+    }
+  },
+  "accountType": {
+    "student": {
+      "label": "Étudiant",
+      "hint": "Votre profil et vos nouveaux cours démarrent en privé."
+    },
+    "educator": {
+      "label": "Enseignant",
+      "hint": "Votre profil et vos nouveaux cours démarrent en public."
+    },
+    "other": {
+      "label": "Autre",
+      "hint": "Votre profil et vos nouveaux cours démarrent en public."
+    }
+  },
+  "onboarding": {
+    "accountType": {
+      "title": "Qu'est-ce qui vous décrit le mieux ?",
+      "hint": "Cela détermine uniquement la confidentialité initiale de votre travail. Rien ne vous est masqué dans un cas comme dans l'autre.",
+      "changeable": "Vous pouvez le modifier à tout moment dans les paramètres.",
+      "error": "Impossible d'enregistrer votre réponse. Réessayez."
     }
   },
   "language": {
@@ -995,7 +1020,9 @@
     "showOriginal": "Afficher l'original",
     "translatedNotice": "Traduction automatique — l'original fait foi",
     "translatedNoticeEditor": "Vue traduite automatiquement — la modification est désactivée tant que l'original n'est pas affiché",
-    "translationFailed": "Impossible de traduire ce cours. Affichage de l'original."
+    "translationFailed": "Impossible de traduire ce cours. Affichage de l'original.",
+    "narrationTranslationFailed": "Impossible de lire ce cours à voix haute dans cette langue. La narration s'est arrêtée.",
+    "translationSeePlans": "Voir les forfaits"
   },
   "quiz": {
     "heading": "Quiz de fin de cours",
@@ -1142,7 +1169,8 @@
     "forbidden": "Vous n'avez pas l'autorisation de faire cela",
     "internal_error": "Une erreur s'est produite de notre côté — réessayez",
     "unknown_error": "Une erreur s'est produite — réessayez",
-    "email_unverified": "Confirmez d’abord votre adresse e-mail — vérifiez votre boîte de réception ou envoyez un nouveau lien depuis les paramètres de votre compte"
+    "email_unverified": "Confirmez d’abord votre adresse e-mail — vérifiez votre boîte de réception ou envoyez un nouveau lien depuis les paramètres de votre compte",
+    "capability_required": "Connectez d’abord un compte Google — vous pouvez le faire depuis les paramètres de votre compte"
   },
   "usage": {
     "title": "Utilisation du forfait",
@@ -1173,7 +1201,8 @@
     "notice": {
       "approaching": "Vous approchez de certaines limites de votre forfait",
       "reached": "Vous avez atteint une limite de votre forfait",
-      "seeAll": "Voir toute l'utilisation"
+      "seeAll": "Voir toute l'utilisation",
+      "dismiss": "Ignorer"
     },
     "metric": {
       "aiTokens": "Génération par IA",
@@ -1193,6 +1222,10 @@
     "errors": {
       "load": "Impossible de charger votre utilisation"
     },
-    "plan": "Forfait"
+    "plan": "Forfait",
+    "settings": {
+      "warnEmails": "M’avertir par e-mail avant épuisement",
+      "warnEmailsHint": "Un avis quand un quota est presque épuisé. Les avis de limite réellement atteinte sont toujours envoyés."
+    }
   }
 }

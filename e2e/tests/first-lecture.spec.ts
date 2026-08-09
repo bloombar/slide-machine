@@ -5,7 +5,7 @@
  * default project keeps an empty title in the data but shows everywhere
  * under its placeholder name ("Default project").
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 
 const email = `first-lecture-${Date.now()}@example.com`
 

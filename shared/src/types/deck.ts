@@ -352,7 +352,15 @@ export type TranslatedSlot =
   | { kind: 'bullets'; items: string[] }
   | { kind: 'table'; header?: string[]; rows: string[][] }
 
-/** One slide's translated slots, plus the fingerprint of what was translated. */
+/**
+ * One slide's translated slots and narration, each with the fingerprint of what
+ * it was translated from.
+ *
+ * The two fingerprints are kept apart deliberately: what a slide *says* and
+ * what a lecturer *said about it* are edited independently, so correcting a
+ * spoken transcript (EDIT-6) must not re-pay for translating slide text nobody
+ * touched, and editing a slide must not re-pay for narration nobody rewrote.
+ */
 export interface SlideTranslationEntry {
   /**
    * Keyed by slot name, like the slide itself (TMPL-9), so a layout with two
@@ -373,6 +381,19 @@ export interface SlideTranslationEntry {
    * across explicitly or invalidates it.
    */
   sourceHash?: string
+  /**
+   * The slide's `sourceTranscript` in this locale, spoken by narration playback
+   * (PLAY-3). It rides here rather than in a collection of its own because it
+   * is the same deck, the same locale and the same cascade delete — and it is
+   * simply absent until someone listens.
+   */
+  narration?: string
+  /**
+   * Hash of the transcript `narration` was translated from, so an edited
+   * narration re-translates on its next play while the slide's own text — and
+   * the rest of the deck — does not.
+   */
+  narrationHash?: string
 }
 
 /** Cached on-demand translation of a deck's slide content (SHARE-2). */

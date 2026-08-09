@@ -8,7 +8,7 @@
  * the same text a relay would have delivered.
  */
 import { readFileSync } from 'node:fs'
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from './fixtures'
 import { MAIL_LOG } from '../playwright.config'
 import { createProject, openProjectSettings } from './helpers'
 

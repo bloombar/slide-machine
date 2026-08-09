@@ -3301,6 +3301,64 @@ describe('DeckViewerPage live session under translated viewing (SHARE-2)', () =>
     ).toBeInTheDocument()
   })
 
+  /** Renders the deck with translation refused for a spent allowance (402). */
+  const refusedRoutes = (message: string, canEdit: boolean) => {
+    vi.spyOn(runtimeConfig, 'getTranslationEnabled').mockReturnValue(true)
+    return mockFetchRoutes({
+      '/api/decks/shared-abc123/translation': () => ({
+        status: 402,
+        body: {
+          error: {
+            code: 'plan_limit_exceeded',
+            message,
+            details: ['translationCharacters'],
+          },
+        },
+      }),
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit },
+      }),
+    })
+  }
+
+  it('tells an editor what ran out, and where to raise it', async () => {
+    // An exhausted allowance is not an outage (BILL-4): the owner is told what
+    // was spent and given the upgrade path, not told to try again.
+    const message =
+      'You have used all of this billing period’s translation. It resets at the start of your next period.'
+    localStorage.setItem('sm:slide-language:shared-abc123', 'fr')
+    refusedRoutes(message, true)
+    mount()
+
+    expect(
+      await screen.findByText(new RegExp(message.slice(0, 40))),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'See plans' })).toHaveAttribute(
+      'href',
+      '/app/plans',
+    )
+  })
+
+  it('tells a reader only that the lecture is not in that language', async () => {
+    // The viewer-safe rule: a student learns nothing about the owner's plan
+    // and is offered no upgrade that is not theirs to buy.
+    localStorage.setItem('sm:slide-language:shared-abc123', 'fr')
+    refusedRoutes('This lecture isn’t available in that language.', false)
+    mount()
+
+    expect(
+      await screen.findByText(/Could not translate this lecture/),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'See plans' }),
+    ).not.toBeInTheDocument()
+  })
+
   it('ends a running live session when the reader switches to a translation', async () => {
     translatableRoutes()
     mount()
@@ -3322,5 +3380,149 @@ describe('DeckViewerPage live session under translated viewing (SHARE-2)', () =>
       screen.queryByRole('textbox', { name: 'Spoken phrase' }),
     ).not.toBeInTheDocument()
     expect(await screen.findByText('Bonjour')).toBeInTheDocument()
+  })
+})
+
+describe('DeckViewerPage narration in the translated language (PLAY-3)', () => {
+  /** jsdom has no media playback; a stub element keeps the clip "playing". */
+  class FakeAudio {
+    src = ''
+    onended: (() => void) | null = null
+    play = vi.fn(async () => {})
+    pause = vi.fn()
+    removeAttribute = vi.fn()
+  }
+
+  /**
+   * The deck, its translation, and a TTS route that records what it was asked
+   * for — the locale on the request is the whole of what PLAY-3 adds here.
+   */
+  const narratableRoutes = (
+    tts: (init?: RequestInit) => { status: number; body: unknown } = () => ({
+      status: 200,
+      body: { url: 'clip', marks: [] },
+    }),
+    translation?: () => { status: number; body: unknown },
+    canEdit = false,
+  ) => {
+    vi.stubGlobal('Audio', FakeAudio)
+    vi.spyOn(runtimeConfig, 'getTtsEnabled').mockReturnValue(true)
+    vi.spyOn(runtimeConfig, 'getTranslationEnabled').mockReturnValue(true)
+    const spoken: Array<Record<string, unknown>> = []
+    const routes = mockFetchRoutes({
+      '/tts': init => {
+        spoken.push(JSON.parse(String(init?.body ?? '{}')))
+        return tts(init)
+      },
+      // Ahead of the deck route: the mock matches by substring, and the deck's
+      // own path is a prefix of the translation path.
+      '/api/decks/shared-abc123/translation':
+        translation ??
+        (() => ({
+          status: 200,
+          body: {
+            locale: 'fr',
+            source: 'en',
+            perSlide: {
+              s1: { slots: { title: { kind: 'text', value: 'Bonjour' } } },
+            },
+          },
+        })),
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit },
+      }),
+    })
+    return { ...routes, spoken }
+  }
+
+  const mount = () =>
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+  const play = async () =>
+    fireEvent.click(await screen.findByRole('button', { name: 'Play deck' }))
+
+  it('speaks the deck in the language it is being read in', async () => {
+    localStorage.setItem('sm:slide-language:shared-abc123', 'fr')
+    const { spoken } = narratableRoutes()
+    mount()
+
+    expect(await screen.findByText('Bonjour')).toBeInTheDocument()
+    await play()
+    // Narration follows the screen — no second switch for the reader to find.
+    await waitFor(() => expect(spoken[0]).toMatchObject({ locale: 'fr' }))
+  })
+
+  it('follows a language chosen after the page loaded', async () => {
+    const { spoken } = narratableRoutes(undefined, undefined, true)
+    mount()
+    await screen.findByRole('button', { name: 'Play deck' })
+
+    fireEvent.click(screen.getByRole('button', { name: /Slide language/ }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /Français/ }))
+    expect(await screen.findByText('Bonjour')).toBeInTheDocument()
+
+    await play()
+    await waitFor(() => expect(spoken).toHaveLength(1))
+    expect(spoken[0]).toMatchObject({ locale: 'fr' })
+  })
+
+  it('narrates as before when the deck is read in its own language', async () => {
+    const { spoken } = narratableRoutes()
+    mount()
+
+    await play()
+    await waitFor(() => expect(spoken).toHaveLength(1))
+    // No locale at all, so the request is what it has always been.
+    expect(spoken[0]).not.toHaveProperty('locale')
+  })
+
+  it('speaks the authored language when the translation could not load', async () => {
+    // The screen is showing the authored text, so that is what is spoken —
+    // narrating a translation nobody can read would be the odd behaviour.
+    localStorage.setItem('sm:slide-language:shared-abc123', 'fr')
+    const { spoken } = narratableRoutes(undefined, () => ({
+      status: 502,
+      body: { error: { code: 'translation_failed', message: 'nope' } },
+    }))
+    mount()
+
+    expect(
+      await screen.findByText(/Could not translate this lecture/),
+    ).toBeInTheDocument()
+    await play()
+    await waitFor(() => expect(spoken).toHaveLength(1))
+    expect(spoken[0]).not.toHaveProperty('locale')
+  })
+
+  it('stops and says so when it cannot be spoken in that language', async () => {
+    localStorage.setItem('sm:slide-language:shared-abc123', 'fr')
+    narratableRoutes(() => ({
+      status: 502,
+      body: {
+        error: { code: 'translation_failed', message: 'Could not narrate.' },
+      },
+    }))
+    mount()
+
+    expect(await screen.findByText('Bonjour')).toBeInTheDocument()
+    await play()
+    // Not silence, and not the wrong language: the reader is told why the
+    // deck stopped speaking.
+    expect(
+      await screen.findByText(/Could not read this lecture aloud/),
+    ).toBeInTheDocument()
   })
 })

@@ -6,7 +6,7 @@
  * and that deck playback runs with drawings present. Runs against the built
  * app + test MongoDB, like the other specs.
  */
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from './fixtures'
 import { createProject } from './helpers'
 
 const password = 'sturdy-passw0rd'

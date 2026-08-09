@@ -5,7 +5,7 @@
  * normal document flow, so scrolling down in list view carried every
  * control off-screen.
  */
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from './fixtures'
 import { createProject } from './helpers'
 
 const GRIP = 'Drag to move the toolbar'

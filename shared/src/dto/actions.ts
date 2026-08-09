@@ -10,7 +10,7 @@ import type {
   Stroke,
   Visibility,
 } from '../types/deck'
-import type { ProfileVisibility } from '../types/user'
+import type { AccountType, ProfileVisibility } from '../types/user'
 import type { WordTiming } from '../providers/transcription'
 
 export interface ProjectCreateInput {
@@ -193,6 +193,12 @@ export interface DeckTransferOwnershipInput {
 /** Profile settings update (AUTH-5). */
 export interface UserSetProfileVisibilityInput {
   profileVisibility: ProfileVisibility
+}
+
+/** The answer to the post-sign-in "what are you?" prompt (AUTH-6). The
+ * first answer also settles the account's privacy defaults. */
+export interface UserSetAccountTypeInput {
+  accountType: AccountType
 }
 
 /** The signed-in user's own public profile fields (AUTH-5); only

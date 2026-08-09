@@ -38,6 +38,7 @@ import { hashPassword } from '../auth/password'
 import { permalinkSlug } from '../lib/slug'
 import { listBuiltinTemplates } from '../templates/builtin'
 import { sessionPhrase } from '../actions/deck'
+import { runAction } from '../actions/dispatch'
 import { enrichSlideImage } from '../enrichment/enrich'
 import { DISCIPLINES, PERSONAS, SEED_DOMAIN, SEED_PASSWORD } from './seed-data'
 // Side-effect imports: register the generation providers in the registry
@@ -496,8 +497,15 @@ const seedLecture = async (plan: LecturePlan): Promise<LectureResult> => {
     try {
       // Each phrase makes exactly one Gemini call inside the action, so
       // gate + 429-retry it the same as the transcript call.
+      //
+      // Through the pipeline rather than straight at execute, so seeded
+      // lectures are built by the same validated, authorized path as a real
+      // one. Unmetered on purpose: this is the server populating a
+      // development database on its own behalf, and it must not stop because
+      // the account it writes for has spent a plan allowance.
       await gemini(
-        () => sessionPhrase.execute(ctx, { deckId, phrase }),
+        () =>
+          runAction(sessionPhrase, ctx, { deckId, phrase }, { meter: false }),
         `phrase (${plan.topic})`,
       )
     } catch (err) {
@@ -599,6 +607,11 @@ const main = async (): Promise<void> => {
         passwordHash,
         emailVerified: true,
         profileVisibility: persona.profileVisibility,
+        // Every persona here is a lecturer with public lectures, which is
+        // what an educator account defaults to (AUTH-6). Answering for them
+        // also keeps the post-sign-in prompt from standing in front of the
+        // seeded demo the first time someone signs in as one.
+        accountType: 'educator',
         bio: persona.bio,
         locale: persona.locale,
         planTier: persona.planTier,

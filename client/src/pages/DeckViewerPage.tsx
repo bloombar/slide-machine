@@ -1088,6 +1088,16 @@ export default function DeckViewerPage() {
     setListening(true)
   }
 
+  // The language narration should be spoken in (PLAY-3): the one the slides
+  // are being displayed in. A translation that failed to load is showing the
+  // authored text, so it is spoken in the authored language too.
+  const spokenLocale =
+    showingTranslation && !translation.failed ? translation.locale : null
+  const spokenLocaleRef = useRef(spokenLocale)
+  useEffect(() => {
+    spokenLocaleRef.current = spokenLocale
+  })
+
   // Text-to-speech playback (TECH-8). Starting playback stops the mic first so
   // the app never records while it is speaking.
   const ttsEnabled = getTtsEnabled()
@@ -1103,6 +1113,9 @@ export default function DeckViewerPage() {
         setSpeaking(false)
       }
     },
+    // Narration follows the language on screen (PLAY-3). Read through a ref so
+    // a switch mid-deck is picked up by the next slide.
+    getLocale: () => spokenLocaleRef.current,
   })
   // Keep the mirror current so slide navigation always skips the live playback.
   useEffect(() => {
@@ -1231,16 +1244,16 @@ export default function DeckViewerPage() {
     Boolean(view?.canEdit) && (view?.slides.length ?? 0) > 0,
   )
 
-  // A voice-setting change should be heard immediately. The server already
-  // picks up the new voice on the next synthesis, but the audio now playing was
-  // generated in the old voice — so re-trigger the current item instead of
-  // waiting for the next slide.
-  const deckVoice = view?.deck.ttsVoice
-  const lastVoiceRef = useRef(deckVoice)
+  // A change to how the deck sounds should be heard immediately. The server
+  // already picks up the new voice — or the new language (PLAY-3) — on the next
+  // synthesis, but the audio playing right now was made with the old one, so
+  // re-trigger the current item instead of waiting for the next slide.
+  const narrationKey = `${view?.deck.ttsVoice ?? ''}|${spokenLocale ?? ''}`
+  const lastNarrationRef = useRef(narrationKey)
   useEffect(() => {
-    if (lastVoiceRef.current === deckVoice) return
-    lastVoiceRef.current = deckVoice
-    if (tts.status === 'idle') return // the next play already uses the new voice
+    if (lastNarrationRef.current === narrationKey) return
+    lastNarrationRef.current = narrationKey
+    if (tts.status === 'idle') return // the next play already uses the new one
     const index = tts.activeIndex ?? activePlayIndex()
     if (tts.scope === 'deck') tts.playDeck(index)
     else {
@@ -1248,7 +1261,7 @@ export default function DeckViewerPage() {
       if (slide) tts.speakSlide(slide)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deckVoice])
+  }, [narrationKey])
 
   // Settings is an aside, not part of the lecture: talking through it
   // must never reach generation. Opening pauses capture; closing resumes
@@ -1481,7 +1494,12 @@ export default function DeckViewerPage() {
     const slides = viewRef.current?.slides ?? []
     const idx = slides.findIndex(s => s.id === slideId)
     const len = slides[idx]?.sourceTranscript?.length ?? 0
-    return strokeVisible(stroke, idx, len, tts.getProgress())
+    return strokeVisible(stroke, idx, len, tts.getProgress(), {
+      // Timed marks are anchored inside the original transcript, and those
+      // anchors do not survive translation, so a translated playback skips
+      // them and shows only the untimed ones (PLAY-3).
+      translated: Boolean(spokenLocale),
+    })
   }
 
   // Saved strokes per slide, plus the shared DrawingLayer props (carousel +
@@ -1948,7 +1966,39 @@ export default function DeckViewerPage() {
       )}
       {translation.failed && (
         <NotificationPill tone="error" role="alert">
-          {t('viewer.translationFailed')}
+          {/* An exhausted allowance is not an outage, and must not be reported
+              as one: "try again" is wrong advice for something that cannot
+              succeed until the plan changes (BILL-4). Only an editor sees it —
+              they are the only person who can act on it — and only they get
+              the upgrade path. A student keeps the neutral wording and learns
+              nothing about the owner's plan. */}
+          {translation.limitMessage && canEdit ? (
+            <>
+              {translation.limitMessage}{' '}
+              <Link
+                to="/app/plans"
+                className="font-medium text-indigo-700 hover:underline"
+              >
+                {t('viewer.translationSeePlans')}
+              </Link>
+            </>
+          ) : (
+            t('viewer.translationFailed')
+          )}
+        </NotificationPill>
+      )}
+      {/* Narration stopped because the deck could not be spoken in the language
+          it is being read in (PLAY-3). Said out loud rather than left as
+          silence: a deck that simply stopped advancing would read as a broken
+          player, and speaking it in the original would have the reader seeing
+          one language and hearing another. */}
+      {tts.error && (
+        <NotificationPill
+          tone="error"
+          role="alert"
+          action={{ label: t('common.dismiss'), onClick: tts.clearError }}
+        >
+          {t('viewer.narrationTranslationFailed')}
         </NotificationPill>
       )}
 

@@ -7,7 +7,7 @@
  *
  * Runs only under the 'chromium-stt' project (mock STT server + fake audio).
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { createProject } from './helpers'
 
 const email = `stt-${Date.now()}@example.com`

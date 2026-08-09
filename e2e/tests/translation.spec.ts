@@ -8,7 +8,7 @@
  * TRANSLATION_PROVIDER is `mock` here (see playwright.config), which tags each
  * translated segment with `[<locale>]`, so the assertions are exact.
  */
-import { test, expect, type Page } from '@playwright/test'
+import { test, autoAnswerAccountType, expect, type Page } from './fixtures'
 import { createProject, verifyEmail } from './helpers'
 
 const stamp = Date.now()
@@ -32,6 +32,7 @@ test('translated viewing: switch language, read, and return to the original', as
 }) => {
   const authorContext = await browser.newContext()
   const authorPage = await authorContext.newPage()
+  await autoAnswerAccountType(authorPage)
   await register(authorPage, author)
 
   // A one-slide public lecture
@@ -96,6 +97,7 @@ test('translated viewing: an editor cannot edit while reading a translation', as
 }) => {
   const context = await browser.newContext()
   const page = await context.newPage()
+  await autoAnswerAccountType(page)
   await register(page, {
     email: `translate-editor-${stamp}@example.com`,
     name: 'Editor',
@@ -139,4 +141,68 @@ test('translated viewing: an editor cannot edit while reading a translation', as
   await expect(
     page.getByRole('button', { name: 'Live session' }),
   ).toHaveAttribute('aria-pressed', 'false')
+})
+
+test('translated narration: the deck is heard in the language it is read in', async ({
+  browser,
+}) => {
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  await autoAnswerAccountType(page)
+  await register(page, {
+    email: `translate-narration-${stamp}@example.com`,
+    name: 'Narrator',
+  })
+
+  await createProject(page, 'NarrationProj')
+  await page
+    .getByRole('button', { name: 'Start a new lecture in NarrationProj' })
+    .click()
+  await expect(page).toHaveURL(/\/d\//)
+  await page.getByRole('button', { name: 'Start lecture' }).click()
+  await page.getByLabel('Spoken phrase').fill('Wave basics')
+  await page.getByRole('button', { name: 'Speak' }).click()
+  await expect(page.getByTestId('slide')).toBeVisible()
+
+  // What each synthesis was asked to speak, recorded off the wire — the locale
+  // on the request is the whole of what PLAY-3 adds to playback.
+  const spoken: Array<Record<string, unknown>> = []
+  page.on('request', request => {
+    if (request.url().includes('/tts') && request.method() === 'POST') {
+      spoken.push(JSON.parse(request.postData() ?? '{}'))
+    }
+  })
+
+  // Read in the original first: narration carries no language of its own.
+  await page.getByRole('button', { name: 'Play deck' }).click()
+  await expect
+    .poll(() => spoken.length, { message: 'narration started' })
+    .toBeGreaterThan(0)
+  expect(spoken.every(s => s.locale === undefined)).toBe(true)
+
+  // Now read it in French. Reloading first so narration starts from a clean
+  // stop rather than resuming the clip that is already cued — and it proves
+  // the remembered language survives the reload.
+  await page.getByRole('button', { name: /Slide language/ }).click()
+  await page.getByRole('menuitemradio', { name: /Français/ }).click()
+  await expect(page.getByTestId('slide')).toContainText('[fr]')
+  await page.reload()
+  await expect(page.getByTestId('slide')).toContainText('[fr]')
+
+  // The same control as before — no separate switch for sound, which is the
+  // whole of what the requirement asks for.
+  await page.getByRole('button', { name: 'Play deck' }).click()
+  // Asserted as "some request asked for French" rather than by counting: a
+  // request that is retried after a token refresh is sent twice, and the
+  // duplicate is not what this test is about.
+  await expect
+    .poll(() => spoken.some(s => s.locale === 'fr'), {
+      message: 'translated narration started',
+    })
+    .toBe(true)
+
+  // It really played: a refusal would have put a message on screen instead.
+  await expect(page.getByText(/Could not read this lecture aloud/)).toHaveCount(
+    0,
+  )
 })

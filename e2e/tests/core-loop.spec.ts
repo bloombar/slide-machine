@@ -3,7 +3,7 @@
  * create project → start a lecture with a template → phrases become
  * slides live → end session → deck plays back at its permalink.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { createProject } from './helpers'
 
 const email = `core-${Date.now()}@example.com`

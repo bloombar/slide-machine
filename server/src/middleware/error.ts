@@ -8,6 +8,7 @@ import type { NextFunction, Request, Response } from 'express'
 import type { ApiErrorBody } from '@slide-machine/shared'
 import {
   ActionForbiddenError,
+  CapabilityRequiredError,
   EmailUnverifiedError,
   ActionNotFoundError,
   ActionValidationError,
@@ -52,6 +53,14 @@ export const errorHandler = (
     // confirming their address (AUTH-3), so the client offers that rather
     // than reporting a flat refusal.
     res.status(403).json(body('email_unverified', err.message))
+  } else if (err instanceof CapabilityRequiredError) {
+    // 403 with a code of its own, checked before the plain forbidden below:
+    // the caller may touch the thing, their account is just not equipped for
+    // this (TECH-14). Like email_unverified, something they can fix — so the
+    // client offers a Connect button rather than reporting a refusal.
+    res
+      .status(403)
+      .json(body('capability_required', err.message, [err.capability]))
   } else if (err instanceof ActionForbiddenError) {
     res.status(403).json(body('forbidden', err.message))
   } else if (err instanceof ActionNotFoundError) {

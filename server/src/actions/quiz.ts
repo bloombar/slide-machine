@@ -31,13 +31,23 @@ import type {
 } from '@slide-machine/shared'
 import { defineAction } from './define'
 import { requireAiTokens } from '../billing/meter-hooks'
-import { registerAction, ActionForbiddenError } from './dispatch'
-import type { ActionContext } from './context'
-import { loadEditableDeck } from './deck'
+import { registerAction } from './dispatch'
+import {
+  deckEditor,
+  isConnected,
+  requiresGoogleDrive,
+  self,
+  signedIn,
+  withGoogleAccount,
+  type DeckAccess,
+  type SelfAccess,
+  type Signed,
+  type WithGoogle,
+} from './access'
 import { env } from '../config/env'
-import { UserModel } from '../models/user'
 import { SlideModel } from '../models/slide'
-import { ProjectModel } from '../models/project'
+import { ProjectModel, projectAcl } from '../models/project'
+import { canEditAcl } from '../lib/access'
 import { registry } from '../providers/registry'
 import { publishQuiz } from '../lib/quiz-publish'
 import { splitPointsEqually } from '../lib/quiz-points'
@@ -74,29 +84,8 @@ const capPastQuestions = (questions: string[]): string[] => {
   return kept.reverse()
 }
 
-/** Loads the acting user (including the encrypted token), or throws if the
- * account no longer exists. The route's requireAuth guarantees a userId, so a
- * null here means the account was removed after the token was issued. */
-const requireUser = async (ctx: ActionContext) => {
-  const user = await UserModel.findById(ctx.userId).select(
-    '+googleQuizRefreshToken',
-  )
-  if (!user) throw new ActionForbiddenError('Sign in required')
-  return user
-}
-
-/**
- * Whether the user can publish. In live mode this requires a stored refresh
- * token — the mock-mode `googleConnected` flag must NOT count as connected
- * once switched to live, or publishing fails with no real Google grant.
- */
-const isConnected = (user: {
-  googleConnected?: boolean
-  googleQuizRefreshToken?: string
-}): boolean =>
-  isLive()
-    ? Boolean(user.googleQuizRefreshToken)
-    : Boolean(user.googleConnected)
+/** The content gate, shared by every quiz action that names a lecture. */
+const byDeckId = deckEditor((input: { deckId: string }) => input.deckId)
 
 /** The deck's published quiz mapped to its client shape, or undefined. */
 const toPublishedQuiz = (quiz?: {
@@ -114,17 +103,21 @@ const toPublishedQuiz = (quiz?: {
 
 /**
  * Whether Google is connected and the deck's published quiz, if any. Only a
- * deck editor/owner may see this (loadEditableDeck enforces it).
+ * deck editor/owner may see this, and the account is loaded WITHOUT requiring
+ * a connection — reporting that there is none is the whole point.
  */
-export const quizStatus = defineAction<{ deckId: string }, QuizStatus>({
+export const quizStatus = defineAction<
+  { deckId: string },
+  QuizStatus,
+  WithGoogle<DeckAccess>
+>({
   name: 'quiz.status',
+  access: withGoogleAccount(byDeckId),
   input: z.object({ deckId: z.string().min(1) }),
-  execute: async (ctx, input) => {
-    const user = await requireUser(ctx)
-    const { deck } = await loadEditableDeck(ctx, input.deckId)
+  execute: async (ctx, input, { deck, googleUser }) => {
     const project = await ProjectModel.findById(deck.projectId)
     return {
-      googleConnected: isConnected(user),
+      googleConnected: isConnected(googleUser, 'quiz'),
       quiz: toPublishedQuiz(deck.quiz),
       hasTranscript: Boolean(deck.transcript?.trim()),
       defaults: project?.quizDefaults ?? undefined,
@@ -140,12 +133,13 @@ export const quizStatus = defineAction<{ deckId: string }, QuizStatus>({
  */
 export const quizConnectGoogle = defineAction<
   { returnTo?: string },
-  QuizConnectResult
+  QuizConnectResult,
+  SelfAccess
 >({
   name: 'quiz.connectGoogle',
+  access: self('+googleQuizRefreshToken'),
   input: z.object({ returnTo: z.string().optional() }),
-  execute: async (ctx, input) => {
-    const user = await requireUser(ctx)
+  execute: async (ctx, input, { user }) => {
     if (!isLive()) {
       user.googleConnected = true
       await user.save()
@@ -179,15 +173,13 @@ const mockFolderTree: Record<string, DriveFolder[]> = {
  * a folder re-calls this with its id. */
 export const quizDriveFolders = defineAction<
   { parentId?: string },
-  { folders: DriveFolder[] }
+  { folders: DriveFolder[] },
+  WithGoogle<Signed>
 >({
   name: 'quiz.driveFolders',
+  access: requiresGoogleDrive(signedIn(), 'quiz'),
   input: z.object({ parentId: z.string().optional() }).strict(),
-  execute: async (ctx, input) => {
-    const user = await requireUser(ctx)
-    if (!isConnected(user)) {
-      throw new ActionForbiddenError('Connect a Google account first')
-    }
+  execute: async (ctx, input, { googleUser: user }) => {
     const parentId = input.parentId ?? 'root'
     if (isLive()) {
       const refreshToken = decryptToken(user.googleQuizRefreshToken!)
@@ -204,18 +196,16 @@ export const quizDriveFolders = defineAction<
  */
 export const quizCreateFolder = defineAction<
   { name: string; parentId?: string },
-  DriveFolder
+  DriveFolder,
+  WithGoogle<Signed>
 >({
   name: 'quiz.createFolder',
+  access: requiresGoogleDrive(signedIn(), 'quiz'),
   input: z.object({
     name: z.string().trim().min(1).max(120),
     parentId: z.string().optional(),
   }),
-  execute: async (ctx, input) => {
-    const user = await requireUser(ctx)
-    if (!isConnected(user)) {
-      throw new ActionForbiddenError('Connect a Google account first')
-    }
+  execute: async (ctx, input, { googleUser: user }) => {
     const parentId = input.parentId ?? 'root'
     if (isLive()) {
       const refreshToken = decryptToken(user.googleQuizRefreshToken!)
@@ -256,7 +246,7 @@ const quizQuestionSchema = z.object({
   correctAnswers: z.array(z.string()).optional(),
 })
 
-type EditableDeck = Awaited<ReturnType<typeof loadEditableDeck>>['deck']
+type EditableDeck = DeckAccess['deck']
 
 /**
  * Generates a quiz definition from the lecture's slides (optionally the spoken
@@ -312,17 +302,14 @@ const buildQuiz = async (
  */
 export const quizGenerate = defineAction<
   { deckId: string } & QuizGenerationOptions,
-  { questions: QuizQuestion[] }
+  { questions: QuizQuestion[] },
+  WithGoogle<DeckAccess>
 >({
   name: 'quiz.generate',
+  access: requiresGoogleDrive(byDeckId, 'quiz'),
   meter: requireAiTokens,
   input: z.object({ deckId: z.string().min(1), ...genOptionsShape }),
-  execute: async (ctx, input) => {
-    const user = await requireUser(ctx)
-    if (!isConnected(user)) {
-      throw new ActionForbiddenError('Connect a Google account first')
-    }
-    const { deck } = await loadEditableDeck(ctx, input.deckId)
+  execute: async (ctx, input, { deck }) => {
     const quiz = await buildQuiz(deck, input)
     return { questions: quiz.questions }
   },
@@ -344,9 +331,11 @@ export const quizPublish = defineAction<
     driveFolderName?: string
     questions?: QuizQuestion[]
   } & QuizGenerationOptions,
-  PublishedQuiz
+  PublishedQuiz,
+  WithGoogle<DeckAccess>
 >({
   name: 'quiz.publish',
+  access: requiresGoogleDrive(byDeckId, 'quiz'),
   input: z.object({
     deckId: z.string().min(1),
     driveFolderId: z.string().min(1),
@@ -357,13 +346,7 @@ export const quizPublish = defineAction<
     // per-question point overrides. Absent = generate the quiz fresh.
     questions: z.array(quizQuestionSchema).min(1).optional(),
   }),
-  execute: async (ctx, input) => {
-    const user = await requireUser(ctx)
-    if (!isConnected(user)) {
-      throw new ActionForbiddenError('Connect a Google account first')
-    }
-    const { deck } = await loadEditableDeck(ctx, input.deckId)
-
+  execute: async (ctx, input, { deck, googleUser: user }) => {
     // Use the reviewed questions when the client sends them (per-question point
     // overrides); otherwise generate the quiz fresh with equal-split points.
     const quiz: QuizDefinition = input.questions?.length
@@ -404,19 +387,30 @@ export const quizPublish = defineAction<
 
     // Remember these options as the project's quiz defaults (QUIZ-2), so the
     // next quiz in this course pre-fills them.
-    await ProjectModel.updateOne(
-      { _id: deck.projectId },
-      {
-        quizDefaults: {
-          questionCount: input.questionCount,
-          totalPoints: input.totalPoints,
-          emailCollection: input.emailCollection,
-          includeTranscript: input.includeTranscript,
-          typeCounts: input.typeCounts,
-          customInstructions: input.customInstructions,
-        },
-      },
+    //
+    // Editing a lecture does not carry the right to edit its course: a
+    // lecture can be shared for editing on its own (SHARE-1), which would
+    // otherwise let a guest rewrite defaults for every other lecture in it.
+    // Skipped silently rather than refused — the quiz is published either
+    // way, and this is a convenience for next time, not part of the result.
+    const project = await ProjectModel.findById(deck.projectId).catch(
+      () => null,
     )
+    if (project && canEditAcl(projectAcl(project), ctx.userId)) {
+      await ProjectModel.updateOne(
+        { _id: project._id },
+        {
+          quizDefaults: {
+            questionCount: input.questionCount,
+            totalPoints: input.totalPoints,
+            emailCollection: input.emailCollection,
+            includeTranscript: input.includeTranscript,
+            typeCounts: input.typeCounts,
+            customInstructions: input.customInstructions,
+          },
+        },
+      )
+    }
 
     return toPublishedQuiz(deck.quiz)!
   },
@@ -430,13 +424,13 @@ export const quizPublish = defineAction<
  */
 export const quizDelete = defineAction<
   { deckId: string },
-  { deleted: boolean }
+  { deleted: boolean },
+  WithGoogle<DeckAccess>
 >({
   name: 'quiz.delete',
+  access: withGoogleAccount(byDeckId),
   input: z.object({ deckId: z.string().min(1) }),
-  execute: async (ctx, input) => {
-    const user = await requireUser(ctx)
-    const { deck } = await loadEditableDeck(ctx, input.deckId)
+  execute: async (ctx, input, { deck, googleUser: user }) => {
     if (!deck.quiz) return { deleted: false }
 
     deck.quizPastQuestions = capPastQuestions([

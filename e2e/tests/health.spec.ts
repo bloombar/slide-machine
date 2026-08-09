@@ -3,7 +3,7 @@
  * action, and the sticky footer's health bar transitively proves SPA
  * serving, the API, and MongoDB together.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 
 test('landing page shows the hero and a healthy API footer', async ({
   page,

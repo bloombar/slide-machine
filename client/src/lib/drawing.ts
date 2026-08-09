@@ -39,16 +39,25 @@ export interface PlaybackProgress {
  * On the active slide, reveal time comes from the clip's `<mark>` timepoints
  * (real spoken time of each phrase boundary) when present, so pauses and speech
  * rate are honored; without marks it falls back to the linear char-fraction.
+ *
+ * `translated` says the deck is being heard in a language it was not narrated
+ * in (PLAY-3). Timed marks are anchored to positions inside the ORIGINAL
+ * transcript and those positions do not survive translation, so they are not
+ * replayed at all — a mark timed to a word that is no longer being spoken would
+ * appear at an arbitrary moment. Untimed marks are unaffected, and a translated
+ * view that is not playing still shows everything, as it does today.
  */
 export const strokeVisible = (
   stroke: Stroke,
   slideIndex: number,
   transcriptLength: number,
   progress: PlaybackProgress | null,
+  options: { translated?: boolean } = {},
 ): boolean => {
   if (stroke.anchor.orphaned) return false
   if (stroke.anchor.source === 'unsynced') return !stroke.erasedAnchor
   if (!progress || slideIndex < 0) return !stroke.erasedAnchor
+  if (options.translated) return false
   if (slideIndex < progress.index) return !stroke.erasedAnchor
   if (slideIndex > progress.index) return false
   // On the active slide, has the clock passed this anchor's time yet?

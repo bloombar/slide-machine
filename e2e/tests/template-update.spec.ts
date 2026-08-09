@@ -11,12 +11,7 @@
  * would test the editor, not this — but every assertion about the offer, the
  * dialog and the result is made against the UI the user actually sees.
  */
-import {
-  test,
-  expect,
-  type APIRequestContext,
-  type Page,
-} from '@playwright/test'
+import { test, expect, type APIRequestContext, type Page } from './fixtures'
 
 const stamp = Date.now()
 const account = {

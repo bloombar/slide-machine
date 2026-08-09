@@ -25,6 +25,7 @@ export const ADMIN_LINKS: AdminLink[] = [
     prefixes: ['/app/admin/projects'],
   },
   { to: '/app/admin/decks', label: 'Lectures', prefixes: ['/app/admin/decks'] },
+  { to: '/app/admin/cost', label: 'Cost', prefixes: ['/app/admin/cost'] },
   { to: '/app/admin/logs', label: 'Admin Logs', prefixes: ['/app/admin/logs'] },
   {
     to: '/app/admin/settings-logs',

@@ -128,11 +128,18 @@ differences:
 - A banner explains that the record is hidden from everyone, and the
   danger zone becomes a **Recovery** panel with a single **Restore**
   button (per-row Delete buttons become **Restore** too).
-- The links into the product — **View public profile**, **View project**,
-  **View slideshow**, and the settings pointers — are withdrawn. Nothing
-  in the product reads a tombstoned record, so those pages would 404.
-- **Moderation is refused.** Deleting, banning, resetting the password of,
-  or editing the settings of a deleted record returns `404` — a tombstoned
+- The links into the product — **View deleted profile**, **View
+  project**, **View slideshow** — still work. The allowlist bypass that
+  opens private content opens tombstoned content too, so a deleted
+  lecture plays in the viewer, a deleted project opens its product page,
+  and a deleted account's profile still lists its work. Each shows the
+  record **as its owner last left it**: the children deleted along with
+  it, and only those — a slide thrown away the week before stays gone.
+  Opening one is confirmed first, in the same dialog style as a private
+  view.
+- **It is read-only.** The settings pointers are withdrawn, and
+  moderation is refused: deleting, banning, resetting the password of, or
+  editing the settings of a deleted record returns `404` — a tombstoned
   record is restored, not moderated again.
 
 **Restore** lifts the tombstone from the record and everything tombstoned
@@ -145,11 +152,17 @@ Stored files (seed blobs, retained audio) are kept until the purge, so a
 restore brings the whole thing back intact.
 
 **Every opening of deleted content is audited** (ADMIN-6/ADMIN-7): each
-visit to a deleted record's page writes a `user.deleted_view`,
-`project.deleted_view`, or `deck.deleted_view` entry naming the record and
-when it was deleted. The directories are not logged — they only badge
-their rows, and logging every page of them would bury the log. Restores
-are audited as `user.restore` / `project.restore` / `deck.restore`.
+visit to a deleted record's page — in the console **or** in the product —
+writes a `user.deleted_view`, `project.deleted_view`, or
+`deck.deleted_view` entry naming the record and when it was deleted. The
+entry is written by the read that serves the content rather than by the
+client that asked for it, so a bookmarked permalink is recorded exactly
+as a click from the console is. Sub-reads of a page already logged are
+not repeated: the lecture list under a deleted project, a language
+switch, a narration play. The directories are not logged either — they
+only badge their rows, and logging every page of them would bury the log.
+Restores are audited as `user.restore` / `project.restore` /
+`deck.restore`.
 
 **The window is finite.** A daily sweep permanently purges anything whose
 `deletedAt` is older than `DELETED_DATA_RETENTION_DAYS` (default **90**;
@@ -296,9 +309,10 @@ Every moderation action writes one (`user.delete`, `user.ban_email`,
 `user.unban_email`, `user.password_reset`, `project.delete`,
 `deck.delete`), as does opening a private project in the product view
 (`project.private_view`). Soft-deleted content adds two more kinds:
-opening a deleted record's page writes `user.deleted_view` /
-`project.deleted_view` / `deck.deleted_view`, and restoring one writes
-`user.restore` / `project.restore` / `deck.restore` (ADMIN-6). Every
+opening a deleted record — in the console or in the product — writes
+`user.deleted_view` / `project.deleted_view` / `deck.deleted_view`, and
+restoring one writes `user.restore` / `project.restore` /
+`deck.restore` (ADMIN-6). Every
 settings edit writes one too
 (`user.settings_update` from the console; `project.settings_update` and
 `deck.settings_update` from the product's own settings modals), whose

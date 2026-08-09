@@ -4,7 +4,7 @@
  * recognized server-side as a CAP-4 voice command and executed by the
  * client — navigating or adding a slide instead of generating content.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { createProject } from './helpers'
 
 const email = `voice-cmd-${Date.now()}@example.com`

@@ -7,7 +7,7 @@
  * reduced-motion instant fallback must land on the same content-stable
  * result.
  */
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from './fixtures'
 import { createProject } from './helpers'
 
 const password = 'sturdy-passw0rd'

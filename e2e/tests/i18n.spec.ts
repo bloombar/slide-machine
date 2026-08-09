@@ -11,7 +11,7 @@
  * its English selectors are deterministic; this spec is the one that opts
  * out, which is also what proves the detection is real.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 
 test.use({ locale: 'fr-FR' })
 

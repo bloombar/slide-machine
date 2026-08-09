@@ -6,7 +6,6 @@
  * slide's deck; missing and foreign both read as forbidden.
  */
 import { z } from 'zod'
-import type { HydratedDocument } from 'mongoose'
 import type {
   Slide,
   SlideDeleteInput,
@@ -31,19 +30,14 @@ import {
   themeTextStyles,
 } from '@slide-machine/shared'
 import { defineAction } from './define'
-import {
-  registerAction,
-  ActionForbiddenError,
-  ActionValidationError,
-} from './dispatch'
-import type { ActionContext } from './context'
-import { SlideModel, toSlideDto, type SlideDb } from '../models/slide'
-import { DeckModel, loadDeckAcl, touchDeck, type DeckDb } from '../models/deck'
+import { slideEditor, type SlideAccess } from './access'
+import { registerAction, ActionValidationError } from './dispatch'
+import { SlideModel, toSlideDto } from '../models/slide'
+import { DeckModel, touchDeck } from '../models/deck'
 import { resolveDeckTemplate } from '../templates/versions'
 import { layoutDescriptors } from '../templates/builtin'
 import { registry } from '../providers/registry'
-import { requireAiTokens } from '../billing/meter-hooks'
-import { canEditAcl } from '../lib/access'
+import { requireAiTokens, requireCapacity } from '../billing/meter-hooks'
 import {
   patchSlot,
   remapSlots,
@@ -62,37 +56,25 @@ import {
 } from '../lib/slide-transcript'
 import { env } from '../config/env'
 
-interface OwnedSlide {
-  slide: HydratedDocument<SlideDb>
-  deck: HydratedDocument<DeckDb>
-}
+/** Every slide action is gated on its lecture; `pick` names the slide. */
+const bySlideId = slideEditor((input: { slideId: string }) => input.slideId)
 
-/** Loads a slide the acting user may edit (via its deck's ACL), or throws. */
-const loadOwnedSlide = async (
-  ctx: ActionContext,
-  slideId: string,
-): Promise<OwnedSlide> => {
-  if (!ctx.userId) throw new ActionForbiddenError('Sign in to continue')
-  const slide = await SlideModel.findById(slideId).catch(() => null)
-  if (!slide) throw new ActionForbiddenError()
-  const deck = await DeckModel.findById(slide.deckId)
-  if (!deck) throw new ActionForbiddenError()
-  if (!canEditAcl(await loadDeckAcl(deck), ctx.userId))
-    throw new ActionForbiddenError()
-  return { slide, deck }
-}
-
-export const slideGet = defineAction<{ slideId: string }, Slide>({
+export const slideGet = defineAction<{ slideId: string }, Slide, SlideAccess>({
   name: 'slide.get',
+  access: bySlideId,
   input: z.object({ slideId: z.string().min(1) }),
-  execute: async (ctx, input) => {
-    const { slide } = await loadOwnedSlide(ctx, input.slideId)
+  execute: async (ctx, input, { slide }) => {
     return toSlideDto(slide)
   },
 })
 
-export const slideEditContent = defineAction<SlideEditInput, Slide>({
+export const slideEditContent = defineAction<
+  SlideEditInput,
+  Slide,
+  SlideAccess
+>({
   name: 'slide.editContent',
+  access: bySlideId,
   input: z.object({
     slideId: z.string().min(1),
     title: z.string().optional(),
@@ -117,8 +99,7 @@ export const slideEditContent = defineAction<SlideEditInput, Slide>({
     // value declares the kind it carries.
     slots: z.record(z.string().min(1).max(60), slotValueSchema).optional(),
   }),
-  execute: async (ctx, input) => {
-    const { slide } = await loadOwnedSlide(ctx, input.slideId)
+  execute: async (ctx, input, { slide }) => {
     // A hand-edit of any text content marks the slide as manually edited, so
     // the post-lecture reformat (GEN-4) won't overwrite it. Image-only changes
     // (imageRef/attribution) don't count — the reformat regenerates text, not
@@ -178,14 +159,18 @@ export const slideEditContent = defineAction<SlideEditInput, Slide>({
  * deck template's layouts; slot content is preserved as-is. Moving onto an
  * image-capable layout with no image yet kicks off background enrichment
  * (IMG-1) so the empty image slot fills itself. */
-export const slideSetLayout = defineAction<SlideSetLayoutInput, Slide>({
+export const slideSetLayout = defineAction<
+  SlideSetLayoutInput,
+  Slide,
+  SlideAccess
+>({
   name: 'slide.setLayout',
+  access: bySlideId,
   input: z.object({
     slideId: z.string().min(1),
     layoutType: z.string().min(1),
   }),
-  execute: async (ctx, input) => {
-    const { slide, deck } = await loadOwnedSlide(ctx, input.slideId)
+  execute: async (ctx, input, { slide, deck }) => {
     const template = await resolveDeckTemplate(deck)
     if (!template?.layouts.some(l => l.type === input.layoutType)) {
       throw new ActionValidationError('slide.setLayout', [
@@ -335,16 +320,17 @@ const refitSlot = (
  */
 export const slideRefitLayout = defineAction<
   SlideRefitLayoutInput,
-  SlideRefitLayoutResult
+  SlideRefitLayoutResult,
+  SlideAccess
 >({
   name: 'slide.refitLayout',
+  access: bySlideId,
   meter: requireAiTokens,
   input: z.object({
     slideId: z.string().min(1),
     fromLayoutType: z.string().min(1).optional(),
   }),
-  execute: async (ctx, input) => {
-    const { slide, deck } = await loadOwnedSlide(ctx, input.slideId)
+  execute: async (ctx, input, { slide, deck }) => {
     const template = await resolveDeckTemplate(deck)
     const layout = template?.layouts.find(l => l.type === slide.layoutType)
     const unchanged = { slide: toSlideDto(slide), filled: [] as string[] }
@@ -501,14 +487,18 @@ const clamp01 = (n: number): number => (n < 0 ? 0 : n > 1 ? 1 : n)
  * change; this is last-write-wins like slide.editContent. Does NOT set
  * manuallyEdited — that flag guards text against the reformat, not drawings.
  */
-export const slideEditDrawings = defineAction<SlideEditDrawingsInput, Slide>({
+export const slideEditDrawings = defineAction<
+  SlideEditDrawingsInput,
+  Slide,
+  SlideAccess
+>({
   name: 'slide.editDrawings',
+  access: bySlideId,
   input: z.object({
     slideId: z.string().min(1),
     drawings: z.array(strokeInput).max(MAX_STROKES_PER_SLIDE),
   }),
-  execute: async (ctx, input) => {
-    const { slide } = await loadOwnedSlide(ctx, input.slideId)
+  execute: async (ctx, input, { slide }) => {
     slide.drawings = input.drawings.map(s => ({
       ...s,
       points: s.points.map(p => ({ x: clamp01(p.x), y: clamp01(p.y) })),
@@ -534,17 +524,18 @@ const MAX_TRANSCRIPT_CHARS = 20000
  */
 export const slideEditTranscript = defineAction<
   SlideEditTranscriptInput,
-  Slide
+  Slide,
+  SlideAccess
 >({
   name: 'slide.editTranscript',
+  access: bySlideId,
   input: z.object({
     slideId: z.string().min(1),
     // Empty is allowed: it clears the stored narration, so playback falls back
     // to narrating the slide's own content (PLAY-2).
     transcript: z.string().max(MAX_TRANSCRIPT_CHARS),
   }),
-  execute: async (ctx, input) => {
-    const { slide } = await loadOwnedSlide(ctx, input.slideId)
+  execute: async (ctx, input, { slide }) => {
     await applySlideTranscript(slide, input.transcript)
     return toSlideDto(slide)
   },
@@ -562,21 +553,28 @@ export const slideEditTranscript = defineAction<
  */
 export const slideRegenerateTranscript = defineAction<
   SlideRegenerateTranscriptInput,
-  SlideRegenerateTranscriptResult
+  SlideRegenerateTranscriptResult,
+  SlideAccess
 >({
   name: 'slide.regenerateTranscript',
-  // No `meter` hook, deliberately. This action checks edit access *inside*
-  // execute (loadEditableDeck), and dispatch runs meter before execute — so a
-  // hook here would answer a user with no rights to the lecture with a billing
-  // error instead of a 403. The minutes are still counted, in transcribeAudio;
-  // enforcing them needs the access check lifted into an `authorize` hook
-  // first, which is a wider refactor than this slice.
+  access: bySlideId,
+  // Metered against the transcription allowance, not the AI one: this
+  // re-transcribes retained audio, which is priced as streaming speech.
+  //
+  // The hook was omitted until now because the access check lived inside
+  // execute and dispatch ran meter first, so enforcing the cap would have
+  // answered someone with no rights to the lecture with a billing error. The
+  // declaration above fixes the order, so the minutes counted in
+  // transcribeAudio are finally enforced as well as recorded (TECH-14).
+  meter: requireCapacity(
+    'sttMinutes',
+    'You have used all of this billing period’s transcription. It resets at the start of your next period.',
+  ),
   input: z.object({
     slideId: z.string().min(1),
     save: z.boolean().optional(),
   }),
-  execute: async (ctx, input) => {
-    const { slide, deck } = await loadOwnedSlide(ctx, input.slideId)
+  execute: async (ctx, input, { slide, deck }) => {
     const { transcript, saved } = await regenerateSlideTranscript(deck, slide, {
       save: input.save,
     })
@@ -586,12 +584,13 @@ export const slideRegenerateTranscript = defineAction<
 
 export const slideDelete = defineAction<
   SlideDeleteInput,
-  { deleted: true; slideOrder: string[] }
+  { deleted: true; slideOrder: string[] },
+  SlideAccess
 >({
   name: 'slide.delete',
+  access: bySlideId,
   input: z.object({ slideId: z.string().min(1) }),
-  execute: async (ctx, input) => {
-    const { slide, deck } = await loadOwnedSlide(ctx, input.slideId)
+  execute: async (ctx, input, { slide, deck }) => {
     // Soft delete (P-10): tombstone the slide and drop it from the deck's order.
     slide.deletedAt = new Date()
     await slide.save()

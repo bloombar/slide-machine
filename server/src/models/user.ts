@@ -5,6 +5,7 @@
  */
 import { Schema, model, type HydratedDocument } from 'mongoose'
 import {
+  ACCOUNT_TYPES,
   LOCALES,
   PLAN_TIERS,
   type PublicUser,
@@ -66,6 +67,9 @@ const userSchema = new Schema<UserDb>(
       enum: ['public', 'private'],
       default: 'public',
     },
+    // No default: absent is what makes the prompt appear after sign-in
+    // (AUTH-6), so accounts that predate the question are asked too.
+    accountType: { type: String, enum: ACCOUNT_TYPES },
     bio: String,
     avatarUrl: String,
     // Interface language: stored ONLY when explicitly chosen (no default)
@@ -76,6 +80,12 @@ const userSchema = new Schema<UserDb>(
     // Lecturing/generation language: stored ONLY when explicitly chosen
     // (no default) — absent falls through to the browser's language
     language: { type: String, enum: LOCALES },
+    // Whether the account wants the advisory "you are close to a limit"
+    // email (BILL-8). Stored as an opt-OUT: everyone gets the warning until
+    // they say otherwise, because the whole point of it is reaching people who
+    // were not expecting a cap. The exhaustion notice has no switch — it
+    // explains why something the user just attempted did not happen.
+    notifyCapWarnings: { type: Boolean, default: true },
     projectDefaults: {
       type: { manualSlideAdvance: Boolean, animatedTransitions: Boolean },
       default: undefined,
@@ -135,14 +145,17 @@ export const toUserDto = (doc: HydratedDocument<UserDb>): SafeUser => ({
   displayName: doc.displayName,
   emailVerified: doc.emailVerified,
   profileVisibility: doc.profileVisibility,
+  accountType: doc.accountType,
   bio: doc.bio,
   avatarUrl: doc.avatarUrl,
   locale: doc.locale,
   language: doc.language,
   projectDefaults: doc.projectDefaults,
+  notifyCapWarnings: doc.notifyCapWarnings !== false,
   planTier: effectivePlanTier(doc),
   planGrant: planGrantView(doc),
   billingProvider: doc.billingProvider,
-  billingCustomerId: doc.billingCustomerId,
+  // `billingCustomerId` is deliberately absent: the provider issued it, the
+  // client has no use for it, and P-8 keeps vendor references server-side.
   createdAt: doc.createdAt.toISOString(),
 })

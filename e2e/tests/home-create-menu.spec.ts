@@ -4,7 +4,7 @@
  * land in the most recently modified one — checked here end to end against
  * the live front/back end and test DB.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { createProject } from './helpers'
 
 test('the "+" menu starts a lecture in the most recent project', async ({

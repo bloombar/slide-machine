@@ -560,7 +560,7 @@
   section: §20 Administration, Operations & Moderation
   family: ADMIN
   phase: 2
-  status: Backlog
+  status: Done
   review: false
   note: administration & moderation
 - id: AUTH-3
@@ -1233,7 +1233,7 @@
   section: §14 Technical Stack & Conventions
   family: TECH
   phase: 2
-  status: Backlog
+  status: Done
   review: false
   note: billing-provider abstraction layer
 - id: TECH-12
@@ -1395,7 +1395,7 @@
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
-  status: Backlog
+  status: Done
   review: false
 - id: BILL-2
   title: Billing provider (Stripe) integration
@@ -1412,7 +1412,7 @@
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
-  status: Backlog
+  status: Done
   review: false
 - id: BILL-3
   title: Usage caps & metering
@@ -1429,7 +1429,7 @@
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
-  status: Backlog
+  status: Done
   review: false
 - id: BILL-4
   title: Enforcement & upgrade prompts
@@ -1446,7 +1446,7 @@
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
-  status: Backlog
+  status: Done
   review: false
 - id: BILL-5
   title: Plan management
@@ -1463,7 +1463,7 @@
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
-  status: Backlog
+  status: Done
   review: false
 - id: BILL-6
   title: Configurable pricing & caps
@@ -1480,7 +1480,7 @@
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3
-  status: Backlog
+  status: Done
   review: false
 - id: BILL-7
   title: Cost attribution & admin cost reporting
@@ -1622,7 +1622,13 @@
   full: Payments are processed by the configured billing provider (Stripe by
     default); the app stores no raw card data. Provider webhooks are
     signature-verified; only minimal, provider-neutral billing references
-    (billingCustomerId, subscription status) are stored.
+    (billingCustomerId, subscription status) are stored. The webhook route is
+    unauthenticated by necessity — its caller is the provider, not a user — so
+    the signature is the only thing separating the two, and an adapter that does
+    not check one (the in-memory mock) is refused at boot in production rather
+    than left to serve the endpoint — overridable only by a setting named for
+    the risk it takes on, so a test harness running the production build can opt
+    in and a real deployment cannot drift into it.
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 3
@@ -1655,7 +1661,7 @@
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 3
-  status: Backlog
+  status: Done
   review: false
 - id: PLAY-3
   title: Narration in the translated language
@@ -1738,6 +1744,23 @@
     vocabulary (CAP-4), this is…
   section: §6 Slide Projects & Seeding
   family: PREP
+  phase: 3
+  status: Backlog
+  review: false
+- id: TECH-14
+  title: Declarative action authorization
+  full: Every action in the action/command layer (TECH-13) declares how it is
+    authorized, drawn from a fixed vocabulary, rather than checking access in
+    the body of its handler. The declaration is part of the action's definition
+    alongside its input schema, and the dispatcher — not the action — enforces
+    it. Resolution happens once, before metering. The declared policy loads
+    whatever documents the decision needs, refuses if the caller may not
+    proceed, and hands those documents to the handler. So an action never pays
+    twice for the same lookup, and a caller with no rights to a lecture is
+    refused before they can be told anything about their plan — authorization
+    precedes plan-cap enforcement (BILL-3)…
+  section: §14 Technical Stack & Conventions
+  family: TECH
   phase: 3
   status: Backlog
   review: false

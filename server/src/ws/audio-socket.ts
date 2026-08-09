@@ -28,6 +28,9 @@ import { DeckModel, loadDeckAcl } from '../models/deck'
 import { canEditAcl } from '../lib/access'
 import { pcmBytesDurationMs } from '../lib/wav'
 import { adjustGauge, recordUsage, BYTES_PER_MB } from '../billing/usage'
+import { runWithUsage } from '../billing/usage-context'
+import { entityFromInput } from '../billing/attribution-resolve'
+import type { UsageAttribution } from '../billing/usage-attribution'
 import { usedFractionOf, userHasCapacity } from '../billing/meter-hooks'
 import {
   canStartRetention,
@@ -138,6 +141,14 @@ const rejectUpgrade = (
 /** Handles one authenticated connection: start message → provider stream →
  * audio in, transcripts out. */
 const handleConnection = (ws: WebSocket, userId: string): void => {
+  /**
+   * Which lecture this session's spend belongs to (BILL-7), learned when the
+   * client names a deck on `start`. A session that never names one still
+   * meters against the user — the socket is the one metered path where the
+   * lecture is genuinely not known up front, because transcription can begin
+   * before a deck exists to attach it to.
+   */
+  let attribution: UsageAttribution = { userId, actorId: userId }
   let stream: TranscriptionStream | null = null
   // Set once the client (or a socket close) ends the session, so we can tell a
   // provider-side failure apart from a normal stop.
@@ -190,6 +201,13 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
   // client named a deck + recording. Frames that arrive before the deck's edit
   // check answers are held briefly (bounded) rather than uploaded, because once
   // bytes leave for the bucket they cannot be un-sent.
+  /** Notes the lecture a session belongs to, so its minutes and its stored
+   * audio land on that lecture's cost rather than only on its owner's. */
+  const noteDeck = async (start: StartMessage): Promise<void> => {
+    if (!start.deckId) return
+    attribution = { userId, actorId: userId, ...(await entityFromInput(start)) }
+  }
+
   const beginRetention = (start: StartMessage): void => {
     if (!env.AUDIO_RETENTION_ENABLED || !start.deckId || !start.sessionId)
       return
@@ -300,7 +318,9 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
       // gauge only ever counts audio the sweep can later find and credit back
       // (BILL-3). ownerId is set: the upload could not have opened without it.
       if (r.ownerId) {
-        await adjustGauge(r.ownerId, 'audioStorageMb', r.bytes / BYTES_PER_MB)
+        await runWithUsage(attribution, () =>
+          adjustGauge(r.ownerId!, 'audioStorageMb', r.bytes / BYTES_PER_MB),
+        )
       }
       // A later phase copies this audio to GCS (gs://) here and sets the
       // recording's gcsUri — Google BatchRecognize reads only from GCS.
@@ -332,7 +352,9 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
     // Taken before the await so concurrent frames cannot be counted twice.
     sttBytes = 0
     const minutes = pcmBytesDurationMs(bytes, sttSampleRate) / 60_000
-    await recordUsage(userId, 'sttMinutes', minutes)
+    await runWithUsage(attribution, () =>
+      recordUsage(userId, 'sttMinutes', minutes),
+    )
 
     if (final || sttStopped) return
 
@@ -399,6 +421,10 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
       return
     }
     beginRetention(start)
+    // Not awaited: a lecture must start streaming the moment the engine is
+    // ready, and the worst a slow lookup can cost is that the first few
+    // seconds of minutes land on the user without their lecture named.
+    void noteDeck(start)
     // Drain transcription events to the client until the stream completes.
     // If it completes without the client stopping, the provider failed
     // (logged server-side) — tell the client so the mic never looks live

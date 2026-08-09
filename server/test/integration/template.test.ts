@@ -168,10 +168,12 @@ describe('template.duplicate (TMPL-4)', () => {
     ).toBe(403)
   })
 
+  // Forbidden, not invalid input: this must answer the same way as the
+  // private-template case above, or the two can be told apart by probing.
   it('rejects an unknown template', async () => {
     expect(
       (await act(ada, 'template.duplicate', { templateId: 'nope' })).status,
-    ).toBe(400)
+    ).toBe(403)
   })
 
   it('requires authentication', async () => {
@@ -179,6 +181,92 @@ describe('template.duplicate (TMPL-4)', () => {
       .post('/api/actions/template.duplicate')
       .send({ templateId: builtinId() })
     expect(res.status).toBe(401)
+  })
+})
+
+describe('template.export access (EXP-2)', () => {
+  const own = async (name = 'Ada Style') =>
+    (await act(ada, 'template.duplicate', { templateId: builtinId(), name }))
+      .body
+
+  it('exports a built-in for anyone', async () => {
+    const res = await act(bob, 'template.export', { templateId: builtinId() })
+    expect(res.status).toBe(200)
+  })
+
+  it('exports the caller’s own design', async () => {
+    const mine = await own()
+    const res = await act(ada, 'template.export', { templateId: mine.id })
+    expect(res.status).toBe(200)
+  })
+
+  // Exporting is a read: it must not be a way around the visibility rule
+  // that template.get enforces on the same design.
+  it("refuses someone else's private design", async () => {
+    const adas = await own()
+    const res = await act(bob, 'template.export', { templateId: adas.id })
+    expect(res.status).toBe(403)
+    expect(res.body.error.code).toBe('forbidden')
+  })
+
+  // Someone editing a shared lecture already sees its design on every
+  // slide, so the export offered in that lecture's own settings has to
+  // work — withholding the file would protect nothing.
+  it('lets an editor of a lecture export the design it is drawn with', async () => {
+    const adas = await own()
+    const project = await act(ada, 'project.create', { title: 'Bio' })
+    const deck = await act(ada, 'deck.create', {
+      projectId: project.body.id,
+      title: 'Photosynthesis',
+    })
+    // deck.create takes the project's design; switching is what pins this one.
+    await act(ada, 'deck.switchTemplate', {
+      deckId: deck.body.id,
+      templateId: adas.id,
+    })
+    await act(ada, 'deck.share', {
+      deckId: deck.body.id,
+      email: 'bob@example.com',
+      role: 'editor',
+    })
+
+    expect(
+      (await act(bob, 'template.export', { templateId: adas.id })).status,
+    ).toBe(200)
+  })
+
+  it('still refuses a viewer of that lecture', async () => {
+    const adas = await own()
+    const project = await act(ada, 'project.create', { title: 'Bio' })
+    const deck = await act(ada, 'deck.create', {
+      projectId: project.body.id,
+      title: 'Photosynthesis',
+    })
+    // deck.create takes the project's design; switching is what pins this one.
+    await act(ada, 'deck.switchTemplate', {
+      deckId: deck.body.id,
+      templateId: adas.id,
+    })
+    await act(ada, 'deck.share', {
+      deckId: deck.body.id,
+      email: 'bob@example.com',
+      role: 'viewer',
+    })
+
+    expect(
+      (await act(bob, 'template.export', { templateId: adas.id })).status,
+    ).toBe(403)
+  })
+
+  it('answers an unknown id exactly as it answers a private one', async () => {
+    const adas = await own()
+    const foreign = await act(bob, 'template.export', { templateId: adas.id })
+    const missing = await act(bob, 'template.export', {
+      templateId: '507f1f77bcf86cd799439011',
+    })
+    expect(missing.status).toBe(foreign.status)
+    expect(missing.body.error.code).toBe(foreign.body.error.code)
+    expect(missing.body.error.message).toBe(foreign.body.error.message)
   })
 })
 

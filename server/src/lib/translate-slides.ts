@@ -12,6 +12,10 @@
  * then back to Markdown, which is the one format the viewer, the exports, and
  * the editor all read. Nothing here writes to the slides themselves: the
  * authored content stays authoritative, and the translation is a layer over it.
+ *
+ * Because the cache decides what is paid for, it also decides what is metered:
+ * the owner's allowance is checked and charged here, on the miss path only
+ * (BILL-3/BILL-4 — see `billing/translation-usage.ts` for which pool pays).
  */
 import { createHash } from 'node:crypto'
 import type { Types } from 'mongoose'
@@ -29,6 +33,12 @@ import {
 } from './markdown-html'
 import { slotsOf, remapSlots, type LegacyContent } from './slide-slots'
 import { registry } from '../providers/registry'
+import {
+  assertTranslationCapacity,
+  recordCachedTranslation,
+  recordTranslationUsage,
+  type TranslationBilling,
+} from '../billing/translation-usage'
 import { env } from '../config/env'
 import {
   SlideTranslationModel,
@@ -48,8 +58,9 @@ export const translationEnabled = (): boolean => {
   return true
 }
 
-/** The slide content translated viewing covers — never the spoken transcript
- * (narration stays in the lecture's own language). */
+/** The slide content translated viewing covers. The spoken transcript is not
+ * part of it: narration is translated on demand, when someone actually listens
+ * (PLAY-3 — see `translate-narration.ts`). */
 export interface TranslatableSlide extends LegacyContent {
   id: string
   /** Absent on slides written before the slot map; derived from the fields. */
@@ -225,15 +236,30 @@ const segmentsOf = (slide: TranslatableSlide): Segment[] => {
  * Lists and tables are seeded from the source before translated strings are
  * written into them, so a cell or bullet the translator returned nothing for
  * falls back to the author's words rather than collapsing the shape.
+ *
+ * `previous` is the cached entry this one replaces, and it is here for one
+ * reason: content and narration are fingerprinted independently (PLAY-3), so
+ * neither pipeline may erase the other's work. This function rebuilds the slots
+ * from scratch and the caller writes `perSlide` wholesale, so a translated
+ * narration would be lost every time a slide's text was edited unless it is
+ * carried across. Copied field by field rather than spread, because a cached
+ * entry is a Mongoose subdocument and not a plain object.
  */
 const entryOf = (
   slide: TranslatableSlide,
   translated: Map<Segment, string>,
+  previous?: SlideTranslationEntry,
 ): SlideTranslationEntry => {
   const slots = slotsOf(slide)
   const entry: SlideTranslationEntry = {
     slots: {},
     sourceHash: slideSourceHash(slide),
+    ...(previous?.narration !== undefined
+      ? { narration: previous.narration }
+      : {}),
+    ...(previous?.narrationHash !== undefined
+      ? { narrationHash: previous.narrationHash }
+      : {}),
   }
   for (const [segment, text] of translated) {
     if (segment.slideId !== slide.id) continue
@@ -327,7 +353,16 @@ export const remapSlideTranslations = async (
       const value = entry.slots?.[from]
       if (value !== undefined) slots[to] = value
     }
-    doc.perSlide.set(slideId, { slots, sourceHash: afterHash })
+    // Narration is not slot-keyed — a layout switch moves boxes, it does not
+    // change what the lecturer said — so it rides across untouched (PLAY-3).
+    doc.perSlide.set(slideId, {
+      slots,
+      sourceHash: afterHash,
+      ...(entry.narration !== undefined ? { narration: entry.narration } : {}),
+      ...(entry.narrationHash !== undefined
+        ? { narrationHash: entry.narrationHash }
+        : {}),
+    })
     doc.markModified('perSlide')
     await doc.save()
   }
@@ -339,12 +374,20 @@ export const remapSlideTranslations = async (
  *
  * Slides that have since been deleted are dropped from the cache on the way
  * through, so a long-lived entry cannot grow orphans.
+ *
+ * `billing` names who pays and out of which pool (BILL-3). It is optional
+ * because not every translation has an account behind it — a deck whose owner
+ * has been deleted, or a test — and because metering must never be the reason
+ * a caller cannot use this. When it is supplied, this function is the only
+ * place that knows whether the provider was actually called, which is why both
+ * the cap check and the counting happen here rather than at the call sites.
  */
 export const translateSlides = async (
   deckId: Types.ObjectId,
   slides: TranslatableSlide[],
   source: Locale,
   target: Locale,
+  billing?: TranslationBilling,
 ): Promise<Record<string, SlideTranslationEntry>> => {
   const existing = await SlideTranslationModel.findOne({
     deckId,
@@ -358,6 +401,9 @@ export const translateSlides = async (
   )
 
   const fresh = new Map<string, SlideTranslationEntry>()
+  /** Whether anything reached the provider — what separates a charge from a
+   * zero-cost record. Stale slides with no words in them do not count. */
+  let translated = false
   if (stale.length) {
     const segments = stale.flatMap(segmentsOf)
     const translatedBySegment = new Map<Segment, string>()
@@ -367,6 +413,10 @@ export const translateSlides = async (
           ? escapeHtml(s.markdown)
           : markdownToHtml(s.markdown, { inline: s.inline }),
       )
+      // Checked here, at the last moment before the call that spends money, and
+      // only when there is something to spend it on. Throws → 402 (BILL-4).
+      if (billing)
+        await assertTranslationCapacity(billing, { localeIsNew: !existing })
       const provider = registry.get<TranslationProvider>('translation')
       const translatedHtml = await provider.translate({
         texts: sourceHtml,
@@ -374,6 +424,18 @@ export const translateSlides = async (
         target,
         format: 'html',
       })
+      translated = true
+      // After the fact, like every other metric: only a call that returned is
+      // charged, and it is charged for what was really submitted.
+      if (billing) {
+        await recordTranslationUsage(billing, {
+          characters: sourceHtml.reduce(
+            (total, html) => total + html.length,
+            0,
+          ),
+          localeIsNew: !existing,
+        })
+      }
       segments.forEach((segment, i) => {
         const repaired = restoreLinkHrefs(
           sourceHtml[i] ?? '',
@@ -390,7 +452,10 @@ export const translateSlides = async (
       })
     }
     for (const slide of stale)
-      fresh.set(slide.id, entryOf(slide, translatedBySegment))
+      fresh.set(
+        slide.id,
+        entryOf(slide, translatedBySegment, cached.get(slide.id)),
+      )
   }
 
   // Merge: freshly translated entries win, live slides keep their cached
@@ -402,11 +467,20 @@ export const translateSlides = async (
   }
 
   if (stale.length || !existing) {
+    // Written wholesale, which leaves a narrow race with a narration write
+    // (PLAY-3) landing between the read above and this line: a first translated
+    // *play* concurrent with a content re-translation of the same deck. It
+    // costs one short `format: 'text'` call on the next play, which re-fills
+    // it, so it is left alone rather than reworked into per-slide `$set` paths.
     await SlideTranslationModel.updateOne(
       { deckId, locale: target },
       { $set: { perSlide: merged } satisfies Partial<SlideTranslationDb> },
       { upsert: true },
     )
   }
+  // Served from the cache. Recorded at zero so the read still counts towards
+  // how many people this deck reached (BILL-3/BILL-7), without spending an
+  // allowance on words nobody re-translated.
+  if (billing && !translated) await recordCachedTranslation(billing)
   return Object.fromEntries(merged)
 }

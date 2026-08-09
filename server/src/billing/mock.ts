@@ -22,6 +22,7 @@ import type {
 } from '@slide-machine/shared'
 import { BILLING_EVENT_TYPES, PLAN_TIERS } from '@slide-machine/shared'
 import { loadPlans } from '../config/plans'
+import { env } from '../config/env'
 import { billingRegistry } from './registry'
 import { WebhookVerificationError } from './errors'
 
@@ -182,10 +183,29 @@ export class MockBillingProvider implements BillingProvider {
    * Accepts a delivery already in internal shape — `{ id, type, subscription }`
    * — so tests and dev tooling can drive billing state by POSTing plain JSON.
    * Unsigned by design: the mock never handles real money.
+   *
+   * Which is exactly why it refuses to run in production (P-8). The webhook
+   * route is unauthenticated because its caller is a payment provider rather
+   * than a user, so a signature is the only thing distinguishing the provider
+   * from a stranger — and an unsigned parser behind that route turns "POST
+   * this JSON" into "put any account on any plan". Configuration already
+   * refuses to boot in this state (`config/env.ts`); this is the second lock,
+   * on the door itself, because the cost of being wrong here is every
+   * subscription in the deployment.
+   *
+   * Both locks share one key — `ALLOW_UNSIGNED_BILLING_WEBHOOKS`, which the
+   * e2e suite sets because it runs the production build and needs mock
+   * billing to work. Sharing it is deliberate: two locks that could disagree
+   * would be a way for the door to be open while the config says it is shut.
    */
   async parseWebhook({
     rawBody,
   }: WebhookDelivery): Promise<BillingEvent | null> {
+    if (env.NODE_ENV === 'production' && !env.ALLOW_UNSIGNED_BILLING_WEBHOOKS) {
+      throw new WebhookVerificationError(
+        'The mock billing provider does not verify webhooks and is not usable in production',
+      )
+    }
     let payload: unknown
     try {
       payload = JSON.parse(rawBody)

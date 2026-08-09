@@ -38,9 +38,24 @@ export const totalTokens = (usage?: GeminiUsageMetadata): number => {
  * Meters a Gemini response's tokens against the ambient user. Safe to call
  * from anywhere: outside a usage context it is a no-op, and a response with no
  * usage block counts nothing rather than guessing.
+ *
+ * The cap is charged the combined total, because `aiTokens` is one allowance
+ * (BILL-3). The **ledger** is handed the split, because input and output bill
+ * at different rates and a report built on one of them is wrong by whatever
+ * the ratio happens to be (BILL-7). Thinking tokens go with output, which is
+ * how the vendor bills them.
  */
 export const meterGeminiUsage = async (
   usage?: GeminiUsageMetadata,
+  model?: string,
 ): Promise<void> => {
-  await meterUsage('aiTokens', totalTokens(usage))
+  await meterUsage('aiTokens', totalTokens(usage), {
+    pricing: {
+      kind: 'tokens',
+      inputTokens: usage?.promptTokenCount ?? 0,
+      outputTokens:
+        (usage?.candidatesTokenCount ?? 0) + (usage?.thoughtsTokenCount ?? 0),
+      model,
+    },
+  })
 }
