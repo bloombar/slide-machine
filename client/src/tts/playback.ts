@@ -21,8 +21,9 @@
  * download (PLAY-1) — that wait was audible as a gap between slides.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Slide, TtsMark } from '@slide-machine/shared'
+import type { Locale, Slide, TtsMark } from '@slide-machine/shared'
 import { synthesizeSlideTts } from '../api/slides'
+import { ApiError } from '../api/http'
 
 export type TtsStatus = 'idle' | 'playing' | 'paused'
 /** What the active audio is: whole-deck playback, one slide's stored narration,
@@ -36,6 +37,13 @@ interface Options {
   navigate: (index: number) => void
   /** Stop the live STT session so we don't record while speaking. */
   stopMic: () => void
+  /**
+   * The language the slides are being displayed in, or null for the language
+   * they were written in (PLAY-3). Read live, like `getSlides`, so switching
+   * language mid-deck is picked up by the next step rather than needing the
+   * hook to be rebuilt.
+   */
+  getLocale?: () => Locale | null
 }
 
 /** A live read of where playback is: which slide, and how far through its audio
@@ -67,9 +75,14 @@ interface Clip {
 /** Stands in for a clip with nothing to speak (or one that failed to load). */
 const EMPTY_CLIP: Clip = { playUrl: null, objectUrl: null, marks: [] }
 
-/** Cache key for a slide's clip: the same words are the same audio. */
-const clipKey = (slideId: string, mode: 'content' | 'transcript'): string =>
-  `${slideId}|${mode}`
+/** Cache key for a slide's clip: the same words are the same audio. The
+ * language is part of it, or a clip warmed in English would be played after the
+ * reader switched to French (PLAY-3). */
+const clipKey = (
+  slideId: string,
+  mode: 'content' | 'transcript',
+  locale: Locale | null,
+): string => `${slideId}|${mode}|${locale ?? ''}`
 
 /**
  * Downloads a clip's bytes and wraps them in an object URL so playing it costs
@@ -92,16 +105,29 @@ const toObjectUrl = async (url: string): Promise<string | null> => {
 const loadClip = async (
   slideId: string,
   mode: 'content' | 'transcript',
-  text?: string,
+  options: { text?: string; locale?: Locale | null } = {},
 ): Promise<Clip> => {
-  const { url, marks } =
-    text === undefined
-      ? await synthesizeSlideTts(slideId, mode)
-      : await synthesizeSlideTts(slideId, mode, text)
+  const { url, marks } = await synthesizeSlideTts(slideId, mode, options)
   if (!url) return EMPTY_CLIP
   const objectUrl = await toObjectUrl(url)
   return { playUrl: objectUrl ?? url, objectUrl, marks: marks ?? [] }
 }
+
+/**
+ * Whether a failure means "this deck cannot be spoken in this language" rather
+ * than "this clip did not load".
+ *
+ * The difference decides what the listener sees. An ordinary failure lets deck
+ * playback move on to the next slide, as it always has. A refusal has to stop
+ * and say so: silently advancing through a deck the reader asked to hear in
+ * French would look like a broken player, and speaking it in English instead
+ * would leave them reading one language and hearing another (PLAY-3).
+ */
+const isNarrationRefusal = (error: unknown): error is ApiError =>
+  error instanceof ApiError &&
+  (error.code === 'translation_failed' ||
+    error.code === 'unavailable' ||
+    error.status === 402)
 
 /** Frees a clip's in-memory bytes once nothing can play them. */
 const releaseClip = (clip: Clip): void => {
@@ -114,6 +140,15 @@ export interface TtsPlayback {
   status: TtsStatus
   scope: TtsScope
   activeIndex: number | null
+  /**
+   * Why narration stopped, when it stopped for a reason worth telling the
+   * listener about — a deck that cannot be spoken in the language it is being
+   * read in (PLAY-3). Null the rest of the time, including for the ordinary
+   * per-slide failures that simply advance.
+   */
+  error: string | null
+  /** Dismiss the message, e.g. when the reader returns to the original. */
+  clearError: () => void
   playDeck: (fromIndex: number) => void
   /** Move deck playback to another slide (arrow-key navigation), continuing
    * from there. No-op unless deck playback is active. */
@@ -134,10 +169,20 @@ export function useTtsPlayback({
   getSlides,
   navigate,
   stopMic,
+  getLocale,
 }: Options): TtsPlayback {
   const [status, setStatus] = useState<TtsStatus>('idle')
   const [scope, setScope] = useState<TtsScope>(null)
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const clearError = useCallback(() => setError(null), [])
+  // Read through a ref so every callback below sees the current reader's
+  // language without being rebuilt when it changes.
+  const localeRef = useRef(getLocale)
+  useEffect(() => {
+    localeRef.current = getLocale
+  })
+  const currentLocale = (): Locale | null => localeRef.current?.() ?? null
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const tokenRef = useRef(0) // bumped to cancel any in-flight sequence
@@ -214,7 +259,16 @@ export function useTtsPlayback({
       let clip: Clip
       try {
         clip = await getClip()
-      } catch {
+      } catch (caught) {
+        // A deck that cannot be spoken in the language being read stops and
+        // says why, rather than advancing through it in silence (PLAY-3).
+        if (isNarrationRefusal(caught)) {
+          if (token === tokenRef.current) {
+            setError(caught.message)
+            stop()
+          }
+          return
+        }
         clip = EMPTY_CLIP
       }
       if (token !== tokenRef.current) {
@@ -245,7 +299,7 @@ export function useTtsPlayback({
       }
       if (token === tokenRef.current) setStatus('playing')
     },
-    [],
+    [stop],
   )
 
   /**
@@ -276,10 +330,11 @@ export function useTtsPlayback({
     (index: number) => {
       const slide = getSlides()[index]
       if (!slide) return
-      const key = clipKey(slide.id, 'transcript')
+      const locale = currentLocale()
+      const key = clipKey(slide.id, 'transcript', locale)
       if (prefetchRef.current?.key === key) return
       dropPrefetch()
-      const clip = loadClip(slide.id, 'transcript')
+      const clip = loadClip(slide.id, 'transcript', { locale })
       // Failures are handled where the clip is played (it advances instead);
       // this keeps the wait from looking like an unhandled rejection.
       clip.catch(() => {})
@@ -304,8 +359,12 @@ export function useTtsPlayback({
         stop()
         return
       }
+      const locale = currentLocale()
       await playSynthesized(
-        () => takeClip(clipKey(slide.id, mode), () => loadClip(slide.id, mode)),
+        () =>
+          takeClip(clipKey(slide.id, mode, locale), () =>
+            loadClip(slide.id, mode, { locale }),
+          ),
         token,
         onEnded,
       )
@@ -320,6 +379,7 @@ export function useTtsPlayback({
     (fromIndex: number, keepPaused: boolean) => {
       stopMic()
       halt()
+      setError(null)
       if (!keepPaused) pausedRef.current = false
       const token = ++tokenRef.current
       setScope('deck')
@@ -365,6 +425,7 @@ export function useTtsPlayback({
     (slide: Slide) => {
       stopMic()
       halt()
+      setError(null)
       pausedRef.current = false
       const token = ++tokenRef.current
       const index = getSlides().findIndex(s => s.id === slide.id)
@@ -390,14 +451,17 @@ export function useTtsPlayback({
       if (!text.trim()) return
       stopMic()
       halt()
+      setError(null)
       pausedRef.current = false
       const token = ++tokenRef.current
       setActiveIndex(null)
       activeIndexRef.current = null
       setScope('text')
       setStatus('playing')
+      // No locale: a preview speaks exactly the words in the editor, and a
+      // translated view is read-only anyway (SHARE-2).
       void playSynthesized(
-        () => loadClip(slide.id, 'transcript', text),
+        () => loadClip(slide.id, 'transcript', { text }),
         token,
         stop,
       )
@@ -457,6 +521,8 @@ export function useTtsPlayback({
     status,
     scope,
     activeIndex,
+    error,
+    clearError,
     playDeck,
     skipTo,
     speakSlide,

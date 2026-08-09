@@ -1021,6 +1021,7 @@
     "translatedNotice": "Traduction automatique — l'original fait foi",
     "translatedNoticeEditor": "Vue traduite automatiquement — la modification est désactivée tant que l'original n'est pas affiché",
     "translationFailed": "Impossible de traduire ce cours. Affichage de l'original.",
+    "narrationTranslationFailed": "Impossible de lire ce cours à voix haute dans cette langue. La narration s'est arrêtée.",
     "translationSeePlans": "Voir les forfaits"
   },
   "quiz": {

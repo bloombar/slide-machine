@@ -1021,6 +1021,7 @@
     "translatedNotice": "Machine-translated — the original is authoritative",
     "translatedNoticeEditor": "Machine-translated view — editing is off until you show the original",
     "translationFailed": "Could not translate this lecture. Showing the original.",
+    "narrationTranslationFailed": "Could not read this lecture aloud in that language. Narration stopped.",
     "translationSeePlans": "See plans"
   },
   "quiz": {

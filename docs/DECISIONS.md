@@ -2,6 +2,20 @@
 
 Short records of non-obvious choices, for when we revisit them.
 
+## Translated narration: resolve the words first, cache them nowhere new (2026-08-08)
+
+**Problem.** [PLAY-3](SPEC.md#play-3-narration-in-the-translated-language) wants a deck spoken in whatever language it is being read in. Synthesized audio is already cached under a hash of `(provider, language, voice, spoken text)`, and the spec is explicit that a translated narration must be "simply another entry under the existing scheme". But [routes/tts.ts](../server/src/routes/tts.ts) was built to compute a cheap cache *seed* and defer producing the text to a miss, so a replay never re-narrates. Translation cannot be deferred that way: the translated words **are** the key.
+
+**Choice.** On the translated path, resolve the spoken text **before** the audio cache is consulted, and add nothing to the key. This is affordable because the narration translation is itself a read-through cache living in the deck's existing per-locale entry ([models/slide-translation.ts](../server/src/models/slide-translation.ts)), so a replay costs one Mongo read and is recorded at zero. Gemini narration of a transcript-less slide stays lazy — its seed is the translated *content*, which is cheap to know.
+
+**Two fingerprints, one entry.** `sourceHash` covers the slide's slots; `narrationHash` covers the transcript alone, in a separate module ([lib/translate-narration.ts](../server/src/lib/translate-narration.ts)) with its own hash version. Editing a spoken transcript ([EDIT-6](SPEC.md#edit-6-spoken-transcript-editing)) must not re-pay for translating slide text nobody touched, and editing a slide must not re-pay for narration nobody rewrote. The hazard this creates is that `translateSlides` writes `perSlide` **wholesale**, so `entryOf` and `remapSlideTranslations` both have to carry narration across explicitly; narration itself writes through a targeted `$set` on the dotted path so it can never clobber the slots. What is left is a narrow lost-write race (a content re-translation concurrent with a first translated play), which is self-healing at the cost of one short call.
+
+**Why not fall back to the original language on failure.** A provider outage refuses with a 502 and the viewer says so. Speaking English into a deck being read in French leaves a student reading one language and hearing another with nothing on screen to explain it; advancing in silence reads as a broken player.
+
+**Bundled fix.** The voice cascade compared a full tag against `deck.language`, so a lecture declaring `'en'` never matched the catalog's `en-US-*` voices — it silently lost its chosen voice and billed premium narration as standard. PLAY-3 needed a Locale→BCP-47 map anyway ([shared/lib/tts-language.ts](../shared/src/lib/tts-language.ts)), so the comparison moved to base subtags. Consequence: those decks re-synthesize once, and premium voices start charging the premium metric, which is what they should always have done.
+
+**Limits.** Whiteboard marks timed to positions in the original transcript are not replayed under a translated playback — those anchors do not survive translation — so only untimed marks show. Narration is not offered to anonymous listeners, because synthesis is `requireAuth` while reading and translating are not; that is a pre-existing [PLAY-2](SPEC.md#play-2-narration-playback) gap, not one this introduced. And `narrationHash` does not cover the *source* locale, so changing a deck's language after caching will not invalidate it — `sourceHash` has the identical gap for content, and fixing half of it would be worse than fixing neither.
+
 ## Diarization is billed like live capture, not like cheap batch (2026-07-31)
 
 **Problem.** Sizing the tier caps ([BILL-1](SPEC.md#bill-1-subscription-tiers)) needed a price per diarized minute. The obvious assumption — batch work is cheap — put it at $0.003/min, which made diarization look like a rounding error at 3% of service cost.
