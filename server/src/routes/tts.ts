@@ -10,6 +10,13 @@
  *    says, and only someone who could save those words may spend the API call
  *    on them.
  *
+ * `locale` says which language the slides are being read in (PLAY-3). Narration
+ * follows the screen, so it is the only thing the client has to send: the words
+ * are the slide's transcript translated (or, for a slide nobody narrated, its
+ * translated content), and everything below this point is unchanged. The audio
+ * cache needs nothing translation-specific, because the language and the spoken
+ * words already identify a clip.
+ *
  * Synthesized audio is cached in object storage under a content hash, so
  * replays are free and never re-call the paid APIs. View access (not edit) is
  * enough to listen to what a lecture already says. Synthesis is behind the
@@ -30,18 +37,29 @@
 import { createHash } from 'node:crypto'
 import { Router } from 'express'
 import {
+  deckSourceLocale,
   findTtsVoice,
+  isLocale,
+  overlaySlideTranslation,
+  ttsLanguageTag,
+  voiceMatchesLanguage,
+  type Locale,
   type TtsMark,
   type TtsProvider,
 } from '@slide-machine/shared'
 import { requireAuth } from '../middleware/auth'
 import { HttpError } from '../middleware/error'
-import { SlideModel } from '../models/slide'
+import { SlideModel, toSlideDto } from '../models/slide'
 import { DeckModel, loadDeckAcl } from '../models/deck'
-import { isAllowlistedAdmin } from '../lib/admin-view'
+import { asOf, isAllowlistedAdmin } from '../lib/admin-view'
 import { ProjectModel } from '../models/project'
 import { canEditAcl, canViewAcl } from '../lib/access'
 import { slideContentText } from '../lib/speakable-text'
+import { slotsOf } from '../lib/slide-slots'
+import { translateSlides, translationEnabled } from '../lib/translate-slides'
+import { translateNarration } from '../lib/translate-narration'
+import { translationBillingFor } from '../billing/translation-usage'
+import { PlanLimitExceededError } from '../billing/limits'
 import { narrateSlide } from '../tts/narrate'
 import { registry } from '../providers/registry'
 import { getStorage } from '../storage'
@@ -75,6 +93,12 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
       'bad_request',
       'That narration is too long to speak',
     )
+  }
+  // The language the slides are being read in (PLAY-3). Narration follows the
+  // screen, so this is the only thing the client has to say about it.
+  const requestedLocale: unknown = req.body?.locale
+  if (requestedLocale !== undefined && !isLocale(requestedLocale)) {
+    throw new HttpError(400, 'bad_request', 'Unsupported language')
   }
 
   // Admins may open a soft-deleted lecture in the viewer (ADMIN-6), so its
@@ -111,34 +135,163 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
     }
   }
 
-  // Language + voice cascade: the lecture's own setting wins, then its
-  // project's, then the server default (all inherited from the same fields the
-  // rest of the app uses).
-  const project = await ProjectModel.findById(deck.projectId).catch(() => null)
-  const languageCode = deck.language ?? project?.language ?? env.TTS_LANGUAGE
+  const project = await ProjectModel.findById(deck.projectId)
+    .setOptions({ withDeleted: admin })
+    .catch(() => null)
+
+  // The language the lecture was authored in — what "Original" means for it.
+  const sourceLocale = deckSourceLocale(deck.language, project?.language)
+  // Reading in another language only means something when translation is
+  // configured (TECH-4) and the language is not the one the lecture already
+  // speaks. A preview of unsaved words never carries one: it is an edit-side
+  // path, and a translated view is read-only even for editors (SHARE-2).
+  const target: Locale | undefined =
+    requestedLocale !== undefined &&
+    requestedLocale !== sourceLocale &&
+    supplied === null &&
+    translationEnabled()
+      ? requestedLocale
+      : undefined
+
+  // Language cascade: the language being read wins, then the lecture's own
+  // setting, then its project's, then the server default. Locales are stored
+  // as bare subtags and speech APIs want region-qualified tags, so they are
+  // mapped on the way out (`ttsLanguageTag` passes a qualified tag through, so
+  // a server that configured TTS_LANGUAGE=en-GB keeps it).
+  const declared = deck.language ?? project?.language
+  const languageCode = ttsLanguageTag(target ?? declared ?? env.TTS_LANGUAGE)
   // Voice cascade: the lecture's own setting wins, then its project's, then the
   // server default (TTS_DEFAULT_VOICE); an unset default leaves `voice`
   // undefined, so the provider uses its own default voice for the language.
   const voice = findTtsVoice(
     deck.ttsVoice ?? project?.ttsVoice ?? env.TTS_DEFAULT_VOICE,
   )
-  // Use the chosen voice by name only when it belongs to the lecture's
-  // language; otherwise its gender carries across to a same-gender voice in
-  // that language (the voice's gender was recorded with the selection).
+  // Use the chosen voice by name only when it belongs to the language being
+  // spoken; otherwise its gender carries across to a same-gender voice in that
+  // language (the voice's gender was recorded with the selection). Compared by
+  // base subtag, because the catalog names voices in full ('en-US-Neural2-F')
+  // while a lecture may declare its language as either 'en' or 'en-US'.
   const gender = voice?.gender
-  const voiceLanguage = voice?.voiceName.split('-').slice(0, 2).join('-')
   const voiceName =
-    voice && voiceLanguage?.toLowerCase() === languageCode.toLowerCase()
+    voice && voiceMatchesLanguage(voice.voiceName, languageCode)
       ? voice.voiceName
       : undefined
+  // Speak in the voice's own tag when one is named: a provider rejects a voice
+  // whose language does not match what it was asked to say (an 'en-US' voice
+  // sent with 'en-GB'). Without a name, the requested language stands.
+  const spokenLanguage = voiceName
+    ? voiceName.split('-').slice(0, 2).join('-')
+    : languageCode
 
-  const content = slideContentText(slide)
+  // Whoever asked, the owner's plan pays (BILL-1) — but an owner or editor
+  // preparing the deck draws on a different allowance than someone listening to
+  // it. Decided before any paid work, because a cache hit is still recorded and
+  // has to land on the same metric a miss would have.
+  const actor = canEditAcl(acl, req.userId) ? 'author' : 'audience'
+  // Who pays, who asked, and what for (BILL-7). This is the path where payer
+  // and actor genuinely differ — a student's playback is charged to the deck's
+  // owner — and the one where the actor may be nobody at all, since a shared
+  // lecture is played by people without accounts. `audience` is stated rather
+  // than inferred, so an anonymous listener is still recorded as audience
+  // activity instead of being mistaken for the owner's own work.
+  const attribution = attributionForDeck(acl.ownerId, deck, {
+    actorId: req.userId,
+    audience: actor === 'audience',
+  })
+  // Translating the narration is translation work, charged to the same owner
+  // out of the same two pools as translated reading (BILL-3, SHARE-2).
+  const translationBilling = target
+    ? await translationBillingFor(acl.ownerId, actor)
+    : undefined
+
   const transcript = slide.sourceTranscript?.trim()
+
+  /**
+   * The slide's content as it is being displayed — the authored text, or the
+   * translation laid over it when the deck is being read in another language.
+   * Loads the whole deck because `translateSlides` writes `perSlide` from the
+   * slides it is handed and drops the rest, so a one-slide call would delete
+   * every other slide's cached translation. It is normally a pure cache hit:
+   * the viewer already translated this deck to put it on screen.
+   */
+  const displayedContent = async (): Promise<string> => {
+    if (!target) return slideContentText(slide)
+    const { filter, options } = asOf(deck.deletedAt)
+    const slides = await SlideModel.find({ deckId: deck._id, ...filter })
+      .sort({ index: 1 })
+      .setOptions(options)
+    const perSlide = await translateSlides(
+      deck._id,
+      slides.map(toSlideDto),
+      sourceLocale,
+      target,
+      translationBilling,
+    )
+    return slideContentText(
+      overlaySlideTranslation(
+        {
+          title: slide.title,
+          body: slide.body,
+          bullets: slide.bullets,
+          caption: slide.caption,
+          slots: slotsOf(slide),
+        },
+        perSlide[slideId],
+      ),
+    )
+  }
+
+  /** What to speak, and how to produce it once the audio cache has missed. */
+  interface Speech {
+    seed: string
+    resolveText: () => Promise<string>
+  }
+
+  /**
+   * What the deck says in the language it is being read in (PLAY-3).
+   *
+   * Translation is the one thing that cannot stay lazy: the audio cache key IS
+   * the spoken words, so they have to be known before it is consulted. That is
+   * a database read on a replay, not a paid call — the narration cache sits in
+   * the same per-deck + locale entry as the slide text — and it is recorded at
+   * zero. The alternative, putting the locale in the key as a namespace, would
+   * give up the sharing that makes two lectures saying the same words in the
+   * same language cost one stored object.
+   */
+  const translatedSpeech = async (locale: Locale): Promise<Speech | null> => {
+    // The lecturer's own words, translated.
+    if (mode === 'transcript' && transcript) {
+      const spoken = await runWithUsage(attribution, () =>
+        translateNarration(
+          deck._id,
+          slideId,
+          transcript,
+          sourceLocale,
+          locale,
+          translationBilling,
+        ),
+      )
+      return { seed: `transcript|${spoken}`, resolveText: async () => spoken }
+    }
+    // Nothing was said about this slide, so it is narrated from its translated
+    // content — the way PLAY-2 narrates from content in the original language.
+    const translated = await runWithUsage(attribution, displayedContent)
+    if (!translated) return null
+    return mode === 'transcript'
+      ? {
+          seed: `narrate|${translated}`,
+          resolveText: async () =>
+            (await narrateSlide(translated, languageCode)) || translated,
+        }
+      : {
+          seed: `content|${translated}`,
+          resolveText: async () => translated,
+        }
+  }
 
   // A stable cache seed (independent of any non-deterministic narration) plus
   // a lazy text resolver, so a cache hit never re-narrates or re-synthesizes.
-  let seed: string
-  let resolveText: () => Promise<string>
+  let speech: Speech
   if (supplied !== null) {
     // Exactly what the caller typed — no narration, no fallback to content: a
     // preview that spoke something else would be worthless.
@@ -147,21 +300,47 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
     // Same seed shape as a stored transcript, on purpose: previewing text and
     // then saving and playing it share one cache entry, so the preview costs
     // the paid API nothing the eventual playback wasn't going to cost anyway.
-    seed = `transcript|${preview}`
-    resolveText = async () => preview
-  } else if (mode === 'transcript' && transcript) {
-    seed = `transcript|${transcript}`
-    resolveText = async () => transcript
-  } else if (mode === 'transcript') {
-    if (!content) return res.json({ url: null, marks: [] })
-    seed = `narrate|${content}`
-    resolveText = async () =>
-      (await narrateSlide(content, languageCode)) || content
+    speech = { seed: `transcript|${preview}`, resolveText: async () => preview }
+  } else if (target) {
+    let translated: Speech | null
+    try {
+      translated = await translatedSpeech(target)
+    } catch (error) {
+      // An exhausted allowance is a deliberate refusal with its own status
+      // (BILL-4), not an upstream failure — rewriting it as a 502 would tell
+      // the listener to retry something that cannot succeed.
+      if (error instanceof PlanLimitExceededError) throw error
+      // Reported rather than papered over: speaking the original language into
+      // a translated deck would have a student reading French and hearing
+      // English, with nothing on screen to explain why.
+      throw new HttpError(
+        502,
+        'translation_failed',
+        'Could not narrate this lecture in that language right now',
+      )
+    }
+    if (!translated) return res.json({ url: null, marks: [] })
+    speech = translated
   } else {
-    if (!content) return res.json({ url: null, marks: [] })
-    seed = `content|${content}`
-    resolveText = async () => content
+    const content = slideContentText(slide)
+    if (mode === 'transcript' && transcript) {
+      speech = {
+        seed: `transcript|${transcript}`,
+        resolveText: async () => transcript,
+      }
+    } else if (!content) {
+      return res.json({ url: null, marks: [] })
+    } else if (mode === 'transcript') {
+      speech = {
+        seed: `narrate|${content}`,
+        resolveText: async () =>
+          (await narrateSlide(content, languageCode)) || content,
+      }
+    } else {
+      speech = { seed: `content|${content}`, resolveText: async () => content }
+    }
   }
+  const { seed, resolveText } = speech
 
   const provider = registry.get<TtsProvider>('tts')
   const ext = extensionFor(provider.audioMimeType)
@@ -172,7 +351,7 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
       [
         'v2',
         provider.name,
-        languageCode,
+        spokenLanguage,
         voiceName ?? '',
         gender ?? '',
         seed,
@@ -196,21 +375,6 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
     }
   }
 
-  // Whoever asked, the owner's plan pays (BILL-1) — but an owner or editor
-  // preparing the deck draws on a different allowance than someone listening
-  // to it. Decided before the cache is consulted, because a cache hit is still
-  // recorded and has to land on the same metric a miss would have.
-  const actor = canEditAcl(acl, req.userId) ? 'author' : 'audience'
-  // Who pays, who asked, and what for (BILL-7). This is the path where payer
-  // and actor genuinely differ — a student's playback is charged to the deck's
-  // owner — and the one where the actor may be nobody at all, since a shared
-  // lecture is played by people without accounts. `audience` is stated rather
-  // than inferred, so an anonymous listener is still recorded as audience
-  // activity instead of being mistaken for the owner's own work.
-  const attribution = attributionForDeck(acl.ownerId, deck, {
-    actorId: req.userId,
-    audience: actor === 'audience',
-  })
   // Premium only when the premium voice is really the one being sent: a voice
   // whose language does not match the lecture's is dropped in favour of the
   // provider's own default, which is a standard one.

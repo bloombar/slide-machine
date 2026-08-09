@@ -259,12 +259,21 @@ decksRouter.post('/decks/:slug/translation', optionalAuth, async (req, res) => {
     .sort({ index: 1 })
     .setOptions(options)
   try {
-    body.perSlide = await translateSlides(
+    const perSlide = await translateSlides(
       deck._id,
       slides.map(toSlideDto),
       source,
       locale,
       billing,
+    )
+    // Narration rides in the same entries (PLAY-3) but is not part of reading:
+    // it is fetched when someone actually presses play, and shipping it here
+    // would put a second copy of every transcript on the wire for every viewer.
+    body.perSlide = Object.fromEntries(
+      Object.entries(perSlide).map(([slideId, { slots, sourceHash }]) => [
+        slideId,
+        { slots, sourceHash },
+      ]),
     )
   } catch (error) {
     // An exhausted allowance is not an upstream failure: it is a deliberate

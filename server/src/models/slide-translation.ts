@@ -28,17 +28,22 @@ export interface SlideTranslationDb {
 }
 
 /**
- * One slide's translated slots; id-less, it is keyed by slide id above.
+ * One slide's translated slots and narration; id-less, it is keyed by slide id
+ * above.
  *
  * `slots` is Mixed for the same reason a slide's own map is: the set of boxes
  * is data a template author writes, not a shape this schema can know ahead of
  * time (see models/slide.ts). Entries whose hash predates the slot map read as
- * stale and are simply re-translated, so no migration is needed to get here.
+ * stale and are simply re-translated, so no migration is needed to get here —
+ * and the same is true of `narration`, which older entries simply lack until
+ * the first person listens to the deck in this language (PLAY-3).
  */
 const entrySchema = new Schema<SlideTranslationEntry>(
   {
     slots: { type: Schema.Types.Mixed, default: () => ({}) },
     sourceHash: String,
+    narration: String,
+    narrationHash: String,
   },
   { _id: false },
 )

@@ -6,9 +6,10 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
-import type { Slide } from '@slide-machine/shared'
+import type { Locale, Slide } from '@slide-machine/shared'
 import { useTtsPlayback } from './playback'
 import { synthesizeSlideTts } from '../api/slides'
+import { ApiError } from '../api/http'
 
 vi.mock('../api/slides', () => ({ synthesizeSlideTts: vi.fn() }))
 const mockedSynth = vi.mocked(synthesizeSlideTts)
@@ -69,11 +70,11 @@ afterEach(() => {
   URL.revokeObjectURL = realRevoke
 })
 
-const setup = () => {
+const setup = (getLocale?: () => Locale | null) => {
   const navigate = vi.fn()
   const stopMic = vi.fn()
   const hook = renderHook(() =>
-    useTtsPlayback({ getSlides: () => slides, navigate, stopMic }),
+    useTtsPlayback({ getSlides: () => slides, navigate, stopMic, getLocale }),
   )
   return { hook, navigate, stopMic }
 }
@@ -87,7 +88,9 @@ describe('useTtsPlayback', () => {
     expect(stopMic).toHaveBeenCalled()
     await waitFor(() => expect(audios[0]?.src).toBe('u1'))
     // Speaks the slide's stored narration/transcript, like deck playback.
-    expect(mockedSynth).toHaveBeenCalledWith(slides[0]!.id, 'transcript')
+    expect(mockedSynth).toHaveBeenCalledWith(slides[0]!.id, 'transcript', {
+      locale: null,
+    })
     expect(navigate).toHaveBeenCalledWith(0)
     await waitFor(() => expect(hook.result.current.status).toBe('playing'))
 
@@ -203,11 +206,9 @@ describe('useTtsPlayback', () => {
     act(() => hook.result.current.speakText(slides[0]!, 'Unsaved words.'))
     expect(stopMic).toHaveBeenCalled()
     await waitFor(() => expect(audios[0]?.src).toBe('preview'))
-    expect(mockedSynth).toHaveBeenCalledWith(
-      slides[0]!.id,
-      'transcript',
-      'Unsaved words.',
-    )
+    expect(mockedSynth).toHaveBeenCalledWith(slides[0]!.id, 'transcript', {
+      text: 'Unsaved words.',
+    })
     // The editor is open over the slide; the preview is about the words.
     expect(navigate).not.toHaveBeenCalled()
     expect(hook.result.current.scope).toBe('text')
@@ -290,7 +291,9 @@ describe('useTtsPlayback', () => {
       await waitFor(() => expect(audios[0]?.src).toBe('url-s1'))
       // Slide 2 is fetched without waiting for slide 1 to finish.
       await waitFor(() =>
-        expect(mockedSynth).toHaveBeenCalledWith('s2', 'transcript'),
+        expect(mockedSynth).toHaveBeenCalledWith('s2', 'transcript', {
+          locale: null,
+        }),
       )
 
       mockedSynth.mockClear()
@@ -356,7 +359,9 @@ describe('useTtsPlayback', () => {
 
       act(() => hook.result.current.playDeck(0))
       await waitFor(() =>
-        expect(mockedSynth).toHaveBeenCalledWith('s2', 'transcript'),
+        expect(mockedSynth).toHaveBeenCalledWith('s2', 'transcript', {
+          locale: null,
+        }),
       )
 
       mockedSynth.mockClear()
@@ -379,6 +384,132 @@ describe('useTtsPlayback', () => {
       // The element downloads it itself, as before — playback still works.
       await waitFor(() => expect(audios[0]?.src).toBe('url-s1'))
       await waitFor(() => expect(hook.result.current.status).toBe('playing'))
+    })
+  })
+
+  describe('speaking the language on screen (PLAY-3)', () => {
+    it('asks for the language the slides are being read in', async () => {
+      mockedSynth.mockResolvedValue({ url: 'u1', marks: [] })
+      const { hook } = setup(() => 'fr')
+
+      act(() => hook.result.current.speakSlide(slides[0]!))
+      await waitFor(() => expect(audios[0]?.src).toBe('u1'))
+      expect(mockedSynth).toHaveBeenCalledWith('s1', 'transcript', {
+        locale: 'fr',
+      })
+    })
+
+    it('warms the next slide in the same language', async () => {
+      mockedSynth.mockResolvedValue({ url: 'u', marks: [] })
+      const { hook } = setup(() => 'fr')
+
+      act(() => hook.result.current.playDeck(0))
+      // A clip warmed in the wrong language would be played after the reader
+      // switched, so the prefetch has to carry it too.
+      await waitFor(() =>
+        expect(mockedSynth).toHaveBeenCalledWith('s2', 'transcript', {
+          locale: 'fr',
+        }),
+      )
+    })
+
+    it('does not reuse a clip warmed in another language', async () => {
+      mockedSynth.mockResolvedValue({ url: 'u', marks: [] })
+      let locale: Locale | null = 'fr'
+      const { hook } = setup(() => locale)
+
+      act(() => hook.result.current.playDeck(0))
+      await waitFor(() =>
+        expect(mockedSynth).toHaveBeenCalledWith('s2', 'transcript', {
+          locale: 'fr',
+        }),
+      )
+      // The reader switches back to the original mid-deck. The warmed French
+      // clip is keyed to French, so slide 2 is fetched again rather than
+      // spoken in a language nobody is reading.
+      locale = null
+      mockedSynth.mockClear()
+      act(() => hook.result.current.skipTo(1))
+      await waitFor(() =>
+        expect(mockedSynth).toHaveBeenCalledWith('s2', 'transcript', {
+          locale: null,
+        }),
+      )
+    })
+
+    it('never translates an unsaved preview', async () => {
+      mockedSynth.mockResolvedValue({ url: 'preview', marks: [] })
+      const { hook } = setup(() => 'fr')
+
+      act(() => hook.result.current.speakText(slides[0]!, 'Unsaved words.'))
+      await waitFor(() => expect(audios[0]?.src).toBe('preview'))
+      // A preview speaks exactly what the editor typed (EDIT-6).
+      expect(mockedSynth).toHaveBeenCalledWith('s1', 'transcript', {
+        text: 'Unsaved words.',
+      })
+    })
+
+    it('stops and says so when the deck cannot be spoken in that language', async () => {
+      mockedSynth.mockRejectedValue(
+        new ApiError(502, 'translation_failed', 'Could not narrate that.'),
+      )
+      const { hook } = setup(() => 'fr')
+
+      act(() => hook.result.current.playDeck(0))
+      await waitFor(() =>
+        expect(hook.result.current.error).toBe('Could not narrate that.'),
+      )
+      // Not advanced through in silence: a deck that kept moving with no
+      // sound would read as a broken player.
+      expect(hook.result.current.status).toBe('idle')
+      expect(hook.result.current.activeIndex).toBeNull()
+
+      act(() => hook.result.current.clearError())
+      expect(hook.result.current.error).toBeNull()
+    })
+
+    it('stops when the owner’s allowance is spent', async () => {
+      mockedSynth.mockRejectedValue(
+        new ApiError(402, 'plan_limit', 'Not available in that language.'),
+      )
+      const { hook } = setup(() => 'fr')
+
+      act(() => hook.result.current.speakSlide(slides[0]!))
+      await waitFor(() =>
+        expect(hook.result.current.error).toBe(
+          'Not available in that language.',
+        ),
+      )
+      expect(hook.result.current.status).toBe('idle')
+    })
+
+    it('still advances past an ordinary failure', async () => {
+      // The distinction that matters: one slide's clip failing to load is not
+      // a refusal, and deck playback keeps moving as it always has.
+      mockedSynth.mockImplementation(async (id: string) => {
+        if (id === 's1') throw new Error('network blip')
+        return { url: 'u2', marks: [] }
+      })
+      const { hook } = setup(() => 'fr')
+
+      act(() => hook.result.current.playDeck(0))
+      await waitFor(() => expect(audios[0]?.src).toBe('u2'))
+      expect(hook.result.current.error).toBeNull()
+      expect(hook.result.current.status).toBe('playing')
+    })
+
+    it('clears a stale refusal when playback starts again', async () => {
+      mockedSynth.mockRejectedValue(
+        new ApiError(502, 'translation_failed', 'Could not narrate that.'),
+      )
+      const { hook } = setup(() => 'fr')
+      act(() => hook.result.current.playDeck(0))
+      await waitFor(() => expect(hook.result.current.error).toBeTruthy())
+
+      mockedSynth.mockResolvedValue({ url: 'u1', marks: [] })
+      act(() => hook.result.current.speakSlide(slides[0]!))
+      await waitFor(() => expect(hook.result.current.status).toBe('playing'))
+      expect(hook.result.current.error).toBeNull()
     })
   })
 })

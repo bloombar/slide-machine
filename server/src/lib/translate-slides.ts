@@ -58,8 +58,9 @@ export const translationEnabled = (): boolean => {
   return true
 }
 
-/** The slide content translated viewing covers — never the spoken transcript
- * (narration stays in the lecture's own language). */
+/** The slide content translated viewing covers. The spoken transcript is not
+ * part of it: narration is translated on demand, when someone actually listens
+ * (PLAY-3 — see `translate-narration.ts`). */
 export interface TranslatableSlide extends LegacyContent {
   id: string
   /** Absent on slides written before the slot map; derived from the fields. */
@@ -235,15 +236,30 @@ const segmentsOf = (slide: TranslatableSlide): Segment[] => {
  * Lists and tables are seeded from the source before translated strings are
  * written into them, so a cell or bullet the translator returned nothing for
  * falls back to the author's words rather than collapsing the shape.
+ *
+ * `previous` is the cached entry this one replaces, and it is here for one
+ * reason: content and narration are fingerprinted independently (PLAY-3), so
+ * neither pipeline may erase the other's work. This function rebuilds the slots
+ * from scratch and the caller writes `perSlide` wholesale, so a translated
+ * narration would be lost every time a slide's text was edited unless it is
+ * carried across. Copied field by field rather than spread, because a cached
+ * entry is a Mongoose subdocument and not a plain object.
  */
 const entryOf = (
   slide: TranslatableSlide,
   translated: Map<Segment, string>,
+  previous?: SlideTranslationEntry,
 ): SlideTranslationEntry => {
   const slots = slotsOf(slide)
   const entry: SlideTranslationEntry = {
     slots: {},
     sourceHash: slideSourceHash(slide),
+    ...(previous?.narration !== undefined
+      ? { narration: previous.narration }
+      : {}),
+    ...(previous?.narrationHash !== undefined
+      ? { narrationHash: previous.narrationHash }
+      : {}),
   }
   for (const [segment, text] of translated) {
     if (segment.slideId !== slide.id) continue
@@ -337,7 +353,16 @@ export const remapSlideTranslations = async (
       const value = entry.slots?.[from]
       if (value !== undefined) slots[to] = value
     }
-    doc.perSlide.set(slideId, { slots, sourceHash: afterHash })
+    // Narration is not slot-keyed — a layout switch moves boxes, it does not
+    // change what the lecturer said — so it rides across untouched (PLAY-3).
+    doc.perSlide.set(slideId, {
+      slots,
+      sourceHash: afterHash,
+      ...(entry.narration !== undefined ? { narration: entry.narration } : {}),
+      ...(entry.narrationHash !== undefined
+        ? { narrationHash: entry.narrationHash }
+        : {}),
+    })
     doc.markModified('perSlide')
     await doc.save()
   }
@@ -427,7 +452,10 @@ export const translateSlides = async (
       })
     }
     for (const slide of stale)
-      fresh.set(slide.id, entryOf(slide, translatedBySegment))
+      fresh.set(
+        slide.id,
+        entryOf(slide, translatedBySegment, cached.get(slide.id)),
+      )
   }
 
   // Merge: freshly translated entries win, live slides keep their cached
@@ -439,6 +467,11 @@ export const translateSlides = async (
   }
 
   if (stale.length || !existing) {
+    // Written wholesale, which leaves a narrow race with a narration write
+    // (PLAY-3) landing between the read above and this line: a first translated
+    // *play* concurrent with a content re-translation of the same deck. It
+    // costs one short `format: 'text'` call on the next play, which re-fills
+    // it, so it is left alone rather than reworked into per-slide `$set` paths.
     await SlideTranslationModel.updateOne(
       { deckId, locale: target },
       { $set: { perSlide: merged } satisfies Partial<SlideTranslationDb> },

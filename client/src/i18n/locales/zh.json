@@ -1021,6 +1021,7 @@
     "translatedNotice": "机器翻译——以原文为准",
     "translatedNoticeEditor": "机器翻译视图——显示原文后方可编辑",
     "translationFailed": "无法翻译本讲。正在显示原文。",
+    "narrationTranslationFailed": "无法用该语言朗读本讲。朗读已停止。",
     "translationSeePlans": "查看套餐"
   },
   "quiz": {
