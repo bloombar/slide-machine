@@ -33,6 +33,7 @@ import type {
 import { isVoiceCommand, WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
 import type { HealthComponent } from '@slide-machine/shared'
 import { env } from '../config/env'
+import { hasContent, splitGeneratedSlots } from '../lib/generated-slots'
 import { registry } from './registry'
 import { meterGeminiUsage, type GeminiUsageMetadata } from './usage-metadata'
 import { GenerationUnavailableError } from './errors'
@@ -60,13 +61,71 @@ const outputShape = (
 ): string => `{
   "action": "new" | "update" | "none"${withCommands ? ' | "command"' : ''},
   "layoutType": "<one of the layout types offered below>",
-  "slots": { "title"?: string, "body"?: string, "bullets"?: string[], "caption"?: string },
+  "slots": { "<a slot name from the chosen layout>": <the value for its kind> },
   "imageGuidance"?: { "keywords": string[], "seededImageId"?: string, "none"?: boolean }${
     withRefit ? ',\n  "updateMode"?: "delta" | "refit"' : ''
   }${withCommands ? ',\n  "command"?: "<a command id from the list below>"' : ''}${
     withDeckTitle ? ',\n  "deckTitle"?: string' : ''
   }
 }`
+
+/**
+ * What a value looks like for each kind of box (TMPL-9/GEN-11).
+ *
+ * Stated once, above the layout menu, so a box in the menu needs only to name
+ * its kind. Only the kinds this template actually declares are described —
+ * telling a history template how to write LaTeX spends the budget on a box
+ * that does not exist, and invites a formula nobody asked for.
+ */
+const KIND_SHAPES: Record<string, string> = {
+  text: 'text — a string of prose',
+  bullets: 'bullets — an array of strings, one per point',
+  code: 'code — a string of source, real indentation and newlines, no markdown fence',
+  math: 'math — a string of LaTeX, the expression only, no $ delimiters',
+  preformatted:
+    'preformatted — a string whose exact spacing and line breaks matter',
+  table:
+    'table — { "header"?: string[], "rows": string[][] }, every row the same length',
+  image: 'image — never written; leave it out and give imageGuidance instead',
+}
+
+/** The shapes worth explaining for this request: the kinds its layouts use. */
+const kindLegend = (
+  descriptors: SlideGenerationRequest['layoutDescriptors'],
+): string => {
+  const kinds = new Set(
+    descriptors.flatMap(d => d.slots.map(s => s.kind as string)),
+  )
+  const lines = [...kinds]
+    .map(kind => KIND_SHAPES[kind])
+    .filter((line): line is string => Boolean(line))
+  return lines.length
+    ? `\nEach slot's value takes the shape its kind calls for:\n${lines
+        .map(line => `- ${line}`)
+        .join('\n')}`
+    : ''
+}
+
+/**
+ * The model's slots, split into the conventional four and the rest.
+ *
+ * A thin wrapper so the result spread reads as one thing: `declared` is left
+ * off entirely when a layout named no boxes of its own, which keeps the
+ * result the same shape it has always been for the built-ins.
+ */
+const splitAndKeep = (
+  raw: Record<string, unknown>,
+  layoutType: string,
+  descriptors: SlideGenerationRequest['layoutDescriptors'],
+) => {
+  const split = splitGeneratedSlots(raw, layoutType, descriptors)
+  const { declared, ...conventional } = split
+  return {
+    slots: conventional,
+    ...(Object.keys(declared).length ? { declared } : {}),
+    empty: !hasContent(split),
+  }
+}
 
 /** A command claim, validated separately: the model may (reasonably)
  * omit layoutType/slots when it picks "command", so it must not be
@@ -83,14 +142,11 @@ const resultSchema = z.object({
   // Models legitimately omit this on "none" and delta-update decisions
   // (the layout isn't changing); drift correction fills it in
   layoutType: z.string().optional(),
-  slots: z
-    .object({
-      title: z.string().optional(),
-      body: z.string().optional(),
-      bullets: z.array(z.string()).optional(),
-      caption: z.string().optional(),
-    })
-    .default({}),
+  // Open, because a layout's boxes are whatever its author named (GEN-11).
+  // What each value must be is decided against the layout's own descriptors
+  // in `splitGeneratedSlots`, not here: this only says the model returned an
+  // object of something.
+  slots: z.record(z.string(), z.unknown()).default({}),
   imageGuidance: z
     .object({
       keywords: z.array(z.string()).default([]),
@@ -166,7 +222,22 @@ const describeSlot = (s: SlotSpec, withDescription = true): string => {
   // adds anything, so the budget is spent on those.
   const purpose =
     withDescription && s.description ? ` — "${s.description}"` : ''
-  return `${s.name}${detail}${purpose}`
+  // The kind is what tells the model to write a program listing rather than
+  // a paragraph, so it is never dropped — a name and a kind are the least a
+  // box can be described by (GEN-11).
+  const language =
+    s.kind === 'code' && typeof s.options?.language === 'string'
+      ? `:${s.options.language}`
+      : ''
+  // The author's own name for the box, where it says more than the slot name
+  // does — "Worked example" tells the model what `example` is for (GEN-11).
+  // Omitted when it merely restates the name, since prompt is latency an
+  // audience sees.
+  const label =
+    s.label && s.label.toLowerCase() !== s.name.toLowerCase()
+      ? ` "${s.label}"`
+      : ''
+  return `${s.name}[${s.kind}${language}]${label}${detail}${purpose}`
 }
 
 /**
@@ -210,6 +281,9 @@ const instructions = (req: SlideGenerationRequest): string => {
     )
     layouts = terse
   }
+  // What each kind of box expects, for the kinds this template actually uses
+  // (GEN-11). Appended to the menu so a box needs only to name its kind.
+  layouts += kindLegend(req.layoutDescriptors)
 
   const seededImages = req.seededImages?.length
     ? `\nInstructor-provided images (set imageGuidance.seededImageId to an id ONLY when one clearly fits the slide):\n${req.seededImages
@@ -686,6 +760,22 @@ export class GeminiGenerationProvider implements GenerationProvider {
             : (req.layoutDescriptors[0]?.type ?? 'content')
     ) as LayoutType
 
+    const { empty, ...content } = splitAndKeep(
+      parsed.slots,
+      layoutType,
+      req.layoutDescriptors,
+    )
+    // A "new" slide with nothing on it is not a slide. Everything the model
+    // returned failed validation — a malformed reply rather than a decision —
+    // so the phrase is left alone instead of putting an empty slide in front
+    // of a lecture (GEN-11).
+    if (empty && parsed.action === 'new') {
+      console.warn(
+        'Generation returned no usable slot content; treating as no decision.',
+      )
+      return { action: 'none', layoutType, slots: {} }
+    }
+
     // Seeded-image ids likewise must be ones we offered
     const seededIds = new Set(req.seededImages?.map(i => i.id) ?? [])
     const guidance = parsed.imageGuidance
@@ -697,7 +787,10 @@ export class GeminiGenerationProvider implements GenerationProvider {
           ? parsed.updateMode
           : undefined,
       layoutType,
-      slots: parsed.slots,
+      // What the model returned, checked against what this layout actually
+      // declares (GEN-11): unknown names discarded, shapes coerced only
+      // where unambiguous.
+      ...content,
       imageGuidance: guidance
         ? {
             keywords: guidance.keywords.slice(0, 6),

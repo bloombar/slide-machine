@@ -4,6 +4,7 @@
  * Interface is minimal and expected to evolve with the first adapter.
  */
 import type { SlotKind, LayoutDescriptor } from '../types/template'
+import type { SlotValue } from '../types/deck'
 import type {
   VoiceCommand,
   VoiceCommandDescriptor,
@@ -120,13 +121,31 @@ export interface SlideGenerationResult {
    * an operational command addressed to the slide system. */
   action: 'new' | 'update' | 'none' | 'command'
   layoutType: string
-  /** Content mapped to the chosen layout's slots. */
+  /**
+   * Content for the conventional boxes, which the slide derives fields from.
+   *
+   * These four have a place of their own because the DTO and much of the app
+   * read them directly; every other box the layout declares arrives in
+   * `declared`. The model does not see the split — it returns one object
+   * keyed by slot name (GEN-11) — and the two are put back together on the
+   * slide.
+   */
   slots: {
     title?: string
     body?: string
     bullets?: string[]
     caption?: string
   }
+  /**
+   * Content for the boxes a template's author named beyond the conventional
+   * four, keyed by their names and already in the shape their declared kind
+   * calls for (GEN-11/TMPL-9).
+   *
+   * Validated against the layout before it gets here: a name the layout does
+   * not declare is discarded, and a value of the wrong shape is coerced only
+   * where that is unambiguous.
+   */
+  declared?: Record<string, SlotValue>
   imageGuidance?: ImageGuidance
   /** Update semantics (allowLayoutRefit only): 'delta' (the default)
    * means slots hold ONLY the added material; 'refit' means slots hold

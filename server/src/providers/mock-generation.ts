@@ -31,8 +31,10 @@ import type {
   SlideNarrateResult,
   SlideRefitRequest,
   SlideRefitResult,
+  SlotValue,
   VoiceCommand,
 } from '@slide-machine/shared'
+import { CONVENTIONAL_SLOTS } from '@slide-machine/shared'
 import { registry } from './registry'
 
 const CONTINUATION = /^(also|and|plus|additionally|furthermore)\b/i
@@ -90,6 +92,90 @@ const titleCase = (words: string[]): string =>
 /** The two longest words make serviceable mock image keywords (GEN-7). */
 const keywords = (words: string[]): string[] =>
   [...words].sort((a, b) => b.length - a.length).slice(0, 2)
+
+/**
+ * Something plausible for each specialized box a layout declares (GEN-11).
+ *
+ * The mock is what the tests and a Google-less development machine run on, so
+ * a template that declares a maths box has to come back with a formula here
+ * too — otherwise the only way to see the feature at all is to hold a real
+ * API key. Deterministic, and derived from the phrase where that makes sense.
+ */
+const declaredFor = (
+  layoutType: string,
+  descriptors: SlideGenerationRequest['layoutDescriptors'],
+  phrase: string,
+): { declared?: Record<string, SlotValue> } => {
+  // A conventional NAME may hold a specialized KIND — an author who turns
+  // "body" into a maths box has not renamed it — so what is skipped is what
+  // the conventional path already fills, which is a matter of kind.
+  const alreadyFilled = (s: { name: string; kind: string }) =>
+    (s.kind === 'text' || s.kind === 'bullets') &&
+    CONVENTIONAL_SLOTS.includes(s.name as (typeof CONVENTIONAL_SLOTS)[number])
+  const specs =
+    descriptors
+      .find(d => d.type === layoutType)
+      ?.slots.filter(s => !alreadyFilled(s)) ?? []
+  const declared: Record<string, SlotValue> = {}
+  for (const spec of specs) {
+    switch (spec.kind) {
+      case 'math':
+        declared[spec.name] = { kind: 'math', tex: 'E = mc^2' }
+        break
+      case 'code':
+        declared[spec.name] = {
+          kind: 'code',
+          source: 'def example():\n    return 1',
+          ...(typeof spec.options?.language === 'string'
+            ? { language: spec.options.language }
+            : {}),
+        }
+        break
+      case 'table':
+        declared[spec.name] = {
+          kind: 'table',
+          header: ['Term', 'Meaning'],
+          rows: [[titleCase(phrase.split(/\s+/).slice(0, 2)), phrase]],
+        }
+        break
+      case 'preformatted':
+        declared[spec.name] = { kind: 'preformatted', value: phrase }
+        break
+      case 'text':
+        declared[spec.name] = { kind: 'text', value: phrase }
+        break
+      case 'bullets':
+        declared[spec.name] = { kind: 'bullets', items: [phrase] }
+        break
+      case 'image':
+        // Filled by enrichment from the keywords, never written here.
+        break
+    }
+  }
+  return Object.keys(declared).length ? { declared } : {}
+}
+
+/**
+ * A result with its authored boxes filled in, and the conventional prose
+ * removed from any box that turned out to hold something else.
+ *
+ * A box holds one thing. An author who turns "body" into a maths box has not
+ * asked for a paragraph as well, and leaving both would let the slide's legacy
+ * fields overwrite the formula on save.
+ */
+const withDeclared = (
+  base: SlideGenerationResult,
+  descriptors: SlideGenerationRequest['layoutDescriptors'],
+  phrase: string,
+): SlideGenerationResult => {
+  const { declared } = declaredFor(base.layoutType, descriptors, phrase)
+  if (!declared) return base
+  const slots = { ...base.slots }
+  for (const name of Object.keys(declared)) {
+    delete slots[name as keyof typeof slots]
+  }
+  return { ...base, slots, declared }
+}
 
 export class MockGenerationProvider implements GenerationProvider {
   readonly name = 'mock'
@@ -217,11 +303,16 @@ export class MockGenerationProvider implements GenerationProvider {
     // A plain content slide (title + body) is text-only too — an image would
     // have nowhere to render on this layout, so the mock requests none and the
     // slide stays `content` (a phrase that wants an image takes two-column).
-    return {
-      action: 'new',
-      layoutType: fitLayout('content', req.layoutDescriptors),
-      slots: { title: titleCase(words.slice(0, 5)), body: phrase },
-    }
+    const layoutType = fitLayout('content', req.layoutDescriptors)
+    return withDeclared(
+      {
+        action: 'new',
+        layoutType,
+        slots: { title: titleCase(words.slice(0, 5)), body: phrase },
+      },
+      req.layoutDescriptors,
+      phrase,
+    )
   }
 
   /**

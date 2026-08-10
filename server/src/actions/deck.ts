@@ -91,6 +91,7 @@ import {
   updateOverflows,
   charCount,
 } from '../lib/slide-fit'
+import { onlyDeclaredBy } from '../lib/generated-slots'
 import {
   layoutDisplaysContent,
   isHeaderLayout,
@@ -1251,6 +1252,17 @@ export const sessionPhrase = defineAction<
       // already carries marks (WB-1/WB-3), regardless of what the model
       // returned — the slide must not be rearranged under their strokes.
       if (!keepLayout) lastSlide.layoutType = result.layoutType
+      // A box the author named holds one thing — a listing, a formula, a
+      // table — so a fresh value REPLACES it. Appending a second program to
+      // the first would produce something that no longer runs.
+      //
+      // Filtered against the layout the slide ACTUALLY kept, which is not
+      // always the one the model wrote for (GEN-11).
+      for (const [name, value] of Object.entries(
+        onlyDeclaredBy(result.declared, lastSlide.layoutType, descriptors),
+      )) {
+        lastSlide.slots = { ...(lastSlide.slots ?? {}), [name]: value }
+      }
       // Keep the slide's image keywords current: a phrase that carries fresh
       // image guidance replaces them, so the search seed and enrichment
       // always reflect the slide's latest content. An update with no
@@ -1295,6 +1307,10 @@ export const sessionPhrase = defineAction<
       body: result.slots.body,
       bullets: result.slots.bullets,
       caption: result.slots.caption,
+      // Boxes the template's author named, already checked against what the
+      // layout declares (GEN-11). The conventional four are derived onto the
+      // slot map by the model's own hook, so only these are set here.
+      ...(result.declared ? { slots: result.declared } : {}),
       imageKeywords: result.imageGuidance?.keywords,
       sourceTranscript: input.phrase,
     })

@@ -132,9 +132,35 @@ describe('slot metadata reaching the model (TMPL-10)', () => {
 
   it('says nothing extra for a box the author did not describe', async () => {
     const prompt = await promptFor(authored({}))
-    // A conventional box's name says what it is; spending prompt on it
-    // would cost latency on every phrase for nothing
-    expect(prompt).toContain('title, example')
+    // A box's name and kind are the least it can be described by (GEN-11);
+    // beyond that, spending prompt on an undescribed box would cost latency
+    // on every phrase for nothing
+    expect(prompt).toContain('title[text] "Slide title", example[text]')
+  })
+
+  it('sends the author’s own name for the box', async () => {
+    const prompt = await promptFor(authored({}))
+    // "Worked example" says what `example` is for better than the slot name
+    // does — and it is what the author wrote (GEN-11)
+    expect(prompt).toContain('"Worked example"')
+  })
+
+  it('names each box’s kind, so the model writes the right thing in it', async () => {
+    const prompt = await promptFor(
+      authored({ kind: 'code', options: { language: 'python' } }),
+    )
+    // A code box gets a program listing, not a paragraph — and the language
+    // the template declared, so the listing is in it
+    expect(prompt).toContain('example[code:python]')
+    // ...and the shape that kind expects is explained once, above the menu
+    expect(prompt).toContain('no markdown fence')
+  })
+
+  it('explains only the kinds this template actually uses', async () => {
+    const prompt = await promptFor(authored({}))
+    // A history template told how to write LaTeX spends the budget on a box
+    // that does not exist, and invites a formula nobody asked for
+    expect(prompt).not.toContain('LaTeX')
   })
 
   it('drops instructions rather than truncating, and says so', async () => {
@@ -191,7 +217,7 @@ describe('GeminiGenerationProvider', () => {
     // The layout option set and constraints are spelled out, with
     // per-slot budgets riding on the slot names
     expect(prompt).toContain('"content" (Content)')
-    expect(prompt).toContain('title (max 50 chars)')
+    expect(prompt).toContain('title[text] "Slide title" (max 50 chars)')
     expect(prompt).toContain('maxBullets')
     // Seeded images are offered by id
     expect(prompt).toContain('id "asset1"')

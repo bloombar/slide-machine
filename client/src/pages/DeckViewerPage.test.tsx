@@ -2701,53 +2701,61 @@ describe('DeckViewerPage title in the primary nav', () => {
 
   // Arrow keys move the deck AND the narration: the spoken transcript follows
   // the user to the slide they navigated to.
-  it('skips deck narration to the slide the arrow keys move to', async () => {
-    vi.spyOn(runtimeConfig, 'getTtsEnabled').mockReturnValue(true)
-    // jsdom has no media playback; a stub element keeps the clip "playing".
-    class FakeAudio {
-      src = ''
-      onended: (() => void) | null = null
-      play = vi.fn(async () => {})
-      pause = vi.fn()
-      removeAttribute = vi.fn()
-    }
-    vi.stubGlobal('Audio', FakeAudio)
-    const { calls } = mockFetchRoutes({
-      '/api/auth/refresh': () => ({
-        status: 200,
-        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
-      }),
-      '/api/decks/shared-abc123': () => ({ status: 200, body: deckView }),
-      '/tts': () => ({ status: 200, body: { url: 'clip', marks: [] } }),
-    })
-    render(
-      <MemoryRouter initialEntries={['/d/shared-abc123']}>
-        <AuthProvider>
-          <Routes>
-            <Route path="/d/:slug" element={<DeckViewerPage />} />
-          </Routes>
-        </AuthProvider>
-      </MemoryRouter>,
-    )
+  // Three sequential network waits, each polled. That is comfortably inside
+  // vitest's five-second default on an idle machine and not on a busy one, and
+  // it has tipped over both in CI and locally. Elapsed time is not what this
+  // test is about.
+  it(
+    'skips deck narration to the slide the arrow keys move to',
+    { timeout: 20000 },
+    async () => {
+      vi.spyOn(runtimeConfig, 'getTtsEnabled').mockReturnValue(true)
+      // jsdom has no media playback; a stub element keeps the clip "playing".
+      class FakeAudio {
+        src = ''
+        onended: (() => void) | null = null
+        play = vi.fn(async () => {})
+        pause = vi.fn()
+        removeAttribute = vi.fn()
+      }
+      vi.stubGlobal('Audio', FakeAudio)
+      const { calls } = mockFetchRoutes({
+        '/api/auth/refresh': () => ({
+          status: 200,
+          body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+        }),
+        '/api/decks/shared-abc123': () => ({ status: 200, body: deckView }),
+        '/tts': () => ({ status: 200, body: { url: 'clip', marks: [] } }),
+      })
+      render(
+        <MemoryRouter initialEntries={['/d/shared-abc123']}>
+          <AuthProvider>
+            <Routes>
+              <Route path="/d/:slug" element={<DeckViewerPage />} />
+            </Routes>
+          </AuthProvider>
+        </MemoryRouter>,
+      )
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Play deck' }))
-    await waitFor(() =>
-      expect(calls.some(u => u.includes('/api/slides/s1/tts'))).toBe(true),
-    )
+      fireEvent.click(await screen.findByRole('button', { name: 'Play deck' }))
+      await waitFor(() =>
+        expect(calls.some(u => u.includes('/api/slides/s1/tts'))).toBe(true),
+      )
 
-    fireEvent.keyDown(window, { key: 'ArrowRight' })
-    await waitFor(() =>
-      expect(calls.some(u => u.includes('/api/slides/s2/tts'))).toBe(true),
-    )
+      fireEvent.keyDown(window, { key: 'ArrowRight' })
+      await waitFor(() =>
+        expect(calls.some(u => u.includes('/api/slides/s2/tts'))).toBe(true),
+      )
 
-    // ...and back: arrowing left re-speaks the previous slide.
-    fireEvent.keyDown(window, { key: 'ArrowLeft' })
-    await waitFor(() =>
-      expect(calls.filter(u => u.includes('/api/slides/s1/tts'))).toHaveLength(
-        2,
-      ),
-    )
-  })
+      // ...and back: arrowing left re-speaks the previous slide.
+      fireEvent.keyDown(window, { key: 'ArrowLeft' })
+      await waitFor(() =>
+        expect(
+          calls.filter(u => u.includes('/api/slides/s1/tts')),
+        ).toHaveLength(2),
+      )
+    },
+  )
 
   it('refreshes the edited age immediately after an auto-save', async () => {
     mockFetchRoutes({
