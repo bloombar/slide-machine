@@ -1370,7 +1370,7 @@
   section: §7 Style Template Library
   family: TMPL
   phase: 2
-  status: In progress
+  status: Done
   review: false
 - id: AUTH-1a
   title: GitHub sign-in
