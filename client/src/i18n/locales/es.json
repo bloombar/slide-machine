@@ -1192,6 +1192,10 @@
       "download": "No se pudo exportar la presentación: inténtalo de nuevo",
       "drive": "No se pudo guardar en Drive: inténtalo de nuevo",
       "delete": "No se pudo eliminar la exportación: inténtalo de nuevo"
+    },
+    "notes": {
+      "heading": "Algunas cosas no se pudieron llevar a este archivo",
+      "math-not-typeset": "No se pudo componer una fórmula, así que se omitió en lugar de escribirla como código: {detail}"
     }
   },
   "errors": {

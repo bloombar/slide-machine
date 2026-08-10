@@ -27,6 +27,7 @@ import type {
   DeckExportFormat,
   DriveFolder,
   ExportDownload,
+  ExportNote,
   ExportedFile,
   ExportStatus,
   ExportToDriveResult,
@@ -365,6 +366,9 @@ export default function ExportPanel({ deckId, locale }: Props) {
   const [destination, setDestination] = useState<Destination>('download')
   const [picking, setPicking] = useState(false)
   const [saved, setSaved] = useState<ExportToDriveResult | null>(null)
+  // What the file could not carry (EXP-7). Shown rather than logged: the
+  // alternative is an author finding a hole in a slide months later.
+  const [notes, setNotes] = useState<ExportNote[]>([])
   // Whether the deck has any freehand whiteboard marks, and whether to include
   // them in the export (default on; only offered for the visual formats).
   const [hasWhiteboard, setHasWhiteboard] = useState(false)
@@ -451,13 +455,17 @@ export default function ExportPanel({ deckId, locale }: Props) {
   const download = () => {
     setBusy(true)
     setError(null)
+    setNotes([])
     dispatchAction<ExportDownload>('export.download', {
       deckId,
       format: format as 'pdf' | 'yaml',
       includeWhiteboard,
       locale,
     })
-      .then(saveToDisk)
+      .then(file => {
+        saveToDisk(file)
+        setNotes(file.notes ?? [])
+      })
       .catch(() => setError(t('export.errors.download')))
       .finally(() => setBusy(false))
   }
@@ -475,6 +483,7 @@ export default function ExportPanel({ deckId, locale }: Props) {
     })
       .then(res => {
         setSaved(res)
+        setNotes(res.notes ?? [])
         setExports(prev => [...prev, res])
         setPicking(false)
       })
@@ -630,6 +639,27 @@ export default function ExportPanel({ deckId, locale }: Props) {
             </span>
           </span>
         </label>
+      )}
+
+      {notes.length > 0 && (
+        /* The export's report: what the format could not carry. Amber rather
+           than red — the file is there and usable, and this is the part of it
+           that is not what the author wrote (EXP-7). */
+        <div
+          role="status"
+          className="flex flex-col gap-1 rounded-md border border-amber-200 bg-amber-50 p-4"
+        >
+          <span className="text-sm font-medium text-amber-900">
+            {t('export.notes.heading')}
+          </span>
+          <ul className="list-disc ps-5 text-sm text-amber-900">
+            {notes.map((note, i) => (
+              <li key={i}>
+                {t(`export.notes.${note.reason}`, { detail: note.detail })}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {saved && (

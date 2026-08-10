@@ -30,6 +30,7 @@ import { createApp } from '../../src/app'
 import { UserModel } from '../../src/models/user'
 import { ProjectModel } from '../../src/models/project'
 import { DeckModel } from '../../src/models/deck'
+import { TemplateModel } from '../../src/models/template'
 import { SlideModel } from '../../src/models/slide'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
 import { UsageRecordModel } from '../../src/models/usage-record'
@@ -391,5 +392,111 @@ describe('what a deck carries into Google Slides (EXP-8)', () => {
     const res = await act(ada, 'export.download', { deckId, format: 'yaml' })
     const yaml = Buffer.from(res.body.contentBase64, 'base64').toString('utf8')
     expect(yaml).not.toContain('Photosynthesis happens inside')
+  })
+})
+
+describe('specialized content on the way out (EXP-7)', () => {
+  /**
+   * A lecture whose design declares a formula box, with the given formulas on
+   * its slide. Built per test, since every test here starts from a wiped
+   * database.
+   *
+   * The design is a stored template rather than a built-in because no
+   * built-in declares a maths box — an author who wants one makes their own.
+   */
+  const lectureWithFormulas = async (...texs: string[]): Promise<string> => {
+    const owner = await UserModel.findOne({ email: 'ada@example.com' })
+    const template = await TemplateModel.create({
+      ownerId: owner!._id,
+      name: 'Physics',
+      permalinkSlug: `physics-${Date.now()}`,
+      theme: { background: '#ffffff', text: '#111111', accent: '#0055ff' },
+      layouts: [
+        {
+          type: 'content',
+          label: 'Content',
+          purpose: 'a worked example',
+          slots: texs.map((_, i) => ({
+            name: `eq${i}`,
+            kind: 'math',
+            label: `Equation ${i + 1}`,
+          })),
+          elementPositions: Object.fromEntries(
+            texs.map((_, i) => [
+              `eq${i}`,
+              { x: 0.06, y: 0.1 + i * 0.35, w: 0.88, h: 0.3 },
+            ]),
+          ),
+        },
+        {
+          type: 'whiteboard',
+          label: 'Whiteboard',
+          purpose: 'a blank slate',
+          slots: [],
+          elementPositions: {},
+        },
+      ],
+      visibility: 'private',
+    })
+    const project = await act(ada, 'project.create', { title: 'Physics' })
+    const created = await act(ada, 'deck.create', {
+      projectId: project.body.id,
+      title: 'Motion',
+      templateId: String(template._id),
+    })
+    const doc = await DeckModel.findById(created.body.id)
+    // A lecture takes its project's design on creation and pins the version
+    // it was built against (TMPL-11). Pointed at this one instead, unpinned,
+    // so the export resolves the design that declares the formula box.
+    await DeckModel.updateOne(
+      { _id: doc!._id },
+      {
+        $set: { templateId: String(template._id) },
+        $unset: { templateVersionId: '' },
+      },
+    )
+    await SlideModel.create({
+      deckId: doc!._id,
+      index: 0,
+      layoutType: 'content',
+      slots: Object.fromEntries(
+        texs.map((tex, i) => [`eq${i}`, { kind: 'math', tex }]),
+      ),
+    })
+    return created.body.id as string
+  }
+
+  it('reports what the file could not carry', async () => {
+    // One that typesets and one that cannot, so both halves of the
+    // requirement are exercised in one export
+    const lecture = await lectureWithFormulas('v = gt', '\\frac{1}{')
+    const res = await act(ada, 'export.download', {
+      deckId: lecture,
+      format: 'pdf',
+    })
+
+    expect(res.status).toBe(200)
+    // The file is produced either way — one broken formula does not cost an
+    // instructor their lecture
+    expect(
+      Buffer.from(res.body.contentBase64, 'base64').subarray(0, 5).toString(),
+    ).toBe('%PDF-')
+    // ...and the user is told, rather than finding a hole in a slide later
+    expect(res.body.notes).toEqual([
+      { reason: 'math-not-typeset', detail: '\\frac{1}{' },
+    ])
+  })
+
+  it('says nothing when everything went in', async () => {
+    const lecture = await lectureWithFormulas('v = gt')
+    const res = await act(ada, 'export.download', {
+      deckId: lecture,
+      format: 'pdf',
+    })
+
+    expect(res.status).toBe(200)
+    // A report that appears when there is nothing to report trains people to
+    // ignore it
+    expect(res.body.notes).toBeUndefined()
   })
 })

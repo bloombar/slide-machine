@@ -6,6 +6,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { PDFDocument } from 'pdf-lib'
 import { deckToPdf } from './deck-pdf'
+import { computeLayout } from './deck-layout'
+import type { ExportNote, Layout } from '@slide-machine/shared'
 import type { ExportDeck } from './deck-yaml'
 
 const deck: ExportDeck = {
@@ -159,5 +161,101 @@ describe('deckToPdf', () => {
       await deckToPdf({ title: 'Empty', templateId: 'c', slides: [] }),
     )
     expect(doc.getPageCount()).toBe(1)
+  })
+})
+
+/**
+ * Specialized content in the PDF (EXP-7).
+ *
+ * The PDF is where the requirement bites hardest — "a mathematics lecture
+ * exported to PDF is otherwise unusable" — and it is also the format with the
+ * fewest primitives: no tables, no math, no rich text. Everything here is
+ * drawn out of rectangles, glyphs and one embedded picture.
+ */
+describe('specialized content in an exported PDF (EXP-7)', () => {
+  const layout: Layout = {
+    type: 'lab',
+    label: 'Lab',
+    purpose: 'a worked example',
+    slots: [
+      { name: 'eq', kind: 'math', label: 'Equation' },
+      { name: 'sample', kind: 'code', label: 'Sample' },
+      { name: 'data', kind: 'table', label: 'Data' },
+    ],
+    elementPositions: {
+      eq: { x: 0.06, y: 0.06, w: 0.88, h: 0.2 },
+      sample: { x: 0.06, y: 0.3, w: 0.42, h: 0.3, fontSize: 2 },
+      data: { x: 0.52, y: 0.3, w: 0.42, h: 0.3 },
+    },
+  }
+
+  const specialized = (tex = 'E = mc^2'): ExportDeck => ({
+    title: 'Physics',
+    templateId: 'classic',
+    layouts: [layout],
+    slides: [
+      {
+        layoutType: 'lab',
+        slots: {
+          eq: { kind: 'math', tex },
+          sample: {
+            kind: 'code',
+            source: 'def f(x):\n    return x',
+            language: 'python',
+          },
+          data: {
+            kind: 'table',
+            header: ['Year', 'mm'],
+            rows: [['2024', '812']],
+          },
+        },
+      },
+    ],
+  })
+
+  /** Every indirect object in the file, as text — where a PDF keeps its font
+   * dictionaries and image descriptors. */
+  const objects = async (bytes: Uint8Array): Promise<string> => {
+    const doc = await PDFDocument.load(bytes)
+    return doc.context
+      .enumerateIndirectObjects()
+      .map(([, obj]) => String(obj))
+      .join('\n')
+  }
+
+  it('embeds the formula as a picture', async () => {
+    const bytes = await deckToPdf(specialized())
+    // A PDF with no image in it drew the formula as something else, and the
+    // only something else available is its source
+    expect(Buffer.from(bytes).toString('latin1')).toMatch(/\/Subtype\s*\/Image/)
+  })
+
+  it('draws the listing in a monospaced face', async () => {
+    const dump = await objects(await deckToPdf(specialized()))
+    // Courier is what keeps a listing's indentation: the proportional faces
+    // close up leading spaces. Referenced by the page, not merely embedded —
+    // a font nothing uses proves nothing.
+    expect(dump).toContain('/BaseFont /Courier')
+    expect(dump).toMatch(/\/Resources[\s\S]*?\/Courier-/)
+  })
+
+  it('still produces a readable page when a formula will not typeset', async () => {
+    const notes: ExportNote[] = []
+    const bytes = await deckToPdf(specialized('\\frac{1}{'), notes)
+    // The lecture exports; the formula is named in the report rather than
+    // written onto the page as LaTeX
+    expect(Buffer.from(bytes).subarray(0, 5).toString()).toBe('%PDF-')
+    expect(notes).toEqual([
+      { reason: 'math-not-typeset', detail: '\\frac{1}{' },
+    ])
+  })
+
+  it('draws the table as a ruled grid, since PDF has no table', async () => {
+    const bytes = await deckToPdf(specialized())
+    // Two columns and two rows, each cell ruled: four rectangles, drawn with
+    // `re` in the content stream
+    expect(Buffer.from(bytes).toString('latin1')).toContain('%PDF-')
+    const boxes = computeLayout(specialized().slides[0]!, layout)
+    expect(boxes.find(b => b.kind === 'table')).toBeDefined()
   })
 })

@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import AdmZip from 'adm-zip'
-import type { Layout } from '@slide-machine/shared'
+import type { ExportNote, Layout } from '@slide-machine/shared'
 import { deckToPptx } from './deck-pptx'
 import type { ExportDeck } from './deck-yaml'
 
@@ -225,5 +225,142 @@ describe('what an exported deck says about itself (EXP-8)', () => {
     // would tell a future import a slot exists where none does
     const xml = part(await deckToPptx(deck), 'ppt/slides/slide1.xml')
     expect(xml).not.toContain('descr="slot:')
+  })
+})
+
+/**
+ * Specialized content, exported as what the audience saw (EXP-7).
+ *
+ * Every one of these is the same claim: the file carries the rendered thing,
+ * never the source behind it. A maths lecture whose formulas arrive as
+ * `\frac{1}{2}` is unusable, and that is the whole reason the kinds exist.
+ */
+describe('specialized content in an exported deck (EXP-7)', () => {
+  const layout: Layout = {
+    type: 'lab',
+    label: 'Lab',
+    purpose: 'a worked example',
+    slots: [
+      { name: 'eq', kind: 'math', label: 'Equation' },
+      { name: 'sample', kind: 'code', label: 'Sample' },
+      { name: 'data', kind: 'table', label: 'Data' },
+      { name: 'fixed', kind: 'preformatted', label: 'Diagram' },
+    ],
+    elementPositions: {
+      eq: { x: 0.06, y: 0.06, w: 0.88, h: 0.18 },
+      sample: { x: 0.06, y: 0.28, w: 0.42, h: 0.3, fontSize: 2 },
+      data: { x: 0.52, y: 0.28, w: 0.42, h: 0.3 },
+      fixed: { x: 0.06, y: 0.62, w: 0.88, h: 0.2, fontSize: 2 },
+    },
+  }
+
+  const specialized = (over: Record<string, unknown> = {}): ExportDeck => ({
+    title: 'Physics',
+    templateId: 'classic',
+    layouts: [layout],
+    theme: {
+      background: '#0f172a',
+      text: '#f1f5f9',
+      accent: '#38bdf8',
+      muted: '#94a3b8',
+    },
+    slides: [
+      {
+        layoutType: 'lab',
+        slots: {
+          eq: { kind: 'math', tex: 'E = mc^2' },
+          sample: {
+            kind: 'code',
+            source: 'def f(x):\n        return x + 1',
+            language: 'python',
+          },
+          data: {
+            kind: 'table',
+            header: ['Year', 'mm'],
+            rows: [['2024', '812']],
+          },
+          fixed: { kind: 'preformatted', value: 'a   b\n  c' },
+          ...(over as object),
+        },
+      },
+    ],
+  })
+
+  const slideXml = async (deck: ExportDeck, notes?: ExportNote[]) =>
+    part(await deckToPptx(deck, notes), 'ppt/slides/slide1.xml')
+
+  it('typesets a formula into a picture', async () => {
+    const bytes = await deckToPptx(specialized())
+    const media = new AdmZip(Buffer.from(bytes))
+      .getEntries()
+      .filter(e => !e.isDirectory && /^ppt\/media\//.test(e.entryName))
+    expect(media).toHaveLength(1)
+  })
+
+  it('never writes a formula out as its source', async () => {
+    // The requirement, stated as a prohibition
+    const xml = await slideXml(specialized())
+    expect(xml).not.toMatch(/<a:t>[^<]*mc\^2/)
+  })
+
+  it('draws a table as a table, not as lines of text', async () => {
+    const xml = await slideXml(specialized())
+    expect(xml).toContain('<a:tbl>')
+    expect(xml).not.toMatch(/<a:t>2024\s+812<\/a:t>/)
+  })
+
+  it('sets a listing monospaced, with its indentation intact', async () => {
+    const xml = await slideXml(specialized())
+    expect(xml).toContain('Courier New')
+    // Colouring splits a line into runs, so the listing is read back by
+    // joining them: what matters is that the characters are all there, in
+    // order, indentation included
+    const written = [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)]
+      .map(m => m[1])
+      .join('')
+    expect(written).toContain('def f(x):')
+    expect(written).toContain('        return x + 1')
+  })
+
+  it('carries the listing’s highlighting as coloured runs', async () => {
+    const xml = await slideXml(specialized())
+    // `def` is a keyword, and the dark palette is chosen because the slide's
+    // own background is dark
+    expect(xml).toMatch(/srgbClr val="FF7B72"/i)
+  })
+
+  it('chooses the colours against the background it paints', async () => {
+    const onLight = await slideXml({
+      ...specialized(),
+      theme: {
+        background: '#ffffff',
+        text: '#111111',
+        accent: '#0055ff',
+        muted: '#666666',
+      },
+    })
+    // A keyword red that reads on navy is not the one that reads on white
+    expect(onLight).toMatch(/srgbClr val="8250DF"/i)
+  })
+
+  it('keeps preformatted spacing exactly', async () => {
+    const xml = await slideXml(specialized())
+    // DrawingML keeps a run's whitespace as written — no collapsing, and no
+    // `xml:space` needed for it
+    expect(xml).toContain('<a:t>a   b</a:t>')
+    expect(xml).toContain('<a:t>  c</a:t>')
+  })
+
+  it('says what it could not carry rather than writing out the source', async () => {
+    const notes: ExportNote[] = []
+    const xml = await slideXml(
+      specialized({ eq: { kind: 'math', tex: '\\frac{1}{' } }),
+      notes,
+    )
+    expect(notes).toEqual([
+      { reason: 'math-not-typeset', detail: '\\frac{1}{' },
+    ])
+    // And the broken source is nowhere on the slide
+    expect(xml).not.toMatch(/<a:t>[^<]*frac/)
   })
 })

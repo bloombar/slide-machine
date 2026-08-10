@@ -1192,6 +1192,10 @@
       "download": "Could not export the deck — please try again",
       "drive": "Could not save to Drive — please try again",
       "delete": "Could not delete the export — please try again"
+    },
+    "notes": {
+      "heading": "Some things could not be carried into this file",
+      "math-not-typeset": "A formula could not be typeset, so it was left out rather than written as its source: {detail}"
     }
   },
   "errors": {

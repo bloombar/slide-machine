@@ -289,3 +289,94 @@ describe('a layout that carries its tree', () => {
     expect(title).toMatchObject({ x: 0.06, w: 0.88 })
   })
 })
+
+/**
+ * Where the rule actually lives (EXP-7).
+ *
+ * "Rendered in every export format, not emitted as raw markup" is decided
+ * here, once: a formula and a table become boxes of their own, and no
+ * exporter is given the option of writing their source out as text. Testing
+ * it at this level states the rule rather than testing each format's
+ * consequence of it.
+ */
+describe('specialized content in the export model', () => {
+  const layout = {
+    type: 'lab',
+    label: 'Lab',
+    purpose: 'a worked example',
+    slots: [
+      { name: 'eq', kind: 'math' as const, label: 'Equation' },
+      { name: 'sample', kind: 'code' as const, label: 'Sample' },
+      { name: 'data', kind: 'table' as const, label: 'Data' },
+      { name: 'fixed', kind: 'preformatted' as const, label: 'Diagram' },
+    ],
+    elementPositions: {
+      eq: { x: 0.06, y: 0.06, w: 0.88, h: 0.2 },
+      sample: { x: 0.06, y: 0.3, w: 0.42, h: 0.3, fontSize: 2 },
+      data: { x: 0.52, y: 0.3, w: 0.42, h: 0.3 },
+      fixed: { x: 0.06, y: 0.66, w: 0.88, h: 0.2, fontSize: 2 },
+    },
+  }
+
+  const slide = {
+    layoutType: 'lab',
+    slots: {
+      eq: { kind: 'math' as const, tex: '\\frac{1}{2}gt^2' },
+      sample: {
+        kind: 'code' as const,
+        source: 'def f(x):\n    return x',
+        language: 'python',
+      },
+      data: {
+        kind: 'table' as const,
+        header: ['Year'],
+        rows: [['2024'], ['2025']],
+      },
+      fixed: { kind: 'preformatted' as const, value: 'a   b' },
+    },
+  }
+
+  const boxes = () => computeLayout(slide, layout)
+  const allText = () =>
+    boxes()
+      .flatMap(b => (b.kind === 'text' ? b.runs.map(r => r.text) : []))
+      .join('\n')
+
+  it('makes a formula a box of its own, carrying its source to be typeset', () => {
+    const math = boxes().find(b => b.kind === 'math')
+    expect(math).toMatchObject({ tex: '\\frac{1}{2}gt^2', slot: 'eq' })
+  })
+
+  it('never lets a formula become text', () => {
+    // The prohibition, at the only place that could break it
+    expect(allText()).not.toContain('frac')
+  })
+
+  it('makes a table a box of its own, rows and header intact', () => {
+    expect(boxes().find(b => b.kind === 'table')).toMatchObject({
+      header: ['Year'],
+      rows: [['2024'], ['2025']],
+    })
+  })
+
+  it('never lets a table become lines of text', () => {
+    expect(allText()).not.toContain('2024')
+  })
+
+  it('splits a listing into coloured, monospaced runs', () => {
+    const code = boxes().find(
+      b => b.kind === 'text' && b.slot === 'sample',
+    ) as { runs: { text: string; mono?: boolean; hex?: string }[] }
+    expect(code.runs.every(r => r.mono)).toBe(true)
+    expect(code.runs.some(r => r.hex)).toBe(true)
+    // And the runs are the listing, character for character
+    expect(code.runs.map(r => r.text).join('')).toContain('    return x')
+  })
+
+  it('keeps preformatted text monospaced and unreflowed', () => {
+    const pre = boxes().find(b => b.kind === 'text' && b.slot === 'fixed') as {
+      runs: { text: string; mono?: boolean }[]
+    }
+    expect(pre.runs[0]).toMatchObject({ text: 'a   b', mono: true })
+  })
+})

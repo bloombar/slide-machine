@@ -27,6 +27,7 @@ import { z } from 'zod'
 import { randomBytes } from 'node:crypto'
 import type { HydratedDocument } from 'mongoose'
 import type {
+  ExportNote,
   DeckExportFormat,
   ExportDownload,
   ExportStatus,
@@ -277,12 +278,16 @@ export const exportDownload = defineAction<
         contentBase64: Buffer.from(yaml, 'utf8').toString('base64'),
       }
     }
-    const pdf = await deckToPdf(deck)
+    // What the format could not carry, so the user is told rather than left
+    // to find a slide with a hole in it (EXP-7).
+    const notes: ExportNote[] = []
+    const pdf = await deckToPdf(deck, notes)
     await meterUsage('exports', 1)
     return {
       fileName: `${base}.pdf`,
       mimeType: MIME.pdf,
       contentBase64: Buffer.from(pdf).toString('base64'),
+      ...(notes.length ? { notes } : {}),
     }
   },
 })
@@ -335,6 +340,7 @@ export const exportToDrive = defineAction<
     const slidesTitle = deck.title.trim() || 'Untitled lecture'
 
     // Create the file (mock fabricates a URL; live really uploads/converts).
+    const notes: ExportNote[] = []
     let fileId: string
     let fileUrl: string
     const fileName =
@@ -357,6 +363,7 @@ export const exportToDrive = defineAction<
           refreshToken,
           { ...deck, title: slidesTitle },
           input.driveFolderId,
+          notes,
         )
         fileId = file.id
         fileUrl = file.fileUrl
@@ -364,7 +371,7 @@ export const exportToDrive = defineAction<
         const data =
           input.format === 'yaml'
             ? new TextEncoder().encode(deckToYaml(deck))
-            : await deckToPdf(deck)
+            : await deckToPdf(deck, notes)
         const file = await uploadFileToDriveLive(
           refreshToken,
           { name: fileName, mimeType: MIME[input.format], data },
@@ -399,6 +406,7 @@ export const exportToDrive = defineAction<
       format: input.format,
       driveFolderName: input.driveFolderName,
       exportedAt: record.exportedAt.toISOString(),
+      ...(notes.length ? { notes } : {}),
     }
   },
 })

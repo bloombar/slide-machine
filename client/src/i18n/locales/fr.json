@@ -1192,6 +1192,10 @@
       "download": "Impossible d’exporter le diaporama — veuillez réessayer",
       "drive": "Impossible d’enregistrer dans Drive — veuillez réessayer",
       "delete": "Impossible de supprimer l'export — veuillez réessayer"
+    },
+    "notes": {
+      "heading": "Certains éléments n’ont pas pu être repris dans ce fichier",
+      "math-not-typeset": "Une formule n’a pas pu être composée ; elle a été omise plutôt qu’écrite sous forme de code : {detail}"
     }
   },
   "errors": {
