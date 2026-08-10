@@ -1,6 +1,16 @@
 /**
  * Unit tests for the deck viewer: the Resume affordance appears for the
  * deck's owner only.
+ *
+ * ## Why this file asks for longer than the default
+ *
+ * Many of these drive narration: a stubbed audio element, fake timers, and
+ * two or three sequential `waitFor`s over mocked network calls. That is
+ * comfortably inside vitest's five-second default on an idle machine and
+ * marginal on a loaded CI runner, and it has timed out there on two different
+ * tests in this file — the second one only after the first was given more
+ * room. Elapsed time is not what any of them is about, so the ceiling is
+ * raised for the file rather than chased test by test.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
@@ -10,6 +20,8 @@ import { setAccessToken } from '../auth/token'
 import DeckViewerPage from './DeckViewerPage'
 import PublicShell from '../components/layout/PublicShell'
 import { ShellTitleProvider } from '../components/layout/ShellTitle'
+
+vi.setConfig({ testTimeout: 20000 })
 import { resetAdminStatus } from '../hooks/useIsAdmin'
 import { mockFetchRoutes } from '../test/fetch-mock'
 import * as runtimeConfig from '../runtime-config'
