@@ -744,25 +744,65 @@ Each user has a public **profile page** listing their published decks and templa
 
 ### 12. Evaluation & Metrics
 
-The system must surface data supporting the grant's mixed-methods evaluation ([GRANT_PROPOSAL.md](GRANT_PROPOSAL.md) §4):
+The system must surface data supporting the grant's mixed-methods evaluation ([GRANT_PROPOSAL.md](GRANT_PROPOSAL.md) §4). The Fall-2026 pilot's design, hypotheses and analysis plan live outside this document in the study protocol; what belongs here is only the **evidence the application itself must be able to produce**.
 
-#### Process measures
+| Kind | Measure | Where it comes from |
+| --- | --- | --- |
+| **Process** | Session reliability — completion rate, provider error rates, transcription restarts, image-enrichment fallbacks | [EVAL-1](#eval-1-live-session-telemetry) |
+| **Process** | Speech-to-text latency (phrase finalization) and slide-generation latency | [EVAL-1](#eval-1-live-session-telemetry) |
+| **Process** | Cost per lecture, per project, per person reached | [BILL-7](#bill-7-cost-attribution--admin-cost-reporting) |
+| **Process** | Slide- and quiz-relevance ratings | Ungraded items inside the exit-ticket Form ([EVAL-5](#eval-5-slide--and-quiz-relevance-ratings)) |
+| **Process** | What was said, how much, and how it was paced | `TranscriptSegment` ([§15](#15-data-models)) — already collected, word-timed |
+| **Learning** | Exit-ticket scores as a per-lecture comprehension signal | Google Forms auto-grading ([QUIZ-5](#quiz-5-distribution--grading)); exported by hand ([EVAL-4](#eval-4-quiz-response-ingestion)) |
+| **Learning** | Comparison across Slide-Machine-delivered and traditionally-delivered sessions | The same, partitioned by lecture ([EVAL-3](#eval-3-study-label-on-a-lecture)) |
+| **Learning** | Student survey on clarity, engagement, perceived usefulness | Administered outside the app |
+| **Extensibility** | Count and nature of student-contributed features merged during the pilot | GitHub and the board |
 
-- System reliability (session completion rate, API error rates, image-enrichment fallbacks).
-- Speech-to-text latency (phrase finalization time) and slide-generation latency.
-- Slide- and quiz-relevance ratings (via the SOC voting layer and/or instructor/student 1–5 ratings).
+All metrics are anonymized before analysis — [P-7](#16-privacy-security--compliance) requires it and [EVAL-2](#eval-2-de-identified-research-export) is where it is enforced rather than promised.
 
-#### Learning measures
+Two shapes of measure run through the table and the requirements below. **What the system did** — latency, failures, cost, words spoken — is the application's own business and it must record it. **What students answered** is not: it belongs to the instructor's institutional systems, and [EVAL-4](#eval-4-quiz-response-ingestion) explains at length why keeping it there is a design position rather than a gap.
 
-- Exit-ticket scores as a per-lecture comprehension signal.
-- Comparison across Slide-Machine-delivered units vs. traditionally-delivered units in the same course.
-- Student survey on clarity, engagement, perceived usefulness.
+#### EVAL-1 Live-session telemetry
 
-#### Extensibility measure
+Every live session writes an **append-only record of what the machine actually did**: session id, lecture, start and stop, wall duration, captured minutes, phrase count, phrase-finalization and slide-generation latency (p50/p95), generation refusals and provider errors, transcription stream restarts, and how the session ended — stopped, abandoned, or crashed.
 
-- Count and nature of student-contributed features merged during the pilot.
+Nothing else in the system can answer "did it work" after the fact. **`TranscriptSegment` records what was said, not what it cost in time and not what failed** — a stall the lecturer talked over leaves no trace at all, and months later a degraded lecture is indistinguishable from a good one. The failures that matter most are the quiet ones: a generation error the speaker never noticed still costs that lecture its quiz, and without a record there is nothing left to find.
 
-All metrics are anonymized before analysis.
+The record is written server-side alongside the segments, is **never updated**, and carries **no student identity**. It is the evidence behind every reliability and latency claim in this section, and it is what lets a failed session be excluded from an evaluation honestly rather than argued about afterward.
+
+#### EVAL-2 De-identified research export
+
+An **admin-only export** produces one bundle for a date range — lectures and slides, transcript segments, session telemetry ([EVAL-1](#eval-1-live-session-telemetry)), quiz references, votes, and cost events ([BILL-7](#bill-7-cost-attribution--admin-cost-reporting)) — keyed by an **opaque per-account study id** rather than by user id, email, or display name. It follows the shape of the existing cost export (`GET /api/admin/cost/export`) and **reuses that CSV plumbing rather than inventing a second one**.
+
+[P-7](#16-privacy-security--compliance) requires evaluation data to be anonymized before analysis. An export that anonymizes **on the way out** is the only place that requirement can be _enforced_ rather than hoped for in a hand-run query written at midnight in February.
+
+Free text that can still name a person — slide bodies, spoken transcripts — leaves as-is and is scrubbed downstream. The bundle's own README says so plainly rather than implying a guarantee it does not make.
+
+#### EVAL-3 Study label on a lecture
+
+A lecture carries an optional short free-text `studyLabel`, set from the lecture settings it already has and returned in the [EVAL-2](#eval-2-de-identified-research-export) export. It exists so a term's lectures can be grouped for later analysis — by unit, by cohort, by whatever an evaluation turns out to need — **without a side spreadsheet joined on lecture title and guessed at months later**.
+
+It is deliberately a **string, not an enum**: the application does not know what any particular evaluation is measuring and should not learn, because the next one will group its lectures differently. If it does not ship, the partition lives in a research assistant's spreadsheet keyed on lecture title — which works, and is exactly why this sits below the two requirements above rather than beside them.
+
+#### EVAL-4 Quiz response ingestion
+
+The application reads a published Form's responses back — per-item correctness, total score, submission time — and stores them against the `QuizRef` ([QUIZ-3](#quiz-3-publishing--link-return)).
+
+**Not built for the pilot, and not merely for want of time.** Google Forms already auto-grades into a response spreadsheet the instructor owns and controls, so an instructor evaluating their own course exports that sheet by hand. Building the read path would pull student answers **out of the institution's FERPA-covered workspace and into this application's database** for no analytical gain and a materially worse position under [P-1](#16-privacy-security--compliance). At one course's scale, the missing feature is the safer instrument.
+
+It stays specified because that argument does not survive scale: a multi-instructor deployment cannot ask every instructor to export spreadsheets by hand, and at that point the ingestion path — with the consent and retention story that must come with it — is the work. Building it later against a real requirement is better than building it now against a convenience.
+
+#### EVAL-5 Slide- and quiz-relevance ratings
+
+A **1–5 relevance rating surface** for the audience, per slide and per quiz — distinct from [SOC-1](#soc-1-voting)'s up/down vote, which is a discovery signal on **public** lectures, is not per-slide, and is unavailable to a student whose lecture was never shared with them.
+
+**Not built for the pilot.** The same five-point judgment rides inside the exit-ticket Form as ungraded single-choice questions added during the [QUIZ-2](#quiz-2-instructor-publish-configuration) review step. That reaches **every** student who was in the room, including those who were never granted access to the lecture in the app and whom a per-slide rating surface therefore could not have reached at all — and it costs nothing to build and nothing to run. A built version would collect fewer ratings from fewer people at greater cost.
+
+#### EVAL-6 Evaluation dashboard
+
+An admin view charting session reliability, latency percentiles and cost per lecture over time, beside the existing per-entity cost panels ([BILL-7](#bill-7-cost-attribution--admin-cost-reporting)).
+
+**Not built for the pilot.** Three people with a CSV and a notebook need the CSV to exist far more than they need a chart, and a visualization nobody has yet learned to read is the wrong thing to build in the last week before a freeze. It becomes worth building when someone who is not on this team has to answer "is it healthy" without opening a spreadsheet — which is a real moment, just not this one. ([§18](#18-future-work) carries the richer-analytics ambition this would grow into.)
 
 ## Part II — Technical Design
 
@@ -1006,6 +1046,7 @@ The same definitions back API request/response DTOs and validation on both tiers
 | **P-11** | Soft-deleted records (P-10) are **permanently purged** by a scheduled daily background sweep once their `deletedAt` is older than a configurable window (`DELETED_DATA_RETENTION_DAYS`, **default 90 days** — [TECH-4](#tech-4-server-configuration)). Purge is a **hard cascade delete** that also removes owned children and stored blobs (seed assets, exports, retained audio — P-6 — synthesized narration, and a template's own imported assets such as backgrounds and logos — [TMPL-8](#tmpl-8-template-import-from-google-slides)), so no orphaned data survives. Blobs that more than one thing can point at are **reference-counted** rather than deleted with the first referent: narration is cached under a hash of the words spoken, so one file can serve two lectures that say the same thing and is deleted with the last lecture that played it; likewise a template asset shared by several layouts survives until no live layout, restorable deleted layout, or theme still refers to it. Template assets are deliberately **not** metered against any storage cap — there is no template-storage allowance in [BILL-3](#bill-3-usage-caps--metering), and the retention sweep is what bounds them. `0` disables the sweep (tombstones kept indefinitely). This bounds storage cost and honors data-minimization, consistent with the audio-retention sweep (P-6). |
 | **P-12** | **Administrative access** is an out-of-band **email allowlist** (`ADMIN_EMAILS` — [§20](#20-administration-operations--moderation) ADMIN-1), never a self-granted role. Admin reads **bypass per-object ACLs** and can reach student-derived content (P-1/P-2), so the allowlist is kept minimal, admins **cannot moderate other admins**, and any admin action that **exposes a user's private content or credentials** — viewing a private lecture/project, resetting/revealing a password (ADMIN-3) — requires **explicit confirmation** before it proceeds. |
 | **P-13** | **Admin audit trail.** Every admin action that **changes or exposes** user data — private lecture/project views, password resets, bans/unbans, deletes, settings edits, and views of soft-deleted content ([§20](#20-administration-operations--moderation) ADMIN-3..6) — is recorded in an **append-only** log (acting admin, action, target, details, timestamp) that **no API can edit or delete** (ADMIN-7). The log is the accountability control over the ACL bypass in P-12 and is exportable as CSV. |
+| **P-14** | **Research data handling.** Evaluation data is keyed by an **opaque per-student study id** — never by NetID, email, or account id. The id↔identity key is held by the research assistant in institution-managed storage, is **not accessible to the course instructor until final grades are submitted**, and is destroyed at the analysis freeze. Where an instructor evaluates their own course, that separation has to be structural rather than promissory. Exit-ticket responses stay in the instructor's institutional workspace and are **never ingested** by the app ([EVAL-4](#eval-4-quiz-response-ingestion) is deliberately unbuilt, and its body says why that absence is the safer position). No student PII enters the app ([P-2](#16-privacy-security--compliance)); retained lecture transcripts are scrubbed of student utterances before analysis, and audio retention ([P-6](#16-privacy-security--compliance)) stays **disabled** for the pilot, so no student voice is stored at all. **No study dataset is ever committed to the repository.** Anonymized export ([EVAL-2](#eval-2-de-identified-research-export)) is the enforcement point for [P-7](#16-privacy-security--compliance), not a manual promise. |
 
 ### 17. Quiz Generator Integration
 

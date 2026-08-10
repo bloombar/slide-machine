@@ -229,6 +229,7 @@ const parseRoadmap = text => {
   scope(/^##\s+5\.\s+Phase 1/m, 1)
   scope(/^##\s+6\.\s+Phase 2/m, 2)
   scope(/^##\s+7\.\s+Phase 3/m, 3)
+  scope(/^##\s+8\.\s+Phase 4/m, 4)
 
   // Status from the "Current status" snapshot: Done vs Outstanding lists.
   const snap = sliceSection(text, /^###\s+Current status/m, /^##\s/m)
