@@ -787,6 +787,114 @@ describe('a table slot (EDIT-7)', () => {
     vi.useRealTimers()
   })
 
+  it('makes the whole cell the click target, not just its words', () => {
+    render(
+      <SlideSlot
+        slot="data"
+        spec={spec}
+        slide={table}
+        colors={colors}
+        onEdit={vi.fn()}
+      />,
+    )
+    // Aiming at the four characters already in a cell is not how anyone
+    // edits a table
+    expect(screen.getByTitle('Click to edit Row 1, column 1')).toHaveClass(
+      'h-full',
+      'w-full',
+    )
+  })
+
+  it('shows an empty cell as somewhere to type', () => {
+    render(
+      <SlideSlot
+        slot="data"
+        spec={spec}
+        slide={slide({
+          slots: { data: { kind: 'table', header: ['Year'], rows: [['']] } },
+        })}
+        colors={colors}
+        onEdit={vi.fn()}
+      />,
+    )
+    // The blank-slot placeholder text prose uses is invisible by design; a
+    // table's empty cells are exactly where an author is about to type
+    expect(
+      screen.getByTitle('Click to edit Row 1, column 1'),
+    ).toHaveTextContent('—')
+  })
+
+  it('drops a row when asked', () => {
+    const onEdit = vi.fn()
+    render(
+      <SlideSlot
+        slot="data"
+        spec={spec}
+        slide={slide({
+          slots: {
+            data: {
+              kind: 'table',
+              header: ['Year', 'Rainfall'],
+              rows: [
+                ['2024', '812mm'],
+                ['2025', '640mm'],
+              ],
+            },
+          },
+        })}
+        colors={colors}
+        onEdit={onEdit}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Remove row 1' }))
+    expect(onEdit).toHaveBeenCalledWith({
+      slots: {
+        data: {
+          kind: 'table',
+          header: ['Year', 'Rainfall'],
+          rows: [['2025', '640mm']],
+        },
+      },
+    })
+  })
+
+  it('drops a column, header and all', () => {
+    const onEdit = vi.fn()
+    render(
+      <SlideSlot
+        slot="data"
+        spec={spec}
+        slide={table}
+        colors={colors}
+        onEdit={onEdit}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Remove column 1' }))
+    expect(onEdit).toHaveBeenCalledWith({
+      slots: {
+        data: { kind: 'table', header: ['Rainfall'], rows: [['812mm']] },
+      },
+    })
+  })
+
+  it('will not empty itself of rows or columns', () => {
+    render(
+      <SlideSlot
+        slot="data"
+        spec={spec}
+        slide={slide({
+          slots: { data: { kind: 'table', rows: [['only']] } },
+        })}
+        colors={colors}
+        onEdit={vi.fn()}
+      />,
+    )
+    // A table with no rows or no columns is not a table; an author who wants
+    // none of it empties the cells or drops the slide
+    expect(screen.queryByRole('button', { name: /Remove row/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Remove column/ })).toBeNull()
+  })
+
   it('grows by a row when asked', () => {
     const onEdit = vi.fn()
     render(

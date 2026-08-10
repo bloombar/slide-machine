@@ -5,6 +5,11 @@
  * a screen reader announces the header a cell belongs to, and a row read out
  * of order is still a row. Styling inherits the slide's typography, so a table
  * on a dark template is a dark table.
+ *
+ * Every cell is ruled, not just the rows. Columns without lines between them
+ * read as loose text at a distance — which is the distance a lecture hall is
+ * — and the same grid is what the exporters draw, so a table looks like the
+ * one the audience saw wherever it ends up (EXP-7).
  */
 interface Props {
   header?: string[]
@@ -25,7 +30,7 @@ export default function SlideTable({ header, rows }: Props) {
               <th
                 key={i}
                 scope="col"
-                className="border-b border-current/30 px-[1cqi] py-[0.6cqi] text-start font-semibold"
+                className="border border-current/30 px-[1cqi] py-[0.6cqi] text-start font-semibold"
               >
                 {cell}
               </th>
@@ -39,7 +44,7 @@ export default function SlideTable({ header, rows }: Props) {
             {cells(row).map((cell, c) => (
               <td
                 key={c}
-                className="border-b border-current/10 px-[1cqi] py-[0.6cqi] align-top"
+                className="border border-current/25 px-[1cqi] py-[0.6cqi] align-top"
               >
                 {cell}
               </td>

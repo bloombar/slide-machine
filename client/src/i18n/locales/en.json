@@ -730,7 +730,9 @@
       "header": "Column {n} heading",
       "cell": "Row {row}, column {column}",
       "addRow": "Add row",
-      "addColumn": "Add column"
+      "addColumn": "Add column",
+      "removeRow": "Remove row {n}",
+      "removeColumn": "Remove column {n}"
     }
   },
   "image": {

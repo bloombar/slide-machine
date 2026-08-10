@@ -730,7 +730,9 @@
       "header": "第 {n} 列标题",
       "cell": "第 {row} 行，第 {column} 列",
       "addRow": "添加行",
-      "addColumn": "添加列"
+      "addColumn": "添加列",
+      "removeRow": "删除第 {n} 行",
+      "removeColumn": "删除第 {n} 列"
     }
   },
   "image": {

@@ -619,17 +619,27 @@ function TableSlot({ slot, spec, slide, onEdit }: SlotEditorProps) {
     onEdit(
       patchSlotValue(slot, {
         kind: 'table',
-        ...(next.header ? { header: next.header } : {}),
+        ...(next.header?.length ? { header: next.header } : {}),
         rows: next.rows,
       }),
     )
+
+  /** Every row padded to the table's width, so an edit never has to reason
+   * about a short row. */
+  const grid = () =>
+    rows.map(row => Array.from({ length: width }, (_, i) => row[i] ?? ''))
 
   const cell = (text: string, label: string, onCell: (v: string) => void) => (
     <EditableText
       value={text}
       label={label}
-      emptyDisplay={t('slide.table.empty')}
-      placeholderStyle
+      // An empty cell shows a visible dash rather than the invisible
+      // blank-slot placeholder text uses: a table's empty cells are where
+      // an author is about to type, and they have to be findable.
+      emptyDisplay="—"
+      // The whole cell is the target. Aiming at the two characters already in
+      // a cell is not how anyone edits a table.
+      fill
       onSave={onCell}
     />
   )
@@ -640,9 +650,7 @@ function TableSlot({ slot, spec, slide, onEdit }: SlotEditorProps) {
     save({ header: next, rows })
   }
   const setCell = (r: number, c: number, v: string) => {
-    const next = rows.map(row =>
-      Array.from({ length: width }, (_, i) => row[i] ?? ''),
-    )
+    const next = grid()
     next[r]![c] = v
     save({ header, rows: next })
   }
@@ -651,20 +659,64 @@ function TableSlot({ slot, spec, slide, onEdit }: SlotEditorProps) {
   const addColumn = () =>
     save({
       ...(header ? { header: [...header, ''] } : {}),
-      rows: rows.map(row => [...row, '']),
+      rows: grid().map(row => [...row, '']),
+    })
+  const removeRow = (r: number) =>
+    save({ header, rows: rows.filter((_, i) => i !== r) })
+  const removeColumn = (c: number) =>
+    save({
+      ...(header ? { header: header.filter((_, i) => i !== c) } : {}),
+      rows: grid().map(row => row.filter((_, i) => i !== c)),
     })
 
+  // A table has to keep a row and a column to still be a table, and an
+  // author who wants none of it deletes the slide or empties the cells.
+  const canRemoveRow = rows.length > 1
+  const canRemoveColumn = width > 1
+
+  /** The small controls that grow and shrink the grid. Muted until the table
+   * is hovered or focused, so they are available without being furniture. */
+  const control = (label: string, onClick: () => void, sign: string) => (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="rounded px-[0.6cqi] leading-none opacity-0 transition-opacity group-hover:opacity-60 group-focus-within:opacity-60 hover:opacity-100 focus:opacity-100"
+    >
+      {sign}
+    </button>
+  )
+
+  const cellClass = 'border border-current/25 px-[1cqi] py-[0.6cqi] align-top'
+
   return (
-    <div className="w-full">
+    <div className="group w-full">
       <table className="w-full table-fixed border-collapse text-start text-[2cqi]">
-        {header?.length ? (
-          <thead>
+        {/* One narrow gutter per axis, holding that row's or column's
+            remove control. In its own cell rather than floating over the
+            table, so nothing it offers sits on top of content. */}
+        <thead>
+          <tr>
+            {Array.from({ length: width }, (_, c) => (
+              <th key={c} className="p-0 text-center text-[1.5cqi] font-normal">
+                {canRemoveColumn &&
+                  control(
+                    t('slide.table.removeColumn', { n: c + 1 }),
+                    () => removeColumn(c),
+                    '×',
+                  )}
+              </th>
+            ))}
+            <th className="w-[3cqi] p-0" />
+          </tr>
+          {header?.length ? (
             <tr>
               {Array.from({ length: width }, (_, i) => (
                 <th
                   key={i}
                   scope="col"
-                  className="border-b border-current/30 px-[1cqi] py-[0.6cqi] text-start font-semibold"
+                  className={`${cellClass} text-start font-semibold`}
                 >
                   {cell(
                     header[i] ?? '',
@@ -673,17 +725,15 @@ function TableSlot({ slot, spec, slide, onEdit }: SlotEditorProps) {
                   )}
                 </th>
               ))}
+              <th className="p-0" />
             </tr>
-          </thead>
-        ) : null}
+          ) : null}
+        </thead>
         <tbody>
           {rows.map((row, r) => (
             <tr key={r}>
               {Array.from({ length: width }, (_, c) => (
-                <td
-                  key={c}
-                  className="border-b border-current/10 px-[1cqi] py-[0.6cqi] align-top"
-                >
+                <td key={c} className={cellClass}>
                   {cell(
                     row[c] ?? '',
                     t('slide.table.cell', { row: r + 1, column: c + 1 }),
@@ -691,15 +741,31 @@ function TableSlot({ slot, spec, slide, onEdit }: SlotEditorProps) {
                   )}
                 </td>
               ))}
+              <td className="p-0 text-center text-[1.5cqi]">
+                {canRemoveRow &&
+                  control(
+                    t('slide.table.removeRow', { n: r + 1 }),
+                    () => removeRow(r),
+                    '×',
+                  )}
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
-      <div className="mt-[0.8cqi] flex gap-[1cqi] text-[1.5cqi] opacity-70">
-        <button type="button" onClick={addRow} className="hover:underline">
+      <div className="mt-[0.8cqi] flex gap-[1cqi] text-[1.5cqi]">
+        <button
+          type="button"
+          onClick={addRow}
+          className="rounded border border-current/30 px-[1cqi] py-[0.3cqi] opacity-70 hover:opacity-100"
+        >
           {t('slide.table.addRow')}
         </button>
-        <button type="button" onClick={addColumn} className="hover:underline">
+        <button
+          type="button"
+          onClick={addColumn}
+          className="rounded border border-current/30 px-[1cqi] py-[0.3cqi] opacity-70 hover:opacity-100"
+        >
           {t('slide.table.addColumn')}
         </button>
       </div>

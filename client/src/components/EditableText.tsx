@@ -53,6 +53,15 @@ interface Props {
    * not want a line of instructions under every box on the slide.
    */
   hint?: string
+  /**
+   * Make the whole box the click target rather than just the words in it.
+   *
+   * A table cell is a box an author aims at — clicking its padding, or
+   * anywhere in an empty one, has to start an edit. Text in a slide layout is
+   * the opposite: its clickable area should hug the words, or it would sit
+   * over whatever is beside it.
+   */
+  fill?: boolean
 }
 
 export default function EditableText({
@@ -67,6 +76,7 @@ export default function EditableText({
   truncate = false,
   source = false,
   hint,
+  fill = false,
 }: Props) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
@@ -146,7 +156,11 @@ export default function EditableText({
         // line by its bottom edge, which lifts the text off the baseline of
         // whatever is beside it.
         className={`relative z-10 cursor-text rounded hover:bg-black/5 ${
-          truncate ? 'block max-w-full truncate' : '-mx-1 inline-block px-1'
+          fill
+            ? 'block h-full w-full'
+            : truncate
+              ? 'block max-w-full truncate'
+              : '-mx-1 inline-block px-1'
         } ${!value && emptyDisplay && placeholderStyle ? 'slot-blank' : ''}`}
       >
         {value

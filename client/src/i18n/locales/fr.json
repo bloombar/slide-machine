@@ -730,7 +730,9 @@
       "header": "En-tête de la colonne {n}",
       "cell": "Ligne {row}, colonne {column}",
       "addRow": "Ajouter une ligne",
-      "addColumn": "Ajouter une colonne"
+      "addColumn": "Ajouter une colonne",
+      "removeRow": "Supprimer la ligne {n}",
+      "removeColumn": "Supprimer la colonne {n}"
     }
   },
   "image": {

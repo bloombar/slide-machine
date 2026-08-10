@@ -730,7 +730,9 @@
       "header": "Encabezado de la columna {n}",
       "cell": "Fila {row}, columna {column}",
       "addRow": "Añadir fila",
-      "addColumn": "Añadir columna"
+      "addColumn": "Añadir columna",
+      "removeRow": "Eliminar la fila {n}",
+      "removeColumn": "Eliminar la columna {n}"
     }
   },
   "image": {
