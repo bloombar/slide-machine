@@ -1,17 +1,20 @@
 # Slide templates
 
-A template is **data** (theme, layouts, slots, geometry, validation — all of it in one
-place) plus, for some layouts, a small amount of **code** (a hand-tuned visual
-arrangement). This page is the single home for how templates and layouts work, including
-how they move to and from Google Slides.
+A template is **data** — theme, layouts, slots, geometry, validation, all of it in one
+place. It used to be data plus a hand-written React component per layout type; those are
+gone ([§4](#4-rendering)), so a layout an instructor builds and one the app ships are the
+same kind of thing. This page is the single home for how templates and layouts work,
+including how they move to and from Google Slides.
 
-> **Status.** Sections 1–4 describe what ships today. Template storage, the positioned
-> renderer, Google Slides import/export and layout deletion (SPEC
-> [TMPL-8](SPEC.md#tmpl-8-template-import-from-google-slides),
-> [EXP-5](SPEC.md#exp-5-lecture-import-from-google-slides),
-> [EXP-6](SPEC.md#exp-6-template-export-to-google-slides)) are specified and designed but
-> **not yet built** — see [ROADMAP.md](ROADMAP.md). They are documented here because the
-> design is what the implementation is checked against.
+> **Status.** Everything here ships except **import**. Template storage, the WYSIWYG
+> editor, layout deletion, the positioned renderer and export to Google Slides
+> ([EXP-6](SPEC.md#exp-6-template-export-to-google-slides)) are all built. What is
+> specified and designed but **not yet built** is the other direction: deriving a
+> template from a Google Slides presentation
+> ([TMPL-8](SPEC.md#tmpl-8-template-import-from-google-slides)) and importing a lecture
+> from one ([EXP-5](SPEC.md#exp-5-lecture-import-from-google-slides)) — see
+> [ROADMAP.md](ROADMAP.md). Those are documented here because the design is what the
+> implementation will be checked against.
 
 ## 1. What a template is, and where it lives
 
@@ -612,21 +615,20 @@ schema in [§4](#4-rendering) can be authored by hand too.
 
 ## 13. What's still deferred
 
-The WYSIWYG template editor (SPEC
-[TMPL-4](SPEC.md#tmpl-4-custom-templates-create--edit--save)) remains unbuilt. With storage
-and the positioned renderer in place, what it still needs is:
+**Import, in both directions.** Everything else in this document is built — the WYSIWYG
+editor ([TMPL-4](SPEC.md#tmpl-4-custom-templates-create--edit--save)) is the authoring path,
+and the per-type layout components it was meant to replace are gone: every layout is data
+now, drawn by `FlowLayout`. What remains:
 
-1. **The editor itself** — a canvas for adding and arranging slots, choosing each one's kind,
-   styling them, and attaching labels, instructions and validation. Import currently stands in
-   as the authoring path; the editor is what lets a user fix what import got wrong, and it is
-   the only remaining piece of the open slot model that is not yet reachable without editing
-   a JSON file by hand.
-2. **Retiring the hand-tuned components.** They are scaffolding with a planned demolition:
-   convert one built-in layout to geometry, compare it side by side with its component, and
-   when the data version is indistinguishable, convert the rest and delete the components.
-   The registry makes this incremental — each layout type flips independently. What can never
-   be deleted is the positioned renderer itself: some code must always interpret arrangement
-   data.
+1. **A template from a Google Slides presentation**
+   ([TMPL-8](SPEC.md#tmpl-8-template-import-from-google-slides)) — the reason
+   `PositionedLayout` and `elementPositions` exist, since an imported design arrives as
+   absolute geometry with no tree. Export already goes the other way.
+2. **A lecture from a Google Slides presentation**
+   ([EXP-5](SPEC.md#exp-5-lecture-import-from-google-slides)).
+3. **Re-importing a template from its own export** — a template downloads as YAML and
+   exports to Slides, but neither comes back ([EXP-3](SPEC.md#exp-3-round-trip-import) on
+   the template side; decks already round-trip through YAML).
 
 The slide scaling strategy (container-query units) and z-index tiers are in
 [DECISIONS.md](DECISIONS.md).

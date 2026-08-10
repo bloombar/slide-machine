@@ -12,7 +12,7 @@ V2 is a full-stack TypeScript application — a React SPA, an Express API, and M
 | `server/` | `@slide-machine/server` | Express API; serves the built SPA in production (TECH-2/10)   |
 | `client/` | `@slide-machine/client` | React + Vite + TailwindCSS SPA (TECH-1)                       |
 | `e2e/`    | `@slide-machine/e2e`    | Playwright end-to-end tests against the built app (TECH-7)    |
-| `config/` | —                       | Adjustable plan tiers/caps (`plans.json`, BILL-6)             |
+| `config/` | —                       | Plan tiers/caps, vendor prices, AI prompts (BILL-6, TECH-4)   |
 
 ## Getting started
 
@@ -34,7 +34,7 @@ Or run the whole stack in Docker with one command: `docker compose up` (add `--p
 | `npm run dev`              | Server (`tsx watch`) + client (Vite) with `/api` proxy       |
 | `npm run build`            | Build the SPA, then bundle the server to `server/dist`       |
 | `npm start`                | Run the built app (production mode, serves the SPA on :3000) |
-| `npm test`                 | Unit tests (server + client, Vitest)                         |
+| `npm test`                 | Unit tests (shared + server + client, Vitest)                |
 | `npm run test:integration` | API tests against a real MongoDB (`MONGODB_TEST_URI`)        |
 | `npm run e2e`              | Playwright tests against the built app (run `build` first)   |
 | `npm run lint`             | ESLint across the repo                                       |
@@ -47,7 +47,7 @@ All adjustable settings and credentials live in config files, never in code:
 
 - **Server** — `server/.env` (see [server/.env.example](server/.env.example)); validated at boot, the server refuses to start on invalid config.
 - **Client** — `client/.env.local` with `VITE_`-prefixed vars (no secrets — these ship to the browser).
-- **Plan tiers** — [config/plans.json](config/plans.json): prices and usage caps, tunable without a code change.
+- **Plan tiers** — [config/plans.json](config/plans.json): prices and usage caps, tunable without a code change. Per-unit vendor prices live alongside it in [config/service-prices.json](config/service-prices.json), and the AI prompts in [config/prompts/](config/prompts/).
 
 ### Object storage
 
