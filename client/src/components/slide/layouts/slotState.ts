@@ -10,10 +10,40 @@
  * Built on `slotValue` rather than reading `slide.slots` directly, so a slide
  * saved before content moved into the slot map answers the same way.
  */
-import type { Slide, SlotKind } from '@slide-machine/shared'
+import type { Slide, SlotKind, SlotValue } from '@slide-machine/shared'
 import { slotValue } from '../slots'
 
+/**
+ * Whether a stored value holds anything.
+ *
+ * Exhaustive over the kinds (TMPL-9) so a kind added later fails to compile
+ * here until somebody says what "empty" means for it. Defaulting would be
+ * worse than a build error: an unrecognized kind would read as empty and its
+ * box would silently stop being drawn.
+ */
+const hasContent = (value: SlotValue): boolean => {
+  switch (value.kind) {
+    case 'text':
+    case 'preformatted':
+      return Boolean(value.value.trim())
+    case 'bullets':
+      return value.items.some(item => item.trim())
+    case 'image':
+      return Boolean(value.ref)
+    case 'code':
+      return Boolean(value.source.trim())
+    case 'math':
+      return Boolean(value.tex.trim())
+    case 'table':
+      return value.rows.some(row => row.some(cell => cell.trim()))
+  }
+}
+
 export const slotIsEmpty = (slide: Slide, name: string): boolean => {
+  const stored = slide.slots?.[name]
+  if (stored) return !hasContent(stored)
+  // No stored value: a slide saved before content moved into the slot map
+  // still answers from the fields it does have.
   const value = slotValue(slide, name)
   if (value.imageRef) return false
   if (value.bullets?.length) return false

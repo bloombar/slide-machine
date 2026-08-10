@@ -31,6 +31,9 @@ import {
 } from '@slide-machine/shared'
 import EditableText from '../EditableText'
 import SlideMarkdown from '../SlideMarkdown'
+import SlideCode from './Code'
+import SlideMath from './Math'
+import SlideTable from './Table'
 import type { ThemeColors } from './theme'
 
 /** Partial content update produced by in-place editing. */
@@ -89,6 +92,25 @@ export const slotValue = (slide: Slide, slot: string): SlotContent => {
   }
 }
 
+/**
+ * The slot's stored value, untouched.
+ *
+ * The flattened `SlotContent` above covers the three kinds every layout has
+ * always had. A specialized kind (TMPL-9) carries fields of its own — a
+ * language, a header row — that flattening would lose, so its editor reads
+ * the value as it is stored.
+ */
+export const rawSlotValue = (
+  slide: Slide,
+  slot: string,
+): SlotValue | undefined => slide.slots?.[slot]
+
+/** An edit to a slot that keeps its own shape (TMPL-9). */
+export const patchSlotValue = (
+  slot: string,
+  value: SlotValue,
+): SlideContentPatch => ({ slots: { [slot]: value } })
+
 /** An edit to a slot, addressed to the slot map by name. */
 export const patchSlot = (
   slot: string,
@@ -135,7 +157,7 @@ const textValue = (slide: Slide, slot: string): string =>
   slotValue(slide, slot).text ?? ''
 
 /** A text slot: markdown normally, in-place editable for owners. */
-function TextSlot({ slot, descriptor, slide, onEdit }: SlotEditorProps) {
+function TextSlot({ slot, spec, descriptor, slide, onEdit }: SlotEditorProps) {
   const { t } = useTranslation()
   const value = textValue(slide, slot)
   const multiline = descriptor.multiline ?? false
@@ -154,13 +176,20 @@ function TextSlot({ slot, descriptor, slide, onEdit }: SlotEditorProps) {
         name: descriptor.label.toLocaleLowerCase(),
       })}
       placeholderStyle
+      hint={slotGuidance(spec, t)}
       onSave={v => onEdit(patchSlot(slot, { text: v }))}
     />
   )
 }
 
 /** The bullet list edits as a whole: one line per bullet. */
-function BulletsSlot({ slot, descriptor, slide, onEdit }: SlotEditorProps) {
+function BulletsSlot({
+  slot,
+  spec,
+  descriptor,
+  slide,
+  onEdit,
+}: SlotEditorProps) {
   const { t } = useTranslation()
   const items = slotValue(slide, slot).bullets ?? []
   const rendered = (bullets: string[]) => (
@@ -183,6 +212,7 @@ function BulletsSlot({ slot, descriptor, slide, onEdit }: SlotEditorProps) {
         name: descriptor.label.toLocaleLowerCase(),
       })}
       placeholderStyle
+      hint={slotGuidance(spec, t)}
       onSave={v =>
         onEdit(
           patchSlot(slot, { bullets: v.split('\n').filter(b => b.trim()) }),
@@ -202,6 +232,7 @@ function BulletsSlot({ slot, descriptor, slide, onEdit }: SlotEditorProps) {
  */
 function ImageSlot({
   slot,
+  spec,
   slide,
   colors,
   imagePending,
@@ -407,10 +438,370 @@ function ImageSlot({
           slideId={slide.id}
           title={hasImage ? t('image.replace') : t('image.add')}
           initialQuery={searchQuery}
+          guidance={slotGuidance(spec, t)}
           onUpload={file => onReplaceImage(file, slot)}
           onPickCandidate={candidate => onPickImageCandidate(candidate, slot)}
           onClose={() => setImageDialogOpen(false)}
         />
+      )}
+    </div>
+  )
+}
+
+/**
+ * What the template meant this box for, in one line (EDIT-7/TMPL-10).
+ *
+ * An instructor typing into "Worked example" should see the instruction the
+ * template wrote for it — "a runnable Python snippet, no more than eight
+ * lines" — rather than having to guess from the name, and should see how much
+ * it holds before running past it. It is guidance, not a rule: the limits are
+ * enforced elsewhere, and nothing here refuses an edit.
+ */
+export const slotGuidance = (
+  spec: SlotSpec | undefined,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string | undefined => {
+  if (!spec) return undefined
+  const limits = [
+    spec.maxWords !== undefined
+      ? t('slide.guidance.words', { count: spec.maxWords })
+      : undefined,
+    spec.maxChars !== undefined
+      ? t('slide.guidance.chars', { count: spec.maxChars })
+      : undefined,
+    spec.maxItems !== undefined
+      ? t('slide.guidance.items', { count: spec.maxItems })
+      : undefined,
+  ].filter(Boolean)
+  const parts = [spec.description, limits.join(' · ')].filter(Boolean)
+  return parts.length ? parts.join(' · ') : undefined
+}
+
+/**
+ * An empty specialized box, shown as a box.
+ *
+ * Prose uses an invisible blank-slot placeholder, which is right for it: an
+ * audience should not see a hole where a caption would have gone. A formula
+ * or a listing is different — nobody stumbles onto one by typing, so its box
+ * has to say that it is there and what belongs in it, or an author cannot
+ * find it at all.
+ *
+ * Only for owners; the editors below return before this on the read-only
+ * path, so an audience still sees nothing.
+ */
+function EmptyFrame({
+  empty,
+  children,
+}: {
+  empty: boolean
+  children: React.ReactNode
+}) {
+  if (!empty) return <>{children}</>
+  return (
+    <div className="rounded-[0.6cqi] border border-dashed border-current/40 px-[1cqi] py-[0.8cqi] opacity-70">
+      {children}
+    </div>
+  )
+}
+
+/**
+ * A program listing: highlighted on the slide, its plain source in the editor
+ * (EDIT-7).
+ *
+ * The language comes from the slot's own options, so a template that declares
+ * a Python box gets Python highlighting on every slide built from it without
+ * anyone restating it per slide. A slide may still carry its own — an
+ * imported one does.
+ */
+function CodeSlot({ slot, spec, descriptor, slide, onEdit }: SlotEditorProps) {
+  const { t } = useTranslation()
+  const value = rawSlotValue(slide, slot)
+  const stored = value?.kind === 'code' ? value : undefined
+  const language =
+    stored?.language ??
+    (typeof spec?.options?.language === 'string'
+      ? spec.options.language
+      : undefined)
+  const source = stored?.source ?? ''
+  const rendered = (text: string) => (
+    <SlideCode source={text} language={language} />
+  )
+  if (!onEdit) return rendered(source)
+  return (
+    <EmptyFrame empty={!source}>
+      <EditableText
+        value={source}
+        label={descriptor.label}
+        multiline
+        source
+        fill
+        renderValue={rendered}
+        // Named by what belongs in it, not by what the box is called: a box
+        // still labelled "Slide body" that now holds Python should say so.
+        emptyDisplay={
+          language
+            ? t('slide.addKind.codeIn', { language })
+            : t('slide.addKind.code')
+        }
+        hint={slotGuidance(spec, t)}
+        onSave={v =>
+          onEdit(
+            patchSlotValue(slot, {
+              kind: 'code',
+              source: v,
+              ...(language ? { language } : {}),
+            }),
+          )
+        }
+      />
+    </EmptyFrame>
+  )
+}
+
+/** A formula: typeset on the slide, LaTeX in the editor (EDIT-7). */
+function MathSlot({ slot, spec, descriptor, slide, onEdit }: SlotEditorProps) {
+  const { t } = useTranslation()
+  const value = rawSlotValue(slide, slot)
+  const stored = value?.kind === 'math' ? value : undefined
+  const tex = stored?.tex ?? ''
+  const display = stored?.display ?? true
+  const rendered = (text: string) => <SlideMath tex={text} display={display} />
+  if (!onEdit) return rendered(tex)
+  return (
+    <EmptyFrame empty={!tex}>
+      <EditableText
+        value={tex}
+        label={descriptor.label}
+        multiline
+        source
+        fill
+        renderValue={rendered}
+        emptyDisplay={t('slide.addKind.math')}
+        hint={slotGuidance(spec, t)}
+        onSave={v =>
+          onEdit(patchSlotValue(slot, { kind: 'math', tex: v, display }))
+        }
+      />
+    </EmptyFrame>
+  )
+}
+
+/** Text whose spacing is the point: shown and edited exactly as typed. */
+function PreformattedSlot({
+  slot,
+  spec,
+  descriptor,
+  slide,
+  onEdit,
+}: SlotEditorProps) {
+  const { t } = useTranslation()
+  const value = rawSlotValue(slide, slot)
+  const text = value?.kind === 'preformatted' ? value.value : ''
+  const rendered = (v: string) => (
+    <pre className="text-start font-mono text-[2cqi] leading-[1.5] whitespace-pre">
+      {v}
+    </pre>
+  )
+  if (!onEdit) return rendered(text)
+  return (
+    <EmptyFrame empty={!text}>
+      <EditableText
+        value={text}
+        label={descriptor.label}
+        multiline
+        source
+        fill
+        renderValue={rendered}
+        emptyDisplay={t('slide.addKind.preformatted')}
+        hint={slotGuidance(spec, t)}
+        onSave={v =>
+          onEdit(patchSlotValue(slot, { kind: 'preformatted', value: v }))
+        }
+      />
+    </EmptyFrame>
+  )
+}
+
+/**
+ * A table, edited cell by cell (EDIT-7).
+ *
+ * Not one text field holding the whole grid: a table is rows and columns, and
+ * an author fixing one number should not have to find it inside a block of
+ * delimited text and keep the delimiters balanced. Each cell is its own
+ * click-to-edit field, and the row and column controls are what a table needs
+ * that prose does not.
+ */
+function TableSlot({ slot, spec, slide, onEdit }: SlotEditorProps) {
+  const { t } = useTranslation()
+  const guidance = slotGuidance(spec, t)
+  const value = rawSlotValue(slide, slot)
+  const stored = value?.kind === 'table' ? value : undefined
+  const header = stored?.header
+  const rows = stored?.rows ?? []
+  const width = Math.max(header?.length ?? 0, ...rows.map(r => r.length), 1)
+
+  if (!onEdit) return <SlideTable header={header} rows={rows} />
+
+  const save = (next: { header?: string[]; rows: string[][] }) =>
+    onEdit(
+      patchSlotValue(slot, {
+        kind: 'table',
+        ...(next.header?.length ? { header: next.header } : {}),
+        rows: next.rows,
+      }),
+    )
+
+  /** Every row padded to the table's width, so an edit never has to reason
+   * about a short row. */
+  const grid = () =>
+    rows.map(row => Array.from({ length: width }, (_, i) => row[i] ?? ''))
+
+  const cell = (text: string, label: string, onCell: (v: string) => void) => (
+    <EditableText
+      value={text}
+      label={label}
+      // An empty cell shows a visible dash rather than the invisible
+      // blank-slot placeholder text uses: a table's empty cells are where
+      // an author is about to type, and they have to be findable.
+      emptyDisplay="—"
+      // The whole cell is the target. Aiming at the two characters already in
+      // a cell is not how anyone edits a table.
+      fill
+      onSave={onCell}
+    />
+  )
+
+  const setHeaderCell = (i: number, v: string) => {
+    const next = Array.from({ length: width }, (_, c) => header?.[c] ?? '')
+    next[i] = v
+    save({ header: next, rows })
+  }
+  const setCell = (r: number, c: number, v: string) => {
+    const next = grid()
+    next[r]![c] = v
+    save({ header, rows: next })
+  }
+  const addRow = () =>
+    save({ header, rows: [...rows, Array.from({ length: width }, () => '')] })
+  const addColumn = () =>
+    save({
+      ...(header ? { header: [...header, ''] } : {}),
+      rows: grid().map(row => [...row, '']),
+    })
+  const removeRow = (r: number) =>
+    save({ header, rows: rows.filter((_, i) => i !== r) })
+  const removeColumn = (c: number) =>
+    save({
+      ...(header ? { header: header.filter((_, i) => i !== c) } : {}),
+      rows: grid().map(row => row.filter((_, i) => i !== c)),
+    })
+
+  // A table has to keep a row and a column to still be a table, and an
+  // author who wants none of it deletes the slide or empties the cells.
+  const canRemoveRow = rows.length > 1
+  const canRemoveColumn = width > 1
+
+  /** The small controls that grow and shrink the grid. Muted until the table
+   * is hovered or focused, so they are available without being furniture. */
+  const control = (label: string, onClick: () => void, sign: string) => (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="rounded px-[0.6cqi] leading-none opacity-0 transition-opacity group-hover:opacity-60 group-focus-within:opacity-60 hover:opacity-100 focus:opacity-100"
+    >
+      {sign}
+    </button>
+  )
+
+  const cellClass = 'border border-current/25 px-[1cqi] py-[0.6cqi] align-top'
+
+  return (
+    <div className="group w-full">
+      <table className="w-full table-fixed border-collapse text-start text-[2cqi]">
+        {/* One narrow gutter per axis, holding that row's or column's
+            remove control. In its own cell rather than floating over the
+            table, so nothing it offers sits on top of content. */}
+        <thead>
+          <tr>
+            {Array.from({ length: width }, (_, c) => (
+              <th key={c} className="p-0 text-center text-[1.5cqi] font-normal">
+                {canRemoveColumn &&
+                  control(
+                    t('slide.table.removeColumn', { n: c + 1 }),
+                    () => removeColumn(c),
+                    '×',
+                  )}
+              </th>
+            ))}
+            <th className="w-[3cqi] p-0" />
+          </tr>
+          {header?.length ? (
+            <tr>
+              {Array.from({ length: width }, (_, i) => (
+                <th
+                  key={i}
+                  scope="col"
+                  className={`${cellClass} text-start font-semibold`}
+                >
+                  {cell(
+                    header[i] ?? '',
+                    t('slide.table.header', { n: i + 1 }),
+                    v => setHeaderCell(i, v),
+                  )}
+                </th>
+              ))}
+              <th className="p-0" />
+            </tr>
+          ) : null}
+        </thead>
+        <tbody>
+          {rows.map((row, r) => (
+            <tr key={r}>
+              {Array.from({ length: width }, (_, c) => (
+                <td key={c} className={cellClass}>
+                  {cell(
+                    row[c] ?? '',
+                    t('slide.table.cell', { row: r + 1, column: c + 1 }),
+                    v => setCell(r, c, v),
+                  )}
+                </td>
+              ))}
+              <td className="p-0 text-center text-[1.5cqi]">
+                {canRemoveRow &&
+                  control(
+                    t('slide.table.removeRow', { n: r + 1 }),
+                    () => removeRow(r),
+                    '×',
+                  )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="mt-[0.8cqi] flex gap-[1cqi] text-[1.5cqi]">
+        <button
+          type="button"
+          onClick={addRow}
+          className="rounded border border-current/30 px-[1cqi] py-[0.3cqi] opacity-70 hover:opacity-100"
+        >
+          {t('slide.table.addRow')}
+        </button>
+        <button
+          type="button"
+          onClick={addColumn}
+          className="rounded border border-current/30 px-[1cqi] py-[0.3cqi] opacity-70 hover:opacity-100"
+        >
+          {t('slide.table.addColumn')}
+        </button>
+      </div>
+      {/* A table has no single field to hang a hint on, and its controls are
+          already on screen for owners, so the instruction sits beside them. */}
+      {guidance && (
+        <span className="mt-[0.4cqi] block text-[1.4cqi] leading-snug opacity-60">
+          {guidance}
+        </span>
       )}
     </div>
   )
@@ -421,6 +812,10 @@ const EDITORS: Record<SlotKind, ComponentType<SlotEditorProps>> = {
   text: TextSlot,
   bullets: BulletsSlot,
   image: ImageSlot,
+  code: CodeSlot,
+  math: MathSlot,
+  preformatted: PreformattedSlot,
+  table: TableSlot,
 }
 
 /** Renders the right editor for a named slot; unknown slots render

@@ -301,7 +301,11 @@
     "slotKinds": {
       "text": "Texto",
       "bullets": "Viñetas",
-      "image": "Imagen"
+      "image": "Imagen",
+      "code": "Código",
+      "math": "Fórmula",
+      "preformatted": "Texto preformateado",
+      "table": "Tabla"
     },
     "newLayoutAdd": "Añadir diseño",
     "layoutSettings": "Diseño",
@@ -448,7 +452,12 @@
     "exportHeading": "Exportar este diseño",
     "exportHint": "Llévatelo como archivo, o a tu Google Drive como una presentación cuyas maquetas son las suyas.",
     "exportAsYaml": "Como YAML",
-    "exportToSlides": "Como Google Slides"
+    "exportToSlides": "Como Google Slides",
+    "slotLanguage": {
+      "label": "Lenguaje",
+      "hint": "En qué lenguaje resaltar este listado.",
+      "auto": "Ninguno"
+    }
   },
   "layout": {
     "change": "Cambiar el diseño de la diapositiva",
@@ -707,6 +716,29 @@
       "editTranscript": "Editar la transcripción hablada",
       "changeLayout": "Cambiar el diseño",
       "delete": "Eliminar la diapositiva"
+    },
+    "math": {
+      "invalid": "— revisa el LaTeX ({reason})"
+    },
+    "guidance": {
+      "words": "hasta {count} palabras",
+      "chars": "hasta {count} caracteres",
+      "items": "hasta {count} puntos"
+    },
+    "table": {
+      "empty": "Celda vacía",
+      "header": "Encabezado de la columna {n}",
+      "cell": "Fila {row}, columna {column}",
+      "addRow": "Añadir fila",
+      "addColumn": "Añadir columna",
+      "removeRow": "Eliminar la fila {n}",
+      "removeColumn": "Eliminar la columna {n}"
+    },
+    "addKind": {
+      "math": "Añadir una fórmula",
+      "code": "Añadir código",
+      "codeIn": "Añadir código {language}",
+      "preformatted": "Añadir texto preformateado"
     }
   },
   "image": {

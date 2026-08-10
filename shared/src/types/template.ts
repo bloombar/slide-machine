@@ -32,11 +32,47 @@ export type LayoutSlot =
   'title' | 'body' | 'bullets' | 'image' | 'caption' | 'columns'
 
 /**
- * Media kind of a content slot. The client keeps a registry of one
- * editor component per kind, so this union is the extension point for
- * new editable media types (video, embeds, ...).
+ * What a content slot holds — a closed, system-provided menu (TMPL-9).
+ *
+ * Closed because each kind is something the system must know how to display,
+ * edit, fit, export and read aloud; an author picks from the menu rather than
+ * inventing one. Everything else about a slot — how many, what they are
+ * called, what they are for, how large, and where they sit — is the author's.
+ *
+ * The client keeps one editor component per kind, so this union is the
+ * extension point: adding a kind means describing it here and registering an
+ * editor for it.
  */
-export type SlotKind = 'text' | 'bullets' | 'image'
+export type SlotKind =
+  | 'text'
+  | 'bullets'
+  | 'image'
+  /** A program listing, set in a monospaced face and highlighted for its
+   * declared language. Its `options.language` names that language. */
+  | 'code'
+  /** A mathematical expression written in LaTeX and shown as typeset
+   * notation, never as its source. */
+  | 'math'
+  /** Text whose exact spacing and line breaks carry meaning. */
+  | 'preformatted'
+  /** Rows and columns, with an optional header row. */
+  | 'table'
+
+/** Every kind an author may choose, in the order the menu offers them. */
+export const SLOT_KINDS: SlotKind[] = [
+  'text',
+  'bullets',
+  'image',
+  'code',
+  'math',
+  'preformatted',
+  'table',
+]
+
+/** The kinds that hold prose or notation rather than a picture or a grid, and
+ * so are bounded by a character budget. */
+export const isTextualKind = (kind: SlotKind): boolean =>
+  kind !== 'image' && kind !== 'table'
 
 /** How a content slot is displayed and edited. */
 export interface SlotDescriptor {

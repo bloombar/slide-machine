@@ -3,7 +3,7 @@
  * (SPEC GEN-1/GEN-6/GEN-7/GEN-8 / TECH-8). Gemini is the pilot adapter.
  * Interface is minimal and expected to evolve with the first adapter.
  */
-import type { LayoutDescriptor } from '../types/template'
+import type { SlotKind, LayoutDescriptor } from '../types/template'
 import type {
   VoiceCommand,
   VoiceCommandDescriptor,
@@ -190,6 +190,15 @@ export interface SlideContent {
   body?: string
   bullets?: string[]
   caption?: string
+  /**
+   * The prose in boxes a template's author named, beyond the conventional
+   * four (TMPL-9) — so a slide whose substance sits in a box called
+   * "takeaway" is not narrated as if it were blank.
+   *
+   * Only what can be said: a formula's LaTeX and a program listing are not
+   * language and never appear here (EDIT-7, `lib/narratable.ts`).
+   */
+  spoken?: string[]
 }
 
 /**
@@ -264,7 +273,9 @@ export interface SlideNarrateResult {
  */
 export interface RefitSlotDescriptor {
   name: string
-  kind: 'text' | 'bullets' | 'image'
+  /** What the box holds (TMPL-9). The model is told the kind so it writes
+   * content of the right sort for it — a code box gets a listing, not prose. */
+  kind: SlotKind
   /** The author's name for the box ("Key points"), which often says what it
    * is for better than the slot name does. */
   label: string

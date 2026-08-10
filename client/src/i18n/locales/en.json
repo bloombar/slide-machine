@@ -301,7 +301,11 @@
     "slotKinds": {
       "text": "Text",
       "bullets": "Bullet points",
-      "image": "Image"
+      "image": "Image",
+      "code": "Code",
+      "math": "Math",
+      "preformatted": "Preformatted text",
+      "table": "Table"
     },
     "newLayoutAdd": "Add layout",
     "layoutSettings": "Layout",
@@ -448,7 +452,12 @@
     "exportHeading": "Export this design",
     "exportHint": "Take it out as a file, or into your Google Drive as a presentation whose layouts are its layouts.",
     "exportAsYaml": "As YAML",
-    "exportToSlides": "As Google Slides"
+    "exportToSlides": "As Google Slides",
+    "slotLanguage": {
+      "label": "Language",
+      "hint": "Which language to highlight this listing as.",
+      "auto": "None"
+    }
   },
   "layout": {
     "change": "Change slide layout",
@@ -707,6 +716,29 @@
       "editTranscript": "Edit spoken transcript",
       "changeLayout": "Change layout",
       "delete": "Delete slide"
+    },
+    "math": {
+      "invalid": "— check the LaTeX ({reason})"
+    },
+    "guidance": {
+      "words": "up to {count} words",
+      "chars": "up to {count} characters",
+      "items": "up to {count} points"
+    },
+    "table": {
+      "empty": "Empty cell",
+      "header": "Column {n} heading",
+      "cell": "Row {row}, column {column}",
+      "addRow": "Add row",
+      "addColumn": "Add column",
+      "removeRow": "Remove row {n}",
+      "removeColumn": "Remove column {n}"
+    },
+    "addKind": {
+      "math": "Add a formula",
+      "code": "Add code",
+      "codeIn": "Add {language} code",
+      "preformatted": "Add preformatted text"
     }
   },
   "image": {

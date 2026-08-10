@@ -18,12 +18,23 @@ import type {
   SlotKind,
   SlotSpec,
 } from '@slide-machine/shared'
-import { MAX_SLOT_DESCRIPTION, TEXT_STYLE_ROLES } from '@slide-machine/shared'
+import {
+  MAX_SLOT_DESCRIPTION,
+  SLOT_KINDS as SHARED_SLOT_KINDS,
+  TEXT_STYLE_ROLES,
+} from '@slide-machine/shared'
 import { FONT_STACKS } from '../slide/fonts'
+import { HIGHLIGHTED_LANGUAGES } from '../slide/code-languages'
 import type { ThemeTextStyles } from '../slide/theme'
 
-/** The kinds of content a box can hold. */
-const SLOT_KINDS: SlotKind[] = ['text', 'bullets', 'image']
+/** The kinds of content a box can hold — the closed menu TMPL-9 defines,
+ * offered in the order it lists them. */
+const SLOT_KINDS: SlotKind[] = SHARED_SLOT_KINDS
+
+/** The languages a code box can be highlighted as — the set the renderer
+ * carries a grammar for (components/slide/Code.tsx). Offering one it cannot
+ * highlight would be a promise the slide does not keep. */
+const CODE_LANGUAGES = HIGHLIGHTED_LANGUAGES
 
 /** The ways a box can arrange other boxes instead of holding content. */
 const CONTENT_LAYOUTS = ['column', 'row', 'grid'] as const
@@ -597,6 +608,35 @@ export default function SlotInspector({
                 onChange={e => onSpec({ maxWords: toNumber(e.target.value) })}
                 className={inputClass}
               />
+            </Field>
+          )}
+          {spec?.kind === 'code' && (
+            /* Which language the listing is highlighted as. Set on the
+               template rather than per slide, so a Python box is Python on
+               every slide built from the design (TMPL-9). */
+            <Field label={t('template.slotLanguage.label')}>
+              <select
+                value={
+                  typeof spec.options?.language === 'string'
+                    ? spec.options.language
+                    : ''
+                }
+                onChange={e =>
+                  onSpec({
+                    options: e.target.value
+                      ? { ...spec.options, language: e.target.value }
+                      : undefined,
+                  })
+                }
+                className={inputClass}
+              >
+                <option value="">{t('template.slotLanguage.auto')}</option>
+                {CODE_LANGUAGES.map(l => (
+                  <option key={l} value={l}>
+                    {l}
+                  </option>
+                ))}
+              </select>
             </Field>
           )}
           {spec?.kind === 'bullets' && (

@@ -4,7 +4,7 @@
  * produces a patch keyed by its slide field.
  */
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import type { LayoutSlot, Slide } from '@slide-machine/shared'
 import SlideSlot from './slots'
 import { searchSlideImages } from '../../api/slides'
@@ -13,6 +13,24 @@ import type { ThemeColors } from './theme'
 // The replace dialog searches on open; keep it offline in slot tests.
 vi.mock('../../api/slides', () => ({
   searchSlideImages: vi.fn(() => Promise.resolve([])),
+}))
+
+// The typesetter and the sixteen grammars are large modules, and this is the
+// biggest test file in the suite — loading them here makes every other test in
+// it wait. They are exercised for real in MathTypeset.test.tsx and
+// CodeHighlighted.test.tsx; what matters here is that the right editor mounts
+// and saves the right shape.
+vi.mock('./MathTypeset', () => ({
+  default: ({ tex }: { tex: string }) => (
+    <span data-testid="typeset">{tex}</span>
+  ),
+}))
+vi.mock('./CodeHighlighted', () => ({
+  default: ({ source, language }: { source: string; language?: string }) => (
+    <pre data-language={language}>
+      <code>{source}</code>
+    </pre>
+  ),
 }))
 const mockedSearch = vi.mocked(searchSlideImages)
 
@@ -564,6 +582,502 @@ describe('a slot the template author defined', () => {
     ).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: 'Replace image' }),
+    ).toBeInTheDocument()
+  })
+})
+
+/**
+ * The specialized content kinds (TMPL-9), edited in place (EDIT-7).
+ *
+ * Each is the same bargain as slide text: the slide shows the rendered result,
+ * clicking reveals the source. What differs is what "rendered" means, and what
+ * must survive the round trip through the editor untouched.
+ */
+describe('a code slot (EDIT-7)', () => {
+  const spec = {
+    name: 'example',
+    kind: 'code' as const,
+    label: 'Worked example',
+    options: { language: 'python' },
+  }
+  const withCode = (source: string) =>
+    slide({ slots: { example: { kind: 'code', source } } })
+
+  it('draws it as a listing in the language the template declared', async () => {
+    const { container } = render(
+      <SlideSlot
+        slot="example"
+        spec={spec}
+        slide={withCode('def f():\n    return 1')}
+        colors={colors}
+      />,
+    )
+    // The language comes from the design, so every slide built from it
+    // agrees without anyone restating it per slide
+    await waitFor(() =>
+      expect(container.querySelector('pre')).toHaveAttribute(
+        'data-language',
+        'python',
+      ),
+    )
+  })
+
+  it('keeps indentation exactly as it was typed', () => {
+    const source = 'def f():\n    if x:\n        return 1'
+    render(
+      <SlideSlot
+        slot="example"
+        spec={spec}
+        slide={withCode(source)}
+        colors={colors}
+      />,
+    )
+    // A listing whose leading spaces were normalized is a different program
+    expect(screen.getByRole('code').textContent).toBe(source)
+  })
+
+  it('edits as plain source, with spelling and autocorrect off', () => {
+    render(
+      <SlideSlot
+        slot="example"
+        spec={spec}
+        slide={withCode('print(1)')}
+        colors={colors}
+        onEdit={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByTitle('Click to edit Worked example'))
+    const field = screen.getByLabelText('Worked example')
+    // Autocorrect turns a quote into a curly quote and the program stops
+    // running; a spelling underline calls a variable name a mistake
+    expect(field).toHaveAttribute('spellcheck', 'false')
+    expect(field).toHaveAttribute('autocorrect', 'off')
+  })
+
+  it('saves the source under the language the template declared', () => {
+    vi.useFakeTimers()
+    const onEdit = vi.fn()
+    render(
+      <SlideSlot
+        slot="example"
+        spec={spec}
+        slide={withCode('print(1)')}
+        colors={colors}
+        onEdit={onEdit}
+      />,
+    )
+    fireEvent.click(screen.getByTitle('Click to edit Worked example'))
+    fireEvent.change(screen.getByLabelText('Worked example'), {
+      target: { value: 'print(2)' },
+    })
+    vi.runAllTimers()
+    expect(onEdit).toHaveBeenCalledWith({
+      slots: {
+        example: { kind: 'code', source: 'print(2)', language: 'python' },
+      },
+    })
+    vi.useRealTimers()
+  })
+})
+
+describe('an empty specialized box (EDIT-7)', () => {
+  const emptySlide = (kind: 'code' | 'math' | 'preformatted') =>
+    slide({
+      slots: {
+        box:
+          kind === 'code'
+            ? { kind: 'code', source: '' }
+            : kind === 'math'
+              ? { kind: 'math', tex: '' }
+              : { kind: 'preformatted', value: '' },
+      },
+    })
+
+  it.each([
+    ['code' as const, 'Add code'],
+    ['math' as const, 'Add a formula'],
+    ['preformatted' as const, 'Add preformatted text'],
+  ])(
+    'names what belongs in it, not what the box is called (%s)',
+    (kind, prompt) => {
+      render(
+        <SlideSlot
+          slot="box"
+          // Still labelled from the conventional slot it started as: what the
+          // author needs to know is what it holds NOW
+          spec={{ name: 'box', kind, label: 'Slide body' }}
+          slide={emptySlide(kind)}
+          colors={colors}
+          onEdit={vi.fn()}
+        />,
+      )
+      expect(screen.getByText(prompt)).toBeInTheDocument()
+    },
+  )
+
+  it('names the language a code box declares', () => {
+    render(
+      <SlideSlot
+        slot="box"
+        spec={{
+          name: 'box',
+          kind: 'code',
+          label: 'Slide body',
+          options: { language: 'python' },
+        }}
+        slide={emptySlide('code')}
+        colors={colors}
+        onEdit={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('Add python code')).toBeInTheDocument()
+  })
+
+  it('shows an audience nothing at all', () => {
+    const { container } = render(
+      <SlideSlot
+        slot="box"
+        spec={{ name: 'box', kind: 'math', label: 'Equation' }}
+        slide={emptySlide('math')}
+        colors={colors}
+      />,
+    )
+    // The prompt is for whoever fills the box, not for the room
+    expect(container.textContent).not.toContain('Add a formula')
+  })
+})
+
+describe('a math slot (EDIT-7)', () => {
+  const spec = { name: 'eq', kind: 'math' as const, label: 'Equation' }
+  const withTex = (tex: string) =>
+    slide({ slots: { eq: { kind: 'math', tex } } })
+
+  it('hands the formula to the typesetter rather than printing it', async () => {
+    render(
+      <SlideSlot
+        slot="eq"
+        spec={spec}
+        slide={withTex('E = mc^2')}
+        colors={colors}
+      />,
+    )
+    // An author writes what they know; the audience sees what they mean
+    expect(await screen.findByTestId('typeset')).toHaveTextContent('E = mc^2')
+  })
+
+  it('reveals the LaTeX when you click to edit it', () => {
+    render(
+      <SlideSlot
+        slot="eq"
+        spec={spec}
+        slide={withTex('E = mc^2')}
+        colors={colors}
+        onEdit={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByTitle('Click to edit Equation'))
+    expect(screen.getByLabelText('Equation')).toHaveValue('E = mc^2')
+  })
+})
+
+describe('a preformatted slot (EDIT-7)', () => {
+  const spec = {
+    name: 'layout',
+    kind: 'preformatted' as const,
+    label: 'Diagram',
+  }
+
+  it('keeps the author’s exact spacing and line breaks', () => {
+    const value = 'a   b\n  c'
+    const { container } = render(
+      <SlideSlot
+        slot="layout"
+        spec={spec}
+        slide={slide({ slots: { layout: { kind: 'preformatted', value } } })}
+        colors={colors}
+      />,
+    )
+    // Read off the element rather than queried by text: the query normalizes
+    // runs of spaces, which is the very thing this slot exists to keep
+    expect(container.querySelector('pre')!.textContent).toBe(value)
+  })
+})
+
+describe('a table slot (EDIT-7)', () => {
+  const spec = { name: 'data', kind: 'table' as const, label: 'Data' }
+  const table = slide({
+    slots: {
+      data: {
+        kind: 'table',
+        header: ['Year', 'Rainfall'],
+        rows: [['2024', '812mm']],
+      },
+    },
+  })
+
+  it('shows a real table, with its header announced as one', () => {
+    render(<SlideSlot slot="data" spec={spec} slide={table} colors={colors} />)
+    // A screen reader announces the column a cell belongs to only if the
+    // header is a header
+    expect(screen.getByRole('columnheader', { name: 'Year' })).toBeVisible()
+    expect(screen.getByRole('cell', { name: '812mm' })).toBeVisible()
+  })
+
+  it('edits one cell at a time', () => {
+    vi.useFakeTimers()
+    const onEdit = vi.fn()
+    render(
+      <SlideSlot
+        slot="data"
+        spec={spec}
+        slide={table}
+        colors={colors}
+        onEdit={onEdit}
+      />,
+    )
+    // Not one field holding a block of delimited text: an author fixing one
+    // number should not have to keep the delimiters balanced
+    fireEvent.click(screen.getByTitle('Click to edit Row 1, column 2'))
+    fireEvent.change(screen.getByLabelText('Row 1, column 2'), {
+      target: { value: '901mm' },
+    })
+    vi.runAllTimers()
+    expect(onEdit).toHaveBeenCalledWith({
+      slots: {
+        data: {
+          kind: 'table',
+          header: ['Year', 'Rainfall'],
+          rows: [['2024', '901mm']],
+        },
+      },
+    })
+    vi.useRealTimers()
+  })
+
+  it('makes the whole cell the click target, not just its words', () => {
+    render(
+      <SlideSlot
+        slot="data"
+        spec={spec}
+        slide={table}
+        colors={colors}
+        onEdit={vi.fn()}
+      />,
+    )
+    // Aiming at the four characters already in a cell is not how anyone
+    // edits a table
+    expect(screen.getByTitle('Click to edit Row 1, column 1')).toHaveClass(
+      'h-full',
+      'w-full',
+    )
+  })
+
+  it('shows an empty cell as somewhere to type', () => {
+    render(
+      <SlideSlot
+        slot="data"
+        spec={spec}
+        slide={slide({
+          slots: { data: { kind: 'table', header: ['Year'], rows: [['']] } },
+        })}
+        colors={colors}
+        onEdit={vi.fn()}
+      />,
+    )
+    // The blank-slot placeholder text prose uses is invisible by design; a
+    // table's empty cells are exactly where an author is about to type
+    expect(
+      screen.getByTitle('Click to edit Row 1, column 1'),
+    ).toHaveTextContent('—')
+  })
+
+  it('drops a row when asked', () => {
+    const onEdit = vi.fn()
+    render(
+      <SlideSlot
+        slot="data"
+        spec={spec}
+        slide={slide({
+          slots: {
+            data: {
+              kind: 'table',
+              header: ['Year', 'Rainfall'],
+              rows: [
+                ['2024', '812mm'],
+                ['2025', '640mm'],
+              ],
+            },
+          },
+        })}
+        colors={colors}
+        onEdit={onEdit}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Remove row 1' }))
+    expect(onEdit).toHaveBeenCalledWith({
+      slots: {
+        data: {
+          kind: 'table',
+          header: ['Year', 'Rainfall'],
+          rows: [['2025', '640mm']],
+        },
+      },
+    })
+  })
+
+  it('drops a column, header and all', () => {
+    const onEdit = vi.fn()
+    render(
+      <SlideSlot
+        slot="data"
+        spec={spec}
+        slide={table}
+        colors={colors}
+        onEdit={onEdit}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Remove column 1' }))
+    expect(onEdit).toHaveBeenCalledWith({
+      slots: {
+        data: { kind: 'table', header: ['Rainfall'], rows: [['812mm']] },
+      },
+    })
+  })
+
+  it('will not empty itself of rows or columns', () => {
+    render(
+      <SlideSlot
+        slot="data"
+        spec={spec}
+        slide={slide({
+          slots: { data: { kind: 'table', rows: [['only']] } },
+        })}
+        colors={colors}
+        onEdit={vi.fn()}
+      />,
+    )
+    // A table with no rows or no columns is not a table; an author who wants
+    // none of it empties the cells or drops the slide
+    expect(screen.queryByRole('button', { name: /Remove row/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Remove column/ })).toBeNull()
+  })
+
+  it('grows by a row when asked', () => {
+    const onEdit = vi.fn()
+    render(
+      <SlideSlot
+        slot="data"
+        spec={spec}
+        slide={table}
+        colors={colors}
+        onEdit={onEdit}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Add row' }))
+    expect(onEdit).toHaveBeenCalledWith({
+      slots: {
+        data: {
+          kind: 'table',
+          header: ['Year', 'Rainfall'],
+          rows: [
+            ['2024', '812mm'],
+            ['', ''],
+          ],
+        },
+      },
+    })
+  })
+})
+
+describe('what the template meant a box for (EDIT-7/TMPL-10)', () => {
+  it('shows the instruction and limits to whoever is filling it', () => {
+    render(
+      <SlideSlot
+        slot="example"
+        spec={{
+          name: 'example',
+          kind: 'code',
+          label: 'Worked example',
+          description: 'A runnable Python snippet, no more than eight lines.',
+          maxWords: 40,
+        }}
+        slide={slide({ slots: { example: { kind: 'code', source: 'x = 1' } } })}
+        colors={colors}
+        onEdit={vi.fn()}
+      />,
+    )
+    // Not on the slide itself: an audience does not want a line of
+    // instructions under every box
+    expect(screen.queryByText(/A runnable Python snippet/)).toBeNull()
+
+    // An instructor typing into the box should see what it was for, rather
+    // than having to guess from its name
+    fireEvent.click(screen.getByTitle('Click to edit Worked example'))
+    expect(screen.getByText(/A runnable Python snippet/)).toBeInTheDocument()
+    expect(screen.getByText(/up to 40 words/)).toBeInTheDocument()
+  })
+
+  it('shows it on an ordinary text box too', () => {
+    render(
+      <SlideSlot
+        slot="takeaway"
+        spec={{
+          name: 'takeaway',
+          kind: 'text',
+          label: 'Takeaway',
+          description: 'One sentence a student should leave with.',
+          maxWords: 12,
+        }}
+        slide={slide({
+          slots: { takeaway: { kind: 'text', value: 'Rain is free.' } },
+        })}
+        colors={colors}
+        onEdit={vi.fn()}
+      />,
+    )
+    // The requirement is about filling a slot by hand, not about which kind
+    // it happens to be
+    fireEvent.click(screen.getByTitle('Click to edit Takeaway'))
+    expect(screen.getByText(/One sentence a student/)).toBeInTheDocument()
+    expect(screen.getByText(/up to 12 words/)).toBeInTheDocument()
+  })
+
+  it('says nothing when the template said nothing', () => {
+    render(
+      <SlideSlot
+        slot="note"
+        spec={{ name: 'note', kind: 'text', label: 'Note' }}
+        slide={slide({ slots: { note: { kind: 'text', value: 'Hi' } } })}
+        colors={colors}
+        onEdit={vi.fn()}
+      />,
+    )
+    expect(screen.queryByText(/up to/)).toBeNull()
+  })
+
+  it('shows it where a picture is actually chosen', async () => {
+    render(
+      <SlideSlot
+        slot="figure"
+        spec={{
+          name: 'figure',
+          kind: 'image',
+          label: 'Figure',
+          description: 'Only a photograph of the figure under discussion.',
+        }}
+        slide={slide({ slots: { figure: { kind: 'image' } } })}
+        colors={colors}
+        onEdit={vi.fn()}
+        onReplaceImage={vi.fn()}
+        onRemoveImage={vi.fn()}
+        onPickImageCandidate={vi.fn()}
+      />,
+    )
+    // An image box has no text field to hang a hint on, and choosing a
+    // picture IS filling the slot by hand
+    fireEvent.click(screen.getByRole('button', { name: 'Add image' }))
+    expect(
+      await screen.findByText(/Only a photograph of the figure/),
     ).toBeInTheDocument()
   })
 })

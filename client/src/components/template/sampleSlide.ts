@@ -41,6 +41,27 @@ const grown = (text: string, chars: number): string => {
   return out.slice(0, chars).trimEnd()
 }
 
+/** The language a code box declares, when it declares one. */
+const languageOf = (spec: { options?: Record<string, unknown> }) =>
+  typeof spec.options?.language === 'string' ? spec.options.language : undefined
+
+/** Short, real listings so a preview shows what the box will look like at the
+ * size it will be. Keyed by language, with one that reads as code in any. */
+const SAMPLE_CODE: Record<string, string> = {
+  python: 'def collected(area, rain):\n    return area * rain * 0.8',
+  javascript: 'const collected = (area, rain) => area * rain * 0.8',
+  typescript:
+    'const collected = (area: number, rain: number) => area * rain * 0.8',
+  sql: 'SELECT year, SUM(rainfall)\n  FROM readings\n GROUP BY year;',
+  default: 'collected = area * rain * 0.8',
+}
+
+/** A formula an audience reads at a glance, rather than one that fills the box. */
+const SAMPLE_TEX = 'V = A \\times r \\times C'
+
+const SAMPLE_PREFORMATTED =
+  'roof  ->  gutter  ->  filter\n            |\n          tank'
+
 /**
  * Builds the slide. `images` are cycled across the layout's picture boxes, so
  * a layout with four of them shows four different pictures rather than the
@@ -82,6 +103,27 @@ export const sampleSlide = (
     } else if (spec.kind === 'image') {
       const ref = images[picture++ % Math.max(1, images.length)]
       slots[spec.name] = { kind: 'image', ref }
+    } else if (spec.kind === 'code') {
+      // A box that will hold a listing has to preview as one, or an author
+      // choosing the kind sees a line of prose and cannot tell it took.
+      slots[spec.name] = {
+        kind: 'code',
+        source: SAMPLE_CODE[languageOf(spec) ?? ''] ?? SAMPLE_CODE.default!,
+        ...(languageOf(spec) ? { language: languageOf(spec)! } : {}),
+      }
+    } else if (spec.kind === 'math') {
+      slots[spec.name] = { kind: 'math', tex: SAMPLE_TEX }
+    } else if (spec.kind === 'table') {
+      slots[spec.name] = {
+        kind: 'table',
+        header: ['Year', 'Rainfall'],
+        rows: [
+          ['2023', '742 mm'],
+          ['2024', '812 mm'],
+        ],
+      }
+    } else if (spec.kind === 'preformatted') {
+      slots[spec.name] = { kind: 'preformatted', value: SAMPLE_PREFORMATTED }
     } else {
       const value = named[spec.name] ?? spec.label
       slots[spec.name] = {

@@ -540,3 +540,84 @@ test('a box carries the author’s instruction to the AI (TMPL-10)', async ({
     page.getByLabel('The slide should always fill this'),
   ).toBeChecked()
 })
+
+test('a box can hold a formula, and it is edited as LaTeX (EDIT-7)', async ({
+  page,
+}) => {
+  // The bargain EDIT-7 strikes for every specialized kind: the slide shows
+  // the rendered result, clicking reveals the source. Here end to end — a
+  // template declares the box, and a lecture's slide fills it.
+  const own = `Maths ${stamp}`
+  await page.goto('/login')
+  await page.getByLabel('Email').fill(user.email)
+  await page.getByLabel('Password').fill(password)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page).toHaveURL(/\/app$/)
+
+  await openProjectSettings(page, projectName)
+  await page.getByRole('tab', { name: 'Design' }).click()
+  await page
+    .getByRole('button', { name: /^Duplicate / })
+    .first()
+    .click()
+  await page.getByLabel('Template name').fill(own)
+
+  // An author picks the kind from the menu the system provides (TMPL-9)
+  await page.getByRole('tab', { name: /Content/ }).click()
+  const boxes = () => page.getByRole('list').last()
+  await boxes().getByText('Slide body').click()
+  await page.getByLabel('What is it').selectOption('math')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByTestId('template-saved')).toHaveText('Saved')
+
+  // Reopening proves the kind is the design's, not this session's
+  const permalink = page.url()
+  await page.goto('/app')
+  await page.goto(permalink)
+  await page.getByRole('tab', { name: /Content/ }).click()
+  await boxes().getByText('Slide body').click()
+  await expect(page.getByLabel('What is it')).toHaveValue('math')
+
+  // On the canvas the box is a formula: typeset, not its source
+  const canvas = page.getByTestId('template-canvas')
+  await expect(canvas.locator('.katex').first()).toBeVisible()
+})
+
+test('a code box keeps its indentation through an edit (EDIT-7)', async ({
+  page,
+}) => {
+  const own = `Code ${stamp}`
+  await page.goto('/login')
+  await page.getByLabel('Email').fill(user.email)
+  await page.getByLabel('Password').fill(password)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page).toHaveURL(/\/app$/)
+
+  await openProjectSettings(page, projectName)
+  await page.getByRole('tab', { name: 'Design' }).click()
+  await page
+    .getByRole('button', { name: /^Duplicate / })
+    .first()
+    .click()
+  await page.getByLabel('Template name').fill(own)
+
+  await page.getByRole('tab', { name: /Content/ }).click()
+  const boxes = () => page.getByRole('list').last()
+  await boxes().getByText('Slide body').click()
+  await page.getByLabel('What is it').selectOption('code')
+  // The language is the template's, so every slide built from it agrees
+  await page.getByLabel('Language').selectOption('python')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByTestId('template-saved')).toHaveText('Saved')
+
+  const permalink = page.url()
+  await page.goto('/app')
+  await page.goto(permalink)
+  await page.getByRole('tab', { name: /Content/ }).click()
+  await boxes().getByText('Slide body').click()
+  await expect(page.getByLabel('Language')).toHaveValue('python')
+
+  // The listing is set as source: monospaced, unwrapped, and highlighted
+  const canvas = page.getByTestId('template-canvas')
+  await expect(canvas.locator('pre[data-language="python"]')).toBeVisible()
+})
