@@ -80,8 +80,12 @@ const outputShape = (
 const KIND_SHAPES: Record<string, string> = {
   text: 'text — a string of prose',
   bullets: 'bullets — an array of strings, one per point',
-  code: 'code — a string of source, real indentation and newlines, no markdown fence',
-  math: 'math — a string of LaTeX, the expression only, no $ delimiters',
+  code:
+    'code — a runnable program listing and nothing else: real indentation, ' +
+    'real newlines, no markdown fence, and NEVER a sentence describing code',
+  math:
+    'math — a LaTeX expression and nothing else, no $ delimiters, and NEVER ' +
+    'a sentence describing the formula',
   preformatted:
     'preformatted — a string whose exact spacing and line breaks matter',
   table:
@@ -100,9 +104,11 @@ const kindLegend = (
     .map(kind => KIND_SHAPES[kind])
     .filter((line): line is string => Boolean(line))
   return lines.length
-    ? `\nEach slot's value takes the shape its kind calls for:\n${lines
-        .map(line => `- ${line}`)
-        .join('\n')}`
+    ? `\nEach slot's value takes the shape its KIND calls for. The kind decides` +
+        ` what goes in a box, not its name or label — a box called "body" whose` +
+        ` kind is code holds a listing, not a paragraph about one:\n${lines
+          .map(line => `- ${line}`)
+          .join('\n')}`
     : ''
 }
 
