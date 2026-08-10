@@ -1218,7 +1218,7 @@
     },
     "cta": {
       "upgrade": "¿Necesitas más? <planLink>Mejorar el plan</planLink> amplía todos los límites.",
-      "contact": "Tienes nuestro plan más amplio: escríbenos y buscamos una solución."
+      "contact": "Tienes nuestro plan más amplio: <contactLink>escríbenos</contactLink> y buscamos una solución."
     },
     "badge": {
       "summary": "Plan {plan} {status}",

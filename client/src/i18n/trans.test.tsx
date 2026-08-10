@@ -54,6 +54,13 @@ const CASES: Array<{
     },
     expects: 'marker',
   },
+  {
+    key: 'usage.cta.contact',
+    components: {
+      contactLink: <a href="/feedback?kind=other" data-testid="marker" />,
+    },
+    expects: 'marker',
+  },
 ]
 
 afterEach(cleanup)

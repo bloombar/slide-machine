@@ -7,12 +7,12 @@
  * stock, and retained audio does not disappear because a month rolled over.
  */
 import { useEffect, useState } from 'react'
-import { Trans, useTranslation } from 'react-i18next'
+import { useTranslation } from 'react-i18next'
 import type { UsageSummaryResponse } from '@slide-machine/shared'
 import { fetchUsage, setCapWarnings } from '../api/usage'
 import { useAuth } from '../auth/AuthContext'
 import { formatDate } from '../i18n/format'
-import { callToActionFor } from '../lib/usage'
+import UsageCallToAction from './UsageCallToAction'
 import UsageMeterGroups from './UsageMeterGroups'
 
 export default function UsagePanel() {
@@ -57,13 +57,9 @@ export default function UsagePanel() {
       <CapWarningToggle />
 
       <p className="text-xs text-slate-500">
-        {/* The message carries a <planLink> slot for the footer badge, whose
-            popover has no other way here. This panel *is* the Plan tab, so the
-            slot renders as plain text rather than a link back to itself. */}
-        <Trans
-          i18nKey={`usage.cta.${callToActionFor(usage.tier)}`}
-          components={{ planLink: <span /> }}
-        />
+        {/* No plan link: this panel *is* the Plan tab, so it would point at
+            itself. */}
+        <UsageCallToAction tier={usage.tier} />
       </p>
     </section>
   )

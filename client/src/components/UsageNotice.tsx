@@ -27,14 +27,15 @@
  */
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { Trans, useTranslation } from 'react-i18next'
+import { useTranslation } from 'react-i18next'
 import { AlertTriangle, X } from 'lucide-react'
 import type {
   UsageMetricSummary,
   UsageSummaryResponse,
 } from '@slide-machine/shared'
 import { fetchUsage } from '../api/usage'
-import { approachingLimits, callToActionFor, isExhausted } from '../lib/usage'
+import { approachingLimits, isExhausted } from '../lib/usage'
+import UsageCallToAction from './UsageCallToAction'
 import UsageMeter from './UsageMeter'
 
 const STORAGE_PREFIX = 'sm:usage-notice-dismissed:'
@@ -131,15 +132,10 @@ export default function UsageNotice() {
       </div>
 
       <p className="mt-3 text-xs text-slate-600">
-        {/* The message carries a <planLink> slot for the footer badge, whose
-            popover has no other way to the Plan tab. Here it renders as plain
-            text: the notice already links there on the next line, and two
-            links to one destination in one sentence is a coin toss for the
-            reader rather than a choice. */}
-        <Trans
-          i18nKey={`usage.cta.${callToActionFor(usage.tier)}`}
-          components={{ planLink: <span /> }}
-        />{' '}
+        {/* No plan link: the notice already links there on the next line, and
+            two links to one destination in one sentence is a coin toss for
+            the reader rather than a choice. */}
+        <UsageCallToAction tier={usage.tier} />{' '}
         {/* The Plan tab is where the full set of meters lives, next to the
             plan this notice is asking about changing. */}
         <Link

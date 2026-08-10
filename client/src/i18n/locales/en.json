@@ -1218,7 +1218,7 @@
     },
     "cta": {
       "upgrade": "Need more? <planLink>Upgrading</planLink> raises every limit.",
-      "contact": "You are on our largest plan — get in touch and we will work something out."
+      "contact": "You are on our largest plan — <contactLink>get in touch</contactLink> and we will work something out."
     },
     "badge": {
       "summary": "{plan} plan {status}",

@@ -16,10 +16,13 @@ import { mockFetchRoutes } from '../test/fetch-mock'
 const renderPage = ({
   authed = false,
   from,
+  kind,
   feedback = () => ({ status: 202, body: { sent: true } }),
 }: {
   authed?: boolean
   from?: string
+  /** `?kind=`, as a link from elsewhere in the app would supply it. */
+  kind?: string
   feedback?: () => { status: number; body?: unknown }
 } = {}) => {
   const mock = mockFetchRoutes({
@@ -38,7 +41,11 @@ const renderPage = ({
   render(
     <MemoryRouter
       initialEntries={[
-        { pathname: '/feedback', state: from ? { from } : null },
+        {
+          pathname: '/feedback',
+          search: kind ? `?kind=${kind}` : '',
+          state: from ? { from } : null,
+        },
       ]}
     >
       <AuthProvider>
@@ -93,6 +100,34 @@ describe('FeedbackPage', () => {
       subject: 'Slides stop advancing',
       message: 'It froze.',
     })
+  })
+
+  it('opens on the kind a link asked for', async () => {
+    // The usage prompts send a Max account here already set to "Something
+    // else", so it does not arrive on a bug-report form it did not want.
+    const { fetchMock } = renderPage({ kind: 'other' })
+    expect(screen.getByLabelText(/Something else/)).toBeChecked()
+
+    fillForm()
+    send()
+    await screen.findByRole('heading', { name: 'Thank you' })
+    expect(posted(fetchMock).kind).toBe('other')
+  })
+
+  it('ignores a kind it does not recognise', async () => {
+    // The value arrives from a URL anyone can edit, so an unknown one falls
+    // back to the default rather than leaving nothing selected.
+    renderPage({ kind: 'nonsense' })
+
+    expect(screen.getByLabelText(/Something is broken/)).toBeChecked()
+  })
+
+  it('leaves the chosen kind editable', async () => {
+    // Preselecting is a courtesy, not a decision made for the sender.
+    renderPage({ kind: 'other' })
+
+    fireEvent.click(screen.getByLabelText(/Something is missing/))
+    expect(screen.getByLabelText(/Something is missing/)).toBeChecked()
   })
 
   it('sends the kind the sender chose', async () => {

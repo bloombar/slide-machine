@@ -27,6 +27,7 @@ import { apiErrorMessage } from '../i18n/apiError'
 import { formatDate } from '../i18n/format'
 import { useAuth } from '../auth/AuthContext'
 import { callToActionFor } from '../lib/usage'
+import UsageCallToAction from './UsageCallToAction'
 
 /** How long to wait before re-reading the summary after checkout returns.
  * One retry, not a poll: the webhook is normally already applied, and a page
@@ -192,7 +193,9 @@ export default function BillingPanel() {
       {/* Max has no larger plan to move to, so it is invited to get in touch
           rather than shown an upgrade that does not exist (BILL-5). */}
       {callToActionFor(summary.tier) === 'contact' && (
-        <p className="text-xs text-slate-500">{t('usage.cta.contact')}</p>
+        <p className="text-xs text-slate-500">
+          <UsageCallToAction tier={summary.tier} />
+        </p>
       )}
     </section>
   )

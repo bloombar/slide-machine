@@ -1218,7 +1218,7 @@
     },
     "cta": {
       "upgrade": "Besoin de plus ? <planLink>Un forfait supérieur</planLink> relève toutes les limites.",
-      "contact": "Vous avez notre forfait le plus large — écrivez-nous et nous trouverons une solution."
+      "contact": "Vous avez notre forfait le plus large — <contactLink>écrivez-nous</contactLink> et nous trouverons une solution."
     },
     "badge": {
       "summary": "Forfait {plan} {status}",

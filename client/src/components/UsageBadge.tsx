@@ -12,13 +12,13 @@
  * lecture must never see the instructor's billing state (BILL-4).
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router'
-import { Trans, useTranslation } from 'react-i18next'
+import { useTranslation } from 'react-i18next'
 import type { UsageSummaryResponse } from '@slide-machine/shared'
 import { fetchUsage } from '../api/usage'
 import { useAuth } from '../auth/AuthContext'
 import { formatDate } from '../i18n/format'
-import { approachingLimits, callToActionFor, isExhausted } from '../lib/usage'
+import { approachingLimits, isExhausted } from '../lib/usage'
+import UsageCallToAction from './UsageCallToAction'
 import UsageMeterGroups from './UsageMeterGroups'
 
 /** Overall standing, worst-metric-wins. */
@@ -126,21 +126,13 @@ export default function UsageBadge() {
           </p>
           <UsageMeterGroups metrics={usage.metrics} compact />
           <p className="mt-3 border-t border-slate-100 pt-2 text-xs text-slate-500">
-            {/* Trans, not t: the upgrade wording is a link mid-sentence, and
-                which words carry it is the translator's call. The `contact`
-                variant has no tag and renders as plain text through the same
-                call. */}
-            <Trans
-              i18nKey={`usage.cta.${callToActionFor(usage.tier)}`}
-              components={{
-                planLink: (
-                  <Link
-                    to="/app/settings?tab=plan"
-                    onClick={() => setOpen(false)}
-                    className="font-medium text-indigo-600 hover:underline"
-                  />
-                ),
-              }}
+            {/* The popover is the one usage surface with no other way to the
+                plan, so its wording carries the link. Following either link
+                closes it rather than leaving it over the page it lands on. */}
+            <UsageCallToAction
+              tier={usage.tier}
+              linkToPlan
+              onFollow={() => setOpen(false)}
             />
           </p>
         </div>
