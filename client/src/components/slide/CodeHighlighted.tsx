@@ -74,6 +74,32 @@ interface Props {
   language?: string
 }
 
+/**
+ * The type size a listing is set at, so its longest line fits the box.
+ *
+ * A listing must never be reflowed — its line breaks are the author's, and
+ * wrapping one changes the program. But a slide that clips its code at both
+ * edges shows nobody anything, so what gives instead is the type size, down to
+ * a floor below which it would not be readable anyway.
+ *
+ * Measured in `cqi`, a percent of the slide's width, so a monospaced line of
+ * N characters occupies about `N × size × 0.6` of it.
+ */
+const CHAR_WIDTH = 0.6
+const MAX_SIZE = 2
+const MIN_SIZE = 0.9
+/** The share of the box a listing may fill before it has to shrink. */
+const USABLE = 92
+
+const fitSize = (source: string): number => {
+  const longest = source
+    .split('\n')
+    .reduce((n, line) => Math.max(n, line.length), 0)
+  if (!longest) return MAX_SIZE
+  const fits = USABLE / (longest * CHAR_WIDTH)
+  return Math.max(MIN_SIZE, Math.min(MAX_SIZE, fits))
+}
+
 export default function SlideCode({ source, language }: Props) {
   const resolved = resolveLanguage(language)
   const html = useMemo(() => {
@@ -91,7 +117,8 @@ export default function SlideCode({ source, language }: Props) {
     <pre
       // `whitespace-pre` and no wrapping: the author's indentation and line
       // breaks are the content, not a rendering choice.
-      className="hljs overflow-auto rounded-[0.8cqi] p-[1.5cqi] text-start font-mono text-[2cqi] leading-[1.5] whitespace-pre"
+      className="hljs overflow-hidden rounded-[0.8cqi] p-[1.5cqi] text-start font-mono leading-[1.5] whitespace-pre"
+      style={{ fontSize: `${fitSize(source)}cqi` }}
       data-language={resolved ?? language ?? undefined}
     >
       {html === undefined ? (

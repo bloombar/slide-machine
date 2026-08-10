@@ -223,3 +223,219 @@ describe('helpers', () => {
     )
   })
 })
+
+/**
+ * Limits on the boxes a template's author named (GEN-11).
+ *
+ * "Fitting respects the kind" is the whole of it: prose may be trimmed at a
+ * word boundary, because a shortened sentence is still a sentence. A program
+ * listing or a formula may not, because a half expression does not parse and
+ * a listing cut mid-line no longer runs. A half-formula is worse than none.
+ */
+describe('limits on an authored box', () => {
+  const descriptors = (
+    slots: LayoutDescriptor['slots'],
+  ): LayoutDescriptor[] => [
+    { type: 'lab', label: 'Lab', purpose: 'a worked example', slots },
+  ]
+
+  const result = (declared: SlideGenerationResult['declared']) =>
+    ({
+      action: 'new',
+      layoutType: 'lab',
+      slots: {},
+      declared,
+    }) as SlideGenerationResult
+
+  it('trims prose at a word boundary', () => {
+    const fitted = clampToBudget(
+      result({ note: { kind: 'text', value: 'one two three four five' } }),
+      descriptors([{ name: 'note', kind: 'text', label: 'Note', maxWords: 3 }]),
+    )
+    expect(fitted.declared?.note).toEqual({
+      kind: 'text',
+      value: 'one two three',
+    })
+  })
+
+  it('omits a listing that will not fit rather than cutting it', () => {
+    // A listing truncated mid-line no longer runs; the box is left empty and
+    // the lecturer can put a shorter one in it
+    const fitted = clampToBudget(
+      result({
+        sample: {
+          kind: 'code',
+          source: 'def f():\n    return 1',
+          language: 'python',
+        },
+      }),
+      descriptors([
+        { name: 'sample', kind: 'code', label: 'Sample', maxChars: 5 },
+      ]),
+    )
+    expect(fitted.declared?.sample).toBeUndefined()
+  })
+
+  it('keeps a listing that fits, exactly as written', () => {
+    const source = 'def f():\n    return 1'
+    const fitted = clampToBudget(
+      result({ sample: { kind: 'code', source, language: 'python' } }),
+      descriptors([
+        { name: 'sample', kind: 'code', label: 'Sample', maxChars: 200 },
+      ]),
+    )
+    expect(fitted.declared?.sample).toEqual({
+      kind: 'code',
+      source,
+      language: 'python',
+    })
+  })
+
+  it('omits a formula that will not fit rather than cutting it', () => {
+    const fitted = clampToBudget(
+      result({ eq: { kind: 'math', tex: '\\int_0^\\infty e^{-x^2} dx' } }),
+      descriptors([
+        { name: 'eq', kind: 'math', label: 'Equation', maxChars: 5 },
+      ]),
+    )
+    expect(fitted.declared?.eq).toBeUndefined()
+  })
+
+  it('bounds a table by rows, not by characters', () => {
+    // Cutting a row keeps a grid a grid; cutting a cell mid-word would leave
+    // a column of fragments
+    const fitted = clampToBudget(
+      result({
+        data: {
+          kind: 'table',
+          header: ['Year'],
+          rows: [['2023'], ['2024'], ['2025']],
+        },
+      }),
+      descriptors([
+        { name: 'data', kind: 'table', label: 'Data', maxItems: 2 },
+      ]),
+    )
+    expect(fitted.declared?.data).toMatchObject({
+      rows: [['2023'], ['2024']],
+    })
+  })
+
+  it('bounds a list by its own item ceiling', () => {
+    const fitted = clampToBudget(
+      result({
+        points: { kind: 'bullets', items: ['a', 'b', 'c', 'd'] },
+      }),
+      descriptors([
+        { name: 'points', kind: 'bullets', label: 'Points', maxItems: 2 },
+      ]),
+    )
+    expect(fitted.declared?.points).toEqual({
+      kind: 'bullets',
+      items: ['a', 'b'],
+    })
+  })
+
+  it('drops a box the layout it ended up on does not declare', () => {
+    // Image reconciliation can move a slide to a layout that can hold its
+    // picture (GEN-7), after the content was checked against the old one. A
+    // slide is never left holding something its template has no box for.
+    const fitted = clampToBudget(
+      {
+        action: 'new',
+        layoutType: 'two-column',
+        slots: {},
+        declared: { eq: { kind: 'math', tex: 'v = gt' } },
+      } as SlideGenerationResult,
+      [
+        ...descriptors([{ name: 'eq', kind: 'math', label: 'Equation' }]),
+        {
+          type: 'two-column',
+          label: 'Two column',
+          purpose: 'text beside a picture',
+          slots: [{ name: 'body', kind: 'text', label: 'Body' }],
+        },
+      ],
+    )
+    expect(fitted.declared).toBeUndefined()
+  })
+
+  it('leaves a box the template set no limit on alone', () => {
+    const long = 'x'.repeat(500)
+    const fitted = clampToBudget(
+      result({ note: { kind: 'text', value: long } }),
+      descriptors([{ name: 'note', kind: 'text', label: 'Note' }]),
+    )
+    expect(fitted.declared?.note).toEqual({ kind: 'text', value: long })
+  })
+})
+
+describe('an authored box that will not fit', () => {
+  const specs = [
+    { name: 'sample', kind: 'code' as const, label: 'Sample', maxChars: 10 },
+    { name: 'points', kind: 'bullets' as const, label: 'Points', maxItems: 2 },
+  ]
+  const descriptors: LayoutDescriptor[] = [
+    { type: 'lab', label: 'Lab', purpose: 'a worked example', slots: specs },
+  ]
+  const update = (declared: SlideGenerationResult['declared']) =>
+    ({
+      action: 'update',
+      layoutType: 'lab',
+      slots: {},
+      declared,
+    }) as SlideGenerationResult
+  const empty = { bulletCount: 0, bodyChars: 0 }
+
+  it('spills onto a new slide rather than being cut down', () => {
+    // "Moved or omitted whole": moved first, because a listing that will not
+    // fit here may fit on a slide of its own
+    expect(
+      updateOverflows(
+        update({
+          sample: { kind: 'code', source: 'def f():\n    return 1' },
+        }),
+        empty,
+        descriptors,
+      ),
+    ).toBe(true)
+  })
+
+  it('does not spill when it fits', () => {
+    expect(
+      updateOverflows(
+        update({ sample: { kind: 'code', source: 'x = 1' } }),
+        empty,
+        descriptors,
+      ),
+    ).toBe(false)
+  })
+
+  it('counts a list by its items', () => {
+    expect(
+      updateOverflows(
+        update({ points: { kind: 'bullets', items: ['a', 'b', 'c'] } }),
+        empty,
+        descriptors,
+      ),
+    ).toBe(true)
+  })
+
+  it('says nothing about a box the template set no limit on', () => {
+    const unlimited: LayoutDescriptor[] = [
+      {
+        type: 'lab',
+        label: 'Lab',
+        purpose: 'a worked example',
+        slots: [{ name: 'sample', kind: 'code', label: 'Sample' }],
+      },
+    ]
+    expect(
+      updateOverflows(
+        update({ sample: { kind: 'code', source: 'x'.repeat(900) } }),
+        empty,
+        unlimited,
+      ),
+    ).toBe(false)
+  })
+})

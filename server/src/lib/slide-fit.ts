@@ -11,6 +11,8 @@ import type {
   LayoutConstraints,
   LayoutDescriptor,
   SlideGenerationResult,
+  SlotSpec,
+  SlotValue,
 } from '@slide-machine/shared'
 
 export const charCount = (text: string | undefined): number =>
@@ -116,6 +118,46 @@ export const updateOverflows = (
   if (limits.maxBullets && bullets > limits.maxBullets) return true
   const bodyChars = current.bodyChars + charCount(result.slots.body)
   if (limits.maxBodyChars && bodyChars > limits.maxBodyChars) return true
+  // A box the author named overflows too, and what happens then is the same:
+  // the content goes on a NEW slide rather than being cut down to fit
+  // (GEN-11/GEN-8). This is what "moved or omitted whole" means for a
+  // listing or a formula — moved first, and only omitted if it cannot fit
+  // anywhere.
+  return declaredOverflows(
+    result.declared,
+    descriptors.find(d => d.type === result.layoutType)?.slots ?? [],
+  )
+}
+
+/** Whether any authored box's content runs past what its slot allows. */
+const declaredOverflows = (
+  declared: Record<string, SlotValue> | undefined,
+  specs: SlotSpec[],
+): boolean => {
+  if (!declared) return false
+  for (const [name, value] of Object.entries(declared)) {
+    const spec = specs.find(s => s.name === name)
+    if (!spec) continue
+    const { maxChars, maxItems } = spec
+    switch (value.kind) {
+      case 'code':
+        if (maxChars && value.source.trim().length > maxChars) return true
+        break
+      case 'math':
+        if (maxChars && value.tex.trim().length > maxChars) return true
+        break
+      case 'table':
+        if (maxItems && value.rows.length > maxItems) return true
+        break
+      case 'bullets':
+        if (maxItems && value.items.length > maxItems) return true
+        break
+      case 'text':
+      case 'preformatted':
+        if (maxChars && value.value.trim().length > maxChars) return true
+        break
+    }
+  }
   return false
 }
 
@@ -137,6 +179,74 @@ export const refitOverflows = (
 }
 
 /** Clamps a result's slots to its layout's character budgets (new slides). */
+/**
+ * A box the author named, held to its own limits (GEN-11).
+ *
+ * Fitting respects the kind. Prose may be trimmed at a word boundary, because
+ * a sentence with its tail cut is still a sentence. **A program listing or a
+ * formula is never truncated** — a half expression does not parse and a
+ * listing cut mid-line no longer runs — so one that will not fit is omitted
+ * whole. A half-formula is worse than none.
+ *
+ * A table is bounded by rows, not characters: cutting a row keeps a grid a
+ * grid, where cutting a cell's text mid-word would leave a column of
+ * fragments.
+ */
+const fitDeclared = (
+  declared: Record<string, SlotValue> | undefined,
+  specs: SlotSpec[],
+): Record<string, SlotValue> | undefined => {
+  if (!declared) return undefined
+  const out: Record<string, SlotValue> = {}
+  for (const [name, value] of Object.entries(declared)) {
+    const spec = specs.find(s => s.name === name)
+    // The layout can change after the content was checked against the old
+    // one — image reconciliation moves a slide to a layout that can hold its
+    // picture (GEN-7). A box the layout it landed on does not declare is
+    // dropped here, so a slide is never left holding something its template
+    // has no box for (GEN-11).
+    if (!spec) continue
+    const { maxChars, maxWords, maxItems } = spec
+    switch (value.kind) {
+      case 'code': {
+        // Whole or not at all.
+        if (maxChars && value.source.trim().length > maxChars) continue
+        out[name] = value
+        break
+      }
+      case 'math': {
+        if (maxChars && value.tex.trim().length > maxChars) continue
+        out[name] = value
+        break
+      }
+      case 'table': {
+        const rows = maxItems ? value.rows.slice(0, maxItems) : value.rows
+        if (!rows.length) continue
+        out[name] = { ...value, rows }
+        break
+      }
+      case 'bullets': {
+        const items = (maxItems ? value.items.slice(0, maxItems) : value.items)
+          .map(item => clampChars(clampWords(item, maxWords), maxChars))
+          .filter((item): item is string => Boolean(item))
+        if (!items.length) continue
+        out[name] = { kind: 'bullets', items }
+        break
+      }
+      case 'text':
+      case 'preformatted': {
+        const text = clampChars(clampWords(value.value, maxWords), maxChars)
+        if (!text?.trim()) continue
+        out[name] = { ...value, value: text }
+        break
+      }
+      default:
+        out[name] = value
+    }
+  }
+  return Object.keys(out).length ? out : undefined
+}
+
 export const clampToBudget = (
   result: SlideGenerationResult,
   descriptors: LayoutDescriptor[],
@@ -160,6 +270,10 @@ export const clampToBudget = (
         .map(b => fit(b, limits.maxBulletChars, words.bullets)!),
       caption: fit(result.slots.caption, limits.maxCaptionChars, words.caption),
     },
+    declared: fitDeclared(
+      result.declared,
+      descriptors.find(d => d.type === result.layoutType)?.slots ?? [],
+    ),
   }
 }
 

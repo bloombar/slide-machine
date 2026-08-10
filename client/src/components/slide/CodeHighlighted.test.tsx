@@ -48,3 +48,35 @@ describe('a program listing on a slide', () => {
     )
   })
 })
+
+describe('a listing too wide for its box', () => {
+  const sizeOf = (el: Element | null) =>
+    Number(/([\d.]+)cqi/.exec((el as HTMLElement).style.fontSize)?.[1])
+
+  it('shrinks to fit rather than being clipped', () => {
+    // A listing is never reflowed — its line breaks are the author's — so
+    // what gives is the type size. A slide that cuts its code off at both
+    // edges shows nobody anything.
+    const short = render(<CodeHighlighted source="x = 1" language="python" />)
+    const long = render(
+      <CodeHighlighted source={`x = "${'y'.repeat(200)}"`} language="python" />,
+    )
+    expect(sizeOf(long.container.querySelector('pre'))).toBeLessThan(
+      sizeOf(short.container.querySelector('pre')),
+    )
+  })
+
+  it('stops shrinking before it becomes unreadable', () => {
+    const { container } = render(
+      <CodeHighlighted source={'z'.repeat(5000)} language="python" />,
+    )
+    expect(sizeOf(container.querySelector('pre'))).toBeGreaterThanOrEqual(0.9)
+  })
+
+  it('leaves an ordinary listing at full size', () => {
+    const { container } = render(
+      <CodeHighlighted source={'def f():\n    return 1'} language="python" />,
+    )
+    expect(sizeOf(container.querySelector('pre'))).toBe(2)
+  })
+})
