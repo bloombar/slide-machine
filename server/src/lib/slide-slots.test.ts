@@ -190,3 +190,79 @@ describe('remapSlots', () => {
     expect(slots).toEqual(before)
   })
 })
+
+/**
+ * A conventional NAME holding a specialized KIND (TMPL-9/GEN-11).
+ *
+ * An author who turns "body" into a maths or code box has not renamed it. The
+ * legacy fields predate those kinds and can only ever say "some prose", so an
+ * empty `body` must not be read as "this box is empty" — it means the box
+ * holds something `body` cannot express.
+ */
+describe('a legacy field and a box it cannot express', () => {
+  const always = () => true
+
+  it('leaves a listing alone when the prose field is empty', () => {
+    // The bug this guards: a generated slide arrived with its code box
+    // filled and came back from the database with it gone
+    const folded = foldLegacy(
+      { body: { kind: 'code', source: 'for x in xs:\n    pass' } },
+      { body: undefined },
+      always,
+    )
+    expect(folded.body).toEqual({
+      kind: 'code',
+      source: 'for x in xs:\n    pass',
+    })
+  })
+
+  it('leaves a formula alone, and a table, and preformatted text', () => {
+    for (const value of [
+      { kind: 'math' as const, tex: 'v = gt' },
+      { kind: 'table' as const, rows: [['2024']] },
+      { kind: 'preformatted' as const, value: 'a  b' },
+    ]) {
+      expect(
+        foldLegacy({ body: value }, { body: undefined }, always).body,
+      ).toEqual(value)
+    }
+  })
+
+  it('still clears a box the field CAN express', () => {
+    // Prose emptied is prose gone — that is what the legacy field means
+    expect(
+      foldLegacy(
+        { body: { kind: 'text', value: 'gone' } },
+        { body: undefined },
+        always,
+      ).body,
+    ).toBeUndefined()
+  })
+
+  it('still lets prose replace what was there', () => {
+    expect(
+      foldLegacy(
+        { body: { kind: 'code', source: 'x = 1' } },
+        { body: 'now prose' },
+        always,
+      ).body,
+    ).toEqual({ kind: 'text', value: 'now prose' })
+  })
+
+  it('leaves a list-kind box alone only when it is not a list', () => {
+    expect(
+      foldLegacy(
+        { bullets: { kind: 'table', rows: [['a']] } },
+        { bullets: [] },
+        always,
+      ).bullets,
+    ).toEqual({ kind: 'table', rows: [['a']] })
+    expect(
+      foldLegacy(
+        { bullets: { kind: 'bullets', items: ['a'] } },
+        { bullets: [] },
+        always,
+      ).bullets,
+    ).toBeUndefined()
+  })
+})

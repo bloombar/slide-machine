@@ -182,4 +182,27 @@ describe('generating onto the boxes a template declares (GEN-11)', () => {
       expect(note.value.trim().split(/\s+/)).toHaveLength(3)
     }
   })
+
+  it('fills a box the author named with a conventional name', async () => {
+    // The case that failed in the app: an author turns "body" into a code
+    // box. The legacy prose field is empty because the box does not hold
+    // prose — which must not be read as "this box is empty".
+    const deckId = await lectureWith([
+      { name: 'title', kind: 'text', label: 'Title' },
+      {
+        name: 'body',
+        kind: 'code',
+        label: 'Body',
+        options: { language: 'python' },
+      },
+    ])
+
+    await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'A for loop repeats a block once per item in a sequence',
+    })
+
+    const slots = await slotsOfFirstSlide(deckId)
+    expect(slots.body).toMatchObject({ kind: 'code', language: 'python' })
+  })
 })

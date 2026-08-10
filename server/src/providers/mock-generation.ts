@@ -262,42 +262,58 @@ export class MockGenerationProvider implements GenerationProvider {
     }
 
     if (segments.length >= 3) {
-      return {
-        action: 'new',
-        layoutType: fitLayout('list', req.layoutDescriptors),
-        slots: { title: titleCase(words.slice(0, 4)), bullets: segments },
-        imageGuidance: { keywords: keywords(words) },
-      }
+      return withDeclared(
+        {
+          action: 'new',
+          layoutType: fitLayout('list', req.layoutDescriptors),
+          slots: { title: titleCase(words.slice(0, 4)), bullets: segments },
+          imageGuidance: { keywords: keywords(words) },
+        },
+        req.layoutDescriptors,
+        phrase,
+      )
     }
 
     if (phrase.endsWith('?')) {
-      return {
-        action: 'new',
-        layoutType: fitLayout('quote', req.layoutDescriptors),
-        slots: { body: phrase },
-        imageGuidance: { none: true, keywords: [] },
-      }
+      return withDeclared(
+        {
+          action: 'new',
+          layoutType: fitLayout('quote', req.layoutDescriptors),
+          slots: { body: phrase },
+          imageGuidance: { none: true, keywords: [] },
+        },
+        req.layoutDescriptors,
+        phrase,
+      )
     }
 
     if (words.length <= 4 && req.rollingContext.length === 0) {
       // A title card is text-only: it has no image slot, so — like a coherent
       // model — the mock asks for no image, and image/layout reconciliation
       // (GEN-7) leaves the layout as a title.
-      return {
-        action: 'new',
-        layoutType: fitLayout('title', req.layoutDescriptors),
-        slots: { title: titleCase(words) },
-      }
+      return withDeclared(
+        {
+          action: 'new',
+          layoutType: fitLayout('title', req.layoutDescriptors),
+          slots: { title: titleCase(words) },
+        },
+        req.layoutDescriptors,
+        phrase,
+      )
     }
 
     // Longer descriptive sentences get an image beside the text
     if (words.length >= 10) {
-      return {
-        action: 'new',
-        layoutType: fitLayout('two-column', req.layoutDescriptors),
-        slots: { title: titleCase(words.slice(0, 5)), body: phrase },
-        imageGuidance: { keywords: keywords(words) },
-      }
+      return withDeclared(
+        {
+          action: 'new',
+          layoutType: fitLayout('two-column', req.layoutDescriptors),
+          slots: { title: titleCase(words.slice(0, 5)), body: phrase },
+          imageGuidance: { keywords: keywords(words) },
+        },
+        req.layoutDescriptors,
+        phrase,
+      )
     }
 
     // A plain content slide (title + body) is text-only too — an image would

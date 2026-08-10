@@ -145,9 +145,22 @@ export const foldLegacy = (
   changed: (field: keyof LegacyContent) => boolean,
 ): Record<string, SlotValue> => {
   const next = { ...slots }
+  /**
+   * Whether a legacy field has any business clearing this box.
+   *
+   * `title`, `body` and `caption` can only ever say "some prose" — they
+   * predate the specialized kinds (TMPL-9). A box named `body` that now holds
+   * a program listing is not something an empty `body` field has an opinion
+   * about, and deleting it because that field is empty throws away content the
+   * legacy shape cannot even express.
+   */
+  const legacyCanClear = (name: string): boolean => {
+    const kind = next[name]?.kind
+    return kind === undefined || kind === 'text' || kind === 'bullets'
+  }
   const setText = (name: string, value: string | undefined) => {
     if (value) next[name] = { kind: 'text', value }
-    else delete next[name]
+    else if (legacyCanClear(name)) delete next[name]
   }
   if (changed('title')) setText('title', legacy.title)
   if (changed('body')) setText('body', legacy.body)
@@ -155,7 +168,7 @@ export const foldLegacy = (
   if (changed('bullets')) {
     if (legacy.bullets?.length)
       next.bullets = { kind: 'bullets', items: legacy.bullets }
-    else delete next.bullets
+    else if (legacyCanClear('bullets')) delete next.bullets
   }
   const imageChanged =
     changed('imageRef') ||
