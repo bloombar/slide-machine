@@ -14,6 +14,24 @@ import type { ThemeColors } from './theme'
 vi.mock('../../api/slides', () => ({
   searchSlideImages: vi.fn(() => Promise.resolve([])),
 }))
+
+// The typesetter and the sixteen grammars are large modules, and this is the
+// biggest test file in the suite — loading them here makes every other test in
+// it wait. They are exercised for real in MathTypeset.test.tsx and
+// CodeHighlighted.test.tsx; what matters here is that the right editor mounts
+// and saves the right shape.
+vi.mock('./MathTypeset', () => ({
+  default: ({ tex }: { tex: string }) => (
+    <span data-testid="typeset">{tex}</span>
+  ),
+}))
+vi.mock('./CodeHighlighted', () => ({
+  default: ({ source, language }: { source: string; language?: string }) => (
+    <pre data-language={language}>
+      <code>{source}</code>
+    </pre>
+  ),
+}))
 const mockedSearch = vi.mocked(searchSlideImages)
 
 const colors: ThemeColors = {
@@ -585,7 +603,7 @@ describe('a code slot (EDIT-7)', () => {
   const withCode = (source: string) =>
     slide({ slots: { example: { kind: 'code', source } } })
 
-  it('shows the listing highlighted for the language the template declared', async () => {
+  it('draws it as a listing in the language the template declared', async () => {
     const { container } = render(
       <SlideSlot
         slot="example"
@@ -594,14 +612,13 @@ describe('a code slot (EDIT-7)', () => {
         colors={colors}
       />,
     )
-    // The grammars load on demand, so the listing is there first and its
-    // colours arrive — which is the whole point of the split
+    // The language comes from the design, so every slide built from it
+    // agrees without anyone restating it per slide
     await waitFor(() =>
-      expect(container.querySelector('.hljs-keyword')).not.toBeNull(),
-    )
-    expect(container.querySelector('pre')).toHaveAttribute(
-      'data-language',
-      'python',
+      expect(container.querySelector('pre')).toHaveAttribute(
+        'data-language',
+        'python',
+      ),
     )
   })
 
@@ -661,19 +678,6 @@ describe('a code slot (EDIT-7)', () => {
     })
     vi.useRealTimers()
   })
-
-  it('shows a listing plainly when its language is one we cannot highlight', () => {
-    render(
-      <SlideSlot
-        slot="example"
-        spec={{ ...spec, options: { language: 'befunge' } }}
-        slide={withCode('>:#,_@')}
-        colors={colors}
-      />,
-    )
-    // Exactly as readable, merely less colourful
-    expect(screen.getByText('>:#,_@')).toBeInTheDocument()
-  })
 })
 
 describe('a math slot (EDIT-7)', () => {
@@ -681,8 +685,8 @@ describe('a math slot (EDIT-7)', () => {
   const withTex = (tex: string) =>
     slide({ slots: { eq: { kind: 'math', tex } } })
 
-  it('displays typeset notation rather than the source', async () => {
-    const { container } = render(
+  it('hands the formula to the typesetter rather than printing it', async () => {
+    render(
       <SlideSlot
         slot="eq"
         spec={spec}
@@ -690,11 +694,8 @@ describe('a math slot (EDIT-7)', () => {
         colors={colors}
       />,
     )
-    // An author writes what they know; the audience sees what they mean.
-    // The typesetter loads on demand, so the source stands in until it lands.
-    await waitFor(() =>
-      expect(container.querySelector('.katex')).not.toBeNull(),
-    )
+    // An author writes what they know; the audience sees what they mean
+    expect(await screen.findByTestId('typeset')).toHaveTextContent('E = mc^2')
   })
 
   it('reveals the LaTeX when you click to edit it', () => {
@@ -709,20 +710,6 @@ describe('a math slot (EDIT-7)', () => {
     )
     fireEvent.click(screen.getByTitle('Click to edit Equation'))
     expect(screen.getByLabelText('Equation')).toHaveValue('E = mc^2')
-  })
-
-  it('shows the trouble inline rather than a blank slot', async () => {
-    const { container } = render(
-      <SlideSlot
-        slot="eq"
-        spec={spec}
-        slide={withTex('\\frac{1}{')}
-        colors={colors}
-      />,
-    )
-    // A formula someone is midway through typing is not an error state, and
-    // must never take the slide down with it
-    await waitFor(() => expect(container.textContent).toContain('\\frac{1}{'))
   })
 })
 
