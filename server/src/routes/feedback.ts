@@ -31,17 +31,17 @@ import { verifyAccessToken } from '../auth/tokens'
 import { HttpError } from '../middleware/error'
 import { UserModel } from '../models/user'
 import { createRateLimiter } from '../lib/rate-limit'
-import { MailUnavailableError, mailerAvailable, sendMail } from '../lib/mailer'
+import { MailUnavailableError, sendMail } from '../lib/mailer'
+import { feedbackEnabled } from '../lib/feedback-config'
 
 export const feedbackRouter = Router()
 
 /**
- * Whether the form can be offered at all: mail has to be deliverable and
- * there has to be somewhere to deliver it. Read by GET /api/config, so the
- * client hides the page's entry point on a server that cannot send.
+ * Whether the form can be offered at all. Defined in lib/feedback-config, which
+ * the cap notification emails ask too; re-exported here because GET /api/config
+ * and this route's own guards have always read it from this module.
  */
-export const feedbackEnabled = (): boolean =>
-  mailerAvailable() && Boolean(env.FEEDBACK_EMAIL)
+export { feedbackEnabled }
 
 /** Submissions allowed per caller per window. Loose enough that nobody
  * filing three bugs in a row notices, tight enough that scripting it is

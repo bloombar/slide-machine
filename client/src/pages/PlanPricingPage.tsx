@@ -53,6 +53,7 @@ import { formatCurrencyMinor, formatDate } from '../i18n/format'
 import { callToActionFor, formatAmount, friendlyCap } from '../lib/usage'
 import { useAuth } from '../auth/AuthContext'
 import ConfirmDialog from '../components/ConfirmDialog'
+import UsageCallToAction from '../components/UsageCallToAction'
 
 /** Where the account's own plan lives — where this page is reached from, and
  * where checkout returns to. */
@@ -607,7 +608,9 @@ export default function PlanPricingPage() {
       {/* Max has no larger plan to move to, so it is invited to get in touch
           rather than shown an upgrade that does not exist (BILL-5). */}
       {callToActionFor(current) === 'contact' && (
-        <p className="mt-4 text-xs text-slate-500">{t('usage.cta.contact')}</p>
+        <p className="mt-4 text-xs text-slate-500">
+          <UsageCallToAction tier={current} />
+        </p>
       )}
 
       {/* What the smaller plan would delete, said before it is agreed to

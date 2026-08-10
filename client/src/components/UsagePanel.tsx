@@ -12,7 +12,7 @@ import type { UsageSummaryResponse } from '@slide-machine/shared'
 import { fetchUsage, setCapWarnings } from '../api/usage'
 import { useAuth } from '../auth/AuthContext'
 import { formatDate } from '../i18n/format'
-import { callToActionFor } from '../lib/usage'
+import UsageCallToAction from './UsageCallToAction'
 import UsageMeterGroups from './UsageMeterGroups'
 
 export default function UsagePanel() {
@@ -57,7 +57,9 @@ export default function UsagePanel() {
       <CapWarningToggle />
 
       <p className="text-xs text-slate-500">
-        {t(`usage.cta.${callToActionFor(usage.tier)}`)}
+        {/* No plan link: this panel *is* the Plan tab, so it would point at
+            itself. */}
+        <UsageCallToAction tier={usage.tier} />
       </p>
     </section>
   )

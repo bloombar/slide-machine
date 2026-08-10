@@ -30,6 +30,7 @@ import { UserModel } from '../models/user'
 import { claimNotification } from '../models/notification-log'
 import { mailerAvailable, sendMail } from '../lib/mailer'
 import { capMessages } from '../i18n/cap-messages'
+import { feedbackEnabled } from '../lib/feedback-config'
 import { env } from '../config/env'
 import { effectivePlanTier, PLAN_FIELDS } from './plan-grant'
 import {
@@ -195,10 +196,14 @@ const deliver = async (
 
   // The call to action follows the tier (BILL-5): there is nothing above Max,
   // so a Max user is invited to talk to us rather than shown a door that is
-  // not there.
+  // not there. Either way the invitation carries where to go — on a server
+  // with no feedback form the contact line falls back to the wording without
+  // a link, since a URL to a page that cannot send is worse than none.
   lines.push(
     to.tier === 'max'
-      ? t('cta.contact')
+      ? feedbackEnabled()
+        ? t('cta.contact', { link: `${appOrigin()}${CONTACT_PATH}` })
+        : t('cta.contactNoForm')
       : t('cta.upgrade', { link: `${appOrigin()}/app/plans` }),
   )
 
@@ -220,6 +225,11 @@ const deliver = async (
   }
 }
 
-/** Where the upgrade link points. */
+/** Where the upgrade and contact links point. */
 const appOrigin = (): string =>
   env.CLIENT_APP_URL || env.PUBLIC_BASE_URL || 'http://localhost:3000'
+
+/** The feedback form, opened on "Something else" — an account asking for more
+ * room than Max is neither reporting a bug nor requesting a feature. Kept in
+ * step with the client's own link to it (components/UsageCallToAction). */
+const CONTACT_PATH = '/feedback?kind=other'

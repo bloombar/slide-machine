@@ -1,5 +1,5 @@
 /**
- * The five messages that carry an element inside the sentence go through
+ * The messages that carry an element inside the sentence go through
  * <Trans> rather than t(). ICU parses them with `ignoreTag: true`, so the
  * tags survive the ICU pass as literal text for Trans to interpolate —
  * this pins that the two actually cooperate, in every locale.
@@ -45,6 +45,20 @@ const CASES: Array<{
   {
     key: 'project.new.description',
     components: { hint: <span data-testid="marker" /> },
+    expects: 'marker',
+  },
+  {
+    key: 'usage.cta.upgrade',
+    components: {
+      planLink: <a href="/app/settings?tab=plan" data-testid="marker" />,
+    },
+    expects: 'marker',
+  },
+  {
+    key: 'usage.cta.contact',
+    components: {
+      contactLink: <a href="/feedback?kind=other" data-testid="marker" />,
+    },
     expects: 'marker',
   },
 ]

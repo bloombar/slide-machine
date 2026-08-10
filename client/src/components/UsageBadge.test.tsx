@@ -139,6 +139,29 @@ describe('UsageBadge', () => {
     )
   })
 
+  it('links the upgrade wording to the settings Plan tab', async () => {
+    // The popover has no other route to the plan it is asking about changing.
+    renderBadge()
+
+    await openPanel()
+
+    const link = await screen.findByRole('link', { name: 'Upgrading' })
+    expect(link).toHaveAttribute('href', '/app/settings?tab=plan')
+  })
+
+  it('closes the popover when the upgrade link is followed', async () => {
+    // Navigating away with the popover still mounted would leave it hanging
+    // over the page it opened.
+    renderBadge()
+
+    await openPanel()
+    fireEvent.click(await screen.findByRole('link', { name: 'Upgrading' }))
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('usage-panel-popover')).toBeNull(),
+    )
+  })
+
   it('invites a Max account to get in touch rather than upgrade', async () => {
     renderBadge([metric()], { tier: 'max' })
 

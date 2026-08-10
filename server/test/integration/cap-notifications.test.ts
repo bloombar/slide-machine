@@ -22,6 +22,7 @@ import { UserModel } from '../../src/models/user'
 import { UsageRecordModel } from '../../src/models/usage-record'
 import { NotificationLogModel } from '../../src/models/notification-log'
 import * as mailer from '../../src/lib/mailer'
+import * as feedbackConfig from '../../src/lib/feedback-config'
 import { PlanLimitExceededError } from '../../src/billing/limits'
 import {
   assertWithinCap,
@@ -269,9 +270,8 @@ describe('what the message says', () => {
     expect(text).toMatch(/turn off these early warnings/i)
   })
 
-  it('invites a Max account to talk to us rather than to upgrade', async () => {
-    // There is no tier above Max, so an upgrade link would point at a door
-    // that is not there (BILL-5).
+  /** Puts a Max account against a wall it cannot buy its way past. */
+  const blockAsMax = async () => {
     await UserModel.updateOne({ _id: adaId }, { planTier: 'max' })
     const cap = capFor('max', 'exports') ?? 0
     await UsageRecordModel.updateOne(
@@ -281,10 +281,35 @@ describe('what the message says', () => {
     )
     await assertWithinCap(adaId, 'max', 'exports').catch(() => {})
     await flushCapNotifications()
+    return sent[0]?.text ?? ''
+  }
 
-    const text = sent[0]?.text ?? ''
+  it('invites a Max account to talk to us, and says where', async () => {
+    // There is no tier above Max, so an upgrade link would point at a door
+    // that is not there (BILL-5) — but an invitation with no address is not
+    // one either, so the form is named. It opens on "Something else": this is
+    // neither a bug report nor a feature request.
+    vi.spyOn(feedbackConfig, 'feedbackEnabled').mockReturnValue(true)
+
+    const text = await blockAsMax()
+
     expect(text).toMatch(/largest plan/i)
+    expect(text).toContain('/feedback?kind=other')
     expect(text).not.toMatch(/\/app\/plans/)
+  })
+
+  it('says it without a link where there is no form to send to', async () => {
+    // A URL to a page that can only answer "there is nowhere to send this" is
+    // worse than none, so the wording stands on its own.
+    vi.spyOn(feedbackConfig, 'feedbackEnabled').mockReturnValue(false)
+
+    const text = await blockAsMax()
+
+    expect(text).toMatch(/largest plan/i)
+    expect(text).not.toContain('/feedback')
+    // And never the unfilled placeholder, which is what a missing fallback
+    // string would leave behind.
+    expect(text).not.toContain('{{link}}')
   })
 
   it('writes to the reader in the language they chose', async () => {

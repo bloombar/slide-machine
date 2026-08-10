@@ -34,8 +34,8 @@ import type {
   UsageSummaryResponse,
 } from '@slide-machine/shared'
 import { fetchUsage } from '../api/usage'
-import { useAuth } from '../auth/AuthContext'
-import { approachingLimits, callToActionFor, isExhausted } from '../lib/usage'
+import { approachingLimits, isExhausted } from '../lib/usage'
+import UsageCallToAction from './UsageCallToAction'
 import UsageMeter from './UsageMeter'
 
 const STORAGE_PREFIX = 'sm:usage-notice-dismissed:'
@@ -68,7 +68,6 @@ const wasDismissed = (key: string): boolean => {
 
 export default function UsageNotice() {
   const { t } = useTranslation()
-  const { user } = useAuth()
   const [usage, setUsage] = useState<UsageSummaryResponse | null>(null)
   const [dismissedKey, setDismissedKey] = useState<string | null>(null)
 
@@ -133,15 +132,18 @@ export default function UsageNotice() {
       </div>
 
       <p className="mt-3 text-xs text-slate-600">
-        {t(`usage.cta.${callToActionFor(usage.tier)}`)}{' '}
-        {user && (
-          <Link
-            to={`/app/u/${user.id}`}
-            className="font-medium text-indigo-700 hover:underline"
-          >
-            {t('usage.notice.seeAll')}
-          </Link>
-        )}
+        {/* No plan link: the notice already links there on the next line, and
+            two links to one destination in one sentence is a coin toss for
+            the reader rather than a choice. */}
+        <UsageCallToAction tier={usage.tier} />{' '}
+        {/* The Plan tab is where the full set of meters lives, next to the
+            plan this notice is asking about changing. */}
+        <Link
+          to="/app/settings?tab=plan"
+          className="font-medium text-indigo-700 hover:underline"
+        >
+          {t('usage.notice.seeAll')}
+        </Link>
       </p>
     </section>
   )

@@ -119,6 +119,7 @@ export const CAP_MESSAGE_KEYS = [
   'gaugeNote',
   'cta.upgrade',
   'cta.contact',
+  'cta.contactNoForm',
   'silence',
   'signoff',
 ] as const
@@ -157,6 +158,8 @@ const MESSAGES: Record<Locale, Record<CapMessageKey, string>> = {
       'Stored audio is not a per-period allowance — it is how much you are holding right now, and it goes down when recordings are deleted.',
     'cta.upgrade': 'Upgrading raises every limit: {{link}}',
     'cta.contact':
+      'You are already on our largest plan. Get in touch and we will work something out: {{link}}',
+    'cta.contactNoForm':
       'You are already on our largest plan. Get in touch and we will work something out.',
     silence:
       'You can turn off these early warnings in your account settings. Notices about a limit actually being reached are always sent.',
@@ -181,6 +184,8 @@ const MESSAGES: Record<Locale, Record<CapMessageKey, string>> = {
     'cta.upgrade':
       'Passer à un forfait supérieur augmente toutes les limites : {{link}}',
     'cta.contact':
+      'Vous êtes déjà sur notre forfait le plus élevé. Contactez-nous et nous trouverons une solution : {{link}}',
+    'cta.contactNoForm':
       'Vous êtes déjà sur notre forfait le plus élevé. Contactez-nous et nous trouverons une solution.',
     silence:
       'Vous pouvez désactiver ces avertissements anticipés dans les paramètres de votre compte. Les avis de limite atteinte sont toujours envoyés.',
@@ -204,6 +209,8 @@ const MESSAGES: Record<Locale, Record<CapMessageKey, string>> = {
       'El audio almacenado no es un cupo por período: es lo que guardas ahora mismo, y baja cuando se eliminan grabaciones.',
     'cta.upgrade': 'Mejorar de plan aumenta todos los límites: {{link}}',
     'cta.contact':
+      'Ya estás en nuestro plan más grande. Escríbenos y buscaremos una solución: {{link}}',
+    'cta.contactNoForm':
       'Ya estás en nuestro plan más grande. Escríbenos y buscaremos una solución.',
     silence:
       'Puedes desactivar estos avisos anticipados en la configuración de tu cuenta. Los avisos de límite alcanzado siempre se envían.',
@@ -227,6 +234,8 @@ const MESSAGES: Record<Locale, Record<CapMessageKey, string>> = {
     'cta.upgrade':
       'Переход на более высокий тариф поднимает все лимиты: {{link}}',
     'cta.contact':
+      'У вас уже наш самый большой тариф. Напишите нам, и мы что-нибудь придумаем: {{link}}',
+    'cta.contactNoForm':
       'У вас уже наш самый большой тариф. Напишите нам, и мы что-нибудь придумаем.',
     silence:
       'Эти ранние предупреждения можно отключить в настройках аккаунта. Уведомления о достигнутом лимите отправляются всегда.',
@@ -246,7 +255,9 @@ const MESSAGES: Record<Locale, Record<CapMessageKey, string>> = {
     gaugeNote:
       '已存音频不是按周期计算的额度，而是当前的存储量；删除录音后会减少。',
     'cta.upgrade': '升级套餐可提高所有上限：{{link}}',
-    'cta.contact': '您已使用我们最高的套餐。请联系我们，我们会为您安排。',
+    'cta.contact':
+      '您已使用我们最高的套餐。请联系我们，我们会为您安排：{{link}}',
+    'cta.contactNoForm': '您已使用我们最高的套餐。请联系我们，我们会为您安排。',
     silence: '您可以在账户设置中关闭这些提前提醒。达到上限的通知则始终发送。',
     signoff: '— Slide Machine',
   },

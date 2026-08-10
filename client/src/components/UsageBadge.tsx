@@ -17,7 +17,8 @@ import type { UsageSummaryResponse } from '@slide-machine/shared'
 import { fetchUsage } from '../api/usage'
 import { useAuth } from '../auth/AuthContext'
 import { formatDate } from '../i18n/format'
-import { approachingLimits, callToActionFor, isExhausted } from '../lib/usage'
+import { approachingLimits, isExhausted } from '../lib/usage'
+import UsageCallToAction from './UsageCallToAction'
 import UsageMeterGroups from './UsageMeterGroups'
 
 /** Overall standing, worst-metric-wins. */
@@ -125,7 +126,14 @@ export default function UsageBadge() {
           </p>
           <UsageMeterGroups metrics={usage.metrics} compact />
           <p className="mt-3 border-t border-slate-100 pt-2 text-xs text-slate-500">
-            {t(`usage.cta.${callToActionFor(usage.tier)}`)}
+            {/* The popover is the one usage surface with no other way to the
+                plan, so its wording carries the link. Following either link
+                closes it rather than leaving it over the page it lands on. */}
+            <UsageCallToAction
+              tier={usage.tier}
+              linkToPlan
+              onFollow={() => setOpen(false)}
+            />
           </p>
         </div>
       )}

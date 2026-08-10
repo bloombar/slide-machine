@@ -12,9 +12,13 @@
  * English only, like the other static pages (see content/document.ts).
  */
 import { useState, type FormEvent } from 'react'
-import { Link, useLocation } from 'react-router'
+import { Link, useLocation, useSearchParams } from 'react-router'
 import { Send } from 'lucide-react'
-import { FEEDBACK_MESSAGE_MAX, type FeedbackKind } from '@slide-machine/shared'
+import {
+  FEEDBACK_KINDS,
+  FEEDBACK_MESSAGE_MAX,
+  type FeedbackKind,
+} from '@slide-machine/shared'
 import { sendFeedback } from '../api/feedback'
 import { ApiError } from '../api/http'
 import { useAuth } from '../auth/AuthContext'
@@ -60,7 +64,18 @@ export default function FeedbackPage() {
    * report carries the page it is about. */
   const from = (location.state as { from?: string } | null)?.from
 
-  const [kind, setKind] = useState<FeedbackKind>('bug')
+  // `?kind=` lets a link elsewhere open the form on the right question — the
+  // usage prompts send a Max account here already set to "Something else".
+  // A query param rather than router state, because the same link is mailed.
+  // Only the initial value: having chosen it for the sender once, the radios
+  // are theirs to change.
+  const [searchParams] = useSearchParams()
+  const requestedKind = searchParams.get('kind')
+  const [kind, setKind] = useState<FeedbackKind>(
+    FEEDBACK_KINDS.includes(requestedKind as FeedbackKind)
+      ? (requestedKind as FeedbackKind)
+      : 'bug',
+  )
   const [subject, setSubject] = useState('')
   const [message, setMessage] = useState('')
   const [email, setEmail] = useState('')
