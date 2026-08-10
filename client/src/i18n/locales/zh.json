@@ -1217,7 +1217,7 @@
       "mb": "{value} MB"
     },
     "cta": {
-      "upgrade": "需要更多？升级套餐可提高所有上限。",
+      "upgrade": "需要更多？<planLink>升级套餐</planLink>可提高所有上限。",
       "contact": "你已使用我们最高的套餐——请联系我们，我们会另行安排。"
     },
     "badge": {

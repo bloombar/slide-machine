@@ -109,6 +109,26 @@ describe('UsageNotice', () => {
     expect(await screen.findByText(/largest plan/)).toBeInTheDocument()
   })
 
+  it('states the upgrade line as prose, not as its markup', async () => {
+    // The message carries a <planLink> slot for the footer badge; here it is
+    // plain text, because the notice links to the Plan tab on its own.
+    renderNotice([metric({ fraction: 0.85 })])
+
+    await screen.findByTestId('usage-notice')
+    expect(document.body.textContent).toContain('Upgrading raises every limit.')
+    expect(document.body.textContent).not.toContain('planLink')
+  })
+
+  it('points "See all usage" at the settings Plan tab', async () => {
+    // The full set of meters lives there, beside the plan the notice is
+    // asking about changing.
+    renderNotice([metric({ fraction: 0.85 })])
+
+    expect(
+      await screen.findByRole('link', { name: 'See all usage' }),
+    ).toHaveAttribute('href', '/app/settings?tab=plan')
+  })
+
   it('says nothing when usage cannot be read', async () => {
     // The home page's job is to list lectures; a billing sidebar failing is
     // not worth interrupting that with an error.

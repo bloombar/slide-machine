@@ -137,6 +137,16 @@ describe('UsagePanel', () => {
     await waitFor(() => expect(toggle).not.toBeChecked())
   })
 
+  it('states the upgrade line as prose, not as its markup', async () => {
+    // The message carries a <planLink> slot for the footer badge. Rendering it
+    // with t() instead of <Trans> would print the tag at the reader.
+    renderPanel()
+
+    await screen.findByTestId('usage-panel')
+    expect(document.body.textContent).toContain('Upgrading raises every limit.')
+    expect(document.body.textContent).not.toContain('planLink')
+  })
+
   it('does not offer an upgrade to the largest plan', async () => {
     renderPanel([metric()], { tier: 'max' })
 

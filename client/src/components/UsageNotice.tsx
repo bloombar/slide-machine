@@ -27,14 +27,13 @@
  */
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { AlertTriangle, X } from 'lucide-react'
 import type {
   UsageMetricSummary,
   UsageSummaryResponse,
 } from '@slide-machine/shared'
 import { fetchUsage } from '../api/usage'
-import { useAuth } from '../auth/AuthContext'
 import { approachingLimits, callToActionFor, isExhausted } from '../lib/usage'
 import UsageMeter from './UsageMeter'
 
@@ -68,7 +67,6 @@ const wasDismissed = (key: string): boolean => {
 
 export default function UsageNotice() {
   const { t } = useTranslation()
-  const { user } = useAuth()
   const [usage, setUsage] = useState<UsageSummaryResponse | null>(null)
   const [dismissedKey, setDismissedKey] = useState<string | null>(null)
 
@@ -133,15 +131,23 @@ export default function UsageNotice() {
       </div>
 
       <p className="mt-3 text-xs text-slate-600">
-        {t(`usage.cta.${callToActionFor(usage.tier)}`)}{' '}
-        {user && (
-          <Link
-            to={`/app/u/${user.id}`}
-            className="font-medium text-indigo-700 hover:underline"
-          >
-            {t('usage.notice.seeAll')}
-          </Link>
-        )}
+        {/* The message carries a <planLink> slot for the footer badge, whose
+            popover has no other way to the Plan tab. Here it renders as plain
+            text: the notice already links there on the next line, and two
+            links to one destination in one sentence is a coin toss for the
+            reader rather than a choice. */}
+        <Trans
+          i18nKey={`usage.cta.${callToActionFor(usage.tier)}`}
+          components={{ planLink: <span /> }}
+        />{' '}
+        {/* The Plan tab is where the full set of meters lives, next to the
+            plan this notice is asking about changing. */}
+        <Link
+          to="/app/settings?tab=plan"
+          className="font-medium text-indigo-700 hover:underline"
+        >
+          {t('usage.notice.seeAll')}
+        </Link>
       </p>
     </section>
   )

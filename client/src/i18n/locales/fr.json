@@ -1217,7 +1217,7 @@
       "mb": "{value} Mo"
     },
     "cta": {
-      "upgrade": "Besoin de plus ? Un forfait supérieur relève toutes les limites.",
+      "upgrade": "Besoin de plus ? <planLink>Un forfait supérieur</planLink> relève toutes les limites.",
       "contact": "Vous avez notre forfait le plus large — écrivez-nous et nous trouverons une solution."
     },
     "badge": {

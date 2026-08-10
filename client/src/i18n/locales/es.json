@@ -1217,7 +1217,7 @@
       "mb": "{value} MB"
     },
     "cta": {
-      "upgrade": "¿Necesitas más? Mejorar el plan amplía todos los límites.",
+      "upgrade": "¿Necesitas más? <planLink>Mejorar el plan</planLink> amplía todos los límites.",
       "contact": "Tienes nuestro plan más amplio: escríbenos y buscamos una solución."
     },
     "badge": {

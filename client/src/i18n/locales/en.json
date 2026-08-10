@@ -1217,7 +1217,7 @@
       "mb": "{value} MB"
     },
     "cta": {
-      "upgrade": "Need more? Upgrading raises every limit.",
+      "upgrade": "Need more? <planLink>Upgrading</planLink> raises every limit.",
       "contact": "You are on our largest plan — get in touch and we will work something out."
     },
     "badge": {
