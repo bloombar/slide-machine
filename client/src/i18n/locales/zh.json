@@ -301,7 +301,11 @@
     "slotKinds": {
       "text": "文字",
       "bullets": "要点",
-      "image": "图片"
+      "image": "图片",
+      "code": "代码",
+      "math": "公式",
+      "preformatted": "预格式化文本",
+      "table": "表格"
     },
     "newLayoutAdd": "添加版式",
     "layoutSettings": "版式",
@@ -448,7 +452,12 @@
     "exportHeading": "导出这个设计",
     "exportHint": "以文件形式带走，或存到你的 Google 云端硬盘，成为一份以它的版式为版式的演示文稿。",
     "exportAsYaml": "导出为 YAML",
-    "exportToSlides": "导出为 Google Slides"
+    "exportToSlides": "导出为 Google Slides",
+    "slotLanguage": {
+      "label": "语言",
+      "hint": "以哪种语言高亮此代码。",
+      "auto": "无"
+    }
   },
   "layout": {
     "change": "更改幻灯片版式",
@@ -707,6 +716,21 @@
       "editTranscript": "编辑口述文稿",
       "changeLayout": "更改版式",
       "delete": "删除幻灯片"
+    },
+    "math": {
+      "invalid": "— 请检查 LaTeX（{reason}）"
+    },
+    "guidance": {
+      "words": "最多 {count} 个词",
+      "chars": "最多 {count} 个字符",
+      "items": "最多 {count} 条"
+    },
+    "table": {
+      "empty": "空单元格",
+      "header": "第 {n} 列标题",
+      "cell": "第 {row} 行，第 {column} 列",
+      "addRow": "添加行",
+      "addColumn": "添加列"
     }
   },
   "image": {

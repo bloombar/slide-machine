@@ -28,6 +28,10 @@ interface Props {
   title?: string
   /** Pre-filled search terms, derived from the slide by the caller. */
   initialQuery: string
+  /** What the template meant this box for (EDIT-7/TMPL-10) — "only a
+   * photograph of the figure under discussion". Choosing a picture IS filling
+   * the slot by hand, so the instruction belongs where the choosing happens. */
+  guidance?: string
   /** Uploads a chosen/dropped file to set the image. */
   onUpload: (file: File) => void
   /** Applies a web search result as the new image. */
@@ -39,6 +43,7 @@ export default function ReplaceImageDialog({
   slideId,
   title,
   initialQuery,
+  guidance,
   onUpload,
   onPickCandidate,
   onClose,
@@ -135,6 +140,9 @@ export default function ReplaceImageDialog({
               <p className="mt-1 text-sm text-slate-500">
                 {t('image.search.intro')}
               </p>
+              {guidance && (
+                <p className="mt-1 text-sm text-slate-500 italic">{guidance}</p>
+              )}
             </div>
             <button
               aria-label={t('common.close')}

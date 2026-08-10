@@ -15,6 +15,7 @@ import path from 'node:path'
 import { z } from 'zod'
 import {
   SLOT_DESCRIPTORS,
+  SLOT_KINDS,
   WHITEBOARD_LAYOUT_TYPE,
   defaultLayoutTree,
   slotLimits,
@@ -23,6 +24,7 @@ import {
   type Layout,
   type LayoutDescriptor,
   type LayoutSlot,
+  type SlotKind,
   type SlotSpec,
   type Template,
   MAX_SLOT_DESCRIPTION,
@@ -36,7 +38,9 @@ const slotFileSchema = z.union([
   z.string().min(1),
   z.object({
     name: z.string().min(1),
-    kind: z.enum(['text', 'bullets', 'image']).optional(),
+    // The closed menu of kinds (TMPL-9). Open here would let a template
+    // declare content nothing knows how to draw, edit or read aloud.
+    kind: z.enum(SLOT_KINDS as [SlotKind, ...SlotKind[]]).optional(),
     label: z.string().min(1).optional(),
     // The author's instruction to the AI (TMPL-10). Capped here rather than
     // trusted: it is untrusted text that flows into a prompt, and every byte

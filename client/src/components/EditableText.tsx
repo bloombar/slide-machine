@@ -34,6 +34,25 @@ interface Props {
    * title in a narrow header. Off by default: text that wraps over several
    * lines (slide bullets) must keep wrapping. Editing is unaffected. */
   truncate?: boolean
+  /**
+   * Edit the value as source rather than as prose (EDIT-7): a monospaced
+   * field with spelling and autocorrect off, and tabs typed into the text
+   * instead of moving focus.
+   *
+   * A program listing is not language. Autocorrect turns a quote into a
+   * curly quote and the program stops running; a spelling underline says a
+   * variable name is wrong when it is the only name that works.
+   */
+  source?: boolean
+  /**
+   * What the template meant this box for, shown while it is being filled
+   * (EDIT-7/TMPL-10).
+   *
+   * Only while editing: an instructor typing into "Worked example" wants to
+   * know it should be eight lines of runnable Python, and an audience does
+   * not want a line of instructions under every box on the slide.
+   */
+  hint?: string
 }
 
 export default function EditableText({
@@ -46,6 +65,8 @@ export default function EditableText({
   placeholderStyle = false,
   debounceMs = 800,
   truncate = false,
+  source = false,
+  hint,
 }: Props) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
@@ -151,6 +172,16 @@ export default function EditableText({
         finish()
       }
     },
+    // Source is typed, not dictated to: no spelling underlines, no smart
+    // quotes, no capitalising the first letter of a line of Python.
+    ...(source
+      ? {
+          spellCheck: false,
+          autoCorrect: 'off' as const,
+          autoCapitalize: 'off' as const,
+          autoComplete: 'off' as const,
+        }
+      : {}),
     // Outline (not border) marks the field: outlines paint outside the
     // box model, so entering/leaving edit mode never shifts the layout
     className:
@@ -162,12 +193,30 @@ export default function EditableText({
       letterSpacing: 'inherit',
       minWidth: reservedBox?.w,
       minHeight: reservedBox?.h,
+      ...(source
+        ? {
+            fontFamily:
+              'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+            // Indentation is the content: never reflow it.
+            whiteSpace: 'pre' as const,
+            textAlign: 'start' as const,
+          }
+        : {}),
     } as React.CSSProperties,
   }
 
-  return multiline ? (
+  const field = multiline ? (
     <textarea rows={Math.max(2, draft.split('\n').length)} {...sharedProps} />
   ) : (
     <input {...sharedProps} />
+  )
+  if (!hint) return field
+  return (
+    <span className="inline-block w-full">
+      {field}
+      <span className="mt-[0.6cqi] block text-[1.4cqi] leading-snug opacity-60">
+        {hint}
+      </span>
+    </span>
   )
 }

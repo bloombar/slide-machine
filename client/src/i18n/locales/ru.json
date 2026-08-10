@@ -301,7 +301,11 @@
     "slotKinds": {
       "text": "Текст",
       "bullets": "Список",
-      "image": "Изображение"
+      "image": "Изображение",
+      "code": "Код",
+      "math": "Формула",
+      "preformatted": "Форматированный текст",
+      "table": "Таблица"
     },
     "newLayoutAdd": "Добавить макет",
     "layoutSettings": "Макет",
@@ -448,7 +452,12 @@
     "exportHeading": "Экспорт этого дизайна",
     "exportHint": "Заберите его файлом или на Google Диск — презентацией, макеты которой это его макеты.",
     "exportAsYaml": "В YAML",
-    "exportToSlides": "В Google Slides"
+    "exportToSlides": "В Google Slides",
+    "slotLanguage": {
+      "label": "Язык",
+      "hint": "На каком языке подсвечивать этот листинг.",
+      "auto": "Нет"
+    }
   },
   "layout": {
     "change": "Изменить макет слайда",
@@ -707,6 +716,21 @@
       "editTranscript": "Изменить устную расшифровку",
       "changeLayout": "Изменить макет",
       "delete": "Удалить слайд"
+    },
+    "math": {
+      "invalid": "— проверьте LaTeX ({reason})"
+    },
+    "guidance": {
+      "words": "до {count} слов",
+      "chars": "до {count} символов",
+      "items": "до {count} пунктов"
+    },
+    "table": {
+      "empty": "Пустая ячейка",
+      "header": "Заголовок столбца {n}",
+      "cell": "Строка {row}, столбец {column}",
+      "addRow": "Добавить строку",
+      "addColumn": "Добавить столбец"
     }
   },
   "image": {

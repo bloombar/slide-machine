@@ -13,6 +13,7 @@
  */
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
+import { narratableText } from '../lib/narratable'
 import type { HydratedDocument } from 'mongoose'
 import type {
   DeckDiarizeInput,
@@ -71,13 +72,19 @@ type DeckDoc = HydratedDocument<DeckDb>
 type SlideDoc = HydratedDocument<SlideDb>
 
 /** The slide's editable content, as the generation passes consume it. */
-const contentOf = (s: SlideDoc): SlideContent => ({
-  layoutType: s.layoutType,
-  title: s.title,
-  body: s.body,
-  bullets: s.bullets,
-  caption: s.caption,
-})
+const contentOf = (s: SlideDoc): SlideContent => {
+  // Boxes the author named carry prose too; what they hold that is not
+  // language — a formula, a listing, a grid — is left out (EDIT-7).
+  const spoken = narratableText(s.slots)
+  return {
+    layoutType: s.layoutType,
+    title: s.title,
+    body: s.body,
+    bullets: s.bullets,
+    caption: s.caption,
+    ...(spoken.length ? { spoken } : {}),
+  }
+}
 
 /** Writes a generation result's content back onto a slide (image + id kept). */
 const applyContent = (

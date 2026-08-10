@@ -301,7 +301,11 @@
     "slotKinds": {
       "text": "Texte",
       "bullets": "Puces",
-      "image": "Image"
+      "image": "Image",
+      "code": "Code",
+      "math": "Formule",
+      "preformatted": "Texte préformaté",
+      "table": "Tableau"
     },
     "newLayoutAdd": "Ajouter la mise en page",
     "layoutSettings": "Disposition",
@@ -448,7 +452,12 @@
     "exportHeading": "Exporter cette conception",
     "exportHint": "Emportez-la sous forme de fichier, ou dans votre Google Drive en présentation dont les mises en page sont les siennes.",
     "exportAsYaml": "En YAML",
-    "exportToSlides": "En Google Slides"
+    "exportToSlides": "En Google Slides",
+    "slotLanguage": {
+      "label": "Langage",
+      "hint": "Le langage dans lequel colorer ce listing.",
+      "auto": "Aucun"
+    }
   },
   "layout": {
     "change": "Changer la mise en page",
@@ -707,6 +716,21 @@
       "editTranscript": "Modifier la transcription orale",
       "changeLayout": "Changer la mise en page",
       "delete": "Supprimer la diapositive"
+    },
+    "math": {
+      "invalid": "— vérifiez le LaTeX ({reason})"
+    },
+    "guidance": {
+      "words": "jusqu'à {count} mots",
+      "chars": "jusqu'à {count} caractères",
+      "items": "jusqu'à {count} points"
+    },
+    "table": {
+      "empty": "Cellule vide",
+      "header": "En-tête de la colonne {n}",
+      "cell": "Ligne {row}, colonne {column}",
+      "addRow": "Ajouter une ligne",
+      "addColumn": "Ajouter une colonne"
     }
   },
   "image": {

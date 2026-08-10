@@ -41,6 +41,7 @@
 import { z } from 'zod'
 import {
   MAX_SLOT_DESCRIPTION,
+  SLOT_KINDS,
   type SlotKind,
   type SlotSpec,
 } from '@slide-machine/shared'
@@ -102,7 +103,7 @@ export const slotFromToken = (
  */
 const slotSchema = z.object({
   name: z.string().min(1).max(MAX_SLOT_NAME),
-  kind: z.enum(['text', 'bullets', 'image']).optional(),
+  kind: z.enum(SLOT_KINDS as [SlotKind, ...SlotKind[]]).optional(),
   label: z.string().max(200).optional(),
   description: z.string().max(MAX_SLOT_DESCRIPTION).optional(),
   multiline: z.boolean().optional(),

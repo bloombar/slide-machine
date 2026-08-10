@@ -526,7 +526,9 @@ const narrateResultSchema = z.object({ transcript: z.string() })
 /** A plain narration built straight from the slide's text — the fallback when
  * the model reply is unusable, and the shape the prompt asks for. */
 const plainNarration = (s: SlideNarrateRequest['slide']): string =>
-  [s.title, s.body, ...(s.bullets ?? [])].filter(Boolean).join('. ')
+  [s.title, s.body, ...(s.bullets ?? []), ...(s.spoken ?? [])]
+    .filter(Boolean)
+    .join('. ')
 
 /** Narration prompt: what the lecturer would say to present this slide.
  * Wording lives in config/prompts/narrate.txt. */
