@@ -64,6 +64,88 @@ describe('ExportPanel', () => {
     createSpy.mockRestore()
   })
 
+  it('shows what the file could not carry (EXP-7)', async () => {
+    const realCreate = document.createElement.bind(document)
+    const createSpy = vi
+      .spyOn(document, 'createElement')
+      .mockImplementation(tag => {
+        const el = realCreate(tag)
+        if (tag === 'a') el.click = vi.fn()
+        return el
+      })
+    mockFetchRoutes({
+      'export.status': () => ({
+        status: 200,
+        body: {
+          googleConnected: false,
+          deckTitle: 'Bio',
+          hasWhiteboard: false,
+          exports: [],
+        },
+      }),
+      'export.download': () => ({
+        status: 200,
+        body: {
+          fileName: 'bio.pdf',
+          mimeType: 'application/pdf',
+          contentBase64: CONTENT_B64,
+          notes: [{ reason: 'math-not-typeset', detail: '\\frac{1}{' }],
+        },
+      }),
+    })
+    render(<ExportPanel deckId="d1" />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Download PDF' }))
+    // Said, not logged: the alternative is an author finding a hole in a
+    // slide months later
+    expect(
+      await screen.findByText(/could not be carried into this file/i),
+    ).toBeVisible()
+    expect(screen.getByText(/could not be typeset/i)).toBeVisible()
+    createSpy.mockRestore()
+  })
+
+  it('says nothing when the file carried everything', async () => {
+    const realCreate = document.createElement.bind(document)
+    const createSpy = vi
+      .spyOn(document, 'createElement')
+      .mockImplementation(tag => {
+        const el = realCreate(tag)
+        if (tag === 'a') el.click = vi.fn()
+        return el
+      })
+    mockFetchRoutes({
+      'export.status': () => ({
+        status: 200,
+        body: {
+          googleConnected: false,
+          deckTitle: 'Bio',
+          hasWhiteboard: false,
+          exports: [],
+        },
+      }),
+      'export.download': () => ({
+        status: 200,
+        body: {
+          fileName: 'bio.pdf',
+          mimeType: 'application/pdf',
+          contentBase64: CONTENT_B64,
+        },
+      }),
+    })
+    render(<ExportPanel deckId="d1" />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Download PDF' }))
+    // A report that appears when there is nothing to report trains people to
+    // ignore it
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/could not be carried into this file/i),
+      ).toBeNull(),
+    )
+    createSpy.mockRestore()
+  })
+
   it('switches the format to YAML and updates the button label', async () => {
     mockFetchRoutes({
       'export.status': () => ({

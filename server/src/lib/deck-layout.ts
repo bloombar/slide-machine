@@ -14,6 +14,7 @@
 import type { Layout, SlotBox, SlotValue } from '@slide-machine/shared'
 import type { ExportSlide } from './deck-yaml'
 import { resolveTreeBoxes } from './tree-boxes'
+import { codeColor, highlightCode } from './code-highlight'
 
 export type ColorRole = 'ink' | 'accent' | 'muted'
 
@@ -25,9 +26,19 @@ export interface LayoutRun {
   bold?: boolean
   italic?: boolean
   color?: ColorRole
+  /** A literal colour, overriding the role — what a syntax token is drawn in
+   * (EXP-7). The roles are the slide's own three, and a listing needs more. */
+  hex?: string
   bullet?: boolean
+  /** Set in a monospaced face, with its spacing kept exactly: a listing or
+   * preformatted text (EXP-7). */
+  mono?: boolean
   /** Extra gap after this paragraph, as a fraction of slide width. */
   spaceAfterFrac?: number
+  /** Continues the previous run on the same line instead of starting a new
+   * one. Syntax colouring splits a line into several runs, and they have to
+   * come back together as the line they were. */
+  sameLine?: boolean
 }
 
 export interface TextBox {
@@ -61,7 +72,38 @@ export interface RuleBox {
   h: number
   color: ColorRole
 }
-export type LayoutBox = TextBox | ImageBox | RuleBox
+/**
+ * A formula, to be typeset into the box rather than written into it (EXP-7).
+ *
+ * It carries its source rather than a picture because typesetting is
+ * asynchronous and this model is not: the renderers ask for the picture when
+ * they are ready to place it, and say so in the report when one cannot be
+ * made.
+ */
+export interface MathBox {
+  kind: 'math'
+  x: number
+  y: number
+  w: number
+  h: number
+  tex: string
+  slot?: string
+}
+
+/** Rows and columns, to be drawn as a table where the format has one and as a
+ * ruled grid where it does not (EXP-7). */
+export interface TableBox {
+  kind: 'table'
+  x: number
+  y: number
+  w: number
+  h: number
+  header?: string[]
+  rows: string[][]
+  slot?: string
+}
+
+export type LayoutBox = TextBox | ImageBox | RuleBox | MathBox | TableBox
 
 /** The image slot only appears in these layouts (matching the app: content/
  * list/title/etc. never render an image, even if the slide carries one).
@@ -139,10 +181,77 @@ const roleOf = (color: string | undefined): ColorRole | undefined => {
   return color ? 'ink' : undefined
 }
 
+/**
+ * A listing's lines, each split into the coloured pieces it is made of.
+ *
+ * One run per piece, with every run after the first on a line marked as
+ * continuing it — so a line that is `def`, a space, and `add` is drawn as one
+ * line in three colours rather than three lines (EXP-7).
+ */
+const codeRuns = (
+  source: string,
+  language: string | undefined,
+  sizeFrac: number,
+  background: string,
+): LayoutRun[] => {
+  const runs: LayoutRun[] = []
+  for (const [index, line] of source.split('\n').entries()) {
+    const spans = highlightCode(line, language)
+    if (!spans.length) {
+      // A blank line is still a line, and a listing's blank lines are part of
+      // how it reads.
+      runs.push({ text: '', sizeFrac, mono: true, ...(index ? {} : {}) })
+      continue
+    }
+    spans.forEach((span, i) => {
+      const hex = codeColor(span.token, background)
+      runs.push({
+        text: span.text,
+        sizeFrac,
+        mono: true,
+        ...(hex ? { hex } : {}),
+        ...(i > 0 ? { sameLine: true } : {}),
+      })
+    })
+  }
+  return runs
+}
+
+/**
+ * The box a slot needs when it is not text: a formula or a table.
+ *
+ * Kept apart from the runs because these are not paragraphs — a formula is
+ * typeset into a picture and a table is drawn as a grid, and writing either
+ * one out as characters is exactly what EXP-7 forbids.
+ */
+const specialBox = (
+  value: SlotValue | undefined,
+  geometry: { x: number; y: number; w: number; h: number },
+  slot?: string,
+): LayoutBox | null => {
+  if (!value) return null
+  if (value.kind === 'math')
+    return value.tex.trim()
+      ? { kind: 'math', ...geometry, tex: value.tex, ...(slot ? { slot } : {}) }
+      : null
+  if (value.kind === 'table')
+    return value.rows.length || value.header?.length
+      ? {
+          kind: 'table',
+          ...geometry,
+          ...(value.header?.length ? { header: value.header } : {}),
+          rows: value.rows,
+          ...(slot ? { slot } : {}),
+        }
+      : null
+  return null
+}
+
 /** The paragraphs one slot contributes, whatever kind it holds. */
 const runsForSlot = (
   value: SlotValue | undefined,
   box: SlotBox,
+  background = '#ffffff',
 ): LayoutRun[] => {
   // A box's fontSize is `cqi` — a percent of slide width — and the export
   // model measures type as a fraction of that same width, so this is /100
@@ -153,8 +262,15 @@ const runsForSlot = (
   if (!value) return []
   switch (value.kind) {
     case 'text':
-    case 'preformatted':
       return value.value ? [{ text: value.value, sizeFrac, bold, color }] : []
+    case 'preformatted':
+      // Its spacing is the content: monospaced, and split by line so nothing
+      // reflows it (EXP-7).
+      return value.value
+        ? value.value
+            .split('\n')
+            .map(text => ({ text, sizeFrac, color, mono: true }))
+        : []
     case 'bullets':
       return value.items.map(text => ({
         text,
@@ -165,13 +281,14 @@ const runsForSlot = (
       }))
     case 'code':
       return value.source
-        ? [{ text: value.source, sizeFrac, color: 'muted' }]
+        ? codeRuns(value.source, value.language, sizeFrac, background)
         : []
     case 'math':
-      return value.tex ? [{ text: value.tex, sizeFrac, color }] : []
     case 'table':
-      // Rendered as lines until the table renderer lands (plan Phase 4)
-      return value.rows.map(row => ({ text: row.join('  '), sizeFrac, color }))
+      // Neither is text. They become boxes of their own, so that an export
+      // draws a formula and a table rather than writing out their source
+      // (EXP-7, `specialBox`).
+      return []
     default:
       return []
   }
@@ -225,6 +342,7 @@ const treeLayout = (
   slide: ExportSlide,
   layout: Layout,
   theme: Record<string, unknown> | undefined,
+  background: string,
 ): LayoutBox[] | null => {
   if (!layout.tree) return null
   const boxes: LayoutBox[] = []
@@ -244,7 +362,13 @@ const treeLayout = (
       boxes.push({ kind: 'image', ...geometry, slot: box.slot })
       continue
     }
-    const runs = runsForSlot(slide.slots?.[box.slot], box.style as SlotBox)
+    const value = slide.slots?.[box.slot]
+    const special = specialBox(value, geometry, box.slot)
+    if (special) {
+      boxes.push(special)
+      continue
+    }
+    const runs = runsForSlot(value, box.style as SlotBox, background)
     if (!runs.length) continue
     boxes.push({
       kind: 'text',
@@ -268,6 +392,7 @@ const treeLayout = (
 const arrangedLayout = (
   slide: ExportSlide,
   layout: Layout,
+  background: string,
 ): LayoutBox[] | null => {
   const positions = layout.elementPositions ?? {}
   if (!Object.keys(positions).length) return null
@@ -281,7 +406,13 @@ const arrangedLayout = (
       boxes.push({ kind: 'image', ...geometry, slot: spec.name })
       continue
     }
-    const runs = runsForSlot(slide.slots?.[spec.name], box)
+    const value = slide.slots?.[spec.name]
+    const special = specialBox(value, geometry, spec.name)
+    if (special) {
+      boxes.push(special)
+      continue
+    }
+    const runs = runsForSlot(value, box, background)
     if (!runs.length) continue
     boxes.push({
       kind: 'text',
@@ -311,9 +442,11 @@ export const computeLayout = (
     // The same order the renderer picks in: the tree is the design, the
     // measured geometry is derived from it, and the arrangements below are
     // what a layout with neither still gets.
-    const drawn = treeLayout(slide, layout, theme)
+    const background =
+      typeof theme?.background === 'string' ? theme.background : '#ffffff'
+    const drawn = treeLayout(slide, layout, theme, background)
     if (drawn) return drawn
-    const arranged = arrangedLayout(slide, layout)
+    const arranged = arrangedLayout(slide, layout, background)
     if (arranged) return arranged
   }
   switch (slide.layoutType) {

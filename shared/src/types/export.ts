@@ -61,10 +61,25 @@ export interface ExportStatus {
  * suggested file name, its MIME type, and the file contents base64-encoded
  * (so binary PDFs survive the JSON transport intact).
  */
+/**
+ * Something a format could not carry (EXP-7).
+ *
+ * Structured rather than a sentence so the app says it in the reader's own
+ * language. `detail` is the author's own content — the formula that would not
+ * typeset — which is theirs and is not translated.
+ */
+export interface ExportNote {
+  reason: 'math-not-typeset'
+  detail: string
+}
+
 export interface ExportDownload {
   fileName: string
   mimeType: string
   contentBase64: string
+  /** What the file could not carry, for the user to see rather than
+   * discover (EXP-7). Absent when everything went in. */
+  notes?: ExportNote[]
 }
 
 /**
@@ -78,6 +93,8 @@ export interface ExportToDriveResult {
   format: DeckExportFormat
   driveFolderName?: string
   exportedAt: string
+  /** As ExportDownload.notes (EXP-7). */
+  notes?: ExportNote[]
 }
 
 /**

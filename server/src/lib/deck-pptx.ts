@@ -14,10 +14,12 @@
  */
 import PptxGenJSImport from 'pptxgenjs'
 import type { Layout } from '@slide-machine/shared'
+import type { ExportNote } from '@slide-machine/shared'
 import type { ExportDeck, ExportSlide } from './deck-yaml'
 import { visibleStrokes, hexForPptx, HIGHLIGHTER_ALPHA } from './deck-drawings'
 import { fetchSlideImages, toDataUri } from './deck-image'
 import { slotToken } from './slot-metadata'
+import { typesetFormulas, type Formulas } from './deck-formulas'
 import { withSlotAltText } from './pptx-alt-text'
 import { computeLayout, type ColorRole } from './deck-layout'
 import { DEFAULT_THEME } from './deck-theme'
@@ -49,6 +51,7 @@ const renderSlide = (
   image?: string,
   layout?: Layout,
   templateTheme?: Record<string, unknown>,
+  formulas?: Formulas,
 ): void => {
   for (const box of computeLayout(slide, layout, templateTheme)) {
     if (box.kind === 'text') {
@@ -58,9 +61,15 @@ const renderSlide = (
           fontSize: r.sizeFrac * WIDTH_PT,
           bold: r.bold,
           italic: r.italic,
-          color: hex[r.color ?? 'ink'],
+          // A syntax token's own colour wins over the slide's three roles
+          // (EXP-7); everything else is drawn in the role it asked for.
+          color: r.hex ? noHash(r.hex) : hex[r.color ?? 'ink'],
           bullet: r.bullet,
-          breakLine: true,
+          // A listing keeps its indentation because the face is monospaced
+          // and nothing reflows it.
+          ...(r.mono ? { fontFace: 'Courier New' } : {}),
+          // Coloured pieces of one line come back together as that line.
+          breakLine: !r.sameLine,
           paraSpaceAfter: (r.spaceAfterFrac ?? 0) * WIDTH_PT,
         },
       }))
@@ -85,6 +94,45 @@ const renderSlide = (
         fill: { color: hex[box.color] },
         line: { type: 'none' },
       })
+    } else if (box.kind === 'math') {
+      // Typeset, never written out: a formula exported as its LaTeX makes a
+      // maths lecture unusable, which is the whole point of the kind (EXP-7).
+      const drawn = formulas?.get(box.tex)
+      if (!drawn) continue
+      const fit = contain(box, drawn.aspect)
+      s.addImage({
+        data: `data:image/png;base64,${Buffer.from(drawn.png).toString('base64')}`,
+        ...fit,
+        ...(box.slot
+          ? { objectName: slotToken(box.slot), altText: box.tex }
+          : { altText: box.tex }),
+      })
+    } else if (box.kind === 'table') {
+      // A real table, because pptx has one: Slides and PowerPoint both give
+      // it rows a reader can select and a screen reader can announce.
+      const body = box.rows.map(row =>
+        row.map(text => ({ text, options: { color: hex.ink } })),
+      )
+      const rows = box.header?.length
+        ? [
+            box.header.map(text => ({
+              text,
+              options: { bold: true, color: hex.ink },
+            })),
+            ...body,
+          ]
+        : body
+      if (rows.length) {
+        s.addTable(rows, {
+          x: box.x * SLIDE_W,
+          y: box.y * SLIDE_H,
+          w: box.w * SLIDE_W,
+          h: box.h * SLIDE_H,
+          fontSize: TABLE_PT,
+          border: { type: 'solid', pt: 0.5, color: hex.muted },
+          ...(box.slot ? { objectName: slotToken(box.slot) } : {}),
+        })
+      }
     } else if (box.kind === 'image' && image) {
       s.addImage({
         data: image,
@@ -105,6 +153,33 @@ const renderSlide = (
   }
   drawStrokes(pptx, s, slide)
 }
+
+/**
+ * A picture centred in its box at its own proportions.
+ *
+ * `sizing: contain` would do this for a photograph, but a formula's box is
+ * the space the design reserved and the formula is usually far wider than it
+ * is tall — letting it fill the box would stretch the notation.
+ */
+const contain = (
+  box: { x: number; y: number; w: number; h: number },
+  aspect: number,
+) => {
+  const boxW = box.w * SLIDE_W
+  const boxH = box.h * SLIDE_H
+  const w = Math.min(boxW, boxH * aspect)
+  const h = w / aspect
+  return {
+    x: box.x * SLIDE_W + (boxW - w) / 2,
+    y: box.y * SLIDE_H + (boxH - h) / 2,
+    w,
+    h,
+  }
+}
+
+/** Table type, in points. Smaller than body text: a table is read a cell at
+ * a time and packs more into the same box. */
+const TABLE_PT = 12
 
 /** Draws freehand whiteboard marks (WB-1) as native freeform lines. Points are
  * 0..1 of the slide → inches (pptx y-axis is top-down, so no flip). */
@@ -154,7 +229,12 @@ const drawStrokes = (pptx: Pptx, s: Slide, slide: ExportSlide): void => {
  * Builds the deck's .pptx and returns its bytes. One slide per deck slide,
  * arranged by layout type.
  */
-export const deckToPptx = async (deck: ExportDeck): Promise<Uint8Array> => {
+export const deckToPptx = async (
+  deck: ExportDeck,
+  /** Collects what a format could not carry, for the export's report
+   * (EXP-7). */
+  notes?: ExportNote[],
+): Promise<Uint8Array> => {
   const pptx = new PptxGenJS()
   pptx.title = deck.title
   pptx.layout = 'LAYOUT_16x9'
@@ -171,14 +251,20 @@ export const deckToPptx = async (deck: ExportDeck): Promise<Uint8Array> => {
   // Only fetch images for slides whose layout shows one; then to data URIs.
   const layoutFor = (slide: ExportSlide) =>
     deck.layouts?.find(l => l.type === slide.layoutType)
+  // The background the export actually paints, so a listing's syntax
+  // colours are chosen against what a reader will see rather than against
+  // whatever the template object happened to say (EXP-7).
+  const drawnTheme = { ...deck.templateTheme, background: theme.background }
   const layouts = deck.slides.map(s =>
-    computeLayout(s, layoutFor(s), deck.templateTheme),
+    computeLayout(s, layoutFor(s), drawnTheme),
   )
   const urls = deck.slides.map((slide, i) =>
     layouts[i]!.some(b => b.kind === 'image') ? slide.imageRef : undefined,
   )
   const fetched = await fetchSlideImages(urls)
   const images = fetched.map(img => (img ? toDataUri(img) : undefined))
+  // Every distinct formula, typeset once, before any slide is drawn.
+  const formulas = await typesetFormulas(layouts.flat(), theme.text, notes)
 
   deck.slides.forEach((slide, i) => {
     const s = pptx.addSlide()
@@ -190,7 +276,8 @@ export const deckToPptx = async (deck: ExportDeck): Promise<Uint8Array> => {
       hex,
       images[i],
       layoutFor(slide),
-      deck.templateTheme,
+      drawnTheme,
+      formulas,
     )
     // The narration goes where a presenter expects to find it, and comes back
     // as narration on re-import (EXP-8/EDIT-6).

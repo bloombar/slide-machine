@@ -15,6 +15,7 @@
 import { deckToPptx } from './deck-pptx'
 import { templateToPptx, templatePictures } from './template-pptx'
 import type { Template } from '@slide-machine/shared'
+import type { ExportNote } from '@slide-machine/shared'
 import type { ExportDeck } from './deck-yaml'
 import { clientForRefreshToken } from '../auth/google-connect'
 
@@ -123,8 +124,10 @@ export const createGoogleSlidesLive = async (
   refreshToken: string,
   deck: ExportDeck,
   folderId = 'root',
+  /** Collects what the format could not carry (EXP-7). */
+  notes?: ExportNote[],
 ): Promise<DriveFile> => {
-  const pptx = await deckToPptx(deck)
+  const pptx = await deckToPptx(deck, notes)
   return uploadFileToDriveLive(
     refreshToken,
     {

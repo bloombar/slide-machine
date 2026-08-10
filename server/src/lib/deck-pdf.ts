@@ -22,14 +22,17 @@ import {
   type PDFPage,
 } from 'pdf-lib'
 import type { Layout } from '@slide-machine/shared'
+import type { ExportNote } from '@slide-machine/shared'
 import type { ExportDeck, ExportSlide } from './deck-yaml'
 import { visibleStrokes, hexToRgb01, HIGHLIGHTER_ALPHA } from './deck-drawings'
 import { fetchSlideImages } from './deck-image'
+import { typesetFormulas } from './deck-formulas'
 import { DEFAULT_THEME, type ExportTheme } from './deck-theme'
 import {
   computeLayout,
   type ColorRole,
   type LayoutRun,
+  type TableBox,
   type TextBox,
 } from './deck-layout'
 
@@ -54,10 +57,25 @@ interface Fonts {
   regular: PDFFont
   bold: PDFFont
   italic: PDFFont
+  /** For listings and preformatted text, whose spacing is the content. */
+  mono: PDFFont
 }
 
 const fontFor = (fonts: Fonts, run: LayoutRun): PDFFont =>
-  run.bold ? fonts.bold : run.italic ? fonts.italic : fonts.regular
+  // A listing is set in a monospaced face so its indentation survives; the
+  // proportional faces would close up the leading spaces (EXP-7).
+  run.mono
+    ? fonts.mono
+    : run.bold
+      ? fonts.bold
+      : run.italic
+        ? fonts.italic
+        : fonts.regular
+
+/** A run's own colour where it has one — a syntax token — and the slide's
+ * role otherwise. */
+const colorFor = (run: LayoutRun): Color =>
+  run.hex ? hex(run.hex) : colors[run.color ?? 'ink']
 
 /** Breaks text into lines that fit `maxWidth` at the given font size. */
 const wrapLines = (
@@ -88,59 +106,152 @@ const wrapLines = (
   return lines
 }
 
-interface DrawnLine {
+/** One piece of a drawn line: some characters set one way. */
+interface Piece {
   text: string
   size: number
   font: PDFFont
   color: Color
+}
+
+/** A line as it will be drawn, and the gap that follows it. */
+interface DrawnLine {
+  pieces: Piece[]
   gapAfter: number
 }
 
-/** Lays a text box's runs into wrapped lines and draws them, honoring the box's
- * horizontal align and vertical align (top or middle) — the app's flex/justify. */
+/**
+ * Lays a text box's runs into lines and draws them, honoring the box's
+ * horizontal and vertical alignment — the app's flex/justify.
+ *
+ * Two things a run can ask for beyond its words. A run may **continue the
+ * previous line** rather than start one, which is how a listing's coloured
+ * pieces come back together as the line they were (EXP-7). And a run may be
+ * **monospaced**, in which case it is not wrapped: a listing that reflows is a
+ * different listing, and its author chose where the lines break.
+ */
 const drawTextBox = (page: PDFPage, box: TextBox): void => {
   const bw = box.w * PAGE_WIDTH
   const bxLeft = box.x * PAGE_WIDTH
   const boxTop = PAGE_HEIGHT - box.y * PAGE_HEIGHT
   const bh = box.h * PAGE_HEIGHT
 
-  const drawn: DrawnLine[] = []
-  let totalH = 0
+  const lines: DrawnLine[] = []
   for (const run of box.runs) {
     const size = run.sizeFrac * PAGE_WIDTH
     const font = fontFor(fonts, run)
-    const color = colors[run.color ?? 'ink']
+    const color = colorFor(run)
     const text = (run.bullet ? '•  ' : '') + run.text
-    const lineH = size * 1.32
-    const wrapped = wrapLines(text, font, size, bw)
-    wrapped.forEach((t, i) => {
-      drawn.push({
-        text: t,
-        size,
-        font,
-        color,
-        gapAfter:
-          i === wrapped.length - 1 ? (run.spaceAfterFrac ?? 0) * PAGE_WIDTH : 0,
-      })
-      totalH += lineH
-    })
-    totalH += (run.spaceAfterFrac ?? 0) * PAGE_WIDTH
+    const gapAfter = (run.spaceAfterFrac ?? 0) * PAGE_WIDTH
+
+    const last = lines[lines.length - 1]
+    if (run.sameLine && last) {
+      last.pieces.push({ text, size, font, color })
+      last.gapAfter = gapAfter
+      continue
+    }
+    // A listing keeps the lines its author wrote; prose wraps to its box.
+    const segments = run.mono ? [text] : wrapLines(text, font, size, bw)
+    segments.forEach((segment, i) =>
+      lines.push({
+        pieces: [{ text: segment, size, font, color }],
+        gapAfter: i === segments.length - 1 ? gapAfter : 0,
+      }),
+    )
   }
 
+  const heightOf = (line: DrawnLine) =>
+    Math.max(...line.pieces.map(p => p.size), 0) * 1.32
+  const widthOf = (line: DrawnLine) =>
+    line.pieces.reduce(
+      (w, p) => w + p.font.widthOfTextAtSize(p.text, p.size),
+      0,
+    )
+  const totalH = lines.reduce(
+    (h, line) => h + heightOf(line) + line.gapAfter,
+    0,
+  )
+
   let cursorTop = box.valign === 'middle' ? boxTop - (bh - totalH) / 2 : boxTop
-  for (const ln of drawn) {
-    const lineH = ln.size * 1.32
-    const lineW = ln.font.widthOfTextAtSize(ln.text, ln.size)
-    const x = box.align === 'center' ? bxLeft + (bw - lineW) / 2 : bxLeft
-    page.drawText(ln.text, {
-      x,
-      y: cursorTop - ln.size,
-      size: ln.size,
-      font: ln.font,
-      color: ln.color,
-    })
-    cursorTop -= lineH + ln.gapAfter
+  for (const line of lines) {
+    const lineH = heightOf(line)
+    let x = box.align === 'center' ? bxLeft + (bw - widthOf(line)) / 2 : bxLeft
+    for (const piece of line.pieces) {
+      page.drawText(piece.text, {
+        x,
+        y: cursorTop - piece.size,
+        size: piece.size,
+        font: piece.font,
+        color: piece.color,
+      })
+      x += piece.font.widthOfTextAtSize(piece.text, piece.size)
+    }
+    cursorTop -= lineH + line.gapAfter
   }
+}
+
+/**
+ * A table as a ruled grid, since PDF has no table of its own (EXP-7).
+ *
+ * Every cell is ruled, not just the rows — the same grid the slide draws, so
+ * the table an audience saw is the table in the file. Columns share the width
+ * equally: the box is what the design reserved, and guessing at content widths
+ * would make one export differ from the next.
+ */
+const drawTableBox = (page: PDFPage, box: TableBox): void => {
+  const rows = box.header?.length ? [box.header, ...box.rows] : box.rows
+  if (!rows.length) return
+  const columns = Math.max(...rows.map(r => r.length), 1)
+  const bw = box.w * PAGE_WIDTH
+  const bh = box.h * PAGE_HEIGHT
+  const left = box.x * PAGE_WIDTH
+  const top = PAGE_HEIGHT - box.y * PAGE_HEIGHT
+  const cellW = bw / columns
+  const cellH = bh / rows.length
+  const size = Math.min(cellH * 0.45, PAGE_WIDTH * 0.018)
+  const pad = size * 0.5
+
+  rows.forEach((row, r) => {
+    const rowTop = top - r * cellH
+    for (let c = 0; c < columns; c++) {
+      page.drawRectangle({
+        x: left + c * cellW,
+        y: rowTop - cellH,
+        width: cellW,
+        height: cellH,
+        borderColor: colors.muted,
+        borderWidth: 0.5,
+      })
+      const heading = Boolean(box.header?.length) && r === 0
+      const font = heading ? fonts.bold : fonts.regular
+      const text = row[c] ?? ''
+      if (!text) continue
+      page.drawText(clipToWidth(text, font, size, cellW - pad * 2), {
+        x: left + c * cellW + pad,
+        y: rowTop - size - pad,
+        size,
+        font,
+        color: colors.ink,
+      })
+    }
+  })
+}
+
+/** As much of a cell's text as fits its column. A table's cells are read at a
+ * glance, so an overlong one is cut rather than allowed to run into its
+ * neighbour. */
+const clipToWidth = (
+  text: string,
+  font: PDFFont,
+  size: number,
+  maxWidth: number,
+): string => {
+  if (font.widthOfTextAtSize(text, size) <= maxWidth) return text
+  let cut = text
+  while (cut.length > 1 && font.widthOfTextAtSize(`${cut}…`, size) > maxWidth) {
+    cut = cut.slice(0, -1)
+  }
+  return `${cut}…`
 }
 
 // Set per document (embedded fonts are document-scoped; colors are per deck).
@@ -154,10 +265,30 @@ const drawSlide = (
   image?: PDFImage,
   layout?: Layout,
   templateTheme?: Record<string, unknown>,
+  formulas?: Map<string, PDFImage>,
 ): void => {
   for (const box of computeLayout(slide, layout, templateTheme)) {
     if (box.kind === 'text') {
       drawTextBox(page, box)
+    } else if (box.kind === 'table') {
+      drawTableBox(page, box)
+    } else if (box.kind === 'math') {
+      // Typeset, never written out — a maths lecture whose formulas export
+      // as LaTeX is unusable (EXP-7).
+      const drawn = formulas?.get(box.tex)
+      if (!drawn) continue
+      const bw = box.w * PAGE_WIDTH
+      const bh = box.h * PAGE_HEIGHT
+      const scale = Math.min(bw / drawn.width, bh / drawn.height)
+      const w = drawn.width * scale
+      const h = drawn.height * scale
+      const boxTop = PAGE_HEIGHT - box.y * PAGE_HEIGHT
+      page.drawImage(drawn, {
+        x: box.x * PAGE_WIDTH + (bw - w) / 2,
+        y: boxTop - (bh - h) / 2 - h,
+        width: w,
+        height: h,
+      })
     } else if (box.kind === 'rule') {
       page.drawRectangle({
         x: box.x * PAGE_WIDTH,
@@ -220,13 +351,19 @@ const drawStrokes = (page: PDFPage, slide: ExportSlide): void => {
 }
 
 /** Builds the deck's PDF: one 16:9 page per slide, in display order. */
-export const deckToPdf = async (deck: ExportDeck): Promise<Uint8Array> => {
+export const deckToPdf = async (
+  deck: ExportDeck,
+  /** Collects what a format could not carry, for the export's report
+   * (EXP-7). */
+  notes?: ExportNote[],
+): Promise<Uint8Array> => {
   const doc = await PDFDocument.create()
   doc.setTitle(deck.title)
   fonts = {
     regular: await doc.embedFont(StandardFonts.Helvetica),
     bold: await doc.embedFont(StandardFonts.HelveticaBold),
     italic: await doc.embedFont(StandardFonts.HelveticaOblique),
+    mono: await doc.embedFont(StandardFonts.Courier),
   }
   // Apply the template theme: text/accent/muted colors and the page background.
   const theme = deck.theme ?? DEFAULT_THEME
@@ -237,8 +374,12 @@ export const deckToPdf = async (deck: ExportDeck): Promise<Uint8Array> => {
   // etc. never display an image), then embed the fetched bytes.
   const layoutFor = (slide: ExportSlide) =>
     deck.layouts?.find(l => l.type === slide.layoutType)
+  // The background the export actually paints, so a listing's syntax
+  // colours are chosen against what a reader will see rather than against
+  // whatever the template object happened to say (EXP-7).
+  const drawnTheme = { ...deck.templateTheme, background: theme.background }
   const layouts = deck.slides.map(s =>
-    computeLayout(s, layoutFor(s), deck.templateTheme),
+    computeLayout(s, layoutFor(s), drawnTheme),
   )
   const urls = deck.slides.map((s, i) =>
     layouts[i]!.some(b => b.kind === 'image') ? s.imageRef : undefined,
@@ -254,6 +395,14 @@ export const deckToPdf = async (deck: ExportDeck): Promise<Uint8Array> => {
     ),
   )
 
+  // Every distinct formula, typeset and embedded once, before any page is
+  // drawn — the page writer is synchronous and typesetting is not.
+  const typeset = await typesetFormulas(layouts.flat(), theme.text, notes)
+  const formulas = new Map<string, PDFImage>()
+  for (const [tex, drawn] of typeset) {
+    formulas.set(tex, await doc.embedPng(drawn.png))
+  }
+
   deck.slides.forEach((slide, i) => {
     const page = doc.addPage([PAGE_WIDTH, PAGE_HEIGHT])
     page.drawRectangle({
@@ -263,7 +412,7 @@ export const deckToPdf = async (deck: ExportDeck): Promise<Uint8Array> => {
       height: PAGE_HEIGHT,
       color: background,
     })
-    drawSlide(page, slide, images[i], layoutFor(slide), deck.templateTheme)
+    drawSlide(page, slide, images[i], layoutFor(slide), drawnTheme, formulas)
   })
   if (doc.getPageCount() === 0) {
     doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]).drawRectangle({
