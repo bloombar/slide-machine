@@ -122,6 +122,11 @@ export const FAMILY_LABEL = {
     color: 'b60205',
     description: 'Administration & moderation',
   },
+  EVAL: {
+    name: 'area:evaluation',
+    color: '1d76db',
+    description: 'Research instrumentation & metrics',
+  },
   FUTURE: {
     name: 'area:future',
     color: 'ededed',

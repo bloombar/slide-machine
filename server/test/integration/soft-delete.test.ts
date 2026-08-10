@@ -13,6 +13,7 @@ import { DeckModel } from '../../src/models/deck'
 import { SlideModel } from '../../src/models/slide'
 import { SeedAssetModel } from '../../src/models/seed-asset'
 import { VoteModel } from '../../src/models/vote'
+import { TemplateVersionModel } from '../../src/models/template-version'
 import {
   deleteProjectCascade,
   deleteDeckCascade,
@@ -72,6 +73,7 @@ beforeEach(async () => {
     SeedAssetModel.deleteMany({}),
     VoteModel.deleteMany({}),
     UsageRecordModel.deleteMany({}),
+    TemplateVersionModel.deleteMany({}),
   ])
   const owner = await UserModel.create({
     email: 'ada@x.com',
@@ -247,5 +249,87 @@ describe('storage gauge on purge', () => {
     await purgeExpiredSoftDeletes(90, Date.now() + 100 * DAY_MS)
 
     expect(await usedThisPeriod(ownerId, 'audioStorageMb')).toBe(4)
+  })
+})
+
+/**
+ * Template versions (TMPL-11) have no tombstone of their own — they sit outside
+ * the cascade on purpose, so a lecture can outlive its template and its author.
+ * That leaves the sweep as the only thing that ever collects them, once no
+ * lecture pins them any more.
+ */
+describe('unpinned template versions (TMPL-11 / P-11)', () => {
+  /** A stored version, optionally backdated past the retention cutoff. */
+  const makeVersion = async (contentHash: string, createdAt?: Date) => {
+    const version = await TemplateVersionModel.create({
+      templateId: 'classic',
+      source: 'builtin',
+      contentHash,
+      name: 'Classic',
+      theme: {},
+      layouts: [],
+    })
+    if (createdAt)
+      await TemplateVersionModel.updateOne(
+        { _id: version._id },
+        { $set: { createdAt } },
+      )
+    return version
+  }
+
+  /** Pins a lecture to a version, reaching tombstoned ones too. */
+  const pin = async (deckId: unknown, versionId: unknown) =>
+    DeckModel.updateOne(
+      { _id: deckId as string },
+      { $set: { templateVersionId: String(versionId) } },
+    ).setOptions({ withDeleted: true })
+
+  const versionCount = async () => TemplateVersionModel.countDocuments({})
+
+  it('collects a version in the same sweep that purges its last lecture', async () => {
+    const { project, deck } = await makeProject()
+    const version = await makeVersion('orphaned')
+    await pin(deck._id, version._id)
+
+    await deleteProjectCascade(project._id)
+    await purgeExpiredSoftDeletes(90, Date.now() + 100 * DAY_MS)
+
+    expect(await versionCount()).toBe(0)
+  })
+
+  it('keeps a version a live lecture is still drawn with', async () => {
+    const { deck } = await makeProject()
+    const version = await makeVersion('in-use')
+    await pin(deck._id, version._id)
+
+    await purgeExpiredSoftDeletes(90, Date.now() + 100 * DAY_MS)
+
+    expect(await versionCount()).toBe(1)
+  })
+
+  it('keeps a version pinned by a tombstoned lecture still inside the window', async () => {
+    // The lecture is recoverable until the window passes (P-10), and has to come
+    // back drawn the way it was — so the structure it holds outlives the sweep.
+    const { project, deck } = await makeProject()
+    const version = await makeVersion(
+      'recoverable',
+      new Date(Date.now() - 200 * DAY_MS),
+    )
+    await pin(deck._id, version._id)
+    await deleteProjectCascade(project._id)
+
+    await purgeExpiredSoftDeletes(90, Date.now())
+
+    expect(await versionCount()).toBe(1)
+  })
+
+  it('spares a version too young for the lecture that will pin it to exist yet', async () => {
+    // A version is written before the lecture that pins it, so a sweep landing
+    // between the two would otherwise take a version about to be used.
+    await makeVersion('just-made')
+
+    await purgeExpiredSoftDeletes(90, Date.now())
+
+    expect(await versionCount()).toBe(1)
   })
 })

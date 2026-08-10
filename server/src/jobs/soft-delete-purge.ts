@@ -9,6 +9,9 @@
  * children and files. Whatever remains — children tombstoned on their own while
  * their parent stayed live (an individually deleted slide or seed asset) — is
  * then swept directly. `DELETED_DATA_RETENTION_DAYS = 0` disables the sweep.
+ *
+ * The sweep also collects template versions no lecture pins any more (TMPL-11),
+ * which have no tombstone of their own and would otherwise accumulate forever.
  */
 import { env } from '../config/env'
 import { UserModel } from '../models/user'
@@ -18,6 +21,7 @@ import { SlideModel } from '../models/slide'
 import { SeedAssetModel } from '../models/seed-asset'
 import { TranscriptSegmentModel } from '../models/transcript-segment'
 import { RefineJobModel } from '../models/refine-job'
+import { TemplateVersionModel } from '../models/template-version'
 import { getStorage } from '../storage'
 import {
   purgeUserCascade,
@@ -28,6 +32,48 @@ import {
 const DAY_MS = 24 * 60 * 60 * 1000
 /** Once a day; startup cost is negligible against the retention window. */
 const SWEEP_INTERVAL_MS = DAY_MS
+
+/**
+ * Removes template versions no lecture pins any more (TMPL-11 / P-11),
+ * returning how many went.
+ *
+ * Versions sit outside the delete cascade deliberately — a lecture may outlive
+ * both its template and its author, so tombstoning a version with either would
+ * take working lectures down with it. That leaves nothing else to collect them:
+ * every edit of a template mints a row, and each one stays behind for good once
+ * the lectures that pinned it are gone. This is the sweep the model docstring
+ * points at.
+ *
+ * A version counts as pinned when any lecture holds it, **tombstoned lectures
+ * included** — one restored inside the retention window (P-10) has to come back
+ * drawn the way it was, so `withDeleted` is set rather than left to the
+ * exclusion middleware.
+ *
+ * Only versions older than the same retention cutoff are candidates, which also
+ * settles a race the reference check alone would lose: `currentVersionIdFor`
+ * writes the version before the lecture that will pin it exists, and a sweep
+ * landing between the two must not take it.
+ */
+const purgeUnpinnedTemplateVersions = async (cutoff: Date): Promise<number> => {
+  const candidates = await TemplateVersionModel.find({
+    createdAt: { $lt: cutoff },
+  }).select('_id')
+  if (!candidates.length) return 0
+
+  const pinning = await DeckModel.find({
+    templateVersionId: { $in: candidates.map(v => v._id.toString()) },
+  })
+    .select('templateVersionId')
+    .setOptions({ withDeleted: true })
+  const pinned = new Set(pinning.map(d => d.templateVersionId))
+
+  const orphans = candidates.filter(v => !pinned.has(v._id.toString()))
+  if (!orphans.length) return 0
+  const result = await TemplateVersionModel.deleteMany({
+    _id: { $in: orphans.map(v => v._id) },
+  })
+  return result.deletedCount ?? 0
+}
 
 /**
  * Permanently removes every record tombstoned before the retention cutoff,
@@ -82,6 +128,10 @@ export const purgeExpiredSoftDeletes = async (
     RefineJobModel.deleteMany(expired),
   ])
   purged += results.reduce((n, r) => n + (r.deletedCount ?? 0), 0)
+
+  // Last, so the lectures purged above have already released their pins and
+  // the versions they were holding go in the same sweep rather than the next.
+  purged += await purgeUnpinnedTemplateVersions(cutoff)
 
   if (purged)
     console.log(`Soft-delete purge: removed ${purged} expired record(s)`)

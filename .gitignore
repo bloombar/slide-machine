@@ -28,6 +28,18 @@ docs/GRANT_PROPOSAL.md
 docs/LAB.md
 docs/grant_proposal.pdf
 
+# Fall 2026 pilot study — kept local while the study runs, committed at
+# publication (May 2027). These name the condition assignment, the directional
+# hypothesis and the anchor quiz items; pilot students work in this repo for
+# their course project, so committing them would hand participants the
+# hypothesis and the answer key. See docs/study/PROTOCOL.md §11.
+#
+# The WHOLE directory is ignored, deliberately — including docs/study/data/,
+# where study data lives and from which no dataset ever enters the repository
+# (SPEC.md P-14). Anything added under docs/study/ is private by default;
+# a study file that should be public has to be moved out, not un-ignored.
+docs/study/
+
 # Local upload storage (STORAGE_PROVIDER=local)
 .uploads*/
 

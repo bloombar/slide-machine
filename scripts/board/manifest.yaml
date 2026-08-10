@@ -498,11 +498,16 @@
   note: administration & moderation
 - id: ADMIN-6
   title: Viewing soft-deleted content
-  full: Soft-deleted records are hidden from all normal reads (P-10), but an admin
-    can view soft-deleted entities (users, projects, lectures, and other owned
-    records) in the console — for recovery or audit — until the retention sweep
-    purges them (P-11). Every access to soft-deleted content is audited
-    (ADMIN-7).
+  full: "Soft-deleted records are hidden from all normal reads (P-10), but an
+    admin can view soft-deleted entities (users, projects, lectures, and other
+    owned records) — for recovery or audit — until the retention sweep purges
+    them (P-11). This holds in the console and in the product itself: a
+    tombstoned lecture opens in the deck viewer, a tombstoned project in the
+    product project view, and a tombstoned account's profile on its profile
+    page, on the same allowlist authority that opens private content (ADMIN-3).
+    A tombstoned record reads as its owner last left it — the children deleted
+    along with it, and only those, exactly what a restore would bring back. It
+    is read-only: the moderation and settings…"
   section: §20 Administration, Operations & Moderation
   family: ADMIN
   phase: 2
@@ -589,6 +594,23 @@
     browser's language decides until then. Authorization enforces that users may
     only modify their own resources (except admins — §20, whose authorization
     comes from the allowlist, not ownership).
+  section: §4 Accounts & Authentication
+  family: AUTH
+  phase: 2
+  status: Done
+  review: false
+- id: AUTH-6
+  title: Account type & privacy defaults
+  full: "After signing in, an account with no accountType yet is asked, once,
+    which of student, educator, or other describes it (§3). The answer is a
+    self-declaration, not a permission — it grants and withholds nothing — and
+    its only effect is to choose the privacy defaults the account's work starts
+    from: Student — the account defaults to private: its profile page is private
+    (SHARE-1) and each new project is created restricted, so lectures inside it
+    are visible only to the owner and whoever they share with. Coursework is the
+    student's own until they decide to publish it, and the public default would
+    publish it for them (P-1/P-2). Educator and Other — the public defaults the
+    product is built around…"
   section: §4 Accounts & Authentication
   family: AUTH
   phase: 2
@@ -1074,8 +1096,8 @@
     second service to delegate to, which resolves the earlier cross-service
     token question (§19). Prerequisite: this depends on EXP-4's
     connected-account flow (offline Google OAuth with Forms/Drive scopes and an
-    encrypted token store), a hard predecessor to publishing that is not yet
-    built."
+    encrypted token store), a hard predecessor to publishing that is built —
+    Google connect, the encrypted per-user token…"
   section: §17 Quiz Generator Integration
   family: QUIZ
   phase: 2
@@ -1203,15 +1225,15 @@
 - id: TECH-4
   title: Server configuration
   full: "Server-side secrets and global settings live in a .env file (never
-    committed), including: OPENAI_API_KEY _(legacy)_ / GEMINI_API_KEY
-    _(post-migration)_ and model/endpoint settings.
+    committed), including: GEMINI_API_KEY and model/endpoint settings. The
+    migration off OpenAI is complete — Gemini is the default generation, quiz
+    and embedding provider, and no OpenAI key is read anywhere.
     GOOGLE_APPLICATION_CREDENTIALS (service account for real-time Speech-to-Text
     streaming) and GOOGLE_CLOUD_TRANSLATION_KEY. TRANSLATION_PROVIDER — the
     active slide-content translation adapter (SHARE-2): google-cloud (default,
     needs the key above), none to disable translated viewing, or mock for tests.
     Without a usable key the client hides the viewer's slide-language switcher.
-    GOOGLE_OAUTH_CLIENT_ID/SECRET — used both for Google sign-in (AUTH-1) and
-    for connected Google Drive import/export with broader scopes…"
+    GOOGLE_OAUTH_CLIENT_ID/SECRET — used both for…"
   section: §14 Technical Stack & Conventions
   family: TECH
   phase: 2
@@ -1370,7 +1392,7 @@
   section: §7 Style Template Library
   family: TMPL
   phase: 2
-  status: In progress
+  status: Done
   review: false
 - id: AUTH-1a
   title: GitHub sign-in
@@ -1513,6 +1535,57 @@
     allowance was spent…"
   section: §5 Plans, Billing & Usage Limits
   family: BILL
+  phase: 3
+  status: Backlog
+  review: false
+- id: EVAL-1
+  title: Live-session telemetry
+  full: 'Every live session writes an append-only record of what the machine
+    actually did: session id, lecture, start and stop, wall duration, captured
+    minutes, phrase count, phrase-finalization and slide-generation latency
+    (p50/p95), generation refusals and provider errors, transcription stream
+    restarts, and how the session ended — stopped, abandoned, or crashed.
+    Nothing else in the system can answer "did it work" after the fact.
+    TranscriptSegment records what was said, not what it cost in time and not
+    what failed — a stall the lecturer talked over leaves no trace at all, and
+    months later a degraded lecture is indistinguishable from a good one. The
+    failures that matter most are the quiet ones: a…'
+  section: §12 Evaluation & Metrics
+  family: EVAL
+  phase: 3
+  status: Backlog
+  review: false
+- id: EVAL-2
+  title: De-identified research export
+  full: An admin-only export produces one bundle for a date range — lectures and
+    slides, transcript segments, session telemetry (EVAL-1), quiz references,
+    votes, and cost events (BILL-7) — keyed by an opaque per-account study id
+    rather than by user id, email, or display name. It follows the shape of the
+    existing cost export (GET /api/admin/cost/export) and reuses that CSV
+    plumbing rather than inventing a second one. P-7 requires evaluation data to
+    be anonymized before analysis. An export that anonymizes on the way out is
+    the only place that requirement can be _enforced_ rather than hoped for in a
+    hand-run query written at midnight in February. Free text that can still
+    name a person — slide bodies…
+  section: §12 Evaluation & Metrics
+  family: EVAL
+  phase: 3
+  status: Backlog
+  review: false
+- id: EVAL-3
+  title: Study label on a lecture
+  full: "A lecture carries an optional short free-text studyLabel, set from the
+    lecture settings it already has and returned in the EVAL-2 export. It exists
+    so a term's lectures can be grouped for later analysis — by unit, by cohort,
+    by whatever an evaluation turns out to need — without a side spreadsheet
+    joined on lecture title and guessed at months later. It is deliberately a
+    string, not an enum: the application does not know what any particular
+    evaluation is measuring and should not learn, because the next one will
+    group its lectures differently. If it does not ship, the partition lives in
+    a research assistant's spreadsheet keyed on lecture title — which works, and
+    is exactly why this sits below…"
+  section: §12 Evaluation & Metrics
+  family: EVAL
   phase: 3
   status: Backlog
   review: false
@@ -1663,6 +1736,24 @@
   phase: 3
   status: Done
   review: false
+- id: P-14
+  title: Research data handling.
+  full: Research data handling. Evaluation data is keyed by an opaque per-student
+    study id — never by NetID, email, or account id. The id↔identity key is held
+    by the research assistant in institution-managed storage, is not accessible
+    to the course instructor until final grades are submitted, and is destroyed
+    at the analysis freeze. Where an instructor evaluates their own course, that
+    separation has to be structural rather than promissory. Exit-ticket
+    responses stay in the instructor's institutional workspace and are never
+    ingested by the app (EVAL-4 is deliberately unbuilt, and its body says why
+    that absence is the safer position). No student PII enters the app (P-2);
+    retained lecture transcripts are scrubbed of student utterances before
+    analysis, and audio retention (P-6) stays disabled for the…
+  section: §16 Privacy, Security & Compliance
+  family: P
+  phase: 3
+  status: Backlog
+  review: false
 - id: PLAY-3
   title: Narration in the translated language
   full: A student reading a deck in a translated language (SHARE-2) can also hear
@@ -1762,6 +1853,56 @@
   section: §14 Technical Stack & Conventions
   family: TECH
   phase: 3
+  status: Backlog
+  review: false
+- id: EVAL-4
+  title: Quiz response ingestion
+  full: The application reads a published Form's responses back — per-item
+    correctness, total score, submission time — and stores them against the
+    QuizRef (QUIZ-3). Not built for the pilot, and not merely for want of time.
+    Google Forms already auto-grades into a response spreadsheet the instructor
+    owns and controls, so an instructor evaluating their own course exports that
+    sheet by hand. Building the read path would pull student answers out of the
+    institution's FERPA-covered workspace and into this application's database
+    for no analytical gain and a materially worse position under P-1. At one
+    course's scale, the missing feature is the safer instrument. It stays
+    specified because that argument does…
+  section: §12 Evaluation & Metrics
+  family: EVAL
+  phase: 4
+  status: Backlog
+  review: false
+- id: EVAL-5
+  title: Slide- and quiz-relevance ratings
+  full: A 1–5 relevance rating surface for the audience, per slide and per quiz —
+    distinct from SOC-1's up/down vote, which is a discovery signal on public
+    lectures, is not per-slide, and is unavailable to a student whose lecture
+    was never shared with them. Not built for the pilot. The same five-point
+    judgment rides inside the exit-ticket Form as ungraded single-choice
+    questions added during the QUIZ-2 review step. That reaches every student
+    who was in the room, including those who were never granted access to the
+    lecture in the app and whom a per-slide rating surface therefore could not
+    have reached at all — and it costs nothing to build and nothing to run. A
+    built version would collect fewer…
+  section: §12 Evaluation & Metrics
+  family: EVAL
+  phase: 4
+  status: Backlog
+  review: false
+- id: EVAL-6
+  title: Evaluation dashboard
+  full: An admin view charting session reliability, latency percentiles and cost
+    per lecture over time, beside the existing per-entity cost panels (BILL-7).
+    Not built for the pilot. Three people with a CSV and a notebook need the CSV
+    to exist far more than they need a chart, and a visualization nobody has yet
+    learned to read is the wrong thing to build in the last week before a
+    freeze. It becomes worth building when someone who is not on this team has
+    to answer "is it healthy" without opening a spreadsheet — which is a real
+    moment, just not this one. (§18 carries the richer-analytics ambition this
+    would grow into.)
+  section: §12 Evaluation & Metrics
+  family: EVAL
+  phase: 4
   status: Backlog
   review: false
 - id: FUTURE-a-remote-oauth-authenticated-multi-user-
