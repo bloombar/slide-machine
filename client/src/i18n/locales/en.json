@@ -733,6 +733,12 @@
       "addColumn": "Add column",
       "removeRow": "Remove row {n}",
       "removeColumn": "Remove column {n}"
+    },
+    "addKind": {
+      "math": "Add a formula",
+      "code": "Add code",
+      "codeIn": "Add {language} code",
+      "preformatted": "Add preformatted text"
     }
   },
   "image": {

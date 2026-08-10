@@ -478,6 +478,33 @@ export const slotGuidance = (
 }
 
 /**
+ * An empty specialized box, shown as a box.
+ *
+ * Prose uses an invisible blank-slot placeholder, which is right for it: an
+ * audience should not see a hole where a caption would have gone. A formula
+ * or a listing is different — nobody stumbles onto one by typing, so its box
+ * has to say that it is there and what belongs in it, or an author cannot
+ * find it at all.
+ *
+ * Only for owners; the editors below return before this on the read-only
+ * path, so an audience still sees nothing.
+ */
+function EmptyFrame({
+  empty,
+  children,
+}: {
+  empty: boolean
+  children: React.ReactNode
+}) {
+  if (!empty) return <>{children}</>
+  return (
+    <div className="rounded-[0.6cqi] border border-dashed border-current/40 px-[1cqi] py-[0.8cqi] opacity-70">
+      {children}
+    </div>
+  )
+}
+
+/**
  * A program listing: highlighted on the slide, its plain source in the editor
  * (EDIT-7).
  *
@@ -501,17 +528,21 @@ function CodeSlot({ slot, spec, descriptor, slide, onEdit }: SlotEditorProps) {
   )
   if (!onEdit) return rendered(source)
   return (
-    <>
+    <EmptyFrame empty={!source}>
       <EditableText
         value={source}
         label={descriptor.label}
         multiline
         source
+        fill
         renderValue={rendered}
-        emptyDisplay={t('slide.addSlot', {
-          name: descriptor.label.toLocaleLowerCase(),
-        })}
-        placeholderStyle
+        // Named by what belongs in it, not by what the box is called: a box
+        // still labelled "Slide body" that now holds Python should say so.
+        emptyDisplay={
+          language
+            ? t('slide.addKind.codeIn', { language })
+            : t('slide.addKind.code')
+        }
         hint={slotGuidance(spec, t)}
         onSave={v =>
           onEdit(
@@ -523,7 +554,7 @@ function CodeSlot({ slot, spec, descriptor, slide, onEdit }: SlotEditorProps) {
           )
         }
       />
-    </>
+    </EmptyFrame>
   )
 }
 
@@ -537,23 +568,21 @@ function MathSlot({ slot, spec, descriptor, slide, onEdit }: SlotEditorProps) {
   const rendered = (text: string) => <SlideMath tex={text} display={display} />
   if (!onEdit) return rendered(tex)
   return (
-    <>
+    <EmptyFrame empty={!tex}>
       <EditableText
         value={tex}
         label={descriptor.label}
         multiline
         source
+        fill
         renderValue={rendered}
-        emptyDisplay={t('slide.addSlot', {
-          name: descriptor.label.toLocaleLowerCase(),
-        })}
-        placeholderStyle
+        emptyDisplay={t('slide.addKind.math')}
         hint={slotGuidance(spec, t)}
         onSave={v =>
           onEdit(patchSlotValue(slot, { kind: 'math', tex: v, display }))
         }
       />
-    </>
+    </EmptyFrame>
   )
 }
 
@@ -575,23 +604,21 @@ function PreformattedSlot({
   )
   if (!onEdit) return rendered(text)
   return (
-    <>
+    <EmptyFrame empty={!text}>
       <EditableText
         value={text}
         label={descriptor.label}
         multiline
         source
+        fill
         renderValue={rendered}
-        emptyDisplay={t('slide.addSlot', {
-          name: descriptor.label.toLocaleLowerCase(),
-        })}
-        placeholderStyle
+        emptyDisplay={t('slide.addKind.preformatted')}
         hint={slotGuidance(spec, t)}
         onSave={v =>
           onEdit(patchSlotValue(slot, { kind: 'preformatted', value: v }))
         }
       />
-    </>
+    </EmptyFrame>
   )
 }
 

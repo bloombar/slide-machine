@@ -680,6 +680,73 @@ describe('a code slot (EDIT-7)', () => {
   })
 })
 
+describe('an empty specialized box (EDIT-7)', () => {
+  const emptySlide = (kind: 'code' | 'math' | 'preformatted') =>
+    slide({
+      slots: {
+        box:
+          kind === 'code'
+            ? { kind: 'code', source: '' }
+            : kind === 'math'
+              ? { kind: 'math', tex: '' }
+              : { kind: 'preformatted', value: '' },
+      },
+    })
+
+  it.each([
+    ['code' as const, 'Add code'],
+    ['math' as const, 'Add a formula'],
+    ['preformatted' as const, 'Add preformatted text'],
+  ])(
+    'names what belongs in it, not what the box is called (%s)',
+    (kind, prompt) => {
+      render(
+        <SlideSlot
+          slot="box"
+          // Still labelled from the conventional slot it started as: what the
+          // author needs to know is what it holds NOW
+          spec={{ name: 'box', kind, label: 'Slide body' }}
+          slide={emptySlide(kind)}
+          colors={colors}
+          onEdit={vi.fn()}
+        />,
+      )
+      expect(screen.getByText(prompt)).toBeInTheDocument()
+    },
+  )
+
+  it('names the language a code box declares', () => {
+    render(
+      <SlideSlot
+        slot="box"
+        spec={{
+          name: 'box',
+          kind: 'code',
+          label: 'Slide body',
+          options: { language: 'python' },
+        }}
+        slide={emptySlide('code')}
+        colors={colors}
+        onEdit={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('Add python code')).toBeInTheDocument()
+  })
+
+  it('shows an audience nothing at all', () => {
+    const { container } = render(
+      <SlideSlot
+        slot="box"
+        spec={{ name: 'box', kind: 'math', label: 'Equation' }}
+        slide={emptySlide('math')}
+        colors={colors}
+      />,
+    )
+    // The prompt is for whoever fills the box, not for the room
+    expect(container.textContent).not.toContain('Add a formula')
+  })
+})
+
 describe('a math slot (EDIT-7)', () => {
   const spec = { name: 'eq', kind: 'math' as const, label: 'Equation' }
   const withTex = (tex: string) =>

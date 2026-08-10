@@ -733,6 +733,12 @@
       "addColumn": "添加列",
       "removeRow": "删除第 {n} 行",
       "removeColumn": "删除第 {n} 列"
+    },
+    "addKind": {
+      "math": "添加公式",
+      "code": "添加代码",
+      "codeIn": "添加 {language} 代码",
+      "preformatted": "添加预格式化文本"
     }
   },
   "image": {
