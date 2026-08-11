@@ -136,6 +136,73 @@ const splitAndKeep = (
   }
 }
 
+/**
+ * The specialized boxes the model answered, and we refused.
+ *
+ * A code box given "A while loop continues as long as n is greater than 10"
+ * is dropped by `valueForKind` — nothing downstream could tell that from a
+ * listing, so it must not be stored as one. But dropping it silently leaves
+ * an empty box on a lecture slide, which is not what the instructor asked for
+ * either. These are the boxes worth asking about a second time: the model
+ * said something, and what it said was the wrong kind of thing.
+ */
+const refusedSpecialized = (
+  raw: Record<string, unknown>,
+  declared: Record<string, unknown> | undefined,
+  layoutType: string,
+  descriptors: SlideGenerationRequest['layoutDescriptors'],
+): SlotSpec[] =>
+  (descriptors.find(d => d.type === layoutType)?.slots ?? []).filter(
+    spec =>
+      (spec.kind === 'code' || spec.kind === 'math') &&
+      typeof raw[spec.name] === 'string' &&
+      (raw[spec.name] as string).trim().length > 0 &&
+      !declared?.[spec.name],
+  ) as SlotSpec[]
+
+/**
+ * Asks again for the refused boxes, and nothing else.
+ *
+ * Deliberately a short prompt with no slide context: the first call already
+ * decided what the slide is about and failed only on the SHAPE of one answer.
+ * Restating the whole request invites the model to reconsider the slide;
+ * asking for one listing invites it to write one.
+ */
+const retrySpecialized = async (
+  refused: SlotSpec[],
+): Promise<Record<string, unknown> | undefined> => {
+  const asked = refused
+    .map(spec =>
+      spec.kind === 'code'
+        ? `  "${spec.name}": a runnable ${
+            typeof spec.options?.language === 'string'
+              ? spec.options.language
+              : ''
+          } program listing — real newlines, real indentation, no markdown fence, no prose${
+            spec.description ? `. ${spec.description}` : ''
+          }`
+        : `  "${spec.name}": a LaTeX expression only, no $ delimiters, no prose${
+            spec.description ? `. ${spec.description}` : ''
+          }`,
+    )
+    .join('\n')
+
+  const prompt = [
+    'Your previous answer described these boxes in words instead of filling',
+    'them. Write the thing itself this time, not a sentence about it.',
+    '',
+    asked,
+    '',
+    'Return JSON with exactly those keys and nothing else.',
+  ].join('\n')
+
+  const text = await callGemini(prompt, 'Specialized retry')
+  const parsed = JSON.parse(text) as unknown
+  return parsed && typeof parsed === 'object'
+    ? (parsed as Record<string, unknown>)
+    : undefined
+}
+
 /** A command claim, validated separately: the model may (reasonably)
  * omit layoutType/slots when it picks "command", so it must not be
  * forced through the content schema. */
@@ -769,11 +836,35 @@ export class GeminiGenerationProvider implements GenerationProvider {
             : (req.layoutDescriptors[0]?.type ?? 'content')
     ) as LayoutType
 
-    const { empty, ...content } = splitAndKeep(
+    let { empty, ...content } = splitAndKeep(
       parsed.slots,
       layoutType,
       req.layoutDescriptors,
     )
+
+    // A code or maths box the model answered in prose was refused, leaving it
+    // empty. Ask once more for just those boxes before giving up: the model
+    // usually complies when the demand is the only thing in front of it, and
+    // an empty box on a lecture slide helps nobody.
+    const refused = refusedSpecialized(
+      parsed.slots,
+      content.declared,
+      layoutType,
+      req.layoutDescriptors,
+    )
+    if (refused.length) {
+      const second = await retrySpecialized(refused).catch(() => undefined)
+      if (second) {
+        const merged = splitAndKeep(
+          { ...parsed.slots, ...second },
+          layoutType,
+          req.layoutDescriptors,
+        )
+        const { empty: stillEmpty, ...retried } = merged
+        content = retried
+        empty = stillEmpty
+      }
+    }
     // A "new" slide with nothing on it is not a slide. Everything the model
     // returned failed validation — a malformed reply rather than a decision —
     // so the phrase is left alone instead of putting an empty slide in front

@@ -1000,3 +1000,111 @@ describe('pingGemini', () => {
     expect((await pingGemini()).status).toBe('down')
   })
 })
+
+describe('a code box answered in prose is asked again (GEN-11)', () => {
+  const codeLayout = [
+    {
+      type: 'content',
+      label: 'Content',
+      purpose: 'x',
+      slots: [
+        { name: 'title', kind: 'text', label: 'Title' },
+        {
+          name: 'snippet',
+          kind: 'code',
+          label: 'Slide body',
+          options: { language: 'python' },
+        },
+      ],
+    },
+  ]
+
+  const request = () =>
+    ({
+      phrase: 'a while loop that counts down from ten',
+      rollingContext: [],
+      layoutDescriptors: codeLayout,
+    }) as never
+
+  it('retries, and keeps what the second answer gives', async () => {
+    // An empty box on a lecture slide helps nobody; the model usually complies
+    // when the demand is the only thing in front of it
+    const replies = [
+      {
+        action: 'new',
+        layoutType: 'content',
+        slots: {
+          title: 'While loops',
+          snippet: 'A while loop continues as long as n is greater than 10.',
+        },
+      },
+      { snippet: 'while n > 10:\n    n -= 1' },
+    ]
+    fetchMock.mockImplementation(async () => geminiReply(replies.shift()))
+
+    const result = await new GeminiGenerationProvider().generateSlideContent(
+      request(),
+    )
+    expect(result.declared?.snippet).toEqual({
+      kind: 'code',
+      source: 'while n > 10:\n    n -= 1',
+      language: 'python',
+    })
+  })
+
+  it('asks only for the box it refused, not for the slide again', async () => {
+    const prompts: string[] = []
+    const replies = [
+      {
+        action: 'new',
+        layoutType: 'content',
+        slots: { title: 'While loops', snippet: 'This shows a loop.' },
+      },
+      { snippet: 'print(1)' },
+    ]
+    fetchMock.mockImplementation(async (_url: string, init: RequestInit) => {
+      prompts.push(String(init?.body))
+      return geminiReply(replies.shift())
+    })
+
+    await new GeminiGenerationProvider().generateSlideContent(request())
+    expect(prompts).toHaveLength(2)
+    expect(prompts[1]).toContain('snippet')
+    expect(prompts[1]).toContain('python')
+    // Restating the whole request invites the model to reconsider the slide
+    expect(prompts[1]).not.toContain('rollingContext')
+  })
+
+  it('leaves the box empty when the second answer is prose too', async () => {
+    const replies = [
+      {
+        action: 'new',
+        layoutType: 'content',
+        slots: { title: 'While loops', snippet: 'This shows a loop.' },
+      },
+      { snippet: 'It repeats until the condition is false.' },
+    ]
+    fetchMock.mockImplementation(async () => geminiReply(replies.shift()))
+
+    const result = await new GeminiGenerationProvider().generateSlideContent(
+      request(),
+    )
+    expect(result.declared?.snippet).toBeUndefined()
+    expect(result.slots.title).toBe('While loops')
+  })
+
+  it('does not retry a box the model filled correctly', async () => {
+    let calls = 0
+    fetchMock.mockImplementation(async () => {
+      calls++
+      return geminiReply({
+        action: 'new',
+        layoutType: 'content',
+        slots: { title: 'While loops', snippet: 'while n > 10:\n    n -= 1' },
+      })
+    })
+
+    await new GeminiGenerationProvider().generateSlideContent(request())
+    expect(calls).toBe(1)
+  })
+})
