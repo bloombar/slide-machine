@@ -417,3 +417,511 @@ describe('how the text sits in its box', () => {
     expect(read.slides[0]!.elements[0]!.align).toBe('start')
   })
 })
+
+/**
+ * A presentation states a property once and lets everything below it go
+ * unset: a slide's title placeholder usually carries no size, no type size
+ * and no colour of its own. Read without following slide → layout → master,
+ * a real Google deck arrives with its boxes in the corner and its colours
+ * gone — which is what it did.
+ */
+describe('what a slide inherits from its layout and master', () => {
+  const pt = (magnitude: number) => ({ magnitude, unit: 'PT' })
+
+  /** A shape that states its own geometry, the way a layout's does. */
+  const placed = (
+    objectId: string,
+    over: Record<string, unknown>,
+    box = { x: 0.08, y: 0.12, w: 0.84, h: 0.3 },
+  ) => ({
+    objectId,
+    size: { width: dim(box.w * PAGE.width), height: dim(box.h * PAGE.height) },
+    transform: {
+      scaleX: 1,
+      scaleY: 1,
+      translateX: dim(box.x * PAGE.width),
+      translateY: dim(box.y * PAGE.height),
+    },
+    ...over,
+  })
+
+  /** A slide's placeholder: text and a pointer, and nothing else. Google
+   * really does return them this bare. */
+  const inheriting = (
+    objectId: string,
+    parentObjectId: string,
+    text: string,
+    style: Record<string, unknown> = {},
+  ) => ({
+    objectId,
+    shape: {
+      shapeType: 'TEXT_BOX',
+      placeholder: { type: 'TITLE', parentObjectId },
+      text: {
+        textElements: [
+          { paragraphMarker: {} },
+          { textRun: { content: `${text}\n`, style } },
+        ],
+      },
+    },
+  })
+
+  /** A deck built the ordinary way: master holds the design, layout refines
+   * it, slides hold only words. */
+  const deck = (over: {
+    master?: Record<string, unknown>
+    layout?: Record<string, unknown>
+    slide?: Record<string, unknown>
+  }) => ({
+    presentationId: 'p1',
+    title: 'Rainwater',
+    pageSize: { width: dim(PAGE.width), height: dim(PAGE.height) },
+    masters: [
+      {
+        objectId: 'master-1',
+        pageProperties: {
+          colorScheme: {
+            colors: [
+              { type: 'DARK1', color: { red: 1, green: 1, blue: 1 } },
+              { type: 'LIGHT1', color: { red: 1, green: 1, blue: 1 } },
+            ],
+          },
+        },
+        pageElements: [],
+        ...over.master,
+      },
+    ],
+    layouts: [
+      {
+        objectId: 'layout-1',
+        layoutProperties: {
+          displayName: 'TITLE_AND_BODY',
+          masterObjectId: 'master-1',
+        },
+        pageElements: [],
+        ...over.layout,
+      },
+    ],
+    slides: [
+      {
+        objectId: 's1',
+        slideProperties: { layoutObjectId: 'layout-1' },
+        pageElements: [],
+        ...over.slide,
+      },
+    ],
+  })
+
+  const firstElement = (raw: Record<string, unknown>) =>
+    toSourcePresentation(raw).slides[0]!.elements[0]!
+
+  it('takes its box from the layout’s placeholder when it states none', () => {
+    // The bug in one line: a placeholder with no geometry is not a shape at
+    // the origin with no width
+    const element = firstElement(
+      deck({
+        layout: {
+          pageElements: [
+            placed('layout-title', {
+              shape: { shapeType: 'TEXT_BOX', placeholder: { type: 'TITLE' } },
+            }),
+          ],
+        },
+        slide: {
+          pageElements: [inheriting('slide-title', 'layout-title', 'Runoff')],
+        },
+      }),
+    )
+    expect(element.box).toEqual({ x: 0.08, y: 0.12, w: 0.84, h: 0.3 })
+  })
+
+  it('reaches the master when the layout states none either', () => {
+    const element = firstElement(
+      deck({
+        master: {
+          pageElements: [
+            placed(
+              'master-title',
+              {
+                shape: {
+                  shapeType: 'TEXT_BOX',
+                  placeholder: { type: 'TITLE' },
+                },
+              },
+              { x: 0.05, y: 0.05, w: 0.9, h: 0.2 },
+            ),
+          ],
+        },
+        layout: {
+          pageElements: [
+            {
+              objectId: 'layout-title',
+              shape: {
+                shapeType: 'TEXT_BOX',
+                placeholder: { type: 'TITLE', parentObjectId: 'master-title' },
+              },
+            },
+          ],
+        },
+        slide: {
+          pageElements: [inheriting('slide-title', 'layout-title', 'Runoff')],
+        },
+      }),
+    )
+    expect(element.box).toEqual({ x: 0.05, y: 0.05, w: 0.9, h: 0.2 })
+  })
+
+  it('keeps its own box when it moved the shape', () => {
+    // Inheritance is a fallback, not an override: a slide that repositioned
+    // its title means it
+    const moved = placed(
+      'slide-title',
+      {
+        shape: {
+          shapeType: 'TEXT_BOX',
+          placeholder: { type: 'TITLE', parentObjectId: 'layout-title' },
+          text: { textElements: [{ textRun: { content: 'Runoff\n' } }] },
+        },
+      },
+      { x: 0.5, y: 0.5, w: 0.4, h: 0.1 },
+    )
+    const element = firstElement(
+      deck({
+        layout: {
+          pageElements: [
+            placed('layout-title', {
+              shape: { shapeType: 'TEXT_BOX', placeholder: { type: 'TITLE' } },
+            }),
+          ],
+        },
+        slide: { pageElements: [moved] },
+      }),
+    )
+    expect(element.box).toEqual({ x: 0.5, y: 0.5, w: 0.4, h: 0.1 })
+  })
+
+  it('takes its type size, colour and family from the layout', () => {
+    const element = firstElement(
+      deck({
+        layout: {
+          pageElements: [
+            placed('layout-title', {
+              shape: {
+                shapeType: 'TEXT_BOX',
+                placeholder: { type: 'TITLE' },
+                text: {
+                  textElements: [
+                    {
+                      textRun: {
+                        content: 'Click to edit Master title style\n',
+                        style: {
+                          fontSize: pt(36),
+                          bold: true,
+                          fontFamily: 'Georgia',
+                          foregroundColor: {
+                            opaqueColor: { themeColor: 'DARK1' },
+                          },
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            }),
+          ],
+        },
+        slide: {
+          pageElements: [inheriting('slide-title', 'layout-title', 'Runoff')],
+        },
+      }),
+    )
+    // 36pt across a ten-inch page is 5% of its width
+    expect(element.runs?.[0]).toMatchObject({
+      text: 'Runoff',
+      fontSize: 5,
+      bold: true,
+      fontFamily: 'Georgia',
+      color: '#ffffff',
+    })
+  })
+
+  it('does not inherit the layout’s prompt text as content', () => {
+    // "Click to edit Master title style" is Google talking to the author, not
+    // something that belongs on a lecture slide
+    const read = toSourcePresentation(
+      deck({
+        layout: {
+          pageElements: [
+            placed('layout-title', {
+              shape: {
+                shapeType: 'TEXT_BOX',
+                placeholder: { type: 'TITLE' },
+                text: {
+                  textElements: [
+                    {
+                      textRun: {
+                        content: 'Click to edit Master title style\n',
+                        style: { fontSize: pt(36) },
+                      },
+                    },
+                  ],
+                },
+              },
+            }),
+          ],
+        },
+        slide: {
+          pageElements: [inheriting('slide-title', 'layout-title', 'Runoff')],
+        },
+      }),
+    )
+    const texts = read.slides[0]!.elements.flatMap(
+      el => el.runs?.map(r => r.text) ?? [],
+    )
+    expect(texts).toEqual(['Runoff'])
+  })
+
+  it('lets the run’s own type size win over the inherited one', () => {
+    const element = firstElement(
+      deck({
+        layout: {
+          pageElements: [
+            placed('layout-title', {
+              shape: {
+                shapeType: 'TEXT_BOX',
+                placeholder: { type: 'TITLE' },
+                text: {
+                  textElements: [
+                    {
+                      textRun: { content: 'x\n', style: { fontSize: pt(36) } },
+                    },
+                  ],
+                },
+              },
+            }),
+          ],
+        },
+        slide: {
+          pageElements: [
+            inheriting('slide-title', 'layout-title', 'Runoff', {
+              fontSize: pt(18),
+            }),
+          ],
+        },
+      }),
+    )
+    expect(element.runs?.[0]?.fontSize).toBe(2.5)
+  })
+
+  it('does not inherit bold onto a run that says it is not bold', () => {
+    const element = firstElement(
+      deck({
+        layout: {
+          pageElements: [
+            placed('layout-title', {
+              shape: {
+                shapeType: 'TEXT_BOX',
+                placeholder: { type: 'TITLE' },
+                text: {
+                  textElements: [
+                    { textRun: { content: 'x\n', style: { bold: true } } },
+                  ],
+                },
+              },
+            }),
+          ],
+        },
+        slide: {
+          pageElements: [
+            inheriting('slide-title', 'layout-title', 'Runoff', {
+              bold: false,
+            }),
+          ],
+        },
+      }),
+    )
+    expect(element.runs?.[0]?.bold).toBeUndefined()
+  })
+
+  it('takes the layout’s alignment, which the slide never restates', () => {
+    // A centred title read as left-aligned is the most visible way an import
+    // stops looking like the deck it came from
+    const element = firstElement(
+      deck({
+        layout: {
+          pageElements: [
+            placed('layout-title', {
+              shape: {
+                shapeType: 'TEXT_BOX',
+                placeholder: { type: 'TITLE' },
+                shapeProperties: { contentAlignment: 'MIDDLE' },
+                text: {
+                  textElements: [
+                    { paragraphMarker: { style: { alignment: 'CENTER' } } },
+                  ],
+                },
+              },
+            }),
+          ],
+        },
+        slide: {
+          pageElements: [inheriting('slide-title', 'layout-title', 'Runoff')],
+        },
+      }),
+    )
+    expect(element.align).toBe('center')
+    expect(element.vAlign).toBe('center')
+  })
+
+  it('survives a presentation whose placeholders point in a circle', () => {
+    // A malformed file must not hang an import
+    const read = toSourcePresentation(
+      deck({
+        layout: {
+          pageElements: [
+            {
+              objectId: 'layout-title',
+              shape: {
+                shapeType: 'TEXT_BOX',
+                placeholder: { type: 'TITLE', parentObjectId: 'slide-title' },
+              },
+            },
+          ],
+        },
+        slide: {
+          pageElements: [inheriting('slide-title', 'layout-title', 'Runoff')],
+        },
+      }),
+    )
+    expect(read.slides[0]!.elements[0]!.runs?.[0]?.text).toBe('Runoff')
+  })
+})
+
+describe('the colour a deck is painted in', () => {
+  const solidFill = (red: number, green: number, blue: number) => ({
+    solidFill: { color: { rgbColor: { red, green, blue } } },
+  })
+
+  const backgroundDeck = (
+    master: Record<string, unknown> | undefined,
+    layout: Record<string, unknown> | undefined,
+    slide: Record<string, unknown> | undefined,
+  ) => ({
+    presentationId: 'p1',
+    title: 'Rainwater',
+    pageSize: { width: dim(PAGE.width), height: dim(PAGE.height) },
+    masters: [
+      {
+        objectId: 'master-1',
+        pageProperties: {
+          colorScheme: {
+            colors: [{ type: 'LIGHT1', color: { red: 1, green: 1, blue: 1 } }],
+          },
+          ...(master ? { pageBackgroundFill: master } : {}),
+        },
+        pageElements: [],
+      },
+    ],
+    layouts: [
+      {
+        objectId: 'layout-1',
+        layoutProperties: { masterObjectId: 'master-1' },
+        pageProperties: layout ? { pageBackgroundFill: layout } : {},
+        pageElements: [],
+      },
+    ],
+    slides: [
+      {
+        objectId: 's1',
+        slideProperties: { layoutObjectId: 'layout-1' },
+        pageProperties: slide ? { pageBackgroundFill: slide } : {},
+        pageElements: [],
+      },
+    ],
+  })
+
+  it('comes from the master when nothing below it states one', () => {
+    // The reported bug: a deck built in deep blue imported white
+    const read = toSourcePresentation(
+      backgroundDeck(
+        { propertyState: 'RENDERED', ...solidFill(0.05, 0.1, 0.4) },
+        undefined,
+        undefined,
+      ),
+    )
+    expect(read.slides[0]!.background).toBe('#0d1a66')
+    // And the design's own palette follows it, not LIGHT1
+    expect(read.theme.background).toBe('#0d1a66')
+  })
+
+  it('comes from the layout, which outranks the master', () => {
+    const read = toSourcePresentation(
+      backgroundDeck(
+        { propertyState: 'RENDERED', ...solidFill(0, 0, 0) },
+        { propertyState: 'RENDERED', ...solidFill(1, 0, 0) },
+        undefined,
+      ),
+    )
+    expect(read.slides[0]!.background).toBe('#ff0000')
+  })
+
+  it('keeps a slide’s own background over anything above it', () => {
+    const read = toSourcePresentation(
+      backgroundDeck(
+        { propertyState: 'RENDERED', ...solidFill(0, 0, 0) },
+        undefined,
+        { propertyState: 'RENDERED', ...solidFill(0, 1, 0) },
+      ),
+    )
+    expect(read.slides[0]!.background).toBe('#00ff00')
+  })
+
+  it('walks past an INHERIT marker rather than stopping at it', () => {
+    // Google states the marker and often no colour beside it; either way the
+    // answer is further up
+    const read = toSourcePresentation(
+      backgroundDeck(
+        { propertyState: 'RENDERED', ...solidFill(0.05, 0.1, 0.4) },
+        { propertyState: 'INHERIT' },
+        { propertyState: 'INHERIT' },
+      ),
+    )
+    expect(read.slides[0]!.background).toBe('#0d1a66')
+  })
+
+  it('walks past a fill that renders nothing, which shows the parent through', () => {
+    const read = toSourcePresentation(
+      backgroundDeck(
+        { propertyState: 'RENDERED', ...solidFill(0.05, 0.1, 0.4) },
+        { propertyState: 'NOT_RENDERED' },
+        undefined,
+      ),
+    )
+    expect(read.slides[0]!.background).toBe('#0d1a66')
+  })
+
+  it('takes a resolved colour beside an INHERIT marker over defaulting to white', () => {
+    // Nothing in the chain claims one outright, but a colour did come back
+    const read = toSourcePresentation(
+      backgroundDeck(undefined, undefined, {
+        propertyState: 'INHERIT',
+        ...solidFill(0.05, 0.1, 0.4),
+      }),
+    )
+    expect(read.slides[0]!.background).toBe('#0d1a66')
+  })
+
+  it('inherits a background picture the same way', () => {
+    const read = toSourcePresentation(
+      backgroundDeck(
+        {
+          propertyState: 'RENDERED',
+          stretchedPictureFill: { contentUrl: 'https://example.test/bg.png' },
+        },
+        undefined,
+        undefined,
+      ),
+    )
+    expect(read.slides[0]!.backgroundImage).toBe('https://example.test/bg.png')
+  })
+})

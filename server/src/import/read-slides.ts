@@ -42,6 +42,15 @@ export class PresentationUnreadableError extends Error {
 /** Google measures everything in EMU; 914400 to the inch. */
 const EMU = 914400
 
+/**
+ * How far a chain of inheritance is followed.
+ *
+ * Slide → layout → master is three, and a presentation should never offer a
+ * fourth. The bound is what stops a file whose ids point in a circle from
+ * hanging the import.
+ */
+const MAX_INHERITANCE = 4
+
 /** A default page, for a presentation that somehow states no size. 16:9 at
  * ten inches, which is what every deck this app makes is. */
 const DEFAULT_PAGE = { width: 10 * EMU, height: 5.625 * EMU }
@@ -54,6 +63,95 @@ interface Dimension {
 const emu = (d: Dimension | undefined): number => {
   if (!d?.magnitude) return 0
   return d.unit === 'PT' ? d.magnitude * (EMU / 72) : d.magnitude
+}
+
+/**
+ * What a page and a shape can inherit from (TMPL-8).
+ *
+ * Google states a property once and lets everything below it go unset. A
+ * slide's title placeholder usually carries no size, no transform and no type
+ * size at all — those live on the layout's placeholder, or the master's. Read
+ * without following that, the deck arrives with its boxes collapsed into the
+ * corner and its colours gone, which is exactly what it did.
+ *
+ * So both chains are indexed up front: pages by id, so a slide can find its
+ * layout and a layout its master, and every element of a layout or master by
+ * id, so a placeholder can find the one it descends from.
+ */
+interface Ancestry {
+  /** Layout and master pages, by object id. */
+  pages: Map<string, Record<string, unknown>>
+  /** Every element that can be inherited from, by object id. */
+  elements: Map<string, Record<string, unknown>>
+}
+
+const indexAncestry = (
+  layouts: Record<string, unknown>[],
+  masters: Record<string, unknown>[],
+): Ancestry => {
+  const pages = new Map<string, Record<string, unknown>>()
+  const elements = new Map<string, Record<string, unknown>>()
+  for (const page of [...layouts, ...masters]) {
+    const id = page.objectId as string | undefined
+    if (id) pages.set(id, page)
+    for (const el of (page.pageElements ?? []) as Record<string, unknown>[]) {
+      const elementId = el.objectId as string | undefined
+      if (elementId) elements.set(elementId, el)
+    }
+  }
+  return { pages, elements }
+}
+
+/**
+ * A shape and the placeholders it descends from, nearest first.
+ *
+ * Google names the link `parentObjectId` on the placeholder itself, which is
+ * the reliable one: matching by placeholder type and index guesses, and gets
+ * it wrong on a layout with two body boxes.
+ */
+const shapeChain = (
+  raw: Record<string, unknown>,
+  ancestry: Ancestry,
+): Record<string, unknown>[] => {
+  const chain = [raw]
+  const seen = new Set<string>([(raw.objectId as string) ?? ''])
+  let current = raw
+  for (let depth = 0; depth < MAX_INHERITANCE; depth++) {
+    const parentId = (
+      current.shape as { placeholder?: { parentObjectId?: string } } | undefined
+    )?.placeholder?.parentObjectId
+    if (!parentId || seen.has(parentId)) break
+    const parent = ancestry.elements.get(parentId)
+    if (!parent) break
+    seen.add(parentId)
+    chain.push(parent)
+    current = parent
+  }
+  return chain
+}
+
+/** A page and the pages it is built on: slide → layout → master. */
+const pageChain = (
+  raw: Record<string, unknown>,
+  ancestry: Ancestry,
+): Record<string, unknown>[] => {
+  const chain = [raw]
+  const seen = new Set<string>([(raw.objectId as string) ?? ''])
+  let current = raw
+  for (let depth = 0; depth < MAX_INHERITANCE; depth++) {
+    const parentId =
+      (current.slideProperties as { layoutObjectId?: string } | undefined)
+        ?.layoutObjectId ??
+      (current.layoutProperties as { masterObjectId?: string } | undefined)
+        ?.masterObjectId
+    if (!parentId || seen.has(parentId)) break
+    const parent = ancestry.pages.get(parentId)
+    if (!parent) break
+    seen.add(parentId)
+    chain.push(parent)
+    current = parent
+  }
+  return chain
 }
 
 /**
@@ -86,6 +184,25 @@ const boxOf = (
     w: clamp(w / page.width),
     h: clamp(h / page.height),
   }
+}
+
+/**
+ * The box a shape actually occupies, taking the first one in its chain that
+ * states a size.
+ *
+ * A placeholder that leaves its geometry unset is not a shape at the origin
+ * with no width — it is a shape drawn where its layout says. Reading the
+ * absent size as zero is what collapsed an imported design into the corner.
+ */
+const boxFromChain = (
+  chain: Record<string, unknown>[],
+  page: { width: number; height: number },
+): SourceBox => {
+  for (const element of chain) {
+    const box = boxOf(element, page)
+    if (box.w > 0 && box.h > 0) return box
+  }
+  return boxOf(chain[0]!, page)
 }
 
 /** `{red,green,blue}` 0–1 as `#rrggbb`. */
@@ -156,11 +273,56 @@ const fontSizeCqi = (
   return Math.round(((points * (EMU / 72)) / pageWidth) * 100 * 100) / 100
 }
 
-/** The runs of one text element, with the styling worth keeping. */
+/** The first run style a shape states, which is where a placeholder keeps the
+ * type its slides are meant to be set in. */
+const firstRunStyle = (
+  raw: Record<string, unknown>,
+): Record<string, unknown> | undefined => {
+  const elements = ((raw.shape as { text?: Record<string, unknown> })?.text
+    ?.textElements ?? []) as Record<string, unknown>[]
+  for (const element of elements) {
+    const style = (element.textRun as { style?: Record<string, unknown> })
+      ?.style
+    if (style && Object.keys(style).length) return style
+  }
+  return undefined
+}
+
+/**
+ * The styling a shape inherits: the nearest ancestor to state each property.
+ *
+ * Only the styling. A layout's placeholder also holds prompt text — "Click to
+ * edit Master title style" — and pulling that down would put Google's
+ * instructions on the lecturer's slides.
+ */
+const inheritedStyle = (
+  chain: Record<string, unknown>[],
+  scheme: Record<string, string>,
+  pageWidth: number,
+): Omit<SourceRun, 'text'> => {
+  const out: Omit<SourceRun, 'text'> = {}
+  for (const raw of chain.slice(1)) {
+    const style = firstRunStyle(raw)
+    if (!style) continue
+    out.fontSize ??= fontSizeCqi(style.fontSize as Dimension, pageWidth)
+    out.color ??= colorOf(
+      style.foregroundColor as Record<string, unknown>,
+      scheme,
+    )
+    out.fontFamily ??= (style.fontFamily as string) || undefined
+    if (out.bold === undefined && style.bold === true) out.bold = true
+    if (out.italic === undefined && style.italic === true) out.italic = true
+  }
+  return out
+}
+
+/** The runs of one text element, with the styling worth keeping. Anything the
+ * run leaves unset comes from the placeholder it descends from. */
 const runsOf = (
   text: Record<string, unknown> | undefined,
   scheme: Record<string, string>,
   pageWidth: number,
+  inherited: Omit<SourceRun, 'text'> = {},
 ): { runs: SourceRun[]; bulleted: boolean } => {
   const elements = (text?.textElements ?? []) as Record<string, unknown>[]
   const runs: SourceRun[] = []
@@ -177,13 +339,29 @@ const runsOf = (
     const content = run.content.replace(/\n$/, '')
     if (!content) continue
     const style = run.style ?? {}
+    // A run's own value wins. An explicit `false` is a decision too — a run
+    // that says it is not bold does not then inherit bold from its layout.
     runs.push({
       text: content,
-      fontSize: fontSizeCqi(style.fontSize as Dimension, pageWidth),
-      bold: style.bold === true ? true : undefined,
-      italic: style.italic === true ? true : undefined,
-      color: colorOf(style.foregroundColor as Record<string, unknown>, scheme),
-      fontFamily: (style.fontFamily as string) || undefined,
+      fontSize:
+        fontSizeCqi(style.fontSize as Dimension, pageWidth) ??
+        inherited.fontSize,
+      bold:
+        style.bold === true
+          ? true
+          : style.bold === false
+            ? undefined
+            : inherited.bold,
+      italic:
+        style.italic === true
+          ? true
+          : style.italic === false
+            ? undefined
+            : inherited.italic,
+      color:
+        colorOf(style.foregroundColor as Record<string, unknown>, scheme) ??
+        inherited.color,
+      fontFamily: (style.fontFamily as string) || inherited.fontFamily,
     })
   }
   return { runs, bulleted }
@@ -202,14 +380,17 @@ const tableOf = (table: Record<string, unknown>): string[][] =>
     }),
   )
 
-/** One shape, whatever it turned out to be. */
+/** One shape, whatever it turned out to be. Anything it leaves unset comes
+ * from the placeholder it descends from, on its layout or the master. */
 const elementOf = (
   raw: Record<string, unknown>,
   page: { width: number; height: number },
   scheme: Record<string, string>,
+  ancestry: Ancestry,
 ): SourceElement | null => {
   const id = (raw.objectId as string) ?? ''
-  const box = boxOf(raw, page)
+  const chain = shapeChain(raw, ancestry)
+  const box = boxFromChain(chain, page)
   // Alt text is where this system writes what a box IS (EXP-8), and it is
   // worth more than anything inferred below.
   const slotName = slotFromToken(raw.description as string | undefined)
@@ -249,8 +430,23 @@ const elementOf = (
     | undefined
   if (!shape) return null
 
-  const placeholder = shape.placeholder?.type
-  const { runs, bulleted } = runsOf(shape.text, scheme, page.width)
+  // A slide's placeholder usually names its own type; where it does not, the
+  // one it descends from does.
+  const placeholder =
+    shape.placeholder?.type ??
+    chain
+      .map(
+        el =>
+          (el.shape as { placeholder?: { type?: string } } | undefined)
+            ?.placeholder?.type,
+      )
+      .find(Boolean)
+  const { runs, bulleted } = runsOf(
+    shape.text,
+    scheme,
+    page.width,
+    inheritedStyle(chain, scheme, page.width),
+  )
   // Google states alignment on the paragraph and the box separately, and
   // names them differently; both are part of how the slide looks.
   const ACROSS: Record<string, 'start' | 'center' | 'end'> = {
@@ -264,18 +460,31 @@ const elementOf = (
     MIDDLE: 'center',
     BOTTOM: 'end',
   }
-  const paragraphs = (
-    (shape.text?.textElements ?? []) as Record<string, unknown>[]
-  ).map(
-    el =>
-      (el.paragraphMarker as { style?: { alignment?: string } } | undefined)
-        ?.style?.alignment,
+  // Alignment inherits the same way everything else does: a centred title on
+  // the layout stays centred on every slide built from it, even though no
+  // slide says so.
+  const paragraphs = chain.flatMap(el =>
+    (
+      ((el.shape as { text?: { textElements?: unknown[] } } | undefined)?.text
+        ?.textElements ?? []) as Record<string, unknown>[]
+    ).map(
+      p =>
+        (p.paragraphMarker as { style?: { alignment?: string } } | undefined)
+          ?.style?.alignment,
+    ),
   )
   const align = ACROSS[paragraphs.find(Boolean) ?? '']
   const vAlign =
     DOWN[
-      (shape.shapeProperties as { contentAlignment?: string } | undefined)
-        ?.contentAlignment ?? ''
+      chain
+        .map(
+          el =>
+            (
+              el.shape as
+                { shapeProperties?: { contentAlignment?: string } } | undefined
+            )?.shapeProperties?.contentAlignment,
+        )
+        .find(Boolean) ?? ''
     ]
   if (!runs.length) {
     // No words: a rule, a band, or an empty placeholder. Only the ones that
@@ -340,25 +549,65 @@ const notesOf = (slide: Record<string, unknown>): string | undefined => {
   return said || undefined
 }
 
+interface BackgroundFill {
+  propertyState?: string
+  solidFill?: Record<string, unknown>
+  stretchedPictureFill?: { contentUrl?: string }
+}
+
+const fillOf = (raw: Record<string, unknown>): BackgroundFill | undefined =>
+  (raw.pageProperties as { pageBackgroundFill?: BackgroundFill } | undefined)
+    ?.pageBackgroundFill
+
+/**
+ * What a page is painted with, taking the first page in its chain to state it.
+ *
+ * A slide almost never states its own background — the colour belongs to the
+ * layout, or to the master behind it. Reading only the slide is why a deck
+ * built in deep blue arrived white.
+ *
+ * A page filled with a colour OR a picture is one decision, so the first page
+ * to state either one settles both: a slide that overrides the colour is not
+ * also still showing its master's photograph.
+ */
+const backgroundOf = (
+  chain: Record<string, unknown>[],
+  scheme: Record<string, string>,
+): { background?: string; backgroundImage?: string } => {
+  for (const raw of chain) {
+    const fill = fillOf(raw)
+    // Both of these mean "what you see here comes from further up": INHERIT
+    // says so outright, and a fill that renders nothing shows the parent
+    // through. Either way the answer is not on this page.
+    if (fill?.propertyState === 'INHERIT') continue
+    if (fill?.propertyState === 'NOT_RENDERED') continue
+    const background = colorOf(fill?.solidFill, scheme)
+    const backgroundImage = fill?.stretchedPictureFill?.contentUrl
+    if (background || backgroundImage) return { background, backgroundImage }
+  }
+  // Nothing in the chain claimed one outright. Google sometimes returns the
+  // resolved value beside an INHERIT marker, and that colour is still the
+  // right answer — better than defaulting the deck to white.
+  for (const raw of chain) {
+    const fill = fillOf(raw)
+    const background = colorOf(fill?.solidFill, scheme)
+    const backgroundImage = fill?.stretchedPictureFill?.contentUrl
+    if (background || backgroundImage) return { background, backgroundImage }
+  }
+  return {}
+}
+
 const pageOf = (
   raw: Record<string, unknown>,
   page: { width: number; height: number },
   scheme: Record<string, string>,
+  ancestry: Ancestry,
 ): SourcePage => {
   const rawElements = (raw.pageElements ?? []) as Record<string, unknown>[]
-  const properties = raw.pageProperties as
-    | {
-        pageBackgroundFill?: {
-          solidFill?: Record<string, unknown>
-          stretchedPictureFill?: { contentUrl?: string }
-        }
-      }
-    | undefined
-  // A page is filled with a colour OR a picture; the picture is part of the
-  // design just as much as the colour is, and dropping it would import a deck
-  // that looks nothing like the one it came from.
-  const backgroundImage =
-    properties?.pageBackgroundFill?.stretchedPictureFill?.contentUrl
+  const { background, backgroundImage } = backgroundOf(
+    pageChain(raw, ancestry),
+    scheme,
+  )
   const metadata = metadataOf(rawElements)
   const notes = notesOf(raw)
   return {
@@ -371,10 +620,10 @@ const pageOf = (
       ((raw.slideProperties as { layoutObjectId?: string })?.layoutObjectId ||
         undefined) ??
       undefined,
-    background: colorOf(properties?.pageBackgroundFill?.solidFill, scheme),
+    background,
     ...(backgroundImage ? { backgroundImage } : {}),
     elements: rawElements
-      .map(el => elementOf(el, page, scheme))
+      .map(el => elementOf(el, page, scheme, ancestry))
       .filter((el): el is SourceElement => el !== null),
     ...(metadata ? { slotMetadata: metadata } : {}),
     ...(notes ? { notes } : {}),
@@ -404,12 +653,15 @@ export const toSourcePresentation = (
     width: emu(size?.width) || DEFAULT_PAGE.width,
     height: emu(size?.height) || DEFAULT_PAGE.height,
   }
-  const scheme = schemeOf((raw.masters ?? []) as Record<string, unknown>[])
-  const layouts = ((raw.layouts ?? []) as Record<string, unknown>[]).map(l =>
-    pageOf(l, page, scheme),
-  )
+  const rawMasters = (raw.masters ?? []) as Record<string, unknown>[]
+  const rawLayouts = (raw.layouts ?? []) as Record<string, unknown>[]
+  const scheme = schemeOf(rawMasters)
+  // Indexed before anything is read, because a slide's boxes and colours are
+  // mostly stated on the layout and master behind it, not on the slide.
+  const ancestry = indexAncestry(rawLayouts, rawMasters)
+  const layouts = rawLayouts.map(l => pageOf(l, page, scheme, ancestry))
   const slides = ((raw.slides ?? []) as Record<string, unknown>[]).map(s =>
-    pageOf(s, page, scheme),
+    pageOf(s, page, scheme, ancestry),
   )
   return {
     id: (raw.presentationId as string) ?? '',
