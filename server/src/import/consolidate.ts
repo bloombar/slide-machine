@@ -327,7 +327,13 @@ const snapValues = (
   const groups: number[][] = []
   for (const value of sorted) {
     const last = groups[groups.length - 1]
-    if (last && value - last[last.length - 1]! <= tolerance) last.push(value)
+    // Measured from where the group STARTED, never from the previous value.
+    // Comparing to the previous one chains: 0.001, 0.012, 0.023, 0.034 are
+    // each within tolerance of the last, so they collapse into one edge
+    // spanning many times it — and a whole design ends up stacked in the
+    // top-left corner. This is the same trap single-linkage clustering sets,
+    // and it has to be refused here for the same reason.
+    if (last && value - last[0]! <= tolerance) last.push(value)
     else groups.push([value])
   }
   const out = new Map<number, number>()
