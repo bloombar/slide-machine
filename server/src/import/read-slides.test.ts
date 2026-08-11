@@ -362,3 +362,58 @@ describe('a presentation that states little', () => {
     expect(read.theme.background).toBe('#000033')
   })
 })
+
+describe('how the text sits in its box', () => {
+  it('keeps a centred paragraph centred', () => {
+    // A centred title read as left-aligned is the most visible way an import
+    // stops looking like the deck it came from
+    const centred = shape({
+      shape: {
+        shapeType: 'TEXT_BOX',
+        placeholder: { type: 'TITLE' },
+        shapeProperties: { contentAlignment: 'MIDDLE' },
+        text: {
+          textElements: [
+            { paragraphMarker: { style: { alignment: 'CENTER' } } },
+            { textRun: { content: 'Hi\n', style: {} } },
+          ],
+        },
+      },
+    })
+    const read = toSourcePresentation(
+      presentation({ slides: [{ objectId: 's1', pageElements: [centred] }] }),
+    )
+    expect(read.slides[0]!.elements[0]).toMatchObject({
+      align: 'center',
+      vAlign: 'center',
+    })
+  })
+
+  it('says nothing when the presentation states nothing', () => {
+    const read = toSourcePresentation(
+      presentation({
+        slides: [{ objectId: 's1', pageElements: [textShape('Hi')] }],
+      }),
+    )
+    expect(read.slides[0]!.elements[0]!.align).toBeUndefined()
+    expect(read.slides[0]!.elements[0]!.vAlign).toBeUndefined()
+  })
+
+  it('reads justified text as start, which is what the renderer offers', () => {
+    const justified = shape({
+      shape: {
+        shapeType: 'TEXT_BOX',
+        text: {
+          textElements: [
+            { paragraphMarker: { style: { alignment: 'JUSTIFIED' } } },
+            { textRun: { content: 'Hi\n', style: {} } },
+          ],
+        },
+      },
+    })
+    const read = toSourcePresentation(
+      presentation({ slides: [{ objectId: 's1', pageElements: [justified] }] }),
+    )
+    expect(read.slides[0]!.elements[0]!.align).toBe('start')
+  })
+})

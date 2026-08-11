@@ -237,3 +237,80 @@ describe('the layout a slide ends up on', () => {
     expect(onlyDeclaredBy(undefined, 'lab', AUTHORED)).toEqual({})
   })
 })
+
+describe('a code box is given code, or nothing (GEN-11)', () => {
+  const codeLayout = [
+    {
+      type: 'content',
+      label: 'Content',
+      purpose: 'x',
+      slots: [
+        { name: 'title', kind: 'text' as const, label: 'Title' },
+        { name: 'body', kind: 'code' as const, label: 'Slide body' },
+      ],
+    },
+  ]
+  const codeFor = (value: string) =>
+    splitGeneratedSlots({ body: value }, 'content', codeLayout as never)
+      .declared.body
+
+  it('refuses the sentence the model sometimes writes instead', () => {
+    // Seen in the wild, in a box whose kind was code: nothing downstream could
+    // tell it from a listing, so it rendered monospaced, looking exactly like
+    // the code it was describing
+    expect(
+      codeFor(
+        'A while loop continues as long as n is greater than 10, containing an if-else statement for conditional logic.',
+      ),
+    ).toBeUndefined()
+  })
+
+  it('keeps a one-line program, which is still a program', () => {
+    expect(codeFor('print(x)')).toMatchObject({ kind: 'code' })
+    expect(codeFor('return n + 1')).toMatchObject({ kind: 'code' })
+    expect(codeFor('pass')).toMatchObject({ kind: 'code' })
+  })
+
+  it('keeps anything with real line breaks', () => {
+    expect(codeFor('def f():\n    return 1')).toMatchObject({ kind: 'code' })
+  })
+
+  it('leaves the box empty rather than filling it with something wrong', () => {
+    // A half-filled slide is better than a slide that lies about what it holds
+    const split = splitGeneratedSlots(
+      { title: 'Loops', body: 'This snippet shows how a loop works.' },
+      'content',
+      codeLayout as never,
+    )
+    expect(split.declared.body).toBeUndefined()
+    expect(split.title).toBe('Loops')
+  })
+})
+
+describe('a maths box is given an expression, or nothing (GEN-11)', () => {
+  const mathLayout = [
+    {
+      type: 'content',
+      label: 'Content',
+      purpose: 'x',
+      slots: [{ name: 'eq', kind: 'math' as const, label: 'Equation' }],
+    },
+  ]
+  const mathFor = (value: string) =>
+    splitGeneratedSlots({ eq: value }, 'content', mathLayout as never).declared
+      .eq
+
+  it('refuses a sentence about the formula', () => {
+    // Typesetting prose produces a line of upright words pretending to be
+    // mathematics
+    expect(
+      mathFor('The quadratic formula gives the roots of a quadratic equation'),
+    ).toBeUndefined()
+  })
+
+  it('keeps real LaTeX', () => {
+    expect(mathFor('E = mc^2')).toMatchObject({ kind: 'math' })
+    expect(mathFor('\\frac{a}{b}')).toMatchObject({ kind: 'math' })
+    expect(mathFor('x')).toMatchObject({ kind: 'math' })
+  })
+})

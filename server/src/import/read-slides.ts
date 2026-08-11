@@ -243,6 +243,7 @@ const elementOf = (
         placeholder?: { type?: string }
         shapeProperties?: {
           shapeBackgroundFill?: { solidFill?: Record<string, unknown> }
+          contentAlignment?: string
         }
       }
     | undefined
@@ -250,6 +251,32 @@ const elementOf = (
 
   const placeholder = shape.placeholder?.type
   const { runs, bulleted } = runsOf(shape.text, scheme, page.width)
+  // Google states alignment on the paragraph and the box separately, and
+  // names them differently; both are part of how the slide looks.
+  const ACROSS: Record<string, 'start' | 'center' | 'end'> = {
+    START: 'start',
+    CENTER: 'center',
+    END: 'end',
+    JUSTIFIED: 'start',
+  }
+  const DOWN: Record<string, 'start' | 'center' | 'end'> = {
+    TOP: 'start',
+    MIDDLE: 'center',
+    BOTTOM: 'end',
+  }
+  const paragraphs = (
+    (shape.text?.textElements ?? []) as Record<string, unknown>[]
+  ).map(
+    el =>
+      (el.paragraphMarker as { style?: { alignment?: string } } | undefined)
+        ?.style?.alignment,
+  )
+  const align = ACROSS[paragraphs.find(Boolean) ?? '']
+  const vAlign =
+    DOWN[
+      (shape.shapeProperties as { contentAlignment?: string } | undefined)
+        ?.contentAlignment ?? ''
+    ]
   if (!runs.length) {
     // No words: a rule, a band, or an empty placeholder. Only the ones that
     // paint something are worth carrying — an empty box is not a design.
@@ -276,6 +303,8 @@ const elementOf = (
     ...(slotName ? { slotName } : {}),
     runs,
     ...(bulleted ? { bulleted: true } : {}),
+    ...(align ? { align } : {}),
+    ...(vAlign ? { vAlign } : {}),
   }
 }
 

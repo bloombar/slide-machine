@@ -43,6 +43,9 @@ export interface CandidateSlot {
   /** The family the presentation named, mapped to a bundled stack later —
    * never fetched at display time (docs/TEMPLATES.md §5). */
   fontFamily?: string
+  /** How the text sits in its box, from the slide it came from. */
+  align?: 'start' | 'center' | 'end'
+  vAlign?: 'start' | 'center' | 'end'
   /** A sentence saying what belongs in this box, for the author and for the
    * AI that fills it (GEN-11). Proposed by the model in pass 5. */
   description?: string
@@ -206,6 +209,8 @@ export const candidateOf = (
       ...(boldOf(element) ? { bold: true } : {}),
       ...(colorOf(element) ? { color: colorOf(element) } : {}),
       ...(fontOf(element) ? { fontFamily: fontOf(element) } : {}),
+      ...(element.align ? { align: element.align } : {}),
+      ...(element.vAlign ? { vAlign: element.vAlign } : {}),
       content: element,
     }
   })

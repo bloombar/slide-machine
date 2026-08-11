@@ -68,6 +68,11 @@ export interface SourceElement {
   /** Where the picture lives. Short-lived, so it is fetched at import time. */
   imageUrl?: string
   table?: { rows: string[][] }
+  /** How the text sits in its box: across, then down. A centred title read as
+   * left-aligned is the single most visible way an import stops looking like
+   * the deck it came from. */
+  align?: 'start' | 'center' | 'end'
+  vAlign?: 'start' | 'center' | 'end'
   /** A shape with no content, drawn from its fill — a rule or a band. */
   fill?: string
 }

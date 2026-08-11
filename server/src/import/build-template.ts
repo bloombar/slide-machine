@@ -216,6 +216,10 @@ const toLayout = (
       ...(mapFont(slot.fontFamily)
         ? { fontFamily: mapFont(slot.fontFamily) }
         : {}),
+      // How the text sits in the box. A centred title read as left-aligned is
+      // the most visible way an import stops looking like its source.
+      ...(slot.align ? { align: slot.align } : {}),
+      ...(slot.vAlign ? { vAlign: slot.vAlign } : {}),
     }
   }
 
