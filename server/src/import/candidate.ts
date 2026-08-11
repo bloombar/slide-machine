@@ -64,8 +64,10 @@ export interface Candidate {
   slideId: string
   slots: CandidateSlot[]
   /** Rules and bands: part of the design, and never content. */
-  decoration: { box: SourceBox; fill?: string }[]
+  decoration: { box: SourceBox; fill?: string; imageUrl?: string }[]
   background?: string
+  /** A picture filling the page behind everything (TMPL-8). */
+  backgroundImage?: string
 }
 
 /** Google's placeholder types, in the vocabulary a layout uses. */
@@ -215,6 +217,7 @@ export const candidateOf = (
       .filter(e => e.kind === 'decoration')
       .map(e => ({ box: e.box, ...(e.fill ? { fill: e.fill } : {}) })),
     ...(page.background ? { background: page.background } : {}),
+    ...(page.backgroundImage ? { backgroundImage: page.backgroundImage } : {}),
   }
 }
 

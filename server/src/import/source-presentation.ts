@@ -80,6 +80,9 @@ export interface SourcePage {
   /** For a slide, the id of the layout it is built on. */
   layoutId?: string
   background?: string
+  /** A picture filling the page behind everything, where the page has one.
+   * Google serves it at a short-lived URL, so an import fetches it. */
+  backgroundImage?: string
   elements: SourceElement[]
   /** The slot metadata this system wrote when it exported the presentation
    * (EXP-8): the boxes of this page, by name. Absent for anything else. */

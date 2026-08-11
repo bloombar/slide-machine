@@ -181,14 +181,17 @@ export const importSourcePresentation = async (
 
   // Pictures are fetched after consolidation, so a deck whose slides collapsed
   // into three layouts does not pay to download forty copies of the same logo.
-  const urls = source.slides.flatMap(slide =>
-    slide.elements
+  const urls = source.slides.flatMap(slide => [
+    ...slide.elements
       .map(element => element.imageUrl)
       .filter((url): url is string => Boolean(url)),
-  )
-  const { failed } = options.assetPrefix
+    // A page filled with a picture is as much a part of the design as one
+    // filled with a colour.
+    ...(slide.backgroundImage ? [slide.backgroundImage] : []),
+  ])
+  const { stored, failed } = options.assetPrefix
     ? await fetchAssets(urls, options.assetPrefix)
-    : { failed: 0 }
+    : { stored: new Map<string, string>(), failed: 0 }
 
   const assignment = new Map<string, number>()
   layouts.forEach((layout, index) => {
@@ -199,7 +202,7 @@ export const importSourcePresentation = async (
   }
 
   return {
-    template: buildTemplate(source, layouts, assignment),
+    template: buildTemplate(source, layouts, assignment, stored),
     report: importReport(source, layouts, approximated.length, failed),
   }
 }

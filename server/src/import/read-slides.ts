@@ -318,7 +318,18 @@ const pageOf = (
 ): SourcePage => {
   const rawElements = (raw.pageElements ?? []) as Record<string, unknown>[]
   const properties = raw.pageProperties as
-    { pageBackgroundFill?: { solidFill?: Record<string, unknown> } } | undefined
+    | {
+        pageBackgroundFill?: {
+          solidFill?: Record<string, unknown>
+          stretchedPictureFill?: { contentUrl?: string }
+        }
+      }
+    | undefined
+  // A page is filled with a colour OR a picture; the picture is part of the
+  // design just as much as the colour is, and dropping it would import a deck
+  // that looks nothing like the one it came from.
+  const backgroundImage =
+    properties?.pageBackgroundFill?.stretchedPictureFill?.contentUrl
   const metadata = metadataOf(rawElements)
   const notes = notesOf(raw)
   return {
@@ -332,6 +343,7 @@ const pageOf = (
         undefined) ??
       undefined,
     background: colorOf(properties?.pageBackgroundFill?.solidFill, scheme),
+    ...(backgroundImage ? { backgroundImage } : {}),
     elements: rawElements
       .map(el => elementOf(el, page, scheme))
       .filter((el): el is SourceElement => el !== null),

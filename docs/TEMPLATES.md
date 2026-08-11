@@ -368,6 +368,18 @@ kind, label, instruction and limits come back verbatim — a code box holding a 
 indistinguishable from prose on the slide, so being told is the only way to know. Everything
 else is inferred, and that direction stays lossy.
 
+**Backgrounds and logos come with the design.** A page filled with a picture, a band or rule
+drawn behind the content, and a logo that appears in the same place on every slide of a design
+all become the layout's `decoration` — painted behind every slot, never editable, never
+generated into, never read aloud. Consolidation is what tells a **logo from a figure**: a
+picture that repeats identically across a design is decoration, one that changes per slide is
+content and stays a box the author fills.
+
+Every such picture is fetched into the template's own storage at import time and the layout
+points at that copy, because a presentation's image URLs are short-lived — a template that
+merely remembered them would look right for an hour and then be full of holes. One that cannot
+be retrieved is **left out rather than pointed at**, and counted in the report.
+
 **Fonts are mapped, never fetched.** A typeface name is matched to one of the app's own font
 stacks by the property that survives the mapping — serif, monospaced, geometric, humanist,
 or neither. Reproducing the original exactly would mean a request to a font host on every

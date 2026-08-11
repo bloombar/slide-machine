@@ -334,3 +334,110 @@ describe('what the instructor is told', () => {
     expect(report.largestMerge).toBeUndefined()
   })
 })
+
+describe('the parts of a design that hold no content', () => {
+  const stored = new Map([
+    ['https://x/bg.jpg', 'https://cdn.test/templates/t1/0.jpg'],
+    ['https://x/logo.png', 'https://cdn.test/templates/t1/1.png'],
+  ])
+
+  it('paints a page-filling picture behind everything', () => {
+    const { layouts } = buildTemplate(
+      source(),
+      [derived({ backgroundImage: 'https://x/bg.jpg' })],
+      new Map(),
+      stored,
+    )
+    expect(layouts[0]!.decoration?.[0]).toEqual({
+      x: 0,
+      y: 0,
+      w: 1,
+      h: 1,
+      imageUrl: 'https://cdn.test/templates/t1/0.jpg',
+    })
+  })
+
+  it('points at the template’s own copy, never the presentation’s', () => {
+    // A presentation's image URLs are short-lived: a template that remembered
+    // them would look right for an hour and then be full of holes
+    const { layouts } = buildTemplate(
+      source(),
+      [
+        derived({
+          decoration: [
+            {
+              box: { x: 0.86, y: 0.87, w: 0.08, h: 0.07 },
+              imageUrl: 'https://x/logo.png',
+            },
+          ],
+        }),
+      ],
+      new Map(),
+      stored,
+    )
+    expect(layouts[0]!.decoration?.[0]?.imageUrl).toBe(
+      'https://cdn.test/templates/t1/1.png',
+    )
+  })
+
+  it('keeps a band that is drawn from its fill', () => {
+    const { layouts } = buildTemplate(
+      source(),
+      [
+        derived({
+          decoration: [
+            { box: { x: 0, y: 0.9, w: 1, h: 0.02 }, fill: '#b45309' },
+          ],
+        }),
+      ],
+      new Map(),
+      stored,
+    )
+    expect(layouts[0]!.decoration).toEqual([
+      { x: 0, y: 0.9, w: 1, h: 0.02, fill: '#b45309' },
+    ])
+  })
+
+  it('leaves out a picture that would not come, rather than pointing at it', () => {
+    // Better an honest gap than a broken image on every slide
+    const { layouts } = buildTemplate(
+      source(),
+      [
+        derived({
+          backgroundImage: 'https://x/missing.jpg',
+          decoration: [
+            {
+              box: { x: 0.8, y: 0.8, w: 0.1, h: 0.1 },
+              imageUrl: 'https://x/missing.png',
+            },
+          ],
+        }),
+      ],
+      new Map(),
+      stored,
+    )
+    expect(layouts[0]!.decoration).toBeUndefined()
+  })
+
+  it('produces decoration the template schema accepts', () => {
+    const { layouts } = buildTemplate(
+      source(),
+      [
+        derived({
+          backgroundImage: 'https://x/bg.jpg',
+          decoration: [
+            { box: { x: 0, y: 0.9, w: 1, h: 0.02 }, fill: '#b45309' },
+          ],
+        }),
+      ],
+      new Map(),
+      stored,
+    )
+    expect(layoutSchema.safeParse(layouts[0]).success).toBe(true)
+  })
+
+  it('says nothing at all when a design has none', () => {
+    const { layouts } = buildTemplate(source(), [derived()], new Map())
+    expect(layouts[0]!.decoration).toBeUndefined()
+  })
+})

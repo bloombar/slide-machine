@@ -58,6 +58,8 @@ export interface DerivedLayout {
   slots: CandidateSlot[]
   decoration: Candidate['decoration']
   background?: string
+  /** A picture filling the slide behind everything (TMPL-8). */
+  backgroundImage?: string
   /** The slides this design came from, in order. */
   members: string[]
   /** What kind of slide this is — `title`, `two-column`, `section`. Assigned
@@ -162,48 +164,83 @@ const cluster = (candidates: Candidate[], tolerance: number): Candidate[][] => {
  * picks a real slide and inherits its jitter; the median inherits nobody's and
  * is unmoved by one slide somebody dragged askew.
  */
+/**
+ * Whether a box is the same picture on every slide of a cluster — a logo, a
+ * crest, a footer mark.
+ *
+ * This is the one place that can tell a logo from a figure, and the difference
+ * matters: a logo belongs to the design and must never become a box an author
+ * is asked to fill or the AI writes into, while a figure is exactly that. A
+ * picture that repeats identically is decoration; one that changes per slide
+ * is content. A cluster of one tells us nothing, so it stays content.
+ */
+const isRepeatedImage = (name: string, members: Candidate[]): boolean => {
+  if (members.length < 2) return false
+  const urls = members.map(
+    m => m.slots.find(s => s.name === name)?.content?.imageUrl,
+  )
+  return urls.every(url => Boolean(url) && url === urls[0])
+}
+
 const medianLayout = (members: Candidate[]): DerivedLayout => {
   const first = members[0]!
-  const slots = first.slots.map(slot => {
-    const mine = members
-      .map(m => m.slots.find(s => s.name === slot.name))
-      .filter((s): s is CandidateSlot => Boolean(s))
-    const boxes = mine.map(s => s.box).filter((b): b is SourceBox => Boolean(b))
-    const sizes = mine
-      .map(s => s.fontSize)
-      .filter((n): n is number => typeof n === 'number')
-    return {
-      ...slot,
-      box: {
-        x: median(boxes.map(b => b.x)),
-        y: median(boxes.map(b => b.y)),
-        w: median(boxes.map(b => b.w)),
-        h: median(boxes.map(b => b.h)),
-      },
-      ...(sizes.length ? { fontSize: median(sizes) } : {}),
-      // Styling is the cluster's most common, not the first slide's: an
-      // exemplar's own oddity should not become the design's.
-      ...(mode(mine.map(s => s.color))
-        ? { color: mode(mine.map(s => s.color)) }
-        : {}),
-      ...(mode(mine.map(s => s.bold)) ? { bold: true } : {}),
-      ...(mode(mine.map(s => s.fontFamily))
-        ? { fontFamily: mode(mine.map(s => s.fontFamily)) }
-        : {}),
-      // A declaration is the presentation telling us what this box IS
-      // (EXP-8); it survives consolidation untouched.
-      ...(mine.find(s => s.restored)
-        ? { restored: mine.find(s => s.restored)!.restored }
-        : {}),
-      // The design carries no content; a slide's own words belong to the
-      // slide (EXP-5 maps them back).
-      content: undefined,
-    }
-  })
+  const repeated = first.slots.filter(
+    slot => slot.kind === 'image' && isRepeatedImage(slot.name, members),
+  )
+  const slots = first.slots
+    .filter(slot => !repeated.includes(slot))
+    .map(slot => {
+      const mine = members
+        .map(m => m.slots.find(s => s.name === slot.name))
+        .filter((s): s is CandidateSlot => Boolean(s))
+      const boxes = mine
+        .map(s => s.box)
+        .filter((b): b is SourceBox => Boolean(b))
+      const sizes = mine
+        .map(s => s.fontSize)
+        .filter((n): n is number => typeof n === 'number')
+      return {
+        ...slot,
+        box: {
+          x: median(boxes.map(b => b.x)),
+          y: median(boxes.map(b => b.y)),
+          w: median(boxes.map(b => b.w)),
+          h: median(boxes.map(b => b.h)),
+        },
+        ...(sizes.length ? { fontSize: median(sizes) } : {}),
+        // Styling is the cluster's most common, not the first slide's: an
+        // exemplar's own oddity should not become the design's.
+        ...(mode(mine.map(s => s.color))
+          ? { color: mode(mine.map(s => s.color)) }
+          : {}),
+        ...(mode(mine.map(s => s.bold)) ? { bold: true } : {}),
+        ...(mode(mine.map(s => s.fontFamily))
+          ? { fontFamily: mode(mine.map(s => s.fontFamily)) }
+          : {}),
+        // A declaration is the presentation telling us what this box IS
+        // (EXP-8); it survives consolidation untouched.
+        ...(mine.find(s => s.restored)
+          ? { restored: mine.find(s => s.restored)!.restored }
+          : {}),
+        // The design carries no content; a slide's own words belong to the
+        // slide (EXP-5 maps them back).
+        content: undefined,
+      }
+    })
   return {
     slots,
-    decoration: first.decoration,
+    // A logo is drawn by the design, not filled in by an author.
+    decoration: [
+      ...first.decoration,
+      ...repeated.map(slot => ({
+        box: slot.box,
+        imageUrl: slot.content!.imageUrl!,
+      })),
+    ],
     ...(first.background ? { background: first.background } : {}),
+    ...(first.backgroundImage
+      ? { backgroundImage: first.backgroundImage }
+      : {}),
     members: members.map(m => m.slideId),
   }
 }
@@ -380,7 +417,9 @@ export const clusterCandidates = (
   for (const candidate of candidates) {
     // Background joins the composition: a slide on a dark band is a different
     // design from the same boxes on white, and geometry alone cannot see it.
-    const key = `${compositionKey(candidate)}::${candidate.background ?? ''}`
+    const key = `${compositionKey(candidate)}::${candidate.background ?? ''}::${
+      candidate.backgroundImage ?? ''
+    }`
     byComposition.set(key, [...(byComposition.get(key) ?? []), candidate])
   }
 

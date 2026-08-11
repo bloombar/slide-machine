@@ -266,6 +266,27 @@ export const layoutSchema = z
         }),
       )
       .default({}),
+    // Bands, rules, logos and background pictures — the parts of a design
+    // that hold no content (TMPL-8). Bounded like everything else: a
+    // decoration outside the slide would paint where nobody can see it, and
+    // an unbounded list would let one import produce a layout that never
+    // finishes drawing.
+    decoration: z
+      .array(
+        z.object({
+          x: z.number().min(0).max(1),
+          y: z.number().min(0).max(1),
+          w: z.number().min(0.001).max(1),
+          h: z.number().min(0.001).max(1),
+          fill: z.string().min(1).max(40).optional(),
+          // A stored URL, so longer than a colour: the template's own copy
+          // under its own prefix, never the source presentation's.
+          imageUrl: z.string().min(1).max(512).optional(),
+          radius: z.number().min(0).max(50).optional(),
+        }),
+      )
+      .max(32)
+      .optional(),
     // Authoring guidelines the editor snaps to. Never drawn on a slide.
     guides: z
       .object({

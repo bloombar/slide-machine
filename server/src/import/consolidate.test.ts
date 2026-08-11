@@ -392,3 +392,59 @@ describe('what the caller gets back', () => {
     expect(assignment.size).toBe(0)
   })
 })
+
+describe('a picture that repeats on every slide of a design', () => {
+  /** Two slides sharing a design, each with a picture in the same corner. */
+  const withPicture = (urls: [string, string]): Candidate[] =>
+    urls.map((url, i) => ({
+      slideId: `s${i + 1}`,
+      slots: [
+        slot('title', { x: 0.08, y: 0.1, w: 0.84, h: 0.18 }),
+        slot(
+          'image',
+          { x: 0.86, y: 0.87, w: 0.08, h: 0.07 },
+          {
+            kind: 'image',
+            content: {
+              id: `e${i}`,
+              kind: 'image',
+              box: { x: 0.86, y: 0.87, w: 0.08, h: 0.07 },
+              imageUrl: url,
+            },
+          },
+        ),
+      ],
+      decoration: [],
+    }))
+
+  it('is decoration, not a box anyone is asked to fill', () => {
+    // A logo belongs to the design; offering it as a slot would ask the author
+    // to supply their own logo on every slide, and invite the AI to write into
+    // it
+    const { layouts } = consolidateCandidates(
+      withPicture(['https://x/logo.png', 'https://x/logo.png']),
+    )
+    expect(layouts[0]!.slots.map(s => s.name)).toEqual(['title'])
+    expect(layouts[0]!.decoration).toEqual([
+      {
+        box: { x: 0.86, y: 0.87, w: 0.08, h: 0.07 },
+        imageUrl: 'https://x/logo.png',
+      },
+    ])
+  })
+
+  it('stays content when it differs from slide to slide', () => {
+    // A figure is exactly the box an author should fill
+    const { layouts } = consolidateCandidates(
+      withPicture(['https://x/one.png', 'https://x/two.png']),
+    )
+    expect(layouts[0]!.slots.map(s => s.name)).toEqual(['title', 'image'])
+    expect(layouts[0]!.decoration).toEqual([])
+  })
+
+  it('stays content when only one slide has it, which proves nothing', () => {
+    const [only] = withPicture(['https://x/logo.png', 'https://x/logo.png'])
+    const { layouts } = consolidateCandidates([only!])
+    expect(layouts[0]!.slots.map(s => s.name)).toEqual(['title', 'image'])
+  })
+})

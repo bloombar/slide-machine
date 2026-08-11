@@ -23,6 +23,7 @@ import {
   MAX_SLOT_DESCRIPTION,
   WHITEBOARD_LAYOUT_TYPE,
   type ElementPositions,
+  type LayoutDecoration,
   type Layout,
   type SlotSpec,
 } from '@slide-machine/shared'
@@ -138,8 +139,50 @@ const safeBox = (box: { x: number; y: number; w: number; h: number }) => {
  * an undescribed one is named after itself. */
 const slotLabel = (name: string): string => titleCase(slug(name))
 
+/**
+ * The parts of a design that hold no content: a full-bleed background picture
+ * first, then the bands and rules drawn over it.
+ *
+ * Every picture is the template's **own stored copy**. A presentation's image
+ * URLs are short-lived, so a template that merely remembered them would look
+ * right for an hour and then be full of holes — which is why the import
+ * fetches them, and why one that would not come is left out rather than
+ * pointed at.
+ */
+const decorationOf = (
+  derived: DerivedLayout,
+  assets: Map<string, string>,
+): LayoutDecoration[] => {
+  const pieces: LayoutDecoration[] = []
+
+  const background = derived.backgroundImage
+    ? assets.get(derived.backgroundImage)
+    : undefined
+  if (background) {
+    pieces.push({ x: 0, y: 0, w: 1, h: 1, imageUrl: background })
+  }
+
+  for (const piece of derived.decoration) {
+    const stored = piece.imageUrl ? assets.get(piece.imageUrl) : undefined
+    // A band with neither a fill nor a picture would paint nothing.
+    if (!piece.fill && !stored) continue
+    pieces.push({
+      ...safeBox(piece.box),
+      ...(piece.fill ? { fill: piece.fill } : {}),
+      ...(stored ? { imageUrl: stored } : {}),
+    })
+  }
+  // Bounded to what the schema accepts, so an unusually busy deck cannot
+  // produce a layout that will not save.
+  return pieces.slice(0, 32)
+}
+
 /** One derived design, as a layout of a template. */
-const toLayout = (derived: DerivedLayout, taken: Set<string>): Layout => {
+const toLayout = (
+  derived: DerivedLayout,
+  taken: Set<string>,
+  assets: Map<string, string>,
+): Layout => {
   const type = unique(slug(derived.type ?? ruleBasedType(derived)), taken)
   const slots: SlotSpec[] = derived.slots.map(slot =>
     // A box the presentation declared is restored exactly — kind, instruction
@@ -184,6 +227,9 @@ const toLayout = (derived: DerivedLayout, taken: Set<string>): Layout => {
       `Imported from ${derived.members.length} slide${derived.members.length === 1 ? '' : 's'} of the source presentation.`,
     slots,
     elementPositions,
+    ...(decorationOf(derived, assets).length
+      ? { decoration: decorationOf(derived, assets) }
+      : {}),
   }
 }
 
@@ -209,12 +255,16 @@ export const buildTemplate = (
   source: SourcePresentation,
   layouts: DerivedLayout[],
   assignment: Map<string, number>,
+  /** Pictures already fetched into the template's own storage, by the URL the
+   * presentation gave. A picture that would not come is simply absent, and the
+   * design is drawn without it. */
+  assets: Map<string, string> = new Map(),
 ): BuiltTemplate => {
   // Claimed before any derived layout can take it, so a presentation with a
   // slide the rules happen to call "whiteboard" cannot collide with the blank
   // slate below — it becomes `whiteboard-2` instead.
   const taken = new Set<string>([WHITEBOARD_LAYOUT_TYPE])
-  const built = layouts.map(layout => toLayout(layout, taken))
+  const built = layouts.map(layout => toLayout(layout, taken, assets))
 
   const layoutOfSlide: Record<string, string> = {}
   for (const [slideId, index] of assignment) {

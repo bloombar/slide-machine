@@ -374,6 +374,34 @@ export type TextStyleRole = (typeof TEXT_STYLE_ROLES)[number]
 export type ElementPositions = Record<string, SlotBox>
 
 /**
+ * Something a layout paints that holds no content: a band, a rule, a logo, or
+ * a full-bleed background picture.
+ *
+ * Decoration is part of a design rather than part of a slide, so it is never
+ * editable, never generated into, and never read aloud. A layout that carries
+ * a tree expresses the same thing as a node with neither `slot` nor
+ * `children`; this is its form for a layout that is only geometry — which is
+ * what a design imported from Google Slides arrives as (TMPL-8).
+ *
+ * `imageUrl` always points at the template's own stored copy. The source
+ * presentation's URLs are short-lived, so an import fetches the file rather
+ * than remembering where it was.
+ */
+export interface LayoutDecoration {
+  /** Fractions of the slide, 0–1 from the top-left. */
+  x: number
+  y: number
+  w: number
+  h: number
+  /** A flat fill — a hex value or a theme key, like any other colour. */
+  fill?: string
+  /** A picture, stored under the template's own prefix. */
+  imageUrl?: string
+  /** Corner radius, `cqi`. */
+  radius?: number
+}
+
+/**
  * A single layout within a template. `purpose`, `slots`, and `constraints`
  * form the machine-readable descriptor serialized into generation requests.
  */
@@ -398,6 +426,11 @@ export interface Layout {
    * from Google Slides, which arrive as absolute geometry with no tree.
    */
   elementPositions: ElementPositions
+  /**
+   * Bands, rules, logos and background pictures, painted behind every slot in
+   * the order given. Part of the design, never content.
+   */
+  decoration?: LayoutDecoration[]
   /** Authoring guidelines; editor-only (see LayoutGuides). */
   guides?: LayoutGuides
 }

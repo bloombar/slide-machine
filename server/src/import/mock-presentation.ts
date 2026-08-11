@@ -92,7 +92,10 @@ const imageAndCaption = (n: number): SourcePage => {
         id: `mock-${n}-image`,
         kind: 'image',
         box: { x: 0.08 + j, y: 0.32, w: 0.44, h: 0.5 },
-        imageUrl: 'https://mock.invalid/figure.png',
+        // A different picture per slide, as a real deck has: this is content,
+        // and must stay a box an author fills — unlike the logo below, which
+        // repeats identically and is part of the design.
+        imageUrl: `https://mock.invalid/figure-${n}.png`,
       },
       text(`mock-${n}-caption`, { x: 0.56, y: 0.32 + j, w: 0.36, h: 0.5 }),
     ],
