@@ -48,8 +48,13 @@ export const verifyConnectState = async (
  * `drive.readonly` lets the folder picker browse the instructor's existing
  * Drive to choose a destination. Deck export (PDF/YAML/Google Slides, EXP-1/
  * EXP-4) needs no extra scope: files are created — and a .pptx is converted to
- * native Google Slides — with `drive.file`. Instructors must reconnect once
- * after a scope is added so their stored token carries it.
+ * native Google Slides — with `drive.file`. Template import (TMPL-8) needs no
+ * extra scope either: `presentations.get` is covered by `drive.readonly`,
+ * verified against the live API rather than assumed, so an instructor already
+ * connected can import without reconnecting.
+ *
+ * Instructors must reconnect once after a scope is genuinely added, so their
+ * stored token carries it.
  */
 const CONNECT_SCOPES = [
   'https://www.googleapis.com/auth/forms.body',
@@ -168,4 +173,18 @@ export const clientForRefreshToken = (refreshToken: string): OAuth2Client => {
   const client = new OAuth2Client({ clientId: id, clientSecret: secret })
   client.setCredentials({ refresh_token: refreshToken })
   return client
+}
+
+/**
+ * A bearer token for the connected account, for calling a Google REST API by
+ * hand where no client library fits — reading a presentation (TMPL-8).
+ *
+ * Throws rather than returning an empty string: a caller that carried on with
+ * no token would get a 401 it could only report as "Google said no", which
+ * hides a stored grant that has been revoked.
+ */
+export const accessTokenFor = async (refreshToken: string): Promise<string> => {
+  const { token } = await clientForRefreshToken(refreshToken).getAccessToken()
+  if (!token) throw new Error('Google would not issue an access token')
+  return token
 }

@@ -33,6 +33,8 @@ import type {
   SlideRefitResult,
   SlotValue,
   VoiceCommand,
+  ImportedLayoutDescriptor,
+  ImportedLayoutSemantics,
 } from '@slide-machine/shared'
 import { CONVENTIONAL_SLOTS } from '@slide-machine/shared'
 import { registry } from './registry'
@@ -454,6 +456,26 @@ export class MockGenerationProvider implements GenerationProvider {
       }
       return vec
     })
+  }
+
+  /**
+   * Names imported layouts without a model (TMPL-8 pass 5).
+   *
+   * Deliberately the same rules the live provider falls back to, so a mock
+   * import produces a template shaped like a real one — and so the fallback
+   * path is exercised by every test that runs an import.
+   */
+  async describeImportedLayouts(
+    layouts: ImportedLayoutDescriptor[],
+  ): Promise<ImportedLayoutSemantics[]> {
+    return layouts.map(layout => ({
+      description: `Imported design used by ${layout.slideCount} slide${
+        layout.slideCount === 1 ? '' : 's'
+      }.`,
+      slots: Object.fromEntries(
+        layout.slots.map(slot => [slot.name, `The ${slot.name} of the slide.`]),
+      ),
+    }))
   }
 }
 

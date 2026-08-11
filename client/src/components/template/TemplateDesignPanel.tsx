@@ -22,6 +22,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { templateName } from '../../i18n/templateName'
 import ConfirmDialog from '../ConfirmDialog'
 import TemplateLibrary from './TemplateLibrary'
+import TemplateImport from './TemplateImport'
 
 export default function TemplateDesignPanel({
   templates,
@@ -110,6 +111,14 @@ export default function TemplateDesignPanel({
         onDuplicate={duplicate}
         onEdit={edit}
         onDelete={setConfirming}
+      />
+      <TemplateImport
+        onImported={imported => {
+          onLibraryChanged()
+          // Chosen straight away, the way a fresh duplicate is: an import
+          // exists to be used, and seeing it in place is how it gets reviewed.
+          onChange(imported.id, imported)
+        }}
       />
       {confirming && (
         <ConfirmDialog

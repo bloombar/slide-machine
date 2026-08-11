@@ -19,6 +19,7 @@ import { z } from 'zod'
 import type {
   ExportDownload,
   ExportToDriveResult,
+  GenerationProvider,
   Layout,
   Template,
 } from '@slide-machine/shared'
@@ -59,7 +60,15 @@ const authorOf = templateAuthor(
   (input: { templateId: string }) => input.templateId,
 )
 import { isLive } from '../lib/export-mode'
-import { requireExports } from '../billing/meter-hooks'
+import { requireExports, requireImportVolume } from '../billing/meter-hooks'
+import {
+  importPresentation,
+  importSourcePresentation,
+} from '../import/import-presentation'
+import { mockPresentation } from '../import/mock-presentation'
+import type { ImportReport } from '../import/build-template'
+import { registry } from '../providers/registry'
+import { accessTokenFor } from '../auth/google-connect'
 import { previewImageUrls } from '../enrichment/preview-images'
 
 /**
@@ -347,6 +356,72 @@ export const templateExportToDrive = defineAction<
   },
 })
 
+/**
+ * Derives a template from a presentation in the caller's Google Drive
+ * (TMPL-8).
+ *
+ * An instructor with a deck they already like should not have to rebuild its
+ * design in an editor. This reads that presentation, works out the few designs
+ * it is really built from, and saves them as a template of their own.
+ *
+ * The result is **private and editable**, never applied to anything. An import
+ * is a guess — a good one, and still a guess — so what it produces is a
+ * starting point the author reviews, not a change to a lecture.
+ *
+ * Needs no OAuth scope beyond the one already used to browse Drive: reading a
+ * presentation is covered by `drive.readonly`, which is verified rather than
+ * assumed (docs/TEMPLATES.md §11).
+ */
+export const templateImportFromSlides = defineAction<
+  { presentationId: string; name?: string },
+  { template: Template; report: ImportReport },
+  WithGoogle<Signed>
+>({
+  name: 'template.importFromSlides',
+  access: requiresGoogleDrive(signedIn(), 'export'),
+  // Against the import allowance, not the export one: this brings a design in
+  // (SPEC BILL-3). The model call inside is metered on its own.
+  meter: requireImportVolume,
+  input: z.object({
+    presentationId: z.string().trim().min(1).max(120),
+    name: z.string().trim().min(1).max(80).optional(),
+  }),
+  execute: async (_ctx, input, { userId, googleUser: user }) => {
+    const provider = registry.get<GenerationProvider>('generation')
+    // Mock mode reads a deliberately messy sample deck rather than Google, so
+    // the suite and a machine with no credentials exercise every consolidation
+    // pass — the same reason every other Google-touching feature has one.
+    const { template: built, report } = isLive()
+      ? await importPresentation({
+          accessToken: await accessTokenFor(
+            decryptToken(user.googleQuizRefreshToken!),
+          ),
+          presentationId: input.presentationId,
+          ownerId: userId,
+          provider,
+        })
+      : await importSourcePresentation(mockPresentation(input.presentationId), {
+          provider,
+        })
+
+    // An imported design still has to satisfy the same schema a hand-written
+    // one does — a template the editor cannot open would be worse than none.
+    const layouts = z.array(layoutSchema).parse(built.layouts)
+    const name = input.name ?? built.name
+
+    const doc = await TemplateModel.create({
+      ownerId: userId,
+      name,
+      permalinkSlug: permalinkSlug(name, 'template'),
+      renderMode: built.renderMode,
+      theme: built.theme,
+      layouts: normalizeLayouts(layouts),
+      visibility: 'private',
+    })
+    return { template: toTemplateDto(doc), report }
+  },
+})
+
 registerAction(templateList)
 registerAction(templateGet)
 registerAction(templateExport)
@@ -355,3 +430,4 @@ registerAction(templateDuplicate)
 registerAction(templateUpdate)
 registerAction(templateDelete)
 registerAction(templateExportToDrive)
+registerAction(templateImportFromSlides)

@@ -1,0 +1,275 @@
+/**
+ * The template a consolidated deck becomes (TMPL-8, stage 3).
+ *
+ * Everything before this speaks the importer's own vocabulary — candidates,
+ * clusters, derived layouts. This is where it becomes the thing the rest of
+ * the system already knows how to draw, edit, export and generate into: a
+ * `Template` no different from one written by hand in the editor.
+ *
+ * ## No tree
+ *
+ * An imported design arrives as absolute geometry, so its layouts carry
+ * `elementPositions` and no `tree` — which the template model already allows
+ * for exactly this case. `renderMode: 'positioned'` is what tells the renderer
+ * to draw the boxes where the presentation had them rather than flow them.
+ *
+ * ## Nothing here trusts the earlier stages
+ *
+ * Boxes are clamped, names are made unique and slug-shaped, descriptions are
+ * capped. The template schema would reject a bad value anyway; catching it
+ * here means the author gets a template rather than an error.
+ */
+import {
+  MAX_SLOT_DESCRIPTION,
+  WHITEBOARD_LAYOUT_TYPE,
+  type ElementPositions,
+  type Layout,
+  type SlotSpec,
+} from '@slide-machine/shared'
+import type { DerivedLayout } from './consolidate'
+import type { SourcePresentation } from './source-presentation'
+import { ruleBasedType } from './semantics'
+
+/** What an import did, in the terms the report is written in. */
+export interface ImportReport {
+  slidesRead: number
+  layoutsCreated: number
+  /** The biggest merge that happened, which is the one worth mentioning. */
+  largestMerge?: { type: string; slides: number }
+  /** Slides that matched no design and were drawn with the nearest one. */
+  approximated: number
+  /** Images that could not be fetched, so the layout has an empty box. */
+  assetsFailed: number
+}
+
+/**
+ * Which of the app's own font stacks a presentation's typeface becomes.
+ *
+ * A presentation names whatever font its author had. Reproducing that exactly
+ * would mean fetching a font from a third party every time a slide is shown —
+ * a privacy leak on every view, and an unreadable deck offline (docs/
+ * TEMPLATES.md §5). So a name is mapped onto one of the stacks already on the
+ * reader's machine, keyed exactly as the template editor's picker keys them
+ * (`client/src/components/slide/fonts.ts`).
+ *
+ * Approximate by design: the trade is a typeface that resembles the original
+ * rather than a request to a font host.
+ */
+const FONT_FAMILIES: { key: string; pattern: RegExp }[] = [
+  // Monospace first: "Courier New" reads as serif by name and is monospaced
+  // in fact, and being fixed-width is the property that matters.
+  { key: 'mono', pattern: /(mono|courier|consol|menlo|code|typewriter)/i },
+  {
+    key: 'geometric',
+    pattern: /(futura|century gothic|avenir|nunito|poppins|montserrat|jost)/i,
+  },
+  {
+    key: 'humanist',
+    pattern: /(optima|candara|gill sans|trebuchet|tahoma|verdana|lato)/i,
+  },
+  {
+    key: 'serif',
+    pattern:
+      /(times|georgia|garamond|cambria|palatino|baskerville|merriweather|playfair|didot|serif)/i,
+  },
+]
+
+/** The stack closest to a font nobody can be asked to download. Anything
+ * unrecognized is sans, which is what most presentation type is. */
+export const mapFont = (family: string | undefined): string | undefined => {
+  if (!family?.trim()) return undefined
+  return FONT_FAMILIES.find(f => f.pattern.test(family))?.key ?? 'sans'
+}
+
+/** The blank slate every template must offer (TMPL-7). No presentation has
+ * one to import, so it is synthesized. */
+const WHITEBOARD_LAYOUT: Layout = {
+  type: WHITEBOARD_LAYOUT_TYPE,
+  label: 'Whiteboard',
+  purpose: 'A blank slate for freehand drawing',
+  slots: [],
+  elementPositions: {},
+}
+
+/** A layout type as a slug, since it keys a slide's `layoutType` and the AI's
+ * option set. */
+const slug = (value: string): string =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'layout'
+
+/** Title Case, for the name an author reads in the layout menu. */
+const titleCase = (value: string): string =>
+  value
+    .split('-')
+    .filter(Boolean)
+    .map(word => word[0]!.toUpperCase() + word.slice(1))
+    .join(' ')
+
+/** Keeps a name unique within a set, since a duplicate layout type would make
+ * one of the two unreachable. */
+const unique = (name: string, taken: Set<string>): string => {
+  if (!taken.has(name)) {
+    taken.add(name)
+    return name
+  }
+  let n = 2
+  while (taken.has(`${name}-${n}`)) n++
+  const next = `${name}-${n}`
+  taken.add(next)
+  return next
+}
+
+/** A box the template schema will accept: inside the slide, and never zero. */
+const safeBox = (box: { x: number; y: number; w: number; h: number }) => {
+  const x = Math.min(Math.max(box.x, 0), 0.99)
+  const y = Math.min(Math.max(box.y, 0), 0.99)
+  return {
+    x,
+    y,
+    w: Math.min(Math.max(box.w, 0.01), 1 - x),
+    h: Math.min(Math.max(box.h, 0.01), 1 - y),
+  }
+}
+
+/** The label an author reads beside a box. A described box says what it is;
+ * an undescribed one is named after itself. */
+const slotLabel = (name: string): string => titleCase(slug(name))
+
+/** One derived design, as a layout of a template. */
+const toLayout = (derived: DerivedLayout, taken: Set<string>): Layout => {
+  const type = unique(slug(derived.type ?? ruleBasedType(derived)), taken)
+  const slots: SlotSpec[] = derived.slots.map(slot =>
+    // A box the presentation declared is restored exactly — kind, instruction
+    // and limits — because a round trip through our own export must lose
+    // nothing (EXP-8). Everything else is inferred, and says so by being
+    // inferable.
+    slot.restored
+      ? { ...slot.restored, name: slot.name }
+      : {
+          name: slot.name,
+          kind: slot.kind,
+          label: slotLabel(slot.name),
+          ...(slot.description
+            ? { description: slot.description.slice(0, MAX_SLOT_DESCRIPTION) }
+            : {}),
+          ...(slot.kind === 'text' && slot.box.h > 0.25
+            ? { multiline: true }
+            : {}),
+        },
+  )
+
+  const elementPositions: ElementPositions = {}
+  for (const slot of derived.slots) {
+    elementPositions[slot.name] = {
+      ...safeBox(slot.box),
+      // Type size and colour came off the slide; keeping them is the whole
+      // point of importing a design rather than describing one.
+      ...(slot.fontSize ? { fontSize: slot.fontSize } : {}),
+      ...(slot.bold ? { fontWeight: 700 } : {}),
+      ...(slot.color ? { color: slot.color } : {}),
+      ...(mapFont(slot.fontFamily)
+        ? { fontFamily: mapFont(slot.fontFamily) }
+        : {}),
+    }
+  }
+
+  return {
+    type,
+    label: titleCase(type),
+    purpose:
+      derived.description ??
+      `Imported from ${derived.members.length} slide${derived.members.length === 1 ? '' : 's'} of the source presentation.`,
+    slots,
+    elementPositions,
+  }
+}
+
+/** The template a presentation becomes, ready to store. */
+export interface BuiltTemplate {
+  name: string
+  theme: Record<string, unknown>
+  layouts: Layout[]
+  renderMode: 'positioned'
+  /** Which layout each source slide ended on, keyed by slide id — what a
+   * lecture import needs to place content (EXP-5). */
+  layoutOfSlide: Record<string, string>
+}
+
+/**
+ * Assembles the template.
+ *
+ * A presentation with no usable slides still yields a template — an empty one
+ * an author can build on — rather than an error. Failing an import because a
+ * deck was unusual helps nobody.
+ */
+export const buildTemplate = (
+  source: SourcePresentation,
+  layouts: DerivedLayout[],
+  assignment: Map<string, number>,
+): BuiltTemplate => {
+  // Claimed before any derived layout can take it, so a presentation with a
+  // slide the rules happen to call "whiteboard" cannot collide with the blank
+  // slate below — it becomes `whiteboard-2` instead.
+  const taken = new Set<string>([WHITEBOARD_LAYOUT_TYPE])
+  const built = layouts.map(layout => toLayout(layout, taken))
+
+  const layoutOfSlide: Record<string, string> = {}
+  for (const [slideId, index] of assignment) {
+    const layout = built[index]
+    if (layout) layoutOfSlide[slideId] = layout.type
+  }
+
+  return {
+    name: source.title.slice(0, 120) || 'Imported design',
+    theme: {
+      background: source.theme.background,
+      surface: source.theme.background,
+      text: source.theme.text,
+      muted: source.theme.muted,
+      accent: source.theme.accent,
+      penColor: source.theme.text,
+      highlighterColor: source.theme.accent,
+    },
+    // Every template must offer a blank slate to draw on (TMPL-7), and no
+    // presentation has one to import — so it is synthesized rather than
+    // derived. Last, because it is the least likely layout to want.
+    layouts: [...built, WHITEBOARD_LAYOUT],
+    renderMode: 'positioned',
+    layoutOfSlide,
+  }
+}
+
+/**
+ * What to tell the instructor.
+ *
+ * Consolidation is lossy, and this is the only visibility into it — so it is
+ * a deliverable, not a nicety. Structured rather than a sentence, because the
+ * app speaks five languages and the sentence is the client's to write.
+ */
+export const importReport = (
+  source: SourcePresentation,
+  layouts: DerivedLayout[],
+  approximated: number,
+  assetsFailed: number,
+): ImportReport => {
+  const biggest = [...layouts].sort(
+    (a, b) => b.members.length - a.members.length,
+  )[0]
+  return {
+    slidesRead: source.slides.length,
+    layoutsCreated: layouts.length,
+    ...(biggest && biggest.members.length > 1
+      ? {
+          largestMerge: {
+            type: biggest.type ?? ruleBasedType(biggest),
+            slides: biggest.members.length,
+          },
+        }
+      : {}),
+    approximated,
+    assetsFailed,
+  }
+}

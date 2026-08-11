@@ -457,6 +457,29 @@
       "label": "语言",
       "hint": "以哪种语言高亮此代码。",
       "auto": "无"
+    },
+    "import": {
+      "open": "从 Google 幻灯片导入设计",
+      "title": "从 Google 幻灯片导入设计",
+      "description": "指定你云端硬盘中的一份演示文稿，我们会分析它的设计——配色、字体和元素位置——并保存为可编辑的模板。",
+      "linkLabel": "Google 幻灯片链接",
+      "linkPlaceholder": "粘贴演示文稿链接",
+      "submit": "导入设计",
+      "working": "正在读取演示文稿…",
+      "errors": {
+        "link": "这看起来不像 Google 幻灯片链接。",
+        "google": "Google 不允许我们读取该演示文稿。请确认你自己能打开它。",
+        "failed": "无法导入该演示文稿"
+      },
+      "report": {
+        "summary": "{slides} 张幻灯片生成了 {layouts} 个版式。",
+        "merged": "已将 {count} 张几乎相同的幻灯片合并为一个版式。",
+        "approximated": "有 {count} 张幻灯片未匹配到任何版式，已做近似处理。",
+        "assetsFailed": "有 {count} 张图片无法获取。",
+        "review": "这个设计归你所有，可随意编辑；演示文稿本身未做任何改动。"
+      },
+      "connectPrompt": "连接 Google 账号，以便读取你云端硬盘中的演示文稿。",
+      "connect": "连接 Google"
     }
   },
   "layout": {

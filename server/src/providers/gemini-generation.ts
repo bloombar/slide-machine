@@ -29,11 +29,14 @@ import type {
   RefitSlotDescriptor,
   LayoutType,
   SlotSpec,
+  ImportedLayoutDescriptor,
+  ImportedLayoutSemantics,
 } from '@slide-machine/shared'
 import { isVoiceCommand, WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
 import type { HealthComponent } from '@slide-machine/shared'
 import { env } from '../config/env'
 import { hasContent, splitGeneratedSlots } from '../lib/generated-slots'
+import { importSemanticsPrompt } from './import-semantics-prompt'
 import { registry } from './registry'
 import { meterGeminiUsage, type GeminiUsageMetadata } from './usage-metadata'
 import { GenerationUnavailableError } from './errors'
@@ -1040,6 +1043,27 @@ export class GeminiGenerationProvider implements GenerationProvider {
     if (!vectors || vectors.length !== texts.length)
       throw new Error('Gemini embed returned an unexpected number of vectors')
     return vectors
+  }
+
+  /**
+   * Names the layouts an import derived (TMPL-8 pass 5).
+   *
+   * One call for the whole set rather than one per layout: the model can only
+   * reuse a type name across layouts — which is what makes near-duplicates
+   * merge — if it sees them together.
+   *
+   * The response is returned as-is for the importer to validate. Parsing lives
+   * there because the importer is what knows which boxes exist and what a
+   * usable answer looks like.
+   */
+  async describeImportedLayouts(
+    layouts: ImportedLayoutDescriptor[],
+  ): Promise<ImportedLayoutSemantics[]> {
+    if (!layouts.length) return []
+    const raw = JSON.parse(
+      await callGemini(importSemanticsPrompt(layouts), 'Import semantics'),
+    ) as { layouts?: ImportedLayoutSemantics[] } | ImportedLayoutSemantics[]
+    return Array.isArray(raw) ? raw : (raw.layouts ?? [])
   }
 }
 
