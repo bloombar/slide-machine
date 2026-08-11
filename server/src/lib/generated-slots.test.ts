@@ -11,6 +11,7 @@
 import { describe, it, expect } from 'vitest'
 import type { LayoutDescriptor } from '@slide-machine/shared'
 import {
+  declaredContentOf,
   hasContent,
   onlyDeclaredBy,
   splitGeneratedSlots,
@@ -312,5 +313,72 @@ describe('a maths box is given an expression, or nothing (GEN-11)', () => {
     expect(mathFor('E = mc^2')).toMatchObject({ kind: 'math' })
     expect(mathFor('\\frac{a}{b}')).toMatchObject({ kind: 'math' })
     expect(mathFor('x')).toMatchObject({ kind: 'math' })
+  })
+})
+
+describe('reading a slide’s authored boxes back out (GEN-11)', () => {
+  const CODE = { kind: 'code', source: 'while n > 10:\n    n -= 1' } as const
+  const MATH = { kind: 'math', tex: 'E = mc^2' } as const
+
+  it('returns the boxes the author named, with what they hold', () => {
+    // The whole point: an update REPLACES one of these, so the model has to
+    // see the current listing to edit it rather than overwrite it
+    expect(declaredContentOf({ example: CODE }, 'lab', AUTHORED)).toEqual({
+      example: CODE,
+    })
+  })
+
+  it('leaves out a box the conventional four already carry', () => {
+    // `content.title` / `content.body` are sent in their own right; sending
+    // them twice would spend prompt on nothing
+    expect(
+      declaredContentOf(
+        {
+          title: { kind: 'text', value: 'Loops' },
+          body: { kind: 'text', value: 'A loop repeats.' },
+          bullets: { kind: 'bullets', items: ['one'] },
+          caption: { kind: 'text', value: 'Fig. 1' },
+        },
+        'lab',
+        CONVENTIONAL,
+      ),
+    ).toEqual({})
+  })
+
+  it('keeps a conventionally-named box that holds something else', () => {
+    // An author who turned "body" into a code box has a listing the prose
+    // field cannot express — and it is exactly the box a lecturer edits aloud
+    const codeBody = layout([
+      { name: 'title', kind: 'text', label: 'Title' },
+      { name: 'body', kind: 'code', label: 'Body' },
+    ])
+    expect(declaredContentOf({ body: CODE }, 'lab', codeBody)).toEqual({
+      body: CODE,
+    })
+  })
+
+  it('leaves pictures out', () => {
+    // The model never writes one; a stored ref and its credit are noise
+    const withImage = layout([
+      { name: 'diagram', kind: 'image', label: 'Diagram' },
+      { name: 'eq', kind: 'math', label: 'Equation' },
+    ])
+    expect(
+      declaredContentOf(
+        { diagram: { kind: 'image', ref: 'asset1' }, eq: MATH },
+        'lab',
+        withImage,
+      ),
+    ).toEqual({ eq: MATH })
+  })
+
+  it('drops a box the layout no longer declares', () => {
+    // A slide keeps content its old layout held (remapSlots); showing the
+    // model a box that is not on screen invites an edit that goes nowhere
+    expect(declaredContentOf({ leftover: CODE }, 'lab', AUTHORED)).toEqual({})
+  })
+
+  it('is empty for a slide with no slot map at all', () => {
+    expect(declaredContentOf(undefined, 'lab', AUTHORED)).toEqual({})
   })
 })

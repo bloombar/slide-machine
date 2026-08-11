@@ -91,7 +91,7 @@ import {
   updateOverflows,
   charCount,
 } from '../lib/slide-fit'
-import { onlyDeclaredBy } from '../lib/generated-slots'
+import { declaredContentOf, onlyDeclaredBy } from '../lib/generated-slots'
 import {
   layoutDisplaysContent,
   isHeaderLayout,
@@ -820,6 +820,33 @@ export const sessionPhrase = defineAction<
       )
     }
 
+    // What the current slide holds, as the model needs to see it.
+    //
+    // The conventional four are for re-fitting, so they ride the same flag the
+    // re-fit does. The boxes a template's author named are different: an
+    // update REPLACES one outright, so the model must see the current listing
+    // to edit it rather than overwrite it — true whether or not layouts may
+    // change (GEN-11).
+    const declaredNow = lastSlide
+      ? declaredContentOf(slotsOf(lastSlide), lastSlide.layoutType, descriptors)
+      : {}
+    const currentSlideContent =
+      env.GENERATION_LAYOUT_REFIT || Object.keys(declaredNow).length
+        ? {
+            ...(env.GENERATION_LAYOUT_REFIT
+              ? {
+                  title: lastSlide?.title,
+                  body: lastSlide?.body,
+                  bullets: lastSlide?.bullets,
+                  caption: lastSlide?.caption,
+                }
+              : {}),
+            ...(Object.keys(declaredNow).length
+              ? { declared: declaredNow }
+              : {}),
+          }
+        : undefined
+
     const provider = registry.get<GenerationProvider>('generation')
     const generated = await provider.generateSlideContent({
       phrase: input.phrase,
@@ -850,14 +877,7 @@ export const sessionPhrase = defineAction<
             bodyChars: charCount(lastSlide.body),
             // The exact slot content, so a refit re-maps real text
             // instead of guessing from the rolling context
-            content: env.GENERATION_LAYOUT_REFIT
-              ? {
-                  title: lastSlide.title,
-                  body: lastSlide.body,
-                  bullets: lastSlide.bullets,
-                  caption: lastSlide.caption,
-                }
-              : undefined,
+            content: currentSlideContent,
             // Everything spoken while on this slide, so the model can see what
             // it already covers (kept to a recent window to bound the prompt).
             sourceTranscript:

@@ -62,14 +62,25 @@ export interface SlideGenerationRequest {
     layoutType: string
     bulletCount: number
     bodyChars: number
-    /** The slide's exact slot content — present when layout re-fit is
-     * allowed, so the model can re-map it rather than guess it from
-     * the rolling context. */
+    /** The slide's exact slot content. The conventional four are present
+     * when layout re-fit is allowed, so the model can re-map them rather
+     * than guess them from the rolling context. */
     content?: {
       title?: string
       body?: string
       bullets?: string[]
       caption?: string
+      /**
+       * What the boxes a template's author named hold right now (GEN-11),
+       * keyed by slot name — sent whenever the slide has any, refit or not.
+       *
+       * These boxes are REPLACED wholesale by an update, not appended to: a
+       * box holds one program, one formula, one table. A model that cannot
+       * see the current listing can only overwrite it, so "add a break to
+       * that loop" loses the loop. Showing it is what makes the box editable
+       * by voice.
+       */
+      declared?: Record<string, SlotValue>
     }
     /** Everything the speaker has said while on this slide (its raw
      * `sourceTranscript`), so the model can judge what it already covers —

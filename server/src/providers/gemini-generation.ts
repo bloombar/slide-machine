@@ -29,6 +29,7 @@ import type {
   RefitSlotDescriptor,
   LayoutType,
   SlotSpec,
+  SlotValue,
   ImportedLayoutDescriptor,
   ImportedLayoutSemantics,
 } from '@slide-machine/shared'
@@ -116,6 +117,64 @@ const kindLegend = (
 }
 
 /**
+ * The conventional four on their own, for the "current slide content" line.
+ *
+ * The authored boxes travel in the same object but are shown separately, with
+ * their kinds and their own rule — a raw `{"kind":"code","source":…}` dump
+ * would read as a shape to copy rather than a listing to edit.
+ */
+const conventionalOnly = (
+  content: NonNullable<SlideGenerationRequest['currentSlide']>['content'],
+) => {
+  const { declared: _declared, ...rest } = content ?? {}
+  return rest
+}
+
+/**
+ * What one authored box holds, as the JSON value the model would write for it.
+ *
+ * Shown in the value's own shape rather than the stored wrapper, so the model
+ * sees the thing it must return: a code box shows the listing as a JSON string
+ * (newlines escaped, exactly how it has to come back), a table shows its rows.
+ */
+const slotJson = (value: SlotValue): string => {
+  switch (value.kind) {
+    case 'code':
+      return JSON.stringify(value.source)
+    case 'math':
+      return JSON.stringify(value.tex)
+    case 'bullets':
+      return JSON.stringify(value.items)
+    case 'table':
+      return JSON.stringify({ header: value.header, rows: value.rows })
+    case 'image':
+      // Never written by the model; excluded upstream, handled for totality.
+      return '(a picture)'
+    default:
+      return JSON.stringify(value.value)
+  }
+}
+
+/**
+ * The listings and formulae a slide already holds, keyed by box name.
+ *
+ * Only the two kinds the specialized retry deals with, as plain text: it asks
+ * for a listing or an expression, so that is what it is shown.
+ */
+const currentSpecializedText = (
+  declared: Record<string, SlotValue> | undefined,
+): Record<string, string> | undefined => {
+  const entries = Object.entries(declared ?? {}).flatMap(([name, value]) =>
+    value.kind === 'code'
+      ? [[name, value.source] as const]
+      : value.kind === 'math'
+        ? [[name, value.tex] as const]
+        : [],
+  )
+  return entries.length ? Object.fromEntries(entries) : undefined
+}
+
+/**
  * The model's slots, split into the conventional four and the rest.
  *
  * A thin wrapper so the result spread reads as one thing: `declared` is left
@@ -175,7 +234,15 @@ const refusedSpecialized = (
  */
 const retrySpecialized = async (
   refused: SlotSpec[],
-  context: { phrase: string; title?: string; said: Record<string, string> },
+  context: {
+    phrase: string
+    title?: string
+    said: Record<string, string>
+    /** What the box holds already, when this is an edit to an existing one.
+     * Without it the retry writes a fresh listing and the previous one is
+     * gone — "add a break to that loop" has to keep the loop. */
+    current?: Record<string, string>
+  },
 ): Promise<Record<string, unknown> | undefined> => {
   const asked = refused
     .map(spec =>
@@ -202,6 +269,20 @@ const retrySpecialized = async (
     .filter(Boolean)
     .join('\n')
 
+  // Boxes that already hold something: this is an edit, not a blank fill, and
+  // the retry has to return the whole box back — the value replaces what is
+  // there, so anything it leaves out is deleted.
+  const existing = refused
+    .map(spec =>
+      context.current?.[spec.name]
+        ? `  "${spec.name}" currently holds: ${JSON.stringify(
+            context.current[spec.name],
+          )}`
+        : '',
+    )
+    .filter(Boolean)
+    .join('\n')
+
   const prompt = [
     'Your previous answer described these boxes in words instead of filling',
     'them. Write the thing itself this time, not a sentence about it.',
@@ -209,6 +290,15 @@ const retrySpecialized = async (
     `The lecturer just said: ${context.phrase}`,
     ...(context.title ? [`The slide is titled: ${context.title}`] : []),
     '',
+    ...(existing
+      ? [
+          'These boxes are not empty — what you return REPLACES what is there,',
+          'so apply the change to what they hold and return the COMPLETE new',
+          'contents of each, not just the changed part:',
+          existing,
+          '',
+        ]
+      : []),
     ...(described
       ? ['What you said each box should contain:', described, '']
       : []),
@@ -456,7 +546,27 @@ const instructions = (req: SlideGenerationRequest): string => {
       ? `\nFor "update", also set "updateMode":
 - "delta": adds a small amount; slots contain ONLY the added material. Keep layoutType "${req.currentSlide.layoutType}" unless another layout still displays every slot this slide uses.
 ${refitRule}
-Current slide content: ${JSON.stringify(req.currentSlide.content)}`
+Current slide content: ${JSON.stringify(conventionalOnly(req.currentSlide.content))}`
+      : ''
+
+  // What the slide's authored boxes hold right now (GEN-11). Shown for every
+  // update, refit or not: these boxes are replaced rather than appended to, so
+  // a model that cannot see the current listing can only overwrite it.
+  const declaredNow = req.currentSlide?.content?.declared
+  const currentDeclared =
+    declaredNow &&
+    Object.keys(declaredNow).length &&
+    req.currentSlide?.layoutType !== WHITEBOARD_LAYOUT_TYPE
+      ? `\nThe current slide's specialized boxes hold this RIGHT NOW, each shown as the JSON value it takes:\n${Object.entries(
+          declaredNow,
+        )
+          .map(
+            ([name, value]) =>
+              `- "${name}" (${value.kind}): ${slotJson(value)}`,
+          )
+          .join(
+            '\n',
+          )}\nA box like these holds ONE thing — one listing, one formula, one table — and an "update" REPLACES it outright; nothing is appended. So when this phrase changes one, return its COMPLETE new value: start from what is shown above, apply the change the speaker just described, and write the whole box out again. A fragment would destroy the rest of it. This applies in "delta" mode too, where the conventional boxes take only the new material. Leave a box out entirely when the phrase does not change it.`
       : ''
 
   // The raw speech captured while on the current slide, so the model can judge
@@ -511,6 +621,7 @@ Current slide content: ${JSON.stringify(req.currentSlide.content)}`
     ),
     deckTitle,
     updateRules,
+    currentDeclared,
     lockLayout,
     pinLayout,
     voiceCommands,
@@ -888,6 +999,12 @@ export class GeminiGenerationProvider implements GenerationProvider {
             String(parsed.slots[spec.name] ?? ''),
           ]),
         ),
+        // Only for an update: on a "new" slide the box starts empty, and
+        // showing the previous slide's listing would invite a copy of it.
+        current:
+          parsed.action === 'update'
+            ? currentSpecializedText(req.currentSlide?.content?.declared)
+            : undefined,
       }).catch(() => undefined)
       if (second) {
         const merged = splitAndKeep(

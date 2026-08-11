@@ -1115,3 +1115,169 @@ describe('a code box answered in prose is asked again (GEN-11)', () => {
     expect(calls).toBe(1)
   })
 })
+
+describe('a box the model must edit rather than overwrite (GEN-11)', () => {
+  const codeLayout = [
+    {
+      type: 'content',
+      label: 'Content',
+      purpose: 'x',
+      slots: [
+        { name: 'title', kind: 'text', label: 'Title' },
+        {
+          name: 'snippet',
+          kind: 'code',
+          label: 'Sample',
+          options: { language: 'python' },
+        },
+      ],
+    },
+  ]
+
+  const editRequest = (
+    overrides: Partial<SlideGenerationRequest> = {},
+  ): SlideGenerationRequest =>
+    ({
+      phrase: 'and add a break once it reaches zero',
+      rollingContext: [],
+      layoutDescriptors: codeLayout,
+      currentSlide: {
+        layoutType: 'content',
+        bulletCount: 0,
+        bodyChars: 0,
+        content: {
+          title: 'While loops',
+          declared: {
+            snippet: { kind: 'code', source: 'while n > 10:\n    n -= 1' },
+          },
+        },
+      },
+      ...overrides,
+    }) as never
+
+  const promptFor = async (req: SlideGenerationRequest): Promise<string> => {
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
+    )
+    await new GeminiGenerationProvider().generateSlideContent(req)
+    const [, init] = fetchMock.mock.calls[0]!
+    return JSON.parse(String(init.body)).contents[0].parts[0].text as string
+  }
+
+  it('shows the model what the box holds right now', async () => {
+    // Without this the model is editing blind: "add a break to that loop"
+    // arrives with no loop to add it to
+    const prompt = await promptFor(editRequest())
+    expect(prompt).toContain('while n > 10:')
+    expect(prompt).toContain('"snippet" (code)')
+  })
+
+  it('demands the complete value back, because it replaces', async () => {
+    // A box holds one program; a returned fragment would destroy the rest
+    const prompt = await promptFor(editRequest())
+    expect(prompt).toContain('REPLACES it outright')
+    expect(prompt).toContain('COMPLETE new value')
+  })
+
+  it('shows it even when layouts may not change', async () => {
+    // Replacement is how an authored box works, refit or not — the rule is
+    // not part of the refit bargain
+    const prompt = await promptFor(
+      editRequest({ allowLayoutRefit: false, allowRephrase: false }),
+    )
+    expect(prompt).toContain('while n > 10:')
+  })
+
+  it('shows a formula as its LaTeX, not as its stored wrapper', async () => {
+    const prompt = await promptFor(
+      editRequest({
+        layoutDescriptors: [
+          {
+            type: 'content',
+            label: 'Content',
+            purpose: 'x',
+            slots: [{ name: 'eq', kind: 'math', label: 'Equation' }],
+          },
+        ],
+        currentSlide: {
+          layoutType: 'content',
+          bulletCount: 0,
+          bodyChars: 0,
+          content: { declared: { eq: { kind: 'math', tex: 'E = mc^2' } } },
+        },
+      } as never),
+    )
+    expect(prompt).toContain('"eq" (math): "E = mc^2"')
+  })
+
+  it('says nothing when the slide has no authored boxes', async () => {
+    // Every phrase pays for this block; a deck of plain slides should not
+    const prompt = await promptFor(
+      editRequest({
+        currentSlide: {
+          layoutType: 'content',
+          bulletCount: 0,
+          bodyChars: 0,
+          content: { title: 'While loops' },
+        },
+      } as never),
+    )
+    expect(prompt).not.toContain('REPLACES it outright')
+  })
+
+  it('keeps the stored wrapper out of the current-content line', async () => {
+    // `{"kind":"code","source":…}` in the re-fit line reads as a shape to
+    // copy rather than a listing to edit
+    const prompt = await promptFor(editRequest({ allowLayoutRefit: true }))
+    expect(prompt).toContain('Current slide content: {"title":"While loops"}')
+  })
+
+  it('hands the current listing to the retry when the box is being edited', async () => {
+    // The retry's answer replaces the box too, so it needs the same warning
+    const prompts: string[] = []
+    const replies = [
+      {
+        action: 'update',
+        layoutType: 'content',
+        slots: { snippet: 'It stops once n reaches zero.' },
+      },
+      { snippet: 'while n > 10:\n    n -= 1\n    if n == 0:\n        break' },
+    ]
+    fetchMock.mockImplementation(async (_url: string, init: RequestInit) => {
+      prompts.push(String(init?.body))
+      return geminiReply(replies.shift())
+    })
+
+    const result = await new GeminiGenerationProvider().generateSlideContent(
+      editRequest(),
+    )
+    expect(prompts).toHaveLength(2)
+    expect(prompts[1]).toContain('currently holds')
+    expect(prompts[1]).toContain('while n > 10:')
+    expect(result.declared?.snippet).toMatchObject({
+      kind: 'code',
+      source: 'while n > 10:\n    n -= 1\n    if n == 0:\n        break',
+    })
+  })
+
+  it('does not show the previous listing when starting a new slide', async () => {
+    // A blank box on a new slide is not an edit; showing the last slide's
+    // program invites a copy of it
+    const prompts: string[] = []
+    const replies = [
+      {
+        action: 'new',
+        layoutType: 'content',
+        slots: { title: 'For loops', snippet: 'This iterates a sequence.' },
+      },
+      { snippet: 'for x in xs:\n    print(x)' },
+    ]
+    fetchMock.mockImplementation(async (_url: string, init: RequestInit) => {
+      prompts.push(String(init?.body))
+      return geminiReply(replies.shift())
+    })
+
+    await new GeminiGenerationProvider().generateSlideContent(editRequest())
+    expect(prompts[1]).not.toContain('currently holds')
+  })
+})

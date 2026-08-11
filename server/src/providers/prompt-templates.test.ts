@@ -23,6 +23,7 @@ const allSlots = {
   currentTranscript: '',
   voiceCommands: '',
   updateRules: '',
+  currentDeclared: '',
   lockLayout: '',
   pinLayout: '',
   language: '',

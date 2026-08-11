@@ -293,3 +293,41 @@ export const onlyDeclaredBy = (
     Object.entries(declared).filter(([name]) => names.has(name)),
   )
 }
+
+/**
+ * What a slide's authored boxes hold right now, ready to show the model.
+ *
+ * The mirror of `splitGeneratedSlots`: that reads the model's answer onto a
+ * slide, this reads a slide back out for the next question. An update REPLACES
+ * one of these boxes rather than appending to it, so the model has to see the
+ * current listing to edit it — otherwise "add a break to that loop" arrives
+ * with no loop to add it to (GEN-11).
+ *
+ * Two exclusions. A box already carried by one of the conventional four is
+ * left out, because that is where it is being sent from. Note the test is the
+ * value's KIND, not its name: an author who turned `body` into a code box has
+ * a listing the prose field cannot express, so it belongs here — the same
+ * distinction `foldLegacy` draws about what a legacy field may clear.
+ *
+ * Pictures are left out too, because the model never writes one: a stored ref
+ * and its credit are noise in the prompt, and `imageGuidance` is how a slide's
+ * picture is chosen.
+ */
+export const declaredContentOf = (
+  slots: Record<string, SlotValue> | undefined,
+  layoutType: string,
+  descriptors: LayoutDescriptor[],
+): Record<string, SlotValue> => {
+  /** True when the conventional four already carry this box's content. */
+  const sentAsLegacy = (name: string, value: SlotValue): boolean =>
+    name === 'bullets'
+      ? value.kind === 'bullets'
+      : (name === 'title' || name === 'body' || name === 'caption') &&
+        (value.kind === 'text' || value.kind === 'preformatted')
+
+  return Object.fromEntries(
+    Object.entries(onlyDeclaredBy(slots, layoutType, descriptors)).filter(
+      ([name, value]) => value.kind !== 'image' && !sentAsLegacy(name, value),
+    ),
+  )
+}
