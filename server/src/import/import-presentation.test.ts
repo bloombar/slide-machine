@@ -321,45 +321,110 @@ describe('a presentation this system exported (EXP-8)', () => {
 })
 
 describe('a presentation that defines its own layouts', () => {
-  /** A deck whose slides sit on layouts its author actually made. */
+  /** A placeholder on a layout page: a real box, and no words — which is what
+   * a layout page IS. */
+  const placeholder = (
+    id: string,
+    type: string,
+    box: { x: number; y: number; w: number; h: number },
+  ): SourceElement => ({ id, kind: 'text', box, placeholder: type, runs: [] })
+
+  /**
+   * A deck whose slides sit on layouts its author made. The layout pages put
+   * the title at y=0.2; every slide that uses them has nudged it to y=0.1, so
+   * the two sources disagree and it is visible which one was believed.
+   */
   const authored = (): SourcePresentation => {
-    const on = (id: string, layoutId: string, y: number): SourcePage => ({
+    const on = (id: string, layoutId: string): SourcePage => ({
       id,
       layoutId,
       elements: [
         element({
           id: `${id}-t`,
           placeholder: 'TITLE',
-          box: { x: 0.08, y, w: 0.84, h: 0.18 },
+          box: { x: 0.08, y: 0.1, w: 0.84, h: 0.18 },
+          runs: [{ text: 'Nine chars', fontSize: 5 }],
         }),
       ],
     })
     return {
       ...presentation([
-        on('s1', 'l1', 0.1),
-        on('s2', 'l1', 0.1),
-        on('s3', 'l2', 0.45),
-        on('s4', 'l2', 0.45),
+        on('s1', 'l1'),
+        on('s2', 'l1'),
+        on('s3', 'l2'),
+        on('s4', 'l2'),
       ]),
       layouts: [
-        { id: 'l1', name: 'TITLE_AND_BODY', elements: [] },
-        { id: 'l2', name: 'SECTION', elements: [] },
+        {
+          id: 'l1',
+          name: 'TITLE_AND_BODY',
+          elements: [
+            placeholder('l1-t', 'TITLE', { x: 0.08, y: 0.2, w: 0.84, h: 0.18 }),
+          ],
+        },
+        {
+          id: 'l2',
+          name: 'SECTION',
+          elements: [
+            placeholder('l2-t', 'TITLE', { x: 0.08, y: 0.5, w: 0.84, h: 0.18 }),
+          ],
+        },
       ],
     }
   }
 
+  it('takes its boxes from the layout, not from the slides wearing it', async () => {
+    // The layout IS the design; a slide is one use of it, and a hand that
+    // nudged a box on every slide has not redesigned the layout
+    const { template } = await importSourcePresentation(authored())
+    expect(template.layouts[0]!.elementPositions.title!.y).toBeCloseTo(0.2, 3)
+  })
+
+  it('takes styling from the slides, which is where a layout page is silent', async () => {
+    // A layout page's placeholders are empty, so they state no type size
+    const { template } = await importSourcePresentation(authored())
+    expect(template.layouts[0]!.elementPositions.title!.fontSize).toBe(5)
+  })
+
   it('uses the author’s grouping rather than clustering over it', async () => {
-    // The author already did the work consolidation exists to do
     const { template } = await importSourcePresentation(authored())
     expect(template.layouts.filter(l => l.type !== 'whiteboard')).toHaveLength(
       2,
     )
   })
 
-  it('approximates nothing, since every slide sat on a chosen layout', async () => {
-    const { report } = await importSourcePresentation(authored())
+  it('counts the slides built on each layout, not the layout pages', async () => {
+    const { report, template } = await importSourcePresentation(authored())
     expect(report.approximated).toBe(0)
     expect(report.layoutsCreated).toBe(2)
+    // Both layouts carry two slides, so the first wins the tie — and the one
+    // whose heading sits near the top is a title slide, the lower one a
+    // section marker
+    expect(report.largestMerge).toEqual({ type: 'title', slides: 2 })
+    expect(
+      template.layouts.map(l => l.type).filter(t => t !== 'whiteboard'),
+    ).toEqual(['title', 'section'])
+  })
+
+  it('tells the lecture importer where every slide went', async () => {
+    const { template } = await importSourcePresentation(authored())
+    expect(Object.keys(template.layoutOfSlide).sort()).toEqual([
+      's1',
+      's2',
+      's3',
+      's4',
+    ])
+  })
+
+  it('falls back to clustering when a layout page has no boxes to read', async () => {
+    // An empty layout page tells us less than the slides do
+    const bare = authored()
+    bare.layouts = bare.layouts.map(l => ({ ...l, elements: [] }))
+    const { template } = await importSourcePresentation(bare)
+    expect(template.layouts.length).toBeGreaterThan(1)
+    for (const layout of template.layouts) {
+      expect(layoutSchema.safeParse(layout).success).toBe(true)
+    }
   })
 
   it('ignores the default layouts a hand-built deck happens to carry', async () => {
@@ -381,18 +446,74 @@ describe('a presentation that defines its own layouts', () => {
       2,
     )
   })
+})
 
-  it('falls back to clustering when a group’s slides do not agree', async () => {
-    // Slides Google says share a layout but that hold different boxes are not
-    // one design in any usable sense
-    const mixed = authored()
-    mixed.slides[1]!.elements.push(
-      element({ id: 'extra', box: { x: 0.1, y: 0.6, w: 0.3, h: 0.2 } }),
+describe('the ceilings a design was built to (TMPL-6)', () => {
+  const listDeck = (): SourcePresentation =>
+    presentation([
+      {
+        id: 's1',
+        elements: [
+          element({
+            id: 's1-t',
+            placeholder: 'TITLE',
+            box: { x: 0.08, y: 0.1, w: 0.84, h: 0.18 },
+            runs: [{ text: 'Nine char', fontSize: 5 }],
+          }),
+          element({
+            id: 's1-b',
+            placeholder: 'BODY',
+            box: { x: 0.08, y: 0.34, w: 0.84, h: 0.5 },
+            bulleted: true,
+            runs: [{ text: 'one\ntwo\nthree', fontSize: 2.5 }],
+          }),
+        ],
+      },
+      {
+        id: 's2',
+        elements: [
+          element({
+            id: 's2-t',
+            placeholder: 'TITLE',
+            box: { x: 0.08, y: 0.1, w: 0.84, h: 0.18 },
+            runs: [{ text: 'A much longer title here', fontSize: 5 }],
+          }),
+          element({
+            id: 's2-b',
+            placeholder: 'BODY',
+            box: { x: 0.08, y: 0.34, w: 0.84, h: 0.5 },
+            bulleted: true,
+            runs: [{ text: 'one\ntwo', fontSize: 2.5 }],
+          }),
+        ],
+      },
+    ])
+
+  it('are measured from the deck, not guessed from the boxes', async () => {
+    // What an author DID is better evidence than what a box could have fitted
+    const { template } = await importSourcePresentation(listDeck())
+    expect(template.layouts[0]!.constraints).toMatchObject({
+      maxBullets: 3,
+      maxTitleChars: 24,
+    })
+  })
+
+  it('take the largest observed, so no slide is over its own limit', async () => {
+    const { template } = await importSourcePresentation(listDeck())
+    const { maxTitleChars } = template.layouts[0]!.constraints!
+    expect(maxTitleChars).toBe('A much longer title here'.length)
+  })
+
+  it('say nothing about a box the design does not have', async () => {
+    const { template } = await importSourcePresentation(listDeck())
+    expect(template.layouts[0]!.constraints).not.toHaveProperty(
+      'maxCaptionChars',
     )
-    const { template } = await importSourcePresentation(mixed)
-    expect(template.layouts.length).toBeGreaterThan(0)
-    for (const layout of template.layouts) {
-      expect(layoutSchema.safeParse(layout).success).toBe(true)
-    }
+    expect(template.layouts[0]!.constraints).not.toHaveProperty('imageRequired')
+  })
+
+  it('reach the layout the AI selects from', async () => {
+    const { template } = await importSourcePresentation(listDeck())
+    expect(layoutSchema.safeParse(template.layouts[0]).success).toBe(true)
   })
 })

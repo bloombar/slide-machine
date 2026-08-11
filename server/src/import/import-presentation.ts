@@ -28,10 +28,11 @@ import {
   importReport,
   type ImportReport,
 } from './build-template'
-import { candidateOf, compositionKey, type Candidate } from './candidate'
+import { candidateOf, type Candidate } from './candidate'
 import {
   consolidateWithSemantics,
   deriveLayouts,
+  observedFrom,
   type Consolidation,
   type DerivedLayout,
   type LayoutSemantics,
@@ -72,52 +73,125 @@ const describeWith =
   }
 
 /**
- * The slides of a presentation, grouped the way its own author grouped them.
+ * A layout the presentation itself defines, with the slides built on it.
  *
- * Returns nothing unless the presentation genuinely defines layouts and its
- * slides genuinely use them — Google gives every deck a `layouts` array, and a
- * hand-built deck's slides all sit on one or two default ones. Grouping by
- * that would produce a single layout for the whole deck, which is worse than
- * clustering. So a grouping is only "authored" when it separates the slides
- * into more than one group, and every group is internally consistent about
- * which boxes it has.
+ * The spec's first source: a deck that DEFINES layouts has already done the
+ * work consolidation exists to do, and its author's own layout is better
+ * evidence than any median of the slides wearing it — it is the design, where
+ * a slide is one use of it.
  */
-const authoredGrouping = (
+interface AuthoredLayout {
+  /** The layout page itself, read as a candidate: authoritative boxes and
+   * names, taken from the design rather than inferred from its uses. */
+  design: Candidate
+  /** The slides built on it, which is what the report and the lecture
+   * importer count (EXP-5). */
+  slides: Candidate[]
+}
+
+/**
+ * The layouts a presentation genuinely defines, or nothing.
+ *
+ * Nothing unless it defines more than one AND its slides actually use them:
+ * Google hands every deck a `layouts` array, and a hand-built deck's slides
+ * all sit on one or two defaults. Treating that as authored would give a
+ * single layout for the whole deck, which is worse than clustering.
+ */
+const authoredLayouts = (
   source: SourcePresentation,
   candidates: Candidate[],
-): Candidate[][] | undefined => {
+  declarationsFor: (page: SourcePage) => SlotSpec[] | undefined,
+): AuthoredLayout[] | undefined => {
   if (source.layouts.length < 2) return undefined
 
-  const byLayout = new Map<string, Candidate[]>()
+  const usedBy = new Map<string, Candidate[]>()
   source.slides.forEach((slide, i) => {
     const id = slide.layoutId
     const candidate = candidates[i]
     if (!id || !candidate) return
-    byLayout.set(id, [...(byLayout.get(id) ?? []), candidate])
+    usedBy.set(id, [...(usedBy.get(id) ?? []), candidate])
   })
-  if (byLayout.size < 2) return undefined
-
-  // Slides that Google says share a layout but that hold different boxes are
-  // not one design in any sense we can use: a group's slots have to agree
-  // before a median of them means anything.
-  const groups = [...byLayout.values()].filter(group =>
-    group.every(c => compositionKey(c) === compositionKey(group[0]!)),
-  )
-  if (groups.length < 2) return undefined
   // Every slide has to end up somewhere; a partial authored grouping would
   // silently drop the rest.
-  return groups.flat().length === candidates.length ? groups : undefined
+  if ([...usedBy.values()].flat().length !== candidates.length) return undefined
+
+  const authored: AuthoredLayout[] = []
+  for (const page of source.layouts) {
+    const slides = usedBy.get(page.id)
+    if (!slides?.length) continue
+    const design = candidateOf(page, declarationsFor(page))
+    // A layout page whose boxes we could not read tells us less than the
+    // slides do, so the deck falls back to clustering rather than importing
+    // a layout with nothing on it.
+    if (!design.slots.length) return undefined
+    authored.push({ design, slides })
+  }
+  return authored.length > 1 ? authored : undefined
 }
 
-/** Derives layouts from a grouping the presentation's author already made,
- * naming them the same way clustering's are. */
+/**
+ * Fills in what a layout page does not state.
+ *
+ * A layout page carries the boxes and the names — the design — but its
+ * placeholders are usually empty, so they carry no type size, colour or font.
+ * Those live on the slides that use it. Taking geometry from the design and
+ * styling from its uses is more faithful than either alone.
+ */
+const styledFromUses = (authored: AuthoredLayout): Candidate => ({
+  ...authored.design,
+  slots: authored.design.slots.map(slot => {
+    if (slot.fontSize !== undefined) return slot
+    const uses = authored.slides
+      .map(s => s.slots.find(u => u.name === slot.name))
+      .filter((u): u is (typeof authored.slides)[number]['slots'][number] =>
+        Boolean(u),
+      )
+    const sizes = uses
+      .map(u => u.fontSize)
+      .filter((n): n is number => typeof n === 'number')
+    return {
+      ...slot,
+      ...(sizes.length
+        ? {
+            fontSize: sizes.sort((a, b) => a - b)[Math.floor(sizes.length / 2)],
+          }
+        : {}),
+      ...(uses.find(u => u.color)
+        ? { color: uses.find(u => u.color)!.color }
+        : {}),
+      ...(uses.find(u => u.fontFamily)
+        ? { fontFamily: uses.find(u => u.fontFamily)!.fontFamily }
+        : {}),
+      ...(uses.some(u => u.bold) ? { bold: true } : {}),
+    }
+  }),
+})
+
+/**
+ * Derives layouts from the ones a presentation defines, naming them the same
+ * way clustering's are.
+ *
+ * Each design comes from its own layout page; its `members` are the slides
+ * built on it, because that is what the report counts and what a lecture
+ * import needs (EXP-5). Its constraints come from those slides, since a layout
+ * page holds no content to measure.
+ */
 const consolidateAuthored = async (
-  groups: Candidate[][],
+  authored: AuthoredLayout[],
   describe: (layouts: DerivedLayout[]) => Promise<LayoutSemantics[]>,
 ): Promise<Consolidation> => {
-  const first = deriveLayouts(groups)
-  const semantics = await describe(first)
-  const layouts = deriveLayouts(groups).map((layout, i) => ({
+  const derived = deriveLayouts(authored.map(a => [styledFromUses(a)])).map(
+    (layout, i) => ({
+      ...layout,
+      members: authored[i]!.slides.map(s => s.slideId),
+      ...(observedFrom(authored[i]!.slides)
+        ? { constraints: observedFrom(authored[i]!.slides) }
+        : {}),
+    }),
+  )
+
+  const semantics = await describe(derived)
+  const layouts = derived.map((layout, i) => ({
     ...layout,
     ...(semantics[i]?.type ? { type: semantics[i]!.type } : {}),
     ...(semantics[i]?.description
@@ -174,7 +248,7 @@ export const importSourcePresentation = async (
   // consolidation exists to do, and its author's own grouping beats any
   // clustering of ours. So slides are grouped by the layout they were built
   // on, and each group's design derived from those slides.
-  const authored = authoredGrouping(source, candidates)
+  const authored = authoredLayouts(source, candidates, declarationsFor)
   const { layouts, approximated } = authored
     ? await consolidateAuthored(authored, describeWith(options.provider))
     : await consolidateWithSemantics(candidates, describeWith(options.provider))

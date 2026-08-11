@@ -226,6 +226,9 @@ const toLayout = (
       derived.description ??
       `Imported from ${derived.members.length} slide${derived.members.length === 1 ? '' : 's'} of the source presentation.`,
     slots,
+    // What the source deck was actually built to, so the AI writes slides
+    // that sit in the design instead of overflowing it (TMPL-6).
+    ...(derived.constraints ? { constraints: derived.constraints } : {}),
     elementPositions,
     ...(decorationOf(derived, assets).length
       ? { decoration: decorationOf(derived, assets) }

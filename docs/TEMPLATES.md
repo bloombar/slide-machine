@@ -343,15 +343,21 @@ and image references. Nothing downstream refers to a Google-shaped field, which 
 a PowerPoint reader would plug into later.
 
 **2. Derive.** Geometry, colors and typography are extracted deterministically. Where the
-presentation defines its own masters and layouts, those become the candidates directly —
-its author's grouping beats any clustering of ours; where it does not — the common case —
-candidates are derived by clustering the slides, which is
-[§7](#7-consolidating-a-hand-built-deck).
+presentation defines its own layouts, **each layout page becomes a layout directly** — the
+layout *is* the design, and a slide is one use of it, so a hand that nudged a box on every
+slide has not redesigned the layout. Where it does not — the common case — candidates are
+derived by clustering the slides, which is [§7](#7-consolidating-a-hand-built-deck).
 
-> A presentation is only treated as *defining* layouts when its slides genuinely use more
-> than one and each group agrees on which boxes it has. Google hands every deck a `layouts`
-> array, and a hand-built deck's slides all sit on one or two defaults — grouping by that
-> would yield a single layout for the whole deck, which is worse than clustering.
+> A layout page carries the boxes and their names but its placeholders are usually **empty**,
+> so it states no type size, color or font. Those are taken from the slides built on it:
+> geometry from the design, styling from its uses. A layout page with no readable boxes tells
+> us less than the slides do, so the deck falls back to clustering rather than importing a
+> layout with nothing on it.
+
+> A presentation is only treated as *defining* layouts when it declares more than one and its
+> slides genuinely use them. Google hands every deck a `layouts` array, and a hand-built
+> deck's slides all sit on one or two defaults — grouping by that would yield a single layout
+> for the whole deck, which is worse than clustering.
 
 The **only** model call assigns semantics: given each candidate's slot composition,
 positions and relative sizes, it returns the conventional `type`, the `purpose` prose, and a
@@ -367,6 +373,13 @@ metadata ([EXP-8](SPEC.md#exp-8-slot-metadata-across-google-slides-round-trips))
 kind, label, instruction and limits come back verbatim — a code box holding a listing is
 indistinguishable from prose on the slide, so being told is the only way to know. Everything
 else is inferred, and that direction stays lossy.
+
+**Ceilings are measured, not guessed.** Each layout's `constraints` — how many bullets, how
+long a title — are the **largest actually observed** across the slides that used it, because
+what an author did is better evidence than what a box could have fitted. They reach the AI
+through the layout descriptor ([TMPL-6](SPEC.md#tmpl-6-layout-descriptors-for-ai-selection)),
+so generated slides sit in the design instead of overflowing it. Taking the largest means no
+existing slide is retroactively over its own limit.
 
 **Backgrounds and logos come with the design.** A page filled with a picture, a band or rule
 drawn behind the content, and a logo that appears in the same place on every slide of a design

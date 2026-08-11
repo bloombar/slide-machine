@@ -62,6 +62,19 @@ export interface DerivedLayout {
   backgroundImage?: string
   /** The slides this design came from, in order. */
   members: string[]
+  /**
+   * What the slides of this design actually held, as ceilings the AI is told
+   * about (TMPL-6). Measured from the deck rather than guessed from the boxes:
+   * a design that never carried more than four bullets is a four-bullet
+   * design, whatever its box could have fitted.
+   */
+  constraints?: {
+    maxBullets?: number
+    maxTitleChars?: number
+    maxBodyChars?: number
+    maxCaptionChars?: number
+    imageRequired?: boolean
+  }
   /** What kind of slide this is — `title`, `two-column`, `section`. Assigned
    * in pass 5, absent until then. */
   type?: string
@@ -77,6 +90,62 @@ export interface Consolidation {
   /** Which layout each slide ended on, so a lecture import needs no second
    * guess (EXP-5). */
   assignment: Map<string, number>
+}
+
+/** Everything a box held on one slide, as the reader flattened it. */
+const textOf = (slot: CandidateSlot | undefined): string =>
+  (slot?.content?.runs ?? []).map(run => run.text).join('')
+
+/** The lines a box held — how many points a list carried. */
+const linesIn = (slot: CandidateSlot | undefined): number =>
+  textOf(slot)
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean).length
+
+/**
+ * The ceilings this design was actually built to (TMPL-6).
+ *
+ * Read off the slides rather than inferred from the boxes, because what an
+ * author DID is better evidence than what a box could have fitted — and it is
+ * what the AI should be told, so generated slides sit in the design instead of
+ * overflowing it.
+ *
+ * Every value is the largest observed, so no existing slide is retroactively
+ * over its own limit. Absent where a design has no such box.
+ */
+export const observedFrom = (
+  members: Candidate[],
+): DerivedLayout['constraints'] => {
+  const slotsNamed = (name: string) =>
+    members.map(m => m.slots.find(s => s.name === name))
+  const most = (values: number[]): number | undefined => {
+    const top = Math.max(0, ...values)
+    return top > 0 ? top : undefined
+  }
+
+  const bulletSlots = members[0]!.slots.filter(s => s.kind === 'bullets')
+  const maxBullets = most(
+    bulletSlots.flatMap(spec => slotsNamed(spec.name).map(linesIn)),
+  )
+  const chars = (name: string) =>
+    most(slotsNamed(name).map(s => textOf(s).length))
+
+  const images = members[0]!.slots.filter(s => s.kind === 'image')
+  const imageRequired =
+    images.length > 0 &&
+    images.every(spec =>
+      slotsNamed(spec.name).every(s => Boolean(s?.content?.imageUrl)),
+    )
+
+  const constraints = {
+    ...(maxBullets ? { maxBullets } : {}),
+    ...(chars('title') ? { maxTitleChars: chars('title') } : {}),
+    ...(chars('body') ? { maxBodyChars: chars('body') } : {}),
+    ...(chars('caption') ? { maxCaptionChars: chars('caption') } : {}),
+    ...(imageRequired ? { imageRequired: true } : {}),
+  }
+  return Object.keys(constraints).length ? constraints : undefined
 }
 
 /** The most common value, ignoring absent ones; ties go to the first seen. */
@@ -227,8 +296,10 @@ const medianLayout = (members: Candidate[]): DerivedLayout => {
         content: undefined,
       }
     })
+  const constraints = observedFrom(members)
   return {
     slots,
+    ...(constraints ? { constraints } : {}),
     // A logo is drawn by the design, not filled in by an author.
     decoration: [
       ...first.decoration,
