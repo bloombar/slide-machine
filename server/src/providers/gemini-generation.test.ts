@@ -1071,8 +1071,15 @@ describe('a code box answered in prose is asked again (GEN-11)', () => {
     expect(prompts).toHaveLength(2)
     expect(prompts[1]).toContain('snippet')
     expect(prompts[1]).toContain('python')
-    // Restating the whole request invites the model to reconsider the slide
-    expect(prompts[1]).not.toContain('rollingContext')
+    // It must know WHAT the slide is about — a retry with no topic writes
+    // something generic and correct-looking, which is how a lecture about
+    // while loops got a hello-world function
+    expect(prompts[1]).toContain('a while loop that counts down from ten')
+    expect(prompts[1]).toContain('While loops')
+    // The prose it wrongly returned is the best brief available
+    expect(prompts[1]).toContain('This shows a loop.')
+    // Knowing the topic is not permission to change the slide
+    expect(prompts[1]).toContain('Do not change the')
   })
 
   it('leaves the box empty when the second answer is prose too', async () => {

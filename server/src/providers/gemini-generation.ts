@@ -163,13 +163,19 @@ const refusedSpecialized = (
 /**
  * Asks again for the refused boxes, and nothing else.
  *
- * Deliberately a short prompt with no slide context: the first call already
- * decided what the slide is about and failed only on the SHAPE of one answer.
- * Restating the whole request invites the model to reconsider the slide;
- * asking for one listing invites it to write one.
+ * It is told WHAT the slide is about and refused permission to change it — the
+ * two are not the same thing, and conflating them is how a lecture about while
+ * loops got a hello-world function. A retry with no topic has nothing to write
+ * about, so it writes something generic and correct-looking, which is worse
+ * than the prose it replaced.
+ *
+ * The prose the model wrongly returned is itself the best specification
+ * available: "a while loop that continues while n is greater than 10" says
+ * exactly what the listing should do. So it is handed back as the brief.
  */
 const retrySpecialized = async (
   refused: SlotSpec[],
+  context: { phrase: string; title?: string; said: Record<string, string> },
 ): Promise<Record<string, unknown> | undefined> => {
   const asked = refused
     .map(spec =>
@@ -187,13 +193,30 @@ const retrySpecialized = async (
     )
     .join('\n')
 
+  const described = refused
+    .map(spec =>
+      context.said[spec.name]
+        ? `  "${spec.name}" should do this: ${context.said[spec.name]}`
+        : '',
+    )
+    .filter(Boolean)
+    .join('\n')
+
   const prompt = [
     'Your previous answer described these boxes in words instead of filling',
     'them. Write the thing itself this time, not a sentence about it.',
     '',
+    `The lecturer just said: ${context.phrase}`,
+    ...(context.title ? [`The slide is titled: ${context.title}`] : []),
+    '',
+    ...(described
+      ? ['What you said each box should contain:', described, '']
+      : []),
+    'Write exactly that, as:',
     asked,
     '',
-    'Return JSON with exactly those keys and nothing else.',
+    'Return JSON with exactly those keys and nothing else. Do not change the',
+    'slide, its title, or its layout — only fill these boxes.',
   ].join('\n')
 
   const text = await callGemini(prompt, 'Specialized retry')
@@ -853,7 +876,19 @@ export class GeminiGenerationProvider implements GenerationProvider {
       req.layoutDescriptors,
     )
     if (refused.length) {
-      const second = await retrySpecialized(refused).catch(() => undefined)
+      const second = await retrySpecialized(refused, {
+        phrase: req.phrase,
+        title:
+          typeof parsed.slots.title === 'string'
+            ? parsed.slots.title
+            : undefined,
+        said: Object.fromEntries(
+          refused.map(spec => [
+            spec.name,
+            String(parsed.slots[spec.name] ?? ''),
+          ]),
+        ),
+      }).catch(() => undefined)
       if (second) {
         const merged = splitAndKeep(
           { ...parsed.slots, ...second },
