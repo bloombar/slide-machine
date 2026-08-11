@@ -8,8 +8,12 @@
  * fills, must not raise a warning at all.
  */
 import { describe, expect, it } from 'vitest'
-import { planUpdate, slotHasContent } from './template-update'
-import type { Layout } from '@slide-machine/shared'
+import {
+  planTemplateSwitch,
+  planUpdate,
+  slotHasContent,
+} from './template-update'
+import type { Layout, SlotValue } from '@slide-machine/shared'
 
 const layout = (type: string, slots: [string, string][]): Layout =>
   ({
@@ -154,5 +158,147 @@ describe('the pairing is the same one the slide switch uses', () => {
     }
     const pairs = planUpdate(from, to, ['content']).get('content')?.pairs
     expect(pairs).toEqual({ title: 'title', body: 'prose' })
+  })
+})
+
+/**
+ * Moving a lecture onto a DIFFERENT design (TMPL-8): the case an imported
+ * template creates. It names its layouts after whatever its slides turned out
+ * to be, so there is no type in common to key on and the slides have to be
+ * placed rather than matched.
+ */
+describe('planTemplateSwitch', () => {
+  const slide = (
+    id: string,
+    layoutType: string,
+    slots: Record<string, SlotValue>,
+  ) => ({ id, layoutType, slots })
+
+  const text = (value: string): SlotValue => ({ kind: 'text', value })
+
+  const CLASSIC = {
+    layouts: [
+      layout('title', [['title', 'text']]),
+      layout('content', [
+        ['title', 'text'],
+        ['body', 'text'],
+      ]),
+    ],
+  }
+
+  it('keeps a slide on a layout of the same type when the design has one', () => {
+    // Two templates that both name a layout "content" mean the same thing
+    const imported = {
+      layouts: [
+        layout('content', [
+          ['title', 'text'],
+          ['body', 'text'],
+        ]),
+      ],
+    }
+    const plans = planTemplateSwitch(CLASSIC, imported, [
+      slide('s1', 'content', { title: text('Runoff'), body: text('Water') }),
+    ])
+    expect(plans.get('s1')).toEqual({
+      layoutType: 'content',
+      pairs: { title: 'title', body: 'body' },
+      unmatchedFrom: [],
+    })
+  })
+
+  it('places a slide on the imported layout that carries the most of it', () => {
+    // The reported bug: an imported design's layouts are called whatever its
+    // slides were, so nothing matches by type and the lecture went blank
+    const imported = {
+      layouts: [
+        layout('cover', [['heading', 'text']]),
+        layout('statement-and-detail', [
+          ['heading', 'text'],
+          ['detail', 'text'],
+        ]),
+      ],
+    }
+    const plans = planTemplateSwitch(CLASSIC, imported, [
+      slide('s1', 'content', { title: text('Runoff'), body: text('Water') }),
+    ])
+    expect(plans.get('s1')?.layoutType).toBe('statement-and-detail')
+    // Both boxes travel, under the names the imported design uses
+    expect(Object.keys(plans.get('s1')!.pairs)).toHaveLength(2)
+  })
+
+  it('does not let empty boxes vote for a bigger layout', () => {
+    // A slide with a title and nothing else belongs on a title card
+    const imported = {
+      layouts: [
+        layout('cover', [['heading', 'text']]),
+        layout('detailed', [
+          ['heading', 'text'],
+          ['detail', 'text'],
+        ]),
+      ],
+    }
+    const plans = planTemplateSwitch(CLASSIC, imported, [
+      slide('s1', 'content', { title: text('Runoff'), body: text('  ') }),
+    ])
+    expect(plans.get('s1')?.layoutType).toBe('cover')
+  })
+
+  it('leaves content that pairs with nothing on the slide', () => {
+    // Nothing is deleted by a switch: switching back finds it intact, and the
+    // GEN-9 re-fit reads it as the source for the boxes the move left empty
+    const imported = { layouts: [layout('cover', [['heading', 'text']])] }
+    const plans = planTemplateSwitch(CLASSIC, imported, [
+      slide('s1', 'content', { title: text('Runoff'), body: text('Water') }),
+    ])
+    expect(plans.get('s1')?.unmatchedFrom).toEqual(['body'])
+  })
+
+  it('skips a slide whose old layout the design never declared', () => {
+    // No boxes to pair, so moving its content would be a guess on no evidence
+    const imported = { layouts: [layout('cover', [['heading', 'text']])] }
+    const plans = planTemplateSwitch(CLASSIC, imported, [
+      slide('s1', 'whiteboard', {}),
+    ])
+    expect(plans.get('s1')).toBeUndefined()
+  })
+
+  it('leaves a slide on a layout with no boxes where it is', () => {
+    // A freehand whiteboard canvas: nothing to pair, so any layout this chose
+    // would be a guess on no evidence
+    const withBoard = {
+      layouts: [...CLASSIC.layouts, layout('whiteboard', [])],
+    }
+    const imported = { layouts: [layout('cover', [['heading', 'text']])] }
+    const plans = planTemplateSwitch(withBoard, imported, [
+      slide('s1', 'whiteboard', {}),
+    ])
+    expect(plans.get('s1')).toBeUndefined()
+  })
+
+  it('plans nothing at all for a design with no layouts', () => {
+    const plans = planTemplateSwitch(CLASSIC, { layouts: [] }, [
+      slide('s1', 'content', { title: text('Runoff') }),
+    ])
+    expect(plans.size).toBe(0)
+  })
+
+  it('breaks a tie toward the layout that leaves fewest boxes empty', () => {
+    const imported = {
+      layouts: [
+        layout('roomy', [
+          ['heading', 'text'],
+          ['detail', 'text'],
+          ['aside', 'text'],
+        ]),
+        layout('snug', [
+          ['heading', 'text'],
+          ['detail', 'text'],
+        ]),
+      ],
+    }
+    const plans = planTemplateSwitch(CLASSIC, imported, [
+      slide('s1', 'content', { title: text('Runoff'), body: text('Water') }),
+    ])
+    expect(plans.get('s1')?.layoutType).toBe('snug')
   })
 })

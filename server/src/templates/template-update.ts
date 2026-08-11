@@ -96,6 +96,95 @@ export const planUpdate = (
   return plans
 }
 
+/** Where one slide lands when the lecture moves to a different design. */
+export interface SwitchPlan {
+  /** The layout in the new template that carries this slide. */
+  layoutType: string
+  /** Old box → new box, for every box that found a partner. */
+  pairs: Record<string, string>
+  /** Boxes with nowhere to go, left where they are for a later re-fit. */
+  unmatchedFrom: string[]
+}
+
+/**
+ * Where a slide's content goes when the lecture is moved to ANOTHER template
+ * (TMPL-8): an imported design applied to a lecture that already has slides.
+ *
+ * The difference from `planUpdate` is only which layouts are being compared.
+ * An update matches a layout to the same layout a version later, so the type
+ * is the key. A switch has no such correspondence: an imported design names
+ * its layouts whatever its slides turned out to be, and a lecture full of
+ * `content` slides moving to it would otherwise sit on a layout the new
+ * template has never heard of, showing nothing.
+ *
+ * So the target layout is CHOSEN, by the same pairing that carries content
+ * everywhere else in this system:
+ *
+ *   1. A layout of the same type, when the new design happens to have one —
+ *      two templates that both name a layout `content` mean the same thing
+ *      by it.
+ *   2. Otherwise the layout that carries the most of what the slide actually
+ *      holds. Empty boxes do not vote: a slide with a title and nothing else
+ *      belongs on a title card, not on the layout with the most boxes.
+ *
+ * Ties break toward the layout that leaves fewest boxes empty, then toward
+ * declaration order — the design's own idea of which layout is its ordinary
+ * one. Nothing is deleted: what pairs with nothing stays on the slide, so a
+ * switch costs content that needs re-placing rather than content that is gone.
+ */
+export const planTemplateSwitch = (
+  from: Pick<DeckTemplate, 'layouts'>,
+  to: Pick<DeckTemplate, 'layouts'>,
+  slides: UpdatableSlide[],
+): Map<string, SwitchPlan> => {
+  const plans = new Map<string, SwitchPlan>()
+  if (!to.layouts.length) return plans
+
+  for (const slide of slides) {
+    const fromLayout = from.layouts.find(l => l.type === slide.layoutType)
+    // A layout the old design never declared, or one with no boxes at all —
+    // a freehand whiteboard canvas is the real case. Either way there is
+    // nothing to pair, so any layout this chose would be a guess on no
+    // evidence. The slide keeps what it has.
+    if (!fromLayout?.slots.length) continue
+
+    const filled = new Set(
+      Object.keys(slide.slots).filter(name =>
+        slotHasContent(slide.slots[name]),
+      ),
+    )
+    const sameType = to.layouts.find(l => l.type === slide.layoutType)
+    const candidates = sameType ? [sameType] : to.layouts
+
+    let best: (SwitchPlan & { carried: number; holes: number }) | undefined
+    for (const candidate of candidates) {
+      const { pairs, unmatchedFrom, unmatchedTo } = pairSlots(
+        fromLayout,
+        candidate,
+      )
+      const carried = Object.keys(pairs).filter(name => filled.has(name)).length
+      const holes = unmatchedTo.length
+      const better =
+        !best ||
+        carried > best.carried ||
+        (carried === best.carried && holes < best.holes)
+      if (better) {
+        best = {
+          layoutType: candidate.type,
+          pairs,
+          unmatchedFrom,
+          carried,
+          holes,
+        }
+      }
+    }
+    if (!best) continue
+    const { carried: _carried, holes: _holes, ...plan } = best
+    plans.set(slide.id, plan)
+  }
+  return plans
+}
+
 /** The label an author would recognize for a box, falling back to its name. */
 const labelFor = (layout: Layout | undefined, slot: string): string =>
   layout?.slots.find(s => s.name === slot)?.label ?? slot

@@ -125,6 +125,7 @@ import {
   getVersion,
 } from '../templates/versions'
 import {
+  planTemplateSwitch,
   planUpdate,
   templateUpdateStatus,
   pendingTemplateFor,
@@ -596,6 +597,27 @@ export const deckApplyTemplateUpdate = defineAction<
   },
 })
 
+/**
+ * Moves the lecture onto a different design (TMPL-8/TMPL-11).
+ *
+ * Applying an imported design to a lecture that already has slides is the case
+ * that made this more than a field assignment. An imported template names its
+ * layouts after whatever its slides turned out to be, so the deck's slides
+ * were left sitting on layout types the new design has never heard of, holding
+ * content under box names it does not declare — a lecture that went blank.
+ *
+ * So each slide is carried across by `planTemplateSwitch`, which chooses its
+ * new layout and re-maps its boxes with `pairSlots` — the same pairing behind
+ * a per-slide layout switch, a template update and the transition animation.
+ * One pairing, so none of them can disagree about which box became which.
+ *
+ * Content that pairs with nothing is LEFT on the slide rather than deleted:
+ * the new layout simply does not draw it, so switching back finds it intact,
+ * and `slide.refitLayout` (GEN-9) has it as source material for the boxes the
+ * move left empty. Filling those is deliberately not done here — it is an AI
+ * call per slide, and a settings change should not quietly spend a lecture's
+ * worth of tokens.
+ */
 export const deckSwitchTemplate = defineAction<
   DeckSwitchTemplateInput,
   Deck,
@@ -614,12 +636,55 @@ export const deckSwitchTemplate = defineAction<
           'templateId: unknown template',
         ])
       }
+      // The design being left, read before anything is reassigned — the
+      // pairing needs both sides as they actually are.
+      const previous = await resolveDeckTemplate(deck)
+
       deck.templateId = input.templateId
       // Switching templates pins the new one as it stands (TMPL-11) — the
       // lecture is being rebuilt on it deliberately, which is exactly when
       // taking its current structure is what the user asked for.
       await pinDeckToCurrent(deck)
       await deck.save()
+
+      const next = await resolveDeckTemplate(deck)
+      if (previous && next) {
+        const slides = await SlideModel.find({ deckId: deck._id })
+        const plans = planTemplateSwitch(
+          previous,
+          next,
+          slides.map(slide => ({
+            id: slide._id.toString(),
+            layoutType: slide.layoutType,
+            slots: slotsOf(slide),
+          })),
+        )
+        for (const slide of slides) {
+          const plan = plans.get(slide._id.toString())
+          if (!plan) continue
+          const moved = Object.entries(plan.pairs).some(
+            ([fromName, toName]) => fromName !== toName,
+          )
+          const before = slotsOf(slide)
+          if (moved) {
+            slide.slots = remapSlots(before, plan.pairs)
+            slide.markModified('slots')
+          }
+          slide.layoutType = plan.layoutType
+          await slide.save()
+          // The words did not change, only the box they sit in — carry the
+          // cached translations across rather than paying to translate the
+          // same text again (SHARE-2).
+          if (moved) {
+            await remapSlideTranslations(
+              deck._id,
+              slide._id.toString(),
+              plan.pairs,
+              { id: slide._id.toString(), slots: before },
+            )
+          }
+        }
+      }
       return toDeckDto(deck, acl)
     }),
 })
