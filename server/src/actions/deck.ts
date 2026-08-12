@@ -452,17 +452,18 @@ export const slideAdd = defineAction<SlideAddInput, Slide, DeckAccess>({
       }
       layoutType = input.layoutType
     }
-    // A whiteboard slide is a blank drawing canvas — no placeholder text;
-    // every other layout gets the editable starter content.
-    const starter =
-      layoutType === WHITEBOARD_LAYOUT_TYPE
-        ? {}
-        : { title: 'New slide', body: 'Click to edit' }
+    // A new slide starts empty, the way one does in every slide tool.
+    //
+    // It used to be seeded with the words "New slide" and "Click to edit", so
+    // that its boxes had something clickable in them. They are real content:
+    // stored, rendered to an audience, exported, and read aloud by TTS unless
+    // the author noticed and deleted them. That was a workaround for an empty
+    // box being invisible, and an empty box now draws itself and says what to
+    // put in it — so the workaround costs more than it buys.
     const slide = await SlideModel.create({
       deckId: deck._id,
       index: deck.slideOrder.length,
       layoutType,
-      ...starter,
     })
     deck.slideOrder.push(slide._id.toString())
     await deck.save()

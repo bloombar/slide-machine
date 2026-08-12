@@ -194,10 +194,13 @@ test('in-place editing in the viewer, including list view and bullets', async ({
   )
   await page.getByRole('button', { name: 'Close settings' }).click()
 
-  // The add icon appends a starter slide at the end
+  // The add icon appends an empty slide at the end, whose boxes invite the
+  // author in rather than arriving with words they have to delete
   await page.getByRole('button', { name: 'Add slide', exact: true }).click()
   await expect(page.getByText('2 / 2')).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'New slide' })).toBeVisible()
+  await expect(page.getByTitle('Click to edit Slide title').first()).toHaveText(
+    'Click to add title',
+  )
   await page.reload()
   await expect(page.getByText('1 / 2')).toBeVisible()
 
