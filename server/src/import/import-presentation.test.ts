@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { layoutSchema } from '../templates/builtin'
+import { WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
 import { importSourcePresentation, assetPrefix } from './import-presentation'
 import type {
   SourceElement,
@@ -515,5 +516,64 @@ describe('the ceilings a design was built to (TMPL-6)', () => {
   it('reach the layout the AI selects from', async () => {
     const { template } = await importSourcePresentation(listDeck())
     expect(layoutSchema.safeParse(template.layouts[0]).success).toBe(true)
+  })
+})
+
+/**
+ * A deck whose slides carry nothing but placeholders their author never
+ * sized. Google returns those with no size and no transform anywhere in the
+ * chain, the reader drops them (a shape with no place on the page cannot be
+ * drawn), and what is left is slides with no boxes at all.
+ */
+describe('a presentation with nothing to derive', () => {
+  const emptySlide = (id: string): SourcePage => ({ id, elements: [] })
+
+  const emptyDeck = (): SourcePresentation => ({
+    id: 'p1',
+    title: 'Untitled presentation',
+    theme: {
+      background: '#ffffff',
+      text: '#1c2230',
+      accent: '#0066ff',
+      muted: '#667085',
+    },
+    layouts: [],
+    slides: ['s1', 's2', 's3'].map(emptySlide),
+  })
+
+  it('still yields a template, rather than failing the import', async () => {
+    const { template } = await importSourcePresentation(emptyDeck())
+    expect(template.name).toBe('Untitled presentation')
+  })
+
+  it('derives no layout from a slide that has no boxes', async () => {
+    // A layout must declare at least one box, so an empty one would be a
+    // template that cannot be saved — and an empty layout is not a design
+    // the author would keep anyway
+    const { template } = await importSourcePresentation(emptyDeck())
+    const derived = template.layouts.filter(
+      l => l.type !== WHITEBOARD_LAYOUT_TYPE,
+    )
+    expect(derived).toEqual([])
+  })
+
+  it('leaves the blank slate every template must offer', async () => {
+    const { template } = await importSourcePresentation(emptyDeck())
+    expect(template.layouts.map(l => l.type)).toEqual([WHITEBOARD_LAYOUT_TYPE])
+  })
+
+  it('every layout it does produce passes the template schema', async () => {
+    // The check that would have caught this: a zero-slot layout is rejected
+    const { template } = await importSourcePresentation(emptyDeck())
+    for (const layout of template.layouts) {
+      expect(layoutSchema.safeParse(layout).success).toBe(true)
+    }
+  })
+
+  it('reports the slides it read and the nothing it made of them', async () => {
+    const { report } = await importSourcePresentation(emptyDeck())
+    expect(report.slidesRead).toBe(3)
+    expect(report.layoutsCreated).toBe(0)
+    expect(report.approximated).toBe(0)
   })
 })

@@ -240,9 +240,19 @@ export const importSourcePresentation = async (
     // layout of its own.
     (slide.slotMetadata as unknown as SlotSpec[] | undefined)
 
-  const candidates = source.slides.map(slide =>
-    candidateOf(slide, declarationsFor(slide)),
-  )
+  // A slide with no boxes cannot become a layout: a layout must declare at
+  // least one, and one with none is rejected by the template schema — so
+  // deriving it would produce a template that cannot be saved.
+  //
+  // It happens for real decks, not just empty ones. A slide built from a
+  // layout and then left alone carries placeholders the author never sized,
+  // and a shape with no place on the page is not part of a design (see
+  // `boxFromChain`). What is left is a slide that says nothing about how the
+  // deck looks, and the honest thing is to derive nothing from it rather than
+  // an empty layout the author would have to delete.
+  const candidates = source.slides
+    .map(slide => candidateOf(slide, declarationsFor(slide)))
+    .filter(candidate => candidate.slots.length > 0)
 
   // A presentation that DEFINES layouts has already done the work
   // consolidation exists to do, and its author's own grouping beats any
