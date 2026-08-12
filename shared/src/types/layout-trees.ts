@@ -190,6 +190,52 @@ const quote: LayoutNode = {
   ],
 }
 
+/**
+ * A program listing under its title.
+ *
+ * The listing takes the room left over and sits on the theme's surface, the
+ * way a code block does everywhere else — a lecturer reading a loop aloud
+ * should get the loop, set as code, not a paragraph about it (GEN-11).
+ */
+const code: LayoutNode = {
+  id: 'root',
+  container: { mode: 'flex', direction: 'column', gap: 2 },
+  children: [
+    { id: 'title', slot: 'title', style: { textStyle: 'heading' } },
+    {
+      id: 'snippet',
+      slot: 'snippet',
+      grow: 1,
+      style: { background: 'surface', radius: 1, padding: 2 },
+    },
+  ],
+}
+
+/** One expression, set large and centred, with a short note under it. */
+const formula: LayoutNode = {
+  id: 'root',
+  container: {
+    mode: 'flex',
+    direction: 'column',
+    justify: 'center',
+    alignItems: 'center',
+    gap: 2.5,
+  },
+  children: [
+    {
+      id: 'title',
+      slot: 'title',
+      style: { textStyle: 'heading', align: 'center' },
+    },
+    { id: 'eq', slot: 'eq', style: { align: 'center' } },
+    {
+      id: 'caption',
+      slot: 'caption',
+      style: { textStyle: 'caption', align: 'center' },
+    },
+  ],
+}
+
 /** The blank slate. No slots, nothing to arrange — the frame already paints
  * the theme, and the drawing tools own the surface (WB-1). */
 const whiteboard: LayoutNode = { id: 'root' }
@@ -204,6 +250,8 @@ export const DEFAULT_LAYOUT_TREES: Record<string, LayoutNode> = {
   'image-heavy': imageHeavy,
   'two-column': twoColumn,
   quote,
+  code,
+  formula,
   whiteboard,
 }
 

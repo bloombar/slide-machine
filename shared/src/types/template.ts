@@ -18,6 +18,11 @@ export const LAYOUT_TYPES = [
   'image-heavy',
   'two-column',
   'quote',
+  // A lecture that involves a program or a formula needs somewhere to put
+  // one. Without these two, a spoken listing has no box in any built-in and
+  // arrives as a paragraph about the code instead of the code (GEN-11).
+  'code',
+  'formula',
   'whiteboard',
 ] as const
 

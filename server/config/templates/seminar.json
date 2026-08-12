@@ -169,6 +169,56 @@
       "elementPositions": {}
     },
     {
+      "type": "code",
+      "label": "Code",
+      "purpose": "A program listing under a short title: a worked snippet, a command, a function being walked through",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Slide title"
+        },
+        {
+          "name": "snippet",
+          "kind": "code",
+          "label": "Program listing",
+          "description": "The listing itself, exactly as it would be typed. Never a sentence about it."
+        }
+      ],
+      "constraints": {
+        "maxTitleChars": 50
+      },
+      "elementPositions": {}
+    },
+    {
+      "type": "formula",
+      "label": "Formula",
+      "purpose": "One equation or expression, set large, with a short title and an optional note beneath",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Slide title"
+        },
+        {
+          "name": "eq",
+          "kind": "math",
+          "label": "Equation",
+          "description": "The expression in LaTeX, with no surrounding prose."
+        },
+        {
+          "name": "caption",
+          "kind": "text",
+          "label": "Slide caption"
+        }
+      ],
+      "constraints": {
+        "maxTitleChars": 50,
+        "maxCaptionChars": 120
+      },
+      "elementPositions": {}
+    },
+    {
       "type": "whiteboard",
       "label": "Whiteboard",
       "purpose": "A blank slate for freehand drawing",
