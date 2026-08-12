@@ -165,6 +165,30 @@ const pageChain = (
 }
 
 /**
+ * A transform's translation.
+ *
+ * Google states these two DIFFERENTLY from every other measurement in the
+ * response. A size is a `Dimension` — `{magnitude, unit}` — but an
+ * `AffineTransform` carries bare numbers with a single `unit` on the transform
+ * itself. Read as a Dimension, `translateX` has no `magnitude`, comes back
+ * zero, and every shape in the presentation lands at the top-left corner with
+ * its size intact. That is exactly what an imported design did: boxes the
+ * right shape, all stacked in the corner.
+ *
+ * Both forms are accepted, because a caller that already has a Dimension
+ * should not have to know which of Google's two conventions applies here.
+ */
+const translation = (
+  value: number | Dimension | undefined,
+  unit: string | undefined,
+): number => {
+  if (typeof value === 'number') {
+    return unit === 'PT' ? value * (EMU / 72) : value
+  }
+  return emu(value)
+}
+
+/**
  * Where a shape sits, as a fraction of the page.
  *
  * Google gives a size and an affine transform rather than a rectangle: the
@@ -180,13 +204,14 @@ const boxOf = (
   const t = (element.transform ?? {}) as {
     scaleX?: number
     scaleY?: number
-    translateX?: Dimension
-    translateY?: Dimension
+    translateX?: number | Dimension
+    translateY?: number | Dimension
+    unit?: string
   }
   const w = emu(size?.width) * (t.scaleX ?? 1)
   const h = emu(size?.height) * (t.scaleY ?? 1)
-  const x = emu(t.translateX)
-  const y = emu(t.translateY)
+  const x = translation(t.translateX, t.unit)
+  const y = translation(t.translateY, t.unit)
   const clamp = (v: number) => Math.min(1, Math.max(0, v))
   return {
     x: clamp(x / page.width),

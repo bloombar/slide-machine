@@ -1,10 +1,16 @@
 {
-  "_fixture": "A Google Slides presentations.get response, shaped the way Google returns one. Capture your own with scripts/capture-google-presentation.mjs and point the test at it. The properties that matter: slide placeholders state text and parentObjectId and NOTHING else — no size, no transform, no font — and the deck's colour lives on the master.",
+  "_fixture": "A Google Slides presentations.get response, shaped the way Google returns one. Capture your own with scripts/capture-google-presentation.mjs and point the test at it. Note the two conventions Google uses for measurements: a SIZE is a Dimension ({magnitude, unit}), but an AffineTransform's translateX/translateY are bare numbers with one unit on the transform. Getting that wrong put every shape at the top-left corner. Also: slide placeholders state text and parentObjectId and NOTHING else, and the deck's colour lives on the master.",
   "presentationId": "1UrbanHydrologyFixture",
   "title": "Urban Hydrology",
   "pageSize": {
-    "width": { "magnitude": 9144000, "unit": "EMU" },
-    "height": { "magnitude": 5143500, "unit": "EMU" }
+    "width": {
+      "magnitude": 9144000,
+      "unit": "EMU"
+    },
+    "height": {
+      "magnitude": 5143500,
+      "unit": "EMU"
+    }
   },
   "masters": [
     {
@@ -13,7 +19,13 @@
         "pageBackgroundFill": {
           "propertyState": "RENDERED",
           "solidFill": {
-            "color": { "rgbColor": { "red": 0.05, "green": 0.1, "blue": 0.4 } },
+            "color": {
+              "rgbColor": {
+                "red": 0.05,
+                "green": 0.1,
+                "blue": 0.4
+              }
+            },
             "alpha": 1
           }
         },
@@ -21,24 +33,51 @@
           "colors": [
             {
               "type": "DARK1",
-              "color": { "red": 0.11, "green": 0.13, "blue": 0.19 }
+              "color": {
+                "red": 0.11,
+                "green": 0.13,
+                "blue": 0.19
+              }
             },
-            { "type": "LIGHT1", "color": { "red": 1, "green": 1, "blue": 1 } },
+            {
+              "type": "LIGHT1",
+              "color": {
+                "red": 1,
+                "green": 1,
+                "blue": 1
+              }
+            },
             {
               "type": "DARK2",
-              "color": { "red": 0.24, "green": 0.29, "blue": 0.4 }
+              "color": {
+                "red": 0.24,
+                "green": 0.29,
+                "blue": 0.4
+              }
             },
             {
               "type": "LIGHT2",
-              "color": { "red": 0.91, "green": 0.93, "blue": 0.96 }
+              "color": {
+                "red": 0.91,
+                "green": 0.93,
+                "blue": 0.96
+              }
             },
             {
               "type": "ACCENT1",
-              "color": { "red": 1, "green": 0.8, "blue": 0 }
+              "color": {
+                "red": 1,
+                "green": 0.8,
+                "blue": 0
+              }
             },
             {
               "type": "ACCENT2",
-              "color": { "red": 0.29, "green": 0.56, "blue": 0.85 }
+              "color": {
+                "red": 0.29,
+                "green": 0.56,
+                "blue": 0.85
+              }
             }
           ]
         }
@@ -47,36 +86,55 @@
         {
           "objectId": "master-title",
           "size": {
-            "width": { "magnitude": 7772400, "unit": "EMU" },
-            "height": { "magnitude": 1005840, "unit": "EMU" }
+            "width": {
+              "magnitude": 7772400,
+              "unit": "EMU"
+            },
+            "height": {
+              "magnitude": 1005840,
+              "unit": "EMU"
+            }
           },
           "transform": {
             "scaleX": 1,
             "scaleY": 1,
-            "translateX": { "magnitude": 685800, "unit": "EMU" },
-            "translateY": { "magnitude": 457200, "unit": "EMU" },
+            "translateX": 685800,
+            "translateY": 457200,
             "unit": "EMU"
           },
           "shape": {
             "shapeType": "TEXT_BOX",
-            "placeholder": { "type": "TITLE" },
-            "shapeProperties": { "contentAlignment": "MIDDLE" },
+            "placeholder": {
+              "type": "TITLE"
+            },
+            "shapeProperties": {
+              "contentAlignment": "MIDDLE"
+            },
             "text": {
               "textElements": [
                 {
                   "endIndex": 32,
-                  "paragraphMarker": { "style": { "alignment": "START" } }
+                  "paragraphMarker": {
+                    "style": {
+                      "alignment": "START"
+                    }
+                  }
                 },
                 {
                   "endIndex": 32,
                   "textRun": {
                     "content": "Click to edit Master title style",
                     "style": {
-                      "fontSize": { "magnitude": 36, "unit": "PT" },
+                      "fontSize": {
+                        "magnitude": 36,
+                        "unit": "PT"
+                      },
                       "bold": true,
                       "fontFamily": "Georgia",
                       "foregroundColor": {
-                        "opaqueColor": { "themeColor": "LIGHT1" }
+                        "opaqueColor": {
+                          "themeColor": "LIGHT1"
+                        }
                       }
                     }
                   }
@@ -88,26 +146,36 @@
         {
           "objectId": "master-body",
           "size": {
-            "width": { "magnitude": 7772400, "unit": "EMU" },
-            "height": { "magnitude": 2743200, "unit": "EMU" }
+            "width": {
+              "magnitude": 7772400,
+              "unit": "EMU"
+            },
+            "height": {
+              "magnitude": 2743200,
+              "unit": "EMU"
+            }
           },
           "transform": {
             "scaleX": 1,
             "scaleY": 1,
-            "translateX": { "magnitude": 685800, "unit": "EMU" },
-            "translateY": { "magnitude": 1691640, "unit": "EMU" },
+            "translateX": 685800,
+            "translateY": 1691640,
             "unit": "EMU"
           },
           "shape": {
             "shapeType": "TEXT_BOX",
-            "placeholder": { "type": "BODY" },
+            "placeholder": {
+              "type": "BODY"
+            },
             "text": {
               "textElements": [
                 {
                   "endIndex": 30,
                   "paragraphMarker": {
                     "bullet": {},
-                    "style": { "alignment": "START" }
+                    "style": {
+                      "alignment": "START"
+                    }
                   }
                 },
                 {
@@ -115,10 +183,15 @@
                   "textRun": {
                     "content": "Click to edit Master text style",
                     "style": {
-                      "fontSize": { "magnitude": 18, "unit": "PT" },
+                      "fontSize": {
+                        "magnitude": 18,
+                        "unit": "PT"
+                      },
                       "fontFamily": "Georgia",
                       "foregroundColor": {
-                        "opaqueColor": { "themeColor": "LIGHT1" }
+                        "opaqueColor": {
+                          "themeColor": "LIGHT1"
+                        }
                       }
                     }
                   }
@@ -139,20 +212,28 @@
         "displayName": "Title slide"
       },
       "pageProperties": {
-        "pageBackgroundFill": { "propertyState": "INHERIT" }
+        "pageBackgroundFill": {
+          "propertyState": "INHERIT"
+        }
       },
       "pageElements": [
         {
           "objectId": "layout-title-heading",
           "size": {
-            "width": { "magnitude": 7315200, "unit": "EMU" },
-            "height": { "magnitude": 1188720, "unit": "EMU" }
+            "width": {
+              "magnitude": 7315200,
+              "unit": "EMU"
+            },
+            "height": {
+              "magnitude": 1188720,
+              "unit": "EMU"
+            }
           },
           "transform": {
             "scaleX": 1,
             "scaleY": 1,
-            "translateX": { "magnitude": 914400, "unit": "EMU" },
-            "translateY": { "magnitude": 1600200, "unit": "EMU" },
+            "translateX": 914400,
+            "translateY": 1600200,
             "unit": "EMU"
           },
           "shape": {
@@ -161,18 +242,29 @@
               "type": "CENTERED_TITLE",
               "parentObjectId": "master-title"
             },
-            "shapeProperties": { "contentAlignment": "MIDDLE" },
+            "shapeProperties": {
+              "contentAlignment": "MIDDLE"
+            },
             "text": {
               "textElements": [
                 {
                   "endIndex": 25,
-                  "paragraphMarker": { "style": { "alignment": "CENTER" } }
+                  "paragraphMarker": {
+                    "style": {
+                      "alignment": "CENTER"
+                    }
+                  }
                 },
                 {
                   "endIndex": 25,
                   "textRun": {
                     "content": "Click to edit title style",
-                    "style": { "fontSize": { "magnitude": 44, "unit": "PT" } }
+                    "style": {
+                      "fontSize": {
+                        "magnitude": 44,
+                        "unit": "PT"
+                      }
+                    }
                   }
                 }
               ]
@@ -182,14 +274,20 @@
         {
           "objectId": "layout-title-subtitle",
           "size": {
-            "width": { "magnitude": 7315200, "unit": "EMU" },
-            "height": { "magnitude": 594360, "unit": "EMU" }
+            "width": {
+              "magnitude": 7315200,
+              "unit": "EMU"
+            },
+            "height": {
+              "magnitude": 594360,
+              "unit": "EMU"
+            }
           },
           "transform": {
             "scaleX": 1,
             "scaleY": 1,
-            "translateX": { "magnitude": 914400, "unit": "EMU" },
-            "translateY": { "magnitude": 2926080, "unit": "EMU" },
+            "translateX": 914400,
+            "translateY": 2926080,
             "unit": "EMU"
           },
           "shape": {
@@ -202,16 +300,25 @@
               "textElements": [
                 {
                   "endIndex": 28,
-                  "paragraphMarker": { "style": { "alignment": "CENTER" } }
+                  "paragraphMarker": {
+                    "style": {
+                      "alignment": "CENTER"
+                    }
+                  }
                 },
                 {
                   "endIndex": 28,
                   "textRun": {
                     "content": "Click to edit subtitle style",
                     "style": {
-                      "fontSize": { "magnitude": 18, "unit": "PT" },
+                      "fontSize": {
+                        "magnitude": 18,
+                        "unit": "PT"
+                      },
                       "foregroundColor": {
-                        "opaqueColor": { "themeColor": "ACCENT1" }
+                        "opaqueColor": {
+                          "themeColor": "ACCENT1"
+                        }
                       }
                     }
                   }
@@ -230,20 +337,28 @@
         "displayName": "Title and body"
       },
       "pageProperties": {
-        "pageBackgroundFill": { "propertyState": "INHERIT" }
+        "pageBackgroundFill": {
+          "propertyState": "INHERIT"
+        }
       },
       "pageElements": [
         {
           "objectId": "layout-body-heading",
           "size": {
-            "width": { "magnitude": 7772400, "unit": "EMU" },
-            "height": { "magnitude": 822960, "unit": "EMU" }
+            "width": {
+              "magnitude": 7772400,
+              "unit": "EMU"
+            },
+            "height": {
+              "magnitude": 822960,
+              "unit": "EMU"
+            }
           },
           "transform": {
             "scaleX": 1,
             "scaleY": 1,
-            "translateX": { "magnitude": 685800, "unit": "EMU" },
-            "translateY": { "magnitude": 411480, "unit": "EMU" },
+            "translateX": 685800,
+            "translateY": 411480,
             "unit": "EMU"
           },
           "shape": {
@@ -256,13 +371,22 @@
               "textElements": [
                 {
                   "endIndex": 25,
-                  "paragraphMarker": { "style": { "alignment": "START" } }
+                  "paragraphMarker": {
+                    "style": {
+                      "alignment": "START"
+                    }
+                  }
                 },
                 {
                   "endIndex": 25,
                   "textRun": {
                     "content": "Click to edit title style",
-                    "style": { "fontSize": { "magnitude": 30, "unit": "PT" } }
+                    "style": {
+                      "fontSize": {
+                        "magnitude": 30,
+                        "unit": "PT"
+                      }
+                    }
                   }
                 }
               ]
@@ -272,33 +396,49 @@
         {
           "objectId": "layout-body-text",
           "size": {
-            "width": { "magnitude": 7772400, "unit": "EMU" },
-            "height": { "magnitude": 3200400, "unit": "EMU" }
+            "width": {
+              "magnitude": 7772400,
+              "unit": "EMU"
+            },
+            "height": {
+              "magnitude": 3200400,
+              "unit": "EMU"
+            }
           },
           "transform": {
             "scaleX": 1,
             "scaleY": 1,
-            "translateX": { "magnitude": 685800, "unit": "EMU" },
-            "translateY": { "magnitude": 1417320, "unit": "EMU" },
+            "translateX": 685800,
+            "translateY": 1417320,
             "unit": "EMU"
           },
           "shape": {
             "shapeType": "TEXT_BOX",
-            "placeholder": { "type": "BODY", "parentObjectId": "master-body" },
+            "placeholder": {
+              "type": "BODY",
+              "parentObjectId": "master-body"
+            },
             "text": {
               "textElements": [
                 {
                   "endIndex": 24,
                   "paragraphMarker": {
                     "bullet": {},
-                    "style": { "alignment": "START" }
+                    "style": {
+                      "alignment": "START"
+                    }
                   }
                 },
                 {
                   "endIndex": 24,
                   "textRun": {
                     "content": "Click to edit text style",
-                    "style": { "fontSize": { "magnitude": 16, "unit": "PT" } }
+                    "style": {
+                      "fontSize": {
+                        "magnitude": 16,
+                        "unit": "PT"
+                      }
+                    }
                   }
                 }
               ]
@@ -320,10 +460,15 @@
             {
               "objectId": "slide-1-notes-body",
               "shape": {
-                "placeholder": { "type": "BODY" },
+                "placeholder": {
+                  "type": "BODY"
+                },
                 "text": {
                   "textElements": [
-                    { "endIndex": 52, "paragraphMarker": {} },
+                    {
+                      "endIndex": 52,
+                      "paragraphMarker": {}
+                    },
                     {
                       "endIndex": 52,
                       "textRun": {
@@ -339,7 +484,9 @@
         }
       },
       "pageProperties": {
-        "pageBackgroundFill": { "propertyState": "INHERIT" }
+        "pageBackgroundFill": {
+          "propertyState": "INHERIT"
+        }
       },
       "pageElements": [
         {
@@ -352,10 +499,16 @@
             },
             "text": {
               "textElements": [
-                { "endIndex": 16, "paragraphMarker": {} },
                 {
                   "endIndex": 16,
-                  "textRun": { "content": "Urban Hydrology\n", "style": {} }
+                  "paragraphMarker": {}
+                },
+                {
+                  "endIndex": 16,
+                  "textRun": {
+                    "content": "Urban Hydrology\n",
+                    "style": {}
+                  }
                 }
               ]
             }
@@ -371,7 +524,10 @@
             },
             "text": {
               "textElements": [
-                { "endIndex": 22, "paragraphMarker": {} },
+                {
+                  "endIndex": 22,
+                  "paragraphMarker": {}
+                },
                 {
                   "endIndex": 22,
                   "textRun": {
@@ -392,7 +548,9 @@
         "masterObjectId": "master-1"
       },
       "pageProperties": {
-        "pageBackgroundFill": { "propertyState": "INHERIT" }
+        "pageBackgroundFill": {
+          "propertyState": "INHERIT"
+        }
       },
       "pageElements": [
         {
@@ -405,7 +563,10 @@
             },
             "text": {
               "textElements": [
-                { "endIndex": 20, "paragraphMarker": {} },
+                {
+                  "endIndex": 20,
+                  "paragraphMarker": {}
+                },
                 {
                   "endIndex": 20,
                   "textRun": {
@@ -427,17 +588,38 @@
             },
             "text": {
               "textElements": [
-                { "endIndex": 20, "paragraphMarker": { "bullet": {} } },
                 {
                   "endIndex": 20,
-                  "textRun": { "content": "Roofs shed quickly\n", "style": {} }
+                  "paragraphMarker": {
+                    "bullet": {}
+                  }
                 },
-                { "endIndex": 40, "paragraphMarker": { "bullet": {} } },
+                {
+                  "endIndex": 20,
+                  "textRun": {
+                    "content": "Roofs shed quickly\n",
+                    "style": {}
+                  }
+                },
                 {
                   "endIndex": 40,
-                  "textRun": { "content": "Roads carry it away\n", "style": {} }
+                  "paragraphMarker": {
+                    "bullet": {}
+                  }
                 },
-                { "endIndex": 62, "paragraphMarker": { "bullet": {} } },
+                {
+                  "endIndex": 40,
+                  "textRun": {
+                    "content": "Roads carry it away\n",
+                    "style": {}
+                  }
+                },
+                {
+                  "endIndex": 62,
+                  "paragraphMarker": {
+                    "bullet": {}
+                  }
+                },
                 {
                   "endIndex": 62,
                   "textRun": {
@@ -458,7 +640,9 @@
         "masterObjectId": "master-1"
       },
       "pageProperties": {
-        "pageBackgroundFill": { "propertyState": "INHERIT" }
+        "pageBackgroundFill": {
+          "propertyState": "INHERIT"
+        }
       },
       "pageElements": [
         {
@@ -471,10 +655,16 @@
             },
             "text": {
               "textElements": [
-                { "endIndex": 18, "paragraphMarker": {} },
                 {
                   "endIndex": 18,
-                  "textRun": { "content": "Measuring runoff\n", "style": {} }
+                  "paragraphMarker": {}
+                },
+                {
+                  "endIndex": 18,
+                  "textRun": {
+                    "content": "Measuring runoff\n",
+                    "style": {}
+                  }
                 }
               ]
             }
@@ -490,7 +680,12 @@
             },
             "text": {
               "textElements": [
-                { "endIndex": 21, "paragraphMarker": { "bullet": {} } },
+                {
+                  "endIndex": 21,
+                  "paragraphMarker": {
+                    "bullet": {}
+                  }
+                },
                 {
                   "endIndex": 21,
                   "textRun": {
@@ -498,7 +693,12 @@
                     "style": {}
                   }
                 },
-                { "endIndex": 44, "paragraphMarker": { "bullet": {} } },
+                {
+                  "endIndex": 44,
+                  "paragraphMarker": {
+                    "bullet": {}
+                  }
+                },
                 {
                   "endIndex": 44,
                   "textRun": {
@@ -519,7 +719,9 @@
         "masterObjectId": "master-1"
       },
       "pageProperties": {
-        "pageBackgroundFill": { "propertyState": "INHERIT" }
+        "pageBackgroundFill": {
+          "propertyState": "INHERIT"
+        }
       },
       "pageElements": [
         {
@@ -532,10 +734,16 @@
             },
             "text": {
               "textElements": [
-                { "endIndex": 15, "paragraphMarker": {} },
                 {
                   "endIndex": 15,
-                  "textRun": { "content": "Storage basins\n", "style": {} }
+                  "paragraphMarker": {}
+                },
+                {
+                  "endIndex": 15,
+                  "textRun": {
+                    "content": "Storage basins\n",
+                    "style": {}
+                  }
                 }
               ]
             }
@@ -551,7 +759,12 @@
             },
             "text": {
               "textElements": [
-                { "endIndex": 24, "paragraphMarker": { "bullet": {} } },
+                {
+                  "endIndex": 24,
+                  "paragraphMarker": {
+                    "bullet": {}
+                  }
+                },
                 {
                   "endIndex": 24,
                   "textRun": {
@@ -559,7 +772,12 @@
                     "style": {}
                   }
                 },
-                { "endIndex": 48, "paragraphMarker": { "bullet": {} } },
+                {
+                  "endIndex": 48,
+                  "paragraphMarker": {
+                    "bullet": {}
+                  }
+                },
                 {
                   "endIndex": 48,
                   "textRun": {
@@ -580,7 +798,9 @@
         "masterObjectId": "master-1"
       },
       "pageProperties": {
-        "pageBackgroundFill": { "propertyState": "INHERIT" }
+        "pageBackgroundFill": {
+          "propertyState": "INHERIT"
+        }
       },
       "pageElements": [
         {
@@ -593,10 +813,16 @@
             },
             "text": {
               "textElements": [
-                { "endIndex": 17, "paragraphMarker": {} },
                 {
                   "endIndex": 17,
-                  "textRun": { "content": "A gauged catchment\n", "style": {} }
+                  "paragraphMarker": {}
+                },
+                {
+                  "endIndex": 17,
+                  "textRun": {
+                    "content": "A gauged catchment\n",
+                    "style": {}
+                  }
                 }
               ]
             }
@@ -605,17 +831,25 @@
         {
           "objectId": "slide-5-photo",
           "size": {
-            "width": { "magnitude": 3657600, "unit": "EMU" },
-            "height": { "magnitude": 2743200, "unit": "EMU" }
+            "width": {
+              "magnitude": 3657600,
+              "unit": "EMU"
+            },
+            "height": {
+              "magnitude": 2743200,
+              "unit": "EMU"
+            }
           },
           "transform": {
             "scaleX": 1,
             "scaleY": 1,
-            "translateX": { "magnitude": 4800600, "unit": "EMU" },
-            "translateY": { "magnitude": 1417320, "unit": "EMU" },
+            "translateX": 4800600,
+            "translateY": 1417320,
             "unit": "EMU"
           },
-          "image": { "contentUrl": "https://fixture.invalid/image-1.png" }
+          "image": {
+            "contentUrl": "https://fixture.invalid/image-1.png"
+          }
         }
       ]
     },
@@ -626,20 +860,28 @@
         "masterObjectId": "master-1"
       },
       "pageProperties": {
-        "pageBackgroundFill": { "propertyState": "INHERIT" }
+        "pageBackgroundFill": {
+          "propertyState": "INHERIT"
+        }
       },
       "pageElements": [
         {
           "objectId": "slide-6-rule",
           "size": {
-            "width": { "magnitude": 7772400, "unit": "EMU" },
-            "height": { "magnitude": 45720, "unit": "EMU" }
+            "width": {
+              "magnitude": 7772400,
+              "unit": "EMU"
+            },
+            "height": {
+              "magnitude": 45720,
+              "unit": "EMU"
+            }
           },
           "transform": {
             "scaleX": 1,
             "scaleY": 1,
-            "translateX": { "magnitude": 685800, "unit": "EMU" },
-            "translateY": { "magnitude": 1280160, "unit": "EMU" },
+            "translateX": 685800,
+            "translateY": 1280160,
             "unit": "EMU"
           },
           "shape": {
@@ -648,7 +890,9 @@
               "shapeBackgroundFill": {
                 "propertyState": "RENDERED",
                 "solidFill": {
-                  "color": { "themeColor": "ACCENT1" },
+                  "color": {
+                    "themeColor": "ACCENT1"
+                  },
                   "alpha": 1
                 }
               }
@@ -665,10 +909,16 @@
             },
             "text": {
               "textElements": [
-                { "endIndex": 13, "paragraphMarker": {} },
                 {
                   "endIndex": 13,
-                  "textRun": { "content": "What to read\n", "style": {} }
+                  "paragraphMarker": {}
+                },
+                {
+                  "endIndex": 13,
+                  "textRun": {
+                    "content": "What to read\n",
+                    "style": {}
+                  }
                 }
               ]
             }
@@ -684,7 +934,12 @@
             },
             "text": {
               "textElements": [
-                { "endIndex": 26, "paragraphMarker": { "bullet": {} } },
+                {
+                  "endIndex": 26,
+                  "paragraphMarker": {
+                    "bullet": {}
+                  }
+                },
                 {
                   "endIndex": 26,
                   "textRun": {

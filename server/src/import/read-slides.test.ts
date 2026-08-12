@@ -1127,3 +1127,111 @@ describe('the palette a design is drawn in', () => {
     expect(toSourcePresentation(deck).theme.text).toBe('#1c2130')
   })
 })
+
+/**
+ * Google states measurements two ways in one response, and mixing them up is
+ * how every shape in an imported deck ended up in the top-left corner with
+ * its size intact.
+ */
+describe('the two ways Google states a measurement', () => {
+  /** A shape exactly as the API returns one: a Dimension size, and a
+   * transform whose translations are bare numbers with one unit. */
+  const asGoogleReturnsIt = {
+    objectId: 'shape-1',
+    size: {
+      width: { magnitude: 0.5 * PAGE.width, unit: 'EMU' },
+      height: { magnitude: 0.25 * PAGE.height, unit: 'EMU' },
+    },
+    transform: {
+      scaleX: 1,
+      scaleY: 1,
+      translateX: 0.1 * PAGE.width,
+      translateY: 0.2 * PAGE.height,
+      unit: 'EMU',
+    },
+    shape: {
+      shapeType: 'TEXT_BOX',
+      placeholder: { type: 'TITLE' },
+      text: {
+        textElements: [{ textRun: { content: 'Runoff\n', style: {} } }],
+      },
+    },
+  }
+
+  it('places a shape whose transform states bare numbers', () => {
+    // The bug: translateX read as a Dimension has no magnitude, so it came
+    // back 0 — and every box in the deck stacked in the corner
+    const read = toSourcePresentation(
+      presentation({
+        slides: [{ objectId: 's1', pageElements: [asGoogleReturnsIt] }],
+      }),
+    )
+    expect(read.slides[0]!.elements[0]!.box).toEqual({
+      x: 0.1,
+      y: 0.2,
+      w: 0.5,
+      h: 0.25,
+    })
+  })
+
+  it('converts a translation stated in points', () => {
+    const inPoints = {
+      ...asGoogleReturnsIt,
+      transform: {
+        scaleX: 1,
+        scaleY: 1,
+        // 72pt to the inch, and the page is ten inches across
+        translateX: 72,
+        translateY: 72,
+        unit: 'PT',
+      },
+    }
+    const read = toSourcePresentation(
+      presentation({ slides: [{ objectId: 's1', pageElements: [inPoints] }] }),
+    )
+    expect(read.slides[0]!.elements[0]!.box.x).toBeCloseTo(0.1, 5)
+  })
+
+  it('still accepts a translation given as a Dimension', () => {
+    // Tolerated rather than required: a caller holding a Dimension should not
+    // have to know which of the two conventions applies here
+    const asDimension = {
+      ...asGoogleReturnsIt,
+      transform: {
+        scaleX: 1,
+        scaleY: 1,
+        translateX: { magnitude: 0.1 * PAGE.width, unit: 'EMU' },
+        translateY: { magnitude: 0.2 * PAGE.height, unit: 'EMU' },
+      },
+    }
+    const read = toSourcePresentation(
+      presentation({
+        slides: [{ objectId: 's1', pageElements: [asDimension] }],
+      }),
+    )
+    expect(read.slides[0]!.elements[0]!.box.x).toBeCloseTo(0.1, 5)
+  })
+
+  it('does not stack a slide’s boxes in the corner', () => {
+    // The shape of the failure, asserted directly: distinct shapes must get
+    // distinct origins
+    const second = {
+      ...asGoogleReturnsIt,
+      objectId: 'shape-2',
+      transform: {
+        scaleX: 1,
+        scaleY: 1,
+        translateX: 0.1 * PAGE.width,
+        translateY: 0.6 * PAGE.height,
+        unit: 'EMU',
+      },
+    }
+    const read = toSourcePresentation(
+      presentation({
+        slides: [{ objectId: 's1', pageElements: [asGoogleReturnsIt, second] }],
+      }),
+    )
+    const origins = read.slides[0]!.elements.map(e => `${e.box.x},${e.box.y}`)
+    expect(new Set(origins).size).toBe(2)
+  })
+})
