@@ -1235,3 +1235,44 @@ describe('the two ways Google states a measurement', () => {
     expect(new Set(origins).size).toBe(2)
   })
 })
+
+describe('what a shape is, not just where it is', () => {
+  it('keeps the kind of shape a decoration is', () => {
+    // An arrow across the top of a slide is an arrow. Read as a bare box it
+    // imports as a grey rectangle, which is the most visible way a design
+    // stops looking like itself.
+    const arrow = shape({
+      shape: {
+        shapeType: 'RIGHT_ARROW',
+        shapeProperties: {
+          shapeBackgroundFill: {
+            solidFill: { color: { themeColor: 'ACCENT1' } },
+          },
+        },
+      },
+    })
+    const read = toSourcePresentation(
+      presentation({ slides: [{ objectId: 's1', pageElements: [arrow] }] }),
+    )
+    expect(read.slides[0]!.elements[0]).toMatchObject({
+      kind: 'decoration',
+      shapeType: 'RIGHT_ARROW',
+    })
+  })
+
+  it('says nothing about a shape the presentation did not name', () => {
+    const plain = shape({
+      shape: {
+        shapeProperties: {
+          shapeBackgroundFill: {
+            solidFill: { color: { themeColor: 'ACCENT1' } },
+          },
+        },
+      },
+    })
+    const read = toSourcePresentation(
+      presentation({ slides: [{ objectId: 's1', pageElements: [plain] }] }),
+    )
+    expect(read.slides[0]!.elements[0]).not.toHaveProperty('shapeType')
+  })
+})

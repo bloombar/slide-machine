@@ -285,6 +285,33 @@ describe('the parts of a design that hold no content (TMPL-8)', () => {
     )
   })
 
+  it('cuts a piece to the shape the deck drew', () => {
+    // An arrow imported as a grey rectangle is the most visible way a design
+    // stops looking like itself
+    const withArrow = layout({
+      elementPositions: arranged.elementPositions,
+      decoration: [
+        {
+          x: 0.15,
+          y: 0.06,
+          w: 0.7,
+          h: 0.1,
+          fill: 'accent',
+          shape: 'RIGHT_ARROW',
+        },
+      ],
+    })
+    const { container } = render(<PositionedLayout {...props(withArrow)} />)
+    expect((pieces(container)[0] as HTMLElement).style.clipPath).toContain(
+      'polygon(',
+    )
+  })
+
+  it('leaves a band as the rectangle it is', () => {
+    const { container } = render(<PositionedLayout {...props(decorated)} />)
+    expect((pieces(container)[0] as HTMLElement).style.clipPath).toBe('')
+  })
+
   it('draws it behind the content, not over it', () => {
     // A band painted last would cover the words it was meant to sit under
     const { container } = render(<PositionedLayout {...props(decorated)} />)

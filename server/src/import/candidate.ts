@@ -67,7 +67,13 @@ export interface Candidate {
   slideId: string
   slots: CandidateSlot[]
   /** Rules and bands: part of the design, and never content. */
-  decoration: { box: SourceBox; fill?: string; imageUrl?: string }[]
+  decoration: {
+    box: SourceBox
+    fill?: string
+    imageUrl?: string
+    /** What the shape is, as the presentation named it. */
+    shapeType?: string
+  }[]
   background?: string
   /** A picture filling the page behind everything (TMPL-8). */
   backgroundImage?: string
@@ -220,7 +226,11 @@ export const candidateOf = (
     slots,
     decoration: page.elements
       .filter(e => e.kind === 'decoration')
-      .map(e => ({ box: e.box, ...(e.fill ? { fill: e.fill } : {}) })),
+      .map(e => ({
+        box: e.box,
+        ...(e.fill ? { fill: e.fill } : {}),
+        ...(e.shapeType ? { shapeType: e.shapeType } : {}),
+      })),
     ...(page.background ? { background: page.background } : {}),
     ...(page.backgroundImage ? { backgroundImage: page.backgroundImage } : {}),
   }

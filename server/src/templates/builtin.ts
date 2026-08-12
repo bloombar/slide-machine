@@ -283,6 +283,9 @@ export const layoutSchema = z
           // under its own prefix, never the source presentation's.
           imageUrl: z.string().min(1).max(512).optional(),
           radius: z.number().min(0).max(50).optional(),
+          // The outline the piece is cut to, as the presentation named it.
+          // Anything the renderer does not know is drawn as a rectangle.
+          shape: z.string().min(1).max(40).optional(),
         }),
       )
       .max(32)

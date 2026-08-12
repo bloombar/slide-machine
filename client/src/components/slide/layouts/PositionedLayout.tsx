@@ -16,6 +16,7 @@ import type { LayoutSlot } from '@slide-machine/shared'
 import { tierOf } from '@slide-machine/shared'
 import type { LayoutProps } from './types'
 import { resolveStyle, contentStyle, resolveColor } from './boxStyle'
+import { clipPathFor } from './decorationShape'
 
 export default function PositionedLayout({
   layout,
@@ -54,6 +55,11 @@ export default function PositionedLayout({
               ? { backgroundImage: `url(${JSON.stringify(piece.imageUrl)})` }
               : {}),
             ...(piece.radius ? { borderRadius: `${piece.radius}cqi` } : {}),
+            // An arrow is an arrow. Unknown shapes clip to nothing and stay
+            // the rectangle they are bounded by.
+            ...(clipPathFor(piece.shape)
+              ? { clipPath: clipPathFor(piece.shape) }
+              : {}),
           }}
         />
       ))}

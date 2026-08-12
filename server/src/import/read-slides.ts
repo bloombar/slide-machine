@@ -544,6 +544,8 @@ const elementOf = (
       ...(placeholder ? { placeholder } : {}),
       ...(slotName ? { slotName } : {}),
       ...(fill ? { fill } : {}),
+      // What the shape is, so an arrow is not drawn as a rectangle.
+      ...(shape.shapeType ? { shapeType: shape.shapeType } : {}),
     }
   }
 

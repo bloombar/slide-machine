@@ -182,6 +182,7 @@ const decorationOf = (
       ...safeBox(piece.box),
       ...(piece.fill ? { fill: piece.fill } : {}),
       ...(stored ? { imageUrl: stored } : {}),
+      ...(piece.shapeType ? { shape: piece.shapeType } : {}),
     })
   }
   // Bounded to what the schema accepts, so an unusually busy deck cannot

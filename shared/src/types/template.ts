@@ -398,6 +398,12 @@ export interface LayoutDecoration {
   y: number
   w: number
   h: number
+  /**
+   * The outline this piece is cut to — `RIGHT_ARROW`, `ELLIPSE`, `CHEVRON`,
+   * as the presentation it came from named it. Absent means a rectangle,
+   * which is what a band or a rule is.
+   */
+  shape?: string
   /** A flat fill — a hex value or a theme key, like any other colour. */
   fill?: string
   /** A picture, stored under the template's own prefix. */

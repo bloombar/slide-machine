@@ -75,6 +75,12 @@ export interface SourceElement {
   vAlign?: 'start' | 'center' | 'end'
   /** A shape with no content, drawn from its fill — a rule or a band. */
   fill?: string
+  /**
+   * What the shape IS, as the presentation names it: `RIGHT_ARROW`, `ELLIPSE`,
+   * `CHEVRON`. Without it every shape is a rectangle, which is what an arrow
+   * imported as — a grey box where the deck had an arrow.
+   */
+  shapeType?: string
 }
 
 /** A page: one of the presentation's own layouts, or one of its slides. */
