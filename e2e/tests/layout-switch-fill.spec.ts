@@ -71,7 +71,7 @@ test('a manual layout switch carries content across, then fills what it could no
   })
 
   await test.step('a box that is restyled still pairs, and is not rewritten', async () => {
-    await slide.getByText('Add slide body').click()
+    await slide.getByTitle('Click to edit Slide body').click()
     await page
       .getByRole('textbox', { name: 'Slide body' })
       .fill('Water crosses the membrane. Solutes stay behind.')

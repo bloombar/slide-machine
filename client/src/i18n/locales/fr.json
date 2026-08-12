@@ -728,6 +728,8 @@
     "previous": "Diapositive précédente",
     "next": "Diapositive suivante",
     "addSlot": "Ajouter {name}",
+    "addTitle": "Cliquez pour ajouter un titre",
+    "addText": "Cliquez pour ajouter du texte",
     "image": {
       "alt": "Image de la diapositive"
     },

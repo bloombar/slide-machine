@@ -74,21 +74,19 @@ test('template import: connect, paste a link, get a usable design', async ({
 
   await page.getByRole('button', { name: 'Import design' }).click()
 
-  // The report is a deliverable, not a nicety: consolidation is lossy and
-  // this is the only visibility into it (TMPL-8).
+  // The report is a deliverable, not a nicety: it is the only account of what
+  // the import made of the deck (TMPL-8).
   const report = page.getByTestId('import-report')
   await expect(report).toBeVisible({ timeout: 20_000 })
   await expect(report).toContainText(/10 slides became \d+ layouts/)
-  await expect(report).toContainText(/Merged \d+ near-identical slides/)
-  // The sample deck has one slide like nothing else in it
-  await expect(report).toContainText(/matched no layout and were approximated/)
   await expect(report).toContainText(/nothing was changed in the presentation/i)
 
-  // Far fewer layouts than slides, which is the whole point of consolidating
+  // Every slide comes back as its own layout: the instructor gets the deck
+  // they recognize, and decides for themselves what to merge or delete.
   const summary = (await report.textContent()) ?? ''
   const layouts = Number(/became (\d+) layouts/.exec(summary)?.[1] ?? '0')
-  expect(layouts).toBeGreaterThan(0)
-  expect(layouts).toBeLessThan(10)
+  expect(layouts).toBe(10)
+  await expect(report).not.toContainText(/Merged \d+ near-identical slides/)
 
   // It is a real template: in the library, rendered as a slide in its own
   // theme like any other, and already chosen — an import exists to be used.

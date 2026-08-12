@@ -728,6 +728,8 @@
     "previous": "Previous slide",
     "next": "Next slide",
     "addSlot": "Add {name}",
+    "addTitle": "Click to add title",
+    "addText": "Click to add text",
     "image": {
       "alt": "Slide image"
     },

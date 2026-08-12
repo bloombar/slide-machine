@@ -47,7 +47,7 @@ test('translated viewing: switch language, read, and return to the original', as
   await expect(authorPage.getByTestId('slide')).toBeVisible()
   const deckUrl = authorPage.url()
   // The author's own view carries the editing chrome (empty-slot prompts like
-  // "Add slide caption"), so each side is compared against its own baseline
+  // "Click to add text"), so each side is compared against its own baseline
   // rather than against the other's. Baselines are read as textContent, which
   // is what toHaveText compares against — innerText would add the line breaks
   // it renders and never match.

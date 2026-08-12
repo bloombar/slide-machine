@@ -728,6 +728,8 @@
     "previous": "上一张幻灯片",
     "next": "下一张幻灯片",
     "addSlot": "添加{name}",
+    "addTitle": "点击添加标题",
+    "addText": "点击添加文本",
     "image": {
       "alt": "幻灯片图片"
     },

@@ -157,6 +157,20 @@ const textValue = (slide: Slide, slot: string): string =>
   slotValue(slide, slot).text ?? ''
 
 /** A text slot: markdown normally, in-place editable for owners. */
+/**
+ * What an empty box invites you to type, in the words a slide editor uses.
+ *
+ * "Click to add title" over a heading and "Click to add text" everywhere else
+ * is the wording of every slide tool an instructor has already used, and an
+ * imported deck should not greet them with a different one. The box's own
+ * label is not used: a design imported from Google Slides names its boxes
+ * whatever its author did, and "Add body-2" is not an invitation.
+ */
+const addPrompt = (slot: string, t: (key: string) => string): string =>
+  slot === 'title' || slot === 'subtitle'
+    ? t('slide.addTitle')
+    : t('slide.addText')
+
 function TextSlot({ slot, spec, descriptor, slide, onEdit }: SlotEditorProps) {
   const { t } = useTranslation()
   const value = textValue(slide, slot)
@@ -172,9 +186,7 @@ function TextSlot({ slot, spec, descriptor, slide, onEdit }: SlotEditorProps) {
       )}
       // Empty slots (e.g. after a layout switch) stay clickable via a
       // muted call-to-action placeholder
-      emptyDisplay={t('slide.addSlot', {
-        name: descriptor.label.toLocaleLowerCase(),
-      })}
+      emptyDisplay={addPrompt(slot, t)}
       placeholderStyle
       hint={slotGuidance(spec, t)}
       onSave={v => onEdit(patchSlot(slot, { text: v }))}
@@ -208,9 +220,7 @@ function BulletsSlot({
       label={descriptor.label}
       multiline
       renderValue={v => rendered(v.split('\n'))}
-      emptyDisplay={t('slide.addSlot', {
-        name: descriptor.label.toLocaleLowerCase(),
-      })}
+      emptyDisplay={t('slide.addText')}
       placeholderStyle
       hint={slotGuidance(spec, t)}
       onSave={v =>

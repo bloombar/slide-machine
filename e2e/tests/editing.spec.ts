@@ -126,11 +126,11 @@ test('in-place editing in the viewer, including list view and bullets', async ({
     'quote',
   )
 
-  // The quote layout's caption was empty and hidden before the switch —
-  // the blank slot is clickable but invisible to the audience; a
+  // The quote layout's caption was empty and hidden before the switch — the
+  // blank slot shows the invitation every slide tool shows, quietly, and a
   // page-background click flashes it as a skeleton, fading on its own
-  const blankCaption = page.getByText('Add slide caption')
-  await expect(blankCaption).toHaveCSS('color', 'rgba(0, 0, 0, 0)')
+  const blankCaption = page.getByTitle('Click to edit Slide caption')
+  await expect(blankCaption).toHaveText('Click to add text')
   await page
     .locator('div.max-w-5xl')
     .first()
