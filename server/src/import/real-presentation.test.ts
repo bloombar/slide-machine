@@ -135,12 +135,14 @@ describe('the design that import derives from it', () => {
     }
   })
 
-  it('groups the deck by the layouts its author actually used', () => {
-    // Five slides on TITLE_AND_BODY and one on TITLE: the author already did
-    // the work consolidation exists to do, so it is not redone worse
-    expect(derived()).toHaveLength(2)
+  it('gives the instructor back every slide they had', () => {
+    // Six slides in, six layouts out. This deck carries no record of having
+    // been exported by us, so it is taken at face value rather than grouped
+    // into the few designs it is "really" built from — the instructor can
+    // merge or delete them once they can see them.
+    expect(derived()).toHaveLength(6)
     expect(result.report.slidesRead).toBe(6)
-    expect(result.report.largestMerge?.slides).toBe(5)
+    expect(result.report.layoutsCreated).toBe(6)
     expect(result.report.approximated).toBe(0)
   })
 

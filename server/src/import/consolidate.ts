@@ -599,6 +599,76 @@ const keepRecurring = (clusters: Candidate[][]): Candidate[][] => {
   return kept.length ? kept : clusters
 }
 
+/** Puts the model's names onto the layouts geometry produced. Geometry is
+ * never touched by it — a bad answer can mislabel a layout, never break one. */
+const applySemantics = (
+  layouts: DerivedLayout[],
+  semantics: (LayoutSemantics | undefined)[],
+): DerivedLayout[] =>
+  layouts.map((layout, i) => ({
+    ...layout,
+    ...(semantics[i]?.type ? { type: semantics[i]!.type } : {}),
+    ...(semantics[i]?.description
+      ? { description: semantics[i]!.description }
+      : {}),
+    slots: layout.slots.map(slot => {
+      const described = semantics[i]?.slotDescriptions?.[slot.name]
+      return described ? { ...slot, description: described } : slot
+    }),
+  }))
+
+/**
+ * One layout per slide, exactly as the slide is.
+ *
+ * The faithful import: no clustering, no merging, and — the part that matters
+ * most — no standardizing. `standardize` is what aligns edges to a common
+ * grid, snaps margins and quantizes the type scale, and it is precisely what
+ * makes a derived template tidier than the deck it came from. Tidier is not
+ * what is wanted here; the same is.
+ *
+ * `medianLayout` over a single slide is that slide: the median of one value
+ * is the value, and the mode of one is the value. So the boxes, the type, the
+ * colours, the decoration and the background all come through as they are.
+ */
+export const verbatimLayouts = (candidates: Candidate[]): DerivedLayout[] =>
+  candidates.map(candidate => {
+    // Ceilings are dropped with the grouping that justified them. A ceiling
+    // measured from many slides is evidence of what the design holds; measured
+    // from one it is only what that slide happened to say, and a title reading
+    // "Hi" would cap the box at two characters for good. With no constraint
+    // the limit comes from the box and its type instead (`slotLimits`), which
+    // is what a single slide can actually tell you.
+    const { constraints: _measuredFromOne, ...layout } = medianLayout([
+      candidate,
+    ])
+    return layout
+  })
+
+/**
+ * The faithful import, named.
+ *
+ * Every slide keeps its own layout, and the model is still asked what each one
+ * IS — naming changes no geometry, and a template of layouts called "Title"
+ * and "Two column" is far easier to edit afterwards than one called
+ * "Layout 1..14".
+ */
+export const verbatimWithSemantics = async (
+  candidates: Candidate[],
+  describe: (
+    layouts: DerivedLayout[],
+  ) => Promise<(LayoutSemantics | undefined)[]>,
+): Promise<Consolidation> => {
+  const derived = verbatimLayouts(candidates)
+  const layouts = applySemantics(derived, await describe(derived))
+  const assignment = new Map<string, number>()
+  layouts.forEach((layout, index) => {
+    for (const id of layout.members) assignment.set(id, index)
+  })
+  // Nothing is approximated when nothing is merged: every slide has the design
+  // it actually had.
+  return { layouts, approximated: [], assignment }
+}
+
 /** Derives the layouts and settles where every slide ended up, including the
  * ones no design would have. */
 const assemble = (
@@ -612,17 +682,7 @@ const assemble = (
   for (const group of groups) {
     group.sort((a, b) => order.get(a.slideId)! - order.get(b.slideId)!)
   }
-  const layouts = deriveLayouts(groups).map((layout, i) => ({
-    ...layout,
-    ...(semantics[i]?.type ? { type: semantics[i]!.type } : {}),
-    ...(semantics[i]?.description
-      ? { description: semantics[i]!.description }
-      : {}),
-    slots: layout.slots.map(slot => {
-      const described = semantics[i]?.slotDescriptions?.[slot.name]
-      return described ? { ...slot, description: described } : slot
-    }),
-  }))
+  const layouts = applySemantics(deriveLayouts(groups), semantics)
 
   const assignment = new Map<string, number>()
   layouts.forEach((layout, index) => {

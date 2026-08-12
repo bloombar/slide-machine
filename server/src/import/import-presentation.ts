@@ -30,7 +30,7 @@ import {
 } from './build-template'
 import { candidateOf, type Candidate } from './candidate'
 import {
-  consolidateWithSemantics,
+  verbatimWithSemantics,
   deriveLayouts,
   observedFrom,
   type Consolidation,
@@ -263,14 +263,32 @@ export const importSourcePresentation = async (
     .map(slide => candidateOf(slide, declarationsFor(slide)))
     .filter(carriesDesign)
 
-  // A presentation that DEFINES layouts has already done the work
-  // consolidation exists to do, and its author's own grouping beats any
-  // clustering of ours. So slides are grouped by the layout they were built
-  // on, and each group's design derived from those slides.
-  const authored = authoredLayouts(source, candidates, declarationsFor)
+  // A presentation this system exported carries its own slot declarations,
+  // and re-importing one has to give back the template it came from — same
+  // layouts, same boxes, same kinds. That is a round trip, not an import of
+  // an unknown deck, so it keeps the grouping the export wrote down.
+  const isOwnExport =
+    declaredByLayout.size > 0 || source.slides.some(slide => slide.slotMetadata)
+
+  // Anything else is imported FAITHFULLY: one layout per slide, exactly as
+  // the slide is.
+  //
+  // Consolidation — clustering near-identical slides into one standardized
+  // design — is deliberately not used here. It is the tidier answer and it is
+  // not the one an instructor wants first: a deck of fourteen slides should
+  // arrive as fourteen layouts they recognize, which they can then merge,
+  // delete or edit themselves. A template they have to reverse-engineer back
+  // into their own deck is worse than one with some near-duplicates in it.
+  //
+  // The passes still exist and still have their tests; `consolidateCandidates`
+  // and `consolidateWithSemantics` are how a tidying pass would be offered
+  // later, as something the user asks for rather than something done to them.
+  const authored = isOwnExport
+    ? authoredLayouts(source, candidates, declarationsFor)
+    : undefined
   const { layouts, approximated } = authored
     ? await consolidateAuthored(authored, describeWith(options.provider))
-    : await consolidateWithSemantics(candidates, describeWith(options.provider))
+    : await verbatimWithSemantics(candidates, describeWith(options.provider))
 
   // Pictures are fetched after consolidation, so a deck whose slides collapsed
   // into three layouts does not pay to download forty copies of the same logo.

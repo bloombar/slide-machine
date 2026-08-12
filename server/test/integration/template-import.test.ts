@@ -137,14 +137,17 @@ describe('template.importFromSlides (TMPL-8)', () => {
     expect(types).toContain('whiteboard')
   })
 
-  it('turns many hand-built slides into few layouts', async () => {
-    // The whole point of consolidation, asserted through the action
+  it('gives back every slide the deck had, as its own layout', async () => {
+    // A faithful import, asserted through the action: an instructor gets the
+    // deck they recognize and decides themselves what to merge or delete.
     await act(ada, 'quiz.connectGoogle')
     const { body } = await act(ada, 'template.importFromSlides', {
       presentationId: 'deck-1',
     })
-    expect(body.report.slidesRead).toBeGreaterThan(body.report.layoutsCreated)
-    expect(body.report.largestMerge.slides).toBeGreaterThan(1)
+    expect(body.report.layoutsCreated).toBe(body.report.slidesRead)
+    expect(body.report.approximated).toBe(0)
+    // Every slide's design, plus the blank slate every template owes (TMPL-7)
+    expect(body.template.layouts).toHaveLength(body.report.slidesRead + 1)
   })
 
   it('reports the slides it could only approximate', async () => {
