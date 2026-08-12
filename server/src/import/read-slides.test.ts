@@ -779,13 +779,13 @@ describe('what a slide inherits from its layout and master', () => {
       deck({
         layout: {
           pageElements: [
-            {
-              objectId: 'layout-title',
+            placed('layout-title', {
               shape: {
                 shapeType: 'TEXT_BOX',
+                // Points back at the slide that points at it
                 placeholder: { type: 'TITLE', parentObjectId: 'slide-title' },
               },
-            },
+            }),
           ],
         },
         slide: {
@@ -794,6 +794,45 @@ describe('what a slide inherits from its layout and master', () => {
       }),
     )
     expect(read.slides[0]!.elements[0]!.runs?.[0]?.text).toBe('Runoff')
+  })
+
+  it('drops a placeholder nothing in the chain gives a place on the page', () => {
+    // An empty box the author never sized. Kept, every one of them lands at
+    // the origin with no area — and their editor hints print on top of each
+    // other in the corner, which is what an imported deck actually showed.
+    const bare = (objectId: string, type: string) => ({
+      objectId,
+      shape: { shapeType: 'TEXT_BOX', placeholder: { type } },
+    })
+    const read = toSourcePresentation(
+      deck({
+        slide: {
+          pageElements: [
+            bare('empty-title', 'TITLE'),
+            bare('empty-body', 'BODY'),
+          ],
+        },
+      }),
+    )
+    expect(read.slides[0]!.elements).toEqual([])
+  })
+
+  it('keeps a placeholder that is empty but does have a place', () => {
+    // An empty box IS part of a design when the design says where it goes —
+    // that is how a derived layout learns the box exists at all
+    const read = toSourcePresentation(
+      deck({
+        slide: {
+          pageElements: [
+            placed('sized-but-empty', {
+              shape: { shapeType: 'TEXT_BOX', placeholder: { type: 'BODY' } },
+            }),
+          ],
+        },
+      }),
+    )
+    expect(read.slides[0]!.elements).toHaveLength(1)
+    expect(read.slides[0]!.elements[0]!.placeholder).toBe('BODY')
   })
 })
 

@@ -207,12 +207,16 @@ const boxOf = (
 const boxFromChain = (
   chain: Record<string, unknown>[],
   page: { width: number; height: number },
-): SourceBox => {
+): SourceBox | undefined => {
   for (const element of chain) {
     const box = boxOf(element, page)
     if (box.w > 0 && box.h > 0) return box
   }
-  return boxOf(chain[0]!, page)
+  // Nothing anywhere in the chain says where this shape goes or how big it
+  // is. That is not a shape at the origin with no area — it is not a shape
+  // on the page at all, and every one of them placed there would sit in the
+  // same spot, printing over each other in the corner.
+  return undefined
 }
 
 /** `{red,green,blue}` 0–1 as `#rrggbb`. */
@@ -401,6 +405,10 @@ const elementOf = (
   const id = (raw.objectId as string) ?? ''
   const chain = shapeChain(raw, ancestry)
   const box = boxFromChain(chain, page)
+  // A shape with no place on the page cannot be drawn and cannot be part of
+  // a design. Google returns these for a placeholder that was never given a
+  // size anywhere in its chain — an empty box the author never filled in.
+  if (!box) return null
   // Alt text is where this system writes what a box IS (EXP-8), and it is
   // worth more than anything inferred below.
   const slotName = slotFromToken(raw.description as string | undefined)
