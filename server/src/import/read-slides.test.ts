@@ -925,3 +925,166 @@ describe('the colour a deck is painted in', () => {
     expect(read.slides[0]!.backgroundImage).toBe('https://example.test/bg.png')
   })
 })
+
+/**
+ * A presentation's colour scheme says what `DARK1` stands for. It does not say
+ * the deck writes in it — a deck on a dark background writes in `LIGHT1`, and
+ * taking `DARK1` gave near-black text on near-black. So the palette is read
+ * from the deck, and every colour is checked against the background before it
+ * is kept.
+ */
+describe('the palette a design is drawn in', () => {
+  const dim = (emu: number) => ({ magnitude: emu, unit: 'EMU' })
+  const PAGE_W = 10 * 914400
+
+  const paletteDeck = (
+    scheme: [string, [number, number, number]][],
+    background: [number, number, number] | undefined,
+    runColor: Record<string, unknown> | undefined,
+    words = 'A long line of body copy on the slide',
+  ) => ({
+    presentationId: 'p1',
+    title: 'Palette',
+    pageSize: { width: dim(PAGE_W), height: dim(5.625 * 914400) },
+    masters: [
+      {
+        objectId: 'master-1',
+        pageProperties: {
+          colorScheme: {
+            colors: scheme.map(([type, [red, green, blue]]) => ({
+              type,
+              color: { red, green, blue },
+            })),
+          },
+          ...(background
+            ? {
+                pageBackgroundFill: {
+                  propertyState: 'RENDERED',
+                  solidFill: {
+                    color: {
+                      rgbColor: {
+                        red: background[0],
+                        green: background[1],
+                        blue: background[2],
+                      },
+                    },
+                  },
+                },
+              }
+            : {}),
+        },
+        pageElements: [],
+      },
+    ],
+    layouts: [],
+    slides: [
+      {
+        objectId: 's1',
+        slideProperties: {
+          layoutObjectId: 'missing',
+          masterObjectId: 'master-1',
+        },
+        pageElements: [
+          {
+            objectId: 's1-body',
+            size: {
+              width: dim(0.8 * PAGE_W),
+              height: dim(0.3 * 5.625 * 914400),
+            },
+            transform: {
+              scaleX: 1,
+              scaleY: 1,
+              translateX: dim(0.1 * PAGE_W),
+              translateY: dim(0.3 * 5.625 * 914400),
+            },
+            shape: {
+              shapeType: 'TEXT_BOX',
+              placeholder: { type: 'BODY' },
+              text: {
+                textElements: [
+                  {
+                    textRun: {
+                      content: `${words}\n`,
+                      style: runColor ? { foregroundColor: runColor } : {},
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    ],
+  })
+
+  const DARK_SCHEME: [string, [number, number, number]][] = [
+    ['DARK1', [0.11, 0.13, 0.19]],
+    ['LIGHT1', [1, 1, 1]],
+    ['DARK2', [0.24, 0.29, 0.4]],
+    ['ACCENT1', [1, 0.8, 0]],
+  ]
+
+  it('writes in the colour the deck writes in, not the one DARK1 names', () => {
+    // The bug in one line: a blue deck's words are white, and the scheme's
+    // DARK1 is near-black
+    const read = toSourcePresentation(
+      paletteDeck(DARK_SCHEME, [0.05, 0.1, 0.4], {
+        opaqueColor: { themeColor: 'LIGHT1' },
+      }),
+    )
+    expect(read.theme.background).toBe('#0d1a66')
+    expect(read.theme.text).toBe('#ffffff')
+  })
+
+  it('still takes the scheme’s text colour when the deck agrees with it', () => {
+    const read = toSourcePresentation(
+      paletteDeck(DARK_SCHEME, [1, 1, 1], {
+        opaqueColor: { themeColor: 'DARK1' },
+      }),
+    )
+    expect(read.theme.text).toBe('#1c2130')
+  })
+
+  it('refuses a text colour that cannot be read on the background', () => {
+    // Whatever the presentation says, a design nobody can read is not the
+    // design that was imported
+    const read = toSourcePresentation(
+      paletteDeck(DARK_SCHEME, [0.05, 0.1, 0.4], {
+        opaqueColor: { rgbColor: { red: 0.07, green: 0.12, blue: 0.42 } },
+      }),
+    )
+    expect(read.theme.text).toBe('#ffffff')
+  })
+
+  it('falls back to the scheme when no slide states a text colour', () => {
+    const read = toSourcePresentation(
+      paletteDeck(DARK_SCHEME, [1, 1, 1], undefined),
+    )
+    expect(read.theme.text).toBe('#1c2130')
+  })
+
+  it('keeps the muted and accent colours readable too', () => {
+    const read = toSourcePresentation(
+      paletteDeck(DARK_SCHEME, [0.05, 0.1, 0.4], {
+        opaqueColor: { themeColor: 'LIGHT1' },
+      }),
+    )
+    // DARK2 is too dark to read on this background, so it is not taken
+    expect(read.theme.muted).not.toBe('#3d4a66')
+    expect(read.theme.accent).toBe('#ffcc00')
+  })
+
+  it('lets the loudest body copy decide, not a one-word flourish', () => {
+    // Weighted by how much text is in each colour
+    const deck = paletteDeck(DARK_SCHEME, [1, 1, 1], {
+      opaqueColor: { themeColor: 'DARK1' },
+    })
+    deck.slides[0]!.pageElements[0]!.shape.text.textElements.push({
+      textRun: {
+        content: '!\n',
+        style: { foregroundColor: { opaqueColor: { themeColor: 'ACCENT1' } } },
+      },
+    } as never)
+    expect(toSourcePresentation(deck).theme.text).toBe('#1c2130')
+  })
+})

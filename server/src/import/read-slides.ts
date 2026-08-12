@@ -139,15 +139,25 @@ const pageChain = (
   const seen = new Set<string>([(raw.objectId as string) ?? ''])
   let current = raw
   for (let depth = 0; depth < MAX_INHERITANCE; depth++) {
-    const parentId =
-      (current.slideProperties as { layoutObjectId?: string } | undefined)
-        ?.layoutObjectId ??
+    // A slide names both the layout it is built on and the master behind
+    // that. The layout comes first because it is the nearer answer, but the
+    // master is followed when the layout is missing — a deck whose layout
+    // reference does not resolve still has a design, and stopping there is
+    // how it lost its colours.
+    const slide = current.slideProperties as
+      { layoutObjectId?: string; masterObjectId?: string } | undefined
+    const candidates = [
+      slide?.layoutObjectId,
+      slide?.masterObjectId,
       (current.layoutProperties as { masterObjectId?: string } | undefined)
-        ?.masterObjectId
-    if (!parentId || seen.has(parentId)) break
-    const parent = ancestry.pages.get(parentId)
-    if (!parent) break
+        ?.masterObjectId,
+    ]
+    const parentId = candidates.find(
+      id => id && !seen.has(id) && ancestry.pages.has(id),
+    )
+    if (!parentId) break
     seen.add(parentId)
+    const parent = ancestry.pages.get(parentId)!
     chain.push(parent)
     current = parent
   }
@@ -630,18 +640,88 @@ const pageOf = (
   }
 }
 
-/** The palette a design is drawn in, from the master's scheme with sane
- * fallbacks — a presentation missing a name should look like a default rather
- * than like a bug. */
+/** Relative luminance of `#rrggbb`, for deciding what reads against what. */
+const luminance = (hex: string): number => {
+  const channel = (from: number): number => {
+    const v = parseInt(hex.slice(from, from + 2), 16) / 255
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+  }
+  return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5)
+}
+
+/** WCAG contrast ratio between two `#rrggbb` colours, 1 (none) to 21. */
+const contrast = (a: string, b: string): number => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [
+    number,
+    number,
+  ]
+  return (hi + 0.05) / (lo + 0.05)
+}
+
+const isHex = (value: string | undefined): value is string =>
+  typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)
+
+/**
+ * The colour the deck's words are actually set in.
+ *
+ * Weighted by how much text is in each colour, so the body copy decides and a
+ * one-word accent does not. This is evidence rather than declaration: a
+ * presentation's colour scheme says what `DARK1` stands for, not that the deck
+ * writes in it — a deck on a dark background writes in `LIGHT1` and taking
+ * `DARK1` gives near-black text on near-black, which is what an imported
+ * design looked like.
+ */
+const dominantTextColor = (pages: SourcePage[]): string | undefined => {
+  const weight = new Map<string, number>()
+  for (const page of pages) {
+    for (const element of page.elements) {
+      for (const run of element.runs ?? []) {
+        if (!isHex(run.color)) continue
+        weight.set(run.color, (weight.get(run.color) ?? 0) + run.text.length)
+      }
+    }
+  }
+  return [...weight.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
+}
+
+/** Enough contrast to read at body size. Below this the design is unusable,
+ * whatever the presentation said. */
+const READABLE = 3
+
+/**
+ * The palette a design is drawn in.
+ *
+ * Backgrounds and accents come from the presentation's own scheme; the text
+ * colour comes from the text, because that is the one the scheme is least
+ * reliable about. Every choice is checked against the background before it is
+ * kept — an imported design that cannot be read is not the design that was
+ * imported, it is a bug wearing its colours.
+ */
 const themeOf = (
   scheme: Record<string, string>,
-  firstSlideBackground: string | undefined,
-): SourceTheme => ({
-  background: firstSlideBackground ?? scheme.LIGHT1 ?? '#ffffff',
-  text: scheme.DARK1 ?? '#1c2230',
-  accent: scheme.ACCENT1 ?? '#4a54d1',
-  muted: scheme.DARK2 ?? scheme.ACCENT2 ?? '#6b7280',
-})
+  background: string | undefined,
+  pages: SourcePage[],
+): SourceTheme => {
+  const bg = background ?? scheme.LIGHT1 ?? '#ffffff'
+  /** The first of these that can actually be read on this background. */
+  const readable = (...candidates: (string | undefined)[]): string => {
+    const hexes = candidates.filter(isHex)
+    return (
+      hexes.find(c => contrast(c, bg) >= READABLE) ??
+      // Nothing offered works, so fall back to the one that always does.
+      (luminance(bg) > 0.4 ? '#1c2230' : '#ffffff')
+    )
+  }
+  const text = readable(dominantTextColor(pages), scheme.DARK1, scheme.LIGHT1)
+  return {
+    background: bg,
+    text,
+    accent: readable(scheme.ACCENT1, scheme.ACCENT2, text),
+    // Muted is the quiet one, so it may sit closer to the background than the
+    // body text — but it still has to be legible.
+    muted: readable(scheme.DARK2, scheme.ACCENT2, text),
+  }
+}
 
 /** Turns one Slides API response into the shape everything downstream reads. */
 export const toSourcePresentation = (
@@ -666,7 +746,9 @@ export const toSourcePresentation = (
   return {
     id: (raw.presentationId as string) ?? '',
     title: (raw.title as string) || 'Imported design',
-    theme: themeOf(scheme, slides[0]?.background),
+    // The palette is read from the deck itself, layouts included: a title
+    // slide alone is a thin sample of what the design writes in.
+    theme: themeOf(scheme, slides[0]?.background, [...slides, ...layouts]),
     layouts,
     slides,
   }
