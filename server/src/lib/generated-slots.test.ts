@@ -382,3 +382,81 @@ describe('reading a slide’s authored boxes back out (GEN-11)', () => {
     expect(declaredContentOf(undefined, 'lab', AUTHORED)).toEqual({})
   })
 })
+
+describe('a sentence that mentions code is still a sentence (GEN-11)', () => {
+  const codeLayout = layout([{ name: 'body', kind: 'code', label: 'Body' }])
+  const mathLayout = layout([{ name: 'eq', kind: 'math', label: 'Equation' }])
+  const codeFor = (value: string) =>
+    splitGeneratedSlots({ body: value }, 'lab', codeLayout).declared.body
+  const mathFor = (value: string) =>
+    splitGeneratedSlots({ eq: value }, 'lab', mathLayout).declared.eq
+
+  it('refuses the sentence that reached a lecture', () => {
+    // Set in a monospaced box and clipped at the edge of the slide, because
+    // it happens to contain a bracket
+    expect(
+      codeFor(
+        'An array is a collection of values. For example, to store student marks: marks = [90, 85, 78]',
+      ),
+    ).toBeUndefined()
+  })
+
+  it('refuses a sentence carrying an assignment, a call or an arrow', () => {
+    expect(
+      codeFor('The counter is set with count = 0 at the top of the loop.'),
+    ).toBeUndefined()
+    expect(
+      codeFor('You call print(x) to show the value on the screen.'),
+    ).toBeUndefined()
+    expect(
+      codeFor('The arrow => introduces the body of a short function here.'),
+    ).toBeUndefined()
+  })
+
+  it('still keeps a listing that happens to hold a sentence in a string', () => {
+    // What is inside quotes says nothing about what the line IS
+    expect(
+      codeFor('print("An array is a collection of values in Python.")'),
+    ).toMatchObject({ kind: 'code' })
+  })
+
+  it('does not call a query prose merely for having words in a row', () => {
+    // Six ordinary words is not enough on its own — there is no sentence here.
+    // (The guard still turns this one down for want of any code token, which
+    // it did before any of this and is a separate narrowness; what matters
+    // here is that it is not being turned down as PROSE.)
+    expect(
+      codeFor('SELECT name FROM users WHERE active AND verified;'),
+    ).toMatchObject({ kind: 'code' })
+  })
+
+  it('still keeps a listing whose comment is a proper sentence', () => {
+    // More than one line is already more than a sentence
+    expect(
+      codeFor(
+        '# Add up all of the student marks in the list.\ntotal = sum(marks)',
+      ),
+    ).toMatchObject({ kind: 'code' })
+  })
+
+  it('still keeps the short listings that always had to pass', () => {
+    expect(codeFor('print(x)')).toMatchObject({ kind: 'code' })
+    expect(codeFor('for x in xs: print(x)')).toMatchObject({ kind: 'code' })
+    expect(codeFor('import numpy as np')).toMatchObject({ kind: 'code' })
+    expect(codeFor('total = sum(marks)')).toMatchObject({ kind: 'code' })
+  })
+
+  it('refuses a sentence about a formula, hyphen and all', () => {
+    // The operator check would have taken the hyphen in "well-known" for maths
+    expect(
+      mathFor('The well-known formula gives the roots of a quadratic.'),
+    ).toBeUndefined()
+  })
+
+  it('still keeps real LaTeX', () => {
+    expect(mathFor('E = mc^2')).toMatchObject({ kind: 'math' })
+    expect(mathFor('\\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}')).toMatchObject({
+      kind: 'math',
+    })
+  })
+})

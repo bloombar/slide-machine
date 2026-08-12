@@ -142,11 +142,39 @@ const asTable = (value: unknown): SlotValue | undefined => {
  * Deliberately permissive — a one-line `print(x)` must pass, and anything
  * genuinely ambiguous is kept. It only has to catch the sentence.
  */
+/**
+ * Whether one line reads as English prose, whatever else it happens to hold.
+ *
+ * The checks below look for evidence of code and stop at the first they find,
+ * which makes them blind to a sentence that mentions some: "An array is a
+ * collection of values. For example, to store student marks: marks = [90, 85]"
+ * contains a bracket, so it passed, and an instructor got a paragraph set in a
+ * monospaced box and clipped at the edge of the slide.
+ *
+ * Prose is recognized by two things together, because either alone is too
+ * eager. A run of ordinary words — `SELECT name FROM users WHERE active` is
+ * six of them and is not prose. And a sentence ending — a full stop followed
+ * by a space or the end, which an assignment and an attribute access are not.
+ */
+const readsAsProse = (text: string): boolean => {
+  // A listing may print a whole sentence and still be a listing, so what is
+  // inside quotes is not evidence about what the line IS.
+  const bare = text.replace(/(['"`])(?:\\.|(?!\1).)*?\1/g, ' ')
+  const sentenceEnd = /\.(\s|$)/.test(bare)
+  const wordRun = /\b[A-Za-z]+\b(?:[,;:]?\s+\b[A-Za-z]+\b){5,}/.test(bare)
+  return sentenceEnd && wordRun
+}
+
 export const looksLikeCode = (source: string): boolean => {
   const text = source.trim()
   if (!text) return false
-  // More than one line is already more than a sentence.
+  // More than one line is already more than a sentence. Checked before the
+  // prose test, which would otherwise reject a listing whose comment or
+  // docstring is a proper sentence — a real thing for a program to contain.
   if (/\n/.test(text)) return true
+  // A sentence that mentions code is still a sentence, whatever tokens it
+  // borrowed. This has to beat every check below, not join them.
+  if (readsAsProse(text)) return false
   // A call, an assignment, a comparison, a block, an index, a terminator.
   if (/[(){}[\];]|[^=!<>]=[^=]|[=!<>]=|->|=>|\+\+|::/.test(text)) return true
   // A lone keyword line — `pass`, `continue`, `return x`.
@@ -172,6 +200,9 @@ export const looksLikeCode = (source: string): boolean => {
 export const looksLikeMath = (tex: string): boolean => {
   const text = tex.trim()
   if (!text) return false
+  // Same blindness, same fix: "The well-known formula gives the roots." holds
+  // a hyphen, which the operator check below would have taken for maths.
+  if (readsAsProse(text)) return false
   // A LaTeX command, a script, a fraction bar, a relation or an operator.
   if (/\\[a-zA-Z]+|[_^{}]|[=<>+\-*/^]|\\\\/.test(text)) return true
   // A bare symbol or single variable is legitimate maths.

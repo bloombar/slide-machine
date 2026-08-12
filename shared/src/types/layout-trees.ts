@@ -202,12 +202,11 @@ const code: LayoutNode = {
   container: { mode: 'flex', direction: 'column', gap: 2 },
   children: [
     { id: 'title', slot: 'title', style: { textStyle: 'heading' } },
-    {
-      id: 'snippet',
-      slot: 'snippet',
-      grow: 1,
-      style: { background: 'surface', radius: 1, padding: 2 },
-    },
+    // No padding, background or corner of its own: the listing brings all
+    // three. Setting them here too inset the text a second time, and the
+    // fitter that picks a type size to keep the longest line on the slide
+    // does not know about that second inset — so the line ran off the edge.
+    { id: 'snippet', slot: 'snippet', grow: 1 },
   ],
 }
 

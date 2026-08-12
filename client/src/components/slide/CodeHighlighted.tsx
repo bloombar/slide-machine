@@ -117,7 +117,13 @@ export default function SlideCode({ source, language }: Props) {
     <pre
       // `whitespace-pre` and no wrapping: the author's indentation and line
       // breaks are the content, not a rendering choice.
-      className="hljs overflow-hidden rounded-[0.8cqi] p-[1.5cqi] text-start font-mono leading-[1.5] whitespace-pre"
+      //
+      // Scrolls rather than hides what overruns, which is what the unhighlighted
+      // fallback has always done. The type size below is chosen to keep the
+      // longest line on the slide, but it is a calculation against an assumed
+      // box — when it is wrong, a line the reader can reach beats one silently
+      // cut off mid-token.
+      className="hljs overflow-auto rounded-[0.8cqi] p-[1.5cqi] text-start font-mono leading-[1.5] whitespace-pre"
       style={{ fontSize: `${fitSize(source)}cqi` }}
       data-language={resolved ?? language ?? undefined}
     >
