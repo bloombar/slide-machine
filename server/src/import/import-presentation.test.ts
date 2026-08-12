@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { layoutSchema } from '../templates/builtin'
 import { WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
+import type { LayoutDecoration } from '@slide-machine/shared'
 import { importSourcePresentation, assetPrefix } from './import-presentation'
 import type {
   SourceElement,
@@ -575,5 +576,115 @@ describe('a presentation with nothing to derive', () => {
     expect(report.slidesRead).toBe(3)
     expect(report.layoutsCreated).toBe(0)
     expect(report.approximated).toBe(0)
+  })
+})
+
+/**
+ * A deck whose slides are each a different colour (TMPL-8).
+ *
+ * A template has ONE theme background; a deck like this has as many as it has
+ * designs. Consolidation already refuses to make two colours into one layout,
+ * but the colour was dropped on the way into the layout — so a red, a blue and
+ * an orange slide all arrived red.
+ */
+describe('a deck of several colours', () => {
+  const text = (
+    id: string,
+    placeholder: string,
+    box: { x: number; y: number; w: number; h: number },
+  ): SourceElement => ({ id, kind: 'text', box, placeholder })
+
+  const colourDeck = (): SourcePresentation => ({
+    id: 'p1',
+    title: 'Untitled presentation',
+    theme: {
+      background: '#e8382a',
+      text: '#000000',
+      accent: '#4285f4',
+      muted: '#595959',
+    },
+    layouts: [],
+    slides: [
+      {
+        id: 's1',
+        background: '#e8382a',
+        elements: [
+          text('t1', 'CENTERED_TITLE', { x: 0.06, y: 0.12, w: 0.88, h: 0.3 }),
+        ],
+      },
+      // A colour and an arrow, and not one box an author could type into
+      {
+        id: 's2',
+        background: '#5b8ad9',
+        elements: [
+          {
+            id: 'a2',
+            kind: 'decoration',
+            box: { x: 0.15, y: 0.06, w: 0.7, h: 0.1 },
+            fill: '#eeeeee',
+          },
+        ],
+      },
+      {
+        id: 's3',
+        background: '#e8992a',
+        elements: [
+          text('t3', 'TITLE', { x: 0.06, y: 0.08, w: 0.88, h: 0.14 }),
+          text('b3', 'BODY', { x: 0.6, y: 0.45, w: 0.34, h: 0.3 }),
+        ],
+      },
+    ],
+  })
+
+  /** The full-bleed fill a layout is painted with, if it has one. */
+  const backgroundOf = (layout: { decoration?: LayoutDecoration[] }) =>
+    layout.decoration?.find(d => d.w === 1 && d.h === 1)?.fill
+
+  const derivedLayouts = async () => {
+    const { template } = await importSourcePresentation(colourDeck())
+    return template.layouts.filter(l => l.type !== WHITEBOARD_LAYOUT_TYPE)
+  }
+
+  it('gives every slide a layout of its own', async () => {
+    // Three designs in, three designs out — not two
+    expect(await derivedLayouts()).toHaveLength(3)
+  })
+
+  it('paints each layout the colour its slide was', async () => {
+    const colours = (await derivedLayouts()).map(backgroundOf)
+    expect(colours).toEqual(['#e8382a', '#5b8ad9', '#e8992a'])
+  })
+
+  it('paints the colour behind everything else on the layout', async () => {
+    // Order is paint order: a band drawn under its own background would be
+    // invisible
+    const blue = (await derivedLayouts()).find(
+      l => backgroundOf(l) === '#5b8ad9',
+    )
+    expect(blue!.decoration![0]).toMatchObject({ x: 0, y: 0, w: 1, h: 1 })
+    expect(blue!.decoration![1]).toMatchObject({ fill: '#eeeeee' })
+  })
+
+  it('keeps a slide that is a colour and a shape and nothing else', async () => {
+    // Dropping it loses a whole page of the deck
+    const blue = (await derivedLayouts()).find(
+      l => backgroundOf(l) === '#5b8ad9',
+    )
+    expect(blue).toBeDefined()
+    expect(blue!.decoration).toHaveLength(2)
+  })
+
+  it('gives that layout a box, since a layout must declare one', async () => {
+    const blue = (await derivedLayouts()).find(
+      l => backgroundOf(l) === '#5b8ad9',
+    )
+    expect(blue!.slots.map(s => s.name)).toEqual(['body'])
+    expect(blue!.elementPositions!.body).toMatchObject({ w: 0.84 })
+  })
+
+  it('produces layouts the template schema accepts', async () => {
+    for (const layout of await derivedLayouts()) {
+      expect(layoutSchema.safeParse(layout).success).toBe(true)
+    }
   })
 })

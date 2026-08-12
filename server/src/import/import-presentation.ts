@@ -240,19 +240,28 @@ export const importSourcePresentation = async (
     // layout of its own.
     (slide.slotMetadata as unknown as SlotSpec[] | undefined)
 
-  // A slide with no boxes cannot become a layout: a layout must declare at
-  // least one, and one with none is rejected by the template schema — so
-  // deriving it would produce a template that cannot be saved.
+  // Slides that say nothing about how the deck looks are left out.
   //
-  // It happens for real decks, not just empty ones. A slide built from a
-  // layout and then left alone carries placeholders the author never sized,
-  // and a shape with no place on the page is not part of a design (see
-  // `boxFromChain`). What is left is a slide that says nothing about how the
-  // deck looks, and the honest thing is to derive nothing from it rather than
-  // an empty layout the author would have to delete.
+  // A slide built from a layout and then left alone carries placeholders the
+  // author never sized, and a shape with no place on the page is not part of
+  // a design (see `boxFromChain`). Such a slide can be left with no boxes at
+  // all — and a layout with no boxes is rejected by the template schema, so
+  // deriving one would produce a template that cannot be saved.
+  //
+  // But no boxes is not the same as no design. A slide that is a colour and
+  // an arrow is a design; dropping it loses a whole page of the deck, which
+  // is exactly what went missing from a three-colour import. So the test is
+  // whether the slide carries ANYTHING — boxes, decoration, or a background
+  // of its own — and `toLayout` gives a box to a design that has none.
+  const carriesDesign = (candidate: Candidate): boolean =>
+    candidate.slots.length > 0 ||
+    candidate.decoration.length > 0 ||
+    Boolean(candidate.background) ||
+    Boolean(candidate.backgroundImage)
+
   const candidates = source.slides
     .map(slide => candidateOf(slide, declarationsFor(slide)))
-    .filter(candidate => candidate.slots.length > 0)
+    .filter(carriesDesign)
 
   // A presentation that DEFINES layouts has already done the work
   // consolidation exists to do, and its author's own grouping beats any

@@ -155,6 +155,18 @@ const decorationOf = (
 ): LayoutDecoration[] => {
   const pieces: LayoutDecoration[] = []
 
+  // The colour this design is painted in, before anything drawn on top of it.
+  //
+  // A template has ONE theme background, and a deck whose slides are each a
+  // different colour has as many as it has designs. Consolidation already
+  // keeps those apart — two slides of different colours are never one layout —
+  // but the colour was then dropped on the way into the layout, so every
+  // design came out wearing the first slide's. A red deck, a blue slide and an
+  // orange slide arrived as three red layouts.
+  if (derived.background) {
+    pieces.push({ x: 0, y: 0, w: 1, h: 1, fill: derived.background })
+  }
+
   const background = derived.backgroundImage
     ? assets.get(derived.backgroundImage)
     : undefined
@@ -184,6 +196,29 @@ const toLayout = (
   assets: Map<string, string>,
 ): Layout => {
   const type = unique(slug(derived.type ?? ruleBasedType(derived)), taken)
+
+  // A design with no boxes of its own — a slide that is a colour and a shape,
+  // and nothing an author ever typed into. It is still worth keeping as a
+  // layout, and a layout must declare at least one box, so it is given one:
+  // a body across the middle of the slide, clear of the bands and rules that
+  // are usually along an edge. Better than losing the page.
+  if (!derived.slots.length) {
+    return {
+      type,
+      label: titleCase(type),
+      purpose:
+        derived.description ??
+        `Imported from ${derived.members.length} slide${derived.members.length === 1 ? '' : 's'} of the source presentation, which carried a design but no text.`,
+      slots: [{ name: 'body', kind: 'text', label: 'Body', multiline: true }],
+      elementPositions: {
+        body: { x: 0.08, y: 0.28, w: 0.84, h: 0.5 },
+      },
+      ...(decorationOf(derived, assets).length
+        ? { decoration: decorationOf(derived, assets) }
+        : {}),
+    }
+  }
+
   const slots: SlotSpec[] = derived.slots.map(slot =>
     // A box the presentation declared is restored exactly — kind, instruction
     // and limits — because a round trip through our own export must lose
