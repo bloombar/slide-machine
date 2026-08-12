@@ -97,6 +97,36 @@ const KIND_SHAPES: Record<string, string> = {
   image: 'image — never written; leave it out and give imageGuidance instead',
 }
 
+/**
+ * When to reach for a specialized box, as opposed to what to put in it.
+ *
+ * The kinds legend says what a code box holds; this says when one is called
+ * for, which is not the same question and was the one going unanswered. A
+ * lecturer working through a loop at the board says "so while n is greater
+ * than ten, we take one off" — they do not say "example". Waiting for the
+ * word means the listing never gets written and the slide carries a sentence
+ * about a program instead of the program.
+ *
+ * Only for the kinds this template actually declares: a design with no maths
+ * box should not be told when it would want one.
+ */
+const REACH_FOR_KIND: Record<string, string> = {
+  code:
+    'When the speaker STATES a program, a command, a function or a few lines ' +
+    'of a language — dictating it, walking through it, or describing what it ' +
+    'does closely enough to write it — that belongs in a code box. Choose a ' +
+    'layoutType that HAS one. They do not have to say "example", "code" or ' +
+    '"snippet" first; talking through the thing is the signal.',
+  math:
+    'When the speaker STATES an equation, a formula or an expression — ' +
+    'reading it out, deriving it, or naming a standard one — that belongs in ' +
+    'a maths box. Choose a layoutType that HAS one. They do not have to say ' +
+    '"formula" or "equation" first.',
+  table:
+    'When the speaker reads out figures that line up in rows and columns, ' +
+    'that belongs in a table box. Choose a layoutType that HAS one.',
+}
+
 /** The shapes worth explaining for this request: the kinds its layouts use. */
 const kindLegend = (
   descriptors: SlideGenerationRequest['layoutDescriptors'],
@@ -107,12 +137,21 @@ const kindLegend = (
   const lines = [...kinds]
     .map(kind => KIND_SHAPES[kind])
     .filter((line): line is string => Boolean(line))
+  const reach = [...kinds]
+    .map(kind => REACH_FOR_KIND[kind])
+    .filter((line): line is string => Boolean(line))
   return lines.length
     ? `\nEach slot's value takes the shape its KIND calls for. The kind decides` +
         ` what goes in a box, not its name or label — a box called "body" whose` +
         ` kind is code holds a listing, not a paragraph about one:\n${lines
           .map(line => `- ${line}`)
-          .join('\n')}`
+          .join('\n')}${
+          reach.length
+            ? `\nThis template has boxes for those, so use them:\n${reach
+                .map(line => `- ${line}`)
+                .join('\n')}`
+            : ''
+        }`
     : ''
 }
 
@@ -566,7 +605,8 @@ Current slide content: ${JSON.stringify(conventionalOnly(req.currentSlide.conten
           )
           .join(
             '\n',
-          )}\nA box like these holds ONE thing — one listing, one formula, one table — and an "update" REPLACES it outright; nothing is appended. So when this phrase changes one, return its COMPLETE new value: start from what is shown above, apply the change the speaker just described, and write the whole box out again. A fragment would destroy the rest of it. This applies in "delta" mode too, where the conventional boxes take only the new material. Leave a box out entirely when the phrase does not change it.`
+          )}\nA box like these holds ONE thing — one listing, one formula, one table — and an "update" REPLACES it outright; nothing is appended. So when this phrase CHANGES what is already there — a correction, a line added to the same program, a term moved across the same equation — return its COMPLETE new value: start from what is shown above, apply the change, and write the whole box out again. A fragment would destroy the rest of it. This applies in "delta" mode too, where the conventional boxes take only the new material. Leave a box out entirely when the phrase does not change it.
+A SECOND, SEPARATE one is not a change to that box: another program, another formula, a further worked example stands on its own and there is nowhere on this slide to put it. Choose "new" and give it a slide of its own — never overwrite the one already there, and never answer "none" merely because the box is full.`
       : ''
 
   // The raw speech captured while on the current slide, so the model can judge

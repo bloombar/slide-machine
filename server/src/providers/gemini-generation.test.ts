@@ -1281,3 +1281,110 @@ describe('a box the model must edit rather than overwrite (GEN-11)', () => {
     expect(prompts[1]).not.toContain('currently holds')
   })
 })
+
+describe('reaching for a specialized box without being asked (GEN-11)', () => {
+  const promptFor = async (req: SlideGenerationRequest): Promise<string> => {
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
+    )
+    await new GeminiGenerationProvider().generateSlideContent(req)
+    const [, init] = fetchMock.mock.calls[0]!
+    return JSON.parse(String(init.body)).contents[0].parts[0].text as string
+  }
+
+  const withKinds = (kinds: string[]): SlideGenerationRequest =>
+    ({
+      phrase: 'so while n is greater than ten we take one off',
+      rollingContext: [],
+      layoutDescriptors: [
+        {
+          type: 'content',
+          label: 'Content',
+          purpose: 'x',
+          slots: [
+            { name: 'title', kind: 'text', label: 'Title' },
+            ...kinds.map((kind, i) => ({
+              name: `slot${i}`,
+              kind,
+              label: `Slot ${i}`,
+            })),
+          ],
+        },
+      ],
+    }) as never
+
+  it('says a spoken program belongs in the code box, example or not', async () => {
+    // A lecturer working through a loop does not say "example" first
+    const prompt = await promptFor(withKinds(['code']))
+    expect(prompt).toContain('STATES a program')
+    expect(prompt).toContain('do not have to say "example"')
+  })
+
+  it('says a spoken equation belongs in the maths box', async () => {
+    const prompt = await promptFor(withKinds(['math']))
+    expect(prompt).toContain('STATES an equation')
+  })
+
+  it('says nothing about code to a template that has no code box', async () => {
+    // Telling a history template when it would want a listing spends the
+    // budget on a box that does not exist, and invites one nobody asked for
+    const prompt = await promptFor(withKinds(['bullets']))
+    expect(prompt).not.toContain('STATES a program')
+    expect(prompt).not.toContain('STATES an equation')
+  })
+})
+
+describe('a second worked example gets its own slide (GEN-11)', () => {
+  const promptFor = async (req: SlideGenerationRequest): Promise<string> => {
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
+    )
+    await new GeminiGenerationProvider().generateSlideContent(req)
+    const [, init] = fetchMock.mock.calls[0]!
+    return JSON.parse(String(init.body)).contents[0].parts[0].text as string
+  }
+
+  const onASlideHolding = (): SlideGenerationRequest =>
+    ({
+      phrase: 'here is another one, a for loop over a list',
+      rollingContext: [],
+      layoutDescriptors: [
+        {
+          type: 'content',
+          label: 'Content',
+          purpose: 'x',
+          slots: [
+            { name: 'title', kind: 'text', label: 'Title' },
+            { name: 'snippet', kind: 'code', label: 'Sample' },
+          ],
+        },
+      ],
+      currentSlide: {
+        layoutType: 'content',
+        bulletCount: 0,
+        bodyChars: 0,
+        content: {
+          declared: {
+            snippet: { kind: 'code', source: 'while n > 10:\n    n -= 1' },
+          },
+        },
+      },
+    }) as never
+
+  it('tells the model a further listing is new material, not an edit', async () => {
+    // The reported symptom: the first example lands and every one after it
+    // silently disappears, because the only box for it is already full
+    const prompt = await promptFor(onASlideHolding())
+    expect(prompt).toContain('SECOND, SEPARATE one is not a change to that box')
+    expect(prompt).toContain('give it a slide of its own')
+  })
+
+  it('forbids the two ways the second one used to vanish', async () => {
+    const prompt = await promptFor(onASlideHolding())
+    // Overwriting the first, and answering "nothing to do"
+    expect(prompt).toContain('never overwrite the one already there')
+    expect(prompt).toContain(
+      'never answer "none" merely because the box is full',
+    )
+  })
+})
