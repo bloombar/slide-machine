@@ -137,16 +137,30 @@ describe('template.importFromSlides (TMPL-8)', () => {
     expect(types).toContain('whiteboard')
   })
 
-  it('gives back every slide the deck had, as its own layout', async () => {
-    // A faithful import, asserted through the action: an instructor gets the
-    // deck they recognize and decides themselves what to merge or delete.
+  it('gives back the few designs the deck is built from, not one per slide', async () => {
+    // Consolidation asserted through the action (TMPL-8). The mock deck is
+    // deliberately messy — a handful of real designs rebuilt by hand with
+    // jitter on every copy — so a template of one layout per slide would be
+    // the near-duplicates the spec calls worse than useless
     await act(ada, 'quiz.connectGoogle')
     const { body } = await act(ada, 'template.importFromSlides', {
       presentationId: 'deck-1',
     })
+    expect(body.report.layoutsCreated).toBeLessThan(body.report.slidesRead)
+    // Every design, plus the blank slate every template owes (TMPL-7)
+    expect(body.template.layouts).toHaveLength(body.report.layoutsCreated + 1)
+  })
+
+  it('gives back every slide as its own layout when the author asks', async () => {
+    // The option, asserted through the action: the same deck the other way,
+    // for the author who wants it exactly as they drew it
+    await act(ada, 'quiz.connectGoogle')
+    const { body } = await act(ada, 'template.importFromSlides', {
+      presentationId: 'deck-1',
+      keepEverySlide: true,
+    })
     expect(body.report.layoutsCreated).toBe(body.report.slidesRead)
     expect(body.report.approximated).toBe(0)
-    // Every slide's design, plus the blank slate every template owes (TMPL-7)
     expect(body.template.layouts).toHaveLength(body.report.slidesRead + 1)
   })
 

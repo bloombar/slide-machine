@@ -68,6 +68,10 @@ export default function TemplateImport({
   const [error, setError] = useState<string | null>(null)
   const [report, setReport] = useState<ImportReport | null>(null)
   const [needsGoogle, setNeedsGoogle] = useState(false)
+  // Off by default: consolidating the deck into the few designs it is built
+  // from is what makes a template usable. On for the deck where that
+  // judgement is wrong (TMPL-8).
+  const [keepEverySlide, setKeepEverySlide] = useState(false)
 
   const presentationId = presentationIdFrom(link)
 
@@ -79,7 +83,7 @@ export default function TemplateImport({
     setReport(null)
     dispatchAction<{ template: Template; report: ImportReport }>(
       'template.importFromSlides',
-      { presentationId },
+      { presentationId, ...(keepEverySlide ? { keepEverySlide: true } : {}) },
     )
       .then(result => {
         setReport(result.report)
@@ -174,6 +178,24 @@ export default function TemplateImport({
           {t('common.cancel')}
         </button>
       </form>
+
+      {/* The judgement an import makes, offered rather than assumed: most
+          decks rebuild one design by hand and want it back as one layout,
+          and some are a handful of genuinely different pages. */}
+      <label className="mt-2 flex items-start gap-2 text-sm text-slate-600">
+        <input
+          type="checkbox"
+          checked={keepEverySlide}
+          onChange={e => setKeepEverySlide(e.target.checked)}
+          className="mt-0.5"
+        />
+        <span>
+          {t('template.import.keepEverySlide')}
+          <span className="block text-xs text-slate-500">
+            {t('template.import.keepEverySlideHint')}
+          </span>
+        </span>
+      </label>
 
       {/* Said only once something has been typed, so an empty field is not an
           error the instructor has not made yet. */}

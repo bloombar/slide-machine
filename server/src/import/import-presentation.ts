@@ -30,6 +30,7 @@ import {
 } from './build-template'
 import { candidateOf, type Candidate } from './candidate'
 import {
+  consolidateWithSemantics,
   verbatimWithSemantics,
   deriveLayouts,
   observedFrom,
@@ -222,6 +223,21 @@ export const importSourcePresentation = async (
   options: {
     provider?: Pick<GenerationProvider, 'describeImportedLayouts'>
     assetPrefix?: string
+    /**
+     * Give every slide a layout of its own, instead of consolidating the deck
+     * into the few designs it is really built from (TMPL-8).
+     *
+     * Off by default, because consolidation is what makes a template usable:
+     * a forty-slide deck imported slide-for-slide is forty near-identical
+     * layouts in the editor and — worse — forty near-identical options for
+     * the AI to choose between on every spoken phrase, described identically,
+     * so the choice is arbitrary.
+     *
+     * On, for the deck where that judgement is wrong: a short deck of
+     * genuinely different designs, or one an author wants back exactly as
+     * they drew it, to merge and delete themselves.
+     */
+    keepEverySlide?: boolean
   } = {},
 ): Promise<ImportResult> => {
   // A presentation this system exported carries each layout's slot
@@ -263,32 +279,38 @@ export const importSourcePresentation = async (
     .map(slide => candidateOf(slide, declarationsFor(slide)))
     .filter(carriesDesign)
 
-  // A presentation this system exported carries its own slot declarations,
-  // and re-importing one has to give back the template it came from — same
-  // layouts, same boxes, same kinds. That is a round trip, not an import of
-  // an unknown deck, so it keeps the grouping the export wrote down.
+  // A presentation this system exported round-trips losslessly, and the spec
+  // says so without conditions (TMPL-8; EXP-6 "materially the same template").
+  // So the round trip is not something `keepEverySlide` can switch off: an
+  // export of a three-layout template must come back as three layouts, not as
+  // one per slide.
   const isOwnExport =
     declaredByLayout.size > 0 || source.slides.some(slide => slide.slotMetadata)
 
-  // Anything else is imported FAITHFULLY: one layout per slide, exactly as
-  // the slide is.
+  // A presentation that DEFINES layouts has already done the work
+  // consolidation exists to do, and its author's own grouping beats any
+  // clustering of ours. So slides are grouped by the layout they were built
+  // on, and each group's design derived from those slides.
   //
-  // Consolidation — clustering near-identical slides into one standardized
-  // design — is deliberately not used here. It is the tidier answer and it is
-  // not the one an instructor wants first: a deck of fourteen slides should
-  // arrive as fourteen layouts they recognize, which they can then merge,
-  // delete or edit themselves. A template they have to reverse-engineer back
-  // into their own deck is worse than one with some near-duplicates in it.
-  //
-  // The passes still exist and still have their tests; `consolidateCandidates`
-  // and `consolidateWithSemantics` are how a tidying pass would be offered
-  // later, as something the user asks for rather than something done to them.
-  const authored = isOwnExport
-    ? authoredLayouts(source, candidates, declarationsFor)
-    : undefined
+  // Skipped when every slide is to be kept, because the whole point of that is
+  // one layout per slide and an authored grouping is a grouping — but only for
+  // a deck from elsewhere, which is the deck that option is about.
+  const authored =
+    options.keepEverySlide && !isOwnExport
+      ? undefined
+      : authoredLayouts(source, candidates, declarationsFor)
+
+  // `!isOwnExport` again, for the export whose layouts could not be paired up
+  // (a one-layout template, say): it falls past `consolidateAuthored`, and
+  // going verbatim there would split it slide-for-slide just the same.
   const { layouts, approximated } = authored
     ? await consolidateAuthored(authored, describeWith(options.provider))
-    : await verbatimWithSemantics(candidates, describeWith(options.provider))
+    : options.keepEverySlide && !isOwnExport
+      ? await verbatimWithSemantics(candidates, describeWith(options.provider))
+      : await consolidateWithSemantics(
+          candidates,
+          describeWith(options.provider),
+        )
 
   // Pictures are fetched after consolidation, so a deck whose slides collapsed
   // into three layouts does not pay to download forty copies of the same logo.
@@ -330,6 +352,9 @@ export const importPresentation = async (options: {
   presentationId: string
   ownerId: string
   provider?: Pick<GenerationProvider, 'describeImportedLayouts'>
+  /** One layout per slide, rather than the few designs the deck is built
+   * from (TMPL-8). The author's choice on the import screen. */
+  keepEverySlide?: boolean
 }): Promise<ImportResult> => {
   const source = await readPresentationLive(
     options.accessToken,
@@ -337,6 +362,7 @@ export const importPresentation = async (options: {
   )
   return importSourcePresentation(source, {
     ...(options.provider ? { provider: options.provider } : {}),
+    ...(options.keepEverySlide ? { keepEverySlide: true } : {}),
     assetPrefix: assetPrefix(options.ownerId, options.presentationId),
   })
 }

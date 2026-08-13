@@ -73,24 +73,21 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('a hand-built deck', () => {
-  it('becomes one layout per slide, exactly as the deck has them', async () => {
-    // An import is faithful first: twelve slides arrive as twelve layouts the
-    // instructor recognizes, to merge or delete themselves. Consolidating them
-    // into one design is tidier and is not what they asked for.
+  it('becomes far fewer layouts than it had slides', async () => {
+    // The whole point: twelve hand-built copies of one design are one design
     const deck = presentation(
       Array.from({ length: 12 }, (_, i) => slide(`s${i}`, (i % 3) * 0.002)),
     )
     const { template, report } = await importSourcePresentation(deck)
-    // Twelve designs, plus the blank slate every template owes (TMPL-7)
-    expect(template.layouts).toHaveLength(13)
-    expect(template.layouts.at(-1)!.type).toBe(WHITEBOARD_LAYOUT_TYPE)
+    // One design, plus the blank slate every template owes (TMPL-7)
+    expect(template.layouts.map(l => l.type)).toEqual(['list', 'whiteboard'])
     expect(report.slidesRead).toBe(12)
-    expect(report.layoutsCreated).toBe(12)
+    expect(report.layoutsCreated).toBe(1)
+    expect(report.largestMerge).toEqual({ type: 'list', slides: 12 })
   })
 
-  it('keeps each copy’s own position, without tidying them onto a grid', async () => {
-    // The jitter is the deck. Snapping it to a common grid is what makes a
-    // derived template tidier than its source, and tidier is not the same.
+  it('tidies the copies onto one grid, which is the point of deriving', async () => {
+    // Twelve hands missing the same spot is one intention, not twelve
     const deck = presentation([
       slide('s0', 0),
       slide('s1', 0.002),
@@ -100,14 +97,46 @@ describe('a hand-built deck', () => {
     const xs = template.layouts
       .filter(l => l.type !== WHITEBOARD_LAYOUT_TYPE)
       .map(l => l.elementPositions!.title!.x)
+    expect(new Set(xs).size).toBe(1)
+  })
+
+  it('keeps every slide when the author asks for that instead', async () => {
+    // The judgement is offered rather than assumed: a short deck of genuinely
+    // different pages wants them all back (TMPL-8)
+    const deck = presentation(
+      Array.from({ length: 12 }, (_, i) => slide(`s${i}`, (i % 3) * 0.002)),
+    )
+    const { template, report } = await importSourcePresentation(deck, {
+      keepEverySlide: true,
+    })
+    expect(template.layouts).toHaveLength(13)
+    expect(template.layouts.at(-1)!.type).toBe(WHITEBOARD_LAYOUT_TYPE)
+    expect(report.layoutsCreated).toBe(12)
+  })
+
+  it('keeps each copy’s own position when every slide is kept', async () => {
+    // No clustering means no snapping: the jitter IS the deck
+    const deck = presentation([
+      slide('s0', 0),
+      slide('s1', 0.002),
+      slide('s2', 0.004),
+    ])
+    const { template } = await importSourcePresentation(deck, {
+      keepEverySlide: true,
+    })
+    const xs = template.layouts
+      .filter(l => l.type !== WHITEBOARD_LAYOUT_TYPE)
+      .map(l => l.elementPositions!.title!.x)
     expect(new Set(xs).size).toBe(3)
   })
 
-  it('leaves nothing approximated, because nothing was merged', async () => {
+  it('approximates nothing when every slide is kept', async () => {
     const deck = presentation(
       Array.from({ length: 5 }, (_, i) => slide(`s${i}`, i * 0.003)),
     )
-    const { report } = await importSourcePresentation(deck)
+    const { report } = await importSourcePresentation(deck, {
+      keepEverySlide: true,
+    })
     expect(report.approximated).toBe(0)
     expect(report.largestMerge).toBeUndefined()
   })
@@ -340,6 +369,34 @@ describe('a presentation this system exported (EXP-8)', () => {
     }
   })
 
+  it('round-trips whatever the author ticked, because the spec has no condition on it', async () => {
+    // "Keep every slide" is a judgement about a deck from elsewhere. Our own
+    // export already states its grouping, and TMPL-8/EXP-6 promise that
+    // grouping back unconditionally — two slides built on one layout are one
+    // layout, not two, however the box is set
+    const { template, report } = await importSourcePresentation(roundTrip(), {
+      keepEverySlide: true,
+    })
+    const designed = template.layouts.filter(
+      l => l.type !== WHITEBOARD_LAYOUT_TYPE,
+    )
+    expect(designed).toHaveLength(1)
+    expect(report.layoutsCreated).toBe(1)
+  })
+
+  it('restores declared kinds on a round trip even with every slide kept', async () => {
+    // The other half of lossless: the grouping survives above, the metadata
+    // has to survive with it
+    const { template } = await importSourcePresentation(roundTrip(), {
+      keepEverySlide: true,
+    })
+    const slot = template.layouts[0]!.slots.find(
+      s => s.name === 'worked-example',
+    )
+    expect(slot!.kind).toBe('code')
+    expect(slot!.options).toEqual({ language: 'python' })
+  })
+
   it('infers as usual for a presentation carrying no declarations', async () => {
     // A deck from anywhere else has none, and that direction stays lossy
     const { template } = await importSourcePresentation(
@@ -352,10 +409,10 @@ describe('a presentation this system exported (EXP-8)', () => {
 /**
  * Re-importing a presentation THIS system exported (EXP-8).
  *
- * The one case that is not imported slide-for-slide: an export carries its own
- * slot declarations, so a round trip has to give back the template it came
- * from — the same layouts, with the slides that wore each one grouped under
- * it. An ordinary Google deck has no such record and is taken at face value.
+ * An export carries its own slot declarations, so a round trip has to give
+ * back the template it came from — the same layouts, with the slides that wore
+ * each one grouped under it. A deck from anywhere else has no such record, and
+ * the designs it is built from are worked out by clustering instead.
  */
 describe('a presentation that defines its own layouts', () => {
   /** A placeholder on a layout page: a real box, and no words — which is what
@@ -469,9 +526,8 @@ describe('a presentation that defines its own layouts', () => {
   })
 
   it('ignores the default layouts a hand-built deck happens to carry', async () => {
-    // Google gives every deck a layouts array, and this one carries no record
-    // of having been exported by us. It is an ordinary deck, so it is taken at
-    // face value: four slides, four layouts.
+    // Google gives every deck a layouts array; grouping a hand-built one by it
+    // would yield a single layout for the whole deck
     const hand = presentation([
       slide('s1'),
       slide('s2'),
@@ -483,9 +539,37 @@ describe('a presentation that defines its own layouts', () => {
       { id: 'l2', elements: [] },
     ]
     const { template } = await importSourcePresentation(hand)
+    // No slide names a layout, so clustering decides — and finds two designs
     expect(
       template.layouts.filter(l => l.type !== WHITEBOARD_LAYOUT_TYPE),
-    ).toHaveLength(4)
+    ).toHaveLength(2)
+  })
+
+  it('is skipped when the author asks to keep every slide', async () => {
+    // An authored grouping is still a grouping, and keeping every slide means
+    // exactly that (TMPL-8). A deck from elsewhere that happens to define
+    // layouts is the deck this option is about, so strip what marks a round
+    // trip and the grouping gives way
+    const foreign = authored()
+    foreign.layouts = foreign.layouts.map(({ slotMetadata: _, ...l }) => l)
+    const { template } = await importSourcePresentation(foreign, {
+      keepEverySlide: true,
+    })
+    expect(
+      template.layouts.filter(l => l.type !== WHITEBOARD_LAYOUT_TYPE),
+    ).toHaveLength(foreign.slides.length)
+  })
+
+  it('is not skipped for our own export, whatever the author ticked', async () => {
+    // The round trip is promised without conditions (TMPL-8; EXP-6), so it is
+    // not the checkbox's to revoke: four slides on two authored layouts come
+    // back as two layouts, not four
+    const { template } = await importSourcePresentation(authored(), {
+      keepEverySlide: true,
+    })
+    expect(
+      template.layouts.filter(l => l.type !== WHITEBOARD_LAYOUT_TYPE),
+    ).toHaveLength(2)
   })
 })
 
@@ -553,12 +637,23 @@ describe('the ceilings a design was built to (TMPL-6)', () => {
     expect(constraints).not.toHaveProperty('imageRequired')
   })
 
-  it('are left off a layout derived from a single slide', async () => {
+  it('reach the template when the deck is consolidated', async () => {
+    // Measured across the slides of a design, which is what makes them a
+    // ceiling rather than one slide's word count
+    const { template } = await importSourcePresentation(listDeck())
+    expect(template.layouts[0]!.constraints).toMatchObject({
+      maxTitleChars: 'A much longer title here'.length,
+    })
+  })
+
+  it('are left off when every slide is kept', async () => {
     // A ceiling read off many slides says what the design holds. Read off one
     // it says only what that slide happened to say — a title of "Nine char"
     // would cap the box at nine characters for good. With none, the limit
     // comes from the box and its type, which is what one slide can tell you.
-    const { template } = await importSourcePresentation(listDeck())
+    const { template } = await importSourcePresentation(listDeck(), {
+      keepEverySlide: true,
+    })
     for (const layout of template.layouts) {
       expect(layout.constraints).toBeUndefined()
     }

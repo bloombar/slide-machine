@@ -118,6 +118,37 @@ describe('importing', () => {
     )
   })
 
+  it('consolidates unless told otherwise, which is the useful default', async () => {
+    // Off is not the same as sent-as-false: the server's default IS
+    // consolidation, so the ordinary import says nothing about it (TMPL-8)
+    render(<TemplateImport onImported={vi.fn()} />)
+    openPanel()
+    expect(screen.getByRole('checkbox')).not.toBeChecked()
+    importLink('1AbCdEfGhIjKl')
+
+    await waitFor(() =>
+      expect(dispatchAction).toHaveBeenCalledWith('template.importFromSlides', {
+        presentationId: '1AbCdEfGhIjKl',
+      }),
+    )
+  })
+
+  it('asks for every slide when the instructor ticks the box', async () => {
+    // The judgement offered rather than assumed: a short deck of genuinely
+    // different pages wants them all back
+    render(<TemplateImport onImported={vi.fn()} />)
+    openPanel()
+    fireEvent.click(screen.getByRole('checkbox'))
+    importLink('1AbCdEfGhIjKl')
+
+    await waitFor(() =>
+      expect(dispatchAction).toHaveBeenCalledWith('template.importFromSlides', {
+        presentationId: '1AbCdEfGhIjKl',
+        keepEverySlide: true,
+      }),
+    )
+  })
+
   it('hands the new design back so it can be worn straight away', async () => {
     const onImported = vi.fn()
     dispatchAction.mockResolvedValue(result())

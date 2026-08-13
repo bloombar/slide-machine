@@ -373,7 +373,7 @@ export const templateExportToDrive = defineAction<
  * assumed (docs/TEMPLATES.md §11).
  */
 export const templateImportFromSlides = defineAction<
-  { presentationId: string; name?: string },
+  { presentationId: string; name?: string; keepEverySlide?: boolean },
   { template: Template; report: ImportReport },
   WithGoogle<Signed>
 >({
@@ -385,6 +385,9 @@ export const templateImportFromSlides = defineAction<
   input: z.object({
     presentationId: z.string().trim().min(1).max(120),
     name: z.string().trim().min(1).max(80).optional(),
+    /** Give every slide a layout of its own instead of consolidating the
+     * deck into the few designs it is built from (TMPL-8). */
+    keepEverySlide: z.boolean().optional(),
   }),
   execute: async (_ctx, input, { userId, googleUser: user }) => {
     const provider = registry.get<GenerationProvider>('generation')
@@ -399,9 +402,11 @@ export const templateImportFromSlides = defineAction<
           presentationId: input.presentationId,
           ownerId: userId,
           provider,
+          ...(input.keepEverySlide ? { keepEverySlide: true } : {}),
         })
       : await importSourcePresentation(mockPresentation(input.presentationId), {
           provider,
+          ...(input.keepEverySlide ? { keepEverySlide: true } : {}),
         })
 
     // An imported design still has to satisfy the same schema a hand-written
