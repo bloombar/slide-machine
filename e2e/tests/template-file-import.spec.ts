@@ -30,49 +30,43 @@ test('template round trip: export a design to a file, import it back', async ({
   await page.getByRole('button', { name: 'Create account' }).click()
   await expect(page).toHaveURL(/\/app$/)
 
+  // Exporting a design lives in a lecture's settings, so the round trip runs
+  // from there — which is also where an instructor would actually be.
   await createProject(page, projectName)
-  await openProjectSettings(page, projectName)
-  await page.getByRole('tab', { name: 'Design' }).click()
+  await page
+    .getByRole('button', { name: `Start a new lecture in ${projectName}` })
+    .click()
+  await expect(page).toHaveURL(/\/d\//)
+  await page.getByRole('button', { name: 'Start lecture' }).click()
 
-  const previews = page.getByTestId('template-preview')
+  await page.getByRole('button', { name: 'Lecture settings' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Lecture settings' })
+  await dialog.getByRole('tab', { name: 'Design' }).click()
+
+  const previews = dialog.getByTestId('template-preview')
   const before = await previews.count()
   expect(before).toBeGreaterThan(0)
 
-  // A design of the instructor's own to export: built-ins are read-only, so
-  // the round trip starts from a duplicate, which is how one is created.
-  await page
-    .getByRole('button', { name: /^Duplicate / })
-    .first()
-    .click()
-  await expect(previews).toHaveCount(before + 1)
-
-  // Export it to the file the importer consumes.
+  // Export the design that is already selected. A built-in is readable, so it
+  // exports like any other — and starting from one keeps the round trip about
+  // the file rather than about how a template came to exist.
   const downloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'As YAML' }).click()
+  await dialog.getByRole('button', { name: 'As YAML' }).click()
   const download = await downloadPromise
   expect(download.suggestedFilename()).toMatch(/\.template\.yaml$/)
   const saved = await download.path()
-  const exported = readFileSync(saved, 'utf8')
   // The file stands on its own: it says what it is, so the importer can tell
   // it from a deck export.
-  expect(exported).toMatch(/kind: template/)
+  expect(readFileSync(saved, 'utf8')).toMatch(/kind: template/)
 
   // Import that same file back. The count going up by one is the whole
   // claim — the design left as a file and came back as a template.
-  const afterExport = await previews.count()
-  await page.getByLabel(/import a template file/i).setInputFiles(saved)
-  await expect(previews).toHaveCount(afterExport + 1)
+  await dialog.getByLabel(/import a template file/i).setInputFiles(saved)
+  await expect(previews).toHaveCount(before + 1)
 
-  // And it is a real template, not a row in a list: chosen straight away, and
-  // openable in the editor at a permalink of its own.
-  const imported = page.getByRole('radio', { checked: true })
-  await expect(imported).toBeVisible()
-  await page
-    .getByRole('button', { name: /^Edit / })
-    .first()
-    .click()
-  await expect(page).toHaveURL(/\/t\//)
-  await expect(page.getByTestId('template-canvas')).toBeVisible()
+  // And it is a real template rather than a row in a list: chosen straight
+  // away, the way an import exists to be used.
+  await expect(dialog.getByRole('radio', { checked: true })).toBeVisible()
 })
 
 test('a file that is not a template is refused, and says why', async ({

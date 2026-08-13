@@ -414,6 +414,33 @@ feature it has a **mock mode**, which reads a deliberately messy sample deck —
 rebuilt by hand with jitter, plus one slide like nothing else in it — so the whole
 consolidation runs in tests and on a machine with no credentials.
 
+### Importing a template file
+
+A design also travels as the file it was exported to (SPEC
+[EXP-3](SPEC.md#exp-3-round-trip-import)). `template.import` takes the YAML
+`template.export` writes and recreates it as a new template in the caller's library;
+`template.importFromDrive` is the same import reading the file out of the connected Drive
+by pasted link, since EXP-3 allows an upload **or** a connected account. Once the bytes
+are in hand both take the same path, so neither route can drift into accepting what the
+other refuses.
+
+Two behaviours are worth knowing, because they differ from a **deck** import:
+
+- **It refuses rather than substitutes.** A deck naming an unknown template falls back to
+  the default and warns — the lecture's content is still worth recovering. A template has
+  nothing to fall back to, so a malformed file, a deck export, or a decoration picture that
+  cannot be retrieved refuses the whole import and lists why. Nothing is written until
+  every picture is stored, so a refusal leaves nothing behind.
+- **The pictures become the importer's own.** Decoration names files under the exporting
+  template's prefix; pointing at those would make one library's design depend on another's
+  and would be swept as theirs rather than the importer's
+  ([P-11](SPEC.md#16-privacy-security--compliance)). Each is re-stored under the new
+  template's prefix first.
+
+The file's `id` and `visibility` are read and discarded: an import is a new template owned
+by whoever imported it, and it arrives private, the same judgement the Google Slides import
+makes. The `whiteboard` layout is synthesized when a file has none.
+
 **4. Map content** — lecture import only (SPEC
 [EXP-5](SPEC.md#exp-5-lecture-import-from-google-slides)). Clustering has already assigned
 every source slide to a derived layout, so each slide's `layoutType` is known without
