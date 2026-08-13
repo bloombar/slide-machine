@@ -465,6 +465,8 @@
       "linkLabel": "Lien Google Slides",
       "linkPlaceholder": "Collez le lien de la présentation",
       "submit": "Importer le design",
+      "keepEverySlide": "Garder chaque diapositive comme sa propre mise en page",
+      "keepEverySlideHint": "Désactivé, les diapositives presque identiques deviennent une seule mise en page, harmonisée. Activé, vous récupérez le deck exactement tel que vous l'avez créé.",
       "working": "Lecture de la présentation…",
       "errors": {
         "link": "Cela ne ressemble pas à un lien Google Slides.",

@@ -465,6 +465,8 @@
       "linkLabel": "Google Slides link",
       "linkPlaceholder": "Paste the presentation link",
       "submit": "Import design",
+      "keepEverySlide": "Keep every slide as its own layout",
+      "keepEverySlideHint": "Off, near-identical slides become one layout and the design is tidied up. On, you get the deck exactly as you drew it.",
       "working": "Reading the presentation…",
       "errors": {
         "link": "That doesn't look like a Google Slides link.",

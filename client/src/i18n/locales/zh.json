@@ -465,6 +465,8 @@
       "linkLabel": "Google 幻灯片链接",
       "linkPlaceholder": "粘贴演示文稿链接",
       "submit": "导入设计",
+      "keepEverySlide": "每张幻灯片保留为独立版式",
+      "keepEverySlideHint": "关闭时，几乎相同的幻灯片会合并为一个版式并加以规整。开启时，将完全按照您绘制的样子导入。",
       "working": "正在读取演示文稿…",
       "errors": {
         "link": "这看起来不像 Google 幻灯片链接。",

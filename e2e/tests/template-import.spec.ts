@@ -81,12 +81,14 @@ test('template import: connect, paste a link, get a usable design', async ({
   await expect(report).toContainText(/10 slides became \d+ layouts/)
   await expect(report).toContainText(/nothing was changed in the presentation/i)
 
-  // Every slide comes back as its own layout: the instructor gets the deck
-  // they recognize, and decides for themselves what to merge or delete.
+  // The deck comes back as the few designs it is built from, not as ten
+  // near-duplicates — and the report says so, consolidation being a judgement
+  // the instructor is told about rather than one made silently (TMPL-8).
   const summary = (await report.textContent()) ?? ''
   const layouts = Number(/became (\d+) layouts/.exec(summary)?.[1] ?? '0')
-  expect(layouts).toBe(10)
-  await expect(report).not.toContainText(/Merged \d+ near-identical slides/)
+  expect(layouts).toBeGreaterThan(0)
+  expect(layouts).toBeLessThan(10)
+  await expect(report).toContainText(/Merged \d+ near-identical slides/)
 
   // It is a real template: in the library, rendered as a slide in its own
   // theme like any other, and already chosen — an import exists to be used.
