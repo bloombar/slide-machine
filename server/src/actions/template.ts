@@ -24,14 +24,23 @@ import type {
   Template,
 } from '@slide-machine/shared'
 import { defineAction } from './define'
-import { registerAction } from './dispatch'
+import { registerAction, ActionValidationError } from './dispatch'
+import {
+  parseTemplateImport,
+  layoutsWithWhiteboard,
+  decorationImages,
+  repointDecoration,
+} from '../lib/template-import'
+import { fetchAssets } from '../import/assets'
 import { TemplateModel, toTemplateDto } from '../models/template'
 import { UserModel } from '../models/user'
 import {
   layoutSchema,
+  listBuiltinTemplates,
   normalizeSlot,
   requireWhiteboardLayout,
 } from '../templates/builtin'
+import { readDriveFileTextLive } from '../lib/drive-file'
 import { listTemplatesFor } from '../templates/resolve'
 import { permalinkSlug } from '../lib/slug'
 import { templateToYaml } from '../lib/template-yaml'
@@ -427,6 +436,137 @@ export const templateImportFromSlides = defineAction<
   },
 })
 
+/**
+ * Round-trip import of a template YAML (EXP-3). Takes the document
+ * `template.export` produced and recreates it as a new template in the
+ * caller's library.
+ *
+ * ## It fails rather than substitutes
+ *
+ * A deck import that cannot resolve something falls back and warns, because
+ * the lecture's content is still worth recovering. A template has nothing to
+ * fall back to, so every problem here refuses the whole import (EXP-3). That
+ * covers a malformed file and, just as importantly, a picture that would not
+ * come: a design imported without its logo is not the design, and saying so
+ * is better than handing back something that looks nearly right.
+ *
+ * ## The pictures become the new template's own
+ *
+ * Decoration names files stored under the exporting template's prefix.
+ * Pointing at those would make one library's design depend on another's, and
+ * would leave the copy broken when the original is deleted and its assets
+ * swept (P-11). So each picture is fetched and re-stored under this
+ * template's prefix before anything is written.
+ */
+const storeImportedTemplate = async (
+  actionName: string,
+  content: string,
+  userId: string,
+  override?: string,
+): Promise<Template> => {
+  const parsed = parseTemplateImport(content)
+  if ('errors' in parsed) {
+    throw new ActionValidationError(actionName, parsed.errors)
+  }
+
+  const layouts = layoutsWithWhiteboard(parsed.data)
+  const name = override ?? parsed.data.name
+
+  // Fetched before the template is written, so a picture that will not come
+  // leaves nothing behind to clean up.
+  const images = decorationImages(layouts)
+  let stored = new Map<string, string>()
+  if (images.length) {
+    const prefix = `templates/import/${userId}/${randomBytes(8).toString('hex')}`
+    stored = (await fetchAssets(images, prefix)).stored
+    const missing = images.filter(url => !stored.has(url))
+    if (missing.length) {
+      throw new ActionValidationError(actionName, [
+        `Could not retrieve ${missing.length} of the design's ${images.length} pictures, so the template was not imported. Export it again from a library that still has them, or remove them from the file.`,
+        ...missing.map(url => `picture: ${url}`),
+      ])
+    }
+  }
+
+  const doc = await TemplateModel.create({
+    ownerId: userId,
+    name,
+    permalinkSlug: permalinkSlug(name, 'template'),
+    ...(parsed.data.renderMode ? { renderMode: parsed.data.renderMode } : {}),
+    theme: parsed.data.theme,
+    layouts: normalizeLayouts(repointDecoration(layouts, stored)),
+    // An import is the author's to review before anyone else sees it, the
+    // same judgement an import from Google Slides makes.
+    visibility: 'private',
+  })
+  return toTemplateDto(doc)
+}
+
+export const templateImport = defineAction<
+  { content: string; name?: string },
+  Template,
+  Signed
+>({
+  name: 'template.import',
+  access: signedIn(),
+  meter: requireImportVolume,
+  input: z.object({
+    content: z.string().min(1),
+    name: z.string().trim().min(1).max(80).optional(),
+  }),
+  execute: async (_ctx, input, { userId }) =>
+    storeImportedTemplate('template.import', input.content, userId, input.name),
+})
+
+/**
+ * The same import, from a template file kept in the caller's connected Drive
+ * (EXP-3: "imports may come from an upload or a connected account").
+ *
+ * A pasted link rather than a file browser, for the reason the Slides import
+ * takes one: the instructor already has the file open in Drive and its address
+ * is in their clipboard, so a browser would be a second thing to learn for the
+ * same result.
+ *
+ * Only the fetching differs. Once the bytes are in hand, a file from Drive and
+ * a file from disk are the same file, and are imported by the same code — so
+ * neither route can drift into accepting something the other refuses.
+ */
+export const templateImportFromDrive = defineAction<
+  { fileId: string; name?: string },
+  Template,
+  WithGoogle<Signed>
+>({
+  name: 'template.importFromDrive',
+  // The same surface the Slides import is gated by: both read a file out of
+  // the connected Drive, and both follow EXPORT_MODE into live or mock.
+  access: requiresGoogleDrive(signedIn(), 'export'),
+  meter: requireImportVolume,
+  input: z.object({
+    fileId: z.string().trim().min(1).max(120),
+    name: z.string().trim().min(1).max(80).optional(),
+  }),
+  execute: async (_ctx, input, { userId, googleUser: user }) => {
+    // Mock-backed like every other Google-touching path, so the suite and a
+    // machine with no credentials exercise the whole import.
+    const content = isLive()
+      ? await readDriveFileTextLive(
+          await accessTokenFor(decryptToken(user.googleQuizRefreshToken!)),
+          input.fileId,
+        )
+      : // A built-in serialized through the real exporter, so mock mode reads
+        // exactly the document a live Drive file would hold rather than a
+        // fixture that could drift from the format.
+        templateToYaml(listBuiltinTemplates()[0]!)
+
+    return storeImportedTemplate(
+      'template.importFromDrive',
+      content,
+      userId,
+      input.name,
+    )
+  },
+})
+
 registerAction(templateList)
 registerAction(templateGet)
 registerAction(templateExport)
@@ -436,3 +576,5 @@ registerAction(templateUpdate)
 registerAction(templateDelete)
 registerAction(templateExportToDrive)
 registerAction(templateImportFromSlides)
+registerAction(templateImport)
+registerAction(templateImportFromDrive)

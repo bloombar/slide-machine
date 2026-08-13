@@ -482,6 +482,19 @@
       },
       "connectPrompt": "连接 Google 账号，以便读取你云端硬盘中的演示文稿。",
       "connect": "连接 Google"
+    },
+    "fileImport": {
+      "open": "导入模板文件",
+      "working": "正在读取文件…",
+      "errors": {
+        "read": "无法读取该文件",
+        "invalid": "无法导入此模板：{details}",
+        "failed": "无法导入此模板",
+        "link": "这看起来不像 Google 云端硬盘链接。"
+      },
+      "driveLabel": "Google 云端硬盘中的模板文件",
+      "drivePlaceholder": "或粘贴模板文件的云端硬盘链接",
+      "driveSubmit": "从云端硬盘导入"
     }
   },
   "layout": {

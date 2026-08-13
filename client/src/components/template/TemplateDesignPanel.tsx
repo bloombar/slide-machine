@@ -23,6 +23,7 @@ import { templateName } from '../../i18n/templateName'
 import ConfirmDialog from '../ConfirmDialog'
 import TemplateLibrary from './TemplateLibrary'
 import TemplateImport from './TemplateImport'
+import TemplateFileImport from './TemplateFileImport'
 
 export default function TemplateDesignPanel({
   templates,
@@ -117,6 +118,14 @@ export default function TemplateDesignPanel({
           onLibraryChanged()
           // Chosen straight away, the way a fresh duplicate is: an import
           // exists to be used, and seeing it in place is how it gets reviewed.
+          onChange(imported.id, imported)
+        }}
+      />
+      {/* The same arrival by the other door: a template file this app wrote
+          earlier, brought back as a template (EXP-3). */}
+      <TemplateFileImport
+        onImported={imported => {
+          onLibraryChanged()
           onChange(imported.id, imported)
         }}
       />

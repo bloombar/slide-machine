@@ -18,7 +18,14 @@
  *     what the author edits and what the renderer draws (TMPL-4)
  *   - `elementPositions` — the same arrangement as absolute boxes, for the
  *     readers that cannot run CSS, and the whole of an imported design (TMPL-8)
+ *   - `decoration` — the bands, rules and logos painted behind the slots
  *   - `guides` — the guidelines its author worked to
+ *
+ * `decoration` belongs in that list for the same reason geometry does. A deck
+ * imported from Google Slides keeps its logo and its colour bands as
+ * decoration, so leaving it out would export such a template without the
+ * pieces that make it recognizable — a round trip that quietly drops the
+ * design is not one (EXP-3).
  *
  * Produced with the `yaml` library (never hand-built) so output is always valid.
  */
@@ -53,6 +60,9 @@ export const templateToYaml = (template: Template): string => {
       ...(Object.keys(layout.elementPositions ?? {}).length
         ? { elementPositions: layout.elementPositions }
         : {}),
+      // Same rule as geometry: written when there is some, absent when the
+      // design has none, rather than an empty list that reads as "no logo".
+      ...(layout.decoration?.length ? { decoration: layout.decoration } : {}),
       ...(layout.guides ? { guides: layout.guides } : {}),
     })),
   }

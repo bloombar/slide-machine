@@ -88,6 +88,9 @@ const ACCESS_INDEX: Record<string, AccessDescriptor> = {
   'template.duplicate': { resource: 'template', level: 'readable' },
   'template.export': { resource: 'template', level: 'readable' },
   'template.get': { resource: 'template', level: 'readable' },
+  // Creating a template from a file the caller supplies: there is no existing
+  // resource to be authorized against, only a signed-in owner for the new one.
+  'template.import': { resource: 'none', level: 'signedIn' },
   'template.list': { resource: 'none', level: 'signedIn' },
   'template.previewImage': { resource: 'none', level: 'signedIn' },
   'template.update': { resource: 'template', level: 'author' },
@@ -162,6 +165,13 @@ const ACCESS_INDEX: Record<string, AccessDescriptor> = {
   // Reads a presentation out of the caller's own Drive and makes a template
   // of it (TMPL-8). No template resource to guard — one is created — so the
   // gate is a signed-in caller with a Google connection.
+  // The same import, reading the file out of the connected Drive instead of
+  // an upload — so it needs the grant the upload route does not.
+  'template.importFromDrive': {
+    resource: 'none',
+    level: 'signedIn',
+    capabilities: ['google-drive'],
+  },
   'template.importFromSlides': {
     resource: 'none',
     level: 'signedIn',
