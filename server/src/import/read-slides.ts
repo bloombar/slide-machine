@@ -562,10 +562,19 @@ const elementOf = (
     }
   }
 
+  // A box's own fill, which is part of the design whether or not it holds
+  // words. Read only for the empty case before, so a deck whose colour lives
+  // on its text boxes rather than on its pages imported white.
+  const boxFill = colorOf(
+    shape.shapeProperties?.shapeBackgroundFill?.solidFill,
+    scheme,
+  )
+
   return {
     id,
     kind: 'text',
     box,
+    ...(boxFill ? { fill: boxFill } : {}),
     ...(placeholder ? { placeholder } : {}),
     ...(slotName ? { slotName } : {}),
     runs,

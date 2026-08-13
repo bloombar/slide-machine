@@ -282,6 +282,9 @@ const medianLayout = (members: Candidate[]): DerivedLayout => {
         ...(mode(mine.map(s => s.color))
           ? { color: mode(mine.map(s => s.color)) }
           : {}),
+        ...(mode(mine.map(s => s.background))
+          ? { background: mode(mine.map(s => s.background)) }
+          : {}),
         ...(mode(mine.map(s => s.bold)) ? { bold: true } : {}),
         ...(mode(mine.map(s => s.fontFamily))
           ? { fontFamily: mode(mine.map(s => s.fontFamily)) }

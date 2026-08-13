@@ -249,6 +249,9 @@ const toLayout = (
       ...(slot.fontSize ? { fontSize: slot.fontSize } : {}),
       ...(slot.bold ? { fontWeight: 700 } : {}),
       ...(slot.color ? { color: slot.color } : {}),
+      // The box's own fill: a deck may put its colour on the boxes rather
+      // than on the page, and dropping it imported the design white.
+      ...(slot.background ? { background: slot.background } : {}),
       ...(mapFont(slot.fontFamily)
         ? { fontFamily: mapFont(slot.fontFamily) }
         : {}),

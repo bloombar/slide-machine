@@ -1382,3 +1382,46 @@ describe('a placeholder nobody has typed into yet', () => {
     expect(element.align).toBe('center')
   })
 })
+
+describe('a deck whose colour lives on its boxes', () => {
+  it('keeps a text box’s own fill', () => {
+    // Not every deck paints its pages. One that colours its boxes instead
+    // imported white, because a shape's fill was read only when it held no
+    // words — a box with text lost it.
+    const filled = shape({
+      shape: {
+        shapeType: 'TEXT_BOX',
+        placeholder: { type: 'TITLE' },
+        shapeProperties: {
+          shapeBackgroundFill: {
+            propertyState: 'RENDERED',
+            solidFill: {
+              color: { rgbColor: { red: 1, green: 0.85, blue: 0 } },
+            },
+          },
+        },
+        text: {
+          textElements: [
+            { textRun: { content: 'Save the date\n', style: {} } },
+          ],
+        },
+      },
+    })
+    const read = toSourcePresentation(
+      presentation({ slides: [{ objectId: 's1', pageElements: [filled] }] }),
+    )
+    expect(read.slides[0]!.elements[0]).toMatchObject({
+      kind: 'text',
+      fill: '#ffd900',
+    })
+  })
+
+  it('says nothing for a box the deck left unfilled', () => {
+    const read = toSourcePresentation(
+      presentation({
+        slides: [{ objectId: 's1', pageElements: [textShape('Plain')] }],
+      }),
+    )
+    expect(read.slides[0]!.elements[0]).not.toHaveProperty('fill')
+  })
+})

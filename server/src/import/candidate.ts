@@ -40,6 +40,9 @@ export interface CandidateSlot {
   fontSize?: number
   bold?: boolean
   color?: string
+  /** The box's own fill, where the shape has one. Part of the design: a deck
+   * may put its colour on the boxes rather than on the page. */
+  background?: string
   /** The family the presentation named, mapped to a bundled stack later —
    * never fetched at display time (docs/TEMPLATES.md §5). */
   fontFamily?: string
@@ -214,6 +217,7 @@ export const candidateOf = (
       ...(sizeOf(element) !== undefined ? { fontSize: sizeOf(element) } : {}),
       ...(boldOf(element) ? { bold: true } : {}),
       ...(colorOf(element) ? { color: colorOf(element) } : {}),
+      ...(element.fill ? { background: element.fill } : {}),
       ...(fontOf(element) ? { fontFamily: fontOf(element) } : {}),
       ...(element.align ? { align: element.align } : {}),
       ...(element.vAlign ? { vAlign: element.vAlign } : {}),
