@@ -143,3 +143,61 @@ describe('EditableText', () => {
     expect(onSave).toHaveBeenCalledWith('Line one')
   })
 })
+
+/**
+ * A box is where its design put it, and typing in it is not a reason to move
+ * it. An imported title centres its contents vertically, so anything that
+ * makes the editor taller than the text it replaced pushes the words up and
+ * out from under the reader — and back down when they finish.
+ */
+describe('editing does not move the box', () => {
+  it('keeps the hint out of the flow, so it adds no height', () => {
+    render(
+      <EditableText
+        value="Runoff"
+        label="Slide title"
+        hint="The main presentation title or section heading."
+        onSave={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByTitle('Click to edit Slide title'))
+    const hint = screen.getByText(
+      'The main presentation title or section heading.',
+    )
+    // Absolutely placed under the field: visible, and costing no height
+    expect(hint).toHaveClass('absolute')
+    expect(hint).toHaveClass('top-full')
+  })
+
+  it('gives a one-line box one row, not two', () => {
+    render(
+      <EditableText
+        value="Runoff"
+        label="Slide body"
+        multiline
+        onSave={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByTitle('Click to edit Slide body'))
+    expect(screen.getByRole('textbox', { name: 'Slide body' })).toHaveAttribute(
+      'rows',
+      '1',
+    )
+  })
+
+  it('grows a row per line the text actually has', () => {
+    render(
+      <EditableText
+        value={'one\ntwo\nthree'}
+        label="Slide body"
+        multiline
+        onSave={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByTitle('Click to edit Slide body'))
+    expect(screen.getByRole('textbox', { name: 'Slide body' })).toHaveAttribute(
+      'rows',
+      '3',
+    )
+  })
+})
