@@ -1000,3 +1000,391 @@ describe('pingGemini', () => {
     expect((await pingGemini()).status).toBe('down')
   })
 })
+
+describe('a code box answered in prose is asked again (GEN-11)', () => {
+  const codeLayout = [
+    {
+      type: 'content',
+      label: 'Content',
+      purpose: 'x',
+      slots: [
+        { name: 'title', kind: 'text', label: 'Title' },
+        {
+          name: 'snippet',
+          kind: 'code',
+          label: 'Slide body',
+          options: { language: 'python' },
+        },
+      ],
+    },
+  ]
+
+  const request = () =>
+    ({
+      phrase: 'a while loop that counts down from ten',
+      rollingContext: [],
+      layoutDescriptors: codeLayout,
+    }) as never
+
+  it('retries, and keeps what the second answer gives', async () => {
+    // An empty box on a lecture slide helps nobody; the model usually complies
+    // when the demand is the only thing in front of it
+    const replies = [
+      {
+        action: 'new',
+        layoutType: 'content',
+        slots: {
+          title: 'While loops',
+          snippet: 'A while loop continues as long as n is greater than 10.',
+        },
+      },
+      { snippet: 'while n > 10:\n    n -= 1' },
+    ]
+    fetchMock.mockImplementation(async () => geminiReply(replies.shift()))
+
+    const result = await new GeminiGenerationProvider().generateSlideContent(
+      request(),
+    )
+    expect(result.declared?.snippet).toEqual({
+      kind: 'code',
+      source: 'while n > 10:\n    n -= 1',
+      language: 'python',
+    })
+  })
+
+  it('asks only for the box it refused, not for the slide again', async () => {
+    const prompts: string[] = []
+    const replies = [
+      {
+        action: 'new',
+        layoutType: 'content',
+        slots: { title: 'While loops', snippet: 'This shows a loop.' },
+      },
+      { snippet: 'print(1)' },
+    ]
+    fetchMock.mockImplementation(async (_url: string, init: RequestInit) => {
+      prompts.push(String(init?.body))
+      return geminiReply(replies.shift())
+    })
+
+    await new GeminiGenerationProvider().generateSlideContent(request())
+    expect(prompts).toHaveLength(2)
+    expect(prompts[1]).toContain('snippet')
+    expect(prompts[1]).toContain('python')
+    // It must know WHAT the slide is about — a retry with no topic writes
+    // something generic and correct-looking, which is how a lecture about
+    // while loops got a hello-world function
+    expect(prompts[1]).toContain('a while loop that counts down from ten')
+    expect(prompts[1]).toContain('While loops')
+    // The prose it wrongly returned is the best brief available
+    expect(prompts[1]).toContain('This shows a loop.')
+    // Knowing the topic is not permission to change the slide
+    expect(prompts[1]).toContain('Do not change the')
+  })
+
+  it('leaves the box empty when the second answer is prose too', async () => {
+    const replies = [
+      {
+        action: 'new',
+        layoutType: 'content',
+        slots: { title: 'While loops', snippet: 'This shows a loop.' },
+      },
+      { snippet: 'It repeats until the condition is false.' },
+    ]
+    fetchMock.mockImplementation(async () => geminiReply(replies.shift()))
+
+    const result = await new GeminiGenerationProvider().generateSlideContent(
+      request(),
+    )
+    expect(result.declared?.snippet).toBeUndefined()
+    expect(result.slots.title).toBe('While loops')
+  })
+
+  it('does not retry a box the model filled correctly', async () => {
+    let calls = 0
+    fetchMock.mockImplementation(async () => {
+      calls++
+      return geminiReply({
+        action: 'new',
+        layoutType: 'content',
+        slots: { title: 'While loops', snippet: 'while n > 10:\n    n -= 1' },
+      })
+    })
+
+    await new GeminiGenerationProvider().generateSlideContent(request())
+    expect(calls).toBe(1)
+  })
+})
+
+describe('a box the model must edit rather than overwrite (GEN-11)', () => {
+  const codeLayout = [
+    {
+      type: 'content',
+      label: 'Content',
+      purpose: 'x',
+      slots: [
+        { name: 'title', kind: 'text', label: 'Title' },
+        {
+          name: 'snippet',
+          kind: 'code',
+          label: 'Sample',
+          options: { language: 'python' },
+        },
+      ],
+    },
+  ]
+
+  const editRequest = (
+    overrides: Partial<SlideGenerationRequest> = {},
+  ): SlideGenerationRequest =>
+    ({
+      phrase: 'and add a break once it reaches zero',
+      rollingContext: [],
+      layoutDescriptors: codeLayout,
+      currentSlide: {
+        layoutType: 'content',
+        bulletCount: 0,
+        bodyChars: 0,
+        content: {
+          title: 'While loops',
+          declared: {
+            snippet: { kind: 'code', source: 'while n > 10:\n    n -= 1' },
+          },
+        },
+      },
+      ...overrides,
+    }) as never
+
+  const promptFor = async (req: SlideGenerationRequest): Promise<string> => {
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
+    )
+    await new GeminiGenerationProvider().generateSlideContent(req)
+    const [, init] = fetchMock.mock.calls[0]!
+    return JSON.parse(String(init.body)).contents[0].parts[0].text as string
+  }
+
+  it('shows the model what the box holds right now', async () => {
+    // Without this the model is editing blind: "add a break to that loop"
+    // arrives with no loop to add it to
+    const prompt = await promptFor(editRequest())
+    expect(prompt).toContain('while n > 10:')
+    expect(prompt).toContain('"snippet" (code)')
+  })
+
+  it('demands the complete value back, because it replaces', async () => {
+    // A box holds one program; a returned fragment would destroy the rest
+    const prompt = await promptFor(editRequest())
+    expect(prompt).toContain('REPLACES it outright')
+    expect(prompt).toContain('COMPLETE new value')
+  })
+
+  it('shows it even when layouts may not change', async () => {
+    // Replacement is how an authored box works, refit or not — the rule is
+    // not part of the refit bargain
+    const prompt = await promptFor(
+      editRequest({ allowLayoutRefit: false, allowRephrase: false }),
+    )
+    expect(prompt).toContain('while n > 10:')
+  })
+
+  it('shows a formula as its LaTeX, not as its stored wrapper', async () => {
+    const prompt = await promptFor(
+      editRequest({
+        layoutDescriptors: [
+          {
+            type: 'content',
+            label: 'Content',
+            purpose: 'x',
+            slots: [{ name: 'eq', kind: 'math', label: 'Equation' }],
+          },
+        ],
+        currentSlide: {
+          layoutType: 'content',
+          bulletCount: 0,
+          bodyChars: 0,
+          content: { declared: { eq: { kind: 'math', tex: 'E = mc^2' } } },
+        },
+      } as never),
+    )
+    expect(prompt).toContain('"eq" (math): "E = mc^2"')
+  })
+
+  it('says nothing when the slide has no authored boxes', async () => {
+    // Every phrase pays for this block; a deck of plain slides should not
+    const prompt = await promptFor(
+      editRequest({
+        currentSlide: {
+          layoutType: 'content',
+          bulletCount: 0,
+          bodyChars: 0,
+          content: { title: 'While loops' },
+        },
+      } as never),
+    )
+    expect(prompt).not.toContain('REPLACES it outright')
+  })
+
+  it('keeps the stored wrapper out of the current-content line', async () => {
+    // `{"kind":"code","source":…}` in the re-fit line reads as a shape to
+    // copy rather than a listing to edit
+    const prompt = await promptFor(editRequest({ allowLayoutRefit: true }))
+    expect(prompt).toContain('Current slide content: {"title":"While loops"}')
+  })
+
+  it('hands the current listing to the retry when the box is being edited', async () => {
+    // The retry's answer replaces the box too, so it needs the same warning
+    const prompts: string[] = []
+    const replies = [
+      {
+        action: 'update',
+        layoutType: 'content',
+        slots: { snippet: 'It stops once n reaches zero.' },
+      },
+      { snippet: 'while n > 10:\n    n -= 1\n    if n == 0:\n        break' },
+    ]
+    fetchMock.mockImplementation(async (_url: string, init: RequestInit) => {
+      prompts.push(String(init?.body))
+      return geminiReply(replies.shift())
+    })
+
+    const result = await new GeminiGenerationProvider().generateSlideContent(
+      editRequest(),
+    )
+    expect(prompts).toHaveLength(2)
+    expect(prompts[1]).toContain('currently holds')
+    expect(prompts[1]).toContain('while n > 10:')
+    expect(result.declared?.snippet).toMatchObject({
+      kind: 'code',
+      source: 'while n > 10:\n    n -= 1\n    if n == 0:\n        break',
+    })
+  })
+
+  it('does not show the previous listing when starting a new slide', async () => {
+    // A blank box on a new slide is not an edit; showing the last slide's
+    // program invites a copy of it
+    const prompts: string[] = []
+    const replies = [
+      {
+        action: 'new',
+        layoutType: 'content',
+        slots: { title: 'For loops', snippet: 'This iterates a sequence.' },
+      },
+      { snippet: 'for x in xs:\n    print(x)' },
+    ]
+    fetchMock.mockImplementation(async (_url: string, init: RequestInit) => {
+      prompts.push(String(init?.body))
+      return geminiReply(replies.shift())
+    })
+
+    await new GeminiGenerationProvider().generateSlideContent(editRequest())
+    expect(prompts[1]).not.toContain('currently holds')
+  })
+})
+
+describe('reaching for a specialized box without being asked (GEN-11)', () => {
+  const promptFor = async (req: SlideGenerationRequest): Promise<string> => {
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
+    )
+    await new GeminiGenerationProvider().generateSlideContent(req)
+    const [, init] = fetchMock.mock.calls[0]!
+    return JSON.parse(String(init.body)).contents[0].parts[0].text as string
+  }
+
+  const withKinds = (kinds: string[]): SlideGenerationRequest =>
+    ({
+      phrase: 'so while n is greater than ten we take one off',
+      rollingContext: [],
+      layoutDescriptors: [
+        {
+          type: 'content',
+          label: 'Content',
+          purpose: 'x',
+          slots: [
+            { name: 'title', kind: 'text', label: 'Title' },
+            ...kinds.map((kind, i) => ({
+              name: `slot${i}`,
+              kind,
+              label: `Slot ${i}`,
+            })),
+          ],
+        },
+      ],
+    }) as never
+
+  it('says a spoken program belongs in the code box, example or not', async () => {
+    // A lecturer working through a loop does not say "example" first
+    const prompt = await promptFor(withKinds(['code']))
+    expect(prompt).toContain('STATES a program')
+    expect(prompt).toContain('do not have to say "example"')
+  })
+
+  it('says a spoken equation belongs in the maths box', async () => {
+    const prompt = await promptFor(withKinds(['math']))
+    expect(prompt).toContain('STATES an equation')
+  })
+
+  it('says nothing about code to a template that has no code box', async () => {
+    // Telling a history template when it would want a listing spends the
+    // budget on a box that does not exist, and invites one nobody asked for
+    const prompt = await promptFor(withKinds(['bullets']))
+    expect(prompt).not.toContain('STATES a program')
+    expect(prompt).not.toContain('STATES an equation')
+  })
+})
+
+describe('a second worked example gets its own slide (GEN-11)', () => {
+  const promptFor = async (req: SlideGenerationRequest): Promise<string> => {
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
+    )
+    await new GeminiGenerationProvider().generateSlideContent(req)
+    const [, init] = fetchMock.mock.calls[0]!
+    return JSON.parse(String(init.body)).contents[0].parts[0].text as string
+  }
+
+  const onASlideHolding = (): SlideGenerationRequest =>
+    ({
+      phrase: 'here is another one, a for loop over a list',
+      rollingContext: [],
+      layoutDescriptors: [
+        {
+          type: 'content',
+          label: 'Content',
+          purpose: 'x',
+          slots: [
+            { name: 'title', kind: 'text', label: 'Title' },
+            { name: 'snippet', kind: 'code', label: 'Sample' },
+          ],
+        },
+      ],
+      currentSlide: {
+        layoutType: 'content',
+        bulletCount: 0,
+        bodyChars: 0,
+        content: {
+          declared: {
+            snippet: { kind: 'code', source: 'while n > 10:\n    n -= 1' },
+          },
+        },
+      },
+    }) as never
+
+  it('tells the model a further listing is new material, not an edit', async () => {
+    // The reported symptom: the first example lands and every one after it
+    // silently disappears, because the only box for it is already full
+    const prompt = await promptFor(onASlideHolding())
+    expect(prompt).toContain('SECOND, SEPARATE one is not a change to that box')
+    expect(prompt).toContain('give it a slide of its own')
+  })
+
+  it('forbids the two ways the second one used to vanish', async () => {
+    const prompt = await promptFor(onASlideHolding())
+    // Overwriting the first, and answering "nothing to do"
+    expect(prompt).toContain('never overwrite the one already there')
+    expect(prompt).toContain(
+      'never answer "none" merely because the box is full',
+    )
+  })
+})

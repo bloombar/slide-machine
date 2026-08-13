@@ -62,14 +62,25 @@ export interface SlideGenerationRequest {
     layoutType: string
     bulletCount: number
     bodyChars: number
-    /** The slide's exact slot content — present when layout re-fit is
-     * allowed, so the model can re-map it rather than guess it from
-     * the rolling context. */
+    /** The slide's exact slot content. The conventional four are present
+     * when layout re-fit is allowed, so the model can re-map them rather
+     * than guess them from the rolling context. */
     content?: {
       title?: string
       body?: string
       bullets?: string[]
       caption?: string
+      /**
+       * What the boxes a template's author named hold right now (GEN-11),
+       * keyed by slot name — sent whenever the slide has any, refit or not.
+       *
+       * These boxes are REPLACED wholesale by an update, not appended to: a
+       * box holds one program, one formula, one table. A model that cannot
+       * see the current listing can only overwrite it, so "add a break to
+       * that loop" loses the loop. Showing it is what makes the box editable
+       * by voice.
+       */
+      declared?: Record<string, SlotValue>
     }
     /** Everything the speaker has said while on this slide (its raw
      * `sourceTranscript`), so the model can judge what it already covers —
@@ -348,6 +359,37 @@ export interface SlideRefitResult {
   slots: Record<string, string | string[]>
 }
 
+/**
+ * One layout derived from an imported presentation, described for naming
+ * (TMPL-8 pass 5). Geometry only — the model is told where the boxes are and
+ * asked what the slide IS.
+ */
+export interface ImportedLayoutDescriptor {
+  slots: {
+    name: string
+    kind: string
+    /** Fractions of the slide, 0–1 from the top-left. */
+    box: { x: number; y: number; w: number; h: number }
+    /** Percent of the slide width, matching the template model's `cqi`. */
+    fontSize?: number
+    bold?: boolean
+  }[]
+  /** How many slides shared this design, which says how central it is. */
+  slideCount: number
+}
+
+/**
+ * What each layout is called, in order. Every field optional: a partial answer
+ * is worth having, and the importer's own rules fill the gaps — an import never
+ * depends on this call succeeding.
+ */
+export interface ImportedLayoutSemantics {
+  type?: string
+  description?: string
+  /** A sentence per box, keyed by slot name. */
+  slots?: Record<string, string>
+}
+
 export interface GenerationProvider {
   readonly name: string
   generateSlideContent(
@@ -366,4 +408,15 @@ export interface GenerationProvider {
    * per input, in order. Throwing is acceptable — callers fall back to a
    * proportional remap when embeddings are unavailable. */
   embedTexts(texts: string[]): Promise<number[][]>
+  /**
+   * Names the layouts derived from an imported presentation (TMPL-8 pass 5):
+   * what kind of slide each is, and what belongs in each box. One entry per
+   * layout, in order.
+   *
+   * Throwing is acceptable — the importer falls back to naming them by rule,
+   * because an import must not depend on a model being reachable.
+   */
+  describeImportedLayouts(
+    layouts: ImportedLayoutDescriptor[],
+  ): Promise<ImportedLayoutSemantics[]>
 }

@@ -15,7 +15,8 @@
 import type { LayoutSlot } from '@slide-machine/shared'
 import { tierOf } from '@slide-machine/shared'
 import type { LayoutProps } from './types'
-import { resolveStyle, contentStyle } from './boxStyle'
+import { resolveStyle, contentStyle, resolveColor } from './boxStyle'
+import { clipPathFor } from './decorationShape'
 
 export default function PositionedLayout({
   layout,
@@ -31,6 +32,37 @@ export default function PositionedLayout({
 
   return (
     <div className="relative h-full w-full">
+      {/*
+        Bands, rules, logos and background pictures, painted first so every
+        slot sits on top of them. They hold no content, so they are not
+        focusable and carry no alt text — a decorative logo announced on every
+        slide is noise to a screen reader, not information.
+      */}
+      {(layout?.decoration ?? []).map((piece, i) => (
+        <div
+          key={i}
+          aria-hidden="true"
+          className="pointer-events-none absolute bg-cover bg-center bg-no-repeat"
+          style={{
+            left: `${piece.x * 100}%`,
+            top: `${piece.y * 100}%`,
+            width: `${piece.w * 100}%`,
+            height: `${piece.h * 100}%`,
+            ...(piece.fill
+              ? { background: resolveColor(piece.fill, colors) }
+              : {}),
+            ...(piece.imageUrl
+              ? { backgroundImage: `url(${JSON.stringify(piece.imageUrl)})` }
+              : {}),
+            ...(piece.radius ? { borderRadius: `${piece.radius}cqi` } : {}),
+            // An arrow is an arrow. Unknown shapes clip to nothing and stay
+            // the rectangle they are bounded by.
+            ...(clipPathFor(piece.shape)
+              ? { clipPath: clipPathFor(piece.shape) }
+              : {}),
+          }}
+        />
+      ))}
       {placed.map(spec => {
         const box = positions[spec.name]!
         const style = resolveStyle(box, textStyles)

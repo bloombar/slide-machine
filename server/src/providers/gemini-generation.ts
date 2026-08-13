@@ -29,11 +29,15 @@ import type {
   RefitSlotDescriptor,
   LayoutType,
   SlotSpec,
+  SlotValue,
+  ImportedLayoutDescriptor,
+  ImportedLayoutSemantics,
 } from '@slide-machine/shared'
 import { isVoiceCommand, WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
 import type { HealthComponent } from '@slide-machine/shared'
 import { env } from '../config/env'
 import { hasContent, splitGeneratedSlots } from '../lib/generated-slots'
+import { importSemanticsPrompt } from './import-semantics-prompt'
 import { registry } from './registry'
 import { meterGeminiUsage, type GeminiUsageMetadata } from './usage-metadata'
 import { GenerationUnavailableError } from './errors'
@@ -93,6 +97,36 @@ const KIND_SHAPES: Record<string, string> = {
   image: 'image — never written; leave it out and give imageGuidance instead',
 }
 
+/**
+ * When to reach for a specialized box, as opposed to what to put in it.
+ *
+ * The kinds legend says what a code box holds; this says when one is called
+ * for, which is not the same question and was the one going unanswered. A
+ * lecturer working through a loop at the board says "so while n is greater
+ * than ten, we take one off" — they do not say "example". Waiting for the
+ * word means the listing never gets written and the slide carries a sentence
+ * about a program instead of the program.
+ *
+ * Only for the kinds this template actually declares: a design with no maths
+ * box should not be told when it would want one.
+ */
+const REACH_FOR_KIND: Record<string, string> = {
+  code:
+    'When the speaker STATES a program, a command, a function or a few lines ' +
+    'of a language — dictating it, walking through it, or describing what it ' +
+    'does closely enough to write it — that belongs in a code box. Choose a ' +
+    'layoutType that HAS one. They do not have to say "example", "code" or ' +
+    '"snippet" first; talking through the thing is the signal.',
+  math:
+    'When the speaker STATES an equation, a formula or an expression — ' +
+    'reading it out, deriving it, or naming a standard one — that belongs in ' +
+    'a maths box. Choose a layoutType that HAS one. They do not have to say ' +
+    '"formula" or "equation" first.',
+  table:
+    'When the speaker reads out figures that line up in rows and columns, ' +
+    'that belongs in a table box. Choose a layoutType that HAS one.',
+}
+
 /** The shapes worth explaining for this request: the kinds its layouts use. */
 const kindLegend = (
   descriptors: SlideGenerationRequest['layoutDescriptors'],
@@ -103,13 +137,80 @@ const kindLegend = (
   const lines = [...kinds]
     .map(kind => KIND_SHAPES[kind])
     .filter((line): line is string => Boolean(line))
+  const reach = [...kinds]
+    .map(kind => REACH_FOR_KIND[kind])
+    .filter((line): line is string => Boolean(line))
   return lines.length
     ? `\nEach slot's value takes the shape its KIND calls for. The kind decides` +
         ` what goes in a box, not its name or label — a box called "body" whose` +
         ` kind is code holds a listing, not a paragraph about one:\n${lines
           .map(line => `- ${line}`)
-          .join('\n')}`
+          .join('\n')}${
+          reach.length
+            ? `\nThis template has boxes for those, so use them:\n${reach
+                .map(line => `- ${line}`)
+                .join('\n')}`
+            : ''
+        }`
     : ''
+}
+
+/**
+ * The conventional four on their own, for the "current slide content" line.
+ *
+ * The authored boxes travel in the same object but are shown separately, with
+ * their kinds and their own rule — a raw `{"kind":"code","source":…}` dump
+ * would read as a shape to copy rather than a listing to edit.
+ */
+const conventionalOnly = (
+  content: NonNullable<SlideGenerationRequest['currentSlide']>['content'],
+) => {
+  const { declared: _declared, ...rest } = content ?? {}
+  return rest
+}
+
+/**
+ * What one authored box holds, as the JSON value the model would write for it.
+ *
+ * Shown in the value's own shape rather than the stored wrapper, so the model
+ * sees the thing it must return: a code box shows the listing as a JSON string
+ * (newlines escaped, exactly how it has to come back), a table shows its rows.
+ */
+const slotJson = (value: SlotValue): string => {
+  switch (value.kind) {
+    case 'code':
+      return JSON.stringify(value.source)
+    case 'math':
+      return JSON.stringify(value.tex)
+    case 'bullets':
+      return JSON.stringify(value.items)
+    case 'table':
+      return JSON.stringify({ header: value.header, rows: value.rows })
+    case 'image':
+      // Never written by the model; excluded upstream, handled for totality.
+      return '(a picture)'
+    default:
+      return JSON.stringify(value.value)
+  }
+}
+
+/**
+ * The listings and formulae a slide already holds, keyed by box name.
+ *
+ * Only the two kinds the specialized retry deals with, as plain text: it asks
+ * for a listing or an expression, so that is what it is shown.
+ */
+const currentSpecializedText = (
+  declared: Record<string, SlotValue> | undefined,
+): Record<string, string> | undefined => {
+  const entries = Object.entries(declared ?? {}).flatMap(([name, value]) =>
+    value.kind === 'code'
+      ? [[name, value.source] as const]
+      : value.kind === 'math'
+        ? [[name, value.tex] as const]
+        : [],
+  )
+  return entries.length ? Object.fromEntries(entries) : undefined
 }
 
 /**
@@ -131,6 +232,127 @@ const splitAndKeep = (
     ...(Object.keys(declared).length ? { declared } : {}),
     empty: !hasContent(split),
   }
+}
+
+/**
+ * The specialized boxes the model answered, and we refused.
+ *
+ * A code box given "A while loop continues as long as n is greater than 10"
+ * is dropped by `valueForKind` — nothing downstream could tell that from a
+ * listing, so it must not be stored as one. But dropping it silently leaves
+ * an empty box on a lecture slide, which is not what the instructor asked for
+ * either. These are the boxes worth asking about a second time: the model
+ * said something, and what it said was the wrong kind of thing.
+ */
+const refusedSpecialized = (
+  raw: Record<string, unknown>,
+  declared: Record<string, unknown> | undefined,
+  layoutType: string,
+  descriptors: SlideGenerationRequest['layoutDescriptors'],
+): SlotSpec[] =>
+  (descriptors.find(d => d.type === layoutType)?.slots ?? []).filter(
+    spec =>
+      (spec.kind === 'code' || spec.kind === 'math') &&
+      typeof raw[spec.name] === 'string' &&
+      (raw[spec.name] as string).trim().length > 0 &&
+      !declared?.[spec.name],
+  ) as SlotSpec[]
+
+/**
+ * Asks again for the refused boxes, and nothing else.
+ *
+ * It is told WHAT the slide is about and refused permission to change it — the
+ * two are not the same thing, and conflating them is how a lecture about while
+ * loops got a hello-world function. A retry with no topic has nothing to write
+ * about, so it writes something generic and correct-looking, which is worse
+ * than the prose it replaced.
+ *
+ * The prose the model wrongly returned is itself the best specification
+ * available: "a while loop that continues while n is greater than 10" says
+ * exactly what the listing should do. So it is handed back as the brief.
+ */
+const retrySpecialized = async (
+  refused: SlotSpec[],
+  context: {
+    phrase: string
+    title?: string
+    said: Record<string, string>
+    /** What the box holds already, when this is an edit to an existing one.
+     * Without it the retry writes a fresh listing and the previous one is
+     * gone — "add a break to that loop" has to keep the loop. */
+    current?: Record<string, string>
+  },
+): Promise<Record<string, unknown> | undefined> => {
+  const asked = refused
+    .map(spec =>
+      spec.kind === 'code'
+        ? `  "${spec.name}": a runnable ${
+            typeof spec.options?.language === 'string'
+              ? spec.options.language
+              : ''
+          } program listing — real newlines, real indentation, no markdown fence, no prose${
+            spec.description ? `. ${spec.description}` : ''
+          }`
+        : `  "${spec.name}": a LaTeX expression only, no $ delimiters, no prose${
+            spec.description ? `. ${spec.description}` : ''
+          }`,
+    )
+    .join('\n')
+
+  const described = refused
+    .map(spec =>
+      context.said[spec.name]
+        ? `  "${spec.name}" should do this: ${context.said[spec.name]}`
+        : '',
+    )
+    .filter(Boolean)
+    .join('\n')
+
+  // Boxes that already hold something: this is an edit, not a blank fill, and
+  // the retry has to return the whole box back — the value replaces what is
+  // there, so anything it leaves out is deleted.
+  const existing = refused
+    .map(spec =>
+      context.current?.[spec.name]
+        ? `  "${spec.name}" currently holds: ${JSON.stringify(
+            context.current[spec.name],
+          )}`
+        : '',
+    )
+    .filter(Boolean)
+    .join('\n')
+
+  const prompt = [
+    'Your previous answer described these boxes in words instead of filling',
+    'them. Write the thing itself this time, not a sentence about it.',
+    '',
+    `The lecturer just said: ${context.phrase}`,
+    ...(context.title ? [`The slide is titled: ${context.title}`] : []),
+    '',
+    ...(existing
+      ? [
+          'These boxes are not empty — what you return REPLACES what is there,',
+          'so apply the change to what they hold and return the COMPLETE new',
+          'contents of each, not just the changed part:',
+          existing,
+          '',
+        ]
+      : []),
+    ...(described
+      ? ['What you said each box should contain:', described, '']
+      : []),
+    'Write exactly that, as:',
+    asked,
+    '',
+    'Return JSON with exactly those keys and nothing else. Do not change the',
+    'slide, its title, or its layout — only fill these boxes.',
+  ].join('\n')
+
+  const text = await callGemini(prompt, 'Specialized retry')
+  const parsed = JSON.parse(text) as unknown
+  return parsed && typeof parsed === 'object'
+    ? (parsed as Record<string, unknown>)
+    : undefined
 }
 
 /** A command claim, validated separately: the model may (reasonably)
@@ -363,7 +585,28 @@ const instructions = (req: SlideGenerationRequest): string => {
       ? `\nFor "update", also set "updateMode":
 - "delta": adds a small amount; slots contain ONLY the added material. Keep layoutType "${req.currentSlide.layoutType}" unless another layout still displays every slot this slide uses.
 ${refitRule}
-Current slide content: ${JSON.stringify(req.currentSlide.content)}`
+Current slide content: ${JSON.stringify(conventionalOnly(req.currentSlide.content))}`
+      : ''
+
+  // What the slide's authored boxes hold right now (GEN-11). Shown for every
+  // update, refit or not: these boxes are replaced rather than appended to, so
+  // a model that cannot see the current listing can only overwrite it.
+  const declaredNow = req.currentSlide?.content?.declared
+  const currentDeclared =
+    declaredNow &&
+    Object.keys(declaredNow).length &&
+    req.currentSlide?.layoutType !== WHITEBOARD_LAYOUT_TYPE
+      ? `\nThe current slide's specialized boxes hold this RIGHT NOW, each shown as the JSON value it takes:\n${Object.entries(
+          declaredNow,
+        )
+          .map(
+            ([name, value]) =>
+              `- "${name}" (${value.kind}): ${slotJson(value)}`,
+          )
+          .join(
+            '\n',
+          )}\nA box like these holds ONE thing — one listing, one formula, one table — and an "update" REPLACES it outright; nothing is appended. So when this phrase CHANGES what is already there — a correction, a line added to the same program, a term moved across the same equation — return its COMPLETE new value: start from what is shown above, apply the change, and write the whole box out again. A fragment would destroy the rest of it. This applies in "delta" mode too, where the conventional boxes take only the new material. Leave a box out entirely when the phrase does not change it.
+A SECOND, SEPARATE one is not a change to that box: another program, another formula, a further worked example stands on its own and there is nowhere on this slide to put it. Choose "new" and give it a slide of its own — never overwrite the one already there, and never answer "none" merely because the box is full.`
       : ''
 
   // The raw speech captured while on the current slide, so the model can judge
@@ -418,6 +661,7 @@ Current slide content: ${JSON.stringify(req.currentSlide.content)}`
     ),
     deckTitle,
     updateRules,
+    currentDeclared,
     lockLayout,
     pinLayout,
     voiceCommands,
@@ -766,11 +1010,53 @@ export class GeminiGenerationProvider implements GenerationProvider {
             : (req.layoutDescriptors[0]?.type ?? 'content')
     ) as LayoutType
 
-    const { empty, ...content } = splitAndKeep(
+    let { empty, ...content } = splitAndKeep(
       parsed.slots,
       layoutType,
       req.layoutDescriptors,
     )
+
+    // A code or maths box the model answered in prose was refused, leaving it
+    // empty. Ask once more for just those boxes before giving up: the model
+    // usually complies when the demand is the only thing in front of it, and
+    // an empty box on a lecture slide helps nobody.
+    const refused = refusedSpecialized(
+      parsed.slots,
+      content.declared,
+      layoutType,
+      req.layoutDescriptors,
+    )
+    if (refused.length) {
+      const second = await retrySpecialized(refused, {
+        phrase: req.phrase,
+        title:
+          typeof parsed.slots.title === 'string'
+            ? parsed.slots.title
+            : undefined,
+        said: Object.fromEntries(
+          refused.map(spec => [
+            spec.name,
+            String(parsed.slots[spec.name] ?? ''),
+          ]),
+        ),
+        // Only for an update: on a "new" slide the box starts empty, and
+        // showing the previous slide's listing would invite a copy of it.
+        current:
+          parsed.action === 'update'
+            ? currentSpecializedText(req.currentSlide?.content?.declared)
+            : undefined,
+      }).catch(() => undefined)
+      if (second) {
+        const merged = splitAndKeep(
+          { ...parsed.slots, ...second },
+          layoutType,
+          req.layoutDescriptors,
+        )
+        const { empty: stillEmpty, ...retried } = merged
+        content = retried
+        empty = stillEmpty
+      }
+    }
     // A "new" slide with nothing on it is not a slide. Everything the model
     // returned failed validation — a malformed reply rather than a decision —
     // so the phrase is left alone instead of putting an empty slide in front
@@ -1040,6 +1326,27 @@ export class GeminiGenerationProvider implements GenerationProvider {
     if (!vectors || vectors.length !== texts.length)
       throw new Error('Gemini embed returned an unexpected number of vectors')
     return vectors
+  }
+
+  /**
+   * Names the layouts an import derived (TMPL-8 pass 5).
+   *
+   * One call for the whole set rather than one per layout: the model can only
+   * reuse a type name across layouts — which is what makes near-duplicates
+   * merge — if it sees them together.
+   *
+   * The response is returned as-is for the importer to validate. Parsing lives
+   * there because the importer is what knows which boxes exist and what a
+   * usable answer looks like.
+   */
+  async describeImportedLayouts(
+    layouts: ImportedLayoutDescriptor[],
+  ): Promise<ImportedLayoutSemantics[]> {
+    if (!layouts.length) return []
+    const raw = JSON.parse(
+      await callGemini(importSemanticsPrompt(layouts), 'Import semantics'),
+    ) as { layouts?: ImportedLayoutSemantics[] } | ImportedLayoutSemantics[]
+    return Array.isArray(raw) ? raw : (raw.layouts ?? [])
   }
 }
 

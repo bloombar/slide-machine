@@ -216,3 +216,126 @@ describe('a slide rendered from arrangement data', () => {
     expect(screen.getByText('A title')).toBeInTheDocument()
   })
 })
+
+describe('the parts of a design that hold no content (TMPL-8)', () => {
+  /** A layout with a band, a logo and a page-filling picture. */
+  const decorated = layout({
+    elementPositions: arranged.elementPositions,
+    decoration: [
+      { x: 0, y: 0, w: 1, h: 1, imageUrl: 'https://cdn.test/bg.jpg' },
+      { x: 0, y: 0.92, w: 1, h: 0.02, fill: '#b45309' },
+      {
+        x: 0.86,
+        y: 0.87,
+        w: 0.08,
+        h: 0.07,
+        imageUrl: 'https://cdn.test/l.png',
+      },
+    ],
+  })
+
+  const pieces = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll('[aria-hidden="true"]'))
+
+  it('draws each piece where the design puts it', () => {
+    const { container } = render(<PositionedLayout {...props(decorated)} />)
+    const band = pieces(container)[1] as HTMLElement
+    expect(band.style.top).toBe('92%')
+    expect(band.style.height).toBe('2%')
+    expect(band.style.width).toBe('100%')
+  })
+
+  it('paints a picture from the template’s own stored copy', () => {
+    const { container } = render(<PositionedLayout {...props(decorated)} />)
+    expect((pieces(container)[0] as HTMLElement).style.backgroundImage).toBe(
+      'url("https://cdn.test/bg.jpg")',
+    )
+  })
+
+  it('quotes the URL, so one with a bracket in it cannot break the CSS', () => {
+    const awkward = layout({
+      elementPositions: arranged.elementPositions,
+      decoration: [
+        { x: 0, y: 0, w: 1, h: 1, imageUrl: 'https://cdn.test/a b(1).png' },
+      ],
+    })
+    const { container } = render(<PositionedLayout {...props(awkward)} />)
+    expect((pieces(container)[0] as HTMLElement).style.backgroundImage).toBe(
+      'url("https://cdn.test/a b(1).png")',
+    )
+  })
+
+  it('paints a band from its fill', () => {
+    const { container } = render(<PositionedLayout {...props(decorated)} />)
+    expect((pieces(container)[1] as HTMLElement).style.background).toBe(
+      'rgb(180, 83, 9)',
+    )
+  })
+
+  it('resolves a theme key, so a palette stays the one source of truth', () => {
+    const themed = layout({
+      elementPositions: arranged.elementPositions,
+      decoration: [{ x: 0, y: 0, w: 1, h: 0.1, fill: 'accent' }],
+    })
+    const { container } = render(
+      <PositionedLayout {...props(themed, { accent: '#0066ff' })} />,
+    )
+    expect((pieces(container)[0] as HTMLElement).style.background).toBe(
+      'rgb(0, 102, 255)',
+    )
+  })
+
+  it('cuts a piece to the shape the deck drew', () => {
+    // An arrow imported as a grey rectangle is the most visible way a design
+    // stops looking like itself
+    const withArrow = layout({
+      elementPositions: arranged.elementPositions,
+      decoration: [
+        {
+          x: 0.15,
+          y: 0.06,
+          w: 0.7,
+          h: 0.1,
+          fill: 'accent',
+          shape: 'RIGHT_ARROW',
+        },
+      ],
+    })
+    const { container } = render(<PositionedLayout {...props(withArrow)} />)
+    expect((pieces(container)[0] as HTMLElement).style.clipPath).toContain(
+      'polygon(',
+    )
+  })
+
+  it('leaves a band as the rectangle it is', () => {
+    const { container } = render(<PositionedLayout {...props(decorated)} />)
+    expect((pieces(container)[0] as HTMLElement).style.clipPath).toBe('')
+  })
+
+  it('draws it behind the content, not over it', () => {
+    // A band painted last would cover the words it was meant to sit under
+    const { container } = render(<PositionedLayout {...props(decorated)} />)
+    const first = container.querySelector('.relative')!.firstElementChild
+    expect(first).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('is hidden from a screen reader and takes no clicks', () => {
+    // A decorative logo announced on every slide is noise, not information
+    const { container } = render(<PositionedLayout {...props(decorated)} />)
+    for (const piece of pieces(container)) {
+      expect(piece).toHaveAttribute('aria-hidden', 'true')
+      expect(piece).toHaveClass('pointer-events-none')
+    }
+  })
+
+  it('still shows every slot the layout declares', () => {
+    render(<PositionedLayout {...props(decorated)} />)
+    expect(screen.getByText('slot:title')).toBeInTheDocument()
+    expect(screen.getByText('slot:body')).toBeInTheDocument()
+  })
+
+  it('draws nothing extra for a layout with no decoration', () => {
+    const { container } = render(<PositionedLayout {...props(arranged)} />)
+    expect(pieces(container)).toHaveLength(0)
+  })
+})

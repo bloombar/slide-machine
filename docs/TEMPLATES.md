@@ -343,21 +343,76 @@ and image references. Nothing downstream refers to a Google-shaped field, which 
 a PowerPoint reader would plug into later.
 
 **2. Derive.** Geometry, colors and typography are extracted deterministically. Where the
-presentation defines its own masters and layouts, those become the candidates directly;
-where it does not — the common case — candidates are derived by clustering the slides, which
-is [§7](#7-consolidating-a-hand-built-deck).
+presentation defines its own layouts, **each layout page becomes a layout directly** — the
+layout *is* the design, and a slide is one use of it, so a hand that nudged a box on every
+slide has not redesigned the layout. Where it does not — the common case — candidates are
+derived by clustering the slides, which is [§7](#7-consolidating-a-hand-built-deck).
+
+> A layout page carries the boxes and their names but its placeholders are usually **empty**,
+> so it states no type size, color or font. Those are taken from the slides built on it:
+> geometry from the design, styling from its uses. A layout page with no readable boxes tells
+> us less than the slides do, so the deck falls back to clustering rather than importing a
+> layout with nothing on it.
+
+> A presentation is only treated as *defining* layouts when it declares more than one and its
+> slides genuinely use them. Google hands every deck a `layouts` array, and a hand-built
+> deck's slides all sit on one or two defaults — grouping by that would yield a single layout
+> for the whole deck, which is worse than clustering.
 
 The **only** model call assigns semantics: given each candidate's slot composition,
-positions, relative sizes and sample text lengths, it returns the conventional `type`, a
-`label`, the `purpose` prose, and `constraints`. No images are sent. If the call fails or
-returns something invalid, a rule-based fallback assigns types (image plus little text →
-`image-heavy`; bulleted body → `list`; title alone → `section`) with canned purposes —
-import degrades, it does not fail.
+positions and relative sizes, it returns the conventional `type`, the `purpose` prose, and a
+sentence per slot. **Names and sentences only — never geometry**, so a wrong answer can
+mislabel a layout but never produce one that draws incorrectly. No images and no slide text
+are sent. If the call fails, is unconfigured, or returns something invalid, a rule-based
+fallback assigns types (image alone → `image-heavy`; boxes side by side → `two-column`;
+bulleted body → `list`; a heading low on the page → `section`; otherwise `content`) — import
+degrades, it does not fail.
+
+**A presentation this system exported is restored, not inferred.** Where a page carries slot
+metadata ([EXP-8](SPEC.md#exp-8-slot-metadata-across-google-slides-round-trips)), each box's
+kind, label, instruction and limits come back verbatim — a code box holding a listing is
+indistinguishable from prose on the slide, so being told is the only way to know. Everything
+else is inferred, and that direction stays lossy.
+
+**Ceilings are measured, not guessed.** Each layout's `constraints` — how many bullets, how
+long a title — are the **largest actually observed** across the slides that used it, because
+what an author did is better evidence than what a box could have fitted. They reach the AI
+through the layout descriptor ([TMPL-6](SPEC.md#tmpl-6-layout-descriptors-for-ai-selection)),
+so generated slides sit in the design instead of overflowing it. Taking the largest means no
+existing slide is retroactively over its own limit.
+
+**Backgrounds and logos come with the design.** A page filled with a picture, a band or rule
+drawn behind the content, and a logo that appears in the same place on every slide of a design
+all become the layout's `decoration` — painted behind every slot, never editable, never
+generated into, never read aloud. Consolidation is what tells a **logo from a figure**: a
+picture that repeats identically across a design is decoration, one that changes per slide is
+content and stays a box the author fills.
+
+Every such picture is fetched into the template's own storage at import time and the layout
+points at that copy, because a presentation's image URLs are short-lived — a template that
+merely remembered them would look right for an hour and then be full of holes. One that cannot
+be retrieved is **left out rather than pointed at**, and counted in the report.
+
+**Fonts are mapped, never fetched.** A typeface name is matched to one of the app's own font
+stacks by the property that survives the mapping — serif, monospaced, geometric, humanist,
+or neither. Reproducing the original exactly would mean a request to a font host on every
+slide view ([§5](#5-typography)).
 
 Background fills and recurring images are downloaded into object storage at import time,
 because the source URLs are short-lived. The required `whiteboard` layout is synthesized.
 
-**3. Persist** as a normal user-owned template with `renderMode: 'positioned'`.
+**3. Persist** as a normal user-owned template with `renderMode: 'positioned'` — private,
+renamable, and applied to nothing. An import is a good guess and still a guess, so what it
+produces is a starting point its author reviews, never a change to a lecture.
+
+The action is `template.importFromSlides`, reached from the Design tab of a lecture's or
+project's settings: the instructor pastes the presentation's link and the id is read out of
+it. It is metered against the **import** allowance
+(SPEC [BILL-3](SPEC.md#bill-3-usage-caps--metering)), and needs no Google scope beyond the
+one already used to browse Drive ([§11](#11-operational-notes)). Like every Google-touching
+feature it has a **mock mode**, which reads a deliberately messy sample deck — three designs
+rebuilt by hand with jitter, plus one slide like nothing else in it — so the whole
+consolidation runs in tests and on a machine with no credentials.
 
 **4. Map content** — lecture import only (SPEC
 [EXP-5](SPEC.md#exp-5-lecture-import-from-google-slides)). Clustering has already assigned
@@ -592,10 +647,13 @@ the user is told what is blocking:
 
 ## 11. Operational notes
 
-- **Google Slides import needs a presentation-read scope** beyond the ones used for quiz
-  publishing and export. A stored authorization carries only the scopes it was issued with,
-  so already-connected instructors must **reconnect once**; the app detects the gap and
-  prompts. Setup: [GOOGLE_API_KEYS.md](GOOGLE_API_KEYS.md).
+- **Google Slides import needs no new OAuth scope, and nobody has to reconnect.** This note
+  previously said the opposite; a live check against the Slides API settled it. The `drive.readonly`
+  already granted for the folder picker is enough for `presentations.get`, so an instructor
+  connected for quiz publishing or export can import immediately. The reader still handles a
+  403/401 by asking for a reconnect rather than assuming — a file shared without the right
+  access produces the same status, and that case is real even when the scopes are fine.
+  Setup: [GOOGLE_API_KEYS.md](GOOGLE_API_KEYS.md).
 - **Import has a mock mode**, as every Google-touching feature does, so the test suite and
   local development need no Google setup at all.
 - **Metering**: an import counts against the import-volume allowance and its model call

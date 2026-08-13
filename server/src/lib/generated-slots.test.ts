@@ -11,6 +11,7 @@
 import { describe, it, expect } from 'vitest'
 import type { LayoutDescriptor } from '@slide-machine/shared'
 import {
+  declaredContentOf,
   hasContent,
   onlyDeclaredBy,
   splitGeneratedSlots,
@@ -235,5 +236,227 @@ describe('the layout a slide ends up on', () => {
 
   it('has nothing to filter when the model wrote no authored boxes', () => {
     expect(onlyDeclaredBy(undefined, 'lab', AUTHORED)).toEqual({})
+  })
+})
+
+describe('a code box is given code, or nothing (GEN-11)', () => {
+  const codeLayout = [
+    {
+      type: 'content',
+      label: 'Content',
+      purpose: 'x',
+      slots: [
+        { name: 'title', kind: 'text' as const, label: 'Title' },
+        { name: 'body', kind: 'code' as const, label: 'Slide body' },
+      ],
+    },
+  ]
+  const codeFor = (value: string) =>
+    splitGeneratedSlots({ body: value }, 'content', codeLayout as never)
+      .declared.body
+
+  it('refuses the sentence the model sometimes writes instead', () => {
+    // Seen in the wild, in a box whose kind was code: nothing downstream could
+    // tell it from a listing, so it rendered monospaced, looking exactly like
+    // the code it was describing
+    expect(
+      codeFor(
+        'A while loop continues as long as n is greater than 10, containing an if-else statement for conditional logic.',
+      ),
+    ).toBeUndefined()
+  })
+
+  it('keeps a one-line program, which is still a program', () => {
+    expect(codeFor('print(x)')).toMatchObject({ kind: 'code' })
+    expect(codeFor('return n + 1')).toMatchObject({ kind: 'code' })
+    expect(codeFor('pass')).toMatchObject({ kind: 'code' })
+  })
+
+  it('keeps anything with real line breaks', () => {
+    expect(codeFor('def f():\n    return 1')).toMatchObject({ kind: 'code' })
+  })
+
+  it('leaves the box empty rather than filling it with something wrong', () => {
+    // A half-filled slide is better than a slide that lies about what it holds
+    const split = splitGeneratedSlots(
+      { title: 'Loops', body: 'This snippet shows how a loop works.' },
+      'content',
+      codeLayout as never,
+    )
+    expect(split.declared.body).toBeUndefined()
+    expect(split.title).toBe('Loops')
+  })
+})
+
+describe('a maths box is given an expression, or nothing (GEN-11)', () => {
+  const mathLayout = [
+    {
+      type: 'content',
+      label: 'Content',
+      purpose: 'x',
+      slots: [{ name: 'eq', kind: 'math' as const, label: 'Equation' }],
+    },
+  ]
+  const mathFor = (value: string) =>
+    splitGeneratedSlots({ eq: value }, 'content', mathLayout as never).declared
+      .eq
+
+  it('refuses a sentence about the formula', () => {
+    // Typesetting prose produces a line of upright words pretending to be
+    // mathematics
+    expect(
+      mathFor('The quadratic formula gives the roots of a quadratic equation'),
+    ).toBeUndefined()
+  })
+
+  it('keeps real LaTeX', () => {
+    expect(mathFor('E = mc^2')).toMatchObject({ kind: 'math' })
+    expect(mathFor('\\frac{a}{b}')).toMatchObject({ kind: 'math' })
+    expect(mathFor('x')).toMatchObject({ kind: 'math' })
+  })
+})
+
+describe('reading a slide’s authored boxes back out (GEN-11)', () => {
+  const CODE = { kind: 'code', source: 'while n > 10:\n    n -= 1' } as const
+  const MATH = { kind: 'math', tex: 'E = mc^2' } as const
+
+  it('returns the boxes the author named, with what they hold', () => {
+    // The whole point: an update REPLACES one of these, so the model has to
+    // see the current listing to edit it rather than overwrite it
+    expect(declaredContentOf({ example: CODE }, 'lab', AUTHORED)).toEqual({
+      example: CODE,
+    })
+  })
+
+  it('leaves out a box the conventional four already carry', () => {
+    // `content.title` / `content.body` are sent in their own right; sending
+    // them twice would spend prompt on nothing
+    expect(
+      declaredContentOf(
+        {
+          title: { kind: 'text', value: 'Loops' },
+          body: { kind: 'text', value: 'A loop repeats.' },
+          bullets: { kind: 'bullets', items: ['one'] },
+          caption: { kind: 'text', value: 'Fig. 1' },
+        },
+        'lab',
+        CONVENTIONAL,
+      ),
+    ).toEqual({})
+  })
+
+  it('keeps a conventionally-named box that holds something else', () => {
+    // An author who turned "body" into a code box has a listing the prose
+    // field cannot express — and it is exactly the box a lecturer edits aloud
+    const codeBody = layout([
+      { name: 'title', kind: 'text', label: 'Title' },
+      { name: 'body', kind: 'code', label: 'Body' },
+    ])
+    expect(declaredContentOf({ body: CODE }, 'lab', codeBody)).toEqual({
+      body: CODE,
+    })
+  })
+
+  it('leaves pictures out', () => {
+    // The model never writes one; a stored ref and its credit are noise
+    const withImage = layout([
+      { name: 'diagram', kind: 'image', label: 'Diagram' },
+      { name: 'eq', kind: 'math', label: 'Equation' },
+    ])
+    expect(
+      declaredContentOf(
+        { diagram: { kind: 'image', ref: 'asset1' }, eq: MATH },
+        'lab',
+        withImage,
+      ),
+    ).toEqual({ eq: MATH })
+  })
+
+  it('drops a box the layout no longer declares', () => {
+    // A slide keeps content its old layout held (remapSlots); showing the
+    // model a box that is not on screen invites an edit that goes nowhere
+    expect(declaredContentOf({ leftover: CODE }, 'lab', AUTHORED)).toEqual({})
+  })
+
+  it('is empty for a slide with no slot map at all', () => {
+    expect(declaredContentOf(undefined, 'lab', AUTHORED)).toEqual({})
+  })
+})
+
+describe('a sentence that mentions code is still a sentence (GEN-11)', () => {
+  const codeLayout = layout([{ name: 'body', kind: 'code', label: 'Body' }])
+  const mathLayout = layout([{ name: 'eq', kind: 'math', label: 'Equation' }])
+  const codeFor = (value: string) =>
+    splitGeneratedSlots({ body: value }, 'lab', codeLayout).declared.body
+  const mathFor = (value: string) =>
+    splitGeneratedSlots({ eq: value }, 'lab', mathLayout).declared.eq
+
+  it('refuses the sentence that reached a lecture', () => {
+    // Set in a monospaced box and clipped at the edge of the slide, because
+    // it happens to contain a bracket
+    expect(
+      codeFor(
+        'An array is a collection of values. For example, to store student marks: marks = [90, 85, 78]',
+      ),
+    ).toBeUndefined()
+  })
+
+  it('refuses a sentence carrying an assignment, a call or an arrow', () => {
+    expect(
+      codeFor('The counter is set with count = 0 at the top of the loop.'),
+    ).toBeUndefined()
+    expect(
+      codeFor('You call print(x) to show the value on the screen.'),
+    ).toBeUndefined()
+    expect(
+      codeFor('The arrow => introduces the body of a short function here.'),
+    ).toBeUndefined()
+  })
+
+  it('still keeps a listing that happens to hold a sentence in a string', () => {
+    // What is inside quotes says nothing about what the line IS
+    expect(
+      codeFor('print("An array is a collection of values in Python.")'),
+    ).toMatchObject({ kind: 'code' })
+  })
+
+  it('does not call a query prose merely for having words in a row', () => {
+    // Six ordinary words is not enough on its own — there is no sentence here.
+    // (The guard still turns this one down for want of any code token, which
+    // it did before any of this and is a separate narrowness; what matters
+    // here is that it is not being turned down as PROSE.)
+    expect(
+      codeFor('SELECT name FROM users WHERE active AND verified;'),
+    ).toMatchObject({ kind: 'code' })
+  })
+
+  it('still keeps a listing whose comment is a proper sentence', () => {
+    // More than one line is already more than a sentence
+    expect(
+      codeFor(
+        '# Add up all of the student marks in the list.\ntotal = sum(marks)',
+      ),
+    ).toMatchObject({ kind: 'code' })
+  })
+
+  it('still keeps the short listings that always had to pass', () => {
+    expect(codeFor('print(x)')).toMatchObject({ kind: 'code' })
+    expect(codeFor('for x in xs: print(x)')).toMatchObject({ kind: 'code' })
+    expect(codeFor('import numpy as np')).toMatchObject({ kind: 'code' })
+    expect(codeFor('total = sum(marks)')).toMatchObject({ kind: 'code' })
+  })
+
+  it('refuses a sentence about a formula, hyphen and all', () => {
+    // The operator check would have taken the hyphen in "well-known" for maths
+    expect(
+      mathFor('The well-known formula gives the roots of a quadratic.'),
+    ).toBeUndefined()
+  })
+
+  it('still keeps real LaTeX', () => {
+    expect(mathFor('E = mc^2')).toMatchObject({ kind: 'math' })
+    expect(mathFor('\\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}')).toMatchObject({
+      kind: 'math',
+    })
   })
 })

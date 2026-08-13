@@ -20,9 +20,17 @@ afterEach(cleanup)
 // looking for English labels that are not there. Clearing on the way in makes
 // each test's starting language certain rather than dependent on what the last
 // one left behind.
+// Unconditionally, and after letting anything in flight land. `changeLanguage`
+// is async, so a switch a test started can still be pending when it ends: at
+// that moment `i18n.language` is STILL 'en', a check short-circuits, and the
+// switch lands in the middle of the NEXT test — which then reads French labels
+// it never asked for. Waiting a turn first, then setting English whatever the
+// singleton currently claims, is what makes that impossible rather than
+// unlikely.
 const useEnglish = async () => {
   localStorage.removeItem(LOCALE_STORAGE_KEY)
-  if (i18n.language !== 'en') await i18n.changeLanguage('en')
+  await new Promise(resolve => setTimeout(resolve, 0))
+  await i18n.changeLanguage('en')
 }
 beforeEach(useEnglish)
 afterEach(useEnglish)

@@ -712,11 +712,12 @@ describe('slide.add', () => {
 
     const added = await act(ada, 'slide.add', { deckId: deck.body.id })
     expect(added.status).toBe(200)
-    expect(added.body).toMatchObject({
-      index: 1,
-      layoutType: 'content',
-      title: 'New slide',
-    })
+    // Empty, the way a new slide is in every slide tool: its boxes draw
+    // themselves and say what to put in them, so seeding words that an
+    // audience would see and TTS would read aloud buys nothing.
+    expect(added.body).toMatchObject({ index: 1, layoutType: 'content' })
+    expect(added.body.title).toBeUndefined()
+    expect(added.body.body).toBeUndefined()
 
     const view = await act(ada, 'deck.get', { deckId: deck.body.id })
     expect(view.body.deck.slideOrder).toHaveLength(2)

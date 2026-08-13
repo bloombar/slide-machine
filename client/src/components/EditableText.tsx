@@ -220,15 +220,25 @@ export default function EditableText({
   }
 
   const field = multiline ? (
-    <textarea rows={Math.max(2, draft.split('\n').length)} {...sharedProps} />
+    // As many rows as the text has, no more: a floor of two made a one-line
+    // box taller the moment it was clicked, which moves a box that centres
+    // its contents. `minHeight` already holds the space the box displayed.
+    <textarea rows={Math.max(1, draft.split('\n').length)} {...sharedProps} />
   ) : (
     <input {...sharedProps} />
   )
   if (!hint) return field
+  // The hint sits OUT of the flow, under the field.
+  //
+  // In flow it made the content taller the moment editing began, and a box
+  // that centres its contents vertically — which an imported design's title
+  // usually does — pushed the words up and out from under the reader, then
+  // dropped them back when editing ended. A box is where its design put it,
+  // and typing in it is not a reason to move it.
   return (
-    <span className="inline-block w-full">
+    <span className="relative inline-block w-full">
       {field}
-      <span className="mt-[0.6cqi] block text-[1.4cqi] leading-snug opacity-60">
+      <span className="absolute top-full left-0 mt-[0.6cqi] block text-[1.4cqi] leading-snug opacity-60">
         {hint}
       </span>
     </span>

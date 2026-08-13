@@ -213,11 +213,15 @@ describe('SlideView in-place editing', () => {
       />,
     )
 
-    // The placeholder is invisible to the audience (transparent text,
-    // skeleton on hover/reveal — index.css) but stays clickable
-    expect(screen.getByText('Add slide caption')).toHaveClass('slot-blank')
+    // The invitation every slide tool shows, in the words they use for it —
+    // quiet enough to read as scaffolding, and clickable (index.css). Found
+    // by its box rather than its words: every text box says the same thing,
+    // which is the point.
+    const caption = screen.getByTitle('Click to edit Slide caption')
+    expect(caption).toHaveTextContent('Click to add text')
+    expect(caption).toHaveClass('slot-blank')
 
-    fireEvent.click(screen.getByText('Add slide caption'))
+    fireEvent.click(caption)
     fireEvent.change(screen.getByRole('textbox', { name: 'Slide caption' }), {
       target: { value: 'An overview' },
     })
@@ -235,7 +239,9 @@ describe('SlideView in-place editing', () => {
         template={template}
       />,
     )
-    expect(screen.queryByText('Add slide caption')).not.toBeInTheDocument()
+    expect(
+      screen.queryByTitle('Click to edit Slide caption'),
+    ).not.toBeInTheDocument()
   })
 })
 

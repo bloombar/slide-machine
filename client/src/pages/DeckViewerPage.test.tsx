@@ -2754,6 +2754,14 @@ describe('DeckViewerPage title in the primary nav', () => {
         expect(calls.some(u => u.includes('/api/slides/s1/tts'))).toBe(true),
       )
 
+      // Wait for playback to actually BE running, not merely for its first
+      // request to have been sent. `skipTo` is a no-op unless deck playback is
+      // active, so an arrow key pressed in the gap between the two is silently
+      // dropped — and the test then waits out its timeout for a request that
+      // will never come. The control flipping to Pause is the state itself
+      // saying so.
+      await screen.findByRole('button', { name: 'Pause playback' })
+
       fireEvent.keyDown(window, { key: 'ArrowRight' })
       await waitFor(() =>
         expect(calls.some(u => u.includes('/api/slides/s2/tts'))).toBe(true),

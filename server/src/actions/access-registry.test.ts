@@ -159,6 +159,14 @@ const ACCESS_INDEX: Record<string, AccessDescriptor> = {
     level: 'readable',
     capabilities: ['google-drive'],
   },
+  // Reads a presentation out of the caller's own Drive and makes a template
+  // of it (TMPL-8). No template resource to guard — one is created — so the
+  // gate is a signed-in caller with a Google connection.
+  'template.importFromSlides': {
+    resource: 'none',
+    level: 'signedIn',
+    capabilities: ['google-drive'],
+  },
   'deck.applyTemplateUpdate': { resource: 'deck', level: 'edit' },
   'deck.diarize': { resource: 'deck', level: 'edit' },
   'deck.refine': { resource: 'deck', level: 'edit' },

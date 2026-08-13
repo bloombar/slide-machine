@@ -123,6 +123,92 @@ const asTable = (value: unknown): SlotValue | undefined => {
  * enrichment from the keywords it gives instead (GEN-7/IMG-6), and a URL the
  * model invented would point at nothing.
  */
+/**
+ * Whether what came back for a code box is actually a program.
+ *
+ * The prompt tells the model a code box holds a listing and never a sentence
+ * about one, and most of the time it obeys. Most of the time is not a
+ * guarantee: the same prompt returns "A while loop continues as long as n is
+ * greater than 10, containing an if-else statement" often enough that an
+ * instructor sees it. Nothing downstream could tell that from code — it is a
+ * non-empty string either way — so it rendered in a monospaced box, looking
+ * exactly like the listing it was describing.
+ *
+ * So the shape is checked rather than trusted. Real code carries at least one
+ * of: a line break, an assignment or comparison, a call, a block character, or
+ * a keyword in a code position. English prose about code carries none of them
+ * and ends in a full stop.
+ *
+ * Deliberately permissive — a one-line `print(x)` must pass, and anything
+ * genuinely ambiguous is kept. It only has to catch the sentence.
+ */
+/**
+ * Whether one line reads as English prose, whatever else it happens to hold.
+ *
+ * The checks below look for evidence of code and stop at the first they find,
+ * which makes them blind to a sentence that mentions some: "An array is a
+ * collection of values. For example, to store student marks: marks = [90, 85]"
+ * contains a bracket, so it passed, and an instructor got a paragraph set in a
+ * monospaced box and clipped at the edge of the slide.
+ *
+ * Prose is recognized by two things together, because either alone is too
+ * eager. A run of ordinary words — `SELECT name FROM users WHERE active` is
+ * six of them and is not prose. And a sentence ending — a full stop followed
+ * by a space or the end, which an assignment and an attribute access are not.
+ */
+const readsAsProse = (text: string): boolean => {
+  // A listing may print a whole sentence and still be a listing, so what is
+  // inside quotes is not evidence about what the line IS.
+  const bare = text.replace(/(['"`])(?:\\.|(?!\1).)*?\1/g, ' ')
+  const sentenceEnd = /\.(\s|$)/.test(bare)
+  const wordRun = /\b[A-Za-z]+\b(?:[,;:]?\s+\b[A-Za-z]+\b){5,}/.test(bare)
+  return sentenceEnd && wordRun
+}
+
+export const looksLikeCode = (source: string): boolean => {
+  const text = source.trim()
+  if (!text) return false
+  // More than one line is already more than a sentence. Checked before the
+  // prose test, which would otherwise reject a listing whose comment or
+  // docstring is a proper sentence — a real thing for a program to contain.
+  if (/\n/.test(text)) return true
+  // A sentence that mentions code is still a sentence, whatever tokens it
+  // borrowed. This has to beat every check below, not join them.
+  if (readsAsProse(text)) return false
+  // A call, an assignment, a comparison, a block, an index, a terminator.
+  if (/[(){}[\];]|[^=!<>]=[^=]|[=!<>]=|->|=>|\+\+|::/.test(text)) return true
+  // A lone keyword line — `pass`, `continue`, `return x`.
+  if (
+    /^(pass|break|continue|return|import|from|def|class|let|const|var)\b/i.test(
+      text,
+    )
+  )
+    return true
+  return false
+}
+
+/**
+ * Whether what came back for a maths box is actually an expression.
+ *
+ * The same failure, in the same place: "The quadratic formula gives the roots
+ * of a quadratic equation." is prose, and typesetting it produces a line of
+ * upright words pretending to be mathematics.
+ *
+ * Real LaTeX carries a command, a symbol, or an operator between operands.
+ * A sentence of ordinary words carries none.
+ */
+export const looksLikeMath = (tex: string): boolean => {
+  const text = tex.trim()
+  if (!text) return false
+  // Same blindness, same fix: "The well-known formula gives the roots." holds
+  // a hyphen, which the operator check below would have taken for maths.
+  if (readsAsProse(text)) return false
+  // A LaTeX command, a script, a fraction bar, a relation or an operator.
+  if (/\\[a-zA-Z]+|[_^{}]|[=<>+\-*/^]|\\\\/.test(text)) return true
+  // A bare symbol or single variable is legitimate maths.
+  return text.length <= 3
+}
+
 export const valueForKind = (
   kind: SlotKind,
   raw: unknown,
@@ -143,14 +229,16 @@ export const valueForKind = (
     }
     case 'code': {
       const source = asText(raw)
-      if (!source?.trim()) return undefined
+      if (!source?.trim() || !looksLikeCode(source)) return undefined
       const language =
         typeof options?.language === 'string' ? options.language : undefined
       return { kind: 'code', source, ...(language ? { language } : {}) }
     }
     case 'math': {
       const tex = asText(raw)
-      return tex?.trim() ? { kind: 'math', tex } : undefined
+      return tex?.trim() && looksLikeMath(tex)
+        ? { kind: 'math', tex }
+        : undefined
     }
     case 'table':
       return asTable(raw)
@@ -234,5 +322,43 @@ export const onlyDeclaredBy = (
   )
   return Object.fromEntries(
     Object.entries(declared).filter(([name]) => names.has(name)),
+  )
+}
+
+/**
+ * What a slide's authored boxes hold right now, ready to show the model.
+ *
+ * The mirror of `splitGeneratedSlots`: that reads the model's answer onto a
+ * slide, this reads a slide back out for the next question. An update REPLACES
+ * one of these boxes rather than appending to it, so the model has to see the
+ * current listing to edit it — otherwise "add a break to that loop" arrives
+ * with no loop to add it to (GEN-11).
+ *
+ * Two exclusions. A box already carried by one of the conventional four is
+ * left out, because that is where it is being sent from. Note the test is the
+ * value's KIND, not its name: an author who turned `body` into a code box has
+ * a listing the prose field cannot express, so it belongs here — the same
+ * distinction `foldLegacy` draws about what a legacy field may clear.
+ *
+ * Pictures are left out too, because the model never writes one: a stored ref
+ * and its credit are noise in the prompt, and `imageGuidance` is how a slide's
+ * picture is chosen.
+ */
+export const declaredContentOf = (
+  slots: Record<string, SlotValue> | undefined,
+  layoutType: string,
+  descriptors: LayoutDescriptor[],
+): Record<string, SlotValue> => {
+  /** True when the conventional four already carry this box's content. */
+  const sentAsLegacy = (name: string, value: SlotValue): boolean =>
+    name === 'bullets'
+      ? value.kind === 'bullets'
+      : (name === 'title' || name === 'body' || name === 'caption') &&
+        (value.kind === 'text' || value.kind === 'preformatted')
+
+  return Object.fromEntries(
+    Object.entries(onlyDeclaredBy(slots, layoutType, descriptors)).filter(
+      ([name, value]) => value.kind !== 'image' && !sentAsLegacy(name, value),
+    ),
   )
 }

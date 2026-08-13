@@ -8,7 +8,7 @@ Respond with ONLY one JSON object, no markdown fences, exactly this shape:
 Decide exactly one action for the new phrase. Set "action" to EXACTLY one of the quoted values below, verbatim and lowercase — never a synonym or variant (not "create", "add", "edit", etc.). If none clearly applies, use "none":
 - "none": filler, asides, or classroom logistics — changes nothing.
 - "update": the phrase continues the CURRENT (last) slide's exact topic — build on that slide instead of starting a new one. For a small addition, put ONLY the new material in slots and never repeat existing content; the update rules below (when present) also let you re-map or re-state the whole slide, and say exactly what to put in slots.
-- "new": the phrase starts new material, shifts the angle, or the current slide is already comfortably full — produce a complete slide. Prefer "new" whenever in doubt: many small slides beat one crowded slide.{{voiceCommands}}{{updateRules}}{{lockLayout}}{{pinLayout}}{{deckTitle}}
+- "new": the phrase starts new material, shifts the angle, or the current slide is already comfortably full — produce a complete slide. Prefer "new" whenever in doubt: many small slides beat one crowded slide.{{voiceCommands}}{{updateRules}}{{currentDeclared}}{{lockLayout}}{{pinLayout}}{{deckTitle}}
 
 Choose layoutType strictly from this set — output one of these EXACT values and no other, ever. The current slide's own layout may NOT appear in this set (e.g. a freehand "whiteboard" drawing canvas): never reuse or output a layoutType that is not listed here. A slide whose layout is not in this set cannot be updated — treat the phrase as "new" (or "none" if it is filler).
 {{layouts}}

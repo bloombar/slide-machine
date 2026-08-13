@@ -14,7 +14,12 @@ import path from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
 import { createElement } from 'react'
-import type { Layout, LayoutNode, Slide } from '@slide-machine/shared'
+import type {
+  Layout,
+  LayoutNode,
+  Slide,
+  SlotValue,
+} from '@slide-machine/shared'
 import {
   WHITEBOARD_LAYOUT_TYPE,
   defaultLayoutTree,
@@ -37,33 +42,71 @@ const colors: ThemeColors = {
   highlighterColor: '#ff0',
 }
 
-/** Fully populated, so a slot is never skipped for being empty. */
-const fullSlide: Slide = {
-  id: 's1',
-  deckId: 'd1',
-  index: 0,
-  layoutType: 'content',
-  slots: {
-    title: { kind: 'text', value: 'Title' },
-    body: { kind: 'text', value: 'Body' },
-    bullets: { kind: 'bullets', items: ['one', 'two'] },
-    caption: { kind: 'text', value: 'Caption' },
-    image: { kind: 'image', ref: 'http://img/x.jpg' },
-    columns: { kind: 'text', value: 'Columns' },
-  },
-}
-
 interface TemplateFile {
   id: string
-  layouts: Array<{ type: string; slots: Array<string | { name: string }> }>
+  layouts: Array<{
+    type: string
+    slots: Array<string | { name: string; kind?: string }>
+  }>
 }
 
 const slotName = (s: string | { name: string }): string =>
   typeof s === 'string' ? s : s.name
 
+/** The kind a declared slot holds. A bare string is a conventional slot, and
+ * only the conventional names appear in that form. */
+const slotKind = (s: string | { name: string; kind?: string }): string => {
+  if (typeof s !== 'string') return s.kind ?? 'text'
+  if (s === 'bullets') return 'bullets'
+  if (s === 'image') return 'image'
+  return 'text'
+}
+
 const templateFiles: TemplateFile[] = readdirSync(templatesDir)
   .filter(f => f.endsWith('.json'))
   .map(f => JSON.parse(readFileSync(path.join(templatesDir, f), 'utf8')))
+
+/** Something of the right shape for a box of this kind, so it is never
+ * skipped for being empty. */
+const sampleFor = (kind: string): SlotValue => {
+  switch (kind) {
+    case 'bullets':
+      return { kind: 'bullets', items: ['one', 'two'] }
+    case 'image':
+      return { kind: 'image', ref: 'http://img/x.jpg' }
+    case 'code':
+      return { kind: 'code', source: 'while n > 10:\n    n -= 1' }
+    case 'math':
+      return { kind: 'math', tex: 'E = mc^2' }
+    case 'table':
+      return { kind: 'table', rows: [['a', 'b']] }
+    case 'preformatted':
+      return { kind: 'preformatted', value: 'literal' }
+    default:
+      return { kind: 'text', value: 'Text' }
+  }
+}
+
+/**
+ * A slide holding something for every box any shipped layout declares.
+ *
+ * Derived rather than listed, so adding a layout with a new box cannot make
+ * this test pass by silently skipping it — which is exactly how an empty box
+ * would look to the renderer.
+ */
+const fullSlide: Slide = {
+  id: 's1',
+  deckId: 'd1',
+  index: 0,
+  layoutType: 'content',
+  slots: Object.fromEntries(
+    templateFiles.flatMap(t =>
+      t.layouts.flatMap(l =>
+        l.slots.map(s => [slotName(s), sampleFor(slotKind(s))] as const),
+      ),
+    ),
+  ),
+}
 
 /** Every slot named anywhere in a tree. */
 const treeSlots = (node: LayoutNode, into = new Set<string>()): Set<string> => {

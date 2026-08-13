@@ -154,6 +154,8 @@ test('the built-in layouts keep the geometry their components had', async ({
       ['two-column', /^Two column/],
       ['image-heavy', /^Image/],
       ['quote', /^Quote/],
+      ['code', /^Code/],
+      ['formula', /^Formula/],
     ] as const) {
       const frame = await showLayout(page, type, pick)
       const nodes = await frame.locator('[data-node-id]').all()

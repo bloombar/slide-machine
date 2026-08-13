@@ -457,6 +457,29 @@
       "label": "Language",
       "hint": "Which language to highlight this listing as.",
       "auto": "None"
+    },
+    "import": {
+      "open": "Import a design from Google Slides",
+      "title": "Import a design from Google Slides",
+      "description": "Point at a presentation in your Drive and we'll work out the design behind it — colours, type and where things sit — and save it as a template you can edit.",
+      "linkLabel": "Google Slides link",
+      "linkPlaceholder": "Paste the presentation link",
+      "submit": "Import design",
+      "working": "Reading the presentation…",
+      "errors": {
+        "link": "That doesn't look like a Google Slides link.",
+        "google": "Google wouldn't let us read that presentation. Check you can open it yourself.",
+        "failed": "Could not import that presentation"
+      },
+      "report": {
+        "summary": "{slides} slides became {layouts} layouts.",
+        "merged": "Merged {count} near-identical slides into one layout.",
+        "approximated": "{count} slides matched no layout and were approximated.",
+        "assetsFailed": "{count} images could not be retrieved.",
+        "review": "The design is yours to edit — nothing was changed in the presentation."
+      },
+      "connectPrompt": "Connect a Google account to read a presentation from your Drive.",
+      "connect": "Connect Google"
     }
   },
   "layout": {
@@ -705,6 +728,8 @@
     "previous": "Previous slide",
     "next": "Next slide",
     "addSlot": "Add {name}",
+    "addTitle": "Click to add title",
+    "addText": "Click to add text",
     "image": {
       "alt": "Slide image"
     },

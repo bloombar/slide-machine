@@ -1,0 +1,342 @@
+/**
+ * One import, end to end (TMPL-8).
+ *
+ * The stages each do one thing and know nothing of each other; this is what
+ * runs them in order and decides what happens when one of them will not
+ * cooperate:
+ *
+ *   1. **read** the presentation into a provider-neutral shape
+ *   2. **describe** each slide as the layout it would be
+ *   3. **consolidate** those into the few designs the deck is really built
+ *      from, naming them with a model where one is reachable
+ *   4. **fetch** the pictures, since Google's URLs expire
+ *   5. **assemble** a template, and say what was lost on the way
+ *
+ * ## Only step 1 can fail the import
+ *
+ * If the presentation cannot be read there is nothing to import and the
+ * instructor gets a clear reason. After that, every stage degrades: a model
+ * that is down means layouts named by rule, a picture that will not come means
+ * an empty box, an unusual deck means a template with fewer layouts. All of it
+ * is counted and reported. An instructor who waited for an import should get
+ * something they can work with.
+ */
+import type { GenerationProvider, SlotSpec } from '@slide-machine/shared'
+import { fetchAssets } from './assets'
+import {
+  buildTemplate,
+  importReport,
+  type ImportReport,
+} from './build-template'
+import { candidateOf, type Candidate } from './candidate'
+import {
+  verbatimWithSemantics,
+  deriveLayouts,
+  observedFrom,
+  type Consolidation,
+  type DerivedLayout,
+  type LayoutSemantics,
+} from './consolidate'
+import { readPresentationLive } from './read-slides'
+import { parseSemantics, toDescriptors, withFallbacks } from './semantics'
+import type { SourcePage, SourcePresentation } from './source-presentation'
+import type { BuiltTemplate } from './build-template'
+
+export interface ImportResult {
+  template: BuiltTemplate
+  report: ImportReport
+}
+
+/** Where a template's own files live, so a retention sweep can find them and
+ * two imports never collide. */
+export const assetPrefix = (ownerId: string, presentationId: string): string =>
+  `templates/import/${ownerId}/${presentationId}`
+
+/**
+ * Names the layouts, falling back to the rules whenever the model will not.
+ *
+ * Wrapped rather than called directly because there are three ways this can go
+ * wrong — unconfigured, unreachable, or answering nonsense — and all three
+ * mean the same thing to the importer: use the rules.
+ */
+const describeWith =
+  (provider: Pick<GenerationProvider, 'describeImportedLayouts'> | undefined) =>
+  async (layouts: DerivedLayout[]) => {
+    if (!provider || !layouts.length) return withFallbacks(layouts, [])
+    try {
+      const raw = await provider.describeImportedLayouts(toDescriptors(layouts))
+      return withFallbacks(layouts, parseSemantics({ layouts: raw }, layouts))
+    } catch {
+      // An import must not depend on a model being reachable.
+      return withFallbacks(layouts, [])
+    }
+  }
+
+/**
+ * A layout the presentation itself defines, with the slides built on it.
+ *
+ * The spec's first source: a deck that DEFINES layouts has already done the
+ * work consolidation exists to do, and its author's own layout is better
+ * evidence than any median of the slides wearing it — it is the design, where
+ * a slide is one use of it.
+ */
+interface AuthoredLayout {
+  /** The layout page itself, read as a candidate: authoritative boxes and
+   * names, taken from the design rather than inferred from its uses. */
+  design: Candidate
+  /** The slides built on it, which is what the report and the lecture
+   * importer count (EXP-5). */
+  slides: Candidate[]
+}
+
+/**
+ * The layouts a presentation genuinely defines, or nothing.
+ *
+ * Nothing unless it defines more than one AND its slides actually use them:
+ * Google hands every deck a `layouts` array, and a hand-built deck's slides
+ * all sit on one or two defaults. Treating that as authored would give a
+ * single layout for the whole deck, which is worse than clustering.
+ */
+const authoredLayouts = (
+  source: SourcePresentation,
+  candidates: Candidate[],
+  declarationsFor: (page: SourcePage) => SlotSpec[] | undefined,
+): AuthoredLayout[] | undefined => {
+  if (source.layouts.length < 2) return undefined
+
+  const usedBy = new Map<string, Candidate[]>()
+  source.slides.forEach((slide, i) => {
+    const id = slide.layoutId
+    const candidate = candidates[i]
+    if (!id || !candidate) return
+    usedBy.set(id, [...(usedBy.get(id) ?? []), candidate])
+  })
+  // Every slide has to end up somewhere; a partial authored grouping would
+  // silently drop the rest.
+  if ([...usedBy.values()].flat().length !== candidates.length) return undefined
+
+  const authored: AuthoredLayout[] = []
+  for (const page of source.layouts) {
+    const slides = usedBy.get(page.id)
+    if (!slides?.length) continue
+    const design = candidateOf(page, declarationsFor(page))
+    // A layout page whose boxes we could not read tells us less than the
+    // slides do, so the deck falls back to clustering rather than importing
+    // a layout with nothing on it.
+    if (!design.slots.length) return undefined
+    authored.push({ design, slides })
+  }
+  return authored.length > 1 ? authored : undefined
+}
+
+/**
+ * Fills in what a layout page does not state.
+ *
+ * A layout page carries the boxes and the names — the design — but its
+ * placeholders are usually empty, so they carry no type size, colour or font.
+ * Those live on the slides that use it. Taking geometry from the design and
+ * styling from its uses is more faithful than either alone.
+ */
+const styledFromUses = (authored: AuthoredLayout): Candidate => ({
+  ...authored.design,
+  slots: authored.design.slots.map(slot => {
+    if (slot.fontSize !== undefined) return slot
+    const uses = authored.slides
+      .map(s => s.slots.find(u => u.name === slot.name))
+      .filter((u): u is (typeof authored.slides)[number]['slots'][number] =>
+        Boolean(u),
+      )
+    const sizes = uses
+      .map(u => u.fontSize)
+      .filter((n): n is number => typeof n === 'number')
+    return {
+      ...slot,
+      ...(sizes.length
+        ? {
+            fontSize: sizes.sort((a, b) => a - b)[Math.floor(sizes.length / 2)],
+          }
+        : {}),
+      ...(uses.find(u => u.color)
+        ? { color: uses.find(u => u.color)!.color }
+        : {}),
+      ...(uses.find(u => u.fontFamily)
+        ? { fontFamily: uses.find(u => u.fontFamily)!.fontFamily }
+        : {}),
+      ...(uses.some(u => u.bold) ? { bold: true } : {}),
+    }
+  }),
+})
+
+/**
+ * Derives layouts from the ones a presentation defines, naming them the same
+ * way clustering's are.
+ *
+ * Each design comes from its own layout page; its `members` are the slides
+ * built on it, because that is what the report counts and what a lecture
+ * import needs (EXP-5). Its constraints come from those slides, since a layout
+ * page holds no content to measure.
+ */
+const consolidateAuthored = async (
+  authored: AuthoredLayout[],
+  describe: (layouts: DerivedLayout[]) => Promise<LayoutSemantics[]>,
+): Promise<Consolidation> => {
+  const derived = deriveLayouts(authored.map(a => [styledFromUses(a)])).map(
+    (layout, i) => ({
+      ...layout,
+      members: authored[i]!.slides.map(s => s.slideId),
+      ...(observedFrom(authored[i]!.slides)
+        ? { constraints: observedFrom(authored[i]!.slides) }
+        : {}),
+    }),
+  )
+
+  const semantics = await describe(derived)
+  const layouts = derived.map((layout, i) => ({
+    ...layout,
+    ...(semantics[i]?.type ? { type: semantics[i]!.type } : {}),
+    ...(semantics[i]?.description
+      ? { description: semantics[i]!.description }
+      : {}),
+    slots: layout.slots.map(slot => {
+      const described = semantics[i]?.slotDescriptions?.[slot.name]
+      return described ? { ...slot, description: described } : slot
+    }),
+  }))
+
+  const assignment = new Map<string, number>()
+  layouts.forEach((layout, index) => {
+    for (const id of layout.members) assignment.set(id, index)
+  })
+  // Nothing is approximated: every slide sat on a layout its author chose.
+  return { layouts, approximated: [], assignment }
+}
+
+/**
+ * Turns a presentation this system has already read into a template.
+ *
+ * Split from the reading so the whole pipeline can be tested — and driven from
+ * a YAML or PowerPoint reader later — without a network.
+ */
+export const importSourcePresentation = async (
+  source: SourcePresentation,
+  options: {
+    provider?: Pick<GenerationProvider, 'describeImportedLayouts'>
+    assetPrefix?: string
+  } = {},
+): Promise<ImportResult> => {
+  // A presentation this system exported carries each layout's slot
+  // declarations on the layout itself (EXP-8), and each slide says which
+  // layout it is built on. Pairing the two is what makes the round trip
+  // lossless: kinds, instructions and limits come back exactly rather than
+  // being guessed from geometry.
+  const declaredByLayout = new Map(
+    source.layouts
+      .filter(layout => layout.slotMetadata)
+      .map(layout => [layout.id, layout.slotMetadata as unknown as SlotSpec[]]),
+  )
+  const declarationsFor = (slide: SourcePage): SlotSpec[] | undefined =>
+    (slide.layoutId ? declaredByLayout.get(slide.layoutId) : undefined) ??
+    // A slide may carry its own declarations when it was exported without a
+    // layout of its own.
+    (slide.slotMetadata as unknown as SlotSpec[] | undefined)
+
+  // Slides that say nothing about how the deck looks are left out.
+  //
+  // A slide built from a layout and then left alone carries placeholders the
+  // author never sized, and a shape with no place on the page is not part of
+  // a design (see `boxFromChain`). Such a slide can be left with no boxes at
+  // all — and a layout with no boxes is rejected by the template schema, so
+  // deriving one would produce a template that cannot be saved.
+  //
+  // But no boxes is not the same as no design. A slide that is a colour and
+  // an arrow is a design; dropping it loses a whole page of the deck, which
+  // is exactly what went missing from a three-colour import. So the test is
+  // whether the slide carries ANYTHING — boxes, decoration, or a background
+  // of its own — and `toLayout` gives a box to a design that has none.
+  const carriesDesign = (candidate: Candidate): boolean =>
+    candidate.slots.length > 0 ||
+    candidate.decoration.length > 0 ||
+    Boolean(candidate.background) ||
+    Boolean(candidate.backgroundImage)
+
+  const candidates = source.slides
+    .map(slide => candidateOf(slide, declarationsFor(slide)))
+    .filter(carriesDesign)
+
+  // A presentation this system exported carries its own slot declarations,
+  // and re-importing one has to give back the template it came from — same
+  // layouts, same boxes, same kinds. That is a round trip, not an import of
+  // an unknown deck, so it keeps the grouping the export wrote down.
+  const isOwnExport =
+    declaredByLayout.size > 0 || source.slides.some(slide => slide.slotMetadata)
+
+  // Anything else is imported FAITHFULLY: one layout per slide, exactly as
+  // the slide is.
+  //
+  // Consolidation — clustering near-identical slides into one standardized
+  // design — is deliberately not used here. It is the tidier answer and it is
+  // not the one an instructor wants first: a deck of fourteen slides should
+  // arrive as fourteen layouts they recognize, which they can then merge,
+  // delete or edit themselves. A template they have to reverse-engineer back
+  // into their own deck is worse than one with some near-duplicates in it.
+  //
+  // The passes still exist and still have their tests; `consolidateCandidates`
+  // and `consolidateWithSemantics` are how a tidying pass would be offered
+  // later, as something the user asks for rather than something done to them.
+  const authored = isOwnExport
+    ? authoredLayouts(source, candidates, declarationsFor)
+    : undefined
+  const { layouts, approximated } = authored
+    ? await consolidateAuthored(authored, describeWith(options.provider))
+    : await verbatimWithSemantics(candidates, describeWith(options.provider))
+
+  // Pictures are fetched after consolidation, so a deck whose slides collapsed
+  // into three layouts does not pay to download forty copies of the same logo.
+  const urls = source.slides.flatMap(slide => [
+    ...slide.elements
+      .map(element => element.imageUrl)
+      .filter((url): url is string => Boolean(url)),
+    // A page filled with a picture is as much a part of the design as one
+    // filled with a colour.
+    ...(slide.backgroundImage ? [slide.backgroundImage] : []),
+  ])
+  const { stored, failed } = options.assetPrefix
+    ? await fetchAssets(urls, options.assetPrefix)
+    : { stored: new Map<string, string>(), failed: 0 }
+
+  const assignment = new Map<string, number>()
+  layouts.forEach((layout, index) => {
+    for (const id of layout.members) assignment.set(id, index)
+  })
+  for (const { slideId, layoutIndex } of approximated) {
+    assignment.set(slideId, layoutIndex)
+  }
+
+  return {
+    template: buildTemplate(source, layouts, assignment, stored),
+    report: importReport(source, layouts, approximated.length, failed),
+  }
+}
+
+/**
+ * Reads a presentation from Google and imports it.
+ *
+ * The only stage that touches the network for the design itself, and the only
+ * one whose failure stops the import — `readPresentationLive` throws a
+ * `PresentationUnreadableError` saying whether reconnecting would help.
+ */
+export const importPresentation = async (options: {
+  accessToken: string
+  presentationId: string
+  ownerId: string
+  provider?: Pick<GenerationProvider, 'describeImportedLayouts'>
+}): Promise<ImportResult> => {
+  const source = await readPresentationLive(
+    options.accessToken,
+    options.presentationId,
+  )
+  return importSourcePresentation(source, {
+    ...(options.provider ? { provider: options.provider } : {}),
+    assetPrefix: assetPrefix(options.ownerId, options.presentationId),
+  })
+}

@@ -126,11 +126,11 @@ test('in-place editing in the viewer, including list view and bullets', async ({
     'quote',
   )
 
-  // The quote layout's caption was empty and hidden before the switch —
-  // the blank slot is clickable but invisible to the audience; a
+  // The quote layout's caption was empty and hidden before the switch — the
+  // blank slot shows the invitation every slide tool shows, quietly, and a
   // page-background click flashes it as a skeleton, fading on its own
-  const blankCaption = page.getByText('Add slide caption')
-  await expect(blankCaption).toHaveCSS('color', 'rgba(0, 0, 0, 0)')
+  const blankCaption = page.getByTitle('Click to edit Slide caption')
+  await expect(blankCaption).toHaveText('Click to add text')
   await page
     .locator('div.max-w-5xl')
     .first()
@@ -194,10 +194,13 @@ test('in-place editing in the viewer, including list view and bullets', async ({
   )
   await page.getByRole('button', { name: 'Close settings' }).click()
 
-  // The add icon appends a starter slide at the end
+  // The add icon appends an empty slide at the end, whose boxes invite the
+  // author in rather than arriving with words they have to delete
   await page.getByRole('button', { name: 'Add slide', exact: true }).click()
   await expect(page.getByText('2 / 2')).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'New slide' })).toBeVisible()
+  await expect(page.getByTitle('Click to edit Slide title').first()).toHaveText(
+    'Click to add title',
+  )
   await page.reload()
   await expect(page.getByText('1 / 2')).toBeVisible()
 

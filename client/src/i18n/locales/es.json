@@ -457,6 +457,29 @@
       "label": "Lenguaje",
       "hint": "En qué lenguaje resaltar este listado.",
       "auto": "Ninguno"
+    },
+    "import": {
+      "open": "Importar un diseño de Google Slides",
+      "title": "Importar un diseño de Google Slides",
+      "description": "Indica una presentación de tu Drive y deduciremos el diseño que hay detrás —colores, tipografía y dónde va cada cosa— y lo guardaremos como una plantilla que puedes editar.",
+      "linkLabel": "Enlace de Google Slides",
+      "linkPlaceholder": "Pega el enlace de la presentación",
+      "submit": "Importar diseño",
+      "working": "Leyendo la presentación…",
+      "errors": {
+        "link": "Eso no parece un enlace de Google Slides.",
+        "google": "Google no nos dejó leer esa presentación. Comprueba que puedes abrirla tú.",
+        "failed": "No se pudo importar esa presentación"
+      },
+      "report": {
+        "summary": "{slides} diapositivas se convirtieron en {layouts} diseños.",
+        "merged": "Se combinaron {count} diapositivas casi idénticas en un solo diseño.",
+        "approximated": "{count} diapositivas no coincidieron con ningún diseño y se aproximaron.",
+        "assetsFailed": "No se pudieron obtener {count} imágenes.",
+        "review": "El diseño es tuyo para editarlo: no se modificó nada en la presentación."
+      },
+      "connectPrompt": "Conecta una cuenta de Google para leer una presentación de tu Drive.",
+      "connect": "Conectar Google"
     }
   },
   "layout": {
@@ -705,6 +728,8 @@
     "previous": "Diapositiva anterior",
     "next": "Diapositiva siguiente",
     "addSlot": "Añadir {name}",
+    "addTitle": "Haz clic para añadir un título",
+    "addText": "Haz clic para añadir texto",
     "image": {
       "alt": "Imagen de la diapositiva"
     },

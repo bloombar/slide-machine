@@ -15,9 +15,24 @@
    placeholder text is transparent. Hovering one, or clicking the page
    background (which stamps data-reveal-blanks on the deck viewer),
    surfaces a subtle skeleton so editors can find and click into them. */
+/*
+ * An empty box in an editable slide.
+ *
+ * It used to be invisible until hovered, which meant an imported design
+ * looked like a blank coloured page: the boxes were there, correctly placed,
+ * and nothing said so. Every slide tool an instructor has used draws the empty
+ * box and its invitation, so this does too — a dashed outline and the prompt,
+ * both quiet enough to read as scaffolding rather than as content.
+ *
+ * `outline` rather than `border`: it is drawn outside the box's own size, so
+ * showing it cannot nudge the text of a box that has content beside it.
+ */
 .slot-blank {
-  color: transparent;
+  color: color-mix(in srgb, currentColor 55%, transparent);
   user-select: none;
+  outline: 0.15cqi dashed color-mix(in srgb, currentColor 35%, transparent);
+  outline-offset: 0.4cqi;
+  border-radius: 0.4cqi;
 }
 span.slot-blank:hover,
 [data-reveal-blanks] .slot-blank {
