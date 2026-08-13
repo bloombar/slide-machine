@@ -1276,3 +1276,109 @@ describe('what a shape is, not just where it is', () => {
     expect(read.slides[0]!.elements[0]).not.toHaveProperty('shapeType')
   })
 })
+
+describe('a placeholder nobody has typed into yet', () => {
+  const pt = (magnitude: number) => ({ magnitude, unit: 'PT' })
+
+  /** A deck whose layout states the type, and whose slide is untouched. */
+  const untouched = () => ({
+    presentationId: 'p1',
+    title: 'Untouched',
+    pageSize: { width: dim(PAGE.width), height: dim(PAGE.height) },
+    masters: [
+      {
+        objectId: 'm',
+        pageProperties: {
+          colorScheme: {
+            colors: [{ type: 'LIGHT1', color: { red: 1, green: 1, blue: 1 } }],
+          },
+        },
+        pageElements: [],
+      },
+    ],
+    layouts: [
+      {
+        objectId: 'l',
+        layoutProperties: { masterObjectId: 'm' },
+        pageElements: [
+          {
+            objectId: 'l-title',
+            size: {
+              width: dim(0.84 * PAGE.width),
+              height: dim(0.18 * PAGE.height),
+            },
+            transform: {
+              scaleX: 1,
+              scaleY: 1,
+              translateX: 0.08 * PAGE.width,
+              translateY: 0.1 * PAGE.height,
+              unit: 'EMU',
+            },
+            shape: {
+              shapeType: 'TEXT_BOX',
+              placeholder: { type: 'TITLE' },
+              text: {
+                textElements: [
+                  {
+                    paragraphMarker: { style: { alignment: 'CENTER' } },
+                  },
+                  {
+                    textRun: {
+                      content: 'Click to edit Master title style',
+                      style: {
+                        fontSize: pt(36),
+                        bold: true,
+                        foregroundColor: {
+                          opaqueColor: { themeColor: 'LIGHT1' },
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    ],
+    slides: [
+      {
+        objectId: 's1',
+        slideProperties: { layoutObjectId: 'l', masterObjectId: 'm' },
+        pageElements: [
+          {
+            objectId: 's1-title',
+            shape: {
+              shapeType: 'TEXT_BOX',
+              // No text at all: the author never typed into it
+              placeholder: { type: 'TITLE', parentObjectId: 'l-title' },
+            },
+          },
+        ],
+      },
+    ],
+  })
+
+  it('is set in the type its design says, though it holds no words', () => {
+    // Size, weight and colour are read off the RUNS, and an empty box has
+    // none — so a deck of untouched placeholders imported with no type at
+    // all, and its title came out the same size as its body
+    const element = toSourcePresentation(untouched()).slides[0]!.elements[0]!
+    expect(element.runs?.[0]).toMatchObject({
+      text: '',
+      fontSize: 5,
+      bold: true,
+      color: '#ffffff',
+    })
+  })
+
+  it('holds no words, so it is not mistaken for content', () => {
+    const element = toSourcePresentation(untouched()).slides[0]!.elements[0]!
+    expect(element.runs?.map(r => r.text).join('')).toBe('')
+  })
+
+  it('keeps the alignment its design sets, too', () => {
+    const element = toSourcePresentation(untouched()).slides[0]!.elements[0]!
+    expect(element.align).toBe('center')
+  })
+})

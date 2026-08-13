@@ -537,6 +537,14 @@ const elementOf = (
       scheme,
     )
     if (!fill && !placeholder) return null
+    // An empty placeholder still has type: the layout or the master says what
+    // size, weight, colour and family a title on this design is set in, even
+    // though nobody has typed one yet. Every one of those is read off the
+    // RUNS, and an empty box has none — so a deck of untouched placeholders
+    // imported with no type at all, and its title and its body came out the
+    // same size. The style is carried on an empty run, which is what it is:
+    // how this box would be set, with nothing in it yet.
+    const empty = inheritedStyle(chain, scheme, page.width)
     return {
       id,
       kind: placeholder ? 'text' : 'decoration',
@@ -546,6 +554,11 @@ const elementOf = (
       ...(fill ? { fill } : {}),
       // What the shape is, so an arrow is not drawn as a rectangle.
       ...(shape.shapeType ? { shapeType: shape.shapeType } : {}),
+      ...(placeholder && Object.values(empty).some(v => v !== undefined)
+        ? { runs: [{ text: '', ...empty }] }
+        : {}),
+      ...(align ? { align } : {}),
+      ...(vAlign ? { vAlign } : {}),
     }
   }
 
