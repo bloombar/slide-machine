@@ -482,6 +482,19 @@
       },
       "connectPrompt": "Conecta una cuenta de Google para leer una presentación de tu Drive.",
       "connect": "Conectar Google"
+    },
+    "fileImport": {
+      "open": "Importar un archivo de plantilla",
+      "working": "Leyendo el archivo…",
+      "errors": {
+        "read": "No se pudo leer ese archivo",
+        "invalid": "No se pudo importar esta plantilla: {details}",
+        "failed": "No se pudo importar esta plantilla",
+        "link": "Eso no parece un enlace de Google Drive."
+      },
+      "driveLabel": "Archivo de plantilla en Google Drive",
+      "drivePlaceholder": "O pega un enlace de Drive a un archivo de plantilla",
+      "driveSubmit": "Importar desde Drive"
     }
   },
   "layout": {

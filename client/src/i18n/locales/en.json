@@ -482,6 +482,19 @@
       },
       "connectPrompt": "Connect a Google account to read a presentation from your Drive.",
       "connect": "Connect Google"
+    },
+    "fileImport": {
+      "open": "Import a template file",
+      "working": "Reading the file…",
+      "errors": {
+        "read": "Could not read that file",
+        "invalid": "Could not import this template: {details}",
+        "failed": "Could not import this template",
+        "link": "That doesn't look like a Google Drive link."
+      },
+      "driveLabel": "Template file in Google Drive",
+      "drivePlaceholder": "Or paste a Drive link to a template file",
+      "driveSubmit": "Import from Drive"
     }
   },
   "layout": {

@@ -116,6 +116,40 @@ describe('templateToYaml', () => {
     expect(parsed.layouts[0].guides).toMatchObject({ x: [0.06, 0.94] })
   })
 
+  it('carries the bands, rules and logos a design is drawn with (EXP-3)', () => {
+    // A deck imported from Google Slides keeps its logo and its colour bands
+    // as decoration, so a file without them exports the template without the
+    // pieces that make it recognizable
+    const decorated: Template = {
+      ...template,
+      layouts: [
+        {
+          ...template.layouts[0]!,
+          decoration: [
+            { x: 0, y: 0, w: 1, h: 0.12, fill: '#123456' },
+            {
+              x: 0.86,
+              y: 0.04,
+              w: 0.1,
+              h: 0.1,
+              imageUrl: 'https://cdn.example.com/logo.png',
+            },
+          ],
+        },
+        ...template.layouts.slice(1),
+      ],
+    }
+    const parsed = YAML.parse(templateToYaml(decorated))
+    expect(parsed.layouts[0].decoration).toHaveLength(2)
+    expect(parsed.layouts[0].decoration[0]).toMatchObject({
+      h: 0.12,
+      fill: '#123456',
+    })
+    expect(parsed.layouts[0].decoration[1]).toMatchObject({
+      imageUrl: 'https://cdn.example.com/logo.png',
+    })
+  })
+
   it('says nothing about geometry a layout does not have', () => {
     // An empty map would read as "this layout has no boxes" rather than
     // "its boxes are in its tree"
@@ -123,6 +157,7 @@ describe('templateToYaml', () => {
     expect(parsed.layouts[0].elementPositions).toBeUndefined()
     expect(parsed.layouts[0].tree).toBeUndefined()
     expect(parsed.layouts[0].guides).toBeUndefined()
+    expect(parsed.layouts[0].decoration).toBeUndefined()
   })
 
   it('carries each slot’s instruction and limits (TMPL-10)', () => {

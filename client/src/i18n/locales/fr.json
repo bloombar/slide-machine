@@ -482,6 +482,19 @@
       },
       "connectPrompt": "Connectez un compte Google pour lire une présentation de votre Drive.",
       "connect": "Connecter Google"
+    },
+    "fileImport": {
+      "open": "Importer un fichier de modèle",
+      "working": "Lecture du fichier…",
+      "errors": {
+        "read": "Impossible de lire ce fichier",
+        "invalid": "Impossible d’importer ce modèle : {details}",
+        "failed": "Impossible d’importer ce modèle",
+        "link": "Cela ne ressemble pas à un lien Google Drive."
+      },
+      "driveLabel": "Fichier de modèle dans Google Drive",
+      "drivePlaceholder": "Ou collez un lien Drive vers un fichier de modèle",
+      "driveSubmit": "Importer depuis Drive"
     }
   },
   "layout": {
