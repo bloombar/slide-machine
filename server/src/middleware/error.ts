@@ -16,6 +16,8 @@ import {
 import { GenerationUnavailableError } from '../providers/errors'
 import { PlanLimitExceededError } from '../billing/limits'
 import { BillingUnavailableError } from '../billing/errors'
+import { PresentationUnreadableError } from '../import/read-slides'
+import { DriveFileUnreadableError } from '../lib/drive-file'
 
 /** An error with an HTTP status and a stable machine-readable code. */
 export class HttpError extends Error {
@@ -79,6 +81,28 @@ export const errorHandler = (
     res
       .status(err.retryable ? 503 : 400)
       .json(body('billing_unavailable', err.message))
+  } else if (
+    err instanceof PresentationUnreadableError ||
+    err instanceof DriveFileUnreadableError
+  ) {
+    // A file in the user's Drive that we could not read (TMPL-8/EXP-3/EXP-5).
+    //
+    // These carry the one thing the instructor needs — whether reconnecting
+    // would help — and until this branch existed they fell through to a plain
+    // 500 "Something went wrong", which threw that away. The result was an
+    // import that failed with nothing to act on, and a Connect button that
+    // never appeared because the client had no way to tell the cases apart.
+    //
+    // `reconnect` becomes the same 403 + code a missing capability uses, so
+    // the client offers the step; anything else is a rejection that will
+    // repeat identically, reported as a bad request rather than inviting the
+    // user to keep pressing the button.
+    const [status, code] = err.reconnect
+      ? ([403, 'google_reconnect'] as const)
+      : err.notFound
+        ? ([404, 'source_not_found'] as const)
+        : ([400, 'source_unreadable'] as const)
+    res.status(status).json(body(code, err.message))
   } else if (err instanceof GenerationUnavailableError) {
     // 503: an upstream AI provider is out of quota/credits or overloaded.
     res.status(503).json(body('generation_unavailable', err.message))

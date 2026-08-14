@@ -23,6 +23,8 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Deck, ImportReport, Template } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
+import { ApiError } from '../api/http'
+import { apiErrorMessage } from '../i18n/apiError'
 import { presentationIdFrom } from './template/TemplateImport'
 
 export default function LectureImportFromSlides({
@@ -68,9 +70,21 @@ export default function LectureImportFromSlides({
       })
       .catch((e: Error) => {
         // Not connected is a missing step rather than a failure, so the step
-        // is offered instead of an error nobody can act on.
-        if (/connect|forbidden|403/i.test(e.message)) setNeedsGoogle(true)
-        else setError(t('lecture.importSlides.errors.failed'))
+        // is offered instead of an error nobody can act on. The server says
+        // which case this is by code rather than leaving it to be guessed
+        // from the message.
+        const code = e instanceof ApiError ? e.code : ''
+        if (
+          code === 'google_reconnect' ||
+          code === 'capability_required' ||
+          (!code && /connect|forbidden|403/i.test(e.message))
+        ) {
+          setNeedsGoogle(true)
+          return
+        }
+        // Translated by code rather than repeating the server's English
+        // (docs/I18N.md), so "not found" and "refused" stay distinguishable.
+        setError(apiErrorMessage(e, t, 'lecture.importSlides.errors.failed'))
       })
       .finally(() => setBusy(false))
   }

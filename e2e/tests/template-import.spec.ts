@@ -42,12 +42,10 @@ test('template import: connect, paste a link, get a usable design', async ({
 
   // The panel stays out of the way until asked for — importing is not what
   // most visits to this tab are about.
-  await expect(page.getByLabel('Google Slides link')).toBeHidden()
-  await page
-    .getByRole('button', { name: /Import a design from Google Slides/i })
-    .click()
+  await expect(page.getByLabel(/Google Slides or Drive link/i)).toBeHidden()
+  await page.getByRole('button', { name: /^Import a design$/i }).click()
 
-  const field = page.getByLabel('Google Slides link')
+  const field = page.getByLabel(/Google Slides or Drive link/i)
   await expect(field).toBeVisible()
 
   // A link that is not one is refused before anything is sent, so the

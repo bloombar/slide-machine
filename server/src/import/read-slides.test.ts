@@ -9,8 +9,12 @@
  * The fixtures are shaped the way Google's responses are, nesting and all —
  * a simplified fixture would test a reader we do not have.
  */
-import { describe, it, expect } from 'vitest'
-import { toSourcePresentation } from './read-slides'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import {
+  toSourcePresentation,
+  readPresentationLive,
+  PresentationUnreadableError,
+} from './read-slides'
 import { slotToken, encodeSlotMetadata } from '../lib/slot-metadata'
 
 const EMU = 914400
@@ -1423,5 +1427,62 @@ describe('a deck whose colour lives on its boxes', () => {
       }),
     )
     expect(read.slides[0]!.elements[0]).not.toHaveProperty('fill')
+  })
+})
+
+/**
+ * Reading the presentation from Google — the one stage whose failure stops an
+ * import (TMPL-8).
+ *
+ * Untested until an import failed in the field and said "Something went
+ * wrong", which is what an unclassified error looks like from the outside.
+ * What matters is that each refusal is told apart, because they ask the user
+ * for different things.
+ */
+describe('when Google will not hand the presentation over', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  const respond = (status: number, body = '{}') =>
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response(body, { status })),
+    )
+
+  it('asks for a reconnect when the grant does not cover it', async () => {
+    respond(403, '{"error":{"message":"insufficient permissions"}}')
+    const err = await readPresentationLive('t', 'p').catch(e => e)
+    expect(err).toBeInstanceOf(PresentationUnreadableError)
+    expect(err.reconnect).toBe(true)
+  })
+
+  it('does not, when the Slides API is switched off for the deployment', async () => {
+    // Google answers 403 for this too, but reconnecting cannot fix it — and
+    // telling an instructor to try sends them round a loop that never ends
+    respond(
+      403,
+      '{"error":{"message":"Google Slides API has not been used in project 1234 before or it is disabled"}}',
+    )
+    const err = await readPresentationLive('t', 'p').catch(e => e)
+    expect(err.reconnect).toBe(false)
+    expect(err.message).toMatch(/not enabled for this deployment/i)
+  })
+
+  it('says a missing presentation is missing', async () => {
+    respond(404)
+    const err = await readPresentationLive('t', 'p').catch(e => e)
+    expect(err.notFound).toBe(true)
+    expect(err.reconnect).toBe(false)
+  })
+
+  it('reports any other status without guessing why', async () => {
+    respond(500)
+    await expect(readPresentationLive('t', 'p')).rejects.toThrow(/500/)
+  })
+
+  it('reads the presentation when Google does hand it over', async () => {
+    respond(200, JSON.stringify({ presentationId: 'p', slides: [] }))
+    await expect(readPresentationLive('t', 'p')).resolves.toMatchObject({
+      slides: [],
+    })
   })
 })

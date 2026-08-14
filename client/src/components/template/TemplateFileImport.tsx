@@ -14,37 +14,20 @@
  * required" is actionable, "import failed" is not. Nothing is created when it
  * refuses, so trying again after an edit is safe.
  *
- * ## Two doors, one room
+ * ## A file from disk only
  *
- * A file from disk and a file kept in the connected Drive are the same file
- * (EXP-3: an import may come from an upload or a connected account). The Drive
- * half takes a pasted link rather than offering a browser, for the reason the
- * Slides import does: the instructor already has it open and its address is in
- * their clipboard.
+ * The same design kept in the connected Drive arrives by its link, in the one
+ * field this panel already has (EXP-3: an upload or a connected account). Two
+ * boxes for two links asked the instructor to work out which was which; one
+ * box works it out for them, and what is left here is the case a link cannot
+ * cover — a file on their own machine.
  */
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FileUp } from 'lucide-react'
+import { Upload } from 'lucide-react'
 import type { Template } from '@slide-machine/shared'
 import { dispatchAction } from '../../api/actions'
 import { ApiError } from '../../api/http'
-
-/**
- * The Drive file id inside whatever the instructor pasted.
- *
- * Mirrors the server's own reading of a link so the field can refuse a
- * non-link before anything is sent — a clear complaint here beats a confusing
- * failure from Google.
- */
-export const driveFileIdFrom = (input: string): string | null => {
-  const text = input.trim()
-  if (!text) return null
-  const fromUrl = /\/file\/d\/([a-zA-Z0-9_-]+)/.exec(text)
-  if (fromUrl) return fromUrl[1]!
-  const fromQuery = /[?&]id=([a-zA-Z0-9_-]+)/.exec(text)
-  if (fromQuery) return fromQuery[1]!
-  return /^[a-zA-Z0-9_-]{10,}$/.test(text) ? text : null
-}
 
 export default function TemplateFileImport({
   onImported,
@@ -55,10 +38,7 @@ export default function TemplateFileImport({
   const { t } = useTranslation()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [link, setLink] = useState('')
   const input = useRef<HTMLInputElement>(null)
-
-  const fileId = driveFileIdFrom(link)
 
   /** Runs an import and reports it, whichever door the file came through. */
   const run = async (action: string, payload: object) => {
@@ -66,7 +46,6 @@ export default function TemplateFileImport({
     setBusy(true)
     try {
       onImported(await dispatchAction<Template>(action, payload))
-      setLink('')
     } catch (err) {
       // The specific problems when the server listed them — a file is fixable
       // and a vague failure is not. Nothing was created either way.
@@ -96,16 +75,10 @@ export default function TemplateFileImport({
     await run('template.import', { content })
   }
 
-  const fromDrive = (event: React.FormEvent) => {
-    event.preventDefault()
-    if (!fileId || busy) return
-    void run('template.importFromDrive', { fileId })
-  }
-
   return (
     <div className="mt-2">
       <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
-        <FileUp className="h-4 w-4" aria-hidden="true" />
+        <Upload className="h-4 w-4" aria-hidden="true" />
         {busy
           ? t('template.fileImport.working')
           : t('template.fileImport.open')}
@@ -121,35 +94,6 @@ export default function TemplateFileImport({
           }}
         />
       </label>
-
-      {/* The same file, kept in Drive instead of on disk (EXP-3/EXP-4). */}
-      <form onSubmit={fromDrive} className="mt-2 flex flex-wrap gap-2">
-        <label className="sr-only" htmlFor="template-drive-link">
-          {t('template.fileImport.driveLabel')}
-        </label>
-        <input
-          id="template-drive-link"
-          type="text"
-          value={link}
-          onChange={e => setLink(e.target.value)}
-          placeholder={t('template.fileImport.drivePlaceholder')}
-          className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-sm"
-        />
-        <button
-          type="submit"
-          disabled={!fileId || busy}
-          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 disabled:opacity-50"
-        >
-          {t('template.fileImport.driveSubmit')}
-        </button>
-      </form>
-      {/* Said only once something has been typed, so an empty field is not a
-          mistake the instructor has not made yet. */}
-      {link.trim() && !fileId && (
-        <p className="mt-1 text-xs text-slate-500">
-          {t('template.fileImport.errors.link')}
-        </p>
-      )}
 
       {error && (
         <p role="alert" className="mt-2 text-sm text-red-600">

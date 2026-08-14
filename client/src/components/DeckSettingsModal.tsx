@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { Trans, useTranslation } from 'react-i18next'
-import { Upload, X } from 'lucide-react'
+import { Download, X } from 'lucide-react'
 import {
   findTtsVoice,
   type Deck,
@@ -33,6 +33,7 @@ import {
 } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import { ApiError } from '../api/http'
+import { apiErrorMessage } from '../i18n/apiError'
 import { FolderPicker } from './ExportPanel'
 import { downloadExport } from '../lib/download'
 import TemplateDesignPanel from './template/TemplateDesignPanel'
@@ -267,12 +268,16 @@ export default function DeckSettingsModal({
 
   // Export the lecture's current template as a re-importable YAML file (EXP-2).
   const exportTemplate = () => {
+    setSlidesError(null)
     dispatchAction<ExportDownload>('template.export', {
       templateId: deck.templateId,
     })
       .then(downloadExport)
-      .catch(() => {
-        // Quiet failure: nothing downloads
+      .catch((err: Error) => {
+        // Said rather than swallowed. A quiet failure here is indistinguishable
+        // from a button that does nothing, which is how this last went wrong:
+        // the export was refused and the screen reported it by staying still.
+        setSlidesError(apiErrorMessage(err, t, 'template.exportYamlError'))
       })
   }
 
@@ -700,7 +705,7 @@ export default function DeckSettingsModal({
                   onClick={exportTemplate}
                   className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
                 >
-                  <Upload className="h-4 w-4" aria-hidden />
+                  <Download className="h-4 w-4" aria-hidden />
                   {t('template.exportAsYaml')}
                 </button>
                 <button
@@ -712,7 +717,7 @@ export default function DeckSettingsModal({
                   }}
                   className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
                 >
-                  <Upload className="h-4 w-4" aria-hidden />
+                  <Download className="h-4 w-4" aria-hidden />
                   {t('template.exportToSlides')}
                 </button>
               </div>

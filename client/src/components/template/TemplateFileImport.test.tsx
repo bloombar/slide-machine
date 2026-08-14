@@ -3,14 +3,16 @@
  * side.
  *
  * Two things carry this control: the file's text has to reach the server
- * unaltered, and a refusal has to say what is wrong with the file. A template
+ * unaltered, and a refusal has to say what is wrong with the file. The same
+ * design kept in Drive arrives by link instead, so those cases live with the
+ * field that reads links (TemplateImport). A template
  * import substitutes nothing, so "it failed" would leave the instructor with a
  * file they cannot fix.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import type { Template } from '@slide-machine/shared'
-import TemplateFileImport, { driveFileIdFrom } from './TemplateFileImport'
+import TemplateFileImport from './TemplateFileImport'
 import { ApiError } from '../../api/http'
 
 const dispatchAction = vi.fn()
@@ -28,7 +30,7 @@ const file = (text = yaml) =>
 
 /** Picks a file, which is the whole interaction. */
 const pick = (f: File) => {
-  const input = screen.getByLabelText(/import a template file/i)
+  const input = screen.getByLabelText(/import a \.yaml design file/i)
   fireEvent.change(input, { target: { files: [f] } })
 }
 
@@ -60,54 +62,6 @@ describe('picking a template file', () => {
   it('does nothing at all until a file is picked', () => {
     render(<TemplateFileImport onImported={vi.fn()} />)
     expect(dispatchAction).not.toHaveBeenCalled()
-  })
-})
-
-describe('the same file, kept in Drive', () => {
-  it('is read out of a Drive link', () => {
-    expect(
-      driveFileIdFrom('https://drive.google.com/file/d/1AbC_dEf-123/view'),
-    ).toBe('1AbC_dEf-123')
-    expect(driveFileIdFrom('https://drive.google.com/open?id=1AbC_dEf')).toBe(
-      '1AbC_dEf',
-    )
-    expect(driveFileIdFrom('1AbCdEfGhIjKl')).toBe('1AbCdEfGhIjKl')
-  })
-
-  it('is nothing when they pasted something else', () => {
-    expect(driveFileIdFrom('my template')).toBeNull()
-    expect(driveFileIdFrom('   ')).toBeNull()
-  })
-
-  it('will not submit until the link is one', () => {
-    render(<TemplateFileImport onImported={vi.fn()} />)
-    const submit = screen.getByRole('button', { name: /import from drive/i })
-    expect(submit).toBeDisabled()
-
-    fireEvent.change(screen.getByLabelText(/template file in google drive/i), {
-      target: { value: 'not a link' },
-    })
-    expect(submit).toBeDisabled()
-    expect(screen.getByText(/doesn't look like/i)).toBeInTheDocument()
-  })
-
-  it('sends the id it found, not the whole link', async () => {
-    render(<TemplateFileImport onImported={vi.fn()} />)
-    fireEvent.change(screen.getByLabelText(/template file in google drive/i), {
-      target: { value: 'https://drive.google.com/file/d/1AbC_dEf-123/view' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: /import from drive/i }))
-
-    await waitFor(() =>
-      expect(dispatchAction).toHaveBeenCalledWith('template.importFromDrive', {
-        fileId: '1AbC_dEf-123',
-      }),
-    )
-  })
-
-  it('says nothing about an empty field, which is not a mistake yet', () => {
-    render(<TemplateFileImport onImported={vi.fn()} />)
-    expect(screen.queryByText(/doesn't look like/i)).not.toBeInTheDocument()
   })
 })
 
@@ -157,7 +111,7 @@ describe('when the file will not do', () => {
     await screen.findByRole('alert')
 
     const input = screen.getByLabelText(
-      /import a template file/i,
+      /import a \.yaml design file/i,
     ) as HTMLInputElement
     expect(input.value).toBe('')
   })

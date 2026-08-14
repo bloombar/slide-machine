@@ -33,6 +33,14 @@ export class PresentationUnreadableError extends Error {
     message: string,
     /** Whether reconnecting the Google account would plausibly fix it. */
     readonly reconnect = false,
+    /**
+     * Whether the presentation simply was not there.
+     *
+     * Kept apart from `reconnect` because the two ask the user for opposite
+     * things — one to grant access, the other to check the link — and a
+     * single "could not read it" would tell them to do neither.
+     */
+    readonly notFound = false,
   ) {
     super(message)
     this.name = 'PresentationUnreadableError'
@@ -827,13 +835,33 @@ export const readPresentationLive = async (
     { headers: { Authorization: `Bearer ${accessToken}` } },
   )
   if (res.status === 403 || res.status === 401) {
+    // Google says 403 for two unrelated things, and only one of them is the
+    // user's to fix. A grant that does not cover this presentation is worth
+    // reconnecting for; the Slides API being switched off for the whole
+    // deployment is not, and telling an instructor to reconnect for it sends
+    // them round a loop that cannot succeed. The reason is in the body, so it
+    // is read rather than assumed.
+    const reason = await res.text().catch(() => '')
+    if (
+      /has not been used in project|is disabled|accessNotConfigured/i.test(
+        reason,
+      )
+    ) {
+      throw new PresentationUnreadableError(
+        'The Google Slides API is not enabled for this deployment — an administrator must switch it on',
+      )
+    }
     throw new PresentationUnreadableError(
       'Google would not let this account read that presentation',
       true,
     )
   }
   if (res.status === 404) {
-    throw new PresentationUnreadableError('That presentation was not found')
+    throw new PresentationUnreadableError(
+      'That presentation was not found',
+      false,
+      true,
+    )
   }
   if (!res.ok) {
     throw new PresentationUnreadableError(

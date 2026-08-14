@@ -448,6 +448,7 @@
     "exportSlidesHint": "把这个设计保存到你的云端硬盘，成为一份以它的版式为版式的演示文稿，每种版式配一张示例幻灯片。",
     "exportSlidesDone": "已保存到云端硬盘——在 Google Slides 中打开",
     "exportSlidesError": "无法把设计保存到云端硬盘——请重试",
+    "exportYamlError": "无法将设计导出为文件",
     "exportSlidesConnect": "连接 Google 账户后即可把设计保存到云端硬盘。",
     "exportHeading": "导出这个设计",
     "exportHint": "以文件形式带走，或存到你的 Google 云端硬盘，成为一份以它的版式为版式的演示文稿。",
@@ -459,17 +460,17 @@
       "auto": "无"
     },
     "import": {
-      "open": "从 Google 幻灯片导入设计",
+      "open": "导入设计",
       "title": "从 Google 幻灯片导入设计",
       "description": "指定你云端硬盘中的一份演示文稿，我们会分析它的设计——配色、字体和元素位置——并保存为可编辑的模板。",
-      "linkLabel": "Google 幻灯片链接",
-      "linkPlaceholder": "粘贴演示文稿链接",
+      "linkLabel": "Google 幻灯片或云端硬盘链接",
+      "linkPlaceholder": "粘贴 Google 幻灯片链接，或指向 .yaml 设计文件的云端硬盘链接",
       "submit": "导入设计",
       "keepEverySlide": "每张幻灯片保留为独立版式",
       "keepEverySlideHint": "关闭时，几乎相同的幻灯片会合并为一个版式并加以规整。开启时，将完全按照您绘制的样子导入。",
       "working": "正在读取演示文稿…",
       "errors": {
-        "link": "这看起来不像 Google 幻灯片链接。",
+        "link": "这看起来不像 Google 幻灯片或云端硬盘链接。",
         "google": "Google 不允许我们读取该演示文稿。请确认你自己能打开它。",
         "failed": "无法导入该演示文稿"
       },
@@ -481,20 +482,17 @@
         "review": "这个设计归你所有，可随意编辑；演示文稿本身未做任何改动。"
       },
       "connectPrompt": "连接 Google 账号，以便读取你云端硬盘中的演示文稿。",
-      "connect": "连接 Google"
+      "connect": "连接 Google",
+      "otherSources": "或上传文件"
     },
     "fileImport": {
-      "open": "导入模板文件",
+      "open": "导入 .yaml 设计文件",
       "working": "正在读取文件…",
       "errors": {
         "read": "无法读取该文件",
         "invalid": "无法导入此模板：{details}",
-        "failed": "无法导入此模板",
-        "link": "这看起来不像 Google 云端硬盘链接。"
-      },
-      "driveLabel": "Google 云端硬盘中的模板文件",
-      "drivePlaceholder": "或粘贴模板文件的云端硬盘链接",
-      "driveSubmit": "从云端硬盘导入"
+        "failed": "无法导入此模板"
+      }
     }
   },
   "layout": {
@@ -1263,7 +1261,10 @@
     "internal_error": "我们这边出了点问题——请重试",
     "unknown_error": "出了点问题——请重试",
     "email_unverified": "请先确认你的邮箱地址——查看收件箱，或在账户设置中发送新链接",
-    "capability_required": "请先关联 Google 账号 — 可在账号设置中完成"
+    "capability_required": "请先关联 Google 账号 — 可在账号设置中完成",
+    "google_reconnect": "Google 不允许此账号读取该文件——请重新连接你的 Google 账号后重试",
+    "source_not_found": "在你的云端硬盘中找不到该文件——请检查链接",
+    "source_unreadable": "Google 未能提供该文件"
   },
   "usage": {
     "title": "套餐用量",

@@ -15,6 +15,8 @@ import {
   ActionNotFoundError,
   ActionValidationError,
 } from '../actions/dispatch'
+import { PresentationUnreadableError } from '../import/read-slides'
+import { DriveFileUnreadableError } from '../lib/drive-file'
 
 /** Captures what the handler wrote. */
 const handle = (err: unknown) => {
@@ -81,5 +83,60 @@ describe('errorHandler', () => {
     expect(res.status).toBe(500)
     expect(res.body.error.code).toBe('internal_error')
     expect(res.body.error.message).not.toContain('secret')
+  })
+})
+
+/**
+ * A Drive file we could not read (TMPL-8/EXP-3/EXP-5).
+ *
+ * These used to fall through to the catch-all 500 "Something went wrong",
+ * which threw away the one thing the instructor needed — whether reconnecting
+ * would help. An import then failed with nothing to act on, and the Connect
+ * button could never appear because the client had no way to tell the cases
+ * apart. Three codes, because they ask for three different things.
+ */
+describe('a source file that could not be read', () => {
+  it('offers the reconnect a refused read calls for', () => {
+    const res = handle(
+      new PresentationUnreadableError(
+        'Google would not let this account',
+        true,
+      ),
+    )
+    expect(res.status).toBe(403)
+    expect(res.body.error.code).toBe('google_reconnect')
+  })
+
+  it('says a missing presentation is missing, not refused', () => {
+    // Opposite instructions: one says grant access, the other says check the
+    // link, and a single "could not read it" would give neither
+    const res = handle(
+      new PresentationUnreadableError('not found', false, true),
+    )
+    expect(res.status).toBe(404)
+    expect(res.body.error.code).toBe('source_not_found')
+  })
+
+  it('reports any other refusal as a bad request, not a server fault', () => {
+    // It will repeat identically, so it must not invite the user to keep
+    // pressing the button
+    const res = handle(new PresentationUnreadableError('read failed (500)'))
+    expect(res.status).toBe(400)
+    expect(res.body.error.code).toBe('source_unreadable')
+  })
+
+  it('treats a Drive file the same way, whichever import asked for it', () => {
+    expect(handle(new DriveFileUnreadableError('refused', true)).status).toBe(
+      403,
+    )
+    expect(
+      handle(new DriveFileUnreadableError('gone', false, true)).body.error.code,
+    ).toBe('source_not_found')
+  })
+
+  it('never reaches the catch-all, which would say nothing useful', () => {
+    const res = handle(new PresentationUnreadableError('anything'))
+    expect(res.body.error.code).not.toBe('internal_error')
+    expect(res.body.error.message).not.toBe('Something went wrong')
   })
 })
