@@ -23,6 +23,7 @@ import {
   MAX_SLOT_DESCRIPTION,
   WHITEBOARD_LAYOUT_TYPE,
   type ElementPositions,
+  type ImportReport,
   type LayoutDecoration,
   type Layout,
   type SlotSpec,
@@ -31,17 +32,10 @@ import type { DerivedLayout } from './consolidate'
 import type { SourcePresentation } from './source-presentation'
 import { ruleBasedType } from './semantics'
 
-/** What an import did, in the terms the report is written in. */
-export interface ImportReport {
-  slidesRead: number
-  layoutsCreated: number
-  /** The biggest merge that happened, which is the one worth mentioning. */
-  largestMerge?: { type: string; slides: number }
-  /** Slides that matched no design and were drawn with the nearest one. */
-  approximated: number
-  /** Images that could not be fetched, so the layout has an empty box. */
-  assetsFailed: number
-}
+/** What an import did, in the terms the report is written in. Declared in
+ * `shared` because the screen that shows it is the point of it, and two copies
+ * of the shape would be two things to keep in step. */
+export type { ImportReport }
 
 /**
  * Which of the app's own font stacks a presentation's typeface becomes.

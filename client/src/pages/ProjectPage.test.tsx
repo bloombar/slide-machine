@@ -113,16 +113,34 @@ describe('ProjectPage', () => {
     expect(screen.queryByRole('link', { name: /^u1$/ })).toBeNull()
   })
 
-  it('the Lectures "+" offers New lecture and Import, but no New project', async () => {
+  it('the Lectures "+" offers New lecture and both imports, but no New project', async () => {
     mockFetchRoutes(baseRoutes)
     renderPage()
     await screen.findByRole('heading', { name: 'Lectures' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Create new' }))
+    // Two ways in that are genuinely different: a file this app exported
+    // earlier (EXP-3), and the deck the instructor already teaches from
+    // (EXP-5).
     expect(screen.getAllByRole('menuitem').map(i => i.textContent)).toEqual([
       'New lecture',
       'Import a lecture',
+      'Import from Google Slides',
     ])
+  })
+
+  it('the "+" opens the Google Slides import in place (EXP-5)', async () => {
+    mockFetchRoutes(baseRoutes)
+    renderPage()
+    await screen.findByRole('heading', { name: 'Lectures' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create new' }))
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Import from Google Slides' }),
+    )
+    expect(
+      await screen.findByLabelText('Google Slides link'),
+    ).toBeInTheDocument()
   })
 
   it('the project kebab no longer carries Import — the "+" does', async () => {

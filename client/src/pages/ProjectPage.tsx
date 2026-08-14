@@ -29,6 +29,7 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import LectureRow from '../components/LectureRow'
 import NewLectureZone from '../components/NewLectureZone'
 import CreateMenu from '../components/CreateMenu'
+import LectureImportFromSlides from '../components/LectureImportFromSlides'
 import ProjectRowMenu from '../components/ProjectRowMenu'
 import EditableText from '../components/EditableText'
 import ProjectSettingsModal, {
@@ -59,6 +60,8 @@ export default function ProjectPage() {
   const [error, setError] = useState<string | null>(null)
   // A success/warning notice after importing a lecture (EXP-3).
   const [notice, setNotice] = useState<string | null>(null)
+  /** Whether the Google Slides import panel is open (EXP-5). */
+  const [importingSlides, setImportingSlides] = useState(false)
   // Set once the admin has acknowledged the confirm dialog below; the
   // settings modal stays shut until then (ADMIN-5 wants the edit
   // acknowledged, and the deep link opens settings on its own).
@@ -231,6 +234,7 @@ export default function ProjectPage() {
             <CreateMenu
               onNewLecture={() => void startLecture()}
               onImportLecture={file => void importLecture(file)}
+              onImportFromSlides={() => setImportingSlides(true)}
             />
           )}
         </div>
@@ -243,6 +247,22 @@ export default function ProjectPage() {
           <p role="status" className="mb-4 text-sm text-slate-600">
             {notice}
           </p>
+        )}
+        {/* The deck an instructor already teaches from, brought in whole
+            (EXP-5). Stays out of the way until asked for. */}
+        {importingSlides && projectId && (
+          <LectureImportFromSlides
+            projectId={projectId}
+            onImported={({ deck }) => {
+              setDecks(prev => [deck, ...prev])
+              setNotice(
+                t('lecture.import.imported', {
+                  name: deck.title || untitledLecture(),
+                }),
+              )
+            }}
+            onClose={() => setImportingSlides(false)}
+          />
         )}
         <ul className="flex flex-col gap-2">
           {/* Always first: a dashed zone to add a lecture. Editors only — a

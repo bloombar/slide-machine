@@ -524,6 +524,23 @@
         "failed": "Impossible d'importer ce fichier"
       }
     },
+    "importSlides": {
+      "label": "Importer depuis Google Slides",
+      "title": "Créer un cours à partir d’une présentation Google Slides",
+      "description": "Indiquez une présentation de votre Drive et nous en rapporterons le design comme modèle et les diapositives comme cours.",
+      "linkLabel": "Lien Google Slides",
+      "linkPlaceholder": "Collez le lien de la présentation",
+      "submit": "Importer le cours",
+      "working": "Lecture de la présentation…",
+      "report": {
+        "summary": "{slides} diapositives sont devenues {layouts} mises en page.",
+        "dropped": "Une partie du contenu ne tenait pas sur sa diapositive : {details}",
+        "untouched": "Rien n’a été modifié dans la présentation."
+      },
+      "errors": {
+        "failed": "Impossible d’importer cette présentation"
+      }
+    },
     "errors": {
       "create": "Impossible de créer le cours"
     }

@@ -7,7 +7,13 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FolderPlus, Import, Plus, Presentation } from 'lucide-react'
+import {
+  FolderPlus,
+  Import,
+  MonitorPlay,
+  Plus,
+  Presentation,
+} from 'lucide-react'
 
 interface Props {
   /** Omitted where a new project makes no sense, which drops the item. */
@@ -15,12 +21,16 @@ interface Props {
   onNewLecture: () => void
   /** Receives a chosen deck-export file to import as a new lecture. */
   onImportLecture: (file: File) => void
+  /** Opens the Google Slides import (EXP-5). Omitted where there is no
+   * project for the lecture to land in, which drops the item. */
+  onImportFromSlides?: () => void
 }
 
 export default function CreateMenu({
   onNewProject,
   onNewLecture,
   onImportLecture,
+  onImportFromSlides,
 }: Props) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -113,6 +123,19 @@ export default function CreateMenu({
             <Import className="h-4 w-4 shrink-0" aria-hidden />
             {t('lecture.import.label')}
           </button>
+          {/* The deck an instructor already teaches from, rather than one this
+              app exported earlier (EXP-5). Offered only where a lecture has a
+              project to land in. */}
+          {onImportFromSlides && (
+            <button
+              role="menuitem"
+              onClick={choose(onImportFromSlides)}
+              className={item}
+            >
+              <MonitorPlay className="h-4 w-4 shrink-0" aria-hidden />
+              {t('lecture.importSlides.label')}
+            </button>
+          )}
         </div>
       )}
     </div>

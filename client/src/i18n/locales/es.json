@@ -524,6 +524,23 @@
         "failed": "No se pudo importar este archivo"
       }
     },
+    "importSlides": {
+      "label": "Importar de Google Slides",
+      "title": "Crear una clase a partir de una presentación de Google Slides",
+      "description": "Indica una presentación de tu Drive y recuperaremos tanto su diseño como plantilla como sus diapositivas en forma de clase.",
+      "linkLabel": "Enlace de Google Slides",
+      "linkPlaceholder": "Pega el enlace de la presentación",
+      "submit": "Importar clase",
+      "working": "Leyendo la presentación…",
+      "report": {
+        "summary": "{slides} diapositivas se convirtieron en {layouts} diseños.",
+        "dropped": "Parte del material no cupo en su diapositiva: {details}",
+        "untouched": "No se modificó nada en la presentación."
+      },
+      "errors": {
+        "failed": "No se pudo importar esa presentación"
+      }
+    },
     "errors": {
       "create": "No se pudo crear la clase"
     }
