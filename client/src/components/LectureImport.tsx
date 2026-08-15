@@ -59,9 +59,6 @@ export default function LectureImport({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [needsGoogle, setNeedsGoogle] = useState(false)
-  // The same choice the design import offers, because it decides the same
-  // thing: whether the deck's near-identical slides become one layout.
-  const [keepEverySlide, setKeepEverySlide] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
 
   const presentationId = presentationIdFrom(link)
@@ -109,7 +106,12 @@ export default function LectureImport({
       {
         projectId,
         presentationId,
-        ...(keepEverySlide ? { keepEverySlide: true } : {}),
+        // Always, for a lecture. Consolidation is what makes a *template*
+        // usable — a handful of designs to choose between rather than forty
+        // near-identical ones. A lecture is the deck itself, and merging two
+        // slides that were drawn differently redraws one of them. The
+        // instructor asked for their lecture, not a tidied version of it.
+        keepEverySlide: true,
       },
     )
       .then(result => {
@@ -197,16 +199,6 @@ export default function LectureImport({
           {t('common.cancel')}
         </button>
       </form>
-
-      <label className="mt-2 flex items-start gap-2 text-sm text-slate-600">
-        <input
-          type="checkbox"
-          checked={keepEverySlide}
-          onChange={e => setKeepEverySlide(e.target.checked)}
-          className="mt-0.5"
-        />
-        <span>{t('template.import.keepEverySlide')}</span>
-      </label>
 
       {/* Said only once something has been typed, so an empty field is not an
           error the instructor has not made yet. */}

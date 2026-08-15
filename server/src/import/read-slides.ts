@@ -429,6 +429,37 @@ const tableOf = (table: Record<string, unknown>): string[][] =>
 
 /** One shape, whatever it turned out to be. Anything it leaves unset comes
  * from the placeholder it descends from, on its layout or the master. */
+/**
+ * A shape's own fill, when the shape actually paints one.
+ *
+ * Google states a colour on a box that has no fill at all: the value is
+ * inherited from the placeholder or the master, and `propertyState` is what
+ * says whether it is drawn. Reading the colour without reading that put a
+ * white rectangle behind every title on a dark deck — the text was still
+ * white, so the slide arrived apparently blank.
+ *
+ * `NOT_RENDERED` is a box with no fill. `INHERIT` means the answer is on the
+ * placeholder above, which `shapeChain` has already merged in by the time
+ * this is asked, so treating it as no fill of its own is right.
+ */
+const paintedFill = (
+  shape: {
+    shapeProperties?: {
+      shapeBackgroundFill?: {
+        propertyState?: string
+        solidFill?: Record<string, unknown>
+      }
+    }
+  },
+  scheme: Record<string, string>,
+): string | undefined => {
+  const fill = shape.shapeProperties?.shapeBackgroundFill
+  if (!fill) return undefined
+  if (fill.propertyState === 'NOT_RENDERED') return undefined
+  if (fill.propertyState === 'INHERIT') return undefined
+  return colorOf(fill.solidFill, scheme)
+}
+
 const elementOf = (
   raw: Record<string, unknown>,
   page: { width: number; height: number },
@@ -474,7 +505,14 @@ const elementOf = (
         text?: Record<string, unknown>
         placeholder?: { type?: string }
         shapeProperties?: {
-          shapeBackgroundFill?: { solidFill?: Record<string, unknown> }
+          shapeBackgroundFill?: {
+            /** `NOT_RENDERED` is a box with no fill at all, and `INHERIT`
+             * defers to the placeholder it descends from. Google states a
+             * colour alongside both, so reading the colour without reading
+             * this paints boxes the deck leaves transparent. */
+            propertyState?: string
+            solidFill?: Record<string, unknown>
+          }
           contentAlignment?: string
         }
       }
@@ -540,10 +578,7 @@ const elementOf = (
   if (!runs.length) {
     // No words: a rule, a band, or an empty placeholder. Only the ones that
     // paint something are worth carrying — an empty box is not a design.
-    const fill = colorOf(
-      shape.shapeProperties?.shapeBackgroundFill?.solidFill,
-      scheme,
-    )
+    const fill = paintedFill(shape, scheme)
     if (!fill && !placeholder) return null
     // An empty placeholder still has type: the layout or the master says what
     // size, weight, colour and family a title on this design is set in, even
@@ -573,10 +608,7 @@ const elementOf = (
   // A box's own fill, which is part of the design whether or not it holds
   // words. Read only for the empty case before, so a deck whose colour lives
   // on its text boxes rather than on its pages imported white.
-  const boxFill = colorOf(
-    shape.shapeProperties?.shapeBackgroundFill?.solidFill,
-    scheme,
-  )
+  const boxFill = paintedFill(shape, scheme)
 
   return {
     id,

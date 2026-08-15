@@ -74,26 +74,17 @@ describe('importing a lecture', () => {
       expect(dispatchAction).toHaveBeenCalledWith('deck.importFromSlides', {
         projectId: 'p1',
         presentationId: '1AbC_dEf-123',
+        keepEverySlide: true,
       }),
     )
   })
 
-  it('consolidates unless told otherwise, as the design import does', async () => {
+  it('keeps every slide, a lecture being the deck itself', async () => {
+    // No choice to offer: consolidation is what makes a *template* usable,
+    // and merging two slides that were drawn differently redraws one of them.
+    // The instructor asked for their lecture, not a tidied version of it.
     renderPanel()
-    expect(screen.getByRole('checkbox')).not.toBeChecked()
-    importLink('1AbCdEfGhIjKl')
-
-    await waitFor(() =>
-      expect(dispatchAction).toHaveBeenCalledWith(
-        'deck.importFromSlides',
-        expect.not.objectContaining({ keepEverySlide: true }),
-      ),
-    )
-  })
-
-  it('asks for every slide when the instructor ticks the box', async () => {
-    renderPanel()
-    fireEvent.click(screen.getByRole('checkbox'))
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
     importLink('1AbCdEfGhIjKl')
 
     await waitFor(() =>

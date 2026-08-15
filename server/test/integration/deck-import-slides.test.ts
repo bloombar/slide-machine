@@ -173,13 +173,11 @@ describe('deck.importFromSlides (EXP-5)', () => {
     })
   })
 
-  it('gives every slide its own layout when the author asks', async () => {
-    // The TMPL-8 choice, carried through to the lecture import
-    const consolidated = await importDeck()
-    const verbatim = await importDeck({ keepEverySlide: true })
-    expect(verbatim.body.report.layoutsCreated).toBeGreaterThan(
-      consolidated.body.report.layoutsCreated,
-    )
+  it('still honours a caller that asks for every slide', async () => {
+    // The action keeps the option — a lecture import always sends it, and
+    // the design import offers it as a choice (TMPL-8)
+    const { body } = await importDeck({ keepEverySlide: true })
+    expect(body.report.layoutsCreated).toBe(body.report.slidesRead)
   })
 
   it('shows up in the owner’s project and nobody else’s', async () => {

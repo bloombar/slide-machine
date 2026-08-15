@@ -1486,3 +1486,84 @@ describe('when Google will not hand the presentation over', () => {
     })
   })
 })
+
+/**
+ * A box that states a fill it does not paint.
+ *
+ * Google puts a colour on shapes that have no fill at all — inherited from
+ * the placeholder or the master — and says so in `propertyState`. Reading the
+ * colour without reading that painted a white rectangle behind every title on
+ * a dark deck. The text was white too, so the slide imported apparently
+ * blank: a white box with white words in it.
+ *
+ * The page-background reader had honoured `propertyState` from the start;
+ * this is the shape reader catching up, and both now go through one helper so
+ * they cannot drift apart again.
+ */
+describe('a fill the shape does not actually paint', () => {
+  const titled = (fill: Record<string, unknown>) =>
+    toSourcePresentation({
+      presentationId: 'p',
+      pageSize: { width: dim(PAGE.width), height: dim(PAGE.height) },
+      slides: [
+        {
+          objectId: 's1',
+          pageElements: [
+            {
+              objectId: 's1-t',
+              size: { width: dim(PAGE.width / 2), height: dim(EMU) },
+              transform: {
+                translateX: 0,
+                translateY: 0,
+                scaleX: 1,
+                scaleY: 1,
+                unit: 'EMU',
+              },
+              shape: {
+                placeholder: { type: 'TITLE' },
+                shapeProperties: { shapeBackgroundFill: fill },
+                text: {
+                  textElements: [
+                    { textRun: { content: 'Rainwater Harvesting' } },
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      ],
+    }).slides[0]!.elements[0]!
+
+  it('is not carried when the box renders no fill', () => {
+    const el = titled({
+      propertyState: 'NOT_RENDERED',
+      solidFill: { color: { rgbColor: { red: 1, green: 1, blue: 1 } } },
+    })
+    expect(el.fill).toBeUndefined()
+  })
+
+  it('is not carried when the box defers to what it descends from', () => {
+    const el = titled({
+      propertyState: 'INHERIT',
+      solidFill: { color: { rgbColor: { red: 1, green: 1, blue: 1 } } },
+    })
+    expect(el.fill).toBeUndefined()
+  })
+
+  it('is carried when the box really is painted', () => {
+    // The case #238 fixed stays fixed: a deck that colours its text boxes
+    // rather than its pages must not import white
+    const el = titled({
+      propertyState: 'RENDERED',
+      solidFill: { color: { rgbColor: { red: 1, green: 0, blue: 0 } } },
+    })
+    expect(el.fill).toBe('#ff0000')
+  })
+
+  it('is carried when Google states no property state at all', () => {
+    const el = titled({
+      solidFill: { color: { rgbColor: { red: 0, green: 0, blue: 1 } } },
+    })
+    expect(el.fill).toBe('#0000ff')
+  })
+})

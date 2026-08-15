@@ -467,7 +467,7 @@
       "linkPlaceholder": "Paste a Google Slides link, or a Drive link to a .yaml design",
       "submit": "Import design",
       "keepEverySlide": "Keep every slide as its own layout",
-      "keepEverySlideHint": "Off, near-identical slides become one layout and the design is tidied up. On, you get the deck exactly as you drew it.",
+      "keepEverySlideHint": "By default, slides that look alike are combined into one tidied-up layout. Tick this to keep each slide exactly as you drew it.",
       "working": "Reading the presentation…",
       "errors": {
         "link": "That doesn't look like a Google Slides or Drive link.",
