@@ -122,17 +122,32 @@ function RowMenu({
 export default function LectureRow({
   deck,
   onDeleted,
+  justArrived = false,
 }: {
   deck: Deck
   /** Owner lists only: enables the kebab menu (share / delete). */
   onDeleted?: (deckId: string) => void
+  /**
+   * Marks a lecture that has just been imported, for a moment.
+   *
+   * An import drops a row into a list that may already be long, under a
+   * heading that may be off screen. The notice says what happened; this says
+   * where, which is the half a sentence cannot point at.
+   */
+  justArrived?: boolean
 }) {
   const { t } = useTranslation()
   const age = useTimeAgo(deck.updatedAt)
   const count = deck.slideOrder.length
 
   return (
-    <li className="flex items-center gap-1 rounded-md border border-slate-200 pe-2 hover:border-slate-300 hover:bg-slate-50">
+    <li
+      className={`flex items-center gap-1 rounded-md border pe-2 transition-colors duration-700 hover:border-slate-300 hover:bg-slate-50 ${
+        justArrived
+          ? 'border-indigo-400 bg-indigo-50 ring-2 ring-indigo-200'
+          : 'border-slate-200'
+      }`}
+    >
       <Link
         to={`/d/${deck.permalinkSlug}`}
         className="min-w-0 flex-1 px-4 py-2"

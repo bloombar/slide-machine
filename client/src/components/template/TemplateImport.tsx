@@ -25,6 +25,8 @@ import { useTranslation } from 'react-i18next'
 import { Upload } from 'lucide-react'
 import type { Template } from '@slide-machine/shared'
 import { dispatchAction } from '../../api/actions'
+import { ApiError } from '../../api/http'
+import { apiErrorMessage } from '../../i18n/apiError'
 
 /** What the server says an import did. */
 export interface ImportReport {
@@ -55,11 +57,52 @@ export const presentationIdFrom = (input: string): string | null => {
   return /^[a-zA-Z0-9_-]{10,}$/.test(text) ? text : null
 }
 
+/** What a pasted link turns out to point at. */
+export interface ImportSource {
+  /** The action that reads it. */
+  action: 'template.importFromSlides' | 'template.importFromDrive'
+  id: string
+}
+
+/**
+ * Which import a pasted link is for.
+ *
+ * Both sources are links, so the instructor gets one field rather than two —
+ * they know what they copied, and having to work out which box it belongs in
+ * is a question the app can answer itself.
+ *
+ * `/file/d/` is Drive's shape for a stored file, which is what an exported
+ * design is; everything else that yields an id is a presentation. A bare id
+ * goes to Slides because that is overwhelmingly what gets pasted, and the
+ * Drive route is reached by pasting the file's own link.
+ */
+export const importSourceFrom = (input: string): ImportSource | null => {
+  const text = input.trim()
+  if (!text) return null
+  const driveFile = /\/file\/d\/([a-zA-Z0-9_-]+)/.exec(text)
+  if (driveFile) {
+    return { action: 'template.importFromDrive', id: driveFile[1]! }
+  }
+  const id = presentationIdFrom(text)
+  return id ? { action: 'template.importFromSlides', id } : null
+}
+
 export default function TemplateImport({
   onImported,
+  otherSources,
 }: {
   /** The new template, so the caller can select it and reload the library. */
   onImported: (template: Template) => void
+  /**
+   * The other ways a design arrives — a template file, or one kept in Drive
+   * (EXP-3) — shown inside this panel rather than beside it.
+   *
+   * They were three controls stacked on the Design tab, all reading as
+   * separate features and two of them wearing the same icon as Export. They
+   * are one question ("where is the design coming from?"), so they are one
+   * panel, and the tab has one button for it.
+   */
+  otherSources?: React.ReactNode
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -73,33 +116,56 @@ export default function TemplateImport({
   // judgement is wrong (TMPL-8).
   const [keepEverySlide, setKeepEverySlide] = useState(false)
 
-  const presentationId = presentationIdFrom(link)
+  const source = importSourceFrom(link)
+  const fromSlides = source?.action === 'template.importFromSlides'
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault()
-    if (!presentationId || busy) return
+    if (!source || busy) return
     setBusy(true)
     setError(null)
     setReport(null)
-    dispatchAction<{ template: Template; report: ImportReport }>(
-      'template.importFromSlides',
-      { presentationId, ...(keepEverySlide ? { keepEverySlide: true } : {}) },
+    // A design file names no slides, so consolidating is not a question it
+    // can be asked — the choice travels only with a presentation.
+    const input = fromSlides
+      ? {
+          presentationId: source.id,
+          ...(keepEverySlide ? { keepEverySlide: true } : {}),
+        }
+      : { fileId: source.id }
+    dispatchAction<Template | { template: Template; report: ImportReport }>(
+      source.action,
+      input,
     )
       .then(result => {
-        setReport(result.report)
+        // The design import reports what it made of the deck; a file simply
+        // comes back as the template it already was.
+        if ('template' in result) {
+          setReport(result.report)
+          onImported(result.template)
+        } else {
+          onImported(result)
+        }
         setLink('')
-        onImported(result.template)
       })
       .catch((e: Error) => {
         // Not connected is not a failure, it is a missing step — so offer the
-        // step rather than an error the instructor cannot act on.
-        if (/connect|forbidden|403/i.test(e.message)) setNeedsGoogle(true)
-        else
-          setError(
-            /google/i.test(e.message)
-              ? t('template.import.errors.google')
-              : t('template.import.errors.failed'),
-          )
+        // step rather than an error the instructor cannot act on. The server
+        // says which case this is by code; matching on the message was
+        // guesswork that missed every error it had not seen before.
+        const code = e instanceof ApiError ? e.code : ''
+        if (
+          code === 'google_reconnect' ||
+          code === 'capability_required' ||
+          (!code && /connect|forbidden|403/i.test(e.message))
+        ) {
+          setNeedsGoogle(true)
+          return
+        }
+        // Which kind of refusal it was, said in the reader's language:
+        // server messages are authored in English and stay that way, so the
+        // code is translated rather than the message repeated (docs/I18N.md).
+        setError(apiErrorMessage(e, t, 'template.import.errors.failed'))
       })
       .finally(() => setBusy(false))
   }
@@ -161,7 +227,7 @@ export default function TemplateImport({
         />
         <button
           type="submit"
-          disabled={!presentationId || busy}
+          disabled={!source || busy}
           className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
         >
           {busy ? t('template.import.working') : t('template.import.submit')}
@@ -182,24 +248,28 @@ export default function TemplateImport({
       {/* The judgement an import makes, offered rather than assumed: most
           decks rebuild one design by hand and want it back as one layout,
           and some are a handful of genuinely different pages. */}
-      <label className="mt-2 flex items-start gap-2 text-sm text-slate-600">
-        <input
-          type="checkbox"
-          checked={keepEverySlide}
-          onChange={e => setKeepEverySlide(e.target.checked)}
-          className="mt-0.5"
-        />
-        <span>
-          {t('template.import.keepEverySlide')}
-          <span className="block text-xs text-slate-500">
-            {t('template.import.keepEverySlideHint')}
+      {/* Hidden for a design file, which has no slides to consolidate: a
+          control that cannot do anything is worse than one that is absent. */}
+      {(!link.trim() || fromSlides) && (
+        <label className="mt-2 flex items-start gap-2 text-sm text-slate-600">
+          <input
+            type="checkbox"
+            checked={keepEverySlide}
+            onChange={e => setKeepEverySlide(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span>
+            {t('template.import.keepEverySlide')}
+            <span className="block text-xs text-slate-500">
+              {t('template.import.keepEverySlideHint')}
+            </span>
           </span>
-        </span>
-      </label>
+        </label>
+      )}
 
       {/* Said only once something has been typed, so an empty field is not an
           error the instructor has not made yet. */}
-      {link.trim() && !presentationId && (
+      {link.trim() && !source && (
         <p className="mt-2 text-sm text-amber-700">
           {t('template.import.errors.link')}
         </p>
@@ -261,6 +331,17 @@ export default function TemplateImport({
             </p>
           )}
           <p className="text-slate-500">{t('template.import.report.review')}</p>
+        </div>
+      )}
+
+      {/* The other ways in, under a rule: same question, lesser-used answers.
+          A design already exported as a file, or one kept in Drive (EXP-3). */}
+      {otherSources && (
+        <div className="mt-4 border-t border-slate-100 pt-3">
+          <h4 className="text-xs font-medium tracking-wide text-slate-500 uppercase">
+            {t('template.import.otherSources')}
+          </h4>
+          {otherSources}
         </div>
       )}
     </section>

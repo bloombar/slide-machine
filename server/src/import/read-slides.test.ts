@@ -9,8 +9,12 @@
  * The fixtures are shaped the way Google's responses are, nesting and all —
  * a simplified fixture would test a reader we do not have.
  */
-import { describe, it, expect } from 'vitest'
-import { toSourcePresentation } from './read-slides'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import {
+  toSourcePresentation,
+  readPresentationLive,
+  PresentationUnreadableError,
+} from './read-slides'
 import { slotToken, encodeSlotMetadata } from '../lib/slot-metadata'
 
 const EMU = 914400
@@ -1423,5 +1427,143 @@ describe('a deck whose colour lives on its boxes', () => {
       }),
     )
     expect(read.slides[0]!.elements[0]).not.toHaveProperty('fill')
+  })
+})
+
+/**
+ * Reading the presentation from Google — the one stage whose failure stops an
+ * import (TMPL-8).
+ *
+ * Untested until an import failed in the field and said "Something went
+ * wrong", which is what an unclassified error looks like from the outside.
+ * What matters is that each refusal is told apart, because they ask the user
+ * for different things.
+ */
+describe('when Google will not hand the presentation over', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  const respond = (status: number, body = '{}') =>
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response(body, { status })),
+    )
+
+  it('asks for a reconnect when the grant does not cover it', async () => {
+    respond(403, '{"error":{"message":"insufficient permissions"}}')
+    const err = await readPresentationLive('t', 'p').catch(e => e)
+    expect(err).toBeInstanceOf(PresentationUnreadableError)
+    expect(err.reconnect).toBe(true)
+  })
+
+  it('does not, when the Slides API is switched off for the deployment', async () => {
+    // Google answers 403 for this too, but reconnecting cannot fix it — and
+    // telling an instructor to try sends them round a loop that never ends
+    respond(
+      403,
+      '{"error":{"message":"Google Slides API has not been used in project 1234 before or it is disabled"}}',
+    )
+    const err = await readPresentationLive('t', 'p').catch(e => e)
+    expect(err.reconnect).toBe(false)
+    expect(err.message).toMatch(/not enabled for this deployment/i)
+  })
+
+  it('says a missing presentation is missing', async () => {
+    respond(404)
+    const err = await readPresentationLive('t', 'p').catch(e => e)
+    expect(err.notFound).toBe(true)
+    expect(err.reconnect).toBe(false)
+  })
+
+  it('reports any other status without guessing why', async () => {
+    respond(500)
+    await expect(readPresentationLive('t', 'p')).rejects.toThrow(/500/)
+  })
+
+  it('reads the presentation when Google does hand it over', async () => {
+    respond(200, JSON.stringify({ presentationId: 'p', slides: [] }))
+    await expect(readPresentationLive('t', 'p')).resolves.toMatchObject({
+      slides: [],
+    })
+  })
+})
+
+/**
+ * A box that states a fill it does not paint.
+ *
+ * Google puts a colour on shapes that have no fill at all — inherited from
+ * the placeholder or the master — and says so in `propertyState`. Reading the
+ * colour without reading that painted a white rectangle behind every title on
+ * a dark deck. The text was white too, so the slide imported apparently
+ * blank: a white box with white words in it.
+ *
+ * The page-background reader had honoured `propertyState` from the start;
+ * this is the shape reader catching up, and both now go through one helper so
+ * they cannot drift apart again.
+ */
+describe('a fill the shape does not actually paint', () => {
+  const titled = (fill: Record<string, unknown>) =>
+    toSourcePresentation({
+      presentationId: 'p',
+      pageSize: { width: dim(PAGE.width), height: dim(PAGE.height) },
+      slides: [
+        {
+          objectId: 's1',
+          pageElements: [
+            {
+              objectId: 's1-t',
+              size: { width: dim(PAGE.width / 2), height: dim(EMU) },
+              transform: {
+                translateX: 0,
+                translateY: 0,
+                scaleX: 1,
+                scaleY: 1,
+                unit: 'EMU',
+              },
+              shape: {
+                placeholder: { type: 'TITLE' },
+                shapeProperties: { shapeBackgroundFill: fill },
+                text: {
+                  textElements: [
+                    { textRun: { content: 'Rainwater Harvesting' } },
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      ],
+    }).slides[0]!.elements[0]!
+
+  it('is not carried when the box renders no fill', () => {
+    const el = titled({
+      propertyState: 'NOT_RENDERED',
+      solidFill: { color: { rgbColor: { red: 1, green: 1, blue: 1 } } },
+    })
+    expect(el.fill).toBeUndefined()
+  })
+
+  it('is not carried when the box defers to what it descends from', () => {
+    const el = titled({
+      propertyState: 'INHERIT',
+      solidFill: { color: { rgbColor: { red: 1, green: 1, blue: 1 } } },
+    })
+    expect(el.fill).toBeUndefined()
+  })
+
+  it('is carried when the box really is painted', () => {
+    // The case #238 fixed stays fixed: a deck that colours its text boxes
+    // rather than its pages must not import white
+    const el = titled({
+      propertyState: 'RENDERED',
+      solidFill: { color: { rgbColor: { red: 1, green: 0, blue: 0 } } },
+    })
+    expect(el.fill).toBe('#ff0000')
+  })
+
+  it('is carried when Google states no property state at all', () => {
+    const el = titled({
+      solidFill: { color: { rgbColor: { red: 0, green: 0, blue: 1 } } },
+    })
+    expect(el.fill).toBe('#0000ff')
   })
 })

@@ -6,15 +6,16 @@ gone ([§4](#4-rendering)), so a layout an instructor builds and one the app shi
 same kind of thing. This page is the single home for how templates and layouts work,
 including how they move to and from Google Slides.
 
-> **Status.** Everything here ships except **import**. Template storage, the WYSIWYG
-> editor, layout deletion, the positioned renderer and export to Google Slides
-> ([EXP-6](SPEC.md#exp-6-template-export-to-google-slides)) are all built. What is
-> specified and designed but **not yet built** is the other direction: deriving a
-> template from a Google Slides presentation
-> ([TMPL-8](SPEC.md#tmpl-8-template-import-from-google-slides)) and importing a lecture
-> from one ([EXP-5](SPEC.md#exp-5-lecture-import-from-google-slides)) — see
-> [ROADMAP.md](ROADMAP.md). Those are documented here because the design is what the
-> implementation will be checked against.
+> **Status.** Everything here ships. Template storage, the WYSIWYG editor, layout
+> deletion, the positioned renderer and export to Google Slides
+> ([EXP-6](SPEC.md#exp-6-template-export-to-google-slides)) were built first; the other
+> direction has since followed — deriving a template from a Google Slides presentation
+> ([TMPL-8](SPEC.md#tmpl-8-template-import-from-google-slides)), re-importing a template
+> from the file it was exported to ([EXP-3](SPEC.md#exp-3-round-trip-import)), and
+> importing a lecture from a presentation
+> ([EXP-5](SPEC.md#exp-5-lecture-import-from-google-slides)). The one source named in the
+> spec and **not** built is a template from a GitHub repo, which is out of scope by
+> decision — see [ROADMAP.md](ROADMAP.md).
 
 ## 1. What a template is, and where it lives
 
@@ -442,11 +443,41 @@ by whoever imported it, and it arrives private, the same judgement the Google Sl
 makes. The `whiteboard` layout is synthesized when a file has none.
 
 **4. Map content** — lecture import only (SPEC
-[EXP-5](SPEC.md#exp-5-lecture-import-from-google-slides)). Clustering has already assigned
-every source slide to a derived layout, so each slide's `layoutType` is known without
-guessing again. Only slot filling remains, and it is deterministic: title placeholders →
-`title`; body with bulleted paragraphs → `bullets`, without → `body`; subtitle → `caption`;
-the dominant image → the image slot, copied into storage. Speaker notes are not imported.
+[EXP-5](SPEC.md#exp-5-lecture-import-from-google-slides)), via `deck.importFromSlides`.
+Clustering has already assigned every source slide to a derived layout, so each slide's
+`layoutType` is known without guessing again — it is never re-decided, which would be a
+second chance to disagree with the design just built.
+
+Only slot filling remains, and it is deterministic rather than a model call: the slide
+already says what it holds, and asking a model would be slower, cost money, and be
+occasionally wrong about a question the presentation has already answered. A box of
+bulleted paragraphs becomes `bullets`, prose becomes `text`, a table becomes its rows, and
+a picture is pointed at the copy the import stored — so the lecture does not depend on the
+Google file continuing to exist. Where a box carries its own declaration (an export of
+ours, [EXP-8](SPEC.md#exp-8-slot-metadata-across-google-slides-round-trips)) that wins over
+every inference: a box exported as `code` holds a listing though nothing about the shape
+says so, and its indentation is kept because indentation is content.
+
+A picture that could not be retrieved is **named in the report** rather than written as a
+reference to nothing, and the report numbers slides as the deck presents them — "slide 4:
+image" is something an author can act on where "3 boxes dropped" is not.
+
+**Speaker notes become narration only on an export of ours**, which wrote them from
+narration in the first place. Another deck's notes may be reminders or citations, and
+narration is read aloud ([PLAY-2](SPEC.md#play-2-narration-playback)), so they are left
+where they are.
+
+One read produces **both** a lecture and the style template its design became; the template
+is saved to the author's library either way, since EXP-5 lets them keep only that.
+
+**A lecture import always keeps every slide**, and offers no choice about it — a deliberate
+divergence from EXP-5's "derived into a style template exactly as
+[TMPL-8](SPEC.md#tmpl-8-template-import-from-google-slides) describes", which consolidates.
+Consolidation is what makes a *template* usable: a handful of designs to choose between
+rather than forty near-identical ones, each described identically to the AI. A lecture is
+the deck itself, and merging two slides that were drawn differently redraws one of them.
+The instructor asked for their lecture, not a tidied version of it. The design import keeps
+the choice, since that is where the judgement belongs.
 
 Import is **read-only** — the source presentation is never modified.
 

@@ -95,6 +95,14 @@ export const parseTemplateImport = (content: string): ParseResult => {
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return { errors: ['document: expected a YAML mapping'] }
   }
+  // The mirror of the deck importer's check: a lecture picked for a design.
+  if ((parsed as { kind?: unknown }).kind === 'deck') {
+    return {
+      errors: [
+        'That is a lecture file, not a design. Import it from the "+" menu beside your lectures instead.',
+      ],
+    }
+  }
   const result = templateDocSchema.safeParse(parsed)
   if (!result.success) {
     return { errors: [...new Set(result.error.issues.map(formatIssue))] }

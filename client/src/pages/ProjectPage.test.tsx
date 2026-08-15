@@ -113,16 +113,35 @@ describe('ProjectPage', () => {
     expect(screen.queryByRole('link', { name: /^u1$/ })).toBeNull()
   })
 
-  it('the Lectures "+" offers New lecture and Import, but no New project', async () => {
+  it('the Lectures "+" offers New lecture and one import, but no New project', async () => {
     mockFetchRoutes(baseRoutes)
     renderPage()
     await screen.findByRole('heading', { name: 'Lectures' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Create new' }))
+    // One import entry whatever the material is: a file this app exported
+    // (EXP-3) and a deck the instructor teaches from (EXP-5) are the same
+    // errand, and the panel asks which rather than the menu.
     expect(screen.getAllByRole('menuitem').map(i => i.textContent)).toEqual([
       'New lecture',
       'Import a lecture',
     ])
+  })
+
+  it('the "+" opens a panel offering both sources', async () => {
+    mockFetchRoutes(baseRoutes)
+    renderPage()
+    await screen.findByRole('heading', { name: 'Lectures' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create new' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Import a lecture' }))
+
+    expect(
+      await screen.findByLabelText('Google Slides link'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByLabelText(/import a \.yaml lecture file/i),
+    ).toBeInTheDocument()
   })
 
   it('the project kebab no longer carries Import — the "+" does', async () => {
@@ -217,10 +236,19 @@ describe('ProjectPage', () => {
   /** Drops a file on the hidden import input. Awaits it: the input lives in
    * the new-lecture zone, which only editors see, so it appears once the
    * viewer's rights resolve rather than with the first paint. */
+  /** Imports a file the way the screen does: one entry, then the source. */
   const importFile = async (content: string) => {
     const file = new File([content], 'deck.yaml', {
       type: 'application/x-yaml',
     })
+    // The "+" no longer picks a file; it opens the panel that asks where the
+    // lecture is coming from.
+    if (!document.querySelector('input[type="file"]')) {
+      fireEvent.click(screen.getByRole('button', { name: 'Create new' }))
+      fireEvent.click(
+        screen.getByRole('menuitem', { name: 'Import a lecture' }),
+      )
+    }
     const input = await vi.waitFor(() => {
       const el = document.querySelector('input[type="file"]')
       if (!el) throw new Error('import input not rendered yet')

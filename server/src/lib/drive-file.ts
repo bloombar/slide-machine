@@ -16,6 +16,9 @@ export class DriveFileUnreadableError extends Error {
   constructor(
     message: string,
     readonly reconnect = false,
+    /** Whether the file simply was not there — a different thing to ask the
+     * user about than a refused read. */
+    readonly notFound = false,
   ) {
     super(message)
     this.name = 'DriveFileUnreadableError'
@@ -68,7 +71,11 @@ export const readDriveFileTextLive = async (
     )
   }
   if (res.status === 404) {
-    throw new DriveFileUnreadableError('That file was not found in Drive')
+    throw new DriveFileUnreadableError(
+      'That file was not found in Drive',
+      false,
+      true,
+    )
   }
   if (!res.ok) {
     throw new DriveFileUnreadableError(

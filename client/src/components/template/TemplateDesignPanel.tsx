@@ -113,6 +113,9 @@ export default function TemplateDesignPanel({
         onEdit={edit}
         onDelete={setConfirming}
       />
+      {/* One way in, three sources. A design arriving from Slides, from a file
+          this app wrote earlier, or from Drive is the same event to the
+          library, so the tab offers one button rather than three controls. */}
       <TemplateImport
         onImported={imported => {
           onLibraryChanged()
@@ -120,14 +123,14 @@ export default function TemplateDesignPanel({
           // exists to be used, and seeing it in place is how it gets reviewed.
           onChange(imported.id, imported)
         }}
-      />
-      {/* The same arrival by the other door: a template file this app wrote
-          earlier, brought back as a template (EXP-3). */}
-      <TemplateFileImport
-        onImported={imported => {
-          onLibraryChanged()
-          onChange(imported.id, imported)
-        }}
+        otherSources={
+          <TemplateFileImport
+            onImported={imported => {
+              onLibraryChanged()
+              onChange(imported.id, imported)
+            }}
+          />
+        }
       />
       {confirming && (
         <ConfirmDialog

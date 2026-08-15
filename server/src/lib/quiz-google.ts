@@ -11,7 +11,7 @@
  */
 import { createGoogleFormFromQuiz, type QuizForm } from 'google-forms-quiz-tool'
 import type { DriveFolder, QuizDefinition } from '@slide-machine/shared'
-import { clientForRefreshToken } from '../auth/google-connect'
+import { accessTokenFor, clientForRefreshToken } from '../auth/google-connect'
 import { toQuizYamlObject, type QuizYamlOptions } from './quiz-yaml'
 import type { QuizPublishResult } from './quiz-publish'
 
@@ -19,11 +19,10 @@ const DRIVE_FILES = 'https://www.googleapis.com/drive/v3/files'
 const FOLDER_MIME = 'application/vnd.google-apps.folder'
 
 /** A fresh access token for the connected account's Drive REST calls. */
-const driveAccessToken = async (refreshToken: string): Promise<string> => {
-  const { token } = await clientForRefreshToken(refreshToken).getAccessToken()
-  if (!token) throw new Error('Could not obtain a Google access token')
-  return token
-}
+/** The connected account's bearer token. One helper, shared with the import
+ * path: a second copy here is what let a dead connection report itself as a
+ * server fault on this side while the other side offered a reconnect. */
+const driveAccessToken = accessTokenFor
 
 /**
  * The sub-folders directly inside `parentId` ('root' = My Drive). Under

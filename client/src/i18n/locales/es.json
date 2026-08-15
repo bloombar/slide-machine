@@ -448,6 +448,7 @@
     "exportSlidesHint": "Guarda este diseño en tu Drive como una presentación cuyos diseños de diapositiva son sus maquetas, con una diapositiva de muestra por cada una.",
     "exportSlidesDone": "Guardado en Drive: abrir en Google Slides",
     "exportSlidesError": "No se pudo guardar el diseño en Drive: inténtalo de nuevo",
+    "exportYamlError": "No se pudo exportar el diseño como archivo",
     "exportSlidesConnect": "Conecta una cuenta de Google para guardar diseños en Drive.",
     "exportHeading": "Exportar este diseño",
     "exportHint": "Llévatelo como archivo, o a tu Google Drive como una presentación cuyas maquetas son las suyas.",
@@ -459,42 +460,39 @@
       "auto": "Ninguno"
     },
     "import": {
-      "open": "Importar un diseño de Google Slides",
+      "open": "Importar un diseño",
       "title": "Importar un diseño de Google Slides",
       "description": "Indica una presentación de tu Drive y deduciremos el diseño que hay detrás —colores, tipografía y dónde va cada cosa— y lo guardaremos como una plantilla que puedes editar.",
-      "linkLabel": "Enlace de Google Slides",
-      "linkPlaceholder": "Pega el enlace de la presentación",
+      "linkLabel": "Enlace de Google Slides o Drive",
+      "linkPlaceholder": "Pega un enlace de Google Slides o un enlace de Drive a un diseño .yaml",
       "submit": "Importar diseño",
       "keepEverySlide": "Conservar cada diapositiva como su propio diseño",
-      "keepEverySlideHint": "Desactivado, las diapositivas casi idénticas se combinan en un diseño y se ordena el resultado. Activado, obtienes la presentación tal como la creaste.",
+      "keepEverySlideHint": "De forma predeterminada, las diapositivas parecidas se combinan en un único diseño ordenado. Marca esta casilla para conservar cada diapositiva tal como la creaste.",
       "working": "Leyendo la presentación…",
       "errors": {
-        "link": "Eso no parece un enlace de Google Slides.",
+        "link": "Eso no parece un enlace de Google Slides ni de Drive.",
         "google": "Google no nos dejó leer esa presentación. Comprueba que puedes abrirla tú.",
         "failed": "No se pudo importar esa presentación"
       },
       "report": {
-        "summary": "{slides} diapositivas se convirtieron en {layouts} diseños.",
-        "merged": "Se combinaron {count} diapositivas casi idénticas en un solo diseño.",
-        "approximated": "{count} diapositivas no coincidieron con ningún diseño y se aproximaron.",
-        "assetsFailed": "No se pudieron obtener {count} imágenes.",
-        "review": "El diseño es tuyo para editarlo: no se modificó nada en la presentación."
+        "summary": "{slides} diapositivas → {layouts} diseños",
+        "merged": "{count} diapositivas casi idénticas combinadas",
+        "approximated": "{count} asignadas al diseño más parecido",
+        "assetsFailed": "No se pudieron obtener {count} imágenes",
+        "review": "Tu presentación no se modificó."
       },
       "connectPrompt": "Conecta una cuenta de Google para leer una presentación de tu Drive.",
-      "connect": "Conectar Google"
+      "connect": "Conectar Google",
+      "otherSources": "O sube un archivo"
     },
     "fileImport": {
-      "open": "Importar un archivo de plantilla",
+      "open": "Importar un archivo de diseño .yaml",
       "working": "Leyendo el archivo…",
       "errors": {
         "read": "No se pudo leer ese archivo",
         "invalid": "No se pudo importar esta plantilla: {details}",
-        "failed": "No se pudo importar esta plantilla",
-        "link": "Eso no parece un enlace de Google Drive."
-      },
-      "driveLabel": "Archivo de plantilla en Google Drive",
-      "drivePlaceholder": "O pega un enlace de Drive a un archivo de plantilla",
-      "driveSubmit": "Importar desde Drive"
+        "failed": "No se pudo importar esta plantilla"
+      }
     }
   },
   "layout": {
@@ -523,6 +521,24 @@
         "invalid": "No se pudo importar este archivo: {details}",
         "failed": "No se pudo importar este archivo"
       }
+    },
+    "importSlides": {
+      "title": "Crear una clase a partir de una presentación de Google Slides",
+      "description": "Indica una presentación de tu Drive y sus diapositivas volverán como una clase que puedes impartir, tal como las creaste.",
+      "linkLabel": "Enlace de Google Slides",
+      "linkPlaceholder": "Pega el enlace de la presentación",
+      "submit": "Importar clase",
+      "working": "Leyendo la presentación…",
+      "report": {
+        "summary": "{slides} diapositivas se convirtieron en {layouts} diseños.",
+        "dropped": "Parte del material no cupo en su diapositiva: {details}",
+        "untouched": "No se modificó nada en la presentación."
+      },
+      "errors": {
+        "failed": "No se pudo importar esa presentación"
+      },
+      "otherSources": "O sube un archivo",
+      "fileOpen": "Importar un archivo de clase .yaml"
     },
     "errors": {
       "create": "No se pudo crear la clase"
@@ -1246,7 +1262,10 @@
     "internal_error": "Algo salió mal por nuestra parte: inténtalo de nuevo",
     "unknown_error": "Algo salió mal: inténtalo de nuevo",
     "email_unverified": "Primero confirma tu dirección de correo: revisa tu bandeja de entrada o envía un enlace nuevo desde los ajustes de tu cuenta",
-    "capability_required": "Primero conecta una cuenta de Google — puedes hacerlo desde la configuración de tu cuenta"
+    "capability_required": "Primero conecta una cuenta de Google — puedes hacerlo desde la configuración de tu cuenta",
+    "google_reconnect": "Google no permitió a esta cuenta leer ese archivo: vuelve a conectar tu cuenta de Google e inténtalo de nuevo",
+    "source_not_found": "No se encontró ese archivo en tu Drive: revisa el enlace",
+    "source_unreadable": "Google no entregó ese archivo"
   },
   "usage": {
     "title": "Uso del plan",

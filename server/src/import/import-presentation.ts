@@ -29,6 +29,7 @@ import {
   type ImportReport,
 } from './build-template'
 import { candidateOf, type Candidate } from './candidate'
+import { importedSlide, type ImportedSlide } from './slide-content'
 import {
   consolidateWithSemantics,
   verbatimWithSemantics,
@@ -45,6 +46,9 @@ import type { BuiltTemplate } from './build-template'
 
 export interface ImportResult {
   template: BuiltTemplate
+  /** The presentation's content, placed on the layouts the design analysis
+   * assigned it (EXP-5). A template-only import simply ignores it. */
+  slides: ImportedSlide[]
   report: ImportReport
 }
 
@@ -125,6 +129,19 @@ const authoredLayouts = (
     // slides do, so the deck falls back to clustering rather than importing
     // a layout with nothing on it.
     if (!design.slots.length) return undefined
+    // A layout page is only the design if the slides on it agree with each
+    // other about how they look. Google hands every deck a stack of default
+    // layout pages, and a hand-built deck's slides sit on two or three of
+    // them while looking nothing alike — five slides, five colours, two
+    // pages. Grouping by the page then throws four of those colours away and
+    // paints the rest the page's own white.
+    //
+    // Disagreement means the design lives on the slides, not the page, so the
+    // deck falls back to clustering, which reads what is actually there.
+    const looks = new Set(
+      slides.map(s => `${s.background ?? ''}::${s.backgroundImage ?? ''}`),
+    )
+    if (looks.size > 1) return undefined
     authored.push({ design, slides })
   }
   return authored.length > 1 ? authored : undefined
@@ -334,9 +351,51 @@ export const importSourcePresentation = async (
     assignment.set(slideId, layoutIndex)
   }
 
+  const template = buildTemplate(source, layouts, assignment, stored)
+
+  // The content half (EXP-5). Built here rather than by a second pass over the
+  // presentation because everything it needs is already in hand: which layout
+  // each slide landed on, what each of its boxes held, and the stored copy of
+  // every picture. Re-deriving any of that later would be a second chance to
+  // disagree with the design that was just built.
+  //
+  // Only slides that carried a design are here — one with nothing on it has no
+  // layout to be placed on, and `candidates` dropped it for the same reason.
+  const notesById = new Map(source.slides.map(slide => [slide.id, slide.notes]))
+  const slides = candidates
+    .filter(candidate => template.layoutOfSlide[candidate.slideId])
+    .map(candidate =>
+      importedSlide(
+        candidate,
+        template.layoutOfSlide[candidate.slideId]!,
+        url => stored.get(url),
+        // Speaker notes are narration only on a presentation this system
+        // exported, which wrote them from narration in the first place
+        // (EXP-8). Another deck's notes may be reminders or citations, and
+        // narration is read aloud (PLAY-2) — so they are left where they are.
+        isOwnExport ? notesById.get(candidate.slideId) : undefined,
+      ),
+    )
+
+  // Numbered as the deck presents them: "slide 4" is what an author would
+  // call it, and the source id is not something they have ever seen.
+  const numberOf = new Map(
+    source.slides.map((slide, index) => [slide.id, index + 1]),
+  )
+  const contentDropped = slides
+    .filter(slide => slide.dropped.length)
+    .map(slide => ({
+      slide: numberOf.get(slide.slideId) ?? 0,
+      slots: slide.dropped,
+    }))
+
   return {
-    template: buildTemplate(source, layouts, assignment, stored),
-    report: importReport(source, layouts, approximated.length, failed),
+    template,
+    slides,
+    report: {
+      ...importReport(source, layouts, approximated.length, failed),
+      ...(contentDropped.length ? { contentDropped } : {}),
+    },
   }
 }
 

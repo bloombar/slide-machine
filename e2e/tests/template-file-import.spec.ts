@@ -59,9 +59,10 @@ test('template round trip: export a design to a file, import it back', async ({
   // it from a deck export.
   expect(readFileSync(saved, 'utf8')).toMatch(/kind: template/)
 
-  // Import that same file back. The count going up by one is the whole
-  // claim — the design left as a file and came back as a template.
-  await dialog.getByLabel(/import a template file/i).setInputFiles(saved)
+  // Import that same file back. The three ways a design arrives share one
+  // panel, so it is opened first — the tab has one Import button, not three.
+  await dialog.getByRole('button', { name: /^Import a design$/i }).click()
+  await dialog.getByLabel(/import a \.yaml design file/i).setInputFiles(saved)
   await expect(previews).toHaveCount(before + 1)
 
   // And it is a real template rather than a row in a list: chosen straight
@@ -88,7 +89,8 @@ test('a file that is not a template is refused, and says why', async ({
   const previews = page.getByTestId('template-preview')
   const before = await previews.count()
 
-  await page.getByLabel(/import a template file/i).setInputFiles({
+  await page.getByRole('button', { name: /^Import a design$/i }).click()
+  await page.getByLabel(/import a \.yaml design file/i).setInputFiles({
     name: 'week-1.deck.yaml',
     mimeType: 'application/x-yaml',
     // A deck export: valid YAML, wrong document.

@@ -177,6 +177,14 @@ const ACCESS_INDEX: Record<string, AccessDescriptor> = {
     level: 'signedIn',
     capabilities: ['google-drive'],
   },
+  // A lecture from a presentation (EXP-5). The lecture does not exist yet, so
+  // what is authorized is the project it lands in — owner only, matching
+  // deck.create and deck.import — plus the grant that reads the presentation.
+  'deck.importFromSlides': {
+    resource: 'project',
+    level: 'own',
+    capabilities: ['google-drive'],
+  },
   'deck.applyTemplateUpdate': { resource: 'deck', level: 'edit' },
   'deck.diarize': { resource: 'deck', level: 'edit' },
   'deck.refine': { resource: 'deck', level: 'edit' },

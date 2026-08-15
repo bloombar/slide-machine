@@ -448,6 +448,7 @@
     "exportSlidesHint": "Saves this design to your Drive as a presentation whose layouts are its layouts, with one slide showing each.",
     "exportSlidesDone": "Saved to Drive — open in Google Slides",
     "exportSlidesError": "Could not save the design to Drive — try again",
+    "exportYamlError": "Could not export the design as a file",
     "exportSlidesConnect": "Connect a Google account to save designs to Drive.",
     "exportHeading": "Export this design",
     "exportHint": "Take it out as a file, or into your Google Drive as a presentation whose layouts are its layouts.",
@@ -459,42 +460,39 @@
       "auto": "None"
     },
     "import": {
-      "open": "Import a design from Google Slides",
+      "open": "Import a design",
       "title": "Import a design from Google Slides",
       "description": "Point at a presentation in your Drive and we'll work out the design behind it — colours, type and where things sit — and save it as a template you can edit.",
-      "linkLabel": "Google Slides link",
-      "linkPlaceholder": "Paste the presentation link",
+      "linkLabel": "Google Slides or Drive link",
+      "linkPlaceholder": "Paste a Google Slides link, or a Drive link to a .yaml design",
       "submit": "Import design",
       "keepEverySlide": "Keep every slide as its own layout",
-      "keepEverySlideHint": "Off, near-identical slides become one layout and the design is tidied up. On, you get the deck exactly as you drew it.",
+      "keepEverySlideHint": "By default, slides that look alike are combined into one tidied-up layout. Tick this to keep each slide exactly as you drew it.",
       "working": "Reading the presentation…",
       "errors": {
-        "link": "That doesn't look like a Google Slides link.",
+        "link": "That doesn't look like a Google Slides or Drive link.",
         "google": "Google wouldn't let us read that presentation. Check you can open it yourself.",
         "failed": "Could not import that presentation"
       },
       "report": {
-        "summary": "{slides} slides became {layouts} layouts.",
-        "merged": "Merged {count} near-identical slides into one layout.",
-        "approximated": "{count} slides matched no layout and were approximated.",
-        "assetsFailed": "{count} images could not be retrieved.",
-        "review": "The design is yours to edit — nothing was changed in the presentation."
+        "summary": "{slides} slides → {layouts} layouts",
+        "merged": "{count} near-identical slides merged",
+        "approximated": "{count} matched to the closest layout",
+        "assetsFailed": "{count} images couldn't be fetched",
+        "review": "Your presentation wasn't changed."
       },
       "connectPrompt": "Connect a Google account to read a presentation from your Drive.",
-      "connect": "Connect Google"
+      "connect": "Connect Google",
+      "otherSources": "Or upload a file"
     },
     "fileImport": {
-      "open": "Import a template file",
+      "open": "Import a .yaml design file",
       "working": "Reading the file…",
       "errors": {
         "read": "Could not read that file",
         "invalid": "Could not import this template: {details}",
-        "failed": "Could not import this template",
-        "link": "That doesn't look like a Google Drive link."
-      },
-      "driveLabel": "Template file in Google Drive",
-      "drivePlaceholder": "Or paste a Drive link to a template file",
-      "driveSubmit": "Import from Drive"
+        "failed": "Could not import this template"
+      }
     }
   },
   "layout": {
@@ -523,6 +521,24 @@
         "invalid": "Could not import this file: {details}",
         "failed": "Could not import this file"
       }
+    },
+    "importSlides": {
+      "title": "Create a lecture from a Google Slides presentation",
+      "description": "Point at a presentation in your Drive and its slides come back as a lecture you can teach from, drawn the way you drew them.",
+      "linkLabel": "Google Slides link",
+      "linkPlaceholder": "Paste the presentation link",
+      "submit": "Import lecture",
+      "working": "Reading the presentation…",
+      "report": {
+        "summary": "{slides} slides became {layouts} layouts.",
+        "dropped": "Some material didn't fit its slide — {details}",
+        "untouched": "Nothing was changed in the presentation."
+      },
+      "errors": {
+        "failed": "Could not import that presentation"
+      },
+      "otherSources": "Or upload a file",
+      "fileOpen": "Import a .yaml lecture file"
     },
     "errors": {
       "create": "Could not create the lecture"
@@ -1246,7 +1262,10 @@
     "internal_error": "Something went wrong on our end — try again",
     "unknown_error": "Something went wrong — try again",
     "email_unverified": "Confirm your email address first — check your inbox, or send a new link from your account settings",
-    "capability_required": "Connect a Google account first — you can do that from your account settings"
+    "capability_required": "Connect a Google account first — you can do that from your account settings",
+    "google_reconnect": "Google would not let this account read that file — reconnect your Google account and try again",
+    "source_not_found": "That file was not found in your Drive — check the link",
+    "source_unreadable": "Google would not hand over that file"
   },
   "usage": {
     "title": "Plan usage",

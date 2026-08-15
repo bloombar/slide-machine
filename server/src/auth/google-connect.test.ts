@@ -5,21 +5,25 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { testEnv, getToken, setCredentials } = vi.hoisted(() => ({
-  testEnv: {
-    JWT_SECRET: 'test-jwt-secret-at-least-32-characters!',
-    GOOGLE_OAUTH_CLIENT_ID: 'client-id' as string | undefined,
-    GOOGLE_OAUTH_CLIENT_SECRET: 'client-secret' as string | undefined,
-    PUBLIC_BASE_URL: 'http://localhost:3000' as string | undefined,
-  },
-  getToken: vi.fn(),
-  setCredentials: vi.fn(),
-}))
+const { testEnv, getToken, setCredentials, getAccessToken } = vi.hoisted(
+  () => ({
+    testEnv: {
+      JWT_SECRET: 'test-jwt-secret-at-least-32-characters!',
+      GOOGLE_OAUTH_CLIENT_ID: 'client-id' as string | undefined,
+      GOOGLE_OAUTH_CLIENT_SECRET: 'client-secret' as string | undefined,
+      PUBLIC_BASE_URL: 'http://localhost:3000' as string | undefined,
+    },
+    getToken: vi.fn(),
+    setCredentials: vi.fn(),
+    getAccessToken: vi.fn(),
+  }),
+)
 vi.mock('../config/env', () => ({ env: testEnv }))
 vi.mock('google-auth-library', () => ({
   OAuth2Client: class {
     getToken = getToken
     setCredentials = setCredentials
+    getAccessToken = getAccessToken
   },
 }))
 
@@ -31,13 +35,16 @@ import {
   exchangeConnectCode,
   grantedDriveAccess,
   clientForRefreshToken,
+  accessTokenFor,
 } from './google-connect'
+import { CapabilityRequiredError } from '../actions/dispatch'
 
 beforeEach(() => {
   testEnv.GOOGLE_OAUTH_CLIENT_ID = 'client-id'
   testEnv.GOOGLE_OAUTH_CLIENT_SECRET = 'client-secret'
   getToken.mockReset()
   setCredentials.mockReset()
+  getAccessToken.mockReset()
 })
 
 describe('connect state', () => {
@@ -155,5 +162,41 @@ describe('clientForRefreshToken', () => {
     expect(setCredentials).toHaveBeenCalledWith({
       refresh_token: 'refresh-xyz',
     })
+  })
+})
+
+/**
+ * A stored Google grant that will not exchange any more (EXP-4).
+ *
+ * This threw a plain Error, so a connection revoked in the user's Google
+ * settings reached them as "Something went wrong on our end — try again": a
+ * server fault they could only wait out, for something one click fixes. Both
+ * the import and the Drive folder picker went through here, so both reported
+ * it that way.
+ */
+describe('a connection Google will no longer honour', () => {
+  it('asks for a reconnect when the exchange is refused', async () => {
+    getAccessToken.mockRejectedValue(new Error('invalid_grant'))
+    const err = await accessTokenFor('stale-token').catch(e => e)
+    expect(err).toBeInstanceOf(CapabilityRequiredError)
+    expect(err.capability).toBe('google-drive')
+  })
+
+  it('asks for one when Google answers with no token at all', async () => {
+    getAccessToken.mockResolvedValue({ token: null })
+    const err = await accessTokenFor('stale-token').catch(e => e)
+    expect(err).toBeInstanceOf(CapabilityRequiredError)
+  })
+
+  it('is never reported as a fault of ours, which nobody can act on', async () => {
+    getAccessToken.mockRejectedValue(new Error('invalid_grant'))
+    const err = await accessTokenFor('stale-token').catch(e => e)
+    expect(err.name).not.toBe('Error')
+    expect(err.message).toMatch(/reconnect/i)
+  })
+
+  it('hands back the token when the connection is live', async () => {
+    getAccessToken.mockResolvedValue({ token: 'access-1' })
+    await expect(accessTokenFor('good-token')).resolves.toBe('access-1')
   })
 })

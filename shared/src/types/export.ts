@@ -11,6 +11,7 @@
  * file.
  */
 import type { Deck } from './deck'
+import type { Template } from './template'
 
 /** The formats a deck can be exported to (EXP-1/EXP-2). */
 export type DeckExportFormat = 'pdf' | 'google-slides' | 'yaml'
@@ -117,4 +118,48 @@ export interface ExportedDeckSettings {
 export interface DeckImportResult {
   deck: Deck
   warnings: string[]
+}
+
+/**
+ * What an import did, in the terms the report is written in (TMPL-8/EXP-5).
+ *
+ * Shared rather than server-only because the screen that shows it is the point
+ * of it: consolidation is a judgement and assets can fail, so the report is
+ * surfaced to the instructor rather than logged, and a second copy of this
+ * shape on the client is a second thing to keep in step.
+ */
+export interface ImportReport {
+  slidesRead: number
+  layoutsCreated: number
+  /** The biggest merge that happened, which is the one worth mentioning. */
+  largestMerge?: { type: string; slides: number }
+  /** Slides that matched no design and were drawn with the nearest one. */
+  approximated: number
+  /** Images that could not be fetched, so the layout has an empty box. */
+  assetsFailed: number
+  /**
+   * Content that could not be placed, by the slide it was on (EXP-5).
+   *
+   * Named rather than counted, because "3 boxes were dropped" is not something
+   * an instructor can act on and "slide 4: image" is. Slides are numbered as
+   * the deck presents them, since that is how their author refers to them.
+   *
+   * Absent for a template-only import, which reads no content to lose.
+   */
+  contentDropped?: { slide: number; slots: string[] }[]
+}
+
+/**
+ * The outcome of creating a lecture from a Google Slides presentation (EXP-5):
+ * the lecture, the style template its design became, and the same report the
+ * template import returns — which now also covers the content side.
+ *
+ * The template comes back because it is a deliverable in its own right: an
+ * instructor may keep only the design and throw the lecture away, and cannot
+ * do that without being told the template exists.
+ */
+export interface DeckImportFromSlidesResult {
+  deck: Deck
+  template: Template
+  report: ImportReport
 }

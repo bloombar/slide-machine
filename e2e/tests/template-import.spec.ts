@@ -42,12 +42,10 @@ test('template import: connect, paste a link, get a usable design', async ({
 
   // The panel stays out of the way until asked for — importing is not what
   // most visits to this tab are about.
-  await expect(page.getByLabel('Google Slides link')).toBeHidden()
-  await page
-    .getByRole('button', { name: /Import a design from Google Slides/i })
-    .click()
+  await expect(page.getByLabel(/Google Slides or Drive link/i)).toBeHidden()
+  await page.getByRole('button', { name: /^Import a design$/i }).click()
 
-  const field = page.getByLabel('Google Slides link')
+  const field = page.getByLabel(/Google Slides or Drive link/i)
   await expect(field).toBeVisible()
 
   // A link that is not one is refused before anything is sent, so the
@@ -78,17 +76,17 @@ test('template import: connect, paste a link, get a usable design', async ({
   // the import made of the deck (TMPL-8).
   const report = page.getByTestId('import-report')
   await expect(report).toBeVisible({ timeout: 20_000 })
-  await expect(report).toContainText(/10 slides became \d+ layouts/)
-  await expect(report).toContainText(/nothing was changed in the presentation/i)
+  await expect(report).toContainText(/10 slides → \d+ layouts/)
+  await expect(report).toContainText(/your presentation wasn.t changed/i)
 
   // The deck comes back as the few designs it is built from, not as ten
   // near-duplicates — and the report says so, consolidation being a judgement
   // the instructor is told about rather than one made silently (TMPL-8).
   const summary = (await report.textContent()) ?? ''
-  const layouts = Number(/became (\d+) layouts/.exec(summary)?.[1] ?? '0')
+  const layouts = Number(/→ (\d+) layouts/.exec(summary)?.[1] ?? '0')
   expect(layouts).toBeGreaterThan(0)
   expect(layouts).toBeLessThan(10)
-  await expect(report).toContainText(/Merged \d+ near-identical slides/)
+  await expect(report).toContainText(/\d+ near-identical slides merged/)
 
   // It is a real template: in the library, rendered as a slide in its own
   // theme like any other, and already chosen — an import exists to be used.

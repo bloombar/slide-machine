@@ -84,11 +84,22 @@ describe('parseDeckImport', () => {
     expect('errors' in result).toBe(true)
   })
 
-  it('rejects the wrong document kind', () => {
+  it('names a design file for what it is, and where it belongs', () => {
+    // The likeliest wrong file here: both are .yaml and this app wrote both.
+    // Four schema violations that never say "template" tell the instructor
+    // nothing they can act on
     const result = parseDeckImport(asYaml({ ...validDoc, kind: 'template' }))
     expect('errors' in result).toBe(true)
-    if ('errors' in result)
-      expect(result.errors.some(e => e.includes('kind'))).toBe(true)
+    if ('errors' in result) {
+      expect(result.errors).toHaveLength(1)
+      expect(result.errors[0]).toMatch(/design file, not a lecture/i)
+      expect(result.errors[0]).toMatch(/design tab/i)
+    }
+  })
+
+  it('still refuses a document of no recognised kind at all', () => {
+    const result = parseDeckImport(asYaml({ ...validDoc, kind: 'quiz' }))
+    expect('errors' in result).toBe(true)
   })
 
   it('rejects a missing title', () => {

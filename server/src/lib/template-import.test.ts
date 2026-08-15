@@ -132,11 +132,13 @@ describe('a file that cannot be trusted', () => {
     })
   })
 
-  it('refuses a deck export, which is a different document', () => {
+  it('names a lecture file for what it is, and where it belongs', () => {
     const parsed = parseTemplateImport(
       'version: 1\nkind: deck\ntitle: Week 1\n',
     )
-    expect('errors' in parsed).toBe(true)
+    if (!('errors' in parsed)) throw new Error('expected errors')
+    expect(parsed.errors).toHaveLength(1)
+    expect(parsed.errors[0]).toMatch(/lecture file, not a design/i)
   })
 
   it('refuses a template with no layouts, which is not a design', () => {
