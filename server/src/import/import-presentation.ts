@@ -129,6 +129,19 @@ const authoredLayouts = (
     // slides do, so the deck falls back to clustering rather than importing
     // a layout with nothing on it.
     if (!design.slots.length) return undefined
+    // A layout page is only the design if the slides on it agree with each
+    // other about how they look. Google hands every deck a stack of default
+    // layout pages, and a hand-built deck's slides sit on two or three of
+    // them while looking nothing alike — five slides, five colours, two
+    // pages. Grouping by the page then throws four of those colours away and
+    // paints the rest the page's own white.
+    //
+    // Disagreement means the design lives on the slides, not the page, so the
+    // deck falls back to clustering, which reads what is actually there.
+    const looks = new Set(
+      slides.map(s => `${s.background ?? ''}::${s.backgroundImage ?? ''}`),
+    )
+    if (looks.size > 1) return undefined
     authored.push({ design, slides })
   }
   return authored.length > 1 ? authored : undefined
