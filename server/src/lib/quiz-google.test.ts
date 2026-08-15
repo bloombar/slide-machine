@@ -15,6 +15,9 @@ vi.mock('../auth/google-connect', () => ({
     token: t,
     getAccessToken: async () => ({ token: `access-${t}` }),
   }),
+  // Shared with the import path since a dead connection must report itself
+  // the same way on both — one helper, so it cannot drift.
+  accessTokenFor: async (t: string) => `access-${t}`,
 }))
 
 import {

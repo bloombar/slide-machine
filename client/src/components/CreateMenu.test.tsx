@@ -62,20 +62,27 @@ describe('CreateMenu', () => {
     expect(screen.queryByRole('menu')).toBeNull()
   })
 
-  it('forwards a picked file and clears the input for a repeat pick', () => {
+  it('opens the import panel rather than picking a file itself', () => {
+    // Importing is one entry, not one per source: the panel asks where the
+    // lecture is coming from, so the menu no longer has to know
     const onImportLecture = vi.fn()
     renderMenu({ onImportLecture })
     open()
 
-    const input = screen.getByLabelText('Import a lecture') as HTMLInputElement
-    const file = new File(['version: 1\n'], 'deck.yaml', {
-      type: 'application/x-yaml',
-    })
-    fireEvent.change(input, { target: { files: [file] } })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Import a lecture' }))
 
-    expect(onImportLecture).toHaveBeenCalledWith(file)
-    expect(input.value).toBe('')
+    expect(onImportLecture).toHaveBeenCalled()
     expect(screen.queryByRole('menu')).toBeNull()
+  })
+
+  it('offers one import entry, whatever the lecture is coming from', () => {
+    renderMenu({})
+    open()
+    expect(
+      screen
+        .getAllByRole('menuitem')
+        .filter(i => /import/i.test(i.textContent ?? '')),
+    ).toHaveLength(1)
   })
 
   it('closes on an outside click and on Escape', () => {

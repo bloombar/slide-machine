@@ -10,6 +10,7 @@ import { OAuth2Client } from 'google-auth-library'
 import { SignJWT, jwtVerify } from 'jose'
 import { env } from '../config/env'
 import { HttpError } from '../middleware/error'
+import { CapabilityRequiredError } from '../actions/dispatch'
 
 const AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
 
@@ -184,7 +185,29 @@ export const clientForRefreshToken = (refreshToken: string): OAuth2Client => {
  * hides a stored grant that has been revoked.
  */
 export const accessTokenFor = async (refreshToken: string): Promise<string> => {
-  const { token } = await clientForRefreshToken(refreshToken).getAccessToken()
-  if (!token) throw new Error('Google would not issue an access token')
+  // A stored grant that Google will no longer exchange is the account no
+  // longer being connected, whatever the wording of the refusal — revoked in
+  // the user's Google settings, expired, or issued by credentials this
+  // deployment has since replaced. Raised as the same thing a missing
+  // connection raises, so the screen offers to reconnect.
+  //
+  // It threw a plain Error before, which reached the user as "Something went
+  // wrong on our end" — a server fault they could only wait out, for
+  // something one click would have fixed.
+  let token: string | null | undefined
+  try {
+    ;({ token } = await clientForRefreshToken(refreshToken).getAccessToken())
+  } catch {
+    throw new CapabilityRequiredError(
+      'google-drive',
+      'Your Google connection has expired — reconnect the account',
+    )
+  }
+  if (!token) {
+    throw new CapabilityRequiredError(
+      'google-drive',
+      'Google would not issue an access token — reconnect the account',
+    )
+  }
   return token
 }

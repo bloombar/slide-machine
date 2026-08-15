@@ -29,23 +29,16 @@ export default function ProjectRowMenu({
    * The home screen passes it, since a project's row is the only place to
    * aim an import there; the project page omits it and offers the import in
    * the "+" menu on its Lectures row instead. */
-  onImport?: (file: File) => void
+  /** Opens the import panel for this project. It asks where the lecture is
+   * coming from — a file, or a presentation — so this no longer picks a file
+   * itself. */
+  onImport?: () => void
 }) {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
-  const fileInput = useRef<HTMLInputElement>(null)
-
-  /** Forwards the picked file, resets the input so the same file can be chosen
-   * again, and closes the menu. */
-  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) onImport?.(file)
-    e.target.value = ''
-    setOpen(false)
-  }
 
   // Outside clicks and Escape close the menu
   useEffect(() => {
@@ -89,18 +82,6 @@ export default function ProjectRowMenu({
 
   return (
     <div ref={menuRef} className="relative">
-      {onImport && (
-        <input
-          ref={fileInput}
-          type="file"
-          accept=".yaml,.yml"
-          className="hidden"
-          aria-label={t('lecture.import.intoProject', {
-            project: projectTitle(project),
-          })}
-          onChange={onFileChange}
-        />
-      )}
       <button
         aria-label={t('project.options', { name: projectTitle(project) })}
         aria-haspopup="menu"
@@ -133,7 +114,10 @@ export default function ProjectRowMenu({
           {onImport && (
             <button
               role="menuitem"
-              onClick={() => fileInput.current?.click()}
+              onClick={() => {
+                setOpen(false)
+                onImport()
+              }}
               className="block w-full px-4 py-2 text-start text-sm text-slate-700 hover:bg-slate-50"
             >
               {t('lecture.import.action')}

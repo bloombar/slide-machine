@@ -11,7 +11,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import type { Deck, Template } from '@slide-machine/shared'
-import LectureImportFromSlides from './LectureImportFromSlides'
+import LectureImport from './LectureImport'
 
 const dispatchAction = vi.fn()
 vi.mock('../api/actions', () => ({
@@ -47,11 +47,7 @@ const importLink = (link: string) => {
 
 const renderPanel = () =>
   render(
-    <LectureImportFromSlides
-      projectId="p1"
-      onImported={vi.fn()}
-      onClose={vi.fn()}
-    />,
+    <LectureImport projectId="p1" onImported={vi.fn()} onClose={vi.fn()} />,
   )
 
 describe('importing a lecture', () => {
@@ -111,7 +107,7 @@ describe('importing a lecture', () => {
   it('hands the lecture back so it can be listed and opened', async () => {
     const onImported = vi.fn()
     render(
-      <LectureImportFromSlides
+      <LectureImport
         projectId="p1"
         onImported={onImported}
         onClose={vi.fn()}
@@ -127,42 +123,75 @@ describe('importing a lecture', () => {
   })
 })
 
-describe('what the instructor is told afterwards', () => {
-  it('says how many slides became how many layouts', async () => {
-    renderPanel()
-    importLink('1AbCdEfGhIjKl')
-
-    const report = await screen.findByTestId('lecture-import-report')
-    expect(report).toHaveTextContent(/10 slides became 3 layouts/)
-  })
-
-  it('names the slides whose material did not fit', async () => {
-    // EXP-5: named rather than silently truncated — "slide 4: image" is
-    // something an author can act on, "3 dropped" is not
-    dispatchAction.mockResolvedValue(
-      result({ contentDropped: [{ slide: 4, slots: ['image'] }] }),
+describe('what happens once it has worked', () => {
+  it('hands the report to the caller rather than showing it here', async () => {
+    // The panel closes on success, so what happened has to survive it — the
+    // page says it beside the lecture that arrived
+    const onImported = vi.fn()
+    render(
+      <LectureImport
+        projectId="p1"
+        onImported={onImported}
+        onClose={vi.fn()}
+      />,
     )
-    renderPanel()
     importLink('1AbCdEfGhIjKl')
 
-    const report = await screen.findByTestId('lecture-import-report')
-    expect(report).toHaveTextContent(/4: image/)
+    await waitFor(() =>
+      expect(onImported).toHaveBeenCalledWith(
+        expect.objectContaining({
+          deck,
+          report: expect.objectContaining({
+            slidesRead: 10,
+            layoutsCreated: 3,
+          }),
+        }),
+      ),
+    )
   })
 
-  it('stays quiet about material that all fitted', async () => {
-    renderPanel()
+  it('shows no report of its own, having closed', async () => {
+    render(
+      <LectureImport projectId="p1" onImported={vi.fn()} onClose={vi.fn()} />,
+    )
     importLink('1AbCdEfGhIjKl')
 
-    const report = await screen.findByTestId('lecture-import-report')
-    expect(report).not.toHaveTextContent(/didn't fit/i)
+    await waitFor(() => expect(dispatchAction).toHaveBeenCalled())
+    expect(
+      screen.queryByTestId('lecture-import-report'),
+    ).not.toBeInTheDocument()
   })
 
-  it('says the presentation itself was left alone', async () => {
-    renderPanel()
-    importLink('1AbCdEfGhIjKl')
+  it('carries a file import’s warnings up the same way', async () => {
+    dispatchAction.mockResolvedValue({
+      deck,
+      warnings: ['Unknown template "foo" — using the default instead.'],
+    })
+    const onImported = vi.fn()
+    render(
+      <LectureImport
+        projectId="p1"
+        onImported={onImported}
+        onClose={vi.fn()}
+      />,
+    )
+    fireEvent.change(screen.getByLabelText(/import a \.yaml lecture file/i), {
+      target: {
+        files: [
+          new File(['version: 1\nkind: deck\n'], 'deck.yaml', {
+            type: 'application/x-yaml',
+          }),
+        ],
+      },
+    })
 
-    const report = await screen.findByTestId('lecture-import-report')
-    expect(report).toHaveTextContent(/nothing was changed in the presentation/i)
+    await waitFor(() =>
+      expect(onImported).toHaveBeenCalledWith(
+        expect.objectContaining({
+          warnings: ['Unknown template "foo" — using the default instead.'],
+        }),
+      ),
+    )
   })
 })
 

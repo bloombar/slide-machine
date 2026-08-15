@@ -523,7 +523,6 @@
       }
     },
     "importSlides": {
-      "label": "Importer depuis Google Slides",
       "title": "Créer un cours à partir d’une présentation Google Slides",
       "description": "Indiquez une présentation de votre Drive et nous en rapporterons le design comme modèle et les diapositives comme cours.",
       "linkLabel": "Lien Google Slides",
@@ -537,7 +536,9 @@
       },
       "errors": {
         "failed": "Impossible d’importer cette présentation"
-      }
+      },
+      "otherSources": "Ou téléversez un fichier",
+      "fileOpen": "Importer un fichier de cours .yaml"
     },
     "errors": {
       "create": "Impossible de créer le cours"

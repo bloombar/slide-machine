@@ -28,7 +28,12 @@ import type {
   Layout,
 } from '@slide-machine/shared'
 import { defineAction } from './define'
-import { projectOwner, requiresGoogleDrive, type ProjectAccess } from './access'
+import {
+  projectOwner,
+  requiresGoogleDrive,
+  type ProjectAccess,
+  type WithGoogle,
+} from './access'
 import { registerAction } from './dispatch'
 import { requireImportVolume } from '../billing/meter-hooks'
 import {
@@ -47,13 +52,12 @@ import { currentVersionIdFor } from '../templates/versions'
 import { TemplateModel, toTemplateDto } from '../models/template'
 import { DeckModel, resolveDeckAcl, toDeckDto } from '../models/deck'
 import { SlideModel } from '../models/slide'
-import { UserModel } from '../models/user'
 import { deleteDeckCascade } from '../lib/cascade'
 
 export const deckImportFromSlides = defineAction<
   { projectId: string; presentationId: string; keepEverySlide?: boolean },
   DeckImportFromSlidesResult,
-  ProjectAccess
+  WithGoogle<ProjectAccess>
 >({
   name: 'deck.importFromSlides',
   // The lecture does not exist yet, so what is authorized is the project it
@@ -71,14 +75,17 @@ export const deckImportFromSlides = defineAction<
      * from (TMPL-8). The author's choice, carried through. */
     keepEverySlide: z.boolean().optional(),
   }),
-  execute: async (_ctx, input, { project, userId }) => {
+  execute: async (_ctx, input, { project, userId, googleUser: user }) => {
     const provider = registry.get<GenerationProvider>('generation')
 
-    const user = await UserModel.findById(userId)
+    // The connected account comes from the access check, which loaded it with
+    // the refresh token. Reading the user again here returned a document
+    // without one — the field is `select: false`, so it is absent unless asked
+    // for — and decrypting `undefined` is what failed every live import.
     const imported = isLive()
       ? await importPresentation({
           accessToken: await accessTokenFor(
-            decryptToken(user!.googleQuizRefreshToken!),
+            decryptToken(user.googleQuizRefreshToken!),
           ),
           presentationId: input.presentationId,
           ownerId: userId,

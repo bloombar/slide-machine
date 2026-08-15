@@ -214,11 +214,14 @@ describe('HomePage', () => {
         type: 'application/x-yaml',
       },
     )
-    // The project's own import input, not the header menu's
-    const input = screen.getByLabelText(
-      'Import a lecture into Biology',
-    ) as HTMLInputElement
-    fireEvent.change(input, { target: { files: [file] } })
+    // The project's own kebab opens the panel against that project, and the
+    // file is picked inside it — one entry, then the source.
+    fireEvent.click(screen.getByRole('button', { name: /Options for Biology/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Import/ }))
+    fireEvent.change(
+      await screen.findByLabelText(/import a \.yaml lecture file/i),
+      { target: { files: [file] } },
+    )
 
     await vi.waitFor(() =>
       expect(sent).toEqual({
@@ -444,11 +447,14 @@ describe('HomePage', () => {
     const file = new File(['version: 1\nkind: deck\n'], 'deck.yaml', {
       type: 'application/x-yaml',
     })
-    // The menu item forwards to its hidden file input; the change event is
-    // what a real pick produces once the OS dialog closes.
-    fireEvent.change(screen.getByLabelText('Import a lecture'), {
-      target: { files: [file] },
-    })
+    // The header "+" is not inside a project, so it resolves the most recent
+    // one and opens the panel against it.
+    fireEvent.click(screen.getByRole('button', { name: 'Create new' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Import a lecture' }))
+    fireEvent.change(
+      await screen.findByLabelText(/import a \.yaml lecture file/i),
+      { target: { files: [file] } },
+    )
 
     await vi.waitFor(() =>
       expect(sent).toEqual({

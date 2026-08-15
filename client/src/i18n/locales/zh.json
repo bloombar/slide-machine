@@ -523,7 +523,6 @@
       }
     },
     "importSlides": {
-      "label": "从 Google 幻灯片导入",
       "title": "用 Google 幻灯片演示文稿创建课程",
       "description": "指定你云端硬盘中的演示文稿，我们会把它的设计保存为模板，并把幻灯片变成可以讲授的课程。",
       "linkLabel": "Google 幻灯片链接",
@@ -537,7 +536,9 @@
       },
       "errors": {
         "failed": "无法导入该演示文稿"
-      }
+      },
+      "otherSources": "或上传文件",
+      "fileOpen": "导入 .yaml 课程文件"
     },
     "errors": {
       "create": "无法创建课程"

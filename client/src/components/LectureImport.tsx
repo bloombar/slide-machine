@@ -1,10 +1,11 @@
 /**
- * Creating a lecture from a Google Slides presentation (EXP-5).
+ * Bringing in a lecture that already exists (EXP-3/EXP-5).
  *
- * The design import (TMPL-8) takes a deck and keeps only its look. This keeps
- * the slides too, which is what an instructor arriving with an existing
- * lecture actually wants: the deck they teach from, back as slides they can
- * lecture over, refine and export.
+ * Two sources, one panel. A Google Slides presentation the instructor teaches
+ * from becomes a lecture drawn in its own design (EXP-5); a `.yaml` file this
+ * app exported earlier becomes the lecture it was (EXP-3). They were two menu
+ * entries that read as two features, and the instructor had to know which of
+ * them their material counted as before they could start.
  *
  * ## A link, like the design import
  *
@@ -12,49 +13,97 @@
  * another tab and its address is in the clipboard, so a Drive browser would be
  * a second thing to learn for the same result.
  *
- * ## The report is not a nicety
+ * ## What happened is said outside this panel
  *
- * One read produces two things — a lecture and the style template its design
- * became — and the author is told about both, because they may want to keep
- * only the template. Content that could not be placed is named by slide, since
- * "slide 4: image" is actionable and "3 boxes dropped" is not.
+ * A finished import closes the panel — leaving it open over the list it just
+ * added to is a box the user has to dismiss to see their own work. So the
+ * report is handed to the caller, which says it beside the lecture that
+ * arrived rather than inside a panel that is gone.
  */
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { Deck, ImportReport, Template } from '@slide-machine/shared'
+import { Upload } from 'lucide-react'
+import type {
+  Deck,
+  DeckImportResult,
+  ImportReport,
+  Template,
+} from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import { ApiError } from '../api/http'
 import { apiErrorMessage } from '../i18n/apiError'
 import { presentationIdFrom } from './template/TemplateImport'
 
-export default function LectureImportFromSlides({
+export default function LectureImport({
   projectId,
   onImported,
   onClose,
 }: {
   projectId: string
-  /** The new lecture, so the caller can list it and open it. */
-  onImported: (result: { deck: Deck; template: Template }) => void
+  /** The new lecture, so the caller can list it and open it. A design
+   * accompanies it only when one was derived (EXP-5); a file import restores
+   * the lecture alone. */
+  onImported: (result: {
+    deck: Deck
+    template?: Template
+    /** Non-fatal notes from a file import, e.g. a substituted template. */
+    warnings?: string[]
+    /** What a presentation import made of the deck, so the caller can say it
+     * once the panel has closed. */
+    report?: ImportReport
+  }) => void
   onClose: () => void
 }) {
   const { t } = useTranslation()
   const [link, setLink] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [report, setReport] = useState<ImportReport | null>(null)
   const [needsGoogle, setNeedsGoogle] = useState(false)
   // The same choice the design import offers, because it decides the same
   // thing: whether the deck's near-identical slides become one layout.
   const [keepEverySlide, setKeepEverySlide] = useState(false)
+  const fileInput = useRef<HTMLInputElement>(null)
 
   const presentationId = presentationIdFrom(link)
+
+  /** A lecture this app exported earlier, restored as the lecture it was
+   * (EXP-3). No design is derived: the file names the template it wants. */
+  const importFile = async (file: File) => {
+    setError(null)
+    let content: string
+    try {
+      content = await file.text()
+    } catch {
+      setError(t('lecture.import.errors.read'))
+      return
+    }
+    setBusy(true)
+    try {
+      const result = await dispatchAction<DeckImportResult>('deck.import', {
+        projectId,
+        content,
+      })
+      onImported({ deck: result.deck, warnings: result.warnings })
+    } catch (err) {
+      setError(
+        err instanceof ApiError && err.details?.length
+          ? t('lecture.import.errors.invalid', {
+              details: err.details.join(' '),
+            })
+          : apiErrorMessage(err, t, 'lecture.import.errors.failed'),
+      )
+    } finally {
+      setBusy(false)
+      // Cleared so the same file can be picked again after a fix.
+      if (fileInput.current) fileInput.current.value = ''
+    }
+  }
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault()
     if (!presentationId || busy) return
     setBusy(true)
     setError(null)
-    setReport(null)
     dispatchAction<{ deck: Deck; template: Template; report: ImportReport }>(
       'deck.importFromSlides',
       {
@@ -64,8 +113,9 @@ export default function LectureImportFromSlides({
       },
     )
       .then(result => {
-        setReport(result.report)
         setLink('')
+        // Handed over rather than shown here: the panel closes on success, so
+        // what happened has to survive it.
         onImported(result)
       })
       .catch((e: Error) => {
@@ -183,32 +233,30 @@ export default function LectureImportFromSlides({
         </p>
       )}
 
-      {report && (
-        <div
-          data-testid="lecture-import-report"
-          className="mt-3 rounded-md bg-slate-50 p-3 text-sm text-slate-700"
-        >
-          <p>
-            {t('lecture.importSlides.report.summary', {
-              slides: report.slidesRead,
-              layouts: report.layoutsCreated,
-            })}
-          </p>
-          {/* Named by slide, because that is what an author can act on. */}
-          {report.contentDropped?.length ? (
-            <p className="mt-1 text-slate-600">
-              {t('lecture.importSlides.report.dropped', {
-                details: report.contentDropped
-                  .map(d => `${d.slide}: ${d.slots.join(', ')}`)
-                  .join('; '),
-              })}
-            </p>
-          ) : null}
-          <p className="mt-1 text-slate-600">
-            {t('lecture.importSlides.report.untouched')}
-          </p>
-        </div>
-      )}
+      {/* The other source, under a rule: a lecture this app exported earlier
+          (EXP-3). Same arrival, different material. */}
+      <div className="mt-4 border-t border-slate-100 pt-3">
+        <h4 className="text-xs font-medium tracking-wide text-slate-500 uppercase">
+          {t('lecture.importSlides.otherSources')}
+        </h4>
+        <label className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+          <Upload className="h-4 w-4" aria-hidden="true" />
+          {busy
+            ? t('lecture.importSlides.working')
+            : t('lecture.importSlides.fileOpen')}
+          <input
+            ref={fileInput}
+            type="file"
+            accept=".yaml,.yml,application/x-yaml,text/yaml"
+            className="sr-only"
+            disabled={busy}
+            onChange={e => {
+              const file = e.target.files?.[0]
+              if (file) void importFile(file)
+            }}
+          />
+        </label>
+      </div>
     </section>
   )
 }

@@ -22,6 +22,7 @@
  */
 import type { SlotValue } from '@slide-machine/shared'
 import type { Candidate, CandidateSlot } from './candidate'
+import type { SourceElement } from './source-presentation'
 
 /** One imported slide, ready to be stored. */
 export interface ImportedSlide {
@@ -36,6 +37,20 @@ export interface ImportedSlide {
   /** Boxes whose material was dropped, named rather than silently lost. */
   dropped: string[]
 }
+
+/**
+ * Whether a box holds anything at all.
+ *
+ * `candidateOf` gives every slot its element, so the element being present
+ * says nothing: a placeholder inherited from the layout and never typed into
+ * is a real element with no words. Asking whether the property exists
+ * reported every untouched box on every slide as material that did not fit,
+ * which is the opposite of true — nothing was there to lose.
+ */
+const holdsSomething = (element: SourceElement): boolean =>
+  (element.runs ?? []).some(run => run.text.trim()) ||
+  Boolean(element.imageUrl) ||
+  Boolean(element.table?.rows.length)
 
 /** The words in a box, as one string. Runs carry styling the slide's content
  * does not keep — the design took that already. */
@@ -121,8 +136,9 @@ export const importedSlide = (
 
   for (const slot of candidate.slots) {
     // A box with nothing in it is not a loss: the design has the box, and an
-    // empty one is what an author left there.
-    if (!slot.content) continue
+    // empty one is what an author left there. Only material that existed and
+    // could not be carried is reported (EXP-5).
+    if (!slot.content || !holdsSomething(slot.content)) continue
     const value = valueOf(slot, imageRef)
     if (value) slots[slot.name] = value
     else dropped.push(slot.name)

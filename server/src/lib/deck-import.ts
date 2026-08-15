@@ -92,8 +92,20 @@ export const parseDeckImport = (content: string): ParseResult => {
   } catch {
     return { errors: ['document: not valid YAML'] }
   }
-  if (parsed === null || typeof parsed !== 'object') {
+  // `typeof [] === 'object'`, so a list has to be turned away by name.
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return { errors: ['document: expected a YAML mapping'] }
+  }
+  // A design file picked for a lecture is the likeliest wrong file here —
+  // both are `.yaml` and this app wrote both. Named as what it is, with
+  // where it does belong, rather than as four schema violations that never
+  // mention the word template.
+  if ((parsed as { kind?: unknown }).kind === 'template') {
+    return {
+      errors: [
+        'That is a design file, not a lecture. Import it from a lecture’s Design tab instead.',
+      ],
+    }
   }
   const result = deckDocSchema.safeParse(parsed)
   if (!result.success) {

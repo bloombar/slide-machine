@@ -523,7 +523,6 @@
       }
     },
     "importSlides": {
-      "label": "Importar de Google Slides",
       "title": "Crear una clase a partir de una presentación de Google Slides",
       "description": "Indica una presentación de tu Drive y recuperaremos tanto su diseño como plantilla como sus diapositivas en forma de clase.",
       "linkLabel": "Enlace de Google Slides",
@@ -537,7 +536,9 @@
       },
       "errors": {
         "failed": "No se pudo importar esa presentación"
-      }
+      },
+      "otherSources": "O sube un archivo",
+      "fileOpen": "Importar un archivo de clase .yaml"
     },
     "errors": {
       "create": "No se pudo crear la clase"

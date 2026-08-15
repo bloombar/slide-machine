@@ -523,7 +523,6 @@
       }
     },
     "importSlides": {
-      "label": "Import from Google Slides",
       "title": "Create a lecture from a Google Slides presentation",
       "description": "Point at a presentation in your Drive and we'll bring back both its design as a template and its slides as a lecture you can teach from.",
       "linkLabel": "Google Slides link",
@@ -537,7 +536,9 @@
       },
       "errors": {
         "failed": "Could not import that presentation"
-      }
+      },
+      "otherSources": "Or upload a file",
+      "fileOpen": "Import a .yaml lecture file"
     },
     "errors": {
       "create": "Could not create the lecture"

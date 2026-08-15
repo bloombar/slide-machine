@@ -232,14 +232,46 @@ describe('what is left out', () => {
     expect(result.dropped).toEqual([])
   })
 
-  it('drops a box of only whitespace rather than storing a blank', () => {
+  it('stores nothing for a box of only whitespace, and calls it no loss', () => {
+    // Every slot arrives with its element, so "has content" cannot mean the
+    // property exists — a placeholder nobody typed into is a real element
+    // with no words. Counting those as dropped reported every untouched box
+    // on every slide as material that did not fit
     const result = importedSlide(
       slide([slot('body', { runs: [{ text: '   ' }] })]),
       'list',
       stored,
     )
     expect(result.slots.body).toBeUndefined()
-    expect(result.dropped).toEqual(['body'])
+    expect(result.dropped).toEqual([])
+  })
+
+  it('says nothing about a deck of untouched placeholders', () => {
+    // What a fresh presentation actually looks like: boxes the layout gave
+    // it, none of them filled in
+    const result = importedSlide(
+      slide([
+        slot('title', { runs: [] }),
+        slot('body', { runs: [{ text: '' }] }),
+      ]),
+      'title',
+      stored,
+    )
+    expect(result.slots).toEqual({})
+    expect(result.dropped).toEqual([])
+  })
+
+  it('still reports a picture that existed and would not come', () => {
+    // The distinction that matters: material was there and could not be
+    // carried, rather than never having been there
+    const result = importedSlide(
+      slide([
+        slot('image', { kind: 'image', imageUrl: 'https://lh3.google.com/x' }),
+      ]),
+      'picture',
+      () => undefined,
+    )
+    expect(result.dropped).toEqual(['image'])
   })
 
   it('names every box it could not carry, for the report', () => {

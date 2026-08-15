@@ -8,10 +8,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import type { Deck, DeckImportResult, Project } from '@slide-machine/shared'
+import type { Deck, Project } from '@slide-machine/shared'
 import { useAuth } from '../auth/AuthContext'
 import { dispatchAction } from '../api/actions'
-import { ApiError } from '../api/http'
 import { userHandle } from '../lib/handle'
 import { untitledLecture } from '../lib/lecture'
 // Module-level translator for the load effect: stable, so it is not a
@@ -23,6 +22,7 @@ import NewLectureZone from '../components/NewLectureZone'
 import ProjectRowMenu from '../components/ProjectRowMenu'
 import NewProjectModal from '../components/NewProjectModal'
 import CreateMenu from '../components/CreateMenu'
+import LectureImport from '../components/LectureImport'
 import UsageNotice from '../components/UsageNotice'
 import DeckFeed from '../components/DeckFeed'
 import { config } from '../config'
@@ -34,13 +34,21 @@ function ProjectSection({
   onImportLecture,
   onLectureDeleted,
   onProjectDeleted,
+  importPanel,
+  justArrived,
 }: {
   project: Project
   decks: Deck[]
   onStartLecture: (project: Project) => void
-  onImportLecture: (project: Project, file: File) => void
+  onImportLecture: (project: Project) => void
   onLectureDeleted: (deckId: string) => void
   onProjectDeleted: (projectId: string) => void
+  /** The import panel, when this is the project being imported into. It
+   * belongs under the project whose kebab opened it — a panel at the top of
+   * the page leaves the user looking at the wrong heading. */
+  importPanel?: React.ReactNode
+  /** The lecture that just arrived, marked briefly. */
+  justArrived?: string | null
 }) {
   const { t } = useTranslation()
   const limit = config.homeLecturesLimit
@@ -61,9 +69,10 @@ function ProjectSection({
         <ProjectRowMenu
           project={project}
           onDeleted={onProjectDeleted}
-          onImport={file => onImportLecture(project, file)}
+          onImport={() => onImportLecture(project)}
         />
       </div>
+      {importPanel}
       <ul className="flex flex-col gap-2">
         {/* Always first: a dashed zone to add a lecture */}
         <NewLectureZone
@@ -71,7 +80,12 @@ function ProjectSection({
           onStart={() => onStartLecture(project)}
         />
         {visible.map(d => (
-          <LectureRow key={d.id} deck={d} onDeleted={onLectureDeleted} />
+          <LectureRow
+            key={d.id}
+            deck={d}
+            justArrived={d.id === justArrived}
+            onDeleted={onLectureDeleted}
+          />
         ))}
       </ul>
       {hiddenCount > 0 && (
@@ -95,6 +109,19 @@ export default function HomePage() {
     new Map(),
   )
   const [creatingProject, setCreatingProject] = useState(false)
+  /** The project an import is landing in, and whether the panel is open
+   * (EXP-3/EXP-5). The home screen is not inside a project, so one is
+   * resolved before the panel can ask anything. */
+  const [importInto, setImportInto] = useState<Project | null>(null)
+  /** The lecture that just arrived, highlighted briefly so it is findable. */
+  const [justArrived, setJustArrived] = useState<string | null>(null)
+
+  // A pointer, not a state: it says "here it is" and then stops.
+  useEffect(() => {
+    if (!justArrived) return
+    const id = setTimeout(() => setJustArrived(null), 2500)
+    return () => clearTimeout(id)
+  }, [justArrived])
   const [error, setError] = useState<string | null>(null)
   // A success/warning notice after importing a lecture (EXP-3).
   const [notice, setNotice] = useState<string | null>(null)
@@ -182,47 +209,6 @@ export default function HomePage() {
    * project (EXP-3). The imported lecture is added to that project's list;
    * validation errors and non-fatal warnings are surfaced in place.
    */
-  const importLecture = async (project: Project, file: File) => {
-    setError(null)
-    setNotice(null)
-    let content: string
-    try {
-      content = await file.text()
-    } catch {
-      setError(t('lecture.import.errors.read'))
-      return
-    }
-    try {
-      const result = await dispatchAction<DeckImportResult>('deck.import', {
-        projectId: project.id,
-        content,
-      })
-      setDecksByProject(prev => {
-        const next = new Map(prev)
-        next.set(project.id, [result.deck, ...(next.get(project.id) ?? [])])
-        return next
-      })
-      const name = result.deck.title || untitledLecture()
-      setNotice(
-        result.warnings.length
-          ? t('lecture.import.importedWithWarnings', {
-              name,
-              warnings: result.warnings.join(' '),
-            })
-          : t('lecture.import.imported', { name }),
-      )
-    } catch (err) {
-      // A validation failure lists the specific problems; anything else is
-      // a generic message. Nothing was created either way.
-      setError(
-        err instanceof ApiError && err.details?.length
-          ? t('lecture.import.errors.invalid', {
-              details: err.details.join(' '),
-            })
-          : t('lecture.import.errors.failed'),
-      )
-    }
-  }
 
   /**
    * Where a lecture goes when it was started without naming a project — the
@@ -248,17 +234,19 @@ export default function HomePage() {
     }
   }
 
-  /** Imports a picked file as a lecture in the target project. */
-  const importLectureHere = async (file: File) => {
+  /**
+   * Opens the import panel against a project to land in (EXP-3/EXP-5).
+   *
+   * The home screen is not inside a project, so one is resolved first — the
+   * most recent, or a fresh one — exactly as starting a lecture here does.
+   */
+  const openImport = async () => {
     setError(null)
-    let project: Project
     try {
-      project = await targetProject()
+      setImportInto(await targetProject())
     } catch {
       setError(t('project.errors.create'))
-      return
     }
-    await importLecture(project, file)
   }
 
   return (
@@ -277,7 +265,7 @@ export default function HomePage() {
             <CreateMenu
               onNewProject={() => setCreatingProject(true)}
               onNewLecture={() => void startLectureHere()}
-              onImportLecture={file => void importLectureHere(file)}
+              onImportLecture={() => void openImport()}
             />
           </div>
 
@@ -293,6 +281,7 @@ export default function HomePage() {
               {notice}
             </p>
           )}
+
           {projects === null ? (
             <p className="text-slate-500">{t('common.loading')}</p>
           ) : projects.length === 0 ? (
@@ -308,9 +297,46 @@ export default function HomePage() {
                 project={p}
                 decks={decksByProject.get(p.id) ?? []}
                 onStartLecture={proj => void startLecture(proj)}
-                onImportLecture={(proj, file) => void importLecture(proj, file)}
+                onImportLecture={proj => setImportInto(proj)}
+                justArrived={justArrived}
                 onLectureDeleted={removeLecture}
                 onProjectDeleted={removeProject}
+                importPanel={
+                  importInto?.id === p.id ? (
+                    <div className="mb-3">
+                      <LectureImport
+                        projectId={p.id}
+                        onImported={({ deck, warnings, report }) => {
+                          setDecksByProject(prev => {
+                            const next = new Map(prev)
+                            next.set(p.id, [deck, ...(next.get(p.id) ?? [])])
+                            return next
+                          })
+                          setJustArrived(deck.id)
+                          const name = deck.title || untitledLecture()
+                          const summary = report
+                            ? ` ${t('lecture.importSlides.report.summary', {
+                                slides: report.slidesRead,
+                                layouts: report.layoutsCreated,
+                              })}`
+                            : ''
+                          setNotice(
+                            (warnings?.length
+                              ? t('lecture.import.importedWithWarnings', {
+                                  name,
+                                  warnings: warnings.join(' '),
+                                })
+                              : t('lecture.import.imported', { name })) +
+                              summary,
+                          )
+                          // Done is done: the panel closes behind it.
+                          setImportInto(null)
+                        }}
+                        onClose={() => setImportInto(null)}
+                      />
+                    </div>
+                  ) : null
+                }
               />
             ))
           )}

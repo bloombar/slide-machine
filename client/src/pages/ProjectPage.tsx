@@ -14,9 +14,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import type { Deck, DeckImportResult, Project } from '@slide-machine/shared'
+import type { Deck, Project } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
-import { ApiError } from '../api/http'
 import { useAuth } from '../auth/AuthContext'
 import { useIsAdmin } from '../hooks/useIsAdmin'
 import { projectTitle, untitledProject } from '../lib/project'
@@ -29,7 +28,7 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import LectureRow from '../components/LectureRow'
 import NewLectureZone from '../components/NewLectureZone'
 import CreateMenu from '../components/CreateMenu'
-import LectureImportFromSlides from '../components/LectureImportFromSlides'
+import LectureImport from '../components/LectureImport'
 import ProjectRowMenu from '../components/ProjectRowMenu'
 import EditableText from '../components/EditableText'
 import ProjectSettingsModal, {
@@ -62,6 +61,15 @@ export default function ProjectPage() {
   const [notice, setNotice] = useState<string | null>(null)
   /** Whether the Google Slides import panel is open (EXP-5). */
   const [importingSlides, setImportingSlides] = useState(false)
+  /** The lecture that just arrived, highlighted briefly so it is findable. */
+  const [justArrived, setJustArrived] = useState<string | null>(null)
+
+  // The mark is a pointer, not a state: it says "here it is" and then stops.
+  useEffect(() => {
+    if (!justArrived) return
+    const id = setTimeout(() => setJustArrived(null), 2500)
+    return () => clearTimeout(id)
+  }, [justArrived])
   // Set once the admin has acknowledged the confirm dialog below; the
   // settings modal stays shut until then (ADMIN-5 wants the edit
   // acknowledged, and the deep link opens settings on its own).
@@ -134,49 +142,6 @@ export default function ProjectPage() {
     }
   }
 
-  /**
-   * Imports a previously exported deck YAML as a new lecture (EXP-3). The
-   * created lecture is added to the top of the list; validation errors and
-   * non-fatal warnings (e.g. a substituted template) are surfaced in place.
-   */
-  const importLecture = async (file: File) => {
-    setError(null)
-    setNotice(null)
-    let content: string
-    try {
-      content = await file.text()
-    } catch {
-      setError(t('lecture.import.errors.read'))
-      return
-    }
-    try {
-      const result = await dispatchAction<DeckImportResult>('deck.import', {
-        projectId,
-        content,
-      })
-      setDecks(prev => [result.deck, ...prev])
-      const name = result.deck.title || untitledLecture()
-      setNotice(
-        result.warnings.length
-          ? t('lecture.import.importedWithWarnings', {
-              name,
-              warnings: result.warnings.join(' '),
-            })
-          : t('lecture.import.imported', { name }),
-      )
-    } catch (err) {
-      // A validation failure lists the specific problems; anything else is a
-      // generic message. Nothing was created either way.
-      setError(
-        err instanceof ApiError && err.details?.length
-          ? t('lecture.import.errors.invalid', {
-              details: err.details.join(' '),
-            })
-          : t('lecture.import.errors.failed'),
-      )
-    }
-  }
-
   return (
     <div>
       <header className="mb-8 flex items-start justify-between gap-4">
@@ -233,8 +198,7 @@ export default function ProjectPage() {
           {project && (canEdit || adminOverride) && (
             <CreateMenu
               onNewLecture={() => void startLecture()}
-              onImportLecture={file => void importLecture(file)}
-              onImportFromSlides={() => setImportingSlides(true)}
+              onImportLecture={() => setImportingSlides(true)}
             />
           )}
         </div>
@@ -251,15 +215,31 @@ export default function ProjectPage() {
         {/* The deck an instructor already teaches from, brought in whole
             (EXP-5). Stays out of the way until asked for. */}
         {importingSlides && projectId && (
-          <LectureImportFromSlides
+          <LectureImport
             projectId={projectId}
-            onImported={({ deck }) => {
+            onImported={({ deck, warnings, report }) => {
               setDecks(prev => [deck, ...prev])
+              // Marked for a moment, so the row that just appeared is the one
+              // the eye lands on.
+              setJustArrived(deck.id)
+              const name = deck.title || untitledLecture()
+              const summary = report
+                ? ` ${t('lecture.importSlides.report.summary', {
+                    slides: report.slidesRead,
+                    layouts: report.layoutsCreated,
+                  })}`
+                : ''
               setNotice(
-                t('lecture.import.imported', {
-                  name: deck.title || untitledLecture(),
-                }),
+                (warnings?.length
+                  ? t('lecture.import.importedWithWarnings', {
+                      name,
+                      warnings: warnings.join(' '),
+                    })
+                  : t('lecture.import.imported', { name })) + summary,
               )
+              // Done is done: the panel closes rather than sitting open over
+              // the list it just added to.
+              setImportingSlides(false)
             }}
             onClose={() => setImportingSlides(false)}
           />
@@ -277,6 +257,7 @@ export default function ProjectPage() {
             <LectureRow
               key={d.id}
               deck={d}
+              justArrived={d.id === justArrived}
               onDeleted={id =>
                 setDecks(prev => prev.filter(deck => deck.id !== id))
               }
