@@ -216,7 +216,7 @@ describe('what the instructor is told afterwards', () => {
   it('says how many slides became how many layouts', async () => {
     await importOne()
     expect(screen.getByRole('status')).toHaveTextContent(
-      '38 slides became 6 layouts',
+      '38 slides → 6 layouts',
     )
   })
 
@@ -224,14 +224,14 @@ describe('what the instructor is told afterwards', () => {
     // Consolidation is a judgment call, so it is stated rather than logged
     await importOne()
     const report = screen.getByRole('status')
-    expect(report).toHaveTextContent(/merged 11 near-identical slides/i)
-    expect(report).toHaveTextContent(/2 slides matched no layout/i)
+    expect(report).toHaveTextContent(/11 near-identical slides merged/i)
+    expect(report).toHaveTextContent(/2 matched to the closest layout/i)
   })
 
   it('mentions images that could not be retrieved', async () => {
     await importOne({ assetsFailed: 3 })
     expect(screen.getByRole('status')).toHaveTextContent(
-      /3 images could not be retrieved/i,
+      /3 images couldn’t be fetched|3 images couldn't be fetched/i,
     )
   })
 
@@ -242,15 +242,15 @@ describe('what the instructor is told afterwards', () => {
       largestMerge: undefined,
     })
     const report = screen.getByRole('status')
-    expect(report).not.toHaveTextContent(/approximated/i)
-    expect(report).not.toHaveTextContent(/could not be retrieved/i)
+    expect(report).not.toHaveTextContent(/closest layout/i)
+    expect(report).not.toHaveTextContent(/couldn.t be fetched/i)
     expect(report).not.toHaveTextContent(/merged/i)
   })
 
   it('says the presentation itself was left alone', async () => {
     await importOne()
     expect(screen.getByRole('status')).toHaveTextContent(
-      /nothing was changed in the presentation/i,
+      /your presentation wasn.t changed/i,
     )
   })
 })

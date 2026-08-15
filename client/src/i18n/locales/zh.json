@@ -475,11 +475,11 @@
         "failed": "无法导入该演示文稿"
       },
       "report": {
-        "summary": "{slides} 张幻灯片生成了 {layouts} 个版式。",
-        "merged": "已将 {count} 张几乎相同的幻灯片合并为一个版式。",
-        "approximated": "有 {count} 张幻灯片未匹配到任何版式，已做近似处理。",
-        "assetsFailed": "有 {count} 张图片无法获取。",
-        "review": "这个设计归你所有，可随意编辑；演示文稿本身未做任何改动。"
+        "summary": "{slides} 张幻灯片 → {layouts} 个版式",
+        "merged": "合并了 {count} 张几乎相同的幻灯片",
+        "approximated": "{count} 张匹配到最接近的版式",
+        "assetsFailed": "{count} 张图片无法获取",
+        "review": "你的演示文稿未被更改。"
       },
       "connectPrompt": "连接 Google 账号，以便读取你云端硬盘中的演示文稿。",
       "connect": "连接 Google",
@@ -524,7 +524,7 @@
     },
     "importSlides": {
       "title": "用 Google 幻灯片演示文稿创建课程",
-      "description": "指定你云端硬盘中的演示文稿，我们会把它的设计保存为模板，并把幻灯片变成可以讲授的课程。",
+      "description": "指定你云端硬盘中的演示文稿，它的幻灯片会原样变成可以讲授的课程。",
       "linkLabel": "Google 幻灯片链接",
       "linkPlaceholder": "粘贴演示文稿链接",
       "submit": "导入课程",

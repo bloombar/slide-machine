@@ -475,11 +475,11 @@
         "failed": "Impossible d'importer cette présentation"
       },
       "report": {
-        "summary": "{slides} diapositives sont devenues {layouts} dispositions.",
-        "merged": "{count} diapositives presque identiques ont été fusionnées en une seule disposition.",
-        "approximated": "{count} diapositives ne correspondaient à aucune disposition et ont été approchées.",
-        "assetsFailed": "{count} images n'ont pas pu être récupérées.",
-        "review": "Le design vous appartient : rien n'a été modifié dans la présentation."
+        "summary": "{slides} diapositives → {layouts} mises en page",
+        "merged": "{count} diapositives quasi identiques fusionnées",
+        "approximated": "{count} associées à la mise en page la plus proche",
+        "assetsFailed": "{count} images n'ont pas pu être récupérées",
+        "review": "Votre présentation n'a pas été modifiée."
       },
       "connectPrompt": "Connectez un compte Google pour lire une présentation de votre Drive.",
       "connect": "Connecter Google",
@@ -524,7 +524,7 @@
     },
     "importSlides": {
       "title": "Créer un cours à partir d’une présentation Google Slides",
-      "description": "Indiquez une présentation de votre Drive et nous en rapporterons le design comme modèle et les diapositives comme cours.",
+      "description": "Indiquez une présentation de votre Drive et ses diapositives reviennent sous forme de cours, telles que vous les avez créées.",
       "linkLabel": "Lien Google Slides",
       "linkPlaceholder": "Collez le lien de la présentation",
       "submit": "Importer le cours",

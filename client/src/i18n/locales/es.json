@@ -475,11 +475,11 @@
         "failed": "No se pudo importar esa presentación"
       },
       "report": {
-        "summary": "{slides} diapositivas se convirtieron en {layouts} diseños.",
-        "merged": "Se combinaron {count} diapositivas casi idénticas en un solo diseño.",
-        "approximated": "{count} diapositivas no coincidieron con ningún diseño y se aproximaron.",
-        "assetsFailed": "No se pudieron obtener {count} imágenes.",
-        "review": "El diseño es tuyo para editarlo: no se modificó nada en la presentación."
+        "summary": "{slides} diapositivas → {layouts} diseños",
+        "merged": "{count} diapositivas casi idénticas combinadas",
+        "approximated": "{count} asignadas al diseño más parecido",
+        "assetsFailed": "No se pudieron obtener {count} imágenes",
+        "review": "Tu presentación no se modificó."
       },
       "connectPrompt": "Conecta una cuenta de Google para leer una presentación de tu Drive.",
       "connect": "Conectar Google",
@@ -524,7 +524,7 @@
     },
     "importSlides": {
       "title": "Crear una clase a partir de una presentación de Google Slides",
-      "description": "Indica una presentación de tu Drive y recuperaremos tanto su diseño como plantilla como sus diapositivas en forma de clase.",
+      "description": "Indica una presentación de tu Drive y sus diapositivas volverán como una clase que puedes impartir, tal como las creaste.",
       "linkLabel": "Enlace de Google Slides",
       "linkPlaceholder": "Pega el enlace de la presentación",
       "submit": "Importar clase",

@@ -475,11 +475,11 @@
         "failed": "Could not import that presentation"
       },
       "report": {
-        "summary": "{slides} slides became {layouts} layouts.",
-        "merged": "Merged {count} near-identical slides into one layout.",
-        "approximated": "{count} slides matched no layout and were approximated.",
-        "assetsFailed": "{count} images could not be retrieved.",
-        "review": "The design is yours to edit — nothing was changed in the presentation."
+        "summary": "{slides} slides → {layouts} layouts",
+        "merged": "{count} near-identical slides merged",
+        "approximated": "{count} matched to the closest layout",
+        "assetsFailed": "{count} images couldn't be fetched",
+        "review": "Your presentation wasn't changed."
       },
       "connectPrompt": "Connect a Google account to read a presentation from your Drive.",
       "connect": "Connect Google",
@@ -524,7 +524,7 @@
     },
     "importSlides": {
       "title": "Create a lecture from a Google Slides presentation",
-      "description": "Point at a presentation in your Drive and we'll bring back both its design as a template and its slides as a lecture you can teach from.",
+      "description": "Point at a presentation in your Drive and its slides come back as a lecture you can teach from, drawn the way you drew them.",
       "linkLabel": "Google Slides link",
       "linkPlaceholder": "Paste the presentation link",
       "submit": "Import lecture",
