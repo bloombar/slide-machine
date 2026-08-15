@@ -35,9 +35,8 @@ test('lecture import: paste a link, get a deck drawn in its own design', async (
   // are not about starting from an existing deck.
   await expect(page.getByLabel('Google Slides link')).toBeHidden()
   await page.getByRole('button', { name: 'Create new' }).click()
-  await page
-    .getByRole('menuitem', { name: 'Import from Google Slides' })
-    .click()
+  // One import entry: the panel asks which source, rather than the menu.
+  await page.getByRole('menuitem', { name: 'Import a lecture' }).click()
 
   const field = page.getByLabel('Google Slides link')
   await expect(field).toBeVisible()
@@ -62,12 +61,12 @@ test('lecture import: paste a link, get a deck drawn in its own design', async (
 
   await page.getByRole('button', { name: 'Import lecture' }).click()
 
-  // The report is a deliverable: one read produced a lecture AND the template
-  // its design became, and consolidation is a judgement worth stating.
-  const report = page.getByTestId('lecture-import-report')
-  await expect(report).toBeVisible({ timeout: 20_000 })
-  await expect(report).toContainText(/10 slides became \d+ layouts/)
-  await expect(report).toContainText(/nothing was changed in the presentation/i)
+  // What happened is said beside the lecture, not in a panel that has gone:
+  // a finished import closes rather than sitting over the list it added to.
+  await expect(page.getByText(/10 slides became \d+ layouts/)).toBeVisible({
+    timeout: 20_000,
+  })
+  await expect(page.getByLabel('Google Slides link')).toBeHidden()
 
   // The lecture is real: listed, and it opens with slides already on it —
   // an import that produced an empty deck wearing the design would pass every

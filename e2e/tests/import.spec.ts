@@ -47,14 +47,16 @@ test('round-trip: export a lecture to YAML and re-import it', async ({
   const lectureLinks = page.locator('a[href^="/d/"]')
   await expect(lectureLinks).toHaveCount(1)
 
-  // Import the exported file from the "+" menu on the Lectures row → a
-  // confirmation notice and a second lecture. The menu item only forwards to
-  // this hidden input, which is what a real file pick fills.
+  // Import the exported file from the "+" menu on the Lectures row. The menu
+  // has one import entry whatever the material is; it opens the panel that
+  // asks where the lecture is coming from, and the file is picked there.
   await page.getByRole('button', { name: 'Create new' }).click()
-  await expect(
-    page.getByRole('menuitem', { name: 'Import a lecture' }),
-  ).toBeVisible()
-  await page.getByLabel('Import a lecture').setInputFiles(filePath)
+  await page.getByRole('menuitem', { name: 'Import a lecture' }).click()
+  await page.getByLabel(/import a \.yaml lecture file/i).setInputFiles(filePath)
+
+  // A confirmation notice, a second lecture, and the panel gone: a finished
+  // import does not leave a box open over the list it just added to.
   await expect(page.getByText(/^Imported /)).toBeVisible()
   await expect(lectureLinks).toHaveCount(2)
+  await expect(page.getByLabel('Google Slides link')).toBeHidden()
 })
