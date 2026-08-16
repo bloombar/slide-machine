@@ -25,6 +25,7 @@ import type { Layout } from '@slide-machine/shared'
 import type { ExportNote } from '@slide-machine/shared'
 import type { ExportDeck, ExportSlide } from './deck-yaml'
 import { visibleStrokes, hexToRgb01, HIGHLIGHTER_ALPHA } from './deck-drawings'
+import { imageCredit } from './image-credit'
 import { fetchSlideImages } from './deck-image'
 import { typesetFormulas } from './deck-formulas'
 import { DEFAULT_THEME, type ExportTheme } from './deck-theme'
@@ -304,12 +305,28 @@ const drawSlide = (
       const w = image.width * scale
       const h = image.height * scale
       const boxTop = PAGE_HEIGHT - box.y * PAGE_HEIGHT
-      page.drawImage(image, {
-        x: box.x * PAGE_WIDTH + (bw - w) / 2,
-        y: boxTop - (bh - h) / 2 - h,
-        width: w,
-        height: h,
-      })
+      const drawnX = box.x * PAGE_WIDTH + (bw - w) / 2
+      const drawnY = boxTop - (bh - h) / 2 - h
+      page.drawImage(image, { x: drawnX, y: drawnY, width: w, height: h })
+
+      // The picture's provenance, under the picture it belongs to (IMG-5).
+      // Tucked against the image rather than in a page footer, so a slide
+      // with two pictures credits each where it sits — and so a reader can
+      // tell which credit is whose.
+      const credit = imageCredit(slide.attribution)
+      if (credit) {
+        const size = 6
+        page.drawText(credit, {
+          x: drawnX,
+          // Just below the image, clamped so a picture at the very bottom of
+          // the page does not print its credit off the edge.
+          y: Math.max(4, drawnY - size - 2),
+          size,
+          font: fonts.regular,
+          color: colors.muted,
+          maxWidth: Math.max(w, 120),
+        })
+      }
     }
   }
   drawStrokes(page, slide)

@@ -102,7 +102,23 @@ export const errorHandler = (
       : err.notFound
         ? ([404, 'source_not_found'] as const)
         : ([400, 'source_unreadable'] as const)
+    // Logged as well as answered. The client shows a translated sentence
+    // keyed by the code (docs/I18N.md), so Google's own wording — which is
+    // the only thing that says WHICH refusal this was — reaches nobody
+    // unless it is written down here.
+    console.warn(`Source unreadable (${code}):`, err.message)
     res.status(status).json(body(code, err.message))
+  } else if (
+    err instanceof Error &&
+    (err as { type?: string }).type === 'entity.too.large'
+  ) {
+    // A file bigger than the body parser will take (body-parser's own error).
+    // 413 with a code of its own: the user picked something too big, which is
+    // theirs to fix by picking something smaller — not a fault of ours to
+    // report as one.
+    res
+      .status(413)
+      .json(body('payload_too_large', 'That file is too large to import'))
   } else if (err instanceof GenerationUnavailableError) {
     // 503: an upstream AI provider is out of quota/credits or overloaded.
     res.status(503).json(body('generation_unavailable', err.message))

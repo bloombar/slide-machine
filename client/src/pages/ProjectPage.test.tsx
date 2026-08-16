@@ -139,9 +139,7 @@ describe('ProjectPage', () => {
     expect(
       await screen.findByLabelText('Google Slides link'),
     ).toBeInTheDocument()
-    expect(
-      screen.getByLabelText(/import a \.yaml lecture file/i),
-    ).toBeInTheDocument()
+    expect(screen.getByLabelText(/import a lecture file/i)).toBeInTheDocument()
   })
 
   it('the project kebab no longer carries Import — the "+" does', async () => {

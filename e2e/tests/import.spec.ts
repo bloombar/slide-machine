@@ -52,7 +52,7 @@ test('round-trip: export a lecture to YAML and re-import it', async ({
   // asks where the lecture is coming from, and the file is picked there.
   await page.getByRole('button', { name: 'Create new' }).click()
   await page.getByRole('menuitem', { name: 'Import a lecture' }).click()
-  await page.getByLabel(/import a \.yaml lecture file/i).setInputFiles(filePath)
+  await page.getByLabel(/import a lecture file/i).setInputFiles(filePath)
 
   // A confirmation notice, a second lecture, and the panel gone: a finished
   // import does not leave a box open over the list it just added to.

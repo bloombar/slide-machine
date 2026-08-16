@@ -62,7 +62,7 @@ test('template round trip: export a design to a file, import it back', async ({
   // Import that same file back. The three ways a design arrives share one
   // panel, so it is opened first — the tab has one Import button, not three.
   await dialog.getByRole('button', { name: /^Import a design$/i }).click()
-  await dialog.getByLabel(/import a \.yaml design file/i).setInputFiles(saved)
+  await dialog.getByLabel(/import a design file/i).setInputFiles(saved)
   await expect(previews).toHaveCount(before + 1)
 
   // And it is a real template rather than a row in a list: chosen straight
@@ -90,7 +90,7 @@ test('a file that is not a template is refused, and says why', async ({
   const before = await previews.count()
 
   await page.getByRole('button', { name: /^Import a design$/i }).click()
-  await page.getByLabel(/import a \.yaml design file/i).setInputFiles({
+  await page.getByLabel(/import a design file/i).setInputFiles({
     name: 'week-1.deck.yaml',
     mimeType: 'application/x-yaml',
     // A deck export: valid YAML, wrong document.

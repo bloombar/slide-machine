@@ -116,6 +116,19 @@ export interface DriveFolder {
 }
 
 /**
+ * A file in the user's Drive that an import could read (TMPL-8/EXP-3/EXP-5).
+ *
+ * `mimeType` travels because the picker shows what a file IS — a
+ * presentation, a PowerPoint, a design file — and because it decides which
+ * import route the choice takes.
+ */
+export interface DriveImportable {
+  id: string
+  name: string
+  mimeType: string
+}
+
+/**
  * Result of quiz.connectGoogle: mock mode connects immediately; live mode
  * returns a Google consent URL the client must redirect the browser to.
  */

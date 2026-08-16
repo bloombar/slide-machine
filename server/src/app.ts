@@ -45,7 +45,13 @@ export const createApp = (): Express => {
   // computed over the exact bytes the provider sent, so the body has to reach
   // the adapter unparsed (BILL-2). Everything else gets JSON as usual.
   app.use(`/api${WEBHOOK_PATH}`, express.raw({ type: '*/*', limit: '1mb' }))
-  app.use(express.json())
+  // Big enough for a PowerPoint import (EXP-3/EXP-5). A .pptx travels as
+  // base64 inside the action's JSON body, which inflates it by a third, and
+  // Express's 100kb default rejected every real deck — as a 500 the caller
+  // could not act on. The ceiling is deliberate rather than absent: an import
+  // is authenticated and metered, but nothing should be able to post an
+  // unbounded body.
+  app.use(express.json({ limit: '32mb' }))
   app.use(cookieParser())
 
   const api = Router()

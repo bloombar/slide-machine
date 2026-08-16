@@ -14,11 +14,18 @@ import type { Deck } from './deck'
 import type { Template } from './template'
 
 /** The formats a deck can be exported to (EXP-1/EXP-2). */
-export type DeckExportFormat = 'pdf' | 'google-slides' | 'yaml'
+/**
+ * `pptx` is here because EXP-1 asks for "PDF, Google Slides, and other easily
+ * supportable common formats", and PowerPoint is the one every institution
+ * still passes around. It is also the cheapest to support: the Google Slides
+ * export already builds a .pptx and lets Drive convert it, so offering the
+ * file itself is the same work minus the upload.
+ */
+export type DeckExportFormat = 'pdf' | 'google-slides' | 'yaml' | 'pptx'
 
 /** Formats that can be produced as bytes for a direct browser download.
  * Google Slides is Drive-only (it is a live Google document, not a file). */
-export type DeckDownloadFormat = 'pdf' | 'yaml'
+export type DeckDownloadFormat = 'pdf' | 'yaml' | 'pptx'
 
 /**
  * Formats that can render the deck's freehand whiteboard marks (WB-1). PDF and
@@ -30,6 +37,9 @@ export type DeckDownloadFormat = 'pdf' | 'yaml'
 export const WHITEBOARD_EXPORT_FORMATS: DeckExportFormat[] = [
   'pdf',
   'google-slides',
+  // PowerPoint draws the marks as native freeform shapes, the same as the PDF
+  // does — a format that renders the slide renders what was drawn on it.
+  'pptx',
 ]
 
 /** A deck export previously saved to Google Drive (EXP-4), so it can be listed

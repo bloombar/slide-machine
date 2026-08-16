@@ -10,7 +10,11 @@
  * `drive.readonly` scope was added must reconnect once to gain it.
  */
 import { createGoogleFormFromQuiz, type QuizForm } from 'google-forms-quiz-tool'
-import type { DriveFolder, QuizDefinition } from '@slide-machine/shared'
+import type {
+  DriveFolder,
+  DriveImportable,
+  QuizDefinition,
+} from '@slide-machine/shared'
 import { accessTokenFor, clientForRefreshToken } from '../auth/google-connect'
 import { toQuizYamlObject, type QuizYamlOptions } from './quiz-yaml'
 import type { QuizPublishResult } from './quiz-publish'
@@ -48,6 +52,54 @@ export const listDriveFoldersLive = async (
   if (!res.ok) throw new Error(`Drive folder list failed (${res.status})`)
   const data = (await res.json()) as { files?: { id: string; name: string }[] }
   return (data.files ?? []).map(f => ({ id: f.id, name: f.name }))
+}
+
+/** What an import can read out of Drive: a presentation to derive from
+ * (TMPL-8/EXP-5), a PowerPoint file to convert, or a file this app exported
+ * earlier (EXP-3). Anything else in the folder is noise to someone choosing
+ * what to import. */
+const IMPORTABLE_MIMES = [
+  'application/vnd.google-apps.presentation',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/x-yaml',
+  'text/yaml',
+  'text/plain',
+]
+
+/**
+ * The importable files directly inside `parentId` ('root' = My Drive).
+ *
+ * The folder picker deliberately lists no files — it chooses a destination,
+ * and a destination is a folder. Importing is the opposite errand: the point
+ * IS the file, so this lists them, filtered to the kinds an import can
+ * actually read. A `.yaml` often arrives as `text/plain`, which is why that
+ * is here; the parser decides whether it is really one.
+ */
+export const listDriveImportablesLive = async (
+  refreshToken: string,
+  parentId = 'root',
+): Promise<DriveImportable[]> => {
+  const token = await driveAccessToken(refreshToken)
+  const kinds = IMPORTABLE_MIMES.map(m => `mimeType='${m}'`).join(' or ')
+  const params = new URLSearchParams({
+    q: `'${parentId}' in parents and (${kinds}) and trashed=false`,
+    fields: 'files(id,name,mimeType)',
+    pageSize: '200',
+    orderBy: 'name',
+    spaces: 'drive',
+  })
+  const res = await fetch(`${DRIVE_FILES}?${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error(`Drive file list failed (${res.status})`)
+  const data = (await res.json()) as {
+    files?: { id: string; name: string; mimeType: string }[]
+  }
+  return (data.files ?? []).map(f => ({
+    id: f.id,
+    name: f.name,
+    mimeType: f.mimeType,
+  }))
 }
 
 /**

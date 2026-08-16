@@ -85,7 +85,16 @@ const valueOf = (
     // A picture the app owns, so the lecture does not depend on the Google
     // file continuing to exist (EXP-5).
     const ref = element.imageUrl ? imageRef(element.imageUrl) : undefined
-    return ref ? { kind: 'image', ref, source: 'seeded' } : undefined
+    if (!ref) return undefined
+    // Its provenance too, where the export wrote it into the alt text
+    // (IMG-5/EXP-8) — a licence that requires attribution is not satisfied by
+    // a picture that came home anonymous.
+    return {
+      kind: 'image',
+      ref,
+      source: 'seeded',
+      ...(element.attribution ? { attribution: element.attribution } : {}),
+    }
   }
 
   if (element.kind === 'table' || kind === 'table') {

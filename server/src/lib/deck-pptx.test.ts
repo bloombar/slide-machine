@@ -364,3 +364,70 @@ describe('specialized content in an exported deck (EXP-7)', () => {
     expect(xml).not.toMatch(/<a:t>[^<]*frac/)
   })
 })
+
+/**
+ * That a picture is really in the file.
+ *
+ * "It is a zip" is true of an export with no pictures in it at all, so the
+ * embed test above cannot tell a working image path from a broken one. A
+ * .pptx keeps its pictures as entries under `ppt/media/`, so that is what is
+ * asked.
+ */
+describe('a picture in the exported file', () => {
+  const PNG = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    'base64',
+  )
+
+  const servePng = () =>
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        headers: { get: () => 'image/png' },
+        arrayBuffer: async () =>
+          PNG.buffer.slice(PNG.byteOffset, PNG.byteOffset + PNG.byteLength),
+      }),
+    )
+
+  const media = (bytes: Uint8Array): string[] =>
+    new AdmZip(Buffer.from(bytes))
+      .getEntries()
+      .map(e => e.entryName)
+      .filter(name => /ppt\/media\//.test(name))
+
+  it('is written into ppt/media, not merely referenced', async () => {
+    servePng()
+    const bytes = await deckToPptx({
+      title: 'Pic',
+      templateId: 'c',
+      slides: [
+        { layoutType: 'image', title: 'Pic', imageRef: 'https://img/x.png' },
+      ],
+    })
+    expect(media(bytes).length).toBeGreaterThan(0)
+  })
+
+  it('carries its credit with it (IMG-5)', async () => {
+    servePng()
+    const bytes = await deckToPptx({
+      title: 'Pic',
+      templateId: 'c',
+      slides: [
+        {
+          layoutType: 'image',
+          title: 'Pic',
+          imageRef: 'https://img/x.png',
+          attribution: { creator: 'Ada Lovelace', license: 'CC BY-SA 4.0' },
+        },
+      ],
+    })
+    const xml = new AdmZip(Buffer.from(bytes))
+      .getEntries()
+      .filter(e => /ppt\/slides\/slide1\.xml$/.test(e.entryName))
+      .map(e => e.getData().toString('utf8'))
+      .join('')
+    expect(media(bytes).length).toBeGreaterThan(0)
+    expect(xml).toContain('Ada Lovelace')
+  })
+})

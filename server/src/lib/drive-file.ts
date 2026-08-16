@@ -99,3 +99,72 @@ export const readDriveFileTextLive = async (
   }
   return text
 }
+
+/** What a Drive file is, before deciding how to read it. */
+export interface DriveFileMeta {
+  name: string
+  mimeType: string
+}
+
+/** A Drive file's name and type, so a caller can tell a presentation from a
+ * PowerPoint from a design file before downloading anything. */
+export const driveFileMetaLive = async (
+  accessToken: string,
+  fileId: string,
+): Promise<DriveFileMeta> => {
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=name,mimeType`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  )
+  if (res.status === 401 || res.status === 403) {
+    throw new DriveFileUnreadableError(
+      'Google would not let this account read that file',
+      true,
+    )
+  }
+  if (res.status === 404) {
+    throw new DriveFileUnreadableError(
+      'That file was not found in Drive',
+      false,
+      true,
+    )
+  }
+  if (!res.ok) {
+    throw new DriveFileUnreadableError(`Drive read failed (${res.status})`)
+  }
+  return (await res.json()) as DriveFileMeta
+}
+
+/**
+ * A converted copy of a Drive file, as a native Google presentation.
+ *
+ * Drive converts on copy, so a PowerPoint already sitting in the user's Drive
+ * needs no download and no re-upload — Google does the reading in place. The
+ * copy is the caller's to trash once read.
+ */
+export const copyAsSlidesLive = async (
+  accessToken: string,
+  fileId: string,
+  name: string,
+): Promise<string> => {
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/copy?fields=id`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name,
+        mimeType: 'application/vnd.google-apps.presentation',
+      }),
+    },
+  )
+  if (!res.ok) {
+    throw new DriveFileUnreadableError(
+      `Google could not convert that file (${res.status})`,
+    )
+  }
+  return ((await res.json()) as { id: string }).id
+}

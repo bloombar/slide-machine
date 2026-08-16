@@ -267,10 +267,11 @@ export default function DeckSettingsModal({
   )
 
   // Export the lecture's current template as a re-importable YAML file (EXP-2).
-  const exportTemplate = () => {
+  const exportTemplate = (format?: 'pptx') => {
     setSlidesError(null)
     dispatchAction<ExportDownload>('template.export', {
       templateId: deck.templateId,
+      ...(format ? { format } : {}),
     })
       .then(downloadExport)
       .catch((err: Error) => {
@@ -702,11 +703,22 @@ export default function DeckSettingsModal({
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={exportTemplate}
+                  onClick={() => exportTemplate()}
                   className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
                 >
                   <Download className="h-4 w-4" aria-hidden />
                   {t('template.exportAsYaml')}
+                </button>
+                {/* The design as a deck anyone can open, its layouts the
+                    slides. YAML is what this app reads back; this is what a
+                    colleague reads. */}
+                <button
+                  type="button"
+                  onClick={() => exportTemplate('pptx')}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  <Download className="h-4 w-4" aria-hidden />
+                  {t('template.exportAsPptx')}
                 </button>
                 <button
                   type="button"

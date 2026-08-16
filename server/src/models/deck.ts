@@ -78,7 +78,7 @@ export interface DeckExportDb {
   fileId: string
   fileUrl: string
   fileName: string
-  format: 'pdf' | 'yaml' | 'google-slides'
+  format: 'pdf' | 'yaml' | 'google-slides' | 'pptx'
   driveFolderId: string
   driveFolderName?: string
   exportedAt: Date
@@ -172,7 +172,7 @@ const exportSchema = new Schema<DeckExportDb>(
     fileName: { type: String, required: true },
     format: {
       type: String,
-      enum: ['pdf', 'yaml', 'google-slides'],
+      enum: ['pdf', 'yaml', 'google-slides', 'pptx'],
       required: true,
     },
     driveFolderId: { type: String, required: true },

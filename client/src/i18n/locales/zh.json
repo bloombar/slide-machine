@@ -453,6 +453,7 @@
     "exportHeading": "导出这个设计",
     "exportHint": "以文件形式带走，或存到你的 Google 云端硬盘，成为一份以它的版式为版式的演示文稿。",
     "exportAsYaml": "导出为 YAML",
+    "exportAsPptx": "导出为 PowerPoint",
     "exportToSlides": "导出为 Google Slides",
     "slotLanguage": {
       "label": "语言",
@@ -486,7 +487,7 @@
       "otherSources": "或上传文件"
     },
     "fileImport": {
-      "open": "导入 .yaml 设计文件",
+      "open": "导入设计文件（.yaml 或 .pptx）",
       "working": "正在读取文件…",
       "errors": {
         "read": "无法读取该文件",
@@ -524,7 +525,7 @@
     },
     "importSlides": {
       "title": "用 Google 幻灯片演示文稿创建课程",
-      "description": "指定你云端硬盘中的演示文稿，它的幻灯片会原样变成可以讲授的课程。",
+      "description": "从你的云端硬盘导入演示文稿——Google 幻灯片或 PowerPoint。每张幻灯片都会原样呈现。",
       "linkLabel": "Google 幻灯片链接",
       "linkPlaceholder": "粘贴演示文稿链接",
       "submit": "导入课程",
@@ -538,7 +539,7 @@
         "failed": "无法导入该演示文稿"
       },
       "otherSources": "或上传文件",
-      "fileOpen": "导入 .yaml 课程文件"
+      "fileOpen": "导入课程文件（.yaml 或 .pptx）"
     },
     "errors": {
       "create": "无法创建课程"
@@ -1226,6 +1227,9 @@
       },
       "google-slides": {
         "hint": "保存在你云端硬盘中的可编辑演示文稿。"
+      },
+      "pptx": {
+        "hint": "可用 PowerPoint 或 Keynote 打开的 .pptx 文件。"
       },
       "yaml": {
         "hint": "便于阅读、可重新导入的文件。"

@@ -17,6 +17,12 @@ import type { Layout } from '@slide-machine/shared'
 import type { ExportNote } from '@slide-machine/shared'
 import type { ExportDeck, ExportSlide } from './deck-yaml'
 import { visibleStrokes, hexForPptx, HIGHLIGHTER_ALPHA } from './deck-drawings'
+import { imageCredit } from './image-credit'
+import { creditToken } from './image-attribution-token'
+
+/** The credit line under a picture: small, and tall enough for one line. */
+const CREDIT_PT = 7
+const CREDIT_H = 0.22
 import { fetchSlideImages, toDataUri } from './deck-image'
 import { slotToken } from './slot-metadata'
 import { typesetFormulas, type Formulas } from './deck-formulas'
@@ -134,11 +140,17 @@ const renderSlide = (
         })
       }
     } else if (box.kind === 'image' && image) {
+      // Alt text carries the picture's provenance home (IMG-5/EXP-8): neither
+      // Slides nor PowerPoint has a field for it, and a deck exported, edited
+      // there and imported back came home with anonymous pictures.
+      const token = creditToken(slide.attribution)
+      const alt = [box.slot ? slotToken(box.slot) : undefined, token]
+        .filter(Boolean)
+        .join('\n')
       s.addImage({
         data: image,
-        ...(box.slot
-          ? { objectName: slotToken(box.slot), altText: slotToken(box.slot) }
-          : {}),
+        ...(box.slot ? { objectName: slotToken(box.slot) } : {}),
+        ...(alt ? { altText: alt } : {}),
         x: box.x * SLIDE_W,
         y: box.y * SLIDE_H,
         w: box.w * SLIDE_W,
@@ -149,6 +161,24 @@ const renderSlide = (
           h: box.h * SLIDE_H,
         },
       })
+
+      // The picture's provenance, under the picture it belongs to (IMG-5).
+      // A slide with two pictures credits each where it sits, so a reader can
+      // tell which credit is whose.
+      const credit = imageCredit(slide.attribution)
+      if (credit) {
+        s.addText(credit, {
+          x: box.x * SLIDE_W,
+          // Just under the box, kept on the slide when the picture runs to
+          // the bottom edge.
+          y: Math.min((box.y + box.h) * SLIDE_H + 0.03, SLIDE_H - CREDIT_H),
+          w: box.w * SLIDE_W,
+          h: CREDIT_H,
+          fontSize: CREDIT_PT,
+          color: hex.muted,
+          margin: 0,
+        })
+      }
     }
   }
   drawStrokes(pptx, s, slide)

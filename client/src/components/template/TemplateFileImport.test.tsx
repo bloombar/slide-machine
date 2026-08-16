@@ -30,7 +30,7 @@ const file = (text = yaml) =>
 
 /** Picks a file, which is the whole interaction. */
 const pick = (f: File) => {
-  const input = screen.getByLabelText(/import a \.yaml design file/i)
+  const input = screen.getByLabelText(/import a design file/i)
   fireEvent.change(input, { target: { files: [f] } })
 }
 
@@ -111,7 +111,7 @@ describe('when the file will not do', () => {
     await screen.findByRole('alert')
 
     const input = screen.getByLabelText(
-      /import a \.yaml design file/i,
+      /import a design file/i,
     ) as HTMLInputElement
     expect(input.value).toBe('')
   })

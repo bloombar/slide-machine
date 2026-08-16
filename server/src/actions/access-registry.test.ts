@@ -177,6 +177,13 @@ const ACCESS_INDEX: Record<string, AccessDescriptor> = {
     level: 'signedIn',
     capabilities: ['google-drive'],
   },
+  // Browsing Drive for something to import: the first step of an import, so
+  // the same grant and the same surface as the imports themselves.
+  'drive.importables': {
+    resource: 'none',
+    level: 'signedIn',
+    capabilities: ['google-drive'],
+  },
   // A lecture from a presentation (EXP-5). The lecture does not exist yet, so
   // what is authorized is the project it lands in — owner only, matching
   // deck.create and deck.import — plus the grant that reads the presentation.

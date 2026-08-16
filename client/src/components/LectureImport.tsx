@@ -32,7 +32,8 @@ import type {
 import { dispatchAction } from '../api/actions'
 import { ApiError } from '../api/http'
 import { apiErrorMessage } from '../i18n/apiError'
-import { presentationIdFrom } from './template/TemplateImport'
+import { isPptx, readAsBase64 } from '../lib/import-file'
+import { importSourceFrom } from './template/TemplateImport'
 
 export default function LectureImport({
   projectId,
@@ -61,12 +62,39 @@ export default function LectureImport({
   const [needsGoogle, setNeedsGoogle] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
 
-  const presentationId = presentationIdFrom(link)
+  const source = importSourceFrom(link)
 
   /** A lecture this app exported earlier, restored as the lecture it was
    * (EXP-3). No design is derived: the file names the template it wants. */
   const importFile = async (file: File) => {
     setError(null)
+    // A PowerPoint file takes the presentation route — Google converts it and
+    // the same pipeline reads it — while a .yaml this app wrote is restored
+    // as the lecture it was. One button either way.
+    if (isPptx(file)) {
+      setBusy(true)
+      try {
+        const result = await dispatchAction<{
+          deck: Deck
+          template: Template
+          report: ImportReport
+        }>('deck.importFromSlides', {
+          projectId,
+          pptxBase64: await readAsBase64(file),
+          // Without this the deck arrives called "Imported presentation":
+          // the name given to the converted copy becomes the title.
+          name: file.name.replace(/\.pptx$/i, ''),
+          keepEverySlide: true,
+        })
+        onImported(result)
+      } catch (err) {
+        setError(apiErrorMessage(err, t, 'lecture.importSlides.errors.failed'))
+      } finally {
+        setBusy(false)
+        if (fileInput.current) fileInput.current.value = ''
+      }
+      return
+    }
     let content: string
     try {
       content = await file.text()
@@ -98,14 +126,19 @@ export default function LectureImport({
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault()
-    if (!presentationId || busy) return
+    if (!source || busy) return
     setBusy(true)
     setError(null)
     dispatchAction<{ deck: Deck; template: Template; report: ImportReport }>(
       'deck.importFromSlides',
       {
         projectId,
-        presentationId,
+        // A Drive file link points at a file, not a presentation — most often
+        // a PowerPoint sitting in Drive. The server reads it for whatever it
+        // turns out to be.
+        ...(source.action === 'template.importFromDrive'
+          ? { driveFileId: source.id }
+          : { presentationId: source.id }),
         // Always, for a lecture. Consolidation is what makes a *template*
         // usable — a handful of designs to choose between rather than forty
         // near-identical ones. A lecture is the deck itself, and merging two
@@ -184,7 +217,7 @@ export default function LectureImport({
         />
         <button
           type="submit"
-          disabled={!presentationId || busy}
+          disabled={!source || busy}
           className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
         >
           {busy
@@ -202,7 +235,7 @@ export default function LectureImport({
 
       {/* Said only once something has been typed, so an empty field is not an
           error the instructor has not made yet. */}
-      {link.trim() && !presentationId && (
+      {link.trim() && !source && (
         <p className="mt-2 text-sm text-slate-500">
           {t('template.import.errors.link')}
         </p>
@@ -239,7 +272,7 @@ export default function LectureImport({
           <input
             ref={fileInput}
             type="file"
-            accept=".yaml,.yml,application/x-yaml,text/yaml"
+            accept=".yaml,.yml,.pptx,application/x-yaml,text/yaml,application/vnd.openxmlformats-officedocument.presentationml.presentation"
             className="sr-only"
             disabled={busy}
             onChange={e => {

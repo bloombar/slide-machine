@@ -218,10 +218,9 @@ describe('HomePage', () => {
     // file is picked inside it — one entry, then the source.
     fireEvent.click(screen.getByRole('button', { name: /Options for Biology/ }))
     fireEvent.click(screen.getByRole('menuitem', { name: /^Import/ }))
-    fireEvent.change(
-      await screen.findByLabelText(/import a \.yaml lecture file/i),
-      { target: { files: [file] } },
-    )
+    fireEvent.change(await screen.findByLabelText(/import a lecture file/i), {
+      target: { files: [file] },
+    })
 
     await vi.waitFor(() =>
       expect(sent).toEqual({
@@ -451,10 +450,9 @@ describe('HomePage', () => {
     // one and opens the panel against it.
     fireEvent.click(screen.getByRole('button', { name: 'Create new' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Import a lecture' }))
-    fireEvent.change(
-      await screen.findByLabelText(/import a \.yaml lecture file/i),
-      { target: { files: [file] } },
-    )
+    fireEvent.change(await screen.findByLabelText(/import a lecture file/i), {
+      target: { files: [file] },
+    })
 
     await vi.waitFor(() =>
       expect(sent).toEqual({
