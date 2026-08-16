@@ -96,6 +96,29 @@ export interface Consolidation {
 const textOf = (slot: CandidateSlot | undefined): string =>
   (slot?.content?.runs ?? []).map(run => run.text).join('')
 
+/**
+ * The most any of these boxes actually held: lines, and the longest of them.
+ *
+ * Kept so an imported layout can be given room for its own content. A design
+ * carries no words — only the slides do — so what travels with it is the size
+ * of what it has to hold, not the thing itself.
+ */
+const heldBy = (
+  slots: (CandidateSlot | undefined)[],
+): { lines: number; longest: number } | undefined => {
+  let lines = 0
+  let longest = 0
+  for (const slot of slots) {
+    const own = textOf(slot)
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+    lines = Math.max(lines, own.length)
+    longest = Math.max(longest, ...own.map(line => line.length), 0)
+  }
+  return lines ? { lines, longest } : undefined
+}
+
 /** The lines a box held — how many points a list carried. */
 const linesIn = (slot: CandidateSlot | undefined): number =>
   textOf(slot)
@@ -268,6 +291,7 @@ const medianLayout = (members: Candidate[]): DerivedLayout => {
       const sizes = mine
         .map(s => s.fontSize)
         .filter((n): n is number => typeof n === 'number')
+      const held = heldBy(mine)
       return {
         ...slot,
         box: {
@@ -295,7 +319,9 @@ const medianLayout = (members: Candidate[]): DerivedLayout => {
           ? { restored: mine.find(s => s.restored)!.restored }
           : {}),
         // The design carries no content; a slide's own words belong to the
-        // slide (EXP-5 maps them back).
+        // slide (EXP-5 maps them back). What is kept is the SIZE of the most
+        // any slide put here, so `build-template` can leave room for it.
+        ...(held ? { held } : {}),
         content: undefined,
       }
     })

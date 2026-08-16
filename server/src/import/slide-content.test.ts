@@ -72,7 +72,9 @@ describe('what a box held arrives in its slot', () => {
       slide([
         slot('body', {
           bulleted: true,
-          runs: [{ text: 'Water' }, { text: 'Carbon dioxide' }],
+          // The reader ends every paragraph with a newline, so the lines are
+          // in the text rather than implied by where the runs happen to fall.
+          runs: [{ text: 'Water\n' }, { text: 'Carbon dioxide' }],
         }),
       ]),
       'list',
@@ -187,6 +189,26 @@ describe('a box whose kind only its declaration knows (EXP-8)', () => {
     })
   })
 
+  it('keeps a listing’s line breaks when they arrive as separate runs', () => {
+    // A listing set as several paragraphs is several runs. Joined without the
+    // breaks between them the lines ran together — `def f():    return 1` —
+    // which is a listing that no longer runs.
+    const result = importedSlide(
+      slide([
+        slot(
+          'example',
+          { runs: [{ text: 'def f():\n' }, { text: '    return 1' }] },
+          { name: 'example', kind: 'code', label: 'Example' },
+        ),
+      ]),
+      'code',
+      stored,
+    )
+    expect(result.slots.example).toMatchObject({
+      source: 'def f():\n    return 1',
+    })
+  })
+
   it('restores a formula as its source, not as typeset words', () => {
     const result = importedSlide(
       slide([
@@ -207,7 +229,7 @@ describe('a box whose kind only its declaration knows (EXP-8)', () => {
       slide([
         slot(
           'points',
-          { runs: [{ text: 'One' }, { text: 'Two' }] },
+          { runs: [{ text: 'One\n' }, { text: 'Two' }] },
           { name: 'points', kind: 'bullets', label: 'Points' },
         ),
       ]),
@@ -409,5 +431,74 @@ describe('where a picture came from', () => {
       stored,
     )
     expect(result.slots.image).not.toHaveProperty('attribution')
+  })
+})
+
+/**
+ * A list whose lines did not arrive as separate runs.
+ *
+ * The old reading counted runs, which held whenever Google gave one per line
+ * and failed when it did not: lines broken inside a paragraph come back in a
+ * single run, and a run split by styling holds more than one line. Counting
+ * lines is what a reader actually sees either way.
+ */
+describe('a list that arrived as fewer runs than it has points', () => {
+  it('is still the points it has, not one long one', () => {
+    const result = importedSlide(
+      slide([
+        slot('body', {
+          bulleted: true,
+          runs: [{ text: 'One\nTwo\nThree\nFour' }],
+        }),
+      ]),
+      'list',
+      stored,
+    )
+    expect(result.slots.body).toEqual({
+      kind: 'bullets',
+      items: ['One', 'Two', 'Three', 'Four'],
+    })
+  })
+
+  it('gathers the lines of several runs into one list', () => {
+    const result = importedSlide(
+      slide([
+        slot('body', {
+          bulleted: true,
+          runs: [{ text: 'One\nTwo\n' }, { text: 'Three\nFour' }],
+        }),
+      ]),
+      'list',
+      stored,
+    )
+    expect(result.slots.body).toEqual({
+      kind: 'bullets',
+      items: ['One', 'Two', 'Three', 'Four'],
+    })
+  })
+
+  it('does not break a point in half where its styling changes', () => {
+    // Google starts a new run wherever styling changes, so a point with one
+    // bold word in it arrives as three. Counting runs made three points —
+    // "A ", "bold", " point" — out of one the author wrote.
+    const result = importedSlide(
+      slide([
+        slot('body', {
+          bulleted: true,
+          runs: [
+            { text: 'A ' },
+            { text: 'bold', bold: true },
+            { text: ' point\n' },
+            { text: 'A plain one' },
+          ],
+        }),
+      ]),
+      'list',
+      stored,
+    )
+    expect(result.slots.body).toEqual({
+      kind: 'bullets',
+      items: ['A bold point', 'A plain one'],
+    })
   })
 })

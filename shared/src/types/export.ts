@@ -42,6 +42,23 @@ export const WHITEBOARD_EXPORT_FORMATS: DeckExportFormat[] = [
   'pptx',
 ]
 
+/**
+ * Formats that can carry the deck's template as reusable layout pages (EXP-1).
+ *
+ * A slide format has somewhere to put them: PowerPoint writes them as layouts,
+ * and Google Slides keeps them through the conversion, which is what makes
+ * "apply layout" work on the far side and what lets an import group the slides
+ * by the design their author chose rather than clustering them afresh.
+ *
+ * The PDF has no such surface — it is a picture of each slide. YAML is left out
+ * for the opposite reason: its export already carries the whole template, so
+ * there is no second shape to choose between.
+ */
+export const LAYOUT_EXPORT_FORMATS: DeckExportFormat[] = [
+  'google-slides',
+  'pptx',
+]
+
 /** A deck export previously saved to Google Drive (EXP-4), so it can be listed
  * and deleted later — mirrors how a published quiz is tracked (QUIZ-3/QUIZ-6). */
 export interface ExportedFile {

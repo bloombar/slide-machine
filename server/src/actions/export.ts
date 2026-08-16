@@ -249,6 +249,7 @@ export const exportDownload = defineAction<
     deckId: string
     format: 'pdf' | 'yaml' | 'pptx'
     includeWhiteboard?: boolean
+    withLayouts?: boolean
     locale?: Locale
   },
   ExportDownload,
@@ -261,6 +262,9 @@ export const exportDownload = defineAction<
     deckId: z.string().min(1),
     format: z.enum(['pdf', 'yaml', 'pptx']),
     includeWhiteboard: z.boolean().optional(),
+    // Carry the deck's template as reusable layout pages (EXP-1). Off by
+    // default: a flat file is what most people want to hand someone.
+    withLayouts: z.boolean().optional(),
     // Export the deck as it reads in this language (SHARE-2); omitted exports
     // the authored text.
     locale: z.enum(LOCALES).optional(),
@@ -287,7 +291,7 @@ export const exportDownload = defineAction<
     if (input.format === 'pptx') {
       // The same builder the Google Slides export uses; that route uploads
       // the bytes for Drive to convert, this one just hands them over.
-      const pptx = await deckToPptx(deck, notes)
+      const pptx = await deckToPptx(deck, notes, input.withLayouts === true)
       await meterUsage('exports', 1)
       return {
         fileName: `${base}.pptx`,
@@ -327,6 +331,7 @@ export const exportToDrive = defineAction<
     driveFolderId: string
     driveFolderName?: string
     includeWhiteboard?: boolean
+    withLayouts?: boolean
     locale?: Locale
   },
   ExportToDriveResult,
@@ -341,6 +346,9 @@ export const exportToDrive = defineAction<
     driveFolderId: z.string().min(1),
     driveFolderName: z.string().optional(),
     includeWhiteboard: z.boolean().optional(),
+    // Carry the deck's template as reusable layout pages (EXP-1); see the
+    // download action.
+    withLayouts: z.boolean().optional(),
     // Save the deck as it reads in this language (SHARE-2); omitted saves the
     // authored text.
     locale: z.enum(LOCALES).optional(),
@@ -379,6 +387,7 @@ export const exportToDrive = defineAction<
           { ...deck, title: slidesTitle },
           input.driveFolderId,
           notes,
+          input.withLayouts === true,
         )
         fileId = file.id
         fileUrl = file.fileUrl
@@ -390,7 +399,7 @@ export const exportToDrive = defineAction<
           input.format === 'yaml'
             ? new TextEncoder().encode(deckToYaml(deck))
             : input.format === 'pptx'
-              ? await deckToPptx(deck, notes)
+              ? await deckToPptx(deck, notes, input.withLayouts === true)
               : await deckToPdf(deck, notes)
         const file = await uploadFileToDriveLive(
           refreshToken,

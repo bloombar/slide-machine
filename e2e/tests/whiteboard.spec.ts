@@ -49,8 +49,13 @@ const eraseAcrossSlide = async (page: Page, yFraction = 0.5) => {
   const y = box.y + box.height * yFraction
   await page.mouse.move(box.x + box.width * 0.35, y)
   await page.mouse.down()
-  await page.mouse.move(box.x + box.width * 0.5, y)
-  await page.mouse.move(box.x + box.width * 0.65, y)
+  // Swept rather than jumped. Erasing hit-tests each pointer position against
+  // the stroke, so a drag of three points erases only where those three land:
+  // a few pixels of layout shift between measuring the slide and moving the
+  // mouse put all three off the stroke and nothing was erased. A real eraser
+  // is dragged, and `steps` is what makes this one a drag.
+  await page.mouse.move(box.x + box.width * 0.5, y, { steps: 12 })
+  await page.mouse.move(box.x + box.width * 0.65, y, { steps: 12 })
   await page.mouse.up()
 }
 
@@ -109,6 +114,15 @@ test('erases a stroke as a timestamped event (kept in data)', async ({
   )
   await drawOnSlide(page)
   await saved
+  // The save having ANSWERED is not the same as the layer being able to erase
+  // what was saved: erasing hit-tests against the strokes that come back as
+  // props, and until those land the eraser passes over nothing. Waiting on
+  // the response alone erased thin air under load, and the stamped save that
+  // then never came was read as a flake.
+  await expect(page.getByTestId('drawing-layer')).toHaveAttribute(
+    'data-erasable',
+    '1',
+  )
 
   // Erase over the same stroke; it is stamped, not deleted. Wait for the save
   // that actually carries the stamp rather than whichever `editDrawings`

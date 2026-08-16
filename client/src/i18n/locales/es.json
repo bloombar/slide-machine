@@ -1243,6 +1243,10 @@
       "label": "Incluir las anotaciones de la pizarra",
       "hint": "Dibujar los trazos a mano alzada en las diapositivas exportadas."
     },
+    "withLayouts": {
+      "label": "Conservar el diseño como plantillas reutilizables",
+      "hint": "Las diapositivas quedan vinculadas al diseño que usan, así el archivo se puede reestilizar y volver a importar con su diseño intacto."
+    },
     "otherDrive": {
       "title": "Retirado de esta clase",
       "message": "Esta exportación se guardó en el Google Drive de otra persona colaboradora, así que se ha retirado de esta clase pero sigue existiendo en su Drive. Pídele que la elimine allí si quieres que desaparezca por completo."

@@ -229,52 +229,38 @@ const demoText = (box: ResolvedBox, layout: Layout): string => {
 }
 
 /**
- * Builds the template's .pptx and returns its bytes: one master per layout,
- * and one demonstration slide on each.
+ * Defines one pptx master per layout a template declares, and says what each
+ * is called.
  *
- * `pictures` are `data:` URIs to stand in the picture boxes of the
- * demonstration slides, taken in turn and repeated if there are more boxes
- * than pictures (`templatePictures`). They go on the slides and never into a
- * layout: a layout carrying a photograph would bake it into every slide made
- * from it, which is a design nobody chose. Without any, a picture box shows
- * as the space it reserves.
+ * Shared by both exporters. A design export ([EXP-6](../../docs/SPEC.md))
+ * writes these and shows each on a demonstration slide; a lecture export
+ * carrying reusable layouts (EXP-1) writes the same ones and attaches its
+ * real slides to them. One implementation, because two would drift and a
+ * re-import would then depend on which door the file came out of.
  *
- * The `whiteboard` layout is omitted — it is an app-only blank slate with no
+ * The master holds the whole design — decoration, reserved picture space, and
+ * a placeholder per box. Everything a slide should show without being asked
+ * is inherited from here rather than repeated on every slide, which is what
+ * makes the layouts reusable when the file is opened or re-imported (TMPL-8).
+ *
+ * The `whiteboard` layout gets none — it is an app-only blank slate with no
  * visual design to carry, and is re-synthesized on import (TMPL-7).
  */
-export const templateToPptx = async (
-  template: Template,
-  pictures: string[] = [],
-): Promise<Uint8Array> => {
-  const pptx = new PptxGenJS()
-  pptx.title = template.name
-  pptx.layout = 'LAYOUT_16x9'
-
-  const theme = resolveTemplateTheme(template.theme)
-  const palette: Palette = {
-    ...theme,
-    surface:
-      typeof template.theme?.surface === 'string'
-        ? (template.theme.surface as string)
-        : theme.background,
-  }
-  const background = { color: noHash(theme.background) }
-
-  const layouts = template.layouts.filter(
+export const defineLayoutMasters = (
+  pptx: InstanceType<typeof PptxGenJS>,
+  template: Pick<Template, 'layouts' | 'theme'>,
+  palette: Palette,
+  background: { color: string },
+): Map<string, string> => {
+  const names = new Map<string, string>()
+  const layouts = (template.layouts ?? []).filter(
     l => l.type !== WHITEBOARD_LAYOUT_TYPE,
   )
-  // Taken in turn across the whole file, so a design with several picture
-  // boxes shows several different pictures rather than the same one twice.
-  let taken = 0
-  const nextPicture = (): string | undefined =>
-    pictures.length ? pictures[taken++ % pictures.length] : undefined
-
   for (const layout of layouts) {
     const boxes = boxesOf(layout, template.theme ?? {})
     const name = masterName(layout)
     const decoration = boxes.filter(box => !box.slot)
     const slots = boxes.filter(box => !!box.slot)
-
     // The layout holds the whole design: the decoration and the reserved
     // space for pictures first, then a placeholder per box over the top. Only
     // the placeholders are the author's to type in, and everything a slide
@@ -325,6 +311,58 @@ export const templateToPptx = async (
         })),
       ],
     })
+    names.set(layout.type, name)
+  }
+  return names
+}
+
+/**
+ * Builds the template's .pptx and returns its bytes: one master per layout,
+ * and one demonstration slide on each.
+ *
+ * `pictures` are `data:` URIs to stand in the picture boxes of the
+ * demonstration slides, taken in turn and repeated if there are more boxes
+ * than pictures (`templatePictures`). They go on the slides and never into a
+ * layout: a layout carrying a photograph would bake it into every slide made
+ * from it, which is a design nobody chose. Without any, a picture box shows
+ * as the space it reserves.
+ *
+ * The `whiteboard` layout is omitted — it is an app-only blank slate with no
+ * visual design to carry, and is re-synthesized on import (TMPL-7).
+ */
+export const templateToPptx = async (
+  template: Template,
+  pictures: string[] = [],
+): Promise<Uint8Array> => {
+  const pptx = new PptxGenJS()
+  pptx.title = template.name
+  pptx.layout = 'LAYOUT_16x9'
+
+  const theme = resolveTemplateTheme(template.theme)
+  const palette: Palette = {
+    ...theme,
+    surface:
+      typeof template.theme?.surface === 'string'
+        ? (template.theme.surface as string)
+        : theme.background,
+  }
+  const background = { color: noHash(theme.background) }
+
+  const layouts = template.layouts.filter(
+    l => l.type !== WHITEBOARD_LAYOUT_TYPE,
+  )
+  // Taken in turn across the whole file, so a design with several picture
+  // boxes shows several different pictures rather than the same one twice.
+  let taken = 0
+  const nextPicture = (): string | undefined =>
+    pictures.length ? pictures[taken++ % pictures.length] : undefined
+
+  defineLayoutMasters(pptx, template, palette, background)
+
+  for (const layout of layouts) {
+    const boxes = boxesOf(layout, template.theme ?? {})
+    const name = masterName(layout)
+    const slots = boxes.filter(box => !!box.slot)
 
     // The demonstration slide, so the design is visible the moment the file
     // opens. Its text goes INTO the layout's placeholders: a slide that drew

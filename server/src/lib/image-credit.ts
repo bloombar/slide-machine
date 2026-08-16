@@ -33,3 +33,35 @@ export const imageCredit = (
   const credit = parts.join(' ').trim()
   return credit || undefined
 }
+
+/**
+ * The provenance a printed credit states, read back.
+ *
+ * The reverse of `imageCredit`, and the reason it exists: a picture's
+ * provenance travels on its alt text, but alt text is not something we
+ * control once the file leaves — a conversion may drop it, and an editor may
+ * clear it. The printed line cannot be dropped: it is on the page, and it is
+ * the thing a licence actually requires be visible.
+ *
+ * So it doubles as the fallback. Only fields the printed form states can come
+ * back — the URLs never appear in it — which is why this is second choice and
+ * not first.
+ */
+export const creditFromLine = (
+  line: string | undefined,
+): ImageAttribution | undefined => {
+  if (!line?.trim()) return undefined
+  const read = (pattern: RegExp): string | undefined =>
+    pattern.exec(line)?.[1]?.trim() || undefined
+  const attribution: ImageAttribution = {
+    ...(read(/^\s*"([^"]*)"/) ? { title: read(/^\s*"([^"]*)"/)! } : {}),
+    ...(read(/\bby\s+(.+?)(?=\s+via\s|\s+—\s|$)/)
+      ? { creator: read(/\bby\s+(.+?)(?=\s+via\s|\s+—\s|$)/)! }
+      : {}),
+    ...(read(/\bvia\s+(.+?)(?=\s+—\s|$)/)
+      ? { sourceName: read(/\bvia\s+(.+?)(?=\s+—\s|$)/)! }
+      : {}),
+    ...(read(/—\s*(.+)$/) ? { license: read(/—\s*(.+)$/)! } : {}),
+  }
+  return Object.keys(attribution).length ? attribution : undefined
+}

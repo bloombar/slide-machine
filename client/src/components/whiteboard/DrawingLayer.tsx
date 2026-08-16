@@ -256,6 +256,22 @@ export default function DrawingLayer({
     <canvas
       ref={canvasRef}
       data-testid="drawing-layer"
+      /*
+       * How many saved strokes this layer can currently act on.
+       *
+       * Erasing hit-tests against the SAVED strokes, which arrive back as
+       * props after the save round-trip — so there is a window where a stroke
+       * has been drawn and stored but the layer cannot yet erase it. Nothing
+       * about the canvas shows that: it is painted, not marked up, so a test
+       * that erases as soon as the save responds is guessing at state it
+       * cannot see, and under load it guesses wrong.
+       *
+       * Stated here so it can be waited for instead.
+       */
+      data-erasable={Object.values(strokesById).reduce(
+        (n, strokes) => n + strokes.filter(s => !s.erasedAnchor).length,
+        0,
+      )}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={finishStroke}

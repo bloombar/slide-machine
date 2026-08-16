@@ -60,10 +60,25 @@ const textOf = (slot: CandidateSlot): string =>
     .join('')
     .trim()
 
-/** The words in a box, as a list. Google gives one run per line for a list,
- * so a paragraph per run is the list a reader sees. */
+/**
+ * The words in a box, as a list.
+ *
+ * A run is not a line and never was: Google splits one wherever styling
+ * changes, so a point with a bold word in it is several runs, and a line
+ * broken inside a paragraph puts several lines in one run. Counting runs
+ * therefore both split points that were whole and joined points that were
+ * separate.
+ *
+ * The words are put back together and cut on the line ends the reader
+ * established, which is the only place a list's points actually are.
+ */
 const itemsOf = (slot: CandidateSlot): string[] =>
-  (slot.content?.runs ?? []).map(run => run.text.trim()).filter(Boolean)
+  (slot.content?.runs ?? [])
+    .map(run => run.text)
+    .join('')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
 
 /**
  * What a box's content is, in the slot vocabulary.

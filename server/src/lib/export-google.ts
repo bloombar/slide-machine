@@ -126,8 +126,10 @@ export const createGoogleSlidesLive = async (
   folderId = 'root',
   /** Collects what the format could not carry (EXP-7). */
   notes?: ExportNote[],
+  /** Write the deck's template as the presentation's own layouts (EXP-1). */
+  withLayouts = false,
 ): Promise<DriveFile> => {
-  const pptx = await deckToPptx(deck, notes)
+  const pptx = await deckToPptx(deck, notes, withLayouts)
   return uploadFileToDriveLive(
     refreshToken,
     {

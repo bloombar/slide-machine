@@ -54,6 +54,16 @@ export interface TextBox {
    * say what a shape IS rather than only where it sits (EXP-8). Absent on the
    * hand-tuned arrangements, whose boxes are not slots. */
   slot?: string
+  /**
+   * A credit this system printed, rather than words the author wrote.
+   *
+   * The licence has to be readable in the exported file (IMG-5), so it is
+   * drawn on the page — but it is not content: re-imported as content it
+   * came back as a caption nobody made, while the picture's own provenance
+   * dialog stayed empty. Marked here so the exporters can say so in the file
+   * and the importer can leave it behind.
+   */
+  credit?: true
 }
 export interface ImageBox {
   kind: 'image'
@@ -144,36 +154,50 @@ const attributionCredit = (slide: ExportSlide): string => {
   return parts.join(' ').trim()
 }
 
-/** Caption + image attribution/license, joined into one muted footer line
- * (IMG-5 requires the attribution to appear on exported slides). */
-const footerText = (slide: ExportSlide): string =>
-  [slide.caption, attributionCredit(slide)].filter(Boolean).join('  ·  ')
+/** The type size of the small muted line under a picture. */
+const FOOTER_SIZE = 0.011
 
-/** Whether a slide has any caption/attribution footer to show. */
-const hasFooter = (slide: ExportSlide): boolean => footerText(slide).length > 0
+/** Whether anything is printed beneath the picture — the author's caption,
+ * the licence credit, or both — so an arrangement can leave room for it. */
+const hasFooter = (slide: ExportSlide): boolean =>
+  Boolean(slide.caption) || Boolean(attributionCredit(slide))
 
-/** The caption + attribution as a small, muted line tucked directly beneath the
- * image (matching the image's column, not the whole slide), so it reads as a
- * figure credit rather than a banner across the bottom (IMG-5). */
+/** A muted line tucked directly beneath the image, matching the image's
+ * column rather than the whole slide, so it reads as a figure credit rather
+ * than a banner across the bottom (IMG-5). */
+const footerLine = (
+  text: string,
+  img: { x: number; y: number; w: number; h: number },
+  offset: number,
+  credit?: true,
+): LayoutBox => {
+  const y = img.y + img.h + 0.015 + offset
+  return {
+    kind: 'text',
+    x: img.x,
+    y,
+    w: img.w,
+    h: Math.max(0, 1 - y - 0.01),
+    align: 'center',
+    valign: 'top',
+    runs: [{ text, sizeFrac: FOOTER_SIZE, color: 'muted' }],
+    ...(credit ? { credit } : {}),
+  }
+}
+
+/**
+ * The author's caption under the picture, where the arrangement has no box of
+ * its own for one.
+ *
+ * The licence credit is NOT here. It goes under every picture, whatever
+ * arrangement drew it (`withCredit`), and putting it here too gave a
+ * template-arranged deck no credit at all while the hand-tuned arrangements
+ * got two.
+ */
 const captionBox = (
   slide: ExportSlide,
   img: { x: number; y: number; w: number; h: number },
-): LayoutBox[] => {
-  if (!hasFooter(slide)) return []
-  const y = img.y + img.h + 0.015
-  return [
-    {
-      kind: 'text',
-      x: img.x,
-      y,
-      w: img.w,
-      h: Math.max(0, 1 - y - 0.01),
-      align: 'center',
-      valign: 'top',
-      runs: [{ text: footerText(slide), sizeFrac: 0.011, color: 'muted' }],
-    },
-  ]
-}
+): LayoutBox[] => (slide.caption ? [footerLine(slide.caption, img, 0)] : [])
 
 /** A box's colour, mapped onto the three roles an export can draw in. */
 const roleOf = (color: string | undefined): ColorRole | undefined => {
@@ -433,7 +457,43 @@ const arrangedLayout = (
  * switch below is the hand-tuned arrangement the built-ins rely on, and stays
  * the fallback for any layout that carries no geometry.
  */
+/**
+ * The licence credit under whichever box shows the picture.
+ *
+ * Applied to every arrangement, because IMG-5 is not a property of one: a
+ * deck laid out by its own template needs its credit exactly as much as one
+ * falling back to a built-in shape, and putting the credit in only the
+ * fallbacks left every template-arranged export with no attribution at all.
+ *
+ * Marked as a credit so the exporters can name it in the file and a re-import
+ * can leave it behind — it is printed on the page, but it is not something
+ * the author wrote (`TextBox.credit`).
+ */
+const withCredit = (slide: ExportSlide, boxes: LayoutBox[]): LayoutBox[] => {
+  const credited = attributionCredit(slide)
+  if (!credited) return boxes
+  // Already added by an arrangement that draws its own footer.
+  if (boxes.some(box => box.kind === 'text' && box.credit)) return boxes
+  const img = boxes.find(box => box.kind === 'image')
+  if (!img) return boxes
+  // Under the caption where there is one, so the two do not overlap.
+  const captioned = boxes.some(
+    box => box.kind === 'text' && !box.credit && box.y > img.y + img.h,
+  )
+  return [
+    ...boxes,
+    footerLine(credited, img, captioned ? FOOTER_SIZE * 1.6 : 0, true),
+  ]
+}
+
 export const computeLayout = (
+  slide: ExportSlide,
+  layout?: Layout,
+  theme?: Record<string, unknown>,
+): LayoutBox[] => withCredit(slide, arrangeBoxes(slide, layout, theme))
+
+/** The boxes an arrangement draws, before the licence credit is added. */
+const arrangeBoxes = (
   slide: ExportSlide,
   layout?: Layout,
   theme?: Record<string, unknown>,

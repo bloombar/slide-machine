@@ -1243,6 +1243,10 @@
       "label": "Inclure les annotations du tableau blanc",
       "hint": "Dessiner les tracés à main levée sur les diapositives exportées."
     },
+    "withLayouts": {
+      "label": "Conserver la mise en page sous forme de dispositions réutilisables",
+      "hint": "Les diapositives restent rattachées à leur disposition : le fichier peut être restylé puis réimporté sans perdre sa mise en page."
+    },
     "otherDrive": {
       "title": "Retiré de ce cours",
       "message": "Cet export a été enregistré dans le Google Drive d'un autre collaborateur : il a été retiré de ce cours mais existe toujours dans son Drive. Demandez-lui de le supprimer si vous souhaitez le faire disparaître complètement."

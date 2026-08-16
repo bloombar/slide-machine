@@ -335,6 +335,53 @@ describe('a presentation this system exported (EXP-8)', () => {
     expect(read.slides[0]!.notes).toBe('What I said.')
     expect(read.slides[0]!.layoutId).toBe('l1')
   })
+
+  it('keeps the breaks between what was said in several paragraphs', () => {
+    // Run together, two paragraphs of narration became one sentence with no
+    // gap — "the first part.And then" — which is what the presenter then
+    // heard read back to them.
+    const read = toSourcePresentation(
+      presentation({
+        slides: [
+          {
+            objectId: 's1',
+            pageElements: [],
+            slideProperties: {
+              notesPage: {
+                pageElements: [
+                  {
+                    objectId: 'n1',
+                    shape: {
+                      placeholder: { type: 'BODY' },
+                      text: {
+                        textElements: [
+                          { paragraphMarker: {} },
+                          {
+                            textRun: {
+                              content: 'The first part.\n',
+                              style: {},
+                            },
+                          },
+                          { paragraphMarker: {} },
+                          {
+                            textRun: {
+                              content: 'And then the rest.\n',
+                              style: {},
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      }),
+    )
+    expect(read.slides[0]!.notes).toBe('The first part.\nAnd then the rest.')
+  })
 })
 
 describe('a presentation that states little', () => {
@@ -1565,5 +1612,307 @@ describe('a fill the shape does not actually paint', () => {
       solidFill: { color: { rgbColor: { red: 0, green: 0, blue: 1 } } },
     })
     expect(el.fill).toBe('#0000ff')
+  })
+})
+
+/**
+ * Lines broken inside one paragraph.
+ *
+ * Slides writes those as a vertical tab rather than a newline. A list
+ * exported from this app, converted by Drive and read back can arrive that
+ * way, and read literally it is one unbroken run — which is how four bullet
+ * points came home as a single paragraph.
+ */
+describe('a line broken inside a paragraph', () => {
+  it('reads as a line break, not as part of the words', () => {
+    const box = shape({
+      shape: {
+        shapeType: 'TEXT_BOX',
+        text: {
+          textElements: [
+            { paragraphMarker: { bullet: {} } },
+            { textRun: { content: 'One\vTwo\vThree\vFour\n', style: {} } },
+          ],
+        },
+      },
+    })
+    const read = toSourcePresentation(
+      presentation({ slides: [{ objectId: 's1', pageElements: [box] }] }),
+    )
+    const element = read.slides[0]!.elements[0]!
+    expect(element.runs?.map(r => r.text)).toEqual(['One\nTwo\nThree\nFour'])
+    expect(element.bulleted).toBe(true)
+  })
+})
+
+/**
+ * Where one paragraph ends and the next begins.
+ *
+ * Slides ends each paragraph with a newline. Dropping it flattened a box to
+ * its words — a four-point list read as "OneTwoThreeFour" — and
+ * `linesIn` in consolidation, which counts a list by splitting on newlines,
+ * therefore counted every list as one line when deriving its ceiling
+ * (TMPL-6).
+ */
+describe('a box of several paragraphs', () => {
+  const listBox = () =>
+    shape({
+      shape: {
+        shapeType: 'TEXT_BOX',
+        text: {
+          textElements: [
+            { paragraphMarker: { bullet: {} } },
+            { textRun: { content: 'One\n', style: {} } },
+            { paragraphMarker: { bullet: {} } },
+            { textRun: { content: 'Two\n', style: {} } },
+            { paragraphMarker: { bullet: {} } },
+            { textRun: { content: 'Three\n', style: {} } },
+          ],
+        },
+      },
+    })
+
+  it('keeps the breaks between them', () => {
+    const read = toSourcePresentation(
+      presentation({ slides: [{ objectId: 's1', pageElements: [listBox()] }] }),
+    )
+    const runs = read.slides[0]!.elements[0]!.runs ?? []
+    expect(runs.map(r => r.text).join('')).toBe('One\nTwo\nThree')
+  })
+
+  it('keeps a space that arrived as a run of its own', () => {
+    // Google splits a run wherever styling changes, so the gap between a bold
+    // word and a plain one is often a run holding nothing but a space. Drop
+    // it and the two words join up.
+    const read = toSourcePresentation(
+      presentation({
+        slides: [
+          {
+            objectId: 's1',
+            pageElements: [
+              shape({
+                shape: {
+                  shapeType: 'TEXT_BOX',
+                  text: {
+                    textElements: [
+                      { paragraphMarker: {} },
+                      { textRun: { content: 'Bold', style: { bold: true } } },
+                      { textRun: { content: ' ', style: {} } },
+                      { textRun: { content: 'plain\n', style: {} } },
+                    ],
+                  },
+                },
+              }),
+            ],
+          },
+        ],
+      }),
+    )
+    const runs = read.slides[0]!.elements[0]!.runs ?? []
+    expect(runs.map(r => r.text).join('')).toBe('Bold plain')
+  })
+
+  it('does not leave the last one dangling', () => {
+    // The final newline ends the box, not a line inside it.
+    const read = toSourcePresentation(
+      presentation({ slides: [{ objectId: 's1', pageElements: [listBox()] }] }),
+    )
+    const runs = read.slides[0]!.elements[0]!.runs ?? []
+    expect(runs[runs.length - 1]!.text.endsWith('\n')).toBe(false)
+  })
+})
+
+/**
+ * The same four-point list, written every way Slides writes one.
+ *
+ * Google does not commit to a shape. A paragraph may end with a newline or
+ * not; a line broken inside one arrives as a vertical tab; and a run is split
+ * wherever styling changes, so a point with a bold word in it is three runs.
+ * Reading the structure off the content is guesswork against all that — a
+ * list came back as one paragraph in some of these shapes, and gained points
+ * it never had in others.
+ *
+ * The paragraph markers are what actually say where a line ends, so the
+ * reader states the break rather than inferring it, and every shape below
+ * comes back as the four points the author wrote.
+ */
+describe('a four-point list, however Slides encodes it', () => {
+  const marker = (bulleted = true) => ({
+    paragraphMarker: bulleted ? { bullet: {} } : {},
+  })
+  const run = (content: string) => ({ textRun: { content, style: {} } })
+
+  const ENCODINGS: Record<string, unknown[]> = {
+    'a paragraph per point, each ending in a newline': [
+      marker(),
+      run('One\n'),
+      marker(),
+      run('Two\n'),
+      marker(),
+      run('Three\n'),
+      marker(),
+      run('Four\n'),
+    ],
+    'the last point left without its newline': [
+      marker(),
+      run('One\n'),
+      marker(),
+      run('Two\n'),
+      marker(),
+      run('Three\n'),
+      marker(),
+      run('Four'),
+    ],
+    'no newlines at all, only the markers': [
+      marker(),
+      run('One'),
+      marker(),
+      run('Two'),
+      marker(),
+      run('Three'),
+      marker(),
+      run('Four'),
+    ],
+    'one paragraph, its lines broken by vertical tabs': [
+      marker(),
+      run('One\vTwo\vThree\vFour\n'),
+    ],
+    'a point split in two by its styling': [
+      marker(),
+      run('One\n'),
+      marker(),
+      run('T'),
+      run('wo\n'),
+      marker(),
+      run('Three\n'),
+      marker(),
+      run('Four\n'),
+    ],
+    'an empty paragraph trailing the list': [
+      marker(),
+      run('One\n'),
+      marker(),
+      run('Two\n'),
+      marker(),
+      run('Three\n'),
+      marker(),
+      run('Four\n'),
+      marker(),
+      run('\n'),
+    ],
+  }
+
+  /** The points a box holds, read the way the importer reads them. */
+  const pointsIn = (elements: unknown[]): string[] => {
+    const read = toSourcePresentation(
+      presentation({
+        slides: [
+          {
+            objectId: 's1',
+            pageElements: [
+              shape({
+                shape: {
+                  shapeType: 'TEXT_BOX',
+                  text: { textElements: elements },
+                },
+              }),
+            ],
+          },
+        ],
+      }),
+    )
+    return (read.slides[0]!.elements[0]!.runs ?? [])
+      .map(r => r.text)
+      .join('')
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+  }
+
+  for (const [shapeOfIt, elements] of Object.entries(ENCODINGS)) {
+    it(`is four points when written as ${shapeOfIt}`, () => {
+      expect(pointsIn(elements)).toEqual(['One', 'Two', 'Three', 'Four'])
+    })
+  }
+})
+
+/**
+ * Where a picture came from, when its alt text did not survive.
+ *
+ * The provenance rides on the picture's alt text (IMG-5/EXP-8), which states
+ * every field including the URLs. But alt text stops being ours the moment
+ * the file leaves: a conversion can drop it and an editor can clear it, and
+ * the credit would go with it — silently, on a licence that requires it.
+ *
+ * The printed line under the picture cannot go missing, because it is on the
+ * page. So it doubles as the second copy.
+ */
+describe('a picture whose credit outlived its alt text', () => {
+  const PRINTED = '"Mitochondrion" by Ada via Wikimedia — CC BY-SA 4.0'
+  const TOKEN =
+    'credit:{"title":"Mitochondrion","creator":"Ada","sourceName":"Wikimedia",' +
+    '"license":"CC BY-SA 4.0","sourceUrl":"https://commons.test/m"}'
+
+  const read = (altText?: string) =>
+    toSourcePresentation(
+      presentation({
+        slides: [
+          {
+            objectId: 's1',
+            pageElements: [
+              {
+                ...shape({}, { x: 0.2, y: 0.2, w: 0.6, h: 0.5 }),
+                objectId: 'pic',
+                ...(altText ? { description: altText } : {}),
+                image: { contentUrl: 'https://google.test/m.png' },
+              },
+              {
+                ...shape({}, { x: 0.2, y: 0.72, w: 0.6, h: 0.06 }),
+                objectId: 'credit',
+                description: 'credit-line',
+                shape: {
+                  shapeType: 'TEXT_BOX',
+                  text: {
+                    textElements: [
+                      { paragraphMarker: {} },
+                      { textRun: { content: `${PRINTED}\n`, style: {} } },
+                    ],
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    )
+
+  it('is credited from the printed line when the alt text is gone', () => {
+    const picture = read().slides[0]!.elements.find(e => e.kind === 'image')
+    expect(picture?.attribution).toEqual({
+      title: 'Mitochondrion',
+      creator: 'Ada',
+      sourceName: 'Wikimedia',
+      license: 'CC BY-SA 4.0',
+    })
+  })
+
+  it('prefers the alt text, which states more than a printed line can', () => {
+    const picture = read(TOKEN).slides[0]!.elements.find(
+      e => e.kind === 'image',
+    )
+    // The source URL has no place in the printed form, and is why alt text
+    // wins wherever it survived.
+    expect(picture?.attribution?.sourceUrl).toBe('https://commons.test/m')
+  })
+
+  it('leaves the printed line off the slide either way', () => {
+    // It is on the page, not in the lecture: read as content it comes back as
+    // a caption the author never wrote.
+    for (const source of [read(), read(TOKEN)]) {
+      const words = source.slides[0]!.elements.flatMap(e =>
+        (e.runs ?? []).map(r => r.text),
+      )
+      expect(words.join('')).not.toContain('Wikimedia')
+    }
   })
 })

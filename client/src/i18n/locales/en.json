@@ -1243,6 +1243,10 @@
       "label": "Include whiteboard markups",
       "hint": "Draw the freehand marks on the exported slides."
     },
+    "withLayouts": {
+      "label": "Keep the design as reusable layouts",
+      "hint": "Slides stay attached to the layout they use, so the file can be restyled and brought back in with its design intact."
+    },
     "otherDrive": {
       "title": "Removed from this lecture",
       "message": "This export was saved to another collaborator's Google Drive, so it's been removed from this lecture but still exists in their Drive. Ask them to delete it there if you'd like it gone entirely."

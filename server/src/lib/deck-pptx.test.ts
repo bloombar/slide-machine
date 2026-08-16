@@ -8,6 +8,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import AdmZip from 'adm-zip'
 import type { ExportNote, Layout } from '@slide-machine/shared'
 import { deckToPptx } from './deck-pptx'
+import { parseSlotMetadata } from './slot-metadata'
 import type { ExportDeck } from './deck-yaml'
 
 const deck: ExportDeck = {
@@ -429,5 +430,315 @@ describe('a picture in the exported file', () => {
       .join('')
     expect(media(bytes).length).toBeGreaterThan(0)
     expect(xml).toContain('Ada Lovelace')
+  })
+})
+
+/**
+ * The two shapes EXP-1 offers.
+ *
+ * A flat deck bakes the formatting into each slide and carries no reusable
+ * layouts — right for handing someone a finished lecture. A deck carrying
+ * layouts writes the template as the presentation's own layout pages and
+ * attaches each slide to the one it uses, which is what lets Google Slides
+ * restyle it and what lets a re-import group by the author's own design
+ * rather than clustering the slides afresh (TMPL-8).
+ *
+ * Without the second shape, a lecture exported and imported back came home
+ * rearranged: the importer had nothing to group by.
+ *
+ * pptxgenjs writes a defined master as a *slide layout* under the one master
+ * the package always has, so that is where these look.
+ */
+describe('a deck carrying its reusable layouts', () => {
+  const withLayouts: ExportDeck = {
+    title: 'Photosynthesis',
+    templateId: 'classic',
+    layouts: [
+      {
+        type: 'title',
+        label: 'Title',
+        purpose: 'Opening slide',
+        slots: [{ name: 'title', kind: 'text', label: 'Title' }],
+        elementPositions: { title: { x: 0.08, y: 0.4, w: 0.84, h: 0.2 } },
+      },
+    ] as Layout[],
+    templateTheme: { background: '#ffffff', text: '#111111' },
+    // A slide arranged by a template carries its content per slot, which is
+    // what `computeLayout` reads.
+    slides: [
+      {
+        layoutType: 'title',
+        title: 'Photosynthesis',
+        slots: { title: { kind: 'text', value: 'Photosynthesis' } },
+      },
+    ],
+  }
+
+  /** The layout pages a .pptx declares, by their XML. */
+  const layoutParts = (bytes: Uint8Array): string[] =>
+    new AdmZip(Buffer.from(bytes))
+      .getEntries()
+      .filter(e => /ppt\/slideLayouts\/.*\.xml$/.test(e.entryName))
+      .map(e => e.getData().toString('utf8'))
+
+  it('declares no reusable layout by default, which is the flat deck', async () => {
+    // The one layout is the package's own default, not the template's.
+    const parts = layoutParts(await deckToPptx(withLayouts))
+    expect(parts).toHaveLength(1)
+    expect(parts[0]).not.toContain('slot:title')
+  })
+
+  it('writes the template as a layout page when asked', async () => {
+    const parts = layoutParts(await deckToPptx(withLayouts, undefined, true))
+    expect(parts.length).toBeGreaterThan(1)
+    expect(parts.join('')).toContain('name="TITLE"')
+  })
+
+  /**
+   * The declaration the importer reads back. This is the round trip: the same
+   * `slidemachine` block `authoredLayouts` looks for when deciding whether a
+   * presentation carries its own design or needs clustering.
+   */
+  it('carries the slot declaration a re-import groups by', async () => {
+    const xml = layoutParts(
+      await deckToPptx(withLayouts, undefined, true),
+    ).join('')
+    expect(xml).toContain('slidemachine')
+    expect(xml).toContain('slot:title')
+  })
+
+  it('attaches the slide to that layout rather than the default', async () => {
+    const bytes = await deckToPptx(withLayouts, undefined, true)
+    const rels = new AdmZip(Buffer.from(bytes))
+      .getEntry('ppt/slides/_rels/slide1.xml.rels')
+      ?.getData()
+      .toString('utf8')
+    // slideLayout1 is the package default; anything else is the template's.
+    expect(rels).toBeDefined()
+    expect(rels).not.toMatch(/slideLayouts\/slideLayout1\.xml/)
+    expect(rels).toMatch(/slideLayouts\/slideLayout\d+\.xml/)
+  })
+
+  /**
+   * The join between the two halves of the round trip.
+   *
+   * The export writes a declaration onto each layout page; the importer reads
+   * it back and, finding one, groups the slides by their author's own design
+   * instead of clustering them afresh (`isOwnExport` in import-presentation).
+   * Each half is tested on its own — this asserts they speak the same
+   * language, which is the part that silently broke when a lecture exported
+   * and re-imported came home rearranged.
+   *
+   * The conversion in between is Google's, so it is not exercised here; what
+   * is exercised is that the bytes we write parse into the specs it expects.
+   */
+  it('writes a declaration the importer can parse back into slots', async () => {
+    const xml = layoutParts(
+      await deckToPptx(withLayouts, undefined, true),
+    ).join('')
+    // The declaration rides in an alt-text attribute, so it is XML-escaped.
+    const encoded = /name="(\{&quot;slidemachine&quot;.*?)"/.exec(xml)?.[1]
+    expect(encoded).toBeDefined()
+    const json = encoded!.replace(/&quot;/g, '"').replace(/&amp;/g, '&')
+
+    const slots = parseSlotMetadata(json)
+    expect(slots).toEqual([{ name: 'title', kind: 'text', label: 'Title' }])
+  })
+
+  /**
+   * A layout's placeholder shows its own label until someone types in it,
+   * which is right on a layout and wrong on a lecture: a slide with no picture
+   * would arrive showing the word "Diagram" where the picture should be.
+   */
+  it("does not leave a layout's prompt showing on a slide that skipped the box", async () => {
+    const twoSlots: ExportDeck = {
+      ...withLayouts,
+      layouts: [
+        {
+          type: 'title',
+          label: 'Title',
+          purpose: 'Opening slide',
+          slots: [
+            { name: 'title', kind: 'text', label: 'Title' },
+            { name: 'diagram', kind: 'image', label: 'Diagram' },
+          ],
+          elementPositions: {
+            title: { x: 0.08, y: 0.1, w: 0.84, h: 0.2 },
+            diagram: { x: 0.08, y: 0.4, w: 0.84, h: 0.4 },
+          },
+        },
+      ] as Layout[],
+      // Titled, but with no picture for the box the layout reserves.
+      slides: [
+        {
+          layoutType: 'title',
+          title: 'Photosynthesis',
+          slots: { title: { kind: 'text', value: 'Photosynthesis' } },
+        },
+      ],
+    }
+    const bytes = await deckToPptx(twoSlots, undefined, true)
+    const slideXml = new AdmZip(Buffer.from(bytes))
+      .getEntry('ppt/slides/slide1.xml')
+      ?.getData()
+      .toString('utf8')
+    expect(slideXml).toContain('Photosynthesis')
+    // The label belongs to the layout page, not to the lecture's slide.
+    expect(slideXml).not.toContain('>Diagram<')
+  })
+
+  it('still exports a valid file either way', async () => {
+    for (const bytes of [
+      await deckToPptx(withLayouts),
+      await deckToPptx(withLayouts, undefined, true),
+    ]) {
+      expect(Array.from(bytes.slice(0, 4))).toEqual([0x50, 0x4b, 0x03, 0x04])
+    }
+  })
+})
+/**
+ * The credit under a picture belongs to the page, not to the lecture.
+ *
+ * A visual export prints it because a licence has to be readable in the file
+ * itself (IMG-5). Unmarked, a re-import read that line as content: the words
+ * came back as a caption ON the slide, in a box the author never made, while
+ * the picture's own provenance dialog stayed empty.
+ */
+describe('the credit printed under a picture', () => {
+  const withPicture: ExportDeck = {
+    title: 'Cells',
+    templateId: 'classic',
+    slides: [
+      {
+        layoutType: 'image',
+        title: 'A mitochondrion',
+        imageRef: 'https://pictures.test/m.png',
+        attribution: {
+          title: 'Mitochondrion',
+          creator: 'Ada',
+          sourceName: 'Wikimedia',
+          license: 'CC BY-SA 4.0',
+        },
+      },
+    ],
+  }
+
+  const withPicture2 = (caption?: string): ExportDeck => ({
+    ...withPicture,
+    slides: [{ ...withPicture.slides[0]!, caption }],
+  })
+
+  const shapeNames = (bytes: Uint8Array): string[] =>
+    (new AdmZip(Buffer.from(bytes))
+      .getEntry('ppt/slides/slide1.xml')!
+      .getData()
+      .toString('utf8')
+      .match(/name="[^"]*"/g) ?? []) as string[]
+
+  const stubImageFetch = () =>
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        headers: { get: () => 'image/png' },
+        arrayBuffer: async () => new Uint8Array([137, 80, 78, 71]).buffer,
+      }),
+    )
+
+  it('is printed once, not twice', async () => {
+    // Two renderers each drew it: the shared layout model puts a credit under
+    // the picture, and this exporter drew a second one on top of it. Counted
+    // in the drawn text only — the picture's alt text names the source too,
+    // and that copy is the one the import reads back into the dialog.
+    stubImageFetch()
+    const xml = new AdmZip(Buffer.from(await deckToPptx(withPicture)))
+      .getEntry('ppt/slides/slide1.xml')!
+      .getData()
+      .toString('utf8')
+    const drawn = (xml.match(/<a:t>[^<]*<\/a:t>/g) ?? []).filter(t =>
+      t.includes('Wikimedia'),
+    )
+    expect(drawn).toHaveLength(1)
+  })
+
+  it('leaves the author’s own caption a box of its own, which does come home', async () => {
+    stubImageFetch()
+    const names = shapeNames(await deckToPptx(withPicture2('Figure 1: a cell')))
+    // The caption is unmarked — it is the lecture's, and re-imports as
+    // content. The credit beneath it is marked, and does not.
+    expect(names).toContain('name="credit-line"')
+    expect(names.filter(n => n === 'name="credit-line"')).toHaveLength(1)
+  })
+
+  /**
+   * The credit belongs to the picture, not to one way of arranging it.
+   *
+   * It used to be drawn by the exporter, for every picture. Moving it into
+   * the shared layout model put it only in the hand-tuned arrangements, so a
+   * deck laid out by its own template — which is most of them — exported with
+   * no attribution at all, and nothing here noticed: every test used a deck
+   * with no template.
+   */
+  it('is printed for a deck arranged by its own template too', async () => {
+    stubImageFetch()
+    const template = [
+      {
+        type: 'figure',
+        label: 'Figure',
+        purpose: 'A picture and its title',
+        slots: [
+          { name: 'title', kind: 'text', label: 'Title' },
+          { name: 'picture', kind: 'image', label: 'Picture' },
+        ],
+        elementPositions: {
+          title: { x: 0.08, y: 0.08, w: 0.84, h: 0.12 },
+          picture: { x: 0.2, y: 0.26, w: 0.6, h: 0.5 },
+        },
+      },
+    ] as Layout[]
+    const bytes = await deckToPptx({
+      title: 'Cells',
+      templateId: 'own',
+      layouts: template,
+      templateTheme: { background: '#ffffff', text: '#111111' },
+      slides: [
+        {
+          layoutType: 'figure',
+          title: 'A mitochondrion',
+          imageRef: 'https://pictures.test/m.png',
+          attribution: withPicture.slides[0]!.attribution,
+          slots: {
+            title: { kind: 'text', value: 'A mitochondrion' },
+            picture: {
+              kind: 'image',
+              ref: 'https://pictures.test/m.png',
+              attribution: withPicture.slides[0]!.attribution,
+            },
+          },
+        },
+      ],
+    })
+    const xml = new AdmZip(Buffer.from(bytes))
+      .getEntry('ppt/slides/slide1.xml')!
+      .getData()
+      .toString('utf8')
+    const drawn = (xml.match(/<a:t>[^<]*<\/a:t>/g) ?? []).filter(t =>
+      t.includes('Wikimedia'),
+    )
+    expect(drawn).toHaveLength(1)
+    expect(xml).toContain('name="credit-line"')
+  })
+
+  it('is named so a re-import knows not to read it as content', async () => {
+    stubImageFetch()
+    const bytes = await deckToPptx(withPicture)
+    const xml = new AdmZip(Buffer.from(bytes))
+      .getEntry('ppt/slides/slide1.xml')!
+      .getData()
+      .toString('utf8')
+    // Printed, so a reader of the file sees whose picture it is...
+    expect(xml).toContain('Wikimedia')
+    // ...and marked, so an importer can tell it from the author's own words.
+    expect(xml).toMatch(/name="credit-line"[^>]*descr="credit-line"/)
   })
 })

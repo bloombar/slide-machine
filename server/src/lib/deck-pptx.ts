@@ -17,12 +17,8 @@ import type { Layout } from '@slide-machine/shared'
 import type { ExportNote } from '@slide-machine/shared'
 import type { ExportDeck, ExportSlide } from './deck-yaml'
 import { visibleStrokes, hexForPptx, HIGHLIGHTER_ALPHA } from './deck-drawings'
-import { imageCredit } from './image-credit'
-import { creditToken } from './image-attribution-token'
-
-/** The credit line under a picture: small, and tall enough for one line. */
-const CREDIT_PT = 7
-const CREDIT_H = 0.22
+import { defineLayoutMasters } from './template-pptx'
+import { creditToken, CREDIT_LINE_TOKEN } from './image-attribution-token'
 import { fetchSlideImages, toDataUri } from './deck-image'
 import { slotToken } from './slot-metadata'
 import { typesetFormulas, type Formulas } from './deck-formulas'
@@ -58,6 +54,15 @@ const renderSlide = (
   layout?: Layout,
   templateTheme?: Record<string, unknown>,
   formulas?: Formulas,
+  /**
+   * Fill the layout's placeholders instead of drawing boxes over them
+   * (EXP-1's "deck carrying reusable layouts").
+   *
+   * A slide that drew its own boxes on top of a master would leave the
+   * master's empty ones behind it, so every box would appear twice — and a
+   * re-import would read the leftovers as part of the design.
+   */
+  intoPlaceholders = false,
 ): void => {
   for (const box of computeLayout(slide, layout, templateTheme)) {
     if (box.kind === 'text') {
@@ -81,15 +86,25 @@ const renderSlide = (
       }))
       if (!runs.length) continue
       s.addText(runs, {
-        x: box.x * SLIDE_W,
-        y: box.y * SLIDE_H,
-        w: box.w * SLIDE_W,
-        h: box.h * SLIDE_H,
+        // Into the layout's box where there is one, so the design stays the
+        // layout's and the slide is only its words.
+        ...(intoPlaceholders && box.slot
+          ? { placeholder: box.slot }
+          : {
+              x: box.x * SLIDE_W,
+              y: box.y * SLIDE_H,
+              w: box.w * SLIDE_W,
+              h: box.h * SLIDE_H,
+            }),
         align: box.align,
         valign: box.valign === 'middle' ? 'middle' : 'top',
         // What this shape IS, so a re-import knows the box without guessing
         // (EXP-8). Only boxes a template named have one.
         ...(box.slot ? { objectName: slotToken(box.slot) } : {}),
+        // A printed credit is named as one, so a re-import leaves it on the
+        // page rather than reading it back as a caption nobody wrote
+        // (IMG-5). The provenance itself rides on the picture's alt text.
+        ...(box.credit ? { objectName: CREDIT_LINE_TOKEN } : {}),
       })
     } else if (box.kind === 'rule') {
       s.addShape(pptx.ShapeType.rect, {
@@ -151,6 +166,12 @@ const renderSlide = (
         data: image,
         ...(box.slot ? { objectName: slotToken(box.slot) } : {}),
         ...(alt ? { altText: alt } : {}),
+        // Named AND positioned, unlike the text above: naming it makes the
+        // picture the content of the layout's picture box, which is what
+        // Slides' own "apply layout" and a re-import both read. The explicit
+        // size stays because `sizing` is what fits a picture of unknown
+        // proportions into that space without distorting it.
+        ...(intoPlaceholders && box.slot ? { placeholder: box.slot } : {}),
         x: box.x * SLIDE_W,
         y: box.y * SLIDE_H,
         w: box.w * SLIDE_W,
@@ -161,26 +182,9 @@ const renderSlide = (
           h: box.h * SLIDE_H,
         },
       })
-
-      // The picture's provenance, under the picture it belongs to (IMG-5).
-      // A slide with two pictures credits each where it sits, so a reader can
-      // tell which credit is whose.
-      const credit = imageCredit(slide.attribution)
-      if (credit) {
-        s.addText(credit, {
-          x: box.x * SLIDE_W,
-          // Just under the box, kept on the slide when the picture runs to
-          // the bottom edge.
-          y: Math.min((box.y + box.h) * SLIDE_H + 0.03, SLIDE_H - CREDIT_H),
-          w: box.w * SLIDE_W,
-          h: CREDIT_H,
-          fontSize: CREDIT_PT,
-          color: hex.muted,
-          margin: 0,
-        })
-      }
     }
   }
+
   drawStrokes(pptx, s, slide)
 }
 
@@ -264,6 +268,18 @@ export const deckToPptx = async (
   /** Collects what a format could not carry, for the export's report
    * (EXP-7). */
   notes?: ExportNote[],
+  /**
+   * Carry the deck's style template as the presentation's own layouts, and
+   * attach each slide to the one it uses (EXP-1).
+   *
+   * Off by default, which is the spec's default: a flat deck is the right
+   * answer for handing someone a finished lecture — nothing to maintain,
+   * nothing to break. On, for continuing to work in Google Slides or
+   * re-importing later: without layout pages a re-import has nothing to
+   * group by, so it clusters the slides and derives a design of its own, and
+   * the lecture comes back looking rearranged.
+   */
+  withLayouts = false,
 ): Promise<Uint8Array> => {
   const pptx = new PptxGenJS()
   pptx.title = deck.title
@@ -296,8 +312,28 @@ export const deckToPptx = async (
   // Every distinct formula, typeset once, before any slide is drawn.
   const formulas = await typesetFormulas(layouts.flat(), theme.text, notes)
 
+  // The layouts the deck is drawn with, written as the presentation's own —
+  // so the file carries the design rather than a copy of it per slide.
+  const masters = withLayouts
+    ? defineLayoutMasters(
+        pptx,
+        { layouts: deck.layouts ?? [], theme: deck.templateTheme ?? {} },
+        {
+          ...theme,
+          // The same rule the design export uses, so one template renders the
+          // same colours whichever door the file comes out of.
+          surface:
+            typeof deck.templateTheme?.surface === 'string'
+              ? deck.templateTheme.surface
+              : theme.background,
+        },
+        background,
+      )
+    : new Map<string, string>()
+
   deck.slides.forEach((slide, i) => {
-    const s = pptx.addSlide()
+    const master = masters.get(slide.layoutType)
+    const s = master ? pptx.addSlide({ masterName: master }) : pptx.addSlide()
     s.background = background
     renderSlide(
       pptx,
@@ -308,6 +344,9 @@ export const deckToPptx = async (
       layoutFor(slide),
       drawnTheme,
       formulas,
+      // Fills the layout's boxes when there is one to fill, so the design
+      // stays on the layout and the slide carries only its content.
+      Boolean(master),
     )
     // The narration goes where a presenter expects to find it, and comes back
     // as narration on re-import (EXP-8/EDIT-6).

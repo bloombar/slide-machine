@@ -11,6 +11,8 @@ import { mockFetchRoutes } from '../test/fetch-mock'
 
 // A tiny base64 payload ("hi") the download path decodes.
 const CONTENT_B64 = 'aGk='
+const MIME_PPTX =
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -339,6 +341,52 @@ describe('ExportPanel', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Download PDF' }))
     await waitFor(() => expect(downloadBody.includeWhiteboard).toBe(false))
+  })
+
+  /**
+   * The two shapes EXP-1 offers. Flat is the default because it is what most
+   * people want to hand someone; the layouts are what make the file editable
+   * as a design and importable back without being rearranged.
+   */
+  it('offers the reusable-layouts choice for the slide formats only', async () => {
+    let downloadBody: { withLayouts?: boolean } = {}
+    mockFetchRoutes({
+      'export.status': () => ({
+        status: 200,
+        body: {
+          googleConnected: false,
+          deckTitle: 'Bio',
+          hasWhiteboard: false,
+          exports: [],
+        },
+      }),
+      'export.download': init => {
+        downloadBody = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: {
+            fileName: 'bio.pptx',
+            mimeType: MIME_PPTX,
+            contentBase64: CONTENT_B64,
+          },
+        }
+      },
+    })
+    render(<ExportPanel deckId="d1" />)
+    const named = /keep the design as reusable layouts/i
+    // PDF is a picture of each slide — nowhere to put a layout.
+    await screen.findByRole('radio', { name: /PDF/ })
+    expect(screen.queryByRole('checkbox', { name: named })).toBeNull()
+    // PowerPoint has somewhere to put them, and starts off.
+    fireEvent.click(screen.getByRole('radio', { name: /PowerPoint/ }))
+    const checkbox = screen.getByRole('checkbox', { name: named })
+    expect(checkbox).not.toBeChecked()
+    // Ticked, it rides along with the download.
+    fireEvent.click(checkbox)
+    fireEvent.click(
+      screen.getByRole('button', { name: /Download PowerPoint/i }),
+    )
+    await waitFor(() => expect(downloadBody.withLayouts).toBe(true))
   })
 
   it('lists a saved Drive export and deletes it', async () => {
