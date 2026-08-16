@@ -8,6 +8,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import AdmZip from 'adm-zip'
 import type { ExportNote, Layout } from '@slide-machine/shared'
 import { deckToPptx } from './deck-pptx'
+import { parseSlotMetadata } from './slot-metadata'
 import type { ExportDeck } from './deck-yaml'
 
 const deck: ExportDeck = {
@@ -429,5 +430,169 @@ describe('a picture in the exported file', () => {
       .join('')
     expect(media(bytes).length).toBeGreaterThan(0)
     expect(xml).toContain('Ada Lovelace')
+  })
+})
+
+/**
+ * The two shapes EXP-1 offers.
+ *
+ * A flat deck bakes the formatting into each slide and carries no reusable
+ * layouts — right for handing someone a finished lecture. A deck carrying
+ * layouts writes the template as the presentation's own layout pages and
+ * attaches each slide to the one it uses, which is what lets Google Slides
+ * restyle it and what lets a re-import group by the author's own design
+ * rather than clustering the slides afresh (TMPL-8).
+ *
+ * Without the second shape, a lecture exported and imported back came home
+ * rearranged: the importer had nothing to group by.
+ *
+ * pptxgenjs writes a defined master as a *slide layout* under the one master
+ * the package always has, so that is where these look.
+ */
+describe('a deck carrying its reusable layouts', () => {
+  const withLayouts: ExportDeck = {
+    title: 'Photosynthesis',
+    templateId: 'classic',
+    layouts: [
+      {
+        type: 'title',
+        label: 'Title',
+        purpose: 'Opening slide',
+        slots: [{ name: 'title', kind: 'text', label: 'Title' }],
+        elementPositions: { title: { x: 0.08, y: 0.4, w: 0.84, h: 0.2 } },
+      },
+    ] as Layout[],
+    templateTheme: { background: '#ffffff', text: '#111111' },
+    // A slide arranged by a template carries its content per slot, which is
+    // what `computeLayout` reads.
+    slides: [
+      {
+        layoutType: 'title',
+        title: 'Photosynthesis',
+        slots: { title: { kind: 'text', value: 'Photosynthesis' } },
+      },
+    ],
+  }
+
+  /** The layout pages a .pptx declares, by their XML. */
+  const layoutParts = (bytes: Uint8Array): string[] =>
+    new AdmZip(Buffer.from(bytes))
+      .getEntries()
+      .filter(e => /ppt\/slideLayouts\/.*\.xml$/.test(e.entryName))
+      .map(e => e.getData().toString('utf8'))
+
+  it('declares no reusable layout by default, which is the flat deck', async () => {
+    // The one layout is the package's own default, not the template's.
+    const parts = layoutParts(await deckToPptx(withLayouts))
+    expect(parts).toHaveLength(1)
+    expect(parts[0]).not.toContain('slot:title')
+  })
+
+  it('writes the template as a layout page when asked', async () => {
+    const parts = layoutParts(await deckToPptx(withLayouts, undefined, true))
+    expect(parts.length).toBeGreaterThan(1)
+    expect(parts.join('')).toContain('name="TITLE"')
+  })
+
+  /**
+   * The declaration the importer reads back. This is the round trip: the same
+   * `slidemachine` block `authoredLayouts` looks for when deciding whether a
+   * presentation carries its own design or needs clustering.
+   */
+  it('carries the slot declaration a re-import groups by', async () => {
+    const xml = layoutParts(
+      await deckToPptx(withLayouts, undefined, true),
+    ).join('')
+    expect(xml).toContain('slidemachine')
+    expect(xml).toContain('slot:title')
+  })
+
+  it('attaches the slide to that layout rather than the default', async () => {
+    const bytes = await deckToPptx(withLayouts, undefined, true)
+    const rels = new AdmZip(Buffer.from(bytes))
+      .getEntry('ppt/slides/_rels/slide1.xml.rels')
+      ?.getData()
+      .toString('utf8')
+    // slideLayout1 is the package default; anything else is the template's.
+    expect(rels).toBeDefined()
+    expect(rels).not.toMatch(/slideLayouts\/slideLayout1\.xml/)
+    expect(rels).toMatch(/slideLayouts\/slideLayout\d+\.xml/)
+  })
+
+  /**
+   * The join between the two halves of the round trip.
+   *
+   * The export writes a declaration onto each layout page; the importer reads
+   * it back and, finding one, groups the slides by their author's own design
+   * instead of clustering them afresh (`isOwnExport` in import-presentation).
+   * Each half is tested on its own — this asserts they speak the same
+   * language, which is the part that silently broke when a lecture exported
+   * and re-imported came home rearranged.
+   *
+   * The conversion in between is Google's, so it is not exercised here; what
+   * is exercised is that the bytes we write parse into the specs it expects.
+   */
+  it('writes a declaration the importer can parse back into slots', async () => {
+    const xml = layoutParts(
+      await deckToPptx(withLayouts, undefined, true),
+    ).join('')
+    // The declaration rides in an alt-text attribute, so it is XML-escaped.
+    const encoded = /name="(\{&quot;slidemachine&quot;.*?)"/.exec(xml)?.[1]
+    expect(encoded).toBeDefined()
+    const json = encoded!.replace(/&quot;/g, '"').replace(/&amp;/g, '&')
+
+    const slots = parseSlotMetadata(json)
+    expect(slots).toEqual([{ name: 'title', kind: 'text', label: 'Title' }])
+  })
+
+  /**
+   * A layout's placeholder shows its own label until someone types in it,
+   * which is right on a layout and wrong on a lecture: a slide with no picture
+   * would arrive showing the word "Diagram" where the picture should be.
+   */
+  it("does not leave a layout's prompt showing on a slide that skipped the box", async () => {
+    const twoSlots: ExportDeck = {
+      ...withLayouts,
+      layouts: [
+        {
+          type: 'title',
+          label: 'Title',
+          purpose: 'Opening slide',
+          slots: [
+            { name: 'title', kind: 'text', label: 'Title' },
+            { name: 'diagram', kind: 'image', label: 'Diagram' },
+          ],
+          elementPositions: {
+            title: { x: 0.08, y: 0.1, w: 0.84, h: 0.2 },
+            diagram: { x: 0.08, y: 0.4, w: 0.84, h: 0.4 },
+          },
+        },
+      ] as Layout[],
+      // Titled, but with no picture for the box the layout reserves.
+      slides: [
+        {
+          layoutType: 'title',
+          title: 'Photosynthesis',
+          slots: { title: { kind: 'text', value: 'Photosynthesis' } },
+        },
+      ],
+    }
+    const bytes = await deckToPptx(twoSlots, undefined, true)
+    const slideXml = new AdmZip(Buffer.from(bytes))
+      .getEntry('ppt/slides/slide1.xml')
+      ?.getData()
+      .toString('utf8')
+    expect(slideXml).toContain('Photosynthesis')
+    // The label belongs to the layout page, not to the lecture's slide.
+    expect(slideXml).not.toContain('>Diagram<')
+  })
+
+  it('still exports a valid file either way', async () => {
+    for (const bytes of [
+      await deckToPptx(withLayouts),
+      await deckToPptx(withLayouts, undefined, true),
+    ]) {
+      expect(Array.from(bytes.slice(0, 4))).toEqual([0x50, 0x4b, 0x03, 0x04])
+    }
   })
 })

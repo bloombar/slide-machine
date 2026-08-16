@@ -36,6 +36,7 @@ import type {
 } from '@slide-machine/shared'
 import {
   WHITEBOARD_EXPORT_FORMATS,
+  LAYOUT_EXPORT_FORMATS,
   localeShortLabel,
 } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
@@ -377,6 +378,10 @@ export default function ExportPanel({ deckId, locale }: Props) {
   // them in the export (default on; only offered for the visual formats).
   const [hasWhiteboard, setHasWhiteboard] = useState(false)
   const [includeWhiteboard, setIncludeWhiteboard] = useState(true)
+  // Whether to carry the lecture's design as reusable layout pages (EXP-1).
+  // Off by default: a flat file is what most people want to hand someone, and
+  // the layouts only matter if the file is going to be edited or brought back.
+  const [withLayouts, setWithLayouts] = useState(false)
   // Exports already saved to Drive, so they can be reopened or deleted.
   const [exports, setExports] = useState<ExportedFile[]>([])
   // Set when a just-deleted export lived in another collaborator's Drive, so a
@@ -428,6 +433,10 @@ export default function ExportPanel({ deckId, locale }: Props) {
   const showWhiteboardOption =
     hasWhiteboard && WHITEBOARD_EXPORT_FORMATS.includes(format)
 
+  // The layouts option only applies to the slide formats that have somewhere
+  // to put them.
+  const showLayoutsOption = LAYOUT_EXPORT_FORMATS.includes(format)
+
   const connectGoogle = () => {
     setBusy(true)
     setError(null)
@@ -464,6 +473,7 @@ export default function ExportPanel({ deckId, locale }: Props) {
       deckId,
       format: format as 'pdf' | 'yaml' | 'pptx',
       includeWhiteboard,
+      withLayouts,
       locale,
     })
       .then(file => {
@@ -483,6 +493,7 @@ export default function ExportPanel({ deckId, locale }: Props) {
       driveFolderId: folder.id,
       driveFolderName: folder.name,
       includeWhiteboard,
+      withLayouts,
       locale,
     })
       .then(res => {
@@ -640,6 +651,24 @@ export default function ExportPanel({ deckId, locale }: Props) {
             {t('export.includeWhiteboard.label')}
             <span className="block text-xs text-slate-500">
               {t('export.includeWhiteboard.hint')}
+            </span>
+          </span>
+        </label>
+      )}
+
+      {/* Reusable layouts — only for the formats that can hold them (EXP-1) */}
+      {showLayoutsOption && (
+        <label className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={withLayouts}
+            onChange={e => setWithLayouts(e.target.checked)}
+          />
+          <span>
+            {t('export.withLayouts.label')}
+            <span className="block text-xs text-slate-500">
+              {t('export.withLayouts.hint')}
             </span>
           </span>
         </label>
