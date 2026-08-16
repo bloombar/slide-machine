@@ -14,6 +14,13 @@
  * required" is actionable, "import failed" is not. Nothing is created when it
  * refuses, so trying again after an edit is safe.
  *
+ * ## Two kinds of file
+ *
+ * A `.yaml` this app exported, and a `.pptx` from anywhere. The second is read
+ * by letting Google convert it (see `read-pptx.ts`), so it takes the Slides
+ * import route rather than the file one — but that is the server's business,
+ * and to whoever picked the file it is one button.
+ *
  * ## A file from disk only
  *
  * The same design kept in the connected Drive arrives by its link, in the one
@@ -28,6 +35,7 @@ import { Upload } from 'lucide-react'
 import type { Template } from '@slide-machine/shared'
 import { dispatchAction } from '../../api/actions'
 import { ApiError } from '../../api/http'
+import { isPptx, readAsBase64 } from '../../lib/import-file'
 
 export default function TemplateFileImport({
   onImported,
@@ -65,6 +73,21 @@ export default function TemplateFileImport({
   }
 
   const choose = async (file: File) => {
+    // Two kinds through one button, because to the instructor they are the
+    // same errand. A PowerPoint file is bytes and travels as base64 — read as
+    // text it would arrive as mangled nonsense, and the failure would surface
+    // much later as an unreadable presentation rather than a mis-read file.
+    if (isPptx(file)) {
+      try {
+        await run('template.importFromSlides', {
+          pptxBase64: await readAsBase64(file),
+          name: file.name.replace(/\.pptx$/i, ''),
+        })
+      } catch {
+        setError(t('template.fileImport.errors.read'))
+      }
+      return
+    }
     let content: string
     try {
       content = await file.text()
@@ -85,7 +108,7 @@ export default function TemplateFileImport({
         <input
           ref={input}
           type="file"
-          accept=".yaml,.yml,application/x-yaml,text/yaml"
+          accept=".yaml,.yml,.pptx,application/x-yaml,text/yaml,application/vnd.openxmlformats-officedocument.presentationml.presentation"
           className="sr-only"
           disabled={busy}
           onChange={e => {

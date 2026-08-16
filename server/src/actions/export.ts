@@ -59,6 +59,7 @@ import { translateSlides, translationEnabled } from '../lib/translate-slides'
 import { translationBillingFor } from '../billing/translation-usage'
 import { deckToYaml, type ExportDeck, type ExportSlide } from '../lib/deck-yaml'
 import { deckToPdf } from '../lib/deck-pdf'
+import { deckToPptx } from '../lib/deck-pptx'
 import { visibleStrokes } from '../lib/deck-drawings'
 import { resolveTemplateTheme } from '../lib/deck-theme'
 import { resolveDeckTemplate } from '../templates/versions'
@@ -79,6 +80,7 @@ export { isLive }
 const MIME = {
   pdf: 'application/pdf',
   yaml: 'application/x-yaml',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
 } as const
 
 /** The content gate, shared by every export action. */
@@ -245,7 +247,7 @@ export const exportStatus = defineAction<
 export const exportDownload = defineAction<
   {
     deckId: string
-    format: 'pdf' | 'yaml'
+    format: 'pdf' | 'yaml' | 'pptx'
     includeWhiteboard?: boolean
     locale?: Locale
   },
@@ -257,7 +259,7 @@ export const exportDownload = defineAction<
   meter: requireExports,
   input: z.object({
     deckId: z.string().min(1),
-    format: z.enum(['pdf', 'yaml']),
+    format: z.enum(['pdf', 'yaml', 'pptx']),
     includeWhiteboard: z.boolean().optional(),
     // Export the deck as it reads in this language (SHARE-2); omitted exports
     // the authored text.
@@ -265,8 +267,9 @@ export const exportDownload = defineAction<
   }),
   execute: async (ctx, input, { deck: deckDoc }) => {
     // YAML has no visual surface, so whiteboard marks never apply to it.
+    // PowerPoint does, and carries them for the same reason the PDF does.
     const includeWhiteboard =
-      input.format === 'pdf' && input.includeWhiteboard !== false
+      input.format !== 'yaml' && input.includeWhiteboard !== false
     const deck = await buildExportDeck(deckDoc, includeWhiteboard, input.locale)
     const base = slugifyTitle(deck.title)
     if (input.format === 'yaml') {
@@ -281,6 +284,18 @@ export const exportDownload = defineAction<
     // What the format could not carry, so the user is told rather than left
     // to find a slide with a hole in it (EXP-7).
     const notes: ExportNote[] = []
+    if (input.format === 'pptx') {
+      // The same builder the Google Slides export uses; that route uploads
+      // the bytes for Drive to convert, this one just hands them over.
+      const pptx = await deckToPptx(deck, notes)
+      await meterUsage('exports', 1)
+      return {
+        fileName: `${base}.pptx`,
+        mimeType: MIME.pptx,
+        contentBase64: Buffer.from(pptx).toString('base64'),
+        ...(notes.length ? { notes } : {}),
+      }
+    }
     const pdf = await deckToPdf(deck, notes)
     await meterUsage('exports', 1)
     return {
@@ -294,12 +309,12 @@ export const exportDownload = defineAction<
 
 /** Whether whiteboard marks apply to a given format (visual formats only). */
 const whiteboardApplies = (format: DeckExportFormat): boolean =>
-  format === 'pdf' || format === 'google-slides'
+  format !== 'yaml'
 
 /**
- * Saves an export to the connected Google Drive (EXP-4): a PDF or YAML file
- * uploaded into the chosen folder, or a native Google Slides presentation built
- * from the deck. Records it on the deck so it can be listed/deleted, and returns
+ * Saves an export to the connected Google Drive (EXP-4): a PDF, YAML or
+ * PowerPoint file uploaded into the chosen folder, or a native Google Slides
+ * presentation built from the deck. Records it on the deck so it can be listed/deleted, and returns
  * the created file.
  *
  * Counts one `exports` unit (BILL-3), the same as a download — the deck is
@@ -308,7 +323,7 @@ const whiteboardApplies = (format: DeckExportFormat): boolean =>
 export const exportToDrive = defineAction<
   {
     deckId: string
-    format: 'pdf' | 'yaml' | 'google-slides'
+    format: 'pdf' | 'yaml' | 'google-slides' | 'pptx'
     driveFolderId: string
     driveFolderName?: string
     includeWhiteboard?: boolean
@@ -322,7 +337,7 @@ export const exportToDrive = defineAction<
   meter: requireExports,
   input: z.object({
     deckId: z.string().min(1),
-    format: z.enum(['pdf', 'yaml', 'google-slides']),
+    format: z.enum(['pdf', 'yaml', 'google-slides', 'pptx']),
     driveFolderId: z.string().min(1),
     driveFolderName: z.string().optional(),
     includeWhiteboard: z.boolean().optional(),
@@ -368,10 +383,15 @@ export const exportToDrive = defineAction<
         fileId = file.id
         fileUrl = file.fileUrl
       } else {
+        // Uploaded as itself, not converted: asking Drive to turn a .pptx
+        // into Slides is what "Google Slides" above already does, and someone
+        // who chose PowerPoint wants the PowerPoint file.
         const data =
           input.format === 'yaml'
             ? new TextEncoder().encode(deckToYaml(deck))
-            : await deckToPdf(deck, notes)
+            : input.format === 'pptx'
+              ? await deckToPptx(deck, notes)
+              : await deckToPdf(deck, notes)
         const file = await uploadFileToDriveLive(
           refreshToken,
           { name: fileName, mimeType: MIME[input.format], data },

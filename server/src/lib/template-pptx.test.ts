@@ -389,3 +389,56 @@ describe('what an exported design says about itself (EXP-8)', () => {
     expect(Math.max(...offsets)).toBeGreaterThan(10 * 914400)
   })
 })
+
+/**
+ * A layout imported from Google Slides (TMPL-8).
+ *
+ * It has no tree — it arrived as absolute geometry — and `resolveTreeBoxes`
+ * answers for one anyway, by inventing a default from the slot names.
+ * Letting that win exported every imported design in generic positions: the
+ * right boxes, in places the deck never put them, which reads as "similar to
+ * my template but not it".
+ */
+describe('a layout that was measured rather than authored', () => {
+  /** The slide XML of the first slide in a generated .pptx. */
+  const firstSlideXml = (bytes: Uint8Array): string => {
+    const zip = new AdmZip(Buffer.from(bytes))
+    const entry = zip
+      .getEntries()
+      .find(e => /ppt\/slides\/slide1\.xml$/.test(e.entryName))!
+    return entry.getData().toString('utf8')
+  }
+
+  const measured = {
+    id: 'imported',
+    ownerId: 'u1',
+    permalinkSlug: 'imported',
+    name: 'Imported',
+    renderMode: 'positioned' as const,
+    theme: { background: '#ffffff', text: '#111111', accent: '#3366cc' },
+    layouts: [
+      {
+        type: 'title',
+        label: 'Title',
+        purpose: 'Opening slide',
+        slots: [{ name: 'title', kind: 'text' as const, label: 'Title' }],
+        // Deliberately nowhere a default tree would put a title: low on the
+        // page and inset, as a real deck's hand-placed box often is.
+        elementPositions: {
+          title: { x: 0.06, y: 0.458, w: 0.88, h: 0.117 },
+        },
+      },
+    ],
+    visibility: 'private' as const,
+    voteScore: 0,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  }
+
+  it('draws the box where the deck put it, not where a default would', async () => {
+    const xml = firstSlideXml(await templateToPptx(measured))
+    // 0.06 of a 10in slide, in EMU: 0.6in x 914400.
+    expect(xml).toContain('548640')
+    // 0.458 of 5.625in: 2.57625in x 914400, rounded by the writer.
+    expect(xml).toMatch(/y="2355\d{3}"/)
+  })
+})

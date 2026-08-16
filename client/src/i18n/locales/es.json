@@ -453,6 +453,7 @@
     "exportHeading": "Exportar este diseño",
     "exportHint": "Llévatelo como archivo, o a tu Google Drive como una presentación cuyas maquetas son las suyas.",
     "exportAsYaml": "Como YAML",
+    "exportAsPptx": "Como PowerPoint",
     "exportToSlides": "Como Google Slides",
     "slotLanguage": {
       "label": "Lenguaje",
@@ -486,7 +487,7 @@
       "otherSources": "O sube un archivo"
     },
     "fileImport": {
-      "open": "Importar un archivo de diseño .yaml",
+      "open": "Importar un archivo de diseño (.yaml o .pptx)",
       "working": "Leyendo el archivo…",
       "errors": {
         "read": "No se pudo leer ese archivo",
@@ -524,7 +525,7 @@
     },
     "importSlides": {
       "title": "Crear una clase a partir de una presentación de Google Slides",
-      "description": "Indica una presentación de tu Drive y sus diapositivas volverán como una clase que puedes impartir, tal como las creaste.",
+      "description": "Trae una presentación desde tu Drive, de Google Slides o PowerPoint. Cada diapositiva llega tal como la hiciste.",
       "linkLabel": "Enlace de Google Slides",
       "linkPlaceholder": "Pega el enlace de la presentación",
       "submit": "Importar clase",
@@ -538,7 +539,7 @@
         "failed": "No se pudo importar esa presentación"
       },
       "otherSources": "O sube un archivo",
-      "fileOpen": "Importar un archivo de clase .yaml"
+      "fileOpen": "Importar un archivo de clase (.yaml o .pptx)"
     },
     "errors": {
       "create": "No se pudo crear la clase"
@@ -1226,6 +1227,9 @@
       },
       "google-slides": {
         "hint": "Una presentación editable en tu Drive."
+      },
+      "pptx": {
+        "hint": "Un archivo .pptx para PowerPoint o Keynote."
       },
       "yaml": {
         "hint": "Un archivo legible y reimportable."

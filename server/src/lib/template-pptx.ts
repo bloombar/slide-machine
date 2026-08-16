@@ -41,6 +41,7 @@ import { resolveTreeBoxes, type ResolvedBox } from './tree-boxes'
 import { fetchSlideImages, toDataUri } from './deck-image'
 import { encodeSlotMetadata, slotToken } from './slot-metadata'
 import { withSlotAltText } from './pptx-alt-text'
+import { pptxFontFace } from './pptx-fonts'
 import { previewImageUrls } from '../enrichment/preview-images'
 
 // pptxgenjs ships CJS; the default export is the constructor under ESM.
@@ -115,6 +116,12 @@ const V_ALIGN = { start: 'top', center: 'middle', end: 'bottom' } as const
 /** How a box's text is set, from the style in force on it. */
 const textOptions = (style: BoxStyle, palette: Palette) => ({
   fontSize: (style.fontSize ?? 2.75) * CQI_TO_PT,
+  // The design's typeface, named as something PowerPoint has. Left unset the
+  // file gets Calibri whatever the template said, which is why an exported
+  // design came back close but never quite itself.
+  ...(pptxFontFace(style.fontFamily)
+    ? { fontFace: pptxFontFace(style.fontFamily) }
+    : {}),
   bold: (style.fontWeight ?? 400) >= 600,
   italic: style.italic,
   color: colorOf(style.color, palette, palette.text),
@@ -133,11 +140,24 @@ const textOptions = (style: BoxStyle, palette: Palette) => ({
  * boxes it carries.
  */
 const boxesOf = (layout: Layout, theme: Record<string, unknown>) => {
-  const resolved = resolveTreeBoxes(layout, theme, sampleLines(layout))
-  if (resolved.length) return resolved
+  // A layout the author built has a tree, and the tree is what it IS: the
+  // boxes are derived from it by measuring, so resolving it again is exact.
+  //
+  // A layout imported from Slides has no tree — it arrived as absolute
+  // geometry (TMPL-8) — and `resolveTreeBoxes` answers anyway, by inventing
+  // a default tree from the slot names. Letting that win exported every
+  // imported design in generic positions: the right boxes, in places the
+  // deck never put them. Measured geometry is the design wherever there is
+  // no tree, so it is asked first.
+  const measured = layout.elementPositions ?? {}
+  const hasMeasured = Object.keys(measured).length > 0
+  if (layout.tree || !hasMeasured) {
+    const resolved = resolveTreeBoxes(layout, theme, sampleLines(layout))
+    if (resolved.length) return resolved
+  }
   const textStyles = themeTextStyles(theme)
   return layout.slots.flatMap((spec: SlotSpec): ResolvedBox[] => {
-    const box = layout.elementPositions?.[spec.name]
+    const box = measured[spec.name]
     if (!box) return []
     const { x, y, w, h, ...style } = box
     return [

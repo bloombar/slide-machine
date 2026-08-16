@@ -42,6 +42,7 @@ import {
   assetPrefix,
 } from '../import/import-presentation'
 import { mockPresentation } from '../import/mock-presentation'
+import { readPptxLive, readDriveSourceLive } from '../import/read-pptx'
 import { isLive } from '../lib/export-mode'
 import { decryptToken } from '../lib/token-crypto'
 import { accessTokenFor } from '../auth/google-connect'
@@ -55,7 +56,18 @@ import { SlideModel } from '../models/slide'
 import { deleteDeckCascade } from '../lib/cascade'
 
 export const deckImportFromSlides = defineAction<
-  { projectId: string; presentationId: string; keepEverySlide?: boolean },
+  {
+    projectId: string
+    presentationId?: string
+    /** A Drive file id, when the link pointed at a file rather than a
+     * presentation — a PowerPoint sitting in Drive, most often. */
+    driveFileId?: string
+    pptxBase64?: string
+    /** What the PowerPoint file was called. It becomes the lecture's title,
+     * so it is the author's name for the deck rather than ours. */
+    name?: string
+    keepEverySlide?: boolean
+  },
   DeckImportFromSlidesResult,
   WithGoogle<ProjectAccess>
 >({
@@ -68,13 +80,29 @@ export const deckImportFromSlides = defineAction<
     'export',
   ),
   meter: requireImportVolume,
-  input: z.object({
-    projectId: z.string().min(1),
-    presentationId: z.string().trim().min(1).max(120),
-    /** One layout per slide rather than the few designs the deck is built
-     * from (TMPL-8). The author's choice, carried through. */
-    keepEverySlide: z.boolean().optional(),
-  }),
+  input: z
+    .object({
+      projectId: z.string().min(1),
+      presentationId: z.string().trim().min(1).max(120).optional(),
+      driveFileId: z.string().trim().min(1).max(120).optional(),
+      /** A PowerPoint file's bytes instead of a presentation id, read by
+       * converting it in the caller's Drive (see `read-pptx.ts`). */
+      pptxBase64: z.string().min(1).optional(),
+      name: z.string().trim().min(1).max(120).optional(),
+      /** One layout per slide rather than the few designs the deck is built
+       * from (TMPL-8). A lecture import always sends it. */
+      keepEverySlide: z.boolean().optional(),
+    })
+    // Exactly one source. Two would leave the server choosing, which is not
+    // its choice; none would leave it with nothing to read.
+    .refine(
+      v =>
+        [v.presentationId, v.driveFileId, v.pptxBase64].filter(Boolean)
+          .length === 1,
+      {
+        message: 'Give exactly one of a presentation, a Drive file, or a file',
+      },
+    ),
   execute: async (_ctx, input, { project, userId, googleUser: user }) => {
     const provider = registry.get<GenerationProvider>('generation')
 
@@ -82,21 +110,52 @@ export const deckImportFromSlides = defineAction<
     // the refresh token. Reading the user again here returned a document
     // without one — the field is `select: false`, so it is absent unless asked
     // for — and decrypting `undefined` is what failed every live import.
-    const imported = isLive()
-      ? await importPresentation({
-          accessToken: await accessTokenFor(
+    const keep = input.keepEverySlide ? { keepEverySlide: true } : {}
+    // A PowerPoint file is converted in the caller's Drive and taken away
+    // again; from there it is the same presentation every import reads.
+    // A Drive link is read for whatever it turns out to point at: a native
+    // presentation where it stands, a PowerPoint via a converted copy.
+    const source =
+      input.driveFileId && isLive()
+        ? await readDriveSourceLive(
             decryptToken(user.googleQuizRefreshToken!),
-          ),
-          presentationId: input.presentationId,
-          ownerId: userId,
+            input.driveFileId,
+          )
+        : input.pptxBase64 && isLive()
+          ? await readPptxLive(decryptToken(user.googleQuizRefreshToken!), {
+              // The file's own name: Drive names the converted presentation
+              // after it, the Slides API hands that back as the title, and the
+              // title is what the lecture is called. A placeholder here made
+              // every PowerPoint import arrive as "Imported presentation".
+              name: input.name ?? 'Imported presentation',
+              data: Buffer.from(input.pptxBase64, 'base64'),
+            })
+          : undefined
+
+    const imported = source
+      ? await importSourcePresentation(source, {
           provider,
-          ...(input.keepEverySlide ? { keepEverySlide: true } : {}),
+          assetPrefix: assetPrefix(userId, source.title || 'pptx'),
+          ...keep,
         })
-      : await importSourcePresentation(mockPresentation(input.presentationId), {
-          provider,
-          assetPrefix: assetPrefix(userId, input.presentationId),
-          ...(input.keepEverySlide ? { keepEverySlide: true } : {}),
-        })
+      : isLive() && input.presentationId
+        ? await importPresentation({
+            accessToken: await accessTokenFor(
+              decryptToken(user.googleQuizRefreshToken!),
+            ),
+            presentationId: input.presentationId,
+            ownerId: userId,
+            provider,
+            ...keep,
+          })
+        : await importSourcePresentation(
+            mockPresentation(input.presentationId ?? 'pptx'),
+            {
+              provider,
+              assetPrefix: assetPrefix(userId, input.presentationId ?? 'pptx'),
+              ...keep,
+            },
+          )
 
     // The design, saved exactly as a template-only import saves it: an author
     // may keep only this and discard the lecture (EXP-5).

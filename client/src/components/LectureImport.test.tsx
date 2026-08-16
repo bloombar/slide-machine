@@ -166,7 +166,7 @@ describe('what happens once it has worked', () => {
         onClose={vi.fn()}
       />,
     )
-    fireEvent.change(screen.getByLabelText(/import a \.yaml lecture file/i), {
+    fireEvent.change(screen.getByLabelText(/import a lecture file/i), {
       target: {
         files: [
           new File(['version: 1\nkind: deck\n'], 'deck.yaml', {

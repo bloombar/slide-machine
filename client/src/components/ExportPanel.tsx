@@ -73,6 +73,10 @@ const FORMATS: Array<{
     icon: Presentation,
     driveOnly: true,
   },
+  // The format everyone else can open. Sits beside Google Slides because the
+  // two answer the same question — "give me something I can edit" — and
+  // differ only in where it opens.
+  { id: 'pptx', label: 'PowerPoint', icon: Presentation },
   { id: 'yaml', label: 'YAML', icon: FileText },
 ]
 
@@ -458,7 +462,7 @@ export default function ExportPanel({ deckId, locale }: Props) {
     setNotes([])
     dispatchAction<ExportDownload>('export.download', {
       deckId,
-      format: format as 'pdf' | 'yaml',
+      format: format as 'pdf' | 'yaml' | 'pptx',
       includeWhiteboard,
       locale,
     })

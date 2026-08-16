@@ -453,6 +453,7 @@
     "exportHeading": "Export this design",
     "exportHint": "Take it out as a file, or into your Google Drive as a presentation whose layouts are its layouts.",
     "exportAsYaml": "As YAML",
+    "exportAsPptx": "As PowerPoint",
     "exportToSlides": "As Google Slides",
     "slotLanguage": {
       "label": "Language",
@@ -486,7 +487,7 @@
       "otherSources": "Or upload a file"
     },
     "fileImport": {
-      "open": "Import a .yaml design file",
+      "open": "Import a design file (.yaml or .pptx)",
       "working": "Reading the file…",
       "errors": {
         "read": "Could not read that file",
@@ -524,7 +525,7 @@
     },
     "importSlides": {
       "title": "Create a lecture from a Google Slides presentation",
-      "description": "Point at a presentation in your Drive and its slides come back as a lecture you can teach from, drawn the way you drew them.",
+      "description": "Bring in a presentation from your Drive — Google Slides or PowerPoint. Every slide comes across exactly as you made it.",
       "linkLabel": "Google Slides link",
       "linkPlaceholder": "Paste the presentation link",
       "submit": "Import lecture",
@@ -538,7 +539,7 @@
         "failed": "Could not import that presentation"
       },
       "otherSources": "Or upload a file",
-      "fileOpen": "Import a .yaml lecture file"
+      "fileOpen": "Import a lecture file (.yaml or .pptx)"
     },
     "errors": {
       "create": "Could not create the lecture"
@@ -1226,6 +1227,9 @@
       },
       "google-slides": {
         "hint": "An editable presentation in your Drive."
+      },
+      "pptx": {
+        "hint": "A .pptx file for PowerPoint or Keynote."
       },
       "yaml": {
         "hint": "A human-readable, re-importable file."

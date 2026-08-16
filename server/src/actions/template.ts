@@ -40,10 +40,12 @@ import {
   normalizeSlot,
   requireWhiteboardLayout,
 } from '../templates/builtin'
-import { readDriveFileTextLive } from '../lib/drive-file'
+import { readDriveFileTextLive, driveFileMetaLive } from '../lib/drive-file'
+import { readDriveSourceLive } from '../import/read-pptx'
 import { listTemplatesFor } from '../templates/resolve'
 import { permalinkSlug } from '../lib/slug'
 import { templateToYaml } from '../lib/template-yaml'
+import { templateToPptx, templatePictures } from '../lib/template-pptx'
 import { createGoogleSlidesFromTemplateLive } from '../lib/export-google'
 import { decryptToken } from '../lib/token-crypto'
 import {
@@ -73,7 +75,9 @@ import { requireExports, requireImportVolume } from '../billing/meter-hooks'
 import {
   importPresentation,
   importSourcePresentation,
+  assetPrefix,
 } from '../import/import-presentation'
+import { readPptxLive } from '../import/read-pptx'
 import { mockPresentation } from '../import/mock-presentation'
 import type { ImportReport } from '../import/build-template'
 import { registry } from '../providers/registry'
@@ -157,23 +161,43 @@ export const templateGet = defineAction<
 })
 
 /**
- * Exports a style template to a YAML file (EXP-2), returned inline for the
- * browser to download — the template's identity, theme, and layouts.
+ * Exports a style template to a file (EXP-2), returned inline for the browser
+ * to download — the template's identity, theme, and layouts.
+ *
+ * Two formats, for two different readers. **YAML** is the one this app reads
+ * back (EXP-3): it carries slot names, kinds, instructions and limits, none
+ * of which PowerPoint has anywhere to put. **PowerPoint** is the one everyone
+ * else reads — a deck whose slides are the layouts, openable in Keynote or
+ * Office by a colleague who has never heard of this app. It is the same
+ * builder the Google Slides export uses, minus the upload.
  *
  * Exporting is a read, so it is gated like one: a private design belongs to
  * its author and to whoever edits a lecture drawn with it, nobody else.
  */
 export const templateExport = defineAction<
-  { templateId: string },
+  { templateId: string; format?: 'yaml' | 'pptx' },
   ExportDownload,
   TemplateAccess
 >({
   name: 'template.export',
   access: readableById,
-  input: z.object({ templateId: z.string().min(1) }),
+  input: z.object({
+    templateId: z.string().min(1),
+    format: z.enum(['yaml', 'pptx']).optional(),
+  }),
   execute: async (ctx, input, { template }) => {
     const slug =
       template.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'template'
+    if (input.format === 'pptx') {
+      const pictures = await templatePictures(template)
+      const pptx = await templateToPptx(template, pictures)
+      return {
+        fileName: `${slug}.pptx`,
+        mimeType:
+          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        contentBase64: Buffer.from(pptx).toString('base64'),
+      }
+    }
     return {
       fileName: `${slug}.template.yaml`,
       mimeType: 'application/x-yaml',
@@ -382,7 +406,12 @@ export const templateExportToDrive = defineAction<
  * assumed (docs/TEMPLATES.md §11).
  */
 export const templateImportFromSlides = defineAction<
-  { presentationId: string; name?: string; keepEverySlide?: boolean },
+  {
+    presentationId?: string
+    pptxBase64?: string
+    name?: string
+    keepEverySlide?: boolean
+  },
   { template: Template; report: ImportReport },
   WithGoogle<Signed>
 >({
@@ -391,32 +420,63 @@ export const templateImportFromSlides = defineAction<
   // Against the import allowance, not the export one: this brings a design in
   // (SPEC BILL-3). The model call inside is metered on its own.
   meter: requireImportVolume,
-  input: z.object({
-    presentationId: z.string().trim().min(1).max(120),
-    name: z.string().trim().min(1).max(80).optional(),
-    /** Give every slide a layout of its own instead of consolidating the
-     * deck into the few designs it is built from (TMPL-8). */
-    keepEverySlide: z.boolean().optional(),
-  }),
+  input: z
+    .object({
+      presentationId: z.string().trim().min(1).max(120).optional(),
+      /** A PowerPoint file's bytes instead of a presentation id. Google does
+       * the reading: the file is converted in the caller's Drive and taken
+       * away again (see `read-pptx.ts`). */
+      pptxBase64: z.string().min(1).optional(),
+      name: z.string().trim().min(1).max(80).optional(),
+      /** Give every slide a layout of its own instead of consolidating the
+       * deck into the few designs it is built from (TMPL-8). */
+      keepEverySlide: z.boolean().optional(),
+    })
+    // One source or the other, never both and never neither — a request that
+    // named two would leave the server picking, which is not its choice.
+    .refine(v => Boolean(v.presentationId) !== Boolean(v.pptxBase64), {
+      message: 'Give either a presentation id or a PowerPoint file, not both',
+    }),
   execute: async (_ctx, input, { userId, googleUser: user }) => {
     const provider = registry.get<GenerationProvider>('generation')
     // Mock mode reads a deliberately messy sample deck rather than Google, so
     // the suite and a machine with no credentials exercise every consolidation
     // pass — the same reason every other Google-touching feature has one.
-    const { template: built, report } = isLive()
-      ? await importPresentation({
-          accessToken: await accessTokenFor(
-            decryptToken(user.googleQuizRefreshToken!),
-          ),
-          presentationId: input.presentationId,
-          ownerId: userId,
+    const keep = input.keepEverySlide ? { keepEverySlide: true } : {}
+    // A PowerPoint file is read by converting it in the caller's Drive and
+    // taking it away again; from there it is the same presentation every
+    // other import reads.
+    const source =
+      input.pptxBase64 && isLive()
+        ? await readPptxLive(decryptToken(user.googleQuizRefreshToken!), {
+            name: input.name ?? 'Imported presentation',
+            data: Buffer.from(input.pptxBase64, 'base64'),
+          })
+        : undefined
+
+    // Mock mode reads a deliberately messy sample deck rather than Google, so
+    // the suite and a machine with no credentials exercise every consolidation
+    // pass — the same reason every other Google-touching feature has one.
+    const { template: built, report } = source
+      ? await importSourcePresentation(source, {
           provider,
-          ...(input.keepEverySlide ? { keepEverySlide: true } : {}),
+          assetPrefix: assetPrefix(userId, source.title || 'pptx'),
+          ...keep,
         })
-      : await importSourcePresentation(mockPresentation(input.presentationId), {
-          provider,
-          ...(input.keepEverySlide ? { keepEverySlide: true } : {}),
-        })
+      : isLive() && input.presentationId
+        ? await importPresentation({
+            accessToken: await accessTokenFor(
+              decryptToken(user.googleQuizRefreshToken!),
+            ),
+            presentationId: input.presentationId,
+            ownerId: userId,
+            provider,
+            ...keep,
+          })
+        : await importSourcePresentation(
+            mockPresentation(input.presentationId ?? 'pptx'),
+            { provider, ...keep },
+          )
 
     // An imported design still has to satisfy the same schema a hand-written
     // one does — a template the editor cannot open would be worse than none.
@@ -546,21 +606,54 @@ export const templateImportFromDrive = defineAction<
     name: z.string().trim().min(1).max(80).optional(),
   }),
   execute: async (_ctx, input, { userId, googleUser: user }) => {
-    // Mock-backed like every other Google-touching path, so the suite and a
-    // machine with no credentials exercise the whole import.
-    const content = isLive()
-      ? await readDriveFileTextLive(
-          await accessTokenFor(decryptToken(user.googleQuizRefreshToken!)),
-          input.fileId,
-        )
-      : // A built-in serialized through the real exporter, so mock mode reads
-        // exactly the document a live Drive file would hold rather than a
-        // fixture that could drift from the format.
-        templateToYaml(listBuiltinTemplates()[0]!)
+    if (isLive()) {
+      const refreshToken = decryptToken(user.googleQuizRefreshToken!)
+      const token = await accessTokenFor(refreshToken)
+      const meta = await driveFileMetaLive(token, input.fileId)
 
+      // A link says nothing about what it points at, so the file is asked.
+      // A presentation or a PowerPoint is a design to derive (TMPL-8);
+      // anything else is read as the design file this app exported (EXP-3).
+      if (
+        meta.mimeType === 'application/vnd.google-apps.presentation' ||
+        meta.mimeType ===
+          'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+      ) {
+        const source = await readDriveSourceLive(refreshToken, input.fileId)
+        const provider = registry.get<GenerationProvider>('generation')
+        const { template: built } = await importSourcePresentation(source, {
+          provider,
+          assetPrefix: assetPrefix(userId, input.fileId),
+        })
+        const layouts = z.array(layoutSchema).parse(built.layouts)
+        const name = input.name ?? built.name
+        const doc = await TemplateModel.create({
+          ownerId: userId,
+          name,
+          permalinkSlug: permalinkSlug(name, 'template'),
+          renderMode: built.renderMode,
+          theme: built.theme,
+          layouts: normalizeLayouts(layouts),
+          visibility: 'private',
+        })
+        return toTemplateDto(doc)
+      }
+
+      return storeImportedTemplate(
+        'template.importFromDrive',
+        await readDriveFileTextLive(token, input.fileId),
+        userId,
+        input.name,
+      )
+    }
+
+    // Mock-backed like every other Google-touching path, so the suite and a
+    // machine with no credentials exercise the whole import. A built-in
+    // serialized through the real exporter, so mock mode reads exactly the
+    // document a live Drive file would hold.
     return storeImportedTemplate(
       'template.importFromDrive',
-      content,
+      templateToYaml(listBuiltinTemplates()[0]!),
       userId,
       input.name,
     )
