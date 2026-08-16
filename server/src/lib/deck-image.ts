@@ -70,7 +70,14 @@ const fetchOne = async (
   if (!url || !/^https?:\/\//i.test(url)) return undefined
   try {
     const res = await fetch(url, {
-      headers: { 'User-Agent': USER_AGENT, Accept: 'image/*' },
+      // `image/*` alone is refused by hosts that serve pictures from an API
+      // path rather than a file one — Openverse answers 406 and the picture
+      // vanished from the export with nothing said. Preferring images while
+      // accepting anything gets the bytes and still says what we want.
+      headers: {
+        'User-Agent': USER_AGENT,
+        Accept: 'image/*,*/*;q=0.8',
+      },
     })
     if ((res.status === 429 || res.status === 503) && attempt < MAX_RETRIES) {
       await delay(300 * (attempt + 1))

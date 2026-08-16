@@ -19,7 +19,7 @@
  * template model measures type in. Colours are `#rrggbb`, resolved against the
  * master's scheme, because a theme reference means nothing outside the
  * presentation it came from.
- */
+ */ import type { ImageAttribution } from '@slide-machine/shared'
 
 /** A rectangle on the page, 0–1 from the top-left. */
 export interface SourceBox {
@@ -67,6 +67,15 @@ export interface SourceElement {
   bulleted?: boolean
   /** Where the picture lives. Short-lived, so it is fetched at import time. */
   imageUrl?: string
+  /**
+   * Where the picture came from, when this system exported the presentation
+   * and wrote it into the alt text (IMG-5/EXP-8).
+   *
+   * Neither Slides nor PowerPoint has a field for provenance, so a deck
+   * exported, edited there and imported back used to come home with anonymous
+   * pictures — and a licence that requires attribution silently unsatisfied.
+   */
+  attribution?: ImageAttribution
   table?: { rows: string[][] }
   /** How the text sits in its box: across, then down. A centred title read as
    * left-aligned is the single most visible way an import stops looking like

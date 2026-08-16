@@ -25,6 +25,7 @@ import {
   type SourceTheme,
 } from './source-presentation'
 import { parseSlotMetadata, slotFromToken } from '../lib/slot-metadata'
+import { creditFromToken } from '../lib/image-attribution-token'
 
 /** Raised when the connected account cannot read this presentation, so the
  * caller can say what to do about it rather than showing a status code. */
@@ -476,6 +477,9 @@ const elementOf = (
   // Alt text is where this system writes what a box IS (EXP-8), and it is
   // worth more than anything inferred below.
   const slotName = slotFromToken(raw.description as string | undefined)
+  // And where it writes where a picture came from (IMG-5/EXP-8), since
+  // neither Slides nor PowerPoint has a field for provenance.
+  const credit = creditFromToken(raw.description as string | undefined)
 
   const image = raw.image as { contentUrl?: string } | undefined
   if (image) {
@@ -485,6 +489,7 @@ const elementOf = (
       box,
       ...(slotName ? { slotName } : {}),
       ...(image.contentUrl ? { imageUrl: image.contentUrl } : {}),
+      ...(credit ? { attribution: credit } : {}),
     }
   }
 

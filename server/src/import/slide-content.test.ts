@@ -360,3 +360,54 @@ describe('the notes on a deck from elsewhere', () => {
     expect(slides[0]!.sourceTranscript).toBe('Skip this one if running late.')
   })
 })
+
+/**
+ * A picture's provenance surviving the round trip (IMG-5/EXP-8).
+ *
+ * The YAML export carried the whole TASL block and always restored it. A deck
+ * exported to Slides or PowerPoint, worked on there and imported back came
+ * home with anonymous pictures, because neither format has a field for it —
+ * so the export writes it into the alt text and the reader takes it out.
+ */
+describe('where a picture came from', () => {
+  const credited = {
+    title: 'Mitochondrion',
+    creator: 'Ada Lovelace',
+    sourceName: 'Wikimedia',
+    license: 'CC BY-SA 4.0',
+  }
+
+  it('lands on the slide when the export wrote it down', () => {
+    const result = importedSlide(
+      slide([
+        slot('image', {
+          kind: 'image',
+          imageUrl: 'https://lh3.google.com/abcd1234',
+          attribution: credited,
+        }),
+      ]),
+      'picture',
+      stored,
+    )
+    expect(result.slots.image).toMatchObject({
+      kind: 'image',
+      attribution: credited,
+    })
+  })
+
+  it('is simply absent for a deck that never had one', () => {
+    // Someone else's presentation says nothing about provenance, and an
+    // invented credit would be worse than none
+    const result = importedSlide(
+      slide([
+        slot('image', {
+          kind: 'image',
+          imageUrl: 'https://lh3.google.com/abcd1234',
+        }),
+      ]),
+      'picture',
+      stored,
+    )
+    expect(result.slots.image).not.toHaveProperty('attribution')
+  })
+})
