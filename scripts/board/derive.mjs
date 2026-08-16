@@ -26,8 +26,9 @@ const familyOf = id => id.replace(/-\d+.*$/, '')
 
 // Requirements deliberately NOT tracked as their own board issues because they
 // are fully realized by another tracked requirement (avoids duplication).
-// P-12 = admin allowlist (ADMIN-1); P-13 = admin audit trail (ADMIN-7).
-const EXCLUDE = new Set(['P-12', 'P-13'])
+// Empty since 2026-08 (P-12/P-13 were here, but every SPEC requirement now
+// gets its own issue so the privacy family is auditable on the board).
+const EXCLUDE = new Set([])
 
 /** Trim to a word boundary with an ellipsis, for tidy issue titles. */
 const shorten = (s, max) => {
@@ -279,42 +280,9 @@ const applyOverrides = byId => {
       'administration & moderation',
     )
   }
-  // Split ids: base ships in an early phase; a suffixed entry tracks the GitHub
-  // remainder on the Phase-3 board so outstanding work is visible there.
-  const splits = [
-    {
-      base: 'AUTH-1',
-      sub: 'AUTH-1a',
-      title: 'GitHub sign-in',
-      section: '§4 Accounts & Authentication',
-    },
-    {
-      base: 'EXP-4',
-      sub: 'EXP-4a',
-      title: 'GitHub connect (import/export)',
-      section: '§11 Export/Import, Voting & Social',
-    },
-  ]
-  for (const { base, sub, title, section } of splits) {
-    const b = byId.get(base)
-    if (b) {
-      b._seedReview = true
-      b._why = 'split id — GitHub part tracked separately'
-    }
-    if (!byId.has(sub)) {
-      byId.set(sub, {
-        id: sub,
-        title,
-        section,
-        family: familyOf(sub),
-        _seedPhase: 3,
-        _seedStatus: 'Backlog',
-        _seedReview: true,
-        _why: 'GitHub remainder of ' + base,
-        _synthetic: true,
-      })
-    }
-  }
+  // (The AUTH-1a/EXP-4a "GitHub remainder" split ids were removed 2026-08-16
+  // along with GitHub sign-in/connect in the SPEC; their issues — #103/#110,
+  // closed not-planned — had their markers stripped so sync ignores them.)
 }
 
 // ---- Assemble & merge with any existing manifest ----

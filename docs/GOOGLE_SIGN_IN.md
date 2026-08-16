@@ -19,7 +19,7 @@ project and dedicated ops account from
 a new project just for this.
 
 > **One client, reused later.** This same OAuth client is also used for
-> connected Google Drive import/export ([EXP-4](SPEC.md#exp-4-connected-accounts-google-drive--github)),
+> connected Google Drive import/export ([EXP-4](SPEC.md#exp-4-connected-accounts-google-drive)),
 > which just requests broader scopes at consent time. Set it up once here for
 > sign-in; no second client is needed for Drive.
 
@@ -48,7 +48,7 @@ before you can create a client.
 6. **Scopes:** add the three basic sign-in scopes — **`openid`**,
    **`.../auth/userinfo.email`**, and **`.../auth/userinfo.profile`**. These
    return the verified email, name, and avatar the app needs to create an
-   account. (Drive scopes for [EXP-4](SPEC.md#exp-4-connected-accounts-google-drive--github)
+   account. (Drive scopes for [EXP-4](SPEC.md#exp-4-connected-accounts-google-drive)
    are added later, not now.)
 7. **Test users:** while the consent screen is in **Testing** mode, only accounts
    you list here can sign in. Add the team's and pilot testers' Google emails.

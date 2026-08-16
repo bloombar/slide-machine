@@ -11,16 +11,15 @@
     (AUTH-3) before the account is fully enabled. Google sign-in (OAuth 2.0 /
     OpenID Connect), which supports NYU Google accounts (NYU Workspace) as well
     as standard Google accounts. Google-verified email needs no separate
-    verification step. GitHub sign-in (OAuth), for users who prefer their GitHub
-    identity (convenient for the pilot's student developers). A given verified
-    email maps to a single account: if a user who registered with a password
-    later signs in with Google or GitHub for…"
+    verification step. A given verified email maps to a single account: if a
+    user who registered with a password later signs in with Google for that same
+    verified email (or vice versa), the methods resolve to the same account
+    rather than creating a duplicate. Signing…"
   section: §4 Accounts & Authentication
   family: AUTH
   phase: 1
   status: Done
-  review: true
-  note: split id — GitHub part tracked separately
+  review: false
 - id: AUTH-2
   title: Login & sessions
   full: Email/password login issues JWT access + refresh tokens. Sessions persist
@@ -257,8 +256,8 @@
 - id: TECH-5
   title: Client configuration
   full: Client build/runtime variables live in a Vite env file (.env.local,
-    VITE_-prefixed), e.g. VITE_API_BASE_URL, VITE_STRIPE_PUBLISHABLE_KEY, public
-    Google/GitHub OAuth client IDs (for sign-in and connect flows), feature
+    VITE_-prefixed), e.g. VITE_API_BASE_URL, VITE_STRIPE_PUBLISHABLE_KEY, the
+    public Google OAuth client ID (for sign-in and connect flows), feature
     flags, and analytics toggles. No secrets are exposed to the client.
   section: §14 Technical Stack & Conventions
   family: TECH
@@ -547,9 +546,8 @@
   section: §20 Administration, Operations & Moderation
   family: ADMIN
   phase: 2
-  status: Backlog
-  review: true
-  note: administration & moderation
+  status: Done
+  review: false
 - id: ADMIN-9
   title: Complimentary plan grants
   full: 'An admin can put any account on a larger plan at no charge for a fixed
@@ -771,23 +769,22 @@
   status: Backlog
   review: false
 - id: EXP-4
-  title: Connected accounts (Google Drive & GitHub)
-  full: "Users can connect their own Google Drive and/or GitHub accounts via OAuth
-    to import from and export to those resources: Import — pull source documents
-    and previously-exported decks/templates from Drive or a GitHub repo/gist
-    (SEED-1). Export — push outputs to the connected destination: PDF / Google
-    Slides / YAML to Google Drive, and YAML deck/template files to a GitHub repo
-    (round-trippable via EXP-3). Connecting an account is separate from sign-in
-    identity (AUTH-1): it grants broader, purpose-specific scopes (Drive files /
-    repo contents) and a user who signed in by email can still connect Drive and
-    GitHub. Connections are listed in the profile and are revocable at any time;
-    tokens are…"
+  title: Connected accounts (Google Drive)
+  full: "Users can connect their own Google Drive account via OAuth to import from
+    and export to it: Import — pull source documents and previously-exported
+    decks/templates from Drive (SEED-1). Export — push outputs to the connected
+    destination: PDF / Google Slides / YAML to Google Drive (round-trippable via
+    EXP-3). Connecting an account is separate from sign-in identity (AUTH-1): it
+    grants broader, purpose-specific scopes (Drive files) and a user who signed
+    in by email can still connect Drive. Connections are listed in the profile
+    and are revocable at any time; tokens are stored encrypted (P-9). Reading a
+    user's existing Google Slides presentations (TMPL-8 / EXP-5) requires a
+    presentation-read scope…"
   section: §11 Export/Import, Voting & Social
   family: EXP
   phase: 2
   status: Done
-  review: true
-  note: split id — GitHub part tracked separately
+  review: false
 - id: EXP-5
   title: Lecture import from Google Slides
   full: A user can create a lecture from an existing Google Slides presentation in
@@ -1134,10 +1131,9 @@
   title: Document seeding
   full: "Users can seed a project by importing content from: Uploaded PDFs and
     document files (e.g., .docx, .pptx, .txt, Markdown). A connected Google
-    Drive account — Google Docs, Drive files, and Google Slides (EXP-4). A
-    connected GitHub account — files from a repo or gist (e.g.,
-    previously-exported YAML decks/templates) (EXP-4). Imported text is parsed,
-    normalized, and stored as seed context for generation."
+    Drive account — Google Docs, Drive files, and Google Slides (EXP-4).
+    Imported text is parsed, normalized, and stored as seed context for
+    generation."
   section: §6 Slide Projects & Seeding
   family: SEED
   phase: 2
@@ -1394,14 +1390,6 @@
   phase: 2
   status: Done
   review: false
-- id: AUTH-1a
-  title: GitHub sign-in
-  section: §4 Accounts & Authentication
-  family: AUTH
-  phase: 3
-  status: Backlog
-  review: true
-  note: GitHub remainder of AUTH-1
 - id: BILL-1
   title: Subscription tiers
   full: "The product offers four subscription tiers, each priced accordingly
@@ -1589,14 +1577,6 @@
   phase: 3
   status: Backlog
   review: false
-- id: EXP-4a
-  title: GitHub connect (import/export)
-  section: §11 Export/Import, Voting & Social
-  family: EXP
-  phase: 3
-  status: Backlog
-  review: true
-  note: GitHub remainder of EXP-4
 - id: IMG-4
   title: AI-generated imagery (optional)
   full: For slides that warrant a custom diagram or infographic rather than a
@@ -1644,10 +1624,10 @@
   status: Backlog
   review: false
 - id: P-4
-  title: Passwords hashed; JWTs signed with rotating secrets; reset/verification…
-  full: Passwords hashed; JWTs signed with rotating secrets; reset/verification
-    links time-limited and single-use; ownership/role checks on every mutating
-    route.
+  title: Passwords hashed; JWTs signed with server-held secrets (periodic secret…
+  full: Passwords hashed; JWTs signed with server-held secrets (periodic secret
+    rotation is recommended, not required); reset/verification links
+    time-limited and single-use; ownership/role checks on every mutating route.
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 3
@@ -1672,9 +1652,10 @@
     retention is explicitly enabled (for diarization — GEN-4 — and per-slide
     original-audio playback — PLAY-2), it applies only to the server-proxied
     engine, is gated on deck edit access, is server-only (never exposed in a DTO
-    or shared surface), and is auto-deleted after a bounded window (and as soon
-    as diarization consumes it). Retained student voices remain subject to
-    P-1/P-2. (Design: DECISIONS.md "Audio retention".)'
+    or shared surface), and is auto-deleted after a bounded window (deleting
+    eagerly as soon as diarization has consumed it is recommended, not
+    required). Retained student voices remain subject to P-1/P-2. (Design:
+    DECISIONS.md "Audio retention".)'
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 3
@@ -1708,11 +1689,11 @@
   status: Backlog
   review: false
 - id: P-9
-  title: Connected-account (Google Drive / GitHub — EXP-4) OAuth tokens are…
-  full: Connected-account (Google Drive / GitHub — EXP-4) OAuth tokens are stored
-    encrypted at rest, request only least-privilege scopes, are per-user and
-    revocable, and are never exposed to the client. Exports that contain student
-    data must not be pushed to public GitHub/Drive locations (FERPA — P-1/P-2).
+  title: Connected-account (Google Drive — EXP-4) OAuth tokens are stored…
+  full: Connected-account (Google Drive — EXP-4) OAuth tokens are stored encrypted
+    at rest, request only least-privilege scopes, are per-user and revocable,
+    and are never exposed to the client. Exports that contain student data must
+    not be pushed to public Drive locations (FERPA — P-1/P-2).
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 3
@@ -1735,6 +1716,33 @@
   family: P
   phase: 3
   status: Done
+  review: false
+- id: P-12
+  title: Administrative access is an out-of-band email allowlist (ADMIN_EMAILS…
+  full: Administrative access is an out-of-band email allowlist (ADMIN_EMAILS —
+    §20 ADMIN-1), never a self-granted role. Admin reads bypass per-object ACLs
+    and can reach student-derived content (P-1/P-2), so the allowlist is kept
+    minimal, admins cannot moderate other admins, and any admin action that
+    exposes a user's private content or credentials — viewing a private
+    lecture/project, resetting/revealing a password (ADMIN-3) — requires
+    explicit confirmation before it proceeds.
+  section: §16 Privacy, Security & Compliance
+  family: P
+  phase: 3
+  status: Backlog
+  review: false
+- id: P-13
+  title: Admin audit trail.
+  full: Admin audit trail. Every admin action that changes or exposes user data —
+    private lecture/project views, password resets, bans/unbans, deletes,
+    settings edits, and views of soft-deleted content (§20 ADMIN-3..6) — is
+    recorded in an append-only log (acting admin, action, target, details,
+    timestamp) that no API can edit or delete (ADMIN-7). The log is the
+    accountability control over the ACL bypass in P-12 and is exportable as CSV.
+  section: §16 Privacy, Security & Compliance
+  family: P
+  phase: 3
+  status: Backlog
   review: false
 - id: P-14
   title: Research data handling.

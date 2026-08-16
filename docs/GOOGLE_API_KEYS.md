@@ -218,7 +218,7 @@ Restart the server; config is validated at boot by `server/src/config/env.ts`.
 
 ## 6. Connected-account access: Forms, Drive & Slides (EXP-4)
 
-Three features act **as the instructor** rather than as the ops account, through the per-user Google account they connect ([EXP-4](SPEC.md#exp-4-connected-accounts-google-drive--github)) — the same OAuth client as Google sign-in, but with **broader scopes** and offline access:
+Three features act **as the instructor** rather than as the ops account, through the per-user Google account they connect ([EXP-4](SPEC.md#exp-4-connected-accounts-google-drive)) — the same OAuth client as Google sign-in, but with **broader scopes** and offline access:
 
 - **Quiz publishing** ([SPEC §17](SPEC.md#17-quiz-generator-integration)) — creates a Google Form in the instructor's own Drive.
 - **Export** ([EXP-1](SPEC.md#exp-1-deck-export)/[EXP-6](SPEC.md#exp-6-template-export-to-google-slides)) — writes decks and templates into their Drive.

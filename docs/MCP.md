@@ -264,7 +264,7 @@ the experience. It is which side of it this app is standing on.
 
 Slide Machine already uses OAuth, but always as the one **asking**: Google and
 GitHub sign-in ([AUTH-1](SPEC.md#auth-1-registration--sign-in-methods)), and
-connected accounts for Drive ([EXP-4](SPEC.md#exp-4-connected-accounts-google-drive--github)).
+connected accounts for Drive ([EXP-4](SPEC.md#exp-4-connected-accounts-google-drive)).
 Google shows the consent screen; Google issues the token; the app receives it.
 
 For MCP, the app must become the one **granting** — an OAuth _authorization
