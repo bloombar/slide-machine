@@ -155,26 +155,38 @@ const boxesOf = (layout: Layout, theme: Record<string, unknown>) => {
     const resolved = resolveTreeBoxes(layout, theme, sampleLines(layout))
     if (resolved.length) return resolved
   }
+
+  // Measured geometry answers for the slots it covers, and the tree answers
+  // for the rest. Neither alone is enough: taking only the tree put an
+  // imported design in generic positions, and taking only the measurements
+  // dropped every slot that was never measured — a picture box among them,
+  // which is how an export lost its images.
   const textStyles = themeTextStyles(theme)
-  return layout.slots.flatMap((spec: SlotSpec): ResolvedBox[] => {
-    const box = measured[spec.name]
-    if (!box) return []
-    const { x, y, w, h, ...style } = box
-    return [
-      {
-        node: { id: spec.name, slot: spec.name },
-        slot: spec.name,
-        kind: spec.kind,
-        style: style.textStyle
-          ? { ...textStyles[style.textStyle], ...style }
-          : style,
-        x,
-        y,
-        w,
-        h,
-      },
-    ]
-  })
+  const fromTree = resolveTreeBoxes(layout, theme, sampleLines(layout))
+  const unmeasured = fromTree.filter(box => !box.slot || !measured[box.slot])
+
+  return [
+    ...layout.slots.flatMap((spec: SlotSpec): ResolvedBox[] => {
+      const box = measured[spec.name]
+      if (!box) return []
+      const { x, y, w, h, ...style } = box
+      return [
+        {
+          node: { id: spec.name, slot: spec.name },
+          slot: spec.name,
+          kind: spec.kind,
+          style: style.textStyle
+            ? { ...textStyles[style.textStyle], ...style }
+            : style,
+          x,
+          y,
+          w,
+          h,
+        },
+      ]
+    }),
+    ...unmeasured,
+  ]
 }
 
 /**

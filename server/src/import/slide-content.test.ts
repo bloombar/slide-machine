@@ -9,8 +9,9 @@
  */
 import { describe, it, expect } from 'vitest'
 import type { Candidate, CandidateSlot } from './candidate'
-import type { SourceElement } from './source-presentation'
+import type { SourceElement, SourcePresentation } from './source-presentation'
 import { importedSlide } from './slide-content'
+import { importSourcePresentation } from './import-presentation'
 
 const box = { x: 0.1, y: 0.1, w: 0.8, h: 0.2 }
 
@@ -308,5 +309,54 @@ describe('what the presenter said over the slide', () => {
       '   ',
     )
     expect(result.sourceTranscript).toBeUndefined()
+  })
+})
+
+/**
+ * Whether a deck's speaker notes come across (EXP-5).
+ *
+ * Our own export wrote its notes FROM narration, so they are known to be
+ * narration and always return. Anyone else's are the author's to ask for:
+ * narration is read aloud (PLAY-2), and "skip this if running late" is not
+ * something to say to a room.
+ */
+describe('the notes on a deck from elsewhere', () => {
+  const deck = (): SourcePresentation => ({
+    id: 'p1',
+    title: 'Untitled',
+    theme: {
+      background: '#ffffff',
+      text: '#111111',
+      accent: '#3366cc',
+      muted: '#666666',
+    },
+    layouts: [],
+    slides: [
+      {
+        id: 's1',
+        notes: 'Skip this one if running late.',
+        elements: [
+          {
+            id: 's1-t',
+            kind: 'text' as const,
+            placeholder: 'TITLE',
+            box: { x: 0.08, y: 0.1, w: 0.84, h: 0.16 },
+            runs: [{ text: 'Photosynthesis' }],
+          },
+        ],
+      },
+    ],
+  })
+
+  it('stay where they are unless asked for', async () => {
+    const { slides } = await importSourcePresentation(deck())
+    expect(slides[0]!.sourceTranscript).toBeUndefined()
+  })
+
+  it('come across when the author asks', async () => {
+    const { slides } = await importSourcePresentation(deck(), {
+      importNotes: true,
+    })
+    expect(slides[0]!.sourceTranscript).toBe('Skip this one if running late.')
   })
 })

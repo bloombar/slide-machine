@@ -67,6 +67,9 @@ export const deckImportFromSlides = defineAction<
      * so it is the author's name for the deck rather than ours. */
     name?: string
     keepEverySlide?: boolean
+    /** Bring the deck's speaker notes across as narration. The author's
+     * choice, because narration is read aloud (PLAY-2). */
+    importNotes?: boolean
   },
   DeckImportFromSlidesResult,
   WithGoogle<ProjectAccess>
@@ -92,6 +95,7 @@ export const deckImportFromSlides = defineAction<
       /** One layout per slide rather than the few designs the deck is built
        * from (TMPL-8). A lecture import always sends it. */
       keepEverySlide: z.boolean().optional(),
+      importNotes: z.boolean().optional(),
     })
     // Exactly one source. Two would leave the server choosing, which is not
     // its choice; none would leave it with nothing to read.
@@ -110,7 +114,10 @@ export const deckImportFromSlides = defineAction<
     // the refresh token. Reading the user again here returned a document
     // without one — the field is `select: false`, so it is absent unless asked
     // for — and decrypting `undefined` is what failed every live import.
-    const keep = input.keepEverySlide ? { keepEverySlide: true } : {}
+    const keep = {
+      ...(input.keepEverySlide ? { keepEverySlide: true } : {}),
+      ...(input.importNotes ? { importNotes: true } : {}),
+    }
     // A PowerPoint file is converted in the caller's Drive and taken away
     // again; from there it is the same presentation every import reads.
     // A Drive link is read for whatever it turns out to point at: a native

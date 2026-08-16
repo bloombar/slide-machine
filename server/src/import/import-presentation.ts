@@ -255,6 +255,16 @@ export const importSourcePresentation = async (
      * they drew it, to merge and delete themselves.
      */
     keepEverySlide?: boolean
+    /**
+     * Bring the speaker notes across as each slide's narration (EXP-5).
+     *
+     * Off unless asked, because narration is read aloud (PLAY-2) and another
+     * deck's notes may be reminders rather than script — "skip this if
+     * running late" is not something to say to a room. A presentation this
+     * system exported wrote its notes FROM narration, so those come back
+     * whatever this says.
+     */
+    importNotes?: boolean
   } = {},
 ): Promise<ImportResult> => {
   // A presentation this system exported carries each layout's slot
@@ -369,11 +379,14 @@ export const importSourcePresentation = async (
         candidate,
         template.layoutOfSlide[candidate.slideId]!,
         url => stored.get(url),
-        // Speaker notes are narration only on a presentation this system
-        // exported, which wrote them from narration in the first place
-        // (EXP-8). Another deck's notes may be reminders or citations, and
-        // narration is read aloud (PLAY-2) — so they are left where they are.
-        isOwnExport ? notesById.get(candidate.slideId) : undefined,
+        // Our own export wrote its notes from narration, so they are known
+        // to be narration and always come back. Anyone else's are the
+        // author's to ask for: narration is read aloud (PLAY-2), and a note
+        // saying "skip this if running late" is not something to say to a
+        // room.
+        isOwnExport || options.importNotes
+          ? notesById.get(candidate.slideId)
+          : undefined,
       ),
     )
 
