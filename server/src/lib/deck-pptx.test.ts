@@ -596,3 +596,149 @@ describe('a deck carrying its reusable layouts', () => {
     }
   })
 })
+/**
+ * The credit under a picture belongs to the page, not to the lecture.
+ *
+ * A visual export prints it because a licence has to be readable in the file
+ * itself (IMG-5). Unmarked, a re-import read that line as content: the words
+ * came back as a caption ON the slide, in a box the author never made, while
+ * the picture's own provenance dialog stayed empty.
+ */
+describe('the credit printed under a picture', () => {
+  const withPicture: ExportDeck = {
+    title: 'Cells',
+    templateId: 'classic',
+    slides: [
+      {
+        layoutType: 'image',
+        title: 'A mitochondrion',
+        imageRef: 'https://pictures.test/m.png',
+        attribution: {
+          title: 'Mitochondrion',
+          creator: 'Ada',
+          sourceName: 'Wikimedia',
+          license: 'CC BY-SA 4.0',
+        },
+      },
+    ],
+  }
+
+  const withPicture2 = (caption?: string): ExportDeck => ({
+    ...withPicture,
+    slides: [{ ...withPicture.slides[0]!, caption }],
+  })
+
+  const shapeNames = (bytes: Uint8Array): string[] =>
+    (new AdmZip(Buffer.from(bytes))
+      .getEntry('ppt/slides/slide1.xml')!
+      .getData()
+      .toString('utf8')
+      .match(/name="[^"]*"/g) ?? []) as string[]
+
+  const stubImageFetch = () =>
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        headers: { get: () => 'image/png' },
+        arrayBuffer: async () => new Uint8Array([137, 80, 78, 71]).buffer,
+      }),
+    )
+
+  it('is printed once, not twice', async () => {
+    // Two renderers each drew it: the shared layout model puts a credit under
+    // the picture, and this exporter drew a second one on top of it. Counted
+    // in the drawn text only — the picture's alt text names the source too,
+    // and that copy is the one the import reads back into the dialog.
+    stubImageFetch()
+    const xml = new AdmZip(Buffer.from(await deckToPptx(withPicture)))
+      .getEntry('ppt/slides/slide1.xml')!
+      .getData()
+      .toString('utf8')
+    const drawn = (xml.match(/<a:t>[^<]*<\/a:t>/g) ?? []).filter(t =>
+      t.includes('Wikimedia'),
+    )
+    expect(drawn).toHaveLength(1)
+  })
+
+  it('leaves the author’s own caption a box of its own, which does come home', async () => {
+    stubImageFetch()
+    const names = shapeNames(await deckToPptx(withPicture2('Figure 1: a cell')))
+    // The caption is unmarked — it is the lecture's, and re-imports as
+    // content. The credit beneath it is marked, and does not.
+    expect(names).toContain('name="credit-line"')
+    expect(names.filter(n => n === 'name="credit-line"')).toHaveLength(1)
+  })
+
+  /**
+   * The credit belongs to the picture, not to one way of arranging it.
+   *
+   * It used to be drawn by the exporter, for every picture. Moving it into
+   * the shared layout model put it only in the hand-tuned arrangements, so a
+   * deck laid out by its own template — which is most of them — exported with
+   * no attribution at all, and nothing here noticed: every test used a deck
+   * with no template.
+   */
+  it('is printed for a deck arranged by its own template too', async () => {
+    stubImageFetch()
+    const template = [
+      {
+        type: 'figure',
+        label: 'Figure',
+        purpose: 'A picture and its title',
+        slots: [
+          { name: 'title', kind: 'text', label: 'Title' },
+          { name: 'picture', kind: 'image', label: 'Picture' },
+        ],
+        elementPositions: {
+          title: { x: 0.08, y: 0.08, w: 0.84, h: 0.12 },
+          picture: { x: 0.2, y: 0.26, w: 0.6, h: 0.5 },
+        },
+      },
+    ] as Layout[]
+    const bytes = await deckToPptx({
+      title: 'Cells',
+      templateId: 'own',
+      layouts: template,
+      templateTheme: { background: '#ffffff', text: '#111111' },
+      slides: [
+        {
+          layoutType: 'figure',
+          title: 'A mitochondrion',
+          imageRef: 'https://pictures.test/m.png',
+          attribution: withPicture.slides[0]!.attribution,
+          slots: {
+            title: { kind: 'text', value: 'A mitochondrion' },
+            picture: {
+              kind: 'image',
+              ref: 'https://pictures.test/m.png',
+              attribution: withPicture.slides[0]!.attribution,
+            },
+          },
+        },
+      ],
+    })
+    const xml = new AdmZip(Buffer.from(bytes))
+      .getEntry('ppt/slides/slide1.xml')!
+      .getData()
+      .toString('utf8')
+    const drawn = (xml.match(/<a:t>[^<]*<\/a:t>/g) ?? []).filter(t =>
+      t.includes('Wikimedia'),
+    )
+    expect(drawn).toHaveLength(1)
+    expect(xml).toContain('name="credit-line"')
+  })
+
+  it('is named so a re-import knows not to read it as content', async () => {
+    stubImageFetch()
+    const bytes = await deckToPptx(withPicture)
+    const xml = new AdmZip(Buffer.from(bytes))
+      .getEntry('ppt/slides/slide1.xml')!
+      .getData()
+      .toString('utf8')
+    // Printed, so a reader of the file sees whose picture it is...
+    expect(xml).toContain('Wikimedia')
+    // ...and marked, so an importer can tell it from the author's own words.
+    expect(xml).toMatch(/name="credit-line"[^>]*descr="credit-line"/)
+  })
+})

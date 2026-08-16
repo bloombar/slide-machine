@@ -441,3 +441,91 @@ describe('the parts of a design that hold no content', () => {
     expect(layouts[0]!.decoration).toBeUndefined()
   })
 })
+
+/**
+ * A box tall enough for what it holds.
+ *
+ * A source box is measured as the source drew it, and the two renderers do
+ * not agree to the pixel: a box that fitted four points in Google Slides can
+ * fit two here. An imported layout draws its boxes at a fixed height and
+ * hides whatever runs past the edge, so the lecture was whole and looked cut
+ * in half — the missing points were there, below the fold.
+ */
+describe('room for what the box actually held', () => {
+  /** Four points of about seventy characters each, as the deck held them. */
+  const held = { lines: 4, longest: 70 }
+
+  const withBody = (h: number, over: Partial<CandidateSlot> = {}) =>
+    derived({
+      slots: [
+        slot('title', { x: 0.08, y: 0.04, w: 0.84, h: 0.12 }, { fontSize: 5 }),
+        slot(
+          'body',
+          { x: 0.08, y: 0.26, w: 0.84, h },
+          { kind: 'bullets', fontSize: 2.5, held, ...over },
+        ),
+      ],
+    })
+
+  const bodyOf = (layout: Parameters<typeof buildTemplate>[1][number]) =>
+    buildTemplate(source(), [layout], new Map()).layouts[0]!.elementPositions
+      .body!
+
+  it('grows a box too short to show its own content', () => {
+    const box = bodyOf(withBody(0.14))
+    expect(box.h).toBeGreaterThan(0.14)
+  })
+
+  it('leaves a box that already has the room exactly as it was drawn', () => {
+    // The geometry IS the design. Growing one that fits would redraw a deck
+    // that was never wrong.
+    expect(bodyOf(withBody(0.6)).h).toBe(0.6)
+  })
+
+  it('does not move the box, only lengthens it', () => {
+    expect(bodyOf(withBody(0.14))).toMatchObject({ x: 0.08, y: 0.26, w: 0.84 })
+  })
+
+  it('stops where the next box down begins', () => {
+    // Growing through a footer would put the list on top of it, which is a
+    // worse way to lose the words than hiding them.
+    const layout = derived({
+      slots: [
+        slot(
+          'body',
+          { x: 0.08, y: 0.26, w: 0.84, h: 0.14 },
+          { kind: 'bullets', fontSize: 2.5, held },
+        ),
+        slot(
+          'footer',
+          { x: 0.08, y: 0.5, w: 0.84, h: 0.08 },
+          { fontSize: 1.5 },
+        ),
+      ],
+    })
+    const box = buildTemplate(source(), [layout], new Map()).layouts[0]!
+      .elementPositions.body!
+    expect(box.h).toBeLessThanOrEqual(0.5 - 0.26)
+  })
+
+  it('leaves a picture alone, which is drawn to fit its box', () => {
+    const layout = derived({
+      slots: [
+        slot(
+          'image',
+          { x: 0.08, y: 0.26, w: 0.4, h: 0.14 },
+          { kind: 'image', held },
+        ),
+      ],
+    })
+    expect(
+      buildTemplate(source(), [layout], new Map()).layouts[0]!.elementPositions
+        .image!.h,
+    ).toBe(0.14)
+  })
+
+  it('still produces a layout the schema accepts', () => {
+    const { layouts } = buildTemplate(source(), [withBody(0.14)], new Map())
+    expect(layoutSchema.safeParse(layouts[0]).success).toBe(true)
+  })
+})

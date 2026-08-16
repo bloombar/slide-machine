@@ -62,6 +62,17 @@ export interface CandidateSlot {
   /** What this box held on the slide it came from, for the lecture importer
    * to place (EXP-5). Ignored when only a design is wanted. */
   content?: SourceElement
+  /**
+   * The most any slide of this design actually put in the box — how many
+   * lines, and how long the longest was.
+   *
+   * A measurement rather than the content, because a design carries no
+   * content (`consolidate`). It exists so a box can be given room for what it
+   * has to hold: a source box measured as the source drew it can be shorter
+   * than this app needs for the same words, and an imported layout hides
+   * whatever runs past its edge.
+   */
+  held?: { lines: number; longest: number }
 }
 
 /** One slide, described as a layout. */

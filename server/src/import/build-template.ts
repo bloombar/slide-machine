@@ -29,6 +29,7 @@ import {
   type SlotSpec,
 } from '@slide-machine/shared'
 import type { DerivedLayout } from './consolidate'
+import type { CandidateSlot } from './candidate'
 import type { SourcePresentation } from './source-presentation'
 import { ruleBasedType } from './semantics'
 
@@ -184,6 +185,68 @@ const decorationOf = (
   return pieces.slice(0, 32)
 }
 
+/* --- Enough room for what a box actually holds ------------------------- *
+ *
+ * A source box is measured as the source drew it, and the two renderers do
+ * not agree to the pixel: a box that fitted four points in Slides can fit two
+ * here, and an imported layout draws its boxes at a fixed height with
+ * anything over the edge hidden. The lecture was whole and looked cut in
+ * half — the points were there, below the fold of a box too short to show
+ * them.
+ *
+ * So a box is allowed to grow to fit its own content. Only to grow, and only
+ * downward into space nothing else is using, because the geometry is the
+ * design and this is the one thing it must not be allowed to do: hide the
+ * lecture.
+ */
+
+/** Roughly a character's width, as a fraction of the type size. */
+const CHAR_W = 0.5
+/** A line's full height, as a fraction of the type size. */
+const LINE_H = 1.5
+/** A 16:9 slide is this many `cqi` tall — `cqi` being a percent of its WIDTH. */
+const SLIDE_H_CQI = 56.25
+
+/**
+ * The height a box's own content needs, as a fraction of the slide's height.
+ * Zero when nothing is known about what it holds.
+ *
+ * An estimate — there is no browser here — and deliberately a generous one.
+ * Being a little taller than needed costs nothing on a box with space beneath
+ * it; being too short costs the reader the end of every list.
+ */
+const heightForText = (slot: CandidateSlot): number => {
+  const { held, fontSize, box } = slot
+  if (!held || !fontSize) return 0
+  const perLine = Math.max(1, Math.floor((box.w * 100) / (fontSize * CHAR_W)))
+  // Every line is assumed as long as the longest, since only the longest was
+  // measured. It is the generous reading, which is the right way to be wrong
+  // about a box that would otherwise hide the end of a list.
+  const rows = held.lines * Math.max(1, Math.ceil(held.longest / perLine))
+  return (rows * fontSize * LINE_H) / SLIDE_H_CQI
+}
+
+/**
+ * How far a box may grow before it would reach something else.
+ *
+ * Only boxes it actually sits above count — a caption beside a picture is not
+ * in the way of the text column, and treating it as if it were would keep a
+ * list short for no reason.
+ */
+const roomBelow = (
+  box: { x: number; y: number; w: number; h: number },
+  others: CandidateSlot[],
+): number => {
+  const overlapsAcross = (other: { x: number; w: number }) =>
+    other.x < box.x + box.w && box.x < other.x + other.w
+  const tops = others
+    .filter(o => overlapsAcross(o.box) && o.box.y >= box.y + box.h)
+    .map(o => o.box.y)
+  // A margin off the slide's own bottom edge, so a grown box never runs off.
+  const floor = Math.min(1 - 0.02, ...tops)
+  return Math.max(box.h, floor - box.y)
+}
+
 /** One derived design, as a layout of a template. */
 const toLayout = (
   derived: DerivedLayout,
@@ -236,8 +299,20 @@ const toLayout = (
 
   const elementPositions: ElementPositions = {}
   for (const slot of derived.slots) {
+    // A picture is not text and is drawn to fit its box; only words can be
+    // hidden by one that is too short.
+    const grown =
+      slot.kind === 'image' || slot.kind === 'table'
+        ? slot.box
+        : {
+            ...slot.box,
+            h: Math.min(
+              Math.max(slot.box.h, heightForText(slot)),
+              roomBelow(slot.box, derived.slots),
+            ),
+          }
     elementPositions[slot.name] = {
-      ...safeBox(slot.box),
+      ...safeBox(grown),
       // Type size and colour came off the slide; keeping them is the whole
       // point of importing a design rather than describing one.
       ...(slot.fontSize ? { fontSize: slot.fontSize } : {}),

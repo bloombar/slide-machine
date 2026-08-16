@@ -17,13 +17,8 @@ import type { Layout } from '@slide-machine/shared'
 import type { ExportNote } from '@slide-machine/shared'
 import type { ExportDeck, ExportSlide } from './deck-yaml'
 import { visibleStrokes, hexForPptx, HIGHLIGHTER_ALPHA } from './deck-drawings'
-import { imageCredit } from './image-credit'
 import { defineLayoutMasters } from './template-pptx'
-import { creditToken } from './image-attribution-token'
-
-/** The credit line under a picture: small, and tall enough for one line. */
-const CREDIT_PT = 7
-const CREDIT_H = 0.22
+import { creditToken, CREDIT_LINE_TOKEN } from './image-attribution-token'
 import { fetchSlideImages, toDataUri } from './deck-image'
 import { slotToken } from './slot-metadata'
 import { typesetFormulas, type Formulas } from './deck-formulas'
@@ -106,6 +101,10 @@ const renderSlide = (
         // What this shape IS, so a re-import knows the box without guessing
         // (EXP-8). Only boxes a template named have one.
         ...(box.slot ? { objectName: slotToken(box.slot) } : {}),
+        // A printed credit is named as one, so a re-import leaves it on the
+        // page rather than reading it back as a caption nobody wrote
+        // (IMG-5). The provenance itself rides on the picture's alt text.
+        ...(box.credit ? { objectName: CREDIT_LINE_TOKEN } : {}),
       })
     } else if (box.kind === 'rule') {
       s.addShape(pptx.ShapeType.rect, {
@@ -183,24 +182,6 @@ const renderSlide = (
           h: box.h * SLIDE_H,
         },
       })
-
-      // The picture's provenance, under the picture it belongs to (IMG-5).
-      // A slide with two pictures credits each where it sits, so a reader can
-      // tell which credit is whose.
-      const credit = imageCredit(slide.attribution)
-      if (credit) {
-        s.addText(credit, {
-          x: box.x * SLIDE_W,
-          // Just under the box, kept on the slide when the picture runs to
-          // the bottom edge.
-          y: Math.min((box.y + box.h) * SLIDE_H + 0.03, SLIDE_H - CREDIT_H),
-          w: box.w * SLIDE_W,
-          h: CREDIT_H,
-          fontSize: CREDIT_PT,
-          color: hex.muted,
-          margin: 0,
-        })
-      }
     }
   }
 

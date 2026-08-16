@@ -40,6 +40,25 @@ export const CREDIT_TOKEN_PREFIX = 'credit:'
  */
 export const MAX_CREDIT_PAYLOAD = 1200
 
+/**
+ * Marks a text box as a printed credit rather than something the author wrote.
+ *
+ * A visual export prints the credit under its picture, because a licence has
+ * to be readable in the file itself. Re-imported, that line was read as
+ * content: the credit appeared as a caption ON the slide, in a box nobody
+ * made, while the picture's own provenance dialog stayed empty — the right
+ * words in the wrong place.
+ *
+ * The provenance already travels on the picture's alt text, so the printed
+ * line carries nothing the import needs. Marked, it can be left where it
+ * belongs: on the page, not in the lecture.
+ */
+export const CREDIT_LINE_TOKEN = 'credit-line'
+
+/** Whether a shape's alt text says it is a credit this system printed. */
+export const isCreditLine = (altText: string | undefined): boolean =>
+  (altText ?? '').split(/\r?\n/).some(line => line.trim() === CREDIT_LINE_TOKEN)
+
 /** The alt-text line carrying an image's provenance, or nothing when there is
  * none worth carrying. */
 export const creditToken = (

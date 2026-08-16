@@ -10,6 +10,7 @@ import { layoutSchema } from '../templates/builtin'
 import { WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
 import type { LayoutDecoration } from '@slide-machine/shared'
 import { candidateOf } from './candidate'
+import { toSourcePresentation } from './read-slides'
 import { observedFrom } from './consolidate'
 import { importSourcePresentation, assetPrefix } from './import-presentation'
 import type {
@@ -831,5 +832,95 @@ describe('a deck of several colours', () => {
     for (const layout of await derivedLayouts()) {
       expect(layoutSchema.safeParse(layout).success).toBe(true)
     }
+  })
+})
+
+/**
+ * A list, all the way from what Google actually returns.
+ *
+ * Every other test here starts from a `SourcePresentation` — already parsed —
+ * so none of them could see the seam where this broke: the reader dropped the
+ * newlines that end Slides' paragraphs, and a four-point list arrived as the
+ * single run "OneTwoThreeFour". Downstream everything then behaved correctly
+ * on input that was already wrong: one bullet, and a design whose ceiling said
+ * its lists hold one line (TMPL-6).
+ *
+ * This starts from the raw response, so the seam is covered.
+ */
+describe('a bulleted list, read the way Google sends it', () => {
+  const EMU = { w: 9144000, h: 5143500 }
+  const emu = (m: number) => ({ magnitude: m, unit: 'EMU' })
+
+  const textBox = (
+    id: string,
+    at: { x: number; y: number; w: number; h: number },
+    elements: unknown[],
+  ) => ({
+    objectId: id,
+    size: { width: emu(at.w * EMU.w), height: emu(at.h * EMU.h) },
+    transform: {
+      scaleX: 1,
+      scaleY: 1,
+      translateX: emu(at.x * EMU.w),
+      translateY: emu(at.y * EMU.h),
+    },
+    shape: { shapeType: 'TEXT_BOX', text: { textElements: elements } },
+  })
+
+  /** One paragraph, ended by the newline Slides ends them with. */
+  const paragraph = (text: string, bulleted = false) => [
+    { paragraphMarker: bulleted ? { bullet: {} } : {} },
+    { textRun: { content: `${text}\n`, style: {} } },
+  ]
+
+  const listSlide = (id: string, title: string, points: string[]) => ({
+    objectId: id,
+    pageElements: [
+      textBox(
+        `${id}-t`,
+        { x: 0.08, y: 0.1, w: 0.84, h: 0.15 },
+        paragraph(title),
+      ),
+      textBox(
+        `${id}-b`,
+        { x: 0.08, y: 0.3, w: 0.84, h: 0.5 },
+        points.flatMap(point => paragraph(point, true)),
+      ),
+    ],
+  })
+
+  const read = () =>
+    toSourcePresentation({
+      presentationId: 'p1',
+      title: 'Bullets',
+      pageSize: { width: emu(EMU.w), height: emu(EMU.h) },
+      masters: [],
+      layouts: [],
+      slides: [
+        listSlide('s0', 'Key points', ['One', 'Two', 'Three', 'Four']),
+        listSlide('s1', 'More points', ['Alpha', 'Beta', 'Gamma', 'Delta']),
+      ],
+    } as never)
+
+  it('comes back as the points it went in as', async () => {
+    const { slides } = await importSourcePresentation(read())
+    expect(slides?.[0]?.slots.body).toEqual({
+      kind: 'bullets',
+      items: ['One', 'Two', 'Three', 'Four'],
+    })
+  })
+
+  it('leaves the title as its own text, not the first point', async () => {
+    const { slides } = await importSourcePresentation(read())
+    expect(slides?.[0]?.slots.title).toEqual({
+      kind: 'text',
+      value: 'Key points',
+    })
+  })
+
+  it('derives a design whose lists hold what the deck put in them', async () => {
+    const { template } = await importSourcePresentation(read())
+    const list = template.layouts.find(l => l.constraints?.maxBullets)
+    expect(list?.constraints?.maxBullets).toBe(4)
   })
 })

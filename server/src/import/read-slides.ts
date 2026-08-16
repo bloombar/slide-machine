@@ -25,7 +25,8 @@ import {
   type SourceTheme,
 } from './source-presentation'
 import { parseSlotMetadata, slotFromToken } from '../lib/slot-metadata'
-import { creditFromToken } from '../lib/image-attribution-token'
+import { creditFromToken, isCreditLine } from '../lib/image-attribution-token'
+import { creditFromLine } from '../lib/image-credit'
 
 /** Raised when the connected account cannot read this presentation, so the
  * caller can say what to do about it rather than showing a status code. */
@@ -375,17 +376,42 @@ const runsOf = (
   const elements = (text?.textElements ?? []) as Record<string, unknown>[]
   const runs: SourceRun[] = []
   let bulleted = false
+  /** Ends the paragraph that came before, so where one line stops is stated
+   * rather than inferred from whether Google happened to include a newline. */
+  const endParagraph = () => {
+    const previous = runs[runs.length - 1]
+    if (previous && !previous.text.endsWith('\n')) previous.text += '\n'
+  }
   for (const element of elements) {
     if (element.paragraphMarker) {
       const marker = element.paragraphMarker as { bullet?: unknown }
       if (marker.bullet) bulleted = true
+      endParagraph()
       continue
     }
     const run = element.textRun as
       { content?: string; style?: Record<string, unknown> } | undefined
     if (!run?.content) continue
-    const content = run.content.replace(/\n$/, '')
-    if (!content) continue
+    /*
+     * Where one line ends and the next begins is kept.
+     *
+     * Slides ends a paragraph with a newline and writes a break INSIDE one as
+     * a vertical tab. Stripping both, as this did, flattened a box to its
+     * words: four bullet points joined into "OneTwoThreeFour", which is how
+     * an exported list came home as a single paragraph. `linesIn`
+     * (consolidate) was already splitting on newlines to count what a list
+     * held, and so was always counting one.
+     *
+     * A vertical tab is a line break either way, so it is read as one; the
+     * newline that ends the LAST paragraph is dropped after the loop, since
+     * that one marks the end of the box rather than a break within it.
+     */
+    const content = run.content.replace(/\v/g, '\n')
+    // Only a run that is nothing but line ends is skipped — an empty
+    // paragraph, as before. Not one that is merely blank: Google splits a run
+    // wherever styling changes, so the space between a bold word and the next
+    // can be a run of its own, and dropping it would join them together.
+    if (!content.replace(/\n/g, '')) continue
     const style = run.style ?? {}
     // A run's own value wins. An explicit `false` is a decision too — a run
     // that says it is not bold does not then inherit bold from its layout.
@@ -412,6 +438,8 @@ const runsOf = (
       fontFamily: (style.fontFamily as string) || inherited.fontFamily,
     })
   }
+  const last = runs[runs.length - 1]
+  if (last) last.text = last.text.replace(/\n$/, '')
   return { runs, bulleted }
 }
 
@@ -480,6 +508,10 @@ const elementOf = (
   // And where it writes where a picture came from (IMG-5/EXP-8), since
   // neither Slides nor PowerPoint has a field for provenance.
   const credit = creditFromToken(raw.description as string | undefined)
+  // A credit this system printed under a picture is part of the page, not
+  // part of the lecture: it says nothing the picture's own alt text has not
+  // already said, and read as content it becomes a caption nobody wrote.
+  if (isCreditLine(raw.description as string | undefined)) return null
 
   const image = raw.image as { contentUrl?: string } | undefined
   if (image) {
@@ -734,12 +766,61 @@ const pageOf = (
       undefined,
     background,
     ...(backgroundImage ? { backgroundImage } : {}),
-    elements: rawElements
-      .map(el => elementOf(el, page, scheme, ancestry))
-      .filter((el): el is SourceElement => el !== null),
+    elements: creditedPictures(
+      rawElements
+        .map(el => elementOf(el, page, scheme, ancestry))
+        .filter((el): el is SourceElement => el !== null),
+      printedCredits(rawElements),
+    ),
     ...(metadata ? { slotMetadata: metadata } : {}),
     ...(notes ? { notes } : {}),
   }
+}
+
+/**
+ * The credits this system printed on a slide, in the words it printed.
+ *
+ * Read even though the elements themselves are dropped, because a printed
+ * credit is the one copy that cannot go missing: the picture's own alt text
+ * carries the provenance, but alt text is not ours once the file leaves, and
+ * a conversion that drops it would take the licence with it. What is on the
+ * page is on the page.
+ */
+const printedCredits = (rawElements: Record<string, unknown>[]): string[] =>
+  rawElements
+    .filter(raw => isCreditLine(raw.description as string | undefined))
+    .map(raw => {
+      const shape = raw.shape as { text?: Record<string, unknown> } | undefined
+      return runsOf(shape?.text, {}, DEFAULT_PAGE.width)
+        .runs.map(run => run.text)
+        .join('')
+        .trim()
+    })
+    .filter(Boolean)
+
+/**
+ * Pictures with their provenance, from whichever copy survived.
+ *
+ * The alt text is preferred: it states the fields exactly, including the URLs
+ * a printed line has no room for. The printed line fills in for a picture
+ * whose alt text did not come back — which is the whole reason it is read.
+ *
+ * Matched by order rather than by position: the credits are printed in the
+ * order their pictures are drawn, and a slide with one picture — which is
+ * nearly all of them — cannot get this wrong.
+ */
+const creditedPictures = (
+  elements: SourceElement[],
+  printed: string[],
+): SourceElement[] => {
+  if (!printed.length) return elements
+  let next = 0
+  return elements.map(element => {
+    if (element.kind !== 'image' || element.attribution) return element
+    const line = printed[next++]
+    const attribution = creditFromLine(line)
+    return attribution ? { ...element, attribution } : element
+  })
 }
 
 /** Relative luminance of `#rrggbb`, for deciding what reads against what. */

@@ -18,6 +18,7 @@
  * one more thing to keep in step.
  */
 import AdmZip from 'adm-zip'
+import { CREDIT_LINE_TOKEN } from './image-attribution-token'
 
 /** Parts whose shapes may be slots: a presentation's layouts, and its slides.
  * Metadata on the layouts is what lets a template round-trip; metadata on the
@@ -25,9 +26,11 @@ import AdmZip from 'adm-zip'
 const AMENDABLE = /^ppt\/(slideLayouts|slides|slideMasters)\/[^/]+\.xml$/
 
 /** A shape name this system wrote, and therefore one worth describing: a slot
- * token, or a metadata payload. */
+ * token, a metadata payload, or the credit line printed under a picture. */
 const isOurs = (name: string): boolean =>
-  name.startsWith('slot:') || name.startsWith('{&quot;slidemachine&quot;')
+  name.startsWith('slot:') ||
+  name.startsWith('{&quot;slidemachine&quot;') ||
+  name === CREDIT_LINE_TOKEN
 
 /**
  * The same XML with `descr` added to every shape this system named.
