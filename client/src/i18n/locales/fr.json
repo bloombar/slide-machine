@@ -169,7 +169,7 @@
     },
     "accountTypeSection": "Type de compte",
     "planSection": "Forfait",
-    "accountTypeSectionHint": "Ce pour quoi vous utilisez Slide Machine. Cela détermine la confidentialité initiale de vos nouveaux cours.",
+    "accountTypeSectionHint": "Ce pour quoi vous utilisez Slide Machine. Rien n'en découle : vos réglages de confidentialité restent les vôtres.",
     "accountTypeUnset": "Non défini",
     "publicProfileSectionHint": "Enregistré au fil de la saisie. Ce que les inconnus voient sur votre profil.",
     "privacySectionHint": "Qui peut voir votre profil et les cours qui y figurent.",
@@ -182,24 +182,13 @@
   },
   "accountType": {
     "student": {
-      "label": "Étudiant",
-      "hint": "Votre profil et vos nouveaux cours démarrent en privé."
+      "label": "Étudiant"
     },
     "educator": {
-      "label": "Enseignant",
-      "hint": "Votre profil et vos nouveaux cours démarrent en public."
+      "label": "Enseignant"
     },
     "other": {
-      "label": "Autre",
-      "hint": "Votre profil et vos nouveaux cours démarrent en public."
-    }
-  },
-  "onboarding": {
-    "accountType": {
-      "title": "Qu'est-ce qui vous décrit le mieux ?",
-      "hint": "Cela détermine uniquement la confidentialité initiale de votre travail. Rien ne vous est masqué dans un cas comme dans l'autre.",
-      "changeable": "Vous pouvez le modifier à tout moment dans les paramètres.",
-      "error": "Impossible d'enregistrer votre réponse. Réessayez."
+      "label": "Autre"
     }
   },
   "language": {

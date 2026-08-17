@@ -13,7 +13,6 @@ import { Link, Outlet } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import HealthFooter from './HealthFooter'
 import ShellMenu from './ShellMenu'
-import AccountTypePrompt from '../AccountTypePrompt'
 import { ShellDrawerFrame } from './ShellDrawer'
 import badgeUrl from '../../assets/badge.png'
 import { useShellTitleSlot } from './ShellTitle'
@@ -69,7 +68,6 @@ export default function AppShell() {
           <Outlet />
         </main>
         <HealthFooter />
-        <AccountTypePrompt />
       </div>
     </ShellDrawerFrame>
   )

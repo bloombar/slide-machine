@@ -17,11 +17,7 @@ import type {
   UserSetProfileVisibilityInput,
   UserUpdateProfileInput,
 } from '@slide-machine/shared'
-import {
-  ACCOUNT_TYPES,
-  LOCALES,
-  accountDefaultsToPrivate,
-} from '@slide-machine/shared'
+import { ACCOUNT_TYPES, LOCALES } from '@slide-machine/shared'
 import { defineAction } from './define'
 import { self, type SelfAccess } from './access'
 import { registerAction } from './dispatch'
@@ -102,17 +98,14 @@ export const userSetProfileVisibility = defineAction<
 registerAction(userSetProfileVisibility)
 
 /**
- * Answers the post-sign-in prompt (AUTH-6) and, the first time only,
- * settles the account's privacy defaults from it: a student's profile
- * starts private, everyone else's stays public. Projects read the type
- * directly when they are created (actions/project.ts), so nothing else
- * has to be written here.
+ * What the account says it is (AUTH-6).
  *
- * Only the FIRST answer applies the defaults. Changing the type later
- * changes what new work starts as, and deliberately leaves the profile
- * alone: by then the visibility toggle beside it may hold a choice the
- * user actually made, and silently reversing it would be worse than
- * asking them to press one more control.
+ * A self-declaration and nothing more: it grants nothing, withholds
+ * nothing, and no default is chosen from it. It once set the account's
+ * privacy defaults on the first answer, which meant a signed-in account
+ * was held behind a modal before it could do anything; the defaults are
+ * the same for everyone again, and this is left as the profile field it
+ * always looked like.
  */
 export const userSetAccountType = defineAction<
   UserSetAccountTypeInput,
@@ -124,11 +117,7 @@ export const userSetAccountType = defineAction<
   input: z.object({ accountType: z.enum(ACCOUNT_TYPES) }),
   execute: async (ctx, input, { user }) => {
     const before = userSettingsSnapshot(user)
-    const first = user.accountType === undefined
     user.accountType = input.accountType
-    if (first && accountDefaultsToPrivate(input.accountType)) {
-      user.profileVisibility = 'private'
-    }
     await user.save()
     await recordSelfChange(user, before)
     return toUserDto(user)

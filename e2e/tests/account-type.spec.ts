@@ -1,20 +1,24 @@
 /**
- * The account-type prompt and the privacy defaults it chooses, end to end
- * (AUTH-6 / P-1): a new account is asked once, a student's profile and new
- * projects start private, an educator's stay public, and the answer is
- * changeable afterwards in account settings.
+ * The account type, end to end (AUTH-6).
  *
- * This is the one spec that imports Playwright's own `test` rather than the
- * shared fixture — the fixture answers the prompt for every other spec, and
- * this one is about the prompt.
+ * It once chose the privacy defaults an account's work started from, and was
+ * asked in a modal that nothing dismissed but an answer. Two things came of
+ * that: a signed-in account met a question before it could do anything, and
+ * a student's lectures were created restricted by a decision the student
+ * never made.
+ *
+ * It is a plain profile field now. What is worth proving is therefore mostly
+ * absence — nothing blocks a new account, and saying "student" re-scopes
+ * nothing — plus the one rule that does still hold a project back: an
+ * address nobody has confirmed (AUTH-3).
  */
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from './fixtures'
 import { createProject, openProjectSettings, verifyEmail } from './helpers'
 
 const stamp = Date.now()
 const password = 'sturdy-passw0rd'
 
-/** Registers and lands in the app, where the prompt is waiting. */
+/** Registers and lands in the app. */
 const register = async (page: Page, email: string, name: string) => {
   await page.goto('/register')
   await page.getByLabel('Display name').fill(name)
@@ -24,24 +28,6 @@ const register = async (page: Page, email: string, name: string) => {
   await expect(page).toHaveURL(/\/app$/)
 }
 
-const prompt = (page: Page) =>
-  page.getByRole('heading', { name: 'Which best describes you?' })
-
-/**
- * Answers the prompt, then confirms the address (AUTH-3).
- *
- * The confirmation matters to what follows: an unconfirmed account's
- * projects start restricted whatever it says it is, so without it a
- * restricted project would prove nothing about the account type, and a
- * public one could not happen at all.
- */
-const answerAndConfirm = async (page: Page, email: string, choice: RegExp) => {
-  await expect(prompt(page)).toBeVisible()
-  await page.getByRole('button', { name: choice }).click()
-  await expect(prompt(page)).toBeHidden()
-  await verifyEmail(page, email)
-}
-
 /** Creates a project and opens the tab that shows what it was created as. */
 const createProjectAndOpenPrivacy = async (page: Page, title: string) => {
   await createProject(page, title)
@@ -49,88 +35,83 @@ const createProjectAndOpenPrivacy = async (page: Page, title: string) => {
   await page.getByRole('tab', { name: 'Privacy & Sharing' }).click()
 }
 
-/** Opens the Privacy & Sharing tab of a project listed on the home page. */
-const openProjectPrivacyFromHome = async (page: Page, title: string) => {
-  await openProjectSettings(page, title)
-  await page.getByRole('tab', { name: 'Privacy & Sharing' }).click()
-}
-
-test('a student account is asked once, and starts private', async ({
+test('a new account is asked nothing and can start straight away', async ({
   page,
 }) => {
-  const email = `student-${stamp}@example.com`
-  await register(page, email, 'Stu Dent')
+  const email = `plain-${stamp}@example.com`
+  await register(page, email, 'Ada Plain')
 
-  // Asked on arrival, and blocking: the answer chooses defaults, so it has
-  // to land before the account creates anything.
-  await expect(prompt(page)).toBeVisible()
+  // Nothing in the way: the home page is usable on arrival.
   await expect(
-    page.getByText('Your profile and new lectures start private.'),
-  ).toBeVisible()
+    page.getByRole('heading', { name: /Which best describes you/i }),
+  ).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'New lecture' })).toBeVisible()
 
-  await page.getByRole('button', { name: /^Student/ }).click()
-  await expect(prompt(page)).toBeHidden()
-  // Confirm the address, so what follows is the account type's doing and
-  // not the unconfirmed-account rule (AUTH-3) reaching the same answer.
-  await verifyEmail(page, email)
-
-  // The profile turned private with the answer (SHARE-1)
+  // And the account has said nothing about itself, which is allowed.
   await page.goto('/app/settings?tab=privacy')
   await expect(
-    page.getByRole('checkbox', { name: 'Public profile' }),
-  ).not.toBeChecked()
+    page.getByRole('combobox', { name: 'Account type' }),
+  ).toHaveValue('')
+})
+
+test('saying "student" changes nothing about privacy', async ({ page }) => {
+  const email = `student-${stamp}@example.com`
+  await register(page, email, 'Stu Dent')
+  // Confirmed, so what follows is the account type's doing (or not) rather
+  // than the unconfirmed-account rule reaching the same answer.
+  await verifyEmail(page, email)
+
+  await page.goto('/app/settings?tab=privacy')
+  await page
+    .getByRole('combobox', { name: 'Account type' })
+    .selectOption('student')
   await expect(
     page.getByRole('combobox', { name: 'Account type' }),
   ).toHaveValue('student')
 
-  // ...and the next project is created restricted rather than public
-  await page.goto('/app')
-  await createProjectAndOpenPrivacy(page, 'StudentProj')
-  await expect(page.getByRole('radio', { name: /restricted/i })).toBeChecked()
-
-  // Not asked again on a later visit
-  await page.goto('/app')
-  await expect(prompt(page)).toBeHidden()
-})
-
-test('an educator account keeps the public defaults', async ({ page }) => {
-  const email = `educator-${stamp}@example.com`
-  await register(page, email, 'Ed Ucator')
-  await answerAndConfirm(page, email, /^Educator/)
-
-  await page.goto('/app/settings?tab=privacy')
+  // The profile is where it was — public — because saying what you are is
+  // not a privacy decision.
   await expect(
     page.getByRole('checkbox', { name: 'Public profile' }),
   ).toBeChecked()
 
+  // And the next project is created public, as everyone's is.
   await page.goto('/app')
-  await createProjectAndOpenPrivacy(page, 'EducatorProj')
+  await createProjectAndOpenPrivacy(page, 'StudentProj')
   await expect(page.getByRole('radio', { name: /public/i })).toBeChecked()
 })
 
-test('the answer is changeable, and changes what new work starts as', async ({
+test('the choice survives a reload, and can be taken back', async ({
   page,
 }) => {
-  const email = `switcher-${stamp}@example.com`
+  const email = `switch-${stamp}@example.com`
   await register(page, email, 'Switch Er')
-  await answerAndConfirm(page, email, /^Other/)
-
-  // A project made as "other" is public...
-  await createProjectAndOpenPrivacy(page, 'BeforeProj')
-  await expect(page.getByRole('radio', { name: /public/i })).toBeChecked()
 
   await page.goto('/app/settings?tab=privacy')
-  const type = page.getByRole('combobox', { name: 'Account type' })
-  await type.selectOption('student')
-  await expect(type).toHaveValue('student')
+  const select = page.getByRole('combobox', { name: 'Account type' })
+  await select.selectOption('educator')
+  await page.reload()
+  await expect(select).toHaveValue('educator')
 
-  // ...and stays public: the type chooses defaults for new work, it does
-  // not re-scope what already exists.
+  await select.selectOption('other')
+  await page.reload()
+  await expect(select).toHaveValue('other')
+})
+
+test('an unconfirmed address still starts a project restricted', async ({
+  page,
+}) => {
+  // The rule that survives (AUTH-3): publishing on behalf of an account
+  // nobody has proved they own is publishing without ever being asked.
+  const email = `unconfirmed-${stamp}@example.com`
+  await register(page, email, 'Un Confirmed')
+
+  await page.goto('/app/settings?tab=privacy')
+  await page
+    .getByRole('combobox', { name: 'Account type' })
+    .selectOption('educator')
+
   await page.goto('/app')
-  await createProjectAndOpenPrivacy(page, 'AfterProj')
+  await createProjectAndOpenPrivacy(page, 'UnconfirmedProj')
   await expect(page.getByRole('radio', { name: /restricted/i })).toBeChecked()
-  await page.getByRole('button', { name: 'Close settings' }).click()
-  await page.goto('/app')
-  await openProjectPrivacyFromHome(page, 'BeforeProj')
-  await expect(page.getByRole('radio', { name: /public/i })).toBeChecked()
 })

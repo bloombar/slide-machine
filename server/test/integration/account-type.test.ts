@@ -1,11 +1,15 @@
 /**
- * Integration tests for the account type and the privacy defaults it
- * chooses (AUTH-6 / P-1).
+ * Integration tests for the account type (AUTH-6).
  *
- * Three things are checked end to end, because the rule is only useful if
- * all three hold together: the answer is stored, a student's profile turns
- * private, and a student's next project is created restricted while
- * everyone else's is public.
+ * It is a self-declaration and nothing more. It once chose the privacy
+ * defaults an account's work started from, which meant a signed-in account
+ * met a modal before it could do anything and a student's lectures were
+ * created restricted; the defaults are the same for everyone again.
+ *
+ * What is checked is therefore mostly that nothing follows from it: saying
+ * "student" changes no visibility, and a project's own rule — an
+ * unconfirmed address (AUTH-3) — is the only thing that still restricts
+ * one.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import request from 'supertest'
@@ -64,7 +68,7 @@ beforeEach(async () => {
 })
 
 describe('user.setAccountType (AUTH-6)', () => {
-  it('starts absent, which is what makes the prompt appear', async () => {
+  it('starts absent, because an account need never say what it is', async () => {
     const user = await UserModel.findOne({ email: 'ada@example.com' })
     expect(user?.accountType).toBeUndefined()
   })
@@ -79,32 +83,26 @@ describe('user.setAccountType (AUTH-6)', () => {
     expect(user?.accountType).toBe('educator')
   })
 
-  it('turns a student’s profile private', async () => {
+  it.each(['student', 'educator', 'other'])(
+    'leaves a %s profile exactly as it was',
+    async type => {
+      const res = await act(ada, 'user.setAccountType', { accountType: type })
+      expect(res.status).toBe(200)
+      // Saying what you are is not a privacy decision. It used to turn a
+      // student's profile private, which is a choice they never made.
+      expect(res.body.profileVisibility).toBe('public')
+    },
+  )
+
+  it('leaves a visibility choice the account made alone', async () => {
+    await act(ada, 'user.setProfileVisibility', {
+      profileVisibility: 'private',
+    })
     const res = await act(ada, 'user.setAccountType', {
-      accountType: 'student',
+      accountType: 'educator',
     })
     expect(res.status).toBe(200)
     expect(res.body.profileVisibility).toBe('private')
-  })
-
-  it.each(['educator', 'other'])('leaves a %s profile public', async type => {
-    const res = await act(ada, 'user.setAccountType', { accountType: type })
-    expect(res.status).toBe(200)
-    expect(res.body.profileVisibility).toBe('public')
-  })
-
-  it('does not reverse a visibility choice made after the first answer', async () => {
-    await act(ada, 'user.setAccountType', { accountType: 'educator' })
-    // The user then deliberately opens their profile back up... or rather,
-    // deliberately closes it. Either way it is now their choice, not a default.
-    await act(ada, 'user.setProfileVisibility', { profileVisibility: 'public' })
-
-    const res = await act(ada, 'user.setAccountType', {
-      accountType: 'student',
-    })
-    expect(res.status).toBe(200)
-    expect(res.body.accountType).toBe('student')
-    expect(res.body.profileVisibility).toBe('public')
   })
 
   it('rejects an answer that is not one of the three', async () => {
@@ -127,36 +125,34 @@ describe('user.setAccountType (AUTH-6)', () => {
     expect(entries).toHaveLength(1)
     expect(entries[0]!.changes).toMatchObject({
       accountType: { to: 'student' },
-      profileVisibility: { from: 'public', to: 'private' },
     })
+    // Nothing else moved with it.
+    expect(entries[0]!.changes).not.toHaveProperty('profileVisibility')
   })
 })
 
-describe('project defaults follow the account type (AUTH-6 / P-1)', () => {
+describe('what a new project starts as (AUTH-3)', () => {
   const createProject = async (token: string) => {
     const res = await act(token, 'project.create', { title: 'Bio 101' })
     expect(res.status).toBe(200)
     return res.body as { id: string; visibility: string }
   }
 
-  it('creates a student’s project restricted', async () => {
-    await act(ada, 'user.setAccountType', { accountType: 'student' })
-    expect((await createProject(ada)).visibility).toBe('restricted')
-  })
-
-  it.each(['educator', 'other'])(
-    'creates a %s’s project public',
+  it.each(['student', 'educator', 'other'])(
+    'creates a %s’s project public, as it does everyone’s',
     async type => {
       await act(ada, 'user.setAccountType', { accountType: type })
       expect((await createProject(ada)).visibility).toBe('public')
     },
   )
 
-  it('creates a project public when the question is still unanswered', async () => {
+  it('creates a project public when the question is unanswered', async () => {
     expect((await createProject(ada)).visibility).toBe('public')
   })
 
-  it('keeps the unverified-email rule as well: whichever is stricter wins', async () => {
+  it('still restricts one for an address nobody has confirmed', async () => {
+    // The rule that survives: publishing on behalf of an account nobody has
+    // proved they own is publishing without ever being asked (AUTH-3).
     const byron = await registerUser('byron@example.com', false)
     await act(byron, 'user.setAccountType', { accountType: 'educator' })
     expect((await createProject(byron)).visibility).toBe('restricted')
@@ -167,12 +163,5 @@ describe('project defaults follow the account type (AUTH-6 / P-1)', () => {
     await act(ada, 'user.setAccountType', { accountType: 'student' })
     const still = await ProjectModel.findById(before.id)
     expect(still?.visibility).toBe('public')
-  })
-
-  it('follows a later change of account type', async () => {
-    await act(ada, 'user.setAccountType', { accountType: 'student' })
-    expect((await createProject(ada)).visibility).toBe('restricted')
-    await act(ada, 'user.setAccountType', { accountType: 'educator' })
-    expect((await createProject(ada)).visibility).toBe('public')
   })
 })

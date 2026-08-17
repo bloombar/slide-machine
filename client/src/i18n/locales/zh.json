@@ -169,7 +169,7 @@
     },
     "accountTypeSection": "账户类型",
     "planSection": "套餐",
-    "accountTypeSectionHint": "你使用 Slide Machine 的身份。它决定新课程的初始隐私设置。",
+    "accountTypeSectionHint": "你使用 Slide Machine 的用途。仅此而已——隐私设置仍由你自己决定。",
     "accountTypeUnset": "未设置",
     "publicProfileSectionHint": "编辑后自动保存。陌生人在你的个人资料页看到的内容。",
     "privacySectionHint": "谁可以查看你的个人资料页以及其中的课程。",
@@ -182,24 +182,13 @@
   },
   "accountType": {
     "student": {
-      "label": "学生",
-      "hint": "你的个人资料页和新课程默认为私密。"
+      "label": "学生"
     },
     "educator": {
-      "label": "教师",
-      "hint": "你的个人资料页和新课程默认为公开。"
+      "label": "教师"
     },
     "other": {
-      "label": "其他",
-      "hint": "你的个人资料页和新课程默认为公开。"
-    }
-  },
-  "onboarding": {
-    "accountType": {
-      "title": "以下哪项最符合你？",
-      "hint": "这只决定你的作品初始的隐私设置，两种选择都不会对你隐藏任何内容。",
-      "changeable": "你可以随时在设置中更改。",
-      "error": "无法保存你的选择，请重试。"
+      "label": "其他"
     }
   },
   "language": {

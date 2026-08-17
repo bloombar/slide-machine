@@ -8,7 +8,7 @@
  * TRANSLATION_PROVIDER is `mock` here (see playwright.config), which tags each
  * translated segment with `[<locale>]`, so the assertions are exact.
  */
-import { test, autoAnswerAccountType, expect, type Page } from './fixtures'
+import { test, expect, type Page } from './fixtures'
 import { createProject, verifyEmail } from './helpers'
 
 const stamp = Date.now()
@@ -32,7 +32,6 @@ test('translated viewing: switch language, read, and return to the original', as
 }) => {
   const authorContext = await browser.newContext()
   const authorPage = await authorContext.newPage()
-  await autoAnswerAccountType(authorPage)
   await register(authorPage, author)
 
   // A one-slide public lecture
@@ -97,7 +96,6 @@ test('translated viewing: an editor cannot edit while reading a translation', as
 }) => {
   const context = await browser.newContext()
   const page = await context.newPage()
-  await autoAnswerAccountType(page)
   await register(page, {
     email: `translate-editor-${stamp}@example.com`,
     name: 'Editor',
@@ -148,7 +146,6 @@ test('translated narration: the deck is heard in the language it is read in', as
 }) => {
   const context = await browser.newContext()
   const page = await context.newPage()
-  await autoAnswerAccountType(page)
   await register(page, {
     email: `translate-narration-${stamp}@example.com`,
     name: 'Narrator',
