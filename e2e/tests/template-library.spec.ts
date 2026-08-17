@@ -520,7 +520,10 @@ test('a box carries the author’s instruction to the AI (TMPL-10)', async ({
 
   const instruction = 'Only the concept being introduced, in three words.'
   await page.getByLabel('What goes in it (for the AI)').fill(instruction)
-  await page.getByLabel('Max words').fill('6')
+  // One ceiling, in the unit the author thinks in: pick the counting, then
+  // the number.
+  await page.getByLabel('Counted in').selectOption('words')
+  await page.getByLabel('Maximum').fill('6')
   await page.getByLabel('The slide should always fill this').check()
   await page.getByRole('button', { name: 'Save' }).click()
   // A refused save says so instead; "Saved" is the check it was accepted
@@ -535,7 +538,8 @@ test('a box carries the author’s instruction to the AI (TMPL-10)', async ({
   await expect(page.getByLabel('What goes in it (for the AI)')).toHaveValue(
     instruction,
   )
-  await expect(page.getByLabel('Max words')).toHaveValue('6')
+  await expect(page.getByLabel('Counted in')).toHaveValue('words')
+  await expect(page.getByLabel('Maximum')).toHaveValue('6')
   await expect(
     page.getByLabel('The slide should always fill this'),
   ).toBeChecked()

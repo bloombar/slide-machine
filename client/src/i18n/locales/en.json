@@ -311,6 +311,9 @@
     "layoutSettings": "Layout",
     "boxSettings": "Box",
     "templateSettings": "Template settings",
+    "aiInstructionsLabel": "Instructions for the AI",
+    "aiInstructionsPlaceholder": "e.g. Write for first-year undergraduates. Avoid jargon; define any term the first time it appears.",
+    "aiInstructionsHint": "Sent with every lecture written on this design — the audience, the reading level, the words to avoid. Each box can still say what belongs in it.",
     "backToLayout": "Back to layout settings",
     "layoutPurposeHint": "The AI reads this when choosing a layout for a slide.",
     "removeLayoutConfirm": "“{name}” will be removed from this template. Slides already using it keep their content.",
@@ -433,6 +436,12 @@
     "slotInstructionsHint": "e.g. a runnable Python snippet, no more than eight lines",
     "slotRequired": "The slide should always fill this",
     "maxWords": "Max words",
+    "slotLimit": "Maximum",
+    "slotLimitUnit": "Counted in",
+    "limitUnit": {
+      "characters": "Max characters",
+      "words": "Max words"
+    },
     "update": {
       "heading": "This design has been updated",
       "hintClean": "The changes are visual only — nothing on your slides needs adjusting.",

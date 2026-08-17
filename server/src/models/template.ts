@@ -31,6 +31,9 @@ export interface TemplateDb {
   renderMode?: TemplateRenderMode
   theme: Record<string, unknown>
   layouts: Layout[]
+  /** What the design asks the AI to keep in mind for every lecture drawn
+   * with it (GEN-6/GEN-11). */
+  aiInstructions?: string
   /** Private by default; unlisted or public once the author shares it. */
   visibility: 'private' | 'unlisted' | 'public'
   /** Net vote score, denormalized like a deck's so lists can sort on it. */
@@ -56,6 +59,7 @@ const templateSchema = new Schema<TemplateDb>(
     renderMode: { type: String, enum: ['components', 'positioned'] },
     theme: { type: Schema.Types.Mixed, required: true },
     layouts: { type: Schema.Types.Mixed, required: true },
+    aiInstructions: { type: String },
     visibility: {
       type: String,
       enum: ['private', 'unlisted', 'public'],
@@ -89,6 +93,7 @@ export const toTemplateDto = (doc: HydratedDocument<TemplateDb>): Template => ({
   // and a layout with neither tree nor geometry relied on a component that no
   // longer exists. Applied on read, so no stored document is rewritten.
   layouts: adoptDefaultTree(normalizePositions(doc.layouts)),
+  ...(doc.aiInstructions ? { aiInstructions: doc.aiInstructions } : {}),
   visibility: doc.visibility,
   voteScore: doc.voteScore,
   createdAt: doc.createdAt.toISOString(),

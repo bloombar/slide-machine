@@ -18,7 +18,7 @@ Fill ONLY the slots listed for the layoutType you choose; leave every other slot
 Slide text must be concise and presentation-ready: tight bullets, no filler words, no first person.{{language}} Constraints list APPROXIMATE CHARACTER BUDGETS (maxTitleChars, maxBodyChars, maxBulletChars, maxCaptionChars, plus maxBullets, a count) — never exceed them in any language; the server rejects overloaded slides.
 
 For imageGuidance: only when an illustrative photo genuinely helps, choose a layoutType whose slot list above includes "image" (e.g. image-heavy, two-column) AND give 2-4 concrete search keywords, ORDERED from most to least likely to return a relevant photo — each keyword is searched on its own, so the first must be the strongest standalone query. If you choose any layout without an "image" slot, set none=true — a text-only slide.{{seededImages}}
-{{projectSeed}}{{deckSeed}}
+{{templateInstructions}}{{projectSeed}}{{deckSeed}}
 {{rolling}}{{deckStructure}}{{capacity}}{{currentTranscript}}
 
 New phrase: "{{phrase}}"

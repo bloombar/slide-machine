@@ -922,6 +922,11 @@ export const sessionPhrase = defineAction<
         deck: seedLayer(deck.seedContext, assets.deck),
       },
       layoutDescriptors: descriptors,
+      // What the design asks for, for every lecture drawn with it (GEN-11).
+      // Read from the template rather than the deck's pinned snapshot: this
+      // is guidance for writing, not structure the deck is drawn from, so an
+      // author who adjusts it means it to apply next time they speak.
+      templateInstructions: template.aiInstructions,
       deckStructure,
       seededImages: seededImages.length ? seededImages : undefined,
       freedom:

@@ -9,6 +9,7 @@
  * stored under it, so renaming would orphan what people have written. The
  * label is theirs to change.
  */
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import type {
@@ -22,6 +23,7 @@ import {
   MAX_SLOT_DESCRIPTION,
   SLOT_KINDS as SHARED_SLOT_KINDS,
   TEXT_STYLE_ROLES,
+  isTextualKind,
 } from '@slide-machine/shared'
 import { FONT_STACKS } from '../slide/fonts'
 import { HIGHLIGHTED_LANGUAGES } from '../slide/code-languages'
@@ -63,6 +65,9 @@ const toNumber = (raw: string): number | undefined => {
   const n = Number(raw)
   return Number.isFinite(n) ? n : undefined
 }
+
+/** What a box's capacity is counted in. */
+type LimitUnit = 'characters' | 'words'
 
 function Field({
   label,
@@ -149,6 +154,38 @@ export default function SlotInspector({
    * placeholder in the limit fields, so the number in force is visible
    * without pretending the box chose it. */
   const inherited = style.textStyle ? (textStyles[style.textStyle] ?? {}) : {}
+
+  /**
+   * The capacity control's state: one number, and what it counts.
+   *
+   * The slot says which unit it is bounded in — a word ceiling makes it a
+   * word-ceiling box — but an empty box says nothing, and an author who
+   * picks "words" before typing a number would watch the menu snap back.
+   * So the choice is remembered until the selection moves to another box,
+   * where the slot's own answer takes over again.
+   */
+  const boundIn: LimitUnit =
+    spec?.maxWords !== undefined ? 'words' : 'characters'
+  // Remembered with the box it was chosen for, so moving to another box
+  // reads that box's own answer rather than carrying this one along. Kept
+  // this way rather than reset in an effect, which would be a second render
+  // to undo the first.
+  const [chosenUnit, setChosenUnit] = useState<{
+    slot?: string
+    unit: LimitUnit
+  } | null>(null)
+  const limitUnit =
+    chosenUnit && chosenUnit.slot === spec?.name ? chosenUnit.unit : boundIn
+  const limitValue = limitUnit === 'words' ? spec?.maxWords : spec?.maxChars
+
+  /** Writes the chosen ceiling and clears the other, so a box is bounded one
+   * way and an author has one number to predict. */
+  const setLimit = (unit: LimitUnit, value: number | undefined) =>
+    onSpec(
+      unit === 'words'
+        ? { maxWords: value, maxChars: undefined }
+        : { maxChars: value, maxWords: undefined },
+    )
 
   /** What the single "what goes in it" control reads. */
   const contentType: ContentType = container
@@ -585,30 +622,68 @@ export default function SlotInspector({
               {t('template.slotRequired')}
             </label>
           )}
-          {spec && (
-            <Field label={t('template.maxChars')}>
+          {spec && isTextualKind(spec.kind) && (
+            /*
+             * How much the box holds, as one number and the unit it is
+             * counted in.
+             *
+             * These were two boxes, and both applied at once with the tighter
+             * winning — which asked an author to hold two ceilings in their
+             * head to predict one. A box is written to a length, and an
+             * author thinks of that length in one unit or the other:
+             * characters for a title, words for prose.
+             *
+             * So the unit is a choice, and choosing it clears the other. An
+             * author who had set both loses one the moment they touch this,
+             * which is what picking either/or means — and it is their own
+             * edit doing it, on a control that says so.
+             *
+             * Not a `Field`: that wraps its children in one label, and two
+             * controls sharing an accessible name is a control nobody can
+             * name. There is no caption above the pair either — the menu
+             * names the ceiling itself ("Max words"), so a label over it
+             * would say the same thing twice. Each control keeps its own
+             * accessible name, since a lone spin button reads as nothing to
+             * anyone who cannot see the menu beside it — and the two names
+             * are kept clear of each other, since a name that contains
+             * another matches both when a control is looked up by it.
+             */
+            <div className="flex gap-2">
               <input
                 type="number"
                 min={1}
-                placeholder={inherited.maxChars?.toString() ?? ''}
-                value={spec.maxChars ?? ''}
-                onFocus={() => onRecord(`maxchars:${spec.name}`)}
-                onChange={e => onSpec({ maxChars: toNumber(e.target.value) })}
-                className={inputClass}
+                aria-label={t('template.slotLimit')}
+                // Only the character ceiling is inherited from the text
+                // style, so only it has something to suggest.
+                placeholder={
+                  limitUnit === 'characters'
+                    ? (inherited.maxChars?.toString() ?? '')
+                    : ''
+                }
+                value={limitValue ?? ''}
+                onFocus={() => onRecord(`limit:${spec.name}`)}
+                onChange={e => setLimit(limitUnit, toNumber(e.target.value))}
+                className={`${inputClass} w-20`}
               />
-            </Field>
-          )}
-          {spec && spec.kind !== 'image' && (
-            <Field label={t('template.maxWords')}>
-              <input
-                type="number"
-                min={1}
-                value={spec.maxWords ?? ''}
-                onFocus={() => onRecord(`maxwords:${spec.name}`)}
-                onChange={e => onSpec({ maxWords: toNumber(e.target.value) })}
+              <select
+                aria-label={t('template.slotLimitUnit')}
+                value={limitUnit}
+                onChange={e => {
+                  onRecord()
+                  const next = e.target.value as LimitUnit
+                  setChosenUnit({ slot: spec.name, unit: next })
+                  // The number means the same thing to the author; it is
+                  // the counting that changed.
+                  setLimit(next, limitValue)
+                }}
                 className={inputClass}
-              />
-            </Field>
+              >
+                <option value="characters">
+                  {t('template.limitUnit.characters')}
+                </option>
+                <option value="words">{t('template.limitUnit.words')}</option>
+              </select>
+            </div>
           )}
           {spec?.kind === 'code' && (
             /* Which language the listing is highlighted as. Set on the

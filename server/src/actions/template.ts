@@ -23,6 +23,7 @@ import type {
   Layout,
   Template,
 } from '@slide-machine/shared'
+import { MAX_TEMPLATE_INSTRUCTIONS } from '@slide-machine/shared'
 import { defineAction } from './define'
 import { registerAction, ActionValidationError } from './dispatch'
 import {
@@ -109,6 +110,21 @@ const templateBody = z.object({
   renderMode: z.enum(['components', 'positioned']).optional(),
   theme: z.record(z.string(), z.unknown()),
   layouts: z.array(layoutSchema).min(1),
+  /**
+   * What the design asks the AI to keep in mind for every lecture drawn with
+   * it (GEN-11): the audience, the register, the vocabulary.
+   *
+   * Bounded and trimmed like a slot's description, and treated the same way
+   * — author text describing the reader to the model, never an instruction
+   * to the system. Empty is stored as absent so a cleared box does not
+   * become a blank line in every prompt.
+   */
+  aiInstructions: z
+    .string()
+    .trim()
+    .max(MAX_TEMPLATE_INSTRUCTIONS)
+    .optional()
+    .transform(v => v || undefined),
   /** Private until the author shares it: unlisted is reachable by link,
    * public is listed for discovery (TMPL-4). */
   visibility: z.enum(['private', 'unlisted', 'public']).optional(),
@@ -243,6 +259,7 @@ export const templateDuplicate = defineAction<
       renderMode: source.renderMode,
       theme: source.theme,
       layouts: source.layouts,
+      aiInstructions: source.aiInstructions,
       visibility: 'private',
     })
     return toTemplateDto(doc)
@@ -257,6 +274,7 @@ export const templateUpdate = defineAction<
     renderMode?: 'components' | 'positioned'
     theme: Record<string, unknown>
     layouts: z.infer<typeof templateBody>['layouts']
+    aiInstructions?: string
     visibility?: 'private' | 'unlisted' | 'public'
   },
   Template,
@@ -276,6 +294,7 @@ export const templateUpdate = defineAction<
     doc.renderMode = input.renderMode
     doc.theme = input.theme
     doc.layouts = normalizeLayouts(input.layouts)
+    doc.aiInstructions = input.aiInstructions
     if (input.visibility) doc.visibility = input.visibility
     await doc.save()
     return toTemplateDto(doc)

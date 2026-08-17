@@ -35,7 +35,7 @@ import {
  */
 export type DeckTemplate = Pick<
   Template,
-  'id' | 'name' | 'renderMode' | 'theme' | 'layouts'
+  'id' | 'name' | 'renderMode' | 'theme' | 'layouts' | 'aiInstructions'
 >
 
 /**
@@ -60,13 +60,20 @@ const stableStringify = (value: unknown): string => {
  * Fingerprint of the structure a deck is drawn with.
  *
  * Covers everything that reaches the renderer — name, render mode, theme and
- * layouts — rather than trying to judge which edits "really" matter. A purely
- * cosmetic change does make a new version, and the update notice then
- * correctly reports that no content needs adjusting; guessing instead would
- * mean sometimes missing a change that did.
+ * layouts — plus what the design asks the AI for, rather than trying to judge
+ * which edits "really" matter. A purely cosmetic change does make a new
+ * version, and the update notice then correctly reports that no content needs
+ * adjusting; guessing instead would mean sometimes missing a change that did.
+ *
+ * The AI instruction is in the hash for that reason: changing who a design
+ * writes for is a change to the design, and a lecture pinned to the old
+ * wording should be told there is a newer one rather than quietly drifting.
  */
 export const contentHashOf = (
-  template: Pick<Template, 'name' | 'renderMode' | 'theme' | 'layouts'>,
+  template: Pick<
+    Template,
+    'name' | 'renderMode' | 'theme' | 'layouts' | 'aiInstructions'
+  >,
 ): string =>
   createHash('sha256')
     .update(
@@ -75,6 +82,7 @@ export const contentHashOf = (
         renderMode: template.renderMode,
         theme: template.theme,
         layouts: template.layouts,
+        aiInstructions: template.aiInstructions,
       }),
     )
     .digest('hex')
@@ -106,6 +114,7 @@ export const ensureVersion = async (
         renderMode: template.renderMode,
         theme: template.theme,
         layouts: template.layouts,
+        aiInstructions: template.aiInstructions,
       },
     },
     { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
@@ -131,6 +140,7 @@ export const templateFromVersion = (
   renderMode: version.renderMode,
   theme: version.theme,
   layouts: version.layouts,
+  ...(version.aiInstructions ? { aiInstructions: version.aiInstructions } : {}),
 })
 
 /** A lecture, as the pinning code needs to see one. */

@@ -68,6 +68,7 @@ const saved = (onSave: ReturnType<typeof vi.fn>) => {
     theme: Record<string, unknown>
     layouts: Layout[]
     visibility: Template['visibility']
+    aiInstructions?: string
   }
 }
 
@@ -479,7 +480,7 @@ describe('how much a box holds', () => {
     fireEvent.change(screen.getByLabelText('Text style'), {
       target: { value: 'heading' },
     })
-    const field = screen.getByLabelText('Max characters')
+    const field = screen.getByLabelText('Maximum')
     expect(field).toHaveValue(null)
     expect(field).toHaveAttribute('placeholder', '80')
   })
@@ -487,9 +488,11 @@ describe('how much a box holds', () => {
   it('lets a box state a budget of its own', () => {
     const onSave = renderEditor()
     selectBox('title')
-    fireEvent.change(screen.getByLabelText('Max characters'), {
+    fireEvent.change(screen.getByLabelText('Maximum'), {
       target: { value: '25' },
     })
+    // Characters is what a box with no ceiling reads in, and what the text
+    // style inherits in.
     expect(saved(onSave).layouts[0]!.slots[0]!.maxChars).toBe(25)
   })
 
@@ -522,13 +525,96 @@ describe('how much a box holds', () => {
     expect(saved(onSave).layouts[0]!.slots[0]!.description).toBeUndefined()
   })
 
-  it('takes a word ceiling as well as a character one', () => {
-    const onSave = renderEditor()
-    selectBox('title')
-    fireEvent.change(screen.getByLabelText('Max words'), {
-      target: { value: '40' },
+  /**
+   * One ceiling, in the unit the author thinks in.
+   *
+   * These were two boxes, both applied at once with the tighter winning,
+   * which asked an author to hold two numbers in their head to predict one.
+   */
+  describe('the unit a capacity is counted in', () => {
+    const unit = () => screen.getByLabelText('Counted in')
+
+    it('counts in characters until told otherwise', () => {
+      renderEditor()
+      selectBox('title')
+      expect(unit()).toHaveValue('characters')
+      // The menu names the ceiling, so nothing above it needs to.
+      expect((unit() as HTMLSelectElement).options[0]!.text).toBe(
+        'Max characters',
+      )
+      expect((unit() as HTMLSelectElement).options[1]!.text).toBe('Max words')
     })
-    expect(saved(onSave).layouts[0]!.slots[0]!.maxWords).toBe(40)
+
+    it('takes a word ceiling instead', () => {
+      const onSave = renderEditor()
+      selectBox('title')
+      fireEvent.change(unit(), { target: { value: 'words' } })
+      fireEvent.change(screen.getByLabelText('Maximum'), {
+        target: { value: '40' },
+      })
+      const slot = saved(onSave).layouts[0]!.slots[0]!
+      expect(slot.maxWords).toBe(40)
+      expect(slot.maxChars).toBeUndefined()
+    })
+
+    it('reads back in the unit the box was bounded in', () => {
+      renderEditor(vi.fn(), {
+        layouts: [
+          {
+            ...layout('content', 'Content', ['title', 'body']),
+            slots: [
+              { name: 'title', kind: 'text', label: 'title', maxWords: 12 },
+              { name: 'body', kind: 'text', label: 'body' },
+            ],
+          } as Layout,
+          layout('whiteboard', 'Whiteboard', []),
+        ],
+      })
+      selectBox('title')
+      expect(unit()).toHaveValue('words')
+      expect(screen.getByLabelText('Maximum')).toHaveValue(12)
+    })
+
+    it('carries the number across when the unit changes', () => {
+      const onSave = renderEditor()
+      selectBox('title')
+      fireEvent.change(screen.getByLabelText('Maximum'), {
+        target: { value: '25' },
+      })
+      fireEvent.change(unit(), { target: { value: 'words' } })
+      const slot = saved(onSave).layouts[0]!.slots[0]!
+      // The number meant the same thing to the author; the counting changed.
+      expect(slot.maxWords).toBe(25)
+      expect(slot.maxChars).toBeUndefined()
+    })
+
+    it('drops the other ceiling, so only one is ever in force', () => {
+      // A box that carried both loses one the moment the author touches
+      // this — which is what picking either/or means.
+      const onSave = renderEditor(vi.fn(), {
+        layouts: [
+          {
+            ...layout('content', 'Content', ['title', 'body']),
+            slots: [
+              {
+                name: 'title',
+                kind: 'text',
+                label: 'title',
+                maxChars: 80,
+                maxWords: 12,
+              },
+              { name: 'body', kind: 'text', label: 'body' },
+            ],
+          } as Layout,
+          layout('whiteboard', 'Whiteboard', []),
+        ],
+      })
+      selectBox('title')
+      fireEvent.change(unit(), { target: { value: 'characters' } })
+      const slot = saved(onSave).layouts[0]!.slots[0]!
+      expect(slot.maxChars).toBe(12)
+      expect(slot.maxWords).toBeUndefined()
+    })
   })
 
   it('marks a box the slide should always fill', () => {
@@ -793,5 +879,62 @@ describe('undo', () => {
     expect(screen.queryByLabelText('What is it')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
     expect(screen.getByLabelText('What is it')).toBeInTheDocument()
+  })
+})
+
+/**
+ * What the design asks the AI for, deck-wide (GEN-11).
+ *
+ * A box's own description says what belongs in that box. This says who the
+ * whole lecture is for — the reading level, the words to avoid — which would
+ * otherwise have to be repeated on every box that holds prose.
+ */
+describe('the design’s instructions for the AI', () => {
+  const field = () => screen.getByLabelText('Instructions for the AI')
+
+  it('starts empty for a design that has never said anything', () => {
+    renderEditor()
+    expect(field()).toHaveValue('')
+  })
+
+  it('shows what the design already asks for', () => {
+    renderEditor(vi.fn(), { aiInstructions: 'Write for nine-year-olds.' })
+    expect(field()).toHaveValue('Write for nine-year-olds.')
+  })
+
+  it('saves what was typed', () => {
+    const onSave = renderEditor()
+    fireEvent.change(field(), {
+      target: { value: 'Avoid jargon; define every term.' },
+    })
+    expect(saved(onSave).aiInstructions).toBe(
+      'Avoid jargon; define every term.',
+    )
+  })
+
+  it('saves a cleared box as nothing at all', () => {
+    // Not an empty string: stored blank, it would become a labelled but empty
+    // line in every prompt, on a call that runs once per spoken phrase.
+    const onSave = renderEditor(vi.fn(), { aiInstructions: 'Something.' })
+    fireEvent.change(field(), { target: { value: '   ' } })
+    expect(saved(onSave).aiInstructions).toBeUndefined()
+  })
+
+  it('counts as unsaved work, so it cannot be closed away by accident', () => {
+    const onDirtyChange = vi.fn()
+    render(
+      <TemplateEditor
+        template={template()}
+        layoutSources={[template()]}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+        onDirtyChange={onDirtyChange}
+      />,
+    )
+    onDirtyChange.mockClear()
+    fireEvent.change(screen.getByLabelText('Instructions for the AI'), {
+      target: { value: 'Write for nine-year-olds.' },
+    })
+    expect(onDirtyChange).toHaveBeenCalledWith(true)
   })
 })

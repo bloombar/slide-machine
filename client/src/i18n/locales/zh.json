@@ -311,6 +311,9 @@
     "layoutSettings": "版式",
     "boxSettings": "文本框",
     "templateSettings": "模板设置",
+    "aiInstructionsLabel": "给 AI 的说明",
+    "aiInstructionsPlaceholder": "例如：面向大一学生撰写。避免行话；术语首次出现时给出定义。",
+    "aiInstructionsHint": "随使用此设计的每一次讲稿生成一起发送：受众、阅读水平、应避免的词语。每个文本框仍可各自说明其内容。",
     "backToLayout": "返回版式设置",
     "layoutPurposeHint": "AI 在为幻灯片选择版式时会读取这段文字。",
     "removeLayoutConfirm": "“{name}”将从此模板中移除。已使用它的幻灯片会保留内容。",
@@ -433,6 +436,12 @@
     "slotInstructionsHint": "例如：一段可运行的 Python 代码，不超过八行",
     "slotRequired": "幻灯片应始终填写这一项",
     "maxWords": "最多字数",
+    "slotLimit": "最大值",
+    "slotLimitUnit": "计量单位",
+    "limitUnit": {
+      "characters": "最多字符数",
+      "words": "最多词数"
+    },
     "update": {
       "heading": "此设计已更新",
       "hintClean": "改动仅涉及外观，幻灯片内容无需调整。",

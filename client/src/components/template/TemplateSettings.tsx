@@ -13,7 +13,10 @@
  */
 import { useTranslation } from 'react-i18next'
 import type { Template, TextStyleSpec } from '@slide-machine/shared'
-import { TEXT_STYLE_ROLES } from '@slide-machine/shared'
+import {
+  MAX_TEMPLATE_INSTRUCTIONS,
+  TEXT_STYLE_ROLES,
+} from '@slide-machine/shared'
 import { FONT_STACKS } from '../slide/fonts'
 import { themeTextStyles } from '../slide/theme'
 
@@ -46,17 +49,21 @@ const toNumber = (raw: string): number | undefined => {
 export default function TemplateSettings({
   name,
   visibility,
+  aiInstructions,
   theme,
   onName,
   onVisibility,
+  onAiInstructions,
   onTheme,
   onRecord,
 }: {
   name: string
   visibility: Template['visibility']
+  aiInstructions: string
   theme: Record<string, unknown>
   onName: (name: string) => void
   onVisibility: (v: Template['visibility']) => void
+  onAiInstructions: (value: string) => void
   onTheme: (patch: Record<string, unknown>) => void
   onRecord: (key?: string) => void
 }) {
@@ -127,6 +134,32 @@ export default function TemplateSettings({
             {t(`template.visibilityHint.${visibility}`)}
           </p>
         </div>
+      </div>
+
+      {/* What the design asks the AI for, deck-wide (GEN-11). A box's own
+          description says what belongs in that box; this says who the whole
+          lecture is for, which would otherwise have to be repeated on every
+          box that holds prose. */}
+      <div className="flex flex-col gap-1">
+        {/* The hint sits outside the label, as the visibility one does:
+            inside, it would become part of the control's accessible name. */}
+        <label className="flex flex-col gap-1">
+          <span className="text-sm font-medium text-slate-700">
+            {t('template.aiInstructionsLabel')}
+          </span>
+          <textarea
+            value={aiInstructions}
+            onFocus={() => onRecord('template-ai-instructions')}
+            onChange={e => onAiInstructions(e.target.value)}
+            maxLength={MAX_TEMPLATE_INSTRUCTIONS}
+            rows={3}
+            placeholder={t('template.aiInstructionsPlaceholder')}
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+        </label>
+        <p className="text-xs text-slate-500">
+          {t('template.aiInstructionsHint')}
+        </p>
       </div>
 
       <fieldset className="flex flex-col gap-2">
