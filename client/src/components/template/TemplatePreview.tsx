@@ -72,6 +72,32 @@ export default function TemplatePreview({
     [shown, atCapacity, template.theme],
   )
 
+  /**
+   * Where this layout starts in the shared run of pictures.
+   *
+   * Every layout began at the first one, so tab two showed tab one's
+   * photographs again: distinct within a slide, and the same few across the
+   * whole design. Counting the picture boxes that come before this layout
+   * carries the run on instead, so a template is as varied as its pool
+   * allows.
+   *
+   * By position in the template, so it is the same on every render and a
+   * layout does not change its pictures when something unrelated does.
+   */
+  const imageStart = useMemo(() => {
+    if (!shown) return 0
+    const layouts = template.layouts ?? []
+    const at = layouts.indexOf(shown)
+    const index = at >= 0 ? at : layouts.findIndex(l => l.type === shown.type)
+    if (index <= 0) return 0
+    return layouts
+      .slice(0, index)
+      .reduce(
+        (n, l) => n + l.slots.filter(spec => spec.kind === 'image').length,
+        0,
+      )
+  }, [template.layouts, shown])
+
   const slide = useMemo(
     () =>
       shown &&
@@ -90,8 +116,9 @@ export default function TemplatePreview({
         images,
         template.id,
         budgets,
+        imageStart,
       ),
-    [shown, images, template.id, budgets, t],
+    [shown, images, template.id, budgets, imageStart, t],
   )
 
   // A template with no layouts has nothing to show; render its background so
