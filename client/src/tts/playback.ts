@@ -156,8 +156,10 @@ export interface TtsPlayback {
   speakSlide: (slide: Slide) => void
   /** Speak text that is not saved yet, as a preview (EDIT-6). */
   speakText: (slide: Slide, text: string) => void
-  /** Toolbar play/pause: pause/resume whatever is speaking (deck playback or
-   * a single slide's narration), or start deck playback when idle. */
+  /** Toolbar play/pause. Pause stops whatever is speaking; Play always plays
+   * the deck — resuming paused deck playback, promoting a paused single
+   * slide's narration into deck playback (it finishes the slide, then steps
+   * on), or starting the deck from `activeIndex` when idle. */
   toggle: (activeIndex: number) => void
   /** Pause or resume whatever is speaking, whichever flow started it. */
   pauseResume: () => void
@@ -191,6 +193,9 @@ export function useTtsPlayback({
   // Mirror of activeIndex for the imperative getProgress reader (WB-2), which
   // must not depend on a re-render to see the current slide.
   const activeIndexRef = useRef<number | null>(null)
+  // Mirror of scope for the step chain, which must see a mid-clip promotion
+  // from 'slide' to 'deck' (toolbar Play) without waiting on a re-render.
+  const scopeRef = useRef<TtsScope>(null)
   // Marks for the active clip, mirrored (like activeIndex) for the imperative
   // getProgress reader so stroke sync sees them without a re-render (WB-2).
   const marksRef = useRef<TtsMark[]>([])
@@ -243,6 +248,7 @@ export function useTtsPlayback({
     pausedRef.current = false
     setStatus('idle')
     setScope(null)
+    scopeRef.current = null
     setActiveIndex(null)
     activeIndexRef.current = null
     marksRef.current = []
@@ -373,6 +379,36 @@ export function useTtsPlayback({
     [getSlides, navigate, playSynthesized, stop, takeClip],
   )
 
+  /**
+   * Speaks slide `i`, then — unless the scope is a single slide's narration —
+   * steps on through the rest of the deck, warming each next slide so the
+   * hand-off doesn't wait on the network. The scope is read live (through
+   * `scopeRef`) rather than captured: a paused single slide the toolbar's Play
+   * promotes to deck playback finishes its clip and keeps stepping, instead of
+   * ending after the slide it was started for.
+   */
+  const step = useCallback(
+    function stepFrom(i: number, token: number) {
+      if (token !== tokenRef.current) return
+      if (i >= getSlides().length) {
+        stop()
+        return
+      }
+      void playAt(i, 'transcript', token, () => {
+        if (scopeRef.current === 'slide') stop()
+        else stepFrom(i + 1, token)
+      }).then(() => {
+        if (
+          token === tokenRef.current &&
+          scopeRef.current !== 'slide' &&
+          i + 1 < getSlides().length
+        )
+          prefetch(i + 1)
+      })
+    },
+    [getSlides, playAt, prefetch, stop],
+  )
+
   /** Runs the deck from `fromIndex`, speaking each slide in turn. `keepPaused`
    * leaves an already-paused deck paused (arrow-key skipping while paused):
    * the new slide's audio is fetched and cued, but waits for resume. */
@@ -384,23 +420,11 @@ export function useTtsPlayback({
       if (!keepPaused) pausedRef.current = false
       const token = ++tokenRef.current
       setScope('deck')
+      scopeRef.current = 'deck'
       setStatus(pausedRef.current ? 'paused' : 'playing')
-      const count = getSlides().length
-      const step = (i: number) => {
-        if (token !== tokenRef.current) return
-        if (i >= count) {
-          stop()
-          return
-        }
-        // Once this slide is actually speaking, warm the next one so the
-        // hand-off doesn't wait on the network.
-        void playAt(i, 'transcript', token, () => step(i + 1)).then(() => {
-          if (token === tokenRef.current && i + 1 < count) prefetch(i + 1)
-        })
-      }
-      step(Math.max(0, fromIndex))
+      step(Math.max(0, fromIndex), token)
     },
-    [getSlides, halt, playAt, prefetch, stop, stopMic],
+    [halt, step, stopMic],
   )
 
   const playDeck = useCallback(
@@ -431,13 +455,16 @@ export function useTtsPlayback({
       const token = ++tokenRef.current
       const index = getSlides().findIndex(s => s.id === slide.id)
       setScope('slide')
+      scopeRef.current = 'slide'
       setStatus('playing')
       // Speak the slide's stored narration/transcript (same as deck playback),
       // not the rendered text — the server narrates from content when a slide
-      // has no transcript of its own.
-      void playAt(index >= 0 ? index : 0, 'transcript', token, stop)
+      // has no transcript of its own. Runs on the deck's own step chain: the
+      // 'slide' scope is what stops it after this one slide, so the toolbar's
+      // Play can promote it into deck playback mid-clip.
+      step(Math.max(0, index), token)
     },
-    [getSlides, halt, playAt, stop, stopMic],
+    [getSlides, halt, step, stopMic],
   )
 
   /**
@@ -458,6 +485,7 @@ export function useTtsPlayback({
       setActiveIndex(null)
       activeIndexRef.current = null
       setScope('text')
+      scopeRef.current = 'text'
       setStatus('playing')
       // No locale: a preview speaks exactly the words in the editor, and a
       // translated view is read-only anyway (SHARE-2).
@@ -485,13 +513,23 @@ export function useTtsPlayback({
 
   const toggle = useCallback(
     (idx: number) => {
-      // Anything already speaking — the deck, one slide (kebab "Speak this
-      // slide"), or a preview — pauses/resumes; only from idle does the
-      // button start deck playback.
-      if (status !== 'idle') pauseResume()
-      else playDeck(idx)
+      if (status === 'paused' && scope === 'slide') {
+        // The toolbar's Play always plays the deck. A paused single slide
+        // resumes where it stopped, finishes, then the deck continues from
+        // the next slide instead of ending after that one — so promote the
+        // scope and warm the next slide the way deck playback would have.
+        setScope('deck')
+        scopeRef.current = 'deck'
+        const i = activeIndexRef.current
+        if (i != null && i + 1 < getSlides().length) prefetch(i + 1)
+        pauseResume()
+      } else if (status !== 'idle') {
+        // Anything speaking — deck, slide, or preview — pauses; a paused
+        // deck (or preview) resumes as before.
+        pauseResume()
+      } else playDeck(idx)
     },
-    [status, pauseResume, playDeck],
+    [getSlides, pauseResume, playDeck, prefetch, scope, status],
   )
 
   const getProgress = useCallback((): TtsProgress | null => {

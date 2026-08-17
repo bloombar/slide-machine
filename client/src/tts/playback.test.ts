@@ -198,11 +198,16 @@ describe('useTtsPlayback', () => {
   })
 
   // "Speak this slide" (kebab) runs through the same toolbar button, so the
-  // listener can pause a single slide's narration too — before this, toggle
-  // only handled deck scope and would restart deck playback over it.
-  it('toggle pauses and resumes a single slide narration', async () => {
-    mockedSynth.mockResolvedValue({ url: 'u', marks: [] })
-    const { hook } = setup()
+  // listener can pause a single slide's narration — and the toolbar's Play
+  // always means "play the deck": resuming finishes the paused clip where it
+  // stopped, then continues through the rest of the deck instead of ending
+  // after that slide.
+  it('toggle pauses a slide narration; resuming continues as the deck', async () => {
+    mockedSynth.mockImplementation(async (id: string) => ({
+      url: `url-${id}`,
+      marks: [],
+    }))
+    const { hook, navigate } = setup()
 
     act(() => hook.result.current.speakSlide(slides[0]!))
     await waitFor(() => expect(hook.result.current.status).toBe('playing'))
@@ -211,12 +216,22 @@ describe('useTtsPlayback', () => {
     act(() => hook.result.current.toggle(0))
     expect(hook.result.current.status).toBe('paused')
     expect(audios[0]!.pause).toHaveBeenCalled()
-    // Still the slide's narration — the deck was not started over it.
-    expect(hook.result.current.scope).toBe('slide')
 
+    // Resume: the same clip keeps playing (not reloaded from the start), and
+    // the narration is now deck playback.
     act(() => hook.result.current.toggle(0))
     expect(hook.result.current.status).toBe('playing')
-    expect(hook.result.current.scope).toBe('slide')
+    expect(hook.result.current.scope).toBe('deck')
+    expect(audios[0]!.src).toBe('url-s1')
+
+    // The adopted clip finishes → the deck steps on to the next slide...
+    act(() => audios[0]!.end())
+    await waitFor(() => expect(audios[0]!.src).toBe('url-s2'))
+    expect(navigate).toHaveBeenCalledWith(1)
+
+    // ...and ends after the last one.
+    act(() => audios[0]!.end())
+    expect(hook.result.current.status).toBe('idle')
   })
 
   // The transcript editor's preview (EDIT-6) runs on this same controller, so

@@ -2824,10 +2824,15 @@ describe('DeckViewerPage title in the primary nav', () => {
     await screen.findByRole('button', { name: 'Play deck' })
     expect(calls.filter(u => u.includes('/tts'))).toHaveLength(1)
 
-    // Clicking again resumes the slide's clip — still no deck playback.
+    // Clicking Play again resumes the paused clip (no re-fetch of s1) and
+    // promotes it to deck playback — the next slide is prefetched so the deck
+    // continues automatically once this slide's narration finishes.
     fireEvent.click(screen.getByRole('button', { name: 'Play deck' }))
     await screen.findByRole('button', { name: 'Pause playback' })
-    expect(calls.filter(u => u.includes('/tts'))).toHaveLength(1)
+    expect(calls.filter(u => u.includes('/api/slides/s1/tts'))).toHaveLength(1)
+    await waitFor(() =>
+      expect(calls.some(u => u.includes('/api/slides/s2/tts'))).toBe(true),
+    )
   })
 
   it('refreshes the edited age immediately after an auto-save', async () => {
