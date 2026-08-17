@@ -10,8 +10,15 @@
 import { useEffect, useState } from 'react'
 import { dispatchAction } from '../../api/actions'
 
-/** Enough to fill a layout with several picture boxes without repeating. */
-const COUNT = 4
+/**
+ * Enough to fill a layout with several picture boxes without repeating.
+ *
+ * A collage layout can hold half a dozen; four meant the fifth box showed the
+ * first picture again, which reads as a mistake the author made rather than
+ * as a placeholder. Asked for once per session and shared by every tab, so
+ * the extra costs nothing.
+ */
+const COUNT = 12
 
 /** Shared across mounts, so reopening the editor is instant. */
 let cached: Promise<string[]> | undefined

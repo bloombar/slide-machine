@@ -118,3 +118,80 @@ describe('sampleSlide at capacity', () => {
     expect((slide.slots?.title as { value: string }).value).toBe('A sli')
   })
 })
+
+/**
+ * A preview picture has one job: to show where the pictures go. A collage
+ * filled with the same photograph does the opposite — the boxes stop reading
+ * as separate boxes, which is the thing the preview exists to show.
+ */
+describe('the pictures a preview puts in a layout', () => {
+  const picture = (name: string): SlotSpec => ({
+    name,
+    kind: 'image',
+    label: name,
+  })
+
+  const refsFrom = (count: number, pool: string[]): (string | undefined)[] => {
+    const slots = Array.from({ length: count }, (_, i) => picture(`p${i}`))
+    const slide = sampleSlide(layout(slots), text, pool)
+    return slots.map(s => {
+      const value = slide.slots?.[s.name]
+      return value?.kind === 'image' ? value.ref : undefined
+    })
+  }
+
+  it('gives every box a different one', () => {
+    const pool = Array.from({ length: 12 }, (_, i) => `http://img/${i}.jpg`)
+    const refs = refsFrom(6, pool)
+    expect(new Set(refs).size).toBe(refs.length)
+  })
+
+  it('still fills every box when there are fewer pictures than boxes', () => {
+    // Repeating beats an empty hole: a blank box reads as a broken preview,
+    // where a repeat reads as a placeholder. It only happens when the search
+    // came back short.
+    const refs = refsFrom(4, ['http://img/only.jpg'])
+    expect(refs.every(Boolean)).toBe(true)
+  })
+
+  it('leaves the boxes empty when no picture came back at all', () => {
+    expect(refsFrom(2, []).every(ref => ref === undefined)).toBe(true)
+  })
+
+  /**
+   * A design is several layouts, and an author flicks between them. Each one
+   * starting at the first picture made every tab show the same photographs:
+   * distinct within a slide, repeated across the design.
+   */
+  describe('across the layouts of one design', () => {
+    const refsAt = (start: number, pool: string[]): (string | undefined)[] => {
+      const slots = [picture('a'), picture('b')]
+      const slide = sampleSlide(
+        layout(slots),
+        text,
+        pool,
+        'preview',
+        undefined,
+        start,
+      )
+      return slots.map(s => {
+        const value = slide.slots?.[s.name]
+        return value?.kind === 'image' ? value.ref : undefined
+      })
+    }
+
+    it('carries the run on, so a later layout shows later pictures', () => {
+      const pool = Array.from({ length: 8 }, (_, i) => `http://img/${i}.jpg`)
+      const first = refsAt(0, pool)
+      const second = refsAt(2, pool)
+      expect(new Set([...first, ...second]).size).toBe(4)
+    })
+
+    it('comes back round when the design outruns the pool', () => {
+      // Unavoidable, and better than an empty box: the pool is finite and a
+      // design may hold more picture boxes than it has pictures.
+      const pool = ['http://img/0.jpg', 'http://img/1.jpg']
+      expect(refsAt(2, pool)).toEqual(pool)
+    })
+  })
+})

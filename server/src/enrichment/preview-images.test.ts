@@ -56,20 +56,29 @@ describe('preview images', () => {
   })
 
   it('searches once, however many times it is asked', async () => {
-    // Clicking between layout tabs must not make a request each time.
+    // Clicking between layout tabs must not make a request each time. The
+    // default set covers several subjects, so one round is several calls —
+    // what matters is that a second ask adds none.
     await previewImageUrls()
+    const afterFirst = vi.mocked(searchWikimedia).mock.calls.length
+    expect(afterFirst).toBeGreaterThan(0)
     await previewImageUrls()
     await previewImageUrls(undefined, 2)
-    expect(searchWikimedia).toHaveBeenCalledTimes(1)
+    expect(searchWikimedia).toHaveBeenCalledTimes(afterFirst)
   })
 
   it('shares one search between callers that arrive together', async () => {
+    await previewImageUrls()
+    const afterFirst = vi.mocked(searchWikimedia).mock.calls.length
+    resetPreviewImageCache()
+    vi.mocked(searchWikimedia).mockClear()
     await Promise.all([
       previewImageUrls(),
       previewImageUrls(),
       previewImageUrls(),
     ])
-    expect(searchWikimedia).toHaveBeenCalledTimes(1)
+    // Three callers, one round between them.
+    expect(searchWikimedia).toHaveBeenCalledTimes(afterFirst)
   })
 
   it('keeps separate answers for separate queries', async () => {
@@ -101,8 +110,9 @@ describe('preview images', () => {
   it('does not retry a failed search on every click', async () => {
     vi.mocked(searchWikimedia).mockRejectedValue(new Error('offline'))
     await previewImageUrls()
+    const afterFirst = vi.mocked(searchWikimedia).mock.calls.length
     await previewImageUrls()
-    expect(searchWikimedia).toHaveBeenCalledTimes(1)
+    expect(searchWikimedia).toHaveBeenCalledTimes(afterFirst)
   })
 
   it('tries again once a failure has had time to clear', async () => {
@@ -118,11 +128,66 @@ describe('preview images', () => {
     expect(await previewImageUrls()).toEqual(['http://img/c.jpg'])
   })
 
+  /**
+   * A preview picture has one job: to show where the pictures go. A layout
+   * filled with the same photograph does the opposite — the boxes stop
+   * reading as separate boxes, which is the thing the preview exists to
+   * show.
+   */
+  describe('what fills a layout with several picture boxes', () => {
+    it('looks in several places, not one', async () => {
+      await previewImageUrls()
+      const asked = vi
+        .mocked(searchWikimedia)
+        .mock.calls.map(c => JSON.stringify(c[0]))
+      expect(new Set(asked).size).toBeGreaterThan(1)
+    })
+
+    it('never offers the same picture twice', async () => {
+      // Two subjects can land on the same file. Shown twice in one layout it
+      // reads as a mistake the author made.
+      vi.mocked(searchWikimedia).mockResolvedValue([
+        candidate('http://img/same.jpg'),
+        candidate('http://img/other.jpg'),
+      ])
+      resetPreviewImageCache()
+      const urls = await previewImageUrls(undefined, 12)
+      expect(new Set(urls).size).toBe(urls.length)
+    })
+
+    it('offers enough for a collage, not four', async () => {
+      // Each subject finds its own pictures, as a real search does — one
+      // mock answer for every subject would dedupe down to a handful.
+      vi.mocked(searchWikimedia).mockImplementation(async keywords =>
+        Array.from({ length: 3 }, (_, i) =>
+          candidate(`http://img/${keywords[0]}-${i}.jpg`),
+        ),
+      )
+      resetPreviewImageCache()
+      expect((await previewImageUrls(undefined, 12)).length).toBeGreaterThan(4)
+    })
+
+    it('puts a different subject in each consecutive box', async () => {
+      // Two frames of the same leaf are two URLs and one picture to the eye.
+      // Taking the subjects in turn keeps them apart.
+      vi.mocked(searchWikimedia).mockImplementation(async keywords =>
+        Array.from({ length: 3 }, (_, i) =>
+          candidate(`http://img/${keywords[0]}-${i}.jpg`),
+        ),
+      )
+      resetPreviewImageCache()
+      const urls = await previewImageUrls(undefined, 4)
+      const subjects = urls.map(u => u.split('/').pop()!.split('-')[0])
+      expect(new Set(subjects).size).toBe(subjects.length)
+    })
+  })
+
   it('keeps a found set for hours', async () => {
     vi.useFakeTimers()
     await previewImageUrls()
+    const afterFirst = vi.mocked(searchWikimedia).mock.calls.length
     vi.advanceTimersByTime(60 * 60 * 1000)
     await previewImageUrls()
-    expect(searchWikimedia).toHaveBeenCalledTimes(1)
+    expect(searchWikimedia).toHaveBeenCalledTimes(afterFirst)
   })
 })

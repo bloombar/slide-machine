@@ -340,7 +340,10 @@ export const templatePreviewImage = defineAction<
   access: signedIn(),
   input: z.object({
     query: z.string().trim().min(1).max(60).optional(),
-    count: z.number().int().min(1).max(8).optional(),
+    // Up to the pool the search asks for: a collage layout can hold half a
+    // dozen picture boxes, and a preview that runs out shows one of them
+    // twice.
+    count: z.number().int().min(1).max(16).optional(),
   }),
   execute: async (_ctx, input) => ({
     urls: await previewImageUrls(input.query, input.count ?? 1),

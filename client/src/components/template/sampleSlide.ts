@@ -68,6 +68,11 @@ const SAMPLE_PREFORMATTED =
  * same one four times; with none, image slots stay empty and the renderer
  * shows the quiet block it always did.
  *
+ * `imageStart` is where in that cycle to begin. Every layout starting at zero
+ * meant each one showed the same pictures as the one before it: distinct
+ * within a tab, and the same three photographs across the whole design. The
+ * caller counts the boxes that came before and says so.
+ *
  * With `budgets`, every bounded box is filled to its limit instead of to the
  * sample's own length.
  */
@@ -77,6 +82,7 @@ export const sampleSlide = (
   images: string[] = [],
   id = 'preview',
   budgets?: Record<string, SlotLimits>,
+  imageStart = 0,
 ): Slide => {
   const named: Record<string, string> = {
     title: text.title,
@@ -101,7 +107,7 @@ export const sampleSlide = (
           : items,
       }
     } else if (spec.kind === 'image') {
-      const ref = images[picture++ % Math.max(1, images.length)]
+      const ref = images[(imageStart + picture++) % Math.max(1, images.length)]
       slots[spec.name] = { kind: 'image', ref }
     } else if (spec.kind === 'code') {
       // A box that will hold a listing has to preview as one, or an author

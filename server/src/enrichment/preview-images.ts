@@ -21,9 +21,38 @@
 import { runUnmetered } from '../billing/usage-context'
 import { searchImageCandidates } from './search'
 
-/** What to look for when the caller has nothing better. Broad and neutral: a
- * placeholder should read as "a picture goes here", not as a subject. */
-const DEFAULT_QUERY = 'lecture hall classroom'
+/**
+ * What to look for when the caller has nothing better.
+ *
+ * Several subjects rather than one, because a preview picture has one job: to
+ * show where the pictures go. A single query returns one room from a dozen
+ * angles, and a layout filled with them reads as a wall of the same grey
+ * photograph — the boxes stop being legible as separate boxes, which is the
+ * one thing the preview exists to show.
+ *
+ * What a lecture is ABOUT, not where it happens. Rooms and blackboards are
+ * the furniture around a lecture; a slide holds its subject — a leaf, an
+ * orbit, a circuit, a chart. Filling a design's picture boxes with lecture
+ * halls previews a deck nobody would make.
+ *
+ * Chosen to differ in kind as well as subject — a photograph, a diagram, a
+ * map, a chart — because a box is being shown, and two pictures of the same
+ * sort of thing read as one picture repeated.
+ */
+const DEFAULT_QUERIES = [
+  'photosynthesis leaf closeup',
+  'solar system planets',
+  'human anatomy diagram',
+  'circuit board electronics',
+  'ancient roman architecture',
+  'statistics chart graph',
+  'world map continents',
+  'crystal mineral macro',
+]
+
+/** The cache key for the default set. Fixed, so every caller that asks for
+ * "whatever you have" shares one entry. */
+const DEFAULT_KEY = 'default:mixed'
 
 /** A found set is good for hours — nothing about it goes stale. */
 const TTL_MS = 6 * 60 * 60 * 1000
@@ -39,9 +68,9 @@ const MISS_TTL_MS = 5 * 60 * 1000
  * cannot grow one entry per typo. */
 const MAX_ENTRIES = 32
 
-/** How many results to ask for, so one search can fill a layout with several
- * picture boxes without repeating itself. */
-const POOL = 8
+/** How many results to ask for. Generous: a collage layout can hold half a
+ * dozen picture boxes, and running out means showing one of them twice. */
+const POOL = 16
 
 interface Entry {
   at: number
@@ -68,12 +97,52 @@ const remember = (key: string, urls: string[]): string[] => {
   return urls
 }
 
-const search = async (query: string): Promise<string[]> => {
+/** How many to keep from any one subject. A commons search returns whole
+ * shoots — the same leaf photographed eight times — so a handful from each of
+ * several subjects beats many from one. */
+const PER_SUBJECT = 3
+
+/**
+ * Pictures for the preview: each subject searched on its own, then taken in
+ * turn.
+ *
+ * Searching every subject at once and keeping the best few gave a set that
+ * was distinct by URL and identical to the eye — the top two results were two
+ * frames of the same leaf, from the same shoot, under sequential filenames. A
+ * design showing those in consecutive boxes looks like it is showing one
+ * picture twice, which is the thing the pool exists to prevent.
+ *
+ * Taking them in turn — leaf, orbit, diagram, board, leaf, orbit — puts a
+ * different subject in every consecutive box and pushes any near-duplicate a
+ * whole round away.
+ */
+const search = async (queries: string[]): Promise<string[]> => {
   try {
     // Wikimedia and Openverse need no credentials, so this works on a
-    // deployment that has configured nothing.
-    const found = await runUnmetered(() => searchImageCandidates([query], POOL))
-    return found.map(c => c.url)
+    // deployment that has configured nothing. A subject that finds nothing
+    // simply contributes nothing.
+    const bySubject = await Promise.all(
+      queries.map(query =>
+        runUnmetered(() => searchImageCandidates([query], PER_SUBJECT)).catch(
+          () => [],
+        ),
+      ),
+    )
+
+    const urls: string[] = []
+    const seen = new Set<string>()
+    for (let rank = 0; rank < PER_SUBJECT; rank++) {
+      for (const subject of bySubject) {
+        const url = subject[rank]?.url
+        // Distinct pictures, not merely distinct results: two subjects can
+        // land on the same file.
+        if (url && !seen.has(url)) {
+          seen.add(url)
+          urls.push(url)
+        }
+      }
+    }
+    return urls.slice(0, POOL)
   } catch {
     // A preview picture is never worth an error. The editor renders the empty
     // block it always did.
@@ -87,16 +156,18 @@ const search = async (query: string): Promise<string[]> => {
  * image host is down would be a poor trade.
  */
 export const previewImageUrls = async (
-  query: string = DEFAULT_QUERY,
+  query?: string,
   count = 1,
 ): Promise<string[]> => {
-  const key = query.trim().toLowerCase() || DEFAULT_QUERY
+  const asked = query?.trim().toLowerCase()
+  const key = asked || DEFAULT_KEY
+  const queries = asked ? [asked] : DEFAULT_QUERIES
   const hit = cache.get(key)
   if (hit && fresh(hit)) return hit.urls.slice(0, count)
 
   const pending =
     inFlight.get(key) ??
-    search(key)
+    search(queries)
       .then(urls => remember(key, urls))
       .finally(() => inFlight.delete(key))
   inFlight.set(key, pending)
