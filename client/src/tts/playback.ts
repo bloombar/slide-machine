@@ -156,7 +156,8 @@ export interface TtsPlayback {
   speakSlide: (slide: Slide) => void
   /** Speak text that is not saved yet, as a preview (EDIT-6). */
   speakText: (slide: Slide, text: string) => void
-  /** Toolbar play/pause: start deck playback, or pause/resume it. */
+  /** Toolbar play/pause: pause/resume whatever is speaking (deck playback or
+   * a single slide's narration), or start deck playback when idle. */
   toggle: (activeIndex: number) => void
   /** Pause or resume whatever is speaking, whichever flow started it. */
   pauseResume: () => void
@@ -484,10 +485,13 @@ export function useTtsPlayback({
 
   const toggle = useCallback(
     (idx: number) => {
-      if (scope === 'deck' && status !== 'idle') pauseResume()
+      // Anything already speaking — the deck, one slide (kebab "Speak this
+      // slide"), or a preview — pauses/resumes; only from idle does the
+      // button start deck playback.
+      if (status !== 'idle') pauseResume()
       else playDeck(idx)
     },
-    [scope, status, pauseResume, playDeck],
+    [status, pauseResume, playDeck],
   )
 
   const getProgress = useCallback((): TtsProgress | null => {

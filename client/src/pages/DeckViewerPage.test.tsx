@@ -2777,6 +2777,59 @@ describe('DeckViewerPage title in the primary nav', () => {
     },
   )
 
+  // The kebab's "Speak this slide" runs on the same audio as deck playback, so
+  // the toolbar button must flip to Pause and be able to pause it — before,
+  // it stayed on Play and clicking it started deck playback over the slide.
+  it('play button shows Pause during "Speak this slide" and pauses it', async () => {
+    vi.spyOn(runtimeConfig, 'getTtsEnabled').mockReturnValue(true)
+    // jsdom has no media playback; a stub element keeps the clip "playing".
+    const pause = vi.fn()
+    class FakeAudio {
+      src = ''
+      onended: (() => void) | null = null
+      play = vi.fn(async () => {})
+      pause = pause
+      removeAttribute = vi.fn()
+    }
+    vi.stubGlobal('Audio', FakeAudio)
+    const { calls } = mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({ status: 200, body: deckView }),
+      '/tts': () => ({ status: 200, body: { url: 'clip', marks: [] } }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByRole('button', { name: 'Play deck' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Speak this slide' }))
+
+    // The toolbar button reflects the slide narration...
+    const pauseButton = await screen.findByRole('button', {
+      name: 'Pause playback',
+    })
+    // ...and clicking it pauses that narration instead of starting the deck.
+    fireEvent.click(pauseButton)
+    expect(pause).toHaveBeenCalled()
+    await screen.findByRole('button', { name: 'Play deck' })
+    expect(calls.filter(u => u.includes('/tts'))).toHaveLength(1)
+
+    // Clicking again resumes the slide's clip — still no deck playback.
+    fireEvent.click(screen.getByRole('button', { name: 'Play deck' }))
+    await screen.findByRole('button', { name: 'Pause playback' })
+    expect(calls.filter(u => u.includes('/tts'))).toHaveLength(1)
+  })
+
   it('refreshes the edited age immediately after an auto-save', async () => {
     mockFetchRoutes({
       '/api/auth/refresh': () => ({

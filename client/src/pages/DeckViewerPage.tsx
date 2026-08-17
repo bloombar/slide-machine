@@ -1124,10 +1124,13 @@ export default function DeckViewerPage() {
   /** The slide the deck play button starts from: the active one per mode. */
   const activePlayIndex = (): number =>
     mode === 'carousel' ? nav.current : (nav.visibleIndex() ?? nav.current)
-  const deckPlaying = tts.scope === 'deck' && tts.status === 'playing'
+  /** Whether any narration is speaking — deck playback or a single slide via
+   * the kebab's "Speak this slide" — so the toolbar button always reflects
+   * (and can pause) what is heard. */
+  const narrationPlaying = tts.status === 'playing'
   /** Speaks a slide's content (kebab option), stopping any current playback. */
   const speakSlide = (slide: Slide) => tts.speakSlide(slide)
-  // Space toggles deck narration play/pause, matching the toolbar button —
+  // Space toggles narration play/pause, matching the toolbar button —
   // active only when TTS is on and the deck has slides to play.
   useSpaceKey(
     () => tts.toggle(activePlayIndex()),
@@ -1847,25 +1850,27 @@ export default function DeckViewerPage() {
                 label={
                   view.slides.length === 0
                     ? t('deck.play.empty')
-                    : deckPlaying
+                    : narrationPlaying
                       ? t('deck.play.pause')
                       : t('deck.play.hint')
                 }
               >
                 <button
                   aria-label={
-                    deckPlaying ? t('deck.play.pause') : t('deck.play.play')
+                    narrationPlaying
+                      ? t('deck.play.pause')
+                      : t('deck.play.play')
                   }
-                  aria-pressed={deckPlaying}
+                  aria-pressed={narrationPlaying}
                   disabled={view.slides.length === 0}
                   onClick={() => tts.toggle(activePlayIndex())}
                   className={`rounded-md p-2 ${
-                    deckPlaying
+                    narrationPlaying
                       ? 'bg-indigo-50 text-indigo-600'
                       : 'text-slate-500 hover:text-slate-900'
                   } disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:text-slate-300`}
                 >
-                  {deckPlaying ? (
+                  {narrationPlaying ? (
                     <Pause className="h-5 w-5" aria-hidden />
                   ) : (
                     <Play className="h-5 w-5" aria-hidden />
