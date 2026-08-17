@@ -105,6 +105,7 @@ export default function TemplateEditorPage() {
       theme: Record<string, unknown>
       layouts: Layout[]
       visibility: Template['visibility']
+      aiInstructions?: string
     }): Promise<boolean> => {
       if (!template) return Promise.resolve(false)
       setSaving(true)

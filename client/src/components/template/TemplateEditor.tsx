@@ -106,6 +106,9 @@ interface Draft {
   theme: Record<string, unknown>
   layouts: Layout[]
   visibility: Template['visibility']
+  /** Held as a string, never absent, so undo restores an emptied box as
+   * empty rather than as untouched. */
+  aiInstructions: string
   layoutIndex: number
   selectedId: string | null
 }
@@ -199,6 +202,7 @@ export default function TemplateEditor({
     theme: Record<string, unknown>
     layouts: Layout[]
     visibility: Template['visibility']
+    aiInstructions?: string
   }) => Promise<boolean>
   onCancel: () => void
   /** Reports unsaved work, so the surface around the editor can refuse to
@@ -215,6 +219,12 @@ export default function TemplateEditor({
   const [theme, setTheme] = useState<Record<string, unknown>>(template.theme)
   const [layouts, setLayouts] = useState<Layout[]>(template.layouts)
   const [visibility, setVisibility] = useState(template.visibility)
+  // The design's own note to the AI (GEN-11). Held as a string rather than
+  // `string | undefined` so the textarea is always controlled; the save turns
+  // an empty one back into absent.
+  const [aiInstructions, setAiInstructions] = useState(
+    template.aiInstructions ?? '',
+  )
   const [layoutIndex, setLayoutIndex] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
@@ -265,16 +275,18 @@ export default function TemplateEditor({
       theme,
       layouts,
       visibility,
+      aiInstructions,
       layoutIndex,
       selectedId,
     }),
-    [name, theme, layouts, visibility, layoutIndex, selectedId],
+    [name, theme, layouts, visibility, aiInstructions, layoutIndex, selectedId],
   )
   const restore = useCallback((d: Draft) => {
     setName(d.name)
     setTheme(d.theme)
     setLayouts(d.layouts)
     setVisibility(d.visibility)
+    setAiInstructions(d.aiInstructions)
     setLayoutIndex(d.layoutIndex)
     setSelectedId(d.selectedId)
   }, [])
@@ -584,12 +596,13 @@ export default function TemplateEditor({
    * box as an edit. A template is a few kilobytes, so this is cheap.
    */
   const dirty =
-    JSON.stringify({ name, theme, layouts, visibility }) !==
+    JSON.stringify({ name, theme, layouts, visibility, aiInstructions }) !==
     JSON.stringify({
       name: template.name,
       theme: template.theme,
       layouts: template.layouts,
       visibility: template.visibility,
+      aiInstructions: template.aiInstructions ?? '',
     })
 
   useEffect(() => {
@@ -600,7 +613,14 @@ export default function TemplateEditor({
 
   // The preview reflects the draft, so a colour change is visible before it
   // is saved rather than after.
-  const draft: Template = { ...template, name, theme, layouts, visibility }
+  const draft: Template = {
+    ...template,
+    name,
+    theme,
+    layouts,
+    visibility,
+    aiInstructions: aiInstructions || undefined,
+  }
 
   /**
    * Saving measures what the browser drew and writes it into each layout's
@@ -622,6 +642,9 @@ export default function TemplateEditor({
       theme,
       layouts: flattened,
       visibility,
+      // Cleared reads as unset, so an emptied box does not become a blank
+      // line in every prompt.
+      aiInstructions: aiInstructions.trim() || undefined,
     })
   }
 
@@ -742,9 +765,11 @@ export default function TemplateEditor({
       <TemplateSettings
         name={name}
         visibility={visibility}
+        aiInstructions={aiInstructions}
         theme={theme}
         onName={setName}
         onVisibility={setVisibility}
+        onAiInstructions={setAiInstructions}
         onTheme={patch => setTheme(prev => ({ ...prev, ...patch }))}
         onRecord={history.record}
       />

@@ -521,6 +521,22 @@ const instructions = (req: SlideGenerationRequest): string => {
         .join('\n')}`
     : ''
 
+  /*
+   * What the template asks for, above the lecture's own context.
+   *
+   * A design carries guidance a slot description cannot — who the deck is
+   * for, what register to write in — and it applies to every slide drawn
+   * with it (GEN-11). Placed before the seed layers because it is the
+   * broadest of them: the lecture's plan is more specific and should read as
+   * refining this, not competing with it.
+   *
+   * Labelled as the design's instruction and nothing more. It is author
+   * text, so it says what to write like — never what to do.
+   */
+  const templateInstructions = req.templateInstructions?.trim()
+    ? `\nThe design this lecture uses asks for:\n${req.templateInstructions.trim()}\n`
+    : ''
+
   const projectSeed = req.seedContext?.project
     ? `\nCourse background (general):\n${req.seedContext.project}`
     : ''
@@ -660,6 +676,7 @@ A SECOND, SEPARATE one is not a change to that box: another program, another for
       Boolean(req.suggestDeckTitle),
     ),
     deckTitle,
+    templateInstructions,
     updateRules,
     currentDeclared,
     lockLayout,

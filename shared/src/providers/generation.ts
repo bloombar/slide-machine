@@ -45,6 +45,16 @@ export interface SlideGenerationRequest {
   }
   /** The active template's layouts — the option set the model must pick from (GEN-6). */
   layoutDescriptors: LayoutDescriptor[]
+  /**
+   * What the active template asks the model to keep in mind for the whole
+   * deck (`Template.aiInstructions`): who it is for, what register to write
+   * in, what to avoid.
+   *
+   * Deck-wide, where a slot's description is box-wide — "use language an
+   * elementary-school reader can follow" is not a fact about a box. Absent
+   * when the design says nothing, which is most of them.
+   */
+  templateInstructions?: string
   seededImages?: SeededImageDescriptor[]
   /** Content freedom 1-5: 1 = only what was said, 5 = free
    * elaboration. Servers resolve it from lecture → project → config. */

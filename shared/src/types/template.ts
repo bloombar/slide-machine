@@ -183,6 +183,18 @@ export interface SlotSpec {
 export const MAX_SLOT_DESCRIPTION = 200
 
 /**
+ * How much a template may say to the model about the whole deck
+ * (`Template.aiInstructions`).
+ *
+ * Larger than a slot's cap because it is sent once per generation rather
+ * than once per box, and it carries the kind of thing a slot description
+ * cannot: who the lecture is for, what register to write in, what to avoid.
+ * Still bounded — every byte is latency on a call that runs per phrase, and
+ * it is untrusted author text flowing into a prompt.
+ */
+export const MAX_TEMPLATE_INSTRUCTIONS = 600
+
+/**
  * How one box paints itself and sets type inside it.
  *
  * Sizes are in `cqi` — a percent of the slide's WIDTH — so type and spacing
@@ -480,6 +492,21 @@ export interface Template {
   /** Visual theme: colors, typography, spacing. Shape is renderer-defined for now. */
   theme: Record<string, unknown>
   layouts: Layout[]
+  /**
+   * What this design asks the AI to keep in mind while writing any lecture
+   * drawn with it (GEN-6/GEN-11).
+   *
+   * A slot description says what belongs in one box; this says what belongs
+   * in the deck — the audience, the register, the vocabulary. "Use language
+   * an elementary-school reader can follow" is not a fact about a box, and
+   * it would otherwise have to be repeated on every one of them.
+   *
+   * It is **data, never a command**, exactly as a slot description is: it is
+   * length-capped (`MAX_TEMPLATE_INSTRUCTIONS`), it describes the audience
+   * to the model, and it can never change how the system behaves. Every
+   * limit the design states is still enforced on whatever comes back.
+   */
+  aiInstructions?: string
   visibility: 'private' | 'unlisted' | 'public'
   voteScore: number
   createdAt: string
@@ -517,6 +544,10 @@ export interface TemplateVersion {
   name: string
   renderMode?: TemplateRenderMode
   theme: Record<string, unknown>
+  /** What the design asks the AI for (GEN-11). Snapshotted with the rest of
+   * it: a lecture is written to the design it pinned, and an edit that
+   * changes the guidance is a change to the design. */
+  aiInstructions?: string
   layouts: Layout[]
   createdAt: string
 }

@@ -94,6 +94,14 @@ describe('contentHashOf', () => {
     expect(contentHashOf(restyled)).not.toBe(contentHashOf(template()))
   })
 
+  it('changes when the design changes what it asks the AI for', () => {
+    // Changing who a design writes for is a change to the design: a lecture
+    // pinned to the old wording should be offered the newer one rather than
+    // drifting into it (GEN-11).
+    const instructed = template({ aiInstructions: 'Write for nine-year-olds.' })
+    expect(contentHashOf(instructed)).not.toBe(contentHashOf(template()))
+  })
+
   it('distinguishes a layout being added', () => {
     const more = template({ layouts: [layout(), layout({ type: 'quote' })] })
     expect(contentHashOf(more)).not.toBe(contentHashOf(template()))

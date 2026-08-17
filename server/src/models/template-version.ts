@@ -35,6 +35,8 @@ export interface TemplateVersionDb {
   renderMode?: TemplateRenderMode
   theme: Record<string, unknown>
   layouts: Layout[]
+  /** What the design asks the AI for, snapshotted with it (GEN-11). */
+  aiInstructions?: string
   createdAt: Date
   updatedAt: Date
 }
@@ -48,6 +50,7 @@ const templateVersionSchema = new Schema<TemplateVersionDb>(
     renderMode: { type: String, enum: ['components', 'positioned'] },
     theme: { type: Schema.Types.Mixed, required: true },
     layouts: { type: Schema.Types.Mixed, required: true },
+    aiInstructions: { type: String },
   },
   { timestamps: true },
 )
@@ -79,6 +82,7 @@ export const toTemplateVersionDto = (
   renderMode: doc.renderMode,
   theme: doc.theme,
   layouts: doc.layouts,
+  ...(doc.aiInstructions ? { aiInstructions: doc.aiInstructions } : {}),
   createdAt: doc.createdAt.toISOString(),
 })
 

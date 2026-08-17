@@ -15,6 +15,7 @@ const allSlots = {
   freedomPolicy: 'FREEDOM-POLICY',
   layouts: 'LAYOUTS',
   seededImages: '',
+  templateInstructions: '',
   projectSeed: '',
   deckSeed: '',
   rolling: 'ROLLING',
@@ -64,5 +65,32 @@ describe('prompt templates', () => {
     // Out-of-range values clamp
     expect(freedomPolicy(0)).toContain('1/5')
     expect(freedomPolicy(99)).toContain('5/5')
+  })
+})
+
+/**
+ * What a design asks the model for, deck-wide (GEN-11).
+ *
+ * A slot description says what belongs in one box. This says who the whole
+ * lecture is for — the audience, the register, the words to avoid — which
+ * would otherwise have to be repeated on every box that holds prose.
+ */
+describe("the design's own instruction", () => {
+  it('reaches the prompt when the design has one', () => {
+    resetPromptCache()
+    const prompt = renderGenerationPrompt({
+      ...allSlots,
+      templateInstructions:
+        '\nThe design this lecture uses asks for:\nWrite for nine-year-olds.\n',
+    })
+    expect(prompt).toContain('Write for nine-year-olds.')
+  })
+
+  it('leaves no trace when the design says nothing', () => {
+    resetPromptCache()
+    const prompt = renderGenerationPrompt({ ...allSlots })
+    // Not a blank line, not a dangling label: most designs say nothing, and
+    // every byte of this prompt is latency on a call that runs per phrase.
+    expect(prompt).not.toContain('The design this lecture uses asks for')
   })
 })

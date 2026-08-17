@@ -293,6 +293,60 @@ describe('template.get and permalinks (TMPL-4)', () => {
     expect(res.body.permalinkSlug).toBe(made.permalinkSlug)
   })
 
+  /**
+   * What a design asks the AI for, deck-wide (GEN-11) — the audience, the
+   * register, the words to avoid. Stored on the template so every lecture
+   * drawn with it is written the same way, and bounded because it is author
+   * text flowing into a prompt that runs once per spoken phrase.
+   */
+  describe('the design’s instructions for the AI', () => {
+    const update = (
+      made: { id: string; theme: unknown; layouts: unknown },
+      aiInstructions?: string,
+    ) =>
+      act(ada, 'template.update', {
+        templateId: made.id,
+        name: 'Lab Style',
+        theme: made.theme,
+        layouts: made.layouts,
+        ...(aiInstructions === undefined ? {} : { aiInstructions }),
+      })
+
+    it('is saved and comes back', async () => {
+      const made = await own('Lab Style')
+      const res = await update(made, 'Write for nine-year-olds.')
+      expect(res.status).toBe(200)
+      expect(res.body.aiInstructions).toBe('Write for nine-year-olds.')
+
+      const read = await act(ada, 'template.get', { slug: made.permalinkSlug })
+      expect(read.body.aiInstructions).toBe('Write for nine-year-olds.')
+    })
+
+    it('is absent, not empty, when the box is cleared', async () => {
+      // Stored blank it would become a labelled but empty line in every
+      // prompt, on a call that runs once per phrase.
+      const made = await own('Lab Style')
+      await update(made, 'Something.')
+      const res = await update(made, '   ')
+      expect(res.status).toBe(200)
+      expect(res.body.aiInstructions).toBeUndefined()
+    })
+
+    it('refuses one longer than the cap', async () => {
+      const made = await own('Lab Style')
+      const res = await update(made, 'x'.repeat(601))
+      expect(res.status).toBe(400)
+    })
+
+    it('travels with a copy, which is a copy of the design', async () => {
+      const made = await own('Lab Style')
+      await update(made, 'Write for nine-year-olds.')
+      const copy = await act(ada, 'template.duplicate', { templateId: made.id })
+      expect(copy.status).toBe(200)
+      expect(copy.body.aiInstructions).toBe('Write for nine-year-olds.')
+    })
+  })
+
   it('reads a template by its permalink, naming the author', async () => {
     const made = await own()
     const res = await act(ada, 'template.get', { slug: made.permalinkSlug })

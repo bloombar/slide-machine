@@ -300,6 +300,9 @@
     "layoutSettings": "Diseño",
     "boxSettings": "Caja",
     "templateSettings": "Ajustes de la plantilla",
+    "aiInstructionsLabel": "Instrucciones para la IA",
+    "aiInstructionsPlaceholder": "p. ej. Escribe para estudiantes de primer curso. Evita la jerga; define cada término la primera vez que aparezca.",
+    "aiInstructionsHint": "Se envía con cada lección creada con este diseño: el público, el nivel de lectura, las palabras que conviene evitar. Cada caja puede seguir indicando qué le corresponde.",
     "backToLayout": "Volver a los ajustes del diseño",
     "layoutPurposeHint": "La IA lee esto al elegir un diseño para una diapositiva.",
     "removeLayoutConfirm": "«{name}» se eliminará de esta plantilla. Las diapositivas que ya lo usan conservan su contenido.",
@@ -422,6 +425,12 @@
     "slotInstructionsHint": "p. ej. un fragmento de Python ejecutable, no más de ocho líneas",
     "slotRequired": "La diapositiva siempre debería rellenarlo",
     "maxWords": "Máx. palabras",
+    "slotLimit": "Máximo",
+    "slotLimitUnit": "Contado en",
+    "limitUnit": {
+      "characters": "Máx. caracteres",
+      "words": "Máx. palabras"
+    },
     "update": {
       "heading": "Este diseño se ha actualizado",
       "hintClean": "Los cambios son solo visuales: no hay nada que ajustar en tus diapositivas.",

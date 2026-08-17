@@ -28,6 +28,7 @@ import {
   type SlotSpec,
   type Template,
   MAX_SLOT_DESCRIPTION,
+  MAX_TEMPLATE_INSTRUCTIONS,
 } from '@slide-machine/shared'
 import { env } from '../config/env'
 
@@ -338,6 +339,8 @@ const templateFileSchema = z
     renderMode: z.enum(['components', 'positioned']).optional(),
     theme: z.record(z.string(), z.unknown()),
     layouts: z.array(layoutSchema).min(1),
+    /** Author guidance for the model, bounded like a slot's (GEN-11). */
+    aiInstructions: z.string().max(MAX_TEMPLATE_INSTRUCTIONS).optional(),
   })
   // Every template — built-in or user-authored — must provide the blank
   // whiteboard slate so the drawing tools always have a canvas (WB-1).
