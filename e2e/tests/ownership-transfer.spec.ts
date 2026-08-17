@@ -5,13 +5,7 @@
  * under "Other lectures" at home (its project still belongs to the old
  * owner).
  */
-import {
-  test,
-  autoAnswerAccountType,
-  expect,
-  type Browser,
-  type Page,
-} from './fixtures'
+import { test, expect, type Browser, type Page } from './fixtures'
 import { createProject } from './helpers'
 
 const stamp = Date.now()
@@ -25,7 +19,6 @@ const newUserPage = async (
 ): Promise<Page> => {
   const context = await browser.newContext()
   const page = await context.newPage()
-  await autoAnswerAccountType(page)
   await page.goto('/register')
   await page.getByLabel('Display name').fill(user.name)
   await page.getByLabel('Email').fill(user.email)

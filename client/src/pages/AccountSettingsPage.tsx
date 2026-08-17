@@ -586,10 +586,9 @@ export default function AccountSettingsPage() {
                     }
                     className="w-fit rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700"
                   >
-                    {/* Only reachable before the prompt is answered, which
-                        the shell does not let last long — but a select whose
-                        value is not among its options renders blank and
-                        looks broken. */}
+                    {/* An account need never say what it is, and most do
+                        not: a select whose value is not among its options
+                        renders blank and looks broken. */}
                     {!user.accountType && (
                       <option value="">{t('profile.accountTypeUnset')}</option>
                     )}

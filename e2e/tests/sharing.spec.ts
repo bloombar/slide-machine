@@ -5,13 +5,7 @@
  * and the profile without leaking existence; the public profile lists
  * only what the viewer may see.
  */
-import {
-  test,
-  autoAnswerAccountType,
-  expect,
-  type Browser,
-  type Page,
-} from './fixtures'
+import { test, expect, type Browser, type Page } from './fixtures'
 import { createProject, verifyEmail } from './helpers'
 
 const stamp = Date.now()
@@ -37,7 +31,6 @@ const newUserPage = async (
 ): Promise<Page> => {
   const context = await browser.newContext()
   const page = await context.newPage()
-  await autoAnswerAccountType(page)
   await register(page, user)
   return page
 }

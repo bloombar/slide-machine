@@ -48,20 +48,6 @@ export type AccountType = 'student' | 'educator' | 'other'
 
 export const ACCOUNT_TYPES = ['student', 'educator', 'other'] as const
 
-/**
- * Whether an account's work starts private (AUTH-6/P-1). Student
- * accounts do: coursework is the student's own until they decide to
- * publish it, and a default that publishes it for them is a decision
- * they never made. Everyone else keeps the public default the product
- * is built around.
- *
- * One predicate rather than a visibility value, because the two things
- * it governs spell "private" differently: a profile is `private`, a
- * project is `restricted`.
- */
-export const accountDefaultsToPrivate = (accountType?: AccountType): boolean =>
-  accountType === 'student'
-
 export interface User {
   id: string
   email: string
@@ -69,7 +55,9 @@ export interface User {
   passwordHash?: string
   emailVerified: boolean
   profileVisibility: ProfileVisibility
-  /** Absent until the account answers the prompt shown after sign-in. */
+  /** What the account says it is, if it has said (AUTH-6). A
+   * self-declaration and nothing more: it grants nothing, withholds
+   * nothing, and no default is chosen from it. */
   accountType?: AccountType
   bio?: string
   avatarUrl?: string
