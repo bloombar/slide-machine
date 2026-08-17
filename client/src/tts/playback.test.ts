@@ -197,6 +197,28 @@ describe('useTtsPlayback', () => {
     expect(hook.result.current.status).toBe('playing')
   })
 
+  // "Speak this slide" (kebab) runs through the same toolbar button, so the
+  // listener can pause a single slide's narration too — before this, toggle
+  // only handled deck scope and would restart deck playback over it.
+  it('toggle pauses and resumes a single slide narration', async () => {
+    mockedSynth.mockResolvedValue({ url: 'u', marks: [] })
+    const { hook } = setup()
+
+    act(() => hook.result.current.speakSlide(slides[0]!))
+    await waitFor(() => expect(hook.result.current.status).toBe('playing'))
+    expect(hook.result.current.scope).toBe('slide')
+
+    act(() => hook.result.current.toggle(0))
+    expect(hook.result.current.status).toBe('paused')
+    expect(audios[0]!.pause).toHaveBeenCalled()
+    // Still the slide's narration — the deck was not started over it.
+    expect(hook.result.current.scope).toBe('slide')
+
+    act(() => hook.result.current.toggle(0))
+    expect(hook.result.current.status).toBe('playing')
+    expect(hook.result.current.scope).toBe('slide')
+  })
+
   // The transcript editor's preview (EDIT-6) runs on this same controller, so
   // it cannot play over a slide or the deck.
   it('speaks supplied text without navigating, and idles when it ends', async () => {
