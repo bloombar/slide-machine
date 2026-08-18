@@ -105,6 +105,12 @@ export interface DeckSetSeedNotesInput {
   seedContext: string
 }
 
+/** Lecture study label (EVAL-3, admins only); empty string clears it. */
+export interface DeckSetStudyLabelInput {
+  deckId: string
+  studyLabel: string
+}
+
 /** Lecture general-access change; creates the lecture's override (SHARE-1). */
 export interface DeckSetAccessInput {
   deckId: string

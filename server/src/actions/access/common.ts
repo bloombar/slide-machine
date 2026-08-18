@@ -44,3 +44,14 @@ export const overrideActor = async (
   if (owner && isAdminEmail(owner.email)) throw new ActionForbiddenError()
   return { id: actor._id.toString(), email: actor.email }
 }
+
+/**
+ * Refuses unless the acting account is allowlisted as an admin. For the rare
+ * setting only an admin may touch even on their own entity (EVAL-3's study
+ * label) — `overrideActor` cannot express that case, because there the actor
+ * already holds edit access and nothing is being overridden.
+ */
+export const requireAdminEmail = async (userId: string): Promise<void> => {
+  const actor = await UserModel.findById(userId).catch(() => null)
+  if (!actor || !isAdminEmail(actor.email)) throw new ActionForbiddenError()
+}

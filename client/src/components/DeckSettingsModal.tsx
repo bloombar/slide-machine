@@ -89,6 +89,9 @@ interface Props {
    * (ADMIN-5): adds the audit banner and drops the sections that change
    * content rather than settings. */
   adminOverride?: boolean
+  /** True when the viewer is an allowlisted admin. Gates the study-label
+   * field (EVAL-3), which even the owner does not see without it. */
+  viewerIsAdmin?: boolean
   /** True when any slide carries whiteboard marks — refining slides then
    * prompts a confirmation, since it may reflow content under the marks. */
   slidesHaveDrawings?: boolean
@@ -113,6 +116,7 @@ export default function DeckSettingsModal({
   initialTab = 'general',
   isOwner,
   adminOverride = false,
+  viewerIsAdmin = false,
   slidesHaveDrawings = false,
   contentLocale,
   onClose,
@@ -189,6 +193,21 @@ export default function DeckSettingsModal({
       .then(onDeckChange)
       .catch(() => {
         // Quiet failure: the field reverts to the saved title on re-render
+      })
+  }
+
+  // Research-study label (EVAL-3), admin-only. Saved on blur when changed;
+  // an emptied field clears the label server-side.
+  const [studyLabelDraft, setStudyLabelDraft] = useState(deck.studyLabel ?? '')
+  const saveStudyLabel = () => {
+    if (studyLabelDraft.trim() === (deck.studyLabel ?? '').trim()) return
+    dispatchAction<Deck>('deck.setStudyLabel', {
+      deckId: deck.id,
+      studyLabel: studyLabelDraft.trim(),
+    })
+      .then(onDeckChange)
+      .catch(() => {
+        // Quiet failure: the field reverts to the saved label on re-render
       })
   }
 
@@ -611,6 +630,28 @@ export default function DeckSettingsModal({
                       // Quiet failure: the select reverts on rerender
                     })
                 }}
+              />
+            </div>
+          )}
+          {viewerIsAdmin && (
+            <div>
+              <h3 className="mb-2 text-lg font-semibold text-slate-700">
+                {t('deck.settings.general.studyLabelHeading')}
+              </h3>
+              <p className="mb-3 text-sm text-slate-500">
+                {t('deck.settings.general.studyLabelHint')}
+              </p>
+              <input
+                aria-label={t('deck.settings.general.studyLabelHeading')}
+                value={studyLabelDraft}
+                onChange={e => setStudyLabelDraft(e.target.value)}
+                onBlur={saveStudyLabel}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') e.currentTarget.blur()
+                }}
+                placeholder={t('deck.settings.general.studyLabelPlaceholder')}
+                maxLength={200}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
             </div>
           )}

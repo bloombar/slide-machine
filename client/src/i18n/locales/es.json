@@ -1079,6 +1079,9 @@
         "languageInherit": "ajuste del proyecto, del perfil o del navegador",
         "voiceHeading": "Voz de narración",
         "voiceHint": "La voz que lee esta clase en voz alta. Habla en el idioma de la clase.",
+        "studyLabelHeading": "Etiqueta de estudio",
+        "studyLabelHint": "Etiqueta opcional de estudio de investigación para agrupar clases en las exportaciones de investigación, p. ej. un código de bloque-curso-condición. Visible solo para administradores.",
+        "studyLabelPlaceholder": "p. ej. B1-SWE-treatment",
         "deleteHint": "Eliminar una clase borra de forma permanente sus diapositivas y su material de referencia. Esta acción no se puede deshacer."
       },
       "refine": {

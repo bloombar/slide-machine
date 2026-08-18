@@ -101,6 +101,7 @@ const ACCESS_INDEX: Record<string, AccessDescriptor> = {
   'deck.setLanguage': { resource: 'deck', level: 'settings' },
   'deck.setRefineSettings': { resource: 'deck', level: 'settings' },
   'deck.setSeedNotes': { resource: 'deck', level: 'settings' },
+  'deck.setStudyLabel': { resource: 'deck', level: 'settingsAdmin' },
   'deck.setTtsVoice': { resource: 'deck', level: 'settings' },
   'deck.share': { resource: 'deck', level: 'settings' },
   'deck.shares': { resource: 'deck', level: 'settingsView' },

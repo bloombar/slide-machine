@@ -182,8 +182,14 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
       )?.value ?? 0)
     : 0
   const { up: voteUp, down: voteDown } = await voteBreakdown('deck', deck._id)
+  // The shared shape drops the study label (EVAL-3), but an admin opening
+  // another user's settings needs the current value — re-attach it for any
+  // allowlisted admin, checking only when there is a label to reveal.
+  const deckDto = isOwner ? toDeckDto(deck, acl) : toSharedDeckDto(deck, acl)
+  if (!isOwner && deck.studyLabel && (admin || (await adminViewer(req.userId))))
+    deckDto.studyLabel = deck.studyLabel
   const body: DeckViewResponse = {
-    deck: isOwner ? toDeckDto(deck, acl) : toSharedDeckDto(deck, acl),
+    deck: deckDto,
     slides: slides.map(toSlideDto),
     template,
     canEdit,

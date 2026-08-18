@@ -56,6 +56,9 @@ export type AccessLevel =
   | 'settings'
   /** The same admission as `settings`, for reading it. Writes no audit. */
   | 'settingsView'
+  /** `settings` admission AND the actor on the admin allowlist — for a
+   * setting non-admins may not touch even on their own lecture (EVAL-3). */
+  | 'settingsAdmin'
   /** ownerId alone — deliberately stricter than `edit`. */
   | 'own'
   /** A template's author. */
