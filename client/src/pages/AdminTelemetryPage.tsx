@@ -20,6 +20,7 @@ import {
   formatDurationMs,
   formatMs,
   EndBadge,
+  HeaderCell,
 } from '../components/admin/TelemetryPanel'
 
 /** Windows an operator actually asks for, matching the cost page. */
@@ -156,33 +157,15 @@ export default function AdminTelemetryPage() {
               <table className="w-full text-sm">
                 <thead className="text-left text-xs text-slate-500 uppercase">
                   <tr>
-                    <th scope="col" className="py-2">
-                      Lecture
-                    </th>
-                    <th scope="col" className="py-2">
-                      Started
-                    </th>
-                    <th scope="col" className="py-2 text-right">
-                      Duration
-                    </th>
-                    <th scope="col" className="py-2 text-right">
-                      Phrases
-                    </th>
-                    <th scope="col" className="py-2 text-right">
-                      STT p50/p95
-                    </th>
-                    <th scope="col" className="py-2 text-right">
-                      Gen. p50/p95
-                    </th>
-                    <th scope="col" className="py-2 text-right">
-                      Errors
-                    </th>
-                    <th scope="col" className="py-2 text-right">
-                      Restarts
-                    </th>
-                    <th scope="col" className="py-2 pl-3">
-                      Ended
-                    </th>
+                    <HeaderCell label="Lecture" align="left" />
+                    <HeaderCell label="Started" align="left" />
+                    <HeaderCell label="Duration" />
+                    <HeaderCell label="Phrases" />
+                    <HeaderCell label="STT p50/p95" />
+                    <HeaderCell label="Gen. p50/p95" />
+                    <HeaderCell label="Errors" />
+                    <HeaderCell label="Restarts" />
+                    <HeaderCell label="Ended" align="end" />
                   </tr>
                 </thead>
                 <tbody>

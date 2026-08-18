@@ -92,6 +92,20 @@ describe('TelemetryPanel', () => {
   })
 })
 
+describe('column hints', () => {
+  it('gives every column header a plain-language hover explanation', async () => {
+    renderPanel()
+    await screen.findByText('Stopped')
+    for (const header of screen.getAllByRole('columnheader')) {
+      expect(header).toHaveAttribute('title')
+      expect(header.getAttribute('title')!.length).toBeGreaterThan(10)
+    }
+    expect(
+      screen.getByRole('columnheader', { name: 'STT p50/p95' }),
+    ).toHaveAttribute('title', expect.stringContaining('speech-to-text'))
+  })
+})
+
 describe('formatting', () => {
   it('renders milliseconds compactly and dashes the unknowable', () => {
     expect(formatMs(450)).toBe('450ms')

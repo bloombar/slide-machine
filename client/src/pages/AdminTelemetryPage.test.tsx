@@ -121,6 +121,17 @@ describe('AdminTelemetryPage', () => {
     await screen.findByText('No live sessions recorded in this period.')
   })
 
+  it('explains every column, including Lecture, on hover', async () => {
+    renderPage()
+    await screen.findByRole('link', { name: 'Standing waves' })
+    for (const header of screen.getAllByRole('columnheader')) {
+      expect(header).toHaveAttribute('title')
+    }
+    expect(
+      screen.getByRole('columnheader', { name: 'Lecture' }),
+    ).toHaveAttribute('title', expect.stringContaining('lecture'))
+  })
+
   it('reports a load failure as an alert', async () => {
     renderPage(() => ({
       status: 500,
