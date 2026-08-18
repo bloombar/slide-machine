@@ -768,6 +768,8 @@ Nothing else in the system can answer "did it work" after the fact. **`Transcrip
 
 The record is written server-side alongside the segments, is **never updated**, and carries **no student identity**. It is the evidence behind every reliability and latency claim in this section, and it is what lets a failed session be excluded from an evaluation honestly rather than argued about afterward.
 
+A minimal **admin read view** ships with the record — a per-lecture session panel and a deployment-wide session list with CSV export, beside the cost panels ([BILL-7](#bill-7-cost-attribution--admin-cost-reporting)) — because evidence nobody can see is evidence nobody checks. The richer charting ambition stays deferred with [EVAL-6](#eval-6-evaluation-dashboard).
+
 #### EVAL-2 De-identified research export
 
 An **admin-only export** produces one bundle for a date range — lectures and slides, transcript segments, session telemetry ([EVAL-1](#eval-1-live-session-telemetry)), quiz references, votes, and cost events ([BILL-7](#bill-7-cost-attribution--admin-cost-reporting)) — keyed by an **opaque per-account study id** rather than by user id, email, or display name. It follows the shape of the existing cost export (`GET /api/admin/cost/export`) and **reuses that CSV plumbing rather than inventing a second one**.

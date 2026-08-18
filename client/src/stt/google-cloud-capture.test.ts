@@ -439,4 +439,39 @@ describe('google cloud speech capture', () => {
     socket.onclose?.()
     expect(onError).not.toHaveBeenCalled()
   })
+
+  it('announces a deliberate stop to the server before closing (EVAL-1)', async () => {
+    stubMediaApis()
+    const capture = createSpeechCapture('google-cloud')
+    capture.start({ onPhrase: vi.fn() })
+    await flush()
+    const socket = FakeWebSocket.instances[0]!
+
+    capture.stop()
+    // The stop frame is what lets telemetry tell a stop from an abandonment.
+    const last = socket.sent[socket.sent.length - 1]
+    expect(JSON.parse(String(last))).toEqual({ type: 'stop' })
+    expect(socket.readyState).toBe(3)
+  })
+
+  it('sends no stop frame on a failure path, so it reads as abandoned', async () => {
+    stubMediaApis()
+    const onError = vi.fn()
+    createSpeechCapture('google-cloud').start({ onPhrase: vi.fn(), onError })
+    await flush()
+    const socket = FakeWebSocket.instances[0]!
+
+    socket.onmessage?.({
+      data: JSON.stringify({ type: 'error', message: 'Engine down' }),
+    })
+    expect(onError).toHaveBeenCalled()
+    const stops = socket.sent.filter(frame => {
+      try {
+        return (JSON.parse(String(frame)) as { type?: string }).type === 'stop'
+      } catch {
+        return false
+      }
+    })
+    expect(stops).toHaveLength(0)
+  })
 })

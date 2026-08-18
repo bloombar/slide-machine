@@ -382,6 +382,11 @@ const googleCloudCapture = (): SpeechCapture => {
     },
     stop() {
       active = false
+      // Tell the server this close is deliberate before it sees the close, so
+      // session telemetry can tell a stop from an abandonment (EVAL-1). Only
+      // here — a failure path must keep reading as abandoned.
+      if (ws && ws.readyState === WebSocket.OPEN)
+        ws.send(JSON.stringify({ type: 'stop' }))
       teardown()
     },
   }

@@ -210,9 +210,15 @@ export class GoogleCloudTranscriptionProvider implements TranscriptionProvider {
         // The max-duration error is expected on long streams — cycle quietly;
         // anything else (bad language code, auth, quota) ends the session and
         // is logged so it is diagnosable instead of silently producing nothing.
-        if (error.code === OUT_OF_RANGE && !ended) restart()
+        if (error.code === OUT_OF_RANGE && !ended) restart('out_of_range')
         else if (!ended) {
           console.error('Google Cloud STT stream error:', error)
+          options.onStreamEvent?.({
+            type: 'error',
+            message: String(
+              (error as { message?: unknown }).message ?? error,
+            ).slice(0, 200),
+          })
           events.close()
         } else finishGrace()
       })
@@ -222,7 +228,7 @@ export class GoogleCloudTranscriptionProvider implements TranscriptionProvider {
         if (ended && recognize === stream) finishGrace()
       })
       recognize = stream
-      restartTimer = setTimeout(restart, STREAM_RESTART_MS)
+      restartTimer = setTimeout(() => restart('timer'), STREAM_RESTART_MS)
     }
 
     // Completes the iterable once Google has had its last word (or the grace
@@ -234,9 +240,10 @@ export class GoogleCloudTranscriptionProvider implements TranscriptionProvider {
     }
 
     // Swaps to a fresh stream so audio keeps flowing past Google's limit.
-    const restart = (): void => {
+    const restart = (reason: 'timer' | 'out_of_range'): void => {
       if (restartTimer) clearTimeout(restartTimer)
       restartTimer = null
+      options.onStreamEvent?.({ type: 'restart', reason })
       // Commit the outgoing stream's audio to the session offset before the
       // new stream captures its (now higher) base — keeps word times absolute.
       sessionByteOffset += currentStreamBytes

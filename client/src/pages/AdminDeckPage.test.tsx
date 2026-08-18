@@ -75,6 +75,11 @@ const renderPage = (status = 200, detailBody: unknown = detail) => {
   const mocks = mockFetchRoutes({
     // More specific than /decks/d1, so it must be matched first
     '/api/admin/decks/d1/private-view': () => ({ status: 204 }),
+    // The telemetry panel's sessions (EVAL-1); empty keeps other tests quiet.
+    '/api/admin/telemetry/decks/d1': () => ({
+      status: 200,
+      body: { sessions: [] },
+    }),
     // Serves GET (detail) and DELETE (delete lecture)
     '/api/admin/decks/d1': init => {
       if (init?.method === 'DELETE') return { status: 204 }
@@ -113,6 +118,15 @@ afterEach(() => {
 })
 
 describe('AdminDeckPage', () => {
+  it('shows the telemetry panel for the lecture (EVAL-1)', async () => {
+    renderPage()
+    await screen.findByRole('heading', { name: 'Waves' })
+    const panel = await screen.findByTestId('telemetry-panel')
+    expect(
+      within(panel).getByText('No live sessions recorded yet.'),
+    ).toBeVisible()
+  })
+
   it('shows the lecture title, its visibility, project, and owner', async () => {
     renderPage()
     const heading = await screen.findByRole('heading', { name: 'Waves' })

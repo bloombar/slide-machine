@@ -134,6 +134,10 @@ import { slotsOf, remapSlots } from '../lib/slide-slots'
 import { remapSlideTranslations } from '../lib/translate-slides'
 import { buildDeckStructure, headerLayoutTypes } from '../lib/deck-structure'
 import { registry } from '../providers/registry'
+import { GenerationUnavailableError } from '../providers/errors'
+import { recordSessionEvent } from '../telemetry/recorder'
+import { withGenerationSignals } from '../telemetry/generation-signals'
+import type { TelemetryOutcome } from '../models/session-telemetry-event'
 import { permalinkSlug } from '../lib/slug'
 import { enrichSlideImages } from '../enrichment/enrich'
 import type { SlideImageContext } from '../enrichment/types'
@@ -814,6 +818,14 @@ export const sessionPhrase = defineAction<
           .join(' ')
         await current.save()
       }
+      // Telemetry (EVAL-1): a phrase row with no generationMs — no model ran.
+      if (input.sessionId)
+        recordSessionEvent({
+          sessionId: input.sessionId,
+          deckId: deck._id.toString(),
+          kind: 'phrase',
+          outcome: 'none',
+        })
       return { kind: 'none' }
     }
 
@@ -867,7 +879,7 @@ export const sessionPhrase = defineAction<
     // the heading (title/section) slides so far plus positional signals, so the
     // windowed model can judge title/section decisions from the deck's shape.
     // Built only when the flag is on and the deck already has slides.
-    let deckStructure
+    let deckStructure: ReturnType<typeof buildDeckStructure> | undefined
     if (env.GENERATION_DECK_STRUCTURE && deck.slideOrder.length) {
       const headingDocs = await SlideModel.find(
         {
@@ -914,75 +926,120 @@ export const sessionPhrase = defineAction<
         : undefined
 
     const provider = registry.get<GenerationProvider>('generation')
-    const generated = await provider.generateSlideContent({
-      phrase: input.phrase,
-      rollingContext,
-      seedContext: {
-        project: seedLayer(project?.seedContext, assets.project),
-        deck: seedLayer(deck.seedContext, assets.deck),
-      },
-      layoutDescriptors: descriptors,
-      // What the design asks for, for every lecture drawn with it (GEN-11).
-      // Read from the template rather than the deck's pinned snapshot: this
-      // is guidance for writing, not structure the deck is drawn from, so an
-      // author who adjusts it means it to apply next time they speak.
-      templateInstructions: template.aiInstructions,
-      deckStructure,
-      seededImages: seededImages.length ? seededImages : undefined,
-      freedom:
-        deck.generationFreedom ??
-        project?.generationFreedom ??
-        env.GENERATION_FREEDOM,
-      // Language precedence: lecture ?? project ?? speaker profile ??
-      // the speaker's browser (sent with the phrase); nothing stored
-      // anywhere leaves the model mirroring the speech
-      language:
-        deck.language ??
-        project?.language ??
-        speaker?.language ??
-        input.browserLanguage,
-      currentSlide: lastSlide
-        ? {
-            layoutType: lastSlide.layoutType,
-            bulletCount: lastSlide.bullets?.length ?? 0,
-            bodyChars: charCount(lastSlide.body),
-            // The exact slot content, so a refit re-maps real text
-            // instead of guessing from the rolling context
-            content: currentSlideContent,
-            // Everything spoken while on this slide, so the model can see what
-            // it already covers (kept to a recent window to bound the prompt).
-            sourceTranscript:
-              lastSlide.sourceTranscript?.slice(-LIVE_TRANSCRIPT_CHARS) ||
-              undefined,
-          }
-        : undefined,
-      // Feature flag (GENERATION_LAYOUT_REFIT): updates may switch the
-      // slide's layout, including a full refit (GEN-8). Never while the user is
-      // hand-annotating the current slide, nor on a slide that already carries
-      // whiteboard marks (WB-1/WB-3) — its layout must hold still.
-      allowLayoutRefit: env.GENERATION_LAYOUT_REFIT && !keepLayout,
-      // Feature flag (GENERATION_LIVE_REPHRASE): a refit may also keep the
-      // layout and re-state existing content for clearer phrasing. Needs refit
-      // enabled (its vehicle) and not while locking the layout for drawing.
-      allowRephrase:
-        env.GENERATION_LAYOUT_REFIT &&
-        env.GENERATION_LIVE_REPHRASE &&
-        !keepLayout,
-      // The slide is being drawn on or already has marks: tell the model to
-      // keep its layout (the server also enforces this below).
-      lockLayout: keepLayout,
-      // The current slide is a heading slide: tell the model its layout is
-      // fixed and new content belongs on a new slide (also enforced below).
-      pinLayout,
-      // Feature flag (GENERATION_VOICE_COMMANDS): offer the CAP-4
-      // command set so the model can flag operational phrases
-      voiceCommands: env.GENERATION_VOICE_COMMANDS
-        ? VOICE_COMMAND_DESCRIPTORS
-        : undefined,
-      // Ask the model to suggest/refine the title on every phrase until the
-      // user locks it by naming the lecture themselves (titleLocked).
-      suggestDeckTitle: !deck.titleLocked,
-    })
+    // Telemetry (EVAL-1): time the model call — including its internal
+    // re-asks, which is generation as the speaker experiences it — and count
+    // refusals through the ambient signal scope. A failure writes an error
+    // row, then rethrows unchanged; the record must observe the live path,
+    // never alter it.
+    const genStart = Date.now()
+    let generated: Awaited<ReturnType<typeof provider.generateSlideContent>>
+    let genRefusals = 0
+    try {
+      ;({ result: generated, refusals: genRefusals } =
+        await withGenerationSignals(() =>
+          provider.generateSlideContent({
+            phrase: input.phrase,
+            rollingContext,
+            seedContext: {
+              project: seedLayer(project?.seedContext, assets.project),
+              deck: seedLayer(deck.seedContext, assets.deck),
+            },
+            layoutDescriptors: descriptors,
+            // What the design asks for, for every lecture drawn with it (GEN-11).
+            // Read from the template rather than the deck's pinned snapshot: this
+            // is guidance for writing, not structure the deck is drawn from, so an
+            // author who adjusts it means it to apply next time they speak.
+            templateInstructions: template.aiInstructions,
+            deckStructure,
+            seededImages: seededImages.length ? seededImages : undefined,
+            freedom:
+              deck.generationFreedom ??
+              project?.generationFreedom ??
+              env.GENERATION_FREEDOM,
+            // Language precedence: lecture ?? project ?? speaker profile ??
+            // the speaker's browser (sent with the phrase); nothing stored
+            // anywhere leaves the model mirroring the speech
+            language:
+              deck.language ??
+              project?.language ??
+              speaker?.language ??
+              input.browserLanguage,
+            currentSlide: lastSlide
+              ? {
+                  layoutType: lastSlide.layoutType,
+                  bulletCount: lastSlide.bullets?.length ?? 0,
+                  bodyChars: charCount(lastSlide.body),
+                  // The exact slot content, so a refit re-maps real text
+                  // instead of guessing from the rolling context
+                  content: currentSlideContent,
+                  // Everything spoken while on this slide, so the model can see what
+                  // it already covers (kept to a recent window to bound the prompt).
+                  sourceTranscript:
+                    lastSlide.sourceTranscript?.slice(-LIVE_TRANSCRIPT_CHARS) ||
+                    undefined,
+                }
+              : undefined,
+            // Feature flag (GENERATION_LAYOUT_REFIT): updates may switch the
+            // slide's layout, including a full refit (GEN-8). Never while the user is
+            // hand-annotating the current slide, nor on a slide that already carries
+            // whiteboard marks (WB-1/WB-3) — its layout must hold still.
+            allowLayoutRefit: env.GENERATION_LAYOUT_REFIT && !keepLayout,
+            // Feature flag (GENERATION_LIVE_REPHRASE): a refit may also keep the
+            // layout and re-state existing content for clearer phrasing. Needs refit
+            // enabled (its vehicle) and not while locking the layout for drawing.
+            allowRephrase:
+              env.GENERATION_LAYOUT_REFIT &&
+              env.GENERATION_LIVE_REPHRASE &&
+              !keepLayout,
+            // The slide is being drawn on or already has marks: tell the model to
+            // keep its layout (the server also enforces this below).
+            lockLayout: keepLayout,
+            // The current slide is a heading slide: tell the model its layout is
+            // fixed and new content belongs on a new slide (also enforced below).
+            pinLayout,
+            // Feature flag (GENERATION_VOICE_COMMANDS): offer the CAP-4
+            // command set so the model can flag operational phrases
+            voiceCommands: env.GENERATION_VOICE_COMMANDS
+              ? VOICE_COMMAND_DESCRIPTORS
+              : undefined,
+            // Ask the model to suggest/refine the title on every phrase until
+            // the user locks it by naming the lecture themselves (titleLocked).
+            suggestDeckTitle: !deck.titleLocked,
+          }),
+        ))
+    } catch (error) {
+      if (input.sessionId)
+        recordSessionEvent({
+          sessionId: input.sessionId,
+          deckId: deck._id.toString(),
+          kind: 'generation_error',
+          errorKind:
+            error instanceof GenerationUnavailableError
+              ? 'unavailable'
+              : 'error',
+          ...(error instanceof GenerationUnavailableError
+            ? { retryable: error.retryable }
+            : {}),
+          errorMessage: String((error as Error)?.message ?? error).slice(
+            0,
+            200,
+          ),
+        })
+      throw error
+    }
+    const generationMs = Date.now() - genStart
+    /** One telemetry row per live phrase, stamped with how it landed. */
+    const phraseEvent = (outcome: TelemetryOutcome): void => {
+      if (!input.sessionId) return
+      recordSessionEvent({
+        sessionId: input.sessionId,
+        deckId: deck._id.toString(),
+        kind: 'phrase',
+        outcome,
+        generationMs,
+        ...(genRefusals ? { refusals: genRefusals } : {}),
+      })
+    }
 
     // Never trust the model's layoutType (belt-and-suspenders to the prompt):
     // coerce anything outside the pickable set — e.g. it echoed the current
@@ -1047,8 +1104,10 @@ export const sessionPhrase = defineAction<
     // With the flag off nothing was offered, so a "command" claim is a
     // provider bug — degrade to filler rather than act on it
     if (rawResult.action === 'command') {
-      return env.GENERATION_VOICE_COMMANDS && rawResult.command
-        ? { kind: 'command', command: rawResult.command }
+      const real = env.GENERATION_VOICE_COMMANDS && rawResult.command
+      phraseEvent(real ? 'command' : 'none')
+      return real
+        ? { kind: 'command', command: rawResult.command! }
         : event({ kind: 'none' })
     }
 
@@ -1081,15 +1140,19 @@ export const sessionPhrase = defineAction<
         : undefined,
       action: 'none',
     })
-    /** Refines the segment with how the phrase related to a slide, once known. */
+    /** Refines the segment with how the phrase related to a slide, once known.
+     * Doubles as the telemetry outcome stamp (EVAL-1): the classification the
+     * transcript stores is exactly what the phrase row should carry. */
     const linkSegment = (
       action: TranscriptSegmentAction,
       slideId?: Types.ObjectId,
-    ): Promise<unknown> =>
-      TranscriptSegmentModel.updateOne(
+    ): Promise<unknown> => {
+      phraseEvent(action)
+      return TranscriptSegmentModel.updateOne(
         { _id: segment._id },
         slideId ? { action, slideId } : { action },
       )
+    }
 
     // Content generation is paused (drawing) but AI voice commands are on, so
     // generation ran only to let the model flag a command (handled above). A
@@ -1102,7 +1165,7 @@ export const sessionPhrase = defineAction<
           .join(' ')
         await lastSlide.save()
         await linkSegment('none', lastSlide._id)
-      }
+      } else phraseEvent('none')
       return event({ kind: 'none' })
     }
 
@@ -1115,7 +1178,7 @@ export const sessionPhrase = defineAction<
           .join(' ')
         await lastSlide.save()
         await linkSegment('none', lastSlide._id)
-      }
+      } else phraseEvent('none')
       return event({ kind: 'none' })
     }
 
@@ -1144,7 +1207,10 @@ export const sessionPhrase = defineAction<
       // the added material into a new slide.
       !(pinLayout && rawResult.layoutType !== lastSlide.layoutType)
     ) {
-      if (!env.GENERATION_LAYOUT_REFIT) return event({ kind: 'none' })
+      if (!env.GENERATION_LAYOUT_REFIT) {
+        phraseEvent('discarded')
+        return event({ kind: 'none' })
+      }
       // A refit that keeps the same layout is a pure rephrase of existing
       // content. When live rephrasing is off, keep the committed slide text
       // verbatim mid-lecture — drop this refit rather than rewrite the slide.
@@ -1152,6 +1218,7 @@ export const sessionPhrase = defineAction<
         rawResult.layoutType === lastSlide.layoutType &&
         !env.GENERATION_LIVE_REPHRASE
       ) {
+        phraseEvent('discarded')
         return event({ kind: 'none' })
       }
       const snapshot: SlideContentSnapshot = {
@@ -1165,6 +1232,7 @@ export const sessionPhrase = defineAction<
         !refitPreservesContent(rawResult, snapshot, descriptors) ||
         refitOverflows(rawResult, descriptors)
       ) {
+        phraseEvent('discarded')
         return event({ kind: 'none' })
       }
       const refit = clampToBudget(rawResult, descriptors)
