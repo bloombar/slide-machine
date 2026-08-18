@@ -129,7 +129,7 @@ export function SessionHeaders() {
         Phrases
       </th>
       <th scope="col" className="py-2 text-right">
-        Final. p50/p95
+        STT p50/p95
       </th>
       <th scope="col" className="py-2 text-right">
         Gen. p50/p95
