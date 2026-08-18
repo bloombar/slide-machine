@@ -107,6 +107,29 @@ test('template import: connect, paste a link, get a usable design', async ({
   await expect(page.getByLabel('Template name')).toHaveValue(
     'Imported sample deck',
   )
+
+  // And a design that can be built on, not only restyled. An import arrives
+  // as measured boxes with no tree, and the outline — with it adding,
+  // removing and reordering boxes — exists only for a tree: an instructor
+  // could import their own deck and then not add a box to it (TMPL-8).
+  await expect(
+    page.getByRole('heading', { name: 'Boxes in this layout' }),
+  ).toBeVisible()
+
+  // Counted by the controls the outline offers, one per box.
+  const removable = page.getByRole('button', { name: /^Remove the .* box$/i })
+  const boxesBefore = await removable.count()
+  expect(boxesBefore).toBeGreaterThan(0)
+
+  await page
+    .getByRole('button', { name: /^Add a box inside/ })
+    .first()
+    .click()
+  await expect(removable).toHaveCount(boxesBefore + 1)
+
+  // And removed again, which is the other half of being editable.
+  await removable.last().click()
+  await expect(removable).toHaveCount(boxesBefore)
 })
 
 /**
