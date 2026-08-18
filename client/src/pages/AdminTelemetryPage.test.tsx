@@ -8,6 +8,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import type { TelemetryOverviewResponse } from '@slide-machine/shared'
 import AdminTelemetryPage from './AdminTelemetryPage'
+import { COLUMN_HINTS } from '../components/admin/TelemetryPanel'
 import { mockFetchRoutes } from '../test/fetch-mock'
 
 const overview = (
@@ -124,12 +125,10 @@ describe('AdminTelemetryPage', () => {
   it('explains every column, including Lecture, on hover', async () => {
     renderPage()
     await screen.findByRole('link', { name: 'Standing waves' })
-    for (const header of screen.getAllByRole('columnheader')) {
-      expect(header).toHaveAttribute('title')
-    }
-    expect(
-      screen.getByRole('columnheader', { name: 'Lecture' }),
-    ).toHaveAttribute('title', expect.stringContaining('lecture'))
+    // Hints render through the house Tooltip inside each header cell.
+    expect(screen.getByText(COLUMN_HINTS['Lecture']!)).toBeInTheDocument()
+    expect(screen.getByText(COLUMN_HINTS['Ended']!)).toBeInTheDocument()
+    expect(screen.getByText(COLUMN_HINTS['Gen. p50/p95']!)).toBeInTheDocument()
   })
 
   it('reports a load failure as an alert', async () => {

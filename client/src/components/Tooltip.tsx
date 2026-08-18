@@ -8,7 +8,7 @@
 import type { ReactNode } from 'react'
 
 interface Props {
-  /** Text shown on hover — keep it to a couple of words. */
+  /** Text shown on hover — keep it to a couple of words unless `multiline`. */
   label: string
   /** Which side the label appears on; 'top' avoids clipping near a bottom edge. */
   side?: 'top' | 'bottom'
@@ -19,6 +19,12 @@ interface Props {
    * centred label would overflow and be clipped.
    */
   align?: 'center' | 'start' | 'end'
+  /**
+   * Sentence-length labels: wrap within a bounded width instead of one
+   * unbounded line, and reset any inherited casing (a hint under an
+   * uppercase table header must not shout). Icon labels stay nowrap.
+   */
+  multiline?: boolean
   /** The control being described. */
   children: ReactNode
 }
@@ -27,6 +33,7 @@ export default function Tooltip({
   label,
   side = 'bottom',
   align = 'center',
+  multiline = false,
   children,
 }: Props) {
   // Position the label above or below the trigger
@@ -52,7 +59,11 @@ export default function Tooltip({
         // and focus-within would leave the label pinned open afterwards.
         // focus-visible fires for keyboard arrival only, matching how
         // SlideNavZones reveals its hotspots.
-        className={`pointer-events-none absolute z-10 rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap text-white opacity-0 transition-opacity group-hover/tt:opacity-100 group-has-[:focus-visible]/tt:opacity-100 ${place} ${anchor}`}
+        className={`pointer-events-none absolute z-10 rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-medium text-white opacity-0 transition-opacity group-hover/tt:opacity-100 group-has-[:focus-visible]/tt:opacity-100 ${
+          multiline
+            ? 'w-max max-w-56 text-left font-normal normal-case'
+            : 'whitespace-nowrap'
+        } ${place} ${anchor}`}
       >
         {label}
       </span>

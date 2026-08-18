@@ -17,6 +17,7 @@ import type {
   TelemetrySessionSummary,
 } from '@slide-machine/shared'
 import { fetchDeckTelemetry } from '../../api/telemetry'
+import Tooltip from '../Tooltip'
 
 /** A millisecond figure for a table cell: seconds past 10s, else ms. */
 export const formatMs = (value: number | null | undefined): string => {
@@ -115,7 +116,8 @@ export function SessionRows({
 /**
  * Plain-language hover explanations for every session column, shared by the
  * per-lecture panel and the overview page so the same column never gets two
- * descriptions. Native `title` tooltips, like the rest of the admin surface.
+ * descriptions. Shown through the house Tooltip, which appears immediately
+ * on hover — the native `title` delay buries a hint nobody waits for.
  */
 export const COLUMN_HINTS: Record<string, string> = {
   Lecture: 'The lecture this recording session belonged to.',
@@ -149,12 +151,16 @@ export function HeaderCell({
   const alignClass =
     align === 'right' ? ' text-right' : align === 'end' ? ' pl-3' : ''
   return (
-    <th
-      scope="col"
-      title={COLUMN_HINTS[label]}
-      className={`cursor-help py-2${alignClass}`}
-    >
-      {label}
+    <th scope="col" className={`cursor-help py-2${alignClass}`}>
+      {/* Right-side columns anchor the hint's end so it grows inward instead
+          of clipping against the table's scroll container. */}
+      <Tooltip
+        label={COLUMN_HINTS[label] ?? label}
+        align={align === 'left' ? 'start' : 'end'}
+        multiline
+      >
+        <span>{label}</span>
+      </Tooltip>
     </th>
   )
 }
