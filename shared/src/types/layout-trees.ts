@@ -17,7 +17,7 @@
  *     so it keeps rendering as it always did (`adoptDefaultTree`, server)
  *   - adding a conventional layout in the editor starts from one of these
  */
-import type { LayoutNode } from './template'
+import type { BoxStyle, LayoutNode } from './template'
 
 /**
  * A margin a layout asks for instead of the template's.
@@ -259,6 +259,59 @@ export const DEFAULT_LAYOUT_TREES: Record<string, LayoutNode> = {
 export const defaultLayoutTree = (type: string): LayoutNode | undefined => {
   const tree = DEFAULT_LAYOUT_TREES[type]
   return tree ? structuredClone(tree) : undefined
+}
+
+/**
+ * A tree for a layout that carries measured geometry instead — which is what
+ * a design imported from Google Slides is (TMPL-8).
+ *
+ * An import arrives as absolute boxes and no tree, because that is what it
+ * was: a deck laid out by hand, with no reusable structure to read. Those
+ * layouts drew correctly and could be restyled, but could not be *built* on
+ * — the editor's outline, and with it adding, removing and reordering boxes,
+ * exists only for a tree. An instructor could import their own deck and then
+ * not add a box to it.
+ *
+ * A tree of `free` boxes is the faithful conversion. Each slot keeps the
+ * exact rectangle it was measured at and the styling it was given; nothing is
+ * re-flowed and nothing moves. What changes is that the layout now has a
+ * structure to edit, and a box added to it joins boxes rather than nothing.
+ *
+ * The root arranges nothing — every child opts out of the flow — and it
+ * states a padding of zero on purpose. A `free` box is placed against its
+ * parent's INNER rectangle, and a root that says nothing about padding is
+ * seeded with the template's safe area: every imported box would then be
+ * nudged inward and shrunk, which is a redesign rather than a conversion.
+ */
+export const treeFromPositions = (
+  positions: Record<
+    string,
+    { x: number; y: number; w: number; h: number } & Record<string, unknown>
+  >,
+  slots: { name: string }[],
+): LayoutNode | undefined => {
+  // In the order the layout declares them, so paint order matches what the
+  // positioned renderer drew.
+  const placed = slots.filter(slot => positions[slot.name])
+  if (!placed.length) return undefined
+  return {
+    id: 'root',
+    container: { mode: 'flex', direction: 'column' },
+    // Stated, not omitted: see above.
+    style: { paddingX: 0, paddingY: 0 },
+    children: placed.map(slot => {
+      const { x, y, w, h, ...style } = positions[slot.name]!
+      return {
+        id: slot.name,
+        slot: slot.name,
+        free: true as const,
+        box: { x, y, w, h },
+        // The styling lived on the position; on a tree it lives on the node,
+        // and dropping it here would import a design and then un-design it.
+        ...(Object.keys(style).length ? { style: style as BoxStyle } : {}),
+      }
+    }),
+  }
 }
 
 /**

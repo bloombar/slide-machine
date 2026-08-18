@@ -32,7 +32,13 @@ import type {
 import { tierOf } from '@slide-machine/shared'
 import type { ThemeColors, ThemeMetrics, ThemeTextStyles } from '../theme'
 import type { LayoutProps } from './types'
-import { resolveStyle, contentStyle, surfaceStyle } from './boxStyle'
+import {
+  resolveStyle,
+  contentStyle,
+  surfaceStyle,
+  resolveColor,
+} from './boxStyle'
+import { clipPathFor } from './decorationShape'
 import { slotIsShown } from './slotState'
 
 /** Literal classes, because Tailwind cannot see an interpolated one. */
@@ -327,13 +333,54 @@ export default function FlowLayout({
   // whose author has not built it yet. The frame already paints the theme.
   if (!tree) return <div className="h-full w-full" />
   return (
-    <Node
-      node={withSafeArea(tree, metrics)}
-      colors={colors}
-      textStyles={textStyles}
-      shows={shows}
-      kindOf={kindOf}
-      slot={slot}
-    />
+    <div className="relative h-full w-full">
+      {/*
+        Bands, rules, logos and background pictures, painted first so every
+        box sits on top of them. They hold no content, so they are not
+        focusable and carry no alt text — a decorative logo announced on
+        every slide is noise to a screen reader, not information.
+
+        Drawn here as well as in the positioned renderer because decoration
+        belongs to the layout, not to one way of arranging it. A design
+        imported from Slides carries its logos and now draws through this
+        renderer (TMPL-8); without this they would simply vanish.
+
+        Not part of the tree, and so not selectable, not draggable and not
+        deletable: a logo is the design's, not the slide's.
+      */}
+      {(layout?.decoration ?? []).map((piece, i) => (
+        <div
+          key={i}
+          aria-hidden="true"
+          className="pointer-events-none absolute bg-cover bg-center bg-no-repeat"
+          style={{
+            left: `${piece.x * 100}%`,
+            top: `${piece.y * 100}%`,
+            width: `${piece.w * 100}%`,
+            height: `${piece.h * 100}%`,
+            ...(piece.fill
+              ? { background: resolveColor(piece.fill, colors) }
+              : {}),
+            ...(piece.imageUrl
+              ? { backgroundImage: `url(${JSON.stringify(piece.imageUrl)})` }
+              : {}),
+            ...(piece.radius ? { borderRadius: `${piece.radius}cqi` } : {}),
+            // An arrow is an arrow. Unknown shapes clip to nothing and stay
+            // the rectangle they are bounded by.
+            ...(clipPathFor(piece.shape)
+              ? { clipPath: clipPathFor(piece.shape) }
+              : {}),
+          }}
+        />
+      ))}
+      <Node
+        node={withSafeArea(tree, metrics)}
+        colors={colors}
+        textStyles={textStyles}
+        shows={shows}
+        kindOf={kindOf}
+        slot={slot}
+      />
+    </div>
   )
 }

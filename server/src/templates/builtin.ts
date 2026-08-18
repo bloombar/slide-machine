@@ -21,6 +21,7 @@ import {
   slotLimits,
   themeTextStyles,
   treeFromSlots,
+  treeFromPositions,
   type Layout,
   type LayoutDescriptor,
   type LayoutSlot,
@@ -417,7 +418,21 @@ export const adoptDefaultTree = <
 ): T[] =>
   layouts.map(layout => {
     if (layout.tree) return layout
-    if (Object.keys(layout.elementPositions ?? {}).length > 0) return layout
+    // A design imported from Slides arrives as measured boxes and no tree
+    // (TMPL-8). It drew correctly and could be restyled, but the editor's
+    // outline — and with it adding, removing and reordering boxes — exists
+    // only for a tree, so an instructor could import their own deck and then
+    // not add a box to it. The boxes become a tree of `free` nodes at exactly
+    // the rectangles they were measured at: nothing moves, and there is now
+    // something to build on.
+    const measured = layout.elementPositions ?? {}
+    if (Object.keys(measured).length > 0) {
+      const tree = treeFromPositions(
+        measured as Parameters<typeof treeFromPositions>[0],
+        layout.slots ?? [],
+      )
+      return tree ? { ...layout, tree } : layout
+    }
     // A conventional type is exactly what it always was; a layout an author
     // named themselves has no such definition, so one is built from the slots
     // it declares. Either way it comes back with something to draw and edit

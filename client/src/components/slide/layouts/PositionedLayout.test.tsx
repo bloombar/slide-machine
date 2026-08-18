@@ -339,3 +339,69 @@ describe('the parts of a design that hold no content (TMPL-8)', () => {
     expect(pieces(container)).toHaveLength(0)
   })
 })
+
+/**
+ * An imported design becomes a tree so it can be built on (TMPL-8), which
+ * moves it from the positioned renderer to this one. Its logos and bands
+ * have to come with it.
+ */
+describe('decoration under the tree renderer', () => {
+  const decoratedTree = layout({
+    tree: {
+      id: 'root',
+      container: { mode: 'flex', direction: 'column' },
+      style: { paddingX: 0, paddingY: 0 },
+      children: [
+        {
+          id: 'title',
+          slot: 'title',
+          free: true,
+          box: { x: 0.1, y: 0.05, w: 0.8, h: 0.2 },
+        },
+      ],
+    },
+    decoration: [
+      { x: 0, y: 0.92, w: 1, h: 0.02, fill: '#b45309' },
+      {
+        x: 0.86,
+        y: 0.87,
+        w: 0.08,
+        h: 0.07,
+        imageUrl: 'https://cdn.test/l.png',
+      },
+    ],
+  })
+
+  const pieces = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll('[aria-hidden="true"]'))
+
+  it('draws the logos and bands a design carries', () => {
+    // Without this an import gains an editable structure and loses its logo,
+    // which is a poor trade.
+    const { container } = render(<FlowLayout {...props(decoratedTree)} />)
+    expect(pieces(container)).toHaveLength(2)
+  })
+
+  it('puts each piece where the design puts it', () => {
+    const { container } = render(<FlowLayout {...props(decoratedTree)} />)
+    const band = pieces(container)[0] as HTMLElement
+    expect(band.style.top).toBe('92%')
+    expect(band.style.height).toBe('2%')
+  })
+
+  it('leaves them out of reach: they are the design, not the slide', () => {
+    // Not in the tree, so not selectable, draggable or deletable — and not
+    // announced to a screen reader either.
+    const { container } = render(<FlowLayout {...props(decoratedTree)} />)
+    for (const piece of pieces(container)) {
+      expect(piece).toHaveClass('pointer-events-none')
+      expect(piece).toHaveAttribute('aria-hidden', 'true')
+    }
+  })
+
+  it('draws nothing extra for a design that carries none', () => {
+    const plain = layout({ tree: decoratedTree.tree })
+    const { container } = render(<FlowLayout {...props(plain)} />)
+    expect(pieces(container)).toHaveLength(0)
+  })
+})
