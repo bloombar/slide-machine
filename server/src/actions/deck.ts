@@ -17,6 +17,7 @@ import type {
   DeckSetRefineSettingsInput,
   DeckSetTtsVoiceInput,
   DeckSetSeedNotesInput,
+  DeckSetStudyLabelInput,
   DeckShare,
   DeckShareInput,
   DeckSharesInput,
@@ -50,6 +51,7 @@ import {
   deckEditor,
   deckOwner,
   deckSettings,
+  deckSettingsAdmin,
   deckSettingsView,
   deckViewer,
   projectOwner,
@@ -254,6 +256,11 @@ const settingsOf = deckSettings((input: { deckId: string }) => input.deckId)
 
 /** The same admission, for an action that only reads the settings. */
 const settingsReadOf = deckSettingsView(
+  (input: { deckId: string }) => input.deckId,
+)
+
+/** The settings gate narrowed to allowlisted admins (EVAL-3). */
+const settingsAdminOf = deckSettingsAdmin(
   (input: { deckId: string }) => input.deckId,
 )
 
@@ -1617,6 +1624,29 @@ export const deckSetSeedNotes = defineAction<
     }),
 })
 
+/** Research-study tag (EVAL-3): groups a term's lectures for later analysis,
+ * e.g. "B1-SWE-treatment". Deliberately free text — the application does not
+ * know what an evaluation measures. Admin-only on both sides of the ACL;
+ * an empty string clears it. */
+export const deckSetStudyLabel = defineAction<
+  DeckSetStudyLabelInput,
+  Deck,
+  DeckSettingsAccess
+>({
+  name: 'deck.setStudyLabel',
+  access: settingsAdminOf,
+  input: z.object({
+    deckId: z.string().min(1),
+    studyLabel: z.string().trim().max(200),
+  }),
+  execute: (ctx, input, access) =>
+    withDeckSettingsAudit(access, async (deck, acl) => {
+      deck.studyLabel = input.studyLabel || undefined
+      await deck.save()
+      return toDeckDto(deck, acl)
+    }),
+})
+
 export const deckSetAccess = defineAction<
   DeckSetAccessInput,
   Deck,
@@ -1833,6 +1863,7 @@ registerAction(deckSetGenerationFreedom)
 registerAction(deckSetRefineSettings)
 registerAction(deckSetLanguage)
 registerAction(deckSetTtsVoice)
+registerAction(deckSetStudyLabel)
 registerAction(deckSetAccess)
 registerAction(deckResetAccess)
 registerAction(deckShare)

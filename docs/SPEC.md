@@ -784,6 +784,8 @@ A lecture carries an optional short free-text `studyLabel`, set from the lecture
 
 It is deliberately a **string, not an enum**: the application does not know what any particular evaluation is measuring and should not learn, because the next one will group its lectures differently. If it does not ship, the partition lives in a research assistant's spreadsheet keyed on lecture title — which works, and is exactly why this sits below the two requirements above rather than beside them.
 
+The field is **admin-only on both sides of the ACL**: an allowlisted admin sets it on their own lectures from the settings modal, or on another user's through the audited settings override ([ADMIN-5](#admin-5-editing-any-entitys-settings)), and every change lands in the settings change log. Non-admin owners, editors and viewers neither see nor receive it — a label can name a study condition, so it stays out of the shared deck shape entirely.
+
 #### EVAL-4 Quiz response ingestion
 
 The application reads a published Form's responses back — per-item correctness, total score, submission time — and stores them against the `QuizRef` ([QUIZ-3](#quiz-3-publishing--link-return)).

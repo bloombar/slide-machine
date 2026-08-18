@@ -22,6 +22,7 @@ export {
   deckViewer,
   deckOwner,
   deckSettings,
+  deckSettingsAdmin,
   deckSettingsView,
 } from './deck'
 export {

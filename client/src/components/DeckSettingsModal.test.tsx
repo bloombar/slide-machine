@@ -34,7 +34,7 @@ const baseDeck: Deck = {
 
 const renderModal = (
   over: Partial<Deck> = {},
-  opts: { slidesHaveDrawings?: boolean } = {},
+  opts: { slidesHaveDrawings?: boolean; viewerIsAdmin?: boolean } = {},
 ) => {
   const onReformatted = vi.fn()
   const onDeckChange = vi.fn()
@@ -44,6 +44,7 @@ const renderModal = (
         deck={{ ...baseDeck, ...over }}
         projectGenerationFreedom={2}
         isOwner
+        viewerIsAdmin={opts.viewerIsAdmin}
         slidesHaveDrawings={opts.slidesHaveDrawings}
         onClose={vi.fn()}
         onTemplateChange={vi.fn()}
@@ -517,5 +518,58 @@ describe('DeckSettingsModal — lecture title', () => {
       ),
     )
     expect(onDeckChange).not.toHaveBeenCalled()
+  })
+})
+
+describe('DeckSettingsModal — study label (EVAL-3)', () => {
+  it('hides the field from non-admin viewers, owner included', () => {
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+    })
+    renderModal({ studyLabel: 'B1-SWE-treatment' })
+    expect(screen.queryByRole('textbox', { name: 'Study label' })).toBeNull()
+  })
+
+  it('shows an admin the saved label', () => {
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+    })
+    renderModal({ studyLabel: 'B1-SWE-treatment' }, { viewerIsAdmin: true })
+    expect(screen.getByRole('textbox', { name: 'Study label' })).toHaveValue(
+      'B1-SWE-treatment',
+    )
+  })
+
+  it('saves the trimmed label on blur and reports the fresh deck', async () => {
+    let sent: { deckId?: string; studyLabel?: string } = {}
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.setStudyLabel': init => {
+        sent = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: { ...baseDeck, studyLabel: sent.studyLabel },
+        }
+      },
+    })
+    const { onDeckChange } = renderModal({}, { viewerIsAdmin: true })
+    const input = screen.getByRole('textbox', { name: 'Study label' })
+    fireEvent.change(input, { target: { value: '  B2-Agile-control  ' } })
+    fireEvent.blur(input)
+    await waitFor(() => expect(onDeckChange).toHaveBeenCalled())
+    expect(sent).toEqual({ deckId: 'd1', studyLabel: 'B2-Agile-control' })
+  })
+
+  it('does not save an unchanged label', () => {
+    const { fetchMock } = mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+    })
+    renderModal({ studyLabel: 'B1-SWE-treatment' }, { viewerIsAdmin: true })
+    const input = screen.getByRole('textbox', { name: 'Study label' })
+    fireEvent.blur(input)
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining('deck.setStudyLabel'),
+      expect.anything(),
+    )
   })
 })

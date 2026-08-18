@@ -81,6 +81,10 @@ export interface Deck {
   language?: Locale
   /** Own narration voice id (TTS_VOICES); absent = inherit the project's. */
   ttsVoice?: string
+  /** Free-text research-study tag (EVAL-3), e.g. "B1-SWE-treatment", used to
+   * group lectures for later analysis. Set and seen only by allowlisted
+   * admins; absent for unlabeled lectures and in non-admin shared views. */
+  studyLabel?: string
   /** Finalized full lecture transcript, retained for post-lecture reformat (GEN-4). */
   transcript?: string
   /** True when the lecture has retained audio to run speaker diarization on

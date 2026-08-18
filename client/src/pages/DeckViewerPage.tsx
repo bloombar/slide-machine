@@ -2292,6 +2292,7 @@ export default function DeckViewerPage() {
             initialTab={settingsTab ?? 'general'}
             isOwner={isOwner}
             adminOverride={adminOverride}
+            viewerIsAdmin={isAdmin === true}
             slidesHaveDrawings={view.slides.some(s =>
               hasVisibleDrawings(s.drawings),
             )}

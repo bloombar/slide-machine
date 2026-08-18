@@ -236,6 +236,8 @@ const deckSchema = new Schema<DeckDb>(
     language: { type: String, enum: LOCALES, default: undefined },
     // Narration voice id (TTS_VOICES); absent = inherit the project's
     ttsVoice: { type: String, default: undefined },
+    // Research-study tag (EVAL-3); absent on lectures outside a study
+    studyLabel: { type: String, trim: true, default: undefined },
     transcript: String,
     // Retained session-audio references (GEN-4 Phase 2); server-only, appended
     // once per recording, never surfaced in a DTO.
@@ -407,6 +409,7 @@ export const toDeckDto = (
   refineTranscriptLevel: doc.refineTranscriptLevel,
   language: doc.language,
   ttsVoice: doc.ttsVoice,
+  studyLabel: doc.studyLabel,
   transcript: doc.transcript,
   hasRecordings: (doc.recordings?.length ?? 0) > 0,
   voteScore: doc.voteScore,
@@ -414,7 +417,9 @@ export const toDeckDto = (
   updatedAt: (doc.updatedAt ?? doc.createdAt).toISOString(),
 })
 
-/** The deck as shown to non-owners: share lists stay with the owner. */
+/** The deck as shown to non-owners: share lists stay with the owner, and
+ * the study label (EVAL-3) is admin-facing research metadata a viewer has
+ * no business reading — it can name a study condition. */
 export const toSharedDeckDto = (
   doc: HydratedDocument<DeckDb>,
   acl: ResolvedAcl,
@@ -422,5 +427,6 @@ export const toSharedDeckDto = (
   const dto = toDeckDto(doc, acl)
   delete dto.viewers
   delete dto.editors
+  delete dto.studyLabel
   return dto
 }

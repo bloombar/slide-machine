@@ -13,7 +13,7 @@ import { DeckModel, loadDeckAcl } from '../../models/deck'
 import { canEditAcl, canViewAcl } from '../../lib/access'
 import { ActionForbiddenError } from '../dispatch'
 import { definePolicy, type AccessPolicy, type PickId } from './policy'
-import { requireUser, overrideActor } from './common'
+import { requireUser, overrideActor, requireAdminEmail } from './common'
 import type { AdminActor, DeckAccess, DeckSettingsAccess } from './types'
 
 /**
@@ -82,6 +82,27 @@ export const deckSettings = <I>(
     const access = await loadDeck(requireUser(ctx), pick(input))
     return { ...access, admin: await settingsActor(access) }
   })
+
+/**
+ * The settings gate narrowed to the admin allowlist (EVAL-3): the same
+ * admission as `deckSettings`, plus the actor must be an admin. An owner or
+ * editor who is not allowlisted is refused — the study label is research
+ * metadata, not a lecture setting every owner should manage — while an
+ * admin who is neither reaches it on the audited override exactly as they
+ * reach any other setting.
+ */
+export const deckSettingsAdmin = <I>(
+  pick: PickId<I>,
+): AccessPolicy<I, DeckSettingsAccess> =>
+  definePolicy(
+    { resource: 'deck', level: 'settingsAdmin' },
+    async (ctx, input) => {
+      const access = await loadDeck(requireUser(ctx), pick(input))
+      const admin = await settingsActor(access)
+      if (!admin) await requireAdminEmail(access.userId)
+      return { ...access, admin }
+    },
+  )
 
 /**
  * The settings gate for *reading* settings rather than changing them —

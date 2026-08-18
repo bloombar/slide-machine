@@ -1079,6 +1079,9 @@
         "languageInherit": "项目、个人资料或浏览器设置",
         "voiceHeading": "朗读语音",
         "voiceHint": "朗读这节课程所用的语音。它会以课程的语言朗读。",
+        "studyLabelHeading": "研究标签",
+        "studyLabelHint": "可选的研究标签，用于在研究导出中对讲座进行分组，例如“单元-课程-条件”代码。仅管理员可见。",
+        "studyLabelPlaceholder": "例如 B1-SWE-treatment",
         "deleteHint": "删除课程会永久移除其幻灯片和参考材料。此操作无法撤销。"
       },
       "refine": {

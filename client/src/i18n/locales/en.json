@@ -1079,6 +1079,9 @@
         "languageInherit": "project, profile, or browser setting",
         "voiceHeading": "Narration voice",
         "voiceHint": "The voice used to read this lecture aloud. It speaks in the lecture's language.",
+        "studyLabelHeading": "Study label",
+        "studyLabelHint": "Optional research-study tag used to group lectures in research exports, e.g. a block-course-condition code. Visible to admins only.",
+        "studyLabelPlaceholder": "e.g. B1-SWE-treatment",
         "deleteHint": "Deleting a lecture permanently removes its slides and seed material. This cannot be undone."
       },
       "refine": {

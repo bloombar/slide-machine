@@ -68,6 +68,7 @@ export const deckSettingsSnapshot = (
   generationFreedom: doc.generationFreedom,
   language: doc.language,
   ttsVoice: doc.ttsVoice,
+  studyLabel: doc.studyLabel,
   refineIdentifySpeakers: doc.refineIdentifySpeakers,
   refineSlidesEnabled: doc.refineSlidesEnabled,
   refineSlidesLevel: doc.refineSlidesLevel,

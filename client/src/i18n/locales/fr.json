@@ -1079,6 +1079,9 @@
         "languageInherit": "paramètre du projet, du profil ou du navigateur",
         "voiceHeading": "Voix de narration",
         "voiceHint": "La voix qui lit ce cours à voix haute. Elle parle dans la langue du cours.",
+        "studyLabelHeading": "Étiquette d'étude",
+        "studyLabelHint": "Étiquette facultative d'étude de recherche pour regrouper les cours dans les exports de recherche, p. ex. un code bloc-cours-condition. Visible uniquement par les administrateurs.",
+        "studyLabelPlaceholder": "p. ex. B1-SWE-treatment",
         "deleteHint": "La suppression d’un cours efface définitivement ses diapositives et ses documents sources. Cette action est irréversible."
       },
       "refine": {
