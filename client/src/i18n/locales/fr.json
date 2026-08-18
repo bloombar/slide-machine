@@ -465,8 +465,8 @@
       "linkLabel": "Lien Google Slides ou Drive",
       "linkPlaceholder": "Collez un lien Google Slides, ou un lien Drive vers un design .yaml",
       "submit": "Importer le design",
-      "keepEverySlide": "Garder chaque diapositive comme sa propre mise en page",
-      "keepEverySlideHint": "Par défaut, les diapositives qui se ressemblent sont regroupées en une seule mise en page harmonisée. Cochez cette case pour conserver chaque diapositive telle que vous l’avez créée.",
+      "tidy": "Regrouper les diapositives quasi identiques en une seule mise en page",
+      "tidyHint": "Un deck construit à la main répète souvent la même mise en page. Cochez pour les reconnaître comme une seule mise en page nettoyée ; laissez décoché pour conserver chaque diapositive telle quelle.",
       "working": "Lecture de la présentation…",
       "errors": {
         "link": "Cela ne ressemble pas à un lien Google Slides ou Drive.",

@@ -111,10 +111,19 @@ export default function TemplateImport({
   const [error, setError] = useState<string | null>(null)
   const [report, setReport] = useState<ImportReport | null>(null)
   const [needsGoogle, setNeedsGoogle] = useState(false)
-  // Off by default: consolidating the deck into the few designs it is built
-  // from is what makes a template usable. On for the deck where that
-  // judgement is wrong (TMPL-8).
-  const [keepEverySlide, setKeepEverySlide] = useState(false)
+  /*
+   * Whether to combine near-identical slides into one layout (TMPL-8).
+   *
+   * Off by default, so an import keeps every slide exactly as it was drawn.
+   * Consolidation is a judgement — which slides are "the same design" — and
+   * a judgement made silently is one the author cannot see being made: a
+   * deck came back with fewer layouts than it had slides and nothing said
+   * which had been merged into which.
+   *
+   * Kept as an offer instead. `keepEverySlide` is still what the server
+   * takes, so this sends its opposite.
+   */
+  const [tidy, setTidy] = useState(false)
 
   const source = importSourceFrom(link)
   const fromSlides = source?.action === 'template.importFromSlides'
@@ -130,7 +139,9 @@ export default function TemplateImport({
     const input = fromSlides
       ? {
           presentationId: source.id,
-          ...(keepEverySlide ? { keepEverySlide: true } : {}),
+          // Always stated, since the default is now the one the server
+          // treats as opt-in.
+          keepEverySlide: !tidy,
         }
       : { fileId: source.id }
     dispatchAction<Template | { template: Template; report: ImportReport }>(
@@ -245,23 +256,26 @@ export default function TemplateImport({
         </button>
       </form>
 
-      {/* The judgement an import makes, offered rather than assumed: most
-          decks rebuild one design by hand and want it back as one layout,
-          and some are a handful of genuinely different pages. */}
+      {/* The judgement an import can make, offered rather than taken. A
+          hand-built deck usually rebuilds one design many times over, and
+          recognising those as one layout is what makes the result usable
+          (TMPL-8) — but which slides count as "the same design" is a guess,
+          and a guess made silently leaves an author with fewer layouts than
+          slides and no way to see why. */}
       {/* Hidden for a design file, which has no slides to consolidate: a
           control that cannot do anything is worse than one that is absent. */}
       {(!link.trim() || fromSlides) && (
         <label className="mt-2 flex items-start gap-2 text-sm text-slate-600">
           <input
             type="checkbox"
-            checked={keepEverySlide}
-            onChange={e => setKeepEverySlide(e.target.checked)}
+            checked={tidy}
+            onChange={e => setTidy(e.target.checked)}
             className="mt-0.5"
           />
           <span>
-            {t('template.import.keepEverySlide')}
+            {t('template.import.tidy')}
             <span className="block text-xs text-slate-500">
-              {t('template.import.keepEverySlideHint')}
+              {t('template.import.tidyHint')}
             </span>
           </span>
         </label>

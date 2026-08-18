@@ -377,6 +377,10 @@ export default function ExportPanel({ deckId, locale }: Props) {
   // Whether the deck has any freehand whiteboard marks, and whether to include
   // them in the export (default on; only offered for the visual formats).
   const [hasWhiteboard, setHasWhiteboard] = useState(false)
+  // Whether this deployment offers the layouts-carrying shape at all
+  // (EXPORT_REUSABLE_LAYOUTS). Absent until status answers, so the option
+  // does not flash in and out on a deployment that does not have it.
+  const [layoutsOffered, setLayoutsOffered] = useState(false)
   const [includeWhiteboard, setIncludeWhiteboard] = useState(true)
   // Whether to carry the lecture's design as reusable layout pages (EXP-1).
   // Off by default: a flat file is what most people want to hand someone, and
@@ -415,6 +419,7 @@ export default function ExportPanel({ deckId, locale }: Props) {
       .then(s => {
         setConnected(s.googleConnected)
         setHasWhiteboard(s.hasWhiteboard)
+        setLayoutsOffered(s.layoutsOffered)
         setExports(s.exports)
       })
       .catch(() => setError(translate('export.errors.status')))
@@ -433,9 +438,11 @@ export default function ExportPanel({ deckId, locale }: Props) {
   const showWhiteboardOption =
     hasWhiteboard && WHITEBOARD_EXPORT_FORMATS.includes(format)
 
-  // The layouts option only applies to the slide formats that have somewhere
-  // to put them.
-  const showLayoutsOption = LAYOUT_EXPORT_FORMATS.includes(format)
+  // The layouts option applies to the slide formats that have somewhere to
+  // put them — and only where the deployment offers the shape at all, since
+  // otherwise the server would ignore the answer.
+  const showLayoutsOption =
+    layoutsOffered && LAYOUT_EXPORT_FORMATS.includes(format)
 
   const connectGoogle = () => {
     setBusy(true)

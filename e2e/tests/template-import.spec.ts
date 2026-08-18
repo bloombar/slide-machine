@@ -37,6 +37,10 @@ test('template import: connect, paste a link, get a usable design', async ({
   await page.getByRole('tab', { name: 'Design' }).click()
 
   const previews = page.getByTestId('template-preview')
+  // Waited for rather than counted straight away: `count()` samples once and
+  // does not retry, so a list that has not painted yet reads as zero — which
+  // is what made this spec fail under load while passing on its own.
+  await expect(previews.first()).toBeVisible()
   const before = await previews.count()
   expect(before).toBeGreaterThan(0)
 
@@ -79,14 +83,14 @@ test('template import: connect, paste a link, get a usable design', async ({
   await expect(report).toContainText(/10 slides → \d+ layouts/)
   await expect(report).toContainText(/your presentation wasn.t changed/i)
 
-  // The deck comes back as the few designs it is built from, not as ten
-  // near-duplicates — and the report says so, consolidation being a judgement
-  // the instructor is told about rather than one made silently (TMPL-8).
+  // Every slide comes back as its own layout. Which slides are "the same
+  // design" is a judgement, and one made silently leaves an author with
+  // fewer layouts than slides and no way to see why — so it is offered
+  // rather than taken (TMPL-8).
   const summary = (await report.textContent()) ?? ''
   const layouts = Number(/→ (\d+) layouts/.exec(summary)?.[1] ?? '0')
-  expect(layouts).toBeGreaterThan(0)
-  expect(layouts).toBeLessThan(10)
-  await expect(report).toContainText(/\d+ near-identical slides merged/)
+  expect(layouts).toBe(10)
+  await expect(report).not.toContainText(/near-identical slides merged/)
 
   // It is a real template: in the library, rendered as a slide in its own
   // theme like any other, and already chosen — an import exists to be used.
@@ -103,4 +107,51 @@ test('template import: connect, paste a link, get a usable design', async ({
   await expect(page.getByLabel('Template name')).toHaveValue(
     'Imported sample deck',
   )
+})
+
+/**
+ * The tidying an import can do, asked for rather than assumed (TMPL-8).
+ *
+ * A hand-built deck usually rebuilds one design many times over, and
+ * recognising those as a single layout is what makes the result usable. It is
+ * still a judgement about which slides count as the same design, so it is a
+ * box the instructor ticks — and the report says what it did.
+ */
+test('ticking the box combines near-identical slides', async ({ page }) => {
+  const email = `tidy-${stamp}@example.com`
+  await page.goto('/register')
+  await page.getByLabel('Display name').fill('Tidy Er')
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Password').fill(password)
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await expect(page).toHaveURL(/\/app$/)
+
+  const project = `Tidy ${stamp}`
+  await createProject(page, project)
+  await openProjectSettings(page, project)
+  await page.getByRole('tab', { name: 'Design' }).click()
+  await page.getByRole('button', { name: /^Import a design$/i }).click()
+
+  const field = page.getByLabel(/Google Slides or Drive link/i)
+  await expect(field).toBeVisible()
+  await field.fill(link)
+  await page
+    .getByRole('checkbox', { name: /combine near-identical slides/i })
+    .check()
+  await page.getByRole('button', { name: 'Import design' }).click()
+
+  // Same missing step as above: this account has never connected Google.
+  const connect = page.getByRole('button', { name: 'Connect Google' })
+  await expect(connect).toBeVisible({ timeout: 20_000 })
+  await connect.click()
+  await expect(connect).toBeHidden({ timeout: 20_000 })
+  await page.getByRole('button', { name: 'Import design' }).click()
+
+  const report = page.getByTestId('import-report')
+  await expect(report).toBeVisible({ timeout: 20_000 })
+  const summary = (await report.textContent()) ?? ''
+  const layouts = Number(/→ (\d+) layouts/.exec(summary)?.[1] ?? '0')
+  expect(layouts).toBeGreaterThan(0)
+  expect(layouts).toBeLessThan(10)
+  await expect(report).toContainText(/near-identical slides merged/)
 })
