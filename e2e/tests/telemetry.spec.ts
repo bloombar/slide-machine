@@ -80,6 +80,8 @@ test('a streamed session leaves a telemetry record the admin can read', async ({
   await expect(adminPage).toHaveURL(/\/app\/admin\/decks\//)
   const panel = adminPage.getByTestId('telemetry-panel')
   await expect(panel).toBeVisible()
-  await expect(panel.getByText('Stopped')).toBeVisible()
+  // Exact match: the Ended column's hover hint also contains the word
+  // "Stopped", but only the end badge is exactly that text.
+  await expect(panel.getByText('Stopped', { exact: true })).toBeVisible()
   await adminContext.close()
 })

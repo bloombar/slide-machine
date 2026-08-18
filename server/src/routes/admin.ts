@@ -375,13 +375,15 @@ const parseListQuery = <T extends z.ZodTypeAny>(
 
 // Sort keys are `${field}:${dir}`: one per column, each direction. The
 // default (joined:desc) is newest-first, as the directory has always been.
+// Every sort ends in `_id` so equal keys (accounts created in the same
+// millisecond, duplicate handles) keep a stable order across page queries.
 const SORTS = {
-  'email:asc': { email: 1 },
-  'email:desc': { email: -1 },
-  'handle:asc': { displayName: 1 },
-  'handle:desc': { displayName: -1 },
-  'joined:asc': { createdAt: 1 },
-  'joined:desc': { createdAt: -1 },
+  'email:asc': { email: 1, _id: 1 },
+  'email:desc': { email: -1, _id: -1 },
+  'handle:asc': { displayName: 1, _id: 1 },
+  'handle:desc': { displayName: -1, _id: -1 },
+  'joined:asc': { createdAt: 1, _id: 1 },
+  'joined:desc': { createdAt: -1, _id: -1 },
 } as const
 
 const listQuerySchema = listQuery(

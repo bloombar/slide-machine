@@ -122,8 +122,9 @@ describe('AdminDeckPage', () => {
     renderPage()
     await screen.findByRole('heading', { name: 'Waves' })
     const panel = await screen.findByTestId('telemetry-panel')
+    // findByText: the panel shows "Loading…" until the sessions fetch settles
     expect(
-      within(panel).getByText('No live sessions recorded yet.'),
+      await within(panel).findByText('No live sessions recorded yet.'),
     ).toBeVisible()
   })
 

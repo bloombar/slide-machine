@@ -17,6 +17,7 @@ import type {
   TelemetrySessionSummary,
 } from '@slide-machine/shared'
 import { fetchDeckTelemetry } from '../../api/telemetry'
+import Tooltip from '../Tooltip'
 
 /** A millisecond figure for a table cell: seconds past 10s, else ms. */
 export const formatMs = (value: number | null | undefined): string => {
@@ -112,37 +113,71 @@ export function SessionRows({
   )
 }
 
+/**
+ * Plain-language hover explanations for every session column, shared by the
+ * per-lecture panel and the overview page so the same column never gets two
+ * descriptions. Shown through the house Tooltip, which appears immediately
+ * on hover — the native `title` delay buries a hint nobody waits for.
+ */
+export const COLUMN_HINTS: Record<string, string> = {
+  Lecture: 'The lecture this recording session belonged to.',
+  Started: 'When the recording session began.',
+  Duration:
+    'Wall-clock time from the start of the session to its last recorded activity.',
+  Captured:
+    'How much spoken audio actually reached transcription — less than the duration when the microphone was paused or the stream faltered.',
+  Phrases:
+    'How many finished spoken phrases the session produced. Each one is a chance to update or create a slide.',
+  'STT p50/p95':
+    'How long after words were spoken the transcript committed them — the speech-to-text share of the lag. Typical (median) / worst-case (95th percentile).',
+  'Gen. p50/p95':
+    'How long the AI took to turn a phrase into slide content — the generation share of the lag. Typical (median) / worst-case (95th percentile).',
+  Errors:
+    'Failures during the session: slide-generation errors plus transcription failures.',
+  Restarts:
+    'Times the transcription stream quietly reconnected mid-session. Routine in long sessions; a sudden spike suggests trouble.',
+  Ended:
+    'How the session ended: Stopped (deliberately), Abandoned (connection closed without a stop), Crashed (no end record at all), Active (still running), or Unknown (the in-browser engine leaves no end signal).',
+}
+
+/** One header cell with its layman's hover explanation. */
+export function HeaderCell({
+  label,
+  align = 'right',
+}: {
+  label: string
+  align?: 'left' | 'right' | 'end'
+}) {
+  const alignClass =
+    align === 'right' ? ' text-right' : align === 'end' ? ' pl-3' : ''
+  return (
+    <th scope="col" className={`cursor-help py-2${alignClass}`}>
+      {/* Right-side columns anchor the hint's end so it grows inward instead
+          of clipping against the table's scroll container. */}
+      <Tooltip
+        label={COLUMN_HINTS[label] ?? label}
+        align={align === 'left' ? 'start' : 'end'}
+        multiline
+      >
+        <span>{label}</span>
+      </Tooltip>
+    </th>
+  )
+}
+
 /** Column headers shared with the admin telemetry overview page. */
 export function SessionHeaders() {
   return (
     <tr>
-      <th scope="col" className="py-2">
-        Started
-      </th>
-      <th scope="col" className="py-2 text-right">
-        Duration
-      </th>
-      <th scope="col" className="py-2 text-right">
-        Captured
-      </th>
-      <th scope="col" className="py-2 text-right">
-        Phrases
-      </th>
-      <th scope="col" className="py-2 text-right">
-        STT p50/p95
-      </th>
-      <th scope="col" className="py-2 text-right">
-        Gen. p50/p95
-      </th>
-      <th scope="col" className="py-2 text-right">
-        Errors
-      </th>
-      <th scope="col" className="py-2 text-right">
-        Restarts
-      </th>
-      <th scope="col" className="py-2 pl-3">
-        Ended
-      </th>
+      <HeaderCell label="Started" align="left" />
+      <HeaderCell label="Duration" />
+      <HeaderCell label="Captured" />
+      <HeaderCell label="Phrases" />
+      <HeaderCell label="STT p50/p95" />
+      <HeaderCell label="Gen. p50/p95" />
+      <HeaderCell label="Errors" />
+      <HeaderCell label="Restarts" />
+      <HeaderCell label="Ended" align="end" />
     </tr>
   )
 }

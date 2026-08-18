@@ -6,7 +6,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import type { TelemetrySessionSummary } from '@slide-machine/shared'
-import TelemetryPanel, { formatDurationMs, formatMs } from './TelemetryPanel'
+import TelemetryPanel, {
+  COLUMN_HINTS,
+  formatDurationMs,
+  formatMs,
+} from './TelemetryPanel'
 import { mockFetchRoutes } from '../../test/fetch-mock'
 
 const session = (
@@ -89,6 +93,30 @@ describe('TelemetryPanel', () => {
     expect(screen.getByRole('alert').textContent).toContain(
       'Could not load sessions.',
     )
+  })
+})
+
+describe('column hints', () => {
+  it('gives every column header a plain-language hover explanation', async () => {
+    renderPanel()
+    await screen.findByText('Stopped')
+    // Each header renders its hint through the house Tooltip (instant on
+    // hover), so the explanation text is in the cell rather than a title attr.
+    const labels = [
+      'Started',
+      'Duration',
+      'Captured',
+      'Phrases',
+      'STT p50/p95',
+      'Gen. p50/p95',
+      'Errors',
+      'Restarts',
+      'Ended',
+    ]
+    for (const label of labels) {
+      expect(screen.getByText(COLUMN_HINTS[label]!)).toBeInTheDocument()
+    }
+    expect(COLUMN_HINTS['STT p50/p95']).toContain('speech-to-text')
   })
 })
 
