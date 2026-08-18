@@ -57,8 +57,16 @@ jobs:
       - name: Build
         run: npm run build
 
+      # The download can stall indefinitely (it once burned hours of CI),
+      # so bound each try and retry twice before giving up.
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 15
+        run: |
+          for i in 1 2 3; do
+            timeout 240 npx playwright install --with-deps chromium && exit 0
+            echo "::warning::Playwright install attempt $i timed out or failed; retrying"
+          done
+          exit 1
 
       - name: End-to-end tests
         run: npm run e2e
