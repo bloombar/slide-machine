@@ -42,6 +42,7 @@ describe('ExportPanel', () => {
           googleConnected: false,
           deckTitle: 'Bio',
           hasWhiteboard: false,
+          layoutsOffered: true,
           exports: [],
         },
       }),
@@ -82,6 +83,7 @@ describe('ExportPanel', () => {
           googleConnected: false,
           deckTitle: 'Bio',
           hasWhiteboard: false,
+          layoutsOffered: true,
           exports: [],
         },
       }),
@@ -123,6 +125,7 @@ describe('ExportPanel', () => {
           googleConnected: false,
           deckTitle: 'Bio',
           hasWhiteboard: false,
+          layoutsOffered: true,
           exports: [],
         },
       }),
@@ -156,6 +159,7 @@ describe('ExportPanel', () => {
           googleConnected: false,
           deckTitle: 'Bio',
           hasWhiteboard: false,
+          layoutsOffered: true,
           exports: [],
         },
       }),
@@ -175,6 +179,7 @@ describe('ExportPanel', () => {
           googleConnected: true,
           deckTitle: 'Bio',
           hasWhiteboard: false,
+          layoutsOffered: true,
           exports: [],
         },
       }),
@@ -200,6 +205,7 @@ describe('ExportPanel', () => {
           googleConnected: false,
           deckTitle: 'Bio',
           hasWhiteboard: false,
+          layoutsOffered: true,
           exports: [],
         },
       }),
@@ -235,6 +241,7 @@ describe('ExportPanel', () => {
           googleConnected: false,
           deckTitle: 'Bio',
           hasWhiteboard: false,
+          layoutsOffered: true,
           exports: [],
         },
       }),
@@ -258,6 +265,7 @@ describe('ExportPanel', () => {
           googleConnected: true,
           deckTitle: 'Bio',
           hasWhiteboard: false,
+          layoutsOffered: true,
           exports: [],
         },
       }),
@@ -308,6 +316,7 @@ describe('ExportPanel', () => {
           googleConnected: false,
           deckTitle: 'Bio',
           hasWhiteboard: true,
+          layoutsOffered: true,
           exports: [],
         },
       }),
@@ -357,6 +366,7 @@ describe('ExportPanel', () => {
           googleConnected: false,
           deckTitle: 'Bio',
           hasWhiteboard: false,
+          layoutsOffered: true,
           exports: [],
         },
       }),
@@ -387,6 +397,31 @@ describe('ExportPanel', () => {
       screen.getByRole('button', { name: /Download PowerPoint/i }),
     )
     await waitFor(() => expect(downloadBody.withLayouts).toBe(true))
+  })
+
+  it('hides the reusable-layouts choice where the deployment has it off', () => {
+    // A checkbox whose answer the server ignores is worse than no checkbox:
+    // it promises a shape this deployment does not produce.
+    mockFetchRoutes({
+      'export.status': () => ({
+        status: 200,
+        body: {
+          googleConnected: false,
+          deckTitle: 'Bio',
+          hasWhiteboard: false,
+          layoutsOffered: false,
+          exports: [],
+        },
+      }),
+    })
+    render(<ExportPanel deckId="d1" />)
+    return waitFor(() =>
+      expect(
+        screen.queryByRole('checkbox', {
+          name: /keep the design as reusable layouts/i,
+        }),
+      ).toBeNull(),
+    )
   })
 
   it('lists a saved Drive export and deletes it', async () => {
@@ -475,6 +510,7 @@ describe('ExportPanel', () => {
           googleConnected: true,
           deckTitle: 'Bio',
           hasWhiteboard: false,
+          layoutsOffered: true,
           exports: [],
         },
       }),
@@ -505,6 +541,7 @@ describe('ExportPanel', () => {
           googleConnected: false,
           deckTitle: 'Bio',
           hasWhiteboard: false,
+          layoutsOffered: true,
           exports: [],
         },
       }),

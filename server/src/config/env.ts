@@ -85,6 +85,16 @@ const envSchema = z
     // (tests/dev), 'live' uploads to the connected account's Drive and builds a
     // real Google Slides presentation. Downloads (PDF/YAML bytes) work in both.
     EXPORT_MODE: z.enum(['mock', 'live']).default('mock'),
+    // EXP-1's second export shape: a lecture that carries its style template
+    // as the presentation's own layout pages, so the file can be restyled
+    // where it lands and re-imported with that design intact.
+    //
+    // Off by default. It is the more ambitious half of the requirement and
+    // the flat file is what most people want to hand someone; a deployment
+    // that wants the choice turns it on and the option appears beside the
+    // format. Off, the checkbox is absent and the server ignores the field,
+    // so a stale client cannot ask for it either.
+    EXPORT_REUSABLE_LAYOUTS: z.stringbool().default(false),
     IMAGE_GEN_PROVIDER: z.string().default('gemini'),
     // Text-to-speech (slide/deck playback). 'google-cloud' needs a key below;
     // 'none' disables the feature; 'mock' is for tests. Without a usable key the

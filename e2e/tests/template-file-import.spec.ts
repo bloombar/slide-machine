@@ -44,6 +44,10 @@ test('template round trip: export a design to a file, import it back', async ({
   await dialog.getByRole('tab', { name: 'Design' }).click()
 
   const previews = dialog.getByTestId('template-preview')
+  // Waited for rather than counted straight away: `count()` samples once and
+  // does not retry, so a list that has not painted yet reads as zero — which
+  // is what made this spec fail under load while passing on its own.
+  await expect(previews.first()).toBeVisible()
   const before = await previews.count()
   expect(before).toBeGreaterThan(0)
 
@@ -87,6 +91,10 @@ test('a file that is not a template is refused, and says why', async ({
   await page.getByRole('tab', { name: 'Design' }).click()
 
   const previews = page.getByTestId('template-preview')
+  // Waited for rather than counted straight away: `count()` samples once and
+  // does not retry, so a list that has not painted yet reads as zero — which
+  // is what made this spec fail under load while passing on its own.
+  await expect(previews.first()).toBeVisible()
   const before = await previews.count()
 
   await page.getByRole('button', { name: /^Import a design$/i }).click()

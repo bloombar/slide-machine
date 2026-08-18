@@ -81,6 +81,15 @@ export interface ExportStatus {
   googleConnected: boolean
   deckTitle: string
   hasWhiteboard: boolean
+  /**
+   * Whether this deployment offers EXP-1's second export shape — a lecture
+   * carrying its template as reusable layout pages
+   * (`EXPORT_REUSABLE_LAYOUTS`).
+   *
+   * Sent rather than assumed, so the option is absent where it does nothing.
+   * A checkbox whose answer the server ignores is worse than no checkbox.
+   */
+  layoutsOffered: boolean
   exports: ExportedFile[]
 }
 

@@ -72,6 +72,7 @@ import {
 import { decryptToken } from '../lib/token-crypto'
 
 import { isLive } from '../lib/export-mode'
+import { env } from '../config/env'
 
 // Re-exported for the modules that have always reached for it here.
 export { isLive }
@@ -231,6 +232,10 @@ export const exportStatus = defineAction<
       googleConnected: isConnected(googleUser, 'export'),
       deckTitle: deck.title,
       hasWhiteboard,
+      // Whether this deployment offers the layouts-carrying shape at all
+      // (EXP-1). Told rather than assumed, so the option is absent where the
+      // server would ignore it.
+      layoutsOffered: env.EXPORT_REUSABLE_LAYOUTS,
       exports: (deck.exports ?? []).map(toExportedFile),
     }
   },
@@ -291,7 +296,7 @@ export const exportDownload = defineAction<
     if (input.format === 'pptx') {
       // The same builder the Google Slides export uses; that route uploads
       // the bytes for Drive to convert, this one just hands them over.
-      const pptx = await deckToPptx(deck, notes, input.withLayouts === true)
+      const pptx = await deckToPptx(deck, notes, wantsLayouts(input))
       await meterUsage('exports', 1)
       return {
         fileName: `${base}.pptx`,
@@ -310,6 +315,17 @@ export const exportDownload = defineAction<
     }
   },
 })
+
+/**
+ * Whether to write the deck's template as reusable layout pages (EXP-1).
+ *
+ * The deployment decides first: with `EXPORT_REUSABLE_LAYOUTS` off the field
+ * is ignored however it arrives, so a client that has not noticed — a stale
+ * tab, a script, a request made by hand — cannot turn on a shape this
+ * deployment does not offer.
+ */
+const wantsLayouts = (input: { withLayouts?: boolean }): boolean =>
+  env.EXPORT_REUSABLE_LAYOUTS && input.withLayouts === true
 
 /** Whether whiteboard marks apply to a given format (visual formats only). */
 const whiteboardApplies = (format: DeckExportFormat): boolean =>
@@ -387,7 +403,7 @@ export const exportToDrive = defineAction<
           { ...deck, title: slidesTitle },
           input.driveFolderId,
           notes,
-          input.withLayouts === true,
+          wantsLayouts(input),
         )
         fileId = file.id
         fileUrl = file.fileUrl
@@ -399,7 +415,7 @@ export const exportToDrive = defineAction<
           input.format === 'yaml'
             ? new TextEncoder().encode(deckToYaml(deck))
             : input.format === 'pptx'
-              ? await deckToPptx(deck, notes, input.withLayouts === true)
+              ? await deckToPptx(deck, notes, wantsLayouts(input))
               : await deckToPdf(deck, notes)
         const file = await uploadFileToDriveLive(
           refreshToken,

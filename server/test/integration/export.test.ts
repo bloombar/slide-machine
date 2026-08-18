@@ -104,8 +104,32 @@ describe('export actions (mock mode)', () => {
       googleConnected: false,
       deckTitle: 'Photosynthesis',
       hasWhiteboard: false,
+      // Off unless the deployment turns it on (EXPORT_REUSABLE_LAYOUTS).
+      layoutsOffered: false,
       exports: [],
     })
+  })
+
+  /**
+   * EXP-1's second export shape, behind a deployment flag
+   * (`EXPORT_REUSABLE_LAYOUTS`). Off here, as it is by default.
+   */
+  it('ignores a request for reusable layouts where they are switched off', async () => {
+    // The field is accepted and disregarded rather than refused: a stale tab
+    // asking for a shape this deployment does not offer should still get its
+    // export, as the flat file it would have got anyway.
+    const res = await act(ada, 'export.download', {
+      deckId,
+      format: 'pptx',
+      withLayouts: true,
+    })
+    expect(res.status).toBe(200)
+    const bytes = Buffer.from(res.body.contentBase64, 'base64')
+    const layouts = new AdmZip(bytes)
+      .getEntries()
+      .filter(e => /ppt\/slideLayouts\/.*\.xml$/.test(e.entryName))
+    // Only the package's own default layout: the template's are not written.
+    expect(layouts).toHaveLength(1)
   })
 
   it('downloads a YAML export capturing the deck content', async () => {

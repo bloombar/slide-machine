@@ -465,8 +465,8 @@
       "linkLabel": "Enlace de Google Slides o Drive",
       "linkPlaceholder": "Pega un enlace de Google Slides o un enlace de Drive a un diseño .yaml",
       "submit": "Importar diseño",
-      "keepEverySlide": "Conservar cada diapositiva como su propio diseño",
-      "keepEverySlideHint": "De forma predeterminada, las diapositivas parecidas se combinan en un único diseño ordenado. Marca esta casilla para conservar cada diapositiva tal como la creaste.",
+      "tidy": "Combinar diapositivas casi idénticas en un solo diseño",
+      "tidyHint": "Una presentación hecha a mano suele repetir el mismo diseño muchas veces. Marca esta opción para reconocerlas como un único diseño ordenado; déjala sin marcar para conservar cada diapositiva tal como la creaste.",
       "working": "Leyendo la presentación…",
       "errors": {
         "link": "Eso no parece un enlace de Google Slides ni de Drive.",

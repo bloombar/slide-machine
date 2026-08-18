@@ -149,13 +149,15 @@ describe('importing', () => {
     await waitFor(() =>
       expect(dispatchAction).toHaveBeenCalledWith('template.importFromSlides', {
         presentationId: '1AbC_dEf-123',
+        keepEverySlide: true,
       }),
     )
   })
 
-  it('consolidates unless told otherwise, which is the useful default', async () => {
-    // Off is not the same as sent-as-false: the server's default IS
-    // consolidation, so the ordinary import says nothing about it (TMPL-8)
+  it('keeps every slide unless the instructor asks for tidying', async () => {
+    // Which slides are "the same design" is a judgement, and one made
+    // silently leaves an author with fewer layouts than slides and no way to
+    // see why. So it is offered rather than taken (TMPL-8).
     render(<TemplateImport onImported={vi.fn()} />)
     openPanel()
     expect(screen.getByRole('checkbox')).not.toBeChecked()
@@ -164,13 +166,14 @@ describe('importing', () => {
     await waitFor(() =>
       expect(dispatchAction).toHaveBeenCalledWith('template.importFromSlides', {
         presentationId: '1AbCdEfGhIjKl',
+        keepEverySlide: true,
       }),
     )
   })
 
-  it('asks for every slide when the instructor ticks the box', async () => {
-    // The judgement offered rather than assumed: a short deck of genuinely
-    // different pages wants them all back
+  it('combines near-identical slides when the box is ticked', async () => {
+    // A hand-built deck usually rebuilds one design many times over, and
+    // recognising those as one layout is what makes the result usable.
     render(<TemplateImport onImported={vi.fn()} />)
     openPanel()
     fireEvent.click(screen.getByRole('checkbox'))
@@ -179,7 +182,7 @@ describe('importing', () => {
     await waitFor(() =>
       expect(dispatchAction).toHaveBeenCalledWith('template.importFromSlides', {
         presentationId: '1AbCdEfGhIjKl',
-        keepEverySlide: true,
+        keepEverySlide: false,
       }),
     )
   })
