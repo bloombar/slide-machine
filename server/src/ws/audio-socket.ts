@@ -37,6 +37,10 @@ import {
   releaseRetentionBytes,
   reserveRetentionBytes,
 } from './retention-budget'
+import {
+  recordSessionEvent,
+  type SessionEventInput,
+} from '../telemetry/recorder'
 
 /** Path the client connects to; scoped so other upgrades are ignored. */
 const STT_PATH = '/api/stt'
@@ -164,6 +168,33 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
   let sttStopped = false
   // Warned once per session, so a long lecture does not repeat it every settle.
   let sttWarned = false
+  // Session telemetry (EVAL-1): present only when `start` carried a sessionId.
+  // `totalSttBytes` is a separate monotonic counter because `sttBytes` above is
+  // drained by every settle; `ended` makes the end row once-only when the stop
+  // message and the socket close both arrive.
+  let telemetry: {
+    sessionId: string
+    /** The named lecture once its edit check answers; null when the session
+     * named none or the connecting user may not edit it (never another
+     * user's deck — the check runs regardless of retention being enabled). */
+    deckIdReady: Promise<string | null>
+    firstAudioWall: number | null
+    totalSttBytes: number
+    ended: boolean
+  } | null = null
+
+  /** Appends one telemetry row for this session; no-op without a session id.
+   * Waits only on the (already-running) deck edit check, never on the write. */
+  const recordTelemetry = (
+    kind: SessionEventInput['kind'],
+    fields?: Partial<SessionEventInput>,
+  ): void => {
+    const t = telemetry
+    if (!t) return
+    void t.deckIdReady.then(deckId =>
+      recordSessionEvent({ sessionId: t.sessionId, deckId, kind, ...fields }),
+    )
+  }
 
   const send = (payload: object): void => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(payload))
@@ -411,6 +442,11 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
         languageCode: start.languageCode || 'en-US',
         sampleRateHertz: start.sampleRate,
         phraseHints: start.phraseHints,
+        onStreamEvent: event => {
+          if (event.type === 'restart')
+            recordTelemetry('stt_restart', { restartReason: event.reason })
+          else recordTelemetry('stt_error', { errorMessage: event.message })
+        },
       })
     } catch (error) {
       // A misconfigured adapter (e.g. missing/invalid credentials) must fail
@@ -419,6 +455,28 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
       send({ type: 'error', message: 'Speech engine is not available' })
       ws.close()
       return
+    }
+    // Telemetry begins once the stream is genuinely open (EVAL-1). The deck
+    // edit check reuses retention's ACL lookup but runs unconditionally —
+    // telemetry must not key rows to a lecture this user cannot edit, and
+    // retention being disabled must not disable the record.
+    if (start.sessionId) {
+      telemetry = {
+        sessionId: start.sessionId,
+        deckIdReady: start.deckId
+          ? retentionOwnerOf(start.deckId, userId).then(owner =>
+              owner ? start.deckId! : null,
+            )
+          : Promise.resolve(null),
+        firstAudioWall: null,
+        totalSttBytes: 0,
+        ended: false,
+      }
+      recordTelemetry('session_start', {
+        engine: provider.name,
+        languageCode: start.languageCode || 'en-US',
+        sampleRate: sttSampleRate,
+      })
     }
     beginRetention(start)
     // Not awaited: a lecture must start streaming the moment the engine is
@@ -443,6 +501,20 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
             : {}),
           ...(event.words?.length ? { words: event.words } : {}),
         })
+        // Finalization latency (EVAL-1): how far the final's last word-end
+        // (audio time) trails the wall clock since audio began flowing. The
+        // audio offset also serves as a captured-duration fallback should the
+        // session crash before its end row.
+        if (event.isFinal && event.words?.length && telemetry?.firstAudioWall) {
+          const lastEndMs = event.words[event.words.length - 1]!.endMs
+          recordTelemetry('stt_final', {
+            finalizationMs: Math.max(
+              0,
+              Date.now() - telemetry.firstAudioWall - lastEndMs,
+            ),
+            audioMs: lastEndMs,
+          })
+        }
       }
       if (!stopped) {
         send({ type: 'error', message: 'Transcription stopped unexpectedly' })
@@ -451,7 +523,20 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
     })()
   }
 
-  const finish = (): void => {
+  const finish = (reason: 'stopped' | 'abandoned'): void => {
+    // The end row is once-only, and the first reason wins: a deliberate stop
+    // frame arrives before the close event it causes, so a stopped session is
+    // never re-labelled abandoned. A process crash writes no end row at all —
+    // that absence is how the read side derives "crashed" (EVAL-1).
+    if (telemetry && !telemetry.ended) {
+      telemetry.ended = true
+      recordTelemetry('session_end', {
+        endReason: reason,
+        capturedMs: Math.round(
+          pcmBytesDurationMs(telemetry.totalSttBytes, sttSampleRate),
+        ),
+      })
+    }
     stopped = true
     stream?.end()
     void settleStt(true)
@@ -463,6 +548,13 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
       stream?.write(new Uint8Array(data))
       if (stream) {
         sttBytes += data.length
+        // Synchronous accounting only in this hot path (EVAL-1): the wall
+        // clock of the first frame anchors finalization latency, the monotonic
+        // byte count becomes captured duration at session end.
+        if (telemetry) {
+          telemetry.firstAudioWall ??= Date.now()
+          telemetry.totalSttBytes += data.length
+        }
         // Settle every ~30 seconds of audio rather than on every frame: one
         // upsert per frame would be hundreds of writes a minute for a number
         // that only has to be roughly live.
@@ -491,11 +583,11 @@ const handleConnection = (ws: WebSocket, userId: string): void => {
       return
     }
     if (message.type === 'start' && !stream) void begin(message as StartMessage)
-    else if (message.type === 'stop') finish()
+    else if (message.type === 'stop') finish('stopped')
   })
 
-  ws.on('close', finish)
-  ws.on('error', finish)
+  ws.on('close', () => finish('abandoned'))
+  ws.on('error', () => finish('abandoned'))
 }
 
 /**

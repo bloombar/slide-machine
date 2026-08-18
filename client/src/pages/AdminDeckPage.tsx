@@ -18,6 +18,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import CostPanel from '../components/admin/CostPanel'
+import TelemetryPanel from '../components/admin/TelemetryPanel'
 import {
   deleteAdminDeck,
   fetchAdminDeck,
@@ -392,6 +393,7 @@ export default function AdminDeckPage() {
           <SeedMaterialView seed={seed} projectTitle={projectTitle(project)} />
         </Modal>
       )}
+      {deckId && <TelemetryPanel deckId={deckId} />}
       {deckId && <CostPanel scope={{ kind: 'deck', id: deckId }} />}
     </div>
   )

@@ -40,6 +40,7 @@ import { hasContent, splitGeneratedSlots } from '../lib/generated-slots'
 import { importSemanticsPrompt } from './import-semantics-prompt'
 import { registry } from './registry'
 import { meterGeminiUsage, type GeminiUsageMetadata } from './usage-metadata'
+import { noteGenerationRefusal } from '../telemetry/generation-signals'
 import { GenerationUnavailableError } from './errors'
 import { freedomPolicy, renderGenerationPrompt } from './prompt-templates'
 import {
@@ -1044,6 +1045,9 @@ export class GeminiGenerationProvider implements GenerationProvider {
       req.layoutDescriptors,
     )
     if (refused.length) {
+      // Telemetry (EVAL-1): one refusal per re-asked box; no-op outside a
+      // live-session signal scope (imports, reformats, tests).
+      noteGenerationRefusal(refused.length)
       const second = await retrySpecialized(refused, {
         phrase: req.phrase,
         title:

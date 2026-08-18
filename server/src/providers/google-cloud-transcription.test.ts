@@ -390,6 +390,56 @@ describe('GoogleCloudTranscriptionProvider', () => {
     stream.end()
   })
 
+  it('reports a timer restart through onStreamEvent (EVAL-1)', () => {
+    vi.useFakeTimers()
+    const onStreamEvent = vi.fn()
+    const provider = new GoogleCloudTranscriptionProvider()
+    const stream = provider.startStream({
+      languageCode: 'en-US',
+      onStreamEvent,
+    })
+    vi.advanceTimersByTime(240_000)
+    expect(onStreamEvent).toHaveBeenCalledWith({
+      type: 'restart',
+      reason: 'timer',
+    })
+    stream.end()
+  })
+
+  it('reports an out-of-range restart through onStreamEvent', () => {
+    const onStreamEvent = vi.fn()
+    const provider = new GoogleCloudTranscriptionProvider()
+    const stream = provider.startStream({
+      languageCode: 'en-US',
+      onStreamEvent,
+    })
+    streams[0]!.emit('error', { code: 11 })
+    expect(onStreamEvent).toHaveBeenCalledWith({
+      type: 'restart',
+      reason: 'out_of_range',
+    })
+    stream.end()
+  })
+
+  it('reports a hard stream error through onStreamEvent, trimmed', () => {
+    const onStreamEvent = vi.fn()
+    const provider = new GoogleCloudTranscriptionProvider()
+    provider.startStream({ languageCode: 'en-US', onStreamEvent })
+    streams[0]!.emit('error', { code: 13, message: 'x'.repeat(500) })
+    expect(onStreamEvent).toHaveBeenCalledWith({
+      type: 'error',
+      message: 'x'.repeat(200),
+    })
+  })
+
+  it('never throws when no onStreamEvent callback is supplied', () => {
+    const provider = new GoogleCloudTranscriptionProvider()
+    const stream = provider.startStream({ languageCode: 'en-US' })
+    expect(() => streams[0]!.emit('error', { code: 11 })).not.toThrow()
+    expect(() => streams[1]!.emit('error', { code: 13 })).not.toThrow()
+    stream.end()
+  })
+
   it('constructs the SpeechClient only once, lazily', () => {
     const provider = new GoogleCloudTranscriptionProvider()
     expect(SpeechClient).not.toHaveBeenCalled()

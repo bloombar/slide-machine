@@ -85,7 +85,7 @@ const serverEnv = (over: Record<string, string>): Record<string, string> => ({
   ...over,
 })
 
-const STT_SPEC = /(google-stt|regenerate-transcript)\.spec\.ts/
+const STT_SPEC = /(google-stt|regenerate-transcript|telemetry)\.spec\.ts/
 
 export default defineConfig({
   testDir: './tests',

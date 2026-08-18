@@ -41,6 +41,7 @@ describe('AdminNav', () => {
     ['/app/admin/projects/p1', 'Projects'],
     ['/app/admin/decks', 'Lectures'],
     ['/app/admin/decks/d1', 'Lectures'],
+    ['/app/admin/telemetry', 'Telemetry'],
     ['/app/admin/logs', 'Admin Logs'],
     ['/app/admin/settings-logs', 'User Logs'],
   ])('marks %s as being in the %s section', (path, label) => {

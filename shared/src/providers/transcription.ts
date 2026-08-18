@@ -30,6 +30,15 @@ export interface TranscriptionEvent {
   words?: WordTiming[]
 }
 
+/**
+ * An operational event inside a live transcription stream — a quiet restart
+ * or a hard provider error. Surfaced so session telemetry (EVAL-1) can count
+ * them; they carry no transcript content.
+ */
+export type TranscriptionStreamEvent =
+  | { type: 'restart'; reason: 'timer' | 'out_of_range' }
+  | { type: 'error'; message?: string }
+
 export interface TranscriptionStreamOptions {
   languageCode: string
   /** Preflight concept terms passed as speech-adaptation phrase hints (PREP-3). */
@@ -37,6 +46,11 @@ export interface TranscriptionStreamOptions {
   /** Sample rate of the incoming PCM audio; the client reports its actual
    * AudioContext rate so no resampling is needed. Defaults to 16 kHz. */
   sampleRateHertz?: number
+  /**
+   * Observability callback for stream restarts and errors (EVAL-1 telemetry).
+   * Optional; adapters without restart behavior simply never call it.
+   */
+  onStreamEvent?: (event: TranscriptionStreamEvent) => void
 }
 
 /** A live audio → text stream for one capture session. */
