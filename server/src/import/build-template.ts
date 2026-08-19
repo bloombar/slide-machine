@@ -423,6 +423,12 @@ export const buildTemplate = (
       accent: source.theme.accent,
       penColor: source.theme.text,
       highlighterColor: source.theme.accent,
+      // What this deck draws a link in, where it says (TMPL-8). A box is
+      // stored with one colour and every run inside it is drawn in that one,
+      // and the run an author coloured differently is nearly always a link —
+      // so a deck whose links are red got them in the body's black. Only
+      // present when the deck states one worth carrying.
+      ...(source.theme.link ? { link: source.theme.link } : {}),
     },
     // Every template must offer a blank slate to draw on (TMPL-7), and no
     // presentation has one to import — so it is synthesized rather than

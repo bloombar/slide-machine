@@ -1071,6 +1071,14 @@ const themeOf = (
     // Muted is the quiet one, so it may sit closer to the background than the
     // body text — but it still has to be legible.
     muted: readable(scheme.DARK2, scheme.ACCENT2, text),
+    // Only when the deck states one AND it differs from the body: a link the
+    // same colour as everything around it is not a decision worth carrying,
+    // and drawing every link in the body colour is what the app already does.
+    ...(isHex(scheme.HYPERLINK) &&
+    readable(scheme.HYPERLINK) !== text &&
+    contrast(scheme.HYPERLINK!, bg) >= READABLE
+      ? { link: scheme.HYPERLINK }
+      : {}),
   }
 }
 

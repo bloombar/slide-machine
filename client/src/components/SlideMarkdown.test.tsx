@@ -54,6 +54,17 @@ describe('SlideMarkdown', () => {
       expect(click.defaultPrevented).toBe(true)
     })
 
+    it('is drawn in the slide’s link colour, not the box’s', () => {
+      // A box carries one colour and every run in it is drawn in that one, so
+      // an imported deck whose links were red showed them in the body's
+      // black. The colour rides on the slide as a custom property, since an
+      // anchor is drawn deep inside any slot of any layout.
+      editable()
+      expect(screen.getByRole('link')).toHaveClass(
+        'text-[color:var(--slide-link,inherit)]',
+      )
+    })
+
     it('says which key to hold, on the link itself', () => {
       // A tooltip alone tells only the reader who hovers and waits, and the
       // person who needs telling is the one who just clicked and saw nothing
@@ -73,6 +84,13 @@ describe('SlideMarkdown', () => {
       )
       expect(screen.getByRole('link').getAttribute('title')).toMatch(
         /click to open|点击可打开/i,
+      )
+    })
+
+    it('draws a presented link in that colour too', () => {
+      render(<SlideMarkdown text="[the docs](https://example.com)" inline />)
+      expect(screen.getByRole('link')).toHaveClass(
+        'text-[color:var(--slide-link,inherit)]',
       )
     })
 

@@ -145,6 +145,16 @@ export interface SourceTheme {
   text: string
   accent: string
   muted: string
+  /**
+   * What this deck draws a hyperlink in, where it says.
+   *
+   * A box is stored with one colour, so every run inside it is drawn in that
+   * one — and the run an author coloured differently is nearly always a link.
+   * A deck whose links are red came back with them in the body's black,
+   * because the box took the colour of its first run. The link colour is the
+   * design's, so it is carried on the theme and the links are drawn in it.
+   */
+  link?: string
 }
 
 /** A whole presentation, ready to derive a design from. */

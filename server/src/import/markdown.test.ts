@@ -7,7 +7,7 @@
  * wrote and the emphasis was dropped on the way.
  */
 import { describe, it, expect } from 'vitest'
-import { markdownOf, isMixed, hasLinks } from './markdown'
+import { markdownOf, isMixed, hasLinks, isNested } from './markdown'
 import type { SourceRun } from './source-presentation'
 
 const run = (text: string, over: Partial<SourceRun> = {}): SourceRun => ({
@@ -160,5 +160,37 @@ describe('deciding a box needs Markdown', () => {
     expect(
       hasLinks([run('a', { bulleted: true, link: 'https://x.test' })]),
     ).toBe(true)
+  })
+})
+
+/**
+ * A list with a point under a point (TMPL-8).
+ *
+ * A box of bullets is stored as a list of strings, and a string has no depth,
+ * so a sub-point came back level with its parent. The nesting was read
+ * correctly all along — it was having nowhere to put it that lost it. Which is
+ * why the same deck showed sub-points on some slides and not others: a box
+ * that also held a link was already written as Markdown, and kept its depth,
+ * while the box next to it was written as strings and did not.
+ */
+describe('a box whose points sit under one another', () => {
+  const point = (text: string, level = 0) => ({
+    text: `${text}\n`,
+    bulleted: true,
+    ...(level ? { bulletLevel: level } : {}),
+  })
+
+  it('is one to write as Markdown, which has somewhere to put the depth', () => {
+    expect(isNested([point('Sources'), point('Government', 1)])).toBe(true)
+  })
+
+  it('is not, when every point is level with the others', () => {
+    // The common case, and it must keep taking the plain path: a flat list is
+    // a list of strings, which is what a bullets slot holds.
+    expect(isNested([point('One'), point('Two')])).toBe(false)
+  })
+
+  it('is not, for prose that happens to be indented', () => {
+    expect(isNested([{ text: 'Just a sentence\n' }])).toBe(false)
   })
 })

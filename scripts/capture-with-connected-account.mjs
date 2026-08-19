@@ -17,6 +17,7 @@
  * it talks to Google and writes a file.
  */
 import { readFileSync, writeFileSync } from 'node:fs'
+import { createDecipheriv } from 'node:crypto'
 import path from 'node:path'
 
 const [, , input, outFile] = process.argv
@@ -55,6 +56,38 @@ const need = name => {
 }
 
 /**
+ * A stored token, decrypted.
+ *
+ * Connected-account secrets are encrypted at rest with AES-256-GCM (P-9), so
+ * what is in the database is `iv.tag.ciphertext` in base64 and not a token —
+ * sending it to Google straight out of the collection gets `invalid_grant`,
+ * which reads exactly like an expired grant. Mirrors
+ * `server/src/lib/token-crypto.ts`; a copy rather than an import because that
+ * is TypeScript and this is a plain script.
+ */
+const decryptToken = packed => {
+  const [iv, tag, ciphertext] = packed.split('.')
+  if (!iv || !tag || !ciphertext) return undefined
+  try {
+    const key = Buffer.from(need('CONNECTED_ACCOUNT_TOKEN_ENC_KEY'), 'base64')
+    const decipher = createDecipheriv(
+      'aes-256-gcm',
+      key,
+      Buffer.from(iv, 'base64'),
+    )
+    decipher.setAuthTag(Buffer.from(tag, 'base64'))
+    return (
+      decipher.update(Buffer.from(ciphertext, 'base64'), undefined, 'utf8') +
+      decipher.final('utf8')
+    )
+  } catch {
+    // A key that does not match what encrypted this one. Skipped rather than
+    // fatal: another account's token may still open.
+    return undefined
+  }
+}
+
+/**
  * Every connected account's refresh token, with the address it belongs to.
  *
  * Every one, not the first: a token goes stale when the account is
@@ -81,8 +114,11 @@ const connectedAccounts = async () => {
       )
       .toArray()
     return users
-      .filter(u => u.googleQuizRefreshToken)
-      .map(u => ({ token: u.googleQuizRefreshToken, email: u.email }))
+      .map(u => ({
+        token: decryptToken(u.googleQuizRefreshToken ?? ''),
+        email: u.email,
+      }))
+      .filter(a => a.token)
   } catch (e) {
     console.error(`Could not read the token from MongoDB: ${e.message}`)
     process.exit(1)

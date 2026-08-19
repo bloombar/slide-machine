@@ -25,7 +25,7 @@
  * they recover content the import reinterpreted.
  */
 import type { SlotKind, SlotSpec } from '@slide-machine/shared'
-import { isMixed, hasLinks } from './markdown'
+import { isMixed, hasLinks, isNested } from './markdown'
 import type {
   SourceBox,
   SourceElement,
@@ -112,7 +112,8 @@ const kindOf = (element: SourceElement): SlotKind => {
   // holding Markdown — the shape it actually had (`markdown.ts`). Called a
   // list it would be edited one line per point, which is not what it is.
   const runs = element.runs ?? []
-  if (isMixed(runs) || (element.bulleted && hasLinks(runs))) return 'text'
+  if (isMixed(runs) || (element.bulleted && (hasLinks(runs) || isNested(runs))))
+    return 'text'
   if (element.bulleted) return 'bullets'
   // Everything else is prose. A listing or a formula on a hand-built slide is
   // indistinguishable from text at this level, and guessing wrong buries the

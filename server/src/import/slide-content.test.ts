@@ -537,3 +537,65 @@ describe('a list that arrived as fewer runs than it has points', () => {
     })
   })
 })
+
+/**
+ * A list of points with points under them (TMPL-8).
+ *
+ * A bullets slot holds strings, and a string has no depth: a sub-point came
+ * back level with its parent. A box that also held a link was already written
+ * as Markdown and kept its nesting, which is why the same deck showed
+ * sub-points on some slides and not on others.
+ */
+describe('a box whose points sit under one another', () => {
+  const point = (text: string, level = 0) => ({
+    text: `${text}\n`,
+    bulleted: true,
+    ...(level ? { bulletLevel: level } : {}),
+  })
+
+  it('keeps the depth, by writing the box as Markdown', () => {
+    const result = importedSlide(
+      slide([
+        slot('body', {
+          bulleted: true,
+          runs: [
+            point('Where the data comes from'),
+            point('A government agency', 1),
+            point('A nonprofit', 1),
+            point('Then cite it'),
+          ],
+        }),
+      ]),
+      'list',
+      stored,
+    )
+    expect(result.slots.body).toEqual({
+      kind: 'text',
+      value: [
+        '- Where the data comes from',
+        '  - A government agency',
+        '  - A nonprofit',
+        '- Then cite it',
+      ].join('\n'),
+    })
+  })
+
+  it('leaves a flat list as the list of strings a bullets slot holds', () => {
+    // The common case, and it must not change: a flat list has no depth to
+    // lose, and Markdown for it would be a heavier shape for nothing.
+    const result = importedSlide(
+      slide([
+        slot('body', {
+          bulleted: true,
+          runs: [point('One'), point('Two')],
+        }),
+      ]),
+      'list',
+      stored,
+    )
+    expect(result.slots.body).toEqual({
+      kind: 'bullets',
+      items: ['One', 'Two'],
+    })
+  })
+})

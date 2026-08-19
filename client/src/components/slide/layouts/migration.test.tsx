@@ -38,6 +38,7 @@ const colors: ThemeColors = {
   accent: '#00ffff',
   penColor: '#000000',
   highlighterColor: '#ffff00',
+  link: '#0ff',
 }
 
 /** Every slot filled, so nothing is skipped for being empty. */

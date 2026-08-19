@@ -164,3 +164,16 @@ export const isMixed = (runs: SourceRun[]): boolean => {
  * but it has to be written as Markdown to keep them. */
 export const hasLinks = (runs: SourceRun[]): boolean =>
   runs.some(run => Boolean(run.link))
+
+/**
+ * Whether any point sits under another one.
+ *
+ * A list of bullets is stored as a list of strings, and a string has no depth:
+ * a sub-point written under its parent came back level with it, and a slide
+ * that said "three sources, and here is what each one holds" came back as one
+ * flat list of eight. The nesting is read correctly — it is having nowhere to
+ * put it that loses it — so a box with any depth is written as Markdown, which
+ * has somewhere.
+ */
+export const isNested = (runs: SourceRun[]): boolean =>
+  linesOf(runs).some(line => line.bulleted && line.level > 0)

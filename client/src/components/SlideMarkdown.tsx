@@ -60,7 +60,7 @@ export default function SlideMarkdown({
               href={href}
               target="_blank"
               rel="noreferrer"
-              className="underline decoration-current/50 underline-offset-4"
+              className="text-[color:var(--slide-link,inherit)] underline decoration-current/50 underline-offset-4"
             >
               {children}
             </a>
@@ -90,7 +90,7 @@ export default function SlideMarkdown({
               onClick={e => {
                 if (!e.metaKey && !e.ctrlKey) e.preventDefault()
               }}
-              className="underline decoration-current/50 underline-offset-4"
+              className="text-[color:var(--slide-link,inherit)] underline decoration-current/50 underline-offset-4"
             >
               {children}
               {/*

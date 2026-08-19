@@ -2178,3 +2178,77 @@ describe('a colour named one way and listed another', () => {
     expect(colourOf('ACCENT6')).toBeUndefined()
   })
 })
+
+/**
+ * The colour a deck draws its links in (TMPL-8).
+ *
+ * A box is stored with one colour and every run inside it is drawn in that
+ * one — and the run an author coloured differently is nearly always a link.
+ * A deck whose links were red got them in the body's black, because the box
+ * took the colour of its first run. The link colour belongs to the design, so
+ * it rides on the theme.
+ */
+describe('a deck that colours its links', () => {
+  const withScheme = (colors: Record<string, [number, number, number]>) => ({
+    presentationId: 'p',
+    pageSize: {
+      width: { magnitude: 9144000, unit: 'EMU' },
+      height: { magnitude: 5143500, unit: 'EMU' },
+    },
+    masters: [
+      {
+        objectId: 'm1',
+        pageProperties: {
+          pageBackgroundFill: {
+            solidFill: { color: { rgbColor: { red: 1, green: 1, blue: 1 } } },
+          },
+          colorScheme: {
+            colors: Object.entries(colors).map(
+              ([type, [red, green, blue]]) => ({
+                type,
+                color: { red, green, blue },
+              }),
+            ),
+          },
+        },
+        pageElements: [],
+      },
+    ],
+    layouts: [],
+    slides: [
+      {
+        objectId: 's1',
+        slideProperties: { masterObjectId: 'm1' },
+        pageElements: [],
+      },
+    ],
+  })
+
+  it('carries it, so a red link is drawn red', () => {
+    const theme = toSourcePresentation(
+      withScheme({
+        DARK1: [0, 0, 0],
+        ACCENT1: [0.2, 0.2, 0.2],
+        HYPERLINK: [1, 0.32, 0.32],
+      }),
+    ).theme
+    expect(theme.link).toBe('#ff5252')
+  })
+
+  it('carries none when the deck draws links like everything else', () => {
+    // Not a decision worth carrying, and the app already draws a link in the
+    // body colour when nothing says otherwise.
+    const theme = toSourcePresentation(
+      withScheme({ DARK1: [0, 0, 0], HYPERLINK: [0, 0, 0] }),
+    ).theme
+    expect(theme.link).toBeUndefined()
+  })
+
+  it('carries none when the colour could not be read on the page', () => {
+    // A link nobody can see is worse than one in the body colour.
+    const theme = toSourcePresentation(
+      withScheme({ DARK1: [0, 0, 0], HYPERLINK: [1, 1, 1] }),
+    ).theme
+    expect(theme.link).toBeUndefined()
+  })
+})

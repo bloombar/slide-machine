@@ -19,3 +19,16 @@ describe('themeColors', () => {
     expect(colors.highlighterColor).toBe('#20a020') // accent
   })
 })
+
+describe('the colour a link is drawn in (TMPL-8)', () => {
+  it('takes what the template states', () => {
+    // An imported design carries the colour its deck drew links in. Without
+    // it every link took the box's colour, and a box carries one colour — so
+    // a deck whose links were red showed them in the body's black.
+    expect(themeColors({ link: '#ff5252' }).link).toBe('#ff5252')
+  })
+
+  it('falls back to the accent, which already means “this one is different”', () => {
+    expect(themeColors({ accent: '#38bdf8' }).link).toBe('#38bdf8')
+  })
+})

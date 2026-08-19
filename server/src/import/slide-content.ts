@@ -22,7 +22,7 @@
  */
 import type { SlotValue } from '@slide-machine/shared'
 import type { Candidate, CandidateSlot } from './candidate'
-import { markdownOf, isMixed, hasLinks } from './markdown'
+import { markdownOf, isMixed, hasLinks, isNested } from './markdown'
 import type { SourceElement } from './source-presentation'
 
 /** One imported slide, ready to be stored. */
@@ -157,7 +157,10 @@ const valueOf = (
    * is better than editing Markdown for the common case.
    */
   const runs = element.runs ?? []
-  if (!kind && (isMixed(runs) || (element.bulleted && hasLinks(runs)))) {
+  if (
+    !kind &&
+    (isMixed(runs) || (element.bulleted && (hasLinks(runs) || isNested(runs))))
+  ) {
     const value = markdownOf(runs)
     return value ? { kind: 'text', value } : undefined
   }
