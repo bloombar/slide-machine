@@ -192,6 +192,22 @@ describe('nested and numbered points', () => {
  * so the depth decides, which is how the original decided too.
  */
 describe('a numbered list with a lettered one under it', () => {
+  it('reads a sub-point indented to its parent’s number as nested', () => {
+    // The importer indents to the parent's CONTENT column, which is three for
+    // "1. " and two for "- ". Indented by two, a numbered list's sub-points
+    // came out level with their parents: 1, a, b, c, 2, 3 rendered as a flat
+    // 1 to 6. Asserted here as well as in the importer, because the two have
+    // to agree on the width and neither alone would catch a disagreement.
+    render(
+      <SlideMarkdown
+        text={'1. Parent\n   1. Child\n   1. Child two\n1. Second'}
+      />,
+    )
+    const top = document.querySelector('ol')!
+    expect(top.querySelectorAll(':scope > li')).toHaveLength(2)
+    expect(top.querySelectorAll(':scope > li > ol > li')).toHaveLength(2)
+  })
+
   it('letters the level below the numbers', () => {
     render(
       <SlideMarkdown text={'1. Form the question\n   1. Who\n   1. What'} />,

@@ -129,7 +129,7 @@ describe('points that are nested or numbered', () => {
         run('Form the question\n', { bulleted: true, ordered: true }),
         run('Who', { bulleted: true, ordered: true, bulletLevel: 1 }),
       ]),
-    ).toBe('1. Form the question\n  1. Who')
+    ).toBe('1. Form the question\n   1. Who')
   })
 
   it('leaves a plain point unindented', () => {
@@ -192,5 +192,53 @@ describe('a box whose points sit under one another', () => {
 
   it('is not, for prose that happens to be indented', () => {
     expect(isNested([{ text: 'Just a sentence\n' }])).toBe(false)
+  })
+})
+
+/**
+ * How far a sub-point is indented (TMPL-8).
+ *
+ * Markdown reads a nested list by its indentation, and the column it has to
+ * reach is the parent's CONTENT column — not a fixed two spaces. "- " is two
+ * characters wide and "1. " is three, so a numbered list indented by two put
+ * its sub-points level with their parents: a slide numbered 1, a, b, c, 2, 3
+ * came out numbered 1 to 6, flat. Bullets were unaffected, which is why the
+ * same deck nested on some slides and not on others.
+ */
+describe('indenting a point under another', () => {
+  const point = (text: string, level = 0, ordered = false): SourceRun => ({
+    text: `${text}\n`,
+    bulleted: true,
+    ...(level ? { bulletLevel: level } : {}),
+    ...(ordered ? { ordered: true } : {}),
+  })
+
+  it('indents under a numbered parent by the width of its number', () => {
+    expect(
+      markdownOf([point('Parent', 0, true), point('Child', 1, true)]),
+    ).toBe('1. Parent\n   1. Child')
+  })
+
+  it('indents under a bulleted parent by the width of its dash', () => {
+    expect(markdownOf([point('Parent'), point('Child', 1)])).toBe(
+      '- Parent\n  - Child',
+    )
+  })
+
+  it('follows the parent even where the two kinds are mixed', () => {
+    // A numbered point with bulleted children still has to clear "1. ".
+    expect(markdownOf([point('Parent', 0, true), point('Child', 1)])).toBe(
+      '1. Parent\n   - Child',
+    )
+  })
+
+  it('adds each ancestor’s width going deeper', () => {
+    expect(
+      markdownOf([
+        point('One', 0, true),
+        point('Two', 1, true),
+        point('Three', 2, true),
+      ]),
+    ).toBe('1. One\n   1. Two\n      1. Three')
   })
 })

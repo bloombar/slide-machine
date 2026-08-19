@@ -130,13 +130,27 @@ export const markdownOf = (runs: SourceRun[]): string => {
   if (!lines.length) return ''
   const out: string[] = []
   let previous: Line | undefined
+  /*
+   * How wide the marker at each depth is, so a sub-point can be indented to
+   * where its parent's TEXT starts.
+   *
+   * Markdown reads a nested list by its indentation, and the column it must
+   * reach is the parent's content column — not a fixed two spaces. "- " is two
+   * characters wide and "1. " is three, so a numbered list indented by two put
+   * its sub-points level with their parents: a slide numbered 1, a, b, c, 2, 3
+   * came out numbered 1 to 6, flat. Bullets were fine, which is why the same
+   * deck nested on some slides and not others.
+   */
+  const markerWidth: number[] = []
   for (const line of lines) {
     if (previous && previous.bulleted !== line.bulleted) out.push('')
     if (line.bulleted) {
-      // Two spaces a level, which is what Markdown reads as a sub-point.
-      // Google keeps these as a nesting depth on the paragraph rather than as
-      // a list inside a list, so the depth is all there is to go on.
-      const indent = '  '.repeat(line.level)
+      // Google keeps the depth on the paragraph rather than as a list inside a
+      // list, so the depth is all there is to go on.
+      const indent = ' '.repeat(
+        markerWidth.slice(0, line.level).reduce((sum, n) => sum + (n || 2), 0),
+      )
+      markerWidth[line.level] = line.ordered ? 3 : 2
       // `1.` for every numbered point: Markdown renumbers them in order, and
       // writing the real numbers would fight the renderer over any point
       // added later.

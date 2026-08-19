@@ -652,8 +652,8 @@ describe('a box whose points are numbered', () => {
     expect((result.slots.body as { value: string }).value).toBe(
       [
         '1. Form your research question',
-        '  1. Who (population)',
-        '  1. What (subject)',
+        '   1. Who (population)',
+        '   1. What (subject)',
       ].join('\n'),
     )
   })
