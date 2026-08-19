@@ -19,7 +19,10 @@
  * The details are read-only: like a project's or a lecture's, account
  * settings are edited in the product itself, from the Settings button on
  * the user's profile page, in the owner's own modal (ADMIN-5, see
- * ProfilePage). This page links there.
+ * ProfilePage). This page links there. The one exception is the
+ * complimentary plan grant (ADMIN-9): it is an admin entitlement rather
+ * than an account setting, so the same editor the settings page's Plan
+ * tab shows an admin is offered here too.
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
@@ -46,6 +49,7 @@ import {
 import { ApiError } from '../api/http'
 import ConfirmDialog from '../components/ConfirmDialog'
 import Modal from '../components/Modal'
+import PlanGrantEditor from '../components/PlanGrantEditor'
 import DeletedBadge, {
   deletedTextClass,
 } from '../components/admin/DeletedBadge'
@@ -109,11 +113,8 @@ const asDate = (iso: string): string =>
  * complimentary grant is what put it there (ADMIN-9) — what it is paying for
  * underneath and when it goes back to it. A lapsed grant is named as history
  * rather than dropped: knowing an account *was* comped until last month is
- * what explains the usage on it.
- *
- * Granting one is not done here. Like every other account setting, it is done
- * in the product view this page links to (ADMIN-5) — the Plan tab of the
- * user's settings page.
+ * what explains the usage on it. Granting one is done in the editor below
+ * the details, the same one the settings page's Plan tab offers an admin.
  */
 const planValue = (detail: AdminUserDetailResponse): string => {
   const { user, billingTier, planGrant } = detail
@@ -469,8 +470,7 @@ export default function AdminUserDetailPage() {
           <Link to={`/app/settings/${user.id}`} className="underline">
             Account Settings
           </Link>{' '}
-          page. Its Plan tab is also where an account is given a complimentary
-          plan. Every change you make there is recorded in the{' '}
+          page. Every change you make there is recorded in the{' '}
           <Link to="/app/admin/logs" className="underline">
             audit log
           </Link>
@@ -514,6 +514,19 @@ export default function AdminUserDetailPage() {
           <DetailRow label="Lectures" value={String(detail.deckCount)} />
         </dl>
       </section>
+
+      {/* Complimentary plan grants (ADMIN-9): the same editor the settings
+          page's Plan tab shows an admin, so a grant can be given from either
+          surface. Withheld for a deleted account, whose entitlements the
+          moderation endpoints refuse to touch. */}
+      {!userDeleted && userId && (
+        <PlanGrantEditor
+          userId={userId}
+          billingTier={detail.billingTier}
+          grant={detail.planGrant}
+          onChanged={() => setVersion(v => v + 1)}
+        />
+      )}
 
       {userId && <AdminUsagePanel userId={userId} />}
       {userId && <CostPanel scope={{ kind: 'user', id: userId }} />}
