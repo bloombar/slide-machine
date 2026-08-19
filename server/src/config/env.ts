@@ -156,12 +156,15 @@ const envSchema = z
 
     // Secrets & service credentials — optional until their features land
     GEMINI_API_KEY: z.string().optional(),
-    // Chosen for phrase-to-slide latency: ~1s, no thinking overhead
-    // (thinking models measured 10-30s; see docs/DECISIONS.md)
-    GEMINI_MODEL: z.string().default('gemini-3.1-flash-lite-preview'),
+    // Chosen for phrase-to-slide latency: the flash-lite family answers in
+    // ~1s with no thinking overhead (thinking models measured 2.5-10s per
+    // phrase; see docs/DECISIONS.md)
+    GEMINI_MODEL: z.string().default('gemini-3.5-flash-lite'),
     // Embedding model for semantic phrase re-anchoring of whiteboard marks on
     // transcript refine (WB-2). Same Gemini API key/base as generation.
-    GEMINI_EMBED_MODEL: z.string().default('text-embedding-004'),
+    // Its similarity scale sets PHRASE_MATCH_THRESHOLD (remap-drawings.ts) —
+    // re-tune the threshold when changing this model.
+    GEMINI_EMBED_MODEL: z.string().default('gemini-embedding-001'),
     // AI content freedom 1-5: 1 = slides contain only what the speaker
     // said; 5 = free elaboration. Projects/lectures can override.
     GENERATION_FREEDOM: z.coerce.number().int().min(1).max(5).default(2),
