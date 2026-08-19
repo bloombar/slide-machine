@@ -24,8 +24,12 @@ import {
 } from '@slide-machine/shared'
 
 /** Minimum cosine similarity for a stored phrase to re-bind to a new phrase;
- * below this the phrase is considered gone. Empirical — start conservative. */
-export const PHRASE_MATCH_THRESHOLD = 0.5
+ * below this the phrase is considered gone. Tuned to the embedding model
+ * (GEMINI_EMBED_MODEL): gemini-embedding-001 scores rewordings of the same
+ * phrase ≥0.81 and unrelated lecture phrases ≤0.68 (measured Aug 2026), so
+ * 0.75 splits the gap. Re-measure before changing the embedding model —
+ * the old text-embedding-004 value was 0.5. */
+export const PHRASE_MATCH_THRESHOLD = 0.75
 
 export const remapDrawingAnchors = async (
   strokes: Stroke[],

@@ -77,7 +77,7 @@ Short records of non-obvious choices, for when we revisit them.
 The three locked sub-decisions:
 
 - **Binding unit** = phrase fingerprint + intra-phrase offset (not a bare word — a single word re-matches everywhere).
-- **Remap mechanism** = embeddings as the backbone (works for manual edits too, not only Gemini rewrites), with proportional `remapAnchor` as the guaranteed last-resort fallback for fingerprint-less marks or when embeddings are unavailable. Threshold `PHRASE_MATCH_THRESHOLD = 0.5`, empirical — tune with real embeddings.
+- **Remap mechanism** = embeddings as the backbone (works for manual edits too, not only Gemini rewrites), with proportional `remapAnchor` as the guaranteed last-resort fallback for fingerprint-less marks or when embeddings are unavailable. Threshold `PHRASE_MATCH_THRESHOLD = 0.75`, tuned to `gemini-embedding-001` (rewordings score ≥0.81, unrelated phrases ≤0.68, measured Aug 2026); re-measure when the embedding model changes (the retired `text-embedding-004` used 0.5).
 - **Orphan policy** = when the best match is below threshold the phrase is gone, so the mark is flagged `orphaned` and hidden (`strokeVisible` — in the editing view as well as during playback), never silently mis-placed. The stroke is kept, and a later remap that re-matches its phrase clears the flag.
 
 **Anti-drift rule.** Remap always matches against the mark's *original* captured `phraseText`, never the previous refinement, so repeated refines don't accumulate error.
@@ -192,7 +192,9 @@ Two rules keep this working:
 
 **Problem.** The real GenerationProvider must return one structured slide decision per spoken phrase in near real time (Open Q #5), on the free-tier dev key.
 
-**Measured on our key** (single-phrase prompt, July 2026): `gemini-2.5-flash*` — retired for new users (404); `gemini-2.0-*` — zero quota (429); `gemini-flash-latest` — ~30s; `gemini-3-flash-preview` — ~10s (thinking tokens); **`gemini-3.1-flash-lite-preview` — ~1s, no thinking, correct new/update/none decisions**. That's the `GEMINI_MODEL` default (env-overridable).
+**Measured on our key** (single-phrase prompt, July 2026): `gemini-2.5-flash*` — retired for new users (404); `gemini-2.0-*` — zero quota (429); `gemini-flash-latest` — ~30s; `gemini-3-flash-preview` — ~10s (thinking tokens); **`gemini-3.1-flash-lite-preview` — ~1s, no thinking, correct new/update/none decisions**.
+
+**Re-measured Aug 2026** (same 10-slide lecture through all 13 offered text models, production prompts/config, replies validated as usable slide decisions): the flash-lite family is alone under 1s — `gemini-3.5-flash-lite` p50 739ms, `gemini-3.1-flash-lite[-preview]` ~900ms, all 100% valid; every thinking model was 2.5–8s p50 (400–1200 thinking tokens per phrase); Gemma models 24s+ with ≤10% valid output. `gemini-3.5-flash-lite` — the fastest, and a stable (non-preview) name — is the `GEMINI_MODEL` default (env-overridable). Preview names eventually 404 (as `gemini-2.5-*` did), so prefer stable names for defaults.
 
 **No `responseSchema`.** Gemini's constrained decoding sent every model we tried into degenerate repetition loops (hundreds of duplicated phrases until MAX_TOKENS), while `responseMimeType: application/json` plus the exact shape spelled out in the prompt stays clean. The adapter therefore prompts the contract and enforces it server-side: zod validation, layout drift coerced back to the offered option set, seeded-image ids checked against what was offered, `maxOutputTokens: 2048` as a hard stop. Revisit the schema if a later API fixes constrained decoding. The prompt text itself is externalized to `config/prompts/` — see [GENERATION_PROMPT.md](GENERATION_PROMPT.md).
 
