@@ -64,11 +64,31 @@ const decks = [
   },
 ]
 
+/** The usage summary the Service-usage panel fetches (its own logic is
+ * covered in AdminUsagePanel.test.tsx). */
+const usageBody = {
+  tier: 'pro',
+  period: '2026-08',
+  resetAt: '2026-09-01T00:00:00.000Z',
+  metrics: [
+    {
+      metric: 'aiTokens',
+      used: 1000,
+      cap: 250_000,
+      fraction: 0.004,
+      allowance: 'instructor',
+      unit: 'tokens',
+      gauge: false,
+    },
+  ],
+}
+
 const renderPage = (status = 200, detailBody: unknown = detail) => {
   // Keys ordered most-specific first: the fetch mock matches by substring
   const mocks = mockFetchRoutes({
     '/api/admin/users/u1/projects': () => ({ status, body: { projects } }),
     '/api/admin/users/u1/decks': () => ({ status, body: { decks } }),
+    '/api/admin/users/u1/usage': () => ({ status, body: usageBody }),
     '/api/admin/users/u1/ban': () => ({ status: 204 }),
     '/api/admin/users/u1/password': () => ({ status: 204 }),
     '/api/admin/projects/p1': () => ({ status: 204 }),
@@ -141,6 +161,27 @@ describe('AdminUserDetailPage', () => {
     expect(
       await screen.findByText(/pro \(complimentary max ended/i),
     ).toBeVisible()
+  })
+
+  // BILL-4 as the operator sees it: the same meters the account's own footer
+  // badge shows, on the account's admin page.
+  it("shows the account's service usage meters", async () => {
+    renderPage()
+    const panel = await screen.findByTestId('admin-usage-panel')
+    expect(
+      within(panel).getByRole('heading', { name: 'Service usage' }),
+    ).toBeVisible()
+    expect(
+      await within(panel).findByTestId('usage-metric-aiTokens'),
+    ).toBeVisible()
+    // Defaults to the window the caps bind against, with the alternative a
+    // click away.
+    expect(
+      within(panel).getByRole('button', { name: 'Current period' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+    expect(
+      within(panel).getByRole('button', { name: 'All time' }),
+    ).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('shows account details and a public-profile link', async () => {
@@ -427,6 +468,7 @@ describe('AdminUserDetailPage soft-deleted content', () => {
         body: { projects },
       }),
       '/api/admin/users/u1/decks': () => ({ status: 200, body: { decks } }),
+      '/api/admin/users/u1/usage': () => ({ status: 200, body: usageBody }),
       '/api/admin/users/u1/restore': () => ({ status: 204 }),
       '/api/admin/users/u1': () => ({
         status: 200,
@@ -468,6 +510,7 @@ describe('AdminUserDetailPage soft-deleted content', () => {
         },
       }),
       '/api/admin/users/u1/decks': () => ({ status: 200, body: { decks: [] } }),
+      '/api/admin/users/u1/usage': () => ({ status: 200, body: usageBody }),
       '/api/admin/projects/p1/restore': () => ({ status: 204 }),
       '/api/admin/users/u1': () => ({ status: 200, body: detail }),
     })
@@ -520,6 +563,7 @@ describe('AdminUserDetailPage soft-deleted content', () => {
         },
       }),
       '/api/admin/decks/d2/restore': () => ({ status: 204 }),
+      '/api/admin/users/u1/usage': () => ({ status: 200, body: usageBody }),
       '/api/admin/users/u1': () => ({ status: 200, body: detail }),
     })
     render(

@@ -118,6 +118,23 @@ test('the allowlisted admin reaches the directory and a user drill-down', async 
     page.getByRole('link', { name: 'View public profile' }),
   ).toBeVisible()
 
+  // The Service usage panel mirrors the account's own footer badge: every
+  // meter against its cap, defaulting to the current billing period.
+  const usagePanel = page.getByTestId('admin-usage-panel')
+  await expect(
+    usagePanel.getByRole('heading', { name: 'Service usage' }),
+  ).toBeVisible()
+  await expect(usagePanel.getByText(/Resets /)).toBeVisible()
+  await expect(usagePanel.getByTestId('usage-metric-aiTokens')).toBeVisible()
+
+  // Lifetime totals are a click away and drop the per-period framing.
+  await usagePanel.getByRole('button', { name: 'All time' }).click()
+  await expect(usagePanel.getByText(/ever spent/)).toBeVisible()
+  await expect(usagePanel.getByText(/Resets /)).toHaveCount(0)
+  await expect(usagePanel.getByTestId('usage-metric-aiTokens')).toBeVisible()
+  await usagePanel.getByRole('button', { name: 'Current period' }).click()
+  await expect(usagePanel.getByText(/Resets /)).toBeVisible()
+
   // The project row links to the project's own admin page
   await page.getByRole('link', { name: 'Admin E2E Project' }).click()
   await expect(page).toHaveURL(/\/app\/admin\/projects\//)

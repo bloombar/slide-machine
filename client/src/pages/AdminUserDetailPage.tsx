@@ -23,6 +23,7 @@
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
+import AdminUsagePanel from '../components/admin/AdminUsagePanel'
 import CostPanel from '../components/admin/CostPanel'
 import { LOCALE_LABELS, type Locale } from '@slide-machine/shared'
 import {
@@ -514,6 +515,7 @@ export default function AdminUserDetailPage() {
         </dl>
       </section>
 
+      {userId && <AdminUsagePanel userId={userId} />}
       {userId && <CostPanel scope={{ kind: 'user', id: userId }} />}
 
       <section className="mt-8">
