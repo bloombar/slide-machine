@@ -177,3 +177,14 @@ export const hasLinks = (runs: SourceRun[]): boolean =>
  */
 export const isNested = (runs: SourceRun[]): boolean =>
   linesOf(runs).some(line => line.bulleted && line.level > 0)
+
+/**
+ * Whether any point counts rather than merely marks.
+ *
+ * A bullets slot holds strings and draws a dash in front of each, so a list
+ * the author numbered came back as dashes — the ordering is the point of
+ * numbering it. Markdown has an ordered list, so a box with one is written
+ * that way.
+ */
+export const isCounted = (runs: SourceRun[]): boolean =>
+  linesOf(runs).some(line => line.bulleted && line.ordered)

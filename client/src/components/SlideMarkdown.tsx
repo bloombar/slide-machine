@@ -124,7 +124,15 @@ export default function SlideMarkdown({
           </ul>
         ),
         ol: ({ children }) => (
-          <ol className="flex list-decimal flex-col gap-[0.2em] pl-[1.2em] text-left">
+          /*
+           * Numbers, then letters, then roman numerals as the list goes
+           * deeper — the convention every document editor uses, and what the
+           * slide this was imported from shows: "1." with "a. b. c." beneath
+           * it. Markdown has one ordered list and no way to say which marker
+           * it wants, so the depth decides, which is how the original decided
+           * too.
+           */
+          <ol className="flex list-decimal flex-col gap-[0.2em] pl-[1.2em] text-left [&_ol]:list-[lower-alpha] [&_ol_ol]:list-[lower-roman]">
             {children}
           </ol>
         ),

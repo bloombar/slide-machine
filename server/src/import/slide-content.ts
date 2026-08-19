@@ -22,7 +22,7 @@
  */
 import type { SlotValue } from '@slide-machine/shared'
 import type { Candidate, CandidateSlot } from './candidate'
-import { markdownOf, isMixed, hasLinks, isNested } from './markdown'
+import { markdownOf, isMixed, hasLinks, isNested, isCounted } from './markdown'
 import type { SourceElement } from './source-presentation'
 
 /** One imported slide, ready to be stored. */
@@ -159,7 +159,9 @@ const valueOf = (
   const runs = element.runs ?? []
   if (
     !kind &&
-    (isMixed(runs) || (element.bulleted && (hasLinks(runs) || isNested(runs))))
+    (isMixed(runs) ||
+      (element.bulleted &&
+        (hasLinks(runs) || isNested(runs) || isCounted(runs))))
   ) {
     const value = markdownOf(runs)
     return value ? { kind: 'text', value } : undefined

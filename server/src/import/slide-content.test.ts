@@ -599,3 +599,62 @@ describe('a box whose points sit under one another', () => {
     })
   })
 })
+
+/**
+ * A list the author numbered (TMPL-8).
+ *
+ * A bullets slot holds strings and draws a dash in front of each, so a list
+ * numbered "1. 2. 3." came back as three dashes — and the ordering is the
+ * whole point of numbering it.
+ */
+describe('a box whose points are numbered', () => {
+  const point = (text: string, over: Record<string, unknown> = {}) => ({
+    text: `${text}\n`,
+    bulleted: true,
+    ordered: true,
+    ...over,
+  })
+
+  it('keeps the numbering, by writing the box as Markdown', () => {
+    const result = importedSlide(
+      slide([
+        slot('body', {
+          bulleted: true,
+          runs: [point('Author or creator'), point('Date of publication')],
+        }),
+      ]),
+      'list',
+      stored,
+    )
+    // Every point written "1.": Markdown renumbers them in order, and writing
+    // the real numbers would fight the renderer over any point added later.
+    expect(result.slots.body).toEqual({
+      kind: 'text',
+      value: '1. Author or creator\n1. Date of publication',
+    })
+  })
+
+  it('keeps a lettered sub-list under its numbered parent', () => {
+    const result = importedSlide(
+      slide([
+        slot('body', {
+          bulleted: true,
+          runs: [
+            point('Form your research question'),
+            point('Who (population)', { bulletLevel: 1 }),
+            point('What (subject)', { bulletLevel: 1 }),
+          ],
+        }),
+      ]),
+      'list',
+      stored,
+    )
+    expect((result.slots.body as { value: string }).value).toBe(
+      [
+        '1. Form your research question',
+        '  1. Who (population)',
+        '  1. What (subject)',
+      ].join('\n'),
+    )
+  })
+})

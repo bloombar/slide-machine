@@ -2252,3 +2252,96 @@ describe('a deck that colours its links', () => {
     expect(theme.link).toBeUndefined()
   })
 })
+
+/**
+ * A list the author numbered, or lettered (TMPL-8).
+ *
+ * Google states the marker it renders — "1.", "a.", "iv." — on the paragraph
+ * itself. The list's `glyphType` is the documented place for it, and a real
+ * deck's lists came back stating nothing but a bullet style, so a slide
+ * numbered "1. 2. 3." with "a. b. c." beneath it imported as six identical
+ * dashes: the ordering the author meant, gone.
+ */
+describe('a point whose marker counts', () => {
+  const paragraph = (text: string, bullet: Record<string, unknown>) => [
+    { paragraphMarker: { bullet } },
+    { textRun: { content: `${text}\n`, style: {} } },
+  ]
+
+  const deck = (elements: unknown[]) => ({
+    presentationId: 'p',
+    pageSize: {
+      width: { magnitude: 9144000, unit: 'EMU' },
+      height: { magnitude: 5143500, unit: 'EMU' },
+    },
+    masters: [{ objectId: 'm1', pageElements: [] }],
+    layouts: [],
+    slides: [
+      {
+        objectId: 's1',
+        slideProperties: { masterObjectId: 'm1' },
+        pageElements: [
+          {
+            objectId: 'body',
+            transform: {
+              translateX: 0,
+              translateY: 0,
+              scaleX: 1,
+              scaleY: 1,
+              unit: 'EMU',
+            },
+            size: {
+              width: { magnitude: 4572000, unit: 'EMU' },
+              height: { magnitude: 914400, unit: 'EMU' },
+            },
+            shape: { text: { textElements: elements } },
+          },
+        ],
+      },
+    ],
+  })
+
+  const runsOf = (elements: unknown[]) =>
+    toSourcePresentation(deck(elements)).slides[0]!.elements[0]!.runs ?? []
+
+  it('is read as ordered from the marker Google renders', () => {
+    const runs = runsOf(
+      paragraph('Author or creator', { listId: 'l1', glyph: '1.' }),
+    )
+    expect(runs[0]!.ordered).toBe(true)
+  })
+
+  it('reads a lettered sub-point as ordered too', () => {
+    const runs = runsOf(
+      paragraph('Who (population)', {
+        listId: 'l1',
+        glyph: 'a.',
+        nestingLevel: 1,
+      }),
+    )
+    expect(runs[0]!.ordered).toBe(true)
+    expect(runs[0]!.bulletLevel).toBe(1)
+  })
+
+  it('leaves a plain bullet unordered, symbol and all', () => {
+    for (const glyph of ['●', '○', '■', '◆', '-']) {
+      expect(
+        runsOf(paragraph('A point', { listId: 'l1', glyph }))[0]!.ordered,
+      ).toBeUndefined()
+    }
+  })
+
+  it('still reads the list’s own glyphType where the paragraph states no glyph', () => {
+    // The documented place for it, and the only answer for a deck that does
+    // fill it in.
+    const raw = deck(paragraph('One', { listId: 'l1' }))
+    ;(
+      raw.slides[0]!.pageElements[0]!.shape.text as Record<string, unknown>
+    ).lists = {
+      l1: { nestingLevel: { '0': { glyphType: 'DIGIT' } } },
+    }
+    expect(
+      toSourcePresentation(raw).slides[0]!.elements[0]!.runs?.[0]?.ordered,
+    ).toBe(true)
+  })
+})

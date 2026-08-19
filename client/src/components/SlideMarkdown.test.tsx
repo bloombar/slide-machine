@@ -182,3 +182,24 @@ describe('nested and numbered points', () => {
     expect(container.querySelectorAll('ol > li')).toHaveLength(2)
   })
 })
+
+/**
+ * How deep an ordered list is decides its marker (TMPL-8).
+ *
+ * Numbers, then letters, then roman numerals — the convention every document
+ * editor uses, and what an imported slide shows: "1." with "a. b. c." beneath
+ * it. Markdown has one ordered list and no way to say which marker it wants,
+ * so the depth decides, which is how the original decided too.
+ */
+describe('a numbered list with a lettered one under it', () => {
+  it('letters the level below the numbers', () => {
+    render(
+      <SlideMarkdown text={'1. Form the question\n   1. Who\n   1. What'} />,
+    )
+    const outer = document.querySelector('ol')!
+    expect(outer.className).toContain('list-decimal')
+    // The nested list is lettered by the same rule the outer one is numbered.
+    expect(outer.className).toContain('[&_ol]:list-[lower-alpha]')
+    expect(outer.querySelector('ol')).not.toBeNull()
+  })
+})

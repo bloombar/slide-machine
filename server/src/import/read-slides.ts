@@ -418,11 +418,37 @@ const runsOf = (
     string,
     { nestingLevel?: Record<string, { glyphType?: string }> }
   >
-  const isOrdered = (listId: string | undefined, level: number): boolean => {
-    const glyph = listId
-      ? lists[listId]?.nestingLevel?.[String(level)]?.glyphType
+  /**
+   * Whether a marker counts rather than merely marks.
+   *
+   * The marker Google actually renders — "1.", "a.", "iv." — as against the
+   * symbols it draws for an unordered point: ●, ○, ■, ◆, a dash. Anything with
+   * a letter or a digit in it is counting.
+   */
+  const counts = (glyph: string | undefined): boolean =>
+    Boolean(glyph) && /[0-9a-z]/i.test(glyph!)
+
+  /**
+   * Whether this paragraph is a numbered or lettered point.
+   *
+   * Read from the paragraph's own rendered `glyph` first. The list's
+   * `glyphType` is the documented place for it and this deck's lists do not
+   * state one — every `nestingLevel` came back holding nothing but a bullet
+   * style — so a slide numbered "1. 2. 3." with "a. b. c." under it imported
+   * as six identical dashes. The glyph is what the author sees, which makes it
+   * the better answer even where both are present.
+   */
+  const isOrdered = (
+    bullet:
+      { listId?: string; nestingLevel?: number; glyph?: string } | undefined,
+    level: number,
+  ): boolean => {
+    if (!bullet) return false
+    if (bullet.glyph !== undefined) return counts(bullet.glyph)
+    const type = bullet.listId
+      ? lists[bullet.listId]?.nestingLevel?.[String(level)]?.glyphType
       : undefined
-    return Boolean(glyph) && glyph !== 'GLYPH_TYPE_UNSPECIFIED'
+    return Boolean(type) && type !== 'GLYPH_TYPE_UNSPECIFIED'
   }
 
   const runs: SourceRun[] = []
@@ -442,11 +468,11 @@ const runsOf = (
   for (const element of elements) {
     if (element.paragraphMarker) {
       const marker = element.paragraphMarker as {
-        bullet?: { listId?: string; nestingLevel?: number }
+        bullet?: { listId?: string; nestingLevel?: number; glyph?: string }
       }
       inBullet = Boolean(marker.bullet)
       level = marker.bullet?.nestingLevel ?? 0
-      ordered = inBullet && isOrdered(marker.bullet?.listId, level)
+      ordered = inBullet && isOrdered(marker.bullet, level)
       if (inBullet) bulleted = true
       endParagraph()
       continue
