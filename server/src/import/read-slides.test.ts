@@ -234,6 +234,61 @@ describe('what a shape turns out to be', () => {
     })
   })
 
+  it('reads how a table divides itself, so it is not re-divided equally', () => {
+    // Google states a width for every column. Discarding them and drawing
+    // equal columns gives a year the same width as a sentence, which is one of
+    // the plainest ways an imported table stops looking like its slide.
+    const cell = (text: string) => ({
+      text: {
+        textElements: [{ textRun: { content: `${text}\n`, style: {} } }],
+      },
+    })
+    const table = shape({
+      table: {
+        tableColumns: [
+          { columnWidth: { magnitude: 1_000_000, unit: 'EMU' } },
+          { columnWidth: { magnitude: 3_000_000, unit: 'EMU' } },
+        ],
+        tableRows: [
+          {
+            rowHeight: { magnitude: 500_000, unit: 'EMU' },
+            tableCells: [cell('Year'), cell('mm')],
+          },
+          {
+            rowHeight: { magnitude: 1_500_000, unit: 'EMU' },
+            tableCells: [cell('2024'), cell('812')],
+          },
+        ],
+      },
+    })
+    const read = toSourcePresentation(
+      presentation({ slides: [{ objectId: 's1', pageElements: [table] }] }),
+    )
+    // Fractions of the table, not lengths: the box is the box the reader
+    // measured, and what matters is the proportions inside it.
+    expect(read.slides[0]!.elements[0]).toMatchObject({
+      kind: 'table',
+      table: { colWidths: [0.25, 0.75], rowHeights: [0.25, 0.75] },
+    })
+  })
+
+  it('leaves a table whose columns state no width to divide itself equally', () => {
+    const cell = (text: string) => ({
+      text: {
+        textElements: [{ textRun: { content: `${text}\n`, style: {} } }],
+      },
+    })
+    const table = shape({
+      table: { tableRows: [{ tableCells: [cell('a'), cell('b')] }] },
+    })
+    const read = toSourcePresentation(
+      presentation({ slides: [{ objectId: 's1', pageElements: [table] }] }),
+    )
+    const element = read.slides[0]!.elements[0]!
+    expect(element.table?.colWidths).toBeUndefined()
+    expect(element.table?.rowHeights).toBeUndefined()
+  })
+
   it('keeps a rule, which is part of a design though it holds nothing', () => {
     const rule = shape({
       shape: {
@@ -1512,6 +1567,27 @@ describe('when Google will not hand the presentation over', () => {
     const err = await readPresentationLive('t', 'p').catch(e => e)
     expect(err.reconnect).toBe(false)
     expect(err.message).toMatch(/not enabled for this deployment/i)
+  })
+
+  it('does not ask for one when the deck simply is not theirs to open', async () => {
+    // The common case, and the one this used to get wrong: an instructor
+    // pastes a link to a colleague's lecture. Nothing is wrong with their
+    // connection, so reconnecting sends them through the consent screen to
+    // arrive back at exactly the same refusal. What they need is access.
+    respond(
+      403,
+      '{"error":{"status":"PERMISSION_DENIED","message":"The caller does not have permission"}}',
+    )
+    const err = await readPresentationLive('t', 'p').catch(e => e)
+    expect(err.forbidden).toBe(true)
+    expect(err.reconnect).toBe(false)
+  })
+
+  it('asks for one when the stored token has gone stale', async () => {
+    respond(401, '{"error":{"message":"Invalid Credentials"}}')
+    const err = await readPresentationLive('t', 'p').catch(e => e)
+    expect(err.reconnect).toBe(true)
+    expect(err.forbidden).toBe(false)
   })
 
   it('says a missing presentation is missing', async () => {

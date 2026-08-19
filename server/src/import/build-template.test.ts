@@ -262,6 +262,42 @@ describe('fonts', () => {
     expect(mapFont('Courier New')).toBe('mono')
   })
 
+  it('places the faces a real Google Slides deck is actually set in', () => {
+    // The first mapping knew about a dozen names and sent everything else to
+    // system sans, so a lecture set in Oswald and Caveat arrived looking like
+    // every other lecture. These are the families Slides offers by default.
+    const expected: Record<string, string> = {
+      Oswald: 'condensed',
+      'Bebas Neue': 'condensed',
+      'Roboto Condensed': 'condensed',
+      Caveat: 'handwritten',
+      'Indie Flower': 'handwritten',
+      'Comic Sans MS': 'handwritten',
+      Raleway: 'geometric',
+      Quicksand: 'geometric',
+      Calibri: 'humanist',
+      'PT Sans': 'humanist',
+      Lora: 'serif',
+      'Roboto Slab': 'serif',
+      'EB Garamond': 'serif',
+      'Roboto Mono': 'mono',
+      // Still sans, and rightly: a neo-grotesque set in Optima or Futura
+      // would look less like itself, not more.
+      Roboto: 'sans',
+      'Open Sans': 'sans',
+      Arial: 'sans',
+    }
+    for (const [family, key] of Object.entries(expected)) {
+      expect([family, mapFont(family)]).toEqual([family, key])
+    }
+  })
+
+  it('reads a hand before a serif, where a name could be either', () => {
+    // "Brush Script" has no serifs and is a hand; the order of the patterns
+    // is what decides it.
+    expect(mapFont('Brush Script MT')).toBe('handwritten')
+  })
+
   it('falls back to sans, which is what most presentation type is', () => {
     expect(mapFont('Some Unknown Face')).toBe('sans')
   })

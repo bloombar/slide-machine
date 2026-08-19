@@ -987,6 +987,184 @@ describe('a table slot (EDIT-7)', () => {
       },
     })
   })
+
+  describe('sizing its columns and rows (EDIT-7)', () => {
+    /** The table, rendered for an owner who can edit it. */
+    const editable = (
+      onEdit: React.ComponentProps<typeof SlideSlot>['onEdit'],
+      slide = table,
+    ) => (
+      <SlideSlot
+        slot="data"
+        spec={spec}
+        slide={slide}
+        colors={colors}
+        onEdit={onEdit}
+      />
+    )
+
+    /** The saved table from the last edit. */
+    const saved = (onEdit: ReturnType<typeof vi.fn>) =>
+      onEdit.mock.calls.at(-1)![0].slots.data
+
+    it('offers a boundary to drag between two columns, and not past the last', () => {
+      render(editable(vi.fn()))
+      // Two columns, so one boundary inside the table. The table's right edge
+      // is not a boundary — there is nothing on the other side of it to give
+      // width back.
+      expect(
+        screen.getAllByRole('separator', { name: /Resize column/ }),
+      ).toHaveLength(1)
+    })
+
+    it('offers one between the header and the row below it', () => {
+      // The header is a band like any other; a table whose header is twice the
+      // height of its rows is a table nobody chose.
+      render(editable(vi.fn()))
+      expect(
+        screen.getAllByRole('separator', { name: /Resize row/ }),
+      ).toHaveLength(1)
+    })
+
+    it('widens a column from the keyboard, since a drag is not available to everyone', () => {
+      const onEdit = vi.fn()
+      render(editable(onEdit))
+      fireEvent.keyDown(
+        screen.getByRole('separator', { name: 'Resize column 1' }),
+        { key: 'ArrowRight' },
+      )
+      const value = saved(onEdit)
+      expect(value.colWidths[0]).toBeGreaterThan(0.5)
+      expect(value.colWidths[0] + value.colWidths[1]).toBeCloseTo(1)
+    })
+
+    it('narrows it again with the other arrow', () => {
+      const onEdit = vi.fn()
+      render(editable(onEdit))
+      fireEvent.keyDown(
+        screen.getByRole('separator', { name: 'Resize column 1' }),
+        { key: 'ArrowLeft' },
+      )
+      expect(saved(onEdit).colWidths[0]).toBeLessThan(0.5)
+    })
+
+    it('takes only what its neighbour gives, so the rest of the table holds still', () => {
+      const wide = slide({
+        slots: {
+          data: {
+            kind: 'table',
+            rows: [['a', 'b', 'c']],
+            colWidths: [0.2, 0.3, 0.5],
+          },
+        },
+      })
+      const onEdit = vi.fn()
+      render(editable(onEdit, wide))
+      fireEvent.keyDown(
+        screen.getByRole('separator', { name: 'Resize column 1' }),
+        { key: 'ArrowRight' },
+      )
+      // The third column is not involved in the boundary that moved.
+      expect(saved(onEdit).colWidths[2]).toBeCloseTo(0.5)
+    })
+
+    it('draws the table at the widths it carries', () => {
+      const sized = slide({
+        slots: {
+          data: {
+            kind: 'table',
+            header: ['Year', 'Rainfall'],
+            rows: [['2024', '812mm']],
+            colWidths: [0.25, 0.75],
+          },
+        },
+      })
+      render(
+        <SlideSlot slot="data" spec={spec} slide={sized} colors={colors} />,
+      )
+      const widths = [...document.querySelectorAll('col')].map(
+        col => (col as HTMLElement).style.width,
+      )
+      expect(widths).toEqual(['25%', '75%'])
+    })
+
+    it('leaves a table nobody sized dividing itself equally', () => {
+      // The common case and the old behaviour: no widths written, nothing to
+      // migrate, and a table that looks as it always did.
+      render(
+        <SlideSlot slot="data" spec={spec} slide={table} colors={colors} />,
+      )
+      expect(document.querySelectorAll('col')).toHaveLength(0)
+    })
+
+    it('keeps the widths through an edit that is not about widths', () => {
+      const sized = slide({
+        slots: {
+          data: {
+            kind: 'table',
+            rows: [['a', 'b']],
+            colWidths: [0.3, 0.7],
+          },
+        },
+      })
+      const onEdit = vi.fn()
+      render(editable(onEdit, sized))
+      fireEvent.click(screen.getByRole('button', { name: 'Add row' }))
+      expect(saved(onEdit).colWidths).toEqual([0.3, 0.7])
+    })
+
+    it('widens a column by dragging its boundary', () => {
+      // jsdom lays nothing out, so the table's width is stubbed: what is under
+      // test is that a pointer drag becomes a fraction of the table, not the
+      // browser's measuring.
+      const onEdit = vi.fn()
+      render(editable(onEdit))
+      vi.spyOn(
+        HTMLTableElement.prototype,
+        'getBoundingClientRect',
+      ).mockReturnValue({ width: 400, height: 200 } as DOMRect)
+      const handle = screen.getByRole('separator', { name: 'Resize column 1' })
+      handle.setPointerCapture = vi.fn()
+      fireEvent.pointerDown(handle, { pointerId: 1, clientX: 200 })
+      fireEvent.pointerMove(handle, { pointerId: 1, clientX: 240 })
+      // Forty pixels of four hundred is a tenth of the table.
+      expect(saved(onEdit).colWidths[0]).toBeCloseTo(0.6)
+    })
+
+    it('ignores a drag before the table has been measured', () => {
+      // A hidden or still-laying-out table has no width, and a fraction of
+      // nothing would resize the column by infinity.
+      const onEdit = vi.fn()
+      render(editable(onEdit))
+      vi.spyOn(
+        HTMLTableElement.prototype,
+        'getBoundingClientRect',
+      ).mockReturnValue({ width: 0, height: 0 } as DOMRect)
+      const handle = screen.getByRole('separator', { name: 'Resize column 1' })
+      handle.setPointerCapture = vi.fn()
+      fireEvent.pointerDown(handle, { pointerId: 1, clientX: 200 })
+      fireEvent.pointerMove(handle, { pointerId: 1, clientX: 240 })
+      expect(onEdit).not.toHaveBeenCalled()
+    })
+
+    it('lets a removed column take its width with it', () => {
+      // Otherwise the remaining columns are re-proportioned around the gap,
+      // and deleting a column silently resizes the ones that stay.
+      const sized = slide({
+        slots: {
+          data: {
+            kind: 'table',
+            rows: [['a', 'b', 'c']],
+            colWidths: [0.2, 0.3, 0.5],
+          },
+        },
+      })
+      const onEdit = vi.fn()
+      render(editable(onEdit, sized))
+      fireEvent.click(screen.getByRole('button', { name: 'Remove column 1' }))
+      expect(saved(onEdit).colWidths).toEqual([0.3, 0.5])
+    })
+  })
 })
 
 describe('what the template meant a box for (EDIT-7/TMPL-10)', () => {

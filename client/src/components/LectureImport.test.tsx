@@ -12,6 +12,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import type { Deck, Template } from '@slide-machine/shared'
 import LectureImport from './LectureImport'
+import { ApiError } from '../api/http'
 
 const dispatchAction = vi.fn()
 vi.mock('../api/actions', () => ({
@@ -189,6 +190,34 @@ describe('what happens once it has worked', () => {
 describe('when it will not work', () => {
   it('offers the missing step rather than an error, when Google is not connected', async () => {
     dispatchAction.mockRejectedValue(new Error('connect google first'))
+    renderPanel()
+    importLink('1AbCdEfGhIjKl')
+
+    expect(
+      await screen.findByRole('button', { name: /connect google/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('says so plainly when the deck is not the instructor’s to open', async () => {
+    // A pasted link to a colleague's lecture. This used to offer "Connect
+    // Google", which sends them through the consent screen to arrive back at
+    // exactly the same refusal — the connection was never the problem.
+    dispatchAction.mockRejectedValue(
+      new ApiError(403, 'source_forbidden', 'no access'),
+    )
+    renderPanel()
+    importLink('1AbCdEfGhIjKl')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /do not have access/i,
+    )
+    expect(screen.queryByRole('button', { name: /connect google/i })).toBeNull()
+  })
+
+  it('still offers the reconnect when the connection IS the problem', async () => {
+    dispatchAction.mockRejectedValue(
+      new ApiError(403, 'google_reconnect', 'stale'),
+    )
     renderPanel()
     importLink('1AbCdEfGhIjKl')
 

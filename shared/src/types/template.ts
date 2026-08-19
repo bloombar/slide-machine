@@ -15,6 +15,10 @@ export const LAYOUT_TYPES = [
   'section',
   'content',
   'list',
+  // Prose and points on one slide. `content` gives one and `list` the other,
+  // so a slide that wanted both had to lose the sentence of context or write
+  // it as a fourth point — which is most lecture slides.
+  'content-list',
   'image-heavy',
   'two-column',
   'quote',

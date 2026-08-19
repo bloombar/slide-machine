@@ -49,6 +49,22 @@ export const FONT_STACKS: FontStack[] = [
     stack:
       'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
   },
+  // The two below exist for imported decks (TMPL-8). A title set in Oswald or
+  // Bebas Neue and a caption in Caveat both used to arrive as plain system
+  // sans, which is the difference between a deck that looks like itself and
+  // one that looks like everybody else's.
+  {
+    key: 'condensed',
+    label: 'Condensed',
+    stack:
+      '"Arial Narrow", "Helvetica Neue Condensed", "Liberation Sans Narrow", "Roboto Condensed", Impact, sans-serif',
+  },
+  {
+    key: 'handwritten',
+    label: 'Handwritten',
+    stack:
+      '"Bradley Hand", "Segoe Script", "Chalkboard SE", "Comic Sans MS", cursive',
+  },
 ]
 
 /** The stack a template's stored key means. An unknown key falls back to the

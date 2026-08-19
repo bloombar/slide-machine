@@ -43,6 +43,16 @@ export class PresentationUnreadableError extends Error {
      * single "could not read it" would tell them to do neither.
      */
     readonly notFound = false,
+    /**
+     * Whether the account is fine and this deck is not theirs to open.
+     *
+     * The third case, and the common one: someone pastes a link to a
+     * colleague's lecture. Nothing is wrong with the connection, so offering
+     * to reconnect sends them through Google's consent screen to arrive back
+     * at the same refusal. What they need is access to the deck, or an
+     * account that already has it.
+     */
+    readonly forbidden = false,
   ) {
     super(message)
     this.name = 'PresentationUnreadableError'
@@ -374,6 +384,25 @@ const runsOf = (
   inherited: Omit<SourceRun, 'text'> = {},
 ): { runs: SourceRun[]; bulleted: boolean } => {
   const elements = (text?.textElements ?? []) as Record<string, unknown>[]
+  /*
+   * How each list in this box is drawn.
+   *
+   * A paragraph says which list it belongs to and how deep it sits; the list
+   * says what its markers look like at that depth. Digits or letters make it
+   * a numbered list, and reading it as bulleted turns "1. 2. 3." into three
+   * dashes — an ordering the author meant.
+   */
+  const lists = (text?.lists ?? {}) as Record<
+    string,
+    { nestingLevel?: Record<string, { glyphType?: string }> }
+  >
+  const isOrdered = (listId: string | undefined, level: number): boolean => {
+    const glyph = listId
+      ? lists[listId]?.nestingLevel?.[String(level)]?.glyphType
+      : undefined
+    return Boolean(glyph) && glyph !== 'GLYPH_TYPE_UNSPECIFIED'
+  }
+
   const runs: SourceRun[] = []
   let bulleted = false
   /** Ends the paragraph that came before, so where one line stops is stated
@@ -382,10 +411,21 @@ const runsOf = (
     const previous = runs[runs.length - 1]
     if (previous && !previous.text.endsWith('\n')) previous.text += '\n'
   }
+  // Which kind of paragraph the runs that follow belong to. A box is often
+  // both — a sentence of context, then points, then a closing line — and read
+  // as one kind the prose came back as bullets nobody wrote.
+  let inBullet = false
+  let level = 0
+  let ordered = false
   for (const element of elements) {
     if (element.paragraphMarker) {
-      const marker = element.paragraphMarker as { bullet?: unknown }
-      if (marker.bullet) bulleted = true
+      const marker = element.paragraphMarker as {
+        bullet?: { listId?: string; nestingLevel?: number }
+      }
+      inBullet = Boolean(marker.bullet)
+      level = marker.bullet?.nestingLevel ?? 0
+      ordered = inBullet && isOrdered(marker.bullet?.listId, level)
+      if (inBullet) bulleted = true
       endParagraph()
       continue
     }
@@ -436,6 +476,13 @@ const runsOf = (
         colorOf(style.foregroundColor as Record<string, unknown>, scheme) ??
         inherited.color,
       fontFamily: (style.fontFamily as string) || inherited.fontFamily,
+      // Where the author pointed this run, if anywhere.
+      ...(typeof (style.link as { url?: string } | undefined)?.url === 'string'
+        ? { link: (style.link as { url: string }).url }
+        : {}),
+      ...(inBullet ? { bulleted: true } : {}),
+      ...(inBullet && level ? { bulletLevel: level } : {}),
+      ...(ordered ? { ordered: true } : {}),
     })
   }
   const last = runs[runs.length - 1]
@@ -455,6 +502,29 @@ const tableOf = (table: Record<string, unknown>): string[][] =>
       return runs.map(r => r.text).join('')
     }),
   )
+
+/**
+ * How a table divides itself, as fractions of its own width and height.
+ *
+ * Google states a width for every column and a height for every row. Read as
+ * fractions of their total, not as lengths, because the box the table lands in
+ * is the box the reader measured — what matters is the proportions inside it,
+ * which then mean the same thing on screen and in an export (EDIT-7).
+ *
+ * A table whose sizes are missing or add to nothing gets none, and every
+ * surface falls back to equal tracks.
+ */
+const tableTracksOf = (
+  entries: unknown,
+  sizeAt: (entry: Record<string, unknown>) => Dimension | undefined,
+): number[] | undefined => {
+  const list = (entries ?? []) as Record<string, unknown>[]
+  if (!Array.isArray(list) || !list.length) return undefined
+  const sizes = list.map(entry => emu(sizeAt(entry)))
+  const total = sizes.reduce((sum, n) => sum + n, 0)
+  if (!total || sizes.some(n => n <= 0)) return undefined
+  return sizes.map(n => n / total)
+}
 
 /** One shape, whatever it turned out to be. Anything it leaves unset comes
  * from the placeholder it descends from, on its layout or the master. */
@@ -532,7 +602,23 @@ const elementOf = (
       kind: 'table',
       box,
       ...(slotName ? { slotName } : {}),
-      table: { rows: tableOf(table) },
+      table: {
+        rows: tableOf(table),
+        ...(() => {
+          const colWidths = tableTracksOf(
+            table.tableColumns,
+            column => column.columnWidth as Dimension | undefined,
+          )
+          const rowHeights = tableTracksOf(
+            table.tableRows,
+            row => row.rowHeight as Dimension | undefined,
+          )
+          return {
+            ...(colWidths ? { colWidths } : {}),
+            ...(rowHeights ? { rowHeights } : {}),
+          }
+        })(),
+      },
     }
   }
 
@@ -940,9 +1026,10 @@ export const toSourcePresentation = (
 /**
  * Reads a presentation from Google.
  *
- * A 403 is reported as something the user can act on: their stored
- * authorization may predate the access this needs, and reconnecting is the
- * fix. Anything else is a failure to read, said plainly.
+ * A refusal is reported as something the user can act on, and which action
+ * that is depends on why: reconnect when the grant is the problem, ask for
+ * access when the deck is, and neither when the deployment is misconfigured.
+ * Anything else is a failure to read, said plainly.
  */
 export const readPresentationLive = async (
   accessToken: string,
@@ -953,13 +1040,13 @@ export const readPresentationLive = async (
     { headers: { Authorization: `Bearer ${accessToken}` } },
   )
   if (res.status === 403 || res.status === 401) {
-    // Google says 403 for two unrelated things, and only one of them is the
-    // user's to fix. A grant that does not cover this presentation is worth
-    // reconnecting for; the Slides API being switched off for the whole
-    // deployment is not, and telling an instructor to reconnect for it sends
-    // them round a loop that cannot succeed. The reason is in the body, so it
-    // is read rather than assumed.
+    // Google says 403 for three unrelated things, and only one of them is
+    // fixed by reconnecting. The reason is in the body, so it is read rather
+    // than assumed.
     const reason = await res.text().catch(() => '')
+    // (1) The Slides API is switched off for the whole deployment. Nothing
+    // the instructor does can help; telling them to reconnect sends them
+    // round a loop that cannot succeed.
     if (
       /has not been used in project|is disabled|accessNotConfigured/i.test(
         reason,
@@ -969,8 +1056,28 @@ export const readPresentationLive = async (
         'The Google Slides API is not enabled for this deployment — an administrator must switch it on',
       )
     }
+    // (2) The stored authorization does not cover what this read needs — an
+    // account connected before the scope was added, or a token that has gone
+    // stale. Reconnecting is exactly the fix.
+    if (
+      res.status === 401 ||
+      /insufficient|invalid_token|ACCESS_TOKEN|expired|unauthenticated|UNAUTHENTICATED/i.test(
+        reason,
+      )
+    ) {
+      throw new PresentationUnreadableError(
+        'Google would not let this account read that presentation',
+        true,
+      )
+    }
+    // (3) The account is fine and this deck is not theirs to open, which is
+    // what a pasted link to somebody else's lecture looks like. Reconnecting
+    // the same account arrives back at the same refusal, so it is not
+    // offered.
     throw new PresentationUnreadableError(
-      'Google would not let this account read that presentation',
+      'This Google account does not have access to that presentation',
+      false,
+      false,
       true,
     )
   }

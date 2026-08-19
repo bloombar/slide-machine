@@ -22,6 +22,7 @@
  */
 import type { SlotValue } from '@slide-machine/shared'
 import type { Candidate, CandidateSlot } from './candidate'
+import { markdownOf, isMixed, hasLinks } from './markdown'
 import type { SourceElement } from './source-presentation'
 
 /** One imported slide, ready to be stored. */
@@ -114,7 +115,16 @@ const valueOf = (
 
   if (element.kind === 'table' || kind === 'table') {
     const rows = element.table?.rows ?? []
-    return rows.length ? { kind: 'table', rows } : undefined
+    if (!rows.length) return undefined
+    // The proportions the table had where it came from (EDIT-7), so an imported
+    // table is not silently re-divided into equal columns.
+    const { colWidths, rowHeights } = element.table ?? {}
+    return {
+      kind: 'table',
+      rows,
+      ...(colWidths?.length ? { colWidths } : {}),
+      ...(rowHeights?.length ? { rowHeights } : {}),
+    }
   }
 
   // Declared kinds that geometry cannot recover. Each takes the box's words
@@ -133,12 +143,35 @@ const valueOf = (
     return value.trim() ? { kind: 'preformatted', value } : undefined
   }
 
+  /*
+   * A box that is prose AND points, or whose words point somewhere, comes
+   * back as Markdown rather than as one kind or the other.
+   *
+   * `SlideMarkdown` renders paragraphs, lists, bold, italic and links in any
+   * multi-line text slot, so this is the shape the box had. Forced to a
+   * single kind it lost whichever half it was not: the sentence of context
+   * above a list came back as a bullet nobody wrote, and the emphasis went
+   * with it, a bullet being a plain string.
+   *
+   * A plain list stays a list — it is editable as one line per point, which
+   * is better than editing Markdown for the common case.
+   */
+  const runs = element.runs ?? []
+  if (!kind && (isMixed(runs) || (element.bulleted && hasLinks(runs)))) {
+    const value = markdownOf(runs)
+    return value ? { kind: 'text', value } : undefined
+  }
+
   if (kind === 'bullets' || (!kind && element.bulleted)) {
     const items = itemsOf(slot)
     return items.length ? { kind: 'bullets', items } : undefined
   }
 
-  const value = textOf(slot)
+  // Prose keeps the emphasis and the links it was written with, for the same
+  // reason: they are what the sentence said, not how the box was styled.
+  const value = runs.some(run => run.bold || run.italic || run.link)
+    ? markdownOf(runs)
+    : textOf(slot)
   return value ? { kind: 'text', value } : undefined
 }
 

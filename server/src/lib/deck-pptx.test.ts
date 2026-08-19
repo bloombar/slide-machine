@@ -310,6 +310,33 @@ describe('specialized content in an exported deck (EXP-7)', () => {
     expect(xml).not.toMatch(/<a:t>2024\s+812<\/a:t>/)
   })
 
+  it('divides a table in the proportions it was given', async () => {
+    // pptxgenjs divides the box equally when it is told nothing, so a table
+    // the author sized used to arrive in Slides re-divided (EDIT-7).
+    const sized = specialized()
+    sized.slides[0]!.slots!.data = {
+      kind: 'table',
+      header: ['Year', 'Rainfall in millimetres'],
+      rows: [['2024', '812']],
+      colWidths: [0.25, 0.75],
+    }
+    const xml = await slideXml(sized)
+    // The grid states each column's width, in EMU.
+    const widths = [...xml.matchAll(/<a:gridCol w="(\d+)"/g)].map(m =>
+      Number(m[1]),
+    )
+    expect(widths).toHaveLength(2)
+    expect(widths[1]! / widths[0]!).toBeCloseTo(3, 1)
+  })
+
+  it('divides a table nobody sized equally, as it always did', async () => {
+    const widths = [
+      ...(await slideXml(specialized())).matchAll(/<a:gridCol w="(\d+)"/g),
+    ].map(m => Number(m[1]))
+    expect(widths).toHaveLength(2)
+    expect(widths[0]).toBe(widths[1])
+  })
+
   it('sets a listing monospaced, with its indentation intact', async () => {
     const xml = await slideXml(specialized())
     expect(xml).toContain('Courier New')
@@ -740,5 +767,112 @@ describe('the credit printed under a picture', () => {
     expect(xml).toContain('Wikimedia')
     // ...and marked, so an importer can tell it from the author's own words.
     expect(xml).toMatch(/name="credit-line"[^>]*descr="credit-line"/)
+  })
+})
+
+describe('a slide holding more than its box', () => {
+  /** The smallest type size in a slide's XML, in hundredths of a point. */
+  const smallestSize = (xml: string): number =>
+    Math.min(...[...xml.matchAll(/sz="(\d+)"/g)].map(m => Number(m[1])))
+
+  const xmlFor = async (body: string) => {
+    const one: ExportDeck = {
+      title: 'Photosynthesis',
+      templateId: 'classic',
+      slides: [{ layoutType: 'content', title: 'Light', body }],
+    }
+    return new AdmZip(Buffer.from(await deckToPptx(one)))
+      .getEntry('ppt/slides/slide1.xml')!
+      .getData()
+      .toString('utf8')
+  }
+
+  const dense = Array.from(
+    { length: 24 },
+    (_, i) => `Point ${i + 1}: a full line of prose about photosynthesis.`,
+  ).join('\n')
+
+  it('draws its type smaller than a slide that fits', async () => {
+    // Without this the exporter drew every line from the top of the box at the
+    // size the design asks for, so the end of a dense slide ran off the box and
+    // off the page: the file was a different lecture from the one on screen.
+    expect(smallestSize(await xmlFor(dense))).toBeLessThan(
+      smallestSize(await xmlFor('An overview')),
+    )
+  })
+
+  it('leaves a slide that fits at the size its design asks for', async () => {
+    // The common case, and the one to protect: a deck the app wrote is written
+    // to the box's limits, and shrinking those too would be a restyling.
+    expect(smallestSize(await xmlFor('An overview'))).toBe(
+      smallestSize(await xmlFor('An overview of the topic')),
+    )
+  })
+
+  it('asks PowerPoint to shrink the box itself as well', async () => {
+    // The estimate here has no font metrics; PowerPoint does. It only
+    // recomputes on an edit, which is why the type is pre-shrunk too.
+    expect(await xmlFor('An overview')).toContain('normAutofit')
+  })
+})
+
+/**
+ * The typeface a design asked for, carried into the file (TMPL-8).
+ *
+ * The exporters knew only "monospaced or not", so a deck imported from a
+ * design set in Georgia came back from the exporter in the one face the
+ * exporter happened to use — which is the plainest way a file stops looking
+ * like the deck it was made from.
+ */
+describe('the typeface an exported deck is set in', () => {
+  /** The first slide's XML, where a run states the face it is set in. */
+  const slideXml = async (deck: ExportDeck) =>
+    new AdmZip(Buffer.from(await deckToPptx(deck)))
+      .getEntry('ppt/slides/slide1.xml')!
+      .getData()
+      .toString('utf8')
+
+  const inFont = (fontFamily?: string): ExportDeck => ({
+    title: 'Rain',
+    templateId: 'classic',
+    layouts: [
+      {
+        type: 'plain',
+        label: 'Plain',
+        purpose: 'prose',
+        slots: [{ name: 'body', kind: 'text', label: 'Body' }],
+        elementPositions: {
+          body: {
+            x: 0.1,
+            y: 0.2,
+            w: 0.8,
+            h: 0.5,
+            ...(fontFamily ? { fontFamily } : {}),
+          },
+        },
+      },
+    ],
+    slides: [
+      {
+        layoutType: 'plain',
+        slots: { body: { kind: 'text', value: 'Rainfall over the decade' } },
+      },
+    ],
+  })
+
+  it('sets a serif design in a serif', async () => {
+    expect(await slideXml(inFont('serif'))).toContain('Georgia')
+  })
+
+  it('sets a condensed design in a condensed face', async () => {
+    expect(await slideXml(inFont('condensed'))).toContain('Arial Narrow')
+  })
+
+  it('leaves a design that asked for no particular stack alone', async () => {
+    // The file's own default is as good an answer, and naming a face where
+    // none was chosen would be inventing a design decision.
+    const xml = await slideXml(inFont())
+    expect(xml).not.toContain('Georgia')
+    expect(xml).not.toContain('Arial Narrow')
   })
 })

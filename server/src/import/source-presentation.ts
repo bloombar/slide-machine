@@ -41,6 +41,23 @@ export interface SourceRun {
   /** The family as the presentation names it. Mapped to a bundled stack
    * later; never fetched at display time (docs/TEMPLATES.md §5). */
   fontFamily?: string
+  /** Where this run points, when the author made it a link. */
+  link?: string
+  /**
+   * Whether the paragraph this run belongs to is a bullet.
+   *
+   * Per run, not per box, because a box is often both: a sentence of context,
+   * then the points that follow, then a closing line. Read as one kind the
+   * whole box became a list, and the prose around it came back as bullets
+   * nobody wrote.
+   */
+  bulleted?: boolean
+  /** How deeply the point is indented, 0 for a top-level one. Google keeps
+   * sub-points as nesting levels rather than as separate boxes. */
+  bulletLevel?: number
+  /** A numbered point rather than a bulleted one: the list it belongs to is
+   * drawn with digits or letters. */
+  ordered?: boolean
 }
 
 /** What a shape on the page turned out to hold. */
@@ -76,7 +93,17 @@ export interface SourceElement {
    * pictures — and a licence that requires attribution silently unsatisfied.
    */
   attribution?: ImageAttribution
-  table?: { rows: string[][] }
+  table?: {
+    rows: string[][]
+    /**
+     * How the table divides itself, as fractions of its own width and height
+     * (EDIT-7). Google states a width for every column and a height for every
+     * row; discarding them and drawing equal columns is one of the plainest
+     * ways an imported table stops looking like the slide it came from.
+     */
+    colWidths?: number[]
+    rowHeights?: number[]
+  }
   /** How the text sits in its box: across, then down. A centred title read as
    * left-aligned is the single most visible way an import stops looking like
    * the deck it came from. */

@@ -359,6 +359,29 @@ describe('specialized content in the export model', () => {
     })
   })
 
+  it('carries the proportions a table was given', () => {
+    // The exporters divide the box with these (EDIT-7); dropping them here
+    // would leave every export re-dividing the table equally.
+    const boxes = computeLayout(
+      {
+        layoutType: 'lab',
+        slots: {
+          data: {
+            kind: 'table',
+            rows: [['2024']],
+            colWidths: [0.3, 0.7],
+            rowHeights: [1],
+          },
+        },
+      } as never,
+      layout,
+    )
+    expect(boxes.find(b => b.kind === 'table')).toMatchObject({
+      colWidths: [0.3, 0.7],
+      rowHeights: [1],
+    })
+  })
+
   it('never lets a table become lines of text', () => {
     expect(allText()).not.toContain('2024')
   })

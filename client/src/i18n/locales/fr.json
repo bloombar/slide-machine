@@ -773,7 +773,9 @@
       "addRow": "Ajouter une ligne",
       "addColumn": "Ajouter une colonne",
       "removeRow": "Supprimer la ligne {n}",
-      "removeColumn": "Supprimer la colonne {n}"
+      "removeColumn": "Supprimer la colonne {n}",
+      "resizeColumn": "Redimensionner la colonne {n}",
+      "resizeRow": "Redimensionner la ligne {n}"
     },
     "addKind": {
       "math": "Ajouter une formule",
@@ -1259,6 +1261,7 @@
     "email_unverified": "Confirmez d’abord votre adresse e-mail — vérifiez votre boîte de réception ou envoyez un nouveau lien depuis les paramètres de votre compte",
     "capability_required": "Connectez d’abord un compte Google — vous pouvez le faire depuis les paramètres de votre compte",
     "google_reconnect": "Google n’a pas autorisé ce compte à lire ce fichier — reconnectez votre compte Google et réessayez",
+    "source_forbidden": "Vous n’avez pas accès à ce fichier — demandez à son propriétaire de le partager avec vous, ou connectez-vous avec un compte qui peut l’ouvrir",
     "source_not_found": "Ce fichier est introuvable dans votre Drive — vérifiez le lien",
     "source_unreadable": "Google n’a pas transmis ce fichier"
   },

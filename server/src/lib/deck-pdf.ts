@@ -23,11 +23,14 @@ import {
 } from 'pdf-lib'
 import type { Layout } from '@slide-machine/shared'
 import type { ExportNote } from '@slide-machine/shared'
+import { tableTracks } from '@slide-machine/shared'
+import { pdfFamily } from './export-fonts'
 import type { ExportDeck, ExportSlide } from './deck-yaml'
 import { visibleStrokes, hexToRgb01, HIGHLIGHTER_ALPHA } from './deck-drawings'
 import { imageCredit } from './image-credit'
 import { fetchSlideImages } from './deck-image'
 import { typesetFormulas } from './deck-formulas'
+import { fitScale } from './fit-scale'
 import { DEFAULT_THEME, type ExportTheme } from './deck-theme'
 import {
   computeLayout,
@@ -60,18 +63,22 @@ interface Fonts {
   italic: PDFFont
   /** For listings and preformatted text, whose spacing is the content. */
   mono: PDFFont
+  /** The same three again with serifs, for a design that asked for them
+   * (TMPL-8). A deck laid out in Georgia used to be written in Helvetica. */
+  serif: PDFFont
+  serifBold: PDFFont
+  serifItalic: PDFFont
 }
 
-const fontFor = (fonts: Fonts, run: LayoutRun): PDFFont =>
+const fontFor = (fonts: Fonts, run: LayoutRun): PDFFont => {
   // A listing is set in a monospaced face so its indentation survives; the
   // proportional faces would close up the leading spaces (EXP-7).
-  run.mono
-    ? fonts.mono
-    : run.bold
-      ? fonts.bold
-      : run.italic
-        ? fonts.italic
-        : fonts.regular
+  if (run.mono || pdfFamily(run.family) === 'mono') return fonts.mono
+  const serif = pdfFamily(run.family) === 'serif'
+  if (run.bold) return serif ? fonts.serifBold : fonts.bold
+  if (run.italic) return serif ? fonts.serifItalic : fonts.italic
+  return serif ? fonts.serif : fonts.regular
+}
 
 /** A run's own colour where it has one — a syntax token — and the slide's
  * role otherwise. */
@@ -137,28 +144,31 @@ const drawTextBox = (page: PDFPage, box: TextBox): void => {
   const boxTop = PAGE_HEIGHT - box.y * PAGE_HEIGHT
   const bh = box.h * PAGE_HEIGHT
 
-  const lines: DrawnLine[] = []
-  for (const run of box.runs) {
-    const size = run.sizeFrac * PAGE_WIDTH
-    const font = fontFor(fonts, run)
-    const color = colorFor(run)
-    const text = (run.bullet ? '•  ' : '') + run.text
-    const gapAfter = (run.spaceAfterFrac ?? 0) * PAGE_WIDTH
+  const laidOut = (scale: number): DrawnLine[] => {
+    const lines: DrawnLine[] = []
+    for (const run of box.runs) {
+      const size = run.sizeFrac * PAGE_WIDTH * scale
+      const font = fontFor(fonts, run)
+      const color = colorFor(run)
+      const text = (run.bullet ? '•  ' : '') + run.text
+      const gapAfter = (run.spaceAfterFrac ?? 0) * PAGE_WIDTH * scale
 
-    const last = lines[lines.length - 1]
-    if (run.sameLine && last) {
-      last.pieces.push({ text, size, font, color })
-      last.gapAfter = gapAfter
-      continue
+      const last = lines[lines.length - 1]
+      if (run.sameLine && last) {
+        last.pieces.push({ text, size, font, color })
+        last.gapAfter = gapAfter
+        continue
+      }
+      // A listing keeps the lines its author wrote; prose wraps to its box.
+      const segments = run.mono ? [text] : wrapLines(text, font, size, bw)
+      segments.forEach((segment, i) =>
+        lines.push({
+          pieces: [{ text: segment, size, font, color }],
+          gapAfter: i === segments.length - 1 ? gapAfter : 0,
+        }),
+      )
     }
-    // A listing keeps the lines its author wrote; prose wraps to its box.
-    const segments = run.mono ? [text] : wrapLines(text, font, size, bw)
-    segments.forEach((segment, i) =>
-      lines.push({
-        pieces: [{ text: segment, size, font, color }],
-        gapAfter: i === segments.length - 1 ? gapAfter : 0,
-      }),
-    )
+    return lines
   }
 
   const heightOf = (line: DrawnLine) =>
@@ -168,10 +178,13 @@ const drawTextBox = (page: PDFPage, box: TextBox): void => {
       (w, p) => w + p.font.widthOfTextAtSize(p.text, p.size),
       0,
     )
-  const totalH = lines.reduce(
-    (h, line) => h + heightOf(line) + line.gapAfter,
-    0,
-  )
+  const tallyOf = (drawn: DrawnLine[]): number =>
+    drawn.reduce((h, line) => h + heightOf(line) + line.gapAfter, 0)
+
+  // Type gives way before content does, as it does on screen (`fit-scale`).
+  const scale = fitScale(at => tallyOf(laidOut(at)), bh)
+  const lines = laidOut(scale)
+  const totalH = tallyOf(lines)
 
   let cursorTop = box.valign === 'middle' ? boxTop - (bh - totalH) / 2 : boxTop
   for (const line of lines) {
@@ -195,9 +208,9 @@ const drawTextBox = (page: PDFPage, box: TextBox): void => {
  * A table as a ruled grid, since PDF has no table of its own (EXP-7).
  *
  * Every cell is ruled, not just the rows — the same grid the slide draws, so
- * the table an audience saw is the table in the file. Columns share the width
- * equally: the box is what the design reserved, and guessing at content widths
- * would make one export differ from the next.
+ * the table an audience saw is the table in the file. Columns and rows are
+ * drawn to the proportions the table carries (EDIT-7), which is how the slide
+ * drew them; a table nobody sized divides its box equally, as it always did.
  */
 const drawTableBox = (page: PDFPage, box: TableBox): void => {
   const rows = box.header?.length ? [box.header, ...box.rows] : box.rows
@@ -207,16 +220,25 @@ const drawTableBox = (page: PDFPage, box: TableBox): void => {
   const bh = box.h * PAGE_HEIGHT
   const left = box.x * PAGE_WIDTH
   const top = PAGE_HEIGHT - box.y * PAGE_HEIGHT
-  const cellW = bw / columns
-  const cellH = bh / rows.length
-  const size = Math.min(cellH * 0.45, PAGE_WIDTH * 0.018)
+  // Fractions of the box, read the same way the viewer reads them.
+  const widths = tableTracks(box.colWidths, columns).map(f => f * bw)
+  const heights = tableTracks(box.rowHeights, rows.length).map(f => f * bh)
+  /** Where a track starts, from the sizes of the ones before it. */
+  const offset = (sizes: number[], upTo: number) =>
+    sizes.slice(0, upTo).reduce((sum, n) => sum + n, 0)
+  // Type is sized to the shortest row, so no row's text is taller than the
+  // cell it sits in.
+  const size = Math.min(Math.min(...heights) * 0.45, PAGE_WIDTH * 0.018)
   const pad = size * 0.5
 
   rows.forEach((row, r) => {
-    const rowTop = top - r * cellH
+    const cellH = heights[r]!
+    const rowTop = top - offset(heights, r)
     for (let c = 0; c < columns; c++) {
+      const cellW = widths[c]!
+      const cellLeft = left + offset(widths, c)
       page.drawRectangle({
-        x: left + c * cellW,
+        x: cellLeft,
         y: rowTop - cellH,
         width: cellW,
         height: cellH,
@@ -228,7 +250,7 @@ const drawTableBox = (page: PDFPage, box: TableBox): void => {
       const text = row[c] ?? ''
       if (!text) continue
       page.drawText(clipToWidth(text, font, size, cellW - pad * 2), {
-        x: left + c * cellW + pad,
+        x: cellLeft + pad,
         y: rowTop - size - pad,
         size,
         font,
@@ -381,6 +403,9 @@ export const deckToPdf = async (
     bold: await doc.embedFont(StandardFonts.HelveticaBold),
     italic: await doc.embedFont(StandardFonts.HelveticaOblique),
     mono: await doc.embedFont(StandardFonts.Courier),
+    serif: await doc.embedFont(StandardFonts.TimesRoman),
+    serifBold: await doc.embedFont(StandardFonts.TimesRomanBold),
+    serifItalic: await doc.embedFont(StandardFonts.TimesRomanItalic),
   }
   // Apply the template theme: text/accent/muted colors and the page background.
   const theme = deck.theme ?? DEFAULT_THEME

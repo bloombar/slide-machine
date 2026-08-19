@@ -101,7 +101,14 @@ export const errorHandler = (
       ? ([403, 'google_reconnect'] as const)
       : err.notFound
         ? ([404, 'source_not_found'] as const)
-        : ([400, 'source_unreadable'] as const)
+        : err.forbidden
+          ? // The account is connected and this file is not theirs to open.
+            // A separate code from `google_reconnect` because the answer is
+            // different: reconnecting the same account lands on the same
+            // refusal, so what they need is access, or the account that has
+            // it.
+            ([403, 'source_forbidden'] as const)
+          : ([400, 'source_unreadable'] as const)
     // Logged as well as answered. The client shows a translated sentence
     // keyed by the code (docs/I18N.md), so Google's own wording — which is
     // the only thing that says WHICH refusal this was — reaches nobody

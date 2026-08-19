@@ -49,9 +49,11 @@ describe('what a box held arrives in its slot', () => {
     })
   })
 
-  it('joins the runs a sentence was split across', () => {
+  it('joins the runs a sentence was split across, keeping the stress', () => {
     // Google splits a line wherever styling changes, so a bolded word alone
-    // would otherwise arrive as its own paragraph
+    // would otherwise arrive as its own paragraph. The bold is the author
+    // stressing a word — only some of the line has it — so it is carried as
+    // Markdown, which is what the slide renders.
     const result = importedSlide(
       slide([
         slot('title', {
@@ -63,7 +65,7 @@ describe('what a box held arrives in its slot', () => {
     )
     expect(result.slots.title).toEqual({
       kind: 'text',
-      value: 'Light dependent',
+      value: 'Light **dependent**',
     })
   })
 
@@ -109,6 +111,39 @@ describe('what a box held arrives in its slot', () => {
         ['1', '2'],
       ],
     })
+  })
+
+  it('places the proportions a table had where it came from', () => {
+    // Otherwise an imported table is silently re-divided into equal columns
+    // (EDIT-7), whatever its author made it.
+    const result = importedSlide(
+      slide([
+        slot('data', {
+          kind: 'table',
+          table: {
+            rows: [['a', 'b']],
+            colWidths: [0.3, 0.7],
+            rowHeights: [1],
+          },
+        }),
+      ]),
+      'content',
+      stored,
+    )
+    expect(result.slots.data).toMatchObject({
+      kind: 'table',
+      colWidths: [0.3, 0.7],
+      rowHeights: [1],
+    })
+  })
+
+  it('leaves a table that stated no proportions without any', () => {
+    const result = importedSlide(
+      slide([slot('data', { kind: 'table', table: { rows: [['a', 'b']] } })]),
+      'content',
+      stored,
+    )
+    expect(result.slots.data).toEqual({ kind: 'table', rows: [['a', 'b']] })
   })
 
   it('keeps the layout the design analysis assigned, rather than guessing', () => {

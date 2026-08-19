@@ -39,6 +39,7 @@ import {
   resolveColor,
 } from './boxStyle'
 import { clipPathFor } from './decorationShape'
+import { useFitText } from './useFitText'
 import { slotIsShown } from './slotState'
 
 /** Literal classes, because Tailwind cannot see an interpolated one. */
@@ -197,6 +198,21 @@ function Node({
 }) {
   const style: BoxStyle = resolveStyle(node.style, textStyles)
   const placement = placementStyle(node, parent)
+  /*
+   * Type gives way before content does (`useFitText`).
+   *
+   * A slide the app wrote is written to the box's limits, so nothing changes
+   * for it. One imported from elsewhere arrives holding whatever its author
+   * put on it, and the end of it was simply clipped.
+   *
+   * Not a listing or a picture: a listing scrolls on purpose, because its
+   * line breaks are content and re-wrapping it smaller would be a different
+   * program.
+   */
+  const kind = node.slot ? kindOf(node.slot) : undefined
+  const { ref: fitRef, scale: fitScale } = useFitText(
+    Boolean(node.slot) && kind !== 'code' && kind !== 'image',
+  )
 
   // A container: draw the box, then let it arrange its children.
   if (node.container) {
@@ -254,8 +270,16 @@ function Node({
       // style lives on the node rather than on the slot, so the tag goes here
       // and the animation reads it from the slot wrapper's nearest ancestor.
       data-flip-tier={tierOf(kindOf(node.slot), node.style?.textStyle)}
+      ref={fitRef as React.Ref<HTMLDivElement>}
       className="overflow-hidden"
-      style={{ ...placement, ...contentStyle(style, colors) }}
+      style={
+        {
+          ...placement,
+          ...contentStyle(style, colors),
+          // 1 unless this box had to give way to show what it holds.
+          '--fit-scale': fitScale,
+        } as React.CSSProperties
+      }
     >
       {node.before}
       {slot(node.slot)}
@@ -333,7 +357,7 @@ export default function FlowLayout({
   // whose author has not built it yet. The frame already paints the theme.
   if (!tree) return <div className="h-full w-full" />
   return (
-    <div className="relative h-full w-full">
+    <div className="relative h-full w-full overflow-hidden">
       {/*
         Bands, rules, logos and background pictures, painted first so every
         box sits on top of them. They hold no content, so they are not

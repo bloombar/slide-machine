@@ -56,7 +56,12 @@ export const typeStyle = (
   style: BoxStyle,
   colors: ThemeColors,
 ): React.CSSProperties => ({
-  fontSize: style.fontSize ? `${style.fontSize}cqi` : undefined,
+  // Against `--fit-scale`, which is 1 unless a box had to shrink to show
+  // everything it holds (`useFitText`). A box that never overflows renders
+  // exactly the size its design asked for.
+  fontSize: style.fontSize
+    ? `calc(var(--fit-scale, 1) * ${style.fontSize}cqi)`
+    : undefined,
   fontWeight: style.fontWeight,
   fontStyle: style.italic ? 'italic' : undefined,
   lineHeight: style.lineHeight,

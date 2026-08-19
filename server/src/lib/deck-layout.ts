@@ -33,6 +33,14 @@ export interface LayoutRun {
   /** Set in a monospaced face, with its spacing kept exactly: a listing or
    * preformatted text (EXP-7). */
   mono?: boolean
+  /**
+   * Which of the app's font stacks the box asks for (`client/.../fonts.ts`).
+   *
+   * Carried so an export is set in the same kind of typeface the screen is: a
+   * deck imported from a design in Georgia used to come back from the exporter
+   * in Helvetica, because the exporters knew only "monospaced or not".
+   */
+  family?: string
   /** Extra gap after this paragraph, as a fraction of slide width. */
   spaceAfterFrac?: number
   /** Continues the previous run on the same line instead of starting a new
@@ -110,6 +118,11 @@ export interface TableBox {
   h: number
   header?: string[]
   rows: string[][]
+  /** How the table divides its own box, as fractions (EDIT-7). Carried through
+   * so a table the author sized exports at those proportions rather than being
+   * re-divided equally by each format. */
+  colWidths?: number[]
+  rowHeights?: number[]
   slot?: string
 }
 
@@ -265,6 +278,8 @@ const specialBox = (
           ...geometry,
           ...(value.header?.length ? { header: value.header } : {}),
           rows: value.rows,
+          ...(value.colWidths?.length ? { colWidths: value.colWidths } : {}),
+          ...(value.rowHeights?.length ? { rowHeights: value.rowHeights } : {}),
           ...(slot ? { slot } : {}),
         }
       : null
@@ -283,10 +298,13 @@ const runsForSlot = (
   const sizeFrac = (box.fontSize ?? 4) / 100
   const color = roleOf(box.color)
   const bold = (box.fontWeight ?? 400) >= 600 ? true : undefined
+  const family = box.fontFamily
   if (!value) return []
   switch (value.kind) {
     case 'text':
-      return value.value ? [{ text: value.value, sizeFrac, bold, color }] : []
+      return value.value
+        ? [{ text: value.value, sizeFrac, bold, color, family }]
+        : []
     case 'preformatted':
       // Its spacing is the content: monospaced, and split by line so nothing
       // reflows it (EXP-7).
@@ -301,6 +319,7 @@ const runsForSlot = (
         sizeFrac,
         bullet: true,
         color,
+        family,
         spaceAfterFrac: sizeFrac * 0.3,
       }))
     case 'code':
