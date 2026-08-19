@@ -777,6 +777,10 @@
       "resizeColumn": "Cambiar el ancho de la columna {n}",
       "resizeRow": "Cambiar la altura de la fila {n}"
     },
+    "link": {
+      "open": "Ctrl+clic para abrir",
+      "openMac": "⌘+clic para abrir"
+    },
     "addKind": {
       "math": "Añadir una fórmula",
       "code": "Añadir código",

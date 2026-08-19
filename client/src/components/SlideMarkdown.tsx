@@ -13,6 +13,16 @@
  */
 import Markdown from 'react-markdown'
 import remarkBreaks from 'remark-breaks'
+import { useTranslation } from 'react-i18next'
+
+/**
+ * Whether the reader is on a Mac, so the hint names the key they actually
+ * have. Told from the platform string, which is all a browser offers and is
+ * enough for the one question being asked.
+ */
+const onMac = (): boolean =>
+  typeof navigator !== 'undefined' &&
+  /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent)
 
 const INLINE_ELEMENTS = ['p', 'br', 'strong', 'em', 'del', 'code', 'a']
 const BLOCK_ELEMENTS = [...INLINE_ELEMENTS, 'ul', 'ol', 'li']
@@ -31,6 +41,7 @@ export default function SlideMarkdown({
   inline = false,
   links = true,
 }: Props) {
+  const { t } = useTranslation()
   return (
     <Markdown
       remarkPlugins={[remarkBreaks]}
@@ -69,13 +80,37 @@ export default function SlideMarkdown({
               href={href}
               target="_blank"
               rel="noreferrer"
-              title={href}
+              // Both, and in this order: what the link points at, and how to
+              // follow it. A link that swallows a plain click is otherwise a
+              // link that looks broken — the behaviour has to say so itself,
+              // since there is nowhere else on a slide to put an instruction.
+              title={`${href}\n${t(
+                onMac() ? 'slide.link.openMac' : 'slide.link.open',
+              )}`}
               onClick={e => {
                 if (!e.metaKey && !e.ctrlKey) e.preventDefault()
               }}
               className="underline decoration-current/50 underline-offset-4"
             >
               {children}
+              {/*
+               * The key to hold, on the link itself.
+               *
+               * A tooltip says it too, but only to someone who hovers and
+               * waits — and the person who needs telling is the one who just
+               * clicked and saw nothing happen. Small, muted, and only while
+               * the slide is being edited: the audience never sees it.
+               *
+               * Hidden from screen readers, which announce the anchor as a
+               * link already and would otherwise read the badge as part of
+               * the link's text.
+               */}
+              <sup
+                aria-hidden
+                className="ms-[0.15em] align-super text-[0.6em] opacity-50"
+              >
+                {onMac() ? '⌘' : 'Ctrl'}
+              </sup>
             </a>
           ),
         code: ({ children }) => (

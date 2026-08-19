@@ -777,6 +777,10 @@
       "resizeColumn": "调整第 {n} 列宽度",
       "resizeRow": "调整第 {n} 行高度"
     },
+    "link": {
+      "open": "按住 Ctrl 点击可打开",
+      "openMac": "按住 ⌘ 点击可打开"
+    },
     "addKind": {
       "math": "添加公式",
       "code": "添加代码",

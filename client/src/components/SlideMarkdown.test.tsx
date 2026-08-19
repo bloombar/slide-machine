@@ -54,6 +54,35 @@ describe('SlideMarkdown', () => {
       expect(click.defaultPrevented).toBe(true)
     })
 
+    it('says which key to hold, on the link itself', () => {
+      // A tooltip alone tells only the reader who hovers and waits, and the
+      // person who needs telling is the one who just clicked and saw nothing
+      // happen. The badge is decoration for a screen reader, which announces
+      // the anchor as a link already.
+      editable()
+      const link = screen.getByRole('link', { name: 'the docs' })
+      expect(link.textContent).toMatch(/⌘|Ctrl/)
+      expect(link.querySelector('sup')).toHaveAttribute('aria-hidden')
+    })
+
+    it('says it in the tooltip too, alongside where the link goes', () => {
+      editable()
+      expect(screen.getByRole('link')).toHaveAttribute(
+        'title',
+        expect.stringContaining('https://example.com'),
+      )
+      expect(screen.getByRole('link').getAttribute('title')).toMatch(
+        /click to open|点击可打开/i,
+      )
+    })
+
+    it('leaves a link nobody is editing plain', () => {
+      // The audience never sees the badge: on a slide being presented a plain
+      // click follows the link, so there is nothing to explain.
+      render(<SlideMarkdown text="[the docs](https://example.com)" inline />)
+      expect(screen.getByRole('link').textContent).toBe('the docs')
+    })
+
     it('follows a Cmd-click, and a Ctrl-click', () => {
       editable()
       for (const modifier of [{ metaKey: true }, { ctrlKey: true }]) {
