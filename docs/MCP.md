@@ -62,7 +62,8 @@ situations — a reasonable argument for future work rather than pilot scope.
 
 ## 2. Why this is cheap — what already exists
 
-The "thin facade" claim in [§18](SPEC.md#18-future-work) is largely earned:
+The "thin facade" claim in [§18](SPEC.md#18-future-work) is largely earned
+(the action layer itself is documented in [ACTIONS.md](ACTIONS.md)):
 
 | Foundation | Where | State |
 | --- | --- | --- |
