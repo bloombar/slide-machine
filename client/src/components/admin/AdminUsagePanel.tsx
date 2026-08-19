@@ -20,6 +20,7 @@ import type {
   UsageWindow,
 } from '@slide-machine/shared'
 import { fetchAdminUserUsage } from '../../api/admin'
+import TimeframeToggle from './TimeframeToggle'
 import UsageMeter from '../UsageMeter'
 
 /** In UTC, because that is the calendar the rollover itself follows — a free
@@ -88,21 +89,6 @@ export default function AdminUsagePanel({ userId }: { userId: string }) {
   const current = loaded?.key === key ? loaded : null
   const summary = current?.summary ?? null
 
-  const windowButton = (value: UsageWindow, label: string) => (
-    <button
-      type="button"
-      aria-pressed={timeframe === value}
-      onClick={() => setTimeframe(value)}
-      className={`rounded-md px-2 py-1 text-xs font-medium ${
-        timeframe === value
-          ? 'bg-slate-200 text-slate-800'
-          : 'text-slate-500 hover:bg-slate-100'
-      }`}
-    >
-      {label}
-    </button>
-  )
-
   return (
     <section
       data-testid="admin-usage-panel"
@@ -110,14 +96,7 @@ export default function AdminUsagePanel({ userId }: { userId: string }) {
     >
       <div className="mb-1 flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-slate-700">Service usage</h2>
-        <div
-          role="group"
-          aria-label="Usage timeframe"
-          className="flex gap-1 rounded-lg border border-slate-200 p-0.5"
-        >
-          {windowButton('period', 'Current period')}
-          {windowButton('all', 'All time')}
-        </div>
+        <TimeframeToggle value={timeframe} onChange={setTimeframe} />
       </div>
 
       {current?.failed && (

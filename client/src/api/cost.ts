@@ -6,6 +6,7 @@
 import type {
   CostOverviewResponse,
   CostSummaryResponse,
+  UsageWindow,
 } from '@slide-machine/shared'
 import { apiFetch } from './http'
 
@@ -21,15 +22,18 @@ const PATHS: Record<CostScope['kind'], string> = {
   deck: 'decks',
 }
 
-/** An optional reporting window; both ends open by default, because
- * "everything so far" is the question an operator asks first. */
+/** An optional reporting window: a named one (`window` — the payer's current
+ * billing period, or the whole ledger) or an ad-hoc `from`/`to` pair. A named
+ * window wins over the pair, mirroring the server. */
 export interface CostWindowQuery {
+  window?: UsageWindow
   from?: string
   to?: string
 }
 
 const query = (window: CostWindowQuery = {}): string => {
   const params = new URLSearchParams()
+  if (window.window) params.set('window', window.window)
   if (window.from) params.set('from', window.from)
   if (window.to) params.set('to', window.to)
   const encoded = params.toString()

@@ -23,10 +23,16 @@ import type {
 } from '@slide-machine/shared'
 import { HttpError } from '../middleware/error'
 import { CostEventModel } from '../models/cost-event'
-import { costOverview, costSummary } from '../billing/cost-report'
+import {
+  costOverview,
+  costSummary,
+  type CostWindow,
+} from '../billing/cost-report'
 import { MICROS_PER_UNIT } from '../billing/pricing'
+import { periodStartFor } from '../billing/usage'
 import { csvRow } from '../audit/csv'
 import { windowFrom, windowFilter } from './report-window'
+import { loadAnyDeck, loadAnyProject } from './admin-targets'
 
 export const adminCostRouter = Router()
 
@@ -47,26 +53,68 @@ adminCostRouter.get('/cost', async (req, res) => {
   res.json(body)
 })
 
+/**
+ * The window a scoped summary was asked for. `?window=period` resolves the
+ * payer's current billing period — the user's own on a user scope, the
+ * owner's on a project or lecture scope, since every ledger row there is
+ * charged to the owner anyway. `?window=all` is the whole ledger, and the raw
+ * `?from=`/`?to=` pair stays for ad-hoc spans; a named window wins over it.
+ */
+const resolveWindow = async (
+  query: Record<string, unknown>,
+  ownerId: () => Promise<string>,
+): Promise<CostWindow> => {
+  const named = query.window
+  if (named === undefined) return windowFrom(query)
+  if (named === 'all') return {}
+  if (named === 'period') return { from: await periodStartFor(await ownerId()) }
+  throw new HttpError(400, 'invalid_input', 'Invalid cost window')
+}
+
+/** One scope's summary, stamped with the window it actually covered so the
+ * client never re-derives period boundaries the server already knows. */
+const windowedSummary = async (
+  scope: { payerId?: string; deckId?: string; projectId?: string },
+  ownerId: () => Promise<string>,
+  query: Record<string, unknown>,
+): Promise<CostSummaryResponse> => {
+  const window = await resolveWindow(query, ownerId)
+  const summary = await costSummary(scope, window)
+  return {
+    ...summary,
+    window: {
+      from: window.from?.toISOString() ?? null,
+      to: window.to?.toISOString() ?? null,
+    },
+  }
+}
+
 adminCostRouter.get('/cost/users/:id', async (req, res) => {
-  const body: CostSummaryResponse = await costSummary(
-    { payerId: objectId(req.params.id, 'user') },
-    windowFrom(req.query as Record<string, unknown>),
+  const payerId = objectId(req.params.id, 'user')
+  const body = await windowedSummary(
+    { payerId },
+    async () => payerId,
+    req.query as Record<string, unknown>,
   )
   res.json(body)
 })
 
 adminCostRouter.get('/cost/projects/:id', async (req, res) => {
-  const body: CostSummaryResponse = await costSummary(
-    { projectId: objectId(req.params.id, 'project') },
-    windowFrom(req.query as Record<string, unknown>),
+  const projectId = objectId(req.params.id, 'project')
+  const body = await windowedSummary(
+    { projectId },
+    async () => (await loadAnyProject(projectId)).ownerId.toString(),
+    req.query as Record<string, unknown>,
   )
   res.json(body)
 })
 
 adminCostRouter.get('/cost/decks/:id', async (req, res) => {
-  const body: CostSummaryResponse = await costSummary(
-    { deckId: objectId(req.params.id, 'lecture') },
-    windowFrom(req.query as Record<string, unknown>),
+  const deckId = objectId(req.params.id, 'lecture')
+  const body = await windowedSummary(
+    { deckId },
+    async () => (await loadAnyDeck(deckId)).ownerId.toString(),
+    req.query as Record<string, unknown>,
   )
   res.json(body)
 })

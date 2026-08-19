@@ -132,8 +132,24 @@ test('the allowlisted admin reaches the directory and a user drill-down', async 
   await expect(usagePanel.getByText(/ever spent/)).toBeVisible()
   await expect(usagePanel.getByText(/Resets /)).toHaveCount(0)
   await expect(usagePanel.getByTestId('usage-metric-aiTokens')).toBeVisible()
-  await usagePanel.getByRole('button', { name: 'Current period' }).click()
+  await usagePanel
+    .getByRole('button', { name: 'Current billing period' })
+    .click()
   await expect(usagePanel.getByText(/Resets /)).toBeVisible()
+
+  // The Cost panel mirrors the same toggle, defaulting to the billing
+  // period; a fresh account has spent nothing either way, and the empty
+  // state names the window it is empty over.
+  const costPanel = page.getByTestId('cost-panel')
+  await expect(
+    costPanel.getByRole('button', { name: 'Current billing period' }),
+  ).toHaveAttribute('aria-pressed', 'true')
+  await expect(
+    costPanel.getByText('Nothing metered in this billing period.'),
+  ).toBeVisible()
+  await costPanel.getByRole('button', { name: 'All time' }).click()
+  await expect(costPanel.getByText(/ever cost the deployment/)).toBeVisible()
+  await expect(costPanel.getByText('Nothing metered here yet.')).toBeVisible()
 
   // The project row links to the project's own admin page
   await page.getByRole('link', { name: 'Admin E2E Project' }).click()

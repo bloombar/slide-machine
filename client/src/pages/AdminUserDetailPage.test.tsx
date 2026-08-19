@@ -177,7 +177,7 @@ describe('AdminUserDetailPage', () => {
     // Defaults to the window the caps bind against, with the alternative a
     // click away.
     expect(
-      within(panel).getByRole('button', { name: 'Current period' }),
+      within(panel).getByRole('button', { name: 'Current billing period' }),
     ).toHaveAttribute('aria-pressed', 'true')
     expect(
       within(panel).getByRole('button', { name: 'All time' }),

@@ -93,6 +93,21 @@ export const periodResetAt = async (userId: string): Promise<Date> => {
   )
 }
 
+/**
+ * When the current period began — the other end of `periodResetAt`, mirroring
+ * `periodKeyFor` the same way. The admin cost reports use it as the boundary
+ * of "this billing period", so the window an operator reads there is the same
+ * one the allowance counters are keyed to.
+ */
+export const periodStartFor = async (userId: string): Promise<Date> => {
+  const sub = await SubscriptionModel.findOne({ userId, status: 'active' })
+  if (sub) return sub.currentPeriodStart
+  const now = new Date()
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0),
+  )
+}
+
 /** The key a given metric's counter lives under — a gauge's never rolls over,
  * every other metric's follows the user's billing period. */
 const periodForMetric = async (

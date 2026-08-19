@@ -63,6 +63,12 @@ export interface CostSummaryResponse {
    * registered students, and every view that prints it says so. */
   costPerRegisteredStudent: Money | null
   cache: CacheEfficiency
+  /**
+   * The span the figures cover, as the route resolved it — for
+   * `?window=period`, the payer's current billing period. Open ends are null;
+   * absent on responses older than this field.
+   */
+  window?: { from: string | null; to: string | null }
 }
 
 export interface TopSpender {
