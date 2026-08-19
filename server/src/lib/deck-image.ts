@@ -14,6 +14,7 @@
  * A URL that still can't produce a usable image is skipped (best-effort).
  */
 import sharp from 'sharp'
+import { getStorage } from '../storage'
 
 const USER_AGENT = 'SlideMachine/1.0 (lecture slide export)'
 const MAX_CONCURRENCY = 3
@@ -61,13 +62,64 @@ const toPng = async (bytes: Uint8Array): Promise<SlideImage | undefined> => {
   }
 }
 
+/** Bytes that came from somewhere, turned into the PNG/JPEG the exporters
+ * draw. Shared by the two ways a picture arrives: over HTTP, and off our own
+ * storage. */
+const imageFrom = async (
+  bytes: Uint8Array,
+): Promise<SlideImage | undefined> => {
+  switch (sniff(bytes)) {
+    case 'png':
+      return { data: bytes, kind: 'png' }
+    case 'jpeg':
+      return { data: bytes, kind: 'jpeg' }
+    case 'html':
+      return undefined
+    default:
+      // WebP, GIF, or anything else sharp can decode → PNG for pdf-lib.
+      return toPng(bytes)
+  }
+}
+
+/** What a locally stored file's public URL looks like (`storage`'s local
+ * driver). Everything after it is the storage key. */
+const LOCAL_FILES = '/api/files/'
+
+/**
+ * A picture the app stores itself, read straight off storage.
+ *
+ * The local storage driver hands out a app-relative URL — `/api/files/<key>`
+ * — because that is what a browser needs. `fetch` cannot use one: it wants an
+ * absolute URL, and the export ran on the server with no origin to resolve
+ * against. So every picture on an imported deck was skipped, silently, and
+ * the deck exported with holes where its images had been. An imported lecture
+ * is the case where every picture is one of these.
+ *
+ * Read rather than fetched even where an origin could be worked out: the
+ * bytes are on this machine, and asking ourselves for them over HTTP is a
+ * round trip that can fail for reasons the picture has nothing to do with.
+ */
+const fromStorage = async (url: string): Promise<SlideImage | undefined> => {
+  try {
+    const bytes = await getStorage().get(
+      decodeURIComponent(url.slice(LOCAL_FILES.length)),
+    )
+    return bytes ? imageFrom(new Uint8Array(bytes)) : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /** Fetches one image URL, retrying transient rate-limit responses (429/503, or
  * a 200-status HTML block page), and normalizing the result to PNG/JPEG. */
 const fetchOne = async (
   url: string | undefined,
   attempt = 0,
 ): Promise<SlideImage | undefined> => {
-  if (!url || !/^https?:\/\//i.test(url)) return undefined
+  if (!url) return undefined
+  // A picture of our own, which has no absolute URL to fetch.
+  if (url.startsWith(LOCAL_FILES)) return fromStorage(url)
+  if (!/^https?:\/\//i.test(url)) return undefined
   try {
     const res = await fetch(url, {
       // `image/*` alone is refused by hosts that serve pictures from an API
@@ -85,22 +137,12 @@ const fetchOne = async (
     }
     if (!res.ok) return undefined
     const bytes = new Uint8Array(await res.arrayBuffer())
-    switch (sniff(bytes)) {
-      case 'png':
-        return { data: bytes, kind: 'png' }
-      case 'jpeg':
-        return { data: bytes, kind: 'jpeg' }
-      case 'html':
-        // A block/error page served with a 200 — retry, then give up.
-        if (attempt < MAX_RETRIES) {
-          await delay(300 * (attempt + 1))
-          return fetchOne(url, attempt + 1)
-        }
-        return undefined
-      default:
-        // WebP, GIF, or anything else sharp can decode → PNG for pdf-lib.
-        return toPng(bytes)
+    // A block/error page served with a 200 — retry, then give up.
+    if (sniff(bytes) === 'html' && attempt < MAX_RETRIES) {
+      await delay(300 * (attempt + 1))
+      return fetchOne(url, attempt + 1)
     }
+    return imageFrom(bytes)
   } catch {
     return undefined
   }
