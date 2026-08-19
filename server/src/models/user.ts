@@ -42,6 +42,14 @@ export interface UserDb extends Omit<User, 'id' | 'createdAt' | 'planGrant'> {
   // Present only in live mode after a successful connect. Never leaves the
   // server except as an authorized client injected into the Quiz Generator.
   googleQuizRefreshToken?: string
+  /**
+   * Opaque research pseudonym (EVAL-2): the only key the de-identified
+   * research export uses for this account. Random, assigned lazily the
+   * first time an export references the account, and stable ever after so
+   * exports of different windows still join. select:false — a pseudonym
+   * listed beside the identity it stands in for stops being one.
+   */
+  studyId?: string
 }
 
 const userSchema = new Schema<UserDb>(
@@ -109,6 +117,10 @@ const userSchema = new Schema<UserDb>(
     },
     billingProvider: String,
     billingCustomerId: String,
+    // Research pseudonym (EVAL-2). Sparse + unique: most accounts never
+    // appear in an export and share the absent value; two accounts sharing
+    // a pseudonym would silently merge in every study dataset.
+    studyId: { type: String, unique: true, sparse: true, select: false },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 )

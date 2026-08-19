@@ -31,6 +31,11 @@ export const ADMIN_LINKS: AdminLink[] = [
     label: 'Telemetry',
     prefixes: ['/app/admin/telemetry'],
   },
+  {
+    to: '/app/admin/research',
+    label: 'Research',
+    prefixes: ['/app/admin/research'],
+  },
   { to: '/app/admin/logs', label: 'Admin Logs', prefixes: ['/app/admin/logs'] },
   {
     to: '/app/admin/settings-logs',

@@ -21,25 +21,12 @@ import {
   deckTelemetry,
   sessionSummaries,
   telemetryOverview,
-  type TelemetryWindow,
 } from '../telemetry/session-report'
 import { csvRow } from '../audit/csv'
+import { SESSION_CSV_COLUMNS, sessionCsvValues } from '../telemetry/session-csv'
+import { windowFrom } from './report-window'
 
 export const adminTelemetryRouter = Router()
-
-/** The window a report covers, from `?from=`/`?to=` ISO dates — same contract
- * as the cost reports: both optional, an unparseable date refused. */
-const windowFrom = (query: Record<string, unknown>): TelemetryWindow => {
-  const parse = (value: unknown, name: string): Date | undefined => {
-    if (value === undefined || value === '') return undefined
-    const date = new Date(String(value))
-    if (Number.isNaN(date.getTime())) {
-      throw new HttpError(400, 'invalid_input', `Invalid ${name} date`)
-    }
-    return date
-  }
-  return { from: parse(query.from, 'from'), to: parse(query.to, 'to') }
-}
 
 /** Rejects a path id that is not one, so a typo reads as a bad request rather
  * than as a lecture with no sessions. */
@@ -83,67 +70,9 @@ adminTelemetryRouter.get('/telemetry/export', async (req, res) => {
     'Content-Disposition',
     `attachment; filename="session-telemetry-${date}.csv"`,
   )
-  res.write(
-    csvRow([
-      'sessionId',
-      'deckId',
-      'deckName',
-      'startedAt',
-      'endedAt',
-      'wallDurationMs',
-      'capturedMs',
-      'phraseCount',
-      'outcomeNone',
-      'outcomeUpdate',
-      'outcomeRefit',
-      'outcomeNew',
-      'outcomeCommand',
-      'outcomeDiscarded',
-      'finalizationP50Ms',
-      'finalizationP95Ms',
-      'generationP50Ms',
-      'generationP95Ms',
-      'refusals',
-      'unavailableErrors',
-      'otherErrors',
-      'sttRestarts',
-      'sttErrors',
-      'longestGenerationOutageMs',
-      'endReason',
-      'excluded',
-    ]),
-  )
+  res.write(csvRow([...SESSION_CSV_COLUMNS]))
   for (const s of sessions) {
-    res.write(
-      csvRow([
-        s.sessionId,
-        s.deckId,
-        s.deckName,
-        s.startedAt,
-        s.endedAt,
-        s.wallDurationMs,
-        s.capturedMs,
-        s.phraseCount,
-        s.outcomes.none,
-        s.outcomes.update,
-        s.outcomes.refit,
-        s.outcomes.new,
-        s.outcomes.command,
-        s.outcomes.discarded,
-        s.finalization.p50Ms,
-        s.finalization.p95Ms,
-        s.generation.p50Ms,
-        s.generation.p95Ms,
-        s.refusals,
-        s.providerErrors.unavailable,
-        s.providerErrors.other,
-        s.sttRestarts,
-        s.sttErrors,
-        s.longestGenerationOutageMs,
-        s.endReason,
-        s.excluded,
-      ]),
-    )
+    res.write(csvRow(sessionCsvValues(s)))
   }
   res.end()
 })
