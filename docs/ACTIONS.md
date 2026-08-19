@@ -14,7 +14,37 @@ how to add to it. The design record for exposing the layer to AI assistants is
 > (descriptions + JSON Schema derivation for AI channels) is future work; see
 > [MCP.md §3](MCP.md#3-the-shared-substrate).
 
-## 1. The map
+## 1. Why a layer
+
+The alternative is what most Express apps do: each route hand-rolls its own
+validation, auth check, and error responses. That shape has a known failure
+mode — every new endpoint is a fresh chance to forget one of those steps, and
+nothing but reviewer vigilance catches the omission. The layer exists to turn
+those per-route obligations into properties of the pipeline:
+
+- **Nothing can be forgotten.** Validation, authorization, metering, and cost
+  attribution run in the dispatcher, in a fixed order, for every action. An
+  action *cannot* skip authorization — `access` is a required field that won't
+  compile absent — and cannot spend provider money unattributed, because
+  `runWithUsage` wraps it before it runs.
+- **Authorization is reviewable in one place.** With per-route checks, "what
+  can a viewer do?" means reading every handler. Here each guard is a
+  declaration with a machine-readable descriptor, pinned in the `ACCESS_INDEX`
+  audit table — so a missing *or weakened* guard shows up as a failing test and
+  a visible table diff, not a silent behavior change.
+- **The surface is enumerable.** Because every operation is a named object with
+  a schema in one registry, the whole API can be listed, audited, and — the
+  point of [MCP.md](MCP.md) — offered to AI assistants as a catalog, without
+  maintaining a parallel hand-written list that drifts.
+- **Cross-cutting changes are one-place changes.** Error→status mapping, the
+  verified-email gate, plan caps, request context: each was added once in the
+  pipeline instead of once per route.
+
+The cost is indirection — a dotted name and a dispatch hop instead of a plain
+route — and the discipline of §7: anything that bypasses the layer gets none of
+these guarantees, which is why the boundary is documented rather than assumed.
+
+## 2. The map
 
 | Piece | Where |
 | --- | --- |
@@ -36,7 +66,7 @@ hand-maintained list of them anywhere: the registry is the index, and the
 `ACCESS_INDEX` table in the audit test is its one reviewable, always-current
 rendering (a stale row fails CI).
 
-## 2. The pipeline
+## 3. The pipeline
 
 `dispatch(name, rawInput, ctx)` runs every action through the same four steps:
 
@@ -67,7 +97,7 @@ Trusted in-process callers (seeding, background work) use `runAction`, which
 takes the action by typed reference instead of by name and may opt out of
 metering. The HTTP path never may.
 
-## 3. Registration and the index
+## 4. Registration and the index
 
 Actions self-register at module load (`registerAction` in each family file);
 [register-all.ts](../server/src/actions/register-all.ts) is the single import
@@ -76,7 +106,7 @@ it — a family file added there is registered everywhere at once; added anywher
 else, it is invisible to the audit, which is the failure mode to avoid.
 `listActions()` exposes the populated registry.
 
-## 4. Declared authorization (TECH-14)
+## 5. Declared authorization (TECH-14)
 
 `access` is a **required** field of `Action` — an action without a declaration
 does not compile. Policies are built from the vocabulary in
@@ -98,7 +128,7 @@ policies read **Mongo only** (they run outside the usage context, so a paid
 call would spend unattributed), and **missing and forbidden answer alike**, so
 an id cannot be probed for existence.
 
-## 5. Adding an action
+## 6. Adding an action
 
 1. Define it with `defineAction` in the right family file (or a new file) —
    `name`, Zod `input`, `access` from the vocabulary, `meter` if it spends
@@ -109,7 +139,7 @@ an id cannot be probed for existence.
    the test fails until the row matches the declared policy.
 4. Call it from the client with `dispatchAction('family.verb', input)`.
 
-## 6. Boundary
+## 7. Boundary
 
 Not everything goes through the layer. Media/streaming routes keep their own
 checks and are **not** covered by the audit index: `routes/tts.ts`,
