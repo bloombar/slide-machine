@@ -23,35 +23,12 @@ import type {
 } from '@slide-machine/shared'
 import { HttpError } from '../middleware/error'
 import { CostEventModel } from '../models/cost-event'
-import {
-  costOverview,
-  costSummary,
-  type CostWindow,
-} from '../billing/cost-report'
+import { costOverview, costSummary } from '../billing/cost-report'
 import { MICROS_PER_UNIT } from '../billing/pricing'
 import { csvRow } from '../audit/csv'
+import { windowFrom, windowFilter } from './report-window'
 
 export const adminCostRouter = Router()
-
-/**
- * The window a report covers, from `?from=`/`?to=` ISO dates.
- *
- * Both optional and both open-ended: "everything so far" is the question an
- * operator asks first, and forcing a range on them would make the default view
- * a decision rather than an answer. An unparseable date is refused rather than
- * ignored — silently reporting the wrong period is worse than an error.
- */
-const windowFrom = (query: Record<string, unknown>): CostWindow => {
-  const parse = (value: unknown, name: string): Date | undefined => {
-    if (value === undefined || value === '') return undefined
-    const date = new Date(String(value))
-    if (Number.isNaN(date.getTime())) {
-      throw new HttpError(400, 'invalid_input', `Invalid ${name} date`)
-    }
-    return date
-  }
-  return { from: parse(query.from, 'from'), to: parse(query.to, 'to') }
-}
 
 /** Rejects a path id that is not one, so a typo reads as a bad request rather
  * than as an entity that spent nothing. */
@@ -107,13 +84,7 @@ adminCostRouter.get('/cost/decks/:id', async (req, res) => {
  */
 adminCostRouter.get('/cost/export', async (req, res) => {
   const window = windowFrom(req.query as Record<string, unknown>)
-  const filter: Record<string, unknown> = {}
-  if (window.from || window.to) {
-    filter.occurredAt = {
-      ...(window.from ? { $gte: window.from } : {}),
-      ...(window.to ? { $lte: window.to } : {}),
-    }
-  }
+  const filter = windowFilter('occurredAt', window)
 
   const date = new Date().toISOString().slice(0, 10)
   res.setHeader('Content-Type', 'text/csv; charset=utf-8')

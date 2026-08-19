@@ -84,6 +84,7 @@ import {
 import { adminPlanRouter } from './admin-plan'
 import { adminCostRouter } from './admin-cost'
 import { adminTelemetryRouter } from './admin-telemetry'
+import { adminResearchRouter } from './admin-research'
 import { adminSettingsRouter } from './admin-settings'
 import { adminSettingsLogsRouter } from './admin-settings-logs'
 
@@ -574,6 +575,8 @@ adminRouter.use(adminSettingsLogsRouter)
 adminRouter.use(adminCostRouter)
 // Session telemetry (EVAL-1): read-only, behind the same allowlist gate.
 adminRouter.use(adminTelemetryRouter)
+// De-identified research export (EVAL-2), behind the same allowlist gate.
+adminRouter.use(adminResearchRouter)
 
 /** Reachable only through the guards above, so 200 means "is an admin";
  * the client uses it to decide whether to show admin navigation. */

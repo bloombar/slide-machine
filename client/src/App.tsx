@@ -33,6 +33,7 @@ import AdminDeckPage from './pages/AdminDeckPage'
 import AdminLogsPage from './pages/AdminLogsPage'
 import AdminCostPage from './pages/AdminCostPage'
 import AdminTelemetryPage from './pages/AdminTelemetryPage'
+import AdminResearchPage from './pages/AdminResearchPage'
 import AdminSettingsLogsPage from './pages/AdminSettingsLogsPage'
 import RequireAuth from './auth/RequireAuth'
 import AdminShell from './components/layout/AdminShell'
@@ -96,6 +97,7 @@ export default function App() {
           <Route path="decks/:deckId" element={<AdminDeckPage />} />
           <Route path="cost" element={<AdminCostPage />} />
           <Route path="telemetry" element={<AdminTelemetryPage />} />
+          <Route path="research" element={<AdminResearchPage />} />
           <Route path="logs" element={<AdminLogsPage />} />
           <Route path="settings-logs" element={<AdminSettingsLogsPage />} />
         </Route>
