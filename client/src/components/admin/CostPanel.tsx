@@ -88,6 +88,13 @@ interface Loaded {
   failed: boolean
 }
 
+/** The scope as the caption names it. */
+const NOUNS: Record<CostScope['kind'], string> = {
+  user: 'account',
+  project: 'project',
+  deck: 'lecture',
+}
+
 export default function CostPanel({ scope }: { scope: CostScope }) {
   const key = `${scope.kind}:${scope.id}`
   const [loaded, setLoaded] = useState<Loaded | null>(null)
@@ -139,7 +146,16 @@ export default function CostPanel({ scope }: { scope: CostScope }) {
       data-testid="cost-panel"
       className="mt-8 rounded-lg border border-slate-200 p-4"
     >
-      <h2 className="mb-3 text-lg font-semibold text-slate-700">Cost</h2>
+      <h2 className="mb-1 text-lg font-semibold text-slate-700">Cost</h2>
+      {/* The one thing every figure below shares, said once: this is the
+          all-time event ledger, not the per-period allowance counters — the
+          two legitimately disagree, and a reader comparing them deserves to
+          know why before suspecting a bug. */}
+      <p className="mb-3 text-xs text-slate-500">
+        Everything this {NOUNS[scope.kind]} has ever cost the deployment, from
+        the per-event ledger — cache hits are counted as events at zero cost.
+        Unlike plan allowances, these figures never reset.
+      </p>
 
       {nothing ? (
         <p className="text-sm text-slate-500">Nothing metered here yet.</p>

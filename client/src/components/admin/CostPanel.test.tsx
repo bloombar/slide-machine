@@ -70,6 +70,16 @@ beforeEach(() => vi.clearAllMocks())
 afterEach(() => vi.unstubAllGlobals())
 
 describe('CostPanel', () => {
+  it('captions its figures as the all-time ledger, named for the scope', async () => {
+    // The usage meters nearby are per-period and billable-only; without this
+    // line the two panels look like they disagree about the same numbers.
+    renderPanel()
+    expect(
+      await screen.findByText(/Everything this lecture has ever cost/),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/never reset/)).toBeInTheDocument()
+  })
+
   it('separates what the owner caused from what their audience did', async () => {
     // One total would hide the only thing the number is useful for: the two
     // have different remedies.
