@@ -232,6 +232,19 @@ describe('GeminiGenerationProvider', () => {
     expect(prompt).toContain('Prefer "new" whenever in doubt')
     // No language resolved anywhere: no language directive
     expect(prompt).not.toContain('IETF tag')
+    // Session-stable content precedes per-phrase content: everything that
+    // changes phrase to phrase (recent slides, current-slide state, the
+    // phrase) must sit AFTER the stable blocks (layouts, seeds), so the
+    // repeated prefix stays byte-identical for Gemini's implicit cache.
+    expect(prompt.indexOf('DECK-SEED')).toBeLessThan(
+      prompt.indexOf('Recent slides'),
+    )
+    expect(prompt.indexOf('Recent slides')).toBeLessThan(
+      prompt.indexOf('Current slide load'),
+    )
+    expect(prompt.indexOf('New phrase:')).toBeGreaterThan(
+      prompt.indexOf('Current slide load'),
+    )
     // The key travels in a header, never the URL
     expect(String(url)).not.toContain('test-key')
     expect(init.headers['x-goog-api-key']).toBe('test-key')
@@ -530,6 +543,21 @@ describe('GeminiGenerationProvider', () => {
     let prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
       .contents[0].parts[0].text as string
     expect(prompt).not.toContain('updateMode')
+    expect(prompt).not.toContain('Current slide content:')
+
+    // The shape follows the offer flag alone (it must stay byte-identical
+    // across a session for Gemini's prefix cache); the update RULES still
+    // require the slide's content to exist.
+    fetchMock.mockClear()
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
+    )
+    await provider.generateSlideContent(
+      request({ allowLayoutRefit: true, currentSlide: undefined }),
+    )
+    prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body)).contents[0]
+      .parts[0].text as string
+    expect(prompt).toContain('"updateMode"?: "delta" | "refit"')
     expect(prompt).not.toContain('Current slide content:')
 
     fetchMock.mockClear()

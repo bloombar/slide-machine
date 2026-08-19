@@ -671,9 +671,13 @@ A SECOND, SEPARATE one is not a change to that box: another program, another for
     : ''
 
   return renderGenerationPrompt({
+    // withRefit follows the offer flag alone, not the current slide's state:
+    // the shape sits at the top of the prompt, and keeping it stable across a
+    // session lets Gemini's implicit prefix cache hit on every phrase. The
+    // update rules (which do depend on the slide) live in the per-phrase tail.
     outputShape: outputShape(
       Boolean(req.voiceCommands?.length),
-      Boolean(req.allowLayoutRefit && req.currentSlide?.content),
+      Boolean(req.allowLayoutRefit),
       Boolean(req.suggestDeckTitle),
     ),
     deckTitle,
