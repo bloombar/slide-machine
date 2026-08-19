@@ -167,10 +167,7 @@
       "plan": "Plan & Usage",
       "privacy": "Privacy"
     },
-    "accountTypeSection": "Account type",
     "planSection": "Plan",
-    "accountTypeSectionHint": "What you use Slide Machine for. Nothing follows from it — your privacy settings are your own.",
-    "accountTypeUnset": "Not set",
     "publicProfileSectionHint": "Saved as you go. What strangers see on your profile page.",
     "privacySectionHint": "Who can see your profile page and the lectures on it.",
     "delete": {
@@ -178,17 +175,6 @@
       "hint": "Deleting your account permanently removes your projects, lectures, and slides. This cannot be undone.",
       "title": "Delete your account?",
       "message": "Your account and all of its projects, lectures, and slides will be permanently deleted."
-    }
-  },
-  "accountType": {
-    "student": {
-      "label": "Student"
-    },
-    "educator": {
-      "label": "Educator"
-    },
-    "other": {
-      "label": "Other"
     }
   },
   "language": {

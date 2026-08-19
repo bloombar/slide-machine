@@ -36,10 +36,8 @@ import {
 } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import {
-  ACCOUNT_TYPES,
   LOCALES,
   LOCALE_LABELS,
-  type AccountType,
   type AdminPlanGrant,
   type AdminUserSettingsPatch,
   type Locale,
@@ -321,16 +319,6 @@ export default function AccountSettingsPage() {
   const setLocale = (locale: Locale | null) =>
     void saveAsAdmin({ locale: locale ?? undefined })
 
-  /** Changes what this account says it is (AUTH-6). Owner-only, like the
-   * prompt that first asks it — the admin patch has no field for it, since
-   * it is the account holder's statement about themselves. */
-  const setAccountType = (accountType: AccountType) =>
-    void dispatchAction<SafeUser>('user.setAccountType', { accountType })
-      .then(updateUser)
-      .catch(() => {
-        // Quiet failure: the select reverts to the saved value
-      })
-
   const toggleVisibility = () => {
     const profileVisibility: ProfileVisibility =
       user?.profileVisibility === 'public' ? 'private' : 'public'
@@ -568,39 +556,6 @@ export default function AccountSettingsPage() {
               aria-labelledby="settings-tab-privacy"
               className="flex flex-col gap-8"
             >
-              {/* What the account is, above who can see it, because it is
-                  what chose the defaults below (AUTH-6). Owner-only: it is
-                  a statement about oneself, and the admin patch has no
-                  field for it. */}
-              {!adminUserId && (
-                <Section
-                  title={t('profile.accountTypeSection')}
-                  hint={t('profile.accountTypeSectionHint')}
-                >
-                  <select
-                    id="account-type"
-                    aria-label={t('profile.accountTypeSection')}
-                    value={user.accountType ?? ''}
-                    onChange={e =>
-                      setAccountType(e.target.value as AccountType)
-                    }
-                    className="w-fit rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700"
-                  >
-                    {/* An account need never say what it is, and most do
-                        not: a select whose value is not among its options
-                        renders blank and looks broken. */}
-                    {!user.accountType && (
-                      <option value="">{t('profile.accountTypeUnset')}</option>
-                    )}
-                    {ACCOUNT_TYPES.map(type => (
-                      <option key={type} value={type}>
-                        {t(`accountType.${type}.label`)}
-                      </option>
-                    ))}
-                  </select>
-                </Section>
-              )}
-
               <Section
                 title={t('profile.privacySection')}
                 hint={t('profile.privacySectionHint')}

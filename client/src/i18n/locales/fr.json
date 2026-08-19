@@ -167,10 +167,7 @@
       "plan": "Forfait et utilisation",
       "privacy": "Confidentialité"
     },
-    "accountTypeSection": "Type de compte",
     "planSection": "Forfait",
-    "accountTypeSectionHint": "Ce pour quoi vous utilisez Slide Machine. Rien n'en découle : vos réglages de confidentialité restent les vôtres.",
-    "accountTypeUnset": "Non défini",
     "publicProfileSectionHint": "Enregistré au fil de la saisie. Ce que les inconnus voient sur votre profil.",
     "privacySectionHint": "Qui peut voir votre profil et les cours qui y figurent.",
     "delete": {
@@ -178,17 +175,6 @@
       "hint": "La suppression de votre compte efface définitivement vos projets, cours et diapositives. Cette action est irréversible.",
       "title": "Supprimer votre compte ?",
       "message": "Votre compte et tous ses projets, cours et diapositives seront définitivement supprimés."
-    }
-  },
-  "accountType": {
-    "student": {
-      "label": "Étudiant"
-    },
-    "educator": {
-      "label": "Enseignant"
-    },
-    "other": {
-      "label": "Autre"
     }
   },
   "language": {

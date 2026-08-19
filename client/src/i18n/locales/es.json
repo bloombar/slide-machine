@@ -167,10 +167,7 @@
       "plan": "Plan y uso",
       "privacy": "Privacidad"
     },
-    "accountTypeSection": "Tipo de cuenta",
     "planSection": "Plan",
-    "accountTypeSectionHint": "Para qué usas Slide Machine. No implica nada más: tus ajustes de privacidad son tuyos.",
-    "accountTypeUnset": "Sin definir",
     "publicProfileSectionHint": "Se guarda al escribir. Lo que ven los desconocidos en tu perfil.",
     "privacySectionHint": "Quién puede ver tu perfil y las clases que aparecen en él.",
     "delete": {
@@ -178,17 +175,6 @@
       "hint": "Eliminar tu cuenta borra definitivamente tus proyectos, clases y diapositivas. Esta acción no se puede deshacer.",
       "title": "¿Eliminar tu cuenta?",
       "message": "Tu cuenta y todos sus proyectos, clases y diapositivas se eliminarán definitivamente."
-    }
-  },
-  "accountType": {
-    "student": {
-      "label": "Estudiante"
-    },
-    "educator": {
-      "label": "Docente"
-    },
-    "other": {
-      "label": "Otro"
     }
   },
   "language": {

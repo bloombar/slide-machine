@@ -212,31 +212,6 @@ describe('AccountSettingsPage', () => {
     )
   })
 
-  it('changes the account type from the Privacy tab (AUTH-6)', async () => {
-    let sent: unknown
-    renderSettings({
-      '/api/actions/user.setAccountType': init => {
-        sent = JSON.parse(String(init?.body))
-        return {
-          status: 200,
-          body: user({ accountType: 'student', profileVisibility: 'private' }),
-        }
-      },
-    })
-
-    fireEvent.click(await screen.findByRole('tab', { name: 'Privacy' }))
-    const select = await screen.findByRole('combobox', { name: 'Account type' })
-    // Unanswered accounts show the placeholder rather than a blank control
-    expect(select).toHaveValue('')
-    expect(screen.getByRole('option', { name: 'Not set' })).toBeInTheDocument()
-
-    fireEvent.change(select, { target: { value: 'student' } })
-    await vi.waitFor(() => expect(sent).toEqual({ accountType: 'student' }))
-    // The saved account is what the control shows, so the placeholder goes
-    await vi.waitFor(() => expect(select).toHaveValue('student'))
-    expect(screen.queryByRole('option', { name: 'Not set' })).toBeNull()
-  })
-
   it('toggles profile visibility', async () => {
     let sent: unknown
     renderSettings({
