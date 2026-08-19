@@ -35,6 +35,13 @@ current slide is a heading), `phrase`.
 
 `PROMPTS_DIR` overrides the directory (defaults to `config/prompts`).
 
+**Slot order matters for cost and latency**: `generation.txt` keeps every
+session-stable slot (shape, freedom policy, layouts, seeds…) ahead of the
+per-phrase ones (`rolling`, `capacity`, `updateRules`, `lockLayout`,
+`pinLayout`, `phrase`…), so the repeated prefix stays byte-identical across a
+lecture and Gemini's implicit context cache discounts it. Keep new slots in
+the section matching how often they change.
+
 ## Seeing exactly what the model saw
 
 Set `GENERATION_LOG_PROMPTS=true` in `server/.env` and the server logs the
