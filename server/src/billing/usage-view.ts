@@ -11,6 +11,7 @@
  * have to know thirteen metric names to lay them out sensibly.
  */
 import {
+  ALL_TIME_PERIOD,
   AUDIENCE_METRICS,
   type PlanTier,
   type UsageAllowance,
@@ -18,8 +19,14 @@ import {
   type UsageMetricSummary,
   type UsageSummaryResponse,
   type UsageUnit,
+  type UsageWindow,
 } from '@slide-machine/shared'
-import { isGaugeMetric, periodResetAt, usageSummary } from './usage'
+import {
+  isGaugeMetric,
+  periodResetAt,
+  usageSummary,
+  usageSummaryAllTime,
+} from './usage'
 
 /**
  * How each metric's number reads. Kept here rather than in the bundle so a
@@ -95,19 +102,36 @@ const fractionOf = (used: number, cap: number | null): number | null => {
   return Math.min(1, used / cap)
 }
 
-/** Every metered resource for one user, ready for the account and home views. */
+/**
+ * Every metered resource for one user, ready for the account and home views.
+ *
+ * `window` widens the report from the current billing period (the default,
+ * and what every cap binds against) to the account's whole history. The
+ * all-time view drops the caps on flow metrics: a per-period allowance is no
+ * bound on a lifetime total, and drawing one would read as a massive overrun.
+ * A gauge keeps its cap either way — it measures what is held right now,
+ * which no choice of window changes.
+ */
 export const accountUsage = async (
   userId: string,
   tier: PlanTier,
+  window: UsageWindow = 'period',
 ): Promise<UsageSummaryResponse> => {
   const [summary, resetAt] = await Promise.all([
-    usageSummary(userId, tier),
+    window === 'all'
+      ? usageSummaryAllTime(userId, tier).then(metrics => ({
+          period: ALL_TIME_PERIOD,
+          metrics,
+        }))
+      : usageSummary(userId, tier),
     periodResetAt(userId),
   ])
 
   const metrics = Object.entries(summary.metrics)
-    .map(([key, { used, cap }]): UsageMetricSummary => {
+    .map(([key, { used, cap: planCap }]): UsageMetricSummary => {
       const metric = key as UsageMetric
+      const gauge = isGaugeMetric(metric)
+      const cap = window === 'all' && !gauge ? null : planCap
       return {
         metric,
         used,
@@ -115,7 +139,7 @@ export const accountUsage = async (
         fraction: fractionOf(used, cap),
         allowance: allowanceOf(metric),
         unit: unitOf(metric),
-        gauge: isGaugeMetric(metric),
+        gauge,
       }
     })
     .sort((a, b) => byDisplayOrder(a.metric, b.metric))

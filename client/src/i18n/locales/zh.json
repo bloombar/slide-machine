@@ -167,10 +167,7 @@
       "plan": "套餐与用量",
       "privacy": "隐私"
     },
-    "accountTypeSection": "账户类型",
     "planSection": "套餐",
-    "accountTypeSectionHint": "你使用 Slide Machine 的用途。仅此而已——隐私设置仍由你自己决定。",
-    "accountTypeUnset": "未设置",
     "publicProfileSectionHint": "编辑后自动保存。陌生人在你的个人资料页看到的内容。",
     "privacySectionHint": "谁可以查看你的个人资料页以及其中的课程。",
     "delete": {
@@ -178,17 +175,6 @@
       "hint": "删除账户将永久移除你的项目、课程和幻灯片。此操作无法撤销。",
       "title": "删除你的账户？",
       "message": "你的账户及其所有项目、课程和幻灯片将被永久删除。"
-    }
-  },
-  "accountType": {
-    "student": {
-      "label": "学生"
-    },
-    "educator": {
-      "label": "教师"
-    },
-    "other": {
-      "label": "其他"
     }
   },
   "language": {

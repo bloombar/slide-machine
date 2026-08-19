@@ -35,10 +35,12 @@ import type {
   Project,
   SafeUser,
   SeedAsset,
+  UsageSummaryResponse,
   Visibility,
 } from '@slide-machine/shared'
 import { UserModel, toUserDto, type UserDb } from '../models/user'
 import { adminPlanGrant, effectivePlanTier } from '../billing/plan-grant'
+import { accountUsage } from '../billing/usage-view'
 import { ProjectModel, toProjectDto, type ProjectDb } from '../models/project'
 import { DeckModel, loadDeckAcls, type DeckDb } from '../models/deck'
 import {
@@ -788,6 +790,26 @@ adminRouter.get('/users/:id/decks', async (req, res) => {
       toAdminDeckSummary(deck, acls.get(deck._id.toString())!),
     ),
   }
+  res.json(body)
+})
+
+/**
+ * One account's metered usage against its caps — the same summary the
+ * account's own footer badge reads (BILL-4), through the allowlist gate
+ * instead of the self-only `user.usage` action, which deliberately takes no
+ * target. `?window=all` totals every period instead of the current one.
+ */
+adminRouter.get('/users/:id/usage', async (req, res) => {
+  const window = req.query.window ?? 'period'
+  if (window !== 'period' && window !== 'all') {
+    throw new HttpError(400, 'invalid_input', 'Invalid usage window')
+  }
+  const user = await loadAnyUser(String(req.params.id))
+  const body: UsageSummaryResponse = await accountUsage(
+    user._id.toString(),
+    effectivePlanTier(user),
+    window,
+  )
   res.json(body)
 })
 

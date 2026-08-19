@@ -2,18 +2,14 @@
  * The account type, end to end (AUTH-6).
  *
  * It once chose the privacy defaults an account's work started from, and was
- * asked in a modal that nothing dismissed but an answer. Two things came of
- * that: a signed-in account met a question before it could do anything, and
- * a student's lectures were created restricted by a decision the student
- * never made.
- *
- * It is a plain profile field now. What is worth proving is therefore mostly
- * absence — nothing blocks a new account, and saying "student" re-scopes
- * nothing — plus the one rule that does still hold a project back: an
- * address nobody has confirmed (AUTH-3).
+ * asked in a modal that nothing dismissed but an answer. The question is now
+ * gone from the interface entirely — settings offers no account-type control.
+ * What is worth proving is therefore absence — nothing blocks a new account,
+ * and nothing asks what it is — plus the one rule that does still hold a
+ * project back: an address nobody has confirmed (AUTH-3).
  */
 import { test, expect, type Page } from './fixtures'
-import { createProject, openProjectSettings, verifyEmail } from './helpers'
+import { createProject, openProjectSettings } from './helpers'
 
 const stamp = Date.now()
 const password = 'sturdy-passw0rd'
@@ -47,55 +43,14 @@ test('a new account is asked nothing and can start straight away', async ({
   ).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'New lecture' })).toBeVisible()
 
-  // And the account has said nothing about itself, which is allowed.
+  // And settings never asks either: the account-type control is gone.
   await page.goto('/app/settings?tab=privacy')
-  await expect(
-    page.getByRole('combobox', { name: 'Account type' }),
-  ).toHaveValue('')
-})
-
-test('saying "student" changes nothing about privacy', async ({ page }) => {
-  const email = `student-${stamp}@example.com`
-  await register(page, email, 'Stu Dent')
-  // Confirmed, so what follows is the account type's doing (or not) rather
-  // than the unconfirmed-account rule reaching the same answer.
-  await verifyEmail(page, email)
-
-  await page.goto('/app/settings?tab=privacy')
-  await page
-    .getByRole('combobox', { name: 'Account type' })
-    .selectOption('student')
-  await expect(
-    page.getByRole('combobox', { name: 'Account type' }),
-  ).toHaveValue('student')
-
-  // The profile is where it was — public — because saying what you are is
-  // not a privacy decision.
   await expect(
     page.getByRole('checkbox', { name: 'Public profile' }),
-  ).toBeChecked()
-
-  // And the next project is created public, as everyone's is.
-  await page.goto('/app')
-  await createProjectAndOpenPrivacy(page, 'StudentProj')
-  await expect(page.getByRole('radio', { name: /public/i })).toBeChecked()
-})
-
-test('the choice survives a reload, and can be taken back', async ({
-  page,
-}) => {
-  const email = `switch-${stamp}@example.com`
-  await register(page, email, 'Switch Er')
-
-  await page.goto('/app/settings?tab=privacy')
-  const select = page.getByRole('combobox', { name: 'Account type' })
-  await select.selectOption('educator')
-  await page.reload()
-  await expect(select).toHaveValue('educator')
-
-  await select.selectOption('other')
-  await page.reload()
-  await expect(select).toHaveValue('other')
+  ).toBeVisible()
+  await expect(
+    page.getByRole('combobox', { name: 'Account type' }),
+  ).toHaveCount(0)
 })
 
 test('an unconfirmed address still starts a project restricted', async ({
@@ -106,12 +61,6 @@ test('an unconfirmed address still starts a project restricted', async ({
   const email = `unconfirmed-${stamp}@example.com`
   await register(page, email, 'Un Confirmed')
 
-  await page.goto('/app/settings?tab=privacy')
-  await page
-    .getByRole('combobox', { name: 'Account type' })
-    .selectOption('educator')
-
-  await page.goto('/app')
   await createProjectAndOpenPrivacy(page, 'UnconfirmedProj')
   await expect(page.getByRole('radio', { name: /restricted/i })).toBeChecked()
 })

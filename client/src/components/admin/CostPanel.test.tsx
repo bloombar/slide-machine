@@ -6,7 +6,7 @@
  * average covers everyone.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { CostSummaryResponse } from '@slide-machine/shared'
 import CostPanel from './CostPanel'
 import { mockFetchRoutes } from '../../test/fetch-mock'
@@ -47,17 +47,19 @@ const summary = (
     hitRatio: 0.6,
     estimatedAvoided: money(750_000),
   },
+  window: { from: '2026-08-01T00:00:00.000Z', to: null },
   ...over,
 })
 
 const renderPanel = (body: CostSummaryResponse | null = summary()) => {
-  mockFetchRoutes({
+  const mocks = mockFetchRoutes({
     '/api/admin/cost/decks/d1': () => ({
       status: body ? 200 : 500,
       body: body ?? { error: { code: 'server_error', message: 'no' } },
     }),
   })
   render(<CostPanel scope={{ kind: 'deck', id: 'd1' }} />)
+  return mocks
 }
 
 /** The value shown under a labelled figure. Reading by label rather than by
@@ -70,6 +72,34 @@ beforeEach(() => vi.clearAllMocks())
 afterEach(() => vi.unstubAllGlobals())
 
 describe('CostPanel', () => {
+  it('defaults to the billing period and captions whose period it is', async () => {
+    // The usage meters nearby cover the same window; without the caption the
+    // two panels look like they disagree about the same numbers.
+    const { calls } = renderPanel()
+    expect(
+      await screen.findByText(
+        /What this lecture has cost the deployment during its owner's current billing period — since August 1, 2026/,
+      ),
+    ).toBeInTheDocument()
+    expect(calls[0]).toContain('window=period')
+    expect(
+      screen.getByRole('button', { name: 'Current billing period' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('switches to the all-time ledger and says it never resets', async () => {
+    const { calls } = renderPanel()
+    await screen.findByText('Total')
+
+    fireEvent.click(screen.getByRole('button', { name: 'All time' }))
+
+    expect(
+      await screen.findByText(/Everything this lecture has ever cost/),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/never reset/)).toBeInTheDocument()
+    expect(calls.some(url => url.includes('window=all'))).toBe(true)
+  })
+
   it('separates what the owner caused from what their audience did', async () => {
     // One total would hide the only thing the number is useful for: the two
     // have different remedies.
@@ -150,6 +180,13 @@ describe('CostPanel', () => {
         },
       }),
     )
+    // The empty state names the window, since "nothing this period" and
+    // "nothing ever" are different facts.
+    expect(
+      await screen.findByText('Nothing metered in this billing period.'),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'All time' }))
     expect(
       await screen.findByText('Nothing metered here yet.'),
     ).toBeInTheDocument()

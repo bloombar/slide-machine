@@ -2,7 +2,8 @@
  * E2E complimentary plan grants against the built app (ADMIN-9): an
  * allowlisted admin puts another account on a larger plan at no charge, from
  * the Plan tab of that account's settings — the same page ADMIN-5 sends them
- * to for everything else about the account.
+ * to for everything else about the account — or straight from the account's
+ * admin page, which carries the same editor.
  *
  * What is proved end to end is the pair of facts the feature rests on: the
  * account really is on the granted plan afterwards (its own usage view says
@@ -172,4 +173,40 @@ test('ending the grant puts the account back', async ({ page, request }) => {
   const body = await summary.json()
   expect(body.tier).toBe('free')
   expect(body.planGrant).toBeUndefined()
+})
+
+test('the admin user page carries the same grant editor', async ({ page }) => {
+  await ensureSignedIn(page, admin)
+  await page.goto('/app/admin')
+  await page.getByRole('link', { name: owner.email }).click()
+  await expect(page).toHaveURL(/\/app\/admin\/users\//)
+
+  const main = page.getByRole('main')
+  await expect(main.getByText('Complimentary plan')).toBeVisible()
+  const granted = page.waitForResponse(
+    res =>
+      res.url().includes('/plan-grant') &&
+      res.request().method() === 'PUT' &&
+      res.status() === 204,
+  )
+  await main.getByRole('combobox', { name: 'Plan' }).selectOption('pro')
+  await main.getByLabel('Last day').fill(nextMonth)
+  await main.getByRole('button', { name: 'Grant plan' }).click()
+  await granted
+
+  // The Plan row re-reads what the server decided, grant named beside it.
+  await expect(
+    main.getByText(/pro — complimentary until .*, then free/i),
+  ).toBeVisible()
+
+  // And the same page ends it, landing the account back where it pays.
+  const revoked = page.waitForResponse(
+    res =>
+      res.url().includes('/plan-grant') &&
+      res.request().method() === 'DELETE' &&
+      res.status() === 204,
+  )
+  await main.getByRole('button', { name: 'End now' }).click()
+  await revoked
+  await expect(main.getByText(/complimentary until/i)).toHaveCount(0)
 })

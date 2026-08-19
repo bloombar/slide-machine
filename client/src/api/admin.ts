@@ -13,6 +13,8 @@ import type {
   SafeUser,
   SeedAsset,
   SettingsLogsResponse,
+  UsageSummaryResponse,
+  UsageWindow,
   Visibility,
 } from '@slide-machine/shared'
 import { apiFetch, apiFetchBlob } from './http'
@@ -234,6 +236,16 @@ export const fetchAdminUserDecks = (
   userId: string,
 ): Promise<{ decks: AdminDeckSummary[] }> =>
   apiFetch<{ decks: AdminDeckSummary[] }>(`/api/admin/users/${userId}/decks`)
+
+/** The target account's usage against its caps — the same summary the
+ * account's own footer badge reads, over the chosen window. */
+export const fetchAdminUserUsage = (
+  userId: string,
+  window: UsageWindow = 'period',
+): Promise<UsageSummaryResponse> =>
+  apiFetch<UsageSummaryResponse>(
+    `/api/admin/users/${userId}/usage?window=${window}`,
+  )
 
 /** Selectable project-directory page sizes; same cap as users. */
 export const ADMIN_PROJECTS_PAGE_SIZES = ADMIN_USERS_PAGE_SIZES

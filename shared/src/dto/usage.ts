@@ -31,6 +31,18 @@ export const AUDIENCE_METRICS: readonly UsageMetric[] = [
   'audienceLocales',
 ]
 
+/**
+ * The span a usage summary covers. `period` — the current billing period, the
+ * one the caps actually bind against — is the default everywhere. `all` totals
+ * every period the account has ever had; the admin console offers it so an
+ * operator can see lifetime consumption, not just this month's.
+ */
+export type UsageWindow = 'period' | 'all'
+
+/** The `period` key an all-time summary reports, since it spans every real
+ * one. A literal that no calendar can produce, like the standing key. */
+export const ALL_TIME_PERIOD = 'all'
+
 /** How a metric's number should be read, so the interface can format it
  * without knowing each metric by name. */
 export type UsageUnit = 'count' | 'minutes' | 'characters' | 'tokens' | 'mb'

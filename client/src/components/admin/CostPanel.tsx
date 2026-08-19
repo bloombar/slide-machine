@@ -19,8 +19,13 @@
  *   that quietly excluded them would be a lie by omission.
  */
 import { useEffect, useState } from 'react'
-import type { CostSummaryResponse, Money } from '@slide-machine/shared'
+import type {
+  CostSummaryResponse,
+  Money,
+  UsageWindow,
+} from '@slide-machine/shared'
 import { fetchCostSummary, type CostScope } from '../../api/cost'
+import TimeframeToggle from './TimeframeToggle'
 
 /** Money for a table cell. Sub-cent figures are common at these scales — a
  * single slide generation costs a fraction of a penny — so a total that
@@ -88,62 +93,108 @@ interface Loaded {
   failed: boolean
 }
 
+/** The scope as the caption names it. */
+const NOUNS: Record<CostScope['kind'], string> = {
+  user: 'account',
+  project: 'project',
+  deck: 'lecture',
+}
+
+/** In UTC, the calendar the free tier's period rollover follows. */
+const formatDate = (iso: string): string =>
+  new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'long',
+    timeZone: 'UTC',
+  }).format(new Date(iso))
+
+/**
+ * The one thing every figure below shares, said once — which span of the
+ * event ledger is being read. The billing period is the account's own on a
+ * user page and the owner's on a project or lecture page (every row here is
+ * charged to the owner either way), and it is the same window the Service
+ * usage meters cover, so the two panels can finally be compared directly.
+ * The all-time caption also says why these numbers are not the allowance
+ * counters — the two legitimately disagree, and a reader deserves to know
+ * why before suspecting a bug.
+ */
+const caption = (
+  kind: CostScope['kind'],
+  timeframe: UsageWindow,
+  from?: string | null,
+): string => {
+  const noun = NOUNS[kind]
+  if (timeframe === 'all') {
+    return (
+      `Everything this ${noun} has ever cost the deployment, from the ` +
+      'per-event ledger — cache hits are counted as events at zero cost. ' +
+      'Unlike plan allowances, these figures never reset.'
+    )
+  }
+  const since = from ? ` — since ${formatDate(from)}` : ''
+  const period =
+    kind === 'user'
+      ? 'since its allowances last renewed'
+      : "during its owner's current billing period"
+  return (
+    `What this ${noun} has cost the deployment ${period}${since}. ` +
+    'Cache hits are counted as events at zero cost.'
+  )
+}
+
 export default function CostPanel({ scope }: { scope: CostScope }) {
-  const key = `${scope.kind}:${scope.id}`
+  const [timeframe, setTimeframe] = useState<UsageWindow>('period')
+  const key = `${scope.kind}:${scope.id}:${timeframe}`
   const [loaded, setLoaded] = useState<Loaded | null>(null)
 
   useEffect(() => {
     let live = true
-    fetchCostSummary(scope)
+    fetchCostSummary(scope, { window: timeframe })
       .then(body => live && setLoaded({ key, summary: body, failed: false }))
       .catch(() => live && setLoaded({ key, summary: null, failed: true }))
     return () => {
       live = false
     }
+    // key encodes every input; the eslint rule cannot see through it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key])
 
   const current = loaded?.key === key ? loaded : null
   const summary = current?.summary ?? null
   const failed = current?.failed ?? false
-
-  if (failed) {
-    return (
-      <section
-        data-testid="cost-panel"
-        className="mt-8 rounded-lg border border-slate-200 p-4"
-      >
-        <h2 className="mb-2 text-lg font-semibold text-slate-700">Cost</h2>
-        <p role="alert" className="text-sm text-red-600">
-          Could not load cost.
-        </p>
-      </section>
-    )
-  }
-  if (!summary) {
-    return (
-      <section
-        data-testid="cost-panel"
-        className="mt-8 rounded-lg border border-slate-200 p-4"
-      >
-        <h2 className="mb-2 text-lg font-semibold text-slate-700">Cost</h2>
-        <p className="text-sm text-slate-500">Loading…</p>
-      </section>
-    )
-  }
-
-  const { cache } = summary
-  const nothing = summary.total.micros === 0 && !cache.cachedEvents
+  const nothing =
+    summary !== null &&
+    summary.total.micros === 0 &&
+    !summary.cache.cachedEvents
+  const cache = summary?.cache
 
   return (
     <section
       data-testid="cost-panel"
       className="mt-8 rounded-lg border border-slate-200 p-4"
     >
-      <h2 className="mb-3 text-lg font-semibold text-slate-700">Cost</h2>
+      <div className="mb-1 flex items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold text-slate-700">Cost</h2>
+        <TimeframeToggle value={timeframe} onChange={setTimeframe} />
+      </div>
+      <p className="mb-3 text-xs text-slate-500">
+        {caption(scope.kind, timeframe, summary?.window?.from)}
+      </p>
 
-      {nothing ? (
-        <p className="text-sm text-slate-500">Nothing metered here yet.</p>
-      ) : (
+      {failed && (
+        <p role="alert" className="text-sm text-red-600">
+          Could not load cost.
+        </p>
+      )}
+      {!current && <p className="text-sm text-slate-500">Loading…</p>}
+
+      {summary && cache && nothing && (
+        <p className="text-sm text-slate-500">
+          {timeframe === 'period'
+            ? 'Nothing metered in this billing period.'
+            : 'Nothing metered here yet.'}
+        </p>
+      )}
+      {summary && cache && !nothing && (
         <>
           <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <Figure label="Total" value={formatMoney(summary.total)} />

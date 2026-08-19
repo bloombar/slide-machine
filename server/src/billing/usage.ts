@@ -13,6 +13,7 @@
  *    still being counted, because the number of users and students is what
  *    every average is divided by (BILL-7).
  */
+import { Types } from 'mongoose'
 import type { PlanTier, UsageMetric } from '@slide-machine/shared'
 import { loadPlans } from '../config/plans'
 import { UsageRecordModel } from '../models/usage-record'
@@ -89,6 +90,21 @@ export const periodResetAt = async (userId: string): Promise<Date> => {
   const now = new Date()
   return new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0),
+  )
+}
+
+/**
+ * When the current period began — the other end of `periodResetAt`, mirroring
+ * `periodKeyFor` the same way. The admin cost reports use it as the boundary
+ * of "this billing period", so the window an operator reads there is the same
+ * one the allowance counters are keyed to.
+ */
+export const periodStartFor = async (userId: string): Promise<Date> => {
+  const sub = await SubscriptionModel.findOne({ userId, status: 'active' })
+  if (sub) return sub.currentPeriodStart
+  const now = new Date()
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0),
   )
 }
 
@@ -264,4 +280,33 @@ export const usageSummary = async (
     ]),
   )
   return { period, metrics }
+}
+
+/**
+ * Like `usageSummary`, but totalled over every period the account has ever
+ * had — the admin console's "all time" view. Gauges only ever have their one
+ * standing row, so for them "all time" and "right now" are the same fact.
+ *
+ * Still a count of what was *spent*: cache hits were recorded at zero, so a
+ * lifetime total here answers "what did this account consume", not "how often
+ * did services run" — that second question is the cost ledger's (BILL-7).
+ */
+export const usageSummaryAllTime = async (
+  userId: string,
+  tier: PlanTier,
+): Promise<Record<string, { used: number; cap: number | null }>> => {
+  const rows = await UsageRecordModel.aggregate<{ _id: string; used: number }>([
+    // An aggregation does no schema casting, so the id must be an ObjectId
+    // here — a string would match nothing and read as "never used anything".
+    { $match: { userId: new Types.ObjectId(userId) } },
+    { $group: { _id: '$metric', used: { $sum: '$used' } } },
+  ])
+  const used = new Map(rows.map(r => [r._id, r.used]))
+  const caps = planFor(tier).caps
+  return Object.fromEntries(
+    (Object.keys(caps) as UsageMetric[]).map(metric => [
+      metric,
+      { used: used.get(metric) ?? 0, cap: caps[metric] },
+    ]),
+  )
 }

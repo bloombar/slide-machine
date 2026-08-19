@@ -64,12 +64,33 @@ const decks = [
   },
 ]
 
+/** The usage summary the Service-usage panel fetches (its own logic is
+ * covered in AdminUsagePanel.test.tsx). */
+const usageBody = {
+  tier: 'pro',
+  period: '2026-08',
+  resetAt: '2026-09-01T00:00:00.000Z',
+  metrics: [
+    {
+      metric: 'aiTokens',
+      used: 1000,
+      cap: 250_000,
+      fraction: 0.004,
+      allowance: 'instructor',
+      unit: 'tokens',
+      gauge: false,
+    },
+  ],
+}
+
 const renderPage = (status = 200, detailBody: unknown = detail) => {
   // Keys ordered most-specific first: the fetch mock matches by substring
   const mocks = mockFetchRoutes({
     '/api/admin/users/u1/projects': () => ({ status, body: { projects } }),
     '/api/admin/users/u1/decks': () => ({ status, body: { decks } }),
+    '/api/admin/users/u1/usage': () => ({ status, body: usageBody }),
     '/api/admin/users/u1/ban': () => ({ status: 204 }),
+    '/api/admin/users/u1/plan-grant': () => ({ status: 204 }),
     '/api/admin/users/u1/password': () => ({ status: 204 }),
     '/api/admin/projects/p1': () => ({ status: 204 }),
     '/api/admin/decks/d2': () => ({ status: 204 }),
@@ -141,6 +162,58 @@ describe('AdminUserDetailPage', () => {
     expect(
       await screen.findByText(/pro \(complimentary max ended/i),
     ).toBeVisible()
+  })
+
+  // ADMIN-9 from this page too: the same grant editor the settings page's
+  // Plan tab shows an admin, so a comp need not leave the user's page.
+  it('grants a complimentary plan from this page', async () => {
+    const { fetchMock } = renderPage()
+    await screen.findByRole('heading', { name: 'Ada' })
+
+    expect(
+      screen.getByRole('heading', { name: 'Complimentary plan' }),
+    ).toBeVisible()
+    fireEvent.change(screen.getByLabelText('Last day'), {
+      target: { value: '2026-09-30' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Grant plan' }))
+
+    await vi.waitFor(() =>
+      expect(requested(fetchMock)).toContainEqual(
+        expect.stringMatching(/PUT .*\/api\/admin\/users\/u1\/plan-grant$/),
+      ),
+    )
+  })
+
+  // A tombstoned account's entitlements are not edited, like the rest of
+  // its moderation (ADMIN-6).
+  it('withholds the grant editor from a deleted account', async () => {
+    renderPage(200, { ...detail, deletedAt: '2026-07-20T09:00:00Z' })
+    await screen.findByRole('heading', { name: 'Ada' })
+    expect(
+      screen.queryByRole('heading', { name: 'Complimentary plan' }),
+    ).toBeNull()
+  })
+
+  // BILL-4 as the operator sees it: the same meters the account's own footer
+  // badge shows, on the account's admin page.
+  it("shows the account's service usage meters", async () => {
+    renderPage()
+    const panel = await screen.findByTestId('admin-usage-panel')
+    expect(
+      within(panel).getByRole('heading', { name: 'Service usage' }),
+    ).toBeVisible()
+    expect(
+      await within(panel).findByTestId('usage-metric-aiTokens'),
+    ).toBeVisible()
+    // Defaults to the window the caps bind against, with the alternative a
+    // click away.
+    expect(
+      within(panel).getByRole('button', { name: 'Current billing period' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+    expect(
+      within(panel).getByRole('button', { name: 'All time' }),
+    ).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('shows account details and a public-profile link', async () => {
@@ -427,6 +500,7 @@ describe('AdminUserDetailPage soft-deleted content', () => {
         body: { projects },
       }),
       '/api/admin/users/u1/decks': () => ({ status: 200, body: { decks } }),
+      '/api/admin/users/u1/usage': () => ({ status: 200, body: usageBody }),
       '/api/admin/users/u1/restore': () => ({ status: 204 }),
       '/api/admin/users/u1': () => ({
         status: 200,
@@ -468,6 +542,7 @@ describe('AdminUserDetailPage soft-deleted content', () => {
         },
       }),
       '/api/admin/users/u1/decks': () => ({ status: 200, body: { decks: [] } }),
+      '/api/admin/users/u1/usage': () => ({ status: 200, body: usageBody }),
       '/api/admin/projects/p1/restore': () => ({ status: 204 }),
       '/api/admin/users/u1': () => ({ status: 200, body: detail }),
     })
@@ -520,6 +595,7 @@ describe('AdminUserDetailPage soft-deleted content', () => {
         },
       }),
       '/api/admin/decks/d2/restore': () => ({ status: 204 }),
+      '/api/admin/users/u1/usage': () => ({ status: 200, body: usageBody }),
       '/api/admin/users/u1': () => ({ status: 200, body: detail }),
     })
     render(
