@@ -1992,3 +1992,189 @@ describe('a picture whose credit outlived its alt text', () => {
     }
   })
 })
+
+/**
+ * The design behind a slide, which the slide's own elements do not include
+ * (TMPL-8).
+ *
+ * A rule under every title, a coloured band down the side, a block behind the
+ * heading: an author draws those once on the layout or the master, and Google
+ * does not repeat them in each slide's `pageElements`. Reading only the slide
+ * lost them — and lost them unevenly, because a slide where the author had
+ * copied the rule onto the slide itself kept it while its neighbour did not.
+ * The same deck came back with the line on some slides and not others.
+ */
+describe('the rules and bands a slide inherits', () => {
+  const band = (
+    id: string,
+    y: number,
+    hex: { red: number; green: number; blue: number },
+  ) => ({
+    objectId: id,
+    transform: {
+      translateX: 0,
+      translateY: y,
+      scaleX: 1,
+      scaleY: 1,
+      unit: 'EMU',
+    },
+    size: {
+      width: { magnitude: 9144000, unit: 'EMU' },
+      height: { magnitude: 91440, unit: 'EMU' },
+    },
+    shape: {
+      shapeType: 'RECTANGLE',
+      shapeProperties: {
+        shapeBackgroundFill: { solidFill: { color: { rgbColor: hex } } },
+      },
+    },
+  })
+
+  const green = { red: 0, green: 0.6, blue: 0.2 }
+
+  /** A deck whose green rule lives on the layout, as an author would draw it. */
+  const deck = (slideElements: Record<string, unknown>[] = []) => ({
+    presentationId: 'p',
+    pageSize: {
+      width: { magnitude: 9144000, unit: 'EMU' },
+      height: { magnitude: 5143500, unit: 'EMU' },
+    },
+    masters: [{ objectId: 'm1', pageElements: [] }],
+    layouts: [
+      {
+        objectId: 'l1',
+        layoutProperties: {
+          masterObjectId: 'm1',
+          displayName: 'TITLE_AND_BODY',
+        },
+        pageElements: [band('rule', 1000000, green)],
+      },
+    ],
+    slides: [
+      {
+        objectId: 's1',
+        slideProperties: { layoutObjectId: 'l1', masterObjectId: 'm1' },
+        pageElements: slideElements,
+      },
+    ],
+  })
+
+  /** The decoration on the first slide, as read. */
+  const decorationOf = (raw: Record<string, unknown>) =>
+    toSourcePresentation(raw).slides[0]!.elements.filter(
+      e => e.kind === 'decoration',
+    )
+
+  it('draws a rule the layout states, not only one the slide repeats', () => {
+    const drawn = decorationOf(deck())
+    expect(drawn).toHaveLength(1)
+    expect(drawn[0]!.fill).toBe('#009933')
+  })
+
+  it('draws it once when the author copied it onto the slide as well', () => {
+    // Two slides of the same deck differ only in whether the author pasted
+    // the rule onto the slide. They must not come back one ruled twice.
+    const drawn = decorationOf(deck([band('copy', 1000000, green)]))
+    expect(drawn).toHaveLength(1)
+  })
+
+  it('keeps a band the slide draws that the design does not', () => {
+    const drawn = decorationOf(deck([band('own', 3000000, green)]))
+    expect(drawn).toHaveLength(2)
+  })
+
+  it('puts the design behind what the slide draws on top of it', () => {
+    const elements = toSourcePresentation(deck([band('own', 3000000, green)]))
+      .slides[0]!.elements
+    expect(elements[0]!.id).toBe('rule')
+  })
+})
+
+/**
+ * A theme colour asked for under a name the master's scheme does not list
+ * (TMPL-8).
+ *
+ * Google lists a master's scheme under one set of names and lets a text style
+ * ask for the same colour under another — `TEXT1` and `DARK1` are one entry.
+ * A miss is not an error: it silently drops the colour, and the box falls back
+ * to the deck's default ink, which is how a heading set in red came back
+ * black.
+ */
+describe('a colour named one way and listed another', () => {
+  const deck = (themeColor: string) => ({
+    presentationId: 'p',
+    pageSize: {
+      width: { magnitude: 9144000, unit: 'EMU' },
+      height: { magnitude: 5143500, unit: 'EMU' },
+    },
+    masters: [
+      {
+        objectId: 'm1',
+        pageProperties: {
+          colorScheme: {
+            colors: [
+              { type: 'DARK1', color: { red: 0.8, green: 0, blue: 0 } },
+              { type: 'ACCENT1', color: { red: 0, green: 0, blue: 0.9 } },
+            ],
+          },
+        },
+        pageElements: [],
+      },
+    ],
+    layouts: [],
+    slides: [
+      {
+        objectId: 's1',
+        slideProperties: { masterObjectId: 'm1' },
+        pageElements: [
+          {
+            objectId: 'title',
+            transform: {
+              translateX: 0,
+              translateY: 0,
+              scaleX: 1,
+              scaleY: 1,
+              unit: 'EMU',
+            },
+            size: {
+              width: { magnitude: 4572000, unit: 'EMU' },
+              height: { magnitude: 914400, unit: 'EMU' },
+            },
+            shape: {
+              text: {
+                textElements: [
+                  {
+                    textRun: {
+                      content: 'Heading\n',
+                      style: {
+                        foregroundColor: { opaqueColor: { themeColor } },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    ],
+  })
+
+  const colourOf = (themeColor: string) =>
+    toSourcePresentation(deck(themeColor)).slides[0]!.elements[0]!.runs?.[0]
+      ?.color
+
+  it('finds it under the name the scheme does list', () => {
+    expect(colourOf('TEXT1')).toBe('#cc0000')
+  })
+
+  it('still finds one asked for by its own name', () => {
+    expect(colourOf('ACCENT1')).toBe('#0000e6')
+  })
+
+  it('leaves a colour it genuinely cannot resolve unset', () => {
+    // Better than inventing one: an unset colour takes the deck's ink, which
+    // is at least a colour the deck chose.
+    expect(colourOf('ACCENT6')).toBeUndefined()
+  })
+})

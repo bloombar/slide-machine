@@ -296,8 +296,30 @@ const colorOf = (
     unknown
   >
   const themed = opaque.themeColor as string | undefined
-  if (themed) return scheme[themed]
-  return rgbHex(opaque.rgbColor as Record<string, number> | undefined)
+  const rgb = rgbHex(opaque.rgbColor as Record<string, number> | undefined)
+  if (themed) {
+    // A master lists its scheme under one set of names and text styles may
+    // ask for the same colour under another: `TEXT1` and `DARK1` are one
+    // entry, as are `BACKGROUND1` and `LIGHT1`. Looked up under the name
+    // given and then under its other name, because a miss here is not an
+    // error — it silently drops the colour, and the box falls back to the
+    // deck's default ink. That is how a heading an author set in red came
+    // back black.
+    const alias: Record<string, string> = {
+      TEXT1: 'DARK1',
+      TEXT2: 'DARK2',
+      BACKGROUND1: 'LIGHT1',
+      BACKGROUND2: 'LIGHT2',
+      DARK1: 'TEXT1',
+      DARK2: 'TEXT2',
+      LIGHT1: 'BACKGROUND1',
+      LIGHT2: 'BACKGROUND2',
+    }
+    // The resolved value where Google sent one beside the name, as a last
+    // resort: a colour we cannot name is still the colour the slide shows.
+    return scheme[themed] ?? scheme[alias[themed] ?? ''] ?? rgb
+  }
+  return rgb
 }
 
 /** The master's colour scheme, by name. */
@@ -827,6 +849,62 @@ const backgroundOf = (
   return {}
 }
 
+/** What makes two pieces of decoration the same piece: where it is, what it
+ * paints, and what shape it is. */
+const decorationKey = (piece: SourceElement): string =>
+  [
+    piece.box.x,
+    piece.box.y,
+    piece.box.w,
+    piece.box.h,
+    piece.fill ?? '',
+    piece.shapeType ?? '',
+  ].join('|')
+
+/**
+ * The rules and bands a page inherits from the design behind it.
+ *
+ * A slide's `pageElements` are only what sits ON the slide. The line under
+ * every title, the coloured band down the side, the block behind the heading —
+ * an author draws those once on the layout or the master, and Google does not
+ * repeat them in each slide's elements. Reading only the slide is why an
+ * imported deck lost them, and lost them unevenly: a slide where the author
+ * had copied the rule onto the slide itself kept it, and its neighbour did
+ * not, so the same deck came back with the line on some slides and not others.
+ *
+ * Only what paints something and holds nothing — an ancestor's placeholders
+ * are boxes for content, and the slide has its own.
+ */
+const inheritedDecoration = (
+  chain: Record<string, unknown>[],
+  page: { width: number; height: number },
+  scheme: Record<string, string>,
+  ancestry: Ancestry,
+  own: SourceElement[],
+): SourceElement[] => {
+  // What the page already draws itself. An author who copied the rule onto
+  // the slide should not end up with it drawn twice.
+  const seen = new Set(
+    own.filter(e => e.kind === 'decoration').map(decorationKey),
+  )
+  const inherited: SourceElement[] = []
+  // The page itself is the head of the chain; everything behind it is design.
+  for (const ancestor of chain.slice(1)) {
+    for (const rawElement of (ancestor.pageElements ?? []) as Record<
+      string,
+      unknown
+    >[]) {
+      const element = elementOf(rawElement, page, scheme, ancestry)
+      if (!element || element.kind !== 'decoration') continue
+      const key = decorationKey(element)
+      if (seen.has(key)) continue
+      seen.add(key)
+      inherited.push(element)
+    }
+  }
+  return inherited
+}
+
 const pageOf = (
   raw: Record<string, unknown>,
   page: { width: number; height: number },
@@ -834,12 +912,16 @@ const pageOf = (
   ancestry: Ancestry,
 ): SourcePage => {
   const rawElements = (raw.pageElements ?? []) as Record<string, unknown>[]
-  const { background, backgroundImage } = backgroundOf(
-    pageChain(raw, ancestry),
-    scheme,
-  )
+  const chain = pageChain(raw, ancestry)
+  const { background, backgroundImage } = backgroundOf(chain, scheme)
   const metadata = metadataOf(rawElements)
   const notes = notesOf(raw)
+  const own = creditedPictures(
+    rawElements
+      .map(el => elementOf(el, page, scheme, ancestry))
+      .filter((el): el is SourceElement => el !== null),
+    printedCredits(rawElements),
+  )
   return {
     id: (raw.objectId as string) ?? '',
     name:
@@ -852,12 +934,12 @@ const pageOf = (
       undefined,
     background,
     ...(backgroundImage ? { backgroundImage } : {}),
-    elements: creditedPictures(
-      rawElements
-        .map(el => elementOf(el, page, scheme, ancestry))
-        .filter((el): el is SourceElement => el !== null),
-      printedCredits(rawElements),
-    ),
+    // The design's own rules and bands go first, because they sit behind what
+    // the slide draws on top of them.
+    elements: [
+      ...inheritedDecoration(chain, page, scheme, ancestry, own),
+      ...own,
+    ],
     ...(metadata ? { slotMetadata: metadata } : {}),
     ...(notes ? { notes } : {}),
   }
