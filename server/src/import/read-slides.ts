@@ -425,8 +425,18 @@ const runsOf = (
    * symbols it draws for an unordered point: ●, ○, ■, ◆, a dash. Anything with
    * a letter or a digit in it is counting.
    */
-  const counts = (glyph: string | undefined): boolean =>
-    Boolean(glyph) && /[0-9a-z]/i.test(glyph!)
+  const counts = (glyph: string | undefined): boolean => {
+    const marker = glyph?.trim()
+    if (!marker) return false
+    // Any script's digits, not only 0-9: a deck numbered ١ ٢ ٣ or १ २ ३ is
+    // numbered.
+    if (/\p{Nd}/u.test(marker)) return true
+    // A letter counts only where something separates it from the text —
+    // "a.", "iv)", "B:". A bare letter is a bullet, not a count: Word draws a
+    // level-two point as a lowercase "o", and a deck that reached Slides
+    // through PowerPoint brings that with it.
+    return /^\p{L}+[.)\]:]/u.test(marker)
+  }
 
   /**
    * Whether this paragraph is a numbered or lettered point.

@@ -2324,10 +2324,38 @@ describe('a point whose marker counts', () => {
   })
 
   it('leaves a plain bullet unordered, symbol and all', () => {
-    for (const glyph of ['●', '○', '■', '◆', '-']) {
+    // Including "o": Word draws a level-two point with it, and a deck that
+    // reached Slides through PowerPoint brings that with it. A bare letter is
+    // a bullet — one only counts when something separates it from the text,
+    // the way "a." and "iv)" do.
+    const bullets = ['●', '○', '■', '◆', '▪', '-', '–', '‣', '➔', '✓', 'o', '§']
+    for (const glyph of bullets) {
       expect(
         runsOf(paragraph('A point', { listId: 'l1', glyph }))[0]!.ordered,
       ).toBeUndefined()
+    }
+  })
+
+  it('counts a marker however the deck writes it', () => {
+    // Not only "1." — decks number with brackets, letters and roman numerals,
+    // and in scripts whose digits are not 0-9. Reading any of those as a
+    // bullet throws away an ordering the author meant.
+    const counted = [
+      '1.',
+      '2)',
+      'a.',
+      'b)',
+      'iv.',
+      'IX.',
+      'A:',
+      '(1)',
+      '١.',
+      '१.',
+    ]
+    for (const glyph of counted) {
+      expect(
+        runsOf(paragraph('A point', { listId: 'l1', glyph }))[0]!.ordered,
+      ).toBe(true)
     }
   })
 
