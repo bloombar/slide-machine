@@ -271,6 +271,81 @@ describe('when a picture will not come', () => {
   })
 })
 
+/**
+ * The pictures a DESIGN draws, as against the ones a slide holds (TMPL-8).
+ *
+ * A crest on the layout and a pattern behind the type are the design's, and no
+ * slide points at them. Only slides were scanned for pictures to fetch, so the
+ * design came out pointing at files the import had never brought across — and
+ * `build-template` then dropped every one of them for being unreachable. An
+ * imported deck arrived as a flat colour with no mark on it.
+ */
+describe('a design that draws its own pictures', () => {
+  /** A deck whose crest sits on the layout, inherited onto every slide the way
+   * `read-slides` hands it over. */
+  const branded = (): SourcePresentation => {
+    const crest: SourceElement = {
+      id: 'crest',
+      kind: 'decoration',
+      box: { x: 0.86, y: 0.87, w: 0.08, h: 0.07 },
+      imageUrl: 'https://google.invalid/crest.png',
+    }
+    const deck = presentation([slide('s0'), slide('s1'), slide('s2')])
+    for (const page of deck.slides) page.elements = [crest, ...page.elements]
+    return deck
+  }
+
+  const stored = () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      headers: {
+        get: (n: string) => (n === 'content-type' ? 'image/png' : null),
+      },
+      arrayBuffer: async () => Buffer.from([1, 2, 3]).buffer,
+    } as unknown as Response)
+  }
+
+  it('brings the crest across and points the design at our copy', async () => {
+    stored()
+    const { template } = await importSourcePresentation(branded(), {
+      assetPrefix: 'templates/import/u1/p1',
+    })
+    const design = template.layouts.find(
+      l => l.type !== WHITEBOARD_LAYOUT_TYPE,
+    )!
+    expect(design.decoration).toEqual([
+      {
+        x: 0.86,
+        y: 0.87,
+        w: 0.08,
+        h: 0.07,
+        imageUrl: 'https://cdn.test/templates/import/u1/p1/0.png',
+      },
+    ])
+  })
+
+  it('fetches it once however many slides the design covers', async () => {
+    stored()
+    await importSourcePresentation(branded(), {
+      assetPrefix: 'templates/import/u1/p1',
+    })
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('never asks the author to fill it in', async () => {
+    // Decoration is the design's. A crest that became a slot is a box the AI
+    // writes into and the author is asked about, on every slide.
+    stored()
+    const { template } = await importSourcePresentation(branded(), {
+      assetPrefix: 'templates/import/u1/p1',
+    })
+    const design = template.layouts.find(
+      l => l.type !== WHITEBOARD_LAYOUT_TYPE,
+    )!
+    expect(design.slots.map(s => s.name)).not.toContain('image')
+  })
+})
+
 describe('a presentation with nothing in it', () => {
   it('still yields a template rather than an error', async () => {
     const { template, report } = await importSourcePresentation(

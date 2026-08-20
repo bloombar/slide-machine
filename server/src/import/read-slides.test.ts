@@ -2091,6 +2091,210 @@ describe('the rules and bands a slide inherits', () => {
 })
 
 /**
+ * The pictures a design draws (TMPL-8).
+ *
+ * A crest in the corner and a pattern behind the type are `image` elements on
+ * the layout or the master, not filled shapes — and only the filled ones were
+ * kept, so a branded deck imported as a flat colour with no mark on it.
+ */
+describe('the pictures a slide inherits from its design', () => {
+  const picture = (id: string, url: string, x: number) => ({
+    objectId: id,
+    transform: {
+      translateX: x,
+      translateY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      unit: 'EMU',
+    },
+    size: {
+      width: { magnitude: 914400, unit: 'EMU' },
+      height: { magnitude: 457200, unit: 'EMU' },
+    },
+    image: { contentUrl: url },
+  })
+
+  const deck = (options: {
+    layout?: Record<string, unknown>[]
+    master?: Record<string, unknown>[]
+    slide?: Record<string, unknown>[]
+  }) => ({
+    presentationId: 'p',
+    pageSize: {
+      width: { magnitude: 9144000, unit: 'EMU' },
+      height: { magnitude: 5143500, unit: 'EMU' },
+    },
+    masters: [{ objectId: 'm1', pageElements: options.master ?? [] }],
+    layouts: [
+      {
+        objectId: 'l1',
+        layoutProperties: { masterObjectId: 'm1' },
+        pageElements: options.layout ?? [],
+      },
+    ],
+    slides: [
+      {
+        objectId: 's1',
+        slideProperties: { layoutObjectId: 'l1', masterObjectId: 'm1' },
+        pageElements: options.slide ?? [],
+      },
+    ],
+  })
+
+  const decorationOf = (raw: Record<string, unknown>) =>
+    toSourcePresentation(raw).slides[0]!.elements.filter(
+      e => e.kind === 'decoration',
+    )
+
+  it('brings across a logo the layout draws', () => {
+    const drawn = decorationOf(
+      deck({ layout: [picture('crest', 'https://x.invalid/crest.png', 0)] }),
+    )
+    expect(drawn).toHaveLength(1)
+    expect(drawn[0]!.imageUrl).toBe('https://x.invalid/crest.png')
+  })
+
+  it('brings across one the master draws, behind the layout', () => {
+    const drawn = decorationOf(
+      deck({ master: [picture('mark', 'https://x.invalid/mark.png', 0)] }),
+    )
+    expect(drawn.map(d => d.imageUrl)).toEqual(['https://x.invalid/mark.png'])
+  })
+
+  it('keeps two different marks that sit in the same corner', () => {
+    // Keyed without the picture, the master's would be discarded as a repeat
+    // of the layout's — same box, same absent fill.
+    const drawn = decorationOf(
+      deck({
+        layout: [picture('a', 'https://x.invalid/a.png', 0)],
+        master: [picture('b', 'https://x.invalid/b.png', 0)],
+      }),
+    )
+    // The master's first: order is paint order, and the layout's mark sits on
+    // top of what the master puts behind it.
+    expect(drawn.map(d => d.imageUrl)).toEqual([
+      'https://x.invalid/b.png',
+      'https://x.invalid/a.png',
+    ])
+  })
+
+  it('does not draw it twice when the slide carries its own copy', () => {
+    const drawn = decorationOf(
+      deck({
+        layout: [picture('crest', 'https://x.invalid/crest.png', 0)],
+        slide: [picture('copy', 'https://x.invalid/crest.png', 0)],
+      }),
+    )
+    expect(drawn).toHaveLength(0)
+    // The slide's own copy is still there, as the picture it is.
+    const images = toSourcePresentation(
+      deck({
+        layout: [picture('crest', 'https://x.invalid/crest.png', 0)],
+        slide: [picture('copy', 'https://x.invalid/crest.png', 0)],
+      }),
+    ).slides[0]!.elements.filter(e => e.kind === 'image')
+    expect(images).toHaveLength(1)
+  })
+
+  it('leaves a picture on the slide itself as content', () => {
+    const elements = toSourcePresentation(
+      deck({ slide: [picture('figure', 'https://x.invalid/figure.png', 0)] }),
+    ).slides[0]!.elements
+    expect(elements.map(e => e.kind)).toEqual(['image'])
+  })
+})
+
+/**
+ * A group, which Google returns as one element with its parts nested inside it
+ * (TMPL-8).
+ *
+ * Nothing read a group — it is neither an image, nor a table, nor a shape — so
+ * it was skipped whole, and a crest that is a mark beside a wordmark went
+ * missing along with everything else anyone had ever grouped.
+ */
+describe('a shape inside a group', () => {
+  const deck = (elements: Record<string, unknown>[]) => ({
+    presentationId: 'p',
+    pageSize: {
+      width: { magnitude: 9144000, unit: 'EMU' },
+      height: { magnitude: 5143500, unit: 'EMU' },
+    },
+    masters: [{ objectId: 'm1', pageElements: [] }],
+    layouts: [{ objectId: 'l1', layoutProperties: { masterObjectId: 'm1' } }],
+    slides: [
+      {
+        objectId: 's1',
+        slideProperties: { layoutObjectId: 'l1', masterObjectId: 'm1' },
+        pageElements: elements,
+      },
+    ],
+  })
+
+  /** A group offset a quarter of the way across, holding one picture that is
+   * itself offset a further quarter within the group. */
+  const grouped = {
+    objectId: 'g1',
+    transform: {
+      translateX: 2286000,
+      translateY: 0,
+      scaleX: 1,
+      scaleY: 1,
+      unit: 'EMU',
+    },
+    size: {
+      width: { magnitude: 2286000, unit: 'EMU' },
+      height: { magnitude: 1285875, unit: 'EMU' },
+    },
+    elementGroup: {
+      children: [
+        {
+          objectId: 'mark',
+          transform: {
+            translateX: 2286000,
+            translateY: 0,
+            scaleX: 1,
+            scaleY: 1,
+            unit: 'EMU',
+          },
+          size: {
+            width: { magnitude: 914400, unit: 'EMU' },
+            height: { magnitude: 457200, unit: 'EMU' },
+          },
+          image: { contentUrl: 'https://x.invalid/mark.png' },
+        },
+      ],
+    },
+  }
+
+  it('reads the parts of a group rather than skipping it whole', () => {
+    const elements = toSourcePresentation(deck([grouped])).slides[0]!.elements
+    expect(elements.map(e => e.id)).toEqual(['mark'])
+    expect(elements[0]!.imageUrl).toBe('https://x.invalid/mark.png')
+  })
+
+  it('places a part where the group puts it, not where it sits inside it', () => {
+    // Its own transform says a quarter across; the group's adds another
+    // quarter. Read without the group it would land at 0.25 — half a slide
+    // from where the author drew it.
+    const box = toSourcePresentation(deck([grouped])).slides[0]!.elements[0]!
+      .box
+    expect(box.x).toBeCloseTo(0.5, 5)
+    expect(box.w).toBeCloseTo(0.1, 5)
+  })
+
+  it('scales a part by the group it is in', () => {
+    const scaled = {
+      ...grouped,
+      transform: { ...grouped.transform, scaleX: 2, scaleY: 2 },
+    }
+    const box = toSourcePresentation(deck([scaled])).slides[0]!.elements[0]!.box
+    // Twice the size, and twice as far across before the group's own offset.
+    expect(box.w).toBeCloseTo(0.2, 5)
+    expect(box.x).toBeCloseTo(0.75, 5)
+  })
+})
+
+/**
  * A theme colour asked for under a name the master's scheme does not list
  * (TMPL-8).
  *
@@ -2250,6 +2454,90 @@ describe('a deck that colours its links', () => {
       withScheme({ DARK1: [0, 0, 0], HYPERLINK: [1, 1, 1] }),
     ).theme
     expect(theme.link).toBeUndefined()
+  })
+
+  /**
+   * A deck is not one background (TMPL-8).
+   *
+   * The theme carries one, but an imported design paints its own on every
+   * layout. A link colour checked against the first slide alone is not thereby
+   * readable on the rest — a deck that opens on a dark title page and then
+   * runs white kept a near-white link, and every linked phrase after slide one
+   * was drawn in white on white. The words were in the box; nothing drew them.
+   */
+  const dark = {
+    pageBackgroundFill: {
+      solidFill: { color: { rgbColor: { red: 0.1, green: 0, blue: 0.2 } } },
+    },
+  }
+  const light = {
+    pageBackgroundFill: {
+      solidFill: { color: { rgbColor: { red: 1, green: 1, blue: 1 } } },
+    },
+  }
+  /** A deck that opens dark and then runs white, which is what a title page
+   * over a photograph makes of an otherwise light template. */
+  const darkThenLight = (colors: Record<string, [number, number, number]>) =>
+    toSourcePresentation({
+      ...withScheme(colors),
+      slides: [
+        { objectId: 's1', pageProperties: dark, pageElements: [] },
+        { objectId: 's2', pageProperties: light, pageElements: [] },
+      ],
+    }).theme
+
+  it('carries none when it reads on the first page but not the rest', () => {
+    expect(
+      darkThenLight({ DARK1: [1, 1, 1], HYPERLINK: [0.9, 0.9, 0.95] }).link,
+    ).toBeUndefined()
+  })
+
+  /**
+   * Dropping the link colour is not enough on its own.
+   *
+   * The client draws a link in `accent` when the theme states no link colour
+   * (`client/src/components/slide/theme.ts`), so an accent picked against the
+   * dark title slide inherits the very bug the link colour was dropped to
+   * avoid — near-white text on the deck's white pages. Every theme colour has
+   * to read everywhere, not just the one the links asked about.
+   */
+  /** A mid-tone that clears the bar on near-black AND on white — which a deep
+   * red does not, being too dark to read on the opener. */
+  const midRed: [number, number, number] = [0.7529, 0.2235, 0.1686]
+
+  it('picks an accent that reads on the light pages too', () => {
+    const theme = darkThenLight({
+      DARK1: [1, 1, 1],
+      // The deck offers a near-white accent first — fine on the dark opener,
+      // invisible on everything after it — and a mid red second.
+      ACCENT1: [0.95, 0.95, 1],
+      ACCENT2: midRed,
+    })
+    expect(theme.accent).toBe('#c0392b')
+  })
+
+  it('keeps the deck’s own accent when it reads on every page', () => {
+    const theme = darkThenLight({ DARK1: [1, 1, 1], ACCENT1: midRed })
+    expect(theme.accent).toBe('#c0392b')
+  })
+
+  it('still carries one that reads on every page the deck paints', () => {
+    const deck = withScheme({ DARK1: [0, 0, 0], HYPERLINK: [0.7, 0, 0] })
+    const grey = {
+      pageBackgroundFill: {
+        solidFill: {
+          color: { rgbColor: { red: 0.95, green: 0.95, blue: 0.95 } },
+        },
+      },
+    }
+    const theme = toSourcePresentation({
+      ...deck,
+      slides: [
+        { objectId: 's1', pageProperties: grey, pageElements: [] },
+        { objectId: 's2', pageProperties: grey, pageElements: [] },
+      ],
+    }).theme
+    expect(theme.link).toBe('#b30000')
   })
 })
 
