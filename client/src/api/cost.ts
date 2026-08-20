@@ -6,6 +6,7 @@
 import type {
   CostOverviewResponse,
   CostSummaryResponse,
+  ServicePricesResponse,
   UsageWindow,
 } from '@slide-machine/shared'
 import { apiFetch } from './http'
@@ -52,6 +53,11 @@ export const fetchCostOverview = (
   window: CostWindowQuery = {},
 ): Promise<CostOverviewResponse> =>
   apiFetch<CostOverviewResponse>(`/api/admin/cost${query(window)}`)
+
+/** The per-unit vendor prices the current configuration can incur. Rebuilt
+ * from config on every request, so a refresh shows edited rates. */
+export const fetchServicePrices = (): Promise<ServicePricesResponse> =>
+  apiFetch<ServicePricesResponse>('/api/admin/cost/prices')
 
 /** Where the CSV lives. A plain link rather than a fetch: the export streams,
  * and the browser's own download handling is better at a long response than

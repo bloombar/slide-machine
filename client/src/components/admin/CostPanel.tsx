@@ -12,10 +12,12 @@
  *   is a plan-sizing question, the other an audience-reach one — so a single
  *   total would hide the only thing the number is useful for.
  * - **How many people, not just how much.** A deck that cost little because
- *   everything was cached still reached its students, and the per-student
+ *   everything was cached still reached its viewers, and the per-viewer
  *   average is what says so.
- * - **Registered students only, and it says so.** Anonymous viewers are
- *   counted as events and never as people (§16), so an average over "students"
+ * - **Registered viewers only, and it says so.** A "registered viewer" is a
+ *   signed-in account that caused activity in the audience role — derived
+ *   from the ledger, never from asking anyone what they are. Anonymous
+ *   viewers are counted as events and never as people (§16), so an average
  *   that quietly excluded them would be a lie by omission.
  */
 import { useEffect, useState } from 'react'
@@ -209,16 +211,16 @@ export default function CostPanel({ scope }: { scope: CostScope }) {
               hint="Caused by viewers"
             />
             <Figure
-              label="Per student"
-              value={formatMoney(summary.costPerRegisteredStudent)}
-              hint="Registered students only"
+              label="Per registered viewer"
+              value={formatMoney(summary.costPerRegisteredViewer)}
+              hint="Excludes anonymous viewers"
             />
           </dl>
 
           <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
             <Figure
-              label="Students reached"
-              value={formatCount(summary.registeredStudents)}
+              label="Viewers reached"
+              value={formatCount(summary.registeredViewers)}
               hint="With an account"
             />
             <Figure

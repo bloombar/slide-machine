@@ -21,7 +21,7 @@ const server = createApp().listen(0)
 afterAll(() => server.close())
 
 const ada = new Types.ObjectId()
-const student = new Types.ObjectId()
+const viewer = new Types.ObjectId()
 const deckId = new Types.ObjectId()
 const projectId = new Types.ObjectId()
 
@@ -66,7 +66,7 @@ describe('instructor versus audience', () => {
     await event({ costMicros: 1000 })
     await event({
       actorKind: 'audience',
-      actorId: student,
+      actorId: viewer,
       costMicros: 400,
       metric: 'audienceTtsCharacters',
     })
@@ -76,7 +76,7 @@ describe('instructor versus audience', () => {
     expect(summary.total.micros).toBe(1450)
     expect(summary.instructor.micros).toBe(1000)
     expect(summary.audience.micros).toBe(400)
-    // Neither instructor nor student spend: a sweep is the deployment's doing
+    // Neither instructor nor viewer spend: a sweep is the deployment's doing
     // and neither remedy applies to it.
     expect(summary.system.micros).toBe(50)
   })
@@ -84,50 +84,50 @@ describe('instructor versus audience', () => {
   it('charges audience work to the owner, not to the viewer', async () => {
     await event({
       actorKind: 'audience',
-      actorId: student,
+      actorId: viewer,
       costMicros: 400,
     })
-    // The student caused it; the owner's report is where it lands.
+    // The viewer caused it; the owner's report is where it lands.
     expect(
       (await costSummary({ payerId: ada.toString() })).audience.micros,
     ).toBe(400)
     expect(
-      (await costSummary({ payerId: student.toString() })).total.micros,
+      (await costSummary({ payerId: viewer.toString() })).total.micros,
     ).toBe(0)
   })
 })
 
 describe('counting people', () => {
-  it('counts a student once however many events they cause', async () => {
+  it('counts a viewer once however many events they cause', async () => {
     for (let i = 0; i < 5; i += 1)
-      await event({ actorKind: 'audience', actorId: student, costMicros: 100 })
+      await event({ actorKind: 'audience', actorId: viewer, costMicros: 100 })
 
     const summary = await costSummary({ deckId: deckId.toString() })
-    expect(summary.registeredStudents).toBe(1)
-    expect(summary.costPerRegisteredStudent?.micros).toBe(500)
+    expect(summary.registeredViewers).toBe(1)
+    expect(summary.costPerRegisteredViewer?.micros).toBe(500)
   })
 
   it('counts anonymous viewers as events, never as people', async () => {
-    await event({ actorKind: 'audience', actorId: student, costMicros: 100 })
+    await event({ actorKind: 'audience', actorId: viewer, costMicros: 100 })
     await event({ actorKind: 'audience', actorId: null, costMicros: 100 })
     await event({ actorKind: 'audience', actorId: null, costMicros: 100 })
 
     const summary = await costSummary({ deckId: deckId.toString() })
-    expect(summary.registeredStudents).toBe(1)
+    expect(summary.registeredViewers).toBe(1)
     expect(summary.anonymousEvents).toBe(2)
-    // The average is over registered students only, and the DTO says so — an
+    // The average is over registered viewers only, and the DTO says so — an
     // average that silently folded in the anonymous ones would be a lie.
-    expect(summary.costPerRegisteredStudent?.micros).toBe(300)
+    expect(summary.costPerRegisteredViewer?.micros).toBe(300)
   })
 
-  it('has no per-student figure when no student was registered', async () => {
+  it('has no per-viewer figure when no viewer was registered', async () => {
     await event({ actorKind: 'audience', actorId: null, costMicros: 100 })
     const summary = await costSummary({ deckId: deckId.toString() })
-    expect(summary.costPerRegisteredStudent).toBeNull()
+    expect(summary.costPerRegisteredViewer).toBeNull()
   })
 
   it('counts a deck that reached thirty as having reached thirty', async () => {
-    // The case the whole "record cache hits" rule exists for: two students pay
+    // The case the whole "record cache hits" rule exists for: two viewers pay
     // for a translation, twenty-eight read it for free, and an average over
     // two would be an order of magnitude wrong.
     for (let i = 0; i < 2; i += 1) {
@@ -146,10 +146,10 @@ describe('counting people', () => {
       })
     }
     const summary = await costSummary({ deckId: deckId.toString() })
-    expect(summary.registeredStudents).toBe(30)
+    expect(summary.registeredViewers).toBe(30)
     expect(summary.audience.micros).toBe(2000)
     // ~67 micros each, not 1000 each.
-    expect(summary.costPerRegisteredStudent?.micros).toBeLessThan(100)
+    expect(summary.costPerRegisteredViewer?.micros).toBeLessThan(100)
   })
 })
 

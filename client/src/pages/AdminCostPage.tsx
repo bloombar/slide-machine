@@ -1,7 +1,7 @@
 /**
  * The deployment-wide cost view (SPEC BILL-7): what this installation costs,
- * what it costs per user, per lecture, per project and per student, and who
- * the largest spenders are.
+ * what it costs per user, per lecture, per project and per registered viewer,
+ * and who the largest spenders are.
  *
  * Averages are per **active** entity, never per existing one. An account that
  * spent nothing is not a cheap user — it is not a user of anything — and
@@ -18,6 +18,7 @@ import {
   type CostWindowQuery,
 } from '../api/cost'
 import { formatMoney } from '../components/admin/CostPanel'
+import ServicePricesPanel from '../components/admin/ServicePricesPanel'
 
 const formatCount = (value: number): string =>
   new Intl.NumberFormat('en-US').format(value)
@@ -169,17 +170,18 @@ export default function AdminCostPage() {
               hint={`${formatCount(data.projectsWithSpend)} with spend`}
             />
             <Stat
-              label="Per student"
-              value={formatMoney(data.averages.perRegisteredStudent)}
-              hint={`${formatCount(data.activeStudents)} registered`}
+              label="Per registered viewer"
+              value={formatMoney(data.averages.perRegisteredViewer)}
+              hint={`${formatCount(data.activeViewers)} registered`}
             />
           </div>
           <p className="mt-3 text-xs text-slate-500">
             Averages divide by entities that actually spent something in the
-            period, not by everything that exists. Per-student figures cover{' '}
-            <strong>registered</strong> students only —{' '}
-            {formatCount(data.totals.anonymousEvents)} events came from viewers
-            with no account, who are counted but never identified.
+            period, not by everything that exists. A registered viewer is a
+            signed-in account that caused activity as audience; per-viewer
+            figures cover them only — {formatCount(data.totals.anonymousEvents)}{' '}
+            events came from viewers with no account, who are counted but never
+            identified.
           </p>
 
           <h2 className="mt-8 mb-3 text-lg font-semibold text-slate-700">
@@ -227,6 +229,8 @@ export default function AdminCostPage() {
           )}
         </>
       )}
+
+      <ServicePricesPanel />
     </div>
   )
 }

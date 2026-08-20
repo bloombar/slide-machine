@@ -9,10 +9,10 @@
  * So raw events are kept for a bounded window and rolled up monthly behind it.
  * A roll-up keeps exactly what the reports read — money split by who caused it,
  * and per-metric quantities — and drops what only an investigation would want:
- * individual timestamps, and which student did what. That the detail is
+ * individual timestamps, and which viewer did what. That the detail is
  * *unrecoverable* after the window is a feature rather than a cost: BILL-7's
  * views are averages and totals, and §16 has no interest in remembering that a
- * particular student played a particular slide two years ago.
+ * particular viewer played a particular slide two years ago.
  *
  * The grain is (month, payer, project, lecture) — the three scopes reports roll
  * up by, so an aged month can still answer them without the rows behind it.
@@ -44,12 +44,16 @@ export interface CostRollupDb {
   systemMicros: number
   byMetric: RolledMetric[]
   /**
-   * How many registered students appeared in the month, at this grain.
+   * How many registered viewers appeared in the month, at this grain.
    *
    * A count rather than the set: keeping the ids would defeat the point of
    * aging the raw rows out. The cost is that two months cannot be summed
-   * without double-counting a student present in both, which is why the
+   * without double-counting a viewer present in both, which is why the
    * reports treat this as a per-month figure and say so.
+   *
+   * The stored name predates the "registered viewer" rename and is kept so
+   * archived months keep their data — this collection is append-only history,
+   * and history does not rename itself.
    */
   registeredStudents: number
   anonymousEvents: number
