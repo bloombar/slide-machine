@@ -2,7 +2,7 @@
  * Unit tests for the admin cost panel (BILL-7).
  *
  * The assertions are about what the panel refuses to imply: that a sub-cent
- * total is free, that anonymous viewers are people, or that a per-student
+ * total is free, that anonymous viewers are people, or that a per-viewer
  * average covers everyone.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -38,9 +38,9 @@ const summary = (
       events: 12,
     },
   ],
-  registeredStudents: 10,
+  registeredViewers: 10,
   anonymousEvents: 34,
-  costPerRegisteredStudent: money(50_000),
+  costPerRegisteredViewer: money(50_000),
   cache: {
     billableEvents: 20,
     cachedEvents: 30,
@@ -110,11 +110,11 @@ describe('CostPanel', () => {
     expect(figure('Audience')).toBe('$0.50')
   })
 
-  it('says a per-student figure covers registered students only', async () => {
+  it('says a per-viewer figure covers registered viewers only', async () => {
     renderPanel()
-    expect(
-      await screen.findByText('Registered students only'),
-    ).toBeInTheDocument()
+    expect(await screen.findByText('Per registered viewer')).toBeInTheDocument()
+    expect(screen.getByText('Excludes anonymous viewers')).toBeInTheDocument()
+    expect(screen.getByText('Viewers reached')).toBeInTheDocument()
     expect(screen.getByText('Events, not people')).toBeInTheDocument()
     // Anonymous activity is shown as a count, beside the people it is not.
     expect(screen.getByText('34')).toBeInTheDocument()
@@ -136,7 +136,7 @@ describe('CostPanel', () => {
         total: money(400),
         instructor: money(400),
         audience: money(0),
-        costPerRegisteredStudent: null,
+        costPerRegisteredViewer: null,
         byMetric: [],
       }),
     )
@@ -169,9 +169,9 @@ describe('CostPanel', () => {
         instructor: money(0),
         audience: money(0),
         byMetric: [],
-        registeredStudents: 0,
+        registeredViewers: 0,
         anonymousEvents: 0,
-        costPerRegisteredStudent: null,
+        costPerRegisteredViewer: null,
         cache: {
           billableEvents: 0,
           cachedEvents: 0,

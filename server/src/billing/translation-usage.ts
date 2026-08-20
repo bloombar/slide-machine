@@ -148,7 +148,7 @@ export const recordTranslationUsage = async (
  *
  * Reading a stored translation costs nothing, so it must not spend an
  * allowance — but it still happened, and the number of students who read a deck
- * in their own language is the denominator of every per-student average
+ * in their own language is the denominator of every per-viewer average
  * BILL-7 reports. A cache hit that went unrecorded would make a deck read by
  * thirty students look like a deck read by the two who arrived first.
  */

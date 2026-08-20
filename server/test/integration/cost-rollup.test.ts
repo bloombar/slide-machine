@@ -15,7 +15,7 @@ import { CostRollupModel } from '../../src/models/cost-rollup'
 import { rollUpExpiredCostEvents } from '../../src/jobs/cost-rollup'
 
 const ada = new Types.ObjectId()
-const student = new Types.ObjectId()
+const viewer = new Types.ObjectId()
 const deckId = new Types.ObjectId()
 
 const DAY = 86_400_000
@@ -61,7 +61,7 @@ describe('rolling a month up', () => {
     await event(monthsAgo(3), { costMicros: 700 })
     await event(monthsAgo(3), {
       actorKind: 'audience',
-      actorId: student,
+      actorId: viewer,
       costMicros: 300,
       metric: 'audienceTtsCharacters',
     })

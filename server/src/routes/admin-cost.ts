@@ -14,12 +14,14 @@
  *   GET /admin/cost/projects/:id        one project's spend
  *   GET /admin/cost/decks/:id           one lecture's spend
  *   GET /admin/cost/export              the raw ledger as CSV
+ *   GET /admin/cost/prices              the configured per-unit vendor prices
  */
 import { Router } from 'express'
 import { isValidObjectId } from 'mongoose'
 import type {
   CostOverviewResponse,
   CostSummaryResponse,
+  ServicePricesResponse,
 } from '@slide-machine/shared'
 import { HttpError } from '../middleware/error'
 import { CostEventModel } from '../models/cost-event'
@@ -29,6 +31,7 @@ import {
   type CostWindow,
 } from '../billing/cost-report'
 import { MICROS_PER_UNIT } from '../billing/pricing'
+import { configuredPrices } from '../billing/configured-prices'
 import { periodStartFor } from '../billing/usage'
 import { csvRow } from '../audit/csv'
 import { windowFrom, windowFilter } from './report-window'
@@ -45,6 +48,17 @@ const objectId = (value: unknown, what: string): string => {
   }
   return id
 }
+
+/**
+ * The per-unit vendor prices the current configuration can actually incur,
+ * so an operator can check what the deployment pays without reading config
+ * files on the server. Filtered to the providers and models in use, and
+ * rebuilt per request — a config edit shows on the next refresh.
+ */
+adminCostRouter.get('/cost/prices', (_req, res) => {
+  const body: ServicePricesResponse = configuredPrices()
+  res.json(body)
+})
 
 adminCostRouter.get('/cost', async (req, res) => {
   const body: CostOverviewResponse = await costOverview(

@@ -243,7 +243,7 @@ describe('recordCachedTranslation', () => {
     ['audience', 'audienceLocales'],
   ])('records a %s cache hit at zero, never debited', async (actor, metric) => {
     // Counted because the read happened — the number of students who read a
-    // deck is the denominator of every per-student average (BILL-7) — but
+    // deck is the denominator of every per-viewer average (BILL-7) — but
     // never charged, because serving stored text costs nothing.
     await recordCachedTranslation({
       ownerId: 'u1',

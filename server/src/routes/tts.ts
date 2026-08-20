@@ -388,7 +388,7 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
     const marks: TtsMark[] = marksBuf ? JSON.parse(marksBuf.toString()) : []
     // Recorded, never debited (BILL-3). Serving stored audio costs nothing, but
     // the playback still happened — and the count of students who listened is
-    // the denominator of every per-student average (BILL-7). Zero units, not a
+    // the denominator of every per-viewer average (BILL-7). Zero units, not a
     // character count: on the narrate path the synthesized text is precisely
     // what a cache hit avoids producing, so no honest quantity is available
     // here. The ledger will need one; the row that says "this happened" does

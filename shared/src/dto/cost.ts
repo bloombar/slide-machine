@@ -52,16 +52,18 @@ export interface CostSummaryResponse {
   system: Money
   byMetric: CostByMetric[]
   /**
-   * Students with accounts who caused activity. Anonymous viewers are not in
-   * this number and cannot be: they have no identity to count, and creating
-   * one to make them countable would conflict with §16.
+   * Signed-in accounts that caused activity as audience — derived from the
+   * role recorded on each ledger row, never from asking anyone what they are.
+   * Anonymous viewers are not in this number and cannot be: they have no
+   * identity to count, and creating one to make them countable would conflict
+   * with §16.
    */
-  registeredStudents: number
+  registeredViewers: number
   /** Activity from viewers with no account, as an event count. */
   anonymousEvents: number
-  /** Audience spend ÷ registered students; null when there are none. Scoped to
-   * registered students, and every view that prints it says so. */
-  costPerRegisteredStudent: Money | null
+  /** Audience spend ÷ registered viewers; null when there are none. Scoped to
+   * registered viewers, and every view that prints it says so. */
+  costPerRegisteredViewer: Money | null
   cache: CacheEfficiency
   /**
    * The span the figures cover, as the route resolved it — for
@@ -69,6 +71,39 @@ export interface CostSummaryResponse {
    * absent on responses older than this field.
    */
   window?: { from: string | null; to: string | null }
+}
+
+/**
+ * One per-unit vendor rate the deployment's current configuration can
+ * actually incur. Filtered server-side: an entry for a provider that is
+ * switched off, or a model nothing is configured to call, is not in the list.
+ */
+export interface ConfiguredPrice {
+  /** Plain-language service name, e.g. 'AI generation'. */
+  service: string
+  /** Which configured entry the rate is for: a model, voice family, or mode. */
+  detail?: string
+  /** What one unit is, e.g. 'per 1M input tokens'. */
+  unit: string
+  /** The per-unit rate — in `currency` units, or a fraction for `percent`. */
+  rate: number
+  /** How to print the rate. */
+  kind: 'currency' | 'percent'
+  /** What the bare rate would misstate, e.g. a free monthly allowance. */
+  note?: string
+}
+
+/**
+ * The per-unit vendor prices behind the deployment's current configuration
+ * (`config/service-prices.json`), rebuilt from the config on every request so
+ * a rate edit shows up on the next refresh.
+ */
+export interface ServicePricesResponse {
+  /** When the figures were last verified against the vendors' pricing. */
+  asOf: string
+  currency: string
+  /** In configuration order, grouped by service. */
+  prices: ConfiguredPrice[]
 }
 
 export interface TopSpender {
@@ -83,7 +118,7 @@ export interface CostOverviewResponse {
   window: { from: string | null; to: string | null }
   totals: CostSummaryResponse
   activeUsers: number
-  activeStudents: number
+  activeViewers: number
   lecturesWithSpend: number
   projectsWithSpend: number
   /**
@@ -95,7 +130,7 @@ export interface CostOverviewResponse {
     perUser: Money | null
     perLecture: Money | null
     perProject: Money | null
-    perRegisteredStudent: Money | null
+    perRegisteredViewer: Money | null
   }
   topSpenders: TopSpender[]
 }

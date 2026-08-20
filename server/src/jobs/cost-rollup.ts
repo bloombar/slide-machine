@@ -45,7 +45,7 @@ interface GroupedRow {
   audienceMicros: number
   systemMicros: number
   anonymousEvents: number
-  students: Types.ObjectId[]
+  viewers: Types.ObjectId[]
   metrics: {
     metric: UsageMetric
     quantity: number
@@ -163,9 +163,9 @@ export const rollUpExpiredCostEvents = async (
           },
           // Audience actors only, and only identified ones. The owner appears
           // on most of these rows as the actor of their own work and is not
-          // one of their own students; an anonymous viewer has no identity to
+          // one of their own viewers; an anonymous viewer has no identity to
           // add and is counted separately, as events.
-          students: {
+          viewers: {
             $addToSet: {
               $cond: [
                 {
@@ -212,7 +212,7 @@ export const rollUpExpiredCostEvents = async (
             audienceMicros: row.audienceMicros,
             systemMicros: row.systemMicros,
             byMetric: foldMetrics(row.metrics),
-            registeredStudents: row.students.length,
+            registeredStudents: row.viewers.length,
             anonymousEvents: row.anonymousEvents,
             rolledAt: new Date(),
           },

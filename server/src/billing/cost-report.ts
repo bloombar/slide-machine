@@ -12,13 +12,13 @@
  * Two counting rules run through everything and are worth stating once:
  *
  * - **Cache hits are rows too, at zero.** They are why the denominators are
- *   honest. A deck where two students trigger a translation and twenty-eight
+ *   honest. A deck where two viewers trigger a translation and twenty-eight
  *   read the stored result cost what those two spent, but it reached *thirty*
- *   students, and an average over two would be an order of magnitude wrong.
+ *   viewers, and an average over two would be an order of magnitude wrong.
  *   The same rows give the cache-hit ratio and the cost avoided for free.
  * - **Anonymous viewers are counted, not identified.** They arrive with no
  *   `actorId`, so they can be counted as events but never as people. Every
- *   per-student average here is therefore over *registered* students only, and
+ *   per-viewer average here is therefore over *registered* viewers only, and
  *   the response says so rather than implying it covers everyone.
  */
 import { Types } from 'mongoose'
@@ -61,18 +61,20 @@ export interface CostSummary {
   system: Money
   byMetric: CostByMetric[]
   /**
-   * Registered students who caused billable-or-cached activity. Anonymous
-   * viewers are absent by construction: they have no identity to count, and
-   * inventing one to make them countable would conflict with §16.
+   * Registered viewers — signed-in accounts that caused billable-or-cached
+   * activity in the audience role. Derived from the role recorded on each
+   * ledger row, never from asking anyone what they are. Anonymous viewers are
+   * absent by construction: they have no identity to count, and inventing one
+   * to make them countable would conflict with §16.
    */
-  registeredStudents: number
+  registeredViewers: number
   /** Activity from viewers with no account, as an event count. */
   anonymousEvents: number
   /**
-   * Audience spend divided by registered students, or null when none. Scoped
-   * to registered students on purpose — see `registeredStudents`.
+   * Audience spend divided by registered viewers, or null when none. Scoped
+   * to registered viewers on purpose — see `registeredViewers`.
    */
-  costPerRegisteredStudent: Money | null
+  costPerRegisteredViewer: Money | null
   cache: CacheEfficiency
 }
 
@@ -134,7 +136,7 @@ interface Facets {
     quantity: number
     events: number
   }[]
-  students: { _id: null; ids: Types.ObjectId[] }[]
+  viewers: { _id: null; ids: Types.ObjectId[] }[]
   anonymous: { _id: null; events: number }[]
 }
 
@@ -174,9 +176,9 @@ export const costSummary = async (
           },
         ],
         // Distinct registered people who acted as audience. `$addToSet` rather
-        // than a count, because the same student appears on many rows and the
+        // than a count, because the same viewer appears on many rows and the
         // question is how many people the deck reached, not how many playbacks.
-        students: [
+        viewers: [
           { $match: { actorKind: 'audience', actorId: { $ne: null } } },
           { $group: { _id: null, ids: { $addToSet: '$actorId' } } },
         ],
@@ -239,7 +241,7 @@ export const costSummary = async (
     avoided += (rate.cost / rate.quantity) * quantity
   }
 
-  const registeredStudents = facets?.students?.[0]?.ids.length ?? 0
+  const registeredViewers = facets?.viewers?.[0]?.ids.length ?? 0
   const totalEvents = billableEvents + cachedEvents
 
   return {
@@ -250,10 +252,10 @@ export const costSummary = async (
     byMetric: [...perMetric.values()].sort(
       (a, b) => b.cost.micros - a.cost.micros,
     ),
-    registeredStudents,
+    registeredViewers,
     anonymousEvents: facets?.anonymous?.[0]?.events ?? 0,
-    costPerRegisteredStudent: registeredStudents
-      ? money(Math.round(audience / registeredStudents), currency)
+    costPerRegisteredViewer: registeredViewers
+      ? money(Math.round(audience / registeredViewers), currency)
       : null,
     cache: {
       billableEvents,
@@ -279,8 +281,8 @@ export interface CostOverview {
   totals: CostSummary
   /** Distinct accounts that spent anything in the window. */
   activeUsers: number
-  /** Distinct registered students who caused activity in the window. */
-  activeStudents: number
+  /** Distinct registered viewers who caused activity in the window. */
+  activeViewers: number
   /** Lectures and projects with at least one event, so the averages below
    * divide by what actually happened rather than by what exists. */
   lecturesWithSpend: number
@@ -289,7 +291,7 @@ export interface CostOverview {
     perUser: Money | null
     perLecture: Money | null
     perProject: Money | null
-    perRegisteredStudent: Money | null
+    perRegisteredViewer: Money | null
   }
   topSpenders: TopSpender[]
 }
@@ -362,16 +364,16 @@ export const costOverview = async (
     },
     totals,
     activeUsers,
-    activeStudents: totals.registeredStudents,
+    activeViewers: totals.registeredViewers,
     lecturesWithSpend,
     projectsWithSpend,
     averages: {
       perUser: per(totals.total.micros, activeUsers),
       perLecture: per(totals.total.micros, lecturesWithSpend),
       perProject: per(totals.total.micros, projectsWithSpend),
-      perRegisteredStudent: per(
+      perRegisteredViewer: per(
         totals.audience.micros,
-        totals.registeredStudents,
+        totals.registeredViewers,
       ),
     },
     topSpenders: top.map(row => ({
