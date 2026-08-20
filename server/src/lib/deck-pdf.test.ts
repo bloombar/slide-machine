@@ -467,3 +467,96 @@ describe('the typeface an exported PDF is set in', () => {
     )
   })
 })
+
+/**
+ * An imported slide in the PDF (TMPL-8/EXP-5).
+ *
+ * The PDF wrote a Markdown box's source out verbatim — asterisks, brackets and
+ * a literal "1." on every line — drew every box in the theme's body colour,
+ * carried no link, and drew none of the design's own bands.
+ */
+describe('an imported slide in an exported PDF', () => {
+  const imported: Layout = {
+    type: 'imported',
+    label: 'Imported',
+    purpose: 'a slide',
+    slots: [{ name: 'body', kind: 'text', label: 'Body' }],
+    elementPositions: {
+      body: { x: 0.1, y: 0.2, w: 0.8, h: 0.6, color: '#0000ff' },
+    },
+    decoration: [{ x: 0, y: 0.95, w: 1, h: 0.02, fill: '#63d297' }],
+  }
+
+  const deckOf = (value: string): ExportDeck => ({
+    title: 'Imported',
+    templateId: 'classic',
+    layouts: [imported],
+    slides: [
+      { layoutType: 'imported', slots: { body: { kind: 'text', value } } },
+    ],
+  })
+
+  /** Everything the export drew, text and rectangles alike. */
+  const drawnBy = async (deck: ExportDeck) => {
+    const text: { text: string; rgb: string }[] = []
+    const rects: string[] = []
+    const asRgb = (c: { red: number; green: number; blue: number }) =>
+      [c.red, c.green, c.blue].map(n => Math.round(n * 255)).join(',')
+    const realText = PDFPage.prototype.drawText
+    const realRect = PDFPage.prototype.drawRectangle
+    const t = vi
+      .spyOn(PDFPage.prototype, 'drawText')
+      .mockImplementation(function (this: PDFPage, s, o) {
+        text.push({ text: String(s), rgb: asRgb(o!.color as never) })
+        return realText.call(this, s, o)
+      })
+    const r = vi
+      .spyOn(PDFPage.prototype, 'drawRectangle')
+      .mockImplementation(function (this: PDFPage, o) {
+        if (o?.color) rects.push(asRgb(o.color as never))
+        return realRect.call(this, o)
+      })
+    const bytes = await deckToPdf(deck)
+    t.mockRestore()
+    r.mockRestore()
+    const doc = await PDFDocument.load(bytes)
+    const links = doc
+      .getPages()
+      .reduce((n, p) => n + (p.node.Annots()?.size() ?? 0), 0)
+    return { text, rects, links }
+  }
+
+  it('writes the words, not the Markdown that spells them', async () => {
+    const { text } = await drawnBy(deckOf('**Faculty** of parts'))
+    const written = text.map(t => t.text).join('')
+    expect(written).toContain('Faculty')
+    expect(written).not.toContain('**')
+  })
+
+  it('counts a numbered list instead of printing 1 every time', async () => {
+    const { text } = await drawnBy(deckOf('1. One\n1. Two\n1. Three'))
+    const markers = text.map(t => t.text.trim()).filter(t => /^\d+\.$/.test(t))
+    expect(markers).toEqual(['1.', '2.', '3.'])
+  })
+
+  it('draws a box in the colour its design gives it', async () => {
+    const { text } = await drawnBy(deckOf('Plain words'))
+    expect(text.find(t => t.text.includes('Plain'))?.rgb).toBe('0,0,255')
+  })
+
+  it('draws the design’s own band, so the page is not blank behind the slide', async () => {
+    const { rects } = await drawnBy(deckOf('Plain words'))
+    expect(rects).toContain('99,210,151')
+  })
+
+  it('makes a link clickable, not merely readable', async () => {
+    // A PDF carries links as annotations on the page; reading an address off
+    // a page is not the same as following it.
+    const { links } = await drawnBy(deckOf('See [the handbook](https://example.org/handbook)'))
+    expect(links).toBe(1)
+  })
+
+  it('adds no annotation to a slide that holds no link', async () => {
+    expect((await drawnBy(deckOf('Plain words'))).links).toBe(0)
+  })
+})

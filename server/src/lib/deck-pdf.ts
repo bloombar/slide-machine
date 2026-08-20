@@ -13,6 +13,8 @@
  */
 import {
   PDFDocument,
+  PDFName,
+  PDFString,
   StandardFonts,
   LineCapStyle,
   rgb,
@@ -120,12 +122,54 @@ interface Piece {
   size: number
   font: PDFFont
   color: Color
+  /** Where these characters point, if anywhere. */
+  link?: string
 }
 
 /** A line as it will be drawn, and the gap that follows it. */
 interface DrawnLine {
   pieces: Piece[]
   gapAfter: number
+  /** How far in the line starts — a sub-point's offset. */
+  indent?: number
+}
+
+/**
+ * Makes a rectangle of the page follow a link when clicked.
+ *
+ * A PDF carries links as annotations on the page rather than as anything in
+ * the text, so this is the only way to have one: the words are drawn, and a
+ * clickable box is laid over where they landed. Without it an imported slide
+ * whose only address was inside a link exported unreachable — reading an
+ * address off a page is not the same as following it.
+ *
+ * Bordered with a zero width, because a PDF reader's default is to draw a box
+ * around every link, and a slide is a design.
+ */
+const linkAnnotation = (
+  page: PDFPage,
+  url: string,
+  at: { x: number; y: number; width: number; height: number },
+): void => {
+  const doc = page.doc
+  const annotation = doc.context.obj({
+    Type: 'Annot',
+    Subtype: 'Link',
+    Rect: [at.x, at.y, at.x + at.width, at.y + at.height],
+    Border: [0, 0, 0],
+    A: doc.context.obj({
+      Type: 'Action',
+      S: 'URI',
+      URI: PDFString.of(url),
+    }),
+  })
+  const existing = page.node.Annots()
+  if (existing) existing.push(doc.context.register(annotation))
+  else
+    page.node.set(
+      PDFName.of('Annots'),
+      doc.context.obj([doc.context.register(annotation)]),
+    )
 }
 
 /**
@@ -152,19 +196,25 @@ const drawTextBox = (page: PDFPage, box: TextBox): void => {
       const color = colorFor(run)
       const text = (run.bullet ? '•  ' : '') + run.text
       const gapAfter = (run.spaceAfterFrac ?? 0) * PAGE_WIDTH * scale
+      // A sub-point is drawn as one. Indented by the type size, so the offset
+      // holds its proportion when a crowded box shrinks to fit.
+      const indent = (run.indent ?? 0) * size * 1.5
 
       const last = lines[lines.length - 1]
       if (run.sameLine && last) {
-        last.pieces.push({ text, size, font, color })
+        last.pieces.push({ text, size, font, color, link: run.link })
         last.gapAfter = gapAfter
         continue
       }
       // A listing keeps the lines its author wrote; prose wraps to its box.
-      const segments = run.mono ? [text] : wrapLines(text, font, size, bw)
+      const segments = run.mono
+        ? [text]
+        : wrapLines(text, font, size, bw - indent)
       segments.forEach((segment, i) =>
         lines.push({
-          pieces: [{ text: segment, size, font, color }],
+          pieces: [{ text: segment, size, font, color, link: run.link }],
           gapAfter: i === segments.length - 1 ? gapAfter : 0,
+          indent,
         }),
       )
     }
@@ -189,8 +239,10 @@ const drawTextBox = (page: PDFPage, box: TextBox): void => {
   let cursorTop = box.valign === 'middle' ? boxTop - (bh - totalH) / 2 : boxTop
   for (const line of lines) {
     const lineH = heightOf(line)
-    let x = box.align === 'center' ? bxLeft + (bw - widthOf(line)) / 2 : bxLeft
+    const left = bxLeft + (line.indent ?? 0)
+    let x = box.align === 'center' ? bxLeft + (bw - widthOf(line)) / 2 : left
     for (const piece of line.pieces) {
+      const width = piece.font.widthOfTextAtSize(piece.text, piece.size)
       page.drawText(piece.text, {
         x,
         y: cursorTop - piece.size,
@@ -198,7 +250,17 @@ const drawTextBox = (page: PDFPage, box: TextBox): void => {
         font: piece.font,
         color: piece.color,
       })
-      x += piece.font.widthOfTextAtSize(piece.text, piece.size)
+      // A link is content (EXP-5), and a PDF can carry one: an imported slide
+      // whose only address was inside a link exported unreachable, and reading
+      // it off the page is not the same as following it.
+      if (piece.link)
+        linkAnnotation(page, piece.link, {
+          x,
+          y: cursorTop - piece.size,
+          width,
+          height: piece.size * 1.2,
+        })
+      x += width
     }
     cursorTop -= lineH + line.gapAfter
   }
@@ -318,7 +380,9 @@ const drawSlide = (
         y: PAGE_HEIGHT - box.y * PAGE_HEIGHT - box.h * PAGE_HEIGHT,
         width: box.w * PAGE_WIDTH,
         height: box.h * PAGE_HEIGHT,
-        color: colors[box.color],
+        // The colour the design names, where it names one (TMPL-8): an
+        // imported band is whatever it was drawn, not one of three roles.
+        color: box.hex ? hex(box.hex) : colors[box.color],
       })
     } else if (box.kind === 'image' && image) {
       const bw = box.w * PAGE_WIDTH

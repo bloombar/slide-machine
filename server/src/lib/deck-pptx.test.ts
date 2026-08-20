@@ -876,3 +876,68 @@ describe('the typeface an exported deck is set in', () => {
     expect(xml).not.toContain('Arial Narrow')
   })
 })
+
+/**
+ * An imported slide in the .pptx (TMPL-8/EXP-5), which is what Drive converts
+ * into Google Slides.
+ *
+ * The same three faults the PDF had: a Markdown box written out as its source,
+ * every box drawn in one colour, and none of the design's own bands.
+ */
+describe('an imported slide in an exported deck', () => {
+  const imported: Layout = {
+    type: 'imported',
+    label: 'Imported',
+    purpose: 'a slide',
+    slots: [{ name: 'body', kind: 'text', label: 'Body' }],
+    elementPositions: {
+      body: { x: 0.1, y: 0.2, w: 0.8, h: 0.6, color: '#0000FF' },
+    },
+    decoration: [{ x: 0, y: 0.95, w: 1, h: 0.02, fill: '#63D297' }],
+  }
+
+  const xmlOf = async (value: string) => {
+    const deck: ExportDeck = {
+      title: 'Imported',
+      templateId: 'classic',
+      layouts: [imported],
+      slides: [
+        { layoutType: 'imported', slots: { body: { kind: 'text', value } } },
+      ],
+    }
+    return new AdmZip(Buffer.from(await deckToPptx(deck)))
+      .getEntry('ppt/slides/slide1.xml')!
+      .getData()
+      .toString('utf8')
+  }
+
+  /** The words the slide says, with the runs joined back together. */
+  const wordsIn = (xml: string) =>
+    [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map(m => m[1]).join('')
+
+  it('writes the words, not the Markdown that spells them', async () => {
+    const xml = await xmlOf('**Faculty** of parts')
+    expect(wordsIn(xml)).toContain('Faculty')
+    expect(wordsIn(xml)).not.toContain('**')
+  })
+
+  it('counts a numbered list instead of writing 1 every time', async () => {
+    expect(wordsIn(await xmlOf('1. One\n1. Two\n1. Three'))).toContain('2.')
+  })
+
+  it('draws a box in the colour its design gives it', async () => {
+    expect(await xmlOf('Plain words')).toContain('0000FF')
+  })
+
+  it('draws the design’s own band', async () => {
+    expect(await xmlOf('Plain words')).toContain('63D297')
+  })
+
+  it('carries a link as a link, not as its address in the words', async () => {
+    // Slides and PowerPoint both have hyperlinks; an imported slide whose only
+    // address was inside one exported unreachable.
+    expect(await xmlOf('See [the handbook](https://example.org/handbook)')).toContain(
+      'hlinkClick',
+    )
+  })
+})

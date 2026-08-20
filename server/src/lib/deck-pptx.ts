@@ -124,6 +124,11 @@ const renderSlide = (
               : {}),
           // Coloured pieces of one line come back together as that line.
           breakLine: !r.sameLine,
+          // A link is content (EXP-5): an imported slide whose only address
+          // was inside one exported unreachable.
+          ...(r.link ? { hyperlink: { url: r.link } } : {}),
+          // A sub-point is drawn as one, rather than level with its parent.
+          ...(r.indent ? { indentLevel: r.indent } : {}),
           paraSpaceAfter: (r.spaceAfterFrac ?? 0) * scale * WIDTH_PT,
         },
       }))
@@ -159,7 +164,9 @@ const renderSlide = (
         y: box.y * SLIDE_H,
         w: box.w * SLIDE_W,
         h: box.h * SLIDE_H,
-        fill: { color: hex[box.color] },
+        // The colour the design names, where it names one (TMPL-8): an
+        // imported band is whatever it was drawn, not one of three roles.
+        fill: { color: box.hex ? noHash(box.hex) : hex[box.color] },
         line: { type: 'none' },
       })
     } else if (box.kind === 'math') {
