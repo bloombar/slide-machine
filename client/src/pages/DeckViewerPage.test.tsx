@@ -929,6 +929,123 @@ describe('DeckViewerPage microphone capture', () => {
     expect(stopSpy).toHaveBeenCalled()
   })
 
+  // Mid-speech interim flush (GEN-12): recognizers only finalize on a pause,
+  // so these drive interim results and assert generation runs before any
+  // final — and that the final never resubmits what was already flushed.
+  it('flushes long uninterrupted interim speech into generation before any final', async () => {
+    FakeRecognition.reset()
+    vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
+    // The flush is opt-in (off by default), so turn it on for this test.
+    vi.spyOn(runtimeConfig, 'getInterimFlushEnabled').mockReturnValue(true)
+    vi.spyOn(runtimeConfig, 'getInterimFlushWords').mockReturnValue(6)
+    const phrases: string[] = []
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+      '/api/actions/session.phrase': init => {
+        phrases.push(
+          (JSON.parse(String(init?.body)) as { phrase: string }).phrase,
+        )
+        return { status: 200, body: { kind: 'none' } }
+      },
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Live session' }))
+    const recognition = FakeRecognition.last!
+    const hear = (transcript: string, isFinal = false) =>
+      act(() => {
+        recognition.onresult?.({
+          resultIndex: 0,
+          results: [{ isFinal, 0: { transcript } }],
+        })
+      })
+
+    const opening = 'the krebs cycle turns acetyl coa into energy carriers'
+    // First sighting: no word is stable yet, nothing is submitted.
+    hear(opening)
+    expect(phrases).toEqual([])
+    // The next interim repeats those words — all nine are now stable, which
+    // clears the six-word threshold, so they flush mid-speech (no final).
+    hear(`${opening} like nadh`)
+    await vi.waitFor(() => expect(phrases).toEqual([opening]))
+
+    // The eventual finalized utterance submits only the unflushed tail.
+    hear(`${opening} like nadh and fadh2`, true)
+    await vi.waitFor(() =>
+      expect(phrases).toEqual([opening, 'like nadh and fadh2']),
+    )
+  })
+
+  it('keeps interims out of generation when the interim flush is off', async () => {
+    FakeRecognition.reset()
+    vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
+    vi.spyOn(runtimeConfig, 'getInterimFlushEnabled').mockReturnValue(false)
+    vi.spyOn(runtimeConfig, 'getInterimFlushWords').mockReturnValue(2)
+    const phrases: string[] = []
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+      '/api/actions/session.phrase': init => {
+        phrases.push(
+          (JSON.parse(String(init?.body)) as { phrase: string }).phrase,
+        )
+        return { status: 200, body: { kind: 'none' } }
+      },
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Live session' }))
+    const recognition = FakeRecognition.last!
+    const hear = (transcript: string, isFinal = false) =>
+      act(() => {
+        recognition.onresult?.({
+          resultIndex: 0,
+          results: [{ isFinal, 0: { transcript } }],
+        })
+      })
+
+    // Well past the (mocked, tiny) threshold, repeatedly — still nothing.
+    hear('one two three four five six seven')
+    hear('one two three four five six seven')
+    hear('one two three four five six seven eight')
+    expect(phrases).toEqual([])
+
+    // Only the finalized phrase generates, in full.
+    hear('one two three four five six seven eight nine', true)
+    await vi.waitFor(() =>
+      expect(phrases).toEqual(['one two three four five six seven eight nine']),
+    )
+  })
+
   it('creates a new slide when "next" is spoken at the end of the deck', async () => {
     FakeRecognition.reset()
     vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)

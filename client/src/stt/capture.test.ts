@@ -63,7 +63,11 @@ describe('browser speech capture', () => {
     expect(recognition.started).toBe(1)
 
     recognition.onresult?.(result('photosynthesis bas', false))
-    expect(onInterim).toHaveBeenCalledWith('photosynthesis bas')
+    // Interims carry the same session id as finals, so the mid-speech
+    // interim flush (GEN-12) can credit the recording session.
+    expect(onInterim).toHaveBeenCalledWith('photosynthesis bas', {
+      sessionId: expect.any(String),
+    })
     expect(onPhrase).not.toHaveBeenCalled()
 
     recognition.onresult?.(result('photosynthesis basics', true))
@@ -73,7 +77,9 @@ describe('browser speech capture', () => {
       sessionId: expect.any(String),
     })
     // A final clears the interim line
-    expect(onInterim).toHaveBeenLastCalledWith('')
+    expect(onInterim).toHaveBeenLastCalledWith('', {
+      sessionId: expect.any(String),
+    })
   })
 
   it('keeps one session id per recording and mints a new one after restart', () => {

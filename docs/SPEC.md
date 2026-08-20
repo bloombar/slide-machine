@@ -385,7 +385,7 @@ The app requires microphone access, prompts for and reports permission state, an
 #### CAP-3 Speech-to-text transcription
 
 - Uses **Google Cloud Speech-to-Text** for fast, accurate, low-latency transcription (removing V1's Chrome-only constraint).
-- Audio is streamed and segmented into phrases on natural pauses; interim text may display as live captions, finalized phrases drive generation.
+- Audio is streamed and segmented into phrases on natural pauses; interim text may display as live captions, finalized phrases drive generation — optionally supplemented mid-speech by the interim flush ([GEN-12](#gen-12-mid-speech-interim-generation), opt-in) so a speaker who never pauses still gets slides.
 - **Speech adaptation** — when a preflight concept set exists ([PREP-3](#prep-3-use-of-the-honed-concept-set)), its terms, names, acronyms, and synonyms are supplied to Google Cloud STT as phrase hints/boosts so domain jargon and proper nouns transcribe correctly.
 - Target: near-real-time latency suitable for live lecture (a key evaluation metric — [§12](#12-evaluation--metrics)). Raw audio is **not retained by default**; optional bounded retention (for diarization and original-audio playback) is governed by [P-6](#16-privacy-security--compliance).
 
@@ -556,6 +556,15 @@ Slide content is not a fixed set of fields the model fills in. Having chosen a l
 - **The system validates rather than trusts.** Content for a slot the chosen layout does not declare is discarded; content of the wrong shape is coerced where that is unambiguous and dropped where it is not; a slide is never left in a state the template does not describe.
 - **Limits are enforced regardless of what the model returns**, per slot, and content that will not fit spills into a new slide rather than overflowing ([GEN-8](#gen-8-new-slide-vs-update-current)). Fitting respects the kind: prose may be trimmed at a word boundary, but a program listing or a formula is never truncated mid-token — it is moved or omitted whole, because a half-expression is worse than none.
 - **Specialized kinds are offered only where a template declares them**, so the layouts a lecture's template provides are exactly the content the AI can produce for it. A history template that declares no math slot can never yield a formula.
+
+#### GEN-12 Mid-speech interim generation
+
+Speech recognizers only finalize a phrase after a trailing pause ([CAP-3](#cap-3-speech-to-text-transcription)), so an instructor who speaks continuously could go a minute or more with no new slide, then get one oversized slide at the first pause. To keep slides appearing mid-speech:
+
+- **Stable-prefix flush** — the client watches the interim transcript; once the words that are stable (unchanged across consecutive interim updates) and not yet submitted pass a **word threshold**, they are submitted to generation ([GEN-1](#gen-1-speech-to-slide-generation)) immediately, without waiting for the recognizer to finalize. Word-based rather than time-based: a count of stable words is deterministic and independent of speaking rate.
+- **No double generation** — when the recognizer finalizes the utterance, only the words not already flushed are submitted. The new-vs-update decision ([GEN-8](#gen-8-new-slide-vs-update-current)) absorbs mid-thought boundaries: a flushed fragment can update the slide it started.
+- **Commands stay final-only** — wake-worded voice commands ([CAP-4](#cap-4-voice-commands)) are matched only against finalized text, so a half-heard interim can never fire a command.
+- **Opt-in and configurable** ([TECH-4](#tech-4-server-configuration)) — `GENERATION_INTERIM_FLUSH` (default **off**) switches the behavior on; `GENERATION_INTERIM_FLUSH_WORDS` (default 140, about a minute of uninterrupted lecture speech) sets the threshold. Off by default because flushed text is the recognizer's hypothesis rather than its finalized pass — the transcript trades some fidelity (and, on Cloud STT, per-word timings for flushed stretches) for liveness. Both settings reach the client via runtime config and apply to every capture engine ([CAP-3](#cap-3-speech-to-text-transcription)) alike.
 
 **Metering note.** Gemini, Speech-to-Text, and image-API usage in §8–§9 all count against the user's plan caps (BILL-3) and are subject to enforcement (BILL-4).
 

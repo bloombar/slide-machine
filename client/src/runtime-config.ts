@@ -37,6 +37,8 @@ let runtime: RuntimeConfig = {
   refineTranscriptDefaultLevel: 2,
   simulatedSpeechEnabled: false,
   whiteboardSuppressDebounceMs: 5000,
+  interimFlushEnabled: false,
+  interimFlushWords: 140,
   sttCaptureSampleRate: 24000,
 }
 let loaded: Promise<RuntimeConfig> | null = null
@@ -98,6 +100,14 @@ export const getSimulatedSpeechEnabled = (): boolean =>
  * auto-slide-creation while recording (WB-3). */
 export const getWhiteboardSuppressDebounceMs = (): number =>
   runtime.whiteboardSuppressDebounceMs
+
+/** Whether long interim speech flushes into generation before the recognizer
+ * finalizes (GEN-12), so slides keep appearing during uninterrupted speech. */
+export const getInterimFlushEnabled = (): boolean => runtime.interimFlushEnabled
+
+/** How many stable, not-yet-submitted interim words trigger a mid-speech
+ * flush (GEN-12). */
+export const getInterimFlushWords = (): number => runtime.interimFlushWords
 
 /** Rate (Hz) mic capture downsamples to before streaming (CAP-3). */
 export const getSttCaptureSampleRate = (): number =>

@@ -64,6 +64,14 @@ export interface RuntimeConfig {
    * suppressing auto-slide-creation while recording (WB-3), so a pause to
    * switch tools or reposition the cursor still counts as active use. */
   whiteboardSuppressDebounceMs: number
+  /** Mid-speech interim generation (GEN-12): whether the client flushes the
+   * stable prefix of a long interim transcript into generation before the
+   * recognizer finalizes, so slides keep appearing during uninterrupted
+   * speech. Off = generation waits for pause-delimited finalized phrases. */
+  interimFlushEnabled: boolean
+  /** How many stable, not-yet-submitted interim words accumulate before a
+   * mid-speech flush. */
+  interimFlushWords: number
   /** Rate (Hz) the mic capture downsamples to before streaming to the server
    * (CAP-3). 24 kHz by default — above the 16 kHz the speech models want, to
    * keep the recording pleasant for per-slide playback; the browser's native

@@ -82,6 +82,11 @@ const serverEnv = (over: Record<string, string>): Record<string, string> => ({
   // The simulated-speech box is a debug affordance, off for real users; specs
   // type phrases into it instead of speaking, so e2e turns it on.
   SIMULATED_SPEECH_ENABLED: 'true',
+  // Mid-speech interim generation (GEN-12), pinned hermetically for
+  // interim-generation.spec; only that spec emits interim results, so the
+  // typed-phrase specs never trip it.
+  GENERATION_INTERIM_FLUSH: 'true',
+  GENERATION_INTERIM_FLUSH_WORDS: '40',
   ...over,
 })
 

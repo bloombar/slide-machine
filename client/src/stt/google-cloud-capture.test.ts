@@ -268,13 +268,19 @@ describe('google cloud speech capture', () => {
     socket.onmessage?.({
       data: JSON.stringify({ type: 'interim', text: 'hel' }),
     })
-    expect(onInterim).toHaveBeenCalledWith('hel')
+    // Interims carry the same session id as finals, so the mid-speech
+    // interim flush (GEN-12) can credit the recording session.
+    expect(onInterim).toHaveBeenCalledWith('hel', {
+      sessionId: expect.any(String),
+    })
     expect(onPhrase).not.toHaveBeenCalled()
 
     socket.onmessage?.({
       data: JSON.stringify({ type: 'final', text: 'hello' }),
     })
-    expect(onInterim).toHaveBeenLastCalledWith('')
+    expect(onInterim).toHaveBeenLastCalledWith('', {
+      sessionId: expect.any(String),
+    })
     // A final with no timings still carries the recording session id.
     expect(onPhrase).toHaveBeenCalledWith('hello', {
       sessionId: expect.any(String),
