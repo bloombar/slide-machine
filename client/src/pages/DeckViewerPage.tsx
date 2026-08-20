@@ -67,6 +67,7 @@ import { useBracketKeys } from '../hooks/useBracketKeys'
 import { useSpaceKey } from '../hooks/useSpaceKey'
 import { useUndoRedoKeys } from '../hooks/useUndoRedoKeys'
 import { createSpeechCapture, type PhraseMeta } from '../stt/capture'
+import { createInterimFlusher } from '../stt/interim-flush'
 import {
   COMMAND_LABELS,
   matchVoiceCommand,
@@ -77,6 +78,8 @@ import SlideNavZones from '../components/SlideNavZones'
 import SlideMenu from '../components/SlideMenu'
 import { useTtsPlayback, type TtsPlayback } from '../tts/playback'
 import {
+  getInterimFlushEnabled,
+  getInterimFlushWords,
   getRefineSlidesDefaultLevel,
   getSimulatedSpeechEnabled,
   getSttEngine,
@@ -1051,22 +1054,51 @@ export default function DeckViewerPage() {
 
   /** Attaches recognition; recognized phrases queue through the same
    * pipeline as typed ones — unless the phrase is a wake-worded
-   * command, which acts immediately and never reaches generation. */
+   * command, which acts immediately and never reaches generation.
+   *
+   * With the interim flush on (GEN-12), long uninterrupted speech also
+   * generates mid-utterance: once the interim transcript's stable prefix
+   * outgrows the word threshold it is queued as a phrase, and the eventual
+   * finalized utterance submits only the words not already flushed. Command
+   * matching stays on finalized text only, so a half-heard interim can
+   * never fire a command. */
   const beginCapture = () => {
+    const flusher = getInterimFlushEnabled()
+      ? createInterimFlusher(getInterimFlushWords())
+      : null
     capture.start(
       {
         onPhrase: (text, meta) => {
           setInterim('')
-          const command = matchVoiceCommand(text)
+          const remainder = flusher ? flusher.final(text) : null
+          const phrase = remainder ? remainder.text : text
+          const command = matchVoiceCommand(phrase)
           if (command) {
             runVoiceCommand(command)
             return
           }
+          if (!phrase) return
+          // Word timings span the whole utterance; keep the tail that
+          // matches what is actually being submitted.
+          const phraseMeta =
+            remainder?.flushed && meta?.words
+              ? {
+                  ...meta,
+                  words: meta.words.slice(-phrase.split(/\s+/).length),
+                }
+              : meta
           phraseQueueRef.current = phraseQueueRef.current.then(() =>
-            submitPhrase(text, meta),
+            submitPhrase(phrase, phraseMeta),
           )
         },
-        onInterim: setInterim,
+        onInterim: (text, meta) => {
+          const flush = flusher?.interim(text)
+          if (flush)
+            phraseQueueRef.current = phraseQueueRef.current.then(() =>
+              submitPhrase(flush, meta),
+            )
+          setInterim(text)
+        },
         onError: message => {
           setListening(false)
           setInterim('')

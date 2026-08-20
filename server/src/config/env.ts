@@ -187,6 +187,17 @@ const envSchema = z
     // default; flip off to keep committed slide text verbatim during a lecture.
     // Only in effect while GENERATION_LAYOUT_REFIT is on (refit is the vehicle).
     GENERATION_LIVE_REPHRASE: z.stringbool().default(true),
+    // Mid-speech interim generation (GEN-12): during long uninterrupted
+    // speech the recognizer emits no finalized phrase until the speaker
+    // pauses, so no slide appears either. When on, the client flushes the
+    // stable prefix of the interim transcript into generation once it grows
+    // past the word threshold below, and the eventual finalized phrase
+    // submits only the words not already flushed. Flip off to generate from
+    // finalized (pause-delimited) phrases only.
+    GENERATION_INTERIM_FLUSH: z.stringbool().default(true),
+    // How many stable, not-yet-submitted interim words accumulate before a
+    // mid-speech flush (~40 words is 15-20s of ordinary lecture speech).
+    GENERATION_INTERIM_FLUSH_WORDS: z.coerce.number().int().min(1).default(40),
     // Deck-structure context: send the running outline of heading (title/section)
     // slides plus positional signals — and the matching heading-decision
     // instructions — so the windowed model can judge title/section slides from

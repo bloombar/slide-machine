@@ -32,8 +32,10 @@ export interface PhraseMeta {
 export interface SpeechCaptureHandlers {
   /** One finalized phrase, ready for session.phrase, with capture metadata. */
   onPhrase: (phrase: string, meta?: PhraseMeta) => void
-  /** Volatile in-progress transcript, for display only. */
-  onInterim?: (text: string) => void
+  /** Volatile in-progress transcript — display, plus the mid-speech interim
+   * flush (GEN-12). Carries the session id so a flushed phrase credits the
+   * same recording session its finalized siblings do. */
+  onInterim?: (text: string, meta?: PhraseMeta) => void
   /** Capture became unusable (permission denied, no service). */
   onError?: (message: string) => void
 }
@@ -135,7 +137,7 @@ const browserCapture = (): SpeechCapture => {
             interim = transcript
           }
         }
-        handlers.onInterim?.(interim)
+        handlers.onInterim?.(interim, { sessionId })
       }
       recognition.onerror = e => {
         if (FATAL_ERRORS.has(e.error)) {
@@ -358,9 +360,9 @@ const googleCloudCapture = (): SpeechCapture => {
               return
             }
             if (message.type === 'interim') {
-              handlers.onInterim?.(message.text ?? '')
+              handlers.onInterim?.(message.text ?? '', { sessionId })
             } else if (message.type === 'final') {
-              handlers.onInterim?.('')
+              handlers.onInterim?.('', { sessionId })
               if (message.text)
                 handlers.onPhrase(message.text, {
                   sessionId,

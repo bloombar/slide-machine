@@ -52,6 +52,8 @@ configRouter.get('/config', (_req, res) => {
     refineTranscriptDefaultLevel: env.REFINE_TRANSCRIPT_DEFAULT_LEVEL,
     simulatedSpeechEnabled: env.SIMULATED_SPEECH_ENABLED,
     whiteboardSuppressDebounceMs: env.WHITEBOARD_SUPPRESS_DEBOUNCE_MS,
+    interimFlushEnabled: env.GENERATION_INTERIM_FLUSH,
+    interimFlushWords: env.GENERATION_INTERIM_FLUSH_WORDS,
     sttCaptureSampleRate: env.STT_CAPTURE_SAMPLE_RATE,
   }
   res.json(body)

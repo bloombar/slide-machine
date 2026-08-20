@@ -53,13 +53,13 @@
   full: "Uses Google Cloud Speech-to-Text for fast, accurate, low-latency
     transcription (removing V1's Chrome-only constraint). Audio is streamed and
     segmented into phrases on natural pauses; interim text may display as live
-    captions, finalized phrases drive generation. Speech adaptation — when a
-    preflight concept set exists (PREP-3), its terms, names, acronyms, and
-    synonyms are supplied to Google Cloud STT as phrase hints/boosts so domain
-    jargon and proper nouns transcribe correctly. Target: near-real-time latency
-    suitable for live lecture (a key evaluation metric — §12). Raw audio is not
-    retained by default; optional bounded retention (for diarization and
-    original-audio playback) is governed by…"
+    captions, finalized phrases drive generation — supplemented mid-speech by
+    the interim flush (GEN-12) so a speaker who never pauses still gets slides.
+    Speech adaptation — when a preflight concept set exists (PREP-3), its terms,
+    names, acronyms, and synonyms are supplied to Google Cloud STT as phrase
+    hints/boosts so domain jargon and proper nouns transcribe correctly. Target:
+    near-real-time latency suitable for live lecture (a key evaluation metric —
+    §12). Raw audio is not…"
   section: §8 Live Lecture Capture
   family: CAP
   phase: 1
@@ -1574,6 +1574,23 @@
     is exactly why this sits below…"
   section: §12 Evaluation & Metrics
   family: EVAL
+  phase: 3
+  status: Backlog
+  review: false
+- id: GEN-12
+  title: Mid-speech interim generation
+  full: "Speech recognizers only finalize a phrase after a trailing pause (CAP-3),
+    so an instructor who speaks continuously could go a minute or more with no
+    new slide, then get one oversized slide at the first pause. To keep slides
+    appearing mid-speech: Stable-prefix flush — the client watches the interim
+    transcript; once the words that are stable (unchanged across consecutive
+    interim updates) and not yet submitted pass a word threshold, they are
+    submitted to generation (GEN-1) immediately, without waiting for the
+    recognizer to finalize. Word-based rather than time-based: a count of stable
+    words is deterministic and independent of speaking rate. No double
+    generation — when the recognizer finalizes…"
+  section: §9 Slide Generation & Enrichment
+  family: GEN
   phase: 3
   status: Backlog
   review: false
