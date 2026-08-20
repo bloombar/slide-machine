@@ -62,13 +62,16 @@ describe('counting a list', () => {
   })
 
   it('draws a bullet for a point that does not count', () => {
-    expect(shown('- One\n  - Two')).toEqual(['• One', '  ◦ Two'])
+    // A dot, then a dash. Not the hollow circle the screen draws: a PDF's
+    // standard fonts cannot encode one, and a character they cannot encode
+    // fails the whole export rather than that one glyph.
+    expect(shown('- One\n  - Two')).toEqual(['• One', '  – Two'])
   })
 
   it('reads a deeper indent as deeper, whatever its width', () => {
     // Two spaces under a dash, three under a number: the column is what says
     // how deep a point is, and it differs by the marker above it.
-    expect(shown('- One\n    - Two')).toEqual(['• One', '  ◦ Two'])
+    expect(shown('- One\n    - Two')).toEqual(['• One', '  – Two'])
   })
 })
 

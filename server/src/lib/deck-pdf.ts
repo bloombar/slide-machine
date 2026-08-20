@@ -116,6 +116,48 @@ const wrapLines = (
   return lines
 }
 
+/**
+ * The characters a standard PDF font can actually draw.
+ *
+ * pdf-lib's standard fonts are WinAnsi-encoded, and `drawText` THROWS on a
+ * character outside it — so a single arrow, a box-drawing rule or a word of
+ * Chinese anywhere in a deck failed the entire export, and the author was told
+ * only "could not export the deck". A missing glyph is a small loss; a missing
+ * file is the lecture.
+ *
+ * The common typographic ones are mapped to something that reads the same, and
+ * anything left is dropped rather than replaced with a question mark, which
+ * says less than the space it takes.
+ */
+const WINANSI =
+  /[\x20-\x7E\xA0-\xFF\u2018\u2019\u201A\u201C\u201D\u201E\u2013\u2014\u2020\u2021\u2022\u2026\u2030\u2039\u203A\u20AC\u2122\u0160\u0161\u017D\u017E\u0152\u0153\u0192\u02C6\u02DC]/
+
+/** What to draw instead, for characters a slide is likely to hold. */
+const SUBSTITUTE: Record<string, string> = {
+  '◦': '-',
+  '▪': '-',
+  '‣': '-',
+  '·': '-',
+  '→': '->',
+  '←': '<-',
+  '⇒': '=>',
+  '↔': '<->',
+  '×': 'x',
+  '≥': '>=',
+  '≤': '<=',
+  '≠': '!=',
+  '½': '1/2',
+  '¼': '1/4',
+  '¾': '3/4',
+  '\u00a0': ' ',
+  '\u200b': '',
+  '\ufeff': '',
+}
+
+/** A string the standard fonts can draw, whatever the slide holds. */
+const drawable = (text: string): string =>
+  [...text].map(ch => (WINANSI.test(ch) ? ch : (SUBSTITUTE[ch] ?? ''))).join('')
+
 /** One piece of a drawn line: some characters set one way. */
 interface Piece {
   text: string
@@ -194,7 +236,7 @@ const drawTextBox = (page: PDFPage, box: TextBox): void => {
       const size = run.sizeFrac * PAGE_WIDTH * scale
       const font = fontFor(fonts, run)
       const color = colorFor(run)
-      const text = (run.bullet ? '•  ' : '') + run.text
+      const text = drawable((run.bullet ? '•  ' : '') + run.text)
       const gapAfter = (run.spaceAfterFrac ?? 0) * PAGE_WIDTH * scale
       // A sub-point is drawn as one. Indented by the type size, so the offset
       // holds its proportion when a crowded box shrinks to fit.

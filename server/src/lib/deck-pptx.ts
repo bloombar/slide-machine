@@ -103,7 +103,7 @@ const renderSlide = (
   for (const box of computeLayout(slide, layout, templateTheme)) {
     if (box.kind === 'text') {
       const scale = fitFor(box)
-      const runs = box.runs.map(r => ({
+      const runs = box.runs.map((r, i) => ({
         text: r.text,
         options: {
           fontSize: r.sizeFrac * scale * WIDTH_PT,
@@ -122,8 +122,16 @@ const renderSlide = (
             : pptxFace(r.family)
               ? { fontFace: pptxFace(r.family)! }
               : {}),
-          // Coloured pieces of one line come back together as that line.
-          breakLine: !r.sameLine,
+          /*
+           * Coloured pieces of one line come back together as that line.
+           *
+           * pptx breaks AFTER a run, and `sameLine` says a run continues the
+           * one before it — so the question is about the NEXT run, not this
+           * one. Read off this run, a marker asked for a break straight after
+           * itself: "1." sat alone on its line, its words fell to the next,
+           * and the following marker landed on the end of them.
+           */
+          breakLine: !box.runs[i + 1]?.sameLine,
           // A link is content (EXP-5): an imported slide whose only address
           // was inside one exported unreachable.
           ...(r.link ? { hyperlink: { url: r.link } } : {}),

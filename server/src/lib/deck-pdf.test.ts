@@ -556,6 +556,22 @@ describe('an imported slide in an exported PDF', () => {
     expect(links).toBe(1)
   })
 
+  it('exports a slide holding characters the standard fonts cannot draw', async () => {
+    /*
+     * pdf-lib's standard fonts are WinAnsi, and `drawText` THROWS on anything
+     * outside it — so one arrow, one box-drawing rule or one word of Chinese
+     * anywhere in a deck failed the whole export, and the author was told only
+     * "could not export the deck". A missing glyph is a small loss; a missing
+     * file is the lecture.
+     */
+    const { text } = await drawnBy(deckOf('Go → there ◦ 北京 ✓ done'))
+    const written = text.map(t => t.text).join('')
+    expect(written).toContain('Go')
+    expect(written).toContain('done')
+    // The ones worth keeping are drawn as something that reads the same.
+    expect(written).toContain('->')
+  })
+
   it('adds no annotation to a slide that holds no link', async () => {
     expect((await drawnBy(deckOf('Plain words'))).links).toBe(0)
   })

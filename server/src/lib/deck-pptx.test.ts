@@ -933,6 +933,24 @@ describe('an imported slide in an exported deck', () => {
     expect(await xmlOf('Plain words')).toContain('63D297')
   })
 
+  it('keeps a marker on the same line as the words it marks', async () => {
+    /*
+     * pptx breaks AFTER a run, and `sameLine` says a run continues the one
+     * before it — so the break belongs to the NEXT run, not this one. Read off
+     * the run itself, a marker asked for a break straight after itself: "1."
+     * sat alone on its line, its words fell to the next, and the following
+     * marker landed on the end of them.
+     */
+    const paragraphs = [
+      ...(await xmlOf('1. One\n1. Two')).matchAll(/<a:p>([\s\S]*?)<\/a:p>/g),
+    ]
+      .map(m =>
+        [...m[1]!.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map(t => t[1]).join(''),
+      )
+      .filter(t => t.trim())
+    expect(paragraphs).toEqual(['1. One', '2. Two'])
+  })
+
   it('carries a link as a link, not as its address in the words', async () => {
     // Slides and PowerPoint both have hyperlinks; an imported slide whose only
     // address was inside one exported unreachable.

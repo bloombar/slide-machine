@@ -138,9 +138,17 @@ const roman = (n: number): string => {
 const counter = (depth: number, n: number): string =>
   depth === 0 ? `${n}.` : depth === 1 ? `${letter(n)}.` : `${roman(n)}.`
 
-/** The symbol for an uncounted point at this depth, as the viewer draws it. */
+/**
+ * The symbol for an uncounted point at this depth.
+ *
+ * A filled dot, then a dash, then a smaller dash — the shapes a reader reads
+ * as "a point, and a point under it". Not the hollow circle and small square
+ * the screen draws: a PDF's standard fonts are WinAnsi, which has neither, and
+ * one character it cannot encode fails the whole export rather than that one
+ * glyph. What matters is the nesting being legible, and these say it.
+ */
 const symbol = (depth: number): string =>
-  depth === 0 ? '•' : depth === 1 ? '◦' : '▪'
+  depth === 0 ? '•' : depth === 1 ? '–' : '-'
 
 /** How far a line is indented, in spaces, and what is left after the marker. */
 const LIST = /^(\s*)(?:([-*+])|(\d+)[.)])\s+(.*)$/
