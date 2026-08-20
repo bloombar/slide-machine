@@ -172,3 +172,31 @@ export const fetchSlideImages = async (
 /** A `data:` URI for a fetched image, for pptxgenjs's addImage. */
 export const toDataUri = (image: SlideImage): string =>
   `data:image/${image.kind};base64,${Buffer.from(image.data).toString('base64')}`
+
+/**
+ * The pictures a design draws, by the reference each box names (TMPL-8).
+ *
+ * Keyed by reference rather than indexed by slide, because that is what a
+ * design's picture IS: one crest drawn on forty slides is one file, and
+ * fetching it per slide would cost forty requests for one answer.
+ *
+ * A picture that will not come is simply absent from the map, and the box is
+ * left unpainted — the same bargain the import makes. One unreachable logo
+ * must not cost an instructor their file.
+ */
+export const fetchDecorationImages = async (
+  boxes: Array<{ kind: string; ref?: string }>,
+): Promise<Map<string, SlideImage>> => {
+  const refs = [
+    ...new Set(
+      boxes.filter(box => box.kind === 'image' && box.ref).map(box => box.ref!),
+    ),
+  ]
+  const fetched = await fetchSlideImages(refs)
+  const found = new Map<string, SlideImage>()
+  refs.forEach((ref, i) => {
+    const image = fetched[i]
+    if (image) found.set(ref, image)
+  })
+  return found
+}

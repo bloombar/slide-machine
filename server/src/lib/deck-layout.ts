@@ -92,6 +92,20 @@ export interface ImageBox {
   h: number
   /** As TextBox.slot. */
   slot?: string
+  /**
+   * The picture this box draws, when it is not the slide's own (TMPL-8).
+   *
+   * A slot's picture belongs to the slide and is resolved from its
+   * `imageRef` — one per slide, which is what every exporter assumed. A
+   * design's crest and its backdrop belong to the LAYOUT and are the same
+   * file on every slide built from it, so the box names its own picture and
+   * the exporter fetches each distinct one once.
+   *
+   * Its presence is also what tells the exporters this box is not asking for
+   * the slide's picture, so a deck whose design carries a logo does not fetch
+   * a slide image nobody draws.
+   */
+  ref?: string
 }
 export interface RuleBox {
   kind: 'rule'
@@ -363,25 +377,35 @@ const runsOfLine = (
 
 /**
  * A layout's own decoration as boxes: the colour it is painted, the bands and
- * rules drawn on it (TMPL-8).
+ * rules drawn on it, and the pictures it draws (TMPL-8).
  *
- * Pictures are left out. A logo is stored as the template's own file and would
- * have to be fetched per layout, which the export does per slide; the fills
- * are what carry a design's colour, and drawing them is the difference between
- * an imported deck exporting as itself and exporting on blank white.
+ * Drawing the fills is the difference between an imported deck exporting as
+ * itself and exporting on blank white. The pictures are the rest of it: an
+ * institution's design is mostly a crest and a backdrop, and a file without
+ * them is the slides with the branding taken off.
+ *
+ * A piece naming both a fill and a picture yields both, fill first — the
+ * colour is what shows through wherever the picture does not reach.
  */
 const decorationBoxes = (layout: Layout): LayoutBox[] =>
-  (layout.decoration ?? [])
-    .filter(piece => piece.fill)
-    .map(piece => ({
-      kind: 'rule' as const,
-      x: piece.x,
-      y: piece.y,
-      w: piece.w,
-      h: piece.h,
-      color: roleOf(piece.fill) ?? 'accent',
-      ...(literalOf(piece.fill) ? { hex: literalOf(piece.fill)! } : {}),
-    }))
+  (layout.decoration ?? []).flatMap(piece => {
+    const at = { x: piece.x, y: piece.y, w: piece.w, h: piece.h }
+    return [
+      ...(piece.fill
+        ? [
+            {
+              kind: 'rule' as const,
+              ...at,
+              color: roleOf(piece.fill) ?? 'accent',
+              ...(literalOf(piece.fill) ? { hex: literalOf(piece.fill)! } : {}),
+            },
+          ]
+        : []),
+      ...(piece.imageUrl
+        ? [{ kind: 'image' as const, ...at, ref: piece.imageUrl }]
+        : []),
+    ]
+  })
 
 /** The paragraphs one slot contributes, whatever kind it holds. */
 const runsForSlot = (

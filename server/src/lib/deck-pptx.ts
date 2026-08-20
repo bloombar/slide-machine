@@ -19,7 +19,11 @@ import type { ExportDeck, ExportSlide } from './deck-yaml'
 import { visibleStrokes, hexForPptx, HIGHLIGHTER_ALPHA } from './deck-drawings'
 import { defineLayoutMasters } from './template-pptx'
 import { creditToken, CREDIT_LINE_TOKEN } from './image-attribution-token'
-import { fetchSlideImages, toDataUri } from './deck-image'
+import {
+  fetchSlideImages,
+  fetchDecorationImages,
+  toDataUri,
+} from './deck-image'
 import { slotToken } from './slot-metadata'
 import { typesetFormulas, type Formulas } from './deck-formulas'
 import { withSlotAltText } from './pptx-alt-text'
@@ -122,6 +126,9 @@ const renderSlide = (
    * re-import would read the leftovers as part of the design.
    */
   intoPlaceholders = false,
+  /** The design's own pictures as data URIs, by the reference each decoration
+   * box names. A crest is one file however many slides draw it (TMPL-8). */
+  design?: Map<string, string>,
 ): void => {
   for (const box of computeLayout(slide, layout, templateTheme)) {
     if (box.kind === 'text') {
@@ -247,6 +254,28 @@ const renderSlide = (
           fontSize: TABLE_PT,
           border: { type: 'solid', pt: 0.5, color: hex.muted },
           ...(box.slot ? { objectName: slotToken(box.slot) } : {}),
+        })
+      }
+    } else if (box.kind === 'image' && box.ref) {
+      /*
+       * A picture the DESIGN draws — a crest, a backdrop.
+       *
+       * Stretched to its box rather than fitted inside it, because the box is
+       * the rectangle the design drew the picture at: fitting would letterbox
+       * a full-bleed backdrop and float a logo inside its own outline.
+       *
+       * No alt text and no placeholder: decoration holds no content, is not
+       * the slide's picture, and a crest announced on every slide is noise to
+       * a screen reader rather than information.
+       */
+      const drawn = design?.get(box.ref)
+      if (drawn) {
+        s.addImage({
+          data: drawn,
+          x: box.x * SLIDE_W,
+          y: box.y * SLIDE_H,
+          w: box.w * SLIDE_W,
+          h: box.h * SLIDE_H,
         })
       }
     } else if (box.kind === 'image' && image) {
@@ -399,11 +428,24 @@ export const deckToPptx = async (
   const layouts = deck.slides.map(s =>
     computeLayout(s, layoutFor(s), drawnTheme),
   )
+  // A box that names its own picture is the design's, not the slide's — so it
+  // must not make a deck fetch a slide image nobody draws.
   const urls = deck.slides.map((slide, i) =>
-    layouts[i]!.some(b => b.kind === 'image') ? slide.imageRef : undefined,
+    layouts[i]!.some(b => b.kind === 'image' && !b.ref)
+      ? slide.imageRef
+      : undefined,
   )
   const fetched = await fetchSlideImages(urls)
   const images = fetched.map(img => (img ? toDataUri(img) : undefined))
+  // The design's own pictures: each distinct one fetched ONCE, however many
+  // slides are built on the layout that draws it. A crest on forty slides is
+  // one file.
+  const design = new Map(
+    [...(await fetchDecorationImages(layouts.flat()))].map(([ref, image]) => [
+      ref,
+      toDataUri(image),
+    ]),
+  )
   // Every distinct formula, typeset once, before any slide is drawn.
   const formulas = await typesetFormulas(layouts.flat(), theme.text, notes)
 
@@ -442,6 +484,7 @@ export const deckToPptx = async (
       // Fills the layout's boxes when there is one to fill, so the design
       // stays on the layout and the slide carries only its content.
       Boolean(master),
+      design,
     )
     // The narration goes where a presenter expects to find it, and comes back
     // as narration on re-import (EXP-8/EDIT-6).

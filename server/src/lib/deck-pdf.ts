@@ -30,7 +30,7 @@ import { pdfFamily } from './export-fonts'
 import type { ExportDeck, ExportSlide } from './deck-yaml'
 import { visibleStrokes, hexToRgb01, HIGHLIGHTER_ALPHA } from './deck-drawings'
 import { imageCredit } from './image-credit'
-import { fetchSlideImages } from './deck-image'
+import { fetchSlideImages, fetchDecorationImages } from './deck-image'
 import { typesetFormulas } from './deck-formulas'
 import { fitScale } from './fit-scale'
 import { DEFAULT_THEME, type ExportTheme } from './deck-theme'
@@ -456,6 +456,9 @@ const drawSlide = (
   layout?: Layout,
   templateTheme?: Record<string, unknown>,
   formulas?: Map<string, PDFImage>,
+  /** The design's own pictures, by the reference each decoration box names.
+   * A crest is one embedded image however many pages draw it (TMPL-8). */
+  design?: Map<string, PDFImage>,
 ): void => {
   for (const box of computeLayout(slide, layout, templateTheme)) {
     if (box.kind === 'text') {
@@ -489,6 +492,23 @@ const drawSlide = (
         // imported band is whatever it was drawn, not one of three roles.
         color: box.hex ? hex(box.hex) : colors[box.color],
       })
+    } else if (box.kind === 'image' && box.ref) {
+      /*
+       * A picture the DESIGN draws — a crest, a backdrop.
+       *
+       * Stretched to its box rather than fitted inside it: the box IS the
+       * rectangle the design drew the picture at, so fitting would letterbox
+       * a full-bleed backdrop and float a logo inside its own outline.
+       */
+      const drawn = design?.get(box.ref)
+      if (drawn) {
+        page.drawImage(drawn, {
+          x: box.x * PAGE_WIDTH,
+          y: PAGE_HEIGHT - box.y * PAGE_HEIGHT - box.h * PAGE_HEIGHT,
+          width: box.w * PAGE_WIDTH,
+          height: box.h * PAGE_HEIGHT,
+        })
+      }
     } else if (box.kind === 'image' && image) {
       const bw = box.w * PAGE_WIDTH
       const bh = box.h * PAGE_HEIGHT
@@ -592,8 +612,12 @@ export const deckToPdf = async (
   const layouts = deck.slides.map(s =>
     computeLayout(s, layoutFor(s), drawnTheme),
   )
+  // A box that names its own picture is the design's, not the slide's — so it
+  // must not make a deck fetch a slide image nobody draws.
   const urls = deck.slides.map((s, i) =>
-    layouts[i]!.some(b => b.kind === 'image') ? s.imageRef : undefined,
+    layouts[i]!.some(b => b.kind === 'image' && !b.ref)
+      ? s.imageRef
+      : undefined,
   )
   const fetched = await fetchSlideImages(urls)
   const images = await Promise.all(
@@ -605,6 +629,19 @@ export const deckToPdf = async (
         : undefined,
     ),
   )
+
+  // The design's own pictures — a crest, a backdrop — each fetched and
+  // embedded ONCE however many pages draw it, before any page is drawn: the
+  // page writer is synchronous and both of those are not.
+  const design = new Map<string, PDFImage>()
+  for (const [ref, image] of await fetchDecorationImages(layouts.flat())) {
+    design.set(
+      ref,
+      image.kind === 'png'
+        ? await doc.embedPng(image.data)
+        : await doc.embedJpg(image.data),
+    )
+  }
 
   // Every distinct formula, typeset and embedded once, before any page is
   // drawn — the page writer is synchronous and typesetting is not.
@@ -623,7 +660,15 @@ export const deckToPdf = async (
       height: PAGE_HEIGHT,
       color: background,
     })
-    drawSlide(page, slide, images[i], layoutFor(slide), drawnTheme, formulas)
+    drawSlide(
+      page,
+      slide,
+      images[i],
+      layoutFor(slide),
+      drawnTheme,
+      formulas,
+      design,
+    )
   })
   if (doc.getPageCount() === 0) {
     doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]).drawRectangle({
