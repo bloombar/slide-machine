@@ -93,6 +93,15 @@ const wrapLines = (
   font: PDFFont,
   size: number,
   maxWidth: number,
+  /**
+   * Room left on the line this text joins, where it is continuing one.
+   *
+   * A run that continues a line — the words after a "1.", a bold phrase in the
+   * middle of a sentence — was appended to it whole, however long it was, so
+   * it ran off the box and off the page. The line it joins is already part
+   * used, and only the first of its lines has to fit what is left.
+   */
+  firstWidth = maxWidth,
 ): string[] => {
   const lines: string[] = []
   for (const paragraph of text.split('\n')) {
@@ -102,14 +111,39 @@ const wrapLines = (
       continue
     }
     let line = ''
+    /** What is left to write on: the joined line first, then whole ones. */
+    const room = () => (lines.length ? maxWidth : firstWidth)
     for (const word of words) {
       const candidate = line ? `${line} ${word}` : word
-      if (font.widthOfTextAtSize(candidate, size) <= maxWidth || !line) {
+      if (font.widthOfTextAtSize(candidate, size) <= room()) {
         line = candidate
-      } else {
-        lines.push(line)
-        line = word
+        continue
       }
+      // The line so far is finished; what follows starts a new one, and
+      // `line` is set to whatever is left of this word below.
+      if (line) lines.push(line)
+      /*
+       * A word too long for a line of its own is broken between characters.
+       *
+       * Wrapping is by word, and a word was kept whole however long it was —
+       * which is right for prose and wrong for the thing that actually turns
+       * up: a URL. `guides.nyu.edu/ds/class/descriptions/Principles-of-...`
+       * has nowhere to break, so it ran off the box and off the page.
+       */
+      let rest = word
+      // Against what is left of the joined line for the first piece, and a
+      // whole line for the rest — the same rule the word wrapping follows.
+      while (font.widthOfTextAtSize(rest, size) > room()) {
+        let cut = 1
+        while (
+          cut < rest.length &&
+          font.widthOfTextAtSize(rest.slice(0, cut + 1), size) <= room()
+        )
+          cut++
+        lines.push(rest.slice(0, cut))
+        rest = rest.slice(cut)
+      }
+      line = rest
     }
     if (line) lines.push(line)
   }
@@ -244,8 +278,37 @@ const drawTextBox = (page: PDFPage, box: TextBox): void => {
 
       const last = lines[lines.length - 1]
       if (run.sameLine && last) {
-        last.pieces.push({ text, size, font, color, link: run.link })
-        last.gapAfter = gapAfter
+        // Wrapped against what is left of the line it joins, and onto lines of
+        // its own after that. Appended whole, a long run ran off the box and
+        // off the page — which is what a slide's last sentence did.
+        const used = last.pieces.reduce(
+          (w, p) => w + p.font.widthOfTextAtSize(p.text, p.size),
+          0,
+        )
+        const width = bw - (last.indent ?? 0)
+        const left = width - used
+        // A line with less than a character left is finished; what would have
+        // joined it starts a line of its own rather than being hung off the
+        // end, where it ran past the box and off the page.
+        // A listing's continuation is part of its own line, always.
+        const joins = run.mono || left >= size
+        const segments = run.mono
+          ? [text]
+          : wrapLines(text, font, size, width, joins ? left : width)
+        segments.forEach((segment, i) => {
+          const piece = { text: segment, size, font, color, link: run.link }
+          const isLast = i === segments.length - 1
+          if (i === 0 && joins) {
+            last.pieces.push(piece)
+            last.gapAfter = isLast ? gapAfter : 0
+            return
+          }
+          lines.push({
+            pieces: [piece],
+            gapAfter: isLast ? gapAfter : 0,
+            indent: last.indent,
+          })
+        })
         continue
       }
       // A listing keeps the lines its author wrote; prose wraps to its box.

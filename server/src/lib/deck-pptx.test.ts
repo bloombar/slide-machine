@@ -951,6 +951,29 @@ describe('an imported slide in an exported deck', () => {
     expect(paragraphs).toEqual(['1. One', '2. Two'])
   })
 
+  it('sets a sub-point in from its parent', async () => {
+    /*
+     * pptxgenjs writes `marL="0" indent="0"` on every paragraph that does not
+     * use its own bullets, so `indentLevel` alone moved nothing and a
+     * sub-point sat flush against its parent in PowerPoint and in Slides
+     * alike. The path that does set a margin insists on drawing pptx's own
+     * bullet, which would sit beside the marker already counted here — and
+     * count its own way, differently from the PDF and the screen.
+     */
+    const xml = await xmlOf('1. One\n   1. Nested')
+    const markers = [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)]
+      .map(m => m[1]!)
+      .filter(t => /[a-z0-9]\./i.test(t))
+    expect(markers[0]).toBe('1. ')
+    // The nested one carries its indent in the words, where nothing strips it.
+    expect(markers[1]).toMatch(/^\u00a0+a\. $/)
+  })
+
+  it('leaves a top-level point flush, with no indent to carry', async () => {
+    const xml = await xmlOf('1. One\n1. Two')
+    expect(xml).not.toContain('\u00a0')
+  })
+
   it('carries a link as a link, not as its address in the words', async () => {
     // Slides and PowerPoint both have hyperlinks; an imported slide whose only
     // address was inside one exported unreachable.

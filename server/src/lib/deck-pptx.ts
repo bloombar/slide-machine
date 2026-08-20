@@ -23,7 +23,12 @@ import { fetchSlideImages, toDataUri } from './deck-image'
 import { slotToken } from './slot-metadata'
 import { typesetFormulas, type Formulas } from './deck-formulas'
 import { withSlotAltText } from './pptx-alt-text'
-import { computeLayout, type ColorRole, type TextBox } from './deck-layout'
+import {
+  computeLayout,
+  type ColorRole,
+  type TextBox,
+  type LayoutRun,
+} from './deck-layout'
 import { DEFAULT_THEME } from './deck-theme'
 import { fitScale, estimatedHeight } from './fit-scale'
 import { tableTracks } from '@slide-machine/shared'
@@ -80,6 +85,24 @@ const fitFor = (box: TextBox): number => {
   )
 }
 
+/**
+ * A run's text with its nesting in front of it, where it starts a line.
+ *
+ * pptxgenjs writes `marL="0" indent="0"` on every paragraph that does not use
+ * its own bullets, so `indentLevel` alone moved nothing: a sub-point sat flush
+ * against its parent, in PowerPoint and in Slides alike. The path that does set
+ * a margin insists on drawing pptx's own bullet, which would sit beside the
+ * marker we already counted — and count differently from the PDF and the
+ * screen, which is the thing this export model exists to prevent.
+ *
+ * So the indent is written into the words. Non-breaking spaces, because
+ * leading ordinary ones are what a renderer feels free to collapse.
+ */
+const indented = (run: LayoutRun, startsLine: boolean): string =>
+  startsLine && run.indent
+    ? `${'\u00a0'.repeat(run.indent * 4)}${run.text}`
+    : run.text
+
 /** Draws a slide's layout boxes (text, rule, image) then its whiteboard marks. */
 const renderSlide = (
   pptx: Pptx,
@@ -104,7 +127,7 @@ const renderSlide = (
     if (box.kind === 'text') {
       const scale = fitFor(box)
       const runs = box.runs.map((r, i) => ({
-        text: r.text,
+        text: indented(r, i === 0 || !r.sameLine),
         options: {
           fontSize: r.sizeFrac * scale * WIDTH_PT,
           bold: r.bold,
@@ -135,7 +158,9 @@ const renderSlide = (
           // A link is content (EXP-5): an imported slide whose only address
           // was inside one exported unreachable.
           ...(r.link ? { hyperlink: { url: r.link } } : {}),
-          // A sub-point is drawn as one, rather than level with its parent.
+          // Said twice, because neither alone does it. `indentLevel` sets the
+          // paragraph's level, which a reader uses for its outline; the
+          // margin comes from the text (see `indented`).
           ...(r.indent ? { indentLevel: r.indent } : {}),
           paraSpaceAfter: (r.spaceAfterFrac ?? 0) * scale * WIDTH_PT,
         },

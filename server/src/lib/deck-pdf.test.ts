@@ -4,7 +4,7 @@
  * (skipping ones that fail to fetch) without failing the export.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { PDFDocument, PDFPage } from 'pdf-lib'
+import { PDFDocument, PDFPage, type PDFFont } from 'pdf-lib'
 import { deckToPdf } from './deck-pdf'
 import { computeLayout } from './deck-layout'
 import type { ExportNote, Layout } from '@slide-machine/shared'
@@ -498,7 +498,7 @@ describe('an imported slide in an exported PDF', () => {
 
   /** Everything the export drew, text and rectangles alike. */
   const drawnBy = async (deck: ExportDeck) => {
-    const text: { text: string; rgb: string }[] = []
+    const text: { text: string; rgb: string; right: number }[] = []
     const rects: string[] = []
     const asRgb = (c: { red: number; green: number; blue: number }) =>
       [c.red, c.green, c.blue].map(n => Math.round(n * 255)).join(',')
@@ -507,7 +507,16 @@ describe('an imported slide in an exported PDF', () => {
     const t = vi
       .spyOn(PDFPage.prototype, 'drawText')
       .mockImplementation(function (this: PDFPage, s, o) {
-        text.push({ text: String(s), rgb: asRgb(o!.color as never) })
+        text.push({
+          text: String(s),
+          rgb: asRgb(o!.color as never),
+          right:
+            (o!.x as number) +
+            (o!.font as PDFFont).widthOfTextAtSize(
+              String(s),
+              o!.size as number,
+            ),
+        })
         return realText.call(this, s, o)
       })
     const r = vi
@@ -570,6 +579,30 @@ describe('an imported slide in an exported PDF', () => {
     expect(written).toContain('done')
     // The ones worth keeping are drawn as something that reads the same.
     expect(written).toContain('->')
+  })
+
+  it('wraps the words after a marker, instead of running off the page', async () => {
+    /*
+     * A run that CONTINUES a line was appended to it whole, however long. The
+     * words of a point follow its marker, so every point longer than its box
+     * ran off the right-hand edge and off the page — which is what a dense
+     * imported slide is made of.
+     */
+    const long = `1. ${'wide '.repeat(40)}end`
+    const { text } = await drawnBy(deckOf(long))
+    const past = text.filter(t => t.right > 960)
+    expect(past).toEqual([])
+    // And all of it is still there, not clipped.
+    expect(text.map(t => t.text).join(' ')).toContain('end')
+  })
+
+  it('breaks a word too long for any line, since a URL has no spaces', async () => {
+    // Wrapping is by word, and a word was kept whole however long — right for
+    // prose, wrong for the thing that turns up: an address.
+    const url =
+      'guides.nyu.edu/ds/class/descriptions/Principles-of-Finding-Data-and-More'
+    const { text } = await drawnBy(deckOf(`See ${url}`))
+    expect(text.filter(t => t.right > 960)).toEqual([])
   })
 
   it('adds no annotation to a slide that holds no link', async () => {
