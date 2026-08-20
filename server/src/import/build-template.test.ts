@@ -476,6 +476,24 @@ describe('the parts of a design that hold no content', () => {
     const { layouts } = buildTemplate(source(), [derived()], new Map())
     expect(layouts[0]!.decoration).toBeUndefined()
   })
+
+  it('paints a logo once when it reaches the design by both routes', () => {
+    // A crest can arrive twice: inherited from the layout page, and again as
+    // the picture every slide of the cluster was found to repeat. Painted
+    // twice it is the same mark stacked on itself — invisible until it is a
+    // transparent PNG, and then it is not.
+    const piece = {
+      box: { x: 0.86, y: 0.87, w: 0.08, h: 0.07 },
+      imageUrl: 'https://x/logo.png',
+    }
+    const { layouts } = buildTemplate(
+      source(),
+      [derived({ decoration: [piece, { ...piece }] })],
+      new Map(),
+      stored,
+    )
+    expect(layouts[0]!.decoration).toHaveLength(1)
+  })
 })
 
 /**

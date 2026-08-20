@@ -189,12 +189,28 @@ const decorationOf = (
     pieces.push({ x: 0, y: 0, w: 1, h: 1, imageUrl: background })
   }
 
+  // A logo reaches a design by two routes — inherited from the layout, and
+  // recognized as the picture every slide of the cluster repeats — and a deck
+  // that does both would paint it twice, at the same size, in the same corner.
+  const drawn = new Set<string>()
   for (const piece of derived.decoration) {
     const stored = piece.imageUrl ? assets.get(piece.imageUrl) : undefined
     // A band with neither a fill nor a picture would paint nothing.
     if (!piece.fill && !stored) continue
+    const box = safeBox(piece.box)
+    const key = [
+      box.x,
+      box.y,
+      box.w,
+      box.h,
+      piece.fill ?? '',
+      stored ?? '',
+      piece.shapeType ?? '',
+    ].join('|')
+    if (drawn.has(key)) continue
+    drawn.add(key)
     pieces.push({
-      ...safeBox(piece.box),
+      ...box,
       ...(piece.fill ? { fill: piece.fill } : {}),
       ...(stored ? { imageUrl: stored } : {}),
       ...(piece.shapeType ? { shape: piece.shapeType } : {}),

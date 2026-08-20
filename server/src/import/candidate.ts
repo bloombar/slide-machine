@@ -254,6 +254,10 @@ export const candidateOf = (
       .map(e => ({
         box: e.box,
         ...(e.fill ? { fill: e.fill } : {}),
+        // A logo or a background pattern the design draws. Dropped here, a
+        // piece that paints a picture rather than a colour arrived painting
+        // nothing, and `build-template` then left it out for being blank.
+        ...(e.imageUrl ? { imageUrl: e.imageUrl } : {}),
         ...(e.shapeType ? { shapeType: e.shapeType } : {}),
       })),
     ...(page.background ? { background: page.background } : {}),

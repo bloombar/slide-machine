@@ -341,14 +341,29 @@ export const importSourcePresentation = async (
 
   // Pictures are fetched after consolidation, so a deck whose slides collapsed
   // into three layouts does not pay to download forty copies of the same logo.
-  const urls = source.slides.flatMap(slide => [
-    ...slide.elements
-      .map(element => element.imageUrl)
-      .filter((url): url is string => Boolean(url)),
-    // A page filled with a picture is as much a part of the design as one
-    // filled with a colour.
-    ...(slide.backgroundImage ? [slide.backgroundImage] : []),
-  ])
+  const urls = [
+    ...source.slides.flatMap(slide => [
+      ...slide.elements
+        .map(element => element.imageUrl)
+        .filter((url): url is string => Boolean(url)),
+      // A page filled with a picture is as much a part of the design as one
+      // filled with a colour.
+      ...(slide.backgroundImage ? [slide.backgroundImage] : []),
+    ]),
+    // And the design's own pictures. A deck that DEFINES its layouts keeps the
+    // crest and the background pattern on the layout page rather than on any
+    // slide, so nothing above reaches them — the design was built pointing at
+    // pictures the import had never fetched, and every one of those boxes came
+    // out empty. Taken from the derived layouts rather than from every layout
+    // page the deck happens to carry, so an import pays only for the art the
+    // template it is building actually uses.
+    ...layouts.flatMap(layout => [
+      ...layout.decoration
+        .map(piece => piece.imageUrl)
+        .filter((url): url is string => Boolean(url)),
+      ...(layout.backgroundImage ? [layout.backgroundImage] : []),
+    ]),
+  ]
   const { stored, failed } = options.assetPrefix
     ? await fetchAssets(urls, options.assetPrefix)
     : { stored: new Map<string, string>(), failed: 0 }

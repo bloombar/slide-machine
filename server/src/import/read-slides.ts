@@ -114,7 +114,11 @@ const indexAncestry = (
   for (const page of [...layouts, ...masters]) {
     const id = page.objectId as string | undefined
     if (id) pages.set(id, page)
-    for (const el of (page.pageElements ?? []) as Record<string, unknown>[]) {
+    // Opened out, so a placeholder that happens to sit inside a group is still
+    // findable by the slide that descends from it.
+    for (const el of flattenGroups(
+      (page.pageElements ?? []) as Record<string, unknown>[],
+    )) {
       const elementId = el.objectId as string | undefined
       if (elementId) elements.set(elementId, el)
     }
@@ -207,6 +211,85 @@ const translation = (
   }
   return emu(value)
 }
+
+/** Google's affine transform, in either of the two unit conventions it uses
+ * for the translation (see `translation`). */
+interface Affine {
+  scaleX?: number
+  scaleY?: number
+  shearX?: number
+  shearY?: number
+  translateX?: number | Dimension
+  translateY?: number | Dimension
+  unit?: string
+}
+
+/**
+ * One transform applied on top of another, in EMU.
+ *
+ * A grouped shape states its transform relative to the group it is in, so its
+ * own is only half the answer — the group's has to be applied over it to get
+ * where the shape actually sits. Ordinary 3×3 affine multiplication, written
+ * out because only six of the nine entries ever vary.
+ */
+const concat = (parent: Affine, child: Affine): Affine => {
+  const at = (t: Affine) => ({
+    sx: t.scaleX ?? 1,
+    sy: t.scaleY ?? 1,
+    shx: t.shearX ?? 0,
+    shy: t.shearY ?? 0,
+    tx: translation(t.translateX, t.unit),
+    ty: translation(t.translateY, t.unit),
+  })
+  const p = at(parent)
+  const c = at(child)
+  return {
+    scaleX: p.sx * c.sx + p.shx * c.shy,
+    shearX: p.sx * c.shx + p.shx * c.sy,
+    translateX: p.sx * c.tx + p.shx * c.ty + p.tx,
+    shearY: p.shy * c.sx + p.sy * c.shy,
+    scaleY: p.shy * c.shx + p.sy * c.sy,
+    translateY: p.shy * c.tx + p.sy * c.ty + p.ty,
+    unit: 'EMU',
+  }
+}
+
+/** How deep a nest of groups is followed. A group inside a group inside a
+ * group is already unusual; the bound is what stops a malformed file from
+ * recursing without end. */
+const MAX_GROUP_DEPTH = 8
+
+/**
+ * A page's elements with every group opened out, each shape carrying the
+ * transform it actually has on the page.
+ *
+ * Google returns a group as ONE element with its parts nested inside it, and
+ * nothing here reads a group: it is neither an image, nor a table, nor a
+ * shape, so it was skipped whole. A crest that is a mark beside a wordmark, or
+ * a background pattern built from a dozen rules, is a group — which is why an
+ * imported design could come back with none of it.
+ *
+ * The parts come out flat, because that is what a design is here: pieces at
+ * absolute positions. Grouping is an authoring convenience with nothing to say
+ * about how the page looks.
+ */
+const flattenGroups = (
+  elements: Record<string, unknown>[],
+  parent?: Affine,
+  depth = 0,
+): Record<string, unknown>[] =>
+  elements.flatMap(raw => {
+    const absolute = parent
+      ? concat(parent, (raw.transform ?? {}) as Affine)
+      : ((raw.transform ?? {}) as Affine)
+    const group = raw.elementGroup as
+      { children?: Record<string, unknown>[] } | undefined
+    if (group) {
+      if (depth >= MAX_GROUP_DEPTH) return []
+      return flattenGroups(group.children ?? [], absolute, depth + 1)
+    }
+    return [parent ? { ...raw, transform: absolute } : raw]
+  })
 
 /**
  * Where a shape sits, as a fraction of the page.
@@ -886,7 +969,9 @@ const backgroundOf = (
 }
 
 /** What makes two pieces of decoration the same piece: where it is, what it
- * paints, and what shape it is. */
+ * paints, and what shape it is. The picture counts too — a master and its
+ * layout often carry two different marks in the same corner, and keyed without
+ * it the second one would be discarded as a repeat of the first. */
 const decorationKey = (piece: SourceElement): string =>
   [
     piece.box.x,
@@ -895,6 +980,7 @@ const decorationKey = (piece: SourceElement): string =>
     piece.box.h,
     piece.fill ?? '',
     piece.shapeType ?? '',
+    piece.imageUrl ?? '',
   ].join('|')
 
 /**
@@ -910,6 +996,15 @@ const decorationKey = (piece: SourceElement): string =>
  *
  * Only what paints something and holds nothing — an ancestor's placeholders
  * are boxes for content, and the slide has its own.
+ *
+ * ## A picture on the design is decoration
+ *
+ * The crest in the corner and the pattern behind the type are `image`
+ * elements, not filled shapes, and keeping only the filled ones dropped every
+ * one of them: a university deck imported as a flat colour with no mark on it.
+ * A picture an author placed on a LAYOUT or a MASTER is part of the design by
+ * definition — a box for content is a placeholder, and those are shapes — so
+ * it comes across as decoration rather than as a box anyone is asked to fill.
  */
 const inheritedDecoration = (
   chain: Record<string, unknown>[],
@@ -918,20 +1013,31 @@ const inheritedDecoration = (
   ancestry: Ancestry,
   own: SourceElement[],
 ): SourceElement[] => {
-  // What the page already draws itself. An author who copied the rule onto
-  // the slide should not end up with it drawn twice.
+  // What the page already draws itself. An author who copied the rule — or the
+  // logo — onto the slide should not end up with it drawn twice.
   const seen = new Set(
-    own.filter(e => e.kind === 'decoration').map(decorationKey),
+    own
+      .filter(e => e.kind === 'decoration' || e.kind === 'image')
+      .map(decorationKey),
   )
   const inherited: SourceElement[] = []
   // The page itself is the head of the chain; everything behind it is design.
-  for (const ancestor of chain.slice(1)) {
-    for (const rawElement of (ancestor.pageElements ?? []) as Record<
-      string,
-      unknown
-    >[]) {
-      const element = elementOf(rawElement, page, scheme, ancestry)
-      if (!element || element.kind !== 'decoration') continue
+  //
+  // Furthest first, because order here is paint order and the master sits
+  // behind the layout that is built on it. Taken nearest-first, a master's
+  // full-bleed pattern is drawn last — over the crest the layout puts on top
+  // of it, and over the band, and over the rule.
+  for (const ancestor of chain.slice(1).reverse()) {
+    for (const rawElement of flattenGroups(
+      (ancestor.pageElements ?? []) as Record<string, unknown>[],
+    )) {
+      const read = elementOf(rawElement, page, scheme, ancestry)
+      if (!read) continue
+      const element =
+        read.kind === 'image' && read.imageUrl
+          ? ({ ...read, kind: 'decoration' } as SourceElement)
+          : read
+      if (element.kind !== 'decoration') continue
       const key = decorationKey(element)
       if (seen.has(key)) continue
       seen.add(key)
@@ -947,7 +1053,9 @@ const pageOf = (
   scheme: Record<string, string>,
   ancestry: Ancestry,
 ): SourcePage => {
-  const rawElements = (raw.pageElements ?? []) as Record<string, unknown>[]
+  const rawElements = flattenGroups(
+    (raw.pageElements ?? []) as Record<string, unknown>[],
+  )
   const chain = pageChain(raw, ancestry)
   const { background, backgroundImage } = backgroundOf(chain, scheme)
   const metadata = metadataOf(rawElements)
@@ -1090,10 +1198,39 @@ const themeOf = (
   pages: SourcePage[],
 ): SourceTheme => {
   const bg = background ?? scheme.LIGHT1 ?? '#ffffff'
-  /** The first of these that can actually be read on this background. */
+  /**
+   * Every background this deck actually paints.
+   *
+   * The theme carries ONE background, but an imported design paints its own
+   * on every layout (`build-template` draws it as full-bleed decoration). A
+   * colour picked to read on the theme's background is not thereby readable on
+   * a page the deck paints white — which is how a deck with a dark title slide
+   * came back with its links in near-white, invisible on every light page.
+   * The words were there; nothing drew them.
+   */
+  const painted = [bg, ...pages.map(page => page.background).filter(isHex)]
+  /** Readable on every page of the deck, not merely on the first one. */
+  const readsEverywhere = (colour: string): boolean =>
+    painted.every(on => contrast(colour, on) >= READABLE)
+  /**
+   * The first of these that can actually be read — everywhere if possible.
+   *
+   * A theme colour is drawn on every page of the deck, so one that reads on
+   * all of them beats one that reads only on the first. This matters most for
+   * `accent`, which is not merely decoration: the client draws a hyperlink in
+   * it when the deck states no link colour of its own
+   * (`client/src/components/slide/theme.ts`). An accent chosen against a dark
+   * title slide is near-white, and every linked phrase on the deck's white
+   * pages was then drawn white on white.
+   *
+   * Falling back to the theme background alone, and then to plain ink, because
+   * a deck that runs both dark and light may offer nothing that reads on both
+   * — and one unreadable page is better than discarding the deck's palette.
+   */
   const readable = (...candidates: (string | undefined)[]): string => {
     const hexes = candidates.filter(isHex)
     return (
+      hexes.find(readsEverywhere) ??
       hexes.find(c => contrast(c, bg) >= READABLE) ??
       // Nothing offered works, so fall back to the one that always does.
       (luminance(bg) > 0.4 ? '#1c2230' : '#ffffff')
@@ -1107,12 +1244,15 @@ const themeOf = (
     // Muted is the quiet one, so it may sit closer to the background than the
     // body text — but it still has to be legible.
     muted: readable(scheme.DARK2, scheme.ACCENT2, text),
-    // Only when the deck states one AND it differs from the body: a link the
-    // same colour as everything around it is not a decision worth carrying,
-    // and drawing every link in the body colour is what the app already does.
+    // Only when the deck states one, it differs from the body, AND it can be
+    // read on every page the deck paints. A link the same colour as everything
+    // around it is not a decision worth carrying, and one that disappears into
+    // half the deck is worse than none: dropping it here leaves the anchor
+    // inheriting its box's own colour, which came off the slide and is
+    // therefore readable where that box sits.
     ...(isHex(scheme.HYPERLINK) &&
     readable(scheme.HYPERLINK) !== text &&
-    contrast(scheme.HYPERLINK!, bg) >= READABLE
+    readsEverywhere(scheme.HYPERLINK!)
       ? { link: scheme.HYPERLINK }
       : {}),
   }
