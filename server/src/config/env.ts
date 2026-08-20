@@ -192,12 +192,14 @@ const envSchema = z
     // pauses, so no slide appears either. When on, the client flushes the
     // stable prefix of the interim transcript into generation once it grows
     // past the word threshold below, and the eventual finalized phrase
-    // submits only the words not already flushed. Flip off to generate from
-    // finalized (pause-delimited) phrases only.
-    GENERATION_INTERIM_FLUSH: z.stringbool().default(true),
+    // submits only the words not already flushed. Off by default (opt-in):
+    // flushed text is the recognizer's hypothesis, not its finalized pass,
+    // so the transcript trades some fidelity for liveness (see GEN-12).
+    GENERATION_INTERIM_FLUSH: z.stringbool().default(false),
     // How many stable, not-yet-submitted interim words accumulate before a
-    // mid-speech flush (~40 words is 15-20s of ordinary lecture speech).
-    GENERATION_INTERIM_FLUSH_WORDS: z.coerce.number().int().min(1).default(40),
+    // mid-speech flush (~140 words is about a minute of ordinary lecture
+    // speech at ~140 wpm).
+    GENERATION_INTERIM_FLUSH_WORDS: z.coerce.number().int().min(1).default(140),
     // Deck-structure context: send the running outline of heading (title/section)
     // slides plus positional signals — and the matching heading-decision
     // instructions — so the windowed model can judge title/section slides from

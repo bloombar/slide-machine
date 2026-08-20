@@ -385,7 +385,7 @@ The app requires microphone access, prompts for and reports permission state, an
 #### CAP-3 Speech-to-text transcription
 
 - Uses **Google Cloud Speech-to-Text** for fast, accurate, low-latency transcription (removing V1's Chrome-only constraint).
-- Audio is streamed and segmented into phrases on natural pauses; interim text may display as live captions, finalized phrases drive generation — supplemented mid-speech by the interim flush ([GEN-12](#gen-12-mid-speech-interim-generation)) so a speaker who never pauses still gets slides.
+- Audio is streamed and segmented into phrases on natural pauses; interim text may display as live captions, finalized phrases drive generation — optionally supplemented mid-speech by the interim flush ([GEN-12](#gen-12-mid-speech-interim-generation), opt-in) so a speaker who never pauses still gets slides.
 - **Speech adaptation** — when a preflight concept set exists ([PREP-3](#prep-3-use-of-the-honed-concept-set)), its terms, names, acronyms, and synonyms are supplied to Google Cloud STT as phrase hints/boosts so domain jargon and proper nouns transcribe correctly.
 - Target: near-real-time latency suitable for live lecture (a key evaluation metric — [§12](#12-evaluation--metrics)). Raw audio is **not retained by default**; optional bounded retention (for diarization and original-audio playback) is governed by [P-6](#16-privacy-security--compliance).
 
@@ -564,7 +564,7 @@ Speech recognizers only finalize a phrase after a trailing pause ([CAP-3](#cap-3
 - **Stable-prefix flush** — the client watches the interim transcript; once the words that are stable (unchanged across consecutive interim updates) and not yet submitted pass a **word threshold**, they are submitted to generation ([GEN-1](#gen-1-speech-to-slide-generation)) immediately, without waiting for the recognizer to finalize. Word-based rather than time-based: a count of stable words is deterministic and independent of speaking rate.
 - **No double generation** — when the recognizer finalizes the utterance, only the words not already flushed are submitted. The new-vs-update decision ([GEN-8](#gen-8-new-slide-vs-update-current)) absorbs mid-thought boundaries: a flushed fragment can update the slide it started.
 - **Commands stay final-only** — wake-worded voice commands ([CAP-4](#cap-4-voice-commands)) are matched only against finalized text, so a half-heard interim can never fire a command.
-- **Configurable** ([TECH-4](#tech-4-server-configuration)) — `GENERATION_INTERIM_FLUSH` (default on) switches the behavior; `GENERATION_INTERIM_FLUSH_WORDS` (default 40) sets the threshold. Both reach the client via runtime config and apply to every capture engine ([CAP-3](#cap-3-speech-to-text-transcription)) alike.
+- **Opt-in and configurable** ([TECH-4](#tech-4-server-configuration)) — `GENERATION_INTERIM_FLUSH` (default **off**) switches the behavior on; `GENERATION_INTERIM_FLUSH_WORDS` (default 140, about a minute of uninterrupted lecture speech) sets the threshold. Off by default because flushed text is the recognizer's hypothesis rather than its finalized pass — the transcript trades some fidelity (and, on Cloud STT, per-word timings for flushed stretches) for liveness. Both settings reach the client via runtime config and apply to every capture engine ([CAP-3](#cap-3-speech-to-text-transcription)) alike.
 
 **Metering note.** Gemini, Speech-to-Text, and image-API usage in §8–§9 all count against the user's plan caps (BILL-3) and are subject to enforcement (BILL-4).
 

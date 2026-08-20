@@ -18,8 +18,8 @@ const envState = {
   REFINE_TRANSCRIPT_DEFAULT_LEVEL: 2,
   SIMULATED_SPEECH_ENABLED: false,
   WHITEBOARD_SUPPRESS_DEBOUNCE_MS: 5000,
-  GENERATION_INTERIM_FLUSH: true,
-  GENERATION_INTERIM_FLUSH_WORDS: 40,
+  GENERATION_INTERIM_FLUSH: false,
+  GENERATION_INTERIM_FLUSH_WORDS: 140,
   STT_CAPTURE_SAMPLE_RATE: 24000,
   OPERATOR_NAME: '',
   OPERATOR_JURISDICTION: '',
@@ -46,8 +46,8 @@ beforeEach(() => {
   envState.TRANSLATION_PROVIDER = 'none'
   envState.GOOGLE_CLOUD_TRANSLATION_KEY = undefined
   envState.STT_CAPTURE_SAMPLE_RATE = 24000
-  envState.GENERATION_INTERIM_FLUSH = true
-  envState.GENERATION_INTERIM_FLUSH_WORDS = 40
+  envState.GENERATION_INTERIM_FLUSH = false
+  envState.GENERATION_INTERIM_FLUSH_WORDS = 140
   envState.OPERATOR_NAME = ''
   envState.OPERATOR_JURISDICTION = ''
   envState.OPERATOR_CONTACT_EMAIL = ''
@@ -64,8 +64,8 @@ describe('GET /api/config', () => {
       refineTranscriptDefaultLevel: 2,
       simulatedSpeechEnabled: false,
       whiteboardSuppressDebounceMs: 5000,
-      interimFlushEnabled: true,
-      interimFlushWords: 40,
+      interimFlushEnabled: false,
+      interimFlushWords: 140,
       sttCaptureSampleRate: 24000,
       translationEnabled: false,
       feedbackEnabled: false,
@@ -135,10 +135,10 @@ describe('GET /api/config', () => {
   // The mid-speech interim flush (GEN-12) runs client-side; both its switch
   // and its word threshold travel through this endpoint.
   it('publishes the interim-flush switch and word threshold', async () => {
-    envState.GENERATION_INTERIM_FLUSH = false
+    envState.GENERATION_INTERIM_FLUSH = true
     envState.GENERATION_INTERIM_FLUSH_WORDS = 25
     expect(await getConfig()).toMatchObject({
-      interimFlushEnabled: false,
+      interimFlushEnabled: true,
       interimFlushWords: 25,
     })
   })

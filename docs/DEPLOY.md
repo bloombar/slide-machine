@@ -210,8 +210,8 @@ value is baked into the SPA at build.
 | `DELETED_DATA_RETENTION_DAYS` | plain | days a soft-deleted record is kept before the daily sweep purges it and its blobs (P-11); default `90`, `0` = keep tombstones forever |
 | `WHITEBOARD_SUPPRESS_DEBOUNCE_MS` | plain | grace (ms) after the last whiteboard gesture during which speech folds into the current slide instead of creating one (EDIT-4); default `5000`, `0` disables. Optional |
 | `SIMULATED_SPEECH_ENABLED` | plain | `true` shows the live session's simulated-speech text box for typing phrases instead of speaking them — a debugging aid; default off. Optional |
-| `GENERATION_INTERIM_FLUSH` | plain | mid-speech interim generation (GEN-12): flush long interim speech into generation before the recognizer finalizes, so slides keep appearing while a speaker talks without pausing; default `true`. Optional |
-| `GENERATION_INTERIM_FLUSH_WORDS` | plain | stable interim words that trigger a mid-speech flush; default `40` (~15–20 s of lecture speech). Optional |
+| `GENERATION_INTERIM_FLUSH` | plain | mid-speech interim generation (GEN-12): flush long interim speech into generation before the recognizer finalizes, so slides keep appearing while a speaker talks without pausing; opt-in, default `false` — flushed text is hypothesis-grade, so the transcript trades some fidelity for liveness. Optional |
+| `GENERATION_INTERIM_FLUSH_WORDS` | plain | stable interim words that trigger a mid-speech flush; default `140` (~1 min of lecture speech). Optional |
 
 > **`0` means "no limit", not "off".** For `STT_CAPTURE_SAMPLE_RATE`,
 > `AUDIO_RETENTION_DAYS`, `AUDIO_RETENTION_MAX_SESSION_MB`,

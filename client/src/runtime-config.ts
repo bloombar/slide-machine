@@ -37,8 +37,8 @@ let runtime: RuntimeConfig = {
   refineTranscriptDefaultLevel: 2,
   simulatedSpeechEnabled: false,
   whiteboardSuppressDebounceMs: 5000,
-  interimFlushEnabled: true,
-  interimFlushWords: 40,
+  interimFlushEnabled: false,
+  interimFlushWords: 140,
   sttCaptureSampleRate: 24000,
 }
 let loaded: Promise<RuntimeConfig> | null = null

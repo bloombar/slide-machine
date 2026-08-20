@@ -935,6 +935,8 @@ describe('DeckViewerPage microphone capture', () => {
   it('flushes long uninterrupted interim speech into generation before any final', async () => {
     FakeRecognition.reset()
     vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
+    // The flush is opt-in (off by default), so turn it on for this test.
+    vi.spyOn(runtimeConfig, 'getInterimFlushEnabled').mockReturnValue(true)
     vi.spyOn(runtimeConfig, 'getInterimFlushWords').mockReturnValue(6)
     const phrases: string[] = []
     mockFetchRoutes({

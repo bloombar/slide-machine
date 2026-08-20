@@ -107,7 +107,7 @@ Behavior is tuned by env vars in `server/.env`, each annotated inline in [.env.e
 | `GENERATION_LAYOUT_REFIT` | `true` | Allow a live slide to switch layout as content grows |
 | `GENERATION_LIVE_REPHRASE` | `true` | Allow same-layout rephrasing of committed slide text (needs `LAYOUT_REFIT`) |
 | `GENERATION_DECK_STRUCTURE` | `true` | Feed deck outline + positional signals for title/section decisions |
-| `GENERATION_INTERIM_FLUSH` | `true` | Generate from long interim speech before the recognizer finalizes (GEN-12); threshold: `GENERATION_INTERIM_FLUSH_WORDS` (default `40`) |
+| `GENERATION_INTERIM_FLUSH` | `false` | Generate from long interim speech before the recognizer finalizes (GEN-12); threshold: `GENERATION_INTERIM_FLUSH_WORDS` (default `140`, ~1 min of speech) |
 | `GENERATION_LOG_PROMPTS` | `false` | Log assembled prompts + raw responses (dev only; includes seed text) |
 | `IMAGE_ENRICHMENT_ENABLED` | `true` | Fetch stock images for slides (IMG-1) |
 | `IMAGE_RERANK_ENABLED` / `_VISION` | `true` / `false` | AI re-rank of image candidates; vision re-rank is heavier |

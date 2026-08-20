@@ -53,13 +53,13 @@
   full: "Uses Google Cloud Speech-to-Text for fast, accurate, low-latency
     transcription (removing V1's Chrome-only constraint). Audio is streamed and
     segmented into phrases on natural pauses; interim text may display as live
-    captions, finalized phrases drive generation — supplemented mid-speech by
-    the interim flush (GEN-12) so a speaker who never pauses still gets slides.
-    Speech adaptation — when a preflight concept set exists (PREP-3), its terms,
-    names, acronyms, and synonyms are supplied to Google Cloud STT as phrase
-    hints/boosts so domain jargon and proper nouns transcribe correctly. Target:
-    near-real-time latency suitable for live lecture (a key evaluation metric —
-    §12). Raw audio is not…"
+    captions, finalized phrases drive generation — optionally supplemented
+    mid-speech by the interim flush (GEN-12, opt-in) so a speaker who never
+    pauses still gets slides. Speech adaptation — when a preflight concept set
+    exists (PREP-3), its terms, names, acronyms, and synonyms are supplied to
+    Google Cloud STT as phrase hints/boosts so domain jargon and proper nouns
+    transcribe correctly. Target: near-real-time latency suitable for live
+    lecture (a key evaluation metric — §12). Raw…"
   section: §8 Live Lecture Capture
   family: CAP
   phase: 1
