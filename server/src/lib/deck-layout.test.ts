@@ -359,6 +359,29 @@ describe('specialized content in the export model', () => {
     })
   })
 
+  it('carries the proportions a table was given', () => {
+    // The exporters divide the box with these (EDIT-7); dropping them here
+    // would leave every export re-dividing the table equally.
+    const boxes = computeLayout(
+      {
+        layoutType: 'lab',
+        slots: {
+          data: {
+            kind: 'table',
+            rows: [['2024']],
+            colWidths: [0.3, 0.7],
+            rowHeights: [1],
+          },
+        },
+      } as never,
+      layout,
+    )
+    expect(boxes.find(b => b.kind === 'table')).toMatchObject({
+      colWidths: [0.3, 0.7],
+      rowHeights: [1],
+    })
+  })
+
   it('never lets a table become lines of text', () => {
     expect(allText()).not.toContain('2024')
   })
@@ -378,5 +401,96 @@ describe('specialized content in the export model', () => {
       runs: { text: string; mono?: boolean }[]
     }
     expect(pre.runs[0]).toMatchObject({ text: 'a   b', mono: true })
+  })
+})
+
+/**
+ * What an imported design contributes to the export model (TMPL-8).
+ *
+ * Three things it carries that a built-in template does not: boxes coloured
+ * outright rather than by role, text stored as Markdown, and decoration of its
+ * own. All three were dropped on the way out — an imported deck exported in
+ * one colour, with its Markdown showing, onto a blank white page.
+ */
+describe('an imported design on the way out', () => {
+  const layout = (over: Record<string, unknown> = {}) =>
+    ({
+      type: 'imported',
+      label: 'Imported',
+      purpose: 'a slide',
+      slots: [{ name: 'body', kind: 'text', label: 'Body' }],
+      elementPositions: {
+        body: { x: 0.1, y: 0.2, w: 0.8, h: 0.6, color: '#ff5252' },
+      },
+      ...over,
+    }) as never
+
+  const slideWith = (value: string) =>
+    ({
+      layoutType: 'imported',
+      slots: { body: { kind: 'text', value } },
+    }) as never
+
+  const runsOf = (value: string, over?: Record<string, unknown>) => {
+    const box = computeLayout(slideWith(value), layout(over)).find(
+      b => b.kind === 'text',
+    )
+    return (box as unknown as { runs: Record<string, unknown>[] }).runs
+  }
+
+  it('draws a box in the colour it was drawn in, not in a role', () => {
+    // `roleOf` answers "ink" to anything it does not recognise, so every box
+    // of an imported deck exported in the theme's body colour.
+    expect(runsOf('Plain words')[0]).toMatchObject({ hex: '#ff5252' })
+  })
+
+  it('renders Markdown rather than writing out its source', () => {
+    const runs = runsOf('**Faculty** of parts')
+    expect(runs.map(r => r.text).join('')).toBe('Faculty of parts')
+    expect(runs[0]).toMatchObject({ bold: true })
+  })
+
+  it('counts a numbered list, since nothing downstream will', () => {
+    // The source says "1." on every line because the viewer renumbers. A PDF
+    // has no renumbering, so the count is worked out here.
+    const markers = runsOf('1. One\n1. Two\n1. Three')
+      .filter(r => /^\d/.test(String(r.text)))
+      .map(r => String(r.text).trim())
+    expect(markers).toEqual(['1.', '2.', '3.'])
+  })
+
+  it('keeps where a link points, so the file can follow it', () => {
+    const link = runsOf(
+      'See [the handbook](https://example.org/handbook)',
+    ).find(r => r.link)
+    expect(link).toMatchObject({
+      text: 'the handbook',
+      link: 'https://example.org/handbook',
+    })
+  })
+
+  it('draws the design’s own bands, so the deck is not exported blank', () => {
+    const boxes = computeLayout(
+      slideWith('words'),
+      layout({
+        decoration: [
+          { x: 0, y: 0, w: 1, h: 1, fill: '#ffffff' },
+          { x: 0, y: 0.98, w: 1, h: 0.02, fill: '#63d297' },
+        ],
+      }),
+    )
+    const rules = boxes.filter(b => b.kind === 'rule')
+    expect(rules.map(r => (r as { hex?: string }).hex)).toEqual([
+      '#ffffff',
+      '#63d297',
+    ])
+  })
+
+  it('draws them behind everything the slide puts on top', () => {
+    const boxes = computeLayout(
+      slideWith('words'),
+      layout({ decoration: [{ x: 0, y: 0, w: 1, h: 1, fill: '#ffffff' }] }),
+    )
+    expect(boxes[0]!.kind).toBe('rule')
   })
 })

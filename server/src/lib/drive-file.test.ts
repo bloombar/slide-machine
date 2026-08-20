@@ -71,13 +71,32 @@ describe('reading the file', () => {
     )
   })
 
-  it('says a refused read is worth reconnecting for', async () => {
-    // A missing grant is a step the instructor can take, not a dead end
-    respond(403)
+  it('says a refused read is worth reconnecting for when the grant is short', async () => {
+    // A missing scope is a step the instructor can take, not a dead end
+    respond(403, '{"error":{"errors":[{"reason":"insufficientPermissions"}]}}')
     await expect(readDriveFileTextLive('t', 'f')).rejects.toMatchObject({
       name: 'DriveFileUnreadableError',
       reconnect: true,
     })
+  })
+
+  it('does not, when the file is simply not the account’s to open', async () => {
+    // The common case: a pasted link to somebody else's file. Nothing is
+    // wrong with the connection, so reconnecting sends the instructor through
+    // the consent screen to arrive back at exactly the same refusal.
+    respond(
+      403,
+      '{"error":{"errors":[{"reason":"forbidden"}],"message":"The user does not have sufficient permissions for this file"}}',
+    )
+    const err = await readDriveFileTextLive('t', 'f').catch(e => e)
+    expect(err.forbidden).toBe(true)
+    expect(err.reconnect).toBe(false)
+  })
+
+  it('asks for a reconnect when the token itself has gone stale', async () => {
+    respond(401, '{"error":{"message":"Invalid Credentials"}}')
+    const err = await readDriveFileTextLive('t', 'f').catch(e => e)
+    expect(err.reconnect).toBe(true)
   })
 
   it('says a missing file is not', async () => {

@@ -43,6 +43,16 @@ export class PresentationUnreadableError extends Error {
      * single "could not read it" would tell them to do neither.
      */
     readonly notFound = false,
+    /**
+     * Whether the account is fine and this deck is not theirs to open.
+     *
+     * The third case, and the common one: someone pastes a link to a
+     * colleague's lecture. Nothing is wrong with the connection, so offering
+     * to reconnect sends them through Google's consent screen to arrive back
+     * at the same refusal. What they need is access to the deck, or an
+     * account that already has it.
+     */
+    readonly forbidden = false,
   ) {
     super(message)
     this.name = 'PresentationUnreadableError'
@@ -286,8 +296,30 @@ const colorOf = (
     unknown
   >
   const themed = opaque.themeColor as string | undefined
-  if (themed) return scheme[themed]
-  return rgbHex(opaque.rgbColor as Record<string, number> | undefined)
+  const rgb = rgbHex(opaque.rgbColor as Record<string, number> | undefined)
+  if (themed) {
+    // A master lists its scheme under one set of names and text styles may
+    // ask for the same colour under another: `TEXT1` and `DARK1` are one
+    // entry, as are `BACKGROUND1` and `LIGHT1`. Looked up under the name
+    // given and then under its other name, because a miss here is not an
+    // error — it silently drops the colour, and the box falls back to the
+    // deck's default ink. That is how a heading an author set in red came
+    // back black.
+    const alias: Record<string, string> = {
+      TEXT1: 'DARK1',
+      TEXT2: 'DARK2',
+      BACKGROUND1: 'LIGHT1',
+      BACKGROUND2: 'LIGHT2',
+      DARK1: 'TEXT1',
+      DARK2: 'TEXT2',
+      LIGHT1: 'BACKGROUND1',
+      LIGHT2: 'BACKGROUND2',
+    }
+    // The resolved value where Google sent one beside the name, as a last
+    // resort: a colour we cannot name is still the colour the slide shows.
+    return scheme[themed] ?? scheme[alias[themed] ?? ''] ?? rgb
+  }
+  return rgb
 }
 
 /** The master's colour scheme, by name. */
@@ -374,6 +406,61 @@ const runsOf = (
   inherited: Omit<SourceRun, 'text'> = {},
 ): { runs: SourceRun[]; bulleted: boolean } => {
   const elements = (text?.textElements ?? []) as Record<string, unknown>[]
+  /*
+   * How each list in this box is drawn.
+   *
+   * A paragraph says which list it belongs to and how deep it sits; the list
+   * says what its markers look like at that depth. Digits or letters make it
+   * a numbered list, and reading it as bulleted turns "1. 2. 3." into three
+   * dashes — an ordering the author meant.
+   */
+  const lists = (text?.lists ?? {}) as Record<
+    string,
+    { nestingLevel?: Record<string, { glyphType?: string }> }
+  >
+  /**
+   * Whether a marker counts rather than merely marks.
+   *
+   * The marker Google actually renders — "1.", "a.", "iv." — as against the
+   * symbols it draws for an unordered point: ●, ○, ■, ◆, a dash. Anything with
+   * a letter or a digit in it is counting.
+   */
+  const counts = (glyph: string | undefined): boolean => {
+    const marker = glyph?.trim()
+    if (!marker) return false
+    // Any script's digits, not only 0-9: a deck numbered ١ ٢ ٣ or १ २ ३ is
+    // numbered.
+    if (/\p{Nd}/u.test(marker)) return true
+    // A letter counts only where something separates it from the text —
+    // "a.", "iv)", "B:". A bare letter is a bullet, not a count: Word draws a
+    // level-two point as a lowercase "o", and a deck that reached Slides
+    // through PowerPoint brings that with it.
+    return /^\p{L}+[.)\]:]/u.test(marker)
+  }
+
+  /**
+   * Whether this paragraph is a numbered or lettered point.
+   *
+   * Read from the paragraph's own rendered `glyph` first. The list's
+   * `glyphType` is the documented place for it and this deck's lists do not
+   * state one — every `nestingLevel` came back holding nothing but a bullet
+   * style — so a slide numbered "1. 2. 3." with "a. b. c." under it imported
+   * as six identical dashes. The glyph is what the author sees, which makes it
+   * the better answer even where both are present.
+   */
+  const isOrdered = (
+    bullet:
+      { listId?: string; nestingLevel?: number; glyph?: string } | undefined,
+    level: number,
+  ): boolean => {
+    if (!bullet) return false
+    if (bullet.glyph !== undefined) return counts(bullet.glyph)
+    const type = bullet.listId
+      ? lists[bullet.listId]?.nestingLevel?.[String(level)]?.glyphType
+      : undefined
+    return Boolean(type) && type !== 'GLYPH_TYPE_UNSPECIFIED'
+  }
+
   const runs: SourceRun[] = []
   let bulleted = false
   /** Ends the paragraph that came before, so where one line stops is stated
@@ -382,10 +469,21 @@ const runsOf = (
     const previous = runs[runs.length - 1]
     if (previous && !previous.text.endsWith('\n')) previous.text += '\n'
   }
+  // Which kind of paragraph the runs that follow belong to. A box is often
+  // both — a sentence of context, then points, then a closing line — and read
+  // as one kind the prose came back as bullets nobody wrote.
+  let inBullet = false
+  let level = 0
+  let ordered = false
   for (const element of elements) {
     if (element.paragraphMarker) {
-      const marker = element.paragraphMarker as { bullet?: unknown }
-      if (marker.bullet) bulleted = true
+      const marker = element.paragraphMarker as {
+        bullet?: { listId?: string; nestingLevel?: number; glyph?: string }
+      }
+      inBullet = Boolean(marker.bullet)
+      level = marker.bullet?.nestingLevel ?? 0
+      ordered = inBullet && isOrdered(marker.bullet, level)
+      if (inBullet) bulleted = true
       endParagraph()
       continue
     }
@@ -436,6 +534,13 @@ const runsOf = (
         colorOf(style.foregroundColor as Record<string, unknown>, scheme) ??
         inherited.color,
       fontFamily: (style.fontFamily as string) || inherited.fontFamily,
+      // Where the author pointed this run, if anywhere.
+      ...(typeof (style.link as { url?: string } | undefined)?.url === 'string'
+        ? { link: (style.link as { url: string }).url }
+        : {}),
+      ...(inBullet ? { bulleted: true } : {}),
+      ...(inBullet && level ? { bulletLevel: level } : {}),
+      ...(ordered ? { ordered: true } : {}),
     })
   }
   const last = runs[runs.length - 1]
@@ -455,6 +560,29 @@ const tableOf = (table: Record<string, unknown>): string[][] =>
       return runs.map(r => r.text).join('')
     }),
   )
+
+/**
+ * How a table divides itself, as fractions of its own width and height.
+ *
+ * Google states a width for every column and a height for every row. Read as
+ * fractions of their total, not as lengths, because the box the table lands in
+ * is the box the reader measured — what matters is the proportions inside it,
+ * which then mean the same thing on screen and in an export (EDIT-7).
+ *
+ * A table whose sizes are missing or add to nothing gets none, and every
+ * surface falls back to equal tracks.
+ */
+const tableTracksOf = (
+  entries: unknown,
+  sizeAt: (entry: Record<string, unknown>) => Dimension | undefined,
+): number[] | undefined => {
+  const list = (entries ?? []) as Record<string, unknown>[]
+  if (!Array.isArray(list) || !list.length) return undefined
+  const sizes = list.map(entry => emu(sizeAt(entry)))
+  const total = sizes.reduce((sum, n) => sum + n, 0)
+  if (!total || sizes.some(n => n <= 0)) return undefined
+  return sizes.map(n => n / total)
+}
 
 /** One shape, whatever it turned out to be. Anything it leaves unset comes
  * from the placeholder it descends from, on its layout or the master. */
@@ -532,7 +660,23 @@ const elementOf = (
       kind: 'table',
       box,
       ...(slotName ? { slotName } : {}),
-      table: { rows: tableOf(table) },
+      table: {
+        rows: tableOf(table),
+        ...(() => {
+          const colWidths = tableTracksOf(
+            table.tableColumns,
+            column => column.columnWidth as Dimension | undefined,
+          )
+          const rowHeights = tableTracksOf(
+            table.tableRows,
+            row => row.rowHeight as Dimension | undefined,
+          )
+          return {
+            ...(colWidths ? { colWidths } : {}),
+            ...(rowHeights ? { rowHeights } : {}),
+          }
+        })(),
+      },
     }
   }
 
@@ -741,6 +885,62 @@ const backgroundOf = (
   return {}
 }
 
+/** What makes two pieces of decoration the same piece: where it is, what it
+ * paints, and what shape it is. */
+const decorationKey = (piece: SourceElement): string =>
+  [
+    piece.box.x,
+    piece.box.y,
+    piece.box.w,
+    piece.box.h,
+    piece.fill ?? '',
+    piece.shapeType ?? '',
+  ].join('|')
+
+/**
+ * The rules and bands a page inherits from the design behind it.
+ *
+ * A slide's `pageElements` are only what sits ON the slide. The line under
+ * every title, the coloured band down the side, the block behind the heading —
+ * an author draws those once on the layout or the master, and Google does not
+ * repeat them in each slide's elements. Reading only the slide is why an
+ * imported deck lost them, and lost them unevenly: a slide where the author
+ * had copied the rule onto the slide itself kept it, and its neighbour did
+ * not, so the same deck came back with the line on some slides and not others.
+ *
+ * Only what paints something and holds nothing — an ancestor's placeholders
+ * are boxes for content, and the slide has its own.
+ */
+const inheritedDecoration = (
+  chain: Record<string, unknown>[],
+  page: { width: number; height: number },
+  scheme: Record<string, string>,
+  ancestry: Ancestry,
+  own: SourceElement[],
+): SourceElement[] => {
+  // What the page already draws itself. An author who copied the rule onto
+  // the slide should not end up with it drawn twice.
+  const seen = new Set(
+    own.filter(e => e.kind === 'decoration').map(decorationKey),
+  )
+  const inherited: SourceElement[] = []
+  // The page itself is the head of the chain; everything behind it is design.
+  for (const ancestor of chain.slice(1)) {
+    for (const rawElement of (ancestor.pageElements ?? []) as Record<
+      string,
+      unknown
+    >[]) {
+      const element = elementOf(rawElement, page, scheme, ancestry)
+      if (!element || element.kind !== 'decoration') continue
+      const key = decorationKey(element)
+      if (seen.has(key)) continue
+      seen.add(key)
+      inherited.push(element)
+    }
+  }
+  return inherited
+}
+
 const pageOf = (
   raw: Record<string, unknown>,
   page: { width: number; height: number },
@@ -748,12 +948,16 @@ const pageOf = (
   ancestry: Ancestry,
 ): SourcePage => {
   const rawElements = (raw.pageElements ?? []) as Record<string, unknown>[]
-  const { background, backgroundImage } = backgroundOf(
-    pageChain(raw, ancestry),
-    scheme,
-  )
+  const chain = pageChain(raw, ancestry)
+  const { background, backgroundImage } = backgroundOf(chain, scheme)
   const metadata = metadataOf(rawElements)
   const notes = notesOf(raw)
+  const own = creditedPictures(
+    rawElements
+      .map(el => elementOf(el, page, scheme, ancestry))
+      .filter((el): el is SourceElement => el !== null),
+    printedCredits(rawElements),
+  )
   return {
     id: (raw.objectId as string) ?? '',
     name:
@@ -766,12 +970,12 @@ const pageOf = (
       undefined,
     background,
     ...(backgroundImage ? { backgroundImage } : {}),
-    elements: creditedPictures(
-      rawElements
-        .map(el => elementOf(el, page, scheme, ancestry))
-        .filter((el): el is SourceElement => el !== null),
-      printedCredits(rawElements),
-    ),
+    // The design's own rules and bands go first, because they sit behind what
+    // the slide draws on top of them.
+    elements: [
+      ...inheritedDecoration(chain, page, scheme, ancestry, own),
+      ...own,
+    ],
     ...(metadata ? { slotMetadata: metadata } : {}),
     ...(notes ? { notes } : {}),
   }
@@ -903,6 +1107,14 @@ const themeOf = (
     // Muted is the quiet one, so it may sit closer to the background than the
     // body text — but it still has to be legible.
     muted: readable(scheme.DARK2, scheme.ACCENT2, text),
+    // Only when the deck states one AND it differs from the body: a link the
+    // same colour as everything around it is not a decision worth carrying,
+    // and drawing every link in the body colour is what the app already does.
+    ...(isHex(scheme.HYPERLINK) &&
+    readable(scheme.HYPERLINK) !== text &&
+    contrast(scheme.HYPERLINK!, bg) >= READABLE
+      ? { link: scheme.HYPERLINK }
+      : {}),
   }
 }
 
@@ -940,9 +1152,10 @@ export const toSourcePresentation = (
 /**
  * Reads a presentation from Google.
  *
- * A 403 is reported as something the user can act on: their stored
- * authorization may predate the access this needs, and reconnecting is the
- * fix. Anything else is a failure to read, said plainly.
+ * A refusal is reported as something the user can act on, and which action
+ * that is depends on why: reconnect when the grant is the problem, ask for
+ * access when the deck is, and neither when the deployment is misconfigured.
+ * Anything else is a failure to read, said plainly.
  */
 export const readPresentationLive = async (
   accessToken: string,
@@ -953,13 +1166,13 @@ export const readPresentationLive = async (
     { headers: { Authorization: `Bearer ${accessToken}` } },
   )
   if (res.status === 403 || res.status === 401) {
-    // Google says 403 for two unrelated things, and only one of them is the
-    // user's to fix. A grant that does not cover this presentation is worth
-    // reconnecting for; the Slides API being switched off for the whole
-    // deployment is not, and telling an instructor to reconnect for it sends
-    // them round a loop that cannot succeed. The reason is in the body, so it
-    // is read rather than assumed.
+    // Google says 403 for three unrelated things, and only one of them is
+    // fixed by reconnecting. The reason is in the body, so it is read rather
+    // than assumed.
     const reason = await res.text().catch(() => '')
+    // (1) The Slides API is switched off for the whole deployment. Nothing
+    // the instructor does can help; telling them to reconnect sends them
+    // round a loop that cannot succeed.
     if (
       /has not been used in project|is disabled|accessNotConfigured/i.test(
         reason,
@@ -969,8 +1182,28 @@ export const readPresentationLive = async (
         'The Google Slides API is not enabled for this deployment — an administrator must switch it on',
       )
     }
+    // (2) The stored authorization does not cover what this read needs — an
+    // account connected before the scope was added, or a token that has gone
+    // stale. Reconnecting is exactly the fix.
+    if (
+      res.status === 401 ||
+      /insufficient|invalid_token|ACCESS_TOKEN|expired|unauthenticated|UNAUTHENTICATED/i.test(
+        reason,
+      )
+    ) {
+      throw new PresentationUnreadableError(
+        'Google would not let this account read that presentation',
+        true,
+      )
+    }
+    // (3) The account is fine and this deck is not theirs to open, which is
+    // what a pasted link to somebody else's lecture looks like. Reconnecting
+    // the same account arrives back at the same refusal, so it is not
+    // offered.
     throw new PresentationUnreadableError(
-      'Google would not let this account read that presentation',
+      'This Google account does not have access to that presentation',
+      false,
+      false,
       true,
     )
   }

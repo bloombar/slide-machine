@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { fetchSlideImages, toDataUri } from './deck-image'
+import { getStorage } from '../storage'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -93,5 +94,53 @@ describe('toDataUri', () => {
     expect(toDataUri({ data: new Uint8Array([1, 2, 3]), kind: 'png' })).toBe(
       'data:image/png;base64,AQID',
     )
+  })
+})
+
+/**
+ * A picture the app stores itself (EXP-1/TMPL-8).
+ *
+ * The local storage driver hands out an app-relative URL — `/api/files/<key>`
+ * — because that is what a browser needs. `fetch` cannot use one: it wants an
+ * absolute URL, and the export runs on the server with no origin to resolve
+ * against. So the fetcher refused every one of them and returned nothing, and
+ * an imported deck — where EVERY picture is one of these, fetched from Google
+ * once and kept — exported with a hole wherever an image had been.
+ */
+describe('a picture the app stores itself', () => {
+  /** A real one-pixel PNG, put where the app would have put it. */
+  const stored = async (key: string) => {
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      'base64',
+    )
+    await getStorage().put(key, png, 'image/png')
+    return getStorage().publicUrl(key)
+  }
+
+  it('is read off storage rather than fetched', async () => {
+    // No fetch stub: reaching the network at all would be the bug.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => {
+        throw new Error('the export must not fetch a picture it already holds')
+      }),
+    )
+    const url = await stored('probe/deck-image/one.png')
+    const [image] = await fetchSlideImages([url])
+    expect(image?.kind).toBe('png')
+    expect(image!.data.length).toBeGreaterThan(0)
+  })
+
+  it('comes back missing, not fatal, when the file is gone', async () => {
+    const [image] = await fetchSlideImages([
+      '/api/files/probe/deck-image/nope.png',
+    ])
+    expect(image).toBeUndefined()
+  })
+
+  it('still refuses a URL that is neither ours nor absolute', async () => {
+    // A relative path we do not serve is not something to go looking for.
+    expect((await fetchSlideImages(['images/leaf.png']))[0]).toBeUndefined()
   })
 })

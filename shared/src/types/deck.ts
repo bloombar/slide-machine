@@ -149,7 +149,19 @@ export type SlotValue =
     }
   | { kind: 'code'; source: string; language?: string }
   | { kind: 'math'; tex: string; display?: boolean }
-  | { kind: 'table'; header?: string[]; rows: string[][] }
+  | {
+      kind: 'table'
+      header?: string[]
+      rows: string[][]
+      /**
+       * How the table divides its box, as fractions of its own width and
+       * height (EDIT-7). Absent means equal tracks, which is what every table
+       * did before they could be resized. Read through `tableTracks`, which
+       * fills in and normalises, so a stale or partial list is not a problem.
+       */
+      colWidths?: number[]
+      rowHeights?: number[]
+    }
 
 /**
  * Which slot kinds translated viewing covers (SHARE-2).

@@ -19,11 +19,47 @@ export class DriveFileUnreadableError extends Error {
     /** Whether the file simply was not there — a different thing to ask the
      * user about than a refused read. */
     readonly notFound = false,
+    /**
+     * Whether the account is fine and the file is not theirs to open.
+     *
+     * A pasted link to somebody else's file. Reconnecting the same account
+     * arrives back at the same refusal, so it is worth telling apart from a
+     * grant that has gone stale.
+     */
+    readonly forbidden = false,
   ) {
     super(message)
     this.name = 'DriveFileUnreadableError'
   }
 }
+
+/**
+ * A refused read, told apart by what Google refused.
+ *
+ * Two unrelated things arrive as a 403. A grant that does not cover this read
+ * — an account connected before the scope was added — is fixed by
+ * reconnecting. A file the user cannot open is not: reconnecting the same
+ * account arrives back at the same refusal, and what they need is access.
+ * Drive says which in the body, so it is read rather than assumed.
+ */
+const refusedRead = (
+  status: number,
+  reason: string,
+): DriveFileUnreadableError =>
+  status === 401 ||
+  /insufficientPermissions|ACCESS_TOKEN_SCOPE_INSUFFICIENT|invalid_token|expired/i.test(
+    reason,
+  )
+    ? new DriveFileUnreadableError(
+        'Google would not let this account read that file',
+        true,
+      )
+    : new DriveFileUnreadableError(
+        'This Google account does not have access to that file',
+        false,
+        false,
+        true,
+      )
 
 /**
  * The file id inside whatever the instructor pasted.
@@ -65,10 +101,10 @@ export const readDriveFileTextLive = async (
     { headers: { Authorization: `Bearer ${accessToken}` } },
   )
   if (res.status === 401 || res.status === 403) {
-    throw new DriveFileUnreadableError(
-      'Google would not let this account read that file',
-      true,
-    )
+    // A 401 is the stored authorization; a 403 is usually the file. They ask
+    // the user for opposite things — reconnect, or get access — so a single
+    // "would not let this account read it" told them to do neither.
+    throw refusedRead(res.status, await res.text().catch(() => ''))
   }
   if (res.status === 404) {
     throw new DriveFileUnreadableError(
@@ -117,10 +153,10 @@ export const driveFileMetaLive = async (
     { headers: { Authorization: `Bearer ${accessToken}` } },
   )
   if (res.status === 401 || res.status === 403) {
-    throw new DriveFileUnreadableError(
-      'Google would not let this account read that file',
-      true,
-    )
+    // A 401 is the stored authorization; a 403 is usually the file. They ask
+    // the user for opposite things — reconnect, or get access — so a single
+    // "would not let this account read it" told them to do neither.
+    throw refusedRead(res.status, await res.text().catch(() => ''))
   }
   if (res.status === 404) {
     throw new DriveFileUnreadableError(

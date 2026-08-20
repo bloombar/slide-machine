@@ -20,6 +20,16 @@ export interface ThemeColors {
   /** Default whiteboard highlighter color: rendered semi-transparent. Falls
    * back to the accent color. */
   highlighterColor: string
+  /**
+   * What a hyperlink is drawn in (TMPL-8).
+   *
+   * A box carries one colour and every run in it is drawn in that one, so an
+   * imported deck whose links were red got them in the body's black — the box
+   * took its first run's colour. An imported design carries the link colour it
+   * states; a template that names none falls back to the accent, which is the
+   * colour a template already uses to mean "this one is different".
+   */
+  link: string
 }
 
 const color = (
@@ -40,6 +50,7 @@ export const themeColors = (theme: Record<string, unknown>): ThemeColors => {
     accent,
     penColor: color(theme, 'penColor', text),
     highlighterColor: color(theme, 'highlighterColor', accent),
+    link: color(theme, 'link', accent),
   }
 }
 

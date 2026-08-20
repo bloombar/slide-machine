@@ -38,6 +38,7 @@ const colors: ThemeColors = {
   accent: '#00ffff',
   penColor: '#000000',
   highlighterColor: '#ffff00',
+  link: '#0ff',
 }
 
 /** Every slot filled, so nothing is skipped for being empty. */
@@ -115,12 +116,15 @@ describe('content — was: flex h-full flex-col justify-center gap-[3cqi] px-[6c
     const at = draw('content')
     // h2 was text-[4cqi] font-semibold, coloured by the accent
     expect(at('title')).toHaveStyle({
-      fontSize: '4cqi',
+      fontSize: 'calc(var(--fit-scale, 1) * 4cqi)',
       fontWeight: '600',
       color: colors.accent,
     })
     // body was text-[2.75cqi] leading-relaxed
-    expect(at('body')).toHaveStyle({ fontSize: '2.75cqi', lineHeight: '1.625' })
+    expect(at('body')).toHaveStyle({
+      fontSize: 'calc(var(--fit-scale, 1) * 2.75cqi)',
+      lineHeight: '1.625',
+    })
   })
 
   it('takes its side margins from the template rather than stating them', () => {
@@ -146,8 +150,13 @@ describe('list — was: content, with bullets in place of the paragraph', () => 
   it('matches content and sizes its bullets like body text', () => {
     const at = draw('list')
     expect(at('root')).toHaveStyle({ gap: '3cqi', paddingLeft: '6cqi' })
-    expect(at('title')).toHaveStyle({ fontSize: '4cqi', color: colors.accent })
-    expect(at('bullets')).toHaveStyle({ fontSize: '2.75cqi' })
+    expect(at('title')).toHaveStyle({
+      fontSize: 'calc(var(--fit-scale, 1) * 4cqi)',
+      color: colors.accent,
+    })
+    expect(at('bullets')).toHaveStyle({
+      fontSize: 'calc(var(--fit-scale, 1) * 2.75cqi)',
+    })
   })
 })
 
@@ -165,7 +174,10 @@ describe('title — was: flex h-full flex-col items-center justify-center gap-[2
   it('sets the h1 at 7cqi bold and the caption in muted', () => {
     const at = draw('title')
     expect(at('title').tagName).toBe('H1')
-    expect(at('title')).toHaveStyle({ fontSize: '7cqi', fontWeight: '700' })
+    expect(at('title')).toHaveStyle({
+      fontSize: 'calc(var(--fit-scale, 1) * 7cqi)',
+      fontWeight: '700',
+    })
     expect(at('title')).toHaveStyle({ textAlign: 'center' })
     expect(at('caption')).toHaveStyle({ color: colors.muted })
   })
@@ -182,7 +194,10 @@ describe('section — was: an accent rule above a 5.5cqi heading', () => {
 
   it('sizes the heading as the component did', () => {
     const at = draw('section')
-    expect(at('title')).toHaveStyle({ fontSize: '5.5cqi', fontWeight: '600' })
+    expect(at('title')).toHaveStyle({
+      fontSize: 'calc(var(--fit-scale, 1) * 5.5cqi)',
+      fontWeight: '600',
+    })
   })
 
   it('centres the pair', () => {
@@ -236,7 +251,7 @@ describe('image-heavy — was: flex h-full flex-col gap-[1.5cqi] p-[4cqi]', () =
 
   it('centres the caption at 2cqi in muted', () => {
     expect(draw('image-heavy')('caption')).toHaveStyle({
-      fontSize: '2cqi',
+      fontSize: 'calc(var(--fit-scale, 1) * 2cqi)',
       textAlign: 'center',
       color: colors.muted,
     })
@@ -251,7 +266,7 @@ describe('quote — was: text-[4cqi] font-medium italic wrapped in curly quotes'
 
   it('sets the body italic at medium weight', () => {
     expect(draw('quote')('body')).toHaveStyle({
-      fontSize: '4cqi',
+      fontSize: 'calc(var(--fit-scale, 1) * 4cqi)',
       fontWeight: '500',
       fontStyle: 'italic',
     })

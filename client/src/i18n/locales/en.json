@@ -773,7 +773,13 @@
       "addRow": "Add row",
       "addColumn": "Add column",
       "removeRow": "Remove row {n}",
-      "removeColumn": "Remove column {n}"
+      "removeColumn": "Remove column {n}",
+      "resizeColumn": "Resize column {n}",
+      "resizeRow": "Resize row {n}"
+    },
+    "link": {
+      "open": "Ctrl-click to open",
+      "openMac": "⌘-click to open"
     },
     "addKind": {
       "math": "Add a formula",
@@ -1259,6 +1265,7 @@
     "email_unverified": "Confirm your email address first — check your inbox, or send a new link from your account settings",
     "capability_required": "Connect a Google account first — you can do that from your account settings",
     "google_reconnect": "Google would not let this account read that file — reconnect your Google account and try again",
+    "source_forbidden": "You do not have access to that file — ask its owner to share it with you, or sign in with an account that can open it",
     "source_not_found": "That file was not found in your Drive — check the link",
     "source_unreadable": "Google would not hand over that file"
   },

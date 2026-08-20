@@ -40,6 +40,7 @@ const colors: ThemeColors = {
   accent: '#0ff',
   penColor: '#000',
   highlighterColor: '#ff0',
+  link: '#0ff',
 }
 
 interface TemplateFile {

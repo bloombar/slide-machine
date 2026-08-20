@@ -773,7 +773,13 @@
       "addRow": "添加行",
       "addColumn": "添加列",
       "removeRow": "删除第 {n} 行",
-      "removeColumn": "删除第 {n} 列"
+      "removeColumn": "删除第 {n} 列",
+      "resizeColumn": "调整第 {n} 列宽度",
+      "resizeRow": "调整第 {n} 行高度"
+    },
+    "link": {
+      "open": "按住 Ctrl 点击可打开",
+      "openMac": "按住 ⌘ 点击可打开"
     },
     "addKind": {
       "math": "添加公式",
@@ -1259,6 +1265,7 @@
     "email_unverified": "请先确认你的邮箱地址——查看收件箱，或在账户设置中发送新链接",
     "capability_required": "请先关联 Google 账号 — 可在账号设置中完成",
     "google_reconnect": "Google 不允许此账号读取该文件——请重新连接你的 Google 账号后重试",
+    "source_forbidden": "你没有该文件的访问权限——请让文件所有者与你共享，或使用有权限的账号登录",
     "source_not_found": "在你的云端硬盘中找不到该文件——请检查链接",
     "source_unreadable": "Google 未能提供该文件"
   },

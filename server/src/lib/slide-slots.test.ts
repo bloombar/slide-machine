@@ -11,6 +11,7 @@ import {
   patchSlot,
   remapSlots,
   slotsOf,
+  slotValueSchema,
 } from './slide-slots'
 
 const changedNothing = () => false
@@ -213,6 +214,56 @@ describe('a legacy field and a box it cannot express', () => {
     expect(folded.body).toEqual({
       kind: 'code',
       source: 'for x in xs:\n    pass',
+    })
+  })
+
+  describe('a table’s column widths on the wire (EDIT-7)', () => {
+    /** A table slot as the editor would send it. */
+    const table = (extra: Record<string, unknown>) => ({
+      kind: 'table',
+      rows: [['2024', '812']],
+      ...extra,
+    })
+
+    it('accepts the proportions the editor sends', () => {
+      // The whole point of the field: a drag that the server rejects is a drag
+      // that silently does nothing.
+      const parsed = slotValueSchema.parse(
+        table({ colWidths: [0.25, 0.75], rowHeights: [1] }),
+      )
+      expect(parsed).toMatchObject({ colWidths: [0.25, 0.75] })
+    })
+
+    it('accepts a table that carries none, which is most of them', () => {
+      expect(slotValueSchema.parse(table({}))).toEqual({
+        kind: 'table',
+        rows: [['2024', '812']],
+      })
+    })
+
+    it('accepts a list that no longer matches the columns', () => {
+      // A column added since the sizes were stored leaves the list short. The
+      // surfaces normalise on read (`tableTracks`), so rejecting it here would
+      // make an ordinary edit unsaveable.
+      expect(() =>
+        slotValueSchema.parse(table({ colWidths: [0.5] })),
+      ).not.toThrow()
+    })
+
+    it('refuses a width that could not be a proportion', () => {
+      // A zero or a negative would collapse a column and take its content out
+      // of sight; a number over one would put the table outside its box.
+      for (const bad of [[0], [-0.5], [1.5]]) {
+        expect(() => slotValueSchema.parse(table({ colWidths: bad }))).toThrow()
+      }
+    })
+
+    it('refuses a list longer than any table anyone reads', () => {
+      expect(() =>
+        slotValueSchema.parse(
+          table({ colWidths: Array.from({ length: 200 }, () => 0.5) }),
+        ),
+      ).toThrow()
     })
   })
 

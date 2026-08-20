@@ -96,6 +96,36 @@
       "elementPositions": {}
     },
     {
+      "type": "content-list",
+      "label": "Text and points",
+      "purpose": "A sentence or two that sets something up, then the points that follow from it",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Slide title"
+        },
+        {
+          "name": "body",
+          "kind": "text",
+          "label": "Opening text",
+          "multiline": true
+        },
+        {
+          "name": "bullets",
+          "kind": "bullets",
+          "label": "Slide bullets"
+        }
+      ],
+      "constraints": {
+        "maxTitleChars": 50,
+        "maxBodyChars": 200,
+        "maxBullets": 4,
+        "maxBulletChars": 70
+      },
+      "elementPositions": {}
+    },
+    {
       "type": "image-heavy",
       "label": "Image",
       "purpose": "A striking image dominates; minimal caption text",

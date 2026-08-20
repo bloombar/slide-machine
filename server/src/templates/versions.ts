@@ -23,6 +23,7 @@ import {
   resolveTemplate,
   resolveTemplateForRead,
 } from './resolve'
+import { adoptDefaultTree } from './builtin'
 
 /**
  * What a deck's own paths need off a template: how its slides are laid out
@@ -131,7 +132,16 @@ export const getVersion = async (
   return doc ? toTemplateVersionDto(doc) : undefined
 }
 
-/** The structure a version describes, in the shape deck paths expect. */
+/**
+ * The structure a version describes, in the shape deck paths expect.
+ *
+ * Layouts are given a tree the same way a template's are (`adoptDefaultTree`),
+ * because a lecture should draw exactly as its design does in the editor. A
+ * design imported from Slides is stored as measured boxes; converted in one
+ * place and not the other, the editor drew it through the tree renderer and
+ * the lecture through the positioned one — two renderers, two sets of
+ * behaviour, and anything added to one silently missing from the other.
+ */
 export const templateFromVersion = (
   version: TemplateVersion,
 ): DeckTemplate => ({
@@ -139,7 +149,7 @@ export const templateFromVersion = (
   name: version.name,
   renderMode: version.renderMode,
   theme: version.theme,
-  layouts: version.layouts,
+  layouts: adoptDefaultTree(version.layouts),
   ...(version.aiInstructions ? { aiInstructions: version.aiInstructions } : {}),
 })
 

@@ -239,6 +239,33 @@ const formula: LayoutNode = {
  * the theme, and the drawing tools own the surface (WB-1). */
 const whiteboard: LayoutNode = { id: 'root' }
 
+/**
+ * A paragraph that sets something up, and the points that follow from it.
+ *
+ * `content` gives prose and `list` gives points, and a slide that wants both
+ * had to pick one — so an instructor with a sentence of context above three
+ * points either lost the context or wrote it as a fourth point. This is the
+ * shape most lecture slides actually are.
+ *
+ * The prose sits above the points because that is the order it is read in,
+ * and takes only the room it needs: the points are what the slide is for, and
+ * a long intro should not squeeze them.
+ */
+const contentList: LayoutNode = {
+  id: 'root',
+  container: {
+    mode: 'flex',
+    direction: 'column',
+    justify: 'center',
+    gap: 2.5,
+  },
+  children: [
+    { id: 'title', slot: 'title', style: { textStyle: 'heading' } },
+    { id: 'body', slot: 'body', style: { textStyle: 'body' } },
+    { id: 'bullets', slot: 'bullets', grow: 1, style: { textStyle: 'bullet' } },
+  ],
+}
+
 /** By conventional layout type. A type absent here has no default, which is
  * what a layout an author named themselves is. */
 export const DEFAULT_LAYOUT_TREES: Record<string, LayoutNode> = {
@@ -246,6 +273,7 @@ export const DEFAULT_LAYOUT_TREES: Record<string, LayoutNode> = {
   section,
   content,
   list,
+  'content-list': contentList,
   'image-heavy': imageHeavy,
   'two-column': twoColumn,
   quote,

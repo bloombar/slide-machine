@@ -310,6 +310,33 @@ describe('specialized content in an exported deck (EXP-7)', () => {
     expect(xml).not.toMatch(/<a:t>2024\s+812<\/a:t>/)
   })
 
+  it('divides a table in the proportions it was given', async () => {
+    // pptxgenjs divides the box equally when it is told nothing, so a table
+    // the author sized used to arrive in Slides re-divided (EDIT-7).
+    const sized = specialized()
+    sized.slides[0]!.slots!.data = {
+      kind: 'table',
+      header: ['Year', 'Rainfall in millimetres'],
+      rows: [['2024', '812']],
+      colWidths: [0.25, 0.75],
+    }
+    const xml = await slideXml(sized)
+    // The grid states each column's width, in EMU.
+    const widths = [...xml.matchAll(/<a:gridCol w="(\d+)"/g)].map(m =>
+      Number(m[1]),
+    )
+    expect(widths).toHaveLength(2)
+    expect(widths[1]! / widths[0]!).toBeCloseTo(3, 1)
+  })
+
+  it('divides a table nobody sized equally, as it always did', async () => {
+    const widths = [
+      ...(await slideXml(specialized())).matchAll(/<a:gridCol w="(\d+)"/g),
+    ].map(m => Number(m[1]))
+    expect(widths).toHaveLength(2)
+    expect(widths[0]).toBe(widths[1])
+  })
+
   it('sets a listing monospaced, with its indentation intact', async () => {
     const xml = await slideXml(specialized())
     expect(xml).toContain('Courier New')
@@ -740,5 +767,218 @@ describe('the credit printed under a picture', () => {
     expect(xml).toContain('Wikimedia')
     // ...and marked, so an importer can tell it from the author's own words.
     expect(xml).toMatch(/name="credit-line"[^>]*descr="credit-line"/)
+  })
+})
+
+describe('a slide holding more than its box', () => {
+  /** The smallest type size in a slide's XML, in hundredths of a point. */
+  const smallestSize = (xml: string): number =>
+    Math.min(...[...xml.matchAll(/sz="(\d+)"/g)].map(m => Number(m[1])))
+
+  const xmlFor = async (body: string) => {
+    const one: ExportDeck = {
+      title: 'Photosynthesis',
+      templateId: 'classic',
+      slides: [{ layoutType: 'content', title: 'Light', body }],
+    }
+    return new AdmZip(Buffer.from(await deckToPptx(one)))
+      .getEntry('ppt/slides/slide1.xml')!
+      .getData()
+      .toString('utf8')
+  }
+
+  const dense = Array.from(
+    { length: 24 },
+    (_, i) => `Point ${i + 1}: a full line of prose about photosynthesis.`,
+  ).join('\n')
+
+  it('draws its type smaller than a slide that fits', async () => {
+    // Without this the exporter drew every line from the top of the box at the
+    // size the design asks for, so the end of a dense slide ran off the box and
+    // off the page: the file was a different lecture from the one on screen.
+    expect(smallestSize(await xmlFor(dense))).toBeLessThan(
+      smallestSize(await xmlFor('An overview')),
+    )
+  })
+
+  it('leaves a slide that fits at the size its design asks for', async () => {
+    // The common case, and the one to protect: a deck the app wrote is written
+    // to the box's limits, and shrinking those too would be a restyling.
+    expect(smallestSize(await xmlFor('An overview'))).toBe(
+      smallestSize(await xmlFor('An overview of the topic')),
+    )
+  })
+
+  it('asks PowerPoint to shrink the box itself as well', async () => {
+    // The estimate here has no font metrics; PowerPoint does. It only
+    // recomputes on an edit, which is why the type is pre-shrunk too.
+    expect(await xmlFor('An overview')).toContain('normAutofit')
+  })
+})
+
+/**
+ * The typeface a design asked for, carried into the file (TMPL-8).
+ *
+ * The exporters knew only "monospaced or not", so a deck imported from a
+ * design set in Georgia came back from the exporter in the one face the
+ * exporter happened to use — which is the plainest way a file stops looking
+ * like the deck it was made from.
+ */
+describe('the typeface an exported deck is set in', () => {
+  /** The first slide's XML, where a run states the face it is set in. */
+  const slideXml = async (deck: ExportDeck) =>
+    new AdmZip(Buffer.from(await deckToPptx(deck)))
+      .getEntry('ppt/slides/slide1.xml')!
+      .getData()
+      .toString('utf8')
+
+  const inFont = (fontFamily?: string): ExportDeck => ({
+    title: 'Rain',
+    templateId: 'classic',
+    layouts: [
+      {
+        type: 'plain',
+        label: 'Plain',
+        purpose: 'prose',
+        slots: [{ name: 'body', kind: 'text', label: 'Body' }],
+        elementPositions: {
+          body: {
+            x: 0.1,
+            y: 0.2,
+            w: 0.8,
+            h: 0.5,
+            ...(fontFamily ? { fontFamily } : {}),
+          },
+        },
+      },
+    ],
+    slides: [
+      {
+        layoutType: 'plain',
+        slots: { body: { kind: 'text', value: 'Rainfall over the decade' } },
+      },
+    ],
+  })
+
+  it('sets a serif design in a serif', async () => {
+    expect(await slideXml(inFont('serif'))).toContain('Georgia')
+  })
+
+  it('sets a condensed design in a condensed face', async () => {
+    expect(await slideXml(inFont('condensed'))).toContain('Arial Narrow')
+  })
+
+  it('leaves a design that asked for no particular stack alone', async () => {
+    // The file's own default is as good an answer, and naming a face where
+    // none was chosen would be inventing a design decision.
+    const xml = await slideXml(inFont())
+    expect(xml).not.toContain('Georgia')
+    expect(xml).not.toContain('Arial Narrow')
+  })
+})
+
+/**
+ * An imported slide in the .pptx (TMPL-8/EXP-5), which is what Drive converts
+ * into Google Slides.
+ *
+ * The same three faults the PDF had: a Markdown box written out as its source,
+ * every box drawn in one colour, and none of the design's own bands.
+ */
+describe('an imported slide in an exported deck', () => {
+  const imported: Layout = {
+    type: 'imported',
+    label: 'Imported',
+    purpose: 'a slide',
+    slots: [{ name: 'body', kind: 'text', label: 'Body' }],
+    elementPositions: {
+      body: { x: 0.1, y: 0.2, w: 0.8, h: 0.6, color: '#0000FF' },
+    },
+    decoration: [{ x: 0, y: 0.95, w: 1, h: 0.02, fill: '#63D297' }],
+  }
+
+  const xmlOf = async (value: string) => {
+    const deck: ExportDeck = {
+      title: 'Imported',
+      templateId: 'classic',
+      layouts: [imported],
+      slides: [
+        { layoutType: 'imported', slots: { body: { kind: 'text', value } } },
+      ],
+    }
+    return new AdmZip(Buffer.from(await deckToPptx(deck)))
+      .getEntry('ppt/slides/slide1.xml')!
+      .getData()
+      .toString('utf8')
+  }
+
+  /** The words the slide says, with the runs joined back together. */
+  const wordsIn = (xml: string) =>
+    [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map(m => m[1]).join('')
+
+  it('writes the words, not the Markdown that spells them', async () => {
+    const xml = await xmlOf('**Faculty** of parts')
+    expect(wordsIn(xml)).toContain('Faculty')
+    expect(wordsIn(xml)).not.toContain('**')
+  })
+
+  it('counts a numbered list instead of writing 1 every time', async () => {
+    expect(wordsIn(await xmlOf('1. One\n1. Two\n1. Three'))).toContain('2.')
+  })
+
+  it('draws a box in the colour its design gives it', async () => {
+    expect(await xmlOf('Plain words')).toContain('0000FF')
+  })
+
+  it('draws the design’s own band', async () => {
+    expect(await xmlOf('Plain words')).toContain('63D297')
+  })
+
+  it('keeps a marker on the same line as the words it marks', async () => {
+    /*
+     * pptx breaks AFTER a run, and `sameLine` says a run continues the one
+     * before it — so the break belongs to the NEXT run, not this one. Read off
+     * the run itself, a marker asked for a break straight after itself: "1."
+     * sat alone on its line, its words fell to the next, and the following
+     * marker landed on the end of them.
+     */
+    const paragraphs = [
+      ...(await xmlOf('1. One\n1. Two')).matchAll(/<a:p>([\s\S]*?)<\/a:p>/g),
+    ]
+      .map(m =>
+        [...m[1]!.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map(t => t[1]).join(''),
+      )
+      .filter(t => t.trim())
+    expect(paragraphs).toEqual(['1. One', '2. Two'])
+  })
+
+  it('sets a sub-point in from its parent', async () => {
+    /*
+     * pptxgenjs writes `marL="0" indent="0"` on every paragraph that does not
+     * use its own bullets, so `indentLevel` alone moved nothing and a
+     * sub-point sat flush against its parent in PowerPoint and in Slides
+     * alike. The path that does set a margin insists on drawing pptx's own
+     * bullet, which would sit beside the marker already counted here — and
+     * count its own way, differently from the PDF and the screen.
+     */
+    const xml = await xmlOf('1. One\n   1. Nested')
+    const markers = [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)]
+      .map(m => m[1]!)
+      .filter(t => /[a-z0-9]\./i.test(t))
+    expect(markers[0]).toBe('1. ')
+    // The nested one carries its indent in the words, where nothing strips it.
+    expect(markers[1]).toMatch(/^\u00a0+a\. $/)
+  })
+
+  it('leaves a top-level point flush, with no indent to carry', async () => {
+    const xml = await xmlOf('1. One\n1. Two')
+    expect(xml).not.toContain('\u00a0')
+  })
+
+  it('carries a link as a link, not as its address in the words', async () => {
+    // Slides and PowerPoint both have hyperlinks; an imported slide whose only
+    // address was inside one exported unreachable.
+    expect(
+      await xmlOf('See [the handbook](https://example.org/handbook)'),
+    ).toContain('hlinkClick')
   })
 })

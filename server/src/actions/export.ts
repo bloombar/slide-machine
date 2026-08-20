@@ -63,7 +63,7 @@ import { deckToPptx } from '../lib/deck-pptx'
 import { visibleStrokes } from '../lib/deck-drawings'
 import { resolveTemplateTheme } from '../lib/deck-theme'
 import { resolveDeckTemplate } from '../templates/versions'
-import { slotsOf } from '../lib/slide-slots'
+import { slotsOf, legacyFrom } from '../lib/slide-slots'
 import {
   uploadFileToDriveLive,
   createGoogleSlidesLive,
@@ -143,6 +143,20 @@ export const buildExportDeck = async (
         )
       : {}
   const slides: ExportSlide[] = slideDocs.map(doc => {
+    /*
+     * The picture, read from the slot map rather than the document's field.
+     *
+     * `imageRef` is one of the five conventional fields, and the map is the
+     * store they are derived FROM (`slide-slots`). A slide the app generated
+     * has both; an imported one is created with its slots and nothing else,
+     * so `doc.imageRef` was empty and the export fetched nothing — an
+     * imported lecture exported with every picture missing, on every slide
+     * that had one.
+     *
+     * The document still wins where it has a value, so nothing changes for a
+     * deck that carries both.
+     */
+    const derived = legacyFrom(slotsOf(doc))
     const s = overlaySlideTranslation(
       {
         title: doc.title,
@@ -161,10 +175,12 @@ export const buildExportDeck = async (
       title: s.title,
       body: s.body,
       bullets: s.bullets,
-      imageRef: doc.imageRef,
-      imageSource: doc.imageSource,
+      imageRef: doc.imageRef ?? derived.imageRef,
+      imageSource: doc.imageSource ?? derived.imageSource,
       caption: s.caption,
-      attribution: doc.attribution,
+      // The credit travels with the picture (IMG-5): a licence that requires
+      // attribution is not satisfied by one that exported anonymous.
+      attribution: doc.attribution ?? derived.attribution,
       narration: doc.sourceTranscript,
       drawings: includeWhiteboard ? visibleStrokes(doc.drawings) : undefined,
     }

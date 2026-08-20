@@ -49,9 +49,11 @@ describe('what a box held arrives in its slot', () => {
     })
   })
 
-  it('joins the runs a sentence was split across', () => {
+  it('joins the runs a sentence was split across, keeping the stress', () => {
     // Google splits a line wherever styling changes, so a bolded word alone
-    // would otherwise arrive as its own paragraph
+    // would otherwise arrive as its own paragraph. The bold is the author
+    // stressing a word — only some of the line has it — so it is carried as
+    // Markdown, which is what the slide renders.
     const result = importedSlide(
       slide([
         slot('title', {
@@ -63,7 +65,7 @@ describe('what a box held arrives in its slot', () => {
     )
     expect(result.slots.title).toEqual({
       kind: 'text',
-      value: 'Light dependent',
+      value: 'Light **dependent**',
     })
   })
 
@@ -109,6 +111,39 @@ describe('what a box held arrives in its slot', () => {
         ['1', '2'],
       ],
     })
+  })
+
+  it('places the proportions a table had where it came from', () => {
+    // Otherwise an imported table is silently re-divided into equal columns
+    // (EDIT-7), whatever its author made it.
+    const result = importedSlide(
+      slide([
+        slot('data', {
+          kind: 'table',
+          table: {
+            rows: [['a', 'b']],
+            colWidths: [0.3, 0.7],
+            rowHeights: [1],
+          },
+        }),
+      ]),
+      'content',
+      stored,
+    )
+    expect(result.slots.data).toMatchObject({
+      kind: 'table',
+      colWidths: [0.3, 0.7],
+      rowHeights: [1],
+    })
+  })
+
+  it('leaves a table that stated no proportions without any', () => {
+    const result = importedSlide(
+      slide([slot('data', { kind: 'table', table: { rows: [['a', 'b']] } })]),
+      'content',
+      stored,
+    )
+    expect(result.slots.data).toEqual({ kind: 'table', rows: [['a', 'b']] })
   })
 
   it('keeps the layout the design analysis assigned, rather than guessing', () => {
@@ -500,5 +535,126 @@ describe('a list that arrived as fewer runs than it has points', () => {
       kind: 'bullets',
       items: ['A bold point', 'A plain one'],
     })
+  })
+})
+
+/**
+ * A list of points with points under them (TMPL-8).
+ *
+ * A bullets slot holds strings, and a string has no depth: a sub-point came
+ * back level with its parent. A box that also held a link was already written
+ * as Markdown and kept its nesting, which is why the same deck showed
+ * sub-points on some slides and not on others.
+ */
+describe('a box whose points sit under one another', () => {
+  const point = (text: string, level = 0) => ({
+    text: `${text}\n`,
+    bulleted: true,
+    ...(level ? { bulletLevel: level } : {}),
+  })
+
+  it('keeps the depth, by writing the box as Markdown', () => {
+    const result = importedSlide(
+      slide([
+        slot('body', {
+          bulleted: true,
+          runs: [
+            point('Where the data comes from'),
+            point('A government agency', 1),
+            point('A nonprofit', 1),
+            point('Then cite it'),
+          ],
+        }),
+      ]),
+      'list',
+      stored,
+    )
+    expect(result.slots.body).toEqual({
+      kind: 'text',
+      value: [
+        '- Where the data comes from',
+        '  - A government agency',
+        '  - A nonprofit',
+        '- Then cite it',
+      ].join('\n'),
+    })
+  })
+
+  it('leaves a flat list as the list of strings a bullets slot holds', () => {
+    // The common case, and it must not change: a flat list has no depth to
+    // lose, and Markdown for it would be a heavier shape for nothing.
+    const result = importedSlide(
+      slide([
+        slot('body', {
+          bulleted: true,
+          runs: [point('One'), point('Two')],
+        }),
+      ]),
+      'list',
+      stored,
+    )
+    expect(result.slots.body).toEqual({
+      kind: 'bullets',
+      items: ['One', 'Two'],
+    })
+  })
+})
+
+/**
+ * A list the author numbered (TMPL-8).
+ *
+ * A bullets slot holds strings and draws a dash in front of each, so a list
+ * numbered "1. 2. 3." came back as three dashes — and the ordering is the
+ * whole point of numbering it.
+ */
+describe('a box whose points are numbered', () => {
+  const point = (text: string, over: Record<string, unknown> = {}) => ({
+    text: `${text}\n`,
+    bulleted: true,
+    ordered: true,
+    ...over,
+  })
+
+  it('keeps the numbering, by writing the box as Markdown', () => {
+    const result = importedSlide(
+      slide([
+        slot('body', {
+          bulleted: true,
+          runs: [point('Author or creator'), point('Date of publication')],
+        }),
+      ]),
+      'list',
+      stored,
+    )
+    // Every point written "1.": Markdown renumbers them in order, and writing
+    // the real numbers would fight the renderer over any point added later.
+    expect(result.slots.body).toEqual({
+      kind: 'text',
+      value: '1. Author or creator\n1. Date of publication',
+    })
+  })
+
+  it('keeps a lettered sub-list under its numbered parent', () => {
+    const result = importedSlide(
+      slide([
+        slot('body', {
+          bulleted: true,
+          runs: [
+            point('Form your research question'),
+            point('Who (population)', { bulletLevel: 1 }),
+            point('What (subject)', { bulletLevel: 1 }),
+          ],
+        }),
+      ]),
+      'list',
+      stored,
+    )
+    expect((result.slots.body as { value: string }).value).toBe(
+      [
+        '1. Form your research question',
+        '   1. Who (population)',
+        '   1. What (subject)',
+      ].join('\n'),
+    )
   })
 })

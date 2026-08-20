@@ -23,8 +23,16 @@ import { fetchSlideImages, toDataUri } from './deck-image'
 import { slotToken } from './slot-metadata'
 import { typesetFormulas, type Formulas } from './deck-formulas'
 import { withSlotAltText } from './pptx-alt-text'
-import { computeLayout, type ColorRole } from './deck-layout'
+import {
+  computeLayout,
+  type ColorRole,
+  type TextBox,
+  type LayoutRun,
+} from './deck-layout'
 import { DEFAULT_THEME } from './deck-theme'
+import { fitScale, estimatedHeight } from './fit-scale'
+import { tableTracks } from '@slide-machine/shared'
+import { pptxFace } from './export-fonts'
 
 // pptxgenjs ships as CommonJS; the interop default differs across runtimes
 // (bundled vs tsx/native ESM), so resolve the constructor from either shape.
@@ -43,6 +51,57 @@ const noHash = (s: string): string => s.replace(/^#/, '').toUpperCase()
 
 type Pptx = InstanceType<typeof PptxGenJS>
 type Slide = ReturnType<Pptx['addSlide']>
+
+/**
+ * How much to shrink a text box's type so it fits the box (EXP-1).
+ *
+ * PowerPoint wraps the text, not us, so unlike the PDF there is nothing here
+ * to measure — the height is estimated from the box's width and what it holds.
+ * A slide is asked for at one aspect, so everything is worked in fractions of
+ * the slide's width, the unit the type sizes already come in.
+ *
+ * Estimated rather than measured, and so approximate. `fit: 'shrink'` on the
+ * shape asks PowerPoint to do the exact thing with its own metrics — but only
+ * once the box is edited or resized, which is no help to someone opening the
+ * file to read it. This gets the first look close; PowerPoint refines it after.
+ */
+const fitFor = (box: TextBox): number => {
+  // Lines, as PowerPoint will break them: a run continues the previous line
+  // unless it asked for a break.
+  const lines: string[] = []
+  for (const run of box.runs) {
+    if (run.sameLine && lines.length) lines[lines.length - 1] += run.text
+    else lines.push(run.text)
+  }
+  // The largest size in the box, since the shrink applies to all of it and the
+  // biggest run is what decides whether it overflows.
+  const size = Math.max(0, ...box.runs.map(r => r.sizeFrac))
+  const gaps = box.runs.reduce((sum, r) => sum + (r.spaceAfterFrac ?? 0), 0)
+  // Box height in width-fractions, to match the type sizes.
+  const height = box.h * (SLIDE_H / SLIDE_W)
+  return fitScale(
+    at => estimatedHeight(lines, size * at, box.w) + gaps * at,
+    height,
+  )
+}
+
+/**
+ * A run's text with its nesting in front of it, where it starts a line.
+ *
+ * pptxgenjs writes `marL="0" indent="0"` on every paragraph that does not use
+ * its own bullets, so `indentLevel` alone moved nothing: a sub-point sat flush
+ * against its parent, in PowerPoint and in Slides alike. The path that does set
+ * a margin insists on drawing pptx's own bullet, which would sit beside the
+ * marker we already counted — and count differently from the PDF and the
+ * screen, which is the thing this export model exists to prevent.
+ *
+ * So the indent is written into the words. Non-breaking spaces, because
+ * leading ordinary ones are what a renderer feels free to collapse.
+ */
+const indented = (run: LayoutRun, startsLine: boolean): string =>
+  startsLine && run.indent
+    ? `${'\u00a0'.repeat(run.indent * 4)}${run.text}`
+    : run.text
 
 /** Draws a slide's layout boxes (text, rule, image) then its whiteboard marks. */
 const renderSlide = (
@@ -66,10 +125,11 @@ const renderSlide = (
 ): void => {
   for (const box of computeLayout(slide, layout, templateTheme)) {
     if (box.kind === 'text') {
-      const runs = box.runs.map(r => ({
-        text: r.text,
+      const scale = fitFor(box)
+      const runs = box.runs.map((r, i) => ({
+        text: indented(r, i === 0 || !r.sameLine),
         options: {
-          fontSize: r.sizeFrac * WIDTH_PT,
+          fontSize: r.sizeFrac * scale * WIDTH_PT,
           bold: r.bold,
           italic: r.italic,
           // A syntax token's own colour wins over the slide's three roles
@@ -77,11 +137,32 @@ const renderSlide = (
           color: r.hex ? noHash(r.hex) : hex[r.color ?? 'ink'],
           bullet: r.bullet,
           // A listing keeps its indentation because the face is monospaced
-          // and nothing reflows it.
-          ...(r.mono ? { fontFace: 'Courier New' } : {}),
-          // Coloured pieces of one line come back together as that line.
-          breakLine: !r.sameLine,
-          paraSpaceAfter: (r.spaceAfterFrac ?? 0) * WIDTH_PT,
+          // and nothing reflows it; anything else is set in the nearest face
+          // to the stack the design asked for (TMPL-8), so an imported deck
+          // exports in the kind of type it was designed in.
+          ...(r.mono
+            ? { fontFace: 'Courier New' }
+            : pptxFace(r.family)
+              ? { fontFace: pptxFace(r.family)! }
+              : {}),
+          /*
+           * Coloured pieces of one line come back together as that line.
+           *
+           * pptx breaks AFTER a run, and `sameLine` says a run continues the
+           * one before it — so the question is about the NEXT run, not this
+           * one. Read off this run, a marker asked for a break straight after
+           * itself: "1." sat alone on its line, its words fell to the next,
+           * and the following marker landed on the end of them.
+           */
+          breakLine: !box.runs[i + 1]?.sameLine,
+          // A link is content (EXP-5): an imported slide whose only address
+          // was inside one exported unreachable.
+          ...(r.link ? { hyperlink: { url: r.link } } : {}),
+          // Said twice, because neither alone does it. `indentLevel` sets the
+          // paragraph's level, which a reader uses for its outline; the
+          // margin comes from the text (see `indented`).
+          ...(r.indent ? { indentLevel: r.indent } : {}),
+          paraSpaceAfter: (r.spaceAfterFrac ?? 0) * scale * WIDTH_PT,
         },
       }))
       if (!runs.length) continue
@@ -98,6 +179,10 @@ const renderSlide = (
             }),
         align: box.align,
         valign: box.valign === 'middle' ? 'middle' : 'top',
+        // PowerPoint's own shrink-to-fit, with its own font metrics, for
+        // anything the estimate above got slightly wrong. It only recomputes
+        // on an edit, which is why the type is pre-shrunk too.
+        fit: 'shrink',
         // What this shape IS, so a re-import knows the box without guessing
         // (EXP-8). Only boxes a template named have one.
         ...(box.slot ? { objectName: slotToken(box.slot) } : {}),
@@ -112,7 +197,9 @@ const renderSlide = (
         y: box.y * SLIDE_H,
         w: box.w * SLIDE_W,
         h: box.h * SLIDE_H,
-        fill: { color: hex[box.color] },
+        // The colour the design names, where it names one (TMPL-8): an
+        // imported band is whatever it was drawn, not one of three roles.
+        fill: { color: box.hex ? noHash(box.hex) : hex[box.color] },
         line: { type: 'none' },
       })
     } else if (box.kind === 'math') {
@@ -144,11 +231,19 @@ const renderSlide = (
           ]
         : body
       if (rows.length) {
+        const columns = Math.max(...rows.map(r => r.length), 1)
+        const w = box.w * SLIDE_W
+        const h = box.h * SLIDE_H
         s.addTable(rows, {
           x: box.x * SLIDE_W,
           y: box.y * SLIDE_H,
-          w: box.w * SLIDE_W,
-          h: box.h * SLIDE_H,
+          w,
+          h,
+          // The proportions the table was given (EDIT-7), in inches, since
+          // pptx wants sizes and not fractions. Without these pptxgenjs
+          // divides the box equally, which is what every table used to get.
+          colW: tableTracks(box.colWidths, columns).map(f => f * w),
+          rowH: tableTracks(box.rowHeights, rows.length).map(f => f * h),
           fontSize: TABLE_PT,
           border: { type: 'solid', pt: 0.5, color: hex.muted },
           ...(box.slot ? { objectName: slotToken(box.slot) } : {}),

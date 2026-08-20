@@ -25,6 +25,7 @@
  * they recover content the import reinterpreted.
  */
 import type { SlotKind, SlotSpec } from '@slide-machine/shared'
+import { isMixed, hasLinks, isNested, isCounted } from './markdown'
 import type {
   SourceBox,
   SourceElement,
@@ -107,6 +108,15 @@ const FROM_PLACEHOLDER: Record<string, string> = {
 const kindOf = (element: SourceElement): SlotKind => {
   if (element.kind === 'image') return 'image'
   if (element.kind === 'table') return 'table'
+  // A box that is prose AND points, or whose words point somewhere, is text
+  // holding Markdown — the shape it actually had (`markdown.ts`). Called a
+  // list it would be edited one line per point, which is not what it is.
+  const runs = element.runs ?? []
+  if (
+    isMixed(runs) ||
+    (element.bulleted && (hasLinks(runs) || isNested(runs) || isCounted(runs)))
+  )
+    return 'text'
   if (element.bulleted) return 'bullets'
   // Everything else is prose. A listing or a formula on a hand-built slide is
   // indistinguishable from text at this level, and guessing wrong buries the

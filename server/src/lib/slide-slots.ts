@@ -20,6 +20,11 @@ import type {
   SlotValue,
 } from '@slide-machine/shared'
 
+/** A ceiling on how many track sizes a table may carry. A table with more
+ * columns than this is not a table anyone reads, and the bound keeps a stored
+ * slot from growing without limit. */
+const MAX_TRACKS = 64
+
 const attributionSchema = z.object({
   caption: z.string().optional(),
   title: z.string().optional(),
@@ -63,6 +68,16 @@ export const slotValueSchema = z.discriminatedUnion('kind', [
     kind: z.literal('table'),
     header: z.array(z.string()).optional(),
     rows: z.array(z.array(z.string())),
+    // How the table divides its box (EDIT-7). Fractions of its own width and
+    // height, so the same table draws in proportion on screen, in a PDF and in
+    // a PowerPoint. Bounded, but not required to be the right length or to sum
+    // to one: `tableTracks` normalises on the way out, so a list left stale by
+    // an added column is drawn rather than rejected.
+    colWidths: z.array(z.number().positive().max(1)).max(MAX_TRACKS).optional(),
+    rowHeights: z
+      .array(z.number().positive().max(1))
+      .max(MAX_TRACKS)
+      .optional(),
   }),
 ])
 

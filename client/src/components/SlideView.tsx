@@ -76,7 +76,17 @@ export default function SlideView({
       data-slide-id={slide.id}
       data-layout={slide.layoutType}
       className="@container aspect-video w-full overflow-hidden rounded-xl shadow-2xl"
-      style={{ backgroundColor: colors.background, color: colors.text }}
+      style={
+        {
+          backgroundColor: colors.background,
+          color: colors.text,
+          // The link colour, as a custom property rather than a prop: an
+          // anchor is drawn deep inside `SlideMarkdown`, in any slot of any
+          // layout, and threading a colour through every one of those to
+          // reach it would be a lot of plumbing for one rule.
+          '--slide-link': colors.link,
+        } as React.CSSProperties
+      }
     >
       {createElement(rendererFor(slide.layoutType, layoutDef), {
         slide,

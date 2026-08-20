@@ -93,7 +93,7 @@ describe('errorHandler', () => {
  * which threw away the one thing the instructor needed — whether reconnecting
  * would help. An import then failed with nothing to act on, and the Connect
  * button could never appear because the client had no way to tell the cases
- * apart. Three codes, because they ask for three different things.
+ * apart. Four codes, because they ask for four different things.
  */
 describe('a source file that could not be read', () => {
   it('offers the reconnect a refused read calls for', () => {
@@ -105,6 +105,17 @@ describe('a source file that could not be read', () => {
     )
     expect(res.status).toBe(403)
     expect(res.body.error.code).toBe('google_reconnect')
+  })
+
+  it('does not offer a reconnect for a deck the account cannot open', () => {
+    // Its own code, because the answer is different: reconnecting the same
+    // account lands on the same refusal. What the user needs is access, or
+    // the account that already has it.
+    const res = handle(
+      new PresentationUnreadableError('no access', false, false, true),
+    )
+    expect(res.status).toBe(403)
+    expect(res.body.error.code).toBe('source_forbidden')
   })
 
   it('says a missing presentation is missing, not refused', () => {

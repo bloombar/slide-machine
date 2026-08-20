@@ -773,7 +773,13 @@
       "addRow": "Añadir fila",
       "addColumn": "Añadir columna",
       "removeRow": "Eliminar la fila {n}",
-      "removeColumn": "Eliminar la columna {n}"
+      "removeColumn": "Eliminar la columna {n}",
+      "resizeColumn": "Cambiar el ancho de la columna {n}",
+      "resizeRow": "Cambiar la altura de la fila {n}"
+    },
+    "link": {
+      "open": "Ctrl+clic para abrir",
+      "openMac": "⌘+clic para abrir"
     },
     "addKind": {
       "math": "Añadir una fórmula",
@@ -1259,6 +1265,7 @@
     "email_unverified": "Primero confirma tu dirección de correo: revisa tu bandeja de entrada o envía un enlace nuevo desde los ajustes de tu cuenta",
     "capability_required": "Primero conecta una cuenta de Google — puedes hacerlo desde la configuración de tu cuenta",
     "google_reconnect": "Google no permitió a esta cuenta leer ese archivo: vuelve a conectar tu cuenta de Google e inténtalo de nuevo",
+    "source_forbidden": "No tienes acceso a ese archivo: pide a su propietario que lo comparta contigo o inicia sesión con una cuenta que pueda abrirlo",
     "source_not_found": "No se encontró ese archivo en tu Drive: revisa el enlace",
     "source_unreadable": "Google no entregó ese archivo"
   },

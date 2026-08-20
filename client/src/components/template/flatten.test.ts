@@ -21,6 +21,7 @@ const colors: ThemeColors = {
   accent: '#00ffff',
   penColor: '#000000',
   highlighterColor: '#ffff00',
+  link: '#0ff',
 }
 
 const rect = (x: number, y: number, w: number, h: number): DOMRect =>

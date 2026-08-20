@@ -15,6 +15,11 @@ import type { Layout, SlotBox, SlotValue } from '@slide-machine/shared'
 import type { ExportSlide } from './deck-yaml'
 import { resolveTreeBoxes } from './tree-boxes'
 import { codeColor, highlightCode } from './code-highlight'
+import {
+  markdownLines,
+  looksLikeMarkdown,
+  type MarkdownLine,
+} from './markdown-runs'
 
 export type ColorRole = 'ink' | 'accent' | 'muted'
 
@@ -33,6 +38,20 @@ export interface LayoutRun {
   /** Set in a monospaced face, with its spacing kept exactly: a listing or
    * preformatted text (EXP-7). */
   mono?: boolean
+  /**
+   * Which of the app's font stacks the box asks for (`client/.../fonts.ts`).
+   *
+   * Carried so an export is set in the same kind of typeface the screen is: a
+   * deck imported from a design in Georgia used to come back from the exporter
+   * in Helvetica, because the exporters knew only "monospaced or not".
+   */
+  family?: string
+  /** Where this run points, if anywhere (EXP-5). A link is content: an
+   * imported slide whose only address was in a link exported unreachable. */
+  link?: string
+  /** How deep a point sits, 0 for a top-level one. Drawn as an offset, so a
+   * sub-point looks like one in the file as well as on the screen. */
+  indent?: number
   /** Extra gap after this paragraph, as a fraction of slide width. */
   spaceAfterFrac?: number
   /** Continues the previous run on the same line instead of starting a new
@@ -80,7 +99,9 @@ export interface RuleBox {
   y: number
   w: number
   h: number
-  color: ColorRole
+  color: ColorRole /** A literal colour, where the design names one rather than a role — an
+   * imported band is whatever colour it was drawn, not one of three. */
+  hex?: string
 }
 /**
  * A formula, to be typeset into the box rather than written into it (EXP-7).
@@ -110,6 +131,11 @@ export interface TableBox {
   h: number
   header?: string[]
   rows: string[][]
+  /** How the table divides its own box, as fractions (EDIT-7). Carried through
+   * so a table the author sized exports at those proportions rather than being
+   * re-divided equally by each format. */
+  colWidths?: number[]
+  rowHeights?: number[]
   slot?: string
 }
 
@@ -206,6 +232,22 @@ const roleOf = (color: string | undefined): ColorRole | undefined => {
 }
 
 /**
+ * A box's colour where it names one outright, rather than a role.
+ *
+ * The three roles are a template's palette, and a design imported from
+ * somewhere else does not have one — its boxes carry the colours they were
+ * drawn in. Those went through `roleOf`, which answers "ink" to anything it
+ * does not recognise, so every box of an imported deck exported in the theme's
+ * body colour: a red heading printed grey, and a slide of three colours
+ * printed in one.
+ *
+ * `hex` already exists on a run for exactly this reason — a syntax token's own
+ * colour — and the exporters already prefer it over the role.
+ */
+const literalOf = (color: string | undefined): string | undefined =>
+  color && /^#[0-9a-f]{3,8}$/i.test(color) ? color : undefined
+
+/**
  * A listing's lines, each split into the coloured pieces it is made of.
  *
  * One run per piece, with every run after the first on a line marked as
@@ -265,28 +307,117 @@ const specialBox = (
           ...geometry,
           ...(value.header?.length ? { header: value.header } : {}),
           rows: value.rows,
+          ...(value.colWidths?.length ? { colWidths: value.colWidths } : {}),
+          ...(value.rowHeights?.length ? { rowHeights: value.rowHeights } : {}),
           ...(slot ? { slot } : {}),
         }
       : null
   return null
 }
 
+/**
+ * One rendered Markdown line as runs: its marker, then its words.
+ *
+ * The marker is a run of its own so it is not bolded along with a bold
+ * lead-in, and every run after the first continues the line rather than
+ * starting one.
+ */
+const runsOfLine = (
+  line: MarkdownLine,
+  style: {
+    sizeFrac: number
+    bold?: boolean
+    color?: ColorRole
+    hex?: string
+    family?: string
+  },
+  linkColor?: string,
+): LayoutRun[] => {
+  const indent = line.indent
+  const base = { ...style, ...(indent !== undefined ? { indent } : {}) }
+  const runs: LayoutRun[] = []
+  if (line.marker)
+    runs.push({ ...base, text: `${line.marker} `, bold: undefined })
+  for (const piece of line.runs) {
+    runs.push({
+      ...base,
+      text: piece.text,
+      // The box's own weight still applies where the sentence asks for none.
+      bold: piece.bold || style.bold,
+      ...(piece.italic ? { italic: true } : {}),
+      ...(piece.mono ? { mono: true } : {}),
+      ...(piece.link
+        ? {
+            link: piece.link,
+            // Drawn in the design's link colour, as the screen draws it.
+            ...(linkColor ? { hex: linkColor } : {}),
+          }
+        : {}),
+      ...(runs.length ? { sameLine: true } : {}),
+    })
+  }
+  // A blank line is a paragraph break, and still has to occupy one.
+  if (!runs.length) runs.push({ ...base, text: '' })
+  return runs
+}
+
+/**
+ * A layout's own decoration as boxes: the colour it is painted, the bands and
+ * rules drawn on it (TMPL-8).
+ *
+ * Pictures are left out. A logo is stored as the template's own file and would
+ * have to be fetched per layout, which the export does per slide; the fills
+ * are what carry a design's colour, and drawing them is the difference between
+ * an imported deck exporting as itself and exporting on blank white.
+ */
+const decorationBoxes = (layout: Layout): LayoutBox[] =>
+  (layout.decoration ?? [])
+    .filter(piece => piece.fill)
+    .map(piece => ({
+      kind: 'rule' as const,
+      x: piece.x,
+      y: piece.y,
+      w: piece.w,
+      h: piece.h,
+      color: roleOf(piece.fill) ?? 'accent',
+      ...(literalOf(piece.fill) ? { hex: literalOf(piece.fill)! } : {}),
+    }))
+
 /** The paragraphs one slot contributes, whatever kind it holds. */
 const runsForSlot = (
   value: SlotValue | undefined,
   box: SlotBox,
   background = '#ffffff',
+  /** What this design draws a link in, where it says (TMPL-8). The screen
+   * draws links in it, and a file that did not would be a different slide. */
+  linkColor?: string,
 ): LayoutRun[] => {
   // A box's fontSize is `cqi` — a percent of slide width — and the export
   // model measures type as a fraction of that same width, so this is /100
   // rather than a guess.
   const sizeFrac = (box.fontSize ?? 4) / 100
   const color = roleOf(box.color)
+  const hex = literalOf(box.color)
   const bold = (box.fontWeight ?? 400) >= 600 ? true : undefined
+  const family = box.fontFamily
   if (!value) return []
   switch (value.kind) {
     case 'text':
-      return value.value ? [{ text: value.value, sizeFrac, bold, color }] : []
+      if (!value.value) return []
+      /*
+       * A box stored as Markdown is RENDERED, not written out.
+       *
+       * An imported box holds Markdown, because a real slide's box is rarely
+       * one thing (`import/markdown.ts`). The viewer renders it; the exporters
+       * wrote the source, so a PDF carried "**Office hours** — see the [handbook](…)" with its
+       * asterisks showing, and every numbered point printed "1." — the source
+       * says `1.` on every line and it is the renderer that counts them.
+       */
+      if (looksLikeMarkdown(value.value))
+        return markdownLines(value.value).flatMap(line =>
+          runsOfLine(line, { sizeFrac, bold, color, hex, family }, linkColor),
+        )
+      return [{ text: value.value, sizeFrac, bold, color, hex, family }]
     case 'preformatted':
       // Its spacing is the content: monospaced, and split by line so nothing
       // reflows it (EXP-7).
@@ -301,6 +432,8 @@ const runsForSlot = (
         sizeFrac,
         bullet: true,
         color,
+        hex,
+        family,
         spaceAfterFrac: sizeFrac * 0.3,
       }))
     case 'code':
@@ -367,6 +500,7 @@ const treeLayout = (
   layout: Layout,
   theme: Record<string, unknown> | undefined,
   background: string,
+  link?: string,
 ): LayoutBox[] | null => {
   if (!layout.tree) return null
   const boxes: LayoutBox[] = []
@@ -379,6 +513,10 @@ const treeLayout = (
         kind: 'rule',
         ...geometry,
         color: roleOf(box.style.background) ?? 'accent',
+        // The colour it was actually drawn in, where the design names one.
+        ...(literalOf(box.style.background)
+          ? { hex: literalOf(box.style.background)! }
+          : {}),
       })
       continue
     }
@@ -392,7 +530,7 @@ const treeLayout = (
       boxes.push(special)
       continue
     }
-    const runs = runsForSlot(value, box.style as SlotBox, background)
+    const runs = runsForSlot(value, box.style as SlotBox, background, link)
     if (!runs.length) continue
     boxes.push({
       kind: 'text',
@@ -417,6 +555,7 @@ const arrangedLayout = (
   slide: ExportSlide,
   layout: Layout,
   background: string,
+  link?: string,
 ): LayoutBox[] | null => {
   const positions = layout.elementPositions ?? {}
   if (!Object.keys(positions).length) return null
@@ -436,7 +575,7 @@ const arrangedLayout = (
       boxes.push(special)
       continue
     }
-    const runs = runsForSlot(value, box, background)
+    const runs = runsForSlot(value, box, background, link)
     if (!runs.length) continue
     boxes.push({
       kind: 'text',
@@ -504,10 +643,22 @@ const arrangeBoxes = (
     // what a layout with neither still gets.
     const background =
       typeof theme?.background === 'string' ? theme.background : '#ffffff'
-    const drawn = treeLayout(slide, layout, theme, background)
-    if (drawn) return drawn
-    const arranged = arrangedLayout(slide, layout, background)
-    if (arranged) return arranged
+    const link = typeof theme?.link === 'string' ? theme.link : undefined
+    /*
+     * The design's own bands and rules, drawn first so everything else sits
+     * on top of them.
+     *
+     * An imported layout carries these (`import/build-template`): the colour
+     * it is painted, the line under every title, the panel behind a column.
+     * The exporters drew the boxes and none of the design, so an imported
+     * deck exported onto a blank white page — the same slides, with the
+     * design taken off.
+     */
+    const design = decorationBoxes(layout)
+    const drawn = treeLayout(slide, layout, theme, background, link)
+    if (drawn) return [...design, ...drawn]
+    const arranged = arrangedLayout(slide, layout, background, link)
+    if (arranged) return [...design, ...arranged]
   }
   switch (slide.layoutType) {
     case 'title':

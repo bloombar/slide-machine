@@ -234,6 +234,61 @@ describe('what a shape turns out to be', () => {
     })
   })
 
+  it('reads how a table divides itself, so it is not re-divided equally', () => {
+    // Google states a width for every column. Discarding them and drawing
+    // equal columns gives a year the same width as a sentence, which is one of
+    // the plainest ways an imported table stops looking like its slide.
+    const cell = (text: string) => ({
+      text: {
+        textElements: [{ textRun: { content: `${text}\n`, style: {} } }],
+      },
+    })
+    const table = shape({
+      table: {
+        tableColumns: [
+          { columnWidth: { magnitude: 1_000_000, unit: 'EMU' } },
+          { columnWidth: { magnitude: 3_000_000, unit: 'EMU' } },
+        ],
+        tableRows: [
+          {
+            rowHeight: { magnitude: 500_000, unit: 'EMU' },
+            tableCells: [cell('Year'), cell('mm')],
+          },
+          {
+            rowHeight: { magnitude: 1_500_000, unit: 'EMU' },
+            tableCells: [cell('2024'), cell('812')],
+          },
+        ],
+      },
+    })
+    const read = toSourcePresentation(
+      presentation({ slides: [{ objectId: 's1', pageElements: [table] }] }),
+    )
+    // Fractions of the table, not lengths: the box is the box the reader
+    // measured, and what matters is the proportions inside it.
+    expect(read.slides[0]!.elements[0]).toMatchObject({
+      kind: 'table',
+      table: { colWidths: [0.25, 0.75], rowHeights: [0.25, 0.75] },
+    })
+  })
+
+  it('leaves a table whose columns state no width to divide itself equally', () => {
+    const cell = (text: string) => ({
+      text: {
+        textElements: [{ textRun: { content: `${text}\n`, style: {} } }],
+      },
+    })
+    const table = shape({
+      table: { tableRows: [{ tableCells: [cell('a'), cell('b')] }] },
+    })
+    const read = toSourcePresentation(
+      presentation({ slides: [{ objectId: 's1', pageElements: [table] }] }),
+    )
+    const element = read.slides[0]!.elements[0]!
+    expect(element.table?.colWidths).toBeUndefined()
+    expect(element.table?.rowHeights).toBeUndefined()
+  })
+
   it('keeps a rule, which is part of a design though it holds nothing', () => {
     const rule = shape({
       shape: {
@@ -1514,6 +1569,27 @@ describe('when Google will not hand the presentation over', () => {
     expect(err.message).toMatch(/not enabled for this deployment/i)
   })
 
+  it('does not ask for one when the deck simply is not theirs to open', async () => {
+    // The common case, and the one this used to get wrong: an instructor
+    // pastes a link to a colleague's lecture. Nothing is wrong with their
+    // connection, so reconnecting sends them through the consent screen to
+    // arrive back at exactly the same refusal. What they need is access.
+    respond(
+      403,
+      '{"error":{"status":"PERMISSION_DENIED","message":"The caller does not have permission"}}',
+    )
+    const err = await readPresentationLive('t', 'p').catch(e => e)
+    expect(err.forbidden).toBe(true)
+    expect(err.reconnect).toBe(false)
+  })
+
+  it('asks for one when the stored token has gone stale', async () => {
+    respond(401, '{"error":{"message":"Invalid Credentials"}}')
+    const err = await readPresentationLive('t', 'p').catch(e => e)
+    expect(err.reconnect).toBe(true)
+    expect(err.forbidden).toBe(false)
+  })
+
   it('says a missing presentation is missing', async () => {
     respond(404)
     const err = await readPresentationLive('t', 'p').catch(e => e)
@@ -1914,5 +1990,386 @@ describe('a picture whose credit outlived its alt text', () => {
       )
       expect(words.join('')).not.toContain('Wikimedia')
     }
+  })
+})
+
+/**
+ * The design behind a slide, which the slide's own elements do not include
+ * (TMPL-8).
+ *
+ * A rule under every title, a coloured band down the side, a block behind the
+ * heading: an author draws those once on the layout or the master, and Google
+ * does not repeat them in each slide's `pageElements`. Reading only the slide
+ * lost them — and lost them unevenly, because a slide where the author had
+ * copied the rule onto the slide itself kept it while its neighbour did not.
+ * The same deck came back with the line on some slides and not others.
+ */
+describe('the rules and bands a slide inherits', () => {
+  const band = (
+    id: string,
+    y: number,
+    hex: { red: number; green: number; blue: number },
+  ) => ({
+    objectId: id,
+    transform: {
+      translateX: 0,
+      translateY: y,
+      scaleX: 1,
+      scaleY: 1,
+      unit: 'EMU',
+    },
+    size: {
+      width: { magnitude: 9144000, unit: 'EMU' },
+      height: { magnitude: 91440, unit: 'EMU' },
+    },
+    shape: {
+      shapeType: 'RECTANGLE',
+      shapeProperties: {
+        shapeBackgroundFill: { solidFill: { color: { rgbColor: hex } } },
+      },
+    },
+  })
+
+  const green = { red: 0, green: 0.6, blue: 0.2 }
+
+  /** A deck whose green rule lives on the layout, as an author would draw it. */
+  const deck = (slideElements: Record<string, unknown>[] = []) => ({
+    presentationId: 'p',
+    pageSize: {
+      width: { magnitude: 9144000, unit: 'EMU' },
+      height: { magnitude: 5143500, unit: 'EMU' },
+    },
+    masters: [{ objectId: 'm1', pageElements: [] }],
+    layouts: [
+      {
+        objectId: 'l1',
+        layoutProperties: {
+          masterObjectId: 'm1',
+          displayName: 'TITLE_AND_BODY',
+        },
+        pageElements: [band('rule', 1000000, green)],
+      },
+    ],
+    slides: [
+      {
+        objectId: 's1',
+        slideProperties: { layoutObjectId: 'l1', masterObjectId: 'm1' },
+        pageElements: slideElements,
+      },
+    ],
+  })
+
+  /** The decoration on the first slide, as read. */
+  const decorationOf = (raw: Record<string, unknown>) =>
+    toSourcePresentation(raw).slides[0]!.elements.filter(
+      e => e.kind === 'decoration',
+    )
+
+  it('draws a rule the layout states, not only one the slide repeats', () => {
+    const drawn = decorationOf(deck())
+    expect(drawn).toHaveLength(1)
+    expect(drawn[0]!.fill).toBe('#009933')
+  })
+
+  it('draws it once when the author copied it onto the slide as well', () => {
+    // Two slides of the same deck differ only in whether the author pasted
+    // the rule onto the slide. They must not come back one ruled twice.
+    const drawn = decorationOf(deck([band('copy', 1000000, green)]))
+    expect(drawn).toHaveLength(1)
+  })
+
+  it('keeps a band the slide draws that the design does not', () => {
+    const drawn = decorationOf(deck([band('own', 3000000, green)]))
+    expect(drawn).toHaveLength(2)
+  })
+
+  it('puts the design behind what the slide draws on top of it', () => {
+    const elements = toSourcePresentation(deck([band('own', 3000000, green)]))
+      .slides[0]!.elements
+    expect(elements[0]!.id).toBe('rule')
+  })
+})
+
+/**
+ * A theme colour asked for under a name the master's scheme does not list
+ * (TMPL-8).
+ *
+ * Google lists a master's scheme under one set of names and lets a text style
+ * ask for the same colour under another — `TEXT1` and `DARK1` are one entry.
+ * A miss is not an error: it silently drops the colour, and the box falls back
+ * to the deck's default ink, which is how a heading set in red came back
+ * black.
+ */
+describe('a colour named one way and listed another', () => {
+  const deck = (themeColor: string) => ({
+    presentationId: 'p',
+    pageSize: {
+      width: { magnitude: 9144000, unit: 'EMU' },
+      height: { magnitude: 5143500, unit: 'EMU' },
+    },
+    masters: [
+      {
+        objectId: 'm1',
+        pageProperties: {
+          colorScheme: {
+            colors: [
+              { type: 'DARK1', color: { red: 0.8, green: 0, blue: 0 } },
+              { type: 'ACCENT1', color: { red: 0, green: 0, blue: 0.9 } },
+            ],
+          },
+        },
+        pageElements: [],
+      },
+    ],
+    layouts: [],
+    slides: [
+      {
+        objectId: 's1',
+        slideProperties: { masterObjectId: 'm1' },
+        pageElements: [
+          {
+            objectId: 'title',
+            transform: {
+              translateX: 0,
+              translateY: 0,
+              scaleX: 1,
+              scaleY: 1,
+              unit: 'EMU',
+            },
+            size: {
+              width: { magnitude: 4572000, unit: 'EMU' },
+              height: { magnitude: 914400, unit: 'EMU' },
+            },
+            shape: {
+              text: {
+                textElements: [
+                  {
+                    textRun: {
+                      content: 'Heading\n',
+                      style: {
+                        foregroundColor: { opaqueColor: { themeColor } },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    ],
+  })
+
+  const colourOf = (themeColor: string) =>
+    toSourcePresentation(deck(themeColor)).slides[0]!.elements[0]!.runs?.[0]
+      ?.color
+
+  it('finds it under the name the scheme does list', () => {
+    expect(colourOf('TEXT1')).toBe('#cc0000')
+  })
+
+  it('still finds one asked for by its own name', () => {
+    expect(colourOf('ACCENT1')).toBe('#0000e6')
+  })
+
+  it('leaves a colour it genuinely cannot resolve unset', () => {
+    // Better than inventing one: an unset colour takes the deck's ink, which
+    // is at least a colour the deck chose.
+    expect(colourOf('ACCENT6')).toBeUndefined()
+  })
+})
+
+/**
+ * The colour a deck draws its links in (TMPL-8).
+ *
+ * A box is stored with one colour and every run inside it is drawn in that
+ * one — and the run an author coloured differently is nearly always a link.
+ * A deck whose links were red got them in the body's black, because the box
+ * took the colour of its first run. The link colour belongs to the design, so
+ * it rides on the theme.
+ */
+describe('a deck that colours its links', () => {
+  const withScheme = (colors: Record<string, [number, number, number]>) => ({
+    presentationId: 'p',
+    pageSize: {
+      width: { magnitude: 9144000, unit: 'EMU' },
+      height: { magnitude: 5143500, unit: 'EMU' },
+    },
+    masters: [
+      {
+        objectId: 'm1',
+        pageProperties: {
+          pageBackgroundFill: {
+            solidFill: { color: { rgbColor: { red: 1, green: 1, blue: 1 } } },
+          },
+          colorScheme: {
+            colors: Object.entries(colors).map(
+              ([type, [red, green, blue]]) => ({
+                type,
+                color: { red, green, blue },
+              }),
+            ),
+          },
+        },
+        pageElements: [],
+      },
+    ],
+    layouts: [],
+    slides: [
+      {
+        objectId: 's1',
+        slideProperties: { masterObjectId: 'm1' },
+        pageElements: [],
+      },
+    ],
+  })
+
+  it('carries it, so a red link is drawn red', () => {
+    const theme = toSourcePresentation(
+      withScheme({
+        DARK1: [0, 0, 0],
+        ACCENT1: [0.2, 0.2, 0.2],
+        HYPERLINK: [1, 0.32, 0.32],
+      }),
+    ).theme
+    expect(theme.link).toBe('#ff5252')
+  })
+
+  it('carries none when the deck draws links like everything else', () => {
+    // Not a decision worth carrying, and the app already draws a link in the
+    // body colour when nothing says otherwise.
+    const theme = toSourcePresentation(
+      withScheme({ DARK1: [0, 0, 0], HYPERLINK: [0, 0, 0] }),
+    ).theme
+    expect(theme.link).toBeUndefined()
+  })
+
+  it('carries none when the colour could not be read on the page', () => {
+    // A link nobody can see is worse than one in the body colour.
+    const theme = toSourcePresentation(
+      withScheme({ DARK1: [0, 0, 0], HYPERLINK: [1, 1, 1] }),
+    ).theme
+    expect(theme.link).toBeUndefined()
+  })
+})
+
+/**
+ * A list the author numbered, or lettered (TMPL-8).
+ *
+ * Google states the marker it renders — "1.", "a.", "iv." — on the paragraph
+ * itself. The list's `glyphType` is the documented place for it, and a real
+ * deck's lists came back stating nothing but a bullet style, so a slide
+ * numbered "1. 2. 3." with "a. b. c." beneath it imported as six identical
+ * dashes: the ordering the author meant, gone.
+ */
+describe('a point whose marker counts', () => {
+  const paragraph = (text: string, bullet: Record<string, unknown>) => [
+    { paragraphMarker: { bullet } },
+    { textRun: { content: `${text}\n`, style: {} } },
+  ]
+
+  const deck = (elements: unknown[]) => ({
+    presentationId: 'p',
+    pageSize: {
+      width: { magnitude: 9144000, unit: 'EMU' },
+      height: { magnitude: 5143500, unit: 'EMU' },
+    },
+    masters: [{ objectId: 'm1', pageElements: [] }],
+    layouts: [],
+    slides: [
+      {
+        objectId: 's1',
+        slideProperties: { masterObjectId: 'm1' },
+        pageElements: [
+          {
+            objectId: 'body',
+            transform: {
+              translateX: 0,
+              translateY: 0,
+              scaleX: 1,
+              scaleY: 1,
+              unit: 'EMU',
+            },
+            size: {
+              width: { magnitude: 4572000, unit: 'EMU' },
+              height: { magnitude: 914400, unit: 'EMU' },
+            },
+            shape: { text: { textElements: elements } },
+          },
+        ],
+      },
+    ],
+  })
+
+  const runsOf = (elements: unknown[]) =>
+    toSourcePresentation(deck(elements)).slides[0]!.elements[0]!.runs ?? []
+
+  it('is read as ordered from the marker Google renders', () => {
+    const runs = runsOf(
+      paragraph('Author or creator', { listId: 'l1', glyph: '1.' }),
+    )
+    expect(runs[0]!.ordered).toBe(true)
+  })
+
+  it('reads a lettered sub-point as ordered too', () => {
+    const runs = runsOf(
+      paragraph('Who (population)', {
+        listId: 'l1',
+        glyph: 'a.',
+        nestingLevel: 1,
+      }),
+    )
+    expect(runs[0]!.ordered).toBe(true)
+    expect(runs[0]!.bulletLevel).toBe(1)
+  })
+
+  it('leaves a plain bullet unordered, symbol and all', () => {
+    // Including "o": Word draws a level-two point with it, and a deck that
+    // reached Slides through PowerPoint brings that with it. A bare letter is
+    // a bullet — one only counts when something separates it from the text,
+    // the way "a." and "iv)" do.
+    const bullets = ['●', '○', '■', '◆', '▪', '-', '–', '‣', '➔', '✓', 'o', '§']
+    for (const glyph of bullets) {
+      expect(
+        runsOf(paragraph('A point', { listId: 'l1', glyph }))[0]!.ordered,
+      ).toBeUndefined()
+    }
+  })
+
+  it('counts a marker however the deck writes it', () => {
+    // Not only "1." — decks number with brackets, letters and roman numerals,
+    // and in scripts whose digits are not 0-9. Reading any of those as a
+    // bullet throws away an ordering the author meant.
+    const counted = [
+      '1.',
+      '2)',
+      'a.',
+      'b)',
+      'iv.',
+      'IX.',
+      'A:',
+      '(1)',
+      '١.',
+      '१.',
+    ]
+    for (const glyph of counted) {
+      expect(
+        runsOf(paragraph('A point', { listId: 'l1', glyph }))[0]!.ordered,
+      ).toBe(true)
+    }
+  })
+
+  it('still reads the list’s own glyphType where the paragraph states no glyph', () => {
+    // The documented place for it, and the only answer for a deck that does
+    // fill it in.
+    const raw = deck(paragraph('One', { listId: 'l1' }))
+    ;(
+      raw.slides[0]!.pageElements[0]!.shape.text as Record<string, unknown>
+    ).lists = {
+      l1: { nestingLevel: { '0': { glyphType: 'DIGIT' } } },
+    }
+    expect(
+      toSourcePresentation(raw).slides[0]!.elements[0]!.runs?.[0]?.ordered,
+    ).toBe(true)
   })
 })

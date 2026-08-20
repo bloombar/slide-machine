@@ -41,6 +41,16 @@ describe('externalized templates', () => {
       const list = template.layouts.find(l => l.type === 'list')!
       expect(list.constraints?.maxBullets).toBe(6)
       expect(list.constraints?.maxBulletChars).toBe(70)
+
+      // Prose AND points on one slide: `content` gives one and `list` the
+      // other, so a slide wanting both had to drop the sentence of context
+      // or write it as an extra point.
+      const mixed = template.layouts.find(l => l.type === 'content-list')!
+      expect(mixed.slots.map(slot => slot.kind)).toEqual(
+        expect.arrayContaining(['text', 'bullets']),
+      )
+      expect(mixed.constraints?.maxBullets).toBeGreaterThan(0)
+      expect(mixed.constraints?.maxBodyChars).toBeGreaterThan(0)
     }
   })
 

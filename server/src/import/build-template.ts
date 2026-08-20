@@ -54,19 +54,39 @@ export type { ImportReport }
 const FONT_FAMILIES: { key: string; pattern: RegExp }[] = [
   // Monospace first: "Courier New" reads as serif by name and is monospaced
   // in fact, and being fixed-width is the property that matters.
-  { key: 'mono', pattern: /(mono|courier|consol|menlo|code|typewriter)/i },
+  {
+    key: 'mono',
+    pattern:
+      /(mono|courier|consol|menlo|code|typewriter|inconsolata|jetbrains|anonymous pro)/i,
+  },
+  // Then the hand-drawn ones, before anything that could claim them by a
+  // shared word: "Brush Script" is a hand, not a serif.
+  {
+    key: 'handwritten',
+    pattern:
+      /(caveat|indie flower|pacifico|dancing script|comic sans|shadows into light|patrick hand|kalam|architects daughter|permanent marker|satisfy|courgette|gloria hallelujah|handlee|bradley hand|segoe script|brush script|chalkboard|marker felt|script|handwrit)/i,
+  },
+  // Narrow display faces, which a title in Oswald or Bebas depends on: set in
+  // an ordinary sans they lose the line breaks the author wrote around them.
+  {
+    key: 'condensed',
+    pattern:
+      /(oswald|bebas|anton|archivo black|impact|narrow|condensed|teko|fjalla|haettenschweiler|league gothic)/i,
+  },
   {
     key: 'geometric',
-    pattern: /(futura|century gothic|avenir|nunito|poppins|montserrat|jost)/i,
+    pattern:
+      /(futura|century gothic|avenir|nunito|poppins|montserrat|jost|raleway|josefin|quicksand|comfortaa|questrial|urbanist|outfit|didact)/i,
   },
   {
     key: 'humanist',
-    pattern: /(optima|candara|gill sans|trebuchet|tahoma|verdana|lato)/i,
+    pattern:
+      /(optima|candara|gill sans|trebuchet|tahoma|verdana|lato|calibri|corbel|myriad|frutiger|segoe ui|ubuntu|pt sans|cabin|karla)/i,
   },
   {
     key: 'serif',
     pattern:
-      /(times|georgia|garamond|cambria|palatino|baskerville|merriweather|playfair|didot|serif)/i,
+      /(times|georgia|garamond|cambria|palatino|baskerville|merriweather|playfair|didot|lora|cardo|spectral|crimson|bookman|book antiqua|constantia|caslon|cormorant|slab|arvo|rockwell|bitter|museo|vollkorn|tinos|droid serif|pt serif|noto serif|source serif|libre|serif)/i,
   },
 ]
 
@@ -291,7 +311,13 @@ const toLayout = (
           ...(slot.description
             ? { description: slot.description.slice(0, MAX_SLOT_DESCRIPTION) }
             : {}),
-          ...(slot.kind === 'text' && slot.box.h > 0.25
+          // Multi-line when the box is deep enough to hold more than a
+          // line, and always when what it holds is Markdown: a list only
+          // draws as a list in a block slot, and an inline one would show
+          // the hyphens.
+          ...(slot.kind === 'text' &&
+          (slot.box.h > 0.25 ||
+            (slot.content?.runs ?? []).some(r => r.bulleted))
             ? { multiline: true }
             : {}),
         },
@@ -397,6 +423,12 @@ export const buildTemplate = (
       accent: source.theme.accent,
       penColor: source.theme.text,
       highlighterColor: source.theme.accent,
+      // What this deck draws a link in, where it says (TMPL-8). A box is
+      // stored with one colour and every run inside it is drawn in that one,
+      // and the run an author coloured differently is nearly always a link —
+      // so a deck whose links are red got them in the body's black. Only
+      // present when the deck states one worth carrying.
+      ...(source.theme.link ? { link: source.theme.link } : {}),
     },
     // Every template must offer a blank slate to draw on (TMPL-7), and no
     // presentation has one to import — so it is synthesized rather than

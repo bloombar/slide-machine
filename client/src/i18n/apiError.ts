@@ -27,10 +27,11 @@ export const GLOBAL_ERROR_CODES = [
   // today, no Google account connected (TECH-14). Like email_unverified, the
   // user can fix it, so it must not read as a flat refusal.
   'capability_required',
-  // A file in the user's Drive we could not read (TMPL-8/EXP-3/EXP-5). Three
+  // A file in the user's Drive we could not read (TMPL-8/EXP-3/EXP-5). Four
   // codes rather than one because they ask for opposite things: reconnect the
-  // account, check the link, or neither.
+  // account, get access to the file, check the link, or none of those.
   'google_reconnect',
+  'source_forbidden',
   'source_not_found',
   'source_unreadable',
   'forbidden',

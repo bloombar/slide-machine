@@ -13,6 +13,8 @@
  */
 import {
   PDFDocument,
+  PDFName,
+  PDFString,
   StandardFonts,
   LineCapStyle,
   rgb,
@@ -23,11 +25,14 @@ import {
 } from 'pdf-lib'
 import type { Layout } from '@slide-machine/shared'
 import type { ExportNote } from '@slide-machine/shared'
+import { tableTracks } from '@slide-machine/shared'
+import { pdfFamily } from './export-fonts'
 import type { ExportDeck, ExportSlide } from './deck-yaml'
 import { visibleStrokes, hexToRgb01, HIGHLIGHTER_ALPHA } from './deck-drawings'
 import { imageCredit } from './image-credit'
 import { fetchSlideImages } from './deck-image'
 import { typesetFormulas } from './deck-formulas'
+import { fitScale } from './fit-scale'
 import { DEFAULT_THEME, type ExportTheme } from './deck-theme'
 import {
   computeLayout,
@@ -60,18 +65,22 @@ interface Fonts {
   italic: PDFFont
   /** For listings and preformatted text, whose spacing is the content. */
   mono: PDFFont
+  /** The same three again with serifs, for a design that asked for them
+   * (TMPL-8). A deck laid out in Georgia used to be written in Helvetica. */
+  serif: PDFFont
+  serifBold: PDFFont
+  serifItalic: PDFFont
 }
 
-const fontFor = (fonts: Fonts, run: LayoutRun): PDFFont =>
+const fontFor = (fonts: Fonts, run: LayoutRun): PDFFont => {
   // A listing is set in a monospaced face so its indentation survives; the
   // proportional faces would close up the leading spaces (EXP-7).
-  run.mono
-    ? fonts.mono
-    : run.bold
-      ? fonts.bold
-      : run.italic
-        ? fonts.italic
-        : fonts.regular
+  if (run.mono || pdfFamily(run.family) === 'mono') return fonts.mono
+  const serif = pdfFamily(run.family) === 'serif'
+  if (run.bold) return serif ? fonts.serifBold : fonts.bold
+  if (run.italic) return serif ? fonts.serifItalic : fonts.italic
+  return serif ? fonts.serif : fonts.regular
+}
 
 /** A run's own colour where it has one — a syntax token — and the slide's
  * role otherwise. */
@@ -84,6 +93,15 @@ const wrapLines = (
   font: PDFFont,
   size: number,
   maxWidth: number,
+  /**
+   * Room left on the line this text joins, where it is continuing one.
+   *
+   * A run that continues a line — the words after a "1.", a bold phrase in the
+   * middle of a sentence — was appended to it whole, however long it was, so
+   * it ran off the box and off the page. The line it joins is already part
+   * used, and only the first of its lines has to fit what is left.
+   */
+  firstWidth = maxWidth,
 ): string[] => {
   const lines: string[] = []
   for (const paragraph of text.split('\n')) {
@@ -93,19 +111,86 @@ const wrapLines = (
       continue
     }
     let line = ''
+    /** What is left to write on: the joined line first, then whole ones. */
+    const room = () => (lines.length ? maxWidth : firstWidth)
     for (const word of words) {
       const candidate = line ? `${line} ${word}` : word
-      if (font.widthOfTextAtSize(candidate, size) <= maxWidth || !line) {
+      if (font.widthOfTextAtSize(candidate, size) <= room()) {
         line = candidate
-      } else {
-        lines.push(line)
-        line = word
+        continue
       }
+      // The line so far is finished; what follows starts a new one, and
+      // `line` is set to whatever is left of this word below.
+      if (line) lines.push(line)
+      /*
+       * A word too long for a line of its own is broken between characters.
+       *
+       * Wrapping is by word, and a word was kept whole however long it was —
+       * which is right for prose and wrong for the thing that actually turns
+       * up: a URL. `guides.nyu.edu/ds/class/descriptions/Principles-of-...`
+       * has nowhere to break, so it ran off the box and off the page.
+       */
+      let rest = word
+      // Against what is left of the joined line for the first piece, and a
+      // whole line for the rest — the same rule the word wrapping follows.
+      while (font.widthOfTextAtSize(rest, size) > room()) {
+        let cut = 1
+        while (
+          cut < rest.length &&
+          font.widthOfTextAtSize(rest.slice(0, cut + 1), size) <= room()
+        )
+          cut++
+        lines.push(rest.slice(0, cut))
+        rest = rest.slice(cut)
+      }
+      line = rest
     }
     if (line) lines.push(line)
   }
   return lines
 }
+
+/**
+ * The characters a standard PDF font can actually draw.
+ *
+ * pdf-lib's standard fonts are WinAnsi-encoded, and `drawText` THROWS on a
+ * character outside it — so a single arrow, a box-drawing rule or a word of
+ * Chinese anywhere in a deck failed the entire export, and the author was told
+ * only "could not export the deck". A missing glyph is a small loss; a missing
+ * file is the lecture.
+ *
+ * The common typographic ones are mapped to something that reads the same, and
+ * anything left is dropped rather than replaced with a question mark, which
+ * says less than the space it takes.
+ */
+const WINANSI =
+  /[\x20-\x7E\xA0-\xFF\u2018\u2019\u201A\u201C\u201D\u201E\u2013\u2014\u2020\u2021\u2022\u2026\u2030\u2039\u203A\u20AC\u2122\u0160\u0161\u017D\u017E\u0152\u0153\u0192\u02C6\u02DC]/
+
+/** What to draw instead, for characters a slide is likely to hold. */
+const SUBSTITUTE: Record<string, string> = {
+  '◦': '-',
+  '▪': '-',
+  '‣': '-',
+  '·': '-',
+  '→': '->',
+  '←': '<-',
+  '⇒': '=>',
+  '↔': '<->',
+  '×': 'x',
+  '≥': '>=',
+  '≤': '<=',
+  '≠': '!=',
+  '½': '1/2',
+  '¼': '1/4',
+  '¾': '3/4',
+  '\u00a0': ' ',
+  '\u200b': '',
+  '\ufeff': '',
+}
+
+/** A string the standard fonts can draw, whatever the slide holds. */
+const drawable = (text: string): string =>
+  [...text].map(ch => (WINANSI.test(ch) ? ch : (SUBSTITUTE[ch] ?? ''))).join('')
 
 /** One piece of a drawn line: some characters set one way. */
 interface Piece {
@@ -113,12 +198,54 @@ interface Piece {
   size: number
   font: PDFFont
   color: Color
+  /** Where these characters point, if anywhere. */
+  link?: string
 }
 
 /** A line as it will be drawn, and the gap that follows it. */
 interface DrawnLine {
   pieces: Piece[]
   gapAfter: number
+  /** How far in the line starts — a sub-point's offset. */
+  indent?: number
+}
+
+/**
+ * Makes a rectangle of the page follow a link when clicked.
+ *
+ * A PDF carries links as annotations on the page rather than as anything in
+ * the text, so this is the only way to have one: the words are drawn, and a
+ * clickable box is laid over where they landed. Without it an imported slide
+ * whose only address was inside a link exported unreachable — reading an
+ * address off a page is not the same as following it.
+ *
+ * Bordered with a zero width, because a PDF reader's default is to draw a box
+ * around every link, and a slide is a design.
+ */
+const linkAnnotation = (
+  page: PDFPage,
+  url: string,
+  at: { x: number; y: number; width: number; height: number },
+): void => {
+  const doc = page.doc
+  const annotation = doc.context.obj({
+    Type: 'Annot',
+    Subtype: 'Link',
+    Rect: [at.x, at.y, at.x + at.width, at.y + at.height],
+    Border: [0, 0, 0],
+    A: doc.context.obj({
+      Type: 'Action',
+      S: 'URI',
+      URI: PDFString.of(url),
+    }),
+  })
+  const existing = page.node.Annots()
+  if (existing) existing.push(doc.context.register(annotation))
+  else
+    page.node.set(
+      PDFName.of('Annots'),
+      doc.context.obj([doc.context.register(annotation)]),
+    )
 }
 
 /**
@@ -137,28 +264,66 @@ const drawTextBox = (page: PDFPage, box: TextBox): void => {
   const boxTop = PAGE_HEIGHT - box.y * PAGE_HEIGHT
   const bh = box.h * PAGE_HEIGHT
 
-  const lines: DrawnLine[] = []
-  for (const run of box.runs) {
-    const size = run.sizeFrac * PAGE_WIDTH
-    const font = fontFor(fonts, run)
-    const color = colorFor(run)
-    const text = (run.bullet ? '•  ' : '') + run.text
-    const gapAfter = (run.spaceAfterFrac ?? 0) * PAGE_WIDTH
+  const laidOut = (scale: number): DrawnLine[] => {
+    const lines: DrawnLine[] = []
+    for (const run of box.runs) {
+      const size = run.sizeFrac * PAGE_WIDTH * scale
+      const font = fontFor(fonts, run)
+      const color = colorFor(run)
+      const text = drawable((run.bullet ? '•  ' : '') + run.text)
+      const gapAfter = (run.spaceAfterFrac ?? 0) * PAGE_WIDTH * scale
+      // A sub-point is drawn as one. Indented by the type size, so the offset
+      // holds its proportion when a crowded box shrinks to fit.
+      const indent = (run.indent ?? 0) * size * 1.5
 
-    const last = lines[lines.length - 1]
-    if (run.sameLine && last) {
-      last.pieces.push({ text, size, font, color })
-      last.gapAfter = gapAfter
-      continue
+      const last = lines[lines.length - 1]
+      if (run.sameLine && last) {
+        // Wrapped against what is left of the line it joins, and onto lines of
+        // its own after that. Appended whole, a long run ran off the box and
+        // off the page — which is what a slide's last sentence did.
+        const used = last.pieces.reduce(
+          (w, p) => w + p.font.widthOfTextAtSize(p.text, p.size),
+          0,
+        )
+        const width = bw - (last.indent ?? 0)
+        const left = width - used
+        // A line with less than a character left is finished; what would have
+        // joined it starts a line of its own rather than being hung off the
+        // end, where it ran past the box and off the page.
+        // A listing's continuation is part of its own line, always.
+        const joins = run.mono || left >= size
+        const segments = run.mono
+          ? [text]
+          : wrapLines(text, font, size, width, joins ? left : width)
+        segments.forEach((segment, i) => {
+          const piece = { text: segment, size, font, color, link: run.link }
+          const isLast = i === segments.length - 1
+          if (i === 0 && joins) {
+            last.pieces.push(piece)
+            last.gapAfter = isLast ? gapAfter : 0
+            return
+          }
+          lines.push({
+            pieces: [piece],
+            gapAfter: isLast ? gapAfter : 0,
+            indent: last.indent,
+          })
+        })
+        continue
+      }
+      // A listing keeps the lines its author wrote; prose wraps to its box.
+      const segments = run.mono
+        ? [text]
+        : wrapLines(text, font, size, bw - indent)
+      segments.forEach((segment, i) =>
+        lines.push({
+          pieces: [{ text: segment, size, font, color, link: run.link }],
+          gapAfter: i === segments.length - 1 ? gapAfter : 0,
+          indent,
+        }),
+      )
     }
-    // A listing keeps the lines its author wrote; prose wraps to its box.
-    const segments = run.mono ? [text] : wrapLines(text, font, size, bw)
-    segments.forEach((segment, i) =>
-      lines.push({
-        pieces: [{ text: segment, size, font, color }],
-        gapAfter: i === segments.length - 1 ? gapAfter : 0,
-      }),
-    )
+    return lines
   }
 
   const heightOf = (line: DrawnLine) =>
@@ -168,16 +333,21 @@ const drawTextBox = (page: PDFPage, box: TextBox): void => {
       (w, p) => w + p.font.widthOfTextAtSize(p.text, p.size),
       0,
     )
-  const totalH = lines.reduce(
-    (h, line) => h + heightOf(line) + line.gapAfter,
-    0,
-  )
+  const tallyOf = (drawn: DrawnLine[]): number =>
+    drawn.reduce((h, line) => h + heightOf(line) + line.gapAfter, 0)
+
+  // Type gives way before content does, as it does on screen (`fit-scale`).
+  const scale = fitScale(at => tallyOf(laidOut(at)), bh)
+  const lines = laidOut(scale)
+  const totalH = tallyOf(lines)
 
   let cursorTop = box.valign === 'middle' ? boxTop - (bh - totalH) / 2 : boxTop
   for (const line of lines) {
     const lineH = heightOf(line)
-    let x = box.align === 'center' ? bxLeft + (bw - widthOf(line)) / 2 : bxLeft
+    const left = bxLeft + (line.indent ?? 0)
+    let x = box.align === 'center' ? bxLeft + (bw - widthOf(line)) / 2 : left
     for (const piece of line.pieces) {
+      const width = piece.font.widthOfTextAtSize(piece.text, piece.size)
       page.drawText(piece.text, {
         x,
         y: cursorTop - piece.size,
@@ -185,7 +355,17 @@ const drawTextBox = (page: PDFPage, box: TextBox): void => {
         font: piece.font,
         color: piece.color,
       })
-      x += piece.font.widthOfTextAtSize(piece.text, piece.size)
+      // A link is content (EXP-5), and a PDF can carry one: an imported slide
+      // whose only address was inside a link exported unreachable, and reading
+      // it off the page is not the same as following it.
+      if (piece.link)
+        linkAnnotation(page, piece.link, {
+          x,
+          y: cursorTop - piece.size,
+          width,
+          height: piece.size * 1.2,
+        })
+      x += width
     }
     cursorTop -= lineH + line.gapAfter
   }
@@ -195,9 +375,9 @@ const drawTextBox = (page: PDFPage, box: TextBox): void => {
  * A table as a ruled grid, since PDF has no table of its own (EXP-7).
  *
  * Every cell is ruled, not just the rows — the same grid the slide draws, so
- * the table an audience saw is the table in the file. Columns share the width
- * equally: the box is what the design reserved, and guessing at content widths
- * would make one export differ from the next.
+ * the table an audience saw is the table in the file. Columns and rows are
+ * drawn to the proportions the table carries (EDIT-7), which is how the slide
+ * drew them; a table nobody sized divides its box equally, as it always did.
  */
 const drawTableBox = (page: PDFPage, box: TableBox): void => {
   const rows = box.header?.length ? [box.header, ...box.rows] : box.rows
@@ -207,16 +387,25 @@ const drawTableBox = (page: PDFPage, box: TableBox): void => {
   const bh = box.h * PAGE_HEIGHT
   const left = box.x * PAGE_WIDTH
   const top = PAGE_HEIGHT - box.y * PAGE_HEIGHT
-  const cellW = bw / columns
-  const cellH = bh / rows.length
-  const size = Math.min(cellH * 0.45, PAGE_WIDTH * 0.018)
+  // Fractions of the box, read the same way the viewer reads them.
+  const widths = tableTracks(box.colWidths, columns).map(f => f * bw)
+  const heights = tableTracks(box.rowHeights, rows.length).map(f => f * bh)
+  /** Where a track starts, from the sizes of the ones before it. */
+  const offset = (sizes: number[], upTo: number) =>
+    sizes.slice(0, upTo).reduce((sum, n) => sum + n, 0)
+  // Type is sized to the shortest row, so no row's text is taller than the
+  // cell it sits in.
+  const size = Math.min(Math.min(...heights) * 0.45, PAGE_WIDTH * 0.018)
   const pad = size * 0.5
 
   rows.forEach((row, r) => {
-    const rowTop = top - r * cellH
+    const cellH = heights[r]!
+    const rowTop = top - offset(heights, r)
     for (let c = 0; c < columns; c++) {
+      const cellW = widths[c]!
+      const cellLeft = left + offset(widths, c)
       page.drawRectangle({
-        x: left + c * cellW,
+        x: cellLeft,
         y: rowTop - cellH,
         width: cellW,
         height: cellH,
@@ -228,7 +417,7 @@ const drawTableBox = (page: PDFPage, box: TableBox): void => {
       const text = row[c] ?? ''
       if (!text) continue
       page.drawText(clipToWidth(text, font, size, cellW - pad * 2), {
-        x: left + c * cellW + pad,
+        x: cellLeft + pad,
         y: rowTop - size - pad,
         size,
         font,
@@ -296,7 +485,9 @@ const drawSlide = (
         y: PAGE_HEIGHT - box.y * PAGE_HEIGHT - box.h * PAGE_HEIGHT,
         width: box.w * PAGE_WIDTH,
         height: box.h * PAGE_HEIGHT,
-        color: colors[box.color],
+        // The colour the design names, where it names one (TMPL-8): an
+        // imported band is whatever it was drawn, not one of three roles.
+        color: box.hex ? hex(box.hex) : colors[box.color],
       })
     } else if (box.kind === 'image' && image) {
       const bw = box.w * PAGE_WIDTH
@@ -381,6 +572,9 @@ export const deckToPdf = async (
     bold: await doc.embedFont(StandardFonts.HelveticaBold),
     italic: await doc.embedFont(StandardFonts.HelveticaOblique),
     mono: await doc.embedFont(StandardFonts.Courier),
+    serif: await doc.embedFont(StandardFonts.TimesRoman),
+    serifBold: await doc.embedFont(StandardFonts.TimesRomanBold),
+    serifItalic: await doc.embedFont(StandardFonts.TimesRomanItalic),
   }
   // Apply the template theme: text/accent/muted colors and the page background.
   const theme = deck.theme ?? DEFAULT_THEME

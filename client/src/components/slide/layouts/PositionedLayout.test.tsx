@@ -128,7 +128,7 @@ describe('PositionedLayout', () => {
     expect(container.querySelector('div[style]')).toHaveStyle({
       justifyContent: 'flex-end',
       alignItems: 'center',
-      fontSize: '8cqi',
+      fontSize: 'calc(var(--fit-scale, 1) * 8cqi)',
       fontWeight: '700',
       color: '#123456',
     })
@@ -156,7 +156,7 @@ describe('PositionedLayout', () => {
     })
     const { container } = render(<PositionedLayout {...props(named)} />)
     expect(container.querySelector('div[style]')).toHaveStyle({
-      fontSize: '7cqi',
+      fontSize: 'calc(var(--fit-scale, 1) * 7cqi)',
       fontWeight: '700',
     })
   })
@@ -170,7 +170,7 @@ describe('PositionedLayout', () => {
     const { container } = render(<PositionedLayout {...props(named)} />)
     // The override wins; the weight still comes from the role.
     expect(container.querySelector('div[style]')).toHaveStyle({
-      fontSize: '3cqi',
+      fontSize: 'calc(var(--fit-scale, 1) * 3cqi)',
       fontWeight: '700',
     })
   })

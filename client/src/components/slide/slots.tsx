@@ -12,7 +12,7 @@
  * Reading and writing go through `slotValue`/`patchSlot`, so a slot the
  * author named behaves exactly like a conventional one.
  */
-import { useState, type ComponentType } from 'react'
+import { useRef, useState, type ComponentType } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ImagePlus, ImageUp, Info, X } from 'lucide-react'
 import ImageAttributionDialog from '../ImageAttributionDialog'
@@ -20,6 +20,9 @@ import ReplaceImageDialog from '../ReplaceImageDialog'
 import Tooltip from '../Tooltip'
 import {
   SLOT_DESCRIPTORS,
+  resizeTrack,
+  tableColumnCount,
+  tableTracks,
   type ImageSearchCandidate,
   type LayoutSlot,
   type Slide,
@@ -34,6 +37,7 @@ import SlideMarkdown from '../SlideMarkdown'
 import SlideCode from './Code'
 import SlideMath from './Math'
 import SlideTable from './Table'
+import TrackHandle from './TrackHandle'
 import type { ThemeColors } from './theme'
 
 /** Partial content update produced by in-place editing. */
@@ -205,7 +209,13 @@ function BulletsSlot({
   const { t } = useTranslation()
   const items = slotValue(slide, slot).bullets ?? []
   const rendered = (bullets: string[]) => (
-    <ul className="flex list-disc flex-col gap-[1.5cqi] ps-[4cqi] text-start text-[2.75cqi]">
+    /* Size and spacing come from the box, not from here. A type size in
+       `cqi` is a fraction of the SLIDE, so it held still while the box shrank
+       its type to fit — the text stayed large and the last line stayed
+       hidden. The `bullet` text style supplies the same 2.75 by default, so
+       nothing about a slide that already fitted changes; the gaps are in `em`
+       for the same reason, and now close up with the type. */
+    <ul className="flex list-disc flex-col gap-[0.4em] ps-[1.4em] text-start">
       {bullets.map((b, i) => (
         <li key={i}>
           <SlideMarkdown text={b} inline links={!onEdit} />
@@ -648,18 +658,58 @@ function TableSlot({ slot, spec, slide, onEdit }: SlotEditorProps) {
   const stored = value?.kind === 'table' ? value : undefined
   const header = stored?.header
   const rows = stored?.rows ?? []
-  const width = Math.max(header?.length ?? 0, ...rows.map(r => r.length), 1)
+  const width = tableColumnCount(rows, header)
+  const colWidths = stored?.colWidths
+  const rowHeights = stored?.rowHeights
+  // The header is a band of its own, so the boundary under it can be dragged.
+  const bands = header?.length ? rows.length + 1 : rows.length
+  const tableRef = useRef<HTMLTableElement | null>(null)
 
-  if (!onEdit) return <SlideTable header={header} rows={rows} />
+  if (!onEdit)
+    return (
+      <SlideTable
+        header={header}
+        rows={rows}
+        colWidths={colWidths}
+        rowHeights={rowHeights}
+      />
+    )
 
-  const save = (next: { header?: string[]; rows: string[][] }) =>
+  const save = (next: {
+    header?: string[]
+    rows: string[][]
+    colWidths?: number[]
+    rowHeights?: number[]
+  }) =>
     onEdit(
       patchSlotValue(slot, {
         kind: 'table',
         ...(next.header?.length ? { header: next.header } : {}),
         rows: next.rows,
+        // Sizes are only written once something has been dragged, so a table
+        // nobody has resized stays as small on the wire as it always was.
+        ...(next.colWidths?.length ? { colWidths: next.colWidths } : {}),
+        ...(next.rowHeights?.length ? { rowHeights: next.rowHeights } : {}),
       }),
     )
+
+  /** Whatever is stored, carried through an edit that is not about sizes. */
+  const sizes = { colWidths, rowHeights }
+
+  const resizeColumn = (c: number, by: number) =>
+    save({
+      header,
+      rows,
+      ...sizes,
+      colWidths: resizeTrack(colWidths, width, c, by),
+    })
+  const resizeRow = (band: number, by: number) =>
+    save({
+      header,
+      rows,
+      ...sizes,
+      rowHeights: resizeTrack(rowHeights, bands, band, by),
+    })
 
   /** Every row padded to the table's width, so an edit never has to reason
    * about a short row. */
@@ -684,26 +734,43 @@ function TableSlot({ slot, spec, slide, onEdit }: SlotEditorProps) {
   const setHeaderCell = (i: number, v: string) => {
     const next = Array.from({ length: width }, (_, c) => header?.[c] ?? '')
     next[i] = v
-    save({ header: next, rows })
+    save({ header: next, rows, ...sizes })
   }
   const setCell = (r: number, c: number, v: string) => {
     const next = grid()
     next[r]![c] = v
-    save({ header, rows: next })
+    save({ header, rows: next, ...sizes })
   }
   const addRow = () =>
-    save({ header, rows: [...rows, Array.from({ length: width }, () => '')] })
+    save({
+      header,
+      rows: [...rows, Array.from({ length: width }, () => '')],
+      ...sizes,
+    })
   const addColumn = () =>
     save({
       ...(header ? { header: [...header, ''] } : {}),
       rows: grid().map(row => [...row, '']),
+      ...sizes,
     })
+  /* A removed track takes its size with it, so the columns either side of a
+   * deleted one keep the widths they were given rather than every column
+   * being re-proportioned around the gap. */
+  const without = (list: number[] | undefined, i: number) =>
+    list?.length ? list.filter((_, n) => n !== i) : undefined
   const removeRow = (r: number) =>
-    save({ header, rows: rows.filter((_, i) => i !== r) })
+    save({
+      header,
+      rows: rows.filter((_, i) => i !== r),
+      colWidths,
+      rowHeights: without(rowHeights, header?.length ? r + 1 : r),
+    })
   const removeColumn = (c: number) =>
     save({
       ...(header ? { header: header.filter((_, i) => i !== c) } : {}),
       rows: grid().map(row => row.filter((_, i) => i !== c)),
+      colWidths: without(colWidths, c),
+      rowHeights,
     })
 
   // A table has to keep a row and a column to still be a table, and an
@@ -727,22 +794,62 @@ function TableSlot({ slot, spec, slide, onEdit }: SlotEditorProps) {
 
   const cellClass = 'border border-current/25 px-[1cqi] py-[0.6cqi] align-top'
 
+  /** The handle on the boundary after a column, where there is one after it. */
+  const columnHandle = (c: number) =>
+    c < width - 1 ? (
+      <TrackHandle
+        orientation="vertical"
+        label={t('slide.table.resizeColumn', { n: c + 1 })}
+        tableRef={tableRef}
+        onResize={by => resizeColumn(c, by)}
+      />
+    ) : null
+
+  /** The handle on the boundary under a band, counting the header as one. */
+  const rowHandle = (band: number) =>
+    band < bands - 1 ? (
+      <TrackHandle
+        orientation="horizontal"
+        label={t('slide.table.resizeRow', { n: band + 1 })}
+        tableRef={tableRef}
+        onResize={by => resizeRow(band, by)}
+      />
+    ) : null
+
   return (
     <div className="group w-full">
-      <table className="w-full table-fixed border-collapse text-start text-[2cqi]">
+      <table
+        ref={tableRef}
+        className="w-full table-fixed border-collapse text-start text-[2cqi]"
+      >
+        {/* The widths the table is drawn to, so a drag shows its result. */}
+        {colWidths?.length ? (
+          <colgroup>
+            {tableTracks(colWidths, width).map((w, i) => (
+              <col key={i} style={{ width: `${w * 100}%` }} />
+            ))}
+            {/* The gutter is not one of the table's columns; it gets what the
+                browser gives it, as it did before there were widths. */}
+            <col />
+          </colgroup>
+        ) : null}
         {/* One narrow gutter per axis, holding that row's or column's
             remove control. In its own cell rather than floating over the
             table, so nothing it offers sits on top of content. */}
         <thead>
           <tr>
             {Array.from({ length: width }, (_, c) => (
-              <th key={c} className="p-0 text-center text-[1.5cqi] font-normal">
+              <th
+                key={c}
+                className="relative p-0 text-center text-[1.5cqi] font-normal"
+              >
                 {canRemoveColumn &&
                   control(
                     t('slide.table.removeColumn', { n: c + 1 }),
                     () => removeColumn(c),
                     '×',
                   )}
+                {columnHandle(c)}
               </th>
             ))}
             <th className="w-[3cqi] p-0" />
@@ -753,13 +860,14 @@ function TableSlot({ slot, spec, slide, onEdit }: SlotEditorProps) {
                 <th
                   key={i}
                   scope="col"
-                  className={`${cellClass} text-start font-semibold`}
+                  className={`${cellClass} relative text-start font-semibold`}
                 >
                   {cell(
                     header[i] ?? '',
                     t('slide.table.header', { n: i + 1 }),
                     v => setHeaderCell(i, v),
                   )}
+                  {i === 0 && rowHandle(0)}
                 </th>
               ))}
               <th className="p-0" />
@@ -770,12 +878,13 @@ function TableSlot({ slot, spec, slide, onEdit }: SlotEditorProps) {
           {rows.map((row, r) => (
             <tr key={r}>
               {Array.from({ length: width }, (_, c) => (
-                <td key={c} className={cellClass}>
+                <td key={c} className={`${cellClass} relative`}>
                   {cell(
                     row[c] ?? '',
                     t('slide.table.cell', { row: r + 1, column: c + 1 }),
                     v => setCell(r, c, v),
                   )}
+                  {c === 0 && rowHandle(header?.length ? r + 1 : r)}
                 </td>
               ))}
               <td className="p-0 text-center text-[1.5cqi]">
