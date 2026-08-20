@@ -3,7 +3,7 @@
  *
  * An imported box is stored as Markdown, because a real slide's box is rarely
  * one thing. The viewer renders it; the exporters wrote the source out
- * verbatim, so a PDF carried `**Office hours**` with its asterisks showing
+ * verbatim, so a PDF carried `**Office hours** — see the [handbook](…)` with its asterisks showing
  * and every numbered point printed "1." — the source says `1.` on every line
  * and it is the renderer that counts them.
  */
@@ -93,17 +93,25 @@ describe('the words of a line', () => {
   })
 
   it('keeps where a link points, and shows only what it says', () => {
-    const [line] = markdownLines('See [the handbook](https://example.org/handbook) today')
+    const [line] = markdownLines(
+      'See [the handbook](https://example.org/handbook) today',
+    )
     expect(line!.runs).toEqual([
-      { text: 'Mail ' },
+      { text: 'See ' },
       { text: 'the handbook', link: 'https://example.org/handbook' },
       { text: ' today' },
     ])
   })
 
   it('keeps the emphasis inside a link as well as the address', () => {
-    expect(markdownLines('[*the handbook*](https://example.org/handbook)')[0]!.runs).toEqual([
-      { text: 'the handbook', italic: true, link: 'https://example.org/handbook' },
+    expect(
+      markdownLines('[*the handbook*](https://example.org/handbook)')[0]!.runs,
+    ).toEqual([
+      {
+        text: 'the handbook',
+        italic: true,
+        link: 'https://example.org/handbook',
+      },
     ])
   })
 

@@ -460,8 +460,13 @@ describe('an imported design on the way out', () => {
   })
 
   it('keeps where a link points, so the file can follow it', () => {
-    const link = runsOf('See [the handbook](https://example.org/handbook)').find(r => r.link)
-    expect(link).toMatchObject({ text: 'the handbook', link: 'https://example.org/handbook' })
+    const link = runsOf(
+      'See [the handbook](https://example.org/handbook)',
+    ).find(r => r.link)
+    expect(link).toMatchObject({
+      text: 'the handbook',
+      link: 'https://example.org/handbook',
+    })
   })
 
   it('draws the design’s own bands, so the deck is not exported blank', () => {

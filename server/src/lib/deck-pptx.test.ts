@@ -977,8 +977,8 @@ describe('an imported slide in an exported deck', () => {
   it('carries a link as a link, not as its address in the words', async () => {
     // Slides and PowerPoint both have hyperlinks; an imported slide whose only
     // address was inside one exported unreachable.
-    expect(await xmlOf('See [the handbook](https://example.org/handbook)')).toContain(
-      'hlinkClick',
-    )
+    expect(
+      await xmlOf('See [the handbook](https://example.org/handbook)'),
+    ).toContain('hlinkClick')
   })
 })

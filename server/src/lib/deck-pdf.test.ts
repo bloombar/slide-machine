@@ -561,7 +561,9 @@ describe('an imported slide in an exported PDF', () => {
   it('makes a link clickable, not merely readable', async () => {
     // A PDF carries links as annotations on the page; reading an address off
     // a page is not the same as following it.
-    const { links } = await drawnBy(deckOf('See [the handbook](https://example.org/handbook)'))
+    const { links } = await drawnBy(
+      deckOf('See [the handbook](https://example.org/handbook)'),
+    )
     expect(links).toBe(1)
   })
 

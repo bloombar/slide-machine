@@ -409,7 +409,7 @@ const runsForSlot = (
        *
        * An imported box holds Markdown, because a real slide's box is rarely
        * one thing (`import/markdown.ts`). The viewer renders it; the exporters
-       * wrote the source, so a PDF carried "**Office hours**" with its
+       * wrote the source, so a PDF carried "**Office hours** — see the [handbook](…)" with its
        * asterisks showing, and every numbered point printed "1." — the source
        * says `1.` on every line and it is the renderer that counts them.
        */

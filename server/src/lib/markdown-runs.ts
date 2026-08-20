@@ -7,7 +7,7 @@
  * exporters did not. They wrote the source out verbatim, so a PDF of an
  * imported lecture read
  *
- *     **Office hours** [the handbook](https://example.org/handbook)
+ *     **Office hours** — see the [handbook](https://example.org/handbook)
  *
  * with the asterisks and brackets on the page, and every numbered point
  * printed "1." — because the source says `1.` on every line and it is the
