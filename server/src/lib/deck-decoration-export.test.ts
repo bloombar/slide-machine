@@ -11,7 +11,7 @@
  * formats an instructor can ask for.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { PDFPage } from 'pdf-lib'
+import { PDFPage, type PDFImage } from 'pdf-lib'
 import type { Layout } from '@slide-machine/shared'
 
 /** A 1×1 PNG, which is a real enough picture for pdf-lib and pptxgenjs. */
@@ -68,7 +68,11 @@ describe('a design’s pictures in the exported PDF', () => {
     const drawn: { width: number; height: number }[] = []
     const spy = vi
       .spyOn(PDFPage.prototype, 'drawImage')
-      .mockImplementation(function (this: PDFPage, _img, options) {
+      .mockImplementation(function (
+        this: PDFPage,
+        _image: PDFImage,
+        options?: { width?: number; height?: number },
+      ) {
         drawn.push({ width: options?.width ?? 0, height: options?.height ?? 0 })
       } as never)
     try {
