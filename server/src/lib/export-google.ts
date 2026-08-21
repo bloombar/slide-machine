@@ -21,7 +21,26 @@ import { clientForRefreshToken } from '../auth/google-connect'
 
 const DRIVE_UPLOAD =
   'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink'
+/** The same endpoint asked for in two steps: metadata first, then the bytes to
+ * the URL it answers with. What Drive requires past the multipart ceiling. */
+const DRIVE_UPLOAD_RESUMABLE =
+  'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,webViewLink'
 const DRIVE_FILES = 'https://www.googleapis.com/drive/v3/files'
+
+/**
+ * The most Drive will take in one multipart request.
+ *
+ * Google's documented ceiling for a multipart upload is 5 MB; past it the
+ * request is refused and the export reported only "could not save to Drive".
+ * A deck used to be a few tens of kilobytes of text, so nothing came close —
+ * then a design's own pictures started travelling with it (TMPL-8), and a
+ * lecture of thirty slides on a template with a full-bleed backdrop is seven
+ * megabytes of perfectly ordinary presentation.
+ *
+ * Held a little under the limit, because the multipart body carries the
+ * metadata and the boundaries as well as the file.
+ */
+const MAX_MULTIPART_BYTES = 4.5 * 1024 * 1024
 
 /** The Google Apps MIME type for a native Google Slides presentation, and the
  * OpenXML MIME type of the .pptx we upload for conversion. */
@@ -60,10 +79,68 @@ export const deleteDriveFileLive = async (
   if (!res.ok) throw new Error(`Drive trash failed (${res.status})`)
 }
 
+/** What Drive answers a failed upload with, said as plainly as Google said
+ * it. A status alone reads as "try again" for refusals that will never
+ * succeed on a retry. */
+const uploadFailed = async (res: Response): Promise<Error> => {
+  const reason = await res.text().catch(() => '')
+  return new Error(
+    `Drive upload failed (${res.status})${reason ? ` — ${reason.slice(0, 500)}` : ''}`,
+  )
+}
+
+/**
+ * A file too big for one request, uploaded the way Drive asks for.
+ *
+ * Two steps: the metadata goes first and Drive answers with a URL of its own
+ * in the `Location` header, then the bytes are PUT to that URL. Sent whole
+ * rather than in chunks — the point here is to clear the multipart ceiling,
+ * and a lecture deck is megabytes rather than gigabytes, so the complexity of
+ * resuming a broken transfer would buy nothing.
+ */
+const uploadResumable = async (
+  token: string,
+  metadata: Record<string, unknown>,
+  file: { mimeType: string; data: Uint8Array },
+): Promise<DriveFile> => {
+  const start = await fetch(DRIVE_UPLOAD_RESUMABLE, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json; charset=UTF-8',
+      'X-Upload-Content-Type': file.mimeType,
+      'X-Upload-Content-Length': String(file.data.byteLength),
+    },
+    body: JSON.stringify(metadata),
+  })
+  if (!start.ok) throw await uploadFailed(start)
+  const location = start.headers.get('location')
+  // Drive accepted the metadata but named nowhere to send the file. Nothing
+  // to do but say so — silently falling back would upload it twice.
+  if (!location) throw new Error('Drive upload failed — no upload URL returned')
+
+  const res = await fetch(location, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': file.mimeType,
+    },
+    body: file.data as BodyInit,
+  })
+  if (!res.ok) throw await uploadFailed(res)
+  const data = (await res.json()) as { id: string; webViewLink?: string }
+  return {
+    id: data.id,
+    fileUrl:
+      data.webViewLink ?? `https://drive.google.com/file/d/${data.id}/view`,
+  }
+}
+
 /**
  * Uploads a file's bytes into the given Drive folder ('root' = My Drive) and
  * returns its id and shareable link. Uses a multipart/related request so the
- * metadata (name, parent) and the media travel in a single call.
+ * metadata (name, parent) and the media travel in a single call — or two
+ * requests when the file is past what Drive takes in one.
  *
  * When `convertTo` is set, Drive converts the uploaded media into that Google
  * Apps type on import (e.g. a .pptx → a native Google Slides file); the stored
@@ -87,6 +164,12 @@ export const uploadFileToDriveLive = async (
     mimeType: file.convertTo ?? file.mimeType,
     ...(folderId !== 'root' ? { parents: [folderId] } : {}),
   }
+  // Past the multipart ceiling Drive wants the upload in two steps, so a long
+  // lecture on a picture-heavy design still lands (see MAX_MULTIPART_BYTES).
+  if (file.data.byteLength > MAX_MULTIPART_BYTES) {
+    return uploadResumable(token, metadata, file)
+  }
+
   const boundary = 'slide-machine-export-boundary'
   const head =
     `--${boundary}\r\n` +
@@ -106,7 +189,12 @@ export const uploadFileToDriveLive = async (
     },
     body,
   })
-  if (!res.ok) throw new Error(`Drive upload failed (${res.status})`)
+  // Google's own reason, not just its status. A refusal here is one of several
+  // unrelated things — a scope the grant does not cover, a quota spent, a file
+  // too big to convert — and they want opposite things from the user. Reported
+  // as a status alone, every one of them reads as "could not save to Drive,
+  // please try again", which is advice for none of them.
+  if (!res.ok) throw await uploadFailed(res)
   const data = (await res.json()) as { id: string; webViewLink?: string }
   return {
     id: data.id,

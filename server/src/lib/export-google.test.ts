@@ -97,10 +97,184 @@ describe('uploadFileToDriveLive', () => {
     expect(res.fileUrl).toBe('https://drive.google.com/file/d/file-2/view')
   })
 
+  /**
+   * A deck bigger than one request (EXP-1/TMPL-8).
+   *
+   * Drive takes 5 MB in a multipart upload and refuses past it. A deck used to
+   * be a few tens of kilobytes of text, so nothing came close — then a design's
+   * own pictures started travelling with it, and a thirty-slide lecture on a
+   * template with a full-bleed backdrop measured seven megabytes. Every one of
+   * those exports failed with "could not save to Drive".
+   */
+  describe('a file past what one request will take', () => {
+    /** Bigger than MAX_MULTIPART_BYTES, which is what picks the path. */
+    const big = new Uint8Array(5 * 1024 * 1024)
+
+    const resumable = () =>
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: {
+            get: (h: string) =>
+              h === 'location' ? 'https://upload/session-1' : null,
+          },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            id: 'big-1',
+            webViewLink: 'https://drive/view/big',
+          }),
+        })
+
+    it('sends it in two steps instead of failing', async () => {
+      const fetchMock = resumable()
+      vi.stubGlobal('fetch', fetchMock)
+      const res = await uploadFileToDriveLive('tok', {
+        name: 'lecture.pptx',
+        mimeType: 'application/pdf',
+        data: big,
+      })
+      expect(res).toEqual({ id: 'big-1', fileUrl: 'https://drive/view/big' })
+      expect(String(fetchMock.mock.calls[0]![0])).toContain(
+        'uploadType=resumable',
+      )
+      // The bytes go to the URL Drive named, not back to the endpoint.
+      expect(String(fetchMock.mock.calls[1]![0])).toBe(
+        'https://upload/session-1',
+      )
+      expect(fetchMock.mock.calls[1]![1].method).toBe('PUT')
+    })
+
+    it('still converts, so a big deck lands as Google Slides', async () => {
+      const fetchMock = resumable()
+      vi.stubGlobal('fetch', fetchMock)
+      await uploadFileToDriveLive('tok', {
+        name: 'lecture.pptx',
+        mimeType: 'application/pdf',
+        data: big,
+        convertTo: 'application/vnd.google-apps.presentation',
+      })
+      const sent = JSON.parse(fetchMock.mock.calls[0]![1].body as string)
+      expect(sent.mimeType).toBe('application/vnd.google-apps.presentation')
+    })
+
+    it('keeps the small path for a small file', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ id: 'f', webViewLink: 'https://drive/view/f' }),
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      await uploadFileToDriveLive('tok', {
+        name: 'small.pdf',
+        mimeType: 'application/pdf',
+        data: new Uint8Array([1, 2, 3]),
+      })
+      expect(String(fetchMock.mock.calls[0]![0])).toContain(
+        'uploadType=multipart',
+      )
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('says so when Drive names nowhere to send the file', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+        }),
+      )
+      await expect(
+        uploadFileToDriveLive('tok', {
+          name: 'lecture.pptx',
+          mimeType: 'application/pdf',
+          data: big,
+        }),
+      ).rejects.toThrow(/no upload URL/)
+    })
+
+    it('reports Google’s reason when the bytes are refused', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            headers: { get: () => 'https://upload/session-2' },
+          })
+          .mockResolvedValueOnce({
+            ok: false,
+            status: 403,
+            text: async () => 'storageQuotaExceeded',
+          }),
+      )
+      await expect(
+        uploadFileToDriveLive('tok', {
+          name: 'lecture.pptx',
+          mimeType: 'application/pdf',
+          data: big,
+        }),
+      ).rejects.toThrow(/storageQuotaExceeded/)
+    })
+  })
+
+  it('says what Google actually refused, not only that it refused', async () => {
+    // A refusal here is one of several unrelated things — a scope the grant
+    // does not cover, a quota spent, a file too big to convert — and reported
+    // as a bare status every one of them reads as "could not save to Drive,
+    // please try again", which is advice for none of them.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 403,
+        text: async () =>
+          '{"error":{"message":"Insufficient Permission","status":"PERMISSION_DENIED"}}',
+      }),
+    )
+    await expect(
+      uploadFileToDriveLive('t', {
+        name: 'd.pptx',
+        mimeType: 'application/pdf',
+        data: new Uint8Array(),
+      }),
+    ).rejects.toThrow(/Insufficient Permission/)
+  })
+
+  it('still reports the failure when Google says nothing at all', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: async () => {
+          throw new Error('no body')
+        },
+      }),
+    )
+    await expect(
+      uploadFileToDriveLive('t', {
+        name: 'd.pptx',
+        mimeType: 'application/pdf',
+        data: new Uint8Array(),
+      }),
+    ).rejects.toThrow(/Drive upload failed \(500\)/)
+  })
+
   it('throws when the upload fails', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({ ok: false, status: 500 }),
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: async () => 'Backend Error',
+      }),
     )
     await expect(
       uploadFileToDriveLive('t', {
@@ -156,7 +330,11 @@ describe('createGoogleSlidesLive', () => {
   it('throws when the Drive conversion upload fails', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({ ok: false, status: 403 }),
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 403,
+        text: async () => 'insufficientPermissions',
+      }),
     )
     await expect(createGoogleSlidesLive('t', deck, 'root')).rejects.toThrow(
       /Drive upload failed \(403\)/,
