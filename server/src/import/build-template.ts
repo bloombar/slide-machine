@@ -262,6 +262,47 @@ const heightForText = (slot: CandidateSlot): number => {
   return (rows * fontSize * LINE_H) / SLIDE_H_CQI
 }
 
+/** The most `maxItems` the template schema will take. */
+const MAX_ITEMS = 50
+
+/**
+ * How much a box can hold, from its own width, height and type size.
+ *
+ * A hand-written template bounds its boxes through the text style each one
+ * follows, and a layout's `constraints` name three boxes — `title`, `body`,
+ * `caption`. An imported design has neither: its boxes carry geometry and no
+ * text style, and they are named after whatever they turned out to be, so a
+ * second column called `body-2` matched nothing and was bounded by nothing.
+ * "Preview with every box at its limit" then had no limit to draw, and on a
+ * design of any complexity it appeared to do nothing at all.
+ *
+ * Measured rather than named, because for an imported box the geometry IS the
+ * bound: what it can hold is how wide it is, how tall, and how big its type.
+ * That also makes the preview mean what it says — a box previewed at the
+ * longest title of the three slides that happened to be sampled is not the
+ * box at its limit.
+ *
+ * The same estimate `heightForText` runs, read the other way round: how many
+ * characters fit across, times how many lines fit down. A bullets box counts
+ * its lines as points, since that is what a point is here.
+ */
+const capacityOf = (
+  slot: CandidateSlot,
+): { maxChars?: number; maxItems?: number } => {
+  const { box, fontSize, kind } = slot
+  // A picture holds no text, and a table's shape is its rows, not a count.
+  if (!fontSize || (kind !== 'text' && kind !== 'bullets')) return {}
+  const perLine = Math.max(1, Math.floor((box.w * 100) / (fontSize * CHAR_W)))
+  const lines = Math.max(
+    1,
+    Math.floor((box.h * SLIDE_H_CQI) / (fontSize * LINE_H)),
+  )
+  return kind === 'bullets'
+    ? // For a list the character bound is per POINT, which is one line of it.
+      { maxChars: perLine, maxItems: Math.min(lines, MAX_ITEMS) }
+    : { maxChars: perLine * lines }
+}
+
 /**
  * How far a box may grow before it would reach something else.
  *
@@ -327,6 +368,10 @@ const toLayout = (
           ...(slot.description
             ? { description: slot.description.slice(0, MAX_SLOT_DESCRIPTION) }
             : {}),
+          // What this box can actually hold. Without it, only a box that
+          // happens to be called `title`, `body` or `caption` is bounded at
+          // all — see `capacityOf`.
+          ...capacityOf(slot),
           // Multi-line when the box is deep enough to hold more than a
           // line, and always when what it holds is Markdown: a list only
           // draws as a list in a block slot, and an inline one would show
