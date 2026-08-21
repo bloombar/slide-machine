@@ -313,15 +313,17 @@ describe('a design that draws its own pictures', () => {
     const design = template.layouts.find(
       l => l.type !== WHITEBOARD_LAYOUT_TYPE,
     )!
-    expect(design.decoration).toEqual([
-      {
-        x: 0.86,
-        y: 0.87,
-        w: 0.08,
-        h: 0.07,
-        imageUrl: 'https://cdn.test/templates/import/u1/p1/0.png',
-      },
-    ])
+    // Filed by what the picture IS, so a re-import cannot displace it.
+    expect(design.decoration).toHaveLength(1)
+    expect(design.decoration![0]).toMatchObject({
+      x: 0.86,
+      y: 0.87,
+      w: 0.08,
+      h: 0.07,
+    })
+    expect(design.decoration![0]!.imageUrl).toMatch(
+      /^https:\/\/cdn\.test\/templates\/import\/u1\/p1\/[0-9a-f]{32}\.png$/,
+    )
   })
 
   it('fetches it once however many slides the design covers', async () => {

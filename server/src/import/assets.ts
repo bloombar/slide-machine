@@ -13,6 +13,7 @@
  * box empty, is counted, and appears in the report — which is the honest
  * outcome, and one the author can fix by dropping a file in.
  */
+import { createHash } from 'node:crypto'
 import { getStorage } from '../storage'
 
 /** How long to wait for one picture. Generous enough for a large photo on a
@@ -49,6 +50,26 @@ export interface StoredAsset {
 }
 
 /**
+ * What a picture is filed under: what it IS, not when it arrived.
+ *
+ * Named by position, a re-import of the same deck overwrote `0.png`, `1.png`
+ * and the rest with DIFFERENT pictures. The prefix is the owner and the
+ * presentation, so it is the same on every import; the order is not, because
+ * Google's image URLs are short-lived and the order they are met in follows
+ * consolidation, which can group a deck differently from one run to the next.
+ *
+ * So every template imported earlier kept pointing at those paths and silently
+ * started showing whatever now sat at that index — a crest replaced by a
+ * photograph of a building.
+ *
+ * Content-addressed instead: the same picture always lands in the same place,
+ * so a re-import rewrites a file with its own bytes and nothing else moves. A
+ * different picture gets a different name and cannot displace one in use.
+ */
+const keyFor = (body: Buffer, contentType: string): string =>
+  `${createHash('sha256').update(body).digest('hex').slice(0, 32)}.${EXTENSIONS[contentType]}`
+
+/**
  * Fetches one picture into storage under `prefix`.
  *
  * Returns null rather than throwing: the caller counts the failures and the
@@ -57,7 +78,6 @@ export interface StoredAsset {
 export const fetchAsset = async (
   sourceUrl: string,
   prefix: string,
-  index: number,
 ): Promise<StoredAsset | null> => {
   try {
     const res = await fetch(sourceUrl, {
@@ -81,7 +101,7 @@ export const fetchAsset = async (
     // Checked again: `content-length` is a claim, not a measurement.
     if (body.byteLength === 0 || body.byteLength > MAX_ASSET_BYTES) return null
 
-    const key = `${prefix}/${index}.${EXTENSIONS[contentType]}`
+    const key = `${prefix}/${keyFor(body, contentType)}`
     await getStorage().put(key, body, contentType)
     return { sourceUrl, url: getStorage().publicUrl(key) }
   } catch {
@@ -108,9 +128,7 @@ export const fetchAssets = async (
 
   for (let i = 0; i < distinct.length; i += concurrency) {
     const batch = distinct.slice(i, i + concurrency)
-    const results = await Promise.all(
-      batch.map((url, n) => fetchAsset(url, prefix, i + n)),
-    )
+    const results = await Promise.all(batch.map(url => fetchAsset(url, prefix)))
     for (const result of results) {
       if (result) stored.set(result.sourceUrl, result.url)
       else failed++
