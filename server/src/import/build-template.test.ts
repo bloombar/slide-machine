@@ -583,3 +583,109 @@ describe('room for what the box actually held', () => {
     expect(layoutSchema.safeParse(layouts[0]).success).toBe(true)
   })
 })
+
+/**
+ * What each box can hold (TMPL-8/TMPL-6).
+ *
+ * "Preview with every box at its limit" draws each box filled to its bound —
+ * and an imported box had none. A hand-written template bounds a box through
+ * the text style it follows, and a layout's `constraints` name three boxes:
+ * `title`, `body`, `caption`. An imported design has no text styles, and its
+ * boxes are named after whatever they turned out to be, so a second column
+ * called `body-2` matched nothing at all. On any design past the simplest,
+ * the preview appeared to do nothing.
+ */
+describe('what an imported box can hold', () => {
+  const twoColumns = derived({
+    slots: [
+      slot('title', { x: 0.08, y: 0.1, w: 0.84, h: 0.12 }, { fontSize: 5 }),
+      slot('body', { x: 0.08, y: 0.34, w: 0.4, h: 0.5 }, { fontSize: 2.5 }),
+      slot('body-2', { x: 0.52, y: 0.34, w: 0.4, h: 0.5 }, { fontSize: 2.5 }),
+    ],
+  })
+
+  const specs = (layout: Parameters<typeof buildTemplate>[1][number]) =>
+    Object.fromEntries(
+      buildTemplate(source(), [layout], new Map()).layouts[0]!.slots.map(s => [
+        s.name,
+        s,
+      ]),
+    )
+
+  it('bounds every box, not only the three a layout can name', () => {
+    const bounded = specs(twoColumns)
+    for (const name of ['title', 'body', 'body-2']) {
+      expect(bounded[name]!.maxChars).toBeGreaterThan(0)
+    }
+  })
+
+  it('gives a wider, taller box more room than a narrow one', () => {
+    // The geometry IS the bound: a half-width column holds less than the
+    // full-width title line it sits under, per line, and more in total.
+    const bounded = specs(twoColumns)
+    expect(bounded.body!.maxChars).toBeGreaterThan(bounded.title!.maxChars!)
+  })
+
+  it('bounds a list by its points, each a line of it', () => {
+    const bulleted = derived({
+      slots: [
+        slot(
+          'points',
+          { x: 0.08, y: 0.3, w: 0.84, h: 0.5 },
+          { kind: 'bullets', fontSize: 2.5 },
+        ),
+      ],
+    })
+    const points = specs(bulleted).points!
+    expect(points.maxItems).toBeGreaterThan(1)
+    // Per point, not for the whole box — which is what a list's bound means.
+    expect(points.maxChars).toBeGreaterThan(0)
+    expect(points.maxChars).toBeLessThan(200)
+  })
+
+  it('leaves a picture unbounded, holding no text', () => {
+    const withPicture = derived({
+      slots: [
+        slot('image', { x: 0.1, y: 0.2, w: 0.8, h: 0.6 }, { kind: 'image' }),
+      ],
+    })
+    expect(specs(withPicture).image!.maxChars).toBeUndefined()
+  })
+
+  it('says nothing about a box whose type size is unknown', () => {
+    // A bound guessed with no type size to guess from would be a number the
+    // design never claimed.
+    const sizeless = derived({
+      slots: [slot('body', { x: 0.08, y: 0.3, w: 0.84, h: 0.4 })],
+    })
+    expect(specs(sizeless).body!.maxChars).toBeUndefined()
+  })
+
+  it('keeps a bound the presentation declared itself (EXP-8)', () => {
+    // Our own export carries the real limit; a measurement must not replace
+    // being told.
+    const restored = derived({
+      slots: [
+        slot(
+          'title',
+          { x: 0.08, y: 0.1, w: 0.84, h: 0.12 },
+          {
+            fontSize: 5,
+            restored: {
+              name: 'title',
+              kind: 'text',
+              label: 'Title',
+              maxChars: 7,
+            },
+          },
+        ),
+      ],
+    })
+    expect(specs(restored).title!.maxChars).toBe(7)
+  })
+
+  it('produces slots the template schema accepts', () => {
+    const { layouts } = buildTemplate(source(), [twoColumns], new Map())
+    expect(layoutSchema.safeParse(layouts[0]).success).toBe(true)
+  })
+})
