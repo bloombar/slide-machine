@@ -493,4 +493,61 @@ describe('an imported design on the way out', () => {
     )
     expect(boxes[0]!.kind).toBe('rule')
   })
+
+  /**
+   * The pictures a design draws (TMPL-8).
+   *
+   * An institution's design is mostly a crest and a backdrop, and decoration
+   * used to be filtered to pieces with a `fill` — so an imported deck exported
+   * with its branding taken off. A picture names itself on the box, because it
+   * belongs to the LAYOUT: the slide's own picture comes from its `imageRef`,
+   * one per slide, which is all any exporter could resolve.
+   */
+  it('draws the pictures the design carries, not only its fills', () => {
+    const boxes = computeLayout(
+      slideWith('words'),
+      layout({
+        decoration: [
+          { x: 0, y: 0, w: 1, h: 1, imageUrl: '/api/files/t1/backdrop.png' },
+          {
+            x: 0.86,
+            y: 0.88,
+            w: 0.1,
+            h: 0.08,
+            imageUrl: '/api/files/t1/1.png',
+          },
+        ],
+      }),
+    )
+    const pictures = boxes.filter(b => b.kind === 'image')
+    expect(pictures.map(p => (p as { ref?: string }).ref)).toEqual([
+      '/api/files/t1/backdrop.png',
+      '/api/files/t1/1.png',
+    ])
+  })
+
+  it('gives a piece that is both a colour and a picture both, colour first', () => {
+    // The fill is what shows wherever the picture does not reach.
+    const boxes = computeLayout(
+      slideWith('words'),
+      layout({
+        decoration: [
+          { x: 0, y: 0, w: 1, h: 1, fill: '#ffffff', imageUrl: '/api/files/b' },
+        ],
+      }),
+    )
+    expect(boxes.slice(0, 2).map(b => b.kind)).toEqual(['rule', 'image'])
+  })
+
+  it('marks a design’s picture apart from the slide’s own', () => {
+    // The exporters read `ref` to tell the two apart: without it a deck whose
+    // design carries a logo would fetch a slide picture nothing draws.
+    const boxes = computeLayout(
+      slideWith('words'),
+      layout({ decoration: [{ x: 0, y: 0, w: 1, h: 1, imageUrl: '/api/f' }] }),
+    )
+    expect(
+      boxes.filter(b => b.kind === 'image' && !('ref' in b && b.ref)).length,
+    ).toBe(0)
+  })
 })
