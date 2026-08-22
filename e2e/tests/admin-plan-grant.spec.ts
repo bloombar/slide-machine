@@ -9,6 +9,11 @@
  * account really is on the granted plan afterwards (its own usage view says
  * so, which is the server metering it, not the page repeating a form), and
  * ending the grant really does put it back where it was.
+ *
+ * The last test covers the one target moderation refuses and this does not:
+ * an allowlisted account, the acting admin's own. It grants and then ends the
+ * grant in the same test, so the shared e2e admin account is left as it was
+ * found.
  */
 import { test, expect, type Page } from './fixtures'
 
@@ -200,6 +205,48 @@ test('the admin user page carries the same grant editor', async ({ page }) => {
   ).toBeVisible()
 
   // And the same page ends it, landing the account back where it pays.
+  const revoked = page.waitForResponse(
+    res =>
+      res.url().includes('/plan-grant') &&
+      res.request().method() === 'DELETE' &&
+      res.status() === 204,
+  )
+  await main.getByRole('button', { name: 'End now' }).click()
+  await revoked
+  await expect(main.getByText(/complimentary until/i)).toHaveCount(0)
+})
+
+test('an admin can grant a plan to their own allowlisted account', async ({
+  page,
+}) => {
+  await ensureSignedIn(page, admin)
+  // Straight to the admin's own console page by id: the shared e2e admin
+  // account is old, so it is not on page 1 of a newest-first directory.
+  const session = await page.request.post('/api/auth/refresh')
+  const { user } = (await session.json()) as { user: { id: string } }
+  await page.goto(`/app/admin/users/${user.id}`)
+  await expect(
+    page.getByRole('heading', { name: admin.displayName }),
+  ).toBeVisible()
+
+  const main = page.getByRole('main')
+  const granted = page.waitForResponse(
+    res =>
+      res.url().includes('/plan-grant') &&
+      res.request().method() === 'PUT' &&
+      res.status() === 204,
+  )
+  await main.getByRole('combobox', { name: 'Plan' }).selectOption('pro')
+  await main.getByLabel('Last day').fill(nextMonth)
+  await main.getByRole('button', { name: 'Grant plan' }).click()
+  await granted
+
+  // Not refused as a moderation action would be: the grant is really there.
+  await expect(
+    main.getByText(/pro — complimentary until .*, then free/i),
+  ).toBeVisible()
+
+  // Put the shared admin account back where the other specs expect it.
   const revoked = page.waitForResponse(
     res =>
       res.url().includes('/plan-grant') &&

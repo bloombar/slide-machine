@@ -129,7 +129,12 @@ export const actor = (req: { adminUser?: { id: string; email: string } }) => {
 /** Admin accounts moderate; they are not moderated. Deleting, banning,
  * resetting, or editing the settings of an allowlisted account (including
  * yourself) — or of a project/lecture an allowlisted account OWNS — is
- * refused; it would be a lockout, not moderation. */
+ * refused; it would be a lockout, not moderation.
+ *
+ * Deliberately not applied to the two endpoints that only ever *give*
+ * something to their target: a complimentary plan grant (ADMIN-9) and an
+ * allowance reset (ADMIN-10). Neither can lock anyone out, and both are
+ * audited with the target's admin status instead. */
 export const rejectAdminTarget = (email: string) => {
   if (isAdminEmail(email)) {
     throw new HttpError(

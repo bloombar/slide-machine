@@ -22,7 +22,9 @@
  * ProfilePage). This page links there. The one exception is the
  * complimentary plan grant (ADMIN-9): it is an admin entitlement rather
  * than an account setting, so the same editor the settings page's Plan
- * tab shows an admin is offered here too.
+ * tab shows an admin is offered here too. The usage panel carries the
+ * matching remedy for what an account has already spent — resetting its
+ * allowances for the current billing period (ADMIN-10).
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
@@ -528,7 +530,11 @@ export default function AdminUserDetailPage() {
         />
       )}
 
-      {userId && <AdminUsagePanel userId={userId} />}
+      {/* Usage against the caps, and the one write on this page's read
+          surfaces: handing the period's allowances back (ADMIN-10). Withheld
+          for a deleted account, whose counters the endpoint refuses to touch
+          until it is restored. */}
+      {userId && <AdminUsagePanel userId={userId} canReset={!userDeleted} />}
       {userId && <CostPanel scope={{ kind: 'user', id: userId }} />}
 
       <section className="mt-8">

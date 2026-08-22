@@ -107,7 +107,10 @@ Admin accounts moderate; they are not moderated: any of these against an
 allowlisted email (including your own) is refused with `target_is_admin`
 until the email is removed from `ADMIN_EMAILS`. The settings editing below
 extends that to **content**: editing a project or lecture whose *owner* is
-allowlisted is refused the same way.
+allowlisted is refused the same way. The two actions that only ever *give*
+something — a [complimentary plan](#complimentary-plans) and an [allowance
+reset](#resetting-allowances) — are the exceptions, since neither can lock
+anyone out; both record the target's admin status in the audit log instead.
 
 ### Deleted content and recovery
 
@@ -250,8 +253,11 @@ It gives and it expires — nothing else:
   on its own tier's terms once the grant ends.
 - **The user is told**: their plan, that it is at no charge, and the date
   it reverts — never who granted it or the note you left.
-- **Not for admins.** Granting to an allowlisted email is refused
-  (`target_is_admin`), like every other action on an admin account.
+- **Admins included.** Unlike moderation, a grant may target an
+  allowlisted email — your own among them: it only ever gives, it expires
+  on its own, and refusing it left nobody able to pilot a plan on an
+  operator's account. The audit entry records that the target was an admin,
+  and whether it was you.
 
 Both granting and ending are in the [audit log](#audit-log-appadminlogs)
 (`user.plan_grant`, `user.plan_grant_revoke`) with the tier, the expiry,
@@ -265,6 +271,38 @@ lapsed stays listed as history, since it is what explains last month's
 usage.
 
 [ADMIN-9]: SPEC.md#admin-9-complimentary-plan-grants
+
+### Resetting allowances
+
+Beside the meters on a user's console page, **Service usage** carries a
+**Reset allowances** button ([ADMIN-10]) — the fix for a bad generation
+run, a botched import, or a lecture whose audience spent a term's budget in
+an afternoon. It puts that account's counters back to zero for the billing
+period it is in, so it can spend its caps again before they renew.
+
+What it does not do is as important:
+
+- **Only this period.** Earlier periods stand, so the account's all-time
+  usage and every cost report still say what was actually consumed.
+- **Stored audio is not reset.** It is a gauge — what the account is
+  holding right now, not what it spent — and a reset does not delete a file
+  or free a disk.
+- **The plan does not change.** Granting a bigger plan is a different act
+  ([Complimentary plans](#complimentary-plans)); this hands back what has
+  already been spent on the plan the account is on.
+- **Nothing about cost changes.** The cost ledger records what the
+  deployment paid a vendor. An allowance is not money.
+
+Cap warnings are re-armed: an account already told it hit a cap this period
+will be told again if it spends the restored allowance back down to it.
+
+Deleted accounts are refused (restore first). An allowlisted account may be
+reset, your own included, for the same reason a grant may be given to one.
+Every reset is in the [audit log](#audit-log-appadminlogs) as
+`user.usage_reset`, with the period, what each counter stood at
+beforehand, and whether the target was an admin.
+
+[ADMIN-10]: SPEC.md#admin-10-resetting-an-accounts-allowances
 
 ### Private lectures
 
@@ -406,7 +444,10 @@ someone onto a paid plan outside Stripe is still a database operation.
 What an admin *can* do in the app is give a plan away for a while:
 [Complimentary plans](#complimentary-plans). That is stored beside
 `planTier` rather than in it, so a webhook and a grant can never overwrite
-each other, and what an account may spend is the larger of the two.
+each other, and what an account may spend is the larger of the two. The
+other half — what an account has already **spent** against those caps — can
+be handed back for the current period: [Resetting
+allowances](#resetting-allowances).
 
 ## Data retention and privacy
 

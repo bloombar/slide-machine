@@ -131,9 +131,10 @@ describe('gating', () => {
     expect(await AdminActionLogModel.countDocuments()).toBe(0)
   })
 
-  // Admins moderate but are not moderated (ADMIN-1) — and an admin comping
-  // themselves a plan is exactly the self-dealing that rule rules out.
-  it('refuses to grant a plan to an allowlisted account', async () => {
+  // "Admins are not moderated" (ADMIN-1) keeps an operator from being locked
+  // out of their own console; a grant only ever hands something over, so it is
+  // allowed — and the audit entry, not a refusal, is what keeps it honest.
+  it('grants a plan to an allowlisted account, flagged in the log', async () => {
     const adminId = await idOf(ADMIN_EMAIL)
 
     const res = await grant(admin, adminId, {
@@ -141,9 +142,24 @@ describe('gating', () => {
       expiresAt: inDays(30),
     })
 
-    expect(res.status).toBe(400)
-    expect(res.body.error.code).toBe('target_is_admin')
-    expect((await UserModel.findById(adminId))!.planGrant).toBeFalsy()
+    expect(res.status).toBe(204)
+    expect((await UserModel.findById(adminId))!.planGrant?.tier).toBe('max')
+
+    const entry = (await AdminActionLogModel.findOne({
+      action: 'user.plan_grant',
+    }))!
+    expect(entry.details).toMatchObject({ targetIsAdmin: true, self: true })
+  })
+
+  // The same flags on an ordinary grant, so a reader does not have to know
+  // that their absence would have meant "not an admin".
+  it('records an ordinary grant as neither admin-targeted nor self-dealt', async () => {
+    await grant(admin, adaId, { tier: 'pro', expiresAt: inDays(30) })
+
+    const entry = (await AdminActionLogModel.findOne({
+      action: 'user.plan_grant',
+    }))!
+    expect(entry.details).toMatchObject({ targetIsAdmin: false, self: false })
   })
 })
 

@@ -35,12 +35,10 @@ import type {
   Project,
   SafeUser,
   SeedAsset,
-  UsageSummaryResponse,
   Visibility,
 } from '@slide-machine/shared'
 import { UserModel, toUserDto, type UserDb } from '../models/user'
 import { adminPlanGrant, effectivePlanTier } from '../billing/plan-grant'
-import { accountUsage } from '../billing/usage-view'
 import { ProjectModel, toProjectDto, type ProjectDb } from '../models/project'
 import { DeckModel, loadDeckAcls, type DeckDb } from '../models/deck'
 import {
@@ -84,6 +82,7 @@ import {
   rejectAdminTarget,
 } from './admin-targets'
 import { adminPlanRouter } from './admin-plan'
+import { adminUsageRouter } from './admin-usage'
 import { adminCostRouter } from './admin-cost'
 import { adminTelemetryRouter } from './admin-telemetry'
 import { adminResearchRouter } from './admin-research'
@@ -567,11 +566,13 @@ export const adminRouter = Router()
 adminRouter.use(requireAuth, requireAdmin)
 
 // The audited settings-editing endpoints (ADMIN-5), the complimentary
-// plan-grant endpoints (ADMIN-9), and the settings change log's read
-// endpoints mount here, after the guards above, so they are covered by
-// exactly the same authorization.
+// plan-grant endpoints (ADMIN-9), one account's usage and its reset
+// (BILL-4/ADMIN-10), and the settings change log's read endpoints mount
+// here, after the guards above, so they are covered by exactly the same
+// authorization.
 adminRouter.use(adminSettingsRouter)
 adminRouter.use(adminPlanRouter)
+adminRouter.use(adminUsageRouter)
 adminRouter.use(adminSettingsLogsRouter)
 // Cost reporting (BILL-7): read-only, behind the same allowlist gate.
 adminRouter.use(adminCostRouter)
@@ -790,26 +791,6 @@ adminRouter.get('/users/:id/decks', async (req, res) => {
       toAdminDeckSummary(deck, acls.get(deck._id.toString())!),
     ),
   }
-  res.json(body)
-})
-
-/**
- * One account's metered usage against its caps — the same summary the
- * account's own footer badge reads (BILL-4), through the allowlist gate
- * instead of the self-only `user.usage` action, which deliberately takes no
- * target. `?window=all` totals every period instead of the current one.
- */
-adminRouter.get('/users/:id/usage', async (req, res) => {
-  const window = req.query.window ?? 'period'
-  if (window !== 'period' && window !== 'all') {
-    throw new HttpError(400, 'invalid_input', 'Invalid usage window')
-  }
-  const user = await loadAnyUser(String(req.params.id))
-  const body: UsageSummaryResponse = await accountUsage(
-    user._id.toString(),
-    effectivePlanTier(user),
-    window,
-  )
   res.json(body)
 })
 
