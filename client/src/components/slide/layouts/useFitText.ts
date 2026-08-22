@@ -56,9 +56,43 @@ const MIN_SCALE = 0.4
  * that fitting settles in a frame or two. */
 const STEPS = 24
 
-/** A pixel of slack, so a box that fits exactly is not shrunk by a rounding
- * difference between `scrollHeight` and `clientHeight`. */
-const SLACK = 1
+/**
+ * How much a box may overrun before the type gives way, as a share of its own
+ * font size.
+ *
+ * A flat pixel of slack was not enough, and the reason is worth stating: a
+ * face set below about 1.2 line-height puts its descenders outside the line
+ * box, so `scrollHeight` exceeds `clientHeight` by a few pixels at EVERY type
+ * size. Shrinking scales that overrun down without ever clearing it, so the
+ * search walked all twenty-four steps to the floor and a seven-character
+ * title set at 9cqi came out at two fifths — while a box that genuinely held
+ * one line too many looked no different to the measurement.
+ *
+ * A share of the font size separates the two. A real extra line costs at
+ * least one line-height, which is around a whole em; the glyphs hanging out
+ * of a tight line box cost a fraction of one. A quarter of an em sits well
+ * between, and it scales with the type, so the same rule holds for a 2cqi
+ * caption and a 17cqi figure.
+ */
+const SLACK_EM = 0.25
+
+/**
+ * The overrun this box may be allowed, in pixels.
+ *
+ * Only a box whose line box is shorter than the glyphs it holds can overrun
+ * without holding too much, so only that box is given room. Everywhere else
+ * the tolerance stays at the pixel of rounding it began as — otherwise a
+ * quarter of an em of slack on body text hides a genuinely clipped line.
+ */
+const TIGHT_LEADING = 1.2
+
+const slackFor = (el: HTMLElement): number => {
+  const cs = getComputedStyle(el)
+  const size = parseFloat(cs.fontSize)
+  const leading = parseFloat(cs.lineHeight) / size
+  if (!Number.isFinite(leading) || leading >= TIGHT_LEADING) return 1
+  return Math.max(1, size * SLACK_EM)
+}
 
 /**
  * A ref to put on the box, and the scale its type should draw at.
@@ -91,7 +125,8 @@ export const useFitText = (
      * width took those boxes to the floor with their height half empty,
      * still four pixels over at three-point type.
      */
-    const fits = (): boolean => el.scrollHeight <= el.clientHeight + SLACK
+    const fits = (): boolean =>
+      el.scrollHeight <= el.clientHeight + slackFor(el)
 
     const measure = () => {
       // A box with no size yet — still being laid out, or hidden — cannot be
