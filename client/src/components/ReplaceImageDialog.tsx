@@ -5,6 +5,8 @@
  * web sources (Wikimedia, Openverse, Flickr) and pick a result. The search
  * seeds itself from the slide's own keywords so the options relate to what
  * the slide is about; choosing a result records its source credit (IMG-5).
+ * Matching pictures from the lecture's own seed material lead the results
+ * (SEED-2), badged as the instructor's own, ahead of any web option.
  * Mutations are delegated to the parent so the slide updates in place — no
  * page reload — while this dialog only handles search and selection UI.
  */
@@ -244,8 +246,16 @@ export default function ReplaceImageDialog({
                         alt={candidate.title || t('image.search.result')}
                         className="h-full w-full object-cover"
                       />
-                      <span className="absolute inset-x-0 bottom-0 bg-black/50 px-1.5 py-0.5 text-start text-[10px] text-white capitalize">
-                        {candidate.source}
+                      <span
+                        className={`absolute inset-x-0 bottom-0 px-1.5 py-0.5 text-start text-[10px] text-white ${
+                          candidate.source === 'seeded'
+                            ? 'bg-indigo-600/80'
+                            : 'bg-black/50 capitalize'
+                        }`}
+                      >
+                        {candidate.source === 'seeded'
+                          ? t('image.search.seeded')
+                          : candidate.source}
                       </span>
                     </button>
                   </li>
