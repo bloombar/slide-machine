@@ -18,11 +18,14 @@ import type {
 import { requireAuth } from '../middleware/auth'
 import { HttpError } from '../middleware/error'
 import { SlideModel, toSlideDto, type SlideDb } from '../models/slide'
-import { DeckModel, loadDeckAcl } from '../models/deck'
+import { DeckModel, loadDeckAcl, type DeckDb } from '../models/deck'
 import { buildSlideAudio, slideAudioWav } from '../lib/slide-audio'
 import { SeedAssetModel } from '../models/seed-asset'
 import { keywordsFromName } from '../seeding/extract'
 import { searchImageCandidates } from '../enrichment/search'
+import { scoreCandidate } from '../enrichment/scoring'
+import type { ImageCandidate } from '../enrichment/types'
+import { seedAssetsFor, seededImageCandidates } from '../lib/seed-assets'
 import { assertUserCapacity } from '../billing/meter-hooks'
 import { runWithUsage } from '../billing/usage-context'
 import { canEditAcl } from '../lib/access'
@@ -159,6 +162,28 @@ const compactAttribution = (value: unknown): ImageAttribution | undefined => {
 }
 
 /**
+ * The lecture's own seed images that match the search terms, best first
+ * (SEED-2). Relevance uses the same score as enrichment, so a picture only
+ * surfaces when its caption/keywords relate to what was searched, and the
+ * seeded source prior keeps the instructor's own material ahead of the web.
+ */
+const matchingSeedImages = async (
+  deck: HydratedDocument<DeckDb>,
+  keywords: string[],
+): Promise<ImageCandidate[]> => {
+  if (!keywords.length) return []
+  const { project, deck: own } = await seedAssetsFor(deck)
+  return seededImageCandidates([...own, ...project])
+    .map(candidate => ({
+      candidate,
+      score: scoreCandidate(candidate, keywords),
+    }))
+    .filter(scored => scored.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map(scored => scored.candidate)
+}
+
+/**
  * Web image search (EDIT-1): returns candidate images for replacing this
  * slide's picture. An explicit `query` wins; otherwise the AI's own image
  * keywords are used, falling back to the slide title — so results relate
@@ -173,7 +198,7 @@ slidesRouter.post(
   '/slides/:slideId/image-candidates',
   requireAuth,
   async (req, res) => {
-    const { slide } = await loadEditableSlide(
+    const { slide, deck } = await loadEditableSlide(
       String(req.params.slideId),
       req.userId,
     )
@@ -205,7 +230,15 @@ slidesRouter.post(
     const candidates = await runWithUsage(payer, () =>
       searchImageCandidates(keywords),
     )
-    const dto: ImageSearchCandidate[] = candidates.map(c => ({
+    // The instructor's own uploads lead the results when they match, so a
+    // picture they already supplied is chosen before any web option (IMG-1).
+    const seeded = await matchingSeedImages(deck, keywords)
+    const seededUrls = new Set(seeded.map(c => c.url))
+    const ranked = [
+      ...seeded,
+      ...candidates.filter(c => !seededUrls.has(c.url)),
+    ]
+    const dto: ImageSearchCandidate[] = ranked.map(c => ({
       url: c.url,
       title: c.title,
       source: c.source,
@@ -218,10 +251,13 @@ slidesRouter.post(
 )
 
 /**
- * Sets a slide's image to one chosen from web search results (EDIT-1).
- * The picture is hotlinked from its source the same way enrichment does,
+ * Sets a slide's image to one chosen from the picker's results (EDIT-1).
+ * A web picture is hotlinked from its source the same way enrichment does,
  * so it is marked AI-sourced ('stock') with read-only credit carried from
- * the source (IMG-5) — the instructor did not create it.
+ * the source (IMG-5) — the instructor did not create it. A picture chosen
+ * from the lecture's own seed material is theirs, so it stays 'seeded' with
+ * editable credit; the URL is checked against the seed assets server-side
+ * rather than trusted from the request.
  */
 slidesRouter.post(
   '/slides/:slideId/image-from-source',
@@ -231,13 +267,17 @@ slidesRouter.post(
     if (!/^https?:\/\//i.test(url)) {
       throw new HttpError(400, 'bad_request', 'A valid image URL is required')
     }
-    const { slide } = await loadEditableSlide(
+    const { slide, deck } = await loadEditableSlide(
       String(req.params.slideId),
       req.userId,
     )
+    const { project, deck: own } = await seedAssetsFor(deck)
+    const fromSeed = seededImageCandidates([...own, ...project]).some(
+      c => c.url === url,
+    )
     setSlotImage(slide, requestedSlot(req.body?.slot), {
       imageRef: url,
-      imageSource: 'stock',
+      imageSource: fromSeed ? 'seeded' : 'stock',
       attribution: compactAttribution(req.body?.attribution),
     })
     await slide.save()

@@ -22,6 +22,7 @@ import { DeckModel } from '../../src/models/deck'
 import { SlideModel } from '../../src/models/slide'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
 import { UsageRecordModel } from '../../src/models/usage-record'
+import { SeedAssetModel } from '../../src/models/seed-asset'
 import { capFor, recordUsage, usedThisPeriod } from '../../src/billing/usage'
 
 // One long-lived server per file: supertest's default per-request
@@ -69,6 +70,7 @@ beforeEach(async () => {
     SlideModel.deleteMany({}),
     RefreshTokenModel.deleteMany({}),
     UsageRecordModel.deleteMany({}),
+    SeedAssetModel.deleteMany({}),
   ])
   ada = await registerUser('ada@example.com')
   const project = await act(ada, 'project.create', { title: 'Bio' })
@@ -953,6 +955,85 @@ describe('POST /slides/:slideId/image-candidates (EDIT-1)', () => {
     expect(urls).toContain('http://wiki/blue cell.png')
   })
 
+  /**
+   * Registers an uploaded picture as seed material for the deck's lecture
+   * (or, without a deckId, its project), the way an upload would.
+   */
+  const seedImage = async (
+    fields: {
+      name: string
+      keywords: string[]
+      level?: 'deck' | 'project'
+    } & Partial<{ enabled: boolean; status: 'processing' | 'ready' }>,
+  ) => {
+    const deck = (await DeckModel.findById(deckId))!
+    return SeedAssetModel.create({
+      projectId: deck.projectId,
+      deckId: fields.level === 'project' ? undefined : deck._id,
+      type: 'image',
+      name: fields.name,
+      status: fields.status ?? 'ready',
+      enabled: fields.enabled ?? true,
+      imageUrl: `http://seed/${fields.name}`,
+      keywords: fields.keywords,
+    })
+  }
+
+  it('leads the results with matching seed images (SEED-2)', async () => {
+    stubImageApis()
+    await seedImage({ name: 'my-cell.png', keywords: ['cell'] })
+    await seedImage({
+      name: 'project-cell.png',
+      keywords: ['cell'],
+      level: 'project',
+    })
+
+    const res = await request(server)
+      .post(`/api/slides/${slideIds[0]}/image-candidates`)
+      .set('Authorization', `Bearer ${ada}`)
+      .send({ query: 'cell' })
+
+    expect(res.status).toBe(200)
+    const urls = res.body.map((c: { url: string }) => c.url)
+    // Both the lecture's and the project's own pictures come before the web
+    expect(urls.slice(0, 2).sort()).toEqual([
+      'http://seed/my-cell.png',
+      'http://seed/project-cell.png',
+    ])
+    expect(urls).toContain('http://wiki/cell.png')
+    expect(res.body[0].source).toBe('seeded')
+    expect(res.body[0].attribution).toMatchObject({
+      sourceName: 'Instructor upload',
+    })
+  })
+
+  it('leaves out seed images that do not match, and ones switched off', async () => {
+    stubImageApis()
+    await seedImage({ name: 'volcano.png', keywords: ['volcano'] })
+    await seedImage({
+      name: 'off-cell.png',
+      keywords: ['cell'],
+      enabled: false,
+    })
+    await seedImage({
+      name: 'pending-cell.png',
+      keywords: ['cell'],
+      status: 'processing',
+    })
+
+    const res = await request(server)
+      .post(`/api/slides/${slideIds[0]}/image-candidates`)
+      .set('Authorization', `Bearer ${ada}`)
+      .send({ query: 'cell' })
+
+    expect(res.status).toBe(200)
+    const urls = res.body.map((c: { url: string }) => c.url)
+    expect(urls).not.toContain('http://seed/volcano.png')
+    expect(urls).not.toContain('http://seed/off-cell.png')
+    expect(urls).not.toContain('http://seed/pending-cell.png')
+    expect(urls).toContain('http://wiki/cell.png')
+  })
+
   it("403s searching for another user's slide", async () => {
     const bob = await registerUser('bob-cand@example.com')
     const res = await request(server)
@@ -1008,6 +1089,28 @@ describe('POST /slides/:slideId/image-from-source (EDIT-1)', () => {
     // Marked AI-sourced 'stock' so its credit stays read-only (IMG-5)
     expect(res.body.imageSource).toBe('stock')
     expect(res.body.attribution).toMatchObject({ creator: 'Ada' })
+  })
+
+  it("keeps a picture chosen from seed material the instructor's own", async () => {
+    const deck = (await DeckModel.findById(deckId))!
+    await SeedAssetModel.create({
+      projectId: deck.projectId,
+      deckId: deck._id,
+      type: 'image',
+      name: 'mine.png',
+      status: 'ready',
+      imageUrl: 'https://example.com/mine.png',
+      keywords: ['mine'],
+    })
+
+    const res = await request(server)
+      .post(`/api/slides/${slideIds[0]}/image-from-source`)
+      .set('Authorization', `Bearer ${ada}`)
+      .send({ url: 'https://example.com/mine.png' })
+
+    expect(res.status).toBe(200)
+    // 'seeded', not 'stock', so its credit stays editable (IMG-5)
+    expect(res.body.imageSource).toBe('seeded')
   })
 
   it('rejects a value that is not a URL', async () => {

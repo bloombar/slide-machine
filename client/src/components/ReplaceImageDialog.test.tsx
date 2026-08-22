@@ -60,6 +60,22 @@ describe('ReplaceImageDialog', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
+  it("badges the lecture's own seed images and keeps them first", async () => {
+    // The server puts matching seed images at the top; the grid keeps
+    // that order and marks them as the instructor's own material.
+    mockedSearch.mockResolvedValue([
+      { url: 'http://seed/mine.png', title: 'My cell', source: 'seeded' },
+      ...candidates,
+    ])
+    setup()
+
+    const options = await screen.findAllByRole('listitem')
+    expect(options[0]).toHaveTextContent('Your material')
+    expect(screen.getAllByText('Your material')).toHaveLength(1)
+    // Web results keep their own source label
+    expect(options[1]).toHaveTextContent('wikimedia')
+  })
+
   it('uploads a file chosen from the computer', async () => {
     mockedSearch.mockResolvedValue([])
     const { onUpload, onClose } = setup()
