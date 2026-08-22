@@ -26,6 +26,22 @@ export const FONT_STACKS: FontStack[] = [
     stack:
       'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
   },
+  // The two faces the app BUNDLES (client/src/index.css). Every other entry
+  // below names fonts already on the reader's machine and so approximates;
+  // these two are the real thing, served from our own origin. A template that
+  // names one reproduces its typeface instead of resembling it.
+  {
+    key: 'frank-ruhl-libre',
+    label: 'Frank Ruhl Libre',
+    stack:
+      '"Frank Ruhl Libre", ui-serif, Georgia, Cambria, "Times New Roman", Times, serif',
+  },
+  {
+    key: 'montserrat',
+    label: 'Montserrat',
+    stack:
+      'Montserrat, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  },
   {
     key: 'serif',
     label: 'System serif',
