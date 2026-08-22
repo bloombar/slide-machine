@@ -163,7 +163,7 @@ describe('slot metadata reaching the model (TMPL-10)', () => {
     expect(prompt).not.toContain('LaTeX')
   })
 
-  it('drops instructions rather than truncating, and says so', async () => {
+  it('spends the budget down rather than dropping every instruction, and says so', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const long = 'y'.repeat(190)
     const manySlots = Array.from({ length: 40 }, (_, i) => ({
@@ -186,10 +186,15 @@ describe('slot metadata reaching the model (TMPL-10)', () => {
     )
     // Every box is still offered — only the instructions gave way
     expect(prompt).toContain('box-39')
-    expect(prompt).not.toContain(long)
+    // Some did give way: forty of these cannot fit.
+    const kept = prompt.split(long).length - 1
+    expect(kept).toBeLessThan(manySlots.length)
+    // But not all of them. Dropping the lot was the old behaviour, and it
+    // left a template whose instructions are its point with none of them.
+    expect(kept).toBeGreaterThan(0)
     // ...and never silently: the author has no other way to find out
     expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining('dropped slot instructions'),
+      expect.stringContaining('slot instructions'),
     )
     warn.mockRestore()
   })
