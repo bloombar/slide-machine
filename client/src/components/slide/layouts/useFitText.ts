@@ -105,14 +105,30 @@ const slackFor = (el: HTMLElement): number => {
 export const useFitText = (
   /** Off for boxes that scroll on purpose, like a program listing. */
   enabled = true,
-): { ref: React.RefObject<HTMLElement | null>; scale: number } => {
+): {
+  ref: React.RefObject<HTMLElement | null>
+  scale: number
+  /**
+   * True when the box is at the floor and STILL cannot show what it holds —
+   * the only case where it needs to scroll.
+   *
+   * Reported rather than assumed because a scroll container is not free:
+   * Chrome composites one per box, and a list view of a hundred slides made
+   * hundreds of them, which was enough for the compositor to give up and
+   * paint nothing at all. Safari drew it, headless Chromium drew it, and
+   * Chrome and Brave showed blank slides.
+   */
+  overflowing: boolean
+} => {
   const ref = useRef<HTMLElement | null>(null)
   const [scale, setScale] = useState(1)
+  const [overflowing, setOverflowing] = useState(false)
 
   useLayoutEffect(() => {
     const el = ref.current
     if (!el || !enabled) {
       setScale(1)
+      setOverflowing(false)
       return
     }
 
@@ -138,6 +154,7 @@ export const useFitText = (
       el.style.setProperty('--fit-scale', '1')
       if (fits()) {
         setScale(1)
+        setOverflowing(false)
         return
       }
       for (let step = 1; step <= STEPS; step++) {
@@ -145,12 +162,15 @@ export const useFitText = (
         el.style.setProperty('--fit-scale', String(next))
         if (fits()) {
           setScale(next)
+          setOverflowing(false)
           return
         }
       }
       // Past the floor the slide simply holds too much; it is left readable
-      // rather than shrunk into a smear.
+      // rather than shrunk into a smear, and given a scrollbar so the rest
+      // can still be reached.
       setScale(MIN_SCALE)
+      setOverflowing(true)
     }
 
     measure()
@@ -177,5 +197,5 @@ export const useFitText = (
     }
   }, [enabled])
 
-  return { ref, scale }
+  return { ref, scale, overflowing }
 }

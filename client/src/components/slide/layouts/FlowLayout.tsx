@@ -216,9 +216,11 @@ function Node({
    * program.
    */
   const kind = node.slot ? kindOf(node.slot) : undefined
-  const { ref: fitRef, scale: fitScale } = useFitText(
-    Boolean(node.slot) && kind !== 'code' && kind !== 'image',
-  )
+  const {
+    ref: fitRef,
+    scale: fitScale,
+    overflowing,
+  } = useFitText(Boolean(node.slot) && kind !== 'code' && kind !== 'image')
 
   // A container: draw the box, then let it arrange its children.
   if (node.container) {
@@ -277,7 +279,8 @@ function Node({
       // and the animation reads it from the slot wrapper's nearest ancestor.
       data-flip-tier={tierOf(kindOf(node.slot), node.style?.textStyle)}
       ref={fitRef as React.Ref<HTMLDivElement>}
-      // Scrolls rather than hides what will not fit.
+      // Scrolls rather than hides what will not fit — but ONLY the box that
+      // actually cannot show it.
       //
       // The type gives way first (`useFitText`), and for a slide the app
       // wrote that is the end of it. Past the floor the box is holding more
@@ -285,7 +288,9 @@ function Node({
       // the reader reach the rest — losing the end of a sentence with no
       // sign it was ever there is the one outcome worth avoiding. A listing
       // never shrinks at all, so scrolling is its only recourse.
-      className="overflow-auto"
+      className={
+        kind === 'code' || overflowing ? 'overflow-auto' : 'overflow-hidden'
+      }
       style={
         {
           ...placement,
