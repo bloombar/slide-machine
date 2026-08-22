@@ -1,0 +1,1464 @@
+{
+  "id": "nyu-elegant",
+  "name": "NYU Elegant",
+  "aiInstructions": "Audience: NYU students, faculty and staff from any school — educated generalists, not specialists in this subject. Write plain, precise academic English. Expand an acronym the first time it appears and define a term of art the first time it is used. Prefer a concrete example to an abstraction. Sentence case for titles and bullets; no full stop at the end of a bullet. One idea per slide. No hype, no emoji, no exclamation marks. State the point outright rather than teasing it. Name the source in the caption for any quotation, figure or statistic that is not the lecturer's own.",
+  "theme": {
+    "background": "#ffffff",
+    "surface": "#f3f3f3",
+    "text": "#333333",
+    "muted": "#9a6aba",
+    "accent": "#57068c",
+    "imageBackground": "#333333",
+    "link": "#57068c",
+    "penColor": "#57068c",
+    "highlighterColor": "#9a6aba",
+    "marginX": 0.043,
+    "marginY": 0.125,
+    "gap": 0.039,
+    "textStyles": {
+      "title": {
+        "fontFamily": "frank-ruhl-libre",
+        "fontSize": 9,
+        "fontWeight": 700,
+        "lineHeight": 0.95,
+        "color": "accent",
+        "maxChars": 44
+      },
+      "sectionTitle": {
+        "fontFamily": "frank-ruhl-libre",
+        "fontSize": 8,
+        "fontWeight": 700,
+        "lineHeight": 0.95,
+        "color": "accent",
+        "maxChars": 48
+      },
+      "heading": {
+        "fontFamily": "frank-ruhl-libre",
+        "fontSize": 6,
+        "fontWeight": 700,
+        "lineHeight": 1.05,
+        "color": "accent",
+        "maxChars": 44
+      },
+      "body": {
+        "fontFamily": "montserrat",
+        "fontSize": 2.5,
+        "lineHeight": 1.45,
+        "maxChars": 300
+      },
+      "bullet": {
+        "fontFamily": "montserrat",
+        "fontSize": 2.5,
+        "lineHeight": 1.45,
+        "maxChars": 80,
+        "maxItems": 5
+      },
+      "caption": {
+        "fontFamily": "montserrat",
+        "fontSize": 2.2,
+        "color": "muted",
+        "lineHeight": 1.35,
+        "maxChars": 110
+      },
+      "quote": {
+        "fontFamily": "frank-ruhl-libre",
+        "fontSize": 7,
+        "fontWeight": 700,
+        "italic": false,
+        "lineHeight": 1.05,
+        "color": "accent",
+        "maxChars": 150
+      },
+      "subhead": {
+        "fontFamily": "montserrat",
+        "fontSize": 1.94,
+        "fontWeight": 700,
+        "color": "accent",
+        "maxChars": 40
+      },
+      "statNumber": {
+        "fontFamily": "frank-ruhl-libre",
+        "fontSize": 17,
+        "fontWeight": 700,
+        "lineHeight": 1.3,
+        "color": "accent",
+        "maxChars": 8
+      },
+      "statLabel": {
+        "fontFamily": "frank-ruhl-libre",
+        "fontSize": 3.8,
+        "fontWeight": 700,
+        "color": "muted",
+        "maxChars": 60,
+        "lineHeight": 1.1
+      }
+    }
+  },
+  "layouts": [
+    {
+      "type": "title",
+      "label": "Title",
+      "purpose": "Opening slide: the lecture title, course and date",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Title",
+          "description": "The lecture's subject, sentence case. Not a greeting.",
+          "maxChars": 44,
+          "required": true
+        },
+        {
+          "name": "caption",
+          "kind": "text",
+          "label": "Caption",
+          "description": "Course, date or lecturer — one line, never a summary.",
+          "maxChars": 70
+        }
+      ],
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "imageUrl": "/templates/nyu-elegant/mark-title.png"
+        },
+        {
+          "x": 0.443,
+          "y": 0.083,
+          "w": 0.115,
+          "h": 0.069,
+          "imageUrl": "/templates/nyu-elegant/logo.png"
+        }
+      ],
+      "tree": {
+        "id": "root",
+        "container": {
+          "mode": "flex",
+          "direction": "column",
+          "justify": "center",
+          "alignItems": "center",
+          "gap": 2.4
+        },
+        "style": {
+          "paddingX": 9.9,
+          "paddingY": 13.7
+        },
+        "children": [
+          {
+            "id": "title",
+            "slot": "title",
+            "style": {
+              "textStyle": "title",
+              "align": "center",
+              "paddingY": 1.5
+            },
+            "shrink": 0
+          },
+          {
+            "id": "caption",
+            "slot": "caption",
+            "style": {
+              "textStyle": "caption",
+              "align": "center",
+              "color": "text"
+            }
+          }
+        ]
+      },
+      "elementPositions": {}
+    },
+    {
+      "type": "title-image",
+      "label": "Title over image",
+      "purpose": "Opening slide where a photograph carries the title",
+      "slots": [
+        {
+          "name": "image",
+          "kind": "image",
+          "label": "Backdrop",
+          "description": "A photograph that sets the scene, calm enough to read white text over.",
+          "required": true
+        },
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Title",
+          "description": "The lecture's subject, sentence case.",
+          "maxChars": 44,
+          "required": true
+        },
+        {
+          "name": "caption",
+          "kind": "text",
+          "label": "Caption",
+          "description": "Course, date or lecturer — one line.",
+          "maxChars": 70
+        }
+      ],
+      "constraints": {
+        "imageRequired": true
+      },
+      "tree": {
+        "id": "root",
+        "container": {
+          "mode": "flex",
+          "direction": "column"
+        },
+        "style": {
+          "paddingX": 0,
+          "paddingY": 0
+        },
+        "children": [
+          {
+            "id": "image",
+            "slot": "image",
+            "free": true,
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            }
+          },
+          {
+            "id": "title",
+            "slot": "title",
+            "free": true,
+            "box": {
+              "x": 0.12,
+              "y": 0.24,
+              "w": 0.76,
+              "h": 0.38
+            },
+            "style": {
+              "textStyle": "title",
+              "align": "center",
+              "vAlign": "center",
+              "color": "#ffffff",
+              "paddingY": 1.5
+            },
+            "shrink": 0
+          },
+          {
+            "id": "caption",
+            "slot": "caption",
+            "free": true,
+            "box": {
+              "x": 0.2,
+              "y": 0.64,
+              "w": 0.6,
+              "h": 0.14
+            },
+            "style": {
+              "textStyle": "caption",
+              "align": "center",
+              "color": "#ffffff"
+            }
+          }
+        ]
+      },
+      "elementPositions": {}
+    },
+    {
+      "type": "section",
+      "label": "Section",
+      "purpose": "A new section or major subtopic begins",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Title",
+          "description": "The section's name, as a noun phrase.",
+          "maxChars": 48,
+          "required": true
+        },
+        {
+          "name": "caption",
+          "kind": "text",
+          "label": "Caption",
+          "description": "One line on what this section establishes.",
+          "maxChars": 90
+        }
+      ],
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "imageUrl": "/templates/nyu-elegant/mark-section.png"
+        },
+        {
+          "x": 0.045,
+          "y": 0.882,
+          "w": 0.085,
+          "h": 0.051,
+          "imageUrl": "/templates/nyu-elegant/logo.png"
+        }
+      ],
+      "tree": {
+        "id": "root",
+        "container": {
+          "mode": "flex",
+          "direction": "column",
+          "justify": "center",
+          "alignItems": "center",
+          "gap": 2.2
+        },
+        "style": {
+          "paddingX": 16.5,
+          "paddingY": 15
+        },
+        "children": [
+          {
+            "id": "rule",
+            "width": 0.055,
+            "height": 0.006,
+            "style": {
+              "background": "muted"
+            }
+          },
+          {
+            "id": "title",
+            "slot": "title",
+            "style": {
+              "textStyle": "sectionTitle",
+              "align": "center",
+              "paddingY": 1.5
+            },
+            "shrink": 0
+          },
+          {
+            "id": "caption",
+            "slot": "caption",
+            "style": {
+              "textStyle": "caption",
+              "align": "center"
+            }
+          }
+        ]
+      },
+      "elementPositions": {}
+    },
+    {
+      "type": "content",
+      "label": "Content",
+      "purpose": "The workhorse: a short title over one paragraph",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Title",
+          "maxChars": 44,
+          "required": true
+        },
+        {
+          "name": "body",
+          "kind": "text",
+          "label": "Body",
+          "description": "Two to four sentences. Define terms as you use them.",
+          "multiline": true,
+          "maxChars": 300
+        }
+      ],
+      "tree": {
+        "id": "root",
+        "container": {
+          "mode": "flex",
+          "direction": "column",
+          "justify": "start",
+          "gap": 2.2
+        },
+        "children": [
+          {
+            "id": "title",
+            "slot": "title",
+            "style": {
+              "textStyle": "heading",
+              "paddingY": 0.8
+            },
+            "shrink": 0
+          },
+          {
+            "id": "body",
+            "slot": "body",
+            "grow": 1,
+            "style": {
+              "textStyle": "body"
+            }
+          }
+        ]
+      },
+      "elementPositions": {},
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 0.051,
+          "imageUrl": "/templates/nyu-elegant/mark-band.png"
+        },
+        {
+          "x": 0.045,
+          "y": 0.882,
+          "w": 0.085,
+          "h": 0.051,
+          "imageUrl": "/templates/nyu-elegant/logo.png"
+        }
+      ]
+    },
+    {
+      "type": "list",
+      "label": "Bullet list",
+      "purpose": "Three to five short parallel points under a title",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Title",
+          "maxChars": 44,
+          "required": true
+        },
+        {
+          "name": "bullets",
+          "kind": "bullets",
+          "label": "Bullets",
+          "description": "Parallel points, same part of speech, no trailing full stops.",
+          "maxItems": 5,
+          "maxChars": 70
+        }
+      ],
+      "tree": {
+        "id": "root",
+        "container": {
+          "mode": "flex",
+          "direction": "column",
+          "justify": "start",
+          "gap": 2.2
+        },
+        "children": [
+          {
+            "id": "title",
+            "slot": "title",
+            "style": {
+              "textStyle": "heading",
+              "paddingY": 0.8
+            },
+            "shrink": 0
+          },
+          {
+            "id": "bullets",
+            "slot": "bullets",
+            "grow": 1,
+            "style": {
+              "textStyle": "bullet"
+            }
+          }
+        ]
+      },
+      "elementPositions": {},
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 0.051,
+          "imageUrl": "/templates/nyu-elegant/mark-band.png"
+        },
+        {
+          "x": 0.045,
+          "y": 0.882,
+          "w": 0.085,
+          "h": 0.051,
+          "imageUrl": "/templates/nyu-elegant/logo.png"
+        }
+      ]
+    },
+    {
+      "type": "content-list",
+      "label": "Text and points",
+      "purpose": "A sentence that sets up the points that follow",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Title",
+          "maxChars": 44,
+          "required": true
+        },
+        {
+          "name": "body",
+          "kind": "text",
+          "label": "Body",
+          "description": "One or two sentences of context for the points.",
+          "multiline": true,
+          "maxChars": 180
+        },
+        {
+          "name": "bullets",
+          "kind": "bullets",
+          "label": "Bullets",
+          "description": "What follows from the opening text. Parallel, no full stops.",
+          "maxItems": 4,
+          "maxChars": 70
+        }
+      ],
+      "tree": {
+        "id": "root",
+        "container": {
+          "mode": "flex",
+          "direction": "column",
+          "justify": "start",
+          "gap": 2
+        },
+        "children": [
+          {
+            "id": "title",
+            "slot": "title",
+            "style": {
+              "textStyle": "heading",
+              "paddingY": 0.8
+            },
+            "shrink": 0
+          },
+          {
+            "id": "body",
+            "slot": "body",
+            "style": {
+              "textStyle": "body"
+            },
+            "shrink": 0
+          },
+          {
+            "id": "bullets",
+            "slot": "bullets",
+            "grow": 1,
+            "style": {
+              "textStyle": "bullet"
+            }
+          }
+        ]
+      },
+      "elementPositions": {},
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 0.051,
+          "imageUrl": "/templates/nyu-elegant/mark-band.png"
+        },
+        {
+          "x": 0.045,
+          "y": 0.882,
+          "w": 0.085,
+          "h": 0.051,
+          "imageUrl": "/templates/nyu-elegant/logo.png"
+        }
+      ]
+    },
+    {
+      "type": "two-column",
+      "label": "Text and image",
+      "purpose": "An explanation beside the figure it refers to",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Title",
+          "maxChars": 40,
+          "required": true
+        },
+        {
+          "name": "body",
+          "kind": "text",
+          "label": "Body",
+          "description": "Two or three sentences on what to look for in the figure.",
+          "multiline": true,
+          "maxChars": 220
+        },
+        {
+          "name": "image",
+          "kind": "image",
+          "label": "Figure",
+          "description": "The specific figure under discussion, never stock decoration.",
+          "required": true
+        }
+      ],
+      "tree": {
+        "id": "root",
+        "container": {
+          "mode": "grid",
+          "columns": 2,
+          "gap": 4.4,
+          "alignItems": "center"
+        },
+        "children": [
+          {
+            "id": "image",
+            "slot": "image",
+            "height": 0.86
+          },
+          {
+            "id": "text",
+            "container": {
+              "mode": "flex",
+              "direction": "column",
+              "gap": 2.2
+            },
+            "children": [
+              {
+                "id": "title",
+                "slot": "title",
+                "style": {
+                  "textStyle": "heading",
+                  "fontSize": 5,
+                  "paddingY": 0.8
+                },
+                "shrink": 0
+              },
+              {
+                "id": "body",
+                "slot": "body",
+                "style": {
+                  "textStyle": "body"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "elementPositions": {},
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "imageUrl": "/templates/nyu-elegant/mark-split.png"
+        },
+        {
+          "x": 0.045,
+          "y": 0.882,
+          "w": 0.085,
+          "h": 0.051,
+          "imageUrl": "/templates/nyu-elegant/logo.png"
+        }
+      ]
+    },
+    {
+      "type": "comparison",
+      "label": "Comparison",
+      "purpose": "Two things side by side, each under its own heading",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Title",
+          "description": "What is compared, and on what basis.",
+          "maxChars": 40,
+          "required": true
+        },
+        {
+          "name": "leftHead",
+          "kind": "text",
+          "label": "Left heading",
+          "maxChars": 34
+        },
+        {
+          "name": "left",
+          "kind": "text",
+          "label": "Left column",
+          "description": "The first thing. Mirror the shape of the right column.",
+          "multiline": true,
+          "maxChars": 200
+        },
+        {
+          "name": "rightHead",
+          "kind": "text",
+          "label": "Right heading",
+          "maxChars": 34
+        },
+        {
+          "name": "right",
+          "kind": "text",
+          "label": "Right column",
+          "description": "The second thing, on the same points and in the same order.",
+          "multiline": true,
+          "maxChars": 200
+        }
+      ],
+      "tree": {
+        "id": "root",
+        "container": {
+          "mode": "flex",
+          "direction": "column",
+          "gap": 3
+        },
+        "children": [
+          {
+            "id": "title",
+            "slot": "title",
+            "style": {
+              "textStyle": "heading",
+              "fontSize": 5.4,
+              "paddingY": 0.8
+            },
+            "shrink": 0
+          },
+          {
+            "id": "cols",
+            "grow": 1,
+            "container": {
+              "mode": "grid",
+              "columns": 2,
+              "gap": 6.8,
+              "alignItems": "start"
+            },
+            "children": [
+              {
+                "id": "leftCol",
+                "container": {
+                  "mode": "flex",
+                  "direction": "column",
+                  "gap": 1.4
+                },
+                "children": [
+                  {
+                    "id": "leftHead",
+                    "slot": "leftHead",
+                    "style": {
+                      "textStyle": "subhead"
+                    },
+                    "shrink": 0
+                  },
+                  {
+                    "id": "left",
+                    "slot": "left",
+                    "style": {
+                      "textStyle": "body",
+                      "fontSize": 1.67
+                    },
+                    "shrink": 0
+                  }
+                ]
+              },
+              {
+                "id": "rightCol",
+                "container": {
+                  "mode": "flex",
+                  "direction": "column",
+                  "gap": 1.4
+                },
+                "children": [
+                  {
+                    "id": "rightHead",
+                    "slot": "rightHead",
+                    "style": {
+                      "textStyle": "subhead"
+                    },
+                    "shrink": 0
+                  },
+                  {
+                    "id": "right",
+                    "slot": "right",
+                    "style": {
+                      "textStyle": "body",
+                      "fontSize": 1.67
+                    },
+                    "shrink": 0
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "elementPositions": {},
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 0.051,
+          "imageUrl": "/templates/nyu-elegant/mark-band.png"
+        },
+        {
+          "x": 0.045,
+          "y": 0.882,
+          "w": 0.085,
+          "h": 0.051,
+          "imageUrl": "/templates/nyu-elegant/logo.png"
+        }
+      ]
+    },
+    {
+      "type": "image-heavy",
+      "label": "Image",
+      "purpose": "A picture carries the slide; the caption names it",
+      "slots": [
+        {
+          "name": "image",
+          "kind": "image",
+          "label": "Image",
+          "description": "The picture being discussed, not decoration.",
+          "required": true
+        },
+        {
+          "name": "caption",
+          "kind": "text",
+          "label": "Caption",
+          "description": "What it shows, and its source.",
+          "maxChars": 100
+        }
+      ],
+      "constraints": {
+        "imageRequired": true
+      },
+      "tree": {
+        "id": "root",
+        "container": {
+          "mode": "flex",
+          "direction": "column",
+          "gap": 1.6
+        },
+        "children": [
+          {
+            "id": "image",
+            "slot": "image",
+            "grow": 1
+          },
+          {
+            "id": "caption",
+            "slot": "caption",
+            "style": {
+              "textStyle": "caption",
+              "color": "text",
+              "fontFamily": "montserrat"
+            },
+            "shrink": 0
+          }
+        ]
+      },
+      "elementPositions": {},
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 0.051,
+          "imageUrl": "/templates/nyu-elegant/mark-band.png"
+        },
+        {
+          "x": 0.045,
+          "y": 0.882,
+          "w": 0.085,
+          "h": 0.051,
+          "imageUrl": "/templates/nyu-elegant/logo.png"
+        }
+      ]
+    },
+    {
+      "type": "quote",
+      "label": "Quotation",
+      "purpose": "One striking sentence or quotation, set large",
+      "slots": [
+        {
+          "name": "body",
+          "kind": "text",
+          "label": "Statement",
+          "description": "The sentence itself, verbatim. Never a description of it.",
+          "multiline": true,
+          "maxChars": 100,
+          "required": true
+        },
+        {
+          "name": "caption",
+          "kind": "text",
+          "label": "Attribution",
+          "description": "Who said it, and where. Empty if the lecturer's own.",
+          "maxChars": 70
+        }
+      ],
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "imageUrl": "/templates/nyu-elegant/mark-quote.png"
+        },
+        {
+          "x": 0.045,
+          "y": 0.882,
+          "w": 0.085,
+          "h": 0.051,
+          "imageUrl": "/templates/nyu-elegant/logo.png"
+        }
+      ],
+      "tree": {
+        "id": "root",
+        "container": {
+          "mode": "flex",
+          "direction": "column",
+          "justify": "center",
+          "gap": 2.6
+        },
+        "style": {
+          "paddingX": 4.3,
+          "paddingY": 12.5
+        },
+        "children": [
+          {
+            "id": "body",
+            "slot": "body",
+            "width": 0.8,
+            "style": {
+              "textStyle": "quote",
+              "paddingY": 0.8
+            }
+          },
+          {
+            "id": "caption",
+            "slot": "caption",
+            "style": {
+              "textStyle": "caption"
+            }
+          }
+        ]
+      },
+      "elementPositions": {}
+    },
+    {
+      "type": "code",
+      "label": "Code",
+      "purpose": "A program listing under a short title",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Title",
+          "description": "What the listing does.",
+          "maxChars": 44,
+          "required": true
+        },
+        {
+          "name": "snippet",
+          "kind": "code",
+          "label": "Program listing",
+          "description": "The listing itself, exactly as typed. Never a sentence about it.",
+          "required": true
+        }
+      ],
+      "tree": {
+        "id": "root",
+        "container": {
+          "mode": "flex",
+          "direction": "column",
+          "gap": 2
+        },
+        "children": [
+          {
+            "id": "title",
+            "slot": "title",
+            "style": {
+              "textStyle": "heading",
+              "fontSize": 5.4,
+              "paddingY": 0.8
+            },
+            "shrink": 0
+          },
+          {
+            "id": "snippet",
+            "slot": "snippet",
+            "grow": 1
+          }
+        ]
+      },
+      "elementPositions": {},
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 0.051,
+          "imageUrl": "/templates/nyu-elegant/mark-band.png"
+        },
+        {
+          "x": 0.045,
+          "y": 0.882,
+          "w": 0.085,
+          "h": 0.051,
+          "imageUrl": "/templates/nyu-elegant/logo.png"
+        }
+      ]
+    },
+    {
+      "type": "formula",
+      "label": "Formula",
+      "purpose": "One equation, set large, with a note beneath",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Title",
+          "description": "What the expression describes, in words.",
+          "maxChars": 40,
+          "required": true
+        },
+        {
+          "name": "eq",
+          "kind": "math",
+          "label": "Equation",
+          "description": "The expression in LaTeX, with no surrounding prose.",
+          "required": true
+        },
+        {
+          "name": "caption",
+          "kind": "text",
+          "label": "Caption",
+          "description": "Name each symbol, in order.",
+          "maxChars": 120
+        }
+      ],
+      "tree": {
+        "id": "root",
+        "container": {
+          "mode": "flex",
+          "direction": "column",
+          "justify": "center",
+          "alignItems": "center",
+          "gap": 3
+        },
+        "children": [
+          {
+            "id": "title",
+            "slot": "title",
+            "style": {
+              "textStyle": "heading",
+              "fontSize": 5.4,
+              "align": "center",
+              "paddingY": 0.8
+            },
+            "shrink": 0
+          },
+          {
+            "id": "eq",
+            "slot": "eq",
+            "style": {
+              "align": "center"
+            }
+          },
+          {
+            "id": "caption",
+            "slot": "caption",
+            "style": {
+              "textStyle": "caption",
+              "align": "center",
+              "color": "text"
+            }
+          }
+        ]
+      },
+      "elementPositions": {},
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 0.051,
+          "imageUrl": "/templates/nyu-elegant/mark-band.png"
+        },
+        {
+          "x": 0.045,
+          "y": 0.882,
+          "w": 0.085,
+          "h": 0.051,
+          "imageUrl": "/templates/nyu-elegant/logo.png"
+        }
+      ]
+    },
+    {
+      "type": "big-number",
+      "label": "Big number",
+      "purpose": "One figure or statistic the slide exists to frame",
+      "slots": [
+        {
+          "name": "figure",
+          "kind": "text",
+          "label": "The figure",
+          "description": "The number alone: \"32%\", \"1.4bn\". Never a sentence.",
+          "maxChars": 8,
+          "required": true
+        },
+        {
+          "name": "label",
+          "kind": "text",
+          "label": "Label",
+          "description": "What the figure measures, as a noun phrase.",
+          "maxChars": 60
+        },
+        {
+          "name": "caption",
+          "kind": "text",
+          "label": "Caption",
+          "description": "The source, and any qualification a careful reader needs.",
+          "maxChars": 120
+        }
+      ],
+      "tree": {
+        "id": "root",
+        "container": {
+          "mode": "flex",
+          "direction": "column",
+          "justify": "center",
+          "alignItems": "center",
+          "gap": 1.8
+        },
+        "children": [
+          {
+            "id": "figure",
+            "slot": "figure",
+            "style": {
+              "textStyle": "statNumber",
+              "align": "center"
+            },
+            "shrink": 0
+          },
+          {
+            "id": "label",
+            "slot": "label",
+            "style": {
+              "textStyle": "statLabel",
+              "align": "center"
+            },
+            "shrink": 0
+          },
+          {
+            "id": "caption",
+            "slot": "caption",
+            "style": {
+              "textStyle": "caption",
+              "align": "center",
+              "color": "text",
+              "fontSize": 1.53
+            }
+          }
+        ]
+      },
+      "elementPositions": {},
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "imageUrl": "/templates/nyu-elegant/mark-stat.png"
+        },
+        {
+          "x": 0.045,
+          "y": 0.882,
+          "w": 0.085,
+          "h": 0.051,
+          "imageUrl": "/templates/nyu-elegant/logo.png"
+        }
+      ]
+    },
+    {
+      "type": "closing",
+      "label": "Closing",
+      "purpose": "The last slide: what to take away, or where next",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Title",
+          "description": "The one thing to remember, or a sign-off.",
+          "maxChars": 44,
+          "required": true
+        },
+        {
+          "name": "caption",
+          "kind": "text",
+          "label": "Next steps",
+          "description": "Reading, assignment or contact details.",
+          "maxChars": 110
+        }
+      ],
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "imageUrl": "/templates/nyu-elegant/mark-title.png"
+        },
+        {
+          "x": 0.045,
+          "y": 0.882,
+          "w": 0.085,
+          "h": 0.051,
+          "imageUrl": "/templates/nyu-elegant/logo.png"
+        }
+      ],
+      "tree": {
+        "id": "root",
+        "container": {
+          "mode": "flex",
+          "direction": "column",
+          "justify": "center",
+          "alignItems": "center",
+          "gap": 2.6
+        },
+        "style": {
+          "paddingX": 12,
+          "paddingY": 13.8
+        },
+        "children": [
+          {
+            "id": "title",
+            "slot": "title",
+            "style": {
+              "textStyle": "sectionTitle",
+              "align": "center",
+              "paddingY": 1.5
+            },
+            "shrink": 0
+          },
+          {
+            "id": "caption",
+            "slot": "caption",
+            "style": {
+              "textStyle": "caption",
+              "align": "center",
+              "color": "text"
+            }
+          }
+        ]
+      },
+      "elementPositions": {}
+    },
+    {
+      "type": "image-list",
+      "label": "Text and three images",
+      "purpose": "An explanation beside three pictures, each with a line of its own",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Title",
+          "description": "What the three pictures together show.",
+          "maxChars": 40,
+          "required": true
+        },
+        {
+          "name": "body",
+          "kind": "text",
+          "label": "Body",
+          "description": "Two or three sentences introducing the set.",
+          "multiline": true,
+          "maxChars": 220
+        },
+        {
+          "name": "image1",
+          "kind": "image",
+          "label": "First picture",
+          "description": "The first of three, in the order the lecturer takes them.",
+          "required": true
+        },
+        {
+          "name": "note1",
+          "kind": "text",
+          "label": "First note",
+          "description": "One line on what the first picture shows.",
+          "maxChars": 90
+        },
+        {
+          "name": "image2",
+          "kind": "image",
+          "label": "Second picture"
+        },
+        {
+          "name": "note2",
+          "kind": "text",
+          "label": "Second note",
+          "maxChars": 90
+        },
+        {
+          "name": "image3",
+          "kind": "image",
+          "label": "Third picture"
+        },
+        {
+          "name": "note3",
+          "kind": "text",
+          "label": "Third note",
+          "maxChars": 90
+        }
+      ],
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 0.051,
+          "imageUrl": "/templates/nyu-elegant/mark-band.png"
+        },
+        {
+          "x": 0.045,
+          "y": 0.882,
+          "w": 0.085,
+          "h": 0.051,
+          "imageUrl": "/templates/nyu-elegant/logo.png"
+        }
+      ],
+      "tree": {
+        "id": "root",
+        "container": {
+          "mode": "grid",
+          "columns": 2,
+          "gap": 5,
+          "alignItems": "center"
+        },
+        "children": [
+          {
+            "id": "text",
+            "container": {
+              "mode": "flex",
+              "direction": "column",
+              "gap": 2.2
+            },
+            "children": [
+              {
+                "id": "title",
+                "slot": "title",
+                "style": {
+                  "textStyle": "heading",
+                  "fontSize": 5,
+                  "paddingY": 0.8
+                },
+                "shrink": 0
+              },
+              {
+                "id": "body",
+                "slot": "body",
+                "style": {
+                  "textStyle": "body",
+                  "fontSize": 2.1
+                },
+                "shrink": 0
+              }
+            ]
+          },
+          {
+            "id": "rows",
+            "container": {
+              "mode": "flex",
+              "direction": "column",
+              "gap": 2.2
+            },
+            "children": [
+              {
+                "id": "row1",
+                "container": {
+                  "mode": "flex",
+                  "direction": "row",
+                  "gap": 2.2,
+                  "alignItems": "center"
+                },
+                "children": [
+                  {
+                    "id": "img1",
+                    "slot": "image1",
+                    "width": 0.32,
+                    "style": {
+                      "background": "surface"
+                    },
+                    "shrink": 0
+                  },
+                  {
+                    "id": "note1",
+                    "slot": "note1",
+                    "grow": 1,
+                    "style": {
+                      "textStyle": "body",
+                      "fontSize": 1.7
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "row2",
+                "container": {
+                  "mode": "flex",
+                  "direction": "row",
+                  "gap": 2.2,
+                  "alignItems": "center"
+                },
+                "children": [
+                  {
+                    "id": "img2",
+                    "slot": "image2",
+                    "width": 0.32,
+                    "style": {
+                      "background": "surface"
+                    },
+                    "shrink": 0
+                  },
+                  {
+                    "id": "note2",
+                    "slot": "note2",
+                    "grow": 1,
+                    "style": {
+                      "textStyle": "body",
+                      "fontSize": 1.7
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "row3",
+                "container": {
+                  "mode": "flex",
+                  "direction": "row",
+                  "gap": 2.2,
+                  "alignItems": "center"
+                },
+                "children": [
+                  {
+                    "id": "img3",
+                    "slot": "image3",
+                    "width": 0.32,
+                    "style": {
+                      "background": "surface"
+                    },
+                    "shrink": 0
+                  },
+                  {
+                    "id": "note3",
+                    "slot": "note3",
+                    "grow": 1,
+                    "style": {
+                      "textStyle": "body",
+                      "fontSize": 1.7
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "elementPositions": {}
+    },
+    {
+      "type": "whiteboard",
+      "label": "Whiteboard",
+      "purpose": "A blank slate for freehand drawing",
+      "slots": [],
+      "elementPositions": {}
+    }
+  ]
+}
