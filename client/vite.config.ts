@@ -17,6 +17,13 @@ export default defineConfig({
         target: 'http://localhost:3000',
         ws: true,
       },
+      // The pictures a built-in template's design is made of, which the API
+      // server owns (server/config/templates/assets). In production one origin
+      // serves both; without this the dev server answers them with index.html
+      // and every logo and background mark on a slide quietly disappears.
+      '/templates': {
+        target: 'http://localhost:3000',
+      },
     },
   },
 })

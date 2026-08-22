@@ -17,11 +17,12 @@ import {
 } from './builtin'
 
 describe('externalized templates', () => {
-  it('loads the three starter templates from server/config/templates', () => {
+  it('loads the starter templates from server/config/templates', () => {
     const templates = listBuiltinTemplates()
     expect(templates.map(t => t.id).sort()).toEqual([
       'classic',
       'midnight',
+      'nyu-elegant',
       'seminar',
     ])
     for (const template of templates) {
@@ -34,23 +35,47 @@ describe('externalized templates', () => {
           'highlighterColor',
         ]),
       )
-      // Every conventional layout is present with its budgets intact
-      expect(template.layouts.map(l => l.type).sort()).toEqual(
-        [...LAYOUT_TYPES].sort(),
+      // Every conventional layout is present with its budgets intact. A
+      // template may also name layouts of its own (TMPL-9), so this is
+      // containment rather than equality — `nyu-elegant` adds three.
+      expect(template.layouts.map(l => l.type)).toEqual(
+        expect.arrayContaining([...LAYOUT_TYPES]),
       )
-      const list = template.layouts.find(l => l.type === 'list')!
-      expect(list.constraints?.maxBullets).toBe(6)
-      expect(list.constraints?.maxBulletChars).toBe(70)
+      // A list layout budgets its points. Asserted on the RESOLVED limits
+      // rather than on `constraints`, because that is what actually governs:
+      // a box's own `maxChars`/`maxItems` wins over the layout's, and a
+      // template that states them per box (as `nyu-elegant` does) need carry
+      // no layout-level copy at all. The figures are each design's own
+      // (TMPL-9), so this asserts a budget exists, not what it is.
+      const list = layoutDescriptors(template).find(l => l.type === 'list')!
+      const bullets = list.slots.find(s => s.kind === 'bullets')!
+      expect(bullets.maxItems).toBeGreaterThan(0)
+      expect(bullets.maxChars).toBeGreaterThan(0)
 
       // Prose AND points on one slide: `content` gives one and `list` the
       // other, so a slide wanting both had to drop the sentence of context
       // or write it as an extra point.
-      const mixed = template.layouts.find(l => l.type === 'content-list')!
+      const mixed = layoutDescriptors(template).find(
+        l => l.type === 'content-list',
+      )!
       expect(mixed.slots.map(slot => slot.kind)).toEqual(
         expect.arrayContaining(['text', 'bullets']),
       )
-      expect(mixed.constraints?.maxBullets).toBeGreaterThan(0)
-      expect(mixed.constraints?.maxBodyChars).toBeGreaterThan(0)
+      // Resolved per box, for the reason given above.
+      expect(
+        mixed.slots.find(s => s.kind === 'bullets')!.maxItems,
+      ).toBeGreaterThan(0)
+      expect(
+        mixed.slots.find(s => s.name === 'body')!.maxChars,
+      ).toBeGreaterThan(0)
+    }
+  })
+
+  it('keeps the original starters on the budgets they were designed to', () => {
+    for (const id of ['classic', 'midnight', 'seminar']) {
+      const list = getBuiltinTemplate(id)!.layouts.find(l => l.type === 'list')!
+      expect(list.constraints?.maxBullets).toBe(6)
+      expect(list.constraints?.maxBulletChars).toBe(70)
     }
   })
 

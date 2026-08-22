@@ -38,7 +38,7 @@ import SlideCode from './Code'
 import SlideMath from './Math'
 import SlideTable from './Table'
 import TrackHandle from './TrackHandle'
-import type { ThemeColors } from './theme'
+import { codeSurface, type ThemeColors } from './theme'
 
 /** Partial content update produced by in-place editing. */
 export type SlideContentPatch = Omit<SlideEditInput, 'slideId'>
@@ -308,6 +308,9 @@ function ImageSlot({
       alt={slide.caption ?? slide.title ?? t('slide.image.alt')}
       onError={() => setFailedSrc(imageRef ?? null)}
       className="h-full w-full object-cover transition-opacity duration-500"
+      // What a picture with a transparent ground sits on, from the design
+      // rather than from whatever the slide happens to be (`imageBackground`).
+      style={{ backgroundColor: colors.imageBackground }}
     />
   )
   const skeleton = (
@@ -534,7 +537,14 @@ function EmptyFrame({
  * anyone restating it per slide. A slide may still carry its own — an
  * imported one does.
  */
-function CodeSlot({ slot, spec, descriptor, slide, onEdit }: SlotEditorProps) {
+function CodeSlot({
+  slot,
+  spec,
+  descriptor,
+  slide,
+  colors,
+  onEdit,
+}: SlotEditorProps) {
   const { t } = useTranslation()
   const value = rawSlotValue(slide, slot)
   const stored = value?.kind === 'code' ? value : undefined
@@ -545,7 +555,11 @@ function CodeSlot({ slot, spec, descriptor, slide, onEdit }: SlotEditorProps) {
       : undefined)
   const source = stored?.source ?? ''
   const rendered = (text: string) => (
-    <SlideCode source={text} language={language} />
+    <SlideCode
+      source={text}
+      language={language}
+      surface={codeSurface(colors)}
+    />
   )
   if (!onEdit) return rendered(source)
   return (
@@ -979,11 +993,15 @@ export default function SlideSlot(props: Omit<SlotEditorProps, 'descriptor'>) {
   // never disturb the flow around them.
   const editor = <Editor {...props} descriptor={descriptor} />
   const flipId = `${props.slide.id}:${props.slot}`
-  if (descriptor.kind === 'image')
+  // A picture and a listing are both PANELS: they take the box they were
+  // given. Wrapped inline like prose, a listing was only as wide as its
+  // longest line, so its ground stopped short of the box and a short snippet
+  // sat in a strip down one side of the slide.
+  if (descriptor.kind === 'image' || descriptor.kind === 'code')
     return (
       <div
         className="h-full w-full"
-        data-flip-slot="image"
+        data-flip-slot={descriptor.kind === 'image' ? 'image' : props.slot}
         data-flip-id={flipId}
       >
         {editor}

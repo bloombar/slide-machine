@@ -28,6 +28,7 @@ const THEME_KEYS = [
   'text',
   'muted',
   'accent',
+  'imageBackground',
   'penColor',
   'highlighterColor',
 ] as const

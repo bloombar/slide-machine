@@ -46,6 +46,7 @@ const colors: ThemeColors = {
   text: '#fff',
   muted: '#888',
   accent: '#0ff',
+  imageBackground: 'transparent',
   penColor: '#000',
   highlighterColor: '#ff0',
   link: '#0ff',

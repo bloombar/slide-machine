@@ -38,6 +38,7 @@ const colors: ThemeColors = {
   text: '#fff',
   muted: '#888',
   accent: '#0ff',
+  imageBackground: 'transparent',
   penColor: '#000',
   highlighterColor: '#ff0',
   link: '#0ff',
@@ -48,6 +49,7 @@ interface TemplateFile {
   layouts: Array<{
     type: string
     slots: Array<string | { name: string; kind?: string }>
+    tree?: LayoutNode
   }>
 }
 
@@ -124,9 +126,13 @@ describe('layout trees match the template files', () => {
   for (const template of templateFiles) {
     for (const file of template.layouts) {
       const declared = file.slots.map(slotName).sort()
-      // The loader gives a conventional layout its default tree, so that is
-      // what a template file naming one actually ships.
-      const tree = defaultLayoutTree(file.type)
+      // What the loader actually ships for this layout: the tree the file
+      // authored, and only failing that the default for its type
+      // (`adoptDefaultTree`, server). Reading the default alone was right
+      // when no built-in drew its own, and wrong the moment one did — it
+      // checked a tree the template does not use, and could not see a
+      // layout of the author's own at all (TMPL-9).
+      const tree = file.tree ?? defaultLayoutTree(file.type)
 
       it(`${template.id}/${file.type}: has a tree`, () => {
         // The whiteboard is the one layout with nothing to draw (WB-1).

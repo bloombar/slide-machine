@@ -13,10 +13,18 @@
  * from the same family is not the same as embedding the design's own, but it
  * is the difference between recognisable and wrong.
  *
- * The names are the ones bundled with Office on both Windows and macOS, so
- * they resolve without a download on the machines that open these files.
+ * The approximating names are ones bundled with Office on both Windows and
+ * macOS, so they resolve without a download on the machines that open these
+ * files. The two faces the app bundles itself are named outright instead —
+ * see below.
  */
 const FACES: Record<string, string> = {
+  // The two the app bundles are named outright rather than approximated. They
+  // are not Office fonts, so PowerPoint substitutes where they are not
+  // installed — but naming them is what lets a machine that HAS them (and
+  // Google Slides, which has both) render the design as designed.
+  'frank-ruhl-libre': 'Frank Ruhl Libre',
+  montserrat: 'Montserrat',
   // Neutral grotesque. Arial over Helvetica: Windows has it, macOS maps it.
   sans: 'Arial',
   serif: 'Georgia',

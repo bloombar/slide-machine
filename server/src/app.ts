@@ -21,6 +21,7 @@ import { ttsRouter } from './routes/tts'
 import { billingRouter, WEBHOOK_PATH } from './routes/billing'
 import { errorHandler } from './middleware/error'
 import { serveSpa } from './static'
+import { serveTemplateAssets } from './templates/assets'
 // Registers every action (TECH-13). One list, shared with the access
 // completeness audit, so neither can drift from the other.
 import './actions/register-all'
@@ -70,6 +71,11 @@ export const createApp = (): Express => {
   api.use(ttsRouter)
   api.use(billingRouter)
   app.use('/api', api)
+
+  // The pictures a built-in template's design is made of. Outside /api
+  // because they are static files, and served in every environment because
+  // the exporters fetch them by URL as well as the browser.
+  serveTemplateAssets(app)
 
   if (env.NODE_ENV === 'production') {
     serveSpa(app, env.CLIENT_DIST)

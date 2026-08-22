@@ -52,6 +52,12 @@ export type { ImportReport }
  * rather than a request to a font host.
  */
 const FONT_FAMILIES: { key: string; pattern: RegExp }[] = [
+  // The faces the app bundles, first and by name. Everything below this pair
+  // answers "what does it most resemble"; these two answer "it is this one",
+  // so a deck set in Montserrat comes back in Montserrat rather than in a
+  // geometric sans that is merely like it.
+  { key: 'frank-ruhl-libre', pattern: /frank\s*ruhl/i },
+  { key: 'montserrat', pattern: /^\s*montserrat/i },
   // Monospace first: "Courier New" reads as serif by name and is monospaced
   // in fact, and being fixed-width is the property that matters.
   {
@@ -75,8 +81,11 @@ const FONT_FAMILIES: { key: string; pattern: RegExp }[] = [
   },
   {
     key: 'geometric',
+    // `montserrat` is gone from this list: it is matched by name above. A
+    // variant that is not the face itself ("Montserrat Alternates") still
+    // lands here, which is right — it resembles Montserrat, it is not it.
     pattern:
-      /(futura|century gothic|avenir|nunito|poppins|montserrat|jost|raleway|josefin|quicksand|comfortaa|questrial|urbanist|outfit|didact)/i,
+      /(futura|century gothic|avenir|nunito|poppins|jost|raleway|josefin|quicksand|comfortaa|questrial|urbanist|outfit|didact)/i,
   },
   {
     key: 'humanist',

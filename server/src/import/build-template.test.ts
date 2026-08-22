@@ -254,7 +254,12 @@ describe('fonts', () => {
     // editor's own (client/src/components/slide/fonts.ts).
     expect(mapFont('Playfair Display')).toBe('serif')
     expect(mapFont('Courier New')).toBe('mono')
-    expect(mapFont('Montserrat')).toBe('geometric')
+    // Bundled with the app now, so it maps to itself rather than to the
+    // geometric stack that used to stand in for it.
+    expect(mapFont('Montserrat')).toBe('montserrat')
+    expect(mapFont('Frank Ruhl Libre')).toBe('frank-ruhl-libre')
+    // A relative that is not the face itself still approximates.
+    expect(mapFont('Poppins')).toBe('geometric')
     expect(mapFont('Trebuchet MS')).toBe('humanist')
   })
 

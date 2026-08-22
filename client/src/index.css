@@ -1,5 +1,27 @@
 @import 'tailwindcss';
 
+/*
+ * Two typefaces bundled with the app, for templates that name them
+ * (docs/TEMPLATES.md §5).
+ *
+ * The rule these live under is that a slide never fetches a font from a THIRD
+ * PARTY at display time: that would tell someone else who is viewing which
+ * slide, on every slide view, and would leave a deck unreadable offline or on
+ * a restricted network. Serving the files ourselves breaks none of that — the
+ * request goes to the same origin as the app, and it is the only way a
+ * template can reproduce a typeface rather than approximate it.
+ *
+ * Both are under the SIL Open Font License; the licence travels in each
+ * package. Only the latin subsets and the weights the templates actually set
+ * are imported, so this costs a handful of small woff2 files.
+ */
+@import '@fontsource/frank-ruhl-libre/latin-400.css';
+@import '@fontsource/frank-ruhl-libre/latin-700.css';
+@import '@fontsource/montserrat/latin-400.css';
+@import '@fontsource/montserrat/latin-400-italic.css';
+@import '@fontsource/montserrat/latin-600.css';
+@import '@fontsource/montserrat/latin-700.css';
+
 @layer base {
   /* Tailwind v4 resets buttons to cursor:default; interactive elements
      should always read as clickable */

@@ -230,6 +230,7 @@
       "text": "文字",
       "muted": "次要文字",
       "accent": "强调色",
+      "imageBackground": "图片背景",
       "penColor": "白板笔",
       "highlighterColor": "白板荧光笔"
     },

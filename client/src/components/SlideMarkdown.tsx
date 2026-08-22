@@ -15,6 +15,29 @@ import Markdown from 'react-markdown'
 import remarkBreaks from 'remark-breaks'
 import { useTranslation } from 'react-i18next'
 
+/**
+ * A link whose destination contains spaces, made parseable.
+ *
+ * CommonMark abandons `[label](a b)` — a destination may not hold an
+ * unescaped space unless it is wrapped in angle brackets — and what reaches
+ * the slide is the raw `[label](...)`, brackets and URL and all, in the
+ * middle of a sentence. Decks imported from a site carry these constantly:
+ * an unresolved `{{ site.baseurl }}` is two spaces inside the destination,
+ * and every citation on the slide turns into markup nobody can read.
+ *
+ * Encoding those spaces is what an author meant either way, and it keeps the
+ * label reading as a link. A destination that is already bracketed is left
+ * alone, as is one carrying a `"title"`, where the space is structural.
+ */
+const LINK_WITH_SPACES = /(\]\()(?!<)([^()"'\n]*\s[^()"'\n]*)(\))/g
+
+export const encodeLinkSpaces = (text: string): string =>
+  text.replace(
+    LINK_WITH_SPACES,
+    (_m, open: string, dest: string, close: string) =>
+      `${open}${dest.trim().replace(/\s+/g, '%20')}${close}`,
+  )
+
 const INLINE_ELEMENTS = ['p', 'br', 'strong', 'em', 'del', 'code', 'a']
 const BLOCK_ELEMENTS = [...INLINE_ELEMENTS, 'ul', 'ol', 'li']
 
@@ -103,7 +126,7 @@ export default function SlideMarkdown({
         ),
       }}
     >
-      {text}
+      {encodeLinkSpaces(text)}
     </Markdown>
   )
 }

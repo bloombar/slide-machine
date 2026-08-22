@@ -56,9 +56,43 @@ const MIN_SCALE = 0.4
  * that fitting settles in a frame or two. */
 const STEPS = 24
 
-/** A pixel of slack, so a box that fits exactly is not shrunk by a rounding
- * difference between `scrollHeight` and `clientHeight`. */
-const SLACK = 1
+/**
+ * How much a box may overrun before the type gives way, as a share of its own
+ * font size.
+ *
+ * A flat pixel of slack was not enough, and the reason is worth stating: a
+ * face set below about 1.2 line-height puts its descenders outside the line
+ * box, so `scrollHeight` exceeds `clientHeight` by a few pixels at EVERY type
+ * size. Shrinking scales that overrun down without ever clearing it, so the
+ * search walked all twenty-four steps to the floor and a seven-character
+ * title set at 9cqi came out at two fifths — while a box that genuinely held
+ * one line too many looked no different to the measurement.
+ *
+ * A share of the font size separates the two. A real extra line costs at
+ * least one line-height, which is around a whole em; the glyphs hanging out
+ * of a tight line box cost a fraction of one. A quarter of an em sits well
+ * between, and it scales with the type, so the same rule holds for a 2cqi
+ * caption and a 17cqi figure.
+ */
+const SLACK_EM = 0.25
+
+/**
+ * The overrun this box may be allowed, in pixels.
+ *
+ * Only a box whose line box is shorter than the glyphs it holds can overrun
+ * without holding too much, so only that box is given room. Everywhere else
+ * the tolerance stays at the pixel of rounding it began as — otherwise a
+ * quarter of an em of slack on body text hides a genuinely clipped line.
+ */
+const TIGHT_LEADING = 1.2
+
+const slackFor = (el: HTMLElement): number => {
+  const cs = getComputedStyle(el)
+  const size = parseFloat(cs.fontSize)
+  const leading = parseFloat(cs.lineHeight) / size
+  if (!Number.isFinite(leading) || leading >= TIGHT_LEADING) return 1
+  return Math.max(1, size * SLACK_EM)
+}
 
 /**
  * A ref to put on the box, and the scale its type should draw at.
@@ -71,14 +105,30 @@ const SLACK = 1
 export const useFitText = (
   /** Off for boxes that scroll on purpose, like a program listing. */
   enabled = true,
-): { ref: React.RefObject<HTMLElement | null>; scale: number } => {
+): {
+  ref: React.RefObject<HTMLElement | null>
+  scale: number
+  /**
+   * True when the box is at the floor and STILL cannot show what it holds —
+   * the only case where it needs to scroll.
+   *
+   * Reported rather than assumed because a scroll container is not free:
+   * Chrome composites one per box, and a list view of a hundred slides made
+   * hundreds of them, which was enough for the compositor to give up and
+   * paint nothing at all. Safari drew it, headless Chromium drew it, and
+   * Chrome and Brave showed blank slides.
+   */
+  overflowing: boolean
+} => {
   const ref = useRef<HTMLElement | null>(null)
   const [scale, setScale] = useState(1)
+  const [overflowing, setOverflowing] = useState(false)
 
   useLayoutEffect(() => {
     const el = ref.current
     if (!el || !enabled) {
       setScale(1)
+      setOverflowing(false)
       return
     }
 
@@ -91,7 +141,15 @@ export const useFitText = (
      * width took those boxes to the floor with their height half empty,
      * still four pixels over at three-point type.
      */
-    const fits = (): boolean => el.scrollHeight <= el.clientHeight + SLACK
+    // Measured once per pass, not per step. `slackFor` reads computed style,
+    // and asking for it inside the search meant a style recalculation for
+    // every one of the twenty-four steps, on every box, every time a box was
+    // observed — hundreds of forced synchronous layouts per frame in a list
+    // of a hundred slides. The type size changes as the search runs, so the
+    // slack is taken from the size the design ASKS for, which is the size the
+    // overhang it exists to tolerate is measured against.
+    let slack = 1
+    const fits = (): boolean => el.scrollHeight <= el.clientHeight + slack
 
     const measure = () => {
       // A box with no size yet — still being laid out, or hidden — cannot be
@@ -101,8 +159,10 @@ export const useFitText = (
       // Start from full size: the content may have got shorter, and a box
       // that only ever shrank would stay small for the rest of the session.
       el.style.setProperty('--fit-scale', '1')
+      slack = slackFor(el)
       if (fits()) {
         setScale(1)
+        setOverflowing(false)
         return
       }
       for (let step = 1; step <= STEPS; step++) {
@@ -110,12 +170,15 @@ export const useFitText = (
         el.style.setProperty('--fit-scale', String(next))
         if (fits()) {
           setScale(next)
+          setOverflowing(false)
           return
         }
       }
       // Past the floor the slide simply holds too much; it is left readable
-      // rather than shrunk into a smear.
+      // rather than shrunk into a smear, and given a scrollbar so the rest
+      // can still be reached.
       setScale(MIN_SCALE)
+      setOverflowing(true)
     }
 
     measure()
@@ -142,5 +205,5 @@ export const useFitText = (
     }
   }, [enabled])
 
-  return { ref, scale }
+  return { ref, scale, overflowing }
 }

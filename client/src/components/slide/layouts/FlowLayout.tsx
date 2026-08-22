@@ -201,18 +201,26 @@ function Node({
   /*
    * Type gives way before content does (`useFitText`).
    *
-   * A slide the app wrote is written to the box's limits, so nothing changes
-   * for it. One imported from elsewhere arrives holding whatever its author
-   * put on it, and the end of it was simply clipped.
+   * A slide the app wrote is written to the box's budgets, so this rarely
+   * fires for one. A deck imported from elsewhere arrives holding whatever
+   * its author put on it — budgets are a generation-time contract and no
+   * import applies them — and the end of it was simply clipped.
+   *
+   * The measurement tolerates an overrun proportional to the type, because a
+   * face set with tight leading hangs its descenders outside the line box at
+   * every size: without that, shrinking chased an overrun it could never
+   * clear and took short titles to the floor (`useFitText`).
    *
    * Not a listing or a picture: a listing scrolls on purpose, because its
    * line breaks are content and re-wrapping it smaller would be a different
    * program.
    */
   const kind = node.slot ? kindOf(node.slot) : undefined
-  const { ref: fitRef, scale: fitScale } = useFitText(
-    Boolean(node.slot) && kind !== 'code' && kind !== 'image',
-  )
+  const {
+    ref: fitRef,
+    scale: fitScale,
+    overflowing,
+  } = useFitText(Boolean(node.slot) && kind !== 'code' && kind !== 'image')
 
   // A container: draw the box, then let it arrange its children.
   if (node.container) {
@@ -271,7 +279,18 @@ function Node({
       // and the animation reads it from the slot wrapper's nearest ancestor.
       data-flip-tier={tierOf(kindOf(node.slot), node.style?.textStyle)}
       ref={fitRef as React.Ref<HTMLDivElement>}
-      className="overflow-hidden"
+      // Scrolls rather than hides what will not fit — but ONLY the box that
+      // actually cannot show it.
+      //
+      // The type gives way first (`useFitText`), and for a slide the app
+      // wrote that is the end of it. Past the floor the box is holding more
+      // than it can show at a readable size, and the honest answer is to let
+      // the reader reach the rest — losing the end of a sentence with no
+      // sign it was ever there is the one outcome worth avoiding. A listing
+      // never shrinks at all, so scrolling is its only recourse.
+      className={
+        kind === 'code' || overflowing ? 'overflow-auto' : 'overflow-hidden'
+      }
       style={
         {
           ...placement,
@@ -397,14 +416,25 @@ export default function FlowLayout({
           }}
         />
       ))}
-      <Node
-        node={withSafeArea(tree, metrics)}
-        colors={colors}
-        textStyles={textStyles}
-        shows={shows}
-        kindOf={kindOf}
-        slot={slot}
-      />
+      {/*
+        Positioned, so the design cannot paint over the slide.
+
+        Decoration is absolute and the tree is not, and CSS paints positioned
+        boxes after non-positioned ones whatever their order in the markup —
+        so a full-bleed background covered every word on the slide. It went
+        unseen only while those pictures were failing to load: the moment they
+        resolved, the title slide went blank.
+      */}
+      <div className="relative h-full w-full">
+        <Node
+          node={withSafeArea(tree, metrics)}
+          colors={colors}
+          textStyles={textStyles}
+          shows={shows}
+          kindOf={kindOf}
+          slot={slot}
+        />
+      </div>
     </div>
   )
 }
