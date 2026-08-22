@@ -9,8 +9,13 @@ import { ShellTitleProvider } from './components/layout/ShellTitle'
 import { ShellActionsProvider } from './components/layout/ShellActions'
 import { loadRuntimeConfig } from './runtime-config'
 import { initI18n } from './i18n'
+import { initBadge } from './components/layout/badge'
 import App from './App'
 import './index.css'
+
+// Settled before the first paint so the nav and the favicon agree on
+// which logo candidate is being tried (see components/layout/badge.ts).
+initBadge()
 
 const render = (): void => {
   createRoot(document.getElementById('root')!).render(

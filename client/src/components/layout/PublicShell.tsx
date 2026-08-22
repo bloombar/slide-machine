@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next'
 import HealthFooter from './HealthFooter'
 import ShellMenu from './ShellMenu'
 import { ShellDrawerFrame } from './ShellDrawer'
-import badgeUrl from '../../assets/badge.png'
+import { getBadgeUrl } from './badge'
 import { useShellTitleSlot } from './ShellTitle'
 import { useShellActionsSlot } from './ShellActions'
 
@@ -35,7 +35,16 @@ export default function PublicShell() {
                 aria-label={t('nav.brandHome')}
                 className="flex shrink-0 items-center gap-2 font-semibold whitespace-nowrap"
               >
-                <img src={badgeUrl} alt="" aria-hidden className="h-7 w-auto" />
+                {/* Nudged down 3px so the hamburger and the title sit on
+                  the badge's rounded rectangle rather than on its whole box:
+                  the tail hangs below the bubble and pulls the optical
+                  centre off the row. */}
+                <img
+                  src={getBadgeUrl()}
+                  alt=""
+                  aria-hidden
+                  className="h-7 w-auto translate-y-[3px]"
+                />
                 {!shellTitle?.active && t('nav.brand')}
               </Link>
               <div
