@@ -778,8 +778,7 @@
       "resizeRow": "Cambiar la altura de la fila {n}"
     },
     "link": {
-      "open": "Ctrl+clic para abrir",
-      "openMac": "⌘+clic para abrir"
+      "open": "Haz clic para abrir"
     },
     "addKind": {
       "math": "Añadir una fórmula",

@@ -2,7 +2,7 @@
  * Unit tests for restricted slide Markdown: inline emphasis, safe links,
  * lists in block mode only, no raw HTML, no heading takeover.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, createEvent } from '@testing-library/react'
 import SlideMarkdown from './SlideMarkdown'
 
@@ -23,9 +23,10 @@ describe('SlideMarkdown', () => {
   })
 
   /**
-   * In edit mode a plain click belongs to the editor, so the link is followed
-   * on Cmd/Ctrl-click — the modifier a browser already uses to open a link,
-   * and what most editors do for a link inside text you can edit.
+   * A link is a link, in edit mode as much as in front of an audience: a
+   * plain click on the words opens the page. The box around it is a
+   * click-to-edit target, so the click stops at the anchor rather than
+   * opening the editor as well.
    */
   describe('a link in text the reader can edit', () => {
     const editable = () =>
@@ -43,15 +44,57 @@ describe('SlideMarkdown', () => {
         'href',
         'https://example.com',
       )
+      expect(screen.getByRole('link')).toHaveAttribute('target', '_blank')
     })
 
-    it('does not follow a plain click, which is the editor’s', () => {
+    it('follows a plain click, rather than leaving it to the editor', () => {
       editable()
       const click = createEvent.click(screen.getByRole('link'), {
         bubbles: true,
       })
       fireEvent(screen.getByRole('link'), click)
-      expect(click.defaultPrevented).toBe(true)
+      expect(click.defaultPrevented).toBe(false)
+    })
+
+    it('keeps that click from also opening the box it sits in', () => {
+      // The words around the link are a click-to-edit target listening on an
+      // ancestor. A click meant for the link is not also a click meant for it.
+      const onBoxClick = vi.fn()
+      render(
+        <span onClick={onBoxClick}>
+          <SlideMarkdown
+            text="See [the docs](https://example.com)"
+            inline
+            links={false}
+          />
+        </span>,
+      )
+      fireEvent.click(screen.getByRole('link'))
+      expect(onBoxClick).not.toHaveBeenCalled()
+
+      // ...while a click on the surrounding words still reaches it.
+      fireEvent.click(screen.getByText(/See/))
+      expect(onBoxClick).toHaveBeenCalled()
+    })
+
+    it('follows Enter on a focused link instead of opening the editor', () => {
+      const onBoxKeyDown = vi.fn()
+      render(
+        <span onKeyDown={onBoxKeyDown}>
+          <SlideMarkdown
+            text="[the docs](https://example.com)"
+            inline
+            links={false}
+          />
+        </span>,
+      )
+      const enter = createEvent.keyDown(screen.getByRole('link'), {
+        key: 'Enter',
+        bubbles: true,
+      })
+      fireEvent(screen.getByRole('link'), enter)
+      expect(onBoxKeyDown).not.toHaveBeenCalled()
+      expect(enter.defaultPrevented).toBe(false)
     })
 
     it('is drawn in the slide’s link colour, not the box’s', () => {
@@ -65,25 +108,14 @@ describe('SlideMarkdown', () => {
       )
     })
 
-    it('says which key to hold, on the link itself', () => {
-      // A tooltip alone tells only the reader who hovers and waits, and the
-      // person who needs telling is the one who just clicked and saw nothing
-      // happen. The badge is decoration for a screen reader, which announces
-      // the anchor as a link already.
-      editable()
-      const link = screen.getByRole('link', { name: 'the docs' })
-      expect(link.textContent).toMatch(/⌘|Ctrl/)
-      expect(link.querySelector('sup')).toHaveAttribute('aria-hidden')
-    })
-
-    it('says it in the tooltip too, alongside where the link goes', () => {
+    it('says in the tooltip that clicking opens it, and where it goes', () => {
       editable()
       expect(screen.getByRole('link')).toHaveAttribute(
         'title',
         expect.stringContaining('https://example.com'),
       )
       expect(screen.getByRole('link').getAttribute('title')).toMatch(
-        /click to open|点击可打开/i,
+        /click to open/i,
       )
     })
 
@@ -94,23 +126,19 @@ describe('SlideMarkdown', () => {
       )
     })
 
-    it('leaves a link nobody is editing plain', () => {
-      // The audience never sees the badge: on a slide being presented a plain
-      // click follows the link, so there is nothing to explain.
-      render(<SlideMarkdown text="[the docs](https://example.com)" inline />)
+    it('carries no modifier-key badge in its text, in either mode', () => {
+      // The link reads as the author wrote it: nothing is appended to say
+      // which key to hold, because there is no longer a key to hold.
+      editable()
       expect(screen.getByRole('link').textContent).toBe('the docs')
+      expect(document.querySelector('sup')).toBeNull()
+      expect(document.body.textContent).not.toMatch(/⌘|Ctrl/)
     })
 
-    it('follows a Cmd-click, and a Ctrl-click', () => {
-      editable()
-      for (const modifier of [{ metaKey: true }, { ctrlKey: true }]) {
-        const click = createEvent.click(screen.getByRole('link'), {
-          bubbles: true,
-          ...modifier,
-        })
-        fireEvent(screen.getByRole('link'), click)
-        expect(click.defaultPrevented).toBe(false)
-      }
+    it('leaves a link nobody is editing plain, with no tooltip', () => {
+      render(<SlideMarkdown text="[the docs](https://example.com)" inline />)
+      expect(screen.getByRole('link').textContent).toBe('the docs')
+      expect(screen.getByRole('link')).not.toHaveAttribute('title')
     })
   })
 

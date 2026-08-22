@@ -4,7 +4,13 @@
  * produces a patch keyed by its slide field.
  */
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  createEvent,
+} from '@testing-library/react'
 import type { LayoutSlot, Slide } from '@slide-machine/shared'
 import SlideSlot from './slots'
 import { searchSlideImages } from '../../api/slides'
@@ -112,6 +118,43 @@ describe('SlideSlot', () => {
       slots: { bullets: { kind: 'bullets', items: ['sun', 'water', 'CO2'] } },
     })
     vi.useRealTimers()
+  })
+
+  /**
+   * A link in an editable text box belongs to the link, not to the editor:
+   * clicking the words follows it, and clicking anywhere else in the box
+   * starts an edit (which is how the link's own text is reached).
+   */
+  describe('a link inside an editable text box', () => {
+    const editableSlot = () =>
+      render(
+        <SlideSlot
+          slot="caption"
+          slide={slide({ caption: 'See [the docs](https://example.com)' })}
+          colors={colors}
+          onEdit={vi.fn()}
+        />,
+      )
+
+    it('opens the link on a plain click instead of the editor', () => {
+      editableSlot()
+      const click = createEvent.click(screen.getByRole('link'), {
+        bubbles: true,
+      })
+      fireEvent(screen.getByRole('link'), click)
+      expect(click.defaultPrevented).toBe(false)
+      expect(
+        screen.queryByRole('textbox', { name: 'Slide caption' }),
+      ).not.toBeInTheDocument()
+    })
+
+    it('still edits the box when the words beside the link are clicked', () => {
+      editableSlot()
+      fireEvent.click(screen.getByTitle('Click to edit Slide caption'))
+      expect(
+        screen.getByRole('textbox', { name: 'Slide caption' }),
+      ).toHaveValue('See [the docs](https://example.com)')
+    })
   })
 
   it('reserves an image slot while a picture may still arrive', () => {

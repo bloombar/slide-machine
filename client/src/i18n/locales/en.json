@@ -778,8 +778,7 @@
       "resizeRow": "Resize row {n}"
     },
     "link": {
-      "open": "Ctrl-click to open",
-      "openMac": "⌘-click to open"
+      "open": "Click to open"
     },
     "addKind": {
       "math": "Add a formula",
