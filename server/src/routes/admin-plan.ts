@@ -14,6 +14,15 @@
  * expiry, and entitlement is computed from the pair — see
  * billing/plan-grant.ts for why that, rather than a swap-and-restore, is what
  * makes "revert to whatever they had before" land on the truth.
+ *
+ * Neither endpoint refuses an allowlisted target the way the moderation ones
+ * do (ADMIN-1). "Admins are not moderated" protects an operator from being
+ * locked out of their own console; a grant is the opposite kind of act — it
+ * only ever hands something over, expires on its own, and costs nothing — and
+ * an admin running a pilot on their own account had no way to do it. What
+ * keeps that honest is the audit trail rather than a refusal: every grant
+ * records whether its target is an admin and whether it is the actor's own
+ * account (ADMIN-7).
  */
 import { Router } from 'express'
 import { Types } from 'mongoose'
@@ -21,8 +30,9 @@ import { z } from 'zod'
 import { planRank, PLAN_TIERS } from '@slide-machine/shared'
 import { logAdminAction } from '../audit/log'
 import { grantInEffect } from '../billing/plan-grant'
+import { isAdminEmail } from '../config/admin'
 import { HttpError } from '../middleware/error'
-import { actor, loadUser, rejectAdminTarget } from './admin-targets'
+import { actor, loadUser } from './admin-targets'
 
 export const adminPlanRouter = Router()
 
@@ -50,10 +60,6 @@ const grantSchema = z.strictObject({
 adminPlanRouter.put('/users/:id/plan-grant', async (req, res) => {
   const user = await loadUser(String(req.params.id))
   const admin = actor(req)
-  // Refused before the body is read, as every other action on an
-  // allowlisted account is: an admin comping themselves a plan is exactly
-  // the self-dealing "admins are not moderated" exists to rule out.
-  rejectAdminTarget(user.email)
 
   const parsed = grantSchema.safeParse(req.body ?? {})
   if (!parsed.success) {
@@ -111,6 +117,13 @@ adminPlanRouter.put('/users/:id/plan-grant', async (req, res) => {
       // account is actually paying for underneath it.
       revertsTo: user.planTier,
       note,
+      // An allowlisted target — the acting admin's own account included — is
+      // allowed here, unlike moderation, so the log is what makes it visible.
+      // Recorded on every grant rather than only on the self-dealing ones: a
+      // flag that appears only when true is a flag a reader has to know to
+      // look for.
+      targetIsAdmin: isAdminEmail(user.email),
+      self: user._id.toString() === admin.id,
       replaced: previous
         ? { tier: previous.tier, expiresAt: previous.expiresAt.toISOString() }
         : undefined,
@@ -129,9 +142,8 @@ adminPlanRouter.put('/users/:id/plan-grant', async (req, res) => {
  * did not happen. A lapsed record is cleared too, so revoking always leaves
  * the account with no grant at all.
  *
- * Unlike granting, this is not refused for an allowlisted account: it only
- * ever takes privilege away, and refusing would strand a grant issued before
- * that email was added to the allowlist.
+ * Nothing about an allowlisted target changes here either: revoking only ever
+ * takes privilege away, so refusing it could only strand a grant.
  */
 adminPlanRouter.delete('/users/:id/plan-grant', async (req, res) => {
   const user = await loadUser(String(req.params.id))

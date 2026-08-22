@@ -12,6 +12,12 @@
  * the allowance counters (billable spend only, per billing period), while the
  * cost table reads the all-time event ledger, cache hits included. Merging
  * them would put two different accountings under one heading.
+ *
+ * The one thing that is not a read: an operator can hand the period's
+ * allowances back (ADMIN-10) — the remedy for a bad generation run or a
+ * lecture whose audience spent a term's budget in an afternoon. It changes
+ * only the counters, never the plan and never the cost ledger, so what the
+ * deployment spent still reads the same afterwards.
  */
 import { useEffect, useState } from 'react'
 import type {
@@ -19,7 +25,9 @@ import type {
   UsageSummaryResponse,
   UsageWindow,
 } from '@slide-machine/shared'
-import { fetchAdminUserUsage } from '../../api/admin'
+import { fetchAdminUserUsage, resetAdminUserUsage } from '../../api/admin'
+import { ApiError } from '../../api/http'
+import ConfirmDialog from '../ConfirmDialog'
 import TimeframeToggle from './TimeframeToggle'
 import UsageMeter from '../UsageMeter'
 
@@ -69,10 +77,26 @@ interface Loaded {
   failed: boolean
 }
 
-export default function AdminUsagePanel({ userId }: { userId: string }) {
+export default function AdminUsagePanel({
+  userId,
+  canReset = true,
+}: {
+  userId: string
+  /** Whether the period's allowances may be handed back (ADMIN-10). False for
+   * a deleted account: the endpoint refuses a tombstone, which is restored
+   * rather than adjusted, so offering the button would only promise a 404. */
+  canReset?: boolean
+}) {
   const [timeframe, setTimeframe] = useState<UsageWindow>('period')
-  const key = `${userId}:${timeframe}`
+  // Bumped by a reset so the meters are re-read rather than left showing the
+  // numbers the operator has just cleared.
+  const [version, setVersion] = useState(0)
+  const key = `${userId}:${timeframe}:${version}`
   const [loaded, setLoaded] = useState<Loaded | null>(null)
+  const [confirming, setConfirming] = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [resetError, setResetError] = useState<string | null>(null)
 
   useEffect(() => {
     let live = true
@@ -89,6 +113,33 @@ export default function AdminUsagePanel({ userId }: { userId: string }) {
   const current = loaded?.key === key ? loaded : null
   const summary = current?.summary ?? null
 
+  /** Hands the period's allowances back, then re-reads. Reports what was
+   * actually cleared: an account that had spent nothing and one whose
+   * counters were wiped both end at zero, and only the "before" tells the
+   * operator which just happened. */
+  const reset = async () => {
+    setConfirming(false)
+    setResetting(true)
+    setNotice(null)
+    setResetError(null)
+    try {
+      const { cleared } = await resetAdminUserUsage(userId)
+      const count = Object.keys(cleared).length
+      setNotice(
+        count === 0
+          ? 'Nothing to reset — every allowance was already at zero for this period.'
+          : `Reset ${count} ${count === 1 ? 'allowance' : 'allowances'} for this period.`,
+      )
+      setVersion(v => v + 1)
+    } catch (err) {
+      setResetError(
+        err instanceof ApiError ? err.message : 'Could not reset allowances.',
+      )
+    } finally {
+      setResetting(false)
+    }
+  }
+
   return (
     <section
       data-testid="admin-usage-panel"
@@ -96,8 +147,31 @@ export default function AdminUsagePanel({ userId }: { userId: string }) {
     >
       <div className="mb-1 flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-slate-700">Service usage</h2>
-        <TimeframeToggle value={timeframe} onChange={setTimeframe} />
+        <div className="flex items-center gap-3">
+          <TimeframeToggle value={timeframe} onChange={setTimeframe} />
+          {canReset && (
+            <button
+              type="button"
+              disabled={resetting}
+              onClick={() => setConfirming(true)}
+              className="rounded-md border border-slate-300 px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Reset allowances
+            </button>
+          )}
+        </div>
       </div>
+
+      {notice && (
+        <p role="status" className="mb-2 text-sm text-green-700">
+          {notice}
+        </p>
+      )}
+      {resetError && (
+        <p role="alert" className="mb-2 text-sm text-red-600">
+          {resetError}
+        </p>
+      )}
 
       {current?.failed && (
         <p role="alert" className="text-sm text-red-600">
@@ -129,6 +203,26 @@ export default function AdminUsagePanel({ userId }: { userId: string }) {
             />
           </div>
         </>
+      )}
+
+      {/* Neutral rather than red: this gives an allowance back. What it
+          cannot undo is the record — the reset is audited, and the counters
+          it clears are the only place the spend was still visible. */}
+      {confirming && (
+        <ConfirmDialog
+          title="Reset this account's allowances?"
+          message={
+            'Every allowance goes back to zero for the current billing period, so the account ' +
+            'can spend its caps again before they renew. Stored audio is not reset — it measures ' +
+            'what the account is holding right now, not what it spent. Past periods stand, so ' +
+            'all-time totals and cost reports still show what was consumed. This is recorded in ' +
+            'the audit log.'
+          }
+          confirmLabel="Reset allowances"
+          tone="neutral"
+          onConfirm={() => void reset()}
+          onCancel={() => setConfirming(false)}
+        />
       )}
     </section>
   )

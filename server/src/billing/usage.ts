@@ -17,6 +17,7 @@ import { Types } from 'mongoose'
 import type { PlanTier, UsageMetric } from '@slide-machine/shared'
 import { loadPlans } from '../config/plans'
 import { UsageRecordModel } from '../models/usage-record'
+import { NotificationLogModel } from '../models/notification-log'
 import { SubscriptionModel } from '../models/subscription'
 import { PlanLimitExceededError } from './limits'
 import { noteCapCrossing } from './cap-queue'
@@ -221,6 +222,49 @@ export const usedThisPeriod = async (
   const period = await periodForMetric(userId, metric)
   const record = await UsageRecordModel.findOne({ userId, period, metric })
   return record?.used ?? 0
+}
+
+/**
+ * Zeroes a user's flow counters for the billing period they are in (ADMIN-10)
+ * and reports what each stood at beforehand.
+ *
+ * Only the current period is touched. Past periods are the record of what the
+ * account actually consumed — the all-time view and the cost reports read them
+ * — and rewriting history would make a reset indistinguishable from usage that
+ * never happened. Gauges are untouched for the same reason `periodKeyFor` never
+ * returns their key: `audioStorageMb` measures audio the account is holding
+ * this instant, and no reset makes a stored file stop occupying a disk.
+ *
+ * Counters are set to zero rather than deleted so a concurrent `$inc` upsert
+ * cannot race the reset into a duplicate row on the unique index; the rows are
+ * the counters, and the reset moves them like anything else does.
+ *
+ * Any cap notification already claimed for the period is released alongside
+ * (BILL-8). The claim row means "this account has been told about this metric
+ * this period", which stops being true the moment the allowance behind it is
+ * given back — leaving it would let an account spend a restored allowance all
+ * the way to the cap and be refused without ever being warned. Gauges keep
+ * their claims: their counters were not reset, so nothing about what they were
+ * told has changed.
+ */
+export const resetPeriodUsage = async (
+  userId: string,
+): Promise<{ period: string; cleared: Record<string, number> }> => {
+  const period = await periodKeyFor(userId)
+  const rows = await UsageRecordModel.find({ userId, period })
+  const cleared = Object.fromEntries(
+    rows.filter(row => row.used > 0).map(row => [row.metric, row.used]),
+  )
+  await UsageRecordModel.updateMany(
+    { userId, period },
+    { $set: { used: 0, updatedAt: new Date() } },
+  )
+  await NotificationLogModel.deleteMany({
+    userId,
+    period,
+    metric: { $nin: [...GAUGE_METRICS] },
+  })
+  return { period, cleared }
 }
 
 /**

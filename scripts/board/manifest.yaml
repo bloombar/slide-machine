@@ -430,11 +430,11 @@
     every admin page shows a horizontal secondary nav bar, just below the
     standard header, linking the top-level sections: Overview, Users, Projects,
     Lectures, and Logs. Overview — deployment-wide averages and totals, chiefly
-    cost: per user, per lecture, per project, and per student, alongside active
-    users, active students, and the largest spenders (BILL-7). Site-wide
-    directories, each paginated and sortable: Users (email, handle, join date),
-    Projects (title, owner, visibility, lecture count, timestamps), and Lectures
-    (title, project, owner…'
+    cost: per user, per lecture, per project, and per registered viewer,
+    alongside active users, active viewers, and the largest spenders (BILL-7).
+    Site-wide directories, each paginated and sortable: Users (email, handle,
+    join date), Projects (title, owner, visibility, lecture count, timestamps),
+    and Lectures (title, project, owner…'
   section: §20 Administration, Operations & Moderation
   family: ADMIN
   phase: 2
@@ -564,6 +564,24 @@
   family: ADMIN
   phase: 2
   status: Done
+  review: false
+  note: administration & moderation
+- id: ADMIN-10
+  title: Resetting an account's allowances
+  full: "An admin can put one account's usage counters back to zero for the
+    billing period it is in — the remedy for a bad generation run, a botched
+    import, or a lecture whose audience spent a term's budget in an afternoon.
+    It sits in the console's Service usage panel (ADMIN-2), beside the meters it
+    clears. Only the current period, and only flows. Past periods are the record
+    of what the account actually consumed — the all-time view reads them — and
+    rewriting one would make an operator's favour indistinguishable from usage
+    that never happened. Gauges (BILL-3, audioStorageMb) are untouched for the
+    same reason a rollover leaves them alone: they measure what the account is
+    holding this instant, which no…"
+  section: §20 Administration, Operations & Moderation
+  family: ADMIN
+  phase: 2
+  status: Backlog
   review: false
   note: administration & moderation
 - id: AUTH-3
@@ -1503,7 +1521,7 @@
     being its lectures plus any project-scoped spend such as seed-material
     extraction. A lecture's owner is not always its project's owner, so both
     references are recorded when the event occurs rather than inferred later.
-    Instructor versus student. Each view…
+    Instructor versus audience. Each view…
   section: §5 Plans, Billing & Usage Limits
   family: BILL
   phase: 3

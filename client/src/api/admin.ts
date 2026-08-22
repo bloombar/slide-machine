@@ -7,6 +7,7 @@ import type {
   AdminLogsResponse,
   AdminPlanGrant,
   AdminPlanGrantInput,
+  AdminUsageResetResponse,
   AdminUserSettingsPatch,
   PlanTier,
   Project,
@@ -246,6 +247,19 @@ export const fetchAdminUserUsage = (
   apiFetch<UsageSummaryResponse>(
     `/api/admin/users/${userId}/usage?window=${window}`,
   )
+
+/**
+ * Gives the account its allowances back for the billing period it is in
+ * (ADMIN-10), and reports what each counter stood at first. Audited, and
+ * refused for a deleted account (404), whose counters mean nothing until it
+ * is restored. Stored audio is a gauge and is never reset.
+ */
+export const resetAdminUserUsage = (
+  userId: string,
+): Promise<AdminUsageResetResponse> =>
+  apiFetch<AdminUsageResetResponse>(`/api/admin/users/${userId}/usage/reset`, {
+    method: 'POST',
+  })
 
 /** Selectable project-directory page sizes; same cap as users. */
 export const ADMIN_PROJECTS_PAGE_SIZES = ADMIN_USERS_PAGE_SIZES

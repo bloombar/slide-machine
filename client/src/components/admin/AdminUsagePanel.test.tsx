@@ -1,10 +1,11 @@
 /**
  * Unit tests for the admin view of one account's usage: the same meters the
  * account's own footer badge shows (BILL-4), defaulting to the current
- * billing period with an all-time alternative.
+ * billing period with an all-time alternative, plus the one write on it —
+ * handing the period's allowances back (ADMIN-10).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import type {
   UsageMetricSummary,
   UsageSummaryResponse,
@@ -52,19 +53,58 @@ const allTime = (): UsageSummaryResponse =>
     metrics: [metric({ used: 5000, cap: null, fraction: null })],
   })
 
-const renderPanel = ({ failPeriod = false } = {}) =>
-  mockFetchRoutes({
+/**
+ * @param spent What each period read returns, in order — a reset is only
+ *   observable if the second read differs from the first.
+ * @param reset What the reset endpoint answers; a 500 stands for a refusal.
+ */
+const renderPanel = ({
+  failPeriod = false,
+  spent = [1000],
+  reset = {
+    status: 200,
+    body: { period: '2026-08', cleared: { aiTokens: 1000 } },
+  },
+}: {
+  failPeriod?: boolean
+  spent?: number[]
+  reset?: { status: number; body: unknown }
+} = {}) => {
+  let read = 0
+  return mockFetchRoutes({
+    '/api/admin/users/u1/usage/reset': () => reset,
     '/api/admin/users/u1/usage?window=all': () => ({
       status: 200,
       body: allTime(),
     }),
-    '/api/admin/users/u1/usage?window=period': () => ({
-      status: failPeriod ? 500 : 200,
-      body: failPeriod
-        ? { error: { code: 'server_error', message: 'no' } }
-        : summary(),
-    }),
+    '/api/admin/users/u1/usage?window=period': () => {
+      const used = spent[Math.min(read++, spent.length - 1)]!
+      const body = summary()
+      return {
+        status: failPeriod ? 500 : 200,
+        body: failPeriod
+          ? { error: { code: 'server_error', message: 'no' } }
+          : {
+              ...body,
+              metrics: body.metrics.map(m =>
+                m.metric === 'aiTokens'
+                  ? { ...m, used, fraction: used / 10_000 }
+                  : m,
+              ),
+            },
+      }
+    },
   })
+}
+
+/** Opens the confirm and takes the offer. */
+const confirmReset = async () => {
+  fireEvent.click(screen.getByRole('button', { name: 'Reset allowances' }))
+  const dialog = await screen.findByRole('alertdialog')
+  fireEvent.click(
+    within(dialog).getByRole('button', { name: 'Reset allowances' }),
+  )
+}
 
 beforeEach(() => vi.clearAllMocks())
 afterEach(() => vi.unstubAllGlobals())
@@ -117,5 +157,77 @@ describe('AdminUsagePanel', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Could not load usage.',
     )
+  })
+})
+
+describe('resetting the allowances (ADMIN-10)', () => {
+  it('confirms first, then clears the period and re-reads the meters', async () => {
+    const { calls } = renderPanel({ spent: [1000, 0] })
+    render(<AdminUsagePanel userId="u1" />)
+    await screen.findByText('1,000 of 10,000')
+
+    // Nothing is sent on the button alone: the account is not the admin's.
+    fireEvent.click(screen.getByRole('button', { name: 'Reset allowances' }))
+    expect(calls.some(url => url.includes('/usage/reset'))).toBe(false)
+
+    const dialog = await screen.findByRole('alertdialog')
+    // The confirm says what a reset does *not* touch, since that is what an
+    // operator would otherwise assume it does.
+    expect(dialog).toHaveTextContent(/Stored audio is not reset/)
+    expect(dialog).toHaveTextContent(/audit log/)
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Reset allowances' }),
+    )
+
+    // What was cleared, not merely that something was: zero either way.
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Reset 1 allowance for this period.',
+    )
+    expect(calls.some(url => url.includes('/usage/reset'))).toBe(true)
+    // The meters are re-read rather than left showing what was just cleared.
+    expect(await screen.findByText('0 of 10,000')).toBeInTheDocument()
+  })
+
+  it('says so when there was nothing to give back', async () => {
+    renderPanel({
+      reset: { status: 200, body: { period: '2026-08', cleared: {} } },
+    })
+    render(<AdminUsagePanel userId="u1" />)
+    await screen.findByTestId('usage-metric-aiTokens')
+
+    await confirmReset()
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Nothing to reset — every allowance was already at zero for this period.',
+    )
+  })
+
+  it('reports a refusal instead of implying the reset landed', async () => {
+    renderPanel({
+      reset: {
+        status: 404,
+        body: { error: { code: 'not_found', message: 'User not found' } },
+      },
+    })
+    render(<AdminUsagePanel userId="u1" />)
+    await screen.findByTestId('usage-metric-aiTokens')
+
+    await confirmReset()
+
+    // The endpoint's own words: an admin can act on "User not found".
+    expect(await screen.findByRole('alert')).toHaveTextContent('User not found')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('withholds the offer for an account that cannot be reset', async () => {
+    renderPanel()
+    render(<AdminUsagePanel userId="u1" canReset={false} />)
+    await screen.findByTestId('usage-metric-aiTokens')
+
+    // A deleted account is restored, not adjusted: the endpoint would 404, so
+    // the button would only promise something it cannot do.
+    expect(
+      screen.queryByRole('button', { name: 'Reset allowances' }),
+    ).not.toBeInTheDocument()
   })
 })

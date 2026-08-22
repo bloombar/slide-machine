@@ -214,6 +214,21 @@ describe('AdminUserDetailPage', () => {
     expect(
       within(panel).getByRole('button', { name: 'All time' }),
     ).toHaveAttribute('aria-pressed', 'false')
+    // The one write on this page's read surfaces (ADMIN-10); what it does is
+    // covered in AdminUsagePanel.test.tsx.
+    expect(
+      within(panel).getByRole('button', { name: 'Reset allowances' }),
+    ).toBeVisible()
+  })
+
+  it('withholds the allowance reset from a deleted account', async () => {
+    renderPage(200, { ...detail, deletedAt: '2026-07-20T09:00:00Z' })
+    const panel = await screen.findByTestId('admin-usage-panel')
+    // A tombstoned account is restored, not adjusted: the meters still read,
+    // but the endpoint behind the button would refuse it.
+    expect(
+      within(panel).queryByRole('button', { name: 'Reset allowances' }),
+    ).toBeNull()
   })
 
   it('shows account details and a public-profile link', async () => {
