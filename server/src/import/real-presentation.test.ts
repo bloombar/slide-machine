@@ -22,10 +22,11 @@
  */
 import { readFileSync } from 'node:fs'
 import { describe, it, expect, vi, beforeAll } from 'vitest'
-import { WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
+import { WHITEBOARD_LAYOUT_TYPE, themeTextStyles } from '@slide-machine/shared'
 import { toSourcePresentation } from './read-slides'
 import { importSourcePresentation } from './import-presentation'
 import { layoutSchema } from '../templates/builtin'
+import { resolveStyle } from '../lib/tree-boxes'
 import type { ImportResult } from './import-presentation'
 import type { SourcePresentation } from './source-presentation'
 
@@ -187,15 +188,24 @@ describe('the design that import derives from it', () => {
 
   it('sets each box in the type the deck sets it in', () => {
     // Type size, weight, family and colour all reach the design — and every
-    // one of them was stated a page or two above the slide
+    // one of them was stated a page or two above the slide.
+    //
+    // Read through the cascade, because a design's typography is now stated
+    // once as a scale and named by each box (`type-scale.ts`). Which half of
+    // the cascade a value sits in is the scale's business; that the box is
+    // SET this way is the design's, and that is what this asserts.
     const heading = derived()
       .flatMap(l => Object.entries(l.elementPositions ?? {}))
       .find(([name]) => name === 'title')?.[1]
-    expect(heading).toMatchObject({
-      fontWeight: 700,
-      color: '#ffffff',
-      fontFamily: 'serif',
-    })
-    expect(heading?.fontSize).toBeGreaterThan(3)
+    const theme = result.template.theme as Record<string, string>
+    const type = resolveStyle(heading, themeTextStyles(theme))
+    // A colour may be stored as the palette entry it already is, which is
+    // what lets one edit recolour every heading — so it is read the way the
+    // renderer reads it rather than compared as a string.
+    const painted = (token: string | undefined) =>
+      token && token in theme ? theme[token] : token
+    expect(painted(type.color)).toBe('#ffffff')
+    expect(type).toMatchObject({ fontWeight: 700, fontFamily: 'serif' })
+    expect(type.fontSize).toBeGreaterThan(3)
   })
 })

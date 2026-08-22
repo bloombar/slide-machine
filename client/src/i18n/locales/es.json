@@ -326,6 +326,7 @@
     },
     "sizing": "Espacio que ocupa",
     "grow": "Ocupa el espacio libre",
+    "holdsSize": "Mantiene su tamaño",
     "colSpan": "Columnas de ancho",
     "rowSpan": "Filas de alto",
     "width": "Ancho %",

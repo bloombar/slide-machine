@@ -8,7 +8,12 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, it, expect } from 'vitest'
-import { LAYOUT_TYPES } from '@slide-machine/shared'
+import {
+  DEFAULT_TEXT_STYLES,
+  LAYOUT_TYPES,
+  TEXT_STYLE_ROLES,
+  themeTextStyles,
+} from '@slide-machine/shared'
 import {
   getBuiltinTemplate,
   listBuiltinTemplates,
@@ -238,5 +243,51 @@ describe('externalized templates', () => {
   it('fails loudly when the directory has no templates', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'tmpl-empty-'))
     expect(() => loadBuiltinTemplates(dir)).toThrow(/No template files/)
+  })
+
+  /**
+   * The three original starters now state their type scale instead of
+   * inheriting it (TMPL-9).
+   *
+   * Stating it is the whole point — a scale an author can see in the file and
+   * edit in the design panel, and that each template can take in its own
+   * direction. But a template someone is already teaching from must not move
+   * because of it, so what they state has to be exactly what they drew before
+   * they stated anything. That is a property worth ASSERTING rather than
+   * eyeballing: `themeTextStyles` merges field by field against the app's
+   * defaults, so a single number out of place restyles a shipped design
+   * silently.
+   */
+  it('leaves the original starters drawing exactly as they did', () => {
+    for (const id of ['classic', 'midnight', 'seminar']) {
+      const template = getBuiltinTemplate(id)!
+      expect(template.theme.textStyles).toBeDefined()
+      const resolved = themeTextStyles(template.theme)
+      // Against the defaults resolved the same way, so this compares two
+      // fully-filled scales rather than a scale against a sparse literal.
+      const before = themeTextStyles({})
+      for (const role of TEXT_STYLE_ROLES) {
+        expect(resolved[role]).toEqual(before[role])
+      }
+      // And nothing was invented: the roles stated are the roles that exist.
+      expect(Object.keys(template.theme.textStyles as object).sort()).toEqual(
+        [...TEXT_STYLE_ROLES].sort(),
+      )
+    }
+  })
+
+  it('states every field the default scale states', () => {
+    // A role that stated only some of its fields would still resolve
+    // correctly today and drift the moment a default changed underneath it.
+    const classic = getBuiltinTemplate('classic')!
+    const stated = classic.theme.textStyles as Record<
+      string,
+      Record<string, unknown>
+    >
+    for (const [role, spec] of Object.entries(DEFAULT_TEXT_STYLES)) {
+      for (const key of Object.keys(spec)) {
+        expect(stated[role]).toHaveProperty(key)
+      }
+    }
   })
 })

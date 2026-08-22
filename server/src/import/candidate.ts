@@ -25,6 +25,7 @@
  * they recover content the import reinterpreted.
  */
 import type { SlotKind, SlotSpec } from '@slide-machine/shared'
+import type { RestoredSlot } from '../lib/slot-metadata'
 import { isMixed, hasLinks, isNested, isCounted } from './markdown'
 import type {
   SourceBox,
@@ -59,7 +60,7 @@ export interface CandidateSlot {
    * a round trip through Google Slides keeps a box's kind, instruction and
    * limits exactly — which inference could never recover.
    */
-  restored?: SlotSpec
+  restored?: RestoredSlot
   /** What this box held on the slide it came from, for the lecture importer
    * to place (EXP-5). Ignored when only a design is wanted. */
   content?: SourceElement

@@ -39,6 +39,7 @@ import {
 import { resolveTemplateTheme, type ExportTheme } from './deck-theme'
 import { resolveTreeBoxes, type ResolvedBox } from './tree-boxes'
 import { fetchSlideImages, toDataUri } from './deck-image'
+import { textStylesBySlot } from '@slide-machine/shared'
 import { encodeSlotMetadata, slotToken } from './slot-metadata'
 import { withSlotAltText } from './pptx-alt-text'
 import { pptxFontFace } from './pptx-fonts'
@@ -201,7 +202,11 @@ const boxesOf = (layout: Layout, theme: Record<string, unknown>) => {
  * nothing to read even if someone finds it.
  */
 const metadataObject = (layout: Layout) => {
-  const payload = encodeSlotMetadata(layout.slots)
+  // With the role each box follows, read from wherever the layout keeps it —
+  // its tree, or its geometry for an imported design. Every shape is written
+  // in literal type below, so this payload is the only place the reference
+  // itself survives the trip (TMPL-9).
+  const payload = encodeSlotMetadata(layout.slots, textStylesBySlot(layout))
   if (!payload) return []
   return [
     {

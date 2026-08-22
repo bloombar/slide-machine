@@ -326,6 +326,7 @@
     },
     "sizing": "Space it takes",
     "grow": "Takes spare room",
+    "holdsSize": "Holds its size",
     "colSpan": "Columns wide",
     "rowSpan": "Rows tall",
     "width": "Width %",

@@ -6,11 +6,33 @@
  * geometry was — so the real assertion here is that `layoutSchema` parses it.
  */
 import { describe, it, expect } from 'vitest'
+import { themeTextStyles } from '@slide-machine/shared'
 import { layoutSchema } from '../templates/builtin'
+import { resolveStyle } from '../lib/tree-boxes'
 import type { CandidateSlot } from './candidate'
 import type { DerivedLayout } from './consolidate'
 import { buildTemplate, importReport, mapFont } from './build-template'
 import type { SourcePresentation } from './source-presentation'
+
+/**
+ * A box's type as anything that draws it sees it: the role it follows, with
+ * its own fields over the top.
+ *
+ * Read through the resolver rather than off the box, because an import now
+ * states a design's typography once as a scale and has each box name a role
+ * (`type-scale.ts`). Asserting on the raw box would assert on which HALF of
+ * the cascade a value happens to live in, which is exactly the thing the
+ * scale is free to change.
+ */
+const typeOf = (
+  built: ReturnType<typeof buildTemplate>,
+  layout: number,
+  slotName: string,
+) =>
+  resolveStyle(
+    built.layouts[layout]!.elementPositions![slotName],
+    themeTextStyles(built.theme),
+  )
 
 const slot = (
   name: string,
@@ -64,7 +86,7 @@ describe('the template that comes out', () => {
 
   it('keeps the type size and colour the slide was drawn in', () => {
     // Which is the point of importing a design rather than describing one
-    const { layouts } = buildTemplate(
+    const built = buildTemplate(
       source(),
       [
         derived({
@@ -79,7 +101,7 @@ describe('the template that comes out', () => {
       ],
       new Map(),
     )
-    expect(layouts[0]!.elementPositions.title).toMatchObject({
+    expect(typeOf(built, 0, 'title')).toMatchObject({
       fontSize: 6.2,
       fontWeight: 700,
       color: '#b45309',
@@ -313,7 +335,7 @@ describe('fonts', () => {
   })
 
   it('reaches the box it belongs to', () => {
-    const { layouts } = buildTemplate(
+    const built = buildTemplate(
       source(),
       [
         derived({
@@ -328,8 +350,8 @@ describe('fonts', () => {
       ],
       new Map(),
     )
-    expect(layouts[0]!.elementPositions.title!.fontFamily).toBe('serif')
-    expect(layoutSchema.safeParse(layouts[0]).success).toBe(true)
+    expect(typeOf(built, 0, 'title').fontFamily).toBe('serif')
+    expect(layoutSchema.safeParse(built.layouts[0]).success).toBe(true)
   })
 })
 

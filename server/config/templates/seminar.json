@@ -8,7 +8,47 @@
     "muted": "#4d7c0f",
     "accent": "#16a34a",
     "penColor": "#14532d",
-    "highlighterColor": "#4ade80"
+    "highlighterColor": "#4ade80",
+    "textStyles": {
+      "title": {
+        "fontSize": 7,
+        "fontWeight": 700,
+        "maxChars": 60
+      },
+      "sectionTitle": {
+        "fontSize": 5.5,
+        "fontWeight": 600,
+        "maxChars": 60
+      },
+      "heading": {
+        "fontSize": 4,
+        "fontWeight": 600,
+        "color": "accent",
+        "maxChars": 80
+      },
+      "body": {
+        "fontSize": 2.75,
+        "lineHeight": 1.625,
+        "maxChars": 320
+      },
+      "bullet": {
+        "fontSize": 2.75,
+        "lineHeight": 1.625,
+        "maxChars": 90,
+        "maxItems": 6
+      },
+      "caption": {
+        "fontSize": 2,
+        "color": "muted",
+        "maxChars": 120
+      },
+      "quote": {
+        "fontSize": 4,
+        "fontWeight": 500,
+        "italic": true,
+        "maxChars": 200
+      }
+    }
   },
   "layouts": [
     {

@@ -32,79 +32,18 @@ import type { DerivedLayout } from './consolidate'
 import type { CandidateSlot } from './candidate'
 import type { SourcePresentation } from './source-presentation'
 import { ruleBasedType } from './semantics'
+import { mapFont } from './font-map'
+import { capacityOf, heightForText } from './text-metrics'
+import { deriveTypeScale, typeOfBox, type TypeScale } from './type-scale'
 
 /** What an import did, in the terms the report is written in. Declared in
  * `shared` because the screen that shows it is the point of it, and two copies
  * of the shape would be two things to keep in step. */
 export type { ImportReport }
 
-/**
- * Which of the app's own font stacks a presentation's typeface becomes.
- *
- * A presentation names whatever font its author had. Reproducing that exactly
- * would mean fetching a font from a third party every time a slide is shown —
- * a privacy leak on every view, and an unreadable deck offline (docs/
- * TEMPLATES.md §5). So a name is mapped onto one of the stacks already on the
- * reader's machine, keyed exactly as the template editor's picker keys them
- * (`client/src/components/slide/fonts.ts`).
- *
- * Approximate by design: the trade is a typeface that resembles the original
- * rather than a request to a font host.
- */
-const FONT_FAMILIES: { key: string; pattern: RegExp }[] = [
-  // The faces the app bundles, first and by name. Everything below this pair
-  // answers "what does it most resemble"; these two answer "it is this one",
-  // so a deck set in Montserrat comes back in Montserrat rather than in a
-  // geometric sans that is merely like it.
-  { key: 'frank-ruhl-libre', pattern: /frank\s*ruhl/i },
-  { key: 'montserrat', pattern: /^\s*montserrat/i },
-  // Monospace first: "Courier New" reads as serif by name and is monospaced
-  // in fact, and being fixed-width is the property that matters.
-  {
-    key: 'mono',
-    pattern:
-      /(mono|courier|consol|menlo|code|typewriter|inconsolata|jetbrains|anonymous pro)/i,
-  },
-  // Then the hand-drawn ones, before anything that could claim them by a
-  // shared word: "Brush Script" is a hand, not a serif.
-  {
-    key: 'handwritten',
-    pattern:
-      /(caveat|indie flower|pacifico|dancing script|comic sans|shadows into light|patrick hand|kalam|architects daughter|permanent marker|satisfy|courgette|gloria hallelujah|handlee|bradley hand|segoe script|brush script|chalkboard|marker felt|script|handwrit)/i,
-  },
-  // Narrow display faces, which a title in Oswald or Bebas depends on: set in
-  // an ordinary sans they lose the line breaks the author wrote around them.
-  {
-    key: 'condensed',
-    pattern:
-      /(oswald|bebas|anton|archivo black|impact|narrow|condensed|teko|fjalla|haettenschweiler|league gothic)/i,
-  },
-  {
-    key: 'geometric',
-    // `montserrat` is gone from this list: it is matched by name above. A
-    // variant that is not the face itself ("Montserrat Alternates") still
-    // lands here, which is right — it resembles Montserrat, it is not it.
-    pattern:
-      /(futura|century gothic|avenir|nunito|poppins|jost|raleway|josefin|quicksand|comfortaa|questrial|urbanist|outfit|didact)/i,
-  },
-  {
-    key: 'humanist',
-    pattern:
-      /(optima|candara|gill sans|trebuchet|tahoma|verdana|lato|calibri|corbel|myriad|frutiger|segoe ui|ubuntu|pt sans|cabin|karla)/i,
-  },
-  {
-    key: 'serif',
-    pattern:
-      /(times|georgia|garamond|cambria|palatino|baskerville|merriweather|playfair|didot|lora|cardo|spectral|crimson|bookman|book antiqua|constantia|caslon|cormorant|slab|arvo|rockwell|bitter|museo|vollkorn|tinos|droid serif|pt serif|noto serif|source serif|libre|serif)/i,
-  },
-]
-
-/** The stack closest to a font nobody can be asked to download. Anything
- * unrecognized is sans, which is what most presentation type is. */
-export const mapFont = (family: string | undefined): string | undefined => {
-  if (!family?.trim()) return undefined
-  return FONT_FAMILIES.find(f => f.pattern.test(family))?.key ?? 'sans'
-}
+/** Re-exported where it has always been imported from. The table itself moved
+ * out so the type scale could use it too (`font-map.ts`). */
+export { mapFont }
 
 /** The blank slate every template must offer (TMPL-7). No presentation has
  * one to import, so it is synthesized. */
@@ -243,74 +182,10 @@ const decorationOf = (
  * downward into space nothing else is using, because the geometry is the
  * design and this is the one thing it must not be allowed to do: hide the
  * lecture.
+ *
+ * The arithmetic itself lives in `text-metrics`, shared with the type scale
+ * so that "how much fits" has one answer.
  */
-
-/** Roughly a character's width, as a fraction of the type size. */
-const CHAR_W = 0.5
-/** A line's full height, as a fraction of the type size. */
-const LINE_H = 1.5
-/** A 16:9 slide is this many `cqi` tall — `cqi` being a percent of its WIDTH. */
-const SLIDE_H_CQI = 56.25
-
-/**
- * The height a box's own content needs, as a fraction of the slide's height.
- * Zero when nothing is known about what it holds.
- *
- * An estimate — there is no browser here — and deliberately a generous one.
- * Being a little taller than needed costs nothing on a box with space beneath
- * it; being too short costs the reader the end of every list.
- */
-const heightForText = (slot: CandidateSlot): number => {
-  const { held, fontSize, box } = slot
-  if (!held || !fontSize) return 0
-  const perLine = Math.max(1, Math.floor((box.w * 100) / (fontSize * CHAR_W)))
-  // Every line is assumed as long as the longest, since only the longest was
-  // measured. It is the generous reading, which is the right way to be wrong
-  // about a box that would otherwise hide the end of a list.
-  const rows = held.lines * Math.max(1, Math.ceil(held.longest / perLine))
-  return (rows * fontSize * LINE_H) / SLIDE_H_CQI
-}
-
-/** The most `maxItems` the template schema will take. */
-const MAX_ITEMS = 50
-
-/**
- * How much a box can hold, from its own width, height and type size.
- *
- * A hand-written template bounds its boxes through the text style each one
- * follows, and a layout's `constraints` name three boxes — `title`, `body`,
- * `caption`. An imported design has neither: its boxes carry geometry and no
- * text style, and they are named after whatever they turned out to be, so a
- * second column called `body-2` matched nothing and was bounded by nothing.
- * "Preview with every box at its limit" then had no limit to draw, and on a
- * design of any complexity it appeared to do nothing at all.
- *
- * Measured rather than named, because for an imported box the geometry IS the
- * bound: what it can hold is how wide it is, how tall, and how big its type.
- * That also makes the preview mean what it says — a box previewed at the
- * longest title of the three slides that happened to be sampled is not the
- * box at its limit.
- *
- * The same estimate `heightForText` runs, read the other way round: how many
- * characters fit across, times how many lines fit down. A bullets box counts
- * its lines as points, since that is what a point is here.
- */
-const capacityOf = (
-  slot: CandidateSlot,
-): { maxChars?: number; maxItems?: number } => {
-  const { box, fontSize, kind } = slot
-  // A picture holds no text, and a table's shape is its rows, not a count.
-  if (!fontSize || (kind !== 'text' && kind !== 'bullets')) return {}
-  const perLine = Math.max(1, Math.floor((box.w * 100) / (fontSize * CHAR_W)))
-  const lines = Math.max(
-    1,
-    Math.floor((box.h * SLIDE_H_CQI) / (fontSize * LINE_H)),
-  )
-  return kind === 'bullets'
-    ? // For a list the character bound is per POINT, which is one line of it.
-      { maxChars: perLine, maxItems: Math.min(lines, MAX_ITEMS) }
-    : { maxChars: perLine * lines }
-}
 
 /**
  * How far a box may grow before it would reach something else.
@@ -338,6 +213,7 @@ const toLayout = (
   derived: DerivedLayout,
   taken: Set<string>,
   assets: Map<string, string>,
+  scale: TypeScale,
 ): Layout => {
   const type = unique(slug(derived.type ?? ruleBasedType(derived)), taken)
 
@@ -409,17 +285,26 @@ const toLayout = (
           }
     elementPositions[slot.name] = {
       ...safeBox(grown),
-      // Type size and colour came off the slide; keeping them is the whole
-      // point of importing a design rather than describing one.
-      ...(slot.fontSize ? { fontSize: slot.fontSize } : {}),
-      ...(slot.bold ? { fontWeight: 700 } : {}),
-      ...(slot.color ? { color: slot.color } : {}),
+      // Type size, weight, family and colour came off the slide; keeping them
+      // is the whole point of importing a design rather than describing one.
+      //
+      // Named rather than written out wherever the deck's own scale already
+      // says it (`type-scale`): the box follows a role, and states only where
+      // it disagrees with it. A box the scale could not place still carries
+      // everything it was measured with.
+      ...typeOfBox(slot, scale),
+      // A presentation this system exported states which role each box
+      // followed (EXP-8), and being told beats deriving it — the file went out
+      // in literal type, so the derivation can only recover a scale that
+      // resembles the one that left. Honoured only where the derived scale
+      // actually defines that role: a name with nothing behind it would
+      // resolve against the app's defaults and restyle the box.
+      ...(slot.restored?.textStyle && scale.styles?.[slot.restored.textStyle]
+        ? { textStyle: slot.restored.textStyle }
+        : {}),
       // The box's own fill: a deck may put its colour on the boxes rather
       // than on the page, and dropping it imported the design white.
       ...(slot.background ? { background: slot.background } : {}),
-      ...(mapFont(slot.fontFamily)
-        ? { fontFamily: mapFont(slot.fontFamily) }
-        : {}),
       // How the text sits in the box. A centred title read as left-aligned is
       // the most visible way an import stops looking like its source.
       ...(slot.align ? { align: slot.align } : {}),
@@ -475,7 +360,18 @@ export const buildTemplate = (
   // slide the rules happen to call "whiteboard" cannot collide with the blank
   // slate below — it becomes `whiteboard-2` instead.
   const taken = new Set<string>([WHITEBOARD_LAYOUT_TYPE])
-  const built = layouts.map(layout => toLayout(layout, taken, assets))
+  // The type scale the deck turns out to have been set on, recovered before
+  // any layout is built because it is a property of the WHOLE presentation:
+  // the same title size appears on thirty slides, and only reading all of
+  // them together says which sizes are the deck's scale and which are one
+  // slide's accident (`type-scale`).
+  const scale = deriveTypeScale(layouts, {
+    text: source.theme.text,
+    muted: source.theme.muted,
+    accent: source.theme.accent,
+    link: source.theme.link,
+  })
+  const built = layouts.map(layout => toLayout(layout, taken, assets, scale))
 
   const layoutOfSlide: Record<string, string> = {}
   for (const [slideId, index] of assignment) {
@@ -499,6 +395,10 @@ export const buildTemplate = (
       // so a deck whose links are red got them in the body's black. Only
       // present when the deck states one worth carrying.
       ...(source.theme.link ? { link: source.theme.link } : {}),
+      // The deck's own type scale, so its typography is stated once and every
+      // box names a role instead of restating it (TMPL-9). A deck that stated
+      // no type at all yields none, and the app's defaults stand.
+      ...(scale.styles ? { textStyles: scale.styles } : {}),
     },
     // Every template must offer a blank slate to draw on (TMPL-7), and no
     // presentation has one to import — so it is synthesized rather than

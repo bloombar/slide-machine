@@ -89,8 +89,14 @@ export type LinesOf = (slot: string, style: BoxStyle) => string[]
  * itself over the top. The same cascade the renderer applies (client
  * boxStyle.ts) — a box naming a role and overriding one thing is the common
  * case, so it is one merge rather than a mode switch.
+ *
+ * Exported because it is the only correct way to read a box's type since
+ * imports started deriving a type scale (`import/type-scale.ts`): a box that
+ * follows a role no longer states the size, weight, family or colour the role
+ * supplies, so reading the box alone reads a design with most of its
+ * typography missing.
  */
-const resolveStyle = (
+export const resolveStyle = (
   style: BoxStyle | undefined,
   textStyles: ThemeTextStyles,
 ): BoxStyle => {

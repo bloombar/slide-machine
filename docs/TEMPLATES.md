@@ -218,6 +218,19 @@ A slot with nothing in it **renders nothing and takes no space**, so a container
 not reserve a hole where an absent caption would go. The editor overrides that, since an
 empty slot still needs to be clickable.
 
+**A box can refuse to give way.** `shrink: 0` on a node is `flex-shrink: 0` — the box keeps
+the size the design asked for, and any overflow is settled by its siblings instead. Without
+it, room is taken from whichever box happens to be *able* to give it, which is how a heading
+came to be crushed to make space for the list beneath it. Authored as **Holds its size** in
+the slot inspector, offered only under a flex parent since `flex-shrink` is inert in a grid.
+
+When a box genuinely cannot show what it holds, three things happen in order: the type
+shrinks to fit (`useFitText`, down to 40% of the design's size), and past that floor the box
+becomes a scroller rather than clipping — losing the end of a sentence with no sign it was
+ever there is the one outcome worth avoiding. Only the box that actually overflows becomes
+one: a scroller per slot exhausts the compositor's layer budget on a long deck, which paints
+the whole list view blank.
+
 ### Sizes are `cqi` or fractions, never `px`
 
 `gap`, `padding`, `radius`, `borderWidth` and `fontSize` are in `cqi` — a percent of the
@@ -236,8 +249,15 @@ A box names a role — `heading`, `body`, `caption` — and the template's `them
 decides what that means, with any field the box sets itself overriding it. Changing "body"
 restyles every body box in every layout, instead of sending an author round eight tabs to
 make the same edit. Defaults are in
-[theme.ts](../client/src/components/slide/theme.ts) and reproduce what the built-in layouts
-were written with.
+[text-styles.ts](../shared/src/types/text-styles.ts) and reproduce what the built-in layouts
+were written with; every built-in now **states its own scale** rather than inheriting them,
+so a template's typography is visible in its file and can be taken in its own direction.
+
+One caution for anyone writing a scale by hand or generating one: the resolution merges a
+stored role over the default **field by field**, so a field a role leaves out is not left
+out — it is supplied by the app's default for that role name. Omitting `fontWeight` on
+`title` yields 700, and omitting `color` on `caption` yields `muted`. A role meant to be
+neutral about a property must say so explicitly.
 
 ### How much a box holds
 
@@ -300,9 +320,17 @@ The theme is a free-form object resolved into a known set with fallbacks
 | --- | --- |
 | `background`, `surface`, `text`, `muted`, `accent` | The slide palette. |
 | `penColor`, `highlighterColor` | Whiteboard defaults; fall back to `text` and `accent`. |
+| `link` | What a hyperlink is drawn in; falls back to `accent`. |
+| `imageBackground` | What is painted behind a picture. Transparent unless stated — a photograph needs nothing, but a diagram or logo with a transparent ground loses its strokes on a slide of the same value. |
 | `textStyles` | Named type roles a layout's boxes refer to ([§4](#text-styles)). |
 | `marginX`, `marginY`, `gap` | Authoring metrics, editor-only (below). |
 | `backgroundImage` | Object-storage URL for an imported background. |
+
+A program listing takes no theme key. It stays on a dark ground whatever the template,
+because the highlighter's token colours are built for one — but it is the **template's**
+darkest stated colour rather than the highlighter's own, so the block belongs to the
+palette instead of looking like a screenshot of another editor (`codeSurface`,
+[theme.ts](../client/src/components/slide/theme.ts)).
 
 `textStyles` replaces the `fontFamily` / `headingFontFamily` pair this table used to
 describe, which nothing ever read. A role carries a family, size, weight, slant and colour,
@@ -310,11 +338,19 @@ and a box names the role — so a template has one type scale rather than a size
 every box.
 
 **Fonts resolve to bundled stacks, never to a runtime fetch.** A template picks from the
-short list in [fonts.ts](../client/src/components/slide/fonts.ts), and an imported one records
-the source family name and maps it to the nearest available stack. Fetching a font from a
-third party at display time would leak viewers to an external host on every slide view and
-break offline and restricted-network use, so it is not done — the cost is that an imported
-template approximates its original typeface rather than reproducing it.
+short list in [fonts.ts](../client/src/components/slide/fonts.ts), and an imported one maps
+the source family to the nearest available stack. Fetching a font from a third party at
+display time would leak viewers to an external host on every slide view and break offline
+and restricted-network use, so it is not done — the cost is that an imported template
+usually approximates its original typeface rather than reproducing it.
+
+Two faces are the exception. **Frank Ruhl Libre and Montserrat are bundled** and served from
+the app's own origin, so a template naming either reproduces the typeface instead of
+resembling it. Both are under the SIL Open Font License, and only the latin subsets and the
+weights the templates actually set are imported. An import matches those two **by name**,
+ahead of the table that answers "what does this most resemble", so a deck set in Montserrat
+comes home in Montserrat; a relative that is not the face itself, like Montserrat
+Alternates, still approximates.
 
 **The metrics are an authoring aid and nothing else.** The editor draws them as guidelines and
 snaps dragged boxes to them; no renderer reads them. That is deliberate: changing a margin
@@ -374,6 +410,27 @@ metadata ([EXP-8](SPEC.md#exp-8-slot-metadata-across-google-slides-round-trips))
 kind, label, instruction and limits come back verbatim — a code box holding a listing is
 indistinguishable from prose on the slide, so being told is the only way to know. Everything
 else is inferred, and that direction stays lossy.
+
+**The type scale is recovered, not invented.** A presentation is rarely written to a scale
+but is nearly always *set* to one — three or four sizes, used over and over. So the sizes of
+every text box in the deck are clustered, the clusters are ranked, and the conventional
+roles are handed out in that order ([type-scale.ts](../server/src/import/type-scale.ts)):
+the size the deck gives the most **room** to becomes `body`, what sits above it is ranked
+`title` / `sectionTitle` / `heading` by how widely each is used, and what sits below becomes
+`caption`. Each box then names its role and states only where it disagrees with it.
+
+Without this, an imported design of thirty layouts held a hundred private type declarations
+that happened to agree — nothing wrong on screen, and nothing an instructor could edit
+without visiting every box. Two consequences worth knowing:
+
+- Sizes within 8% of one another **collapse onto one**. A title set at 40pt on most slides
+  and 38pt on two of them becomes one role at the size the deck used most, which is the
+  point rather than a side effect — a scale that preserved every accidental nudge would not
+  be a scale.
+- A role takes a colour, weight or family **only when every box following it already stated
+  the same one**, so no box gains type it did not have. Where the boxes disagree, the role
+  states the neutral value the box was already drawn with and the disagreeing boxes keep
+  their own.
 
 **Ceilings are measured, not guessed.** Each layout's `constraints` — how many bullets, how
 long a title — are the **largest actually observed** across the slides that used it, because
@@ -731,20 +788,30 @@ schema in [§4](#4-rendering) can be authored by hand too.
 
 ## 13. What's still deferred
 
-**Import, in both directions.** Everything else in this document is built — the WYSIWYG
-editor ([TMPL-4](SPEC.md#tmpl-4-custom-templates-create--edit--save)) is the authoring path,
-and the per-type layout components it was meant to replace are gone: every layout is data
-now, drawn by `FlowLayout`. What remains:
+**Import is done, in both directions.** This section used to list it as outstanding and no
+longer should: a template from a Google Slides presentation
+([TMPL-8](SPEC.md#tmpl-8-template-import-from-google-slides)), a lecture from one
+([EXP-5](SPEC.md#exp-5-lecture-import-from-google-slides)), and a template re-imported from
+its own YAML export ([EXP-3](SPEC.md#exp-3-round-trip-import)) have all landed — [§6](#6-importing-from-google-slides)
+and [§7](#7-consolidating-a-hand-built-deck) describe them. The WYSIWYG editor
+([TMPL-4](SPEC.md#tmpl-4-custom-templates-create--edit--save)) is the authoring path, and the
+per-type layout components it replaced are gone: every layout is data now, drawn by
+`FlowLayout`.
 
-1. **A template from a Google Slides presentation**
-   ([TMPL-8](SPEC.md#tmpl-8-template-import-from-google-slides)) — the reason
-   `PositionedLayout` and `elementPositions` exist, since an imported design arrives as
-   absolute geometry with no tree. Export already goes the other way.
-2. **A lecture from a Google Slides presentation**
-   ([EXP-5](SPEC.md#exp-5-lecture-import-from-google-slides)).
-3. **Re-importing a template from its own export** — a template downloads as YAML and
-   exports to Slides, but neither comes back ([EXP-3](SPEC.md#exp-3-round-trip-import) on
-   the template side; decks already round-trip through YAML).
+What is genuinely outstanding is **authorability** rather than capability — parts of the
+model that render, export and import correctly but that the editor gives an author no way to
+reach:
+
+1. **Picture decoration cannot be authored.** A layout's `decoration[]` — a band, a logo, a
+   full-bleed background — draws in both renderers and survives every round trip, but only
+   an import or a hand-written JSON file can produce one. In the editor an author can style
+   an empty tree node into a rule or a panel, and can go no further.
+2. **A user-created template has nowhere to put a picture.** `/templates` serves the
+   built-ins' assets out of the repo, and an import stores its own under the template's
+   prefix in object storage. A template authored in the app has neither route.
+3. **Deriving the rest of a design's theme on import.** The type scale is recovered now
+   ([§6](#6-importing-from-google-slides)); `marginX` / `marginY` / `gap` and
+   `imageBackground` are not, so an imported template still states no authoring metrics.
 
 The slide scaling strategy (container-query units) and z-index tiers are in
 [DECISIONS.md](DECISIONS.md).
