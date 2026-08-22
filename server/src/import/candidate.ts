@@ -95,6 +95,35 @@ export interface Candidate {
   backgroundImage?: string
 }
 
+/**
+ * The least a box must be able to hold to be CONTENT rather than ornament.
+ *
+ * A design carries text that was never meant to be written into: a decorative
+ * initial, a slide number, a single glyph set large in a corner. Imported as
+ * slots they do three kinds of harm — they sit in the editor as boxes an
+ * author cannot use, they overlap the real content, and worst, the AI is told
+ * a `body` slot holds one character, because a box's budget is derived from
+ * its geometry (`text-metrics`). NYU's own template deck has exactly one: a
+ * 5%-wide box carrying a single violet glyph, which imported as a body slot
+ * with `maxChars: 1`.
+ *
+ * Four characters is below any real word and far below anything a design
+ * would ask an author to write, so the rule costs nothing a content box
+ * wanted. The estimate is the same generous one used everywhere else, so a
+ * box that is merely small keeps its place.
+ */
+const MIN_CONTENT_CHARS = 4
+
+const holdsAWord = (element: SourceElement): boolean => {
+  if (element.kind === 'image' || element.kind === 'table') return true
+  const size = sizeOf(element)
+  if (!size) return true // no stated size: nothing to judge it by
+  const { box } = element
+  const perLine = Math.max(1, Math.floor((box.w * 100) / (size * 0.5)))
+  const lines = Math.max(1, Math.floor((box.h * 56.25) / (size * 1.5)))
+  return perLine * lines >= MIN_CONTENT_CHARS
+}
+
 /** Google's placeholder types, in the vocabulary a layout uses. */
 const FROM_PLACEHOLDER: Record<string, string> = {
   TITLE: 'title',
@@ -211,7 +240,9 @@ export const candidateOf = (
   declared?: SlotSpec[],
 ): Candidate => {
   const byName = new Map((declared ?? []).map(spec => [spec.name, spec]))
-  const content = page.elements.filter(e => e.kind !== 'decoration')
+  const content = page.elements.filter(
+    e => e.kind !== 'decoration' && holdsAWord(e),
+  )
   const withKinds = content.map(element => ({
     element,
     kind: kindOf(element),
