@@ -21,13 +21,16 @@ interface Props {
   source: string
   /** The language the slot declares. An unknown one shows plainly. */
   language?: string
+  /** What the block sits on, from the template's palette (`codeSurface`). */
+  surface?: string
 }
 
 /** The listing with no colours — the shape of the box, exactly. */
-const Plain = ({ source, language }: Props) => (
+const Plain = ({ source, language, surface }: Props) => (
   <pre
-    className="hljs overflow-auto rounded-[0.8cqi] p-[1.5cqi] text-start font-mono text-[2cqi] leading-[1.5] whitespace-pre"
+    className="hljs overflow-auto rounded-[0.8cqi] p-[1.5cqi] text-start font-mono text-[2cqi] leading-[1.5] whitespace-pre w-max min-w-full box-border"
     data-language={language ?? undefined}
+    style={surface ? { background: surface } : undefined}
   >
     <code>{source}</code>
   </pre>

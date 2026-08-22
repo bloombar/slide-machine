@@ -21,6 +21,19 @@ export interface ThemeColors {
    * back to the accent color. */
   highlighterColor: string
   /**
+   * What is painted behind a picture (TMPL-4).
+   *
+   * A photograph covers its box and needs nothing behind it, but a diagram,
+   * a logo or a chart exported with a transparent ground does: on a pale
+   * slide its dark strokes vanish, and on a dark one its dark strokes do.
+   * The design says what those pictures sit on, so an instructor dropping a
+   * transparent PNG onto a slide gets a readable one without editing it.
+   *
+   * Transparent unless a template states otherwise, so nothing an existing
+   * design draws today moves.
+   */
+  imageBackground: string
+  /**
    * What a hyperlink is drawn in (TMPL-8).
    *
    * A box carries one colour and every run in it is drawn in that one, so an
@@ -48,10 +61,46 @@ export const themeColors = (theme: Record<string, unknown>): ThemeColors => {
     text,
     muted: color(theme, 'muted', '#94a3b8'),
     accent,
+    imageBackground: color(theme, 'imageBackground', 'transparent'),
     penColor: color(theme, 'penColor', text),
     highlighterColor: color(theme, 'highlighterColor', accent),
     link: color(theme, 'link', accent),
   }
+}
+
+/** Perceived lightness of a hex colour, 0–1. */
+const luminance = (hex: string): number => {
+  const v = hex.replace('#', '')
+  const full =
+    v.length === 3
+      ? v
+          .split('')
+          .map(c => c + c)
+          .join('')
+      : v
+  const n = Number.parseInt(full, 16)
+  if (!Number.isFinite(n) || full.length !== 6) return 1
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+  return (0.2126 * r! + 0.7152 * g! + 0.0722 * b!) / 255
+}
+
+/**
+ * What a program listing sits on.
+ *
+ * The highlighter's colours are built for a dark ground, so the block stays
+ * dark whatever the template — but it is the TEMPLATE's dark rather than the
+ * highlighter's. Left to itself every deck got GitHub's blue-black, which on
+ * a violet-and-white design reads as a screenshot of somebody else's editor
+ * rather than as part of the slide.
+ *
+ * The darkest colour the theme already states is used, so the block belongs
+ * to the palette: a near-black on a light design, the surface on a dark one.
+ */
+export const codeSurface = (colors: ThemeColors): string => {
+  const darkest = [colors.surface, colors.text, colors.background]
+    .filter(c => typeof c === 'string' && c.startsWith('#'))
+    .sort((a, b) => luminance(a) - luminance(b))[0]
+  return darkest && luminance(darkest) < 0.45 ? darkest : '#1c1917'
 }
 
 /**

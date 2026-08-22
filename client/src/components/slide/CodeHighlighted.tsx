@@ -72,6 +72,8 @@ interface Props {
   source: string
   /** The language the slot declares. An unknown one shows plainly. */
   language?: string
+  /** What the block sits on, from the template's palette (`codeSurface`). */
+  surface?: string
 }
 
 /**
@@ -100,7 +102,7 @@ const fitSize = (source: string): number => {
   return Math.max(MIN_SIZE, Math.min(MAX_SIZE, fits))
 }
 
-export default function SlideCode({ source, language }: Props) {
+export default function SlideCode({ source, language, surface }: Props) {
   const resolved = resolveLanguage(language)
   const html = useMemo(() => {
     if (!resolved) return undefined
@@ -123,8 +125,11 @@ export default function SlideCode({ source, language }: Props) {
       // longest line on the slide, but it is a calculation against an assumed
       // box — when it is wrong, a line the reader can reach beats one silently
       // cut off mid-token.
-      className="hljs overflow-auto rounded-[0.8cqi] p-[1.5cqi] text-start font-mono leading-[1.5] whitespace-pre"
-      style={{ fontSize: `${fitSize(source)}cqi` }}
+      className="hljs overflow-auto rounded-[0.8cqi] p-[1.5cqi] text-start font-mono leading-[1.5] whitespace-pre w-max min-w-full box-border"
+      style={{
+        fontSize: `${fitSize(source)}cqi`,
+        ...(surface ? { background: surface } : {}),
+      }}
       data-language={resolved ?? language ?? undefined}
     >
       {html === undefined ? (

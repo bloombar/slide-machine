@@ -230,6 +230,7 @@
       "text": "Texte",
       "muted": "Texte atténué",
       "accent": "Accent",
+      "imageBackground": "Derrière les images",
       "penColor": "Stylo du tableau",
       "highlighterColor": "Surligneur du tableau"
     },

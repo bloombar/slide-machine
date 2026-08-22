@@ -230,6 +230,7 @@
       "text": "Texto",
       "muted": "Texto atenuado",
       "accent": "Acento",
+      "imageBackground": "Detrás de las imágenes",
       "penColor": "Rotulador de pizarra",
       "highlighterColor": "Marcador de pizarra"
     },

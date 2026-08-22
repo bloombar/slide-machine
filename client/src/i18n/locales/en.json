@@ -230,6 +230,7 @@
       "text": "Text",
       "muted": "Muted text",
       "accent": "Accent",
+      "imageBackground": "Behind images",
       "penColor": "Whiteboard pen",
       "highlighterColor": "Whiteboard highlighter"
     },
