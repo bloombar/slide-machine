@@ -127,10 +127,12 @@ test('in-place editing in the viewer, including list view and bullets', async ({
   )
 
   // The quote layout's caption was empty and hidden before the switch — the
-  // blank slot shows the invitation every slide tool shows, quietly, and a
-  // page-background click flashes it as a skeleton, fading on its own
+  // blank slot carries the invitation every slide tool shows, but keeps it
+  // transparent so a lecturer presenting never projects it; a page-background
+  // click flashes the box as a skeleton, fading on its own
   const blankCaption = page.getByTitle('Click to edit Slide caption')
   await expect(blankCaption).toHaveText('Click to add text')
+  await expect(blankCaption).toHaveCSS('color', 'rgba(0, 0, 0, 0)')
   await page
     .locator('div.max-w-5xl')
     .first()
@@ -140,6 +142,22 @@ test('in-place editing in the viewer, including list view and bullets', async ({
     'rgba(148, 163, 184, 0.35)',
   )
   await expect(blankCaption).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  await expect(blankCaption).toHaveCSS('color', 'rgba(0, 0, 0, 0)')
+
+  // The slide's own background, between its boxes, flashes them the same way
+  await page
+    .getByTestId('slide')
+    .first()
+    .click({ position: { x: 5, y: 5 } })
+  await expect(blankCaption).toHaveCSS(
+    'background-color',
+    'rgba(148, 163, 184, 0.35)',
+  )
+  await expect(blankCaption).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  // Hovering one draws it for the editor — words and dashed box together —
+  // and holds still, unlike the half-second flash above
+  await blankCaption.hover()
+  await expect(blankCaption).not.toHaveCSS('color', 'rgba(0, 0, 0, 0)')
   await blankCaption.click()
   await page
     .getByRole('textbox', { name: 'Slide caption' })

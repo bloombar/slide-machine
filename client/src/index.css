@@ -11,30 +11,35 @@
   }
 }
 
-/* Blank slide slots: invisible to the audience by default — their
-   placeholder text is transparent. Hovering one, or clicking the page
-   background (which stamps data-reveal-blanks on the deck viewer),
-   surfaces a subtle skeleton so editors can find and click into them. */
 /*
  * An empty box in an editable slide.
  *
- * It used to be invisible until hovered, which meant an imported design
- * looked like a blank coloured page: the boxes were there, correctly placed,
- * and nothing said so. Every slide tool an instructor has used draws the empty
- * box and its invitation, so this does too — a dashed outline and the prompt,
- * both quiet enough to read as scaffolding rather than as content.
+ * Nothing is drawn at rest. A blank slot is styled only where there is an
+ * `onEdit`, and a lecturer presenting their own deck is still its owner — so
+ * a permanently drawn box and its "Click to add text" get projected to the
+ * room. The text stays in the DOM, sized, named and clickable; it is just
+ * transparent, and no box is drawn around it.
+ *
+ * On demand it draws itself the way every slide tool an instructor has used
+ * draws one — a dashed outline and the invitation, quiet enough to read as
+ * scaffolding rather than as content. That is on hover, or while the deck
+ * viewer carries data-reveal-blanks (stamped for half a second by a click on
+ * the page background), so an editor can find every blank slot at a glance.
  *
  * `outline` rather than `border`: it is drawn outside the box's own size, so
- * showing it cannot nudge the text of a box that has content beside it.
+ * revealing it cannot nudge the text of a box that has content beside it.
+ * `currentColor` in the outline resolves to the `color` set beside it, so the
+ * outline and the words fade in together and match the slide's own palette.
  */
 .slot-blank {
-  color: color-mix(in srgb, currentColor 55%, transparent);
+  color: transparent;
   user-select: none;
-  outline: 0.15cqi dashed color-mix(in srgb, currentColor 35%, transparent);
-  outline-offset: 0.4cqi;
   border-radius: 0.4cqi;
 }
 span.slot-blank:hover,
 [data-reveal-blanks] .slot-blank {
+  color: color-mix(in srgb, currentColor 55%, transparent);
   background-color: rgb(148 163 184 / 0.35);
+  outline: 0.15cqi dashed color-mix(in srgb, currentColor 35%, transparent);
+  outline-offset: 0.4cqi;
 }

@@ -188,8 +188,9 @@ function TextSlot({ slot, spec, descriptor, slide, onEdit }: SlotEditorProps) {
       renderValue={v => (
         <SlideMarkdown text={v} inline={!multiline} links={false} />
       )}
-      // Empty slots (e.g. after a layout switch) stay clickable via a
-      // muted call-to-action placeholder
+      // Empty slots (e.g. after a layout switch) stay clickable: the
+      // call-to-action sizes and names the target, and shows itself on
+      // hover or a background click rather than to the room (index.css)
       emptyDisplay={addPrompt(slot, t)}
       placeholderStyle
       hint={slotGuidance(spec, t)}
