@@ -125,7 +125,7 @@ export default function SlideCode({ source, language, surface }: Props) {
       // longest line on the slide, but it is a calculation against an assumed
       // box — when it is wrong, a line the reader can reach beats one silently
       // cut off mid-token.
-      className="hljs overflow-auto rounded-[0.8cqi] p-[1.5cqi] text-start font-mono leading-[1.5] whitespace-pre w-max min-w-full box-border"
+      className="hljs overflow-auto rounded-[0.8cqi] p-[1.5cqi] text-start font-mono leading-[1.5] w-full box-border whitespace-pre"
       style={{
         fontSize: `${fitSize(source)}cqi`,
         ...(surface ? { background: surface } : {}),

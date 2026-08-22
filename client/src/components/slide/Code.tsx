@@ -28,7 +28,7 @@ interface Props {
 /** The listing with no colours — the shape of the box, exactly. */
 const Plain = ({ source, language, surface }: Props) => (
   <pre
-    className="hljs overflow-auto rounded-[0.8cqi] p-[1.5cqi] text-start font-mono text-[2cqi] leading-[1.5] whitespace-pre w-max min-w-full box-border"
+    className="hljs overflow-auto rounded-[0.8cqi] p-[1.5cqi] text-start font-mono text-[2cqi] leading-[1.5] w-full box-border whitespace-pre"
     data-language={language ?? undefined}
     style={surface ? { background: surface } : undefined}
   >
