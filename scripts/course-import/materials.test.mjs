@@ -36,6 +36,7 @@ beforeAll(() => {
   fs.writeFileSync(path.join(dir, 'images', 'waterfall.png'), 'png-bytes')
   fs.writeFileSync(path.join(dir, 'images', 'crisis.pdf'), 'pdf-bytes')
   fs.writeFileSync(path.join(dir, 'images', 'notes.txt'), 'text')
+  fs.writeFileSync(path.join(dir, 'images', 'chart.drawio'), 'xml')
   fs.writeFileSync(path.join(dir, 'assets', deckName, 'diagram.png'), 'png')
 })
 
@@ -215,10 +216,10 @@ describe('mimeFor', () => {
     expect(mimeFor('a.png')).toBe('image/png')
     expect(mimeFor('a.JPG')).toBe('image/jpeg')
     expect(mimeFor('a.pdf')).toBe('application/pdf')
+    expect(mimeFor('a.txt')).toBe('text/plain')
   })
 
   it('refuses anything the route would reject', () => {
-    expect(mimeFor('a.txt')).toBe(null)
     expect(mimeFor('a.drawio')).toBe(null)
     expect(mimeFor('a.gif')).toBe(null)
   })
@@ -284,7 +285,7 @@ describe('materialsFor', () => {
           { type: 'image', alt: 'Waterfall', url: '../images/waterfall.png' },
           {
             type: 'paragraph',
-            text: 'A [handout](../images/notes.txt) and a [remote one](https://x.test/a.pdf) and a [gone](../images/absent.png).',
+            text: 'A [handout](../images/notes.txt) and a [diagram](../images/chart.drawio) and a [remote one](https://x.test/a.pdf) and a [gone](../images/absent.png).',
           },
         ],
       },
@@ -297,11 +298,16 @@ describe('materialsFor', () => {
       deckName,
       lectureTitle: 'What is Software Engineering',
     })
-    expect(uploads).toHaveLength(1)
+    expect(uploads).toHaveLength(2)
     expect(uploads[0]).toMatchObject({
       name: 'waterfall.png',
       mime: 'image/png',
       filePath: path.join(dir, 'images', 'waterfall.png'),
+    })
+    // A plain-text handout is material too, not a near-miss (SEED-1)
+    expect(uploads[1]).toMatchObject({
+      name: 'notes.txt',
+      mime: 'text/plain',
     })
     expect(uploads[0].caption).toContain('Waterfall')
     expect(uploads[0].caption).toContain('Process models')

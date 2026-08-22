@@ -213,8 +213,8 @@ describe('upload authorization and validation', () => {
       ada,
       { projectId },
       {
-        name: 'notes.txt',
-        type: 'text/plain',
+        name: 'slides.key',
+        type: 'application/x-iwork-keynote-sffkey',
         body: Buffer.from('hello'),
       },
     )
@@ -297,6 +297,41 @@ describe('extraction pipeline', () => {
     expect(children[0]!.status).toBe('ready')
     expect(children[0]!.name).toContain('cell-membrane.png')
     expect(children[0]!.imageUrl).toMatch(/^\/api\/files\//)
+  })
+
+  it('extracts text from plain-text files', async () => {
+    const res = await uploadFile(
+      ada,
+      { projectId },
+      {
+        name: 'handout.txt',
+        type: 'text/plain',
+        body: Buffer.from('\ufeffOsmosis moves water across a membrane'),
+      },
+    )
+    expect(res.status).toBe(201)
+    expect(res.body.type).toBe('doc')
+    const asset = await settled(res.body.id)
+    expect(asset.status).toBe('ready')
+    expect(asset.text).toBe('Osmosis moves water across a membrane')
+  })
+
+  /** Browsers and CLIs label .txt inconsistently; the extension decides. */
+  it('takes a .txt sent as a generic binary', async () => {
+    const res = await uploadFile(
+      ada,
+      { projectId },
+      {
+        name: 'reading.txt',
+        type: 'application/octet-stream',
+        body: Buffer.from('Diffusion follows the concentration gradient'),
+      },
+    )
+    expect(res.status).toBe(201)
+    expect(res.body.type).toBe('doc')
+    const asset = await settled(res.body.id)
+    expect(asset.status).toBe('ready')
+    expect(asset.text).toContain('Diffusion follows')
   })
 
   it('marks unparseable files failed without surfacing errors', async () => {
@@ -553,7 +588,11 @@ describe('seed upload metering', () => {
     const res = await uploadFile(
       ada,
       { projectId },
-      { name: 'notes.txt', type: 'text/plain', body: Buffer.from('hello') },
+      {
+        name: 'slides.key',
+        type: 'application/x-iwork-keynote-sffkey',
+        body: Buffer.from('hello'),
+      },
     )
 
     expect(res.status).toBe(400)

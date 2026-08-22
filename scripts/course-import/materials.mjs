@@ -25,6 +25,8 @@ const MIME_BY_EXT = {
   '.pdf': 'application/pdf',
   '.docx':
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.txt': 'text/plain',
+  '.md': 'text/plain',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
@@ -48,7 +50,7 @@ const cleanTarget = url =>
 
 /** Extensions worth reporting on: the ones the route takes, plus the
  * near-misses an instructor would want told about (a `.gif` or `.svg`
- * diagram, a `.doc`, a `.txt` handout). A web page and a link to another
+ * diagram, a `.doc` handout). A web page and a link to another
  * lecture are neither — `../version-control-systems` and `…/index.htm` are
  * navigation, not material. */
 const MATERIAL_EXT =

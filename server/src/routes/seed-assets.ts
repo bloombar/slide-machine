@@ -27,9 +27,34 @@ const ACCEPTED: Record<string, SeedAsset['type']> = {
   'application/pdf': 'pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
     'doc',
+  'text/plain': 'doc',
   'image/png': 'image',
   'image/jpeg': 'image',
   'image/webp': 'image',
+}
+
+/** Some clients label a .txt as a generic binary; the extension settles
+ * the plain-text formats browsers are least reliable about. */
+const EXTENSION_MIME: Record<string, string> = {
+  txt: 'text/plain',
+  md: 'text/plain',
+}
+
+/**
+ * Asset type and canonical MIME type of an upload, from the declared
+ * MIME type or, failing that, the file extension. Undefined when the
+ * file is not seed material.
+ */
+const resolveUpload = (
+  mimeType: string,
+  name: string,
+): { type: SeedAsset['type']; mimeType: string } | undefined => {
+  const declared = ACCEPTED[mimeType]
+  if (declared) return { type: declared, mimeType }
+  const ext = name.split('.').pop()?.toLowerCase() ?? ''
+  const byExt = EXTENSION_MIME[ext]
+  const type = byExt ? ACCEPTED[byExt] : undefined
+  return type && byExt ? { type, mimeType: byExt } : undefined
 }
 
 const upload = multer({
@@ -46,14 +71,15 @@ seedAssetsRouter.post(
   async (req, res) => {
     const file = req.file
     if (!file) throw new HttpError(400, 'bad_request', 'No file uploaded')
-    const type = ACCEPTED[file.mimetype]
-    if (!type) {
+    const resolved = resolveUpload(file.mimetype, file.originalname ?? '')
+    if (!resolved) {
       throw new HttpError(
         400,
         'unsupported_type',
-        'Only PDF, DOCX, PNG, JPEG, and WebP files are accepted',
+        'Only PDF, DOCX, TXT, PNG, JPEG, and WebP files are accepted',
       )
     }
+    const { type, mimeType } = resolved
 
     const projectId = String(req.body.projectId ?? '')
     const deckId = req.body.deckId ? String(req.body.deckId) : undefined
@@ -96,13 +122,13 @@ seedAssetsRouter.post(
     // Keep the original: images serve from here; docs allow reprocessing
     const storage = getStorage()
     const key = `seed/${asset._id.toString()}/${randomUUID()}-${name.replace(/[^\w.-]+/g, '_')}`
-    await storage.put(key, file.buffer, file.mimetype)
+    await storage.put(key, file.buffer, mimeType)
     asset.storageKey = key
     if (type === 'image') asset.imageUrl = storage.publicUrl(key)
     await asset.save()
 
     res.status(201).json(toSeedAssetDto(asset))
 
-    void processSeedAsset(asset._id.toString(), file.buffer, file.mimetype)
+    void processSeedAsset(asset._id.toString(), file.buffer, mimeType)
   },
 )

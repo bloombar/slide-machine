@@ -923,9 +923,9 @@
   "seed": {
     "notesHeading": "Notas de referencia",
     "materialHeading": "Material de referencia",
-    "upload": "Subir un PDF, un DOCX o una foto",
+    "upload": "Subir un PDF, un DOCX, un TXT o una foto",
     "uploadLabel": "Subir material de referencia",
-    "uploadFailed": "Error al subir: PDF, DOCX o imágenes de hasta 20 MB",
+    "uploadFailed": "Error al subir: PDF, DOCX, TXT o imágenes de hasta 20 MB",
     "orDrop": "o arrastra y suelta un archivo",
     "empty": "Todavía no hay material de referencia.",
     "use": "Usar",

@@ -923,9 +923,9 @@
   "seed": {
     "notesHeading": "Seed notes",
     "materialHeading": "Seed material",
-    "upload": "Upload PDF, DOCX, or photo",
+    "upload": "Upload PDF, DOCX, TXT, or photo",
     "uploadLabel": "Upload seed material",
-    "uploadFailed": "Upload failed — PDF, DOCX, or images up to 20 MB",
+    "uploadFailed": "Upload failed — PDF, DOCX, TXT, or images up to 20 MB",
     "orDrop": "or drag and drop a file",
     "empty": "No seed material yet.",
     "use": "Use",

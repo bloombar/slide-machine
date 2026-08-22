@@ -1,11 +1,12 @@
 /**
- * Baseline seed-content extraction (SEED-1/SEED-2): PDFs and DOCX yield
- * text; DOCX embedded photos become their own image assets; uploaded
- * images become photo assets directly. Runs fire-and-forget after the
- * upload response, never throws to the caller, and marks the asset
- * 'failed' quietly on any error. The AI tier (ai-extract.ts) layers on
- * when GEMINI_API_KEY exists: vision captions/keywords for photos and
- * OCR for scanned PDFs; without a key the baseline stands unchanged.
+ * Baseline seed-content extraction (SEED-1/SEED-2): PDFs, DOCX, and
+ * plain-text files yield text; DOCX embedded photos become their own
+ * image assets; uploaded images become photo assets directly. Runs
+ * fire-and-forget after the upload response, never throws to the
+ * caller, and marks the asset 'failed' quietly on any error. The AI
+ * tier (ai-extract.ts) layers on when GEMINI_API_KEY exists: vision
+ * captions/keywords for photos and OCR for scanned PDFs; without a key
+ * the baseline stands unchanged.
  */
 import AdmZip from 'adm-zip'
 import mammoth from 'mammoth'
@@ -45,6 +46,10 @@ const pdfText = async (buffer: Buffer): Promise<string> => {
   const { text } = await extractText(pdf, { mergePages: true })
   return text
 }
+
+/** Plain text arrives ready to use; only the stray BOM needs removing. */
+const plainText = (buffer: Buffer): string =>
+  buffer.toString('utf8').replace(/^\ufeff/, '')
 
 const docxText = async (buffer: Buffer): Promise<string> => {
   const { value } = await mammoth.extractRawText({ buffer })
@@ -115,6 +120,8 @@ export const processSeedAsset = async (
         text = (await ocrPdf(buffer)) ?? text
       }
       asset.text = text.slice(0, MAX_TEXT_CHARS)
+    } else if (mimeType === 'text/plain') {
+      asset.text = plainText(buffer).slice(0, MAX_TEXT_CHARS)
     } else if (mimeType.startsWith('image/')) {
       // The upload route already stored the binary and set imageUrl
       asset.keywords = [

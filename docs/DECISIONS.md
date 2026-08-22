@@ -147,13 +147,13 @@ Two rules keep this working:
 
 ## Seed material: upload → keyless extraction → generation (2026-07-11)
 
-**Problem.** [SEED-1](SPEC.md#seed-1-document-seeding)/[2](SPEC.md#seed-2-image-seeding) need instructor documents (PDF/DOCX/photos) feeding slide generation and image enrichment, and this had to work before any AI credential (Gemini) was guaranteed — so the baseline could not hard-depend on a key.
+**Problem.** [SEED-1](SPEC.md#seed-1-document-seeding)/[2](SPEC.md#seed-2-image-seeding) need instructor documents (PDF/DOCX/TXT/photos) feeding slide generation and image enrichment, and this had to work before any AI credential (Gemini) was guaranteed — so the baseline could not hard-depend on a key.
 
 **Choice.** A two-tier pipeline where the baseline needs no keys:
 
 - **Storage** behind a `FileStorage` seam ([storage/index.ts](../server/src/storage/index.ts)): `local` (disk + `GET /api/files/*`, the dev/test default) or `s3` (MinIO/DO Spaces), selected by `STORAGE_PROVIDER`.
-- **Upload** (`POST /api/seed-assets`, 20 MB, PDF/DOCX/PNG/JPEG/WebP) answers immediately with a `processing` asset; extraction runs fire-and-forget and settles to `ready`/`failed` — the same fault-tolerant background pattern as image enrichment. Project-level uploads are owner-only; lecture-level follow deck edit rights.
-- **Baseline extraction** ([seeding/extract.ts](../server/src/seeding/extract.ts)): PDF text via unpdf, DOCX text via mammoth plus embedded photos (≥10 KiB, ≤12) spun into their own image assets, uploaded photos used directly with caption-derived keywords. The **AI tier** ([seeding/ai-extract.ts](../server/src/seeding/ai-extract.ts) — vision captions, OCR, summarization) is implemented and layers on inside `processSeedAsset` automatically whenever `GEMINI_API_KEY` is present; it returns null (never throws) without a key, so the keyless baseline stands unchanged.
+- **Upload** (`POST /api/seed-assets`, 20 MB, PDF/DOCX/TXT/PNG/JPEG/WebP — a `.txt` or `.md` mislabelled as a generic binary is taken on its extension) answers immediately with a `processing` asset; extraction runs fire-and-forget and settles to `ready`/`failed` — the same fault-tolerant background pattern as image enrichment. Project-level uploads are owner-only; lecture-level follow deck edit rights.
+- **Baseline extraction** ([seeding/extract.ts](../server/src/seeding/extract.ts)): PDF text via unpdf, DOCX text via mammoth plus embedded photos, plain text decoded as UTF-8 (≥10 KiB, ≤12) spun into their own image assets, uploaded photos used directly with caption-derived keywords. The **AI tier** ([seeding/ai-extract.ts](../server/src/seeding/ai-extract.ts) — vision captions, OCR, summarization) is implemented and layers on inside `processSeedAsset` automatically whenever `GEMINI_API_KEY` is present; it returns null (never throws) without a key, so the keyless baseline stands unchanged.
 - **Payoffs**: enabled assets' text joins the structured seed layers (`seedContext: { project, deck }`, additive, deck outranks project; 8k chars/layer). Seeded photos enter the enrichment pool with source prior **1.2 — above every web source** — and a model-selected `seededImageId` short-circuits search entirely (`imageSource: 'seeded'`, [IMG-1](SPEC.md#img-1-real-time-image-enrichment)).
 
 ## Access control: project-level ACLs with lecture inheritance (2026-07-12)
