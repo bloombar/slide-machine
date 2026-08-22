@@ -254,20 +254,36 @@ const assignRoles = (
   bulletCluster: Cluster | undefined,
 ): Map<Cluster, string> => {
   const roles = new Map<Cluster, string>()
-  /** How much of the page this cluster's prose covers. */
-  const prose = (c: Cluster) =>
-    c.slots
-      .filter(s => s.kind === 'text')
-      .reduce((total, s) => total + s.box.w * s.box.h, 0)
+  /** How many of the deck's prose boxes are set at this size. */
+  const prose = (c: Cluster) => c.slots.filter(s => s.kind === 'text').length
 
-  // The body anchor: the prose size the deck gives the most room to, or — in
-  // a deck that is all lists — the list size, so there is still a middle to
-  // rank from. Two sizes given equal room settle on the smaller, since the
-  // reading size of a design is never the larger of two equals.
+  /**
+   * The body anchor: the SMALLEST prose size the deck uses substantially, or —
+   * in a deck that is all lists — the list size, so there is still a middle to
+   * rank from.
+   *
+   * Both halves of that are load-bearing, and each fixes a way the other
+   * fails. Taking the most-used size alone gets a TEMPLATE deck backwards: an
+   * official template deck is mostly title and statement slides, and NYU's
+   * runs twelve display boxes against ten of body — so "most used" and "most
+   * page area" both called its 5.8cqi display size the reading size, which
+   * left the deck with no `body` role at all and set its paragraphs in
+   * `caption`. Taking the smallest size alone is worse: that is the caption,
+   * on every deck that has one.
+   *
+   * Together they say what a reading size actually is — the smallest size a
+   * design uses OFTEN. A caption is small and rare, a title is common and
+   * large, and body is the only thing that is both small and common.
+   *
+   * "Substantially" is measured against the deck's own most-used prose size
+   * rather than an absolute figure, so this reads the same whatever units or
+   * type scale a deck happens to be drawn at.
+   */
+  const busiest = Math.max(0, ...clusters.map(prose))
   const anchor =
     [...clusters]
-      .sort((a, b) => prose(b) - prose(a) || a.size - b.size)
-      .find(c => prose(c) > 0) ?? bulletCluster
+      .filter(c => prose(c) > 0 && prose(c) * 2 > busiest)
+      .sort((a, b) => a.size - b.size)[0] ?? bulletCluster
   if (!anchor) return roles
 
   const above = clusters
