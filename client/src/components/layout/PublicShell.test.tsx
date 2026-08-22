@@ -10,6 +10,7 @@ import { setAccessToken } from '../../auth/token'
 import PublicShell from './PublicShell'
 import { ShellTitle, ShellTitleProvider } from './ShellTitle'
 import { mockFetchRoutes } from '../../test/fetch-mock'
+import { getBadgeUrl } from './badge'
 
 const renderShell = (refreshStatus: number) => {
   mockFetchRoutes({
@@ -77,7 +78,9 @@ describe('PublicShell', () => {
     const brand = await screen.findByRole('link', { name: /slide machine/i })
     const badge = brand.querySelector('img')
     expect(badge).toBeInTheDocument()
-    expect(badge).toHaveAttribute('src', expect.stringContaining('badge'))
+    // Vite inlines the mark, so the src is a data: URI rather than a
+    // filename — what matters is that it is the badge the app ships.
+    expect(badge).toHaveAttribute('src', getBadgeUrl())
     expect(badge).toHaveAttribute('alt', '')
     const menu = screen.getByRole('button', { name: 'Menu' })
     expect(

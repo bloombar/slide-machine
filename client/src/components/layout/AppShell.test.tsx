@@ -9,6 +9,7 @@ import { AuthProvider } from '../../auth/AuthContext'
 import { setAccessToken } from '../../auth/token'
 import AppShell from './AppShell'
 import { mockFetchRoutes } from '../../test/fetch-mock'
+import { getBadgeUrl } from './badge'
 
 beforeEach(() => {
   setAccessToken(null)
@@ -63,7 +64,9 @@ describe('AppShell', () => {
     const brand = screen.getByRole('link', { name: /slide machine/i })
     const badge = brand.querySelector('img')
     expect(badge).toBeInTheDocument()
-    expect(badge).toHaveAttribute('src', expect.stringContaining('badge'))
+    // Vite inlines the mark, so the src is a data: URI rather than a
+    // filename — what matters is that it is the badge the app ships.
+    expect(badge).toHaveAttribute('src', getBadgeUrl())
     // Decorative: the link's own label already names the destination
     expect(badge).toHaveAttribute('alt', '')
     // Badge sits between the hamburger button and the title text

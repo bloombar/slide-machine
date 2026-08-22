@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 89" role="img" aria-label="The Slide Machine">
+    <rect x="0" y="0" width="100" height="70" rx="18" fill="#000"></rect>
+    <path d="M24 58 L24 89 L50 64 Z" fill="#000"></path>
+    <rect x="18" y="13" width="64" height="44" rx="5" fill="#fff"></rect>
+    <rect x="24" y="24" width="26" height="22" rx="3" fill="#000"></rect>
+    <rect x="56" y="26" width="20" height="6" rx="3" fill="#000"></rect>
+    <rect x="56" y="38" width="13" height="6" rx="3" fill="#000"></rect>
+</svg>
