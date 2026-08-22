@@ -141,8 +141,15 @@ export const useFitText = (
      * width took those boxes to the floor with their height half empty,
      * still four pixels over at three-point type.
      */
-    const fits = (): boolean =>
-      el.scrollHeight <= el.clientHeight + slackFor(el)
+    // Measured once per pass, not per step. `slackFor` reads computed style,
+    // and asking for it inside the search meant a style recalculation for
+    // every one of the twenty-four steps, on every box, every time a box was
+    // observed — hundreds of forced synchronous layouts per frame in a list
+    // of a hundred slides. The type size changes as the search runs, so the
+    // slack is taken from the size the design ASKS for, which is the size the
+    // overhang it exists to tolerate is measured against.
+    let slack = 1
+    const fits = (): boolean => el.scrollHeight <= el.clientHeight + slack
 
     const measure = () => {
       // A box with no size yet — still being laid out, or hidden — cannot be
@@ -152,6 +159,7 @@ export const useFitText = (
       // Start from full size: the content may have got shorter, and a box
       // that only ever shrank would stay small for the rest of the session.
       el.style.setProperty('--fit-scale', '1')
+      slack = slackFor(el)
       if (fits()) {
         setScale(1)
         setOverflowing(false)
