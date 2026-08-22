@@ -1,9 +1,11 @@
 /**
- * Integration tests for on-demand image sourcing (EDIT-3 + IMG-1): moving
- * a slide onto a layout with an image slot, while it has no image yet,
- * derives search keywords from the slide's text and runs background
- * enrichment. Text-only layouts and slides that already have an image are
- * left alone.
+ * Integration tests for on-demand image sourcing (EDIT-3 + IMG-1): a slide on
+ * a layout with an image slot, while it has no image yet, derives search
+ * keywords from the slide's text and runs background enrichment. That holds
+ * whether the slide arrived there by a layout switch or by having its content
+ * filled in on an image layout from the start — the way an imported lecture
+ * is built. Text-only layouts and slides that already have an image are left
+ * alone.
  */
 import {
   describe,
@@ -340,5 +342,98 @@ describe('slide.setLayout image sourcing', () => {
     expect(res.status).toBe(200)
     expect(res.body.imageKeywords).toBeUndefined()
     expect(res.body.imageRef).toBeUndefined()
+  })
+})
+
+/**
+ * A slide built the way the course importer builds one: `slide.add` names the
+ * layout and `slide.editContent` fills its boxes, with no layout switch
+ * anywhere. Every imported lecture is made this way, so a picture box left
+ * empty here is empty in every imported deck.
+ */
+describe('slide.editContent image sourcing', () => {
+  it('sources an image for a slide whose content arrives on an image layout', async () => {
+    const added = await act(ada, 'slide.add', {
+      deckId,
+      layoutType: 'two-column',
+    })
+    expect(added.status).toBe(200)
+    stubImageApis()
+
+    const res = await act(ada, 'slide.editContent', {
+      slideId: added.body.id,
+      slots: {
+        title: { kind: 'text', value: 'The Mitochondria' },
+        body: { kind: 'text', value: 'Cell biology' },
+      },
+    })
+    expect(res.status).toBe(200)
+
+    await vi.waitFor(async () => {
+      const slide = await act(ada, 'slide.get', { slideId: added.body.id })
+      expect(slide.body.imageKeywords).toEqual(['mitochondria'])
+      expect(slide.body.imageRef).toBe('http://wiki/mitochondria.png')
+    })
+  })
+
+  /**
+   * The picture-led layout declares an image slot and a caption and nothing
+   * else, so its caption is the only text there is to search on.
+   */
+  it('mines the caption of a picture-led slide that has no other text', async () => {
+    const added = await act(ada, 'slide.add', {
+      deckId,
+      layoutType: 'image-heavy',
+    })
+    stubImageApis()
+
+    await act(ada, 'slide.editContent', {
+      slideId: added.body.id,
+      slots: { caption: { kind: 'text', value: 'Mitochondria' } },
+    })
+
+    await vi.waitFor(async () => {
+      const slide = await act(ada, 'slide.get', { slideId: added.body.id })
+      expect(slide.body.imageKeywords).toEqual(['mitochondria'])
+      expect(slide.body.imageRef).toBe('http://wiki/mitochondria.png')
+    })
+  })
+
+  /** A text-only layout has no box to fill, so nothing is searched for. */
+  it('leaves a slide on a text-only layout alone', async () => {
+    const added = await act(ada, 'slide.add', { deckId, layoutType: 'content' })
+    stubImageApis()
+
+    const res = await act(ada, 'slide.editContent', {
+      slideId: added.body.id,
+      slots: { title: { kind: 'text', value: 'The Mitochondria' } },
+    })
+    expect(res.status).toBe(200)
+    expect(res.body.imageKeywords).toBeUndefined()
+    expect(res.body.imageRef).toBeUndefined()
+  })
+
+  /** A box the import already filled keeps what it was given (IMG-3). */
+  it('does not search for a slide that arrives with its own picture', async () => {
+    const added = await act(ada, 'slide.add', {
+      deckId,
+      layoutType: 'two-column',
+    })
+    stubImageApis()
+
+    const res = await act(ada, 'slide.editContent', {
+      slideId: added.body.id,
+      slots: {
+        title: { kind: 'text', value: 'The Mitochondria' },
+        image: {
+          kind: 'image',
+          ref: 'http://source/own.png',
+          source: 'seeded',
+        },
+      },
+    })
+    expect(res.status).toBe(200)
+    expect(res.body.imageRef).toBe('http://source/own.png')
+    expect(res.body.imageKeywords).toBeUndefined()
   })
 })

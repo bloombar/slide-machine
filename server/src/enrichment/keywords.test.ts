@@ -1,7 +1,7 @@
 /**
  * Unit tests for slide keyword derivation: the title is preferred, then
- * bullets, then body; stopwords and short tokens are dropped, terms are
- * deduped and capped, and a textless slide yields nothing.
+ * bullets, then body, then the caption; stopwords and short tokens are
+ * dropped, terms are deduped and capped, and a textless slide yields nothing.
  */
 import { describe, it, expect } from 'vitest'
 import { deriveImageKeywords } from './keywords'
@@ -35,6 +35,24 @@ describe('deriveImageKeywords', () => {
       'eruption',
       'basics',
     ])
+  })
+
+  /**
+   * The picture-led layout, `image-heavy`, declares an image slot and a
+   * caption and nothing else — so a slide on it has no title, bullets or body
+   * to mine. Without this tier every such slide searches for nothing and its
+   * picture box stays empty for good.
+   */
+  it('falls back to the caption when the slide has no other text', () => {
+    expect(
+      deriveImageKeywords({ caption: 'Waterfall lifecycle diagram' }),
+    ).toEqual(['waterfall', 'lifecycle', 'diagram'])
+  })
+
+  it('prefers a title over a caption', () => {
+    expect(
+      deriveImageKeywords({ title: 'Photosynthesis', caption: 'A green leaf' }),
+    ).toEqual(['photosynthesis'])
   })
 
   it('dedupes repeated words and drops short tokens', () => {
