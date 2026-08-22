@@ -14,7 +14,10 @@
  * A URL that still can't produce a usable image is skipped (best-effort).
  */
 import sharp from 'sharp'
+import path from 'node:path'
+import { readFile } from 'node:fs/promises'
 import { getStorage } from '../storage'
+import { env } from '../config/env'
 
 const USER_AGENT = 'SlideMachine/1.0 (lecture slide export)'
 const MAX_CONCURRENCY = 3
@@ -86,6 +89,36 @@ const imageFrom = async (
 const LOCAL_FILES = '/api/files/'
 
 /**
+ * A picture belonging to a built-in template's design (`templates/assets.ts`).
+ *
+ * Read off disk rather than fetched, for the same reason `/api/files/` is read
+ * from storage: it is ours, and it has no absolute URL. Giving it one would
+ * mean writing this deployment's origin into a template — and a template is
+ * snapshotted when a deck pins it, so a development origin would be frozen
+ * into decks and travel with them.
+ */
+const TEMPLATE_ASSETS = '/templates/'
+
+const fromTemplateAssets = async (
+  url: string,
+): Promise<SlideImage | undefined> => {
+  try {
+    // Confined to the assets directory: the path comes from a template, and
+    // a `..` in it must not reach the rest of the disk.
+    const rel = path.normalize(
+      decodeURIComponent(url.slice(TEMPLATE_ASSETS.length)),
+    )
+    if (rel.startsWith('..') || path.isAbsolute(rel)) return undefined
+    const dir = path.join(env.TEMPLATES_DIR, 'assets')
+    const file = path.join(dir, rel)
+    if (!file.startsWith(dir)) return undefined
+    return imageFrom(new Uint8Array(await readFile(file)))
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * A picture the app stores itself, read straight off storage.
  *
  * The local storage driver hands out a app-relative URL — `/api/files/<key>`
@@ -119,6 +152,7 @@ const fetchOne = async (
   if (!url) return undefined
   // A picture of our own, which has no absolute URL to fetch.
   if (url.startsWith(LOCAL_FILES)) return fromStorage(url)
+  if (url.startsWith(TEMPLATE_ASSETS)) return fromTemplateAssets(url)
   if (!/^https?:\/\//i.test(url)) return undefined
   try {
     const res = await fetch(url, {
