@@ -923,9 +923,9 @@
   "seed": {
     "notesHeading": "Notes sources",
     "materialHeading": "Documents sources",
-    "upload": "Importer un PDF, un DOCX ou une photo",
+    "upload": "Importer un PDF, un DOCX, un TXT ou une photo",
     "uploadLabel": "Importer des documents sources",
-    "uploadFailed": "Échec de l'import — PDF, DOCX ou images jusqu'à 20 Mo",
+    "uploadFailed": "Échec de l'import — PDF, DOCX, TXT ou images jusqu'à 20 Mo",
     "orDrop": "ou déposez un fichier",
     "empty": "Aucun document source pour le moment.",
     "use": "Utiliser",

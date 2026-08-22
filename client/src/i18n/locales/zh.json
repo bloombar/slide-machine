@@ -923,9 +923,9 @@
   "seed": {
     "notesHeading": "参考笔记",
     "materialHeading": "参考材料",
-    "upload": "上传 PDF、DOCX 或照片",
+    "upload": "上传 PDF、DOCX、TXT 或照片",
     "uploadLabel": "上传参考材料",
-    "uploadFailed": "上传失败——支持 20 MB 以内的 PDF、DOCX 或图片",
+    "uploadFailed": "上传失败——支持 20 MB 以内的 PDF、DOCX、TXT 或图片",
     "orDrop": "或拖放文件",
     "empty": "尚无参考材料。",
     "use": "使用",

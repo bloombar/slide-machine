@@ -140,7 +140,7 @@ The root `dev` script passes `--raw` to `concurrently`, which is load-bearing on
 Two unrelated things share the word "seed":
 
 - **Dev database seeding** — `npm run seed -w server` ([server/src/db/seed.ts](../server/src/db/seed.ts)) populates a database with sample users, projects, and lectures so you have something to work against. Prerequisites, the seeded login credentials, quotas, and reset behavior are in [SEEDING.md](SEEDING.md).
-- **Seed-material extraction** — [server/src/seeding/](../server/src/seeding/) is the ingestion pipeline for a **project's uploaded seed content** ([SEED-1](SPEC.md#seed-1-document-seeding)/[SEED-2](SPEC.md#seed-2-image-seeding)): `extract.ts` is the keyless baseline (PDF/DOCX text, embedded + uploaded images), and `ai-extract.ts` is the Gemini tier (vision captions/keywords, OCR for scanned PDFs) that layers on when `GEMINI_API_KEY` is set. Both run fire-and-forget after upload and never throw, so a failed extraction never blocks the request.
+- **Seed-material extraction** — [server/src/seeding/](../server/src/seeding/) is the ingestion pipeline for a **project's uploaded seed content** ([SEED-1](SPEC.md#seed-1-document-seeding)/[SEED-2](SPEC.md#seed-2-image-seeding)): `extract.ts` is the keyless baseline (PDF/DOCX/TXT text, embedded + uploaded images), and `ai-extract.ts` is the Gemini tier (vision captions/keywords, OCR for scanned PDFs) that layers on when `GEMINI_API_KEY` is set. Both run fire-and-forget after upload and never throw, so a failed extraction never blocks the request.
 
 ## Project board
 

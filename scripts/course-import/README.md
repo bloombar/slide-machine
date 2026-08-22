@@ -144,8 +144,8 @@ from its own revision of the notes — a picture the local source names may not
 be served there at all, and a box holding a dead URL shows nothing. Once the
 file is uploaded, the box is repointed at that copy.
 
-Only what the upload route accepts is sent — PDF, DOCX, PNG, JPEG and WebP,
-up to 20 MB. Everything else linked from the lecture is reported at the end of
+Only what the upload route accepts is sent — PDF, DOCX, TXT/MD, PNG, JPEG
+and WebP, up to 20 MB. Everything else linked from the lecture is reported at the end of
 the run with the reason it was left behind: linked off-site, unsupported
 format, over the size limit, or not found on disk. Uploads count against the
 account's import allowance, so `--dry-run` lists exactly what would be sent

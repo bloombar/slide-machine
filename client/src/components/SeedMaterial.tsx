@@ -1,7 +1,7 @@
 /**
  * Seed material manager (SEED-1/SEED-2), used at both levels: upload
- * PDFs, DOCX, or photos; watch extraction settle (the list polls while
- * anything is processing); edit photo captions (which double as
+ * PDFs, DOCX, text files, or photos; watch extraction settle (the list
+ * polls while anything is processing); edit photo captions (which double as
  * enrichment keywords); toggle assets in or out of generation; delete.
  */
 import {
@@ -22,7 +22,7 @@ import {
 } from '../api/seed-assets'
 
 const POLL_MS = 1500
-const ACCEPT = '.pdf,.docx,image/png,image/jpeg,image/webp'
+const ACCEPT = '.pdf,.docx,.txt,.md,text/plain,image/png,image/jpeg,image/webp'
 
 function CaptionField({
   asset,
