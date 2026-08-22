@@ -778,8 +778,7 @@
       "resizeRow": "调整第 {n} 行高度"
     },
     "link": {
-      "open": "按住 Ctrl 点击可打开",
-      "openMac": "按住 ⌘ 点击可打开"
+      "open": "点击打开"
     },
     "addKind": {
       "math": "添加公式",
