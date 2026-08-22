@@ -99,15 +99,27 @@ const extractKeywords = (text: string | undefined): string[] => {
 
 /**
  * Keywords for sourcing an image on a slide, preferring the tightest text
- * the slide offers: its title, then its bullets, then its body. The first
- * tier that yields any term wins, keeping the query focused.
+ * the slide offers: its title, then its bullets, then its body, then its
+ * caption. The first tier that yields any term wins, keeping the query
+ * focused.
+ *
+ * The caption tier is what saves a picture-led layout. `image-heavy`
+ * declares an image slot and a caption and nothing else, so a slide on it
+ * has no title, bullets or body to mine — without the caption there is
+ * nothing to search for, and the slot stays empty for good.
  */
 export const deriveImageKeywords = (slide: {
   title?: string
   bullets?: string[]
   body?: string
+  caption?: string
 }): string[] => {
-  const tiers = [slide.title, slide.bullets?.join(' '), slide.body]
+  const tiers = [
+    slide.title,
+    slide.bullets?.join(' '),
+    slide.body,
+    slide.caption,
+  ]
   for (const tier of tiers) {
     const words = extractKeywords(tier)
     if (words.length) return words

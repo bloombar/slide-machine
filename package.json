@@ -26,6 +26,8 @@
     "caps:derive": "node scripts/pricing/derive-caps.mjs",
     "caps:check": "node scripts/pricing/derive-caps.mjs --check",
     "spaces:lifecycle": "node scripts/spaces/lifecycle.mjs",
+    "course:import": "node scripts/course-import/import-course.mjs",
+    "test:scripts": "vitest run scripts",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

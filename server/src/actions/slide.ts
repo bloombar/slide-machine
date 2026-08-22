@@ -35,7 +35,6 @@ import { registerAction, ActionValidationError } from './dispatch'
 import { SlideModel, toSlideDto } from '../models/slide'
 import { DeckModel, touchDeck } from '../models/deck'
 import { resolveDeckTemplate } from '../templates/versions'
-import { layoutDescriptors } from '../templates/builtin'
 import { registry } from '../providers/registry'
 import { requireAiTokens, requireCapacity } from '../billing/meter-hooks'
 import {
@@ -45,11 +44,11 @@ import {
   slotsOf,
 } from '../lib/slide-slots'
 import { remapSlideTranslations } from '../lib/translate-slides'
-import { imageSlotNames, slotHasImage } from '../lib/image-layout'
-import { enrichSlideImages } from '../enrichment/enrich'
-import type { SlideImageContext } from '../enrichment/types'
-import { deriveImageKeywords } from '../enrichment/keywords'
-import { seedAssetsFor, seededImageCandidates } from '../lib/seed-assets'
+import {
+  applyImageKeywords,
+  emptyImageSlotsOf,
+  sourceEmptyImageSlots,
+} from '../lib/source-images'
 import {
   applySlideTranscript,
   regenerateSlideTranscript,
@@ -128,9 +127,9 @@ export const slideEditContent = defineAction<
     // Slots merge one at a time, so editing one never clears another. A slot
     // the slide's layout does not declare is refused rather than stored: a
     // slide must never hold content the template cannot show.
+    const deck = await DeckModel.findById(slide.deckId)
+    const template = deck ? await resolveDeckTemplate(deck) : undefined
     if (input.slots) {
-      const deck = await DeckModel.findById(slide.deckId)
-      const template = deck ? await resolveDeckTemplate(deck) : undefined
       const declared = new Set(
         template?.layouts
           .find(l => l.type === slide.layoutType)
@@ -149,8 +148,30 @@ export const slideEditContent = defineAction<
       slide.slots = next
       slide.markModified('slots')
     }
+
+    // Content arriving on a layout with an empty picture box leaves a hole
+    // nothing else fills: a slide built straight through slide.add plus
+    // slide.editContent -- every imported lecture -- never passes through the
+    // layout switch that used to be the only thing to source one. Keywords are
+    // mined only when the slide has none, so this fires once per slide and a
+    // box the author deliberately emptied is not refilled behind them.
+    const sourceImages =
+      env.IMAGE_ENRICHMENT_ENABLED &&
+      deck !== null &&
+      template !== undefined &&
+      emptyImageSlotsOf(slide, template).length > 0
+
     await slide.save()
     await touchDeck(slide.deckId)
+
+    // After the save: a slide written as a slot map only has its title and
+    // body folded out of that map by the pre-save hook, so mining its words
+    // any earlier would search an apparently empty slide.
+    if (sourceImages && applyImageKeywords(slide).length) {
+      await slide.save()
+      sourceEmptyImageSlots(slide, deck!, template!)
+    }
+
     return toSlideDto(slide)
   },
 })
@@ -203,65 +224,16 @@ export const slideSetLayout = defineAction<
     slide.layoutType = input.layoutType
 
     // Switching onto a layout with picture boxes still empty: source them via
-    // enrichment. Derive keywords from the slide's own text when the model
-    // left none, and persist them so the intent survives a reload and the
-    // client polls for the arriving images.
-    //
-    // Asked per box, not of the slide as a whole. A layout an author built
-    // may have several picture boxes (IMG-6/TMPL-9), and a slide that already
-    // carries one picture still has two empty holes — gating on "does this
-    // slide have an image" would leave them empty for good.
-    const emptyImageSlots = imageSlotNames(
-      input.layoutType,
-      layoutDescriptors(template),
-    ).filter(name => !slotHasImage(slide, name))
-    const shouldSource =
-      env.IMAGE_ENRICHMENT_ENABLED && emptyImageSlots.length > 0
-    if (shouldSource && !slide.imageKeywords?.length) {
-      const derived = deriveImageKeywords(slide)
-      if (derived.length) slide.imageKeywords = derived
-    }
+    // enrichment, so the empty image slot fills itself.
+    if (
+      env.IMAGE_ENRICHMENT_ENABLED &&
+      emptyImageSlotsOf(slide, template).length
+    )
+      applyImageKeywords(slide)
 
     await slide.save()
     await touchDeck(slide.deckId)
-
-    if (shouldSource && slide.imageKeywords?.length) {
-      // Fire-and-forget, strictly off the response path (IMG-2): load the
-      // lecture's seeded uploads to prefer, then enrich in the background.
-      const keywords = slide.imageKeywords
-      const slideId = slide._id.toString()
-      // 'fill' captioning: this slide may already carry an edited caption, so
-      // only set one when it is empty (the AI re-rank still picks the image).
-      const context: SlideImageContext = {
-        title: slide.title,
-        body: slide.body,
-        bullets: slide.bullets,
-        caption: slide.caption,
-        imageKeywords: keywords,
-        layoutType: input.layoutType,
-        captionMaxChars: template.layouts
-          .find(l => l.type === input.layoutType)
-          ?.slots.find(s => s.name === 'caption')?.maxChars,
-        seedContext: deck.seedContext?.slice(0, 1500) || undefined,
-        captionMode: 'fill',
-      }
-      void seedAssetsFor(deck)
-        .then(assets =>
-          enrichSlideImages(
-            slideId,
-            // Only the empty ones: a lookup is metered, and a box that
-            // already holds a picture keeps it (IMG-3).
-            emptyImageSlots,
-            keywords,
-            [
-              ...seededImageCandidates(assets.project),
-              ...seededImageCandidates(assets.deck),
-            ],
-            context,
-          ),
-        )
-        .catch(() => undefined)
-    }
+    sourceEmptyImageSlots(slide, deck, template)
 
     return toSlideDto(slide)
   },
