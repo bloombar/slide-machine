@@ -23,6 +23,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   themeTextStyles,
+  textStylesBySlot,
   type Layout,
   type BoxStyle,
 } from '@slide-machine/shared'
@@ -215,7 +216,10 @@ describe('what a template carries into Google Slides (EXP-8)', () => {
   it('brings a slot’s kind, instruction and limits back unchanged', () => {
     // What the payload is for, and what it does carry
     const layout = imported().layouts[0]!
-    const encoded = encodeSlotMetadata(specsOf(layout))
+    const encoded = encodeSlotMetadata(
+      specsOf(layout),
+      textStylesBySlot(layout),
+    )
     expect(encoded).toBeDefined()
     const back = parseSlotMetadata(encoded!)
     expect(back).toBeDefined()
@@ -241,7 +245,9 @@ describe('what a template carries into Google Slides (EXP-8)', () => {
     // for the role to be. If it is later carried somewhere other than the
     // slot payload, update this to read it from there.
     const layout = imported().layouts[0]!
-    const back = parseSlotMetadata(encodeSlotMetadata(specsOf(layout))!)
+    const back = parseSlotMetadata(
+      encodeSlotMetadata(specsOf(layout), textStylesBySlot(layout))!,
+    )
     const byName = new Map((back ?? []).map(s => [s.name, s]))
     for (const [name, box] of Object.entries(layout.elementPositions ?? {})) {
       if (!box.textStyle) continue
@@ -251,5 +257,154 @@ describe('what a template carries into Google Slides (EXP-8)', () => {
         `the payload says nothing about "${name}" following "${box.textStyle}"`,
       ).toBe(box.textStyle)
     }
+  })
+})
+
+/**
+ * What happens when a re-imported file states a role (EXP-8).
+ *
+ * Being told which role a box followed beats deriving it — the file went out
+ * in literal type, so a derivation can only recover a scale that RESEMBLES
+ * the one that left. But a role name is only worth honouring if the scale it
+ * names says the same thing, and these are the three ways that can go wrong.
+ */
+describe('a role restored from an exported file', () => {
+  const builtFrom = (slots: CandidateSlot[]) =>
+    buildTemplate(
+      source(),
+      [{ slots, decoration: [], members: ['s1'] }],
+      new Map(),
+    )
+
+  /** A design with a real scale — a heading size and a reading size — plus
+   * whatever box the case under test needs. */
+  const around = (extra: CandidateSlot) => [
+    ...[1, 2, 3].map(i =>
+      slot(
+        `headline-${i}`,
+        { x: 0.08, y: 0.08, w: 0.84, h: 0.15 },
+        {
+          fontSize: 8,
+        },
+      ),
+    ),
+    ...[1, 2, 3].map(i =>
+      slot(`prose-${i}`, { x: 0.08, y: 0.3, w: 0.84, h: 0.5 }, { fontSize: 3 }),
+    ),
+    extra,
+  ]
+
+  const typeOf = (built: ReturnType<typeof builtFrom>, name: string) =>
+    resolveStyle(
+      built.layouts[0]!.elementPositions![name],
+      themeTextStyles(built.theme),
+    )
+
+  it('imports a file that records no role exactly as it always did', () => {
+    // Every deck exported before the role was carried has a payload without
+    // one. A fix that made new exports lossless while changing how old ones
+    // import would be worse than the defect it fixed.
+    const legacy = slot(
+      'legacy',
+      { x: 0.08, y: 0.3, w: 0.4, h: 0.5 },
+      {
+        fontSize: 3,
+        restored: { name: 'legacy', kind: 'text', label: 'Legacy' },
+      },
+    )
+    const built = builtFrom(around(legacy))
+    const plain = builtFrom(
+      around(
+        slot('legacy', { x: 0.08, y: 0.3, w: 0.4, h: 0.5 }, { fontSize: 3 }),
+      ),
+    )
+    expect(typeOf(built, 'legacy')).toEqual(typeOf(plain, 'legacy'))
+    expect(typeOf(built, 'legacy').fontSize).toBe(3)
+  })
+
+  it('ignores a role the derived scale has nothing behind', () => {
+    // A name with no style behind it resolves against DEFAULT_TEXT_STYLES,
+    // which would restyle the box — `quote` would arrive italic at 4cqi
+    const aside = slot(
+      'sidebar',
+      { x: 0.08, y: 0.3, w: 0.4, h: 0.5 },
+      {
+        fontSize: 3,
+        restored: {
+          name: 'sidebar',
+          kind: 'text',
+          label: 'Quoted',
+          textStyle: 'quote',
+        },
+      },
+    )
+    const built = builtFrom(around(aside))
+    expect(built.theme.textStyles).not.toHaveProperty('quote')
+    expect(typeOf(built, 'sidebar').italic).not.toBe(true)
+    expect(typeOf(built, 'sidebar').fontSize).toBe(3)
+  })
+
+  it('keeps the type a box was measured in when its role says otherwise', () => {
+    // A box that followed `title` while overriding the size — a small title —
+    // comes back measured at its own size, and the re-derivation puts it in
+    // the reading-size cluster. Honouring the recorded role is right; what it
+    // must not do is hand the box the role's size, because the box was
+    // subtracted against the role the derivation gave it, not the one the
+    // file named. Otherwise a 3cqi box re-imports at 8.
+    const small = slot(
+      'small-title',
+      { x: 0.08, y: 0.3, w: 0.4, h: 0.5 },
+      {
+        fontSize: 3,
+        restored: {
+          name: 'small-title',
+          kind: 'text',
+          label: 'Small title',
+          textStyle: 'title',
+        },
+      },
+    )
+    const built = builtFrom(around(small))
+    expect(typeOf(built, 'small-title').fontSize).toBe(3)
+  })
+
+  it('does not let one oddly named box rename the role of the many', () => {
+    // The anchor takes its name from its boxes "where they agree". Only boxes
+    // whose name claims a role get a vote, so three boxes called `prose` are
+    // silent and a single `quoted` one carries it unopposed — and the deck
+    // loses `body` altogether, the role every layout and every generation
+    // budget is written around.
+    const odd = slot(
+      'quoted',
+      { x: 0.08, y: 0.3, w: 0.4, h: 0.5 },
+      {
+        fontSize: 3,
+      },
+    )
+    const built = builtFrom(around(odd))
+    expect(Object.keys(built.theme.textStyles as object)).toContain('body')
+  })
+
+  it('leaves a box alone when its role is the one it would have got', () => {
+    // The common case, and the one a fix for the divergent case could quietly
+    // break: where the derived role and the recorded role agree, being told
+    // the role must change nothing at all. Asserted against the same box with
+    // no record of a role rather than against literal values, so it holds
+    // whatever the derivation decides the scale is.
+    const box = { x: 0.08, y: 0.08, w: 0.84, h: 0.15 }
+    const told = slot('headline-4', box, {
+      fontSize: 8,
+      restored: {
+        name: 'headline-4',
+        kind: 'text',
+        label: 'Headline',
+        textStyle: 'title',
+      },
+    })
+    const untold = slot('headline-4', box, { fontSize: 8 })
+    expect(typeOf(builtFrom(around(told)), 'headline-4')).toEqual(
+      typeOf(builtFrom(around(untold)), 'headline-4'),
+    )
+    expect(typeOf(builtFrom(around(told)), 'headline-4').fontSize).toBe(8)
   })
 })

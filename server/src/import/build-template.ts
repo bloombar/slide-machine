@@ -292,16 +292,13 @@ const toLayout = (
       // says it (`type-scale`): the box follows a role, and states only where
       // it disagrees with it. A box the scale could not place still carries
       // everything it was measured with.
-      ...typeOfBox(slot, scale),
       // A presentation this system exported states which role each box
       // followed (EXP-8), and being told beats deriving it — the file went out
       // in literal type, so the derivation can only recover a scale that
-      // resembles the one that left. Honoured only where the derived scale
-      // actually defines that role: a name with nothing behind it would
-      // resolve against the app's defaults and restyle the box.
-      ...(slot.restored?.textStyle && scale.styles?.[slot.restored.textStyle]
-        ? { textStyle: slot.restored.textStyle }
-        : {}),
+      // resembles the one that left. Passed IN rather than applied over the
+      // result: what comes back is the box's disagreements with whichever role
+      // it ends up naming, so the two have to be the same role.
+      ...typeOfBox(slot, scale, slot.restored?.textStyle),
       // The box's own fill: a deck may put its colour on the boxes rather
       // than on the page, and dropping it imported the design white.
       ...(slot.background ? { background: slot.background } : {}),

@@ -277,27 +277,33 @@ const assignRoles = (
     .sort((a, b) => b.size - a.size)
 
   /**
-   * What the anchor is CALLED, where its boxes agree.
+   * What the anchor is CALLED, in the one case where nothing else can say.
    *
    * A deck whose only text size belongs to boxes called `title` is a deck of
    * titles, and calling that size `body` would put the word in front of an
    * author as if their design had asked for it.
    *
-   * But a name may only claim a HEADING rank when nothing is ranked above the
-   * anchor. Otherwise naming the anchor `title` would take the word from the
-   * cluster that is actually the largest, and the roles would come out
-   * inverted — a `sectionTitle` set larger than the `title` it sits under.
-   * Ranking knows the order; a name only fills in where there is no order to
-   * read.
+   * Everywhere else the anchor is `body`, and deliberately so on two counts.
+   * Ranking already knows the order, and letting a name override it would
+   * invert the scale — a `sectionTitle` set larger than the `title` above it.
+   * And `body` is the role the conventional layouts, the slot budgets and the
+   * generation prompt are all written around: a deck that emitted `quote`
+   * instead would render correctly and leave an author editing "body" with
+   * nothing to edit.
+   *
+   * A name must also be held by a MAJORITY of the anchor's boxes, not merely
+   * by most of the boxes that happened to claim anything. Only a name that
+   * matches a role votes, so three boxes called `prose` are silent and one
+   * called `quoted` would otherwise carry the whole cluster one to nothing.
    */
-  const named = dominant(
-    anchor.slots.flatMap(s => {
-      const role = roleFromName(s.name)
-      return role ? [role] : []
-    }),
-  )
-  const anchorRole =
-    named && (!above.length || !ABOVE_BODY.includes(named)) ? named : 'body'
+  const votes = anchor.slots.flatMap(s => {
+    const role = roleFromName(s.name)
+    return role ? [role] : []
+  })
+  const named = dominant(votes)
+  const majority =
+    !!named && votes.filter(v => v === named).length * 2 > anchor.slots.length
+  const anchorRole = !above.length && named && majority ? named : 'body'
   roles.set(anchor, anchorRole)
 
   // Two heading sizes are a title and a heading. `sectionTitle` is the middle
@@ -456,6 +462,20 @@ export const deriveTypeScale = (
 export const typeOfBox = (
   slot: CandidateSlot,
   scale: TypeScale,
+  /**
+   * The role the box is KNOWN to have followed, where the file said so
+   * (EXP-8). It replaces the derived role rather than being applied over the
+   * result, because what this function returns is the box's disagreements
+   * with a particular role — subtract against the derived one and then rename
+   * the box to another, and the box is left naming a role it was never
+   * measured against. A small title restored as `title` in a deck whose
+   * derived `title` is twice its size would come back at the derived size,
+   * its own having been dropped as redundant.
+   *
+   * Honoured only where the scale actually defines it: a role with nothing
+   * behind it resolves against the app's defaults and restyles the box.
+   */
+  restored?: string,
 ): {
   textStyle?: string
   fontSize?: number
@@ -463,14 +483,26 @@ export const typeOfBox = (
   fontFamily?: string
   color?: string
 } => {
-  const role = scale.roleOf.get(slot)
+  const derived = scale.roleOf.get(slot)
+  const role = restored && scale.styles?.[restored] ? restored : derived
   const style = role ? scale.styles?.[role] : undefined
   const family = mapFont(slot.fontFamily)
+  // A role the box was not measured into cannot speak for its size.
+  //
+  // Dropping a box's own size is the NORMALIZATION onto the scale, and it is
+  // only sound for the role the box's size actually helped derive — that role
+  // stands for the cluster this box sits in. A restored role is different
+  // evidence: it says what the box was called, not what it was set in. A
+  // small title restored as `title` in a deck whose titles are twice its size
+  // is a genuine deviation, and dropping it would resize the box to a cluster
+  // it was never in.
+  const measuredInto = role === derived
   return {
     ...(role ? { textStyle: role } : {}),
-    // The role's size replaces the box's, which is the normalization onto the
-    // scale. Where there is no role there is nothing to inherit from.
-    ...(slot.fontSize && style?.fontSize === undefined
+    // The role's size replaces the box's only where the box helped derive it.
+    ...(slot.fontSize !== undefined &&
+    (style?.fontSize === undefined ||
+      (!measuredInto && style.fontSize !== slot.fontSize))
       ? { fontSize: slot.fontSize }
       : {}),
     ...(slot.bold && style?.fontWeight !== 700 ? { fontWeight: 700 } : {}),
