@@ -2196,7 +2196,21 @@ export default function DeckViewerPage() {
                   />
                 </DraggableListRow>
               ) : (
-                <li key={s.id} ref={nav.registerItem(i)} className="relative">
+                <li
+                  key={s.id}
+                  ref={nav.registerItem(i)}
+                  // Slides off screen are skipped until they are scrolled
+                  // to. A lecture of a hundred slides is a list some fifty
+                  // thousand pixels tall, and every slide is a query
+                  // container measured against its own width; laying all of
+                  // them out at once is work no reader has asked for.
+                  //
+                  // `auto` in the intrinsic size means the real height is
+                  // remembered once a slide has been seen, so the figure here
+                  // only has to be close before that: a slide is 16:9 in a
+                  // column capped at 5xl, which is 549px.
+                  className="relative [contain-intrinsic-size:auto_549px] [content-visibility:auto]"
+                >
                   <SlideView slide={displaySlide(s)} template={view.template} />
                   {ttsEnabled && (
                     <SlideMenu number={i + 1} onSpeak={() => speakSlide(s)} />
