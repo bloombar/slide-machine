@@ -2340,7 +2340,19 @@ describe('DeckViewerPage settings modal', () => {
     act(() => vi.advanceTimersByTime(500))
     expect(wrapper).not.toHaveAttribute('data-reveal-blanks')
 
-    // Clicks on controls (buttons, links, the slide itself) never reveal
+    // The slide's own background flashes them too: a blank box shows nothing
+    // at rest, so the click asking "what is on this slide?" is aimed there
+    const slide = screen.getAllByTestId('slide')[0] as HTMLElement
+    fireEvent.click(slide)
+    expect(wrapper).toHaveAttribute('data-reveal-blanks', 'true')
+    act(() => vi.advanceTimersByTime(500))
+    expect(wrapper).not.toHaveAttribute('data-reveal-blanks')
+
+    // …but a click on a box is an edit, not a question about the slide
+    fireEvent.click(slide.querySelector('[data-flip-slot]') as Element)
+    expect(wrapper).not.toHaveAttribute('data-reveal-blanks')
+
+    // Clicks on controls never reveal either
     fireEvent.click(screen.getByRole('button', { name: 'List view' }))
     expect(wrapper).not.toHaveAttribute('data-reveal-blanks')
     vi.useRealTimers()

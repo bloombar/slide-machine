@@ -1376,9 +1376,18 @@ export default function DeckViewerPage() {
     translation.setLocale(next)
   }
 
-  // A click on the page background — not the slide, a control, or a
-  // modal backdrop — briefly reveals blank slots (styled in index.css),
-  // which hide again on their own half a second later
+  /**
+   * A click on empty space — the page background, or the slide's own
+   * background between its boxes — briefly reveals blank slots (styled in
+   * index.css), which hide again on their own half a second later.
+   *
+   * The slide counts because that is where an editor is already looking: a
+   * blank box shows nothing at rest, so the click that asks "what is on this
+   * slide?" is the one aimed at the slide itself. Clicking a box is not that
+   * question — it edits — so every slot is exempt, found by the
+   * `data-flip-slot` wrapper each one renders inside; so are controls, links,
+   * modal backdrops, and the drawing canvas, whose clicks are strokes.
+   */
   const canEditView = Boolean(view?.canEdit)
   useEffect(() => {
     if (!canEditView) return
@@ -1386,7 +1395,7 @@ export default function DeckViewerPage() {
       const target = e.target as Element | null
       if (
         target?.closest(
-          'a, button, input, textarea, select, label, [role], [aria-hidden], [data-testid="slide"]',
+          'a, button, input, textarea, select, label, [role], [aria-hidden], [data-flip-slot], [data-testid="drawing-layer"]',
         )
       )
         return
