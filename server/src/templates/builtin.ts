@@ -32,6 +32,7 @@ import {
   MAX_TEMPLATE_INSTRUCTIONS,
 } from '@slide-machine/shared'
 import { env } from '../config/env'
+import { withAbsoluteAssets } from './assets'
 
 /** A slot in a template file: bare-name shorthand for the conventional
  * slots, or the full WYSIWYG-ready object (custom slots must state
@@ -499,11 +500,16 @@ export const loadBuiltinTemplates = (
       // A file that names a conventional layout gets that layout's tree
       // without writing it out, so the starter templates stay readable and a
       // deployment's own file only describes what it does differently.
+      // Decoration pictures are absolutized here, at the one point a
+      // built-in is read: a file can only name a path, and a path is dropped
+      // by anything that fetches rather than renders (`templates/assets.ts`).
       layouts: adoptDefaultTree(
-        parsed.data.layouts.map(layout => ({
-          ...layout,
-          slots: layout.slots.map(normalizeSlot),
-        })),
+        parsed.data.layouts.map(layout =>
+          withAbsoluteAssets({
+            ...layout,
+            slots: layout.slots.map(normalizeSlot),
+          }),
+        ),
       ) as Layout[],
       ownerId: 'system',
       // A built-in's id is already a readable slug, so it is its permalink.
