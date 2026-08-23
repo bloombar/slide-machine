@@ -61,8 +61,20 @@ console.log(
 )
 console.log(
   usedLayouts.size > 1
-    ? '  Defines its own layouts — the AUTHORED path. Layout pages become layouts directly.'
-    : '  Slides sit on one layout or none — expect CLUSTERING, not the authored path.',
+    ? '  Defines its own layouts — so the AUTHORED path is AVAILABLE to it.'
+    : '  Slides sit on one layout or none — the authored path is not available.',
+)
+// Which is not the same as it being taken, and the difference cost a wrong
+// prediction: `keepEverySlide` SUPPRESSES the authored path outright
+// (`import-presentation.ts`), deliberately, because keeping every slide means
+// one layout per slide and an authored grouping is a grouping. Since keeping
+// every slide is the shipped default, a default import gives one layout per
+// slide whatever the deck's own layout pages say — the authored path runs
+// only when an author asks for tidying.
+console.log(
+  keep === 'false'
+    ? `  Tidying was asked for, so expect roughly ${usedLayouts.size} layouts plus the whiteboard.`
+    : `  But keepEverySlide SUPPRESSES it: expect ${deck.slides.length} layouts plus the whiteboard, one per slide.`,
 )
 
 /* --- Backgrounds --------------------------------------------------------- */
@@ -180,5 +192,8 @@ for (const line of [
   'Whether the type scale is right. It reports the sizes present, not what they mean.',
   'Anything about rendering: clipping, overlap, contrast, wrapping. Only a browser sees those.',
   'Whether the deck is representative. One deck answers for one deck.',
+  'Whether a picture will actually be FETCHED. Signed URLs expire within the hour,',
+  '  and an expired one is a real failure rather than a classification result —',
+  '  decoration pictures come back as zero either way.',
 ])
   console.log(`  ${line}`)
