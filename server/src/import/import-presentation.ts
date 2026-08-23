@@ -366,9 +366,12 @@ export const importSourcePresentation = async (
       ...(layout.backgroundImage ? [layout.backgroundImage] : []),
     ]),
   ]
+  // `failed: undefined`, never 0, when there is nowhere to put a picture:
+  // nothing was attempted, and saying "none failed" would be the same answer
+  // a completely successful fetch gives.
   const { stored, failed } = options.assetPrefix
     ? await fetchAssets(urls, options.assetPrefix)
-    : { stored: new Map<string, string>(), failed: 0 }
+    : { stored: new Map<string, string>(), failed: undefined }
 
   const assignment = new Map<string, number>()
   layouts.forEach((layout, index) => {

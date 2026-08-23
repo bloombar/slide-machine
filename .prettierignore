@@ -8,6 +8,9 @@ scripts/board/manifest.yaml
 # Build & test artifacts
 dist/
 coverage/
+# Review output: a contact sheet and its screenshots, regenerated per run and
+# published rather than committed. Formatting generated HTML gates nothing.
+e2e/artifacts/
 node_modules/
 playwright-report/
 test-results/

@@ -417,7 +417,8 @@ export const importReport = (
   source: SourcePresentation,
   layouts: DerivedLayout[],
   approximated: number,
-  assetsFailed: number,
+  /** Absent when no fetch was attempted — see `ImportReport`. */
+  assetsFailed: number | undefined,
 ): ImportReport => {
   const biggest = [...layouts].sort(
     (a, b) => b.members.length - a.members.length,
@@ -434,6 +435,7 @@ export const importReport = (
         }
       : {}),
     approximated,
-    assetsFailed,
+    // Omitted rather than zeroed when nothing was attempted.
+    ...(assetsFailed === undefined ? {} : { assetsFailed }),
   }
 }

@@ -35,7 +35,9 @@ export interface ImportReport {
   layoutsCreated: number
   largestMerge?: { type: string; slides: number }
   approximated: number
-  assetsFailed: number
+  /** Absent when the import attempted no fetch at all — not the same as none
+   * having failed, which is why it is not a plain number. */
+  assetsFailed?: number
 }
 
 /**
@@ -323,7 +325,7 @@ export default function TemplateImport({
               })}
             </p>
           )}
-          {report.assetsFailed > 0 && (
+          {(report.assetsFailed ?? 0) > 0 && (
             <p className="text-amber-700">
               {t('template.import.report.assetsFailed', {
                 count: report.assetsFailed,

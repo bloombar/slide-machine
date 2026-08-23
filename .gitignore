@@ -14,6 +14,10 @@ coverage/
 
 # Test artifacts
 test-results/
+# Megabytes of screenshots and a contact sheet, produced fresh by every
+# fidelity run and published for review. Binary review material does not
+# belong in the history.
+e2e/artifacts/
 playwright-report/
 blob-report/
 
