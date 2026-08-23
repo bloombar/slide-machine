@@ -1192,6 +1192,37 @@ const READABLE = 3
  * kept — an imported design that cannot be read is not the design that was
  * imported, it is a bug wearing its colours.
  */
+/**
+ * The background this deck actually wears.
+ *
+ * The first slide's was standing in for the deck's, and a title slide is the
+ * one page least like the rest: NYU's own template deck opens on violet and
+ * is white for ten of its thirteen pages, so the theme came back violet. No
+ * imported layout is affected — each paints its own ground as full-bleed
+ * decoration (`build-template`) — but the whiteboard has none, and neither
+ * does any layout an author adds afterwards, so both sat on a colour the deck
+ * uses three times in thirteen.
+ *
+ * The commonest wins; ties go to the earlier page, so a deck evenly split
+ * still reads the same way every time.
+ */
+const dominantBackground = (pages: SourcePage[]): string | undefined => {
+  const counts = new Map<string, number>()
+  for (const page of pages) {
+    if (!isHex(page.background)) continue
+    counts.set(page.background, (counts.get(page.background) ?? 0) + 1)
+  }
+  let best: string | undefined
+  let bestCount = 0
+  for (const [colour, count] of counts) {
+    if (count > bestCount) {
+      best = colour
+      bestCount = count
+    }
+  }
+  return best
+}
+
 const themeOf = (
   scheme: Record<string, string>,
   background: string | undefined,
@@ -1283,7 +1314,7 @@ export const toSourcePresentation = (
     title: (raw.title as string) || 'Imported design',
     // The palette is read from the deck itself, layouts included: a title
     // slide alone is a thin sample of what the design writes in.
-    theme: themeOf(scheme, slides[0]?.background, [...slides, ...layouts]),
+    theme: themeOf(scheme, dominantBackground(slides), [...slides, ...layouts]),
     layouts,
     slides,
   }
