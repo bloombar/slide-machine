@@ -835,7 +835,6 @@ Two questions to carry through all of it:
   indistinguishable from outside, and a green suite proves nothing about a feature
   absent from the design under test.
 
-
 ## 10. Deleting templates and layouts
 
 Deletion is a tombstone, and the daily retention sweep is what actually erases things (SPEC
