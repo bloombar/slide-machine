@@ -130,9 +130,44 @@ const slotSchema = z.object({
   caps: z.boolean().optional(),
 })
 
+/**
+ * One text role as the payload states it.
+ *
+ * Bounded like everything else here, and every field optional, because this
+ * is a wire format a build that has moved on must still be able to read.
+ */
+const roleSchema = z.object({
+  fontFamily: z.string().max(40).optional(),
+  fontSize: z.number().positive().max(100).optional(),
+  fontWeight: z.number().int().min(100).max(900).optional(),
+  italic: z.boolean().optional(),
+  caps: z.boolean().optional(),
+  lineHeight: z.number().min(0.5).max(4).optional(),
+  color: z.string().max(40).optional(),
+  maxChars: z.number().int().positive().optional(),
+  maxItems: z.number().int().positive().optional(),
+})
+
 const payloadSchema = z.object({
   [MARKER]: z.literal(SLOT_METADATA_VERSION),
   slots: z.array(slotSchema).max(200),
+  /**
+   * What each text role IS, as opposed to which boxes follow it.
+   *
+   * Without this the round trip carried a reference to something the reading
+   * end had to invent. Every shape is exported in RESOLVED type — the file
+   * has no notion of our roles — so a re-import derived a fresh scale from
+   * the letterforms, and a fresh scale clusters differently: measured on a
+   * real deck, twenty of thirty-one boxes came back resolving to different
+   * type, including eight titles that lost their capitals because they
+   * inherited `caps` from a role rather than stating it themselves.
+   *
+   * Written onto every layout rather than once for the presentation. It is a
+   * few hundred bytes against an eight-kilobyte cap, and it makes each layout
+   * self-describing: a layout copied into another deck brings its typography
+   * with it instead of arriving to be guessed at.
+   */
+  textStyles: z.record(z.string().max(40), roleSchema).optional(),
 })
 
 /** The fields worth carrying, with anything absent left out so the payload
@@ -174,10 +209,17 @@ export const encodeSlotMetadata = (
   roles: Record<string, string | undefined> = {},
   /** Which boxes are set in capitals, by slot name. */
   caps: Record<string, boolean | undefined> = {},
+  /** The template's own `theme.textStyles`, so the roles the slots name mean
+   * the same thing at the reading end (see `payloadSchema.textStyles`). */
+  textStyles?: Record<string, unknown>,
 ): string | undefined => {
   if (!slots.length) return undefined
   const wrap = (entries: Record<string, unknown>[]): string =>
-    JSON.stringify({ [MARKER]: SLOT_METADATA_VERSION, slots: entries })
+    JSON.stringify({
+      [MARKER]: SLOT_METADATA_VERSION,
+      slots: entries,
+      ...(textStyles && Object.keys(textStyles).length ? { textStyles } : {}),
+    })
 
   const full = wrap(
     slots.map(spec => forWire(spec, roles[spec.name], caps[spec.name])),
@@ -198,6 +240,29 @@ export const encodeSlotMetadata = (
   // Still over: a template this large is beyond what alt text can hold, and
   // saying nothing is honest where saying half of it would not be.
   return bytes(lean) <= MAX_SLOT_PAYLOAD_BYTES ? lean : undefined
+}
+
+/**
+ * What each text role means, from a payload that carries it.
+ *
+ * Read separately from the slots rather than returned beside them, because
+ * every caller of `parseSlotMetadata` wants the slots and only the import's
+ * theme-building wants these — and changing that function's shape would
+ * change it for readers who have no use for the answer.
+ */
+export const parseThemeStyles = (
+  text: string | undefined,
+): Record<string, unknown> | undefined => {
+  if (!text || bytes(text) > MAX_SLOT_PAYLOAD_BYTES) return undefined
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch {
+    return undefined
+  }
+  const parsed = payloadSchema.safeParse(raw)
+  const styles = parsed.success ? parsed.data.textStyles : undefined
+  return styles && Object.keys(styles).length ? styles : undefined
 }
 
 /**

@@ -201,7 +201,10 @@ const boxesOf = (layout: Layout, theme: Record<string, unknown>) => {
  * Off the canvas so nothing is drawn over the design, and empty so there is
  * nothing to read even if someone finds it.
  */
-const metadataObject = (layout: Layout) => {
+const metadataObject = (
+  layout: Layout,
+  textStyles: Record<string, unknown> | undefined,
+) => {
   // With the role each box follows, read from wherever the layout keeps it —
   // its tree, or its geometry for an imported design. Every shape is written
   // in literal type below, so this payload is the only place the reference
@@ -216,6 +219,10 @@ const metadataObject = (layout: Layout) => {
     layout.slots,
     textStylesBySlot(layout),
     capsBySlot,
+    // What those roles MEAN. Every shape below is written in resolved type,
+    // so without this the reading end has a reference and nothing to resolve
+    // it against (EXP-8).
+    textStyles,
   )
   if (!payload) return []
   return [
@@ -305,7 +312,10 @@ export const defineLayoutMasters = (
               line: { type: 'none' as const },
             },
           })),
-        ...metadataObject(layout),
+        ...metadataObject(
+          layout,
+          template.theme.textStyles as Record<string, unknown> | undefined,
+        ),
         ...slots.map(box => ({
           placeholder: {
             options: {

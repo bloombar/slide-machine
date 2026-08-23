@@ -381,7 +381,19 @@ export const importSourcePresentation = async (
     assignment.set(slideId, layoutIndex)
   }
 
-  const template = buildTemplate(source, layouts, assignment, stored)
+  // What each role means, where the presentation carries it. Any page that
+  // states it states the same thing — the writer puts the template's own
+  // scale on every layout — so the first found is the answer.
+  const restoredStyles = [...source.layouts, ...source.slides].find(
+    page => page.themeStyles,
+  )?.themeStyles
+  const template = buildTemplate(
+    source,
+    layouts,
+    assignment,
+    stored,
+    restoredStyles,
+  )
 
   // The content half (EXP-5). Built here rather than by a second pass over the
   // presentation because everything it needs is already in hand: which layout

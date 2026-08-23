@@ -356,6 +356,8 @@ export const buildTemplate = (
    * presentation gave. A picture that would not come is simply absent, and the
    * design is drawn without it. */
   assets: Map<string, string> = new Map(),
+  /** What each text role means, where the presentation stated it (EXP-8). */
+  restoredStyles?: Record<string, unknown>,
 ): BuiltTemplate => {
   // Claimed before any derived layout can take it, so a presentation with a
   // slide the rules happen to call "whiteboard" cannot collide with the blank
@@ -399,7 +401,19 @@ export const buildTemplate = (
       // The deck's own type scale, so its typography is stated once and every
       // box names a role instead of restating it (TMPL-9). A deck that stated
       // no type at all yields none, and the app's defaults stand.
-      ...(scale.styles ? { textStyles: scale.styles } : {}),
+      //
+      // RESTORED where the presentation carries it. A file this system wrote
+      // states what each role means, and being told beats deriving: every
+      // shape was exported in resolved type, so a fresh derivation reads the
+      // letterforms and clusters them its own way. That is how twenty of
+      // thirty-one boxes came back set differently, eight of them titles that
+      // lost their capitals because they inherited `caps` from a role rather
+      // than stating it (EXP-8, docs/TEMPLATES.md §9).
+      ...(restoredStyles
+        ? { textStyles: restoredStyles }
+        : scale.styles
+          ? { textStyles: scale.styles }
+          : {}),
     },
     // Every template must offer a blank slate to draw on (TMPL-7), and no
     // presentation has one to import — so it is synthesized rather than
