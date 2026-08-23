@@ -4,6 +4,19 @@
 
 Before finalizing major changes to code, do thorough 100% code coverage unit tests, integration tests. For changes that affect both front- and back-end, add e2e tests using Playwright with live front- and back-ends with live test db to ensure correct functionality. All passing passing tests should be reproducible during regression testing as we develop new code.
 
+### Reading a green result
+
+A passing check is not automatically evidence. Before treating one as proof, ask:
+
+- **What would this value look like if the thing that sets it had never happened?** If the answer is "the same", it is not evidence. A count of zero failures, a field read off a type that does not have it, a measurement that never ran, and a bundle built before the change all report exactly what success reports.
+- **Does this pass mean "nothing broke" or "the thing works"?** They are indistinguishable from outside. A green suite proves nothing about a feature the data under test never exercises.
+- **Which tests did this green actually run?** The gate below is unit tests only; CI also runs `test:integration` and the e2e suite. A green from one says nothing about the others.
+- **Was every artifact produced by the code under test?** Rebuild before measuring, and confirm the build contains something the change introduced — check for a marker, not a timestamp.
+
+The first question you can and should ask about your own work: whether an artifact is what you think it is is checkable from the inside. **A prediction is not** — when you expect a particular answer, the expectation is what is doing the asking, so that check has to come from someone with no stake in the outcome. Where work is split across people or sessions, spend one question there rather than on general review.
+
+Fix the defect, not the instrument. If a check reports something correct as a fault, the rule is measuring the wrong thing — loosening its threshold hides the real fault it was built to catch.
+
 ## Code conventions
 
 Use Prettier and ESLint for code formatting, using default rules except semicolons, which should be avoided. Use ES Module import/export styles.
