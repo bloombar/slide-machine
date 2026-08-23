@@ -12,6 +12,7 @@ import { feedbackRouter } from './routes/feedback'
 import { googleConnectRouter } from './routes/google-connect'
 import { adminRouter } from './routes/admin'
 import { actionsRouter } from './routes/actions'
+import { mcpRouter } from './routes/mcp'
 import { decksRouter } from './routes/decks'
 import { usersRouter } from './routes/users'
 import { seedAssetsRouter } from './routes/seed-assets'
@@ -63,6 +64,7 @@ export const createApp = (): Express => {
   api.use('/auth', googleConnectRouter)
   api.use('/admin', adminRouter)
   api.use(actionsRouter)
+  api.use(mcpRouter)
   api.use(decksRouter)
   api.use(usersRouter)
   api.use(seedAssetsRouter)

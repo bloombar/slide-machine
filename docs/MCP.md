@@ -5,11 +5,26 @@ for preparing and revising decks, and a **remote MCP server** that lets an
 external AI assistant (Claude, ChatGPT, Gemini) do the same work from outside
 the app.
 
-Neither is built. Both are future work — [SPEC.md §18](SPEC.md#18-future-work),
-open question [§19.11](SPEC.md#19-open-questions). This page is the design
-record: what the value is, what the two features share, what they don't, and
-what would have to change in the spec. It is a plan to argue with, not a
-specification to implement.
+This page began as the design record: what the value is, what the two features
+share, what they don't, and what would have to change in the spec. Both remain
+future work in the spec — [SPEC.md §18](SPEC.md#18-future-work), open question
+[§19.11](SPEC.md#19-open-questions) — and the spec has not been edited.
+
+**What is built** (branch `feat/MCP-1-remote-mcp-server`, tracked by
+[issue #129](https://github.com/bloombar/slide-machine/issues/129)):
+
+| | State |
+| --- | --- |
+| Schema derivation and action descriptions (§3.1, §3.2) | Built — [actions/catalog.ts](../server/src/actions/catalog.ts) |
+| Model-legible errors (§3.3) | Built — [actions/agent-error.ts](../server/src/actions/agent-error.ts) |
+| The MCP tool surface (§4) | A first set of ten tools — [mcp/tools/](../server/src/mcp/tools/) |
+| The safety boundary (§6) | Built and enforced by test — [mcp/forbidden.ts](../server/src/mcp/forbidden.ts) |
+| The endpoint | `POST /api/mcp` — [routes/mcp.ts](../server/src/routes/mcp.ts), authenticated by the app's own bearer token |
+| **OAuth authorization server (§5)** | **Not built.** The next stage, and the reason the endpoint is not yet usable by a third-party assistant. |
+| The in-app chat assistant (§3.4) | Not built |
+
+The rest of this page is unchanged, and is still a plan to argue with rather
+than a specification to implement.
 
 The dependency runs one way, and not the way it first appears:
 
@@ -354,7 +369,16 @@ resolved by building it well.
 **Ongoing maintenance.** The MCP authorization spec is young and still moving.
 This is code that needs tracking, not code that is finished.
 
-### 5.5 The cheaper alternative
+### 5.5 The cheaper alternative — **not taken**
+
+**Decided: the full authorization server**, built in stages, per
+[issue #129](https://github.com/bloombar/slide-machine/issues/129). The tool
+surface ships first behind the app's own bearer token so it can be built and
+tested against something; the authorization server replaces that token check
+without touching a tool. The alternative below is recorded because the reasons
+for it have not gone away, and because the staging means it remains a live
+fallback if the authorization-server work proves too large.
+
 
 **Per-user API tokens.** The instructor generates a token in their settings and
 pastes it into the assistant. It verifies through the existing bearer path with
@@ -435,19 +459,31 @@ Four edits, none yet applied.
 
 ## 8. Sequencing
 
-1. `description` field on `Action`; Zod → JSON Schema derivation; model-legible
-   errors. Small, and unblocks everything.
+The order below was written before any of it was built, and the MCP half was
+taken first — so steps 3 and 4 were reached without step 2. The tool set is
+therefore a designed first guess rather than one drawn from observed usage
+(§4.1), and revisiting it against [EVAL-1](SPEC.md#eval-1-live-session-telemetry)
+telemetry and pilot feedback is outstanding work rather than a step that was
+skipped and forgotten.
+
+1. ~~`description` field on `Action`; Zod → JSON Schema derivation;
+   model-legible errors.~~ **Done.**
 2. Conversational loop in the provider abstraction; declared exposure. Ship the
-   in-app assistant — PREP-4 generalized beyond preflight.
-3. Design the intent tool set (§4.1) against real usage.
-4. Decide the auth fork (§5), then build the MCP server. By this point it is
-   what [§18](SPEC.md#18-future-work) already claims: a thin facade whose only
-   substantial remaining work is auth.
+   in-app assistant — PREP-4 generalized beyond preflight. **Not started.**
+3. ~~Design the intent tool set (§4.1)~~ **A first set exists**; it has not yet
+   been tested against real usage.
+4. ~~Decide the auth fork (§5)~~ **Decided: the full authorization server**
+   (§5.5). **Building it is the remaining work**, and it is the majority of
+   what is left. Until it exists, the endpoint answers the app's own bearer
+   token and no third-party assistant can connect to it.
 
 ## 9. Open questions
 
-- Full OAuth authorization server, or per-user API tokens? (§5.5)
-- What is the intent tool set, for beginners and experts alike? (§4.1)
+- ~~Full OAuth authorization server, or per-user API tokens?~~ **Decided:
+  the authorization server, built in stages** (§5.5).
+- Is the first tool set (§4.1) the right one, for beginners and experts alike?
+  It was designed rather than observed, which is the weakest part of what is
+  built.
 - Which operations require explicit confirmation rather than authorization
   alone? (§5.4, §6)
 - What scopes exist, and are they legible enough that a consent screen means
