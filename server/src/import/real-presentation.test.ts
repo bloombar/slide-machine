@@ -47,13 +47,32 @@ const FIXTURE = new URL(
 const raw = JSON.parse(readFileSync(FIXTURE, 'utf8')) as Record<string, unknown>
 
 let source: SourcePresentation
+/**
+ * The deck as an instructor actually gets it.
+ *
+ * `keepEverySlide` is what every import route sends
+ * (`KEEP_EVERY_SLIDE_BY_DEFAULT`), so this is the path a real import takes
+ * and therefore the one the assertions below run against.
+ *
+ * They used not to. This file imported without options — the CONSOLIDATING
+ * branch, which no route sends — and the default path was covered by a single
+ * layout COUNT and nothing else. Every substantive check, colours, geometry,
+ * type, ran against a template no instructor would ever receive, so a whole
+ * afternoon's worth of derivation could differ on the shipped path and the
+ * suite would stay green. A count is exactly the check that passes for
+ * reasons unrelated to what it is checking.
+ */
 let result: ImportResult
+/** The same deck merged, which is what the tidy checkbox asks for. Kept as
+ * its own case rather than as the default, since it is the opt-in. */
+let tidied: ImportResult
 
 beforeAll(async () => {
   source = toSourcePresentation(raw)
   // No provider: naming layouts is the one pass an import must survive
   // without, so the fixture run is the rule-based path.
-  result = await importSourcePresentation(source)
+  result = await importSourcePresentation(source, { keepEverySlide: true })
+  tidied = await importSourcePresentation(source)
 })
 
 describe('reading a real presentation', () => {
@@ -136,24 +155,47 @@ describe('the design that import derives from it', () => {
     }
   })
 
-  it('groups the deck by the layouts its author actually used', () => {
-    // Five slides on TITLE_AND_BODY and one on TITLE: the author already did
-    // the work consolidation exists to do, so it is not redone worse
-    expect(derived()).toHaveLength(2)
+  it('reads every slide of the deck, whichever way it is imported', () => {
     expect(result.report.slidesRead).toBe(6)
-    expect(result.report.largestMerge?.slides).toBe(5)
+    expect(tidied.report.slidesRead).toBe(6)
     expect(result.report.approximated).toBe(0)
+    // Kept apart, one layout per slide, because that is what was asked for
+    expect(derived()).toHaveLength(6)
   })
 
-  it('gives back every slide when the author asks for that', async () => {
-    // The same deck, imported the other way: one layout per slide (TMPL-8)
-    const every = await importSourcePresentation(source, {
-      keepEverySlide: true,
-    })
+  it('groups the deck by the layouts its author actually used', () => {
+    // Five slides on TITLE_AND_BODY and one on TITLE: the author already did
+    // the work consolidation exists to do, so it is not redone worse. This is
+    // the TIDIED import — grouping is what the checkbox asks for.
     expect(
-      every.template.layouts.filter(l => l.type !== WHITEBOARD_LAYOUT_TYPE),
-    ).toHaveLength(6)
-    expect(every.report.layoutsCreated).toBe(6)
+      tidied.template.layouts.filter(l => l.type !== WHITEBOARD_LAYOUT_TYPE),
+    ).toHaveLength(2)
+    expect(tidied.report.largestMerge?.slides).toBe(5)
+    expect(tidied.report.approximated).toBe(0)
+  })
+
+  it('combines near-identical slides when the author ticks the box', () => {
+    // The same deck imported the other way. Merging is the OPT-IN (TMPL-8),
+    // so it is asserted as its own case rather than as the default — and on
+    // more than a count, since a count was all this path used to check.
+    const merged = tidied.template.layouts.filter(
+      l => l.type !== WHITEBOARD_LAYOUT_TYPE,
+    )
+    const kept = result.template.layouts.filter(
+      l => l.type !== WHITEBOARD_LAYOUT_TYPE,
+    )
+    expect(merged.length).toBeLessThan(kept.length)
+    expect(tidied.report.layoutsCreated).toBe(merged.length)
+    // Whatever it merges, it still has to draw: every box placed, and a
+    // palette to draw it in.
+    for (const layout of merged) {
+      for (const slot of layout.slots) {
+        expect(layout.elementPositions?.[slot.name]).toBeDefined()
+      }
+    }
+    expect(tidied.template.theme.background).toBe(
+      result.template.theme.background,
+    )
   })
 
   it('carries the deck’s colour onto the template', () => {
