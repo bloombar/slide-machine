@@ -149,3 +149,64 @@ describe('the edges a real deck actually reaches', () => {
     ).toBe(0)
   })
 })
+
+/**
+ * How the box is set, where the design says so.
+ *
+ * Both terms are fed from production — `capacityOf(slot, { caps })` in
+ * `build-template`, and the role's own line height in `type-scale` — and
+ * neither had a test that passed one. An estimate that quietly ignored its
+ * settings would look exactly like one that honoured them, since the default
+ * path is the one every other test here exercises.
+ */
+describe('the way a box is actually set', () => {
+  it('fits fewer capitals across a line than mixed-case words', () => {
+    // Capitals carry no narrow lowercase forms and no descender gaps, so a
+    // title set in caps holds about a fifth less than the same box of prose.
+    // Told otherwise, the overflow lands on the reader.
+    expect(capacityOf(slot({ fontSize: 4 })).maxChars).toBe(80)
+    expect(capacityOf(slot({ fontSize: 4 }), { caps: true }).maxChars).toBe(64)
+  })
+
+  it('fits more lines down a box set with tight display leading', () => {
+    // A display face at 0.95 puts half again as many lines in the same box as
+    // the 1.5 fallback allows — which is how a title box was told it holds
+    // one line when it holds two.
+    expect(capacityOf(slot({ fontSize: 4 })).maxChars).toBe(80)
+    expect(
+      capacityOf(slot({ fontSize: 4 }), { lineHeight: 0.95 }).maxChars,
+    ).toBe(160)
+  })
+
+  it('gives capitals the extra rows they wrap onto', () => {
+    // 36 characters fit one line of prose and need two of capitals, so the
+    // same words need twice the room
+    const held = { lines: 2, longest: 36 }
+    expect(heightForText(slot({ fontSize: 4, held }))).toBeCloseTo(
+      12 / 56.25,
+      10,
+    )
+    expect(
+      heightForText(slot({ fontSize: 4, held }), { caps: true }),
+    ).toBeCloseTo(24 / 56.25, 10)
+  })
+
+  it('asks for less room for the same lines set tighter', () => {
+    const held = { lines: 2, longest: 10 }
+    expect(
+      heightForText(slot({ fontSize: 4, held }), { lineHeight: 0.95 }),
+    ).toBeCloseTo(7.6 / 56.25, 10)
+  })
+
+  it('is unchanged for a box that says nothing about how it is set', () => {
+    // The regression this pair of settings could quietly cause: every box
+    // measured before they existed must still measure the same.
+    const held = { lines: 2, longest: 10 }
+    expect(capacityOf(slot({ fontSize: 4 }), {})).toEqual(
+      capacityOf(slot({ fontSize: 4 })),
+    )
+    expect(heightForText(slot({ fontSize: 4, held }), {})).toBe(
+      heightForText(slot({ fontSize: 4, held })),
+    )
+  })
+})
