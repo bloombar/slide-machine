@@ -238,10 +238,36 @@ export const candidateOf = (
   /** The slot declarations this presentation carries for this page, if it is
    * one this system exported (EXP-8). */
   declared?: SlotSpec[],
+  /**
+   * Read this page as a DESIGN rather than as a slide.
+   *
+   * True for a layout page, which a deck that defines its own layouts turns
+   * into a layout directly (`import-presentation`). The distinction matters
+   * for exactly one thing: what a picture on the page means. On a slide a
+   * picture is content somebody put there; on a layout page it is shared by
+   * every slide using that page, which is what design means — a crest, a
+   * band, the photograph a title treatment is built around.
+   *
+   * Read as a slide, those became empty image SLOTS: NYU's own template deck
+   * came back with twenty-one of them and not one picture, its photographs
+   * fetched and stored and then referenced by nothing.
+   *
+   * A PLACEHOLDER is the exception, and it is not a small one. Google's stock
+   * layouts define picture placeholders on the layout page — that is where a
+   * placeholder is supposed to live — so treating every layout-page picture
+   * as design would make every stock picture box undeletable decoration and
+   * leave an author no way to place an image at all.
+   */
+  asDesign = false,
 ): Candidate => {
   const byName = new Map((declared ?? []).map(spec => [spec.name, spec]))
+  /** A picture this page carries as design rather than as content: on a
+   * layout page, one nobody can fill because it is not a placeholder. */
+  const isPageArt = (e: SourceElement): boolean =>
+    asDesign && e.kind === 'image' && !e.placeholder
+
   const content = page.elements.filter(
-    e => e.kind !== 'decoration' && holdsAWord(e),
+    e => e.kind !== 'decoration' && !isPageArt(e) && holdsAWord(e),
   )
   const withKinds = content.map(element => ({
     element,
@@ -282,7 +308,7 @@ export const candidateOf = (
     slideId: page.id,
     slots,
     decoration: page.elements
-      .filter(e => e.kind === 'decoration')
+      .filter(e => e.kind === 'decoration' || isPageArt(e))
       .map(e => ({
         box: e.box,
         ...(e.fill ? { fill: e.fill } : {}),

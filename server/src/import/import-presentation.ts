@@ -124,7 +124,9 @@ const authoredLayouts = (
   for (const page of source.layouts) {
     const slides = usedBy.get(page.id)
     if (!slides?.length) continue
-    const design = candidateOf(page, declarationsFor(page))
+    // Read as a DESIGN: this page is about to become a layout, so the
+    // pictures on it are the design's own rather than boxes to fill.
+    const design = candidateOf(page, declarationsFor(page), true)
     // A layout page whose boxes we could not read tells us less than the
     // slides do, so the deck falls back to clustering rather than importing
     // a layout with nothing on it.
