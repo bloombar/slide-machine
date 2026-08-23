@@ -11,6 +11,27 @@
  * separately in `imported-template-fidelity.spec.ts`, where they can fail
  * honestly.
  *
+ * ## It asserts as well as photographs
+ *
+ * The pictures are for a person to judge; the geometry is not left to one.
+ * While it is here it walks EVERY layout, which is more than any other test
+ * does — the spec that strains a design with a lecture only ever reaches the
+ * handful of layouts the generator happens to choose, so most layouts in most
+ * designs were never measured in a browser at all. The same rules run on each
+ * one as it is photographed: nothing clipped, nothing overlapping, nothing off
+ * the slide. A layout that would fail them should not reach the contact sheet
+ * looking fine.
+ *
+ * What that does and does not add is worth being exact about, since it is
+ * easy to read as more than it is. Only one slide's worth of content exists
+ * here, mapped into whatever slots each layout offers, so a box a layout has
+ * nothing to put in stays empty. Geometry is checked everywhere — a box off
+ * the slide is off it whether or not anything fills it — while clipping is
+ * only visible where a box was given words, and two boxes cannot be caught
+ * overlapping unless both were filled. The static audit
+ * (`server/src/templates/audit.test.ts`) is the one that sees an overlap in
+ * boxes nothing has filled yet, which is why both exist.
+ *
  * The pairing is approximate by nature: the importer consolidated 13 slides
  * into 11 layouts, so a layout may stand for more than one slide. The sheet
  * shows both sequences in order and says so, rather than inventing a
@@ -18,7 +39,8 @@
  */
 import { cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
-import { test, expect, type Page, type APIRequestContext } from './fixtures'
+import { test, expect, type APIRequestContext } from './fixtures'
+import { faultsOn, settled } from './slide-boxes'
 import { createProject } from './helpers'
 
 const OUT = path.resolve('artifacts/nyu-bold')
@@ -42,37 +64,6 @@ const LAYOUTS: { type: string; label: string }[] = JSON.parse(
     type: l.type,
     label: l.label,
   }))
-
-/**
- * Waits for the slide itself to stop moving.
- *
- * Not "no animation anywhere": the app keeps indefinitely-repeating ones
- * running elsewhere on the page — a pulse on the record indicator, and the
- * like — so waiting on all of them never returns. Only animations whose
- * target is inside the slide count, and endlessly repeating ones are ignored
- * however they are scoped, since they are never going to finish.
- *
- * Belt and braces over `prefers-reduced-motion`, which the app already
- * honours, so a timeout here is not worth failing a run over.
- */
-const settled = (page: Page) =>
-  page
-    .waitForFunction(
-      () => {
-        const slide = document.querySelector('[data-testid="slide"]')
-        if (!slide) return false
-        return document.getAnimations().every(animation => {
-          const effect = animation.effect as KeyframeEffect | null
-          const target = effect?.target ?? null
-          if (!target || !slide.contains(target)) return true
-          if (effect?.getTiming().iterations === Infinity) return true
-          return animation.playState !== 'running'
-        })
-      },
-      undefined,
-      { timeout: 5_000 },
-    )
-    .catch(() => {})
 
 /** Every distinct picture the design draws itself with. */
 const DECORATION_PICTURES: string[] = [
@@ -167,6 +158,7 @@ test('captures every imported layout beside its source deck', async ({
   await expect(page.getByText('1 / 1')).toBeVisible({ timeout: 15_000 })
 
   const slide = page.getByTestId('slide').first()
+  const faults: string[] = []
   for (const layout of LAYOUTS) {
     await page.getByRole('button', { name: 'Options for slide 1' }).click()
     await page.getByRole('menuitem', { name: 'Change layout' }).click()
@@ -199,5 +191,10 @@ test('captures every imported layout beside its source deck', async ({
     await slide.screenshot({
       path: path.join(OUT, `imported-${layout.type}.png`),
     })
+    faults.push(...(await faultsOn(slide, `layout ${layout.type}`)))
   }
+
+  // After the captures, so a failing layout is still photographed and can be
+  // looked at rather than only read about.
+  expect(faults, faults.join('\n')).toEqual([])
 })
