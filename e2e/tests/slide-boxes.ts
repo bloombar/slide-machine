@@ -106,6 +106,26 @@ export const boxesOf = (slide: Locator) =>
           ),
           overflowY: node.scrollHeight - node.clientHeight,
           overflowX: node.scrollWidth - node.clientWidth,
+          // Where the GLYPHS actually are, which is not where the box is.
+          // A dense design draws its boxes a hair wider than their pitch, so
+          // neighbours in a grid overlap as rectangles while nothing a reader
+          // sees touches: measured on one catalogue page, 60% of overlapping
+          // box pairs had zero text overlap and the rest were affordances.
+          // Overlap is judged on this rather than on the box.
+          textBox: (() => {
+            const range = document.createRange()
+            range.selectNodeContents(node)
+            const t = range.getBoundingClientRect()
+            range.detach()
+            return t.width && t.height
+              ? {
+                  x: (t.x - frame.x) / frame.width,
+                  y: (t.y - frame.y) / frame.height,
+                  w: t.width / frame.width,
+                  h: t.height / frame.height,
+                }
+              : null
+          })(),
           hasText: (() => {
             if (node.querySelector('img') || node.tagName === 'IMG')
               return false
@@ -122,7 +142,15 @@ export const boxesOf = (slide: Locator) =>
 export type SlideBox = Awaited<ReturnType<typeof boxesOf>>[number]
 
 /** How much of the slide two boxes share. Zero when they merely touch. */
-export const overlapArea = (a: SlideBox, b: SlideBox): number => {
+/** A rectangle as a fraction of the slide. */
+export interface Rect {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export const overlapArea = (a: Rect, b: Rect): number => {
   const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)
   const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y)
   return w > EPS && h > EPS ? w * h : 0
@@ -168,10 +196,12 @@ export const faultsOn = async (
       )
   }
 
-  const worded = boxes.filter(box => box.hasText)
+  // Compared on the text, not the container — see `textBox`. A box with no
+  // measurable text extent cannot collide with anything.
+  const worded = boxes.filter(box => box.hasText && box.textBox)
   for (let a = 0; a < worded.length; a++)
     for (let b = a + 1; b < worded.length; b++) {
-      const shared = overlapArea(worded[a]!, worded[b]!)
+      const shared = overlapArea(worded[a]!.textBox!, worded[b]!.textBox!)
       if (shared > 0)
         faults.push(
           `${where} "${worded[a]!.id}" and "${worded[b]!.id}" overlap over ` +

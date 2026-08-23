@@ -137,7 +137,7 @@ export default function TemplatePreview({
 
   return (
     <div className={className} aria-hidden={!interactive}>
-      <SlideView slide={slide} template={template} testId={testId} />
+      <SlideView slide={slide} template={template} testId={testId} asTemplate />
     </div>
   )
 }
