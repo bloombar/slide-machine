@@ -435,7 +435,13 @@ export const deriveTypeScale = (
     // about a face both boxes share. Storing the stack also means the theme
     // holds something the renderer can actually draw.
     const family = agreedOn(slots, s => mapFont(s.fontFamily))
-    const capacities = slots.map(capacityOf)
+    // Measured against how the role is actually set, so a caps title is not
+    // told it holds a quarter more than it does. `INHERITED.lineHeight` is
+    // what an imported box is drawn at, and matches the estimate's own
+    // fallback, so it is stated rather than assumed.
+    const capacities = slots.map(s =>
+      capacityOf(s, { lineHeight: INHERITED.lineHeight }),
+    )
     // What a box set in this role holds, from the boxes that already are.
     // A budget for the boxes an author adds LATER: every imported box carries
     // its own measured capacity, which is more specific and wins

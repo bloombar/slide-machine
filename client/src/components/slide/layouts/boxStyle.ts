@@ -67,6 +67,29 @@ export const typeStyle = (
   lineHeight: style.lineHeight,
   fontFamily: fontStack(style.fontFamily),
   color: resolveColor(style.color, colors),
+  /**
+   * A word longer than its box breaks rather than bursting it.
+   *
+   * Slide text ran on the CSS default, `overflow-wrap: normal`, under which a
+   * token with no break opportunity cannot be broken at all — so the box grew
+   * to whatever width the token demanded. A title holding one long word came
+   * out over half again the width of the slide, hanging off BOTH edges with
+   * its start and end cut by the slide boundary. Every design the app ships
+   * did it, byte for byte identically, because it was never a property of any
+   * template.
+   *
+   * `anywhere` rather than `break-word`: both break the word visually, but
+   * only `anywhere` also constrains the box's `min-content` width, and the
+   * symptom here is the BOX growing. `break-word` would break the glyphs and
+   * leave the geometry exactly as wrong as it was.
+   *
+   * It also makes the renderer agree with the arithmetic. The capacity
+   * estimate assumes text wraps wherever it must (`text-metrics`), and a
+   * budget saying a word fits is only true if the renderer will break it.
+   * A URL, a file path, a chemical name or a gene identifier all reach this,
+   * and a lecture is exactly where those appear.
+   */
+  overflowWrap: 'anywhere',
 })
 
 const pad = (v: number | undefined): string | undefined =>

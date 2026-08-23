@@ -16,9 +16,27 @@
  */
 import type { CandidateSlot } from './candidate'
 
-/** Roughly a character's width, as a fraction of the type size. */
+/**
+ * Roughly a character's width, as a fraction of the type size.
+ *
+ * Half an em is about right for mixed-case prose in the faces this app sets.
+ * Capitals are not: they carry no narrow lowercase forms and no descender
+ * gaps, and run about a quarter wider. A design that sets its titles in caps
+ * — which a brand template very often does — was told each of them holds a
+ * quarter more than it can, and the overflow landed on the reader.
+ */
 const CHAR_W = 0.5
-/** A line's full height, as a fraction of the type size. */
+const CHAR_W_CAPS = 0.62
+
+/**
+ * A line's full height, as a fraction of the type size.
+ *
+ * Only the fallback now. A box set in a role that states its own
+ * `lineHeight` is measured against THAT: a display face at 0.95 fits half
+ * again as many lines into the same box as this assumes, and a paragraph at
+ * 1.625 fits fewer. Guessing 1.5 for both is how a title box was told it
+ * holds one line when it holds two.
+ */
 const LINE_H = 1.5
 /** A 16:9 slide is this many `cqi` tall — `cqi` being a percent of its WIDTH. */
 const SLIDE_H_CQI = 56.25
@@ -34,15 +52,23 @@ const MAX_ITEMS = 50
  * Being a little taller than needed costs nothing on a box with space beneath
  * it; being too short costs the reader the end of every list.
  */
-export const heightForText = (slot: CandidateSlot): number => {
+export const heightForText = (
+  slot: CandidateSlot,
+  setting: { lineHeight?: number; caps?: boolean } = {},
+): number => {
   const { held, fontSize, box } = slot
   if (!held || !fontSize) return 0
-  const perLine = Math.max(1, Math.floor((box.w * 100) / (fontSize * CHAR_W)))
+  const charWidth = setting.caps ? CHAR_W_CAPS : CHAR_W
+  const lineHeight = setting.lineHeight ?? LINE_H
+  const perLine = Math.max(
+    1,
+    Math.floor((box.w * 100) / (fontSize * charWidth)),
+  )
   // Every line is assumed as long as the longest, since only the longest was
   // measured. It is the generous reading, which is the right way to be wrong
   // about a box that would otherwise hide the end of a list.
   const rows = held.lines * Math.max(1, Math.ceil(held.longest / perLine))
-  return (rows * fontSize * LINE_H) / SLIDE_H_CQI
+  return (rows * fontSize * lineHeight) / SLIDE_H_CQI
 }
 
 /**
@@ -68,14 +94,29 @@ export const heightForText = (slot: CandidateSlot): number => {
  */
 export const capacityOf = (
   slot: CandidateSlot,
+  /**
+   * How the box is actually set, where that is known.
+   *
+   * The estimate used to assume one line height and one letter width for
+   * every box on every slide, which made it wrong in both directions at
+   * once — too generous for a title set in caps, too mean for one set with
+   * tight display leading. Both are stated by the role a box follows, so
+   * both are read from it rather than guessed.
+   */
+  setting: { lineHeight?: number; caps?: boolean } = {},
 ): { maxChars?: number; maxItems?: number } => {
   const { box, fontSize, kind } = slot
   // A picture holds no text, and a table's shape is its rows, not a count.
   if (!fontSize || (kind !== 'text' && kind !== 'bullets')) return {}
-  const perLine = Math.max(1, Math.floor((box.w * 100) / (fontSize * CHAR_W)))
+  const charWidth = setting.caps ? CHAR_W_CAPS : CHAR_W
+  const lineHeight = setting.lineHeight ?? LINE_H
+  const perLine = Math.max(
+    1,
+    Math.floor((box.w * 100) / (fontSize * charWidth)),
+  )
   const lines = Math.max(
     1,
-    Math.floor((box.h * SLIDE_H_CQI) / (fontSize * LINE_H)),
+    Math.floor((box.h * SLIDE_H_CQI) / (fontSize * lineHeight)),
   )
   return kind === 'bullets'
     ? // For a list the character bound is per POINT, which is one line of it.
