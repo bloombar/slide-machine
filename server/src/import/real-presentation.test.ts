@@ -251,3 +251,99 @@ describe('the design that import derives from it', () => {
     expect(type.fontSize).toBeGreaterThan(3)
   })
 })
+
+/**
+ * A deck that DEFINES ITS OWN LAYOUTS — the other half of import.
+ *
+ * urban-hydrology above is hand-built: it has no layout definitions, so it
+ * exercises clustering and nothing else. Every defect found on the authored
+ * path was invisible to it — a deck's background taken from its first slide,
+ * layout-page pictures read as slide content, and the whole keep-every-slide
+ * divergence. This is NYU's own template deck, which is that path.
+ *
+ * Its pictures are stabilised to `fixture.invalid`, so nothing here fetches
+ * anything; what it covers is derivation, classification, the type scale and
+ * naming.
+ */
+describe('a presentation that defines its own layouts', () => {
+  let authored: ImportResult
+
+  beforeAll(async () => {
+    const doc = JSON.parse(
+      readFileSync(
+        new URL(
+          '../../test/fixtures/presentation-nyu-bold.json',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    ) as Record<string, unknown>
+    // As every import route sends it (`KEEP_EVERY_SLIDE_BY_DEFAULT`).
+    authored = await importSourcePresentation(toSourcePresentation(doc), {
+      keepEverySlide: true,
+    })
+  })
+
+  it('takes its ground from the page most of the deck wears', () => {
+    // Ten of the thirteen slides are white and the title slide is violet.
+    // Reading the first slide's called the whole deck violet, which no
+    // imported layout showed — each paints its own — but the whiteboard and
+    // every layout an author adds later sat on it.
+    expect(authored.template.theme.background).toBe('#ffffff')
+  })
+
+  it('recovers the scale the deck was set on, not two sizes', () => {
+    const roles = authored.template.theme.textStyles as Record<string, unknown>
+    // A deck of this size is set on a real hierarchy; two roles would mean
+    // the derivation had collapsed it.
+    expect(Object.keys(roles).length).toBeGreaterThan(2)
+    expect(roles).toHaveProperty('title')
+    expect(roles).toHaveProperty('body')
+  })
+
+  it('keeps a layout page picture as design, not as an empty box', () => {
+    // The photographs live on the layout pages. Read as slides they became
+    // image SLOTS — twenty-one empty full-bleed boxes, and the pictures
+    // themselves fetched, stored and then referenced by nothing.
+    //
+    // Asserted as "no content box fills the slide" rather than by counting
+    // stored pictures, because this fixture's URLs are stabilised: nothing
+    // can be fetched from it, so a picture count would be zero however the
+    // classification behaved. The shape of the mistake is what is testable
+    // here, and it is the shape that matters — a full-bleed picture is a
+    // ground, and a ground is never something an author fills in.
+    const fullBleed = authored.template.layouts.flatMap(l =>
+      l.slots
+        .filter(s => s.kind === 'image')
+        .filter(s => {
+          const box = l.elementPositions?.[s.name]
+          return box && box.w > 0.9 && box.h > 0.9
+        }),
+    )
+    expect(fullBleed).toHaveLength(0)
+  })
+
+  it('still gives a slide its own picture as a fillable box', () => {
+    // The exception that keeps the rule honest: a picture a SLIDE places is
+    // content, and must stay something an author can fill.
+    const slots = authored.template.layouts.flatMap(l =>
+      l.slots.filter(s => s.kind === 'image'),
+    )
+    expect(slots.length).toBeGreaterThan(0)
+  })
+
+  it('leaves no box naming a role the theme does not define', () => {
+    const roles = authored.template.theme.textStyles as Record<string, unknown>
+    for (const layout of authored.template.layouts) {
+      for (const box of Object.values(layout.elementPositions ?? {})) {
+        if (box.textStyle) expect(roles).toHaveProperty(box.textStyle)
+      }
+    }
+  })
+
+  it('produces layouts the template schema accepts', () => {
+    for (const layout of authored.template.layouts) {
+      expect(layoutSchema.safeParse(layout).success).toBe(true)
+    }
+  })
+})
