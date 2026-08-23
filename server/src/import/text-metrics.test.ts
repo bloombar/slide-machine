@@ -162,10 +162,19 @@ describe('the edges a real deck actually reaches', () => {
 describe('the way a box is actually set', () => {
   it('fits fewer capitals across a line than mixed-case words', () => {
     // Capitals carry no narrow lowercase forms and no descender gaps, so a
-    // title set in caps holds about a fifth less than the same box of prose.
+    // title set in caps holds meaningfully less than the same box of prose.
     // Told otherwise, the overflow lands on the reader.
-    expect(capacityOf(slot({ fontSize: 4 })).maxChars).toBe(80)
-    expect(capacityOf(slot({ fontSize: 4 }), { caps: true }).maxChars).toBe(64)
+    //
+    // The face is stated, and that is the point of the test rather than a
+    // detail of it: Montserrat is one of the faces whose width was actually
+    // measured, so these numbers answer to a measurement. Left unstated they
+    // would resolve against the fallback for unmeasured faces, and the test
+    // would assert an arithmetic identity about a constant nobody checked.
+    const set = { fontFamily: 'montserrat' }
+    expect(capacityOf(slot({ fontSize: 4 }), set).maxChars).toBe(76)
+    expect(
+      capacityOf(slot({ fontSize: 4 }), { ...set, caps: true }).maxChars,
+    ).toBe(66)
   })
 
   it('fits more lines down a box set with tight display leading', () => {
