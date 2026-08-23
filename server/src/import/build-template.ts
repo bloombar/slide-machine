@@ -214,6 +214,9 @@ const toLayout = (
   taken: Set<string>,
   assets: Map<string, string>,
   scale: TypeScale,
+  /** Present when the presentation stated what its roles mean, which is also
+   * what makes "no role recorded" mean "no role" (EXP-8). */
+  restoredStyles?: Record<string, unknown>,
 ): Layout => {
   const type = unique(slug(derived.type ?? ruleBasedType(derived)), taken)
 
@@ -256,7 +259,10 @@ const toLayout = (
           // What this box can actually hold. Without it, only a box that
           // happens to be called `title`, `body` or `caption` is bounded at
           // all — see `capacityOf`.
-          ...capacityOf(slot, { caps: slot.caps }),
+          ...capacityOf(slot, {
+            caps: slot.caps,
+            fontFamily: mapFont(slot.fontFamily),
+          }),
           // Multi-line when the box is deep enough to hold more than a
           // line, and always when what it holds is Markdown: a list only
           // draws as a list in a block slot, and an inline one would show
@@ -298,7 +304,17 @@ const toLayout = (
       // resembles the one that left. Passed IN rather than applied over the
       // result: what comes back is the box's disagreements with whichever role
       // it ends up naming, so the two have to be the same role.
-      ...typeOfBox(slot, scale, slot.restored?.textStyle),
+      // A file that carries role DEFINITIONS was written by something that
+      // records roles, so a declared box with no role recorded is a box that
+      // deliberately follows none — `null` says so, where `undefined` would
+      // only mean nobody mentioned it (`typeOfBox`).
+      ...typeOfBox(
+        slot,
+        scale,
+        slot.restored
+          ? (slot.restored.textStyle ?? (restoredStyles ? null : undefined))
+          : undefined,
+      ),
       // Being told beats detecting it: an export writes the shouted
       // letterforms, so a re-import reading the text alone would see capitals
       // rather than a box SET in them and would store the shout.
@@ -374,7 +390,9 @@ export const buildTemplate = (
     accent: source.theme.accent,
     link: source.theme.link,
   })
-  const built = layouts.map(layout => toLayout(layout, taken, assets, scale))
+  const built = layouts.map(layout =>
+    toLayout(layout, taken, assets, scale, restoredStyles),
+  )
 
   const layoutOfSlide: Record<string, string> = {}
   for (const [slideId, index] of assignment) {
