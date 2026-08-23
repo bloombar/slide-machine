@@ -17,16 +17,88 @@
 import type { CandidateSlot } from './candidate'
 
 /**
- * Roughly a character's width, as a fraction of the type size.
+ * A character's width, as a fraction of the type size, PER FACE.
  *
- * Half an em is about right for mixed-case prose in the faces this app sets.
- * Capitals are not: they carry no narrow lowercase forms and no descender
- * gaps, and run about a quarter wider. A design that sets its titles in caps
- * — which a brand template very often does — was told each of them holds a
- * quarter more than it can, and the overflow landed on the reader.
+ * This was a single 0.5 for every typeface, and measuring it showed the
+ * assumption was wrong in both directions at once. Body prose at weight 400,
+ * measured per face:
+ *
+ *   sans 0.429 · humanist 0.440 · frank-ruhl-libre 0.454 · serif 0.454
+ *   geometric 0.466 · montserrat 0.522 · mono 0.602
+ *
+ * A forty percent spread, so no single number can be right. Five faces were
+ * given less room than they have, and text was trimmed shorter than it needed
+ * to be. Montserrat and especially MONO went the other way: a monospaced face
+ * has no narrow letters at all, so a program listing — the one box where
+ * overflow is least forgivable — was told it holds a fifth more than it does.
  */
-const CHAR_W = 0.5
-const CHAR_W_CAPS = 0.62
+const CHAR_W: Record<string, number> = {
+  sans: 0.429,
+  humanist: 0.44,
+  'frank-ruhl-libre': 0.454,
+  serif: 0.454,
+  geometric: 0.466,
+  montserrat: 0.522,
+  mono: 0.602,
+}
+
+/**
+ * For a face nobody measured, or none stated.
+ *
+ * Wider than every measured face except Montserrat and mono, which is the
+ * safe direction: it under-states what a box holds, so text is written a
+ * little short rather than a little over. `condensed` and `handwritten` land
+ * here and are genuinely narrower than this, so they lose a few characters
+ * they could have had — the trade being that a face nobody has measured
+ * never overflows on our estimate.
+ */
+const CHAR_W_DEFAULT = 0.5
+
+/**
+ * The same, for a box set in capitals. Measured, not derived.
+ *
+ * This was a single ratio applied to the table above, and that was wrong in
+ * principle rather than merely imprecise. Measured per face, capitals run
+ * between 1.22 and 1.35 times the width of prose — and MONO is exactly 1.000,
+ * as it has to be: every glyph in a monospaced face has the same advance, so
+ * no multiplier can be right for it.
+ *
+ * The ratio was also too small, and too small is the unsafe direction: it
+ * makes the estimate think more characters fit than do, so the budget is
+ * generous and capitals overflow their box. It came out low because the
+ * figure it was derived from compared capitals against TITLE CASE rather than
+ * prose, and Title Case already capitalises every word's first letter, so it
+ * sits much nearer all-caps than prose does. On Montserrat: prose 0.522,
+ * Title Case 0.540, capitals 0.637 — caps over Title Case is 1.179, caps over
+ * prose is 1.220. The old 1.16 was very nearly the Title-Case ratio, which is
+ * the tell that it was measuring the wrong pair.
+ *
+ * Both tables are measurements now, and that is worth stating because the
+ * test over them went red twice while nothing was wrong with what it tested.
+ * It had taken one figure from a measurement and the other from a multiplier
+ * applied to it — and a check that mixes a measurement with a model moves
+ * every time the model does.
+ */
+const CHAR_W_CAPS: Record<string, number> = {
+  sans: 0.555,
+  humanist: 0.572,
+  geometric: 0.6,
+  serif: 0.612,
+  condensed: 0.505,
+  montserrat: 0.637,
+  'frank-ruhl-libre': 0.563,
+  mono: 0.602,
+}
+
+/**
+ * Capitals in a face nobody measured.
+ *
+ * The TOP of the observed range rather than its middle, for the same reason
+ * the mixed-case fallback is wider than most of its table: over-stating how
+ * wide capitals are makes a title come out short, and under-stating it makes
+ * a title overflow. Short is the recoverable one.
+ */
+const CHAR_W_CAPS_DEFAULT = CHAR_W_DEFAULT * 1.35
 
 /**
  * A line's full height, as a fraction of the type size.
@@ -44,6 +116,18 @@ const SLIDE_H_CQI = 56.25
 /** The most `maxItems` the template schema will take. */
 const MAX_ITEMS = 50
 
+/** What one character of this box costs, in fractions of its type size. */
+const charWidthFor = (setting: {
+  caps?: boolean
+  fontFamily?: string
+}): number => {
+  const table = setting.caps ? CHAR_W_CAPS : CHAR_W
+  const fallback = setting.caps ? CHAR_W_CAPS_DEFAULT : CHAR_W_DEFAULT
+  return (
+    (setting.fontFamily ? table[setting.fontFamily] : undefined) ?? fallback
+  )
+}
+
 /**
  * The height a box's own content needs, as a fraction of the slide's height.
  * Zero when nothing is known about what it holds.
@@ -54,11 +138,11 @@ const MAX_ITEMS = 50
  */
 export const heightForText = (
   slot: CandidateSlot,
-  setting: { lineHeight?: number; caps?: boolean } = {},
+  setting: { lineHeight?: number; caps?: boolean; fontFamily?: string } = {},
 ): number => {
   const { held, fontSize, box } = slot
   if (!held || !fontSize) return 0
-  const charWidth = setting.caps ? CHAR_W_CAPS : CHAR_W
+  const charWidth = charWidthFor(setting)
   const lineHeight = setting.lineHeight ?? LINE_H
   const perLine = Math.max(
     1,
@@ -103,12 +187,12 @@ export const capacityOf = (
    * tight display leading. Both are stated by the role a box follows, so
    * both are read from it rather than guessed.
    */
-  setting: { lineHeight?: number; caps?: boolean } = {},
+  setting: { lineHeight?: number; caps?: boolean; fontFamily?: string } = {},
 ): { maxChars?: number; maxItems?: number } => {
   const { box, fontSize, kind } = slot
   // A picture holds no text, and a table's shape is its rows, not a count.
   if (!fontSize || (kind !== 'text' && kind !== 'bullets')) return {}
-  const charWidth = setting.caps ? CHAR_W_CAPS : CHAR_W
+  const charWidth = charWidthFor(setting)
   const lineHeight = setting.lineHeight ?? LINE_H
   const perLine = Math.max(
     1,

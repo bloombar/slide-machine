@@ -19,6 +19,26 @@
  */
 import type { BoxStyle, LayoutNode } from './template'
 
+/*
+ * A headline holds the size its design asked for — `shrink: 0` on every
+ * headline node below.
+ *
+ * Room in a flex column is taken from whichever box CAN give it, and without
+ * this that was whichever box happened to be able to — so a heading was
+ * crushed to make space for the list beneath it while the list kept its full
+ * size. The heading is the one box on the slide a reader uses to find their
+ * place, and it is the one that gave way.
+ *
+ * Stated here rather than in each template's file so it holds for all four
+ * built-ins and for every layout an author builds from a conventional type.
+ * `nyu-elegant` had already fixed it for itself, twenty-four times, in its
+ * own JSON; three shipped designs still had it.
+ *
+ * Only the headline roles. A caption or a paragraph giving way is how a slide
+ * absorbs more content than it was drawn for, and the type fitter shrinks
+ * what is left over (`useFitText`).
+ */
+
 /**
  * A margin a layout asks for instead of the template's.
  *
@@ -50,7 +70,7 @@ const content: LayoutNode = {
     gap: 3,
   },
   children: [
-    { id: 'title', slot: 'title', style: { textStyle: 'heading' } },
+    { shrink: 0, id: 'title', slot: 'title', style: { textStyle: 'heading' } },
     { id: 'body', slot: 'body', style: { textStyle: 'body' } },
   ],
 }
@@ -65,7 +85,7 @@ const list: LayoutNode = {
     gap: 3,
   },
   children: [
-    { id: 'title', slot: 'title', style: { textStyle: 'heading' } },
+    { shrink: 0, id: 'title', slot: 'title', style: { textStyle: 'heading' } },
     { id: 'bullets', slot: 'bullets', style: { textStyle: 'bullet' } },
   ],
 }
@@ -82,6 +102,7 @@ const title: LayoutNode = {
   },
   children: [
     {
+      shrink: 0,
       id: 'title',
       slot: 'title',
       style: { textStyle: 'title', align: 'center' },
@@ -118,6 +139,7 @@ const section: LayoutNode = {
       style: { background: 'accent', radius: 0.25 },
     },
     {
+      shrink: 0,
       id: 'title',
       slot: 'title',
       style: { textStyle: 'sectionTitle', align: 'center' },
@@ -134,7 +156,12 @@ const twoColumn: LayoutNode = {
       id: 'text',
       container: { mode: 'flex', direction: 'column', gap: 2 },
       children: [
-        { id: 'title', slot: 'title', style: { textStyle: 'heading' } },
+        {
+          shrink: 0,
+          id: 'title',
+          slot: 'title',
+          style: { textStyle: 'heading' },
+        },
         { id: 'body', slot: 'body', style: { textStyle: 'body' } },
       ],
     },
@@ -201,7 +228,7 @@ const code: LayoutNode = {
   id: 'root',
   container: { mode: 'flex', direction: 'column', gap: 2 },
   children: [
-    { id: 'title', slot: 'title', style: { textStyle: 'heading' } },
+    { shrink: 0, id: 'title', slot: 'title', style: { textStyle: 'heading' } },
     // No padding, background or corner of its own: the listing brings all
     // three. Setting them here too inset the text a second time, and the
     // fitter that picks a type size to keep the longest line on the slide
@@ -222,6 +249,7 @@ const formula: LayoutNode = {
   },
   children: [
     {
+      shrink: 0,
       id: 'title',
       slot: 'title',
       style: { textStyle: 'heading', align: 'center' },
@@ -260,7 +288,7 @@ const contentList: LayoutNode = {
     gap: 2.5,
   },
   children: [
-    { id: 'title', slot: 'title', style: { textStyle: 'heading' } },
+    { shrink: 0, id: 'title', slot: 'title', style: { textStyle: 'heading' } },
     { id: 'body', slot: 'body', style: { textStyle: 'body' } },
     { id: 'bullets', slot: 'bullets', grow: 1, style: { textStyle: 'bullet' } },
   ],

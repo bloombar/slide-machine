@@ -134,6 +134,10 @@ export interface SourcePage {
   /** The slot metadata this system wrote when it exported the presentation
    * (EXP-8): the boxes of this page, by name. Absent for anything else. */
   slotMetadata?: Record<string, unknown>[]
+  /** What each text role means, where this page carries it — a template we
+   * exported states it so a re-import restores the scale rather than deriving
+   * a fresh one from resolved letterforms (EXP-8). */
+  themeStyles?: Record<string, unknown>
   /** What the presenter said over this slide, from the speaker notes
    * (EXP-8/EDIT-6). Slides only. */
   notes?: string

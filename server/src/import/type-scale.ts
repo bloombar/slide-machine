@@ -441,8 +441,15 @@ export const deriveTypeScale = (
     // what an imported box is drawn at, and matches the estimate's own
     // fallback, so it is stated rather than assumed.
     const allCaps = slots.every(s => s.caps)
+    // Measured in the face the role is actually set in: a monospaced listing
+    // and a humanist caption do not hold the same number of characters in the
+    // same box, and pretending they do was wrong by up to forty percent.
     const capacities = slots.map(s =>
-      capacityOf(s, { lineHeight: INHERITED.lineHeight, caps: allCaps }),
+      capacityOf(s, {
+        lineHeight: INHERITED.lineHeight,
+        caps: allCaps,
+        fontFamily: family ?? mapFont(s.fontFamily),
+      }),
     )
     // What a box set in this role holds, from the boxes that already are.
     // A budget for the boxes an author adds LATER: every imported box carries
@@ -503,8 +510,16 @@ export const typeOfBox = (
    *
    * Honoured only where the scale actually defines it: a role with nothing
    * behind it resolves against the app's defaults and restyles the box.
+   *
+   * `null` means the file states this box follows NO role — which is
+   * information, and was the last kind still being lost. A box outside every
+   * role holds its own size and its own colour; re-clustered into a role on
+   * re-import, those values are not overridden but GONE, and a white caption
+   * came home dark grey, bold, at seventy percent of its size. Absence cannot
+   * carry that, because absence is also what an older file says when it
+   * simply never recorded a role.
    */
-  restored?: string,
+  restored?: string | null,
 ): {
   textStyle?: string
   fontSize?: number
@@ -514,7 +529,12 @@ export const typeOfBox = (
   color?: string
 } => {
   const derived = scale.roleOf.get(slot)
-  const role = restored && scale.styles?.[restored] ? restored : derived
+  const role =
+    restored === null
+      ? undefined
+      : restored && scale.styles?.[restored]
+        ? restored
+        : derived
   const style = role ? scale.styles?.[role] : undefined
   const family = mapFont(slot.fontFamily)
   // A role the box was not measured into cannot speak for its size.

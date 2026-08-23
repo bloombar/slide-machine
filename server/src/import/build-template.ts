@@ -30,7 +30,7 @@ import {
 } from '@slide-machine/shared'
 import type { DerivedLayout } from './consolidate'
 import type { CandidateSlot } from './candidate'
-import type { SourcePresentation } from './source-presentation'
+import type { SourceBox, SourcePresentation } from './source-presentation'
 import { ruleBasedType } from './semantics'
 import { mapFont } from './font-map'
 import { capacityOf, heightForText } from './text-metrics'
@@ -200,8 +200,19 @@ const roomBelow = (
 ): number => {
   const overlapsAcross = (other: { x: number; w: number }) =>
     other.x < box.x + box.w && box.x < other.x + other.w
+  // Anything below this box's TOP, not below its bottom edge.
+  //
+  // Asking "does it start below where I end" misses a box that starts a
+  // hair above that edge — and a box growing downward runs into it just the
+  // same. NYU's title slide has a caption beginning 0.006 of the slide above
+  // the title's bottom, so the caption was invisible to this check and the
+  // title grew straight through it: 7.9% of the slide with words over words,
+  // in a design whose source barely touched at all.
+  //
+  // `> box.y` rather than `>= `, so a box does not stop itself, and boxes
+  // sharing a top edge sit side by side rather than blocking each other.
   const tops = others
-    .filter(o => overlapsAcross(o.box) && o.box.y >= box.y + box.h)
+    .filter(o => o.box !== box && overlapsAcross(o.box) && o.box.y > box.y)
     .map(o => o.box.y)
   // A margin off the slide's own bottom edge, so a grown box never runs off.
   const floor = Math.min(1 - 0.02, ...tops)
@@ -214,6 +225,9 @@ const toLayout = (
   taken: Set<string>,
   assets: Map<string, string>,
   scale: TypeScale,
+  /** Present when the presentation stated what its roles mean, which is also
+   * what makes "no role recorded" mean "no role" (EXP-8). */
+  restoredStyles?: Record<string, unknown>,
 ): Layout => {
   const type = unique(slug(derived.type ?? ruleBasedType(derived)), taken)
 
@@ -239,6 +253,46 @@ const toLayout = (
     }
   }
 
+  /**
+   * The box each slot ends up drawn at.
+   *
+   * A text box is allowed to grow downward into space nothing is using, so
+   * that an imported slide does not hide the end of its own content. Computed
+   * ONCE, here, because two things need the same answer: the geometry that is
+   * stored, and the budget that says how much may be written into it.
+   *
+   * They used to disagree. The budget was measured against the box as the
+   * source drew it and the geometry stored the grown one, so a box that grew
+   * by a line was told it holds half of what it shows — and the text was
+   * trimmed to the smaller of the two. On this deck that is a title box
+   * bounded at eleven characters while drawing twenty-two, which reads as a
+   * title cut to one word for no reason a reader can see.
+   */
+  const drawnBox = new Map<CandidateSlot, SourceBox>(
+    derived.slots.map(slot => [
+      slot,
+      slot.kind === 'image' || slot.kind === 'table'
+        ? slot.box
+        : {
+            ...slot.box,
+            h: Math.min(
+              Math.max(
+                slot.box.h,
+                // The face matters here as much as it does to the budget: a
+                // box measured against the fallback width is measured against
+                // a WIDER letter than it is set in, so it is given rows it
+                // does not need and grows into space that is not free.
+                heightForText(slot, {
+                  caps: slot.caps,
+                  fontFamily: mapFont(slot.fontFamily),
+                }),
+              ),
+              roomBelow(slot.box, derived.slots),
+            ),
+          },
+    ]),
+  )
+
   const slots: SlotSpec[] = derived.slots.map(slot =>
     // A box the presentation declared is restored exactly — kind, instruction
     // and limits — because a round trip through our own export must lose
@@ -256,7 +310,11 @@ const toLayout = (
           // What this box can actually hold. Without it, only a box that
           // happens to be called `title`, `body` or `caption` is bounded at
           // all — see `capacityOf`.
-          ...capacityOf(slot, { caps: slot.caps }),
+          // Measured against the box as DRAWN, not as the source left it.
+          ...capacityOf(
+            { ...slot, box: drawnBox.get(slot) ?? slot.box },
+            { caps: slot.caps, fontFamily: mapFont(slot.fontFamily) },
+          ),
           // Multi-line when the box is deep enough to hold more than a
           // line, and always when what it holds is Markdown: a list only
           // draws as a list in a block slot, and an inline one would show
@@ -273,18 +331,8 @@ const toLayout = (
   for (const slot of derived.slots) {
     // A picture is not text and is drawn to fit its box; only words can be
     // hidden by one that is too short.
-    const grown =
-      slot.kind === 'image' || slot.kind === 'table'
-        ? slot.box
-        : {
-            ...slot.box,
-            h: Math.min(
-              Math.max(slot.box.h, heightForText(slot, { caps: slot.caps })),
-              roomBelow(slot.box, derived.slots),
-            ),
-          }
     elementPositions[slot.name] = {
-      ...safeBox(grown),
+      ...safeBox(drawnBox.get(slot) ?? slot.box),
       // Type size, weight, family and colour came off the slide; keeping them
       // is the whole point of importing a design rather than describing one.
       //
@@ -298,7 +346,17 @@ const toLayout = (
       // resembles the one that left. Passed IN rather than applied over the
       // result: what comes back is the box's disagreements with whichever role
       // it ends up naming, so the two have to be the same role.
-      ...typeOfBox(slot, scale, slot.restored?.textStyle),
+      // A file that carries role DEFINITIONS was written by something that
+      // records roles, so a declared box with no role recorded is a box that
+      // deliberately follows none — `null` says so, where `undefined` would
+      // only mean nobody mentioned it (`typeOfBox`).
+      ...typeOfBox(
+        slot,
+        scale,
+        slot.restored
+          ? (slot.restored.textStyle ?? (restoredStyles ? null : undefined))
+          : undefined,
+      ),
       // Being told beats detecting it: an export writes the shouted
       // letterforms, so a re-import reading the text alone would see capitals
       // rather than a box SET in them and would store the shout.
@@ -356,6 +414,8 @@ export const buildTemplate = (
    * presentation gave. A picture that would not come is simply absent, and the
    * design is drawn without it. */
   assets: Map<string, string> = new Map(),
+  /** What each text role means, where the presentation stated it (EXP-8). */
+  restoredStyles?: Record<string, unknown>,
 ): BuiltTemplate => {
   // Claimed before any derived layout can take it, so a presentation with a
   // slide the rules happen to call "whiteboard" cannot collide with the blank
@@ -372,7 +432,9 @@ export const buildTemplate = (
     accent: source.theme.accent,
     link: source.theme.link,
   })
-  const built = layouts.map(layout => toLayout(layout, taken, assets, scale))
+  const built = layouts.map(layout =>
+    toLayout(layout, taken, assets, scale, restoredStyles),
+  )
 
   const layoutOfSlide: Record<string, string> = {}
   for (const [slideId, index] of assignment) {
@@ -399,7 +461,19 @@ export const buildTemplate = (
       // The deck's own type scale, so its typography is stated once and every
       // box names a role instead of restating it (TMPL-9). A deck that stated
       // no type at all yields none, and the app's defaults stand.
-      ...(scale.styles ? { textStyles: scale.styles } : {}),
+      //
+      // RESTORED where the presentation carries it. A file this system wrote
+      // states what each role means, and being told beats deriving: every
+      // shape was exported in resolved type, so a fresh derivation reads the
+      // letterforms and clusters them its own way. That is how twenty of
+      // thirty-one boxes came back set differently, eight of them titles that
+      // lost their capitals because they inherited `caps` from a role rather
+      // than stating it (EXP-8, docs/TEMPLATES.md §9).
+      ...(restoredStyles
+        ? { textStyles: restoredStyles }
+        : scale.styles
+          ? { textStyles: scale.styles }
+          : {}),
     },
     // Every template must offer a blank slate to draw on (TMPL-7), and no
     // presentation has one to import — so it is synthesized rather than

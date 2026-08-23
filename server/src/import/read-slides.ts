@@ -24,7 +24,11 @@ import {
   type SourceRun,
   type SourceTheme,
 } from './source-presentation'
-import { parseSlotMetadata, slotFromToken } from '../lib/slot-metadata'
+import {
+  parseSlotMetadata,
+  parseThemeStyles,
+  slotFromToken,
+} from '../lib/slot-metadata'
 import { creditFromToken, isCreditLine } from '../lib/image-attribution-token'
 import { creditFromLine } from '../lib/image-credit'
 
@@ -899,6 +903,18 @@ const metadataOf = (
   return undefined
 }
 
+/** What each text role means, where this page carries it (EXP-8). Read
+ * separately from the slots because only theme-building wants it. */
+const themeStylesOf = (
+  elements: Record<string, unknown>[],
+): Record<string, unknown> | undefined => {
+  for (const raw of elements) {
+    const parsed = parseThemeStyles(raw.description as string | undefined)
+    if (parsed) return parsed
+  }
+  return undefined
+}
+
 /** The speaker notes of a slide, which carry its narration (EXP-8). */
 const notesOf = (slide: Record<string, unknown>): string | undefined => {
   const notes = (
@@ -1059,6 +1075,7 @@ const pageOf = (
   const chain = pageChain(raw, ancestry)
   const { background, backgroundImage } = backgroundOf(chain, scheme)
   const metadata = metadataOf(rawElements)
+  const themeStyles = themeStylesOf(rawElements)
   const notes = notesOf(raw)
   const own = creditedPictures(
     rawElements
@@ -1085,6 +1102,7 @@ const pageOf = (
       ...own,
     ],
     ...(metadata ? { slotMetadata: metadata } : {}),
+    ...(themeStyles ? { themeStyles } : {}),
     ...(notes ? { notes } : {}),
   }
 }
