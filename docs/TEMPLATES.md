@@ -802,10 +802,17 @@ What is genuinely outstanding is **authorability** rather than capability — pa
 model that render, export and import correctly but that the editor gives an author no way to
 reach:
 
-1. **Picture decoration cannot be authored.** A layout's `decoration[]` — a band, a logo, a
-   full-bleed background — draws in both renderers and survives every round trip, but only
-   an import or a hand-written JSON file can produce one. In the editor an author can style
-   an empty tree node into a rule or a panel, and can go no further.
+1. **Picture decoration cannot be CREATED in the editor.** A layout's `decoration[]` — a
+   band, a logo, a full-bleed background — draws in both renderers and survives every round
+   trip, but only an import or a hand-written JSON file can produce one. In the editor an
+   author can style an empty tree node into a rule or a panel, and can go no further.
+
+   What an author *can* now do is **open one up**: layout settings lists the pictures a
+   design paints and turns any of them into an image slot at the same rectangle, so a
+   photograph a title treatment was built around becomes something a lecture fills with its
+   own. Reversed by undo, like any other edit. The remaining gap is the other direction —
+   bringing a new picture in as decoration, which still wants an upload the editor has no
+   route for.
 2. **A user-created template has nowhere to put a picture.** `/templates` serves the
    built-ins' assets out of the repo, and an import stores its own under the template's
    prefix in object storage. A template authored in the app has neither route.
