@@ -206,6 +206,14 @@ level.
 `free` is first-class rather than a legacy path — a design imported from Google Slides arrives
 as absolute geometry with no flow to fall back on.
 
+**Every layout carries a tree by the time anything draws it**, so `FlowLayout` draws
+everything. An imported design's `elementPositions` are converted into a tree of `free`
+nodes on read (`adoptDefaultTree`, applied by the built-in loader, by the template model and
+by the version store alike), and `rendererFor` prefers a tree over geometry. `PositionedLayout`
+is the fallback for a layout that somehow has neither, and `renderMode` on a template is
+vestigial — nothing reads it. Worth knowing before reasoning about imports from that file:
+it looks like the import renderer and is not reached.
+
 Two node shapes beyond a plain slot:
 
 - A node with **no slot and no children** is decoration — a rule, band, or panel, drawn from
@@ -432,6 +440,23 @@ without visiting every box. Two consequences worth knowing:
   states the neutral value the box was already drawn with and the disagreeing boxes keep
   their own.
 
+**A picture on a layout page is design; a picture on a slide is content — unless it is a
+placeholder.** A deck that defines its own layouts turns each layout page into a layout
+directly, so the pictures on that page are shared by every slide using it: a crest, a band,
+the photograph a title treatment is built around. Read as a slide's pictures they became
+empty image *slots*, and the design's own photography was fetched, stored and then
+referenced by nothing. The exception is not a small one: Google's stock layouts define
+picture **placeholders** on the layout page, so treating every layout-page picture as design
+would make every stock picture box undeletable and leave an author no way to place an image
+at all. An author can hand a decoration picture over to the slides afterwards
+([§13](#13-whats-still-deferred)).
+
+**A deck's background is the one most of its pages wear**, not the first slide's. A title
+slide is the page least like the rest — an official template deck opens on its brand colour
+and is white for most of what follows — and the theme's palette is chosen for legibility
+against that background, so reading it off the first slide can collapse `text`, `muted` and
+`accent` onto a single colour.
+
 **Ceilings are measured, not guessed.** Each layout's `constraints` — how many bullets, how
 long a title — are the **largest actually observed** across the slides that used it, because
 what an author did is better evidence than what a box could have fitted. They reach the AI
@@ -539,6 +564,18 @@ the choice, since that is where the judgement belongs.
 Import is **read-only** — the source presentation is never modified.
 
 ## 7. Consolidating a hand-built deck
+
+**Consolidation is off by default.** An import keeps each slide's design as its own layout
+unless the author ticks the box asking for merging — `KEEP_EVERY_SLIDE_BY_DEFAULT` in
+`shared`, read by both action schemas and by the control's own initial state so the two
+cannot disagree. Which slides are "the same design" is a judgement, and a judgement made
+silently is one the author cannot see being made: a deck comes back with fewer layouts than
+it had slides and nothing says which were merged into which.
+
+Worth stating plainly because the two branches produce genuinely different templates —
+merging takes the median type size across the slides it combines, so a deck's display sizes
+collapse toward its commonest one. Anything reasoning about, testing, or reproducing an
+import must run the branch the app actually sends, which is this one.
 
 Real decks are not cleanly templated. The same "title and bullets" slide gets rebuilt by
 hand a dozen times, each copy differing by a few pixels. Reproducing every variation would
@@ -761,6 +798,13 @@ the user is told what is blocking:
 - Built-in templates cannot be deleted at all; they are files, not records.
 
 ## 11. Operational notes
+
+**Storage is per-process, and the e2e server has its own.** An import writes a template's
+pictures under `STORAGE_LOCAL_DIR`, which is relative to the working directory: the app
+serving from `server/` writes `server/.uploads`, while the e2e harness runs from `e2e/` and
+writes `e2e/.uploads-e2e`. A template imported by one is therefore missing its pictures to
+the other, and the symptom is decoration that silently does not render rather than an error.
+Check with a direct request for the file, not by looking at the slide.
 
 - **Google Slides import needs no new OAuth scope, and nobody has to reconnect.** This note
   previously said the opposite; a live check against the Slides API settled it. The `drive.readonly`
