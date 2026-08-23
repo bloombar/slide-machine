@@ -59,7 +59,22 @@ export default function ConsolidateToggle({
         className="mt-0.5"
       />
       <span>
-        {t('template.import.tidy')}
+        {/*
+          The two routes get DIFFERENT labels, not one label twice.
+
+          Both import panels can be on screen together, and a control's
+          accessible name is what a screen reader announces — two checkboxes
+          reading "Combine near-identical slides into one layout" on one page
+          leave a listener no way to tell which import each governs. The
+          ambiguity is the defect; that a strict locator also could not tell
+          them apart is the same fact seen from the outside.
+
+          So each names what it acts on rather than repeating the action —
+          and they differ from the FIRST word rather than sharing an opening
+          and diverging at the end. A listener should not have to hear eight
+          identical words before the two are told apart.
+        */}
+        {t(scoped ? 'template.import.tidyFile' : 'template.import.tidy')}
         <span className="block text-xs text-slate-500">
           {t(
             scoped

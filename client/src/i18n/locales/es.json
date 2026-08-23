@@ -458,6 +458,7 @@
       "linkPlaceholder": "Pega un enlace de Google Slides o un enlace de Drive a un diseño .yaml",
       "submit": "Importar diseño",
       "tidy": "Combinar diapositivas casi idénticas en un solo diseño",
+      "tidyFile": "Reducir la presentación que abras a menos maquetas",
       "tidyHint": "Una presentación hecha a mano suele repetir el mismo diseño muchas veces. Marca esta opción para reconocerlas como un único diseño ordenado; déjala sin marcar para conservar cada diapositiva tal como la creaste.",
       "tidyHintFile": "Se aplica a las presentaciones. Una presentación suele repetir un mismo diseño muchas veces; un archivo de diseño no tiene diapositivas que combinar.",
       "working": "Leyendo la presentación…",
