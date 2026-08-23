@@ -23,6 +23,7 @@ import type {
   Layout,
   Template,
 } from '@slide-machine/shared'
+import { KEEP_EVERY_SLIDE_BY_DEFAULT } from '@slide-machine/shared'
 import { MAX_TEMPLATE_INSTRUCTIONS } from '@slide-machine/shared'
 import { defineAction } from './define'
 import { registerAction, ActionValidationError } from './dispatch'
@@ -452,7 +453,9 @@ export const templateImportFromSlides = defineAction<
       name: z.string().trim().min(1).max(80).optional(),
       /** Give every slide a layout of its own instead of consolidating the
        * deck into the few designs it is built from (TMPL-8). */
-      keepEverySlide: z.boolean().optional(),
+      // Absent means KEEP, matching the control in the import panel — the
+      // product decision lives in `shared` so the two cannot disagree.
+      keepEverySlide: z.boolean().default(KEEP_EVERY_SLIDE_BY_DEFAULT),
     })
     // One source or the other, never both and never neither — a request that
     // named two would leave the server picking, which is not its choice.

@@ -30,6 +30,7 @@
  * cover — a file on their own machine.
  */
 import { useRef, useState } from 'react'
+import ConsolidateToggle, { useConsolidateChoice } from './ConsolidateToggle'
 import { useTranslation } from 'react-i18next'
 import { Upload } from 'lucide-react'
 import type { Template } from '@slide-machine/shared'
@@ -44,6 +45,7 @@ export default function TemplateFileImport({
   onImported: (template: Template) => void
 }) {
   const { t } = useTranslation()
+  const { tidy, setTidy, keepEverySlide } = useConsolidateChoice()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const input = useRef<HTMLInputElement>(null)
@@ -82,6 +84,10 @@ export default function TemplateFileImport({
         await run('template.importFromSlides', {
           pptxBase64: await readAsBase64(file),
           name: file.name.replace(/\.pptx$/i, ''),
+          // Stated, as the link route states it. Left unsaid, this route used
+          // the schema's old absent-means-merge reading and quietly merged a
+          // deck the author had not asked to have merged.
+          keepEverySlide,
         })
       } catch {
         setError(t('template.fileImport.errors.read'))
@@ -100,7 +106,13 @@ export default function TemplateFileImport({
 
   return (
     <div className="mt-2">
-      <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+      {/* Above the button, because choosing a file starts the import — there
+          is no submit step to hang it off, so it has to be set beforehand.
+          Always shown: unlike the link route, this one cannot know whether
+          the file has slides until after it has been chosen, so the control
+          says what it applies to rather than hiding on a guess. */}
+      <ConsolidateToggle tidy={tidy} onChange={setTidy} scoped />
+      <label className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
         <Upload className="h-4 w-4" aria-hidden="true" />
         {busy
           ? t('template.fileImport.working')

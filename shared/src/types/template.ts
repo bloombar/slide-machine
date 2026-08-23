@@ -372,6 +372,25 @@ export interface TextStyleSpec extends Pick<
   maxItems?: number
 }
 
+/**
+ * Whether an import keeps a slide's design as its own layout, or merges the
+ * slides it judges to be the same design (TMPL-8).
+ *
+ * Kept separate, because which slides are "the same design" is a judgement,
+ * and a judgement made silently is one the author cannot see being made — a
+ * deck comes back with fewer layouts than it had slides and nothing says
+ * which were merged into which. Merging is offered instead, as a checkbox.
+ *
+ * Declared HERE, in the one place both halves of the app can read, because
+ * it was previously stated twice and the two disagreed: the checkbox in the
+ * import panel defaulted to keeping every slide, while the action schemas
+ * left the field optional and treated its absence as "merge". Every caller
+ * that did not state it — including one shipped upload route — silently got
+ * behaviour no instructor had ever chosen. Both the schemas and the control
+ * now read this, so the two cannot drift apart again.
+ */
+export const KEEP_EVERY_SLIDE_BY_DEFAULT = true
+
 /** The text roles a template defines. Open-ended: these are the ones the
  * built-in layouts use, and a template may carry others. */
 export const TEXT_STYLE_ROLES = [

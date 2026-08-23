@@ -455,6 +455,7 @@
       "submit": "Import design",
       "tidy": "Combine near-identical slides into one layout",
       "tidyHint": "A hand-built deck often rebuilds the same design many times over. Tick this to recognise those as a single tidied-up layout; leave it clear to keep every slide exactly as you drew it.",
+      "tidyHintFile": "Applies to presentations. A slide deck usually rebuilds one design many times over; a design file has no slides to combine.",
       "working": "Reading the presentation…",
       "errors": {
         "link": "That doesn't look like a Google Slides or Drive link.",

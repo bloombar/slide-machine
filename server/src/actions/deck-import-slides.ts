@@ -27,6 +27,7 @@ import type {
   GenerationProvider,
   Layout,
 } from '@slide-machine/shared'
+import { KEEP_EVERY_SLIDE_BY_DEFAULT } from '@slide-machine/shared'
 import { defineAction } from './define'
 import {
   projectOwner,
@@ -94,7 +95,8 @@ export const deckImportFromSlides = defineAction<
       name: z.string().trim().min(1).max(120).optional(),
       /** One layout per slide rather than the few designs the deck is built
        * from (TMPL-8). A lecture import always sends it. */
-      keepEverySlide: z.boolean().optional(),
+      // Absent means KEEP, as everywhere else (`shared`).
+      keepEverySlide: z.boolean().default(KEEP_EVERY_SLIDE_BY_DEFAULT),
       importNotes: z.boolean().optional(),
     })
     // Exactly one source. Two would leave the server choosing, which is not

@@ -455,6 +455,7 @@
       "submit": "Importer le design",
       "tidy": "Regrouper les diapositives quasi identiques en une seule mise en page",
       "tidyHint": "Un deck construit à la main répète souvent la même mise en page. Cochez pour les reconnaître comme une seule mise en page nettoyée ; laissez décoché pour conserver chaque diapositive telle quelle.",
+      "tidyHintFile": "S’applique aux présentations. Un diaporama reprend souvent une même maquette plusieurs fois ; un fichier de design n’a pas de diapositives à combiner.",
       "working": "Lecture de la présentation…",
       "errors": {
         "link": "Cela ne ressemble pas à un lien Google Slides ou Drive.",
