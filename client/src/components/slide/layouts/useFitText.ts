@@ -149,6 +149,18 @@ export const useFitText = (
   const [scale, setScale] = useState(1)
   const [overflowing, setOverflowing] = useState(false)
 
+  /*
+   * This effect writes state, deliberately and before paint.
+   *
+   * Measuring laid-out geometry and writing the result back IS what a layout
+   * effect is for — the size a box needs cannot be known during render, only
+   * after the browser has laid it out, and the answer has to be applied
+   * before the frame is shown or the reader sees the unshrunk text flash.
+   * The rule warns about cascading renders, and the cascade is bounded here:
+   * `measure` sets a scale, the scale changes only the type size, and the
+   * observers that could re-enter are the ones that exist to.
+   */
+  /* eslint-disable react-hooks/set-state-in-effect */
   useLayoutEffect(() => {
     if (!el || !enabled) {
       setScale(1)
@@ -228,6 +240,7 @@ export const useFitText = (
       edits.disconnect()
     }
   }, [enabled, el])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return { ref, scale, overflowing }
 }
