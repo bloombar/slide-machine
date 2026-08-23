@@ -34,7 +34,7 @@
  * way: past a point the honest answer is that the slide holds too much, and
  * the author is better served seeing that than being handed six-point type.
  */
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useState } from 'react'
 
 /**
  * How small the type may get, as a fraction of the size the design asks for.
@@ -106,7 +106,31 @@ export const useFitText = (
   /** Off for boxes that scroll on purpose, like a program listing. */
   enabled = true,
 ): {
-  ref: React.RefObject<HTMLElement | null>
+  /**
+   * Put this on the box. A CALLBACK ref, not a ref object, and that is the
+   * whole of a defect worth stating.
+   *
+   * A ref object is only ever filled in — nothing re-runs when it is. This
+   * measurement lives in an effect keyed on `enabled`, so it ran once, on
+   * mount, and captured whatever `ref.current` held at that instant. A box
+   * whose slot has nothing to show yet renders NOTHING — no element, so no
+   * ref, so the effect took its "no element" exit, set the scale to 1, and
+   * attached no observers at all. When the content arrived and the box
+   * finally existed, nothing was watching it and nothing re-ran: no observer
+   * had ever been attached to fire.
+   *
+   * The box then drew at full size holding half again what it could show,
+   * and reported a scale of 1 — indistinguishable from a box that genuinely
+   * fits. It was not that the measurement got the wrong answer; it is that
+   * the measurement never happened, and an absent measurement reads exactly
+   * like a passing one.
+   *
+   * As a callback ref the element becomes state, the effect depends on it,
+   * and a box that appears later is measured when it appears — as is one
+   * React swaps for a different node, which the old code would have gone on
+   * watching after it was detached.
+   */
+  ref: (node: HTMLElement | null) => void
   scale: number
   /**
    * True when the box is at the floor and STILL cannot show what it holds —
@@ -120,12 +144,12 @@ export const useFitText = (
    */
   overflowing: boolean
 } => {
-  const ref = useRef<HTMLElement | null>(null)
+  const [el, setEl] = useState<HTMLElement | null>(null)
+  const ref = useCallback((node: HTMLElement | null) => setEl(node), [])
   const [scale, setScale] = useState(1)
   const [overflowing, setOverflowing] = useState(false)
 
   useLayoutEffect(() => {
-    const el = ref.current
     if (!el || !enabled) {
       setScale(1)
       setOverflowing(false)
@@ -203,7 +227,7 @@ export const useFitText = (
       resize.disconnect()
       edits.disconnect()
     }
-  }, [enabled])
+  }, [enabled, el])
 
   return { ref, scale, overflowing }
 }

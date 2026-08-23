@@ -278,7 +278,7 @@ function Node({
       // style lives on the node rather than on the slot, so the tag goes here
       // and the animation reads it from the slot wrapper's nearest ancestor.
       data-flip-tier={tierOf(kindOf(node.slot), node.style?.textStyle)}
-      ref={fitRef as React.Ref<HTMLDivElement>}
+      ref={fitRef}
       // Scrolls rather than hides what will not fit — but ONLY the box that
       // actually cannot show it.
       //
