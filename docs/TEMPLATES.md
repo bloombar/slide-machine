@@ -206,6 +206,14 @@ level.
 `free` is first-class rather than a legacy path — a design imported from Google Slides arrives
 as absolute geometry with no flow to fall back on.
 
+**Every layout carries a tree by the time anything draws it**, so `FlowLayout` draws
+everything. An imported design's `elementPositions` are converted into a tree of `free`
+nodes on read (`adoptDefaultTree`, applied by the built-in loader, by the template model and
+by the version store alike), and `rendererFor` prefers a tree over geometry. `PositionedLayout`
+is the fallback for a layout that somehow has neither, and `renderMode` on a template is
+vestigial — nothing reads it. Worth knowing before reasoning about imports from that file:
+it looks like the import renderer and is not reached.
+
 Two node shapes beyond a plain slot:
 
 - A node with **no slot and no children** is decoration — a rule, band, or panel, drawn from
@@ -217,6 +225,19 @@ Two node shapes beyond a plain slot:
 A slot with nothing in it **renders nothing and takes no space**, so a container's gap does
 not reserve a hole where an absent caption would go. The editor overrides that, since an
 empty slot still needs to be clickable.
+
+**A box can refuse to give way.** `shrink: 0` on a node is `flex-shrink: 0` — the box keeps
+the size the design asked for, and any overflow is settled by its siblings instead. Without
+it, room is taken from whichever box happens to be *able* to give it, which is how a heading
+came to be crushed to make space for the list beneath it. Authored as **Holds its size** in
+the slot inspector, offered only under a flex parent since `flex-shrink` is inert in a grid.
+
+When a box genuinely cannot show what it holds, three things happen in order: the type
+shrinks to fit (`useFitText`, down to 40% of the design's size), and past that floor the box
+becomes a scroller rather than clipping — losing the end of a sentence with no sign it was
+ever there is the one outcome worth avoiding. Only the box that actually overflows becomes
+one: a scroller per slot exhausts the compositor's layer budget on a long deck, which paints
+the whole list view blank.
 
 ### Sizes are `cqi` or fractions, never `px`
 
@@ -236,8 +257,31 @@ A box names a role — `heading`, `body`, `caption` — and the template's `them
 decides what that means, with any field the box sets itself overriding it. Changing "body"
 restyles every body box in every layout, instead of sending an author round eight tabs to
 make the same edit. Defaults are in
-[theme.ts](../client/src/components/slide/theme.ts) and reproduce what the built-in layouts
-were written with.
+[text-styles.ts](../shared/src/types/text-styles.ts) and reproduce what the built-in layouts
+were written with; every built-in now **states its own scale** rather than inheriting them,
+so a template's typography is visible in its file and can be taken in its own direction.
+
+One caution for anyone writing a scale by hand or generating one: the resolution merges a
+stored role over the default **field by field**, so a field a role leaves out is not left
+out — it is supplied by the app's default for that role name. Omitting `fontWeight` on
+`title` yields 700, and omitting `color` on `caption` yields `muted`. A role meant to be
+neutral about a property must say so explicitly.
+
+### Capitals are a setting, not the text
+
+A box may be `caps`, and a text style may carry it for every box that follows the role. It
+is a **transform applied when the box is drawn** — the slide keeps the words the author
+wrote, and the box shouts them. Storing the shouted form instead would be unrecoverable: a
+translation would be handed capitals to translate, a narration voice may spell them out,
+search would match nothing, and every future export would carry the damage. It is the same
+class of property as `fontWeight`, and it travels the same way — through the renderer, both
+exporters (applied once in `deck-layout`, so the PDF and the pptx cannot disagree), the
+YAML round trip and the Slides slot payload.
+
+An import recognises it, timidly and on purpose. A box counts as set in capitals only if it
+holds no lowercase letter anywhere, at least eight cased letters, and more than one word.
+Wrongly shouting an instructor's body text is loud and on every slide; failing to shout a
+title loses a flourish. So an acronym, a single word and a box of digits are all refused.
 
 ### How much a box holds
 
@@ -300,9 +344,17 @@ The theme is a free-form object resolved into a known set with fallbacks
 | --- | --- |
 | `background`, `surface`, `text`, `muted`, `accent` | The slide palette. |
 | `penColor`, `highlighterColor` | Whiteboard defaults; fall back to `text` and `accent`. |
-| `textStyles` | Named type roles a layout's boxes refer to ([§4](#text-styles)). |
+| `link` | What a hyperlink is drawn in; falls back to `accent`. |
+| `imageBackground` | What is painted behind a picture. Transparent unless stated — a photograph needs nothing, but a diagram or logo with a transparent ground loses its strokes on a slide of the same value. |
+| `textStyles` | Named type roles a layout's boxes refer to ([§4](#text-styles)). A role may carry `caps` (below). |
 | `marginX`, `marginY`, `gap` | Authoring metrics, editor-only (below). |
 | `backgroundImage` | Object-storage URL for an imported background. |
+
+A program listing takes no theme key. It stays on a dark ground whatever the template,
+because the highlighter's token colours are built for one — but it is the **template's**
+darkest stated colour rather than the highlighter's own, so the block belongs to the
+palette instead of looking like a screenshot of another editor (`codeSurface`,
+[theme.ts](../client/src/components/slide/theme.ts)).
 
 `textStyles` replaces the `fontFamily` / `headingFontFamily` pair this table used to
 describe, which nothing ever read. A role carries a family, size, weight, slant and colour,
@@ -310,11 +362,19 @@ and a box names the role — so a template has one type scale rather than a size
 every box.
 
 **Fonts resolve to bundled stacks, never to a runtime fetch.** A template picks from the
-short list in [fonts.ts](../client/src/components/slide/fonts.ts), and an imported one records
-the source family name and maps it to the nearest available stack. Fetching a font from a
-third party at display time would leak viewers to an external host on every slide view and
-break offline and restricted-network use, so it is not done — the cost is that an imported
-template approximates its original typeface rather than reproducing it.
+short list in [fonts.ts](../client/src/components/slide/fonts.ts), and an imported one maps
+the source family to the nearest available stack. Fetching a font from a third party at
+display time would leak viewers to an external host on every slide view and break offline
+and restricted-network use, so it is not done — the cost is that an imported template
+usually approximates its original typeface rather than reproducing it.
+
+Two faces are the exception. **Frank Ruhl Libre and Montserrat are bundled** and served from
+the app's own origin, so a template naming either reproduces the typeface instead of
+resembling it. Both are under the SIL Open Font License, and only the latin subsets and the
+weights the templates actually set are imported. An import matches those two **by name**,
+ahead of the table that answers "what does this most resemble", so a deck set in Montserrat
+comes home in Montserrat; a relative that is not the face itself, like Montserrat
+Alternates, still approximates.
 
 **The metrics are an authoring aid and nothing else.** The editor draws them as guidelines and
 snaps dragged boxes to them; no renderer reads them. That is deliberate: changing a margin
@@ -374,6 +434,44 @@ metadata ([EXP-8](SPEC.md#exp-8-slot-metadata-across-google-slides-round-trips))
 kind, label, instruction and limits come back verbatim — a code box holding a listing is
 indistinguishable from prose on the slide, so being told is the only way to know. Everything
 else is inferred, and that direction stays lossy.
+
+**The type scale is recovered, not invented.** A presentation is rarely written to a scale
+but is nearly always *set* to one — three or four sizes, used over and over. So the sizes of
+every text box in the deck are clustered, the clusters are ranked, and the conventional
+roles are handed out in that order ([type-scale.ts](../server/src/import/type-scale.ts)):
+the size the deck gives the most **room** to becomes `body`, what sits above it is ranked
+`title` / `sectionTitle` / `heading` by how widely each is used, and what sits below becomes
+`caption`. Each box then names its role and states only where it disagrees with it.
+
+Without this, an imported design of thirty layouts held a hundred private type declarations
+that happened to agree — nothing wrong on screen, and nothing an instructor could edit
+without visiting every box. Two consequences worth knowing:
+
+- Sizes within 8% of one another **collapse onto one**. A title set at 40pt on most slides
+  and 38pt on two of them becomes one role at the size the deck used most, which is the
+  point rather than a side effect — a scale that preserved every accidental nudge would not
+  be a scale.
+- A role takes a colour, weight or family **only when every box following it already stated
+  the same one**, so no box gains type it did not have. Where the boxes disagree, the role
+  states the neutral value the box was already drawn with and the disagreeing boxes keep
+  their own.
+
+**A picture on a layout page is design; a picture on a slide is content — unless it is a
+placeholder.** A deck that defines its own layouts turns each layout page into a layout
+directly, so the pictures on that page are shared by every slide using it: a crest, a band,
+the photograph a title treatment is built around. Read as a slide's pictures they became
+empty image *slots*, and the design's own photography was fetched, stored and then
+referenced by nothing. The exception is not a small one: Google's stock layouts define
+picture **placeholders** on the layout page, so treating every layout-page picture as design
+would make every stock picture box undeletable and leave an author no way to place an image
+at all. An author can hand a decoration picture over to the slides afterwards
+([§13](#13-whats-still-deferred)).
+
+**A deck's background is the one most of its pages wear**, not the first slide's. A title
+slide is the page least like the rest — an official template deck opens on its brand colour
+and is white for most of what follows — and the theme's palette is chosen for legibility
+against that background, so reading it off the first slide can collapse `text`, `muted` and
+`accent` onto a single colour.
 
 **Ceilings are measured, not guessed.** Each layout's `constraints` — how many bullets, how
 long a title — are the **largest actually observed** across the slides that used it, because
@@ -482,6 +580,18 @@ the choice, since that is where the judgement belongs.
 Import is **read-only** — the source presentation is never modified.
 
 ## 7. Consolidating a hand-built deck
+
+**Consolidation is off by default.** An import keeps each slide's design as its own layout
+unless the author ticks the box asking for merging — `KEEP_EVERY_SLIDE_BY_DEFAULT` in
+`shared`, read by both action schemas and by the control's own initial state so the two
+cannot disagree. Which slides are "the same design" is a judgement, and a judgement made
+silently is one the author cannot see being made: a deck comes back with fewer layouts than
+it had slides and nothing says which were merged into which.
+
+Worth stating plainly because the two branches produce genuinely different templates —
+merging takes the median type size across the slides it combines, so a deck's display sizes
+collapse toward its commonest one. Anything reasoning about, testing, or reproducing an
+import must run the branch the app actually sends, which is this one.
 
 Real decks are not cleanly templated. The same "title and bullets" slide gets rebuilt by
 hand a dozen times, each copy differing by a few pixels. Reproducing every variation would
@@ -613,8 +723,9 @@ holds.
 **It is advisory, and untrusted.** An instructor can edit or delete alt text and notes in
 Google's interface, and a converter may not preserve everything. So the payload is versioned,
 validated and size-capped, and import **falls back to inference** when it is missing, damaged
-or unrecognized. Its presence makes the round trip lossless; its absence degrades the result
-but never fails the import.
+or unrecognized. Its presence makes the round trip much better; its absence degrades the result
+but never fails the import. Better, not lossless — see [§9](#9-fidelity-and-limits) for
+what it does not carry.
 
 **Deck export offers two shapes** (SPEC [EXP-1](SPEC.md#exp-1-deck-export)):
 
@@ -655,10 +766,19 @@ the user did not ask for.
 
 ## 9. Fidelity and limits
 
-- **A presentation we exported round-trips losslessly**; one from anywhere else does not.
+- **A presentation we exported round-trips better than a foreign one, not losslessly.**
   Ours carries slot metadata ([§8](#8-exporting)), so re-import restores names, kinds,
-  instructions and limits exactly. A foreign deck has none, so its slots are inferred from
-  geometry and placeholder type and every slot arrives as `text` for the author to correct.
+  instructions, limits and the text ROLE each box follows. A foreign deck has none, so its
+  slots are inferred from geometry and placeholder type and every slot arrives as `text`
+  for the author to correct.
+- **A design's typography does not survive the trip.** The payload carries which role a box
+  follows; nothing carries what each role IS. Every shape is exported in resolved type, so a
+  re-import derives a fresh scale from the letterforms rather than restoring the one that
+  left — and a fresh scale clusters differently. Measured on a real deck: 20 of 31 boxes
+  came back resolving to different type, including **eight titles that lost their capitals**
+  because they inherited `caps` from a role rather than stating it themselves. Sizes drift a
+  few percent and nobody notices; the capitals are visible. Carrying role definitions
+  alongside the references is what fixes it, and it is not done yet.
 - **There is no ceiling on layouts or slots.** Layout types and slot names are open
   ([§2](#2-layouts-and-slots)), so a design is never dropped merely because the vocabulary ran
   out. Consolidation still merges near-identical designs on purpose — that is a judgment call,
@@ -671,6 +791,54 @@ the user did not ask for.
 - **Not carried in either direction:** animations, transitions, slide numbering, and anything
   scripted on the master.
 - Everything lost is named in the report, never dropped silently.
+
+### Checking an import
+
+Derived from doing it twice and finding most of it the hard way. The order matters:
+each step is cheap, and each one gates the next.
+
+1. **Record which code path produced the template** — the options the product sends,
+   not a script's defaults. Everything below describes whatever this produced, and an
+   import run with different options is a template no instructor will ever receive.
+2. **Read the source deck before looking at the import.** Count its slides, its
+   pictures *through layout inheritance* (a deck often keeps them on layout pages,
+   not slides), its all-caps strings, its distinct type sizes and colours.
+   Expectations have to come from the source, before the import can anchor you to
+   its own numbers: you cannot notice that six type roles arrived as two unless you
+   knew there were six.
+3. **Audit the template's data** (`npx tsx scripts/audit-template.mjs <file>`):
+   palette collapse, boxes too small to hold text, text over text, styles nothing
+   defines, unreadable contrast. Seconds, no browser. *It cannot see wrapping, and
+   it cannot see whether any of this matches the deck.*
+4. **Compare those counts against step 2.** Roles against type steps; pictures
+   referenced against pictures present; capitalised boxes against capitalised
+   strings; layouts against slides. This is the step that catches a feature that
+   never ran, and no passing test will tell you: a zero here means nothing happened.
+5. **Confirm the build, and know which tests a green actually ran.** The e2e suite
+   runs the built app, so a bundle older than the change under test can only answer
+   questions about a different program — check the bundle contains something the
+   change introduced. And check what a passing run covered: the local gate in
+   [CONTRIBUTING](CONTRIBUTING.md) is `npm test`, which is unit tests only, while CI
+   also runs `test:integration` and the e2e suite. A green from the first says
+   nothing about the other two, and "the tests passed" is the most-repeated sentence
+   in software.
+6. **Render every layout, with content written to strain it** — an unbreakable word,
+   a URL, a list past its point count (`e2e/tests/imported-template-fidelity.spec.ts`,
+   `nyu-bold-comparison.spec.ts`). *These only see boxes that were given content.*
+7. **Look at it beside the source.** The only step that catches a colour read wrong,
+   and nothing asserted substitutes for it.
+8. **Round-trip it and compare box by box, paired by slide** — never by layout name,
+   which is assigned fresh on every import, so the same name means different slides.
+
+Two questions to carry through all of it:
+
+- **What would this number look like if the thing that sets it had never happened?**
+  If the answer is "the same", it is not evidence. A count of zero failures, a field
+  that does not exist on the type being read, and a measurement that never ran all
+  report exactly what success reports.
+- **Does this pass mean "nothing broke" or "the thing works"?** They are
+  indistinguishable from outside, and a green suite proves nothing about a feature
+  absent from the design under test.
 
 ## 10. Deleting templates and layouts
 
@@ -705,6 +873,13 @@ the user is told what is blocking:
 
 ## 11. Operational notes
 
+**Storage is per-process, and the e2e server has its own.** An import writes a template's
+pictures under `STORAGE_LOCAL_DIR`, which is relative to the working directory: the app
+serving from `server/` writes `server/.uploads`, while the e2e harness runs from `e2e/` and
+writes `e2e/.uploads-e2e`. A template imported by one is therefore missing its pictures to
+the other, and the symptom is decoration that silently does not render rather than an error.
+Check with a direct request for the file, not by looking at the slide.
+
 - **Google Slides import needs no new OAuth scope, and nobody has to reconnect.** This note
   previously said the opposite; a live check against the Slides API settled it. The `drive.readonly`
   already granted for the folder picker is enough for `presentations.get`, so an instructor
@@ -731,20 +906,37 @@ schema in [§4](#4-rendering) can be authored by hand too.
 
 ## 13. What's still deferred
 
-**Import, in both directions.** Everything else in this document is built — the WYSIWYG
-editor ([TMPL-4](SPEC.md#tmpl-4-custom-templates-create--edit--save)) is the authoring path,
-and the per-type layout components it was meant to replace are gone: every layout is data
-now, drawn by `FlowLayout`. What remains:
+**Import is done, in both directions.** This section used to list it as outstanding and no
+longer should: a template from a Google Slides presentation
+([TMPL-8](SPEC.md#tmpl-8-template-import-from-google-slides)), a lecture from one
+([EXP-5](SPEC.md#exp-5-lecture-import-from-google-slides)), and a template re-imported from
+its own YAML export ([EXP-3](SPEC.md#exp-3-round-trip-import)) have all landed — [§6](#6-importing-from-google-slides)
+and [§7](#7-consolidating-a-hand-built-deck) describe them. The WYSIWYG editor
+([TMPL-4](SPEC.md#tmpl-4-custom-templates-create--edit--save)) is the authoring path, and the
+per-type layout components it replaced are gone: every layout is data now, drawn by
+`FlowLayout`.
 
-1. **A template from a Google Slides presentation**
-   ([TMPL-8](SPEC.md#tmpl-8-template-import-from-google-slides)) — the reason
-   `PositionedLayout` and `elementPositions` exist, since an imported design arrives as
-   absolute geometry with no tree. Export already goes the other way.
-2. **A lecture from a Google Slides presentation**
-   ([EXP-5](SPEC.md#exp-5-lecture-import-from-google-slides)).
-3. **Re-importing a template from its own export** — a template downloads as YAML and
-   exports to Slides, but neither comes back ([EXP-3](SPEC.md#exp-3-round-trip-import) on
-   the template side; decks already round-trip through YAML).
+What is genuinely outstanding is **authorability** rather than capability — parts of the
+model that render, export and import correctly but that the editor gives an author no way to
+reach:
+
+1. **Picture decoration cannot be CREATED in the editor.** A layout's `decoration[]` — a
+   band, a logo, a full-bleed background — draws in both renderers and survives every round
+   trip, but only an import or a hand-written JSON file can produce one. In the editor an
+   author can style an empty tree node into a rule or a panel, and can go no further.
+
+   What an author *can* now do is **open one up**: layout settings lists the pictures a
+   design paints and turns any of them into an image slot at the same rectangle, so a
+   photograph a title treatment was built around becomes something a lecture fills with its
+   own. Reversed by undo, like any other edit. The remaining gap is the other direction —
+   bringing a new picture in as decoration, which still wants an upload the editor has no
+   route for.
+2. **A user-created template has nowhere to put a picture.** `/templates` serves the
+   built-ins' assets out of the repo, and an import stores its own under the template's
+   prefix in object storage. A template authored in the app has neither route.
+3. **Deriving the rest of a design's theme on import.** The type scale is recovered now
+   ([§6](#6-importing-from-google-slides)); `marginX` / `marginY` / `gap` and
+   `imageBackground` are not, so an imported template still states no authoring metrics.
 
 The slide scaling strategy (container-query units) and z-index tiers are in
 [DECISIONS.md](DECISIONS.md).

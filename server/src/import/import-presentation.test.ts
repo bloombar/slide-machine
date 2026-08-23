@@ -7,7 +7,8 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { layoutSchema } from '../templates/builtin'
-import { WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
+import { resolveStyle } from '../lib/tree-boxes'
+import { WHITEBOARD_LAYOUT_TYPE, themeTextStyles } from '@slide-machine/shared'
 import type { LayoutDecoration } from '@slide-machine/shared'
 import { candidateOf } from './candidate'
 import { toSourcePresentation } from './read-slides'
@@ -557,9 +558,16 @@ describe('a presentation that defines its own layouts', () => {
   })
 
   it('takes styling from the slides, which is where a layout page is silent', async () => {
-    // A layout page's placeholders are empty, so they state no type size
+    // A layout page's placeholders are empty, so they state no type size.
+    // Resolved through the box's role, since a deck's sizes are now stated
+    // once as a scale (`type-scale.ts`).
     const { template } = await importSourcePresentation(authored())
-    expect(template.layouts[0]!.elementPositions.title!.fontSize).toBe(5)
+    expect(
+      resolveStyle(
+        template.layouts[0]!.elementPositions.title,
+        themeTextStyles(template.theme),
+      ).fontSize,
+    ).toBe(5)
   })
 
   it('uses the author’s grouping rather than clustering over it', async () => {

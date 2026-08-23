@@ -21,6 +21,7 @@
  * threw away.
  */
 import { useState } from 'react'
+import ConsolidateToggle, { useConsolidateChoice } from './ConsolidateToggle'
 import { useTranslation } from 'react-i18next'
 import { Upload } from 'lucide-react'
 import type { Template } from '@slide-machine/shared'
@@ -34,7 +35,9 @@ export interface ImportReport {
   layoutsCreated: number
   largestMerge?: { type: string; slides: number }
   approximated: number
-  assetsFailed: number
+  /** Absent when the import attempted no fetch at all — not the same as none
+   * having failed, which is why it is not a plain number. */
+  assetsFailed?: number
 }
 
 /**
@@ -123,7 +126,7 @@ export default function TemplateImport({
    * Kept as an offer instead. `keepEverySlide` is still what the server
    * takes, so this sends its opposite.
    */
-  const [tidy, setTidy] = useState(false)
+  const { tidy, setTidy, keepEverySlide } = useConsolidateChoice()
 
   const source = importSourceFrom(link)
   const fromSlides = source?.action === 'template.importFromSlides'
@@ -139,9 +142,7 @@ export default function TemplateImport({
     const input = fromSlides
       ? {
           presentationId: source.id,
-          // Always stated, since the default is now the one the server
-          // treats as opt-in.
-          keepEverySlide: !tidy,
+          keepEverySlide,
         }
       : { fileId: source.id }
     dispatchAction<Template | { template: Template; report: ImportReport }>(
@@ -265,20 +266,7 @@ export default function TemplateImport({
       {/* Hidden for a design file, which has no slides to consolidate: a
           control that cannot do anything is worse than one that is absent. */}
       {(!link.trim() || fromSlides) && (
-        <label className="mt-2 flex items-start gap-2 text-sm text-slate-600">
-          <input
-            type="checkbox"
-            checked={tidy}
-            onChange={e => setTidy(e.target.checked)}
-            className="mt-0.5"
-          />
-          <span>
-            {t('template.import.tidy')}
-            <span className="block text-xs text-slate-500">
-              {t('template.import.tidyHint')}
-            </span>
-          </span>
-        </label>
+        <ConsolidateToggle tidy={tidy} onChange={setTidy} />
       )}
 
       {/* Said only once something has been typed, so an empty field is not an
@@ -337,7 +325,7 @@ export default function TemplateImport({
               })}
             </p>
           )}
-          {report.assetsFailed > 0 && (
+          {(report.assetsFailed ?? 0) > 0 && (
             <p className="text-amber-700">
               {t('template.import.report.assetsFailed', {
                 count: report.assetsFailed,

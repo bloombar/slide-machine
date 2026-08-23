@@ -25,6 +25,7 @@
  * they recover content the import reinterpreted.
  */
 import type { SlotKind, SlotSpec } from '@slide-machine/shared'
+import type { RestoredSlot } from '../lib/slot-metadata'
 import { isMixed, hasLinks, isNested, isCounted } from './markdown'
 import type {
   SourceBox,
@@ -40,6 +41,9 @@ export interface CandidateSlot {
   /** Type size in `cqi`, where the source stated one. */
   fontSize?: number
   bold?: boolean
+  /** Set in capitals — a way of SETTING the box, carried as a transform and
+   * never as a change to the words (`BoxStyle.caps`). */
+  caps?: boolean
   color?: string
   /** The box's own fill, where the shape has one. Part of the design: a deck
    * may put its colour on the boxes rather than on the page. */
@@ -59,7 +63,7 @@ export interface CandidateSlot {
    * a round trip through Google Slides keeps a box's kind, instruction and
    * limits exactly — which inference could never recover.
    */
-  restored?: SlotSpec
+  restored?: RestoredSlot
   /** What this box held on the slide it came from, for the lecture importer
    * to place (EXP-5). Ignored when only a design is wanted. */
   content?: SourceElement
@@ -92,6 +96,35 @@ export interface Candidate {
   background?: string
   /** A picture filling the page behind everything (TMPL-8). */
   backgroundImage?: string
+}
+
+/**
+ * The least a box must be able to hold to be CONTENT rather than ornament.
+ *
+ * A design carries text that was never meant to be written into: a decorative
+ * initial, a slide number, a single glyph set large in a corner. Imported as
+ * slots they do three kinds of harm — they sit in the editor as boxes an
+ * author cannot use, they overlap the real content, and worst, the AI is told
+ * a `body` slot holds one character, because a box's budget is derived from
+ * its geometry (`text-metrics`). NYU's own template deck has exactly one: a
+ * 5%-wide box carrying a single violet glyph, which imported as a body slot
+ * with `maxChars: 1`.
+ *
+ * Four characters is below any real word and far below anything a design
+ * would ask an author to write, so the rule costs nothing a content box
+ * wanted. The estimate is the same generous one used everywhere else, so a
+ * box that is merely small keeps its place.
+ */
+const MIN_CONTENT_CHARS = 4
+
+const holdsAWord = (element: SourceElement): boolean => {
+  if (element.kind === 'image' || element.kind === 'table') return true
+  const size = sizeOf(element)
+  if (!size) return true // no stated size: nothing to judge it by
+  const { box } = element
+  const perLine = Math.max(1, Math.floor((box.w * 100) / (size * 0.5)))
+  const lines = Math.max(1, Math.floor((box.h * 56.25) / (size * 1.5)))
+  return perLine * lines >= MIN_CONTENT_CHARS
 }
 
 /** Google's placeholder types, in the vocabulary a layout uses. */
@@ -135,6 +168,41 @@ const sizeOf = (element: SourceElement): number | undefined => {
 
 const boldOf = (element: SourceElement): boolean | undefined =>
   element.runs?.some(r => r.bold) ? true : undefined
+
+/**
+ * Whether this box is SET in capitals, as opposed to happening to hold some.
+ *
+ * Deliberately timid, because the two ways of being wrong are not equally
+ * bad: wrongly shouting an instructor's body text is loud and on every slide,
+ * while failing to shout a title merely loses a flourish. So all four of
+ * these must hold, and any one of them failing means no.
+ *
+ *   - No lowercase letter ANYWHERE in the box. One is enough to prove the
+ *     text is written normally and merely opens with a capital.
+ *   - At least `CAPS_MIN_LETTERS` cased letters. Refuses "NYU", "PDF", "Q&A"
+ *     and every other acronym, which is the commonest false positive by far.
+ *   - More than one word. A single shouted label is as likely to be an
+ *     abbreviation, a code or a stray glyph as a deliberate setting.
+ *   - Some cased letters at all, so a box of digits or punctuation — a slide
+ *     number, a date, a bullet character — is never called capitalised.
+ *
+ * What survives is a box holding several words of several letters with not
+ * one lowercase among them, which is a design decision rather than an
+ * accident of content.
+ */
+const CAPS_MIN_LETTERS = 8
+
+export const capsOf = (element: SourceElement): boolean | undefined => {
+  const text = (element.runs ?? []).map(r => r.text).join('')
+  if (/\p{Ll}/u.test(text)) return undefined
+  const letters = text.match(/\p{L}/gu)?.length ?? 0
+  if (letters < CAPS_MIN_LETTERS) return undefined
+  const words = text
+    .trim()
+    .split(/\s+/)
+    .filter(w => /\p{L}/u.test(w))
+  return words.length > 1 ? true : undefined
+}
 
 const colorOf = (element: SourceElement): string | undefined =>
   element.runs?.find(r => r.color)?.color
@@ -208,9 +276,37 @@ export const candidateOf = (
   /** The slot declarations this presentation carries for this page, if it is
    * one this system exported (EXP-8). */
   declared?: SlotSpec[],
+  /**
+   * Read this page as a DESIGN rather than as a slide.
+   *
+   * True for a layout page, which a deck that defines its own layouts turns
+   * into a layout directly (`import-presentation`). The distinction matters
+   * for exactly one thing: what a picture on the page means. On a slide a
+   * picture is content somebody put there; on a layout page it is shared by
+   * every slide using that page, which is what design means — a crest, a
+   * band, the photograph a title treatment is built around.
+   *
+   * Read as a slide, those became empty image SLOTS: NYU's own template deck
+   * came back with twenty-one of them and not one picture, its photographs
+   * fetched and stored and then referenced by nothing.
+   *
+   * A PLACEHOLDER is the exception, and it is not a small one. Google's stock
+   * layouts define picture placeholders on the layout page — that is where a
+   * placeholder is supposed to live — so treating every layout-page picture
+   * as design would make every stock picture box undeletable decoration and
+   * leave an author no way to place an image at all.
+   */
+  asDesign = false,
 ): Candidate => {
   const byName = new Map((declared ?? []).map(spec => [spec.name, spec]))
-  const content = page.elements.filter(e => e.kind !== 'decoration')
+  /** A picture this page carries as design rather than as content: on a
+   * layout page, one nobody can fill because it is not a placeholder. */
+  const isPageArt = (e: SourceElement): boolean =>
+    asDesign && e.kind === 'image' && !e.placeholder
+
+  const content = page.elements.filter(
+    e => e.kind !== 'decoration' && !isPageArt(e) && holdsAWord(e),
+  )
   const withKinds = content.map(element => ({
     element,
     kind: kindOf(element),
@@ -237,6 +333,7 @@ export const candidateOf = (
       ...(spec ? { restored: spec } : {}),
       ...(sizeOf(element) !== undefined ? { fontSize: sizeOf(element) } : {}),
       ...(boldOf(element) ? { bold: true } : {}),
+      ...(capsOf(element) ? { caps: true } : {}),
       ...(colorOf(element) ? { color: colorOf(element) } : {}),
       ...(element.fill ? { background: element.fill } : {}),
       ...(fontOf(element) ? { fontFamily: fontOf(element) } : {}),
@@ -250,7 +347,7 @@ export const candidateOf = (
     slideId: page.id,
     slots,
     decoration: page.elements
-      .filter(e => e.kind === 'decoration')
+      .filter(e => e.kind === 'decoration' || isPageArt(e))
       .map(e => ({
         box: e.box,
         ...(e.fill ? { fill: e.fill } : {}),

@@ -120,6 +120,7 @@ const boxStyleSchema = z.object({
   fontSize: z.number().positive().max(100).optional(),
   fontWeight: z.number().int().min(100).max(900).optional(),
   italic: z.boolean().optional(),
+  caps: z.boolean().optional(),
   lineHeight: z.number().min(0.5).max(4).optional(),
   fontFamily: z.string().min(1).max(40).optional(),
   color: z.string().min(1).max(40).optional(),

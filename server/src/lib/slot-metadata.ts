@@ -71,6 +71,11 @@ export const MAX_SLOT_PAYLOAD_BYTES = 8000
  * a line at a time, and bounded. */
 const MAX_SLOT_NAME = 120
 
+/** A slot as the payload states it: its own declaration, plus the text role
+ * the box that shows it follows. The role rides here rather than on `SlotSpec`
+ * because that is where it has to be read back from, not where it lives. */
+export type RestoredSlot = SlotSpec & { textStyle?: string; caps?: boolean }
+
 /** The alt text that identifies a shape as a slot. */
 export const slotToken = (name: string): string => `${SLOT_TOKEN_PREFIX}${name}`
 
@@ -112,6 +117,17 @@ const slotSchema = z.object({
   maxItems: z.number().int().positive().optional(),
   required: z.boolean().optional(),
   options: z.record(z.string(), z.unknown()).optional(),
+  /** The text role the box follows (TMPL-9). Not a `SlotSpec` field — it
+   * lives on the box, not the slot — but it belongs in this payload because
+   * it is the one part of a design's typography that a Slides file has
+   * nowhere else to put: the exporter resolves every role down to literal
+   * type before writing, so without this a re-import can only derive a fresh
+   * scale, which is a different design from the one that left. */
+  textStyle: z.string().min(1).max(40).optional(),
+  /** Set in capitals. Travels for the same reason the role does: the export
+   * writes the shouted letterforms, so a re-import would read the text as
+   * capitals rather than as a box SET in them (`BoxStyle.caps`). */
+  caps: z.boolean().optional(),
 })
 
 const payloadSchema = z.object({
@@ -121,8 +137,14 @@ const payloadSchema = z.object({
 
 /** The fields worth carrying, with anything absent left out so the payload
  * states what a template said rather than a defaulted copy of it. */
-const forWire = (spec: SlotSpec): Record<string, unknown> => {
+const forWire = (
+  spec: SlotSpec,
+  role?: string,
+  caps?: boolean,
+): Record<string, unknown> => {
   const out: Record<string, unknown> = { name: spec.name, kind: spec.kind }
+  if (role) out.textStyle = role
+  if (caps) out.caps = true
   if (spec.label) out.label = spec.label
   if (spec.description) out.description = spec.description
   if (spec.multiline) out.multiline = spec.multiline
@@ -144,17 +166,31 @@ const bytes = (text: string): number => Buffer.byteLength(text, 'utf8')
  * only steers what is written into it. Losing the whole payload to save a
  * sentence would be the wrong trade.
  */
-export const encodeSlotMetadata = (slots: SlotSpec[]): string | undefined => {
+export const encodeSlotMetadata = (
+  slots: SlotSpec[],
+  /** The text role each box follows, by slot name — `textStylesBySlot` of the
+   * layout these slots belong to. Optional so a caller that has only the
+   * specs still writes a valid payload, just one without the roles. */
+  roles: Record<string, string | undefined> = {},
+  /** Which boxes are set in capitals, by slot name. */
+  caps: Record<string, boolean | undefined> = {},
+): string | undefined => {
   if (!slots.length) return undefined
   const wrap = (entries: Record<string, unknown>[]): string =>
     JSON.stringify({ [MARKER]: SLOT_METADATA_VERSION, slots: entries })
 
-  const full = wrap(slots.map(forWire))
+  const full = wrap(
+    slots.map(spec => forWire(spec, roles[spec.name], caps[spec.name])),
+  )
   if (bytes(full) <= MAX_SLOT_PAYLOAD_BYTES) return full
 
   const lean = wrap(
     slots.map(spec => {
-      const { description, ...rest } = forWire(spec)
+      const { description, ...rest } = forWire(
+        spec,
+        roles[spec.name],
+        caps[spec.name],
+      )
       void description
       return rest
     }),
@@ -175,7 +211,7 @@ export const encodeSlotMetadata = (slots: SlotSpec[]): string | undefined => {
  */
 export const parseSlotMetadata = (
   text: string | undefined,
-): SlotSpec[] | undefined => {
+): RestoredSlot[] | undefined => {
   if (!text || bytes(text) > MAX_SLOT_PAYLOAD_BYTES) return undefined
   let raw: unknown
   try {
@@ -187,7 +223,7 @@ export const parseSlotMetadata = (
   if (!parsed.success) return undefined
   const slots = parsed.data.slots
     .filter(slot => slot.name)
-    .map((slot): SlotSpec => ({
+    .map((slot): RestoredSlot => ({
       ...slot,
       kind: (slot.kind ?? 'text') as SlotKind,
       // A slot must be labelled to be shown, and its name is the honest

@@ -6,11 +6,34 @@
  * geometry was — so the real assertion here is that `layoutSchema` parses it.
  */
 import { describe, it, expect } from 'vitest'
+import { themeTextStyles } from '@slide-machine/shared'
 import { layoutSchema } from '../templates/builtin'
+import { resolveStyle } from '../lib/tree-boxes'
 import type { CandidateSlot } from './candidate'
 import type { DerivedLayout } from './consolidate'
 import { buildTemplate, importReport, mapFont } from './build-template'
+import { capsOf } from './candidate'
 import type { SourcePresentation } from './source-presentation'
+
+/**
+ * A box's type as anything that draws it sees it: the role it follows, with
+ * its own fields over the top.
+ *
+ * Read through the resolver rather than off the box, because an import now
+ * states a design's typography once as a scale and has each box name a role
+ * (`type-scale.ts`). Asserting on the raw box would assert on which HALF of
+ * the cascade a value happens to live in, which is exactly the thing the
+ * scale is free to change.
+ */
+const typeOf = (
+  built: ReturnType<typeof buildTemplate>,
+  layout: number,
+  slotName: string,
+) =>
+  resolveStyle(
+    built.layouts[layout]!.elementPositions![slotName],
+    themeTextStyles(built.theme),
+  )
 
 const slot = (
   name: string,
@@ -64,7 +87,7 @@ describe('the template that comes out', () => {
 
   it('keeps the type size and colour the slide was drawn in', () => {
     // Which is the point of importing a design rather than describing one
-    const { layouts } = buildTemplate(
+    const built = buildTemplate(
       source(),
       [
         derived({
@@ -79,7 +102,7 @@ describe('the template that comes out', () => {
       ],
       new Map(),
     )
-    expect(layouts[0]!.elementPositions.title).toMatchObject({
+    expect(typeOf(built, 0, 'title')).toMatchObject({
       fontSize: 6.2,
       fontWeight: 700,
       color: '#b45309',
@@ -313,7 +336,7 @@ describe('fonts', () => {
   })
 
   it('reaches the box it belongs to', () => {
-    const { layouts } = buildTemplate(
+    const built = buildTemplate(
       source(),
       [
         derived({
@@ -328,8 +351,8 @@ describe('fonts', () => {
       ],
       new Map(),
     )
-    expect(layouts[0]!.elementPositions.title!.fontFamily).toBe('serif')
-    expect(layoutSchema.safeParse(layouts[0]).success).toBe(true)
+    expect(typeOf(built, 0, 'title').fontFamily).toBe('serif')
+    expect(layoutSchema.safeParse(built.layouts[0]).success).toBe(true)
   })
 })
 
@@ -692,5 +715,53 @@ describe('what an imported box can hold', () => {
   it('produces slots the template schema accepts', () => {
     const { layouts } = buildTemplate(source(), [twoColumns], new Map())
     expect(layoutSchema.safeParse(layouts[0]).success).toBe(true)
+  })
+})
+
+describe('recognising a box set in capitals', () => {
+  const el = (text: string) =>
+    ({
+      kind: 'text',
+      box: { x: 0, y: 0, w: 1, h: 1 },
+      runs: [{ text }],
+    }) as never
+
+  it('recognises several shouted words', () => {
+    expect(capsOf(el('TITLE OF PRESENTATION'))).toBe(true)
+    expect(capsOf(el('SLIDE WITH LIST ITEMS'))).toBe(true)
+  })
+
+  it('refuses an acronym', () => {
+    // The commonest false positive by far, and the one that would shout a
+    // whole box because three letters in it are capitals.
+    expect(capsOf(el('NYU'))).toBeUndefined()
+    expect(capsOf(el('PDF'))).toBeUndefined()
+  })
+
+  it('refuses a single word, however long', () => {
+    // As likely an abbreviation, a code or a stray glyph as a decision.
+    expect(capsOf(el('INTRODUCTION'))).toBeUndefined()
+  })
+
+  it('refuses a box holding one lowercase letter anywhere', () => {
+    // One is enough to prove the text is written normally.
+    expect(capsOf(el('TITLE OF PRESENTATIONs'))).toBeUndefined()
+    expect(capsOf(el('Rainwater harvesting on campus'))).toBeUndefined()
+  })
+
+  it('refuses a box with no letters to speak of', () => {
+    // A slide number, a date, a bullet glyph: uncased, and not a decision
+    // about how to set type.
+    expect(capsOf(el('01/23/2020'))).toBeUndefined()
+    expect(capsOf(el('— • —'))).toBeUndefined()
+  })
+
+  it('reads the whole box, not its first run', () => {
+    const split = {
+      kind: 'text',
+      box: { x: 0, y: 0, w: 1, h: 1 },
+      runs: [{ text: 'AN IMPORTANT ' }, { text: 'quote' }],
+    } as never
+    expect(capsOf(split)).toBeUndefined()
   })
 })

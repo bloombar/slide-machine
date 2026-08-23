@@ -137,27 +137,34 @@ describe('template.importFromSlides (TMPL-8)', () => {
     expect(types).toContain('whiteboard')
   })
 
-  it('gives back the few designs the deck is built from, not one per slide', async () => {
+  it('gives back the few designs the deck is built from when asked to tidy', async () => {
     // Consolidation asserted through the action (TMPL-8). The mock deck is
     // deliberately messy — a handful of real designs rebuilt by hand with
     // jitter on every copy — so a template of one layout per slide would be
-    // the near-duplicates the spec calls worse than useless
+    // the near-duplicates the spec calls worse than useless.
+    //
+    // Asked for EXPLICITLY, because merging is the opt-in: which slides are
+    // "the same design" is a judgement, and the app does not make it unless
+    // the author ticks the box (`KEEP_EVERY_SLIDE_BY_DEFAULT`).
     await act(ada, 'quiz.connectGoogle')
     const { body } = await act(ada, 'template.importFromSlides', {
       presentationId: 'deck-1',
+      keepEverySlide: false,
     })
     expect(body.report.layoutsCreated).toBeLessThan(body.report.slidesRead)
     // Every design, plus the blank slate every template owes (TMPL-7)
     expect(body.template.layouts).toHaveLength(body.report.layoutsCreated + 1)
   })
 
-  it('gives back every slide as its own layout when the author asks', async () => {
-    // The option, asserted through the action: the same deck the other way,
-    // for the author who wants it exactly as they drew it
+  it('gives back every slide as its own layout by default', async () => {
+    // The DEFAULT, asserted through the action rather than only in the unit
+    // tests: the flag is deliberately not passed, so this fails if the
+    // action's own schema ever stops defaulting to keeping every slide —
+    // which is exactly how the two halves came to disagree before
+    // (`KEEP_EVERY_SLIDE_BY_DEFAULT`).
     await act(ada, 'quiz.connectGoogle')
     const { body } = await act(ada, 'template.importFromSlides', {
       presentationId: 'deck-1',
-      keepEverySlide: true,
     })
     expect(body.report.layoutsCreated).toBe(body.report.slidesRead)
     expect(body.report.approximated).toBe(0)
@@ -174,8 +181,15 @@ describe('template.importFromSlides (TMPL-8)', () => {
       slidesRead: expect.any(Number),
       layoutsCreated: expect.any(Number),
       approximated: expect.any(Number),
-      assetsFailed: expect.any(Number),
     })
+    // ABSENT, and asserted as absent rather than as a number.
+    //
+    // This import fetches nothing — it is given nowhere to put a picture — so
+    // there is no count to report, and reporting zero would be the same
+    // answer a wholly successful fetch gives. That indistinguishability was
+    // the defect; a test that accepted `any(Number)` here is evidence of it,
+    // since it was written when the field could not say "not attempted".
+    expect(body.report.assetsFailed).toBeUndefined()
   })
 
   it('arrives private, since an import is a guess the author reviews', async () => {

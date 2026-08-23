@@ -171,8 +171,17 @@ export interface ImportReport {
   largestMerge?: { type: string; slides: number }
   /** Slides that matched no design and were drawn with the nearest one. */
   approximated: number
-  /** Images that could not be fetched, so the layout has an empty box. */
-  assetsFailed: number
+  /**
+   * Images that could not be fetched, so the layout has an empty box.
+   *
+   * ABSENT means no fetch was attempted — an import given nowhere to store
+   * pictures skips them entirely. It is not the same as zero, and it used to
+   * be reported as zero, which is the most reassuring number this field can
+   * carry: "every picture came through" and "we never looked" were
+   * indistinguishable. A count that reads well for a reason unrelated to what
+   * it counts is worse than no count.
+   */
+  assetsFailed?: number
   /**
    * Content that could not be placed, by the slide it was on (EXP-5).
    *

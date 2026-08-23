@@ -22,10 +22,11 @@
  */
 import { readFileSync } from 'node:fs'
 import { describe, it, expect, vi, beforeAll } from 'vitest'
-import { WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
+import { WHITEBOARD_LAYOUT_TYPE, themeTextStyles } from '@slide-machine/shared'
 import { toSourcePresentation } from './read-slides'
 import { importSourcePresentation } from './import-presentation'
 import { layoutSchema } from '../templates/builtin'
+import { resolveStyle } from '../lib/tree-boxes'
 import type { ImportResult } from './import-presentation'
 import type { SourcePresentation } from './source-presentation'
 
@@ -46,13 +47,32 @@ const FIXTURE = new URL(
 const raw = JSON.parse(readFileSync(FIXTURE, 'utf8')) as Record<string, unknown>
 
 let source: SourcePresentation
+/**
+ * The deck as an instructor actually gets it.
+ *
+ * `keepEverySlide` is what every import route sends
+ * (`KEEP_EVERY_SLIDE_BY_DEFAULT`), so this is the path a real import takes
+ * and therefore the one the assertions below run against.
+ *
+ * They used not to. This file imported without options — the CONSOLIDATING
+ * branch, which no route sends — and the default path was covered by a single
+ * layout COUNT and nothing else. Every substantive check, colours, geometry,
+ * type, ran against a template no instructor would ever receive, so a whole
+ * afternoon's worth of derivation could differ on the shipped path and the
+ * suite would stay green. A count is exactly the check that passes for
+ * reasons unrelated to what it is checking.
+ */
 let result: ImportResult
+/** The same deck merged, which is what the tidy checkbox asks for. Kept as
+ * its own case rather than as the default, since it is the opt-in. */
+let tidied: ImportResult
 
 beforeAll(async () => {
   source = toSourcePresentation(raw)
   // No provider: naming layouts is the one pass an import must survive
   // without, so the fixture run is the rule-based path.
-  result = await importSourcePresentation(source)
+  result = await importSourcePresentation(source, { keepEverySlide: true })
+  tidied = await importSourcePresentation(source)
 })
 
 describe('reading a real presentation', () => {
@@ -135,24 +155,47 @@ describe('the design that import derives from it', () => {
     }
   })
 
-  it('groups the deck by the layouts its author actually used', () => {
-    // Five slides on TITLE_AND_BODY and one on TITLE: the author already did
-    // the work consolidation exists to do, so it is not redone worse
-    expect(derived()).toHaveLength(2)
+  it('reads every slide of the deck, whichever way it is imported', () => {
     expect(result.report.slidesRead).toBe(6)
-    expect(result.report.largestMerge?.slides).toBe(5)
+    expect(tidied.report.slidesRead).toBe(6)
     expect(result.report.approximated).toBe(0)
+    // Kept apart, one layout per slide, because that is what was asked for
+    expect(derived()).toHaveLength(6)
   })
 
-  it('gives back every slide when the author asks for that', async () => {
-    // The same deck, imported the other way: one layout per slide (TMPL-8)
-    const every = await importSourcePresentation(source, {
-      keepEverySlide: true,
-    })
+  it('groups the deck by the layouts its author actually used', () => {
+    // Five slides on TITLE_AND_BODY and one on TITLE: the author already did
+    // the work consolidation exists to do, so it is not redone worse. This is
+    // the TIDIED import — grouping is what the checkbox asks for.
     expect(
-      every.template.layouts.filter(l => l.type !== WHITEBOARD_LAYOUT_TYPE),
-    ).toHaveLength(6)
-    expect(every.report.layoutsCreated).toBe(6)
+      tidied.template.layouts.filter(l => l.type !== WHITEBOARD_LAYOUT_TYPE),
+    ).toHaveLength(2)
+    expect(tidied.report.largestMerge?.slides).toBe(5)
+    expect(tidied.report.approximated).toBe(0)
+  })
+
+  it('combines near-identical slides when the author ticks the box', () => {
+    // The same deck imported the other way. Merging is the OPT-IN (TMPL-8),
+    // so it is asserted as its own case rather than as the default — and on
+    // more than a count, since a count was all this path used to check.
+    const merged = tidied.template.layouts.filter(
+      l => l.type !== WHITEBOARD_LAYOUT_TYPE,
+    )
+    const kept = result.template.layouts.filter(
+      l => l.type !== WHITEBOARD_LAYOUT_TYPE,
+    )
+    expect(merged.length).toBeLessThan(kept.length)
+    expect(tidied.report.layoutsCreated).toBe(merged.length)
+    // Whatever it merges, it still has to draw: every box placed, and a
+    // palette to draw it in.
+    for (const layout of merged) {
+      for (const slot of layout.slots) {
+        expect(layout.elementPositions?.[slot.name]).toBeDefined()
+      }
+    }
+    expect(tidied.template.theme.background).toBe(
+      result.template.theme.background,
+    )
   })
 
   it('carries the deck’s colour onto the template', () => {
@@ -187,15 +230,120 @@ describe('the design that import derives from it', () => {
 
   it('sets each box in the type the deck sets it in', () => {
     // Type size, weight, family and colour all reach the design — and every
-    // one of them was stated a page or two above the slide
+    // one of them was stated a page or two above the slide.
+    //
+    // Read through the cascade, because a design's typography is now stated
+    // once as a scale and named by each box (`type-scale.ts`). Which half of
+    // the cascade a value sits in is the scale's business; that the box is
+    // SET this way is the design's, and that is what this asserts.
     const heading = derived()
       .flatMap(l => Object.entries(l.elementPositions ?? {}))
       .find(([name]) => name === 'title')?.[1]
-    expect(heading).toMatchObject({
-      fontWeight: 700,
-      color: '#ffffff',
-      fontFamily: 'serif',
+    const theme = result.template.theme as Record<string, string>
+    const type = resolveStyle(heading, themeTextStyles(theme))
+    // A colour may be stored as the palette entry it already is, which is
+    // what lets one edit recolour every heading — so it is read the way the
+    // renderer reads it rather than compared as a string.
+    const painted = (token: string | undefined) =>
+      token && token in theme ? theme[token] : token
+    expect(painted(type.color)).toBe('#ffffff')
+    expect(type).toMatchObject({ fontWeight: 700, fontFamily: 'serif' })
+    expect(type.fontSize).toBeGreaterThan(3)
+  })
+})
+
+/**
+ * A deck that DEFINES ITS OWN LAYOUTS — the other half of import.
+ *
+ * urban-hydrology above is hand-built: it has no layout definitions, so it
+ * exercises clustering and nothing else. Every defect found on the authored
+ * path was invisible to it — a deck's background taken from its first slide,
+ * layout-page pictures read as slide content, and the whole keep-every-slide
+ * divergence. This is NYU's own template deck, which is that path.
+ *
+ * Its pictures are stabilised to `fixture.invalid`, so nothing here fetches
+ * anything; what it covers is derivation, classification, the type scale and
+ * naming.
+ */
+describe('a presentation that defines its own layouts', () => {
+  let authored: ImportResult
+
+  beforeAll(async () => {
+    const doc = JSON.parse(
+      readFileSync(
+        new URL(
+          '../../test/fixtures/presentation-nyu-bold.json',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    ) as Record<string, unknown>
+    // As every import route sends it (`KEEP_EVERY_SLIDE_BY_DEFAULT`).
+    authored = await importSourcePresentation(toSourcePresentation(doc), {
+      keepEverySlide: true,
     })
-    expect(heading?.fontSize).toBeGreaterThan(3)
+  })
+
+  it('takes its ground from the page most of the deck wears', () => {
+    // Ten of the thirteen slides are white and the title slide is violet.
+    // Reading the first slide's called the whole deck violet, which no
+    // imported layout showed — each paints its own — but the whiteboard and
+    // every layout an author adds later sat on it.
+    expect(authored.template.theme.background).toBe('#ffffff')
+  })
+
+  it('recovers the scale the deck was set on, not two sizes', () => {
+    const roles = authored.template.theme.textStyles as Record<string, unknown>
+    // A deck of this size is set on a real hierarchy; two roles would mean
+    // the derivation had collapsed it.
+    expect(Object.keys(roles).length).toBeGreaterThan(2)
+    expect(roles).toHaveProperty('title')
+    expect(roles).toHaveProperty('body')
+  })
+
+  it('keeps a layout page picture as design, not as an empty box', () => {
+    // The photographs live on the layout pages. Read as slides they became
+    // image SLOTS — twenty-one empty full-bleed boxes, and the pictures
+    // themselves fetched, stored and then referenced by nothing.
+    //
+    // Asserted as "no content box fills the slide" rather than by counting
+    // stored pictures, because this fixture's URLs are stabilised: nothing
+    // can be fetched from it, so a picture count would be zero however the
+    // classification behaved. The shape of the mistake is what is testable
+    // here, and it is the shape that matters — a full-bleed picture is a
+    // ground, and a ground is never something an author fills in.
+    const fullBleed = authored.template.layouts.flatMap(l =>
+      l.slots
+        .filter(s => s.kind === 'image')
+        .filter(s => {
+          const box = l.elementPositions?.[s.name]
+          return box && box.w > 0.9 && box.h > 0.9
+        }),
+    )
+    expect(fullBleed).toHaveLength(0)
+  })
+
+  it('still gives a slide its own picture as a fillable box', () => {
+    // The exception that keeps the rule honest: a picture a SLIDE places is
+    // content, and must stay something an author can fill.
+    const slots = authored.template.layouts.flatMap(l =>
+      l.slots.filter(s => s.kind === 'image'),
+    )
+    expect(slots.length).toBeGreaterThan(0)
+  })
+
+  it('leaves no box naming a role the theme does not define', () => {
+    const roles = authored.template.theme.textStyles as Record<string, unknown>
+    for (const layout of authored.template.layouts) {
+      for (const box of Object.values(layout.elementPositions ?? {})) {
+        if (box.textStyle) expect(roles).toHaveProperty(box.textStyle)
+      }
+    }
+  })
+
+  it('produces layouts the template schema accepts', () => {
+    for (const layout of authored.template.layouts) {
+      expect(layoutSchema.safeParse(layout).success).toBe(true)
+    }
   })
 })
