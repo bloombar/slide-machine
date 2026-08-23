@@ -30,7 +30,7 @@ import {
 } from '@slide-machine/shared'
 import type { DerivedLayout } from './consolidate'
 import type { CandidateSlot } from './candidate'
-import type { SourcePresentation } from './source-presentation'
+import type { SourceBox, SourcePresentation } from './source-presentation'
 import { ruleBasedType } from './semantics'
 import { mapFont } from './font-map'
 import { capacityOf, heightForText } from './text-metrics'
@@ -242,6 +242,36 @@ const toLayout = (
     }
   }
 
+  /**
+   * The box each slot ends up drawn at.
+   *
+   * A text box is allowed to grow downward into space nothing is using, so
+   * that an imported slide does not hide the end of its own content. Computed
+   * ONCE, here, because two things need the same answer: the geometry that is
+   * stored, and the budget that says how much may be written into it.
+   *
+   * They used to disagree. The budget was measured against the box as the
+   * source drew it and the geometry stored the grown one, so a box that grew
+   * by a line was told it holds half of what it shows — and the text was
+   * trimmed to the smaller of the two. On this deck that is a title box
+   * bounded at eleven characters while drawing twenty-two, which reads as a
+   * title cut to one word for no reason a reader can see.
+   */
+  const drawnBox = new Map<CandidateSlot, SourceBox>(
+    derived.slots.map(slot => [
+      slot,
+      slot.kind === 'image' || slot.kind === 'table'
+        ? slot.box
+        : {
+            ...slot.box,
+            h: Math.min(
+              Math.max(slot.box.h, heightForText(slot, { caps: slot.caps })),
+              roomBelow(slot.box, derived.slots),
+            ),
+          },
+    ]),
+  )
+
   const slots: SlotSpec[] = derived.slots.map(slot =>
     // A box the presentation declared is restored exactly — kind, instruction
     // and limits — because a round trip through our own export must lose
@@ -259,10 +289,11 @@ const toLayout = (
           // What this box can actually hold. Without it, only a box that
           // happens to be called `title`, `body` or `caption` is bounded at
           // all — see `capacityOf`.
-          ...capacityOf(slot, {
-            caps: slot.caps,
-            fontFamily: mapFont(slot.fontFamily),
-          }),
+          // Measured against the box as DRAWN, not as the source left it.
+          ...capacityOf(
+            { ...slot, box: drawnBox.get(slot) ?? slot.box },
+            { caps: slot.caps, fontFamily: mapFont(slot.fontFamily) },
+          ),
           // Multi-line when the box is deep enough to hold more than a
           // line, and always when what it holds is Markdown: a list only
           // draws as a list in a block slot, and an inline one would show
@@ -279,18 +310,8 @@ const toLayout = (
   for (const slot of derived.slots) {
     // A picture is not text and is drawn to fit its box; only words can be
     // hidden by one that is too short.
-    const grown =
-      slot.kind === 'image' || slot.kind === 'table'
-        ? slot.box
-        : {
-            ...slot.box,
-            h: Math.min(
-              Math.max(slot.box.h, heightForText(slot, { caps: slot.caps })),
-              roomBelow(slot.box, derived.slots),
-            ),
-          }
     elementPositions[slot.name] = {
-      ...safeBox(grown),
+      ...safeBox(drawnBox.get(slot) ?? slot.box),
       // Type size, weight, family and colour came off the slide; keeping them
       // is the whole point of importing a design rather than describing one.
       //
