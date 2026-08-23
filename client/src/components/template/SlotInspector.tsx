@@ -510,6 +510,23 @@ export default function SlotInspector({
           the only value a design has ever wanted. Absent rather than 1 when
           off, so a layout carries the setting only where it says something.
         */}
+        {/*
+          Set in capitals — a way of SETTING the box, never a change to what
+          it holds. A slide keeps the words the author wrote and this draws
+          them shouted, so translation, narration and search all still see
+          the original (`BoxStyle.caps`).
+        */}
+        <label className="col-span-2 flex items-center gap-2 text-xs text-slate-600">
+          <input
+            type="checkbox"
+            checked={Boolean(style.caps)}
+            onChange={e => {
+              onRecord()
+              onStyle({ caps: e.target.checked || undefined })
+            }}
+          />
+          {t('template.caps')}
+        </label>
         {parent && !isFree && parent.mode !== 'grid' && (
           <label className="col-span-2 flex items-center gap-2 text-xs text-slate-600">
             <input

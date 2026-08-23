@@ -62,6 +62,9 @@ export interface LayoutRun {
 
 export interface TextBox {
   kind: 'text'
+  /** Drawn in capitals. A transform applied on the way out, never a change to
+   * the deck — see `applyCaps`. */
+  caps?: boolean
   x: number
   y: number
   w: number
@@ -562,6 +565,7 @@ const treeLayout = (
       align: box.style.align === 'center' ? 'center' : 'left',
       valign: box.style.vAlign === 'center' ? 'middle' : 'top',
       runs,
+      caps: box.style.caps,
       slot: box.slot,
     })
   }
@@ -607,6 +611,7 @@ const arrangedLayout = (
       align: box.align === 'center' ? 'center' : 'left',
       valign: box.vAlign === 'center' ? 'middle' : 'top',
       runs,
+      caps: box.caps,
       slot: spec.name,
     })
   }
@@ -649,11 +654,35 @@ const withCredit = (slide: ExportSlide, boxes: LayoutBox[]): LayoutBox[] => {
   ]
 }
 
+/**
+ * Shouts the boxes a design sets in capitals.
+ *
+ * Done HERE, once, rather than in each exporter: the PDF writer draws
+ * strings and the pptx writer emits runs, and a transform applied in one and
+ * forgotten in the other is a design that exports two different ways.
+ *
+ * And done on the way OUT rather than in the deck. What the slide stores is
+ * what the author wrote; capitals are how this design sets the box, the same
+ * as its weight. Uppercasing the stored text would travel into translations,
+ * into a narration voice that may spell it out, and into every future export,
+ * and none of that could be undone (`BoxStyle.caps`).
+ */
+const applyCaps = (boxes: LayoutBox[]): LayoutBox[] =>
+  boxes.map(box =>
+    box.kind === 'text' && box.caps
+      ? {
+          ...box,
+          runs: box.runs.map(r => ({ ...r, text: r.text.toUpperCase() })),
+        }
+      : box,
+  )
+
 export const computeLayout = (
   slide: ExportSlide,
   layout?: Layout,
   theme?: Record<string, unknown>,
-): LayoutBox[] => withCredit(slide, arrangeBoxes(slide, layout, theme))
+): LayoutBox[] =>
+  applyCaps(withCredit(slide, arrangeBoxes(slide, layout, theme)))
 
 /** The boxes an arrangement draws, before the licence credit is added. */
 const arrangeBoxes = (

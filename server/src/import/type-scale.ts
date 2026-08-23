@@ -152,6 +152,7 @@ const INHERITED = {
   fontFamily: 'sans',
   fontWeight: 400,
   italic: false,
+  caps: false,
   lineHeight: 1.5,
   color: 'text',
 } as const
@@ -439,8 +440,9 @@ export const deriveTypeScale = (
     // told it holds a quarter more than it does. `INHERITED.lineHeight` is
     // what an imported box is drawn at, and matches the estimate's own
     // fallback, so it is stated rather than assumed.
+    const allCaps = slots.every(s => s.caps)
     const capacities = slots.map(s =>
-      capacityOf(s, { lineHeight: INHERITED.lineHeight }),
+      capacityOf(s, { lineHeight: INHERITED.lineHeight, caps: allCaps }),
     )
     // What a box set in this role holds, from the boxes that already are.
     // A budget for the boxes an author adds LATER: every imported box carries
@@ -463,6 +465,11 @@ export const deriveTypeScale = (
       // that were not.
       fontWeight: slots.every(s => s.bold) ? 700 : INHERITED.fontWeight,
       italic: INHERITED.italic,
+      // Lifted to the role the same way weight is: only when EVERY box
+      // following it is set that way, so no box is shouted that was not.
+      // A deck whose titles are all caps states it once here rather than on
+      // each of them, which is the whole point of a scale.
+      caps: slots.every(s => s.caps) ? true : INHERITED.caps,
       lineHeight: INHERITED.lineHeight,
       color: color ? namedColor(color, palette) : INHERITED.color,
       ...(maxChars ? { maxChars } : {}),
@@ -502,6 +509,7 @@ export const typeOfBox = (
   textStyle?: string
   fontSize?: number
   fontWeight?: number
+  caps?: boolean
   fontFamily?: string
   color?: string
 } => {
@@ -528,6 +536,7 @@ export const typeOfBox = (
       ? { fontSize: slot.fontSize }
       : {}),
     ...(slot.bold && style?.fontWeight !== 700 ? { fontWeight: 700 } : {}),
+    ...(slot.caps && style?.caps !== true ? { caps: true } : {}),
     ...(family && style?.fontFamily !== family ? { fontFamily: family } : {}),
     // Compared against what the role's colour MEANS, not how it is stored:
     // the role may hold the word `accent` and the box the hex behind it.

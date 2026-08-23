@@ -267,6 +267,22 @@ out — it is supplied by the app's default for that role name. Omitting `fontWe
 `title` yields 700, and omitting `color` on `caption` yields `muted`. A role meant to be
 neutral about a property must say so explicitly.
 
+### Capitals are a setting, not the text
+
+A box may be `caps`, and a text style may carry it for every box that follows the role. It
+is a **transform applied when the box is drawn** — the slide keeps the words the author
+wrote, and the box shouts them. Storing the shouted form instead would be unrecoverable: a
+translation would be handed capitals to translate, a narration voice may spell them out,
+search would match nothing, and every future export would carry the damage. It is the same
+class of property as `fontWeight`, and it travels the same way — through the renderer, both
+exporters (applied once in `deck-layout`, so the PDF and the pptx cannot disagree), the
+YAML round trip and the Slides slot payload.
+
+An import recognises it, timidly and on purpose. A box counts as set in capitals only if it
+holds no lowercase letter anywhere, at least eight cased letters, and more than one word.
+Wrongly shouting an instructor's body text is loud and on every slide; failing to shout a
+title loses a flourish. So an acronym, a single word and a box of digits are all refused.
+
 ### How much a box holds
 
 A text style also carries a **budget** — roughly how many characters fit a box
@@ -330,7 +346,7 @@ The theme is a free-form object resolved into a known set with fallbacks
 | `penColor`, `highlighterColor` | Whiteboard defaults; fall back to `text` and `accent`. |
 | `link` | What a hyperlink is drawn in; falls back to `accent`. |
 | `imageBackground` | What is painted behind a picture. Transparent unless stated — a photograph needs nothing, but a diagram or logo with a transparent ground loses its strokes on a slide of the same value. |
-| `textStyles` | Named type roles a layout's boxes refer to ([§4](#text-styles)). |
+| `textStyles` | Named type roles a layout's boxes refer to ([§4](#text-styles)). A role may carry `caps` (below). |
 | `marginX`, `marginY`, `gap` | Authoring metrics, editor-only (below). |
 | `backgroundImage` | Object-storage URL for an imported background. |
 

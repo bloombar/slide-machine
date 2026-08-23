@@ -222,6 +222,19 @@ export interface BoxStyle {
   fontSize?: number
   fontWeight?: number
   italic?: boolean
+  /**
+   * Draw this box's text in capitals.
+   *
+   * A TRANSFORM, applied when the box is drawn, and never a change to what is
+   * stored. A design that sets its titles in caps is stating how they are
+   * SET, not what they say — so the slide keeps "Rainwater harvesting" and
+   * the box draws it shouted. Storing the shouted form instead would be
+   * unrecoverable: a translation would be asked to translate capitals, a
+   * narration voice handed all-caps may spell it out or shout it, search
+   * would match nothing, and an export would carry the damage onward. Same
+   * class of property as `fontWeight`.
+   */
+  caps?: boolean
   /** Line height as a multiple of the font size. Unitless, so it scales with
    * the type rather than fighting it. */
   lineHeight?: number
@@ -358,7 +371,13 @@ export interface LayoutGuides {
  */
 export interface TextStyleSpec extends Pick<
   BoxStyle,
-  'fontFamily' | 'fontSize' | 'fontWeight' | 'italic' | 'lineHeight' | 'color'
+  | 'fontFamily'
+  | 'fontSize'
+  | 'fontWeight'
+  | 'italic'
+  | 'caps'
+  | 'lineHeight'
+  | 'color'
 > {
   /**
    * About how much text fits a box set in this style, in characters.

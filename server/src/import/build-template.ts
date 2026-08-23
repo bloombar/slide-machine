@@ -256,7 +256,7 @@ const toLayout = (
           // What this box can actually hold. Without it, only a box that
           // happens to be called `title`, `body` or `caption` is bounded at
           // all — see `capacityOf`.
-          ...capacityOf(slot),
+          ...capacityOf(slot, { caps: slot.caps }),
           // Multi-line when the box is deep enough to hold more than a
           // line, and always when what it holds is Markdown: a list only
           // draws as a list in a block slot, and an inline one would show
@@ -279,7 +279,7 @@ const toLayout = (
         : {
             ...slot.box,
             h: Math.min(
-              Math.max(slot.box.h, heightForText(slot)),
+              Math.max(slot.box.h, heightForText(slot, { caps: slot.caps })),
               roomBelow(slot.box, derived.slots),
             ),
           }
@@ -299,6 +299,10 @@ const toLayout = (
       // result: what comes back is the box's disagreements with whichever role
       // it ends up naming, so the two have to be the same role.
       ...typeOfBox(slot, scale, slot.restored?.textStyle),
+      // Being told beats detecting it: an export writes the shouted
+      // letterforms, so a re-import reading the text alone would see capitals
+      // rather than a box SET in them and would store the shout.
+      ...(slot.restored?.caps ? { caps: true } : {}),
       // The box's own fill: a deck may put its colour on the boxes rather
       // than on the page, and dropping it imported the design white.
       ...(slot.background ? { background: slot.background } : {}),

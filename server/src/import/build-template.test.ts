@@ -12,6 +12,7 @@ import { resolveStyle } from '../lib/tree-boxes'
 import type { CandidateSlot } from './candidate'
 import type { DerivedLayout } from './consolidate'
 import { buildTemplate, importReport, mapFont } from './build-template'
+import { capsOf } from './candidate'
 import type { SourcePresentation } from './source-presentation'
 
 /**
@@ -714,5 +715,53 @@ describe('what an imported box can hold', () => {
   it('produces slots the template schema accepts', () => {
     const { layouts } = buildTemplate(source(), [twoColumns], new Map())
     expect(layoutSchema.safeParse(layouts[0]).success).toBe(true)
+  })
+})
+
+describe('recognising a box set in capitals', () => {
+  const el = (text: string) =>
+    ({
+      kind: 'text',
+      box: { x: 0, y: 0, w: 1, h: 1 },
+      runs: [{ text }],
+    }) as never
+
+  it('recognises several shouted words', () => {
+    expect(capsOf(el('TITLE OF PRESENTATION'))).toBe(true)
+    expect(capsOf(el('SLIDE WITH LIST ITEMS'))).toBe(true)
+  })
+
+  it('refuses an acronym', () => {
+    // The commonest false positive by far, and the one that would shout a
+    // whole box because three letters in it are capitals.
+    expect(capsOf(el('NYU'))).toBeUndefined()
+    expect(capsOf(el('PDF'))).toBeUndefined()
+  })
+
+  it('refuses a single word, however long', () => {
+    // As likely an abbreviation, a code or a stray glyph as a decision.
+    expect(capsOf(el('INTRODUCTION'))).toBeUndefined()
+  })
+
+  it('refuses a box holding one lowercase letter anywhere', () => {
+    // One is enough to prove the text is written normally.
+    expect(capsOf(el('TITLE OF PRESENTATIONs'))).toBeUndefined()
+    expect(capsOf(el('Rainwater harvesting on campus'))).toBeUndefined()
+  })
+
+  it('refuses a box with no letters to speak of', () => {
+    // A slide number, a date, a bullet glyph: uncased, and not a decision
+    // about how to set type.
+    expect(capsOf(el('01/23/2020'))).toBeUndefined()
+    expect(capsOf(el('— • —'))).toBeUndefined()
+  })
+
+  it('reads the whole box, not its first run', () => {
+    const split = {
+      kind: 'text',
+      box: { x: 0, y: 0, w: 1, h: 1 },
+      runs: [{ text: 'AN IMPORTANT ' }, { text: 'quote' }],
+    } as never
+    expect(capsOf(split)).toBeUndefined()
   })
 })

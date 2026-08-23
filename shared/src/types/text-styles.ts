@@ -45,6 +45,7 @@ const one = (raw: unknown, fallback: TextStyleSpec): TextStyleSpec => {
     fontSize: num(r.fontSize) ?? fallback.fontSize,
     fontWeight: num(r.fontWeight) ?? fallback.fontWeight,
     italic: typeof r.italic === 'boolean' ? r.italic : fallback.italic,
+    caps: typeof r.caps === 'boolean' ? r.caps : fallback.caps,
     lineHeight: num(r.lineHeight) ?? fallback.lineHeight,
     color: str(r.color) ?? fallback.color,
     maxChars: num(r.maxChars) ?? fallback.maxChars,

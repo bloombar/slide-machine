@@ -330,6 +330,7 @@
     "sizing": "占用空间",
     "grow": "占用剩余空间",
     "holdsSize": "保持自身大小",
+    "caps": "使用大写",
     "colSpan": "跨列数",
     "rowSpan": "跨行数",
     "width": "宽度 %",

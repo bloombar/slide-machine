@@ -330,6 +330,7 @@
     "sizing": "Espace occupé",
     "grow": "Occupe l’espace libre",
     "holdsSize": "Conserve sa taille",
+    "caps": "En capitales",
     "colSpan": "Colonnes de large",
     "rowSpan": "Lignes de haut",
     "width": "Largeur %",

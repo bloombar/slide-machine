@@ -41,6 +41,9 @@ export interface CandidateSlot {
   /** Type size in `cqi`, where the source stated one. */
   fontSize?: number
   bold?: boolean
+  /** Set in capitals — a way of SETTING the box, carried as a transform and
+   * never as a change to the words (`BoxStyle.caps`). */
+  caps?: boolean
   color?: string
   /** The box's own fill, where the shape has one. Part of the design: a deck
    * may put its colour on the boxes rather than on the page. */
@@ -165,6 +168,41 @@ const sizeOf = (element: SourceElement): number | undefined => {
 
 const boldOf = (element: SourceElement): boolean | undefined =>
   element.runs?.some(r => r.bold) ? true : undefined
+
+/**
+ * Whether this box is SET in capitals, as opposed to happening to hold some.
+ *
+ * Deliberately timid, because the two ways of being wrong are not equally
+ * bad: wrongly shouting an instructor's body text is loud and on every slide,
+ * while failing to shout a title merely loses a flourish. So all four of
+ * these must hold, and any one of them failing means no.
+ *
+ *   - No lowercase letter ANYWHERE in the box. One is enough to prove the
+ *     text is written normally and merely opens with a capital.
+ *   - At least `CAPS_MIN_LETTERS` cased letters. Refuses "NYU", "PDF", "Q&A"
+ *     and every other acronym, which is the commonest false positive by far.
+ *   - More than one word. A single shouted label is as likely to be an
+ *     abbreviation, a code or a stray glyph as a deliberate setting.
+ *   - Some cased letters at all, so a box of digits or punctuation — a slide
+ *     number, a date, a bullet character — is never called capitalised.
+ *
+ * What survives is a box holding several words of several letters with not
+ * one lowercase among them, which is a design decision rather than an
+ * accident of content.
+ */
+const CAPS_MIN_LETTERS = 8
+
+export const capsOf = (element: SourceElement): boolean | undefined => {
+  const text = (element.runs ?? []).map(r => r.text).join('')
+  if (/\p{Ll}/u.test(text)) return undefined
+  const letters = text.match(/\p{L}/gu)?.length ?? 0
+  if (letters < CAPS_MIN_LETTERS) return undefined
+  const words = text
+    .trim()
+    .split(/\s+/)
+    .filter(w => /\p{L}/u.test(w))
+  return words.length > 1 ? true : undefined
+}
 
 const colorOf = (element: SourceElement): string | undefined =>
   element.runs?.find(r => r.color)?.color
@@ -295,6 +333,7 @@ export const candidateOf = (
       ...(spec ? { restored: spec } : {}),
       ...(sizeOf(element) !== undefined ? { fontSize: sizeOf(element) } : {}),
       ...(boldOf(element) ? { bold: true } : {}),
+      ...(capsOf(element) ? { caps: true } : {}),
       ...(colorOf(element) ? { color: colorOf(element) } : {}),
       ...(element.fill ? { background: element.fill } : {}),
       ...(fontOf(element) ? { fontFamily: fontOf(element) } : {}),

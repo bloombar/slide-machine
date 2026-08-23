@@ -64,6 +64,9 @@ export const typeStyle = (
     : undefined,
   fontWeight: style.fontWeight,
   fontStyle: style.italic ? 'italic' : undefined,
+  // A transform, never a change to the text. The slide stores what the author
+  // wrote and the box draws it shouted (`BoxStyle.caps`).
+  textTransform: style.caps ? 'uppercase' : undefined,
   lineHeight: style.lineHeight,
   fontFamily: fontStack(style.fontFamily),
   color: resolveColor(style.color, colors),

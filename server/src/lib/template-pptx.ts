@@ -206,7 +206,17 @@ const metadataObject = (layout: Layout) => {
   // its tree, or its geometry for an imported design. Every shape is written
   // in literal type below, so this payload is the only place the reference
   // itself survives the trip (TMPL-9).
-  const payload = encodeSlotMetadata(layout.slots, textStylesBySlot(layout))
+  const capsBySlot = Object.fromEntries(
+    Object.entries(layout.elementPositions ?? {}).map(([name, box]) => [
+      name,
+      box.caps,
+    ]),
+  )
+  const payload = encodeSlotMetadata(
+    layout.slots,
+    textStylesBySlot(layout),
+    capsBySlot,
+  )
   if (!payload) return []
   return [
     {
