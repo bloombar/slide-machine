@@ -723,8 +723,9 @@ holds.
 **It is advisory, and untrusted.** An instructor can edit or delete alt text and notes in
 Google's interface, and a converter may not preserve everything. So the payload is versioned,
 validated and size-capped, and import **falls back to inference** when it is missing, damaged
-or unrecognized. Its presence makes the round trip lossless; its absence degrades the result
-but never fails the import.
+or unrecognized. Its presence makes the round trip much better; its absence degrades the result
+but never fails the import. Better, not lossless — see [§9](#9-fidelity-and-limits) for
+what it does not carry.
 
 **Deck export offers two shapes** (SPEC [EXP-1](SPEC.md#exp-1-deck-export)):
 
@@ -765,10 +766,19 @@ the user did not ask for.
 
 ## 9. Fidelity and limits
 
-- **A presentation we exported round-trips losslessly**; one from anywhere else does not.
+- **A presentation we exported round-trips better than a foreign one, not losslessly.**
   Ours carries slot metadata ([§8](#8-exporting)), so re-import restores names, kinds,
-  instructions and limits exactly. A foreign deck has none, so its slots are inferred from
-  geometry and placeholder type and every slot arrives as `text` for the author to correct.
+  instructions, limits and the text ROLE each box follows. A foreign deck has none, so its
+  slots are inferred from geometry and placeholder type and every slot arrives as `text`
+  for the author to correct.
+- **A design's typography does not survive the trip.** The payload carries which role a box
+  follows; nothing carries what each role IS. Every shape is exported in resolved type, so a
+  re-import derives a fresh scale from the letterforms rather than restoring the one that
+  left — and a fresh scale clusters differently. Measured on a real deck: 20 of 31 boxes
+  came back resolving to different type, including **eight titles that lost their capitals**
+  because they inherited `caps` from a role rather than stating it themselves. Sizes drift a
+  few percent and nobody notices; the capitals are visible. Carrying role definitions
+  alongside the references is what fixes it, and it is not done yet.
 - **There is no ceiling on layouts or slots.** Layout types and slot names are open
   ([§2](#2-layouts-and-slots)), so a design is never dropped merely because the vocabulary ran
   out. Consolidation still merges near-identical designs on purpose — that is a judgment call,
@@ -781,6 +791,50 @@ the user did not ask for.
 - **Not carried in either direction:** animations, transitions, slide numbering, and anything
   scripted on the master.
 - Everything lost is named in the report, never dropped silently.
+
+### Checking an import
+
+Derived from doing it twice and finding most of it the hard way. The order matters:
+each step is cheap, and each one gates the next.
+
+1. **Record which code path produced the template** — the options the product sends,
+   not a script's defaults. Everything below describes whatever this produced, and an
+   import run with different options is a template no instructor will ever receive.
+2. **Read the source deck before looking at the import.** Count its slides, its
+   pictures *through layout inheritance* (a deck often keeps them on layout pages,
+   not slides), its all-caps strings, its distinct type sizes and colours.
+   Expectations have to come from the source, before the import can anchor you to
+   its own numbers: you cannot notice that six type roles arrived as two unless you
+   knew there were six.
+3. **Audit the template's data** (`npx tsx scripts/audit-template.mjs <file>`):
+   palette collapse, boxes too small to hold text, text over text, styles nothing
+   defines, unreadable contrast. Seconds, no browser. *It cannot see wrapping, and
+   it cannot see whether any of this matches the deck.*
+4. **Compare those counts against step 2.** Roles against type steps; pictures
+   referenced against pictures present; capitalised boxes against capitalised
+   strings; layouts against slides. This is the step that catches a feature that
+   never ran, and no passing test will tell you: a zero here means nothing happened.
+5. **Confirm the build before rendering anything.** The e2e suite runs the built
+   app, so a bundle older than the change under test can only answer questions about
+   a different program. Check the bundle contains something the change introduced.
+6. **Render every layout, with content written to strain it** — an unbreakable word,
+   a URL, a list past its point count (`e2e/tests/imported-template-fidelity.spec.ts`,
+   `nyu-bold-comparison.spec.ts`). *These only see boxes that were given content.*
+7. **Look at it beside the source.** The only step that catches a colour read wrong,
+   and nothing asserted substitutes for it.
+8. **Round-trip it and compare box by box, paired by slide** — never by layout name,
+   which is assigned fresh on every import, so the same name means different slides.
+
+Two questions to carry through all of it:
+
+- **What would this number look like if the thing that sets it had never happened?**
+  If the answer is "the same", it is not evidence. A count of zero failures, a field
+  that does not exist on the type being read, and a measurement that never ran all
+  report exactly what success reports.
+- **Does this pass mean "nothing broke" or "the thing works"?** They are
+  indistinguishable from outside, and a green suite proves nothing about a feature
+  absent from the design under test.
+
 
 ## 10. Deleting templates and layouts
 
