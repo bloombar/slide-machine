@@ -407,4 +407,79 @@ describe('a role restored from an exported file', () => {
     )
     expect(typeOf(builtFrom(around(told)), 'headline-4').fontSize).toBe(8)
   })
+
+  it('never leaves a box naming a role the theme does not define', () => {
+    // The door either fix could reopen. A box naming a role with nothing
+    // behind it resolves against DEFAULT_TEXT_STYLES — which is the silent
+    // restyling both defects were, arriving through a third entrance. Held
+    // over a deck that exercises every path into a role at once: derived,
+    // restored-and-defined, restored-and-undefined, and a list.
+    const built = builtFrom([
+      ...[1, 2, 3].map(i =>
+        slot(
+          `headline-${i}`,
+          { x: 0.08, y: 0.08, w: 0.84, h: 0.15 },
+          {
+            fontSize: 8,
+          },
+        ),
+      ),
+      ...[1, 2, 3].map(i =>
+        slot(
+          `prose-${i}`,
+          { x: 0.08, y: 0.3, w: 0.84, h: 0.5 },
+          {
+            fontSize: 3,
+          },
+        ),
+      ),
+      slot(
+        'points',
+        { x: 0.5, y: 0.3, w: 0.4, h: 0.5 },
+        {
+          kind: 'bullets',
+          fontSize: 3,
+        },
+      ),
+      slot(
+        'told-known',
+        { x: 0.08, y: 0.3, w: 0.4, h: 0.5 },
+        {
+          fontSize: 8,
+          restored: {
+            name: 'told-known',
+            kind: 'text',
+            label: 'Told',
+            textStyle: 'title',
+          },
+        },
+      ),
+      slot(
+        'told-unknown',
+        { x: 0.5, y: 0.3, w: 0.4, h: 0.5 },
+        {
+          fontSize: 3,
+          restored: {
+            name: 'told-unknown',
+            kind: 'text',
+            label: 'Told',
+            textStyle: 'quote',
+          },
+        },
+      ),
+      slot('tiny', { x: 0.08, y: 0.86, w: 0.84, h: 0.08 }, { fontSize: 1.6 }),
+    ])
+    const defined = Object.keys(
+      (built.theme.textStyles ?? {}) as Record<string, unknown>,
+    )
+    const named = built.layouts.flatMap(layout =>
+      Object.entries(layout.elementPositions ?? {}).flatMap(([name, box]) =>
+        box.textStyle ? [[name, box.textStyle] as const] : [],
+      ),
+    )
+    // The deck has roles at all, or this asserts nothing
+    expect(named.length).toBeGreaterThan(0)
+    for (const [name, role] of named)
+      expect(defined, `"${name}" names the role "${role}"`).toContain(role)
+  })
 })
