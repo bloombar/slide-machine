@@ -53,36 +53,49 @@ const OUT = path.resolve('artifacts/nyu-bold')
  * renumbers its layouts whenever the derivation changes, so a hard-coded list
  * silently captures the wrong set — or nothing — on the next regeneration.
  */
-const LAYOUTS: { type: string; label: string }[] = JSON.parse(
-  readFileSync(
-    path.resolve('../server/config/templates/nyu-bold.json'),
-    'utf8',
-  ),
-)
-  .layouts.filter((l: { type: string }) => l.type !== 'whiteboard')
-  .map((l: { type: string; label: string }) => ({
-    type: l.type,
-    label: l.label,
-  }))
+const TEMPLATE_FILE = path.resolve('../server/config/templates/nyu-bold.json')
+
+/**
+ * Whether the design this spec is about is installed at all.
+ *
+ * It is a template DERIVED from someone's deck and installed for review, not
+ * one the app ships, so it comes and goes. Read once, and guarded: reading it
+ * unconditionally at module scope threw `ENOENT` in CI the moment the file was
+ * removed, which fails the whole e2e stage rather than this one spec — and it
+ * failed only in CI, because the local gate never runs e2e.
+ *
+ * The test skips loudly when it is absent rather than passing over an empty
+ * design list. A spec that quietly succeeds because its subject is missing is
+ * the exact green that means nothing ran.
+ */
+const INSTALLED = existsSync(TEMPLATE_FILE)
+
+interface DerivedTemplate {
+  layouts: {
+    type: string
+    label: string
+    decoration?: { imageUrl?: string }[]
+  }[]
+}
+
+const TEMPLATE: DerivedTemplate = INSTALLED
+  ? (JSON.parse(readFileSync(TEMPLATE_FILE, 'utf8')) as DerivedTemplate)
+  : { layouts: [] }
+
+const LAYOUTS = TEMPLATE.layouts
+  .filter(layout => layout.type !== 'whiteboard')
+  .map(layout => ({ type: layout.type, label: layout.label }))
 
 /** Every distinct picture the design draws itself with. */
 const DECORATION_PICTURES: string[] = [
   ...new Set(
-    (
-      JSON.parse(
-        readFileSync(
-          path.resolve('../server/config/templates/nyu-bold.json'),
-          'utf8',
-        ),
-      ).layouts as { decoration?: { imageUrl?: string }[] }[]
-    ).flatMap(layout =>
+    TEMPLATE.layouts.flatMap(layout =>
       (layout.decoration ?? [])
         .map(piece => piece.imageUrl)
         .filter((url): url is string => Boolean(url)),
     ),
   ),
 ]
-
 /**
  * Makes the design's own pictures reachable, and refuses to photograph it if
  * they are not.
@@ -122,6 +135,20 @@ test('captures every imported layout beside its source deck', async ({
   page,
   request,
 }) => {
+  // Said out loud, and as a skip rather than a pass: this spec is about a
+  // design that is installed for review and removed again, so "not run" is a
+  // normal outcome — but it must never be mistaken for "checked and fine".
+  test.skip(
+    !INSTALLED,
+    `${TEMPLATE_FILE} is not installed, so there is no derived design to ` +
+      `photograph or measure. Install the template to run this.`,
+  )
+  // And it must not pass by having nothing to do: if the file IS there, it has
+  // to describe layouts, or the walk below covers none of them silently.
+  expect(
+    LAYOUTS.length,
+    'the installed template declares no layouts',
+  ).toBeGreaterThan(0)
   mkdirSync(OUT, { recursive: true })
   await stagePictures(request)
   // The slide morphs between layouts (GEN-9), and a screenshot taken mid-flight
