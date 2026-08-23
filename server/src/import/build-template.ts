@@ -200,8 +200,19 @@ const roomBelow = (
 ): number => {
   const overlapsAcross = (other: { x: number; w: number }) =>
     other.x < box.x + box.w && box.x < other.x + other.w
+  // Anything below this box's TOP, not below its bottom edge.
+  //
+  // Asking "does it start below where I end" misses a box that starts a
+  // hair above that edge — and a box growing downward runs into it just the
+  // same. NYU's title slide has a caption beginning 0.006 of the slide above
+  // the title's bottom, so the caption was invisible to this check and the
+  // title grew straight through it: 7.9% of the slide with words over words,
+  // in a design whose source barely touched at all.
+  //
+  // `> box.y` rather than `>= `, so a box does not stop itself, and boxes
+  // sharing a top edge sit side by side rather than blocking each other.
   const tops = others
-    .filter(o => overlapsAcross(o.box) && o.box.y >= box.y + box.h)
+    .filter(o => o.box !== box && overlapsAcross(o.box) && o.box.y > box.y)
     .map(o => o.box.y)
   // A margin off the slide's own bottom edge, so a grown box never runs off.
   const floor = Math.min(1 - 0.02, ...tops)
@@ -265,7 +276,17 @@ const toLayout = (
         : {
             ...slot.box,
             h: Math.min(
-              Math.max(slot.box.h, heightForText(slot, { caps: slot.caps })),
+              Math.max(
+                slot.box.h,
+                // The face matters here as much as it does to the budget: a
+                // box measured against the fallback width is measured against
+                // a WIDER letter than it is set in, so it is given rows it
+                // does not need and grows into space that is not free.
+                heightForText(slot, {
+                  caps: slot.caps,
+                  fontFamily: mapFont(slot.fontFamily),
+                }),
+              ),
               roomBelow(slot.box, derived.slots),
             ),
           },
