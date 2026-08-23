@@ -148,6 +148,20 @@ export interface SlotEditorProps {
   onEdit?: (patch: SlideContentPatch) => void
   /** True while background enrichment may still deliver an image. */
   imagePending?: boolean
+  /**
+   * This slide is being shown as a TEMPLATE rather than as a lecture.
+   *
+   * An empty picture box draws nothing to an audience, and that is right for
+   * a deck: a reserved block would read as a picture that failed to load. A
+   * template preview is a different claim — it shows a design as a design,
+   * and a design's picture boxes are part of what it IS.
+   *
+   * Without this, a template whose pictures are content came out as a page
+   * with nothing where a dozen pictures belong. Not holes: NOTHING. It reads
+   * as a broken page rather than as a template with boxes to fill, and an
+   * instructor has no way to tell which it is.
+   */
+  asTemplate?: boolean
   /** Owner-only: uploads a file into this slot. The slot name is passed on,
    * since a layout may have several image slots (TMPL-4). */
   onReplaceImage?: (file: File, slot: string) => void
@@ -257,6 +271,7 @@ function ImageSlot({
   slide,
   colors,
   imagePending,
+  asTemplate,
   onEdit,
   onReplaceImage,
   onPickImageCandidate,
@@ -366,8 +381,20 @@ function ImageSlot({
       )
     // Nothing is coming: a reserved block would read as a picture that failed
     // to load. Editors still get the block below, since it is what they drop
-    // a new picture onto.
-    return imagePending ? skeleton : null
+    // a new picture onto — and so does a template shown as a template, where
+    // an unfilled box is part of the design rather than a gap in a lecture.
+    if (imagePending) return skeleton
+    if (!asTemplate) return null
+    return (
+      <div
+        data-empty-image-slot
+        className="flex h-full w-full items-center justify-center rounded border border-dashed border-current/30 text-current/50"
+        style={{ backgroundColor: colors.imageBackground }}
+      >
+        <ImagePlus className="h-6 w-6" aria-hidden="true" />
+        <span className="sr-only">{t('image.add')}</span>
+      </div>
+    )
   }
 
   // A file dropped straight onto the slot uploads without the dialog

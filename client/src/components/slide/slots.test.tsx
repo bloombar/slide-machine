@@ -74,6 +74,38 @@ describe('SlideSlot', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 
+  describe('an unfilled picture box', () => {
+    const emptyImage = slide({ layoutType: 'image-heavy' })
+
+    it('draws nothing in a lecture, where a reserved block would read as a failure', () => {
+      const { container } = render(
+        <SlideSlot slot="image" slide={emptyImage} colors={colors} />,
+      )
+      expect(
+        container.querySelector('[data-empty-image-slot]'),
+      ).not.toBeInTheDocument()
+    })
+
+    it('says it is there when the design is shown AS a design', () => {
+      // A template preview claims to show a design, and a design's picture
+      // boxes are part of what it is. Left drawing nothing, a template whose
+      // pictures are content came out as a page with NOTHING where a dozen
+      // pictures belong — which reads as broken rather than as unfilled, and
+      // gives an instructor no way to tell the two apart.
+      const { container } = render(
+        <SlideSlot
+          slot="image"
+          slide={emptyImage}
+          colors={colors}
+          asTemplate
+        />,
+      )
+      expect(
+        container.querySelector('[data-empty-image-slot]'),
+      ).toBeInTheDocument()
+    })
+  })
+
   it('mounts an editor labeled by the slot descriptor and patches its field', () => {
     vi.useFakeTimers()
     const onEdit = vi.fn()

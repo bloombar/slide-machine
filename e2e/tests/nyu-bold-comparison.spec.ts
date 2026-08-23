@@ -43,7 +43,7 @@ import { test, expect, type APIRequestContext } from './fixtures'
 import { faultsOn, settled } from './slide-boxes'
 import { createProject } from './helpers'
 
-const OUT = path.resolve('artifacts/nyu-bold')
+const OUT = path.resolve(process.env.COMPARE_OUT ?? 'artifacts/nyu-bold')
 
 /**
  * Every layout the import derived, minus the blank slate — a whiteboard is
@@ -53,7 +53,16 @@ const OUT = path.resolve('artifacts/nyu-bold')
  * renumbers its layouts whenever the derivation changes, so a hard-coded list
  * silently captures the wrong set — or nothing — on the next regeneration.
  */
-const TEMPLATE_FILE = path.resolve('../server/config/templates/nyu-bold.json')
+/**
+ * The design under review, and where its pictures go.
+ *
+ * Overridable, because this walk — every layout, photographed and measured —
+ * is what verifying ANY imported design needs, not only the first one it was
+ * written for. `COMPARE_TEMPLATE` and `COMPARE_OUT` point it at another.
+ */
+const TEMPLATE_FILE = path.resolve(
+  process.env.COMPARE_TEMPLATE ?? '../server/config/templates/nyu-bold.json',
+)
 
 /**
  * Whether the design this spec is about is installed at all.
@@ -71,6 +80,7 @@ const TEMPLATE_FILE = path.resolve('../server/config/templates/nyu-bold.json')
 const INSTALLED = existsSync(TEMPLATE_FILE)
 
 interface DerivedTemplate {
+  name?: string
   layouts: {
     type: string
     label: string
@@ -81,6 +91,12 @@ interface DerivedTemplate {
 const TEMPLATE: DerivedTemplate = INSTALLED
   ? (JSON.parse(readFileSync(TEMPLATE_FILE, 'utf8')) as DerivedTemplate)
   : { layouts: [] }
+
+/** The name the design is offered under, escaped for use as a pattern. */
+const DESIGN_NAME = new RegExp(
+  (TEMPLATE.name ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&') || 'nyu bold',
+  'i',
+)
 
 const LAYOUTS = TEMPLATE.layouts
   .filter(layout => layout.type !== 'whiteboard')
@@ -113,13 +129,27 @@ const DECORATION_PICTURES: string[] = [
  * not a quiet one.
  */
 const stagePictures = async (request: APIRequestContext) => {
-  const into = path.resolve('.uploads-e2e/templates/nyu-bold')
-  const from = path.resolve('../server/.uploads/templates/nyu-bold')
-  // Copied every run rather than only when the directory is missing: a
-  // regenerated template refers to different files, and a stale copy from a
-  // previous round would leave the new ones 404ing while the folder looks
-  // populated.
-  if (existsSync(from)) cpSync(from, into, { recursive: true })
+  // Which folders to stage is read from the design's own picture URLs
+  // (`/api/files/<key>`), not hard-coded: pointing this spec at another
+  // design must not mean remembering to change a path here as well.
+  const folders = new Set(
+    DECORATION_PICTURES.map(url =>
+      url
+        .replace(/^\/api\/files\//, '')
+        .split('/')
+        .slice(0, -1)
+        .join('/'),
+    ).filter(Boolean),
+  )
+  for (const folder of folders) {
+    const into = path.resolve('.uploads-e2e', folder)
+    const from = path.resolve('../server/.uploads', folder)
+    // Copied every run rather than only when the directory is missing: a
+    // regenerated template refers to different files, and a stale copy from a
+    // previous round would leave the new ones 404ing while the folder looks
+    // populated.
+    if (existsSync(from)) cpSync(from, into, { recursive: true })
+  }
   for (const url of DECORATION_PICTURES) {
     const response = await request.get(url)
     expect(
@@ -172,7 +202,9 @@ test('captures every imported layout beside its source deck', async ({
   await page.getByRole('button', { name: 'Start lecture' }).click()
   await page.getByRole('button', { name: 'Lecture settings' }).click()
   await page.getByRole('tab', { name: 'Design' }).click()
-  await page.getByRole('radio', { name: /nyu bold/i }).click()
+  // Chosen by the name the template carries, so pointing this spec at another
+  // design needs no edit here.
+  await page.getByRole('radio', { name: DESIGN_NAME }).click()
   await page.getByRole('button', { name: 'Close settings' }).click()
 
   // Something in the boxes, so a layout is photographed holding a lecture

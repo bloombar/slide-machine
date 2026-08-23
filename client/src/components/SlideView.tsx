@@ -25,6 +25,7 @@ export default function SlideView({
   slide,
   template,
   imagePending,
+  asTemplate,
   editable,
   onEdit,
   onReplaceImage,
@@ -39,6 +40,9 @@ export default function SlideView({
   testId?: string
   /** True while background enrichment may still deliver an image (GEN-5). */
   imagePending?: boolean
+  /** Shown as a TEMPLATE rather than as a lecture, so an unfilled picture box
+   * says it is there instead of drawing nothing (`slots.tsx`). */
+  asTemplate?: boolean
   /** Owner-only: enables click-to-edit on every editable slot. */
   editable?: boolean
   onEdit?: (patch: SlideContentPatch) => void
@@ -59,6 +63,7 @@ export default function SlideView({
   const slot = (name: string) => (
     <SlideSlot
       slot={name}
+      asTemplate={asTemplate}
       spec={layoutDef?.slots.find(s => s.name === name)}
       slide={slide}
       colors={colors}
