@@ -55,16 +55,50 @@ const CHAR_W: Record<string, number> = {
 const CHAR_W_DEFAULT = 0.5
 
 /**
- * How much wider the same face runs in capitals.
+ * The same, for a box set in capitals. Measured, not derived.
  *
- * Capitals carry no narrow lowercase forms and no descender gaps. Measured on
- * Montserrat at display size: 0.621 against 0.535 for the same strings in
- * mixed case, so about sixteen percent. Kept as a RATIO rather than a second
- * table because it is a property of capitals rather than of any one face, and
- * because a per-face caps table would be seven more numbers measured from one
- * deck's worth of strings.
+ * This was a single ratio applied to the table above, and that was wrong in
+ * principle rather than merely imprecise. Measured per face, capitals run
+ * between 1.22 and 1.35 times the width of prose — and MONO is exactly 1.000,
+ * as it has to be: every glyph in a monospaced face has the same advance, so
+ * no multiplier can be right for it.
+ *
+ * The ratio was also too small, and too small is the unsafe direction: it
+ * makes the estimate think more characters fit than do, so the budget is
+ * generous and capitals overflow their box. It came out low because the
+ * figure it was derived from compared capitals against TITLE CASE rather than
+ * prose, and Title Case already capitalises every word's first letter, so it
+ * sits much nearer all-caps than prose does. On Montserrat: prose 0.522,
+ * Title Case 0.540, capitals 0.637 — caps over Title Case is 1.179, caps over
+ * prose is 1.220. The old 1.16 was very nearly the Title-Case ratio, which is
+ * the tell that it was measuring the wrong pair.
+ *
+ * Both tables are measurements now, and that is worth stating because the
+ * test over them went red twice while nothing was wrong with what it tested.
+ * It had taken one figure from a measurement and the other from a multiplier
+ * applied to it — and a check that mixes a measurement with a model moves
+ * every time the model does.
  */
-const CAPS_RATIO = 1.16
+const CHAR_W_CAPS: Record<string, number> = {
+  sans: 0.555,
+  humanist: 0.572,
+  geometric: 0.6,
+  serif: 0.612,
+  condensed: 0.505,
+  montserrat: 0.637,
+  'frank-ruhl-libre': 0.563,
+  mono: 0.602,
+}
+
+/**
+ * Capitals in a face nobody measured.
+ *
+ * The TOP of the observed range rather than its middle, for the same reason
+ * the mixed-case fallback is wider than most of its table: over-stating how
+ * wide capitals are makes a title come out short, and under-stating it makes
+ * a title overflow. Short is the recoverable one.
+ */
+const CHAR_W_CAPS_DEFAULT = CHAR_W_DEFAULT * 1.35
 
 /**
  * A line's full height, as a fraction of the type size.
@@ -87,10 +121,11 @@ const charWidthFor = (setting: {
   caps?: boolean
   fontFamily?: string
 }): number => {
-  const base =
-    (setting.fontFamily ? CHAR_W[setting.fontFamily] : undefined) ??
-    CHAR_W_DEFAULT
-  return setting.caps ? base * CAPS_RATIO : base
+  const table = setting.caps ? CHAR_W_CAPS : CHAR_W
+  const fallback = setting.caps ? CHAR_W_CAPS_DEFAULT : CHAR_W_DEFAULT
+  return (
+    (setting.fontFamily ? table[setting.fontFamily] : undefined) ?? fallback
+  )
 }
 
 /**
