@@ -17,16 +17,54 @@
 import type { CandidateSlot } from './candidate'
 
 /**
- * Roughly a character's width, as a fraction of the type size.
+ * A character's width, as a fraction of the type size, PER FACE.
  *
- * Half an em is about right for mixed-case prose in the faces this app sets.
- * Capitals are not: they carry no narrow lowercase forms and no descender
- * gaps, and run about a quarter wider. A design that sets its titles in caps
- * — which a brand template very often does — was told each of them holds a
- * quarter more than it can, and the overflow landed on the reader.
+ * This was a single 0.5 for every typeface, and measuring it showed the
+ * assumption was wrong in both directions at once. Body prose at weight 400,
+ * measured per face:
+ *
+ *   sans 0.429 · humanist 0.440 · frank-ruhl-libre 0.454 · serif 0.454
+ *   geometric 0.466 · montserrat 0.522 · mono 0.602
+ *
+ * A forty percent spread, so no single number can be right. Five faces were
+ * given less room than they have, and text was trimmed shorter than it needed
+ * to be. Montserrat and especially MONO went the other way: a monospaced face
+ * has no narrow letters at all, so a program listing — the one box where
+ * overflow is least forgivable — was told it holds a fifth more than it does.
  */
-const CHAR_W = 0.5
-const CHAR_W_CAPS = 0.62
+const CHAR_W: Record<string, number> = {
+  sans: 0.429,
+  humanist: 0.44,
+  'frank-ruhl-libre': 0.454,
+  serif: 0.454,
+  geometric: 0.466,
+  montserrat: 0.522,
+  mono: 0.602,
+}
+
+/**
+ * For a face nobody measured, or none stated.
+ *
+ * Wider than every measured face except Montserrat and mono, which is the
+ * safe direction: it under-states what a box holds, so text is written a
+ * little short rather than a little over. `condensed` and `handwritten` land
+ * here and are genuinely narrower than this, so they lose a few characters
+ * they could have had — the trade being that a face nobody has measured
+ * never overflows on our estimate.
+ */
+const CHAR_W_DEFAULT = 0.5
+
+/**
+ * How much wider the same face runs in capitals.
+ *
+ * Capitals carry no narrow lowercase forms and no descender gaps. Measured on
+ * Montserrat at display size: 0.621 against 0.535 for the same strings in
+ * mixed case, so about sixteen percent. Kept as a RATIO rather than a second
+ * table because it is a property of capitals rather than of any one face, and
+ * because a per-face caps table would be seven more numbers measured from one
+ * deck's worth of strings.
+ */
+const CAPS_RATIO = 1.16
 
 /**
  * A line's full height, as a fraction of the type size.
@@ -44,6 +82,17 @@ const SLIDE_H_CQI = 56.25
 /** The most `maxItems` the template schema will take. */
 const MAX_ITEMS = 50
 
+/** What one character of this box costs, in fractions of its type size. */
+const charWidthFor = (setting: {
+  caps?: boolean
+  fontFamily?: string
+}): number => {
+  const base =
+    (setting.fontFamily ? CHAR_W[setting.fontFamily] : undefined) ??
+    CHAR_W_DEFAULT
+  return setting.caps ? base * CAPS_RATIO : base
+}
+
 /**
  * The height a box's own content needs, as a fraction of the slide's height.
  * Zero when nothing is known about what it holds.
@@ -54,11 +103,11 @@ const MAX_ITEMS = 50
  */
 export const heightForText = (
   slot: CandidateSlot,
-  setting: { lineHeight?: number; caps?: boolean } = {},
+  setting: { lineHeight?: number; caps?: boolean; fontFamily?: string } = {},
 ): number => {
   const { held, fontSize, box } = slot
   if (!held || !fontSize) return 0
-  const charWidth = setting.caps ? CHAR_W_CAPS : CHAR_W
+  const charWidth = charWidthFor(setting)
   const lineHeight = setting.lineHeight ?? LINE_H
   const perLine = Math.max(
     1,
@@ -103,12 +152,12 @@ export const capacityOf = (
    * tight display leading. Both are stated by the role a box follows, so
    * both are read from it rather than guessed.
    */
-  setting: { lineHeight?: number; caps?: boolean } = {},
+  setting: { lineHeight?: number; caps?: boolean; fontFamily?: string } = {},
 ): { maxChars?: number; maxItems?: number } => {
   const { box, fontSize, kind } = slot
   // A picture holds no text, and a table's shape is its rows, not a count.
   if (!fontSize || (kind !== 'text' && kind !== 'bullets')) return {}
-  const charWidth = setting.caps ? CHAR_W_CAPS : CHAR_W
+  const charWidth = charWidthFor(setting)
   const lineHeight = setting.lineHeight ?? LINE_H
   const perLine = Math.max(
     1,
