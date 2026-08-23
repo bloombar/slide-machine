@@ -170,11 +170,17 @@ describe('the way a box is actually set', () => {
     // measured, so these numbers answer to a measurement. Left unstated they
     // would resolve against the fallback for unmeasured faces, and the test
     // would assert an arithmetic identity about a constant nobody checked.
+    //
+    // Both numbers come from measurements of Montserrat itself — 0.522 for
+    // prose and 0.637 for capitals — rather than from a ratio applied to the
+    // first. An earlier version derived the caps figure by multiplying, and
+    // the multiplier turned out to have been taken against Title Case rather
+    // than prose, which understated it on every face.
     const set = { fontFamily: 'montserrat' }
     expect(capacityOf(slot({ fontSize: 4 }), set).maxChars).toBe(76)
     expect(
       capacityOf(slot({ fontSize: 4 }), { ...set, caps: true }).maxChars,
-    ).toBe(66)
+    ).toBe(62)
   })
 
   it('fits more lines down a box set with tight display leading', () => {
