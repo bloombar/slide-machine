@@ -814,9 +814,14 @@ each step is cheap, and each one gates the next.
    referenced against pictures present; capitalised boxes against capitalised
    strings; layouts against slides. This is the step that catches a feature that
    never ran, and no passing test will tell you: a zero here means nothing happened.
-5. **Confirm the build before rendering anything.** The e2e suite runs the built
-   app, so a bundle older than the change under test can only answer questions about
-   a different program. Check the bundle contains something the change introduced.
+5. **Confirm the build, and know which tests a green actually ran.** The e2e suite
+   runs the built app, so a bundle older than the change under test can only answer
+   questions about a different program — check the bundle contains something the
+   change introduced. And check what a passing run covered: the local gate in
+   [CONTRIBUTING](CONTRIBUTING.md) is `npm test`, which is unit tests only, while CI
+   also runs `test:integration` and the e2e suite. A green from the first says
+   nothing about the other two, and "the tests passed" is the most-repeated sentence
+   in software.
 6. **Render every layout, with content written to strain it** — an unbreakable word,
    a URL, a list past its point count (`e2e/tests/imported-template-fidelity.spec.ts`,
    `nyu-bold-comparison.spec.ts`). *These only see boxes that were given content.*
