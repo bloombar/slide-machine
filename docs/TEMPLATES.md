@@ -832,6 +832,19 @@ the user did not ask for.
     each other and is right to, since nothing in the data distinguishes this from the
     defect. Narrowing the title box is not available either: at ~7 characters a line the
     deck's own title would not fit in three lines.
+- **A layout the source deck has no slide for is an addition, not a derivation.** The
+  eleven conventional types are always present ([§2](#2-layouts-and-slots)), so importing a
+  design that shows no code, no formula and no table still produces boxes for them, drawn to
+  the design's margins and set in its type — but nothing about how they look was observed.
+  NYU Bold is the case: its `code` panel is the only dark object in a design of white
+  grounds, purple grounds and photographs. It ships dark deliberately. The colour is not
+  invented — `codeSurface` resolves it to `#333333`, the deck's own body ink — and a listing
+  needs a ground that separates it from the page, where the only pale alternative
+  (`surface`, `#f3f3f3`) reads against white as a rendering fault rather than a panel. The
+  reservation stands on its own terms: with no source slide there is nothing to be faithful
+  TO, so this is a judgment about legibility wearing a design's colours, and it is recorded
+  here rather than left to look derived. `codeSurface` is shared client code, so the
+  alternative was never a template decision — it would change every design at once.
 - **Fonts are mapped, not reproduced** ([§5](#5-theme-resolution)).
 - **Carried through Google Slides:** slot metadata and narration, via the mechanism in
   [§8](#8-exporting).
