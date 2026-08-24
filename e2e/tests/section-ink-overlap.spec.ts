@@ -51,6 +51,7 @@ import { createProject } from './helpers'
 const TITLE = process.env.PROBE_TITLE ?? 'PRESENTATION PART ONE TITLE'
 const NUMBER = process.env.PROBE_NUMBER ?? '01'
 /** Which two boxes, and which layout. Defaults to the section divider. */
+const DESIGN = process.env.PROBE_DESIGN ?? 'NYU Bold'
 const LAYOUT = process.env.PROBE_LAYOUT ?? 'section'
 const LAYOUT_LABEL = process.env.PROBE_LAYOUT_LABEL ?? 'Section divider'
 const A_LABEL = process.env.PROBE_A_LABEL ?? 'Part title'
@@ -118,14 +119,14 @@ const inkOf = (id: string) => `
  * its `j` are design decisions, and which of them descends furthest is not
  * predictable from the alphabet.
  */
-const WORST_GLYPH = (font: string, uppercaseOnly: boolean) => `
+const WORST_GLYPH = (font: string) => `
 (() => {
   const ctx = document.createElement('canvas').getContext('2d')
   ctx.font = ${JSON.stringify(font)}
   const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
   const lower = 'abcdefghijklmnopqrstuvwxyz'
   const marks = String.fromCharCode(46,44,59,58,33,63,40,41,91,93,123,125,47,92,124,45,95,34,39,64,35,36,37,38,42,43,61,60,62,126,96,94)
-  const letters = ${uppercaseOnly ? 'true' : 'false'} ? upper : upper + lower
+  const letters = upper + lower
   const rank = (set, key) => [...set]
     .map(ch => ({ ch, v: ctx.measureText(ch)[key] }))
     .sort((a, b) => b.v - a.v)
@@ -134,8 +135,10 @@ const WORST_GLYPH = (font: string, uppercaseOnly: boolean) => `
   return {
     font: ctx.font,
     size: parseFloat(ctx.font),
-    lettersDeepest: rank(letters, 'actualBoundingBoxDescent'),
-    lettersTallest: rank(letters, 'actualBoundingBoxAscent'),
+    capsDeepest: rank(upper, 'actualBoundingBoxDescent'),
+    capsTallest: rank(upper, 'actualBoundingBoxAscent'),
+    textDeepest: rank(letters, 'actualBoundingBoxDescent'),
+    textTallest: rank(letters, 'actualBoundingBoxAscent'),
     withMarksDeepest: rank(letters + marks, 'actualBoundingBoxDescent'),
     withMarksTallest: rank(letters + marks, 'actualBoundingBoxAscent'),
   }
@@ -167,7 +170,7 @@ test('measures whether the divider’s two texts touch', async ({ page }) => {
   await page.getByRole('button', { name: 'Start lecture' }).click()
   await page.getByRole('button', { name: 'Lecture settings' }).click()
   await page.getByRole('tab', { name: 'Design' }).click()
-  await page.getByRole('radio', { name: /NYU Bold/i }).click()
+  await page.getByRole('radio', { name: new RegExp(DESIGN, 'i') }).click()
   await page.getByRole('button', { name: 'Close settings' }).click()
 
   await page.getByLabel('Spoken phrase').fill('Opening')
@@ -220,18 +223,8 @@ test('measures whether the divider’s two texts touch', async ({ page }) => {
   // Which glyph in each box could reach furthest toward the other. The
   // measured clearance above is for the text actually written; this is the
   // worst the same two boxes could do with any other content.
-  const upperWorst = await page.evaluate(
-    WORST_GLYPH(
-      title.font as string,
-      /uppercase/.test(TITLE) || TITLE === TITLE.toUpperCase(),
-    ),
-  )
-  const lowerWorst = await page.evaluate(
-    WORST_GLYPH(
-      number.font as string,
-      NUMBER === NUMBER.toUpperCase() && /[A-Z]/.test(NUMBER),
-    ),
-  )
+  const upperWorst = await page.evaluate(WORST_GLYPH(title.font as string))
+  const lowerWorst = await page.evaluate(WORST_GLYPH(number.font as string))
   console.log(
     'INK GLYPHS ' + JSON.stringify({ upperWorst, lowerWorst }, null, 2),
   )
