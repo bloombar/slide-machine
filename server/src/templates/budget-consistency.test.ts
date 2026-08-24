@@ -108,6 +108,44 @@ interface Rect {
   h: number
 }
 
+/**
+ * Budgets a design states deliberately, against what its geometry derives.
+ *
+ * Equality is the rule, and an exception has to be written down. The
+ * alternative offered was to accept any budget NOT LOOSER than the geometry,
+ * on the reasoning that a tight budget cannot cost a reader content — true
+ * about readers, and fatal to this test's purpose.
+ *
+ * This file exists to catch a template nobody regenerated. On this branch's
+ * own history, the stale file was stale in the TIGHT direction: the leading
+ * defect made every display budget too small — `title.title` stated 13 where
+ * the corrected importer derives 26, `section.title` 15 against 30. A
+ * "never looser" check would have looked at that file, found every budget
+ * tighter than derived, and passed it. The one thing it is for is the one
+ * thing it would stop catching.
+ *
+ * So a deliberate tightening is listed here with its numbers and its reason,
+ * and everything else must match. Staleness does not arrive with a written
+ * reason, which is exactly what makes this distinguish the two.
+ */
+const DELIBERATE: {
+  template: string
+  layout: string
+  slot: string
+  stated: number
+  derived: number
+  why: string
+}[] = [
+  {
+    template: 'nyu-bold',
+    layout: 'big-number',
+    slot: 'title',
+    stated: 7,
+    derived: 8,
+    why: 'the figure box is a line short of its own type at 8; 7 keeps it on one line',
+  },
+]
+
 describe('a shipped design against its own geometry', () => {
   /**
    * Guards every case below, which are generated from the loaded set.
@@ -213,9 +251,18 @@ describe('a shipped design against its own geometry', () => {
           checked++
 
           const where = `${template.id} ${layout.type}.${slot.name}`
+          const excused = DELIBERATE.find(
+            d =>
+              d.template === template.id &&
+              d.layout === layout.type &&
+              d.slot === slot.name &&
+              d.stated === slot.maxChars &&
+              d.derived === expected.maxChars,
+          )
           if (
             expected.maxChars !== undefined &&
-            slot.maxChars !== expected.maxChars
+            slot.maxChars !== expected.maxChars &&
+            !excused
           )
             wrong.push(
               `${where} states maxChars ${slot.maxChars} but its box ` +
