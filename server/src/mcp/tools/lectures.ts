@@ -25,11 +25,27 @@ import { registerTool } from '../registry'
 const onDay = (value: string | Date | undefined): string =>
   value ? new Date(value).toISOString().slice(0, 10) : 'unknown'
 
+/**
+ * How a project is named, including when it has no name.
+ *
+ * Three cases, and they mean different things. A title is genuinely optional —
+ * the project created for a user's first lecture has none, and the app shows a
+ * placeholder — so an empty one is ordinary and says "untitled". A title that
+ * is missing entirely means the project was not in the listing at all, which
+ * is not ordinary, and flattening the two would tell a model that a lookup
+ * failure and an unnamed project are the same thing.
+ *
+ * Passing the empty string straight through printed `in project ""`, which
+ * reads as broken data rather than an absent name.
+ */
+const projectName = (title: string | undefined): string =>
+  title === undefined ? 'unknown' : title.trim() ? title : 'Untitled project'
+
 /** One lecture as a line of prose, ids included. */
 const lectureLine = (deck: Deck, projectTitle: string | undefined): string =>
   `- "${deck.title || 'Untitled lecture'}" (lecture id: ${deck.id}) — ` +
   `${deck.slideOrder.length} slide${deck.slideOrder.length === 1 ? '' : 's'}, ` +
-  `in project "${projectTitle ?? 'unknown'}" (project id: ${deck.projectId}), ` +
+  `in project "${projectName(projectTitle)}" (project id: ${deck.projectId}), ` +
   `last changed ${onDay(deck.updatedAt)}`
 
 export const findLectures = defineTool({
@@ -130,7 +146,7 @@ export const readLecture = defineTool({
 
     const header = [
       `Lecture "${deck.title || 'Untitled lecture'}" (lecture id: ${deck.id})`,
-      `Project: "${view.project.title}" (project id: ${view.project.id})`,
+      `Project: "${projectName(view.project.title)}" (project id: ${view.project.id})`,
       `Template: ${template.name} (template id: ${deck.templateId})`,
       `Visibility: ${deck.visibility}${deck.accessInherited ? ' (inherited from the project)' : ''}`,
       `Slides: ${slides.length}`,

@@ -45,6 +45,37 @@ export const issuerOrigin = (): string =>
 /** Where the MCP endpoint itself lives — the resource a token is minted for. */
 export const resourceUrl = (): string => `${issuerOrigin()}/api/mcp`
 
+/**
+ * Whether this deployment can be an authorization server at all.
+ *
+ * RFC 8414 requires an `https` issuer, and the SDK enforces it by throwing
+ * when the router is built — with a localhost exemption for development. That
+ * throw happens inside `createApp`, so an origin of `http://slides.example.edu`
+ * would not disable the MCP endpoint, it would stop the entire application
+ * from starting: every lecture, every export, everything, because one optional
+ * feature could not be configured.
+ *
+ * So the condition is checked here instead, and a deployment that cannot host
+ * this feature simply does not host it. Losing agent access is a missing
+ * feature; failing to boot is an outage.
+ */
+export const isUsableIssuer = (origin: string): boolean => {
+  try {
+    const url = new URL(origin)
+    return (
+      url.protocol === 'https:' ||
+      url.hostname === 'localhost' ||
+      url.hostname === '127.0.0.1'
+    )
+  } catch {
+    // An unparseable origin means the deployment is misconfigured in a way
+    // this feature cannot work around either.
+    return false
+  }
+}
+
+export const oauthAvailable = (): boolean => isUsableIssuer(issuerOrigin())
+
 /** The machine-facing half. Mounted at the app root by app.ts. */
 export const oauthAuthRouter = (): ReturnType<typeof mcpAuthRouter> =>
   mcpAuthRouter({

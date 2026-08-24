@@ -94,10 +94,14 @@ describe('find_lectures', () => {
     expect(out.text).toContain('create_lecture')
   })
 
-  it('reports a lecture whose project it cannot name, rather than hiding it', async () => {
+  it('reports a lecture whose project it cannot find, rather than hiding it', async () => {
+    // Distinct from a project that merely has no title: this one was not in
+    // the listing at all, which is a different fact about the data.
     const call = fakeCall({ 'deck.list': [deck], 'project.list': [] })
     const out = await findLectures.run(call, {})
+
     expect(out.text).toContain('unknown')
+    expect(out.text).not.toContain('Untitled project')
     expect(out.text).toContain('deck-1')
   })
 
@@ -123,6 +127,19 @@ describe('find_lectures', () => {
     })
     const out = await findLectures.run(call, { query: 'recursion' })
     expect(out.text).toContain('2 lectures:')
+  })
+
+  it('names an untitled project rather than printing an empty quote', async () => {
+    // A user's first project has no title of its own — real data, which the
+    // fixtures above happened not to cover.
+    const call = fakeCall({
+      'deck.list': [deck],
+      'project.list': [{ id: 'proj-1', title: '' }],
+    })
+    const out = await findLectures.run(call, {})
+
+    expect(out.text).toContain('Untitled project')
+    expect(out.text).not.toContain('project ""')
   })
 
   it('handles a lecture with no title and no recorded change date', async () => {
@@ -174,6 +191,14 @@ describe('read_lecture', () => {
     expect(out.text).toContain('A tree unfolding')
     expect(out.text).toContain('Chapter 6')
     expect(out.text).toContain('may edit')
+  })
+
+  it('names an untitled project when reading a lecture too', async () => {
+    const call = fakeCall({
+      'deck.get': { ...view, project: { id: 'proj-1', title: '  ' } },
+    })
+    const out = await readLecture.run(call, { lectureId: 'deck-1' })
+    expect(out.text).toContain('Untitled project')
   })
 
   it('warns when the account may only read, before an edit is attempted', async () => {

@@ -13,7 +13,11 @@ import { googleConnectRouter } from './routes/google-connect'
 import { adminRouter } from './routes/admin'
 import { actionsRouter } from './routes/actions'
 import { mcpRouter } from './routes/mcp'
-import { oauthAuthRouter, oauthConsentRouter } from './routes/oauth'
+import {
+  oauthAuthRouter,
+  oauthAvailable,
+  oauthConsentRouter,
+} from './routes/oauth'
 import { decksRouter } from './routes/decks'
 import { usersRouter } from './routes/users'
 import { seedAssetsRouter } from './routes/seed-assets'
@@ -62,7 +66,18 @@ export const createApp = (): Express => {
   // /.well-known/..., and an assistant nobody arranged finds every other
   // endpoint by reading them. Mounted before the API so the SPA fallback in
   // production cannot swallow them.
-  app.use(oauthAuthRouter())
+  //
+  // Conditional, because the standard requires an https issuer and a
+  // deployment reached over plain http cannot satisfy it. Skipping the feature
+  // is the right failure: the alternative is the whole application refusing to
+  // start over one thing it cannot offer.
+  if (oauthAvailable()) {
+    app.use(oauthAuthRouter())
+  } else {
+    console.warn(
+      'MCP agent access is unavailable: it needs an https PUBLIC_BASE_URL (or localhost in development)',
+    )
+  }
 
   const api = Router()
   api.use(healthRouter)
