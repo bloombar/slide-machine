@@ -1005,6 +1005,7 @@
     "addSlideHint": "Ajouter une diapositive",
     "liveSession": "Session en direct",
     "playingOriginal": "Lecture de l'audio d'origine…",
+    "editFailed": "Cette modification n'a pas été enregistrée. Votre dernier changement n'est pas sur la diapositive.",
     "layoutRefit": "Les blocs ajoutés par cette mise en page ont été remplis",
     "play": {
       "play": "Lire le diaporama",

@@ -2027,3 +2027,20 @@
   phase: 4
   status: Backlog
   review: false
+- id: TMPL-12
+  title: Every shipped design holds what it says it holds
+  full: "A built-in design states what each of its boxes can hold — on the slot,
+    on the text style the box follows, or in the layout's constraints — and the
+    app enforces those limits when it fills a slide. A stated limit is therefore
+    a promise about the design, and a design that breaks its own promise loses a
+    reader content without telling anyone: type gives way before content does
+    (TMPL-9), so an over-full box shrinks rather than clipping, and nothing
+    about the slide looks wrong. Every design the app ships is filled to its own
+    stated limits and measured in a browser, because only a browser can see
+    wrapping, leading and clipping. At those limits nothing is clipped, nothing
+    overlaps, nothing sits off…"
+  section: §7 Style Template Library
+  family: TMPL
+  phase: P2
+  status: Backlog
+  review: false

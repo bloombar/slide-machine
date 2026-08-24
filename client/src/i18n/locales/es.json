@@ -1005,6 +1005,7 @@
     "addSlideHint": "Añadir una diapositiva",
     "liveSession": "Sesión en directo",
     "playingOriginal": "Reproduciendo el audio original…",
+    "editFailed": "Esa edición no se guardó. Tu último cambio no está en la diapositiva.",
     "layoutRefit": "Se rellenaron los cuadros que añadió este diseño",
     "play": {
       "play": "Reproducir la presentación",

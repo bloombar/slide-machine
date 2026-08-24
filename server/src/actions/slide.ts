@@ -41,6 +41,7 @@ import {
   patchSlot,
   remapSlots,
   slotValueSchema,
+  slotWriteOps,
   slotsOf,
 } from '../lib/slide-slots'
 import { remapSlideTranslations } from '../lib/translate-slides'
@@ -141,12 +142,6 @@ export const slideEditContent = defineAction<
           `slots: not declared by this layout: ${unknown.join(', ')}`,
         ])
       }
-      let next = slotsOf(slide)
-      for (const [name, value] of Object.entries(input.slots)) {
-        next = patchSlot(next, name, value)
-      }
-      slide.slots = next
-      slide.markModified('slots')
     }
 
     // Content arriving on a layout with an empty picture box leaves a hole
@@ -155,24 +150,58 @@ export const slideEditContent = defineAction<
     // layout switch that used to be the only thing to source one. Keywords are
     // mined only when the slide has none, so this fires once per slide and a
     // box the author deliberately emptied is not refilled behind them.
+    await slide.save()
+
+    /*
+     * The boxes are written one path at a time, not as a whole map.
+     *
+     * `slotWriteOps` says why at length. In short: republishing every box on
+     * the slide to change one of them loses whatever another request wrote in
+     * between, and editing two boxes in quick succession is what filling in a
+     * slide IS. Addressing `slots.<name>` leaves the boxes this request never
+     * mentioned exactly as they are, whoever else is writing them.
+     */
+    let written = slide
+    if (input.slots) {
+      const set: Record<string, unknown> = {}
+      const unset: Record<string, ''> = {}
+      const current = slotsOf(slide)
+      for (const [name, value] of Object.entries(input.slots)) {
+        const ops = slotWriteOps(current, name, value)
+        Object.assign(set, ops.set)
+        Object.assign(unset, ops.unset)
+      }
+      const update: Record<string, unknown> = {}
+      if (Object.keys(set).length) update.$set = set
+      if (Object.keys(unset).length) update.$unset = unset
+      written =
+        (await SlideModel.findOneAndUpdate({ _id: slide._id }, update, {
+          new: true,
+        })) ?? slide
+    }
+    await touchDeck(written.deckId)
+
+    // Content arriving on a layout with an empty picture box leaves a hole
+    // nothing else fills: a slide built straight through slide.add plus
+    // slide.editContent -- every imported lecture -- never passes through the
+    // layout switch that used to be the only thing to source one. Keywords are
+    // mined only when the slide has none, so this fires once per slide and a
+    // box the author deliberately emptied is not refilled behind them.
+    //
+    // Read from the slide as it stands AFTER the write, not before: which
+    // picture boxes are still empty is a question about the slide that now
+    // exists.
     const sourceImages =
       env.IMAGE_ENRICHMENT_ENABLED &&
       deck !== null &&
       template !== undefined &&
-      emptyImageSlotsOf(slide, template).length > 0
-
-    await slide.save()
-    await touchDeck(slide.deckId)
-
-    // After the save: a slide written as a slot map only has its title and
-    // body folded out of that map by the pre-save hook, so mining its words
-    // any earlier would search an apparently empty slide.
-    if (sourceImages && applyImageKeywords(slide).length) {
-      await slide.save()
-      sourceEmptyImageSlots(slide, deck!, template!)
+      emptyImageSlotsOf(written, template).length > 0
+    if (sourceImages && applyImageKeywords(written).length) {
+      await written.save()
+      sourceEmptyImageSlots(written, deck!, template!)
     }
 
-    return toSlideDto(slide)
+    return toSlideDto(written)
   },
 })
 
