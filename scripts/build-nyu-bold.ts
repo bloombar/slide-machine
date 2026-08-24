@@ -805,15 +805,23 @@ const main = async () => {
        * reason (`shared/types/text-ink`).
        *
        * But the rule has to hold for what the slots permit, not for the two
-       * strings NYU happens to have written. Its own worst case — a `Q` in
-       * the title, whose tail reaches 0.161em below the baseline, under the
-       * dot of an `i` in the numeral at 0.787em — leaves 0.0094 of the slide
-       * of genuine ink overlap, about 5px. That is what this buys back.
+       * strings NYU happens to have written, and its own worst case put a
+       * `Q` in the title over the dot of an `i` in the numeral with 0.0094 of
+       * the slide — about 5px — of genuine ink overlap.
        *
-       * It does not buy back the marks: a solidus in the number box reaches
-       * far higher than any digit and would touch by 28px. That case is
-       * closed by TMPL-16, a slot declaring the characters it holds, not by
-       * moving this box further.
+       * WHERE THAT LEAVES THE SHIPPED GEOMETRY, measured at the rectangle
+       * below rather than the one it was derived from:
+       *
+       *   Q over i or j              clears by 5.7px
+       *   nothing over a solidus     clears by 1.9px
+       *   Q over a solidus           COLLIDES by 12.7px
+       *   @ over a solidus           COLLIDES by 16.7px
+       *
+       * So every case in letters and digits is now inside the margin, and the
+       * one surviving assumption about this pair is that the number box holds
+       * DIGITS — no `/`, `\` or `$`, which reach higher than any letter.
+       * That is exactly what TMPL-16 would declare, and declaring it is what
+       * closes this rather than moving the box further.
        *
        * The size is derived rather than picked: the 0.0094 the rule reports,
        * plus 0.008 for the largest disagreement between the analytic model

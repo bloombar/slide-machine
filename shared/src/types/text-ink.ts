@@ -27,36 +27,29 @@
  *
  * A rule has to hold for whatever an author writes, and a template does not
  * record what its slots will hold. The extents below are therefore measured
- * over letters and digits — but the glyph set is the implementation, not the
- * claim. Stated as something a reader can actually check, what this rule
- * assumes about any pair of boxes it calls clear is:
+ * over LETTERS AND DIGITS, and marks are outside them. In Montserrat Bold the
+ * ones that matter are `/` and `\` at 0.842em and `$` at 0.820em above the
+ * baseline — well past the 0.787em of the tallest letter, the dot on an `i` —
+ * and `@` at 0.206em below it, past `Q`'s 0.161em.
  *
- *   **the upper box's last line carries no deep descender, AND the lower box
- *   holds digits.**
+ * So a pair of boxes this rule calls clear is clear for text, and may not be
+ * for a slash or an at-sign. Whether that matters depends on how much room
+ * the pair actually has: the shortfall is bounded by the difference between
+ * the two sets, about 0.055em above and 0.045em below, and a design with more
+ * margin than that is unaffected either way.
  *
- * On NYU Bold's divider, which is the case that forced this, both halves are
- * within a few pixels of mattering. Montserrat Bold's deepest capital is `Q`
- * at 0.161em — 14.8px as that slide renders — against 1.1px for `C`, `G` and
- * `J`, so it is a cliff rather than a slope: one letter, or none. Above it,
- * the dot on an `i` or `j` reaches 0.787em. A `Q` in the title over an `i` in
- * the numeral leaves about 5px of real ink in a gap this rule calls clear
- * (measured twice, from the metrics and from a render, at 5.0 and 5.2px).
+ * **Deliberately no pixel figures here.** A limit stated against a particular
+ * rectangle stops being true when the rectangle moves, and goes on reading as
+ * considered — which is how the first version of this docstring described an
+ * exclusion that a later nudge had already closed. The numbers for a specific
+ * pair belong where that geometry is set; the claim that belongs here is
+ * about the FACE, which does not move.
  *
- * Describing that as "unaccented Latin" would send a reader looking for
- * accents, and accents are not what breaks it. **Marks are.** Admit them and
- * the title's deepest glyph is `@` at 19.0px while the numeral's tallest is
- * the solidus at 285.3px, which touch by 28px — five times the residual
- * above. The character-set framing does not cover its own worst case, which
- * is why the assumption is written as the two conditions rather than as a
- * repertoire.
- *
- * The second condition — that the lower box holds digits — is the one nothing
- * enforces. It is true of this divider because the slot is a part number, and
- * it is exactly what **TMPL-16** proposes: a slot declaring the characters it
- * holds. Implement TMPL-16 and this rule reads the declaration instead of
- * assuming it, and the solidus case closes with it. Do not widen the extents
- * here to cover marks; that builds the approximation deeper rather than
- * replacing it.
+ * What removes the assumption rather than restating it is **TMPL-16**: a slot
+ * declaring the characters it holds. A number box that says it holds digits
+ * takes the marks out of its own reachable set, and this rule reads the
+ * declaration instead of assuming it. Do not widen the extents to cover
+ * marks — that builds the approximation deeper rather than replacing it.
  *
  * This is the same standard TMPL-12 already sets for character WIDTHS — "a
  * statement about content of ordinary letter widths rather than a guarantee
