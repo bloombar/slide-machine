@@ -47,6 +47,54 @@
 export const NATURAL_LINE_BOX = 1.196
 
 /**
+ * The leading below which a line's ink hangs outside its own line box.
+ *
+ * `NATURAL_LINE_BOX` is 1.196 and this is 1.2: they sit four thousandths
+ * apart, and that is deliberate rather than sloppy. A box set at or above its
+ * face's natural box contains its own glyphs, so it needs no allowance; one
+ * set below does not shrink its letters to match and the ascenders and
+ * descenders stay where they were.
+ *
+ * Only such a box is given room. Everywhere else the tolerance stays at the
+ * pixel of rounding it began as — otherwise a quarter of an em of slack on
+ * body text hides a genuinely clipped line.
+ */
+export const TIGHT_LEADING = 1.2
+
+/**
+ * What a box led under `TIGHT_LEADING` may overrun by, as a share of its own
+ * type size.
+ *
+ * Shared because two parts of the system have to agree about it, and for a
+ * while they did not. The renderer grants this allowance when it measures a
+ * box (`useFitText`): a tight line box overruns at EVERY type size, so
+ * without it the search shrinks a title to two fifths chasing an overrun it
+ * can never clear. The importer, deriving how much a box holds, granted
+ * nothing — so it refused a second line that the renderer draws without
+ * complaint, and NYU Bold's own title box was budgeted for one line while
+ * holding two.
+ *
+ * A budget stricter than the renderer is not a safe direction to be wrong in.
+ * It is invisible: the box draws correctly, and the only symptom is content
+ * trimmed to a bound nothing on screen justifies.
+ *
+ * Where the value comes from. A flat pixel was not enough: a face set below
+ * about 1.2 puts its descenders outside the line box, so `scrollHeight`
+ * exceeds `clientHeight` by a few pixels at EVERY type size. Shrinking scales
+ * that overrun down without ever clearing it, so the renderer's search walked
+ * all twenty-four steps to the floor and a seven-character title set at 9cqi
+ * came out at two fifths — while a box that genuinely held one line too many
+ * looked no different to the measurement.
+ *
+ * A share of the font size separates the two. A real extra line costs at
+ * least one line-height, which is around a whole em; the glyphs hanging out
+ * of a tight line box cost a fraction of one. A quarter of an em sits well
+ * between, and it scales with the type, so the same rule holds for a 2cqi
+ * caption and a 17cqi figure.
+ */
+export const SLACK_EM = 0.25
+
+/**
  * A template's named text styles: what "body" or "heading" means, and about
  * how much text fits a box set in one.
  *

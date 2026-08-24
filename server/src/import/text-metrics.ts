@@ -14,7 +14,11 @@
  * "how much fits", which is the question the whole generation contract rests
  * on.
  */
-import { NATURAL_LINE_BOX } from '@slide-machine/shared'
+import {
+  NATURAL_LINE_BOX,
+  SLACK_EM,
+  TIGHT_LEADING,
+} from '@slide-machine/shared'
 import type { CandidateSlot } from './candidate'
 
 /**
@@ -258,7 +262,25 @@ const linesDown = (
   const step = bullets ? lineHeight + BULLET_GAP_EM : lineHeight
   // The overhang comes off the top before any line is counted, since it is
   // paid whether the box holds one line or ten.
-  const forLines = room - Math.max(0, NATURAL_LINE_BOX - lineHeight)
+  //
+  // And the renderer's own allowance goes back on, because this estimate is
+  // not the last word on whether a line fits — `useFitText` is, and it grants
+  // a box led under `TIGHT_LEADING` an overrun of `SLACK_EM` before it
+  // shrinks anything. Without the same term here the two disagree, and the
+  // disagreement is one-sided: the budget refuses a line the renderer draws.
+  //
+  // NYU Bold's own title box is the case. Two lines of its title need 2.153em
+  // and the box has 2.134em, so this refused the second line by 0.019em —
+  // while the renderer, allowing a quarter em for exactly this condition,
+  // draws both with room to spare. The deck shows it working; the estimate
+  // said it could not.
+  //
+  // Not a safe direction to be wrong in, either, which is why it is worth a
+  // change rather than a note. A budget stricter than the renderer is
+  // invisible: the box draws correctly, and the only symptom is content
+  // trimmed to a bound nothing on screen justifies.
+  const slack = lineHeight < TIGHT_LEADING ? SLACK_EM : 0
+  const forLines = room - Math.max(0, NATURAL_LINE_BOX - lineHeight) + slack
   return Math.max(
     1,
     Math.floor((forLines + (bullets ? BULLET_GAP_EM : 0)) / step),

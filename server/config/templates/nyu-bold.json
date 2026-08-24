@@ -25,7 +25,7 @@
         "caps": true,
         "lineHeight": 1.017,
         "color": "accent",
-        "maxChars": 24
+        "maxChars": 33
       },
       "bullet": {
         "fontSize": 1.94,
@@ -187,6 +187,15 @@
           "description": "One line on what this part covers.",
           "maxChars": 32,
           "required": false
+        },
+        {
+          "name": "number",
+          "kind": "text",
+          "label": "Part number",
+          "description": "The part number as digits — \"01\", \"02\". Two characters, no words.",
+          "multiline": true,
+          "maxChars": 2,
+          "required": false
         }
       ],
       "elementPositions": {
@@ -194,7 +203,7 @@
           "x": 0.03466207349081365,
           "y": 0.08888888888888889,
           "w": 0.9318241469816273,
-          "h": 0.37909902222222225,
+          "h": 0.35806357538641004,
           "fontSize": 9.44,
           "fontWeight": 700,
           "caps": true,
@@ -213,6 +222,19 @@
           "fontFamily": "montserrat",
           "color": "#ffffff",
           "lineHeight": 1.375,
+          "align": "start",
+          "vAlign": "start"
+        },
+        "number": {
+          "x": 0.47556123496281716,
+          "y": 0.3229566676387674,
+          "w": 0.506496062992126,
+          "h": 0.6770433323612326,
+          "fontSize": 34.72,
+          "fontWeight": 700,
+          "fontFamily": "montserrat",
+          "color": "#8900e1",
+          "lineHeight": 1.196,
           "align": "start",
           "vAlign": "start"
         }
@@ -1288,7 +1310,7 @@
           "kind": "text",
           "label": "Title",
           "description": "A closing heading, centred and in capitals.",
-          "maxChars": 14,
+          "maxChars": 25,
           "required": true
         },
         {
