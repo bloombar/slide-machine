@@ -134,6 +134,28 @@ describe('PositionedLayout', () => {
     })
   })
 
+  it('ranges the text itself, not only the block it sits in', () => {
+    // REGRESSION. `alignItems` placed the block and `textAlign` was only ever
+    // set for `center`, so a right-ranged box drew its lines from the left:
+    // several ragged right edges sharing one hard left one. Nothing else
+    // could see it — the data is right and so is the geometry, and the design
+    // is still wrong.
+    const ranged = (align: 'start' | 'center' | 'end') =>
+      layout({
+        elementPositions: { title: { x: 0, y: 0, w: 1, h: 0.5, align } },
+      })
+    const styleOf = (align: 'start' | 'center' | 'end') =>
+      render(
+        <PositionedLayout {...props(ranged(align))} />,
+      ).container.querySelector('div[style]')
+    expect(styleOf('end')).toHaveStyle({
+      alignItems: 'flex-end',
+      textAlign: 'end',
+    })
+    expect(styleOf('center')).toHaveStyle({ textAlign: 'center' })
+    expect(styleOf('start')).toHaveStyle({ textAlign: 'start' })
+  })
+
   it('reads a colour named as a theme key from the theme', () => {
     const themed = layout({
       elementPositions: {
