@@ -441,6 +441,59 @@ const fontSizeCqi = (
   return Math.round(((points * (EMU / 72)) / pageWidth) * 100 * 100) / 100
 }
 
+/**
+ * What Google's line spacing means as a CSS line-height multiple.
+ *
+ * `lineSpacing` is a percentage of NORMAL, and normal is not `line-height: 1`.
+ * So 80 is not 0.8: it is 80% of whatever Google considers a normal line box.
+ *
+ * MEASURED, NOT COMPUTED: 1.19602 ± 0.00061, precision-weighted over five
+ * cases. Live renders of the NYU Bold source deck, read as baseline-to-
+ * baseline distance off per-row ink profiles — Google outlines the glyphs in
+ * its embed, so there is no text node to ask and pixels were the only
+ * instrument. The scale is arithmetic rather than an estimate: the deck's
+ * `pageSize` is 9144000 EMU, which is 10in at 720pt, captured 4800px wide, so
+ * 6.6667 px/pt exactly.
+ *
+ * A round 1.200 sits 6.6σ away, and it is the RESIDUALS that say so rather
+ * than the mean: at 1.200 all three large-type cases miss the same way (1.9,
+ * 1.2 and 1.5px), which is a systematic error, while the two 12pt cases sit
+ * at zero because one pixel is 0.83% of a line at that size and they cannot
+ * discriminate at all. At 1.196 every residual is under half a pixel with no
+ * sign pattern.
+ *
+ * One case was measured and DISCARDED: slide 6's quote gave unequal band
+ * heights, a Q's tail contaminating the bottom edge and a round cap
+ * overshooting the top, and it would have supported anything from 1.198 to
+ * 1.205 depending on which edge you believed. Unequal bands are the tell that
+ * a band is not measuring what you think it is. That it was excluded, and
+ * why, is part of why the other five are believable.
+ *
+ * A FONT-METRICS DERIVATION GIVES ~1.219 AND IS WRONG. Montserrat's own
+ * ascent and descent put its normal line box there, and two people deriving
+ * that independently is the same assumption twice rather than a confirmation.
+ * The large-type cases exclude it outright. Do not "correct" this back to a
+ * computed figure.
+ *
+ * OPEN, AND STATED AS OPEN: every one of those measurements is Google
+ * rendering Montserrat. Whether this is a property of Google's interpretation
+ * or varies by typeface cannot be settled from one face, and settling it
+ * would take the same measurement on an import set in another. An unproven
+ * constant with an honest docstring is fine; the figure this replaces was a
+ * confident sentence about source data nobody had checked.
+ */
+const NORMAL_LINE_BOX = 1.196
+
+/**
+ * A `lineSpacing` percentage as the multiple the template model stores.
+ *
+ * Rounded to thousandths rather than hundredths on purpose: at display sizes
+ * a hundredth of a line is a couple of pixels, which is the same margin the
+ * measurement above used to rule out a neighbouring value.
+ */
+export const lineHeightFrom = (lineSpacing: number): number =>
+  Math.round(lineSpacing * NORMAL_LINE_BOX * 10) / 1000
+
 /** The first run style a shape states, which is where a placeholder keeps the
  * type its slides are meant to be set in. */
 const firstRunStyle = (
@@ -826,11 +879,22 @@ const elementOf = (
         ?.textElements ?? []) as Record<string, unknown>[]
     ).map(
       p =>
-        (p.paragraphMarker as { style?: { alignment?: string } } | undefined)
-          ?.style?.alignment,
+        (
+          p.paragraphMarker as
+            { style?: { alignment?: string; lineSpacing?: number } } | undefined
+        )?.style,
     ),
   )
-  const align = ACROSS[paragraphs.find(Boolean) ?? '']
+  const align = ACROSS[paragraphs.map(p => p?.alignment).find(Boolean) ?? '']
+  // Leading inherits exactly as alignment does: a title set tight on the
+  // layout page stays tight on every slide built from it, and no slide says
+  // so. Nearest ancestor to state one wins, which is what `chain` is ordered
+  // by. A deck that states none at all leaves this unset, and the estimate's
+  // own fallback stands (`text-metrics`).
+  const spacing = paragraphs
+    .map(p => p?.lineSpacing)
+    .find((value): value is number => typeof value === 'number' && value > 0)
+  const lineHeight = spacing === undefined ? undefined : lineHeightFrom(spacing)
   const vAlign =
     DOWN[
       chain
@@ -868,6 +932,9 @@ const elementOf = (
       ...(placeholder && Object.values(empty).some(v => v !== undefined)
         ? { runs: [{ text: '', ...empty }] }
         : {}),
+      // How this box would be LED, for the same reason its type is carried:
+      // an untouched placeholder is still set in the design's leading.
+      ...(lineHeight ? { lineHeight } : {}),
       ...(align ? { align } : {}),
       ...(vAlign ? { vAlign } : {}),
     }
@@ -887,6 +954,7 @@ const elementOf = (
     ...(slotName ? { slotName } : {}),
     runs,
     ...(bulleted ? { bulleted: true } : {}),
+    ...(lineHeight ? { lineHeight } : {}),
     ...(align ? { align } : {}),
     ...(vAlign ? { vAlign } : {}),
   }
@@ -1077,6 +1145,9 @@ const pageOf = (
   const metadata = metadataOf(rawElements)
   const themeStyles = themeStylesOf(rawElements)
   const notes = notesOf(raw)
+  const skipped = Boolean(
+    (raw.slideProperties as { isSkipped?: boolean } | undefined)?.isSkipped,
+  )
   const own = creditedPictures(
     rawElements
       .map(el => elementOf(el, page, scheme, ancestry))
@@ -1104,6 +1175,7 @@ const pageOf = (
     ...(metadata ? { slotMetadata: metadata } : {}),
     ...(themeStyles ? { themeStyles } : {}),
     ...(notes ? { notes } : {}),
+    ...(skipped ? { skipped } : {}),
   }
 }
 

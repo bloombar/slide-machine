@@ -285,6 +285,11 @@ const toLayout = (
                 heightForText(slot, {
                   caps: slot.caps,
                   fontFamily: mapFont(slot.fontFamily),
+                  // Measured against the leading the box is actually SET in.
+                  // Against the estimate's fallback instead, a box set tight
+                  // was given rows it does not need — and one set loose was
+                  // given too few.
+                  lineHeight: slot.lineHeight,
                 }),
               ),
               roomBelow(slot.box, derived.slots),
@@ -313,7 +318,16 @@ const toLayout = (
           // Measured against the box as DRAWN, not as the source left it.
           ...capacityOf(
             { ...slot, box: drawnBox.get(slot) ?? slot.box },
-            { caps: slot.caps, fontFamily: mapFont(slot.fontFamily) },
+            {
+              caps: slot.caps,
+              fontFamily: mapFont(slot.fontFamily),
+              // What a box holds depends on how tightly it is led, and this
+              // deck's titles are led tighter than anything the app assumes:
+              // told the default instead, a two-line title box was budgeted
+              // for one line, and the source deck's own titles did not fit
+              // the budgets derived from it.
+              lineHeight: slot.lineHeight,
+            },
           ),
           // Multi-line when the box is deep enough to hold more than a
           // line, and always when what it holds is Markdown: a list only

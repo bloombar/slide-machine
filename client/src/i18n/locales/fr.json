@@ -471,6 +471,7 @@
         "summary": "{slides} diapositives → {layouts} mises en page",
         "merged": "{count} diapositives quasi identiques fusionnées",
         "approximated": "{count} associées à la mise en page la plus proche",
+        "skipped": "{count} diapositives marquées « ignorer » ont été exclues",
         "assetsFailed": "{count} images n'ont pas pu être récupérées",
         "review": "Votre présentation n'a pas été modifiée."
       },

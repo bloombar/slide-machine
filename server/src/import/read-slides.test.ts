@@ -879,6 +879,65 @@ describe('what a slide inherits from its layout and master', () => {
     expect(element.vAlign).toBe('center')
   })
 
+  it('takes the layout’s leading too, and keeps its alignment', () => {
+    // Leading is read off the same paragraph chain alignment is, so the two
+    // are pinned together: a design sets both on its layout page and no slide
+    // built from it restates either. `lineSpacing` is a percentage of normal,
+    // so 85 is not 0.85 — the conversion is `lineHeightFrom`.
+    const element = firstElement(
+      deck({
+        layout: {
+          pageElements: [
+            placed('layout-title', {
+              shape: {
+                shapeType: 'TEXT_BOX',
+                placeholder: { type: 'TITLE' },
+                text: {
+                  textElements: [
+                    {
+                      paragraphMarker: {
+                        style: { alignment: 'CENTER', lineSpacing: 85 },
+                      },
+                    },
+                  ],
+                },
+              },
+            }),
+          ],
+        },
+        slide: {
+          pageElements: [inheriting('slide-title', 'layout-title', 'Runoff')],
+        },
+      }),
+    )
+    expect(element.lineHeight).toBe(1.017)
+    expect(element.align).toBe('center')
+  })
+
+  it('leaves the leading unset where the deck states none', () => {
+    // Absent is not 1.0: a box whose deck says nothing must fall through to
+    // the estimate's own fallback rather than being led at Google's normal.
+    const element = firstElement(
+      deck({
+        slide: {
+          pageElements: [
+            placed('t', {
+              shape: {
+                shapeType: 'TEXT_BOX',
+                text: {
+                  textElements: [
+                    { textRun: { content: 'Runoff\n', style: {} } },
+                  ],
+                },
+              },
+            }),
+          ],
+        },
+      }),
+    )
+    expect(element.lineHeight).toBeUndefined()
+  })
+
   it('survives a presentation whose placeholders point in a circle', () => {
     // A malformed file must not hang an import
     const read = toSourcePresentation(
@@ -2659,5 +2718,45 @@ describe('a point whose marker counts', () => {
     expect(
       toSourcePresentation(raw).slides[0]!.elements[0]!.runs?.[0]?.ordered,
     ).toBe(true)
+  })
+})
+
+describe('a page the author marked not-for-presentation', () => {
+  it('is read as skipped, so the import can leave it out', () => {
+    // Google's "skip slide". A template deck marks its own instructions page
+    // this way, and a layout derived from that page is a design the deck does
+    // not have. The reader only reports it — leaving it out is the importer's
+    // decision, and `import-recon` wants to see it either way.
+    const read = toSourcePresentation(
+      presentation({
+        slides: [
+          { objectId: 's1', pageElements: [] },
+          {
+            objectId: 's2',
+            pageElements: [],
+            slideProperties: { isSkipped: true },
+          },
+        ],
+      }),
+    )
+    expect(read.slides[0]!.skipped).toBeUndefined()
+    expect(read.slides[1]!.skipped).toBe(true)
+  })
+
+  it('is not marked when the deck says it is presented', () => {
+    // `isSkipped: false` is what Google sends for an ordinary page, and it
+    // must read the same as saying nothing.
+    const read = toSourcePresentation(
+      presentation({
+        slides: [
+          {
+            objectId: 's1',
+            pageElements: [],
+            slideProperties: { isSkipped: false, layoutObjectId: 'l1' },
+          },
+        ],
+      }),
+    )
+    expect(read.slides[0]!.skipped).toBeUndefined()
   })
 })

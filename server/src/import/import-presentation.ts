@@ -237,8 +237,39 @@ const consolidateAuthored = async (
  * Split from the reading so the whole pipeline can be tested — and driven from
  * a YAML or PowerPoint reader later — without a network.
  */
-export const importSourcePresentation = async (
+/**
+ * The deck without the pages its author marked not-for-presentation.
+ *
+ * Google's "skip slide" keeps a page in the file and never shows it, and a
+ * template deck uses it for its own documentation: NYU's ship a "Template
+ * Notes" page of links to their usage guidelines and their accessibility
+ * add-on. That page is ABOUT the deck rather than part of it, so deriving a
+ * layout from it puts a design in the template that the design does not have,
+ * and importing it as a lecture slide puts the template's instructions into
+ * somebody's class.
+ *
+ * Not an option, because it is a different question from the one
+ * `keepEverySlide` asks. That one is about whether near-identical slides are
+ * consolidated; this is about which slides exist at all, and the author has
+ * already answered it.
+ *
+ * A deck whose every page is skipped is left whole. Someone asked for it to
+ * be imported, and importing nothing is worse than importing all of it.
+ */
+export const withoutSkippedSlides = (
   source: SourcePresentation,
+): { source: SourcePresentation; skipped: number } => {
+  const presented = source.slides.filter(slide => !slide.skipped)
+  if (!presented.length || presented.length === source.slides.length)
+    return { source, skipped: 0 }
+  return {
+    source: { ...source, slides: presented },
+    skipped: source.slides.length - presented.length,
+  }
+}
+
+export const importSourcePresentation = async (
+  presentation: SourcePresentation,
   options: {
     provider?: Pick<GenerationProvider, 'describeImportedLayouts'>
     assetPrefix?: string
@@ -269,6 +300,11 @@ export const importSourcePresentation = async (
     importNotes?: boolean
   } = {},
 ): Promise<ImportResult> => {
+  // The pages the author actually presents. Everything below reads `source`,
+  // so a skipped page is out of the design AND out of the lecture, which is
+  // the same decision made once.
+  const { source, skipped: slidesSkipped } = withoutSkippedSlides(presentation)
+
   // A presentation this system exported carries each layout's slot
   // declarations on the layout itself (EXP-8), and each slide says which
   // layout it is built on. Pairing the two is what makes the round trip
@@ -422,10 +458,12 @@ export const importSourcePresentation = async (
       ),
     )
 
-  // Numbered as the deck presents them: "slide 4" is what an author would
-  // call it, and the source id is not something they have ever seen.
+  // Numbered by its place in the deck the author is looking at — including
+  // the pages that were skipped, which still occupy a position in the
+  // filmstrip they would count along. The source id is not something they
+  // have ever seen.
   const numberOf = new Map(
-    source.slides.map((slide, index) => [slide.id, index + 1]),
+    presentation.slides.map((slide, index) => [slide.id, index + 1]),
   )
   const contentDropped = slides
     .filter(slide => slide.dropped.length)
@@ -439,6 +477,9 @@ export const importSourcePresentation = async (
     slides,
     report: {
       ...importReport(source, layouts, approximated.length, failed),
+      // Said, not done silently: a deck that never had those pages and one
+      // whose pages were dropped look identical afterwards.
+      ...(slidesSkipped ? { slidesSkipped } : {}),
       ...(contentDropped.length ? { contentDropped } : {}),
     },
   }

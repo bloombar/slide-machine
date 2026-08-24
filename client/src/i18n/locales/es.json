@@ -471,6 +471,7 @@
         "summary": "{slides} diapositivas → {layouts} diseños",
         "merged": "{count} diapositivas casi idénticas combinadas",
         "approximated": "{count} asignadas al diseño más parecido",
+        "skipped": "Se omitieron {count} diapositivas marcadas como «omitir»",
         "assetsFailed": "No se pudieron obtener {count} imágenes",
         "review": "Tu presentación no se modificó."
       },

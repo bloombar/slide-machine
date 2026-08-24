@@ -143,9 +143,28 @@ export interface TypeScale {
  *   - ordinary weight and upright, which is what a box that was neither bold
  *     nor italic was drawn at (the importer reads no slant at all, so no
  *     imported box has ever been italic)
- *   - `1.5`, the line height set on every element on the page, and the same
- *     figure the capacity arithmetic assumes (`text-metrics`) — so what a box
- *     is told it holds and what it draws finally agree
+ *   - `1.5`, the leading a box is drawn at when its deck states none, and the
+ *     same figure the capacity arithmetic falls back to (`text-metrics`) — so
+ *     what a box is told it holds and what it draws agree
+ *
+ * That last one used to say `1.5` was "the line height set on every element
+ * on the page". It is not. Google states leading as `lineSpacing`, a
+ * percentage of normal, and nothing read it — so every imported design was
+ * re-led to a figure its author never chose.
+ *
+ * The size of that is worth stating exactly, because it is smaller than it
+ * first looked and the correction matters. Converted properly, NYU Bold's
+ * body at `lineSpacing: 125` is 1.494 — our 1.5 is right to within 0.4%. Its
+ * titles at 80 and 85 are 0.956 and 1.016, where 1.5 is 57% and 48% too
+ * loose, and a title box was therefore budgeted for one line where it holds
+ * two. **This is a display-type defect, not a global one**, and anyone
+ * "fixing" body leading to match a source would break the one value that was
+ * already right. That 1.5 lands on the body figure is a coincidence — it was
+ * a hard-coded default that happened to sit on top of one correct value and
+ * eleven wrong ones, not a decision about prose.
+ *
+ * The wrong sentence is recorded here rather than deleted: a belief about
+ * source data that nobody had checked against a deck is how it survived.
  *   - the theme's own text colour, which an uncoloured box inherited
  */
 const INHERITED = {
@@ -287,8 +306,28 @@ const assignRoles = (
       .sort((a, b) => a.size - b.size)[0] ?? bulletCluster
   if (!anchor) return roles
 
-  const above = clusters
-    .filter(c => c.size > anchor.size)
+  /*
+   * The heading ranks, and which clusters are even eligible for one.
+   *
+   * Ranking by count is what stops a one-off from taking `title` — see above.
+   * Taking the top three by count and no more is what let one through
+   * anyway: where fewer than three sizes above the anchor are actually used,
+   * the slice fills the remaining ranks from a field of singletons, and the
+   * size sort that follows crowns the largest of them. NYU Bold lost `title`
+   * to the single 20.83cqi figure on its one big-number slide that way, while
+   * the 5.83cqi size carrying every real title in the deck was demoted.
+   *
+   * So a cluster earns a rank by being used more than once. Deliberately that
+   * blunt: a percentage threshold would be right often enough that nobody
+   * checks it.
+   *
+   * The fallback carries the other half. A deck where every size above the
+   * anchor is a one-off is a small deck, not a broken one, and it must still
+   * come out with a `title` rather than with no heading roles at all.
+   */
+  const eligible = clusters.filter(c => c.size > anchor.size)
+  const used = eligible.filter(c => c.slots.length > 1)
+  const above = (used.length ? used : eligible)
     .sort((a, b) => b.slots.length - a.slots.length)
     .slice(0, ABOVE_BODY.length)
     .sort((a, b) => b.size - a.size)
@@ -437,16 +476,35 @@ export const deriveTypeScale = (
     // holds something the renderer can actually draw.
     const family = agreedOn(slots, s => mapFont(s.fontFamily))
     // Measured against how the role is actually set, so a caps title is not
-    // told it holds a quarter more than it does. `INHERITED.lineHeight` is
-    // what an imported box is drawn at, and matches the estimate's own
-    // fallback, so it is stated rather than assumed.
+    // told it holds a quarter more than it does — leading included, which is
+    // read from the boxes rather than assumed.
     const allCaps = slots.every(s => s.caps)
+    /*
+     * The leading the role is actually set in.
+     *
+     * The cluster's most common rather than its agreed one, because a role
+     * genuinely holds boxes at two leadings: NYU sets its title slide and its
+     * section header at 0.956 and its five other title layouts at 1.016, and
+     * those are one size and one role. The role carries the commoner; a box
+     * that differs states its own on the box (`typeOfBox`), which is how
+     * colour and weight already work here.
+     *
+     * Only when EVERY box of the role states one, though. Taking the majority
+     * where some box stated nothing would re-lead that box to a figure its
+     * deck never chose, which is precisely the defect this replaced.
+     */
+    const leadings = slots.map(s => s.lineHeight)
+    const leading = leadings.every(v => v !== undefined)
+      ? dominant(leadings as number[])!
+      : INHERITED.lineHeight
     // Measured in the face the role is actually set in: a monospaced listing
     // and a humanist caption do not hold the same number of characters in the
     // same box, and pretending they do was wrong by up to forty percent.
     const capacities = slots.map(s =>
       capacityOf(s, {
-        lineHeight: INHERITED.lineHeight,
+        // The box's own leading first: what it is told it holds has to be
+        // measured against what it is drawn at, or the budget is fiction.
+        lineHeight: s.lineHeight ?? leading,
         caps: allCaps,
         fontFamily: family ?? mapFont(s.fontFamily),
       }),
@@ -477,7 +535,7 @@ export const deriveTypeScale = (
       // A deck whose titles are all caps states it once here rather than on
       // each of them, which is the whole point of a scale.
       caps: slots.every(s => s.caps) ? true : INHERITED.caps,
-      lineHeight: INHERITED.lineHeight,
+      lineHeight: leading,
       color: color ? namedColor(color, palette) : INHERITED.color,
       ...(maxChars ? { maxChars } : {}),
       ...(role === 'bullet' && maxItems ? { maxItems } : {}),
@@ -527,6 +585,7 @@ export const typeOfBox = (
   caps?: boolean
   fontFamily?: string
   color?: string
+  lineHeight?: number
 } => {
   const derived = scale.roleOf.get(slot)
   const role =
@@ -562,6 +621,14 @@ export const typeOfBox = (
     // the role may hold the word `accent` and the box the hex behind it.
     ...(slot.color && (!role || scale.colorOf.get(role) !== slot.color)
       ? { color: slot.color }
+      : {}),
+    // A box led differently from its role keeps its own leading. Not a
+    // flourish: this box's BUDGET was measured against the leading it is set
+    // in (`build-template`), so dropping it here would draw the box at the
+    // role's leading while telling it what the box's own holds — the two
+    // numbers disagreeing is the defect this whole change is about.
+    ...(slot.lineHeight !== undefined && style?.lineHeight !== slot.lineHeight
+      ? { lineHeight: slot.lineHeight }
       : {}),
   }
 }

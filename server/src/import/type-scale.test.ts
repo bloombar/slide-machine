@@ -173,6 +173,42 @@ describe('the roles it hands out', () => {
     expect(new Set(roles).size).toBe(5)
   })
 
+  it('never lets a one-off figure take the title from a size the deck uses', () => {
+    // REGRESSION. Ranking above the body by box count is what keeps a
+    // one-off from taking `title` — but taking the top three by count and no
+    // more filled the spare ranks from a field of singletons, and the size
+    // sort that follows then crowned the largest of THEM. This deck is the
+    // shape that exposes it: one well-used heading size, one well-used
+    // sub-heading, and a single enormous figure on one slide.
+    const figure = slot('figure', { fontSize: 90 })
+    const scale = deriveTypeScale(
+      layouts([
+        ...many(6, 'body', { fontSize: 12 }),
+        ...many(6, 'heading', { fontSize: 28 }),
+        ...many(2, 'sub', { fontSize: 20 }),
+        figure,
+      ]),
+    )
+    expect(scale.styles!.title!.fontSize).toBe(28)
+    // And the figure follows no role at all rather than defining one, so its
+    // own size stays on the box.
+    expect(scale.roleOf.get(figure)).toBeUndefined()
+  })
+
+  it('still names a title in a deck where every heading size is a one-off', () => {
+    // The other half of that rule, and the load-bearing half: a deck of five
+    // slides may genuinely use each of its heading sizes once. Preferring
+    // well-used sizes must not leave such a deck with no heading role at all.
+    const scale = deriveTypeScale(
+      layouts([
+        ...many(4, 'body', { fontSize: 12 }),
+        slot('big', { fontSize: 44 }),
+        slot('medium', { fontSize: 30 }),
+      ]),
+    )
+    expect(scale.styles!.title!.fontSize).toBe(44)
+  })
+
   it('still finds a middle to rank from in a deck that is all lists', () => {
     const scale = deriveTypeScale(
       layouts([

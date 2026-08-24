@@ -471,6 +471,7 @@
         "summary": "{slides} slides → {layouts} layouts",
         "merged": "{count} near-identical slides merged",
         "approximated": "{count} matched to the closest layout",
+        "skipped": "{count} slides marked “skip” were left out",
         "assetsFailed": "{count} images couldn't be fetched",
         "review": "Your presentation wasn't changed."
       },

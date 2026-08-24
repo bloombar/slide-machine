@@ -51,6 +51,10 @@ export interface CandidateSlot {
   /** The family the presentation named, mapped to a bundled stack later —
    * never fetched at display time (docs/TEMPLATES.md §5). */
   fontFamily?: string
+  /** The box's leading as a multiple of its type size, where the source
+   * stated one. What the box is drawn at, and what its budget is measured
+   * against — the two have to be the same number or the budget is fiction. */
+  lineHeight?: number
   /** How the text sits in its box, from the slide it came from. */
   align?: 'start' | 'center' | 'end'
   vAlign?: 'start' | 'center' | 'end'
@@ -337,6 +341,7 @@ export const candidateOf = (
       ...(colorOf(element) ? { color: colorOf(element) } : {}),
       ...(element.fill ? { background: element.fill } : {}),
       ...(fontOf(element) ? { fontFamily: fontOf(element) } : {}),
+      ...(element.lineHeight ? { lineHeight: element.lineHeight } : {}),
       ...(element.align ? { align: element.align } : {}),
       ...(element.vAlign ? { vAlign: element.vAlign } : {}),
       content: element,
