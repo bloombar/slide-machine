@@ -452,6 +452,18 @@ Every budget those designs state was derived and validated against **one** of th
 
 This is a statement about the **designs**, not about the browser they are measured in. A design that names its faces has one answer everywhere and needs nothing here.
 
+#### TMPL-18 A tolerated fault is tolerated at the size it was measured
+
+A design that fails a check ([TMPL-12](#tmpl-12-every-shipped-design-holds-what-it-says-it-holds)) may be **recorded** rather than fixed, so that a new fault fails the build instead of joining a list of old ones. Recording is a judgement, and every recorded fault carries what it was measured at.
+
+**That measurement is currently prose, and nothing compares against it.** An entry is matched to a fault by a fragment of its text, so an entry goes on matching however far the fault worsens: a box recorded as shrinking its type to 85% still matches the same box shrinking to 40%. **The mechanism built to stop a new fault passing silently will absorb a regression in an old one just as silently** — the numbers that would reveal it sit beside the entry as text nobody diffs. With four entries a reader notices. With twenty-one they do not, and eye-reading is the only check the list has.
+
+**So a recorded fault states its magnitude in a form the check can compare, and the build fails when the fault gets worse.** Recording says "this much is wrong and no more"; it does not say "this box is exempt".
+
+**And an entry that no longer matches any fault fails too**, so the list shrinks when a design is repaired instead of describing a defect that no longer exists. One exception, which is why entries say what KIND of fault they are: an entry recorded as **platform-specific** legitimately does not reproduce on every machine, and its absence is not evidence of repair.
+
+The point is that a list of tolerated faults decays in both directions — entries that outlive their defect, and defects that outgrow their entries — and the longer it is, the less a reader can be the mechanism that catches either.
+
 ### 8. Live Lecture Capture
 
 #### CAP-1 Session lifecycle

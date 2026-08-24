@@ -1493,6 +1493,23 @@
   phase: 2
   status: Backlog
   review: false
+- id: TMPL-18
+  title: A tolerated fault is tolerated at the size it was measured
+  full: "A design that fails a check (TMPL-12) may be recorded rather than fixed,
+    so that a new fault fails the build instead of joining a list of old ones.
+    Recording is a judgement, and every recorded fault carries what it was
+    measured at. That measurement is currently prose, and nothing compares
+    against it. An entry is matched to a fault by a fragment of its text, so an
+    entry goes on matching however far the fault worsens: a box recorded as
+    shrinking its type to 85% still matches the same box shrinking to 40%. The
+    mechanism built to stop a new fault passing silently will absorb a
+    regression in an old one just as silently — the numbers that would reveal it
+    sit beside the entry as text nobody diffs.…"
+  section: §7 Style Template Library
+  family: TMPL
+  phase: 2
+  status: Backlog
+  review: false
 - id: BILL-1
   title: Subscription tiers
   full: "The product offers four subscription tiers, each priced accordingly
