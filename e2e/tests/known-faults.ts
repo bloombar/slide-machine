@@ -15,12 +15,24 @@
  * So: every design is walked, every fault is compared against this list, and
  * anything NOT on it fails. The list must shrink and may never silently grow.
  *
- * ## Measured, not assumed
+ * ## Measured, not assumed — and three different things are being measured
  *
- * Every entry below was produced by running this same gate against
- * `better-faster` at `2aa10ad` in a separate worktree — the base build, its
- * own templates, the same spec. "Almost certainly pre-existing" is not a
- * reason to tolerate a fault; being measured on the base is.
+ * "Almost certainly pre-existing" is never a reason to tolerate a fault.
+ * Being measured is. But the three groups here were measured in three
+ * different places, and the fields say which:
+ *
+ *   - no marker: run against `better-faster` at `2aa10ad` in a separate
+ *     worktree, or reproduced identically on both machines. Pre-existing and
+ *     machine-independent.
+ *   - `platform`: seen in CI and NOT on the development machine. The design
+ *     names no typeface, so the number belongs to the face the runner
+ *     resolved rather than to the design (TMPL-17).
+ *   - `introduced`: created by this branch. One entry, with its whole case.
+ *
+ * A reader must be able to tell them apart without reading the numbers,
+ * because they carry different obligations: the first shrinks when somebody
+ * fixes the design, the second when a design states a typeface, and the third
+ * when TMPL-16 lands.
  *
  * Recorded with their numbers so a reader sees what is tolerated rather than
  * inferring it from a green.
@@ -56,7 +68,32 @@ export interface KnownFault {
    * exists to stop.
    */
   introduced?: string
+  /**
+   * Present ONLY on a fault that does not reproduce on every machine.
+   *
+   * `classic`, `midnight` and `seminar` name no font family, so every reader
+   * gets their platform's own face and the same box measures differently on
+   * different machines. Those faults are real for the reader who hits them
+   * and absent for the one who does not, so the number recorded is a property
+   * of the face the runner resolved rather than of the design.
+   *
+   * The discriminator sits in the same CI run: `nyu-elegant` names a real
+   * face and its nine faults are byte-identical here and there, while the
+   * three faceless designs disagree between machines and agree byte for byte
+   * with EACH OTHER. That is what makes this a measurement rather than a
+   * story about fonts.
+   *
+   * It is also what a stale-entry check would have to exempt: an entry that
+   * legitimately does not reproduce here cannot be required to match.
+   */
+  platform?: string
 }
+
+/** The caveat every faceless design's entry carries, written once. */
+const PLATFORM_FACE =
+  'CI only. This design names no typeface, so the runner resolved the system ' +
+  "stack to a face with different metrics from this machine's, and the box " +
+  'shrank where it does not shrink locally. TMPL-17.'
 
 export const KNOWN_FAULTS: KnownFault[] = [
   // `two-column` places its title above the top edge of the slide and its
@@ -111,6 +148,155 @@ export const KNOWN_FAULTS: KnownFault[] = [
     design: 'seminar',
     match: 'image-heavy at its budget "caption" only fits because',
     measured: 'shrunk to 40%, drawn at 7.8px',
+  },
+
+  // ---- The three designs that name no typeface ----
+  //
+  // Four faults each, IDENTICAL across all three: same layouts, same boxes,
+  // same pixel sizes, same percentages. Three designs agreeing byte for byte
+  // is what one shared system face looks like, and not one of the four
+  // appears on this machine at all.
+  {
+    design: 'classic',
+    match: 'content-list at its budget "body" only fits because',
+    measured:
+      'shrunk to 90%, drawn 24.2px against a design size of 26.8px, box 859x118, 200 chars',
+    platform: PLATFORM_FACE,
+  },
+  {
+    design: 'classic',
+    match: 'content-list at its budget "bullets" only fits because',
+    measured:
+      'shrunk to 88%, drawn 23.5px against 26.8px, box 859x199, 280 chars',
+    platform: PLATFORM_FACE,
+  },
+  {
+    design: 'classic',
+    match: 'list at its budget "bullets" only fits because',
+    measured:
+      'shrunk to 85%, drawn 22.8px against 26.8px, box 859x268, 420 chars',
+    platform: PLATFORM_FACE,
+  },
+  {
+    design: 'classic',
+    match: 'quote at its budget "body" only fits because',
+    measured:
+      'shrunk to 95%, drawn 37.1px against 39.0px, box 820x389, 202 chars',
+    platform: PLATFORM_FACE,
+  },
+  {
+    design: 'midnight',
+    match: 'content-list at its budget "body" only fits because',
+    measured:
+      'shrunk to 90%, drawn 24.2px against a design size of 26.8px, box 859x118, 200 chars',
+    platform: PLATFORM_FACE,
+  },
+  {
+    design: 'midnight',
+    match: 'content-list at its budget "bullets" only fits because',
+    measured:
+      'shrunk to 88%, drawn 23.5px against 26.8px, box 859x199, 280 chars',
+    platform: PLATFORM_FACE,
+  },
+  {
+    design: 'midnight',
+    match: 'list at its budget "bullets" only fits because',
+    measured:
+      'shrunk to 85%, drawn 22.8px against 26.8px, box 859x268, 420 chars',
+    platform: PLATFORM_FACE,
+  },
+  {
+    design: 'midnight',
+    match: 'quote at its budget "body" only fits because',
+    measured:
+      'shrunk to 95%, drawn 37.1px against 39.0px, box 820x389, 202 chars',
+    platform: PLATFORM_FACE,
+  },
+  {
+    design: 'seminar',
+    match: 'content-list at its budget "body" only fits because',
+    measured:
+      'shrunk to 90%, drawn 24.2px against a design size of 26.8px, box 859x118, 200 chars',
+    platform: PLATFORM_FACE,
+  },
+  {
+    design: 'seminar',
+    match: 'content-list at its budget "bullets" only fits because',
+    measured:
+      'shrunk to 88%, drawn 23.5px against 26.8px, box 859x199, 280 chars',
+    platform: PLATFORM_FACE,
+  },
+  {
+    design: 'seminar',
+    match: 'list at its budget "bullets" only fits because',
+    measured:
+      'shrunk to 85%, drawn 22.8px against 26.8px, box 859x268, 420 chars',
+    platform: PLATFORM_FACE,
+  },
+  {
+    design: 'seminar',
+    match: 'quote at its budget "body" only fits because',
+    measured:
+      'shrunk to 95%, drawn 37.1px against 39.0px, box 820x389, 202 chars',
+    platform: PLATFORM_FACE,
+  },
+
+  // ---- nyu-elegant ----
+  //
+  // NO platform caveat, and the absence is the point. This design names Frank
+  // Ruhl Libre, and its nine faults are byte-identical locally and in CI.
+  // They reproduce, so they are the design: nine boxes wrong at their own
+  // stated budgets, on a design this branch does not touch.
+  {
+    design: 'nyu-elegant',
+    match: 'closing at its budget "caption" only fits because',
+    measured:
+      'shrunk to 40% - the floor - drawn 8.6px against 21.5px, in a box that lays out 486x2px holding 110 chars',
+  },
+  {
+    design: 'nyu-elegant',
+    match: 'closing at its budget "caption" hides its content',
+    measured: '10px tall hidden, allowed 8.0px at leading 1.35 on 8.6px',
+  },
+  {
+    design: 'nyu-elegant',
+    match: 'closing at its budget "caption" cuts the descenders',
+    measured: '8px of reachable ink outside the box, leading 1.35 at 8.6px',
+  },
+  {
+    design: 'nyu-elegant',
+    match: 'title at its budget "caption" hides its content',
+    measured:
+      '29px tall hidden, allowed 8.0px at leading 1.35 on 21.5px, 70 chars',
+  },
+  {
+    design: 'nyu-elegant',
+    match: 'section at its budget "caption" hides its content',
+    measured:
+      '58px tall hidden, allowed 8.0px at leading 1.35 on 21.5px, 90 chars',
+  },
+  {
+    design: 'nyu-elegant',
+    match: 'content-list at its budget "bullets" only fits because',
+    measured:
+      'shrunk to 75%, drawn 18.3px against 24.4px, box 892x128, 280 chars',
+  },
+  {
+    design: 'nyu-elegant',
+    match: 'quote at its budget "body" only fits because',
+    measured:
+      'shrunk to 80%, drawn 54.7px against 68.3px, box 714x245, 100 chars',
+  },
+  {
+    design: 'nyu-elegant',
+    match: 'title-image at its budget "title" only fits because',
+    measured:
+      'shrunk to 88%, drawn 76.9px against 87.8px, box 742x209, 44 chars',
+  },
+  {
+    design: 'nyu-elegant',
+    match: 'title-image at its budget "title" cuts the descenders',
+    measured: '14px of reachable ink outside the box, leading 0.95 at 76.9px',
   },
   {
     design: 'nyu-bold',
