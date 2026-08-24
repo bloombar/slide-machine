@@ -50,6 +50,10 @@ export const EPS = 0.004
  */
 export const NOISE = 8
 
+/** Ink outside a box by less than this is rounding, in pixels. The ink model
+ * places a baseline from font tables; a pixel is below anything it resolves. */
+export const NOISE_PX = 1
+
 /**
  * Leading tight enough that a face hangs its descenders outside the line box.
  *
@@ -441,64 +445,6 @@ export const faultsOn = async (
       )
   }
 
-  /**
-   * Compared on the INK, which is the only version a reader can see.
-   *
-   * This rule used to compare `textBox`, and its comment claimed that was
-   * "where the GLYPHS actually are". It was not. `Range.getBoundingClientRect`
-   * returns the LINE BOX, and the two differ by exactly the amount that
-   * matters here: a box led tighter than its face's natural box hangs ink
-   * OUTSIDE its line boxes, one led looser leaves empty room INSIDE them. So
-   * the rule was wrong in both directions at once, and the docstring asserted
-   * the property the code lacked — which is why nobody checked the
-   * implementation.
-   *
-   * The correction is not a loosened threshold, and the difference is
-   * demonstrable rather than argued: on NYU Bold's divider the two boxes
-   * overlap over 6.1% of the slide while their glyphs clear by 0.062 of its
-   * height. A relaxed tolerance cannot produce a case where the two answers
-   * diverge like that; only a different measurement can. And it needs no
-   * appeal to the face at all on `big-number`, whose title bottom and caption
-   * top are the same number to five decimals: boxes that abut exactly have
-   * zero rectangle overlap, so anything reported for them is line-box
-   * overrun by construction, whatever the platform resolves the stack to.
-   *
-   * `inkBoxOf` is the same model the template audit uses, from the same
-   * table, so the two cannot drift apart — the argument that put `SLACK_EM`
-   * in `shared`. Its inputs here come off the DOM rather than the template:
-   * the box as drawn, and the line count the browser actually produced.
-   *
-   * A face we ship no metrics for keeps the line box, which is what this rule
-   * compared before. That is deliberate: the audit falls back to the whole
-   * rectangle, which is conservative for a static check, but doing that here
-   * would newly fault every design that names no typeface — a change in
-   * behaviour dressed as a correction, on designs this has nothing to say
-   * about.
-   */
-  const inkOf = (box: (typeof boxes)[number]) =>
-    inkBoxOf(
-      { x: box.x, y: box.y, w: box.w, h: box.h },
-      {
-        fontSize: box.setting.fontSize,
-        fontFamily: box.setting.family,
-        fontWeight: box.setting.fontWeight,
-        lineHeight: box.setting.lineHeight,
-        caps: box.setting.caps,
-        vAlign: box.setting.vAlign as 'start' | 'center' | 'end',
-        // Left undefined where the padding IS the renderer's own overhang
-        // allowance, so the model recomputes the same number instead of
-        // being handed it twice.
-        ...(box.setting.paddingEm > 0 &&
-        Math.abs(
-          box.setting.paddingEm -
-            (NATURAL_LINE_BOX - box.setting.lineHeight) / 2,
-        ) > 0.001
-          ? { paddingY: box.setting.paddingEm }
-          : {}),
-      },
-      Math.max(1, box.lines),
-    ) ?? box.textBox
-
   // A box with no measurable text extent cannot collide with anything.
   const worded = boxes.filter(box => box.hasText && box.textBox)
   for (let a = 0; a < worded.length; a++)
@@ -514,6 +460,66 @@ export const faultsOn = async (
     }
   return faults
 }
+
+/** One measured box, as `boxesOf` reports it. */
+export type Box = Awaited<ReturnType<typeof boxesOf>>[number]
+
+/**
+ * Compared on the INK, which is the only version a reader can see.
+ *
+ * This rule used to compare `textBox`, and its comment claimed that was
+ * "where the GLYPHS actually are". It was not. `Range.getBoundingClientRect`
+ * returns the LINE BOX, and the two differ by exactly the amount that
+ * matters here: a box led tighter than its face's natural box hangs ink
+ * OUTSIDE its line boxes, one led looser leaves empty room INSIDE them. So
+ * the rule was wrong in both directions at once, and the docstring asserted
+ * the property the code lacked — which is why nobody checked the
+ * implementation.
+ *
+ * The correction is not a loosened threshold, and the difference is
+ * demonstrable rather than argued: on NYU Bold's divider the two boxes
+ * overlap over 6.1% of the slide while their glyphs clear by 0.062 of its
+ * height. A relaxed tolerance cannot produce a case where the two answers
+ * diverge like that; only a different measurement can. And it needs no
+ * appeal to the face at all on `big-number`, whose title bottom and caption
+ * top are the same number to five decimals: boxes that abut exactly have
+ * zero rectangle overlap, so anything reported for them is line-box
+ * overrun by construction, whatever the platform resolves the stack to.
+ *
+ * `inkBoxOf` is the same model the template audit uses, from the same
+ * table, so the two cannot drift apart — the argument that put `SLACK_EM`
+ * in `shared`. Its inputs here come off the DOM rather than the template:
+ * the box as drawn, and the line count the browser actually produced.
+ *
+ * A face we ship no metrics for keeps the line box, which is what this rule
+ * compared before. That is deliberate: the audit falls back to the whole
+ * rectangle, which is conservative for a static check, but doing that here
+ * would newly fault every design that names no typeface — a change in
+ * behaviour dressed as a correction, on designs this has nothing to say
+ * about.
+ */
+export const inkOf = (box: Box) =>
+  inkBoxOf(
+    { x: box.x, y: box.y, w: box.w, h: box.h },
+    {
+      fontSize: box.setting.fontSize,
+      fontFamily: box.setting.family,
+      fontWeight: box.setting.fontWeight,
+      lineHeight: box.setting.lineHeight,
+      caps: box.setting.caps,
+      vAlign: box.setting.vAlign as 'start' | 'center' | 'end',
+      // Left undefined where the padding IS the renderer's own overhang
+      // allowance, so the model recomputes the same number instead of
+      // being handed it twice.
+      ...(box.setting.paddingEm > 0 &&
+      Math.abs(
+        box.setting.paddingEm - (NATURAL_LINE_BOX - box.setting.lineHeight) / 2,
+      ) > 0.001
+        ? { paddingY: box.setting.paddingEm }
+        : {}),
+    },
+    Math.max(1, box.lines),
+  ) ?? box.textBox
 
 /**
  * The type size a box is allowed to give up before it counts against the
@@ -598,37 +604,70 @@ export const shrunkOn = async (
  * boxes that are hiding nothing — but a clipped descender IS a few pixels.
  * The two are indistinguishable by size alone.
  *
- * What separates them is the leading. Only a box set tighter than
- * `TIGHT_LEADING` puts glyphs outside its line box, so only there does a
- * small overflow mean a letter is losing its tail rather than the renderer
- * rounding. Above that, a small overflow is noise and is left alone.
+ * ## It asks about ink, and it used to measure the line box
  *
- * The upper bound matters as much as the lower: an overflow of a whole line
- * or more is a line that did not fit, which is the generic clip check's
- * business, not this one's. Reporting it here too would say the same fault
- * twice in different words.
+ * The rule is named for a quantity — glyph ink below the baseline — and it
+ * compared `scrollHeight` against `clientHeight`, which is a statement about
+ * LINE boxes. That is not a wrong threshold, it is the wrong quantity, and it
+ * is the same defect the overlap rule carried: a box led tighter than its
+ * face's natural box overflows its line boxes at every type size, whether or
+ * not a single glyph is cut.
+ *
+ * The old version needed a leading test to tell those apart, because it could
+ * not see the difference directly. Asking `inkBoxOf` where the ink actually
+ * reaches makes the leading test unnecessary: a box whose reachable ink lies
+ * inside its own rectangle is not cutting anything, at any leading.
+ *
+ * ## What "reachable" means, and the hazard it does not report
+ *
+ * The model gives the worst case over the characters a box could hold, not
+ * the ones it holds now — the same assumption the audit makes, and the same
+ * limit. A box that clips nothing today because its content happens to have
+ * no descenders is reported clean, and stays clean until somebody types a
+ * `g`.
+ *
+ * NYU Bold's section numeral is exactly that box and it is worth naming here
+ * rather than leaving to be rediscovered: its reachable ink bottom is 1.0580
+ * of the slide against a box bottom of 1.0000, so 31.9px of ink would be cut
+ * — and the box's bottom IS the slide's bottom, so unlike the overlap on the
+ * same slide there is no geometry that closes it. It reports nothing because
+ * the slot holds digits, which is an assumption nothing enforces. TMPL-16.
+ *
+ * ## The upper bound
+ *
+ * Ink outside the box by a whole line or more is a line that did not fit,
+ * which is the generic clip check's business. Reporting it here too would say
+ * the same fault twice in different words.
  */
 export const descenderFaultsOn = async (
   slide: Locator,
   where: string,
 ): Promise<string[]> => {
   const boxes = await boxesOf(slide)
-  return boxes
-    .filter(box => {
-      if (!box.hasText || !box.clips) return false
-      if (!box.leading || box.leading >= TIGHT_LEADING) return false
-      const line = box.fontSizePx * box.leading
-      // Hidden, but by less than a line: the tails of the letters on the
-      // last line rather than a line that did not fit.
-      return box.overflowY > 0 && box.overflowY < line
-    })
-    .map(
-      box =>
-        `${where} "${box.id}" cuts the descenders off its last line ` +
-        `(${box.overflowY}px hidden, leading ${box.leading.toFixed(2)} at ` +
-        `${box.fontSizePx.toFixed(1)}px — under ${TIGHT_LEADING}, so the ` +
-        `glyphs sit outside the line box the design gave them)`,
+  const faults: string[] = []
+  for (const box of boxes) {
+    if (!box.hasText || !box.clips) continue
+    const ink = inkOf(box)
+    // A face we have no metrics for cannot be asked this question. The old
+    // line-box test is not a weaker answer to it, it is an answer to a
+    // different question, so there is nothing to fall back to.
+    if (!ink || ink === box.textBox) continue
+    const frameH = box.h ? box.heightPx / box.h : 0
+    if (!frameH) continue
+    const below = (ink.y + ink.h - (box.y + box.h)) * frameH
+    const above = (box.y - ink.y) * frameH
+    const hidden = Math.max(below, above)
+    // Cut, but by less than a line: the tails of the letters on the last
+    // line rather than a line that did not fit, which is the clip rule's.
+    const line = box.fontSizePx * (box.leading || 1)
+    if (hidden <= NOISE_PX || hidden >= line) continue
+    faults.push(
+      `${where} "${box.id}" cuts ${below >= above ? 'the descenders off its last line' : 'the ascenders off its first line'} ` +
+        `(${hidden.toFixed(0)}px of reachable ink outside the box, leading ` +
+        `${box.leading.toFixed(2)} at ${box.fontSizePx.toFixed(1)}px)`,
     )
+  }
+  return faults
 }
 
 /**
