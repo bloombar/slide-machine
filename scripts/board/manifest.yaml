@@ -1459,6 +1459,40 @@
   phase: 2
   status: Backlog
   review: false
+- id: TMPL-16
+  title: A slot says what it can hold
+  full: "A slot states how MUCH it holds (TMPL-6) and never what KIND of
+    characters. Every rule that has to reason about a box's contents therefore
+    guesses, and two of them guess in opposite directions. The overlap rule must
+    decide whether two boxes collide. Ink height depends on the glyphs: in
+    Montserrat 700 a digit rises 0.700 em above its baseline and an accented
+    capital 0.900. On NYU Bold's section divider that difference decides the
+    question — the numeral's box is maxChars: 2 and described \"as digits\", and
+    its digits clear the title's last line by 0.062 of the slide, while an Á in
+    the same box would overlap it by 2.6%. The rule can assume the worst glyph
+    the face contains and fault a correct…"
+  section: §7 Style Template Library
+  family: TMPL
+  phase: 2
+  status: Backlog
+  review: false
+- id: TMPL-17
+  title: A design that names no face is measured against none
+  full: "A design may name the typefaces it is set in, and three of the app's
+    built-ins — classic, midnight and seminar — name none. Their text falls back
+    to the platform's own UI face: one thing on macOS, another on Windows,
+    another on Linux, each with its own advance widths and vertical metrics.
+    Every budget those designs state was derived and validated against one of
+    those faces, on whichever machine measured it. A reader on any other
+    platform is looking at a design whose stated limits were never checked for
+    the face they are seeing, and TMPL-12's promise — that a design holds what
+    it says it holds — silently narrows to \"on the platform that measured it\".
+    The gate found this by disagreeing with…"
+  section: §7 Style Template Library
+  family: TMPL
+  phase: 2
+  status: Backlog
+  review: false
 - id: BILL-1
   title: Subscription tiers
   full: "The product offers four subscription tiers, each priced accordingly

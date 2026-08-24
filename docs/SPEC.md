@@ -426,6 +426,30 @@ Our reader cannot see them at all. It reads a box's text runs, and a generated f
 
 **Import therefore reads a generated field as what it is** — recording which field a box carries rather than the value the source happened to render — so that a design that numbers its slides is imported as one that numbers its slides. Where the app has no equivalent for a field, it is dropped **for a stated reason** under [TMPL-13](#tmpl-13-import-element-accounting) rather than in silence, which is what separates "we do not support footers" from "we never saw it".
 
+#### TMPL-16 A slot says what it can hold
+
+A slot states how MUCH it holds ([TMPL-6](#tmpl-6-layout-descriptors-for-ai-selection)) and never what KIND of characters. Every rule that has to reason about a box's contents therefore guesses, and two of them guess in opposite directions.
+
+The **overlap** rule must decide whether two boxes collide. Ink height depends on the glyphs: in Montserrat 700 a digit rises 0.700 em above its baseline and an accented capital 0.900. On NYU Bold's section divider that difference decides the question — the numeral's box is `maxChars: 2` and described "as digits", and its digits clear the title's last line by 0.062 of the slide, while an `Á` in the same box would overlap it by 2.6%. The rule can assume the worst glyph the face contains and fault a correct design, or assume ordinary letters and be silently wrong for three of the five locales the app ships. Neither is right, because the box's own description already answers the question and nothing can read it.
+
+The **ornament** rule must decide whether a box is too small to write in. It estimates characters from area and type size, so a box holding two digits at display size is indistinguishable from a decorative glyph nobody could type into.
+
+**So a slot may declare the character set it accepts** — digits, capitals, ordinary text — and the rules read that declaration instead of guessing. A declaration is enforced where it can be (the editor and generation refuse what the slot does not accept) so that a rule may rely on it, which is what separates it from a label saying "Part number" that nothing checks.
+
+`caps` is the shape this already takes: it is a style, applied by the renderer, so a box set in capitals **cannot** receive a lowercase descender and a rule may depend on it. The gap is that everything else about a box's contents is prose.
+
+Until this exists, rules that depend on glyph shape state their assumption and its cost in the same breath — which strings they exclude, and by how much — rather than quietly assuming the convenient case.
+
+#### TMPL-17 A design that names no face is measured against none
+
+A design may name the typefaces it is set in, and three of the app's built-ins — `classic`, `midnight` and `seminar` — name none. Their text falls back to the platform's own UI face: one thing on macOS, another on Windows, another on Linux, each with its own advance widths and vertical metrics.
+
+Every budget those designs state was derived and validated against **one** of those faces, on whichever machine measured it. A reader on any other platform is looking at a design whose stated limits were never checked for the face they are seeing, and [TMPL-12](#tmpl-12-every-shipped-design-holds-what-it-says-it-holds)'s promise — that a design holds what it says it holds — silently narrows to "on the platform that measured it". The gate found this by disagreeing with itself: the same designs pass on a developer's machine and fail in CI, at their own declared budgets, with no code between the two.
+
+**So a shipped design either names its faces, or its budgets hold for every face it can plausibly be drawn in** — the second being a real option, since a limit derived conservatively across the candidate faces costs only the characters the widest of them would have taken. What is not an option is a limit that is accurate for one face and unstated about the rest.
+
+This is a statement about the **designs**, not about the browser they are measured in. A design that names its faces has one answer everywhere and needs nothing here.
+
 ### 8. Live Lecture Capture
 
 #### CAP-1 Session lifecycle
