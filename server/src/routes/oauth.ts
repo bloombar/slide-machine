@@ -20,7 +20,14 @@
  * attacker would edit it.
  */
 import { Router } from 'express'
-import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js'
+import {
+  createOAuthMetadata,
+  mcpAuthMetadataRouter,
+} from '@modelcontextprotocol/sdk/server/auth/router.js'
+import { authorizationHandler } from '@modelcontextprotocol/sdk/server/auth/handlers/authorize.js'
+import { tokenHandler } from '@modelcontextprotocol/sdk/server/auth/handlers/token.js'
+import { clientRegistrationHandler } from '@modelcontextprotocol/sdk/server/auth/handlers/register.js'
+import { revocationHandler } from '@modelcontextprotocol/sdk/server/auth/handlers/revoke.js'
 import { requireAuth } from '../middleware/auth'
 import { HttpError } from '../middleware/error'
 import { OAuthAuthorizationModel } from '../models/oauth-authorization'
@@ -76,15 +83,81 @@ export const isUsableIssuer = (origin: string): boolean => {
 
 export const oauthAvailable = (): boolean => isUsableIssuer(issuerOrigin())
 
-/** The machine-facing half. Mounted at the app root by app.ts. */
-export const oauthAuthRouter = (): ReturnType<typeof mcpAuthRouter> =>
-  mcpAuthRouter({
+/**
+ * Where the OAuth endpoints live, and why they are not at the root.
+ *
+ * The SDK's own `mcpAuthRouter` puts them at `/authorize`, `/token`,
+ * `/register` and `/revoke` — and this application already has a `/register`
+ * **page**, where a person signs up. Mounting the two at one path is not a
+ * near miss: the registration endpoint answers anything that is not a POST
+ * with 405, so `GET /register` stopped returning the sign-up screen and
+ * returned a method error instead. In production, where Express serves the
+ * SPA, that took out the whole page.
+ *
+ * A prefix costs nothing, because a client never guesses these paths. It reads
+ * them from the metadata document (RFC 8414), which is the entire reason that
+ * document exists — so the endpoints can live wherever the deployment needs
+ * them to, as long as the metadata says so. Only the `.well-known` documents
+ * have a fixed location, and those stay at the root where the standard puts
+ * them.
+ */
+export const OAUTH_PREFIX = '/oauth'
+
+const endpoint = (name: string): string =>
+  `${issuerOrigin()}${OAUTH_PREFIX}/${name}`
+
+/** The metadata every endpoint path is taken from, so the two cannot drift. */
+export const oauthMetadata = () => ({
+  ...createOAuthMetadata({
     provider,
     issuerUrl: new URL(issuerOrigin()),
-    resourceServerUrl: new URL(resourceUrl()),
-    resourceName: 'Slide Machine',
     scopesSupported: supportedScopes,
-  })
+  }),
+  authorization_endpoint: endpoint('authorize'),
+  token_endpoint: endpoint('token'),
+  registration_endpoint: endpoint('register'),
+  revocation_endpoint: endpoint('revoke'),
+})
+
+/**
+ * The machine-facing half: the four endpoints under their prefix, plus the
+ * discovery documents at the root.
+ *
+ * Assembled from the SDK's own handlers rather than its all-in-one router,
+ * which hard-codes the root paths. Every handler and the metadata shape are
+ * still the SDK's — what is chosen here is only where they are mounted.
+ */
+export const oauthAuthRouter = (): Router => {
+  const router = Router()
+  const metadata = oauthMetadata()
+  const path = (url: string): string => new URL(url).pathname
+
+  router.use(
+    path(metadata.authorization_endpoint),
+    authorizationHandler({ provider }),
+  )
+  router.use(path(metadata.token_endpoint), tokenHandler({ provider }))
+  router.use(
+    path(metadata.registration_endpoint!),
+    clientRegistrationHandler({ clientsStore: provider.clientsStore }),
+  )
+  router.use(
+    path(metadata.revocation_endpoint!),
+    revocationHandler({ provider }),
+  )
+
+  // At the root, and advertising the prefixed endpoints above.
+  router.use(
+    mcpAuthMetadataRouter({
+      oauthMetadata: metadata,
+      resourceServerUrl: new URL(resourceUrl()),
+      resourceName: 'Slide Machine',
+      scopesSupported: supportedScopes,
+    }),
+  )
+
+  return router
+}
 
 export const oauthConsentRouter = Router()
 

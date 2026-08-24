@@ -46,7 +46,7 @@ const registerUser = async (email: string): Promise<string> => {
 /** Registers an assistant the way a real one introduces itself (RFC 7591). */
 const registerClient = async (redirectUri = 'https://assistant.test/cb') => {
   const res = await request(server)
-    .post('/register')
+    .post('/oauth/register')
     .send({
       client_name: 'Test Assistant',
       redirect_uris: [redirectUri],
@@ -70,7 +70,7 @@ const connect = async (
   const { verifier, challenge } = pkce()
 
   const authorize = await request(server)
-    .get('/authorize')
+    .get('/oauth/authorize')
     .query({
       client_id: client.client_id,
       response_type: 'code',
@@ -95,7 +95,7 @@ const connect = async (
 
   const code = new URL(approve.body.redirectTo).searchParams.get('code')!
 
-  const token = await request(server).post('/token').type('form').send({
+  const token = await request(server).post('/oauth/token').type('form').send({
     grant_type: 'authorization_code',
     code,
     code_verifier: verifier,
@@ -174,12 +174,52 @@ describe('discovery', () => {
     )
 
     expect(res.status).toBe(200)
-    expect(res.body.authorization_endpoint).toContain('/authorize')
-    expect(res.body.token_endpoint).toContain('/token')
-    expect(res.body.registration_endpoint).toContain('/register')
+    expect(res.body.authorization_endpoint).toContain('/oauth/authorize')
+    expect(res.body.token_endpoint).toContain('/oauth/token')
+    expect(res.body.registration_endpoint).toContain('/oauth/register')
     // OAuth 2.1 has no flow without PKCE, so the server must say it requires it.
     expect(res.body.code_challenge_methods_supported).toContain('S256')
     expect(res.body.scopes_supported).toEqual([SCOPES.read, SCOPES.write])
+  })
+})
+
+describe('living alongside the application', () => {
+  it('leaves the app’s own /register page alone', async () => {
+    // The SDK puts dynamic client registration at /register, and this app has
+    // a sign-up PAGE there. The registration endpoint answers anything that is
+    // not a POST with 405, so mounting the two together turned the sign-up
+    // screen into a method error — and in production, where Express serves the
+    // SPA, took the page out entirely. 249 e2e failures, all from this.
+    const res = await request(server).get('/register')
+    expect(res.status).not.toBe(405)
+  })
+
+  it('does not answer client registration at the root either', async () => {
+    // A POST there is the app's business, not the OAuth server's.
+    const res = await request(server)
+      .post('/register')
+      .send({
+        client_name: 'Test Assistant',
+        redirect_uris: ['https://assistant.test/cb'],
+      })
+    expect(res.status).not.toBe(201)
+  })
+
+  it('advertises every endpoint under the prefix it actually serves', async () => {
+    // The paths are not guessable and are never meant to be: a client reads
+    // them from here (RFC 8414). What must hold is that what is advertised is
+    // what answers.
+    const meta = await request(server).get(
+      '/.well-known/oauth-authorization-server',
+    )
+    for (const key of [
+      'authorization_endpoint',
+      'token_endpoint',
+      'registration_endpoint',
+      'revocation_endpoint',
+    ]) {
+      expect(meta.body[key], key).toContain('/oauth/')
+    }
   })
 })
 
@@ -230,7 +270,7 @@ describe('the full connect flow', () => {
     const session = await registerUser('refresh@example.test')
     const { client, tokens } = await connect(session)
 
-    const first = await request(server).post('/token').type('form').send({
+    const first = await request(server).post('/oauth/token').type('form').send({
       grant_type: 'refresh_token',
       refresh_token: tokens.refresh_token,
       client_id: client.client_id,
@@ -239,11 +279,14 @@ describe('the full connect flow', () => {
     expect(first.body.access_token).not.toBe(tokens.access_token)
 
     // Rotation: a stolen refresh token is worth one exchange, not a standing key.
-    const replay = await request(server).post('/token').type('form').send({
-      grant_type: 'refresh_token',
-      refresh_token: tokens.refresh_token,
-      client_id: client.client_id,
-    })
+    const replay = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refresh_token,
+        client_id: client.client_id,
+      })
     expect(replay.status).toBe(400)
   })
 })
@@ -265,7 +308,7 @@ describe('attempts to get in without consent', () => {
     const client = await registerClient()
     const { challenge } = pkce()
 
-    const res = await request(server).get('/authorize').query({
+    const res = await request(server).get('/oauth/authorize').query({
       client_id: client.client_id,
       response_type: 'code',
       redirect_uri: 'https://attacker.test/steal',
@@ -284,7 +327,7 @@ describe('attempts to get in without consent', () => {
     const client = await registerClient()
     const { challenge } = pkce()
 
-    const authorize = await request(server).get('/authorize').query({
+    const authorize = await request(server).get('/oauth/authorize').query({
       client_id: client.client_id,
       response_type: 'code',
       redirect_uri: 'https://assistant.test/cb',
@@ -303,7 +346,7 @@ describe('attempts to get in without consent', () => {
     const code = new URL(approve.body.redirectTo).searchParams.get('code')!
 
     const res = await request(server)
-      .post('/token')
+      .post('/oauth/token')
       .type('form')
       .send({
         grant_type: 'authorization_code',
@@ -318,7 +361,7 @@ describe('attempts to get in without consent', () => {
   it('refuses to mint a code for someone who is not signed in', async () => {
     const client = await registerClient()
     const { challenge } = pkce()
-    const authorize = await request(server).get('/authorize').query({
+    const authorize = await request(server).get('/oauth/authorize').query({
       client_id: client.client_id,
       response_type: 'code',
       redirect_uri: 'https://assistant.test/cb',
@@ -341,7 +384,7 @@ describe('attempts to get in without consent', () => {
     const { client, code, verifier } = await connect(session)
 
     // The first exchange happened inside connect(); a replay must not work.
-    const res = await request(server).post('/token').type('form').send({
+    const res = await request(server).post('/oauth/token').type('form').send({
       grant_type: 'authorization_code',
       code,
       code_verifier: verifier,
@@ -356,7 +399,7 @@ describe('attempts to get in without consent', () => {
     const { tokens } = await connect(session)
     const other = await registerClient('https://other.test/cb')
 
-    const res = await request(server).post('/token').type('form').send({
+    const res = await request(server).post('/oauth/token').type('form').send({
       grant_type: 'refresh_token',
       refresh_token: tokens.refresh_token,
       client_id: other.client_id,
@@ -382,7 +425,7 @@ describe('what consent actually decided', () => {
     const client = await registerClient()
     const { challenge } = pkce()
 
-    const authorize = await request(server).get('/authorize').query({
+    const authorize = await request(server).get('/oauth/authorize').query({
       client_id: client.client_id,
       response_type: 'code',
       redirect_uri: 'https://assistant.test/cb',
@@ -452,10 +495,13 @@ describe('what consent actually decided', () => {
     const session = await registerUser('revoke@example.test')
     const { client, tokens } = await connect(session)
 
-    const revoked = await request(server).post('/revoke').type('form').send({
-      token: tokens.access_token,
-      client_id: client.client_id,
-    })
+    const revoked = await request(server)
+      .post('/oauth/revoke')
+      .type('form')
+      .send({
+        token: tokens.access_token,
+        client_id: client.client_id,
+      })
     expect(revoked.status).toBe(200)
 
     const res = await mcp(tokens.access_token, {
