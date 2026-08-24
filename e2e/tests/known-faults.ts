@@ -71,6 +71,24 @@ export const KNOWN_FAULTS: KnownFault[] = [
     match: 'image-heavy at its budget "caption" only fits because',
     measured: 'shrunk to 40%, drawn at 7.8px',
   },
+  // `seminar` shares that geometry and shows the same three. Measured on the
+  // base separately rather than assumed from the other two, because "the same
+  // numbers" is what a shared layout and a shared defect both look like.
+  {
+    design: 'seminar',
+    match: 'two-column at its budget "title" runs off the slide',
+    measured: 'y -0.035 (above the top edge)',
+  },
+  {
+    design: 'seminar',
+    match: 'two-column at its budget "body" runs off the slide',
+    measured: 'bottom at 1.035',
+  },
+  {
+    design: 'seminar',
+    match: 'image-heavy at its budget "caption" only fits because',
+    measured: 'shrunk to 40%, drawn at 7.8px',
+  },
 ]
 
 /**
