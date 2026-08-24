@@ -757,6 +757,71 @@ const paintedFill = (
   return colorOf(fill.solidFill, scheme)
 }
 
+/**
+ * A rule: Google's `line` page element, read as the thin filled rectangle it
+ * draws.
+ *
+ * Its own reader rather than a case of the shape path, for two reasons that
+ * both make the shape path give a wrong answer rather than no answer.
+ *
+ * A line states its extent through a transform whose OMITTED scale means
+ * ZERO. `{scaleX: 0.2072}` with no `scaleY` is a horizontal rule a fifth of
+ * an inch long; read the missing value as 1 — which is right for every shape,
+ * because Google always sends both for those — and it becomes a three-inch
+ * square. That is why these arrived with nonsensical geometry and were then
+ * dropped for having no `shape`.
+ *
+ * And a line's thickness is not in its box at all. The box has one dimension
+ * of zero by construction; what makes it visible is `weight`, in EMU, so the
+ * rectangle is only right once the weight is put back as the missing side.
+ *
+ * Straight horizontal and vertical rules only. A diagonal has no rectangle
+ * that stands for it, and drawing one as a box would put a slab across the
+ * slide where the design has a stroke — worse than leaving it out, and
+ * leaving it out is what happens today.
+ */
+const ruleOf = (
+  raw: Record<string, unknown>,
+  line: {
+    lineProperties?: {
+      lineFill?: { solidFill?: Record<string, unknown> }
+      weight?: Dimension
+    }
+  },
+  page: { width: number; height: number },
+  scheme: Record<string, string>,
+  id: string,
+): SourceElement | null => {
+  const size = raw.size as { width?: Dimension; height?: Dimension } | undefined
+  const t = (raw.transform ?? {}) as {
+    scaleX?: number
+    scaleY?: number
+    translateX?: number | Dimension
+    translateY?: number | Dimension
+    unit?: string
+  }
+  const w = emu(size?.width) * (t.scaleX ?? 0)
+  const h = emu(size?.height) * (t.scaleY ?? 0)
+  // Diagonal, or nothing at all.
+  if ((w > 0 && h > 0) || (w <= 0 && h <= 0)) return null
+  const weight = emu(line.lineProperties?.weight)
+  if (!weight) return null
+  const fill = colorOf(line.lineProperties?.lineFill?.solidFill, scheme)
+  if (!fill) return null
+  const clamp = (v: number) => Math.min(1, Math.max(0, v))
+  return {
+    id,
+    kind: 'decoration',
+    box: {
+      x: clamp(translation(t.translateX, t.unit) / page.width),
+      y: clamp(translation(t.translateY, t.unit) / page.height),
+      w: clamp((w || weight) / page.width),
+      h: clamp((h || weight) / page.height),
+    },
+    fill,
+  }
+}
+
 const elementOf = (
   raw: Record<string, unknown>,
   page: { width: number; height: number },
@@ -780,6 +845,16 @@ const elementOf = (
   // part of the lecture: it says nothing the picture's own alt text has not
   // already said, and read as content it becomes a caption nobody wrote.
   if (isCreditLine(raw.description as string | undefined)) return null
+
+  const line = raw.line as
+    | {
+        lineProperties?: {
+          lineFill?: { solidFill?: Record<string, unknown> }
+          weight?: Dimension
+        }
+      }
+    | undefined
+  if (line) return ruleOf(raw, line, page, scheme, id)
 
   const image = raw.image as { contentUrl?: string } | undefined
   if (image) {

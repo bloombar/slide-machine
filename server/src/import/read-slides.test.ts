@@ -2721,6 +2721,91 @@ describe('a point whose marker counts', () => {
   })
 })
 
+describe('a rule the design draws', () => {
+  const rule = (transform: Record<string, unknown>) => ({
+    objectId: 'rule-1',
+    size: { width: dim(3000000), height: dim(3000000) },
+    transform: { ...transform, unit: 'EMU' },
+    line: {
+      lineProperties: {
+        lineFill: {
+          solidFill: {
+            color: { rgbColor: { red: 0.5372549, blue: 0.88235295 } },
+          },
+        },
+        weight: dim(76200),
+      },
+      lineType: 'STRAIGHT_CONNECTOR_1',
+    },
+  })
+
+  it('reads a horizontal one as the thin rectangle it draws', () => {
+    // Google sends these as `line`, not `shape`, and the reader had no case
+    // for the type — so the deck's most repeated motif after its logo was
+    // dropped from every layout it appears on.
+    //
+    // Two things it must get right. An OMITTED scale on a line means zero,
+    // not one: `scaleX` alone is a horizontal rule, and reading the missing
+    // `scaleY` as 1 makes a three-inch square out of a hairline. And the
+    // thickness is not in the box at all — it is `weight`.
+    const read = toSourcePresentation(
+      presentation({
+        slides: [
+          {
+            objectId: 's1',
+            pageElements: [
+              rule({ scaleX: 0.2072, translateX: 418229, translateY: 2012625 }),
+            ],
+          },
+        ],
+      }),
+    )
+    const drawn = read.slides[0]!.elements[0]!
+    expect(drawn.kind).toBe('decoration')
+    expect(drawn.fill).toBe('#8900e1')
+    expect(drawn.box.w).toBeCloseTo((3000000 * 0.2072) / (10 * EMU), 6)
+    // The weight, as a fraction of the page's height — not the box's height,
+    // which is zero.
+    expect(drawn.box.h).toBeCloseTo(76200 / (5.625 * EMU), 6)
+  })
+
+  it('reads a vertical one the same way round', () => {
+    const read = toSourcePresentation(
+      presentation({
+        slides: [
+          {
+            objectId: 's1',
+            pageElements: [
+              rule({ scaleY: 1.7294, translateX: 4572004, translateY: 0 }),
+            ],
+          },
+        ],
+      }),
+    )
+    const drawn = read.slides[0]!.elements[0]!
+    expect(drawn.box.h).toBeCloseTo((3000000 * 1.7294) / (5.625 * EMU), 6)
+    expect(drawn.box.w).toBeCloseTo(76200 / (10 * EMU), 6)
+  })
+
+  it('leaves a diagonal alone rather than drawing a slab', () => {
+    // A diagonal has no rectangle that stands for it, and a box across the
+    // slide is worse than the stroke being missing.
+    const read = toSourcePresentation(
+      presentation({
+        slides: [
+          {
+            objectId: 's1',
+            pageElements: [
+              rule({ scaleX: 0.5, scaleY: 0.5, translateX: 0, translateY: 0 }),
+            ],
+          },
+        ],
+      }),
+    )
+    expect(read.slides[0]!.elements).toHaveLength(0)
+  })
+})
+
 describe('a page the author marked not-for-presentation', () => {
   it('is read as skipped, so the import can leave it out', () => {
     // Google's "skip slide". A template deck marks its own instructions page
