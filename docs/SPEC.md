@@ -372,6 +372,16 @@ A pinned version **outlives its template**: deleting a template no longer drops 
 
 Content that pairs with nothing is **kept on the slide and left undrawn rather than deleted**, so the cost of an unwanted update is content that needs re-placing, not content that is gone. A layout the update removes outright leaves its slides alone — content and layout name both — rather than forcing them onto some other layout the system would have to choose for them; those slides are named in the warning so the decision stays the user's.
 
+#### TMPL-12 Every shipped design holds what it says it holds
+
+A built-in design **states what each of its boxes can hold** — on the slot, on the text style the box follows, or in the layout's constraints — and the app enforces those limits when it fills a slide. A stated limit is therefore a promise about the design, and a design that breaks its own promise loses a reader content without telling anyone: type gives way before content does ([TMPL-9](#tmpl-9-open-slot--layout-model)), so an over-full box shrinks rather than clipping, and nothing about the slide looks wrong.
+
+**Every design the app ships is filled to its own stated limits and measured in a browser**, because only a browser can see wrapping, leading and clipping. At those limits nothing is clipped, nothing overlaps, nothing sits off the slide, and no box has to shrink its type to fit what the design said it holds. The same walk with every optional box empty leaves no collapsed neighbour and no reserved hole.
+
+Two designs do not meet this today, measured at `2aa10ad`: `classic` and `midnight` place `two-column`'s title above the top edge of the slide (y −0.035) and its body past the bottom (bottom 1.035) at their own declared budgets, and both shrink `image-heavy`'s caption to the renderer's 40% floor. These are pre-existing and are recorded as known faults so that a new one fails rather than joining them.
+
+A limit is derived from an average character width, so this is a statement about content of ordinary letter widths rather than a guarantee that no string of that length can ever shrink a box.
+
 ### 8. Live Lecture Capture
 
 #### CAP-1 Session lifecycle
