@@ -1003,6 +1003,7 @@
     "addSlideHint": "添加一张幻灯片",
     "liveSession": "实时会话",
     "playingOriginal": "正在播放原始音频…",
+    "editFailed": "该编辑未保存。您最近的修改并不在幻灯片上。",
     "layoutRefit": "已填充此版式新增的文本框",
     "play": {
       "play": "播放演示文稿",

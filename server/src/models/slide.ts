@@ -126,6 +126,22 @@ const LEGACY_FIELDS = [
 ] as const
 
 slideSchema.pre('save', function () {
+  /*
+   * Only when this save has something to fold.
+   *
+   * It used to run on every save and rewrite the WHOLE map from this
+   * document's copy of it — so a save about drawings, a transcript or a flag
+   * republished every box on the slide, and anything another request had
+   * written in between was erased with no error and a 200 in reply. Folding
+   * is only meaningful when this save touched the map or one of the fields
+   * that folds into it; the rest have no opinion about what the boxes hold
+   * and should not be overwriting them.
+   */
+  const folds =
+    this.isNew ||
+    this.isModified('slots') ||
+    LEGACY_FIELDS.some(field => this.isModified(field))
+  if (!folds) return
   const folded = foldLegacy(slotsOf(this), this, field =>
     this.isModified(field),
   )

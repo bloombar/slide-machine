@@ -1003,6 +1003,7 @@
     "addSlideHint": "Add a slide",
     "liveSession": "Live session",
     "playingOriginal": "Playing original audio…",
+    "editFailed": "That edit was not saved. Your last change is not on the slide.",
     "layoutRefit": "Filled the boxes this layout added",
     "play": {
       "play": "Play deck",
