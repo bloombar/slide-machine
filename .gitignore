@@ -2,7 +2,11 @@
 the-slide-machine-6d173e88efd3.json
 
 # Dependencies & build output
-node_modules/
+# No trailing slash: with one, the pattern matches only directories, so a
+# SYMLINK named node_modules slips past it — which is how one pointing at a
+# contributor's own machine reached the default branch and broke every other
+# checkout (b1d9a0b).
+node_modules
 dist/
 coverage/
 
