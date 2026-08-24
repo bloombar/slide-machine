@@ -810,6 +810,28 @@ the user did not ask for.
   imported box: the positioned renderer honours it already (`boxStyle.surfaceStyle`), so what
   is missing is the derivation, padding-aware capacity arithmetic, and inset text in
   `deck-layout` and both exporters, which today ignore it.
+- **Design furniture the layout model cannot express.** Three instances, found in one
+  deck, none of them fixable in a template file — they need the model to change, and they
+  are listed together because a fix for any one of them leaves the others looking fixed.
+  - **Decoration cannot sit above a slot.** `PositionedLayout` and `FlowLayout` paint every
+    decoration piece and then every slot, so a rule, band or logo the design draws OVER a
+    picture is painted under it and disappears. NYU Bold's seam rule straddles the left edge
+    of its photograph exactly as Google draws it, and half of it is behind the picture; the
+    shipped file moves that one rule aside as an authored departure, which fixes the design
+    and not the class.
+  - **Decoration cannot hold text, and text on a LAYOUT page is not carried down.** The
+    same symptom by two different routes, so both are named: a text box on a SLIDE is
+    dropped by consolidation (NYU Bold's part number), and a text box on a LAYOUT page is
+    dropped by `inheritedDecoration`, which carries pictures and fills down the chain and
+    not text (its opening quotation mark). Neither is content — an ornament offered as a
+    fillable box puts a quotation mark in front of an author as something to write in — so
+    the model needs decoration that can be typographic, not a new slot.
+  - **A box may overlap another while its ink does not.** NYU's part-number slide has a
+    full-width title box and a 250pt numeral over its right half. It reads because the
+    title's ink never reaches that half — but the audit sees two boxes of words on top of
+    each other and is right to, since nothing in the data distinguishes this from the
+    defect. Narrowing the title box is not available either: at ~7 characters a line the
+    deck's own title would not fit in three lines.
 - **Fonts are mapped, not reproduced** ([§5](#5-theme-resolution)).
 - **Carried through Google Slides:** slot metadata and narration, via the mechanism in
   [§8](#8-exporting).
