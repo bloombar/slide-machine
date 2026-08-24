@@ -24,6 +24,26 @@ export default defineConfig({
       '/templates': {
         target: 'http://localhost:3000',
       },
+      // The OAuth authorization server (docs/MCP.md §5). These live at the
+      // application root rather than under /api, because that is where the
+      // discovery documents have to be — so in development, where the SPA is
+      // on Vite and the API on :3000, they need forwarding explicitly or an
+      // assistant's token request lands on index.html.
+      '/.well-known': {
+        target: 'http://localhost:3000',
+      },
+      '/authorize': {
+        target: 'http://localhost:3000',
+      },
+      '/token': {
+        target: 'http://localhost:3000',
+      },
+      '/register': {
+        target: 'http://localhost:3000',
+      },
+      '/revoke': {
+        target: 'http://localhost:3000',
+      },
     },
   },
 })

@@ -22,6 +22,7 @@ import type { ActionContext } from '../actions/context'
 import { callerFor } from './tool'
 import { findTool, listTools } from './registry'
 import { describeErrorForAgent } from '../actions/agent-error'
+import { satisfies, scopeForTool } from '../oauth/scopes'
 import { APP_VERSION } from '../lib/app-version'
 // Registers every tool (docs/MCP.md §4). One list, shared with the test that
 // checks none of them reaches a forbidden action.
@@ -40,6 +41,7 @@ export const runTool = async (
   name: string,
   args: unknown,
   ctx: ActionContext,
+  grantedScopes: readonly string[],
 ): Promise<CallToolResult> => {
   const tool = findTool(name)
   // The SDK refuses an unregistered tool before this runs, so this is
@@ -49,6 +51,27 @@ export const runTool = async (
     return {
       isError: true,
       content: [{ type: 'text', text: `No tool named "${name}".` }],
+    }
+  }
+
+  // The consent screen's answer, enforced. A read-only grant is refused a
+  // tool that writes even though the account behind the token could perform
+  // it in the app — that difference is the entire value of asking.
+  const needed = scopeForTool(tool)
+  if (!satisfies(grantedScopes, needed)) {
+    return {
+      isError: true,
+      content: [
+        {
+          type: 'text',
+          text:
+            `This connection was not granted permission to do that: "${name}" needs the ` +
+            `"${needed}" permission and this connection has ` +
+            `${grantedScopes.length ? `"${grantedScopes.join('", "')}"` : 'none'}. ` +
+            'The user would have to reconnect and approve it. Do not retry. ' +
+            '(code: insufficient_scope, retryable: false)',
+        },
+      ],
     }
   }
 
@@ -82,7 +105,10 @@ export const runTool = async (
  * fenced `call` function and its own arguments, and has no way to act as
  * anyone else.
  */
-export const createMcpServer = (ctx: ActionContext): McpServer => {
+export const createMcpServer = (
+  ctx: ActionContext,
+  grantedScopes: readonly string[],
+): McpServer => {
   const server = new McpServer(
     { name: 'slide-machine', version: APP_VERSION },
     {
@@ -98,7 +124,15 @@ export const createMcpServer = (ctx: ActionContext): McpServer => {
     },
   )
 
-  for (const tool of listTools()) {
+  // Only what this connection may actually use is advertised. A read-only
+  // grant being shown seven write tools would spend context on every turn
+  // describing buttons that answer with a refusal — and would invite the
+  // model to promise the user edits it cannot make.
+  const offered = listTools().filter(tool =>
+    satisfies(grantedScopes, scopeForTool(tool)),
+  )
+
+  for (const tool of offered) {
     server.registerTool(
       tool.name,
       {
@@ -118,7 +152,7 @@ export const createMcpServer = (ctx: ActionContext): McpServer => {
           openWorldHint: false,
         },
       },
-      (args: unknown) => runTool(tool.name, args, ctx),
+      (args: unknown) => runTool(tool.name, args, ctx, grantedScopes),
     )
   }
 

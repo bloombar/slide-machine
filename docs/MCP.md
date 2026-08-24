@@ -19,9 +19,17 @@ future work in the spec — [SPEC.md §18](SPEC.md#18-future-work), open questio
 | Model-legible errors (§3.3) | Built — [actions/agent-error.ts](../server/src/actions/agent-error.ts) |
 | The MCP tool surface (§4) | A first set of ten tools — [mcp/tools/](../server/src/mcp/tools/) |
 | The safety boundary (§6) | Built and enforced by test — [mcp/forbidden.ts](../server/src/mcp/forbidden.ts) |
-| The endpoint | `POST /api/mcp` — [routes/mcp.ts](../server/src/routes/mcp.ts), authenticated by the app's own bearer token |
-| **OAuth authorization server (§5)** | **Not built.** The next stage, and the reason the endpoint is not yet usable by a third-party assistant. |
+| The endpoint | `POST /api/mcp` — [routes/mcp.ts](../server/src/routes/mcp.ts) |
+| **OAuth authorization server (§5)** | Built — [oauth/](../server/src/oauth/) and [routes/oauth.ts](../server/src/routes/oauth.ts). Dynamic client registration, PKCE, scopes, refresh-token rotation, revocation, and the two discovery documents. |
+| The consent screen (§5.1) | Built — [OAuthConsentPage.tsx](../client/src/pages/OAuthConsentPage.tsx) |
+| Connected-assistants list and disconnect (§5.3) | Built — [ConnectedAssistantsPanel.tsx](../client/src/components/ConnectedAssistantsPanel.tsx), account settings → Privacy |
 | The in-app chat assistant (§3.4) | Not built |
+
+**What has not been done:** the tool set has still not been validated against
+real usage (§4.1, §8 below), no assistant vendor's connector has been
+registered or tested against a live deployment (§5.6), and the institutional
+question in §5.6 — whether NYU IT will approve a third-party connector for
+managed faculty accounts — remains open and is not a technical matter.
 
 The rest of this page is unchanged, and is still a plan to argue with rather
 than a specification to implement.
@@ -472,15 +480,16 @@ skipped and forgotten.
    in-app assistant — PREP-4 generalized beyond preflight. **Not started.**
 3. ~~Design the intent tool set (§4.1)~~ **A first set exists**; it has not yet
    been tested against real usage.
-4. ~~Decide the auth fork (§5)~~ **Decided: the full authorization server**
-   (§5.5). **Building it is the remaining work**, and it is the majority of
-   what is left. Until it exists, the endpoint answers the app's own bearer
-   token and no third-party assistant can connect to it.
+4. ~~Decide the auth fork (§5), then build the MCP server.~~ **Done.** The
+   authorization server is built: an assistant nobody arranged registers
+   itself, the instructor approves it on a consent screen, and the token it
+   receives is scoped, short-lived, rotated on refresh, and revocable from
+   account settings.
 
 ## 9. Open questions
 
-- ~~Full OAuth authorization server, or per-user API tokens?~~ **Decided:
-  the authorization server, built in stages** (§5.5).
+- ~~Full OAuth authorization server, or per-user API tokens?~~ **Decided and
+  built: the authorization server** (§5.5).
 - Is the first tool set (§4.1) the right one, for beginners and experts alike?
   It was designed rather than observed, which is the weakest part of what is
   built.

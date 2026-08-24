@@ -1,23 +1,51 @@
 /**
  * Tests for the MCP endpoint (docs/MCP.md).
  *
- * These drive the real Express app over HTTP with the action dispatcher
- * stubbed, so what is exercised is the route's own job — authentication, the
- * rate limit, and the JSON-RPC handshake through the SDK's transport — without
- * a database standing behind it. Ownership and metering are the action layer's
- * to enforce and are tested there; the point here is that an agent request
- * reaches it at all, and only when it should.
+ * These drive the real Express app over HTTP with the token verifier and the
+ * action dispatcher stubbed, so what is exercised is the route's own job — the
+ * scope a token carries, the rate limit, and the JSON-RPC handshake through
+ * the SDK's transport — without a database standing behind it.
+ *
+ * The OAuth flow that produces such a token is tested for real, against a
+ * database, in test/integration/oauth-mcp.test.ts. Ownership and metering are
+ * the action layer's to enforce and are tested where they live. The point
+ * here is that an agent request reaches the tools at all, and only when it
+ * should.
  */
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest'
 import request from 'supertest'
 
-vi.mock('../auth/tokens', async importOriginal => ({
-  ...(await importOriginal<typeof import('../auth/tokens')>()),
-  verifyAccessToken: vi.fn(async (token: string) => {
-    if (token !== 'good-token') throw new Error('bad token')
-    return { userId: 'user-1' }
-  }),
-}))
+// Stands in for a token the OAuth flow would have issued. `good-token`
+// carries both scopes; `read-token` carries only reading, which is how the
+// consent screen's answer reaches this route.
+vi.mock('../oauth/provider', async importOriginal => {
+  const actual = await importOriginal<typeof import('../oauth/provider')>()
+  const { InvalidTokenError } =
+    await import('@modelcontextprotocol/sdk/server/auth/errors.js')
+  return {
+    ...actual,
+    provider: {
+      ...actual.provider,
+      verifyAccessToken: vi.fn(async (token: string) => {
+        if (token !== 'good-token' && token !== 'read-token') {
+          throw new InvalidTokenError('nope')
+        }
+        return {
+          token,
+          clientId: 'client-a',
+          // Required: the SDK refuses a bearer token with no expiry, which
+          // is the right rule — a token that never dies cannot be outlived.
+          expiresAt: Math.floor(Date.now() / 1000) + 3600,
+          scopes:
+            token === 'read-token'
+              ? ['lectures.read']
+              : ['lectures.read', 'lectures.write'],
+          extra: { userId: 'user-1' },
+        }
+      }),
+    },
+  }
+})
 
 vi.mock('../actions/dispatch', async importOriginal => {
   const actual = await importOriginal<typeof import('../actions/dispatch')>()
@@ -58,16 +86,18 @@ beforeEach(() => {
 })
 
 describe('POST /api/mcp', () => {
-  it('refuses a request with no token', async () => {
+  it('refuses a request with no token, and says where to get one', async () => {
+    // The header is how an assistant that has never seen this server finds
+    // the authorization server at all (RFC 9728).
     const res = await rpc(null, INITIALIZE)
+
     expect(res.status).toBe(401)
-    expect(res.body.error.code).toBe('unauthorized')
+    expect(res.headers['www-authenticate']).toContain('resource_metadata=')
   })
 
   it('refuses a token it cannot verify', async () => {
     const res = await rpc('nonsense', INITIALIZE)
     expect(res.status).toBe(401)
-    expect(res.body.error.code).toBe('invalid_token')
   })
 
   it('completes the handshake and names the server', async () => {
@@ -113,11 +143,25 @@ describe('POST /api/mcp', () => {
 
     expect(res.status).toBe(200)
     expect(res.body.result.isError).toBeUndefined()
-    // Every action the tool dispatched carried the caller's id — this is the
-    // whole of the "same auth as the app" claim, at the seam where it is made.
+    // Every action the tool dispatched carried the token's account — this is
+    // the whole of the "same auth as the app" claim, at the seam where it is
+    // made.
     for (const call of vi.mocked(dispatch).mock.calls) {
       expect(call[2]).toMatchObject({ userId: 'user-1' })
     }
+  })
+
+  it('offers a read-only connection only the tools it may use', async () => {
+    const res = await rpc('read-token', {
+      jsonrpc: '2.0',
+      id: 8,
+      method: 'tools/list',
+      params: {},
+    })
+
+    const names = res.body.result.tools.map((t: { name: string }) => t.name)
+    expect(names).toContain('find_lectures')
+    expect(names).not.toContain('edit_slides')
   })
 
   it('hands a refused call back as a readable error result', async () => {

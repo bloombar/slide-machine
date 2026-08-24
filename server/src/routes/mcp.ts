@@ -2,24 +2,33 @@
  * The MCP endpoint (docs/MCP.md) — one POST that an external AI assistant
  * speaks JSON-RPC to.
  *
- * There is deliberately very little here. Authentication decides who is
- * calling; the SDK's transport handles the protocol; the tools do the work
- * through the action layer, which authorizes and meters exactly as it does for
- * the app's own front end. The whole security story of this route is
- * "whatever `requireAuth` proved, and nothing more" — an agent call is an
- * ordinary call by the account that authorized it.
+ * There is deliberately very little here. The token decides who is calling and
+ * what they were granted; the SDK's transport handles the protocol; the tools
+ * do the work through the action layer, which authorizes and meters exactly as
+ * it does for the app's own front end. An agent call is an ordinary call by
+ * the account that authorized it.
  *
- * ## Auth, and what is still missing
+ * ## Two fences, doing different jobs
  *
- * This stage verifies the application's own bearer token, the same one the
- * React client carries. That is enough to build and test the tool surface
- * against, and it is **not** the model this feature ships with: a session
- * token means "this is the instructor," full stop — every permission they
- * have, no per-assistant revocation, and no record of which assistant is
- * calling. The OAuth authorization server that replaces it is the next stage
- * (docs/MCP.md §5), and it slots in here: the token check becomes a scope
- * check, and the 401 below starts carrying the `WWW-Authenticate` header that
- * points a client at the metadata it needs to start a flow.
+ * The token carries **scopes**, which say what this assistant was allowed to
+ * do — read, or read and write. That is the user's answer on the consent
+ * screen, and it is checked per tool: a read-only grant cannot reach a tool
+ * that writes, even though the account behind it could.
+ *
+ * Underneath, the **tool surface** says what any assistant may do at all
+ * (mcp/forbidden.ts). No scope reaches deletion, sharing or publishing,
+ * because those are not tools. Scope narrows what is on the surface; it never
+ * widens it, and the two are not alternatives — a token with every scope is
+ * still confined to ten tools.
+ *
+ * ## Why the 401 carries a header
+ *
+ * An assistant that has never seen this server needs to discover where to ask
+ * for a token. The `WWW-Authenticate` header on a refusal names the protected
+ * resource metadata document (RFC 9728), which names the authorization server,
+ * which advertises its own endpoints — so a client nobody arranged can get
+ * from "refused" to a working connection with no configuration. That chain is
+ * the whole of "remote" in the requirement.
  *
  * ## Why the rate limit
  *
@@ -31,11 +40,13 @@
 import { Router } from 'express'
 import { randomUUID } from 'node:crypto'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
-import { requireAuth } from '../middleware/auth'
+import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js'
+import { getOAuthProtectedResourceMetadataUrl } from '@modelcontextprotocol/sdk/server/auth/router.js'
 import { createRateLimiter } from '../lib/rate-limit'
 import { HttpError } from '../middleware/error'
 import { createMcpServer } from '../mcp/server'
-import { appOrigin } from '../lib/app-origin'
+import { provider } from '../oauth/provider'
+import { resourceUrl } from './oauth'
 
 export const MCP_PATH = '/mcp'
 
@@ -55,35 +66,58 @@ export const mcpRateLimiter = createRateLimiter({
 
 export const mcpRouter = Router()
 
-mcpRouter.post(MCP_PATH, requireAuth, async (req, res) => {
-  if (!mcpRateLimiter.take(req.userId!)) {
-    throw new HttpError(
-      429,
-      'rate_limited',
-      'Too many requests from this account; slow down and try again shortly',
+mcpRouter.post(
+  MCP_PATH,
+  // No `requiredScopes` here: a token needs *some* valid grant to reach the
+  // endpoint, and which scope each call needs is decided per tool inside the
+  // server, where the tool that was asked for is known.
+  (req, res, next) =>
+    requireBearerAuth({
+      verifier: provider,
+      resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(
+        new URL(resourceUrl()),
+      ),
+    })(req, res, next),
+  async (req, res) => {
+    // Set by verifyAccessToken; the token is bound to one account and carries
+    // what the user approved on the consent screen.
+    const auth = req.auth
+    const userId = auth?.extra?.userId as string | undefined
+    /* c8 ignore next 4 -- unreachable: requireBearerAuth refuses before this,
+       and every token this server mints carries a userId. The guard is here so
+       a change to the provider cannot silently dispatch with no user. */
+    if (!auth || !userId) {
+      throw new HttpError(401, 'invalid_token', 'Token is not bound to a user')
+    }
+
+    if (!mcpRateLimiter.take(userId)) {
+      throw new HttpError(
+        429,
+        'rate_limited',
+        'Too many requests from this account; slow down and try again shortly',
+      )
+    }
+
+    // Stateless: a server and transport per request, closed when the response
+    // is. Nothing about answering a tool call needs to outlive it, and keeping
+    // no session map means nothing to leak and no instance affinity to arrange.
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+      enableJsonResponse: true,
+    })
+    const server = createMcpServer(
+      { userId, requestId: randomUUID(), origin: resourceUrl() },
+      auth.scopes,
     )
-  }
 
-  // Stateless: a server and transport per request, closed when the response
-  // is. Nothing about answering a tool call needs to outlive it, and keeping
-  // no session map means nothing to leak and no instance affinity to arrange.
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-    enableJsonResponse: true,
-  })
-  const server = createMcpServer({
-    userId: req.userId,
-    requestId: randomUUID(),
-    origin: appOrigin(req),
-  })
+    res.on('close', () => {
+      void transport.close()
+      void server.close()
+    })
 
-  res.on('close', () => {
-    void transport.close()
-    void server.close()
-  })
-
-  await server.connect(transport)
-  // The body is already parsed by the app's JSON middleware, so it is handed
-  // over rather than read again from the stream.
-  await transport.handleRequest(req, res, req.body)
-})
+    await server.connect(transport)
+    // The body is already parsed by the app's JSON middleware, so it is handed
+    // over rather than read again from the stream.
+    await transport.handleRequest(req, res, req.body)
+  },
+)

@@ -11,6 +11,7 @@ import { z } from 'zod'
 import { createMcpServer, runTool } from './server'
 import { listTools, registerTool } from './registry'
 import { defineTool } from './tool'
+import { ALL_SCOPES, SCOPES } from '../oauth/scopes'
 import * as dispatch from '../actions/dispatch'
 import { ActionForbiddenError } from '../actions/dispatch'
 
@@ -22,7 +23,7 @@ afterEach(() => {
 
 describe('createMcpServer', () => {
   it('advertises every registered tool', () => {
-    const server = createMcpServer(ctx)
+    const server = createMcpServer(ctx, ALL_SCOPES)
     // Reaching into the SDK's registry is the only way to see what a client
     // would be offered without standing up a transport and a client.
     const registered = Object.keys(
@@ -38,7 +39,7 @@ describe('createMcpServer', () => {
 
   it('wires each advertised tool to the tool of the same name', async () => {
     vi.spyOn(dispatch, 'dispatch').mockResolvedValue([])
-    const server = createMcpServer(ctx)
+    const server = createMcpServer(ctx, ALL_SCOPES)
     const registered = (
       server as unknown as {
         _registeredTools: Record<
@@ -54,8 +55,19 @@ describe('createMcpServer', () => {
     expect(result).toMatchObject({ structuredContent: { lectures: [] } })
   })
 
+  it('advertises only the tools this connection may actually use', () => {
+    const server = createMcpServer(ctx, [SCOPES.read])
+    const registered = Object.keys(
+      (server as unknown as { _registeredTools: Record<string, unknown> })
+        ._registeredTools,
+    )
+
+    expect(registered).toContain('find_lectures')
+    expect(registered).not.toContain('edit_slides')
+  })
+
   it('marks read-only tools as such, so a client can run them unprompted', () => {
-    const server = createMcpServer(ctx)
+    const server = createMcpServer(ctx, ALL_SCOPES)
     const registered = (
       server as unknown as {
         _registeredTools: Record<
@@ -77,7 +89,7 @@ describe('createMcpServer', () => {
 describe('runTool', () => {
   it('returns a tool’s prose as text, and its data as structured content', async () => {
     vi.spyOn(dispatch, 'dispatch').mockResolvedValue([])
-    const result = await runTool('find_lectures', {}, ctx)
+    const result = await runTool('find_lectures', {}, ctx, ALL_SCOPES)
 
     expect(result.isError).toBeUndefined()
     expect(result.content[0]).toMatchObject({ type: 'text' })
@@ -99,13 +111,13 @@ describe('runTool', () => {
       }),
     )
 
-    const result = await runTool('zz_probe_confirmation', {}, ctx)
+    const result = await runTool('zz_probe_confirmation', {}, ctx, ALL_SCOPES)
     expect(result.structuredContent).toBeUndefined()
     expect(result.content[0]).toEqual({ type: 'text', text: 'done' })
   })
 
   it('refuses a tool that is not registered', async () => {
-    const result = await runTool('no_such_tool', {}, ctx)
+    const result = await runTool('no_such_tool', {}, ctx, ALL_SCOPES)
     expect(result.isError).toBe(true)
     expect((result.content[0] as { text: string }).text).toContain(
       'no_such_tool',
@@ -116,7 +128,12 @@ describe('runTool', () => {
     // An error *result* is handed to the model, which can act on it; a
     // protocol error ends the call and tells it nothing.
     vi.spyOn(dispatch, 'dispatch').mockRejectedValue(new ActionForbiddenError())
-    const result = await runTool('read_lecture', { lectureId: 'nope' }, ctx)
+    const result = await runTool(
+      'read_lecture',
+      { lectureId: 'nope' },
+      ctx,
+      ALL_SCOPES,
+    )
 
     expect(result.isError).toBe(true)
     const [first] = result.content as { type: string; text: string }[]
@@ -124,11 +141,39 @@ describe('runTool', () => {
     expect(first?.text).toContain('retryable: false')
   })
 
+  it('refuses a write tool to a connection granted only reading', async () => {
+    // The account behind the token could do this in the app. The point of
+    // asking on the consent screen is that this connection may not.
+    const result = await runTool(
+      'rename_lecture',
+      { lectureId: 'deck-1', title: 'x' },
+      ctx,
+      [SCOPES.read],
+    )
+
+    expect(result.isError).toBe(true)
+    const [first] = result.content as { type: string; text: string }[]
+    expect(first?.text).toContain('insufficient_scope')
+    expect(first?.text).toContain(SCOPES.write)
+  })
+
+  it('lets a write grant read, since editing needs looking first', async () => {
+    vi.spyOn(dispatch, 'dispatch').mockResolvedValue([])
+    const result = await runTool('find_lectures', {}, ctx, [SCOPES.write])
+    expect(result.isError).toBeUndefined()
+  })
+
+  it('names having no permissions at all, rather than listing an empty quote', async () => {
+    const result = await runTool('find_lectures', {}, ctx, [])
+    const [first] = result.content as { type: string; text: string }[]
+    expect(first?.text).toContain('has none')
+  })
+
   it('says nothing about an unexpected failure beyond that it failed', async () => {
     vi.spyOn(dispatch, 'dispatch').mockRejectedValue(
       new Error('mongodb://user:hunter2@10.0.0.4'),
     )
-    const result = await runTool('list_templates', {}, ctx)
+    const result = await runTool('list_templates', {}, ctx, ALL_SCOPES)
 
     expect(result.isError).toBe(true)
     const [first] = result.content as { type: string; text: string }[]

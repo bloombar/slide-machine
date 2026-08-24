@@ -175,7 +175,9 @@
       "hint": "La suppression de votre compte efface définitivement vos projets, cours et diapositives. Cette action est irréversible.",
       "title": "Supprimer votre compte ?",
       "message": "Votre compte et tous ses projets, cours et diapositives seront définitivement supprimés."
-    }
+    },
+    "assistantsSection": "Assistants IA connectés",
+    "assistantsSectionHint": "Les assistants que vous avez autorisés à consulter ou modifier vos cours depuis l'extérieur de l'application. La déconnexion prend effet immédiatement et ne vous déconnecte nulle part ailleurs."
   },
   "language": {
     "label": "Langue",
@@ -1332,5 +1334,20 @@
       "warnEmails": "M’avertir par e-mail avant épuisement",
       "warnEmailsHint": "Un avis quand un quota est presque épuisé. Les avis de limite réellement atteinte sont toujours envoyés."
     }
+  },
+  "oauth": {
+    "title": "Connecter un assistant",
+    "asking": "{name} demande à se connecter à votre compte Slide Machine. Si vous acceptez, il pourra :",
+    "limits": "Il ne peut rien supprimer, ni partager un cours, ni publier un quiz, ni modifier votre formule — cela reste dans l'application. Vous pouvez le déconnecter à tout moment depuis les paramètres de votre compte.",
+    "allow": "Autoriser",
+    "deny": "Refuser",
+    "expired": "Cette demande a expiré ou a déjà reçu une réponse. Demandez à l'assistant de se reconnecter.",
+    "failed": "Une erreur s'est produite et rien n'a été connecté. Réessayez."
+  },
+  "assistants": {
+    "none": "Aucun assistant IA n'est connecté à ce compte.",
+    "connectedOn": "Connecté le {date}",
+    "disconnect": "Déconnecter",
+    "failed": "Impossible de charger les assistants connectés."
   }
 }

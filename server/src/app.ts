@@ -13,6 +13,7 @@ import { googleConnectRouter } from './routes/google-connect'
 import { adminRouter } from './routes/admin'
 import { actionsRouter } from './routes/actions'
 import { mcpRouter } from './routes/mcp'
+import { oauthAuthRouter, oauthConsentRouter } from './routes/oauth'
 import { decksRouter } from './routes/decks'
 import { usersRouter } from './routes/users'
 import { seedAssetsRouter } from './routes/seed-assets'
@@ -56,6 +57,13 @@ export const createApp = (): Express => {
   app.use(express.json({ limit: '32mb' }))
   app.use(cookieParser())
 
+  // The OAuth authorization server, at the application ROOT rather than under
+  // /api — RFC 8414 and RFC 9728 put the discovery documents at
+  // /.well-known/..., and an assistant nobody arranged finds every other
+  // endpoint by reading them. Mounted before the API so the SPA fallback in
+  // production cannot swallow them.
+  app.use(oauthAuthRouter())
+
   const api = Router()
   api.use(healthRouter)
   api.use(configRouter)
@@ -65,6 +73,7 @@ export const createApp = (): Express => {
   api.use('/admin', adminRouter)
   api.use(actionsRouter)
   api.use(mcpRouter)
+  api.use(oauthConsentRouter)
   api.use(decksRouter)
   api.use(usersRouter)
   api.use(seedAssetsRouter)

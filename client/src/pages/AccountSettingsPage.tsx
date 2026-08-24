@@ -58,6 +58,7 @@ import PlanGrantEditor from '../components/PlanGrantEditor'
 import UsagePanel from '../components/UsagePanel'
 import BillingPanel from '../components/BillingPanel'
 import EmailVerificationNotice from '../components/EmailVerificationNotice'
+import ConnectedAssistantsPanel from '../components/ConnectedAssistantsPanel'
 
 /** One settings change, as the account itself holds it: an absent
  * `language`/`locale` means "unchanged", an explicit `undefined` one
@@ -570,6 +571,20 @@ export default function AccountSettingsPage() {
                   {t('profile.publicProfileHint', { own: !adminUserId })}
                 </label>
               </Section>
+
+              {/* Only on your own settings. An assistant's token acts for one
+                  person, and withdrawing it is that person's decision — the
+                  actions behind this panel are self-scoped, so an admin
+                  viewing someone else's settings would only ever be shown
+                  their own connections. */}
+              {!adminUserId && (
+                <Section
+                  title={t('profile.assistantsSection')}
+                  hint={t('profile.assistantsSectionHint')}
+                >
+                  <ConnectedAssistantsPanel />
+                </Section>
+              )}
             </section>
           )}
 
