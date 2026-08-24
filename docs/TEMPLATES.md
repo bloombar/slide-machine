@@ -785,6 +785,31 @@ the user did not ask for.
   and it is reported.
 - **Content kinds are a closed list.** An imported slot can only be one of the kinds in
   [§2](#2-layouts-and-slots); there is no way for a template to introduce a new one.
+- **A box's height is over-budgeted, in two ways still outstanding.** Both make the
+  importer ask for more room than a design gave, and `build-template` then GROWS the box
+  until its content fits — so both move shipped geometry, not only budgets.
+  - **Google's text insets are not modelled.** Slides draws text inside a default inset of
+    0.1in left and right, 0.05in top and bottom (measured at 0.085–0.096in across three
+    cases); `capacityOf` divides the full box width and knows nothing about it. That is 4.2%
+    of usable width on a 0.471-wide title box and **8.0% on a 0.251-wide caption**, which is
+    why NYU Bold's slide 7 captions ship at 0.355 where NYU drew them at 0.231 — the clearest
+    evidence that this reaches geometry. It is also why "TEMPLATE NOTES" wraps to two lines
+    in Google and one in our estimate. **The API exposes no inset field** — `leftInset` and
+    its siblings appear nowhere in a captured deck — so it can only be applied as Google's
+    documented default; do not go looking for it in the response. Note also that the fix is
+    not the character-width constant, which was measured and is right: Montserrat's caps
+    advance is 0.684 em/char and `montserrat: 0.637` sits correctly inside the range for
+    realistically spaced titles.
+  - **One line is budgeted as a full line box.** `fontSize × lineHeight` overstates the ink
+    of a single line of display capitals, which have no descenders and sit well inside their
+    line box. A designer sizing a box to the cap height of one line — as NYU did for the
+    `big-number` figure, 0.377 high for type whose line box is 0.443 — will always have that
+    box grown by us.
+  Fixing either in the budget alone would make the arithmetic describe GOOGLE's usable area
+  while our renderers still draw to the box edge. The fix is to derive real `padding` on the
+  imported box: the positioned renderer honours it already (`boxStyle.surfaceStyle`), so what
+  is missing is the derivation, padding-aware capacity arithmetic, and inset text in
+  `deck-layout` and both exporters, which today ignore it.
 - **Fonts are mapped, not reproduced** ([§5](#5-theme-resolution)).
 - **Carried through Google Slides:** slot metadata and narration, via the mechanism in
   [§8](#8-exporting).
