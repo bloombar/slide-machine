@@ -192,6 +192,15 @@ export interface ImportReport {
    */
   slidesSkipped?: number
   /**
+   * Strokes the import declined to draw: a rule running diagonally, which has
+   * no rectangle that stands for it.
+   *
+   * Counted for the same reason skipped pages are. The refusal stays a
+   * refusal — a slab drawn across a slide is worse than a missing stroke, and
+   * worse still for having a number defending it.
+   */
+  rulesDeclined?: number
+  /**
    * Content that could not be placed, by the slide it was on (EXP-5).
    *
    * Named rather than counted, because "3 boxes were dropped" is not something

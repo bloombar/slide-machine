@@ -472,6 +472,7 @@
         "merged": "{count} diapositivas casi idénticas combinadas",
         "approximated": "{count} asignadas al diseño más parecido",
         "skipped": "Se omitieron {count} diapositivas marcadas como «omitir»",
+        "rulesDeclined": "No se pudieron redibujar {count} líneas diagonales",
         "assetsFailed": "No se pudieron obtener {count} imágenes",
         "review": "Tu presentación no se modificó."
       },

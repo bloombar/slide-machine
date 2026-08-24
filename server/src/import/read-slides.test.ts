@@ -2787,6 +2787,31 @@ describe('a rule the design draws', () => {
     expect(drawn.box.w).toBeCloseTo(76200 / (10 * EMU), 6)
   })
 
+  it('centres the stroke on its path rather than starting it there', () => {
+    // REGRESSION, and it shipped looking correct. A line's transform gives
+    // the stroke's CENTRELINE and the ink straddles it; read as the leading
+    // edge, every rule is displaced by half its own weight along its
+    // thickness axis. On white space that is four pixels and invisible. The
+    // one rule that landed on a picture's edge is what gave it away.
+    const read = toSourcePresentation(
+      presentation({
+        slides: [
+          {
+            objectId: 's1',
+            pageElements: [
+              rule({ scaleX: 0.2072, translateX: 0, translateY: 2012625 }),
+            ],
+          },
+        ],
+      }),
+    )
+    const drawn = read.slides[0]!.elements[0]!
+    // Half the weight above the path, half below.
+    expect(drawn.box.y).toBeCloseTo((2012625 - 76200 / 2) / (5.625 * EMU), 6)
+    // And the other axis is untouched: only the thickness axis moved.
+    expect(drawn.box.x).toBe(0)
+  })
+
   it('leaves a diagonal alone rather than drawing a slab', () => {
     // A diagonal has no rectangle that stands for it, and a box across the
     // slide is worse than the stroke being missing.
@@ -2803,6 +2828,23 @@ describe('a rule the design draws', () => {
       }),
     )
     expect(read.slides[0]!.elements).toHaveLength(0)
+    // And says so. A deck that never had the stroke and a deck whose stroke
+    // we declined look identical afterwards; only the count tells them apart.
+    expect(read.rulesDeclined).toBe(1)
+  })
+
+  it('counts nothing for a deck whose rules it could all draw', () => {
+    const read = toSourcePresentation(
+      presentation({
+        slides: [
+          {
+            objectId: 's1',
+            pageElements: [rule({ scaleX: 0.2, translateX: 0, translateY: 0 })],
+          },
+        ],
+      }),
+    )
+    expect(read.rulesDeclined).toBeUndefined()
   })
 })
 

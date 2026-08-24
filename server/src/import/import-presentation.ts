@@ -480,6 +480,9 @@ export const importSourcePresentation = async (
       // Said, not done silently: a deck that never had those pages and one
       // whose pages were dropped look identical afterwards.
       ...(slidesSkipped ? { slidesSkipped } : {}),
+      ...(presentation.rulesDeclined
+        ? { rulesDeclined: presentation.rulesDeclined }
+        : {}),
       ...(contentDropped.length ? { contentDropped } : {}),
     },
   }

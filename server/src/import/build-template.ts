@@ -86,15 +86,27 @@ const unique = (name: string, taken: Set<string>): string => {
   return next
 }
 
-/** A box the template schema will accept: inside the slide, and never zero. */
+/**
+ * A box the template schema will accept: inside the slide, and never zero.
+ *
+ * The floor grows a too-thin box about its own CENTRE rather than from its
+ * leading edge. A floor is sound — a box of no width cannot be drawn or
+ * selected — but one that grows in a single direction moves the piece as
+ * well as widening it, which on a hairline rule is the whole of its position.
+ * That is the same defect `ruleOf` exists to avoid, in miniature, and it
+ * would have reintroduced it a tenth of a stroke at a time.
+ */
 const safeBox = (box: { x: number; y: number; w: number; h: number }) => {
-  const x = Math.min(Math.max(box.x, 0), 0.99)
-  const y = Math.min(Math.max(box.y, 0), 0.99)
+  const grown = (side: number) => Math.max(side, 0.01)
+  const centred = (start: number, side: number) =>
+    Math.min(Math.max(start - (grown(side) - side) / 2, 0), 0.99)
+  const x = centred(box.x, box.w)
+  const y = centred(box.y, box.h)
   return {
     x,
     y,
-    w: Math.min(Math.max(box.w, 0.01), 1 - x),
-    h: Math.min(Math.max(box.h, 0.01), 1 - y),
+    w: Math.min(grown(box.w), 1 - x),
+    h: Math.min(grown(box.h), 1 - y),
   }
 }
 

@@ -38,6 +38,9 @@ export interface ImportReport {
   /** Pages the author had marked "skip slide", which the import left out.
    * Absent when the deck had none. */
   slidesSkipped?: number
+  /** Rules the import declined to redraw, because a diagonal has no rectangle
+   * that stands for it. Absent when there were none. */
+  rulesDeclined?: number
   /** Absent when the import attempted no fetch at all — not the same as none
    * having failed, which is why it is not a plain number. */
   assetsFailed?: number
@@ -332,6 +335,13 @@ export default function TemplateImport({
             <p>
               {t('template.import.report.skipped', {
                 count: report.slidesSkipped,
+              })}
+            </p>
+          )}
+          {(report.rulesDeclined ?? 0) > 0 && (
+            <p>
+              {t('template.import.report.rulesDeclined', {
+                count: report.rulesDeclined,
               })}
             </p>
           )}

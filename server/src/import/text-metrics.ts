@@ -110,6 +110,54 @@ const CHAR_W_CAPS_DEFAULT = CHAR_W_DEFAULT * 1.35
  * holds one line when it holds two.
  */
 const LINE_H = 1.5
+/**
+ * The line box a face occupies when nothing asks it to be tighter.
+ *
+ * Two things read it. Google states leading as a percentage OF NORMAL, so
+ * `lineSpacing: 80` is 80% of this rather than 0.8 (`lineHeightFrom`). And a
+ * box led TIGHTER than this does not shrink its glyphs to match — the ink
+ * stays this tall and hangs outside the line box, which a clipped box cuts.
+ *
+ * MEASURED, NOT COMPUTED: 1.19602 ± 0.00061, precision-weighted over five
+ * cases. Live renders of the NYU Bold source deck, read as baseline-to-
+ * baseline distance off per-row ink profiles — Google outlines the glyphs in
+ * its embed, so there is no text node to ask and pixels were the only
+ * instrument. The scale is arithmetic rather than an estimate: the deck's
+ * `pageSize` is 9144000 EMU, which is 10in at 720pt, captured 4800px wide, so
+ * 6.6667 px/pt exactly.
+ *
+ * A round 1.200 sits 6.6σ away, and it is the RESIDUALS that say so rather
+ * than the mean: at 1.200 all three large-type cases miss the same way (1.9,
+ * 1.2 and 1.5px), which is a systematic error, while the two 12pt cases sit
+ * at zero because one pixel is 0.83% of a line at that size and they cannot
+ * discriminate at all. At 1.196 every residual is under half a pixel with no
+ * sign pattern.
+ *
+ * One case was measured and DISCARDED: slide 6's quote gave unequal band
+ * heights, a Q's tail contaminating the bottom edge and a round cap
+ * overshooting the top, and it would have supported anything from 1.198 to
+ * 1.205 depending on which edge you believed. Unequal bands are the tell that
+ * a band is not measuring what you think it is. That it was excluded, and
+ * why, is part of why the other five are believable.
+ *
+ * A FONT-METRICS DERIVATION GIVES ~1.219 AND IS WRONG. Montserrat's own
+ * ascent and descent put its normal line box there, and two people deriving
+ * that independently is the same assumption twice rather than a confirmation.
+ * The large-type cases exclude it outright. Do not "correct" this back to a
+ * computed figure.
+ *
+ * OPEN, AND STATED AS OPEN: every one of those measurements is Google
+ * rendering Montserrat. Whether this is a property of Google's interpretation
+ * or varies by typeface cannot be settled from one face, and settling it
+ * would take the same measurement on an import set in another. An unproven
+ * constant with an honest docstring is fine; the figure this replaces was a
+ * confident sentence about source data nobody had checked.
+ */
+
+/**
+ */
+export const NATURAL_LINE_BOX = 1.196
+
 /** A 16:9 slide is this many `cqi` tall — `cqi` being a percent of its WIDTH. */
 const SLIDE_H_CQI = 56.25
 
@@ -190,6 +238,24 @@ const charsPerLine = (
       WRAP_ALLOWANCE,
   )
 
+/**
+ * What a run of lines actually costs in height, in ems.
+ *
+ * Not simply `lines × lineHeight`. A box led TIGHTER than the face's natural
+ * line box does not shrink its letters to match: the ink stays as tall as it
+ * ever was and hangs outside the line box, above the first line and below the
+ * last. A box that clips its overflow then cuts it — which is what NYU Bold's
+ * title slide does at 0.957 and its big number at 1.196, losing 13px and 18px
+ * of descender, and what lets a title's INK reach into the caption beneath it
+ * while the two rectangles do not overlap at all.
+ *
+ * So the overhang is paid once, whatever the line count: a run occupies its
+ * lines at the design's leading, plus however much the natural box exceeds
+ * it. A box led at or above natural pays nothing.
+ */
+const inkHeight = (lines: number, lineHeight: number): number =>
+  lines * lineHeight + Math.max(0, NATURAL_LINE_BOX - lineHeight)
+
 /** How many lines fit down it. A list also pays for the gap between points. */
 const linesDown = (
   box: { h: number },
@@ -198,13 +264,13 @@ const linesDown = (
   bullets: boolean,
 ): number => {
   const room = usableHeight(box) / fontSize
+  const step = bullets ? lineHeight + BULLET_GAP_EM : lineHeight
+  // The overhang comes off the top before any line is counted, since it is
+  // paid whether the box holds one line or ten.
+  const forLines = room - Math.max(0, NATURAL_LINE_BOX - lineHeight)
   return Math.max(
     1,
-    Math.floor(
-      bullets
-        ? (room + BULLET_GAP_EM) / (lineHeight + BULLET_GAP_EM)
-        : room / lineHeight,
-    ),
+    Math.floor((forLines + (bullets ? BULLET_GAP_EM : 0)) / step),
   )
 }
 
@@ -246,7 +312,8 @@ export const heightForText = (
   // is grown to hold exactly what it is told it holds.
   const gaps = bullets ? Math.max(0, held.lines - 1) * BULLET_GAP_EM : 0
   return (
-    (rows * fontSize * lineHeight + gaps * fontSize + INSET_Y_CQI) / SLIDE_H_CQI
+    (inkHeight(rows, lineHeight) * fontSize + gaps * fontSize + INSET_Y_CQI) /
+    SLIDE_H_CQI
   )
 }
 

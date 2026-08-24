@@ -16,6 +16,7 @@
  * stored authorization really does turn out to lack it, the caller is told to
  * reconnect rather than shown an error it cannot act on.
  */
+import { NATURAL_LINE_BOX } from './text-metrics'
 import {
   type SourceBox,
   type SourceElement,
@@ -444,55 +445,16 @@ const fontSizeCqi = (
 /**
  * What Google's line spacing means as a CSS line-height multiple.
  *
- * `lineSpacing` is a percentage of NORMAL, and normal is not `line-height: 1`.
- * So 80 is not 0.8: it is 80% of whatever Google considers a normal line box.
- *
- * MEASURED, NOT COMPUTED: 1.19602 ± 0.00061, precision-weighted over five
- * cases. Live renders of the NYU Bold source deck, read as baseline-to-
- * baseline distance off per-row ink profiles — Google outlines the glyphs in
- * its embed, so there is no text node to ask and pixels were the only
- * instrument. The scale is arithmetic rather than an estimate: the deck's
- * `pageSize` is 9144000 EMU, which is 10in at 720pt, captured 4800px wide, so
- * 6.6667 px/pt exactly.
- *
- * A round 1.200 sits 6.6σ away, and it is the RESIDUALS that say so rather
- * than the mean: at 1.200 all three large-type cases miss the same way (1.9,
- * 1.2 and 1.5px), which is a systematic error, while the two 12pt cases sit
- * at zero because one pixel is 0.83% of a line at that size and they cannot
- * discriminate at all. At 1.196 every residual is under half a pixel with no
- * sign pattern.
- *
- * One case was measured and DISCARDED: slide 6's quote gave unequal band
- * heights, a Q's tail contaminating the bottom edge and a round cap
- * overshooting the top, and it would have supported anything from 1.198 to
- * 1.205 depending on which edge you believed. Unequal bands are the tell that
- * a band is not measuring what you think it is. That it was excluded, and
- * why, is part of why the other five are believable.
- *
- * A FONT-METRICS DERIVATION GIVES ~1.219 AND IS WRONG. Montserrat's own
- * ascent and descent put its normal line box there, and two people deriving
- * that independently is the same assumption twice rather than a confirmation.
- * The large-type cases exclude it outright. Do not "correct" this back to a
- * computed figure.
- *
- * OPEN, AND STATED AS OPEN: every one of those measurements is Google
- * rendering Montserrat. Whether this is a property of Google's interpretation
- * or varies by typeface cannot be settled from one face, and settling it
- * would take the same measurement on an import set in another. An unproven
- * constant with an honest docstring is fine; the figure this replaces was a
- * confident sentence about source data nobody had checked.
- */
-const NORMAL_LINE_BOX = 1.196
-
-/**
- * A `lineSpacing` percentage as the multiple the template model stores.
+ * `lineSpacing` is a percentage of NORMAL, and normal is not `line-height: 1`
+ * — it is the font's own natural line box, which is `NATURAL_LINE_BOX` and
+ * where the measurement behind that number is recorded.
  *
  * Rounded to thousandths rather than hundredths on purpose: at display sizes
- * a hundredth of a line is a couple of pixels, which is the same margin the
- * measurement above used to rule out a neighbouring value.
+ * a hundredth of a line is a couple of pixels, which is the margin the
+ * measurement used to rule out a neighbouring value.
  */
 export const lineHeightFrom = (lineSpacing: number): number =>
-  Math.round(lineSpacing * NORMAL_LINE_BOX * 10) / 1000
+  Math.round(lineSpacing * NATURAL_LINE_BOX * 10) / 1000
 
 /** The first run style a shape states, which is where a placeholder keeps the
  * type its slides are meant to be set in. */
@@ -771,6 +733,13 @@ const paintedFill = (
  * square. That is why these arrived with nonsensical geometry and were then
  * dropped for having no `shape`.
  *
+ * Defaulting the missing scale to 1 is the natural thing to write, and it is
+ * worth knowing how natural: someone who had been told this rule twenty
+ * minutes earlier independently computed one of these rules as spanning
+ * 0.500 to 0.828 — a third of the slide — by writing `?? 1` again. Both lines
+ * on that slide depend on getting it right; one omits `scaleX` and the other
+ * omits `scaleY`.
+ *
  * And a line's thickness is not in its box at all. The box has one dimension
  * of zero by construction; what makes it visible is `weight`, in EMU, so the
  * rectangle is only right once the weight is put back as the missing side.
@@ -791,6 +760,7 @@ const ruleOf = (
   page: { width: number; height: number },
   scheme: Record<string, string>,
   id: string,
+  declined: { count: number },
 ): SourceElement | null => {
   const size = raw.size as { width?: Dimension; height?: Dimension } | undefined
   const t = (raw.transform ?? {}) as {
@@ -802,19 +772,42 @@ const ruleOf = (
   }
   const w = emu(size?.width) * (t.scaleX ?? 0)
   const h = emu(size?.height) * (t.scaleY ?? 0)
-  // Diagonal, or nothing at all.
-  if ((w > 0 && h > 0) || (w <= 0 && h <= 0)) return null
+  // A diagonal is declined rather than approximated, and the refusal is
+  // COUNTED — a deck that never had the stroke and a deck whose stroke we
+  // declined look identical afterwards.
+  if (w > 0 && h > 0) {
+    declined.count++
+    return null
+  }
+  if (w <= 0 && h <= 0) return null
   const weight = emu(line.lineProperties?.weight)
   if (!weight) return null
   const fill = colorOf(line.lineProperties?.lineFill?.solidFill, scheme)
   if (!fill) return null
   const clamp = (v: number) => Math.min(1, Math.max(0, v))
+  /*
+   * The transform gives the stroke's CENTRELINE, not the rectangle's leading
+   * edge, so the ink straddles it and the box is `path ± weight / 2`.
+   *
+   * Measured rather than reasoned: three rules read off the source renders,
+   * two horizontal and one vertical. Every one of them has its shipped
+   * leading edge sitting on the source's centre to within a pixel, while the
+   * leading-edge reading misses by 15 to 25px — six to seventeen times the
+   * ±1px an ink extent can be read to. Along the THICKNESS axis only: length
+   * and position on the other axis were right all along, and so is the
+   * stroke width.
+   *
+   * It displaced every imported rule by half its own weight, and only the one
+   * that landed on a picture boundary gave it away. On white space, four
+   * pixels of slip is invisible — which is why this shipped looking correct.
+   */
+  const offset = (extent: number) => (extent ? 0 : weight / 2)
   return {
     id,
     kind: 'decoration',
     box: {
-      x: clamp(translation(t.translateX, t.unit) / page.width),
-      y: clamp(translation(t.translateY, t.unit) / page.height),
+      x: clamp((translation(t.translateX, t.unit) - offset(w)) / page.width),
+      y: clamp((translation(t.translateY, t.unit) - offset(h)) / page.height),
       w: clamp((w || weight) / page.width),
       h: clamp((h || weight) / page.height),
     },
@@ -827,6 +820,7 @@ const elementOf = (
   page: { width: number; height: number },
   scheme: Record<string, string>,
   ancestry: Ancestry,
+  declined: { count: number },
 ): SourceElement | null => {
   const id = (raw.objectId as string) ?? ''
   const chain = shapeChain(raw, ancestry)
@@ -854,7 +848,7 @@ const elementOf = (
         }
       }
     | undefined
-  if (line) return ruleOf(raw, line, page, scheme, id)
+  if (line) return ruleOf(raw, line, page, scheme, id, declined)
 
   const image = raw.image as { contentUrl?: string } | undefined
   if (image) {
@@ -1171,6 +1165,7 @@ const inheritedDecoration = (
   scheme: Record<string, string>,
   ancestry: Ancestry,
   own: SourceElement[],
+  declined: { count: number },
 ): SourceElement[] => {
   // What the page already draws itself. An author who copied the rule — or the
   // logo — onto the slide should not end up with it drawn twice.
@@ -1190,7 +1185,7 @@ const inheritedDecoration = (
     for (const rawElement of flattenGroups(
       (ancestor.pageElements ?? []) as Record<string, unknown>[],
     )) {
-      const read = elementOf(rawElement, page, scheme, ancestry)
+      const read = elementOf(rawElement, page, scheme, ancestry, declined)
       if (!read) continue
       const element =
         read.kind === 'image' && read.imageUrl
@@ -1211,6 +1206,7 @@ const pageOf = (
   page: { width: number; height: number },
   scheme: Record<string, string>,
   ancestry: Ancestry,
+  declined: { count: number } = { count: 0 },
 ): SourcePage => {
   const rawElements = flattenGroups(
     (raw.pageElements ?? []) as Record<string, unknown>[],
@@ -1225,7 +1221,7 @@ const pageOf = (
   )
   const own = creditedPictures(
     rawElements
-      .map(el => elementOf(el, page, scheme, ancestry))
+      .map(el => elementOf(el, page, scheme, ancestry, declined))
       .filter((el): el is SourceElement => el !== null),
     printedCredits(rawElements),
   )
@@ -1244,7 +1240,7 @@ const pageOf = (
     // The design's own rules and bands go first, because they sit behind what
     // the slide draws on top of them.
     elements: [
-      ...inheritedDecoration(chain, page, scheme, ancestry, own),
+      ...inheritedDecoration(chain, page, scheme, ancestry, own, declined),
       ...own,
     ],
     ...(metadata ? { slotMetadata: metadata } : {}),
@@ -1470,9 +1466,14 @@ export const toSourcePresentation = (
   // Indexed before anything is read, because a slide's boxes and colours are
   // mostly stated on the layout and master behind it, not on the slide.
   const ancestry = indexAncestry(rawLayouts, rawMasters)
-  const layouts = rawLayouts.map(l => pageOf(l, page, scheme, ancestry))
+  // Strokes the reader declines to draw, counted across the whole deck so the
+  // import can say so rather than dropping them quietly.
+  const declined = { count: 0 }
+  const layouts = rawLayouts.map(l =>
+    pageOf(l, page, scheme, ancestry, declined),
+  )
   const slides = ((raw.slides ?? []) as Record<string, unknown>[]).map(s =>
-    pageOf(s, page, scheme, ancestry),
+    pageOf(s, page, scheme, ancestry, declined),
   )
   return {
     id: (raw.presentationId as string) ?? '',
@@ -1482,6 +1483,7 @@ export const toSourcePresentation = (
     theme: themeOf(scheme, dominantBackground(slides), [...slides, ...layouts]),
     layouts,
     slides,
+    ...(declined.count ? { rulesDeclined: declined.count } : {}),
   }
 }
 

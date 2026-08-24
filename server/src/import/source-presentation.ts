@@ -193,4 +193,15 @@ export interface SourcePresentation {
   /** The presentation's own layouts, where it defines any worth using. */
   layouts: SourcePage[]
   slides: SourcePage[]
+  /**
+   * Strokes the reader declined to draw: a `line` element running diagonally,
+   * which has no rectangle that stands for it.
+   *
+   * Counted rather than dropped quietly, for the reason a skipped page is
+   * counted — afterwards, a deck that never had the stroke and a deck whose
+   * stroke we declined look exactly the same. The refusal itself stays a
+   * refusal: a slab drawn across a slide would be worse than the missing
+   * stroke, and worse still for having a number defending it.
+   */
+  rulesDeclined?: number
 }
