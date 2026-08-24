@@ -87,6 +87,27 @@ const unique = (name: string, taken: Set<string>): string => {
 }
 
 /**
+ * The thinnest a CONTENT box may be, from the template schema: a box smaller
+ * than this is rejected, and one at the limit is still large enough to aim a
+ * cursor at.
+ */
+const SLOT_FLOOR = 0.01
+
+/**
+ * The thinnest a DECORATION may be — a tenth of the slot floor, which is the
+ * schema's own limit for a decoration.
+ *
+ * Decoration is held to the looser figure because it is a different kind of
+ * thing. A slot has to be clickable; a rule has only to be drawn, and a
+ * design's rules are routinely thinner than anything anyone would click. NYU
+ * Bold sets the seam beside its half-page photograph at 0.00833 of the slide,
+ * and the slot floor rounded it up to 0.01 — 23% heavier than the deck draws
+ * it, and, because the floor grows a box about its centre, half of that
+ * spilling past the picture's edge it is supposed to meet.
+ */
+const DECORATION_FLOOR = 0.001
+
+/**
  * A box the template schema will accept: inside the slide, and never zero.
  *
  * The floor grows a too-thin box about its own CENTRE rather than from its
@@ -96,8 +117,11 @@ const unique = (name: string, taken: Set<string>): string => {
  * That is the same defect `ruleOf` exists to avoid, in miniature, and it
  * would have reintroduced it a tenth of a stroke at a time.
  */
-const safeBox = (box: { x: number; y: number; w: number; h: number }) => {
-  const grown = (side: number) => Math.max(side, 0.01)
+const safeBox = (
+  box: { x: number; y: number; w: number; h: number },
+  floor: number = SLOT_FLOOR,
+) => {
+  const grown = (side: number) => Math.max(side, floor)
   const centred = (start: number, side: number) =>
     Math.min(Math.max(start - (grown(side) - side) / 2, 0), 0.99)
   const x = centred(box.x, box.w)
@@ -157,7 +181,7 @@ const decorationOf = (
     const stored = piece.imageUrl ? assets.get(piece.imageUrl) : undefined
     // A band with neither a fill nor a picture would paint nothing.
     if (!piece.fill && !stored) continue
-    const box = safeBox(piece.box)
+    const box = safeBox(piece.box, DECORATION_FLOOR)
     const key = [
       box.x,
       box.y,
