@@ -116,6 +116,98 @@ const SLIDE_H_CQI = 56.25
 /** The most `maxItems` the template schema will take. */
 const MAX_ITEMS = 50
 
+/**
+ * The text inset Google draws inside every box, in `cqi`.
+ *
+ * Slides reserves 0.1in left and right and 0.05in top and bottom, and text is
+ * laid out inside what remains. A page is 10in wide, so `cqi` — a percent of
+ * the width — makes those exactly 2 across and 1 down.
+ *
+ * **The API exposes no inset field.** `leftInset` and its siblings appear
+ * nowhere in a captured presentation, so this is the documented default
+ * applied blind rather than a value read off a deck. Said plainly because the
+ * next person to look will search the response, find nothing, and conclude
+ * there is nothing to apply.
+ *
+ * Measured effect: 4.2% of usable width on a 0.471-wide title and 8.0% on a
+ * 0.251-wide caption, and a whole line of a two-line box vertically.
+ */
+const INSET_X_CQI = 2
+const INSET_Y_CQI = 1
+
+/**
+ * Characters a line loses to wrapping at word boundaries.
+ *
+ * The arithmetic below packs characters tight; a browser breaks at spaces and
+ * leaves the tail of each line empty. Measured by wrapping both the deck's own
+ * prose and short varied words at line lengths from 10 to 80 characters: the
+ * waste runs 2.3 to 5.6 and does not scale with the line, which is what the
+ * theory says — the expected loss is about half a word, whatever the width.
+ *
+ * Three is the smallest allowance under which EVERY box in a real design
+ * holds the budget it declares when filled with wrapping text; two leaves six
+ * boxes overflowing. Larger values also pass, and three is chosen because a
+ * budget should be the honest number rather than a cautious one.
+ */
+const WRAP_ALLOWANCE = 3
+
+/**
+ * What a bullets box spends on being a list rather than on words: the marker
+ * sits in a 1.4em indent and points are separated by 0.4em, both stated by
+ * the renderer (`client/src/components/slide/slots.tsx`).
+ *
+ * Neither was modelled, and on an eleven-point list the gaps alone are four
+ * ems — a fifth of the box's height, spent before a word is drawn.
+ */
+const BULLET_INDENT_EM = 1.4
+const BULLET_GAP_EM = 0.4
+
+/** The width a box actually lays text out in, in `cqi`. */
+const usableWidth = (
+  box: { w: number },
+  fontSize: number,
+  bullets: boolean,
+): number =>
+  Math.max(
+    0,
+    box.w * 100 - INSET_X_CQI - (bullets ? BULLET_INDENT_EM * fontSize : 0),
+  )
+
+/** The height it actually lays them out in, in `cqi`. */
+const usableHeight = (box: { h: number }): number =>
+  Math.max(0, box.h * SLIDE_H_CQI - INSET_Y_CQI)
+
+/** How many characters of this text fit on one line of this box. */
+const charsPerLine = (
+  box: { w: number },
+  fontSize: number,
+  charWidth: number,
+  bullets: boolean,
+): number =>
+  Math.max(
+    1,
+    Math.floor(usableWidth(box, fontSize, bullets) / (fontSize * charWidth)) -
+      WRAP_ALLOWANCE,
+  )
+
+/** How many lines fit down it. A list also pays for the gap between points. */
+const linesDown = (
+  box: { h: number },
+  fontSize: number,
+  lineHeight: number,
+  bullets: boolean,
+): number => {
+  const room = usableHeight(box) / fontSize
+  return Math.max(
+    1,
+    Math.floor(
+      bullets
+        ? (room + BULLET_GAP_EM) / (lineHeight + BULLET_GAP_EM)
+        : room / lineHeight,
+    ),
+  )
+}
+
 /** What one character of this box costs, in fractions of its type size. */
 const charWidthFor = (setting: {
   caps?: boolean
@@ -140,19 +232,22 @@ export const heightForText = (
   slot: CandidateSlot,
   setting: { lineHeight?: number; caps?: boolean; fontFamily?: string } = {},
 ): number => {
-  const { held, fontSize, box } = slot
+  const { held, fontSize, box, kind } = slot
   if (!held || !fontSize) return 0
   const charWidth = charWidthFor(setting)
   const lineHeight = setting.lineHeight ?? LINE_H
-  const perLine = Math.max(
-    1,
-    Math.floor((box.w * 100) / (fontSize * charWidth)),
-  )
+  const bullets = kind === 'bullets'
+  const perLine = charsPerLine(box, fontSize, charWidth, bullets)
   // Every line is assumed as long as the longest, since only the longest was
   // measured. It is the generous reading, which is the right way to be wrong
   // about a box that would otherwise hide the end of a list.
   const rows = held.lines * Math.max(1, Math.ceil(held.longest / perLine))
-  return (rows * fontSize * lineHeight) / SLIDE_H_CQI
+  // The same inset and the same per-point gap the capacity reads, so a box
+  // is grown to hold exactly what it is told it holds.
+  const gaps = bullets ? Math.max(0, held.lines - 1) * BULLET_GAP_EM : 0
+  return (
+    (rows * fontSize * lineHeight + gaps * fontSize + INSET_Y_CQI) / SLIDE_H_CQI
+  )
 }
 
 /**
@@ -194,14 +289,9 @@ export const capacityOf = (
   if (!fontSize || (kind !== 'text' && kind !== 'bullets')) return {}
   const charWidth = charWidthFor(setting)
   const lineHeight = setting.lineHeight ?? LINE_H
-  const perLine = Math.max(
-    1,
-    Math.floor((box.w * 100) / (fontSize * charWidth)),
-  )
-  const lines = Math.max(
-    1,
-    Math.floor((box.h * SLIDE_H_CQI) / (fontSize * lineHeight)),
-  )
+  const bullets = kind === 'bullets'
+  const perLine = charsPerLine(box, fontSize, charWidth, bullets)
+  const lines = linesDown(box, fontSize, lineHeight, bullets)
   return kind === 'bullets'
     ? // For a list the character bound is per POINT, which is one line of it.
       { maxChars: perLine, maxItems: Math.min(lines, MAX_ITEMS) }
