@@ -2770,6 +2770,9 @@ describe('a rule the design draws', () => {
   })
 
   it('reads a vertical one the same way round', () => {
+    // The same reading with the axes swapped: the length is the scaled
+    // extent, the WEIGHT is the thickness, and neither is the box Google
+    // sends.
     const read = toSourcePresentation(
       presentation({
         slides: [
@@ -2783,7 +2786,15 @@ describe('a rule the design draws', () => {
       }),
     )
     const drawn = read.slides[0]!.elements[0]!
-    expect(drawn.box.h).toBeCloseTo((3000000 * 1.7294) / (5.625 * EMU), 6)
+    // This is NYU's own seam, and it is drawn slightly LONGER than the page:
+    // 1.0087 of it, the way a designer draws a full-bleed rule by running it
+    // past both edges rather than measuring it. A box is a fraction of the
+    // page, so the reader clamps it to the page — which draws the same rule
+    // and is the only value the template schema accepts. Asserted as the
+    // clamp rather than as the raw arithmetic, which no box can hold.
+    expect((3000000 * 1.7294) / (5.625 * EMU)).toBeGreaterThan(1)
+    expect(drawn.box.y).toBe(0)
+    expect(drawn.box.h).toBe(1)
     expect(drawn.box.w).toBeCloseTo(76200 / (10 * EMU), 6)
   })
 

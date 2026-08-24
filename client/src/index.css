@@ -65,3 +65,24 @@ span.slot-blank:hover,
   outline: 0.15cqi dashed color-mix(in srgb, currentColor 35%, transparent);
   outline-offset: 0.4cqi;
 }
+
+/**
+ * A formula on a slide is not a formula in a document.
+ *
+ * `katex.min.css` gives a display equation `margin: 1em 0`, which is right in
+ * running text: the margin is what separates the expression from the prose
+ * above and below it. A slot has no prose around it. It is a box the design
+ * placed, at a size the design chose, with `vAlign` deciding where the ink
+ * sits inside it — so the margin is a second display context inside the first,
+ * and it costs two ems of a box that was measured without them.
+ *
+ * What that did was not subtle. `useFitText` shrinks a slot's contents until
+ * they fit, and it was fitting the margins: NYU Bold's equation rendered at
+ * `--fit-scale: 0.45` — 56px of ink where the box had room for 124 — so the
+ * one thing the slide exists to show came out smaller than its own heading,
+ * and the leftover margin held the caption a fifth of a slide away from it.
+ * Every design was paying this, not only the imported one.
+ */
+.slide-math .katex-display {
+  margin: 0;
+}

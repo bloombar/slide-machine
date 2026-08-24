@@ -25,7 +25,7 @@
         "caps": true,
         "lineHeight": 1.017,
         "color": "accent",
-        "maxChars": 21
+        "maxChars": 24
       },
       "bullet": {
         "fontSize": 1.94,
@@ -35,7 +35,7 @@
         "caps": false,
         "lineHeight": 1.495,
         "color": "text",
-        "maxChars": 37,
+        "maxChars": 40,
         "maxItems": 9
       },
       "heading": {
@@ -46,7 +46,7 @@
         "caps": false,
         "lineHeight": 1.196,
         "color": "text",
-        "maxChars": 86
+        "maxChars": 89
       },
       "body": {
         "fontSize": 1.67,
@@ -56,7 +56,7 @@
         "caps": false,
         "lineHeight": 1.495,
         "color": "text",
-        "maxChars": 94
+        "maxChars": 97
       },
       "caption": {
         "fontSize": 1.53,
@@ -66,7 +66,7 @@
         "caps": false,
         "lineHeight": 1.495,
         "color": "text",
-        "maxChars": 246
+        "maxChars": 249
       }
     }
   },
@@ -82,7 +82,7 @@
           "label": "Title",
           "description": "The lecture title, in capitals over the photograph. A few words, not a sentence.",
           "multiline": true,
-          "maxChars": 20,
+          "maxChars": 23,
           "required": true
         },
         {
@@ -90,7 +90,7 @@
           "kind": "text",
           "label": "Subtitle",
           "description": "What the lecture is about, in one line.",
-          "maxChars": 31,
+          "maxChars": 34,
           "required": false
         },
         {
@@ -98,16 +98,16 @@
           "kind": "text",
           "label": "Presenter",
           "description": "Who is presenting, and the date.",
-          "maxChars": 66,
+          "maxChars": 47,
           "required": false
         }
       ],
       "elementPositions": {
         "title": {
           "x": 0.034662003499562555,
-          "y": 0.012648813065033515,
+          "y": 0.18383235555555555,
           "w": 0.9039370078740158,
-          "h": 0.5931511869349665,
+          "h": 0.42196764444444446,
           "fontSize": 10.56,
           "fontWeight": 700,
           "caps": true,
@@ -133,7 +133,7 @@
           "x": 0.03363954505686789,
           "y": 0.8058812092932828,
           "w": 0.2664041994750656,
-          "h": 0.1741187907067172,
+          "h": 0.1278506853310003,
           "textStyle": "caption",
           "fontWeight": 700,
           "caps": true,
@@ -177,7 +177,7 @@
           "label": "Part title",
           "description": "The name of the part that follows, in capitals.",
           "multiline": true,
-          "maxChars": 24,
+          "maxChars": 27,
           "required": true
         },
         {
@@ -185,7 +185,7 @@
           "kind": "text",
           "label": "Subtitle",
           "description": "One line on what this part covers.",
-          "maxChars": 58,
+          "maxChars": 32,
           "required": false
         }
       ],
@@ -194,7 +194,7 @@
           "x": 0.03466207349081365,
           "y": 0.08888888888888889,
           "w": 0.9318241469816273,
-          "h": 0.4823223485953144,
+          "h": 0.37909902222222225,
           "fontSize": 9.44,
           "fontWeight": 700,
           "caps": true,
@@ -208,7 +208,7 @@
           "x": 0.03466207349081365,
           "y": 0.5712112374842033,
           "w": 0.4409120734908137,
-          "h": 0.14,
+          "h": 0.09250510352872558,
           "fontSize": 2.5,
           "fontFamily": "montserrat",
           "color": "#ffffff",
@@ -258,7 +258,7 @@
           "kind": "text",
           "label": "Title",
           "description": "The heading, in capitals. Nothing else is on the slide, so it has to carry it.",
-          "maxChars": 21,
+          "maxChars": 24,
           "required": true
         }
       ],
@@ -308,7 +308,7 @@
           "kind": "text",
           "label": "Title",
           "description": "A label for the paragraph, in capitals.",
-          "maxChars": 22,
+          "maxChars": 25,
           "required": true
         },
         {
@@ -317,7 +317,7 @@
           "label": "Body",
           "description": "The paragraph the slide exists for. One idea.",
           "multiline": true,
-          "maxChars": 360,
+          "maxChars": 363,
           "required": true
         }
       ],
@@ -382,7 +382,7 @@
           "label": "Title",
           "description": "The heading, in capitals.",
           "required": true,
-          "maxChars": 21
+          "maxChars": 24
         },
         {
           "name": "body",
@@ -391,7 +391,7 @@
           "description": "One or two sentences of context for the points.",
           "multiline": true,
           "required": false,
-          "maxChars": 200
+          "maxChars": 203
         },
         {
           "name": "bullets",
@@ -400,7 +400,7 @@
           "description": "What follows from the opening sentence. Parallel, no full stops.",
           "multiline": true,
           "required": true,
-          "maxChars": 83,
+          "maxChars": 86,
           "maxItems": 5
         }
       ],
@@ -469,7 +469,7 @@
           "label": "Title",
           "description": "The heading, ranged right against the points. Two or three words in capitals.",
           "multiline": true,
-          "maxChars": 30,
+          "maxChars": 33,
           "required": true
         },
         {
@@ -477,7 +477,7 @@
           "kind": "bullets",
           "label": "Points",
           "description": "The points. Each fits on one line. Parallel, and no full stops.",
-          "maxChars": 37,
+          "maxChars": 40,
           "maxItems": 9,
           "required": true
         }
@@ -544,7 +544,7 @@
           "kind": "text",
           "label": "Title",
           "description": "What both columns are about, in capitals.",
-          "maxChars": 42,
+          "maxChars": 45,
           "required": true
         },
         {
@@ -553,7 +553,7 @@
           "label": "Left column",
           "description": "The first paragraph.",
           "multiline": true,
-          "maxChars": 360,
+          "maxChars": 363,
           "required": true
         },
         {
@@ -562,7 +562,7 @@
           "label": "Right column",
           "description": "The second paragraph, which follows on from the first.",
           "multiline": true,
-          "maxChars": 360,
+          "maxChars": 363,
           "required": false
         }
       ],
@@ -639,7 +639,7 @@
           "kind": "text",
           "label": "Title",
           "description": "What the picture is of, in capitals.",
-          "maxChars": 14,
+          "maxChars": 17,
           "required": true
         },
         {
@@ -648,7 +648,7 @@
           "label": "Body",
           "description": "What to notice in the picture, in a few sentences.",
           "multiline": true,
-          "maxChars": 246,
+          "maxChars": 249,
           "required": false
         },
         {
@@ -664,7 +664,7 @@
           "x": 0.03408792650918635,
           "y": 0.08652182366093127,
           "w": 0.41591207349081366,
-          "h": 0.35254933333333327,
+          "h": 0.24714293333333334,
           "textStyle": "title",
           "color": "#57068c",
           "align": "start",
@@ -735,7 +735,7 @@
           "kind": "text",
           "label": "Title",
           "description": "What the three have in common, in capitals.",
-          "maxChars": 21,
+          "maxChars": 24,
           "required": true
         },
         {
@@ -764,7 +764,7 @@
           "kind": "text",
           "label": "Left caption",
           "description": "What the left picture shows. Open with its name in a word or two.",
-          "maxChars": 161,
+          "maxChars": 164,
           "required": false
         },
         {
@@ -772,7 +772,7 @@
           "kind": "text",
           "label": "Middle caption",
           "description": "What the middle picture shows, in the same shape.",
-          "maxChars": 161,
+          "maxChars": 164,
           "required": false
         },
         {
@@ -780,7 +780,7 @@
           "kind": "text",
           "label": "Right caption",
           "description": "What the right picture shows, in the same shape.",
-          "maxChars": 161,
+          "maxChars": 164,
           "required": false
         }
       ],
@@ -888,7 +888,7 @@
           "kind": "text",
           "label": "Caption",
           "description": "What the picture shows, and where it came from.",
-          "maxChars": 86,
+          "maxChars": 89,
           "required": false
         }
       ],
@@ -937,7 +937,7 @@
           "label": "Statement",
           "description": "The sentence, in capitals across the whole slide. Name the speaker if it is a quotation.",
           "multiline": true,
-          "maxChars": 52,
+          "maxChars": 55,
           "required": true
         }
       ],
@@ -992,7 +992,7 @@
           "label": "Quotation",
           "description": "The quotation, centred in capitals over the photograph. Name who said it.",
           "multiline": true,
-          "maxChars": 64,
+          "maxChars": 67,
           "required": true
         }
       ],
@@ -1051,7 +1051,7 @@
           "label": "Figure",
           "description": "The figure alone — \"100%\", \"1831\". No words.",
           "multiline": true,
-          "maxChars": 5,
+          "maxChars": 8,
           "required": true
         },
         {
@@ -1059,7 +1059,7 @@
           "kind": "text",
           "label": "What it measures",
           "description": "What the figure counts, in capitals. A phrase.",
-          "maxChars": 32,
+          "maxChars": 35,
           "required": false
         },
         {
@@ -1067,7 +1067,7 @@
           "kind": "text",
           "label": "Body",
           "description": "Why the figure matters, in a sentence or two.",
-          "maxChars": 141,
+          "maxChars": 144,
           "required": false
         }
       ],
@@ -1145,7 +1145,7 @@
           "label": "Title",
           "description": "What the listing does.",
           "required": true,
-          "maxChars": 21
+          "maxChars": 24
         },
         {
           "name": "snippet",
@@ -1207,7 +1207,7 @@
           "label": "Title",
           "description": "What the expression describes, in words.",
           "required": true,
-          "maxChars": 21
+          "maxChars": 24
         },
         {
           "name": "eq",
@@ -1222,7 +1222,7 @@
           "label": "Caption",
           "description": "Name each symbol, in order.",
           "required": false,
-          "maxChars": 218
+          "maxChars": 221
         }
       ],
       "elementPositions": {
@@ -1240,6 +1240,7 @@
           "y": 0.3,
           "w": 0.921,
           "h": 0.36,
+          "fontSize": 8.33,
           "align": "center",
           "vAlign": "center"
         },
@@ -1287,7 +1288,7 @@
           "kind": "text",
           "label": "Title",
           "description": "A closing heading, centred and in capitals.",
-          "maxChars": 22,
+          "maxChars": 14,
           "required": true
         },
         {
@@ -1296,7 +1297,7 @@
           "label": "Caption",
           "description": "What to take away, or where to go next.",
           "multiline": true,
-          "maxChars": 318,
+          "maxChars": 321,
           "required": true
         }
       ],
@@ -1305,7 +1306,7 @@
           "x": 0.26441929133858266,
           "y": 0.25723867502673275,
           "w": 0.4711614173228346,
-          "h": 0.21448888888888892,
+          "h": 0.20594925634295713,
           "align": "center",
           "vAlign": "start",
           "fontSize": 5,

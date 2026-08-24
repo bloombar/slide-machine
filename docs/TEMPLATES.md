@@ -845,6 +845,15 @@ the user did not ask for.
   TO, so this is a judgment about legibility wearing a design's colours, and it is recorded
   here rather than left to look derived. `codeSurface` is shared client code, so the
   alternative was never a template decision — it would change every design at once.
+- **A formula is set in KaTeX's face, not the design's.** `MathTypeset` imports
+  `katex.min.css`, which brings Computer Modern with it, so every equation in every
+  design is serif and italic whatever the deck's own typography says. Sharper than the
+  code panel above and worth reading as a different kind of problem: the panel is a
+  judgment about a layout with no source, while this is one design's letterforms
+  appearing inside another's, visible to a reader who knows nothing about the deck.
+  NYU Bold has no serif on any of its thirteen slides. Mapping the notation onto the
+  theme's own family is not a template setting — it is the same system-level change as
+  the code panel's ground, and it moves all five built-ins at once.
 - **Fonts are mapped, not reproduced** ([§5](#5-theme-resolution)).
 - **Carried through Google Slides:** slot metadata and narration, via the mechanism in
   [§8](#8-exporting).

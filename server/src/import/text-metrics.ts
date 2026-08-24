@@ -179,8 +179,16 @@ const usableWidth = (
 const usableHeight = (box: { h: number }): number =>
   Math.max(0, box.h * SLIDE_H_CQI - INSET_Y_CQI)
 
-/** How many characters of this text fit on one line of this box. */
-const charsPerLine = (
+/**
+ * How many characters fit across one line of this box, with nothing given up
+ * for wrapping.
+ *
+ * The raw fit. What a line actually holds once the text has to BREAK is
+ * `charsPerLine` below; the two are separate because a line that is never
+ * broken wastes nothing, and charging it as though it were is what made the
+ * budgets too tight.
+ */
+const fitsPerLine = (
   box: { w: number },
   fontSize: number,
   charWidth: number,
@@ -188,9 +196,38 @@ const charsPerLine = (
 ): number =>
   Math.max(
     1,
-    Math.floor(usableWidth(box, fontSize, bullets) / (fontSize * charWidth)) -
-      WRAP_ALLOWANCE,
+    Math.floor(usableWidth(box, fontSize, bullets) / (fontSize * charWidth)),
   )
+
+/**
+ * How many characters a line that IS broken holds.
+ *
+ * A break happens at a word boundary, so such a line stops short of its own
+ * width by however much of the next word would not fit. The line a run ends
+ * on is not broken and holds the full `fitsPerLine`.
+ */
+const wrappedPerLine = (fits: number): number =>
+  Math.max(1, fits - WRAP_ALLOWANCE)
+
+/**
+ * How many characters a run of `n` lines holds, and how many lines a run of
+ * `chars` characters takes. One model, read both ways round.
+ *
+ * Every line but the last is broken and pays the wrapping allowance; the last
+ * one is not and does not. So `n` lines hold `fits + (n - 1) × wrapped`, and
+ * the row count is that relation inverted.
+ *
+ * They are written next to each other because they MUST agree. `capacityOf`
+ * tells an author a box holds so many characters and `heightForText` decides
+ * whether that many characters fit in it — two answers to one question, and a
+ * box whose budget wraps onto a line it does not have is the shape of every
+ * overflow this module exists to prevent.
+ */
+const holdsIn = (fits: number, lines: number): number =>
+  fits + Math.max(0, lines - 1) * wrappedPerLine(fits)
+
+const rowsFor = (chars: number, fits: number): number =>
+  chars <= fits ? 1 : 1 + Math.ceil((chars - fits) / wrappedPerLine(fits))
 
 /**
  * What a run of lines actually costs in height, in ems.
@@ -253,15 +290,19 @@ export const heightForText = (
   setting: { lineHeight?: number; caps?: boolean; fontFamily?: string } = {},
 ): number => {
   const { held, fontSize, box, kind } = slot
-  if (!held || !fontSize) return 0
+  // No ink, no room — INCLUDING the inset. A box measured as holding nothing
+  // asked for the inset alone, which is a box a fifth of a line tall where
+  // the answer is meant to be "nothing at all", and `build-template` then
+  // grew a genuinely empty box to hold it.
+  if (!held || !fontSize || held.lines <= 0) return 0
   const charWidth = charWidthFor(setting)
   const lineHeight = setting.lineHeight ?? LINE_H
   const bullets = kind === 'bullets'
-  const perLine = charsPerLine(box, fontSize, charWidth, bullets)
+  const fits = fitsPerLine(box, fontSize, charWidth, bullets)
   // Every line is assumed as long as the longest, since only the longest was
   // measured. It is the generous reading, which is the right way to be wrong
   // about a box that would otherwise hide the end of a list.
-  const rows = held.lines * Math.max(1, Math.ceil(held.longest / perLine))
+  const rows = held.lines * rowsFor(held.longest, fits)
   // The same inset and the same per-point gap the capacity reads, so a box
   // is grown to hold exactly what it is told it holds.
   const gaps = bullets ? Math.max(0, held.lines - 1) * BULLET_GAP_EM : 0
@@ -311,10 +352,26 @@ export const capacityOf = (
   const charWidth = charWidthFor(setting)
   const lineHeight = setting.lineHeight ?? LINE_H
   const bullets = kind === 'bullets'
-  const perLine = charsPerLine(box, fontSize, charWidth, bullets)
+  const fits = fitsPerLine(box, fontSize, charWidth, bullets)
   const lines = linesDown(box, fontSize, lineHeight, bullets)
-  return kind === 'bullets'
-    ? // For a list the character bound is per POINT, which is one line of it.
-      { maxChars: perLine, maxItems: Math.min(lines, MAX_ITEMS) }
-    : { maxChars: perLine * lines }
+  /*
+   * The wrapping allowance is paid PER BREAK, not per line.
+   *
+   * A line stops short of its own width because the next word would not fit —
+   * so the cost belongs to the break, and the last line, which is not
+   * followed by one, pays nothing. A box of one line pays nothing at all: it
+   * never wraps, and it holds exactly what fits across it.
+   *
+   * Charged per line instead, every box gave up three characters it has, and
+   * a one-line title gave up the whole allowance for a wrap that cannot
+   * happen. That is not a theory: NYU's own titles did not fit the budgets
+   * derived from the boxes they are set in — "TITLE OF PRESENTATION" in a box
+   * budgeted for twenty, off by one, two and three characters on three
+   * slides. The deck is the counterexample and the estimate was wrong.
+   */
+  return bullets
+    ? // For a list the character bound is per POINT, which is one line of it,
+      // and one line does not wrap.
+      { maxChars: fits, maxItems: Math.min(lines, MAX_ITEMS) }
+    : { maxChars: holdsIn(fits, lines) }
 }
