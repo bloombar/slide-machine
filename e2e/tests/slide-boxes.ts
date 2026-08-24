@@ -90,24 +90,41 @@ export const fontsLoaded = (page: Page) =>
     // The faces THIS slide actually asks for, read off the rendered boxes
     // rather than from a list — a design that uses one face should not be
     // reported against another it never mentions.
+    //
+    // Checked at the WEIGHT the box is set in, not at the default. A browser
+    // fetches only the faces a page uses, so a family bundled at 400 and 700
+    // and used only at 700 has no 400 face loaded — and a check written
+    // `16px "Family"` asks about 400 and answers "no" about a face that is
+    // on screen and correct. That false negative was live in this helper:
+    // it is the difference between reporting a design's real face and
+    // reporting the one nobody asked for.
     const slide = document.querySelector('[data-testid="slide"]')
-    const wanted = new Set<string>()
+    const wanted = new Map<
+      string,
+      { family: string; weight: string; style: string }
+    >()
     for (const node of slide?.querySelectorAll('[data-node-id]') ?? []) {
-      const first = getComputedStyle(node)
-        .fontFamily.split(',')[0]
+      const cs = getComputedStyle(node)
+      const family = cs.fontFamily
+        .split(',')[0]
         ?.trim()
         .replace(/^["']|["']$/g, '')
       // Only real families; the generic keywords at the end of a stack are
       // always "available" and say nothing.
       if (
-        first &&
-        !/^(ui-|system-ui|-apple-system|serif|sans-serif)/.test(first)
+        !family ||
+        /^(ui-|system-ui|-apple-system|serif|sans-serif)/.test(family)
       )
-        wanted.add(first)
+        continue
+      const weight = cs.fontWeight || '400'
+      const style = cs.fontStyle === 'italic' ? 'italic' : 'normal'
+      wanted.set(`${family}|${weight}|${style}`, { family, weight, style })
     }
-    return [...wanted].map(family => ({
+    return [...wanted.values()].map(({ family, weight, style }) => ({
       family,
-      loaded: document.fonts.check(`16px "${family}"`),
+      weight,
+      style,
+      loaded: document.fonts.check(`${style} ${weight} 16px "${family}"`),
     }))
   })
 

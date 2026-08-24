@@ -289,7 +289,31 @@ const writeInto = async (page: Page, slot: SlotSpec, text: string) => {
       { timeout: 10_000 },
     )
     .catch(() => undefined)
-  await box.click()
+  /*
+   * Opened by a click, and if the click cannot land, by asking the element
+   * directly.
+   *
+   * A `slot-blank` affordance in a centred flow layout can sit under its own
+   * container: Playwright reports the span visible, enabled and stable, then
+   * finds `[data-node-id="root"]` taking the pointer event at the span's
+   * centre. It retried 577 times and timed out the whole run — five minutes
+   * to report nothing, on nyu-elegant, which then reads as a design fault
+   * rather than as a box this helper could not open.
+   *
+   * The fallback dispatches the click on the element itself, which is what
+   * the affordance listens for. It is a weaker interaction than a real
+   * click and is used ONLY after a real one has failed, so a box that opens
+   * normally is still tested through the normal path. What it must not do is
+   * hide the problem: the reason is printed, so a box reached this way is
+   * visible in the log rather than silently equivalent.
+   */
+  await box.click({ timeout: 5_000 }).catch(async () => {
+    console.log(
+      `CLICK FALLBACK  ${label}: the real click could not land ` +
+        `(an ancestor took the pointer event); dispatched on the element`,
+    )
+    await box.evaluate(el => (el as HTMLElement).click())
+  })
   const field = page.getByRole('textbox', { name: label })
   await field.fill(text)
   // A multi-line field takes Enter as a newline, so it is committed with the
@@ -642,7 +666,8 @@ for (const template of TEMPLATES) {
     // legitimately disagree about a box that abuts its neighbour.
     for (const face of await fontsLoaded(page))
       console.log(
-        `FONT        ${face.family}: ${face.loaded ? 'loaded' : 'NOT LOADED — measurements below are of a fallback face'}`,
+        `FONT        ${face.family} ${face.weight}${face.style === 'italic' ? ' italic' : ''}: ` +
+          `${face.loaded ? 'loaded' : 'NOT LOADED — measurements below are of a fallback face'}`,
       )
     const faults: string[] = []
     /** Boxes no content reached, collected across the whole walk. */
