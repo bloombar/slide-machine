@@ -311,6 +311,9 @@ export default function DeckViewerPage() {
   const [pendingImages, setPendingImages] = useState<Set<string>>(new Set())
   // The slide currently being refined via its kebab (drives a status toast)
   const [refiningSlideId, setRefiningSlideId] = useState<string | null>(null)
+  // An edit the server did not take. Cleared by the next one that lands, so
+  // the notice never outlives the problem it describes.
+  const [editFailed, setEditFailed] = useState(false)
   /** The last layout refit (GEN-9), while its undo is still offered: the
    * slide as it stood before, and the emptying patch that puts it back. */
   const [refitUndo, setRefitUndo] = useState<{
@@ -1442,6 +1445,7 @@ export default function DeckViewerPage() {
   const editSlide = (slideId: string) => (patch: SlideContentPatch) => {
     dispatchAction<Slide>('slide.editContent', { slideId, ...patch })
       .then(updated => {
+        setEditFailed(false)
         setView(v =>
           v
             ? {
@@ -1453,7 +1457,18 @@ export default function DeckViewerPage() {
         touchDeckLocally()
       })
       .catch(() => {
-        // Quiet failure: the on-screen text simply reverts to the saved value
+        /*
+         * A save that did not happen is said out loud.
+         *
+         * This used to be an empty catch, justified as "the on-screen text
+         * simply reverts to the saved value" — which is true, and is exactly
+         * what makes it unsafe. Reverting is also what a box does when the
+         * save SUCCEEDED and something else overwrote it, so the two are
+         * indistinguishable from the author's chair, and losing a paragraph
+         * looks like a rendering quirk. Three reviewers spent four rounds on
+         * that. The text reverting is the symptom, not the message.
+         */
+        setEditFailed(true)
       })
   }
 
@@ -2283,6 +2298,20 @@ export default function DeckViewerPage() {
           }}
           onClose={() => setRefineSlideFor(null)}
         />
+      )}
+
+      {editFailed && (
+        <NotificationPill
+          tone="error"
+          role="alert"
+          action={{
+            label: '✕',
+            ariaLabel: t('common.dismiss'),
+            onClick: () => setEditFailed(false),
+          }}
+        >
+          {t('deck.editFailed')}
+        </NotificationPill>
       )}
 
       {refiningSlideId && (

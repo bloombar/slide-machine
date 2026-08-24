@@ -235,6 +235,61 @@ export const remapSlots = (
   return next
 }
 
+/**
+ * Which conventional fields a slot is read out into (`legacyFrom`).
+ *
+ * Only these five slots feed a field of their own; a box a template author
+ * named has no legacy field and mirrors nothing.
+ */
+const MIRRORED: Record<string, readonly (keyof LegacyContent)[]> = {
+  title: ['title'],
+  body: ['body'],
+  caption: ['caption'],
+  bullets: ['bullets'],
+  image: ['imageRef', 'imageSource', 'imageKeywords', 'attribution'],
+}
+
+/**
+ * The database operations that write ONE slot and touch nothing else.
+ *
+ * The alternative — read the map, patch it, save the whole thing — loses
+ * writes. Two edits in flight together each load the slide, each patch their
+ * own box, and each write the entire map back, so the second erases the
+ * first and both report success. That is not an exotic race: leaving a box
+ * commits it on blur and the next box commits on Enter about fifty
+ * milliseconds later, which is simply what typing into a slide looks like.
+ *
+ * Addressing `slots.<name>` writes that one box, so two edits to different
+ * boxes no longer have anything to disagree about. The conventional fields
+ * the box feeds are written in the same operation, because they are derived
+ * from it and the `slide_text` index reads them.
+ *
+ * One read-modify-write is left, and only for pictures: `patchSlot` merges an
+ * image patch onto the credit already beside it, which it has to read. Two
+ * simultaneous edits to the SAME picture can still lose an attribution field.
+ * Two edits to the same box at the same instant are one person changing their
+ * mind, not the ordinary case this exists to fix.
+ */
+export const slotWriteOps = (
+  slots: Record<string, SlotValue>,
+  name: string,
+  value: SlotValue,
+): { set: Record<string, unknown>; unset: Record<string, ''> } => {
+  const merged = patchSlot(slots, name, value)[name]
+  const set: Record<string, unknown> = {}
+  const unset: Record<string, ''> = {}
+  if (merged === undefined) unset[`slots.${name}`] = ''
+  else set[`slots.${name}`] = merged
+  const derived = legacyFrom(merged === undefined ? {} : { [name]: merged })
+  for (const field of MIRRORED[name] ?? []) {
+    const next = derived[field]
+    // `$set: undefined` is not a way to clear a field; `$unset` is.
+    if (next === undefined) unset[field] = ''
+    else set[field] = next
+  }
+  return { set, unset }
+}
+
 /** Applies one slot's patch. An empty value takes the slot back to empty. */
 export const patchSlot = (
   slots: Record<string, SlotValue>,
