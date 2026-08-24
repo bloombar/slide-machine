@@ -1,0 +1,1385 @@
+{
+  "id": "nyu-bold",
+  "name": "NYU Bold",
+  "renderMode": "positioned",
+  "aiInstructions": "Audience: NYU students, faculty and staff — educated generalists, not specialists in this subject. This design shouts: titles are set in enormous capitals and every title box is short, so write a title as a label, not a sentence — two or three short words. A long title is cut, not shrunk; put the sentence you wanted to title with in the body beneath. Elsewhere write plain, precise academic English and expand an acronym the first time it appears. One idea per slide, sentence case in body and bullets. No hype, no emoji. Name the source of any quotation or statistic.",
+  "theme": {
+    "background": "#ffffff",
+    "surface": "#f3f3f3",
+    "text": "#333333",
+    "muted": "#6f6f6f",
+    "accent": "#57068c",
+    "imageBackground": "#f3f3f3",
+    "link": "#57068c",
+    "penColor": "#57068c",
+    "highlighterColor": "#9a6aba",
+    "marginX": 0.034,
+    "marginY": 0.083,
+    "gap": 0.03,
+    "textStyles": {
+      "title": {
+        "fontSize": 5.83,
+        "fontFamily": "montserrat",
+        "fontWeight": 700,
+        "italic": false,
+        "caps": true,
+        "lineHeight": 1.017,
+        "color": "accent",
+        "maxChars": 33
+      },
+      "bullet": {
+        "fontSize": 1.94,
+        "fontFamily": "montserrat",
+        "fontWeight": 400,
+        "italic": false,
+        "caps": false,
+        "lineHeight": 1.495,
+        "color": "text",
+        "maxChars": 40,
+        "maxItems": 9
+      },
+      "heading": {
+        "fontSize": 1.94,
+        "fontFamily": "montserrat",
+        "fontWeight": 700,
+        "italic": false,
+        "caps": false,
+        "lineHeight": 1.196,
+        "color": "text",
+        "maxChars": 89
+      },
+      "body": {
+        "fontSize": 1.67,
+        "fontFamily": "montserrat",
+        "fontWeight": 400,
+        "italic": false,
+        "caps": false,
+        "lineHeight": 1.495,
+        "color": "text",
+        "maxChars": 97
+      },
+      "caption": {
+        "fontSize": 1.53,
+        "fontFamily": "montserrat",
+        "fontWeight": 400,
+        "italic": false,
+        "caps": false,
+        "lineHeight": 1.495,
+        "color": "text",
+        "maxChars": 249
+      }
+    }
+  },
+  "layouts": [
+    {
+      "type": "title",
+      "label": "Title",
+      "purpose": "Opening slide: the lecture title over a photograph",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Title",
+          "description": "The lecture title, in capitals over the photograph. A few words, not a sentence.",
+          "multiline": true,
+          "maxChars": 23,
+          "required": true
+        },
+        {
+          "name": "caption",
+          "kind": "text",
+          "label": "Subtitle",
+          "description": "What the lecture is about, in one line.",
+          "maxChars": 34,
+          "required": false
+        },
+        {
+          "name": "body",
+          "kind": "text",
+          "label": "Presenter",
+          "description": "Who is presenting, and the date.",
+          "maxChars": 47,
+          "required": false
+        }
+      ],
+      "elementPositions": {
+        "title": {
+          "x": 0.034662003499562555,
+          "y": 0.18383235555555555,
+          "w": 0.9039370078740158,
+          "h": 0.42196764444444446,
+          "fontSize": 10.56,
+          "fontWeight": 700,
+          "caps": true,
+          "fontFamily": "montserrat",
+          "color": "#ffffff",
+          "lineHeight": 0.957,
+          "align": "start",
+          "vAlign": "end"
+        },
+        "caption": {
+          "x": 0.03363954505686789,
+          "y": 0.6065422377758336,
+          "w": 0.5206692913385826,
+          "h": 0.15153105861767277,
+          "fontSize": 2.78,
+          "fontFamily": "montserrat",
+          "color": "#ffffff",
+          "lineHeight": 1.375,
+          "align": "start",
+          "vAlign": "start"
+        },
+        "body": {
+          "x": 0.03363954505686789,
+          "y": 0.8058812092932828,
+          "w": 0.2664041994750656,
+          "h": 0.1278506853310003,
+          "textStyle": "caption",
+          "fontWeight": 700,
+          "caps": true,
+          "color": "#ffffff",
+          "align": "start",
+          "vAlign": "start"
+        }
+      },
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "fill": "#57068c"
+        },
+        {
+          "x": 6.753062117235344e-8,
+          "y": 0,
+          "w": 0.9999999324693788,
+          "h": 0.9999994750656168,
+          "imageUrl": "/templates/nyu-bold/photo-title.jpg"
+        },
+        {
+          "x": 0.04452919947506562,
+          "y": 0.08320148731408573,
+          "w": 0.11473914862204726,
+          "h": 0.06923302809371051,
+          "imageUrl": "/templates/nyu-bold/logo-white.png"
+        }
+      ]
+    },
+    {
+      "type": "section",
+      "label": "Section divider",
+      "purpose": "A new part of the lecture begins",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Part title",
+          "description": "The name of the part that follows, in capitals.",
+          "multiline": true,
+          "maxChars": 27,
+          "required": true
+        },
+        {
+          "name": "caption",
+          "kind": "text",
+          "label": "Subtitle",
+          "description": "One line on what this part covers.",
+          "maxChars": 32,
+          "required": false
+        },
+        {
+          "name": "number",
+          "kind": "text",
+          "label": "Part number",
+          "description": "The part number as digits — \"01\", \"02\". Two characters, no words.",
+          "multiline": true,
+          "maxChars": 2,
+          "required": false
+        }
+      ],
+      "elementPositions": {
+        "title": {
+          "x": 0.03466207349081365,
+          "y": 0.08888888888888889,
+          "w": 0.9318241469816273,
+          "h": 0.35806357538641004,
+          "fontSize": 9.44,
+          "fontWeight": 700,
+          "caps": true,
+          "fontFamily": "montserrat",
+          "color": "#ffffff",
+          "lineHeight": 0.957,
+          "align": "start",
+          "vAlign": "start"
+        },
+        "caption": {
+          "x": 0.03466207349081365,
+          "y": 0.5712112374842033,
+          "w": 0.4409120734908137,
+          "h": 0.09250510352872558,
+          "fontSize": 2.5,
+          "fontFamily": "montserrat",
+          "color": "#ffffff",
+          "lineHeight": 1.375,
+          "align": "start",
+          "vAlign": "start"
+        },
+        "number": {
+          "x": 0.47556123496281716,
+          "y": 0.3429566676387674,
+          "w": 0.506496062992126,
+          "h": 0.6570433323612326,
+          "fontSize": 34.72,
+          "fontWeight": 700,
+          "fontFamily": "montserrat",
+          "color": "#8900e1",
+          "lineHeight": 1.196,
+          "align": "start",
+          "vAlign": "start"
+        }
+      },
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "fill": "#57068c"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "w": 0.9999997200349958,
+          "h": 0.9999974803149606,
+          "imageUrl": "/templates/nyu-bold/mark-section.png"
+        },
+        {
+          "x": 0.04452919947506562,
+          "y": 0.8824965986196169,
+          "w": 0.08487277723097113,
+          "h": 0.05121024982988237,
+          "imageUrl": "/templates/nyu-bold/logo-white.png"
+        },
+        {
+          "x": 0.044528444335083114,
+          "y": 0.5016869155244484,
+          "w": 0.05702099737532809,
+          "h": 0.014814814814814815,
+          "fill": "#8900e1"
+        }
+      ]
+    },
+    {
+      "type": "title-only",
+      "label": "Title only",
+      "purpose": "A heading alone, for a stretch the lecturer talks through",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Title",
+          "description": "The heading, in capitals. Nothing else is on the slide, so it has to carry it.",
+          "maxChars": 24,
+          "required": true
+        }
+      ],
+      "elementPositions": {
+        "title": {
+          "x": 0.03408792650918635,
+          "y": 0.08652182366093127,
+          "w": 0.9213582677165354,
+          "h": 0.14173653333333333,
+          "textStyle": "title",
+          "color": "#57068c",
+          "align": "start",
+          "vAlign": "start"
+        }
+      },
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "fill": "#ffffff"
+        },
+        {
+          "x": 0.04452919947506562,
+          "y": 0.8824965986196169,
+          "w": 0.08487277723097113,
+          "h": 0.05121024982988237,
+          "imageUrl": "/templates/nyu-bold/logo.png"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "w": 0.9971597550306213,
+          "h": 0.059725882181393984,
+          "imageUrl": "/templates/nyu-bold/band-top.png"
+        }
+      ]
+    },
+    {
+      "type": "content",
+      "label": "Content",
+      "purpose": "The workhorse: a small title over one paragraph",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Title",
+          "description": "A label for the paragraph, in capitals.",
+          "maxChars": 25,
+          "required": true
+        },
+        {
+          "name": "body",
+          "kind": "text",
+          "label": "Body",
+          "description": "The paragraph the slide exists for. One idea.",
+          "multiline": true,
+          "maxChars": 363,
+          "required": true
+        }
+      ],
+      "elementPositions": {
+        "title": {
+          "x": 0.03408792650918635,
+          "y": 0.08290232720909885,
+          "w": 0.4711614173228346,
+          "h": 0.21448888888888892,
+          "fontSize": 5,
+          "fontWeight": 700,
+          "caps": true,
+          "fontFamily": "montserrat",
+          "color": "#57068c",
+          "lineHeight": 1.017,
+          "align": "start",
+          "vAlign": "start"
+        },
+        "body": {
+          "x": 0.03408792650918635,
+          "y": 0.3200602119179547,
+          "w": 0.36640419947506564,
+          "h": 0.47028288130650336,
+          "textStyle": "body",
+          "color": "#333333",
+          "align": "start",
+          "vAlign": "start"
+        }
+      },
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "fill": "#ffffff"
+        },
+        {
+          "x": 0.04452919947506562,
+          "y": 0.8824965986196169,
+          "w": 0.08487277723097113,
+          "h": 0.05121024982988237,
+          "imageUrl": "/templates/nyu-bold/logo.png"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "w": 0.9971597550306213,
+          "h": 0.059725882181393984,
+          "imageUrl": "/templates/nyu-bold/band-top.png"
+        }
+      ]
+    },
+    {
+      "type": "content-list",
+      "label": "Text and points",
+      "purpose": "A sentence that sets up the points that follow",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Title",
+          "description": "The heading, in capitals.",
+          "required": true,
+          "maxChars": 24
+        },
+        {
+          "name": "body",
+          "kind": "text",
+          "label": "Body",
+          "description": "One or two sentences of context for the points.",
+          "multiline": true,
+          "required": false,
+          "maxChars": 203
+        },
+        {
+          "name": "bullets",
+          "kind": "bullets",
+          "label": "Points",
+          "description": "What follows from the opening sentence. Parallel, no full stops.",
+          "multiline": true,
+          "required": true,
+          "maxChars": 86,
+          "maxItems": 5
+        }
+      ],
+      "elementPositions": {
+        "title": {
+          "x": 0.034,
+          "y": 0.087,
+          "w": 0.921,
+          "h": 0.155,
+          "textStyle": "title",
+          "align": "start",
+          "vAlign": "start"
+        },
+        "body": {
+          "x": 0.034,
+          "y": 0.28,
+          "w": 0.921,
+          "h": 0.14,
+          "textStyle": "body",
+          "color": "#333333",
+          "align": "start",
+          "vAlign": "start"
+        },
+        "bullets": {
+          "x": 0.034,
+          "y": 0.46,
+          "w": 0.921,
+          "h": 0.37,
+          "textStyle": "bullet",
+          "align": "start",
+          "vAlign": "start"
+        }
+      },
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "fill": "#ffffff"
+        },
+        {
+          "x": 0.04452919947506562,
+          "y": 0.8824965986196169,
+          "w": 0.08487277723097113,
+          "h": 0.05121024982988237,
+          "imageUrl": "/templates/nyu-bold/logo.png"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "w": 0.9971597550306213,
+          "h": 0.059725882181393984,
+          "imageUrl": "/templates/nyu-bold/band-top.png"
+        }
+      ]
+    },
+    {
+      "type": "list",
+      "label": "Bullet list",
+      "purpose": "Points under a heading set hard against them",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Title",
+          "description": "The heading, ranged right against the points. Two or three words in capitals.",
+          "multiline": true,
+          "maxChars": 33,
+          "required": true
+        },
+        {
+          "name": "bullets",
+          "kind": "bullets",
+          "label": "Points",
+          "description": "The points. Each fits on one line. Parallel, and no full stops.",
+          "maxChars": 40,
+          "maxItems": 9,
+          "required": true
+        }
+      ],
+      "elementPositions": {
+        "title": {
+          "x": 0.03408792650918635,
+          "y": 0.22406435306697775,
+          "w": 0.36591207349081367,
+          "h": 0.6220472440944882,
+          "textStyle": "title",
+          "color": "#57068c",
+          "align": "end",
+          "vAlign": "start"
+        },
+        "bullets": {
+          "x": 0.45,
+          "y": 0.22857647905122974,
+          "w": 0.45853018372703414,
+          "h": 0.6072324292796732,
+          "textStyle": "bullet",
+          "align": "start",
+          "vAlign": "start"
+        }
+      },
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "fill": "#ffffff"
+        },
+        {
+          "x": 0.04452919947506562,
+          "y": 0.8824965986196169,
+          "w": 0.08487277723097113,
+          "h": 0.05121024982988237,
+          "imageUrl": "/templates/nyu-bold/logo.png"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "w": 0.9971597550306213,
+          "h": 0.059725882181393984,
+          "imageUrl": "/templates/nyu-bold/band-top.png"
+        },
+        {
+          "x": 0.31719507928696417,
+          "y": 0.48233427238261883,
+          "w": 0.06797900262467192,
+          "h": 0.014814814814814815,
+          "fill": "#8900e1"
+        }
+      ]
+    },
+    {
+      "type": "two-column",
+      "label": "Two columns",
+      "purpose": "Two paragraphs side by side under one title",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Title",
+          "description": "What both columns are about, in capitals.",
+          "maxChars": 45,
+          "required": true
+        },
+        {
+          "name": "body",
+          "kind": "text",
+          "label": "Left column",
+          "description": "The first paragraph.",
+          "multiline": true,
+          "maxChars": 363,
+          "required": true
+        },
+        {
+          "name": "body-2",
+          "kind": "text",
+          "label": "Right column",
+          "description": "The second paragraph, which follows on from the first.",
+          "multiline": true,
+          "maxChars": 363,
+          "required": false
+        }
+      ],
+      "elementPositions": {
+        "title": {
+          "x": 0.03408792650918635,
+          "y": 0.08652182366093127,
+          "w": 0.9213582677165354,
+          "h": 0.24714293333333334,
+          "textStyle": "title",
+          "color": "#57068c",
+          "align": "start",
+          "vAlign": "start"
+        },
+        "body": {
+          "x": 0.15050853018372704,
+          "y": 0.35555555555555557,
+          "w": 0.36420603674540686,
+          "h": 0.4757655293088364,
+          "textStyle": "body",
+          "color": "#333333",
+          "align": "start",
+          "vAlign": "start"
+        },
+        "body-2": {
+          "x": 0.5524032152230971,
+          "y": 0.35555555555555557,
+          "w": 0.36420603674540686,
+          "h": 0.4757655293088364,
+          "textStyle": "body",
+          "color": "#333333",
+          "align": "start",
+          "vAlign": "start"
+        }
+      },
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "fill": "#ffffff"
+        },
+        {
+          "x": 0.04452919947506562,
+          "y": 0.8824965986196169,
+          "w": 0.08487277723097113,
+          "h": 0.05121024982988237,
+          "imageUrl": "/templates/nyu-bold/logo.png"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "w": 0.9971597550306213,
+          "h": 0.059725882181393984,
+          "imageUrl": "/templates/nyu-bold/band-top.png"
+        },
+        {
+          "x": 0.045738121719160106,
+          "y": 0.38388743851463014,
+          "w": 0.06797900262467192,
+          "h": 0.014814814814814815,
+          "fill": "#8900e1"
+        }
+      ]
+    },
+    {
+      "type": "image-heavy",
+      "label": "Text and image",
+      "purpose": "An explanation beside the photograph it refers to",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Title",
+          "description": "What the picture is of, in capitals.",
+          "maxChars": 17,
+          "required": true
+        },
+        {
+          "name": "body",
+          "kind": "text",
+          "label": "Body",
+          "description": "What to notice in the picture, in a few sentences.",
+          "multiline": true,
+          "maxChars": 249,
+          "required": false
+        },
+        {
+          "name": "image",
+          "kind": "image",
+          "label": "Image",
+          "description": "The photograph. It fills the right half of the slide, top to bottom.",
+          "required": true
+        }
+      ],
+      "elementPositions": {
+        "title": {
+          "x": 0.03408792650918635,
+          "y": 0.08652182366093127,
+          "w": 0.41591207349081366,
+          "h": 0.24714293333333334,
+          "textStyle": "title",
+          "color": "#57068c",
+          "align": "start",
+          "vAlign": "start"
+        },
+        "body": {
+          "x": 0.03408792650918635,
+          "y": 0.534684553319724,
+          "w": 0.3791010498687664,
+          "h": 0.2960046660834062,
+          "textStyle": "caption",
+          "color": "#333333",
+          "align": "start",
+          "vAlign": "end"
+        },
+        "image": {
+          "x": 0.5,
+          "y": 0,
+          "w": 0.5,
+          "h": 0.9999999756974822
+        }
+      },
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "fill": "#ffffff"
+        },
+        {
+          "x": 0.04452919947506562,
+          "y": 0.8824965986196169,
+          "w": 0.08487277723097113,
+          "h": 0.05121024982988237,
+          "imageUrl": "/templates/nyu-bold/logo.png"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "w": 0.9971597550306213,
+          "h": 0.059725882181393984,
+          "imageUrl": "/templates/nyu-bold/band-top.png"
+        },
+        {
+          "x": 0.045738121719160106,
+          "y": 0.38388743851463014,
+          "w": 0.06797900262467192,
+          "h": 0.014814814814814815,
+          "fill": "#8900e1"
+        },
+        {
+          "x": 0.49166666666666664,
+          "y": 7.776805677068145e-9,
+          "w": 0.008333333333333333,
+          "h": 0.9999999922231944,
+          "fill": "#8900e1"
+        }
+      ]
+    },
+    {
+      "type": "image-list",
+      "label": "Three images",
+      "purpose": "Three pictures in a row, each with a line of its own",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Title",
+          "description": "What the three have in common, in capitals.",
+          "maxChars": 24,
+          "required": true
+        },
+        {
+          "name": "image",
+          "kind": "image",
+          "label": "Left image",
+          "description": "The leftmost picture.",
+          "required": true
+        },
+        {
+          "name": "image-2",
+          "kind": "image",
+          "label": "Middle image",
+          "description": "The middle picture.",
+          "required": false
+        },
+        {
+          "name": "image-3",
+          "kind": "image",
+          "label": "Right image",
+          "description": "The rightmost picture.",
+          "required": false
+        },
+        {
+          "name": "body",
+          "kind": "text",
+          "label": "Left caption",
+          "description": "What the left picture shows. Open with its name in a word or two.",
+          "maxChars": 164,
+          "required": false
+        },
+        {
+          "name": "body-2",
+          "kind": "text",
+          "label": "Middle caption",
+          "description": "What the middle picture shows, in the same shape.",
+          "maxChars": 164,
+          "required": false
+        },
+        {
+          "name": "body-3",
+          "kind": "text",
+          "label": "Right caption",
+          "description": "What the right picture shows, in the same shape.",
+          "maxChars": 164,
+          "required": false
+        }
+      ],
+      "elementPositions": {
+        "image": {
+          "x": 0.12497812773403325,
+          "y": 0.2844287897346165,
+          "w": 0.1731847933070866,
+          "h": 0.3078840769903762
+        },
+        "image-2": {
+          "x": 0.4134076990376203,
+          "y": 0.2844287897346165,
+          "w": 0.1731847933070866,
+          "h": 0.3078840769903762
+        },
+        "title": {
+          "x": 0.03408792650918635,
+          "y": 0.08652182366093127,
+          "w": 0.9213582677165354,
+          "h": 0.14173653333333333,
+          "textStyle": "title",
+          "color": "#57068c",
+          "align": "start",
+          "vAlign": "start"
+        },
+        "body": {
+          "x": 0.08023293963254594,
+          "y": 0.6192475940507437,
+          "w": 0.251246719160105,
+          "h": 0.3607524059492563,
+          "textStyle": "body",
+          "fontWeight": 700,
+          "color": "#57068c",
+          "align": "center",
+          "vAlign": "start"
+        },
+        "body-2": {
+          "x": 0.36914370078740155,
+          "y": 0.6192475940507437,
+          "w": 0.251246719160105,
+          "h": 0.3607524059492563,
+          "textStyle": "body",
+          "fontWeight": 700,
+          "color": "#57068c",
+          "align": "center",
+          "vAlign": "start"
+        },
+        "body-3": {
+          "x": 0.6580544619422573,
+          "y": 0.6192475940507437,
+          "w": 0.251246719160105,
+          "h": 0.3607524059492563,
+          "textStyle": "body",
+          "fontWeight": 700,
+          "color": "#57068c",
+          "align": "center",
+          "vAlign": "start"
+        },
+        "image-3": {
+          "x": 0.6961176727909011,
+          "y": 0.2844287897346165,
+          "w": 0.1731847933070866,
+          "h": 0.3078840769903762
+        }
+      },
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "fill": "#ffffff"
+        },
+        {
+          "x": 0.04452919947506562,
+          "y": 0.8824965986196169,
+          "w": 0.08487277723097113,
+          "h": 0.05121024982988237,
+          "imageUrl": "/templates/nyu-bold/logo.png"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "w": 0.9971597550306213,
+          "h": 0.059725882181393984,
+          "imageUrl": "/templates/nyu-bold/band-top.png"
+        }
+      ]
+    },
+    {
+      "type": "image-full",
+      "label": "Full-width image",
+      "purpose": "One picture across the slide, named by the caption beneath it",
+      "slots": [
+        {
+          "name": "image",
+          "kind": "image",
+          "label": "Image",
+          "description": "The picture. It runs nearly the full width of the slide.",
+          "required": true
+        },
+        {
+          "name": "caption",
+          "kind": "text",
+          "label": "Caption",
+          "description": "What the picture shows, and where it came from.",
+          "maxChars": 89,
+          "required": false
+        }
+      ],
+      "elementPositions": {
+        "caption": {
+          "x": 0.03408792650918635,
+          "y": 0.6930972071546613,
+          "w": 0.4911745406824147,
+          "h": 0.11764362787984835,
+          "textStyle": "heading",
+          "align": "start",
+          "vAlign": "end"
+        },
+        "image": {
+          "x": 0.034,
+          "y": 0.06,
+          "w": 0.932,
+          "h": 0.6
+        }
+      },
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "fill": "#ffffff"
+        },
+        {
+          "x": 0.04452919947506562,
+          "y": 0.8824965986196169,
+          "w": 0.08487277723097113,
+          "h": 0.05121024982988237,
+          "imageUrl": "/templates/nyu-bold/logo.png"
+        }
+      ]
+    },
+    {
+      "type": "quote",
+      "label": "Statement",
+      "purpose": "One sentence or quotation, set as large as the slide allows",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Statement",
+          "description": "The sentence, in capitals across the whole slide. Name the speaker if it is a quotation.",
+          "multiline": true,
+          "maxChars": 55,
+          "required": true
+        }
+      ],
+      "elementPositions": {
+        "title": {
+          "x": 0.04452919947506562,
+          "y": 0.08751822688830563,
+          "w": 0.9109251968503937,
+          "h": 0.7437736949547972,
+          "fontSize": 8.33,
+          "fontWeight": 700,
+          "caps": true,
+          "fontFamily": "montserrat",
+          "color": "#333333",
+          "lineHeight": 1.196,
+          "align": "start",
+          "vAlign": "start"
+        }
+      },
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "fill": "#ffffff"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "imageUrl": "/templates/nyu-bold/mark-grid.png"
+        },
+        {
+          "x": 0.04452919947506562,
+          "y": 0.8824965986196169,
+          "w": 0.08487277723097113,
+          "h": 0.05121024982988237,
+          "imageUrl": "/templates/nyu-bold/logo.png"
+        }
+      ]
+    },
+    {
+      "type": "quote-image",
+      "label": "Quotation over an image",
+      "purpose": "A quotation set white and centred over a photograph",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Quotation",
+          "description": "The quotation, centred in capitals over the photograph. Name who said it.",
+          "multiline": true,
+          "maxChars": 67,
+          "required": true
+        }
+      ],
+      "elementPositions": {
+        "title": {
+          "x": 0.12042049431321085,
+          "y": 0.1820647419072616,
+          "w": 0.7597769028871391,
+          "h": 0.5846019247594051,
+          "textStyle": "title",
+          "color": "#ffffff",
+          "lineHeight": 1.196,
+          "align": "center",
+          "vAlign": "start"
+        }
+      },
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "fill": "#57068c"
+        },
+        {
+          "x": 6.753062117235344e-8,
+          "y": 0,
+          "w": 0.9999999324693788,
+          "h": 0.9999994750656168,
+          "imageUrl": "/templates/nyu-bold/photo-quote.jpg"
+        },
+        {
+          "x": 0.04452919947506562,
+          "y": 0.8824965986196169,
+          "w": 0.08487277723097113,
+          "h": 0.05121024982988237,
+          "imageUrl": "/templates/nyu-bold/logo-white.png"
+        },
+        {
+          "x": 0.4718004259623797,
+          "y": 0.8150540896276854,
+          "w": 0.05702099737532809,
+          "h": 0.014814814814814815,
+          "fill": "#8900e1"
+        }
+      ]
+    },
+    {
+      "type": "big-number",
+      "label": "Big number",
+      "purpose": "One figure or statistic the slide exists to frame",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Figure",
+          "description": "The figure alone — \"100%\", \"1831\". No words.",
+          "multiline": true,
+          "maxChars": 7,
+          "required": true
+        },
+        {
+          "name": "caption",
+          "kind": "text",
+          "label": "What it measures",
+          "description": "What the figure counts, in capitals. A phrase.",
+          "maxChars": 35,
+          "required": false
+        },
+        {
+          "name": "body",
+          "kind": "text",
+          "label": "Body",
+          "description": "Why the figure matters, in a sentence or two.",
+          "maxChars": 144,
+          "required": false
+        }
+      ],
+      "elementPositions": {
+        "title": {
+          "x": 0.03408792650918635,
+          "y": 0.07926509186351706,
+          "w": 0.9318241469816273,
+          "h": 0.46066986666666665,
+          "fontSize": 20.83,
+          "fontWeight": 700,
+          "fontFamily": "montserrat",
+          "color": "#57068c",
+          "lineHeight": 1.196,
+          "align": "center",
+          "vAlign": "start"
+        },
+        "body": {
+          "x": 0.2707431102362205,
+          "y": 0.6998576143093225,
+          "w": 0.45853018372703414,
+          "h": 0.15093244444444445,
+          "textStyle": "body",
+          "color": "#333333",
+          "align": "center",
+          "vAlign": "start"
+        },
+        "caption": {
+          "x": 0.04452919947506562,
+          "y": 0.5399349585301837,
+          "w": 0.9108923884514437,
+          "h": 0.1398658501020706,
+          "fontSize": 3.89,
+          "fontWeight": 700,
+          "caps": true,
+          "fontFamily": "montserrat",
+          "color": "#8900e1",
+          "lineHeight": 1.375,
+          "align": "center",
+          "vAlign": "start"
+        }
+      },
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "fill": "#ffffff"
+        },
+        {
+          "x": 0.04452919947506562,
+          "y": 0.8824965986196169,
+          "w": 0.08487277723097113,
+          "h": 0.05121024982988237,
+          "imageUrl": "/templates/nyu-bold/logo.png"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "w": 0.9971597550306213,
+          "h": 0.059725882181393984,
+          "imageUrl": "/templates/nyu-bold/band-top.png"
+        }
+      ]
+    },
+    {
+      "type": "code",
+      "label": "Code",
+      "purpose": "A program listing under a short title",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Title",
+          "description": "What the listing does.",
+          "required": true,
+          "maxChars": 24
+        },
+        {
+          "name": "snippet",
+          "kind": "code",
+          "label": "Program listing",
+          "description": "The listing itself, exactly as typed. Never a sentence about it.",
+          "required": true
+        }
+      ],
+      "elementPositions": {
+        "title": {
+          "x": 0.034,
+          "y": 0.087,
+          "w": 0.921,
+          "h": 0.155,
+          "textStyle": "title",
+          "align": "start",
+          "vAlign": "start"
+        },
+        "snippet": {
+          "x": 0.034,
+          "y": 0.28,
+          "w": 0.921,
+          "h": 0.55
+        }
+      },
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "fill": "#ffffff"
+        },
+        {
+          "x": 0.04452919947506562,
+          "y": 0.8824965986196169,
+          "w": 0.08487277723097113,
+          "h": 0.05121024982988237,
+          "imageUrl": "/templates/nyu-bold/logo.png"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "w": 0.9971597550306213,
+          "h": 0.059725882181393984,
+          "imageUrl": "/templates/nyu-bold/band-top.png"
+        }
+      ]
+    },
+    {
+      "type": "formula",
+      "label": "Formula",
+      "purpose": "One expression, set large, with a note beneath",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Title",
+          "description": "What the expression describes, in words.",
+          "required": true,
+          "maxChars": 24
+        },
+        {
+          "name": "eq",
+          "kind": "math",
+          "label": "Equation",
+          "description": "The expression in LaTeX, with no surrounding prose.",
+          "required": true
+        },
+        {
+          "name": "caption",
+          "kind": "text",
+          "label": "Caption",
+          "description": "Name each symbol, in order.",
+          "required": false,
+          "maxChars": 221
+        }
+      ],
+      "elementPositions": {
+        "title": {
+          "x": 0.034,
+          "y": 0.087,
+          "w": 0.921,
+          "h": 0.155,
+          "textStyle": "title",
+          "align": "start",
+          "vAlign": "start"
+        },
+        "eq": {
+          "x": 0.034,
+          "y": 0.3,
+          "w": 0.921,
+          "h": 0.36,
+          "fontSize": 8.33,
+          "align": "center",
+          "vAlign": "center"
+        },
+        "caption": {
+          "x": 0.034,
+          "y": 0.7,
+          "w": 0.921,
+          "h": 0.12,
+          "textStyle": "caption",
+          "align": "center",
+          "vAlign": "start"
+        }
+      },
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "fill": "#ffffff"
+        },
+        {
+          "x": 0.04452919947506562,
+          "y": 0.8824965986196169,
+          "w": 0.08487277723097113,
+          "h": 0.05121024982988237,
+          "imageUrl": "/templates/nyu-bold/logo.png"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "w": 0.9971597550306213,
+          "h": 0.059725882181393984,
+          "imageUrl": "/templates/nyu-bold/band-top.png"
+        }
+      ]
+    },
+    {
+      "type": "closing",
+      "label": "Closing",
+      "purpose": "The last slide: what to take away, or where to go next",
+      "slots": [
+        {
+          "name": "title",
+          "kind": "text",
+          "label": "Title",
+          "description": "A closing heading, centred and in capitals.",
+          "maxChars": 25,
+          "required": true
+        },
+        {
+          "name": "caption",
+          "kind": "text",
+          "label": "Caption",
+          "description": "What to take away, or where to go next.",
+          "multiline": true,
+          "maxChars": 321,
+          "required": true
+        }
+      ],
+      "elementPositions": {
+        "title": {
+          "x": 0.26441929133858266,
+          "y": 0.25723867502673275,
+          "w": 0.4711614173228346,
+          "h": 0.20594925634295713,
+          "align": "center",
+          "vAlign": "start",
+          "fontSize": 5,
+          "fontWeight": 700,
+          "caps": true,
+          "fontFamily": "montserrat",
+          "lineHeight": 1.017,
+          "color": "#57068c"
+        },
+        "caption": {
+          "x": 0.24465223097112862,
+          "y": 0.4882433858267716,
+          "w": 0.5106955380577428,
+          "h": 0.32335958005249343,
+          "textStyle": "body",
+          "fontWeight": 700,
+          "color": "#333333",
+          "align": "center",
+          "vAlign": "start"
+        }
+      },
+      "decoration": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "fill": "#ffffff"
+        },
+        {
+          "x": 0.04452919947506562,
+          "y": 0.8824965986196169,
+          "w": 0.08487277723097113,
+          "h": 0.05121024982988237,
+          "imageUrl": "/templates/nyu-bold/logo.png"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "w": 0.9971597550306213,
+          "h": 0.059725882181393984,
+          "imageUrl": "/templates/nyu-bold/band-top.png"
+        }
+      ]
+    },
+    {
+      "type": "whiteboard",
+      "label": "Whiteboard",
+      "purpose": "A blank slate for freehand drawing",
+      "slots": [],
+      "elementPositions": {}
+    }
+  ]
+}

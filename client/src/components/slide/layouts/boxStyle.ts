@@ -9,7 +9,7 @@
  * Sizes arrive in `cqi` — a percent of the slide's width — so type and spacing
  * scale with the slide rather than the window (docs/TEMPLATES.md §4).
  */
-import type { BoxStyle } from '@slide-machine/shared'
+import { NATURAL_LINE_BOX, type BoxStyle } from '@slide-machine/shared'
 import type { ThemeColors } from '../theme'
 import type { ThemeTextStyles } from '../theme'
 import { fontStack } from '../fonts'
@@ -24,11 +24,31 @@ export const resolveColor = (
   return color in colors ? colors[color as keyof ThemeColors] : color
 }
 
-/** Flex alignment for a box's own content. */
-export const FLEX: Record<string, string> = {
+/** How a box may be aligned, on either axis. */
+type Alignment = NonNullable<BoxStyle['align']>
+
+/**
+ * Flex alignment for a box's own content.
+ *
+ * Typed as a TOTAL record over the three values rather than as
+ * `Record<string, string>`, and that is the point rather than tidiness: the
+ * defect this file carried was an enum property handled by a conditional on
+ * one of its values instead of by a map with an entry for each. A total
+ * record cannot be written with a value missing — it fails to compile — so
+ * the class of defect goes away instead of being covered by a test.
+ */
+export const FLEX: Record<Alignment, string> = {
   start: 'flex-start',
   center: 'center',
   end: 'flex-end',
+}
+
+/** The same three values as text alignment, which places the LINES inside
+ * the block that `FLEX` places. Total, for the reason above. */
+const TEXT_ALIGN: Record<Alignment, 'start' | 'center' | 'end'> = {
+  start: 'start',
+  center: 'center',
+  end: 'end',
 }
 
 /**
@@ -119,6 +139,28 @@ export const surfaceStyle = (
 })
 
 /**
+ * Room for the ink a tightly-led line hangs outside its own line box.
+ *
+ * A design set below the face's natural line box does not shrink its letters
+ * to match: the ascenders and descenders stay where they were and overflow
+ * the line box, above the first line and below the last. A box that clips its
+ * overflow — which every slot does — then cuts them, and a box anchored to
+ * its bottom edge pushes that ink into whatever sits beneath it. NYU Bold's
+ * title is set at 0.957 and lost 13px of descender into its own subtitle.
+ *
+ * Half the overhang at each end, in `em`, so it scales with the type exactly
+ * as the overhang does. Only where the box states no vertical padding of its
+ * own: a design that asked for padding has already said what it wants.
+ */
+const overhangPadding = (style: BoxStyle): React.CSSProperties => {
+  const leading = style.lineHeight
+  if (!leading || leading >= NATURAL_LINE_BOX) return {}
+  if (style.paddingY !== undefined || style.padding !== undefined) return {}
+  const half = `${((NATURAL_LINE_BOX - leading) / 2).toFixed(3)}em`
+  return { paddingTop: half, paddingBottom: half }
+}
+
+/**
  * The full style for a box that lays its content out itself: a flex column,
  * so `align` and `vAlign` mean the same thing in every renderer.
  */
@@ -130,7 +172,29 @@ export const contentStyle = (
   flexDirection: 'column',
   justifyContent: FLEX[style.vAlign ?? 'start'],
   alignItems: FLEX[style.align ?? 'start'],
-  textAlign: style.align === 'center' ? 'center' : undefined,
+  /*
+   * Every value of `align`, not only the middle one.
+   *
+   * `alignItems` above places the text BLOCK, and that is not the same
+   * property: a right-ranged block of several lines still sets each of its
+   * lines from the left unless the text itself is told otherwise. So a
+   * design whose title is ranged right — which is how NYU Bold sets its
+   * list titles, and which the template records correctly — drew with four
+   * ragged right edges and one hard left one, and nothing could see it.
+   * The data audit passes because the data is right, and the clip, bounds
+   * and overlap rules pass because the geometry is right: the box is in the
+   * correct place at the correct size holding the correct words, and the
+   * design is still wrong.
+   *
+   * Logical values rather than `left`/`right`, matching the logical
+   * properties the slot markup already uses (`ps-`, `text-start`), so a
+   * right-to-left language ranges to the correct edge.
+   */
+  textAlign: TEXT_ALIGN[style.align ?? 'start'],
   ...typeStyle(style, colors),
   ...surfaceStyle(style, colors),
+  // After `surfaceStyle`, which writes `paddingTop`/`paddingBottom` as
+  // `undefined` when the box states none — and a later `undefined` in a
+  // spread wins, which would silently erase this.
+  ...overhangPadding(style),
 })

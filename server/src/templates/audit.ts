@@ -42,11 +42,16 @@
  * cries wolf is one people learn to ignore.
  */
 import {
+  inkBoxOf,
+  lineHeightOf,
   themeTextStyles,
+  type BoxStyle,
+  type Rect,
   type Layout,
   type Template,
 } from '@slide-machine/shared'
 import { resolveStyle } from '../lib/tree-boxes'
+import { linesDown } from '../import/text-metrics'
 
 /** One thing the audit noticed, and where. */
 export interface AuditFinding {
@@ -125,6 +130,33 @@ const overlaps = (
   return w > EPS && h > EPS ? w * h : 0
 }
 
+/**
+ * The rectangle a box's WORDS occupy, which is what a collision is about.
+ *
+ * Not the box: NYU Bold's divider draws its title box and its numeral box
+ * over one another by 6.1% of the slide, exactly as the source deck does,
+ * while the glyphs clear by a third of the title's own type size. Reading
+ * rectangles calls that design broken. What the ink model can and cannot
+ * promise — including the `Q`-over-`i` case it does not cover — is written
+ * in `shared/types/text-ink`, and it is worth reading before trusting a
+ * clear result here.
+ *
+ * A face we ship no metrics for falls back to the box, which is what this
+ * rule compared before and is the conservative direction: it can fault a
+ * design that is fine, never pass one that is not.
+ *
+ * Lines are counted as PROSE even for a list, which holds fewer of them for
+ * the gap between points. Fewer lines is a shorter run of ink, so counting
+ * prose is the generous reading and keeps this from missing a collision.
+ */
+const inkOf = ([, box, style]: [string, Rect, BoxStyle]): Rect => {
+  const leading = lineHeightOf(style)
+  if (leading === null || typeof style.fontSize !== 'number') return box
+  return (
+    inkBoxOf(box, style, linesDown(box, style.fontSize, leading, false)) ?? box
+  )
+}
+
 /** A full-slide piece — the shape that makes something a ground rather than
  * an ornament. */
 const fullBleed = (piece: { w?: number; h?: number }): boolean =>
@@ -190,7 +222,7 @@ export const auditTemplate = (
   for (const layout of template.layouts) {
     const positions = layout.elementPositions ?? {}
     const { ground, covered } = groundOf(layout, theme.background)
-    const words: [string, (typeof positions)[string]][] = []
+    const words: [string, (typeof positions)[string], BoxStyle][] = []
 
     for (const [name, box] of Object.entries(positions)) {
       const where = { rule: '', layout: layout.type, box: name }
@@ -217,7 +249,7 @@ export const auditTemplate = (
           message: `names the text style \`${role}\`, which the theme does not define — it will fall back to the app's own defaults`,
         })
       if (!role && box.fontSize === undefined) continue
-      words.push([name, box])
+      words.push([name, box, resolveStyle(box, styles)])
 
       if (box.w < MIN_TEXT_W || box.h < MIN_TEXT_H)
         faults.push({
@@ -257,7 +289,7 @@ export const auditTemplate = (
 
     for (let a = 0; a < words.length; a++)
       for (let b = a + 1; b < words.length; b++) {
-        const shared = overlaps(words[a]![1], words[b]![1])
+        const shared = overlaps(inkOf(words[a]!), inkOf(words[b]!))
         if (shared > 0)
           faults.push({
             rule: 'overlap',

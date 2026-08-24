@@ -86,15 +86,51 @@ const unique = (name: string, taken: Set<string>): string => {
   return next
 }
 
-/** A box the template schema will accept: inside the slide, and never zero. */
-const safeBox = (box: { x: number; y: number; w: number; h: number }) => {
-  const x = Math.min(Math.max(box.x, 0), 0.99)
-  const y = Math.min(Math.max(box.y, 0), 0.99)
+/**
+ * The thinnest a CONTENT box may be, from the template schema: a box smaller
+ * than this is rejected, and one at the limit is still large enough to aim a
+ * cursor at.
+ */
+const SLOT_FLOOR = 0.01
+
+/**
+ * The thinnest a DECORATION may be — a tenth of the slot floor, which is the
+ * schema's own limit for a decoration.
+ *
+ * Decoration is held to the looser figure because it is a different kind of
+ * thing. A slot has to be clickable; a rule has only to be drawn, and a
+ * design's rules are routinely thinner than anything anyone would click. NYU
+ * Bold sets the seam beside its half-page photograph at 0.00833 of the slide,
+ * and the slot floor rounded it up to 0.01 — 23% heavier than the deck draws
+ * it, and, because the floor grows a box about its centre, half of that
+ * spilling past the picture's edge it is supposed to meet.
+ */
+const DECORATION_FLOOR = 0.001
+
+/**
+ * A box the template schema will accept: inside the slide, and never zero.
+ *
+ * The floor grows a too-thin box about its own CENTRE rather than from its
+ * leading edge. A floor is sound — a box of no width cannot be drawn or
+ * selected — but one that grows in a single direction moves the piece as
+ * well as widening it, which on a hairline rule is the whole of its position.
+ * That is the same defect `ruleOf` exists to avoid, in miniature, and it
+ * would have reintroduced it a tenth of a stroke at a time.
+ */
+const safeBox = (
+  box: { x: number; y: number; w: number; h: number },
+  floor: number = SLOT_FLOOR,
+) => {
+  const grown = (side: number) => Math.max(side, floor)
+  const centred = (start: number, side: number) =>
+    Math.min(Math.max(start - (grown(side) - side) / 2, 0), 0.99)
+  const x = centred(box.x, box.w)
+  const y = centred(box.y, box.h)
   return {
     x,
     y,
-    w: Math.min(Math.max(box.w, 0.01), 1 - x),
-    h: Math.min(Math.max(box.h, 0.01), 1 - y),
+    w: Math.min(grown(box.w), 1 - x),
+    h: Math.min(grown(box.h), 1 - y),
   }
 }
 
@@ -145,7 +181,7 @@ const decorationOf = (
     const stored = piece.imageUrl ? assets.get(piece.imageUrl) : undefined
     // A band with neither a fill nor a picture would paint nothing.
     if (!piece.fill && !stored) continue
-    const box = safeBox(piece.box)
+    const box = safeBox(piece.box, DECORATION_FLOOR)
     const key = [
       box.x,
       box.y,
@@ -219,6 +255,34 @@ const roomBelow = (
   return Math.max(box.h, floor - box.y)
 }
 
+/**
+ * How far a box may grow UPWARD before it would reach something else.
+ *
+ * The mirror of `roomBelow`, and it exists because growing downward is wrong
+ * for a box whose text sits on its bottom edge. NYU Bold's title slide anchors
+ * its title to the baseline of the block — `vAlign: end` — so a box grown
+ * downward moves the words down the slide, away from where the design put
+ * them. Grown upward it keeps the ink exactly where it was and takes the
+ * space above it, which on that slide is empty.
+ */
+const roomAbove = (
+  box: { x: number; y: number; w: number; h: number },
+  others: CandidateSlot[],
+): number => {
+  const overlapsAcross = (other: { x: number; w: number }) =>
+    other.x < box.x + box.w && box.x < other.x + other.w
+  const bottoms = others
+    .filter(
+      o =>
+        o.box !== box &&
+        overlapsAcross(o.box) &&
+        o.box.y + o.box.h < box.y + box.h,
+    )
+    .map(o => o.box.y + o.box.h)
+  const ceiling = Math.max(0.02, ...bottoms)
+  return Math.max(box.h, box.y + box.h - ceiling)
+}
+
 /** One derived design, as a layout of a template. */
 const toLayout = (
   derived: DerivedLayout,
@@ -268,12 +332,23 @@ const toLayout = (
    * bounded at eleven characters while drawing twenty-two, which reads as a
    * title cut to one word for no reason a reader can see.
    */
+  /**
+   * Where the extra height comes from.
+   *
+   * A box whose text sits on its bottom edge keeps that edge and takes the
+   * room above it; everything else keeps its top and grows down. Growing the
+   * wrong way is not a smaller mistake than not growing at all — it moves the
+   * words off the line the design set them on.
+   */
+  const grown = (slot: CandidateSlot, box: SourceBox): SourceBox =>
+    slot.vAlign === 'end' ? { ...box, y: slot.box.y + slot.box.h - box.h } : box
+
   const drawnBox = new Map<CandidateSlot, SourceBox>(
     derived.slots.map(slot => [
       slot,
       slot.kind === 'image' || slot.kind === 'table'
         ? slot.box
-        : {
+        : grown(slot, {
             ...slot.box,
             h: Math.min(
               Math.max(
@@ -285,11 +360,18 @@ const toLayout = (
                 heightForText(slot, {
                   caps: slot.caps,
                   fontFamily: mapFont(slot.fontFamily),
+                  // Measured against the leading the box is actually SET in.
+                  // Against the estimate's fallback instead, a box set tight
+                  // was given rows it does not need — and one set loose was
+                  // given too few.
+                  lineHeight: slot.lineHeight,
                 }),
               ),
-              roomBelow(slot.box, derived.slots),
+              slot.vAlign === 'end'
+                ? roomAbove(slot.box, derived.slots)
+                : roomBelow(slot.box, derived.slots),
             ),
-          },
+          }),
     ]),
   )
 
@@ -313,7 +395,16 @@ const toLayout = (
           // Measured against the box as DRAWN, not as the source left it.
           ...capacityOf(
             { ...slot, box: drawnBox.get(slot) ?? slot.box },
-            { caps: slot.caps, fontFamily: mapFont(slot.fontFamily) },
+            {
+              caps: slot.caps,
+              fontFamily: mapFont(slot.fontFamily),
+              // What a box holds depends on how tightly it is led, and this
+              // deck's titles are led tighter than anything the app assumes:
+              // told the default instead, a two-line title box was budgeted
+              // for one line, and the source deck's own titles did not fit
+              // the budgets derived from it.
+              lineHeight: slot.lineHeight,
+            },
           ),
           // Multi-line when the box is deep enough to hold more than a
           // line, and always when what it holds is Markdown: a list only

@@ -304,6 +304,15 @@ const refitSlot = (
 })
 
 /**
+ * The kinds a refit may write: the ones whose whole value is prose.
+ *
+ * `text` and `bullets` are what a language model returns and what the legacy
+ * shape can express. Every other kind carries structure the reply does not
+ * have.
+ */
+const REFILLABLE = new Set<SlotSpec['kind']>(['text', 'bullets'])
+
+/**
  * slide.refitLayout — writes content for the boxes a layout switch left
  * empty (GEN-9).
  *
@@ -340,11 +349,22 @@ export const slideRefitLayout = defineAction<
     const content = slotsOf(slide)
     const declared = new Set(layout.slots.map(s => s.name))
 
-    // A hole is a box this layout declares and nothing filled. Pictures are
-    // excluded: they are sourced by image enrichment, not written by a
-    // language model.
+    /*
+     * A hole is a box this layout declares and nothing filled.
+     *
+     * Only boxes that hold PROSE. Pictures are sourced by image enrichment
+     * rather than written by a language model, and a formula, a listing, a
+     * table and a block of preformatted text are each stored in a shape of
+     * their own that a sentence is not — a `math` box holds LaTeX, a `code`
+     * box a program. Filled from here they were written as `kind: 'text'`,
+     * which is a value no editor for those kinds can read and no renderer
+     * draws: the box showed "Add a formula" while holding a paragraph, so it
+     * read as empty to the author, as empty to the room, and as filled to
+     * everything that asks what the slide holds.
+     */
     const holes = layout.slots.filter(
-      s => s.kind !== 'image' && refitValueOf(content[s.name]) === undefined,
+      s =>
+        REFILLABLE.has(s.kind) && refitValueOf(content[s.name]) === undefined,
     )
     // Content the switch could not place: the material to write the holes
     // from. Anything stored under a name this layout does not declare.
@@ -435,13 +455,44 @@ export const slideRefitLayout = defineAction<
       }
       filled.push(name)
     }
-    if (!filled.length) return unchanged
+    /*
+     * Re-read before writing, and keep only the holes that are STILL holes.
+     *
+     * The generation call above takes seconds, and the author is looking at
+     * the slide for every one of them — a layout switch is exactly when
+     * somebody starts typing. `content` was read before the call, so writing
+     * it back wholesale republishes the slide as it stood BEFORE they typed,
+     * and everything written in between is gone with no error anywhere: the
+     * box simply shows what the switch had left in it. Two reviewers hit this
+     * on `formula.eq` and `big-number.title` and read it as the editor
+     * dropping their text.
+     *
+     * A box the author has filled themselves is no longer a hole, which is
+     * the rule this action already states — it is only ever meant to write
+     * what the switch left empty.
+     */
+    const current = await SlideModel.findById(slide._id)
+    if (!current) return unchanged
+    const now = slotsOf(current)
+    // Whatever happens below, the slide handed back is the one in the
+    // database NOW. Returning the copy read before the call publishes a
+    // stale slide to the client, which is the same lost edit by another
+    // route — the write is skipped and the author's text disappears anyway.
+    if (!filled.length) return { slide: toSlideDto(current), filled: [] }
+    let merged = now
+    const written: string[] = []
+    for (const name of filled) {
+      if (refitValueOf(now[name]) !== undefined) continue
+      merged = patchSlot(merged, name, next[name]!)
+      written.push(name)
+    }
+    if (!written.length) return { slide: toSlideDto(current), filled: [] }
 
-    slide.slots = next
-    slide.markModified('slots')
-    await slide.save()
-    await touchDeck(slide.deckId)
-    return { slide: toSlideDto(slide), filled }
+    current.slots = merged
+    current.markModified('slots')
+    await current.save()
+    await touchDeck(current.deckId)
+    return { slide: toSlideDto(current), filled: written }
   },
 })
 

@@ -313,6 +313,12 @@ const medianLayout = (members: Candidate[]): DerivedLayout => {
         ...(mode(mine.map(s => s.fontFamily))
           ? { fontFamily: mode(mine.map(s => s.fontFamily)) }
           : {}),
+        // Leading, like every other way the box is set: the cluster's most
+        // common rather than the exemplar's own. Dropping it here would put
+        // the design back on the app's default the moment two slides merged.
+        ...(mode(mine.map(s => s.lineHeight))
+          ? { lineHeight: mode(mine.map(s => s.lineHeight)) }
+          : {}),
         // A declaration is the presentation telling us what this box IS
         // (EXP-8); it survives consolidation untouched.
         ...(mine.find(s => s.restored)

@@ -37,7 +37,14 @@
  * shows both sequences in order and says so, rather than inventing a
  * correspondence the data does not carry.
  */
-import { cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+} from 'node:fs'
 import path from 'node:path'
 import { test, expect, type APIRequestContext } from './fixtures'
 import { faultsOn, settled } from './slide-boxes'
@@ -112,34 +119,54 @@ const DECORATION_PICTURES: string[] = [
     ),
   ),
 ]
+/** How storage addresses a picture it holds, as opposed to one that ships. */
+const UPLOAD_PREFIX = '/api/files/'
+
 /**
  * Makes the design's own pictures reachable, and refuses to photograph it if
  * they are not.
  *
- * The e2e server is started from THIS directory, so its `STORAGE_LOCAL_DIR` of
- * `.uploads-e2e` means `e2e/.uploads-e2e` — while an import run by hand writes
- * to `server/.uploads`. The pictures are then on disk, the template refers to
- * them, and every one of them 404s. Nothing fails: the slides simply render
- * without their photographs, and the comparison sheet comes out looking like
- * the import lost them.
+ * A design's pictures come from one of two places, and only one of them needs
+ * anything done to it.
  *
- * That is the worst kind of pass — a believable artifact of a defect that does
- * not exist. So the files are copied where the server actually reads, and then
- * checked over HTTP. A sheet with no pictures in it should be a failed run,
- * not a quiet one.
+ * An IMPORTED design's pictures were uploaded, so they live in storage and are
+ * addressed `/api/files/<key>`. The e2e server is started from THIS directory,
+ * so its `STORAGE_LOCAL_DIR` of `.uploads-e2e` means `e2e/.uploads-e2e` —
+ * while an import run by hand writes to `server/.uploads`. The pictures are
+ * then on disk, the template refers to them, and every one of them 404s.
+ * Nothing fails: the slides simply render without their photographs, and the
+ * comparison sheet comes out looking like the import lost them. So those are
+ * copied where the server actually reads.
+ *
+ * A SHIPPED built-in's pictures are already in the repo and are addressed
+ * `/templates/<id>/<file>`, served by the API itself out of
+ * `server/config/templates/assets/` (`server/src/templates/assets.ts`).
+ * `TEMPLATES_DIR` defaults from the server module's own location rather than
+ * from the working directory, so those are reachable from here already and
+ * there is nothing to stage.
+ *
+ * Telling the two apart is not tidiness. Putting a built-in URL through the
+ * upload path does worse than nothing: stripping a prefix the URL does not
+ * carry leaves it absolute, and `path.resolve` against an absolute path
+ * discards the base it was given — so both source and destination collapse to
+ * `/templates/<id>` at the filesystem root, and the copy silently no-ops
+ * because nothing is there.
+ *
+ * Either way the pictures are then checked over HTTP, because being served is
+ * the only property the browser about to photograph them cares about, and it
+ * is the same question for both kinds. A sheet with no pictures in it should
+ * be a failed run, not a quiet one.
  */
 const stagePictures = async (request: APIRequestContext) => {
-  // Which folders to stage is read from the design's own picture URLs
-  // (`/api/files/<key>`), not hard-coded: pointing this spec at another
-  // design must not mean remembering to change a path here as well.
+  // Which folders to stage is read from the design's own picture URLs, not
+  // hard-coded: pointing this spec at another design must not mean
+  // remembering to change a path here as well.
   const folders = new Set(
-    DECORATION_PICTURES.map(url =>
-      url
-        .replace(/^\/api\/files\//, '')
-        .split('/')
-        .slice(0, -1)
-        .join('/'),
-    ).filter(Boolean),
+    DECORATION_PICTURES.filter(url => url.startsWith(UPLOAD_PREFIX))
+      .map(url =>
+        url.slice(UPLOAD_PREFIX.length).split('/').slice(0, -1).join('/'),
+      )
+      .filter(Boolean),
   )
   for (const folder of folders) {
     const into = path.resolve('.uploads-e2e', folder)
@@ -152,12 +179,33 @@ const stagePictures = async (request: APIRequestContext) => {
   }
   for (const url of DECORATION_PICTURES) {
     const response = await request.get(url)
+    // Said differently for each kind, because the thing to go and look at is
+    // different: a missing upload is a staging problem, a missing built-in
+    // picture is a file that is not in the repo or is not named what the
+    // template says it is.
+    const remedy = url.startsWith(UPLOAD_PREFIX)
+      ? `Copy the design's pictures from server/.uploads into e2e/.uploads-e2e ` +
+        `(same sub-path), or re-run the import with the e2e storage directory.`
+      : `A shipped design serves its pictures from server/config/templates/assets/ ` +
+        `— check the file is committed there and that its name matches the ` +
+        `decoration URL in the template JSON.`
     expect(
       response.status(),
       `${url} is not being served — the design would be photographed without ` +
-        `its pictures. Copy server/.uploads/templates/nyu-bold into ` +
-        `e2e/.uploads-e2e/templates/.`,
+        `its pictures. ${remedy}`,
     ).toBe(200)
+    // And that a picture is what came back. A 200 on its own is not enough to
+    // conclude that: the SPA fallback answers an unknown path with index.html
+    // at 200, so if a picture ever fell through to it — a mount order changed,
+    // a prefix renamed — a status check would be satisfied while the design
+    // still photographs blank. That is the same believable-wrong-artifact this
+    // whole helper exists to prevent, so it is checked rather than assumed.
+    expect(
+      response.headers()['content-type'] ?? '',
+      `${url} was served, but not as an image — it is being answered by ` +
+        `something other than the picture (the SPA fallback answers unknown ` +
+        `paths with HTML at status 200). ${remedy}`,
+    ).toMatch(/^image\//)
   }
 }
 
@@ -165,6 +213,16 @@ test('captures every imported layout beside its source deck', async ({
   page,
   request,
 }) => {
+  /*
+   * A budget, not a threshold. This walks EVERY layout, switching layout and
+   * waiting for the morph to settle and taking a screenshot on each — two
+   * orders of magnitude more work than the specs the 30-second default was
+   * chosen for. At the default it died part-way through and reported the page
+   * as closed, which reads like a crash and is only a clock; worse, it left a
+   * partial contact sheet, which is the one output nobody should be asked to
+   * judge a design from.
+   */
+  test.setTimeout(300_000)
   // Said out loud, and as a skip rather than a pass: this spec is about a
   // design that is installed for review and removed again, so "not run" is a
   // normal outcome — but it must never be mistaken for "checked and fine".
@@ -180,6 +238,26 @@ test('captures every imported layout beside its source deck', async ({
     'the installed template declares no layouts',
   ).toBeGreaterThan(0)
   mkdirSync(OUT, { recursive: true })
+  /*
+   * Clear this run's own pictures before taking any.
+   *
+   * The importer renames and renumbers layouts whenever the derivation
+   * changes, so a previous round's files sit here under names the design no
+   * longer has — `imported-title-4.png`, `imported-content-2.png` — and the
+   * sheet is built by reading the directory. Measured on this design: nine
+   * stale pictures of layouts that do not exist, alongside sixteen current
+   * ones, all looking equally current.
+   *
+   * That is the worst kind of artifact to hand someone. The reviewer is being
+   * asked to judge a design by eye, and cannot tell from an image whether the
+   * layout it shows is still in the design — so a stale picture reads as a
+   * real layout, and a stale BAD picture reads as a real defect. Only this
+   * spec's own output is removed, by prefix, so anything else left here for
+   * another purpose survives.
+   */
+  for (const file of existsSync(OUT) ? readdirSync(OUT) : [])
+    if (file.startsWith('imported-') && file.endsWith('.png'))
+      rmSync(path.join(OUT, file))
   await stagePictures(request)
   // The slide morphs between layouts (GEN-9), and a screenshot taken mid-flight
   // catches text at partial opacity or drawn twice at two positions — which

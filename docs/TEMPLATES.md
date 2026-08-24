@@ -22,7 +22,7 @@ including how they move to and from Google Slides.
 Two stores, one resolver.
 
 **Built-in templates are files.** One JSON per template in `server/config/templates/`
-(`classic.json`, `midnight.json`, `seminar.json`). Drop a new `*.json` in the directory to
+(`classic.json`, `midnight.json`, `seminar.json`, `nyu-elegant.json`, `nyu-bold.json`). Drop a new `*.json` in the directory to
 add one; edit a file to retune anything. No code change, no rebuild in dev. Files are
 zod-validated at first use ([builtin.ts](../server/src/templates/builtin.ts)) and fail
 loudly if malformed; `TEMPLATES_DIR` overrides the location; the Docker image ships
@@ -785,6 +785,93 @@ the user did not ask for.
   and it is reported.
 - **Content kinds are a closed list.** An imported slot can only be one of the kinds in
   [§2](#2-layouts-and-slots); there is no way for a template to introduce a new one.
+- **A box's height is over-budgeted, in two ways still outstanding.** Both make the
+  importer ask for more room than a design gave, and `build-template` then GROWS the box
+  until its content fits — so both move shipped geometry, not only budgets.
+  - **Google's text insets are not modelled.** Slides draws text inside a default inset of
+    0.1in left and right, 0.05in top and bottom (measured at 0.085–0.096in across three
+    cases); `capacityOf` divides the full box width and knows nothing about it. That is 4.2%
+    of usable width on a 0.471-wide title box and **8.0% on a 0.251-wide caption**, which is
+    why NYU Bold's slide 7 captions ship at 0.355 where NYU drew them at 0.231 — the clearest
+    evidence that this reaches geometry. It is also why "TEMPLATE NOTES" wraps to two lines
+    in Google and one in our estimate. **The API exposes no inset field** — `leftInset` and
+    its siblings appear nowhere in a captured deck — so it can only be applied as Google's
+    documented default; do not go looking for it in the response. Note also that the fix is
+    not the character-width constant, which was measured and is right: Montserrat's caps
+    advance is 0.684 em/char and `montserrat: 0.637` sits correctly inside the range for
+    realistically spaced titles.
+  - **One line is budgeted as a full line box.** `fontSize × lineHeight` overstates the ink
+    of a single line of display capitals, which have no descenders and sit well inside their
+    line box. A designer sizing a box to the cap height of one line — as NYU did for the
+    `big-number` figure, 0.377 high for type whose line box is 0.443 — will always have that
+    box grown by us.
+  Fixing either in the budget alone would make the arithmetic describe GOOGLE's usable area
+  while our renderers still draw to the box edge. The fix is to derive real `padding` on the
+  imported box: the positioned renderer honours it already (`boxStyle.surfaceStyle`), so what
+  is missing is the derivation, padding-aware capacity arithmetic, and inset text in
+  `deck-layout` and both exporters, which today ignore it.
+- **Design furniture the layout model cannot express.** Three instances, found in one
+  deck, none of them fixable in a template file — they need the model to change, and they
+  are listed together because a fix for any one of them leaves the others looking fixed.
+  - **Decoration cannot sit above a slot.** `PositionedLayout` and `FlowLayout` paint every
+    decoration piece and then every slot, so a rule, band or logo the design draws OVER a
+    picture is painted under it and disappears. NYU Bold's seam rule straddles the left edge
+    of its photograph exactly as Google draws it, and half of it is behind the picture; the
+    shipped file moves that one rule aside as an authored departure, which fixes the design
+    and not the class.
+  - **Decoration cannot hold text, and text on a LAYOUT page is not carried down.** The
+    same symptom by two different routes, so both are named: a text box on a SLIDE is
+    dropped by consolidation (NYU Bold's part number), and a text box on a LAYOUT page is
+    dropped by `inheritedDecoration`, which carries pictures and fills down the chain and
+    not text (its opening quotation mark). Neither is content — an ornament offered as a
+    fillable box puts a quotation mark in front of an author as something to write in — so
+    the model needs decoration that can be typographic, not a new slot.
+  - **A box may overlap another while its ink does not.** NYU's part-number slide has a
+    full-width title box and a 250pt numeral over its right half. It reads because the
+    title's ink never reaches that half — but the audit sees two boxes of words on top of
+    each other and is right to, since nothing in the data distinguishes this from the
+    defect. Narrowing the title box is not available either: at ~7 characters a line the
+    deck's own title would not fit in three lines.
+- **A layout the source deck has no slide for is an addition, not a derivation.** The
+  eleven conventional types are always present ([§2](#2-layouts-and-slots)), so importing a
+  design that shows no code, no formula and no table still produces boxes for them, drawn to
+  the design's margins and set in its type — but nothing about how they look was observed.
+  NYU Bold is the case: its `code` panel is the only dark object in a design of white
+  grounds, purple grounds and photographs. It ships dark deliberately. The colour is not
+  invented — `codeSurface` resolves it to `#333333`, the deck's own body ink — and a listing
+  needs a ground that separates it from the page, where the only pale alternative
+  (`surface`, `#f3f3f3`) reads against white as a rendering fault rather than a panel. The
+  reservation stands on its own terms: with no source slide there is nothing to be faithful
+  TO, so this is a judgment about legibility wearing a design's colours, and it is recorded
+  here rather than left to look derived. `codeSurface` is shared client code, so the
+  alternative was never a template decision — it would change every design at once.
+- **A formula is set in KaTeX's face, not the design's.** `MathTypeset` imports
+  `katex.min.css`, which brings Computer Modern with it, so every equation in every
+  design is serif and italic whatever the deck's own typography says. Sharper than the
+  code panel above and worth reading as a different kind of problem: the panel is a
+  judgment about a layout with no source, while this is one design's letterforms
+  appearing inside another's, visible to a reader who knows nothing about the deck.
+  NYU Bold has no serif on any of its thirteen slides. Mapping the notation onto the
+  theme's own family is not a template setting — it is the same system-level change as
+  the code panel's ground, and it moves all five built-ins at once.
+- **A character's width is measured at one weight and used at every weight.**
+  `CHAR_W` in `text-metrics.ts` holds one number per face, taken from prose at weight
+  400, and a display title is nearly always bold. Measured in the browser in the app's
+  own bundled faces: Montserrat is 5.4% wider at 700 than at 400 in prose and 2.6%
+  wider in capitals; the spread across faces is 1.8% (humanist) to 20% (geometric), and
+  0% for a monospaced face where every glyph is one advance whatever the weight. So a
+  single bold multiplier is as wrong as a single character width was.
+
+  Not fixed here, and the reason is worth recording. A per-face, per-weight table can
+  only be measured for the faces the app bundles — the rest name whatever generic the
+  reader's machine supplies, so a number measured on one machine describes that
+  machine. And the correction interacts with `WRAP_ALLOWANCE`: applying it made NYU's
+  own two-line title stop fitting, because the allowance charges three characters for a
+  break that in that title costs one — the space the break consumes is counted against
+  the budget and then again as raggedness. Two approximations that only agree by
+  accident, which is why the one box where it showed (`big-number`'s figure, the only
+  box at display size) states its own budget instead. The constant behind it has never
+  been validated in a browser at any weight.
 - **Fonts are mapped, not reproduced** ([§5](#5-theme-resolution)).
 - **Carried through Google Slides:** slot metadata and narration, via the mechanism in
   [§8](#8-exporting).
