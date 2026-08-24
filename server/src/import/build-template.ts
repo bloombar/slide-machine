@@ -231,6 +231,34 @@ const roomBelow = (
   return Math.max(box.h, floor - box.y)
 }
 
+/**
+ * How far a box may grow UPWARD before it would reach something else.
+ *
+ * The mirror of `roomBelow`, and it exists because growing downward is wrong
+ * for a box whose text sits on its bottom edge. NYU Bold's title slide anchors
+ * its title to the baseline of the block — `vAlign: end` — so a box grown
+ * downward moves the words down the slide, away from where the design put
+ * them. Grown upward it keeps the ink exactly where it was and takes the
+ * space above it, which on that slide is empty.
+ */
+const roomAbove = (
+  box: { x: number; y: number; w: number; h: number },
+  others: CandidateSlot[],
+): number => {
+  const overlapsAcross = (other: { x: number; w: number }) =>
+    other.x < box.x + box.w && box.x < other.x + other.w
+  const bottoms = others
+    .filter(
+      o =>
+        o.box !== box &&
+        overlapsAcross(o.box) &&
+        o.box.y + o.box.h < box.y + box.h,
+    )
+    .map(o => o.box.y + o.box.h)
+  const ceiling = Math.max(0.02, ...bottoms)
+  return Math.max(box.h, box.y + box.h - ceiling)
+}
+
 /** One derived design, as a layout of a template. */
 const toLayout = (
   derived: DerivedLayout,
@@ -280,12 +308,23 @@ const toLayout = (
    * bounded at eleven characters while drawing twenty-two, which reads as a
    * title cut to one word for no reason a reader can see.
    */
+  /**
+   * Where the extra height comes from.
+   *
+   * A box whose text sits on its bottom edge keeps that edge and takes the
+   * room above it; everything else keeps its top and grows down. Growing the
+   * wrong way is not a smaller mistake than not growing at all — it moves the
+   * words off the line the design set them on.
+   */
+  const grown = (slot: CandidateSlot, box: SourceBox): SourceBox =>
+    slot.vAlign === 'end' ? { ...box, y: slot.box.y + slot.box.h - box.h } : box
+
   const drawnBox = new Map<CandidateSlot, SourceBox>(
     derived.slots.map(slot => [
       slot,
       slot.kind === 'image' || slot.kind === 'table'
         ? slot.box
-        : {
+        : grown(slot, {
             ...slot.box,
             h: Math.min(
               Math.max(
@@ -304,9 +343,11 @@ const toLayout = (
                   lineHeight: slot.lineHeight,
                 }),
               ),
-              roomBelow(slot.box, derived.slots),
+              slot.vAlign === 'end'
+                ? roomAbove(slot.box, derived.slots)
+                : roomBelow(slot.box, derived.slots),
             ),
-          },
+          }),
     ]),
   )
 
