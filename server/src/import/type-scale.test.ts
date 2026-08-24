@@ -86,18 +86,28 @@ describe('the sizes a deck was set in', () => {
     // running edge would swallow all four into a single role in which nothing
     // is within tolerance of anything else. Measured against the size that
     // opened the cluster, 40 and 37 merge and 34 and 31 do not.
+    const a = slot('a', { fontSize: 40 })
+    const b = slot('b', { fontSize: 37 })
+    const c = slot('c', { fontSize: 34 })
+    const d = slot('d', { fontSize: 31 })
     const scale = deriveTypeScale(
-      layouts([
-        ...many(6, 'body', { fontSize: 12 }),
-        slot('a', { fontSize: 40 }),
-        slot('b', { fontSize: 37 }),
-        slot('c', { fontSize: 34 }),
-        slot('d', { fontSize: 31 }),
-      ]),
+      layouts([...many(6, 'body', { fontSize: 12 }), a, b, c, d]),
     )
-    expect(scale.styles!.title!.fontSize).toBe(40)
-    expect(scale.styles!.sectionTitle!.fontSize).toBe(34)
-    expect(scale.styles!.heading!.fontSize).toBe(31)
+    // Asserted on what each box RESOLVES to, per this file's own rule, and
+    // not on which role happens to hold it. Reading `styles.sectionTitle`
+    // tested the naming rather than the clustering: a box used once no longer
+    // earns a named role — it carries its size explicitly instead, and draws
+    // identically — so the previous form broke on a change that altered
+    // nothing this case is about.
+    // 40 and 37 are one size an author nudged, so they merge and both draw
+    // at the size that opened the cluster.
+    expect(resolved(a, scale).fontSize).toBe(40)
+    expect(resolved(b, scale).fontSize).toBe(40)
+    // 34 and 31 are not. Each keeps its own size rather than being chained
+    // into the cluster above it, which is the whole point of measuring
+    // against the size that opened it.
+    expect(resolved(c, scale).fontSize).toBe(34)
+    expect(resolved(d, scale).fontSize).toBe(31)
   })
 
   it('resolve a tie in favour of the larger, so a role never drifts down', () => {
