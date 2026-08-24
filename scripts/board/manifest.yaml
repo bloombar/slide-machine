@@ -1408,6 +1408,57 @@
   phase: 2
   status: Done
   review: false
+- id: TMPL-13
+  title: Import element accounting
+  full: "Import already says what it merged, what it approximated, and what it
+    could not fetch (TMPL-8). It does not say what it discarded, and that
+    silence is where three real defects lived undetected through a full
+    thirteen-slide fidelity review of NYU Bold: a 250pt section numeral, one
+    half of a matched pair of quotation ornaments, and a slide number on eleven
+    of thirteen pages. None of them produced a warning, a count, or an empty
+    box. They were simply not there, and nothing on either side of the import
+    was in a position to notice. Absence is the one defect our checks cannot
+    see. Every fidelity check compares something that exists on both sides —
+    geometry, colour, leading, wrapping, contrast. A…"
+  section: §7 Style Template Library
+  family: TMPL
+  phase: 2
+  status: Backlog
+  review: false
+- id: TMPL-14
+  title: A design may draw its own text
+  full: "A design's furniture is not only rules, bands and logos. Decks draw words
+    as design: a decorative initial, an oversized quotation mark, a watermark, a
+    standing label a layout always carries. A design today can draw a fill or a
+    picture and nothing else, so every one of these is lost on import and cannot
+    be authored into a built-in either. NYU Bold's quotation layout is the
+    worked example. Its source brackets the quote with a matched pair of accent
+    marks — a large opening quotation mark above and a rule below. We ship the
+    rule and not the mark, so the layout is half of a symmetry, and nothing in
+    the import said so. Decoration may therefore carry text, with its own face,
+    size, weight, colour…"
+  section: §7 Style Template Library
+  family: TMPL
+  phase: 2
+  status: Backlog
+  review: false
+- id: TMPL-15
+  title: Generated fields survive import
+  full: "A presentation's slide numbers, dates and footers are generated fields:
+    the source states where the value goes and the presenting application
+    supplies it. They are a third thing alongside design and content — nobody
+    authors them, and they differ on every slide. Our reader cannot see them at
+    all. It reads a box's text runs, and a generated field has none, so the box
+    arrives empty and is discarded as an empty placeholder. NYU Bold carries a
+    slide-number field on every layout but its title and section pages; eleven
+    of its thirteen slides are numbered in the source and none in ours. That was
+    not a decision anybody made. Import therefore reads a generated field as
+    what it is — recording which…"
+  section: §7 Style Template Library
+  family: TMPL
+  phase: 2
+  status: Backlog
+  review: false
 - id: BILL-1
   title: Subscription tiers
   full: "The product offers four subscription tiers, each priced accordingly

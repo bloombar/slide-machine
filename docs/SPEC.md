@@ -382,6 +382,50 @@ Two designs do not meet this today, measured at `2aa10ad`: `classic` and `midnig
 
 A limit is derived from an average character width, so this is a statement about content of ordinary letter widths rather than a guarantee that no string of that length can ever shrink a box.
 
+#### TMPL-13 Import element accounting
+
+Import already says what it merged, what it approximated, and what it could not fetch ([TMPL-8](#tmpl-8-template-import-from-google-slides)). It does not say what it **discarded**, and that silence is where three real defects lived undetected through a full thirteen-slide fidelity review of NYU Bold: a 250pt section numeral, one half of a matched pair of quotation ornaments, and a slide number on eleven of thirteen pages. None of them produced a warning, a count, or an empty box. They were simply not there, and nothing on either side of the import was in a position to notice.
+
+**Absence is the one defect our checks cannot see.** Every fidelity check compares something that exists on both sides — geometry, colour, leading, wrapping, contrast. A source element that was never imported makes no box to measure, so every one of those checks passes, correctly, on the part of the design that survived. A screenshot of the result looks clean, because it is clean; it is merely not the design that was imported.
+
+**So the import reconciles rather than merely reports.** Every element the source presentation actually draws — on its slides, on the layout pages its slides inherit from, and on its master — ends the import in exactly one of three recorded states:
+
+- **placed** — it became a slot ([TMPL-9](#tmpl-9-open-slot--layout-model)) or a piece of a layout's decoration;
+- **dropped for a stated reason** — page marked "skip slide", a stroke with no rectangle that stands for it, a box too small to hold a word, an asset that would not retrieve;
+- **unaccounted** — nothing claimed it, and no rule refused it.
+
+The third state is the point. The second is produced today one field at a time — skipped pages, declined strokes, unfetched assets each have their own count — and each field exists because somebody thought of that category in advance and added it. The categories nobody thought of have no field and report nothing at all: a box the ornament rule judged too small to hold a word is discarded in silence today, and that single unrecorded rule accounts for two of the three absences. Reconciling against an enumeration of the source turns "we never considered this" from silence into a line in the report. `ImportReport` already carries the instinct — `slidesSkipped`, `rulesDeclined`, `contentDropped` are each one predicted category, and the requirement here is the completion of that idea rather than a new one; the completion is the part that catches what nobody predicted.
+
+**The report shows the unaccounted, named and located** — the slide it was on, what it is, where it sat, and its first few characters if it has any ("slide 2 · text '01' · x 0.48 y 0.32 · 0.51 × 0.68"). Named rather than counted, for the same reason dropped content is named rather than counted: "three elements were unaccounted" is not something an instructor can act on and "slide 2: the big 01" is. Zero unaccounted is stated as a claim, not as an absent line, since a report that says nothing when everything was fine reads identically to one that never ran.
+
+**What this does not promise.** It says every element has a destination; it does not say the destination is right. An element placed in decoration that should have been a slot is fully accounted and still wrong — a section numeral frozen into the design says "01" on every section divider of every deck built from that template, and looks perfect in every screenshot of the slide it came from. Whether a thing is design or content stays a judgement, made against the deck and checked by rendering ours beside the source. This requirement narrows what a human has to look for; it does not replace the looking.
+
+**What it costs.** Three things, honestly:
+
+- **Deciding what "draws" means is the hard part, not the bookkeeping.** Google marks an unfilled shape with an opaque white fill next to `propertyState: NOT_RENDERED`; a box whose only content is a generated slide number holds no text run; an empty placeholder renders a prompt in the editor and nothing in the presentation. Reading any of these naively makes the enumeration report every empty placeholder in the deck as an element, and forty spurious unaccounted lines are as unread as none. Each of those three rules had to be got right before the count meant anything.
+- **The silent failure moves rather than disappears.** An element the enumerator cannot see is not reported as unaccounted; it is reported as not being in the source. That is the same blindness one level up, so the enumeration itself needs a check with an independent basis — reconciling the words the source's own PDF render prints against the elements enumerated closes it for text, which is where the three real absences happened to live.
+- **Some furniture is genuinely ignorable**, and a rule that never says so buries its own signal. Categories that are decided once — a slide-number field, a footer, a date — belong in "dropped for a stated reason" with the reason recorded, not in "unaccounted" on every deck forever.
+
+**It runs before anyone looks at a screenshot**, on every import, and it is the cheapest of the checks: it reads two files and needs no browser. It is also the only one of them that would have found the other two defects on its own.
+
+#### TMPL-14 A design may draw its own text
+
+A design's furniture is not only rules, bands and logos. Decks draw **words** as design: a decorative initial, an oversized quotation mark, a watermark, a standing label a layout always carries. A design today can draw a fill or a picture and nothing else, so every one of these is lost on import and cannot be authored into a built-in either.
+
+NYU Bold's quotation layout is the worked example. Its source brackets the quote with a matched pair of accent marks — a large opening quotation mark above and a rule below. We ship the rule and not the mark, so the layout is half of a symmetry, and nothing in the import said so.
+
+**Decoration may therefore carry text**, with its own face, size, weight, colour and alignment, drawn exactly as a band or a logo is drawn: never editable, never offered to the AI, never counted toward any slot's budget, and identical on every slide built on that layout.
+
+**That last clause is the whole distinction, and getting it wrong is worse than the gap it closes.** Text belongs to the design only when it is the same on every slide the layout produces. A section number is not: it reads 01 on the first divider and 02 on the second, so it is content and belongs in a slot ([TMPL-9](#tmpl-9-open-slot--layout-model)). Frozen into decoration it would be fully accounted by [TMPL-13](#tmpl-13-import-element-accounting), render perfectly, survive every fidelity check we have, and say 01 on every section divider of every deck built from that template. A defect that passes both the accounting and the screenshot is the expensive kind, so the rule an importer applies is the origin of the element — inherited from the layout page, or drawn on the slide itself — rather than anything about how the text looks.
+
+#### TMPL-15 Generated fields survive import
+
+A presentation's slide numbers, dates and footers are **generated fields**: the source states where the value goes and the presenting application supplies it. They are a third thing alongside design and content — nobody authors them, and they differ on every slide.
+
+Our reader cannot see them at all. It reads a box's text runs, and a generated field has none, so the box arrives empty and is discarded as an empty placeholder. NYU Bold carries a slide-number field on every layout but its title and section pages; eleven of its thirteen slides are numbered in the source and none in ours. That was not a decision anybody made.
+
+**Import therefore reads a generated field as what it is** — recording which field a box carries rather than the value the source happened to render — so that a design that numbers its slides is imported as one that numbers its slides. Where the app has no equivalent for a field, it is dropped **for a stated reason** under [TMPL-13](#tmpl-13-import-element-accounting) rather than in silence, which is what separates "we do not support footers" from "we never saw it".
+
 ### 8. Live Lecture Capture
 
 #### CAP-1 Session lifecycle
