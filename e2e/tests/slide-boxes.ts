@@ -69,8 +69,54 @@ export const TIGHT_LEADING = 1.2
  * Belt and braces over `prefers-reduced-motion`, which the app already
  * honours, so a timeout here is not worth failing a run over.
  */
-export const settled = (page: Page) =>
-  page
+/**
+ * Whether the faces the design asks for have actually loaded.
+ *
+ * Every box measurement is a text measurement, and text measures differently
+ * in a fallback face. The design's stack is
+ * `Montserrat, ui-sans-serif, system-ui, -apple-system, …` — so if Montserrat
+ * has not arrived, macOS measures in San Francisco and Linux in whatever it
+ * has, and the same box legitimately produces two different answers on two
+ * machines. Boxes that abut by construction then differ between "touching"
+ * and "overlapping" for reasons that have nothing to do with the design.
+ *
+ * Reported rather than assumed, because the failure is silent: a fallback
+ * face renders perfectly well and says nothing about not being the one asked
+ * for.
+ */
+export const fontsLoaded = (page: Page) =>
+  page.evaluate(async () => {
+    await document.fonts.ready
+    // The faces THIS slide actually asks for, read off the rendered boxes
+    // rather than from a list — a design that uses one face should not be
+    // reported against another it never mentions.
+    const slide = document.querySelector('[data-testid="slide"]')
+    const wanted = new Set<string>()
+    for (const node of slide?.querySelectorAll('[data-node-id]') ?? []) {
+      const first = getComputedStyle(node)
+        .fontFamily.split(',')[0]
+        ?.trim()
+        .replace(/^["']|["']$/g, '')
+      // Only real families; the generic keywords at the end of a stack are
+      // always "available" and say nothing.
+      if (
+        first &&
+        !/^(ui-|system-ui|-apple-system|serif|sans-serif)/.test(first)
+      )
+        wanted.add(first)
+    }
+    return [...wanted].map(family => ({
+      family,
+      loaded: document.fonts.check(`16px "${family}"`),
+    }))
+  })
+
+export const settled = async (page: Page) => {
+  // Fonts first. A measurement taken before the design's own face has loaded
+  // is a measurement of a fallback, and every rule in this file is a text
+  // measurement.
+  await page.evaluate(() => document.fonts.ready).catch(() => {})
+  return page
     .waitForFunction(
       () => {
         const slide = document.querySelector('[data-testid="slide"]')
@@ -87,6 +133,7 @@ export const settled = (page: Page) =>
       { timeout: 5_000 },
     )
     .catch(() => {})
+}
 
 /** Every box the design reserves on a rendered slide, as fractions of the
  * slide, with how far each one's content runs past it. */
