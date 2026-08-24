@@ -854,6 +854,24 @@ the user did not ask for.
   NYU Bold has no serif on any of its thirteen slides. Mapping the notation onto the
   theme's own family is not a template setting — it is the same system-level change as
   the code panel's ground, and it moves all five built-ins at once.
+- **A character's width is measured at one weight and used at every weight.**
+  `CHAR_W` in `text-metrics.ts` holds one number per face, taken from prose at weight
+  400, and a display title is nearly always bold. Measured in the browser in the app's
+  own bundled faces: Montserrat is 5.4% wider at 700 than at 400 in prose and 2.6%
+  wider in capitals; the spread across faces is 1.8% (humanist) to 20% (geometric), and
+  0% for a monospaced face where every glyph is one advance whatever the weight. So a
+  single bold multiplier is as wrong as a single character width was.
+
+  Not fixed here, and the reason is worth recording. A per-face, per-weight table can
+  only be measured for the faces the app bundles — the rest name whatever generic the
+  reader's machine supplies, so a number measured on one machine describes that
+  machine. And the correction interacts with `WRAP_ALLOWANCE`: applying it made NYU's
+  own two-line title stop fitting, because the allowance charges three characters for a
+  break that in that title costs one — the space the break consumes is counted against
+  the budget and then again as raggedness. Two approximations that only agree by
+  accident, which is why the one box where it showed (`big-number`'s figure, the only
+  box at display size) states its own budget instead. The constant behind it has never
+  been validated in a browser at any weight.
 - **Fonts are mapped, not reproduced** ([§5](#5-theme-resolution)).
 - **Carried through Google Slides:** slot metadata and narration, via the mechanism in
   [§8](#8-exporting).

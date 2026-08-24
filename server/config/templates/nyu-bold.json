@@ -1051,7 +1051,7 @@
           "label": "Figure",
           "description": "The figure alone — \"100%\", \"1831\". No words.",
           "multiline": true,
-          "maxChars": 8,
+          "maxChars": 7,
           "required": true
         },
         {
