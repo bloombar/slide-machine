@@ -107,6 +107,40 @@ const inkOf = (id: string) => `
   }
 })()`
 
+/**
+ * The character whose ink reaches furthest, in each direction, for a given
+ * font — over the set a design can actually be written in.
+ *
+ * The ink rule's tolerance is stated for the unaccented Latin set, so the
+ * question it rests on is which member of that set is worst. Answered by
+ * measuring every one of them in the face the box computed to, rather than
+ * by naming the letters that seem likely: a face's `Q` tail, its comma and
+ * its `j` are design decisions, and which of them descends furthest is not
+ * predictable from the alphabet.
+ */
+const WORST_GLYPH = (font: string, uppercaseOnly: boolean) => `
+(() => {
+  const ctx = document.createElement('canvas').getContext('2d')
+  ctx.font = ${JSON.stringify(font)}
+  const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  const lower = 'abcdefghijklmnopqrstuvwxyz'
+  const marks = String.fromCharCode(46,44,59,58,33,63,40,41,91,93,123,125,47,92,124,45,95,34,39,64,35,36,37,38,42,43,61,60,62,126,96,94)
+  const letters = ${uppercaseOnly ? 'true' : 'false'} ? upper : upper + lower
+  const rank = (set, key) => [...set]
+    .map(ch => ({ ch, v: ctx.measureText(ch)[key] }))
+    .sort((a, b) => b.v - a.v)
+    .slice(0, 4)
+    .map(r => r.ch + ' ' + r.v.toFixed(1))
+  return {
+    font: ctx.font,
+    size: parseFloat(ctx.font),
+    lettersDeepest: rank(letters, 'actualBoundingBoxDescent'),
+    lettersTallest: rank(letters, 'actualBoundingBoxAscent'),
+    withMarksDeepest: rank(letters + marks, 'actualBoundingBoxDescent'),
+    withMarksTallest: rank(letters + marks, 'actualBoundingBoxAscent'),
+  }
+})()`
+
 const intersects = (
   a: { left: number; right: number; top: number; bottom: number },
   b: { left: number; right: number; top: number; bottom: number },
@@ -183,6 +217,25 @@ test('measures whether the divider’s two texts touch', async ({ page }) => {
     'INK PROBE ' +
       JSON.stringify({ title, number, inkOverlapOfSlide: worst }, null, 2),
   )
+  // Which glyph in each box could reach furthest toward the other. The
+  // measured clearance above is for the text actually written; this is the
+  // worst the same two boxes could do with any other content.
+  const upperWorst = await page.evaluate(
+    WORST_GLYPH(
+      title.font as string,
+      /uppercase/.test(TITLE) || TITLE === TITLE.toUpperCase(),
+    ),
+  )
+  const lowerWorst = await page.evaluate(
+    WORST_GLYPH(
+      number.font as string,
+      NUMBER === NUMBER.toUpperCase() && /[A-Z]/.test(NUMBER),
+    ),
+  )
+  console.log(
+    'INK GLYPHS ' + JSON.stringify({ upperWorst, lowerWorst }, null, 2),
+  )
+
   console.log(
     `INK VERDICT  ${worst > 0 ? 'TOUCHES' : 'CLEAR'} — ` +
       `ink overlap ${(worst * 100).toFixed(3)}% of the slide; ` +
