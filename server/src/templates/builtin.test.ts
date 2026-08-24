@@ -27,6 +27,7 @@ describe('externalized templates', () => {
     expect(templates.map(t => t.id).sort()).toEqual([
       'classic',
       'midnight',
+      'nyu-bold',
       'nyu-elegant',
       'seminar',
     ])

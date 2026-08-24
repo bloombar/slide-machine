@@ -22,7 +22,7 @@ including how they move to and from Google Slides.
 Two stores, one resolver.
 
 **Built-in templates are files.** One JSON per template in `server/config/templates/`
-(`classic.json`, `midnight.json`, `seminar.json`). Drop a new `*.json` in the directory to
+(`classic.json`, `midnight.json`, `seminar.json`, `nyu-elegant.json`, `nyu-bold.json`). Drop a new `*.json` in the directory to
 add one; edit a file to retune anything. No code change, no rebuild in dev. Files are
 zod-validated at first use ([builtin.ts](../server/src/templates/builtin.ts)) and fail
 loudly if malformed; `TEMPLATES_DIR` overrides the location; the Docker image ships

@@ -38,9 +38,13 @@ export const serveTemplateAssets = (app: Express): void => {
       index: false,
       // The design of a built-in changes only when the app is deployed.
       maxAge: '1h',
-      // A miss is a 404, not the SPA. Falling through would answer a missing
-      // picture with index.html, which `deck-image.ts` sniffs as a block page
-      // and retries before giving up — slow, and misleading in the logs.
+      // A miss is an error, not the SPA. Falling through would answer a
+      // missing picture with index.html, which `deck-image.ts` sniffs as a
+      // block page and retries before giving up — slow, and misleading in the
+      // logs. What the caller actually receives is a 500: `fallthrough: false`
+      // hands the miss to the error handler, which has no case for it. Said
+      // exactly because this comment used to claim a 404, and a reader
+      // debugging a missing picture would go looking for the wrong status.
       fallthrough: false,
     }),
   )
