@@ -30,6 +30,7 @@
  * over a full-slide photograph, and flagging that would bury the real faults
  * under designs that are working correctly.
  */
+import { NATURAL_LINE_BOX, inkBoxOf } from '@slide-machine/shared'
 import { type Locator, type Page } from './fixtures'
 
 /** Rounding slack, as a fraction of the slide. Sub-pixel differences are not
@@ -244,6 +245,79 @@ export const boxesOf = (slide: Locator) =>
                 }
               : null
           })(),
+          /**
+           * What the box is set in, in the fields the ink model reads.
+           *
+           * Gathered here rather than derived from the template, because the
+           * gate measures what the app DREW: a box whose type the renderer
+           * shrank is set in a smaller size than the design states, and the
+           * ink it can reach shrinks with it.
+           *
+           * `cqi` is a percent of the slide's WIDTH, which is the unit the
+           * template model measures type in, so the conversion is against
+           * the frame's width and not its height.
+           */
+          setting: (() => {
+            const family = (style.fontFamily.split(',')[0] ?? '')
+              .trim()
+              .replace(/^["']|["']$/g, '')
+              .toLowerCase()
+              .replace(/\s+/g, '-')
+            const fontSizePx = Number.parseFloat(style.fontSize) || 0
+            const lineHeightPx = Number.parseFloat(style.lineHeight) || 0
+            const padTopPx = Number.parseFloat(style.paddingTop) || 0
+            return {
+              family,
+              fontSize: (fontSizePx / frame.width) * 100,
+              fontWeight: Number.parseInt(style.fontWeight, 10) || 400,
+              lineHeight: fontSizePx ? lineHeightPx / fontSizePx : 0,
+              caps: style.textTransform === 'uppercase',
+              vAlign:
+                style.justifyContent === 'center'
+                  ? 'center'
+                  : style.justifyContent === 'flex-end'
+                    ? 'end'
+                    : 'start',
+              paddingEm: fontSizePx ? padTopPx / fontSizePx : 0,
+            }
+          })(),
+          /**
+           * How many line boxes the browser actually drew.
+           *
+           * Counted by CLUSTERING the rect tops, not by taking the distinct
+           * ones. A Range yields a rect per fragment, and fragments on the
+           * same line do not share a top: a two-line title reported tops of
+           * 195, 207 and 283, which is two lines and three distinct values.
+           * Counting the distinct ones gave three, and a line count one too
+           * high pushes the modelled ink a whole line below where the glyphs
+           * are — which turned a design with one fault into a design with
+           * seven overlapping pairs.
+           *
+           * Tops within half a line of each other are the same line. Half is
+           * the only threshold that cannot be wrong in either direction: two
+           * real lines are a full line-height apart, and fragments of one
+           * line differ by at most the tallest inline box on it.
+           */
+          lines: (() => {
+            const range = document.createRange()
+            range.selectNodeContents(node)
+            const tops = [...range.getClientRects()]
+              .filter(rect => rect.height > 0)
+              .map(rect => rect.top)
+              .sort((a, b) => a - b)
+            range.detach()
+            const step = (Number.parseFloat(style.lineHeight) || 0) / 2
+            if (!tops.length) return 0
+            if (!step) return 1
+            let count = 1
+            let last = tops[0]!
+            for (const top of tops)
+              if (top - last > step) {
+                count++
+                last = top
+              }
+            return count
+          })(),
           // Furniture the design draws, as the app itself marks it. A
           // decoration is not a box the reader is missing content from.
           furniture: node.getAttribute('aria-hidden') === 'true',
@@ -367,12 +441,71 @@ export const faultsOn = async (
       )
   }
 
-  // Compared on the text, not the container — see `textBox`. A box with no
-  // measurable text extent cannot collide with anything.
+  /**
+   * Compared on the INK, which is the only version a reader can see.
+   *
+   * This rule used to compare `textBox`, and its comment claimed that was
+   * "where the GLYPHS actually are". It was not. `Range.getBoundingClientRect`
+   * returns the LINE BOX, and the two differ by exactly the amount that
+   * matters here: a box led tighter than its face's natural box hangs ink
+   * OUTSIDE its line boxes, one led looser leaves empty room INSIDE them. So
+   * the rule was wrong in both directions at once, and the docstring asserted
+   * the property the code lacked — which is why nobody checked the
+   * implementation.
+   *
+   * The correction is not a loosened threshold, and the difference is
+   * demonstrable rather than argued: on NYU Bold's divider the two boxes
+   * overlap over 6.1% of the slide while their glyphs clear by 0.062 of its
+   * height. A relaxed tolerance cannot produce a case where the two answers
+   * diverge like that; only a different measurement can. And it needs no
+   * appeal to the face at all on `big-number`, whose title bottom and caption
+   * top are the same number to five decimals: boxes that abut exactly have
+   * zero rectangle overlap, so anything reported for them is line-box
+   * overrun by construction, whatever the platform resolves the stack to.
+   *
+   * `inkBoxOf` is the same model the template audit uses, from the same
+   * table, so the two cannot drift apart — the argument that put `SLACK_EM`
+   * in `shared`. Its inputs here come off the DOM rather than the template:
+   * the box as drawn, and the line count the browser actually produced.
+   *
+   * A face we ship no metrics for keeps the line box, which is what this rule
+   * compared before. That is deliberate: the audit falls back to the whole
+   * rectangle, which is conservative for a static check, but doing that here
+   * would newly fault every design that names no typeface — a change in
+   * behaviour dressed as a correction, on designs this has nothing to say
+   * about.
+   */
+  const inkOf = (box: (typeof boxes)[number]) =>
+    inkBoxOf(
+      { x: box.x, y: box.y, w: box.w, h: box.h },
+      {
+        fontSize: box.setting.fontSize,
+        fontFamily: box.setting.family,
+        fontWeight: box.setting.fontWeight,
+        lineHeight: box.setting.lineHeight,
+        caps: box.setting.caps,
+        vAlign: box.setting.vAlign as 'start' | 'center' | 'end',
+        // Left undefined where the padding IS the renderer's own overhang
+        // allowance, so the model recomputes the same number instead of
+        // being handed it twice.
+        ...(box.setting.paddingEm > 0 &&
+        Math.abs(
+          box.setting.paddingEm -
+            (NATURAL_LINE_BOX - box.setting.lineHeight) / 2,
+        ) > 0.001
+          ? { paddingY: box.setting.paddingEm }
+          : {}),
+      },
+      Math.max(1, box.lines),
+    ) ?? box.textBox
+
+  // A box with no measurable text extent cannot collide with anything.
   const worded = boxes.filter(box => box.hasText && box.textBox)
   for (let a = 0; a < worded.length; a++)
     for (let b = a + 1; b < worded.length; b++) {
-      const shared = overlapArea(worded[a]!.textBox!, worded[b]!.textBox!)
+      const inkA = inkOf(worded[a]!)
+      const inkB = inkOf(worded[b]!)
+      const shared = inkA && inkB ? overlapArea(inkA, inkB) : 0
       if (shared > 0)
         faults.push(
           `${where} "${worded[a]!.id}" and "${worded[b]!.id}" overlap over ` +
