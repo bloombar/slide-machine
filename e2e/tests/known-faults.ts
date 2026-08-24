@@ -24,6 +24,19 @@
  *
  * Recorded with their numbers so a reader sees what is tolerated rather than
  * inferring it from a green.
+ *
+ * ## One entry here is NOT pre-existing, and that is a different act
+ *
+ * The mechanism above exists so a NEW fault fails rather than joining a list
+ * of old ones. Putting a new fault on the list is therefore the one move this
+ * file is built to prevent, and it has been made once, deliberately, with a
+ * ruling behind it. It carries an `introduced` field; the pre-existing ones
+ * do not, and a reader must be able to tell them apart at a glance.
+ *
+ * If a later reader thinks that call was wrong, the entry states everything
+ * needed to reverse it. Reversing it means shipping a section divider without
+ * its dominant graphic, which is the defect this whole branch began from —
+ * that is the trade, and it is written down rather than implied.
  */
 
 /** One tolerated fault: the design, and enough of the message to identify it. */
@@ -33,6 +46,16 @@ export interface KnownFault {
   match: string
   /** What it was measured at on the base, for a reader and for comparison. */
   measured: string
+  /**
+   * Present ONLY on a fault this branch introduced, and absent on every
+   * pre-existing one.
+   *
+   * Its value is the argument for accepting it. A pre-existing fault needs no
+   * argument — it was there before and the branch is not answerable for it.
+   * A new one needs the whole case, because listing it is the thing this file
+   * exists to stop.
+   */
+  introduced?: string
 }
 
 export const KNOWN_FAULTS: KnownFault[] = [
@@ -88,6 +111,36 @@ export const KNOWN_FAULTS: KnownFault[] = [
     design: 'seminar',
     match: 'image-heavy at its budget "caption" only fits because',
     measured: 'shrunk to 40%, drawn at 7.8px',
+  },
+  {
+    design: 'nyu-bold',
+    match: 'section at its budget "number" cuts the descenders',
+    measured:
+      '32px of reachable ink outside the box, at 34.72cqi — and the shared ' +
+      'ink model derives 31.9px from the font tables independently',
+    introduced:
+      'NEW ON THIS BRANCH, unlike everything above it. The section numeral ' +
+      'is the box this PR restored, and it reports a fault the base branch ' +
+      'never had because the base branch had deleted the box.\n\n' +
+      'Unreachable for what the slot holds. The rule reports the worst case ' +
+      'over characters a box COULD carry; digits have no descenders, so ' +
+      'nothing is cut today. It becomes real the moment somebody types a ' +
+      '`g`, and nothing enforces that they cannot.\n\n' +
+      'No geometry closes it, measured rather than argued. The box is ' +
+      '1.0645em of height holding a 1.196em line, and changing its type ' +
+      'size only trades one rule for the other: at 34.72cqi the descender ' +
+      'rule faults and the overlap rule is silent; at 29.00cqi the line ' +
+      'fits and the overlap rule faults at 0.3% instead, because the ' +
+      'smaller type sits higher. There is no size that satisfies both. And ' +
+      "the vertical axis is closed too — the box's bottom IS the slide's " +
+      'bottom, so unlike the title/numeral overlap on the same slide, which ' +
+      'was closed by moving a box 0.020 down, there is nowhere for this one ' +
+      'to go.\n\n' +
+      'TMPL-16 — a slot declaring the characters it holds — is the only ' +
+      'thing that closes it, and would close it exactly.\n\n' +
+      'The alternative to accepting it is shipping a section divider ' +
+      'without its dominant graphic, which is the defect this branch began ' +
+      'from.',
   },
 ]
 
