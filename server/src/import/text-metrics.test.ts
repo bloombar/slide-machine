@@ -199,16 +199,32 @@ describe('the way a box is actually set', () => {
     // the 1.5 fallback allows — which is how a title box was told it holds
     // one line when it holds two.
     //
-    // Half again, and not twice: 15.875cqi of interior at 3.8cqi a line would
-    // take four, but a face led below its natural box hangs its ink outside
-    // that box at each end, and the run has to fit INCLUDING the overhang.
-    // Four lines plus 0.984cqi of ink is 16.18 in a box of 15.875, so three
-    // is the honest answer. This case asserted four until the overhang was
-    // modelled, and the number is the half of it that was left behind.
+    // FOUR, and the number has now been checked against a browser rather than
+    // argued from the arithmetic. 15.875cqi of interior at 3.8cqi a line
+    // takes four with room over; the reason this case said three is that a
+    // face led below its natural box hangs ink outside that box at each end,
+    // and the run was required to fit INCLUDING the overhang — four lines
+    // plus 0.984cqi of ink is 16.18 in a box of 15.875.
+    //
+    // That was the estimate being stricter than the renderer, which is the
+    // defect `SLACK_EM` exists to close: `useFitText` allows a box led under
+    // `TIGHT_LEADING` a quarter em of overrun before it shrinks anything, and
+    // 0.305cqi of overhang is well inside the 1.0cqi that allows.
+    //
+    // Measured, in the built app, in this exact box: 147 characters draw on
+    // FOUR lines at `--fit-scale` 1.00, with `scrollHeight` equal to
+    // `clientHeight` and no overflow at all. The control is 190 characters in
+    // the same box, which shrinks to 0.95 — so the measurement can report a
+    // box that does not fit, and "four lines fit" is a result rather than the
+    // absence of one.
+    //
+    // What is left is 0.31cqi of worst-case ink outside the box, about 3px at
+    // the size this renders — real for a descender, nil for a line without
+    // one, and the same limit the ink model states for every tight-led box.
     expect(capacityOf(slot({ fontSize: 4 })).maxChars).toBe(75)
     expect(
       capacityOf(slot({ fontSize: 4 }), { lineHeight: 0.95 }).maxChars,
-    ).toBe(39 + 36 + 36)
+    ).toBe(39 + 36 + 36 + 36)
   })
 
   it('gives capitals the extra rows they wrap onto', () => {
