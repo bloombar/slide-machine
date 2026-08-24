@@ -16,7 +16,7 @@
  * stored authorization really does turn out to lack it, the caller is told to
  * reconnect rather than shown an error it cannot act on.
  */
-import { NATURAL_LINE_BOX } from './text-metrics'
+import { NATURAL_LINE_BOX } from '@slide-machine/shared'
 import {
   type SourceBox,
   type SourceElement,

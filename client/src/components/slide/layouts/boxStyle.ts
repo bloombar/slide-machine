@@ -9,7 +9,7 @@
  * Sizes arrive in `cqi` — a percent of the slide's width — so type and spacing
  * scale with the slide rather than the window (docs/TEMPLATES.md §4).
  */
-import type { BoxStyle } from '@slide-machine/shared'
+import { NATURAL_LINE_BOX, type BoxStyle } from '@slide-machine/shared'
 import type { ThemeColors } from '../theme'
 import type { ThemeTextStyles } from '../theme'
 import { fontStack } from '../fonts'
@@ -139,6 +139,28 @@ export const surfaceStyle = (
 })
 
 /**
+ * Room for the ink a tightly-led line hangs outside its own line box.
+ *
+ * A design set below the face's natural line box does not shrink its letters
+ * to match: the ascenders and descenders stay where they were and overflow
+ * the line box, above the first line and below the last. A box that clips its
+ * overflow — which every slot does — then cuts them, and a box anchored to
+ * its bottom edge pushes that ink into whatever sits beneath it. NYU Bold's
+ * title is set at 0.957 and lost 13px of descender into its own subtitle.
+ *
+ * Half the overhang at each end, in `em`, so it scales with the type exactly
+ * as the overhang does. Only where the box states no vertical padding of its
+ * own: a design that asked for padding has already said what it wants.
+ */
+const overhangPadding = (style: BoxStyle): React.CSSProperties => {
+  const leading = style.lineHeight
+  if (!leading || leading >= NATURAL_LINE_BOX) return {}
+  if (style.paddingY !== undefined || style.padding !== undefined) return {}
+  const half = `${((NATURAL_LINE_BOX - leading) / 2).toFixed(3)}em`
+  return { paddingTop: half, paddingBottom: half }
+}
+
+/**
  * The full style for a box that lays its content out itself: a flex column,
  * so `align` and `vAlign` mean the same thing in every renderer.
  */
@@ -171,4 +193,8 @@ export const contentStyle = (
   textAlign: TEXT_ALIGN[style.align ?? 'start'],
   ...typeStyle(style, colors),
   ...surfaceStyle(style, colors),
+  // After `surfaceStyle`, which writes `paddingTop`/`paddingBottom` as
+  // `undefined` when the box states none — and a later `undefined` in a
+  // spread wins, which would silently erase this.
+  ...overhangPadding(style),
 })

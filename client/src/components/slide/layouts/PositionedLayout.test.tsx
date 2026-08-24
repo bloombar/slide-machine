@@ -156,6 +156,38 @@ describe('PositionedLayout', () => {
     expect(styleOf('start')).toHaveStyle({ textAlign: 'start' })
   })
 
+  it('keeps the ink of a tightly-led box inside it', () => {
+    // A design set below the face's natural line box does not shrink its
+    // letters: they hang outside the line box and a clipped box cuts them —
+    // 13px of descender on NYU Bold's title, pushed into its own subtitle
+    // because the box is anchored to its bottom edge. Half the overhang at
+    // each end, in `em` so it scales with the type.
+    const tight = layout({
+      elementPositions: {
+        title: { x: 0, y: 0, w: 1, h: 0.5, lineHeight: 0.957, fontSize: 8 },
+      },
+    })
+    expect(
+      render(<PositionedLayout {...props(tight)} />).container.querySelector(
+        'div[style]',
+      ),
+    ).toHaveStyle({ paddingTop: '0.120em', paddingBottom: '0.120em' })
+  })
+
+  it('leaves a box led at or above natural unpadded', () => {
+    // The overhang is what is being paid for; a box that has none pays
+    // nothing, and padding it would shrink the text area for no reason.
+    const loose = layout({
+      elementPositions: {
+        title: { x: 0, y: 0, w: 1, h: 0.5, lineHeight: 1.5, fontSize: 8 },
+      },
+    })
+    const box = render(
+      <PositionedLayout {...props(loose)} />,
+    ).container.querySelector('div[style]') as HTMLElement
+    expect(box.style.paddingTop).toBe('')
+  })
+
   it('reads a colour named as a theme key from the theme', () => {
     const themed = layout({
       elementPositions: {
