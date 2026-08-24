@@ -791,6 +791,39 @@ const main = async () => {
         )
       positions.number = positions['title-2']!
       delete positions['title-2']
+
+      /*
+       * AUTHORED. The numeral is nudged 0.02 of the slide's height down —
+       * about 11px as it renders — and its box shortened by the same amount
+       * so its bottom edge stays on the slide.
+       *
+       * NYU's own two rectangles overlap: the title box runs to 0.447 and the
+       * numeral box begins at 0.323. That is not a defect in the deck — the
+       * GLYPHS clear each other by 0.062 of the slide, measured in a browser
+       * on the real strings, about a third of the title's own type size. Our
+       * overlap rule compares ink rather than rectangles for exactly this
+       * reason (`shared/types/text-ink`).
+       *
+       * But the rule has to hold for what the slots permit, not for the two
+       * strings NYU happens to have written. Its own worst case — a `Q` in
+       * the title, whose tail reaches 0.161em below the baseline, under the
+       * dot of an `i` in the numeral at 0.787em — leaves 0.0094 of the slide
+       * of genuine ink overlap, about 5px. That is what this buys back.
+       *
+       * It does not buy back the marks: a solidus in the number box reaches
+       * far higher than any digit and would touch by 28px. That case is
+       * closed by TMPL-16, a slot declaring the characters it holds, not by
+       * moving this box further.
+       *
+       * The size is derived rather than picked: the 0.0094 the rule reports,
+       * plus 0.008 for the largest disagreement between the analytic model
+       * and the browser measurement that validated it. Rounded up to 0.02.
+       * vAlign is `start`, so moving `y` moves the glyphs by the same amount
+       * and nothing else about the slide changes.
+       */
+      const NUDGE = 0.02
+      positions.number.y += NUDGE
+      positions.number.h -= NUDGE
     }
     if (n === 12) {
       /*

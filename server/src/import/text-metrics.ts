@@ -251,8 +251,11 @@ const rowsFor = (chars: number, fits: number): number =>
 const inkHeight = (lines: number, lineHeight: number): number =>
   lines * lineHeight + Math.max(0, NATURAL_LINE_BOX - lineHeight)
 
-/** How many lines fit down it. A list also pays for the gap between points. */
-const linesDown = (
+/** How many lines fit down it. A list also pays for the gap between points.
+ *
+ * Exported for the template audit, which needs the same line count to know
+ * where a box's ink lands (`shared/types/text-ink`). */
+export const linesDown = (
   box: { h: number },
   fontSize: number,
   lineHeight: number,
