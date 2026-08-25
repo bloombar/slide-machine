@@ -105,7 +105,7 @@
           "kind": "text",
           "label": "Title",
           "description": "The lecture's subject, sentence case. Not a greeting.",
-          "maxChars": 44,
+          "maxChars": 34,
           "required": true
         },
         {
@@ -152,7 +152,8 @@
             "style": {
               "textStyle": "title",
               "align": "center",
-              "paddingY": 1.5
+              "paddingY": 1.5,
+              "color": "#330662"
             },
             "shrink": 0
           },
@@ -162,8 +163,9 @@
             "style": {
               "textStyle": "caption",
               "align": "center",
-              "color": "text"
-            }
+              "color": "#330662"
+            },
+            "shrink": 1
           }
         ]
       },
@@ -186,7 +188,7 @@
           "kind": "text",
           "label": "Title",
           "description": "The lecture's subject, sentence case.",
-          "maxChars": 44,
+          "maxChars": 33,
           "required": true
         },
         {
@@ -271,7 +273,7 @@
           "kind": "text",
           "label": "Title",
           "description": "The section's name, as a noun phrase.",
-          "maxChars": 48,
+          "maxChars": 32,
           "required": true
         },
         {
@@ -279,7 +281,7 @@
           "kind": "text",
           "label": "Caption",
           "description": "One line on what this section establishes.",
-          "maxChars": 90
+          "maxChars": 60
         }
       ],
       "decoration": [
@@ -289,13 +291,6 @@
           "w": 1,
           "h": 1,
           "imageUrl": "/templates/nyu-elegant/mark-section.png"
-        },
-        {
-          "x": 0.045,
-          "y": 0.882,
-          "w": 0.085,
-          "h": 0.051,
-          "imageUrl": "/templates/nyu-elegant/logo.png"
         }
       ],
       "tree": {
@@ -317,8 +312,9 @@
             "width": 0.055,
             "height": 0.006,
             "style": {
-              "background": "muted"
-            }
+              "background": "accent"
+            },
+            "shrink": 0
           },
           {
             "id": "title",
@@ -326,7 +322,8 @@
             "style": {
               "textStyle": "sectionTitle",
               "align": "center",
-              "paddingY": 1.5
+              "paddingY": 1.5,
+              "color": "#330662"
             },
             "shrink": 0
           },
@@ -335,8 +332,10 @@
             "slot": "caption",
             "style": {
               "textStyle": "caption",
-              "align": "center"
-            }
+              "align": "center",
+              "color": "#330662"
+            },
+            "shrink": 1
           }
         ]
       },
@@ -387,7 +386,8 @@
             "grow": 1,
             "style": {
               "textStyle": "body"
-            }
+            },
+            "shrink": 1
           }
         ]
       },
@@ -454,7 +454,8 @@
             "grow": 1,
             "style": {
               "textStyle": "bullet"
-            }
+            },
+            "shrink": 1
           }
         ]
       },
@@ -537,7 +538,8 @@
             "grow": 1,
             "style": {
               "textStyle": "bullet"
-            }
+            },
+            "shrink": 1
           }
         ]
       },
@@ -624,7 +626,8 @@
                 "slot": "body",
                 "style": {
                   "textStyle": "body"
-                }
+                },
+                "shrink": 1
               }
             ]
           }
@@ -741,7 +744,7 @@
                       "textStyle": "body",
                       "fontSize": 1.67
                     },
-                    "shrink": 0
+                    "shrink": 1
                   }
                 ]
               },
@@ -768,11 +771,12 @@
                       "textStyle": "body",
                       "fontSize": 1.67
                     },
-                    "shrink": 0
+                    "shrink": 1
                   }
                 ]
               }
-            ]
+            ],
+            "shrink": 1
           }
         ]
       },
@@ -828,7 +832,8 @@
           {
             "id": "image",
             "slot": "image",
-            "grow": 1
+            "grow": 1,
+            "shrink": 1
           },
           {
             "id": "caption",
@@ -871,7 +876,7 @@
           "label": "Statement",
           "description": "The sentence itself, verbatim. Never a description of it.",
           "multiline": true,
-          "maxChars": 100,
+          "maxChars": 78,
           "required": true
         },
         {
@@ -918,14 +923,16 @@
             "style": {
               "textStyle": "quote",
               "paddingY": 0.8
-            }
+            },
+            "shrink": 0
           },
           {
             "id": "caption",
             "slot": "caption",
             "style": {
               "textStyle": "caption"
-            }
+            },
+            "shrink": 1
           }
         ]
       },
@@ -973,7 +980,8 @@
           {
             "id": "snippet",
             "slot": "snippet",
-            "grow": 1
+            "grow": 1,
+            "shrink": 1
           }
         ]
       },
@@ -1049,7 +1057,8 @@
             "slot": "eq",
             "style": {
               "align": "center"
-            }
+            },
+            "shrink": 0
           },
           {
             "id": "caption",
@@ -1058,7 +1067,8 @@
               "textStyle": "caption",
               "align": "center",
               "color": "text"
-            }
+            },
+            "shrink": 1
           }
         ]
       },
@@ -1144,7 +1154,9 @@
               "align": "center",
               "color": "text",
               "fontSize": 1.53
-            }
+            },
+            "shrink": 1,
+            "width": 0.4114
           }
         ]
       },
@@ -1176,7 +1188,7 @@
           "kind": "text",
           "label": "Title",
           "description": "The one thing to remember, or a sign-off.",
-          "maxChars": 44,
+          "maxChars": 38,
           "required": true
         },
         {
@@ -1234,7 +1246,8 @@
               "textStyle": "caption",
               "align": "center",
               "color": "text"
-            }
+            },
+            "shrink": 1
           }
         ]
       },
@@ -1348,7 +1361,7 @@
                   "textStyle": "body",
                   "fontSize": 2.1
                 },
-                "shrink": 0
+                "shrink": 1
               }
             ]
           },
@@ -1385,7 +1398,8 @@
                     "style": {
                       "textStyle": "body",
                       "fontSize": 1.7
-                    }
+                    },
+                    "shrink": 1
                   }
                 ]
               },
@@ -1414,7 +1428,8 @@
                     "style": {
                       "textStyle": "body",
                       "fontSize": 1.7
-                    }
+                    },
+                    "shrink": 1
                   }
                 ]
               },
@@ -1443,7 +1458,8 @@
                     "style": {
                       "textStyle": "body",
                       "fontSize": 1.7
-                    }
+                    },
+                    "shrink": 1
                   }
                 ]
               }
