@@ -1510,6 +1510,40 @@
   phase: 2
   status: Backlog
   review: false
+- id: TMPL-19
+  title: A box holds its budget while its neighbours hold theirs
+  full: "TMPL-12 fills a design to its own stated limits and measures the result.
+    It fills them one box at a time, and that is the whole of the gap: a walk
+    that fills one box and leaves its siblings empty never puts two boxes at
+    their budgets simultaneously, so it cannot see a box that is destroyed by a
+    neighbour rather than by its own contents. In a design whose geometry is a
+    flow — an arrangement the renderer resolves, rather than a list of
+    rectangles — a box has no fixed size to be measured against. Its height is
+    what its siblings leave it. So a budget states what a box holds in a
+    rectangle that exists only for a particular combination of content, and
+    every check that reads the budget alone is…"
+  section: §7 Style Template Library
+  family: TMPL
+  phase: 2
+  status: Backlog
+  review: false
+- id: TMPL-20
+  title: A flow design's budgets are checked, or the check says they are not
+  full: "TMPL-12's budgets are verified by recomputing each one from the rectangle
+    it was derived from. A flow-stated design has no such rectangle (TMPL-19),
+    so today the check reaches none of its boxes — and passes, in a case named
+    after the design it did not examine. Measured: 0 of nyu-elegant's 36 per-box
+    budgets are recomputable, against 34 of 34 for nyu-bold. The suite reports
+    11 passed either way. A green from a check that examined nothing is
+    indistinguishable from a green from a check that examined everything, and
+    the design behind that green turned out to carry nine reproducible faults.
+    The gap is documented honestly in the check's own prose, which is why it is
+    a requirement rather than a…"
+  section: §7 Style Template Library
+  family: TMPL
+  phase: 2
+  status: Backlog
+  review: false
 - id: BILL-1
   title: Subscription tiers
   full: "The product offers four subscription tiers, each priced accordingly

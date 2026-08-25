@@ -464,6 +464,35 @@ A design that fails a check ([TMPL-12](#tmpl-12-every-shipped-design-holds-what-
 
 The point is that a list of tolerated faults decays in both directions — entries that outlive their defect, and defects that outgrow their entries — and the longer it is, the less a reader can be the mechanism that catches either.
 
+#### TMPL-19 A box holds its budget while its neighbours hold theirs
+
+[TMPL-12](#tmpl-12-every-shipped-design-holds-what-it-says-it-holds) fills a design to its own stated limits and measures the result. It fills them **one box at a time**, and that is the whole of the gap: a walk that fills one box and leaves its siblings empty never puts two boxes at their budgets simultaneously, so it cannot see a box that is destroyed by a neighbour rather than by its own contents.
+
+In a design whose geometry is a **flow** — an arrangement the renderer resolves, rather than a list of rectangles — a box has no fixed size to be measured against. Its height is what its siblings leave it. So a budget states what a box holds in a rectangle that exists only for a particular combination of content, and every check that reads the budget alone is reading a promise about a box nobody has drawn.
+
+`nyu-elegant`'s closing page is the worked example, measured in a browser:
+
+- caption alone, at its full stated budget of 110 characters — 741.8 × 57.94px, type at 100%, nothing hidden;
+- the same caption, same budget, with its **sibling** title filled to *its* stated 44 — 483.8 × 2.48px, type shrunk to the renderer's 40% floor, 10px of content hidden.
+
+The height went to the sibling. The title node carries `shrink: 0` and the caption does not, so the caption absorbs the entire overflow of a title that was itself only doing what its budget permits. Both boxes are inside their stated limits and the page is destroyed. Seven of that design's nine recorded faults are this one cause, on six boxes across four layouts; cutting the titles and touching no caption budget clears five of them outright and restores a section divider that had been squeezed to zero width.
+
+**So the walk fills every box on a layout at once**, and a design's budgets are a set that must hold together rather than a list that holds one at a time. Where boxes compete for the same space, the design states which one yields — leaving it to the renderer's default means the last shrinkable child silently absorbs everyone else's overflow.
+
+**A collapsed box is the failure mode to name, because it is the one that looks like a decision.** A box shrunk to nothing renders as a design with fewer elements, not as a broken one: no clipping, no overlap, nothing off the slide. The graphic that vanishes carries no text, so no rule that reads text can see it go.
+
+#### TMPL-20 A flow design's budgets are checked, or the check says they are not
+
+[TMPL-12](#tmpl-12-every-shipped-design-holds-what-it-says-it-holds)'s budgets are verified by recomputing each one from the rectangle it was derived from. A flow-stated design has no such rectangle ([TMPL-19](#tmpl-19-a-box-holds-its-budget-while-its-neighbours-hold-theirs)), so today the check reaches none of its boxes — and **passes**, in a case named after the design it did not examine.
+
+Measured: 0 of `nyu-elegant`'s 36 per-box budgets are recomputable, against 34 of 34 for `nyu-bold`. The suite reports `11 passed` either way. A green from a check that examined nothing is indistinguishable from a green from a check that examined everything, and the design behind that green turned out to carry nine reproducible faults.
+
+The gap is documented honestly in the check's own prose, which is why it is a requirement rather than a bug — and the prose also records the moment it was nearly closed. Resolving the trees with empty content produced thirty-six disagreements, "body boxes reported at four hundredths of the slide's height — flow boxes collapsed for want of anything to hold", and these were set aside as false findings "against a design that is fine". The collapse was real; the design was not fine. The reasoning was correct about the cause and wrong about the conclusion, and it pointed the instrument away from the exact failure it had just produced.
+
+**So a check states, in its result and not only in its prose, how much it examined.** A case that reaches nothing reports that it reached nothing and fails or skips explicitly, rather than passing. Coverage is part of the result: "34 of 34 budgets recomputed" and "0 of 36" are different outcomes and must not print the same word.
+
+**And a flow design's budgets are verified against a resolved layout with every box filled**, which is the rectangle those budgets are actually promises about — the same fill-them-all walk [TMPL-19](#tmpl-19-a-box-holds-its-budget-while-its-neighbours-hold-theirs) requires. Empty content is what made the earlier attempt unreadable; content at the budgets is what the budgets describe.
+
 ### 8. Live Lecture Capture
 
 #### CAP-1 Session lifecycle
