@@ -503,7 +503,7 @@
           "label": "Bullets",
           "description": "What follows from the opening text. Parallel, no full stops.",
           "maxItems": 3,
-          "maxChars": 70
+          "maxChars": 65
         }
       ],
       "tree": {
