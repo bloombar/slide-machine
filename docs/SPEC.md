@@ -518,6 +518,19 @@ proposed was small enough — 78 and 60 characters both wrap to four lines where
 leaves the caption alive — and three independent arithmetic models agreed on a figure the browser
 contradicted.
 
+**Pinning a box is two decisions, and a design records it as one.** `shrink: 0` says this box does not
+yield. It also says this box will not shrink its own type, because those are the same mechanism seen
+from either end: the fitter asks whether a box's content exceeds the box, and a pinned box with no
+stated height *is* its content, so it is asked whether it fits inside itself and always answers yes.
+`nyu-elegant`'s quote body sits 69px past its parent reporting full scale and no overflow. Before it was
+pinned it shrank its type to 80%, which every check could see. Pinning it did not make it fit — it
+removed it from the fitter's reach, and the overflow it used to absorb by shrinking now lands on the
+sibling.
+
+So a design that names a holder has also, silently, exempted it from the one mechanism that would have
+reported the problem. **Both halves belong in whatever a template says about that box, and only one of
+them is written down today.**
+
 **A collapsed box is the failure mode to name, because it is the one that looks like a decision.** A box shrunk to nothing renders as a design with fewer elements, not as a broken one: no clipping, no overlap, nothing off the slide. The graphic that vanishes carries no text, so no rule that reads text can see it go.
 
 #### TMPL-20 A flow design's budgets are checked, or the check says they are not
