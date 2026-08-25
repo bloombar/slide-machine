@@ -495,6 +495,21 @@ The gap is documented honestly in the check's own prose, which is why it is a re
 
 **And a flow design's budgets are verified against a resolved layout with every box filled**, which is the rectangle those budgets are actually promises about — the same fill-them-all walk [TMPL-19](#tmpl-19-a-box-holds-its-budget-while-its-neighbours-hold-theirs) requires. Empty content is what made the earlier attempt unreadable; content at the budgets is what the budgets describe.
 
+**The resolver that check runs on must model the failure it is looking for.** The app already has a
+headless resolver of tree geometry — `resolveTreeBoxes`, used by the exporters — and filling every box
+to its budget through it picks out the same four over-full layouts a browser does. It models `grow` and
+does **not** model `shrink`: on overflow it leaves every child at its natural height and lets the column
+overrun. So it can say a set does not fit, and it can never reproduce a collapse. Asked about
+`nyu-elegant`'s closing caption it reports the box at its natural 5.94cqi, where the browser draws
+2.48px.
+
+A check built on it would therefore examine every one of the 36 budgets this requirement exists to
+reach, report full coverage, and **pass on the design whose collapse prompted the requirement** — the
+same defect as the 0-of-36 green, one layer down and harder to see, because this time the check really
+did run. **A check's coverage and its sensitivity are separate claims and both have to be made.**
+Reaching a box is not the same as being able to see it fail, and an instrument blind to the failure mode
+reports the same green as a design that does not have it.
+
 ### 8. Live Lecture Capture
 
 #### CAP-1 Session lifecycle
