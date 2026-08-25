@@ -281,7 +281,7 @@
           "kind": "text",
           "label": "Caption",
           "description": "One line on what this section establishes.",
-          "maxChars": 60
+          "maxChars": 58
         }
       ],
       "decoration": [
@@ -502,7 +502,7 @@
           "kind": "bullets",
           "label": "Bullets",
           "description": "What follows from the opening text. Parallel, no full stops.",
-          "maxItems": 4,
+          "maxItems": 3,
           "maxChars": 70
         }
       ],
