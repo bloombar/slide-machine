@@ -13,6 +13,7 @@
  */
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
+import { NATURAL_LINE_BOX } from '@slide-machine/shared'
 import { useFitText } from './useFitText'
 
 afterEach(() => {
@@ -66,6 +67,40 @@ function Box({
       style={{ '--fit-scale': scale } as React.CSSProperties}
     >
       {children ?? 'words'}
+    </div>
+  )
+}
+
+/**
+ * The same box, told what type it is set in.
+ *
+ * `slackFor` reads the box's own font size and line height off computed
+ * style, so the allowance it grants cannot be exercised without them. jsdom
+ * lays nothing out but does report inline declarations, which is all the hook
+ * asks for.
+ */
+function TypedBox({
+  fontSizePx,
+  leading,
+}: {
+  fontSizePx: number
+  leading: number
+}) {
+  const { ref, scale } = useFitText(true)
+  return (
+    <div
+      ref={ref as React.Ref<HTMLDivElement>}
+      data-testid="box"
+      data-scale={scale}
+      style={
+        {
+          '--fit-scale': scale,
+          fontSize: `${fontSizePx}px`,
+          lineHeight: `${fontSizePx * leading}px`,
+        } as React.CSSProperties
+      }
+    >
+      words
     </div>
   )
 }
@@ -165,5 +200,86 @@ describe('fitting a box’s type to what it holds', () => {
     stubBox(140, 0)
     render(<Box />)
     expect(scaleOf()).toBe(1)
+  })
+})
+
+/**
+ * The coupling between the font's natural line box and the tight-leading
+ * threshold, which nothing else in the codebase records.
+ *
+ * `NATURAL_LINE_BOX` is 1.196 and `TIGHT_LEADING` is 1.2. They sit four
+ * thousandths apart, and every derived design's leading is some multiple of
+ * the first: a deck's line spacing is a percentage, so 100% — the commonest
+ * setting there is — lands exactly on `NATURAL_LINE_BOX`, four thousandths
+ * under the threshold and therefore on the generous side of it.
+ *
+ * That margin is narrower than the measurement error anyone would accept
+ * while refining a measured constant. `NATURAL_LINE_BOX` IS a measurement,
+ * carried to three decimals, and someone tightening it to 1.20 would be doing
+ * careful work. Every 100%-spaced box in every deck-derived design would
+ * silently move from a quarter-em allowance to a single pixel, and boxes that
+ * fit today would start shrinking — a whole design a little smaller than the
+ * deck it came from, with no failing test and nothing to say why.
+ *
+ * ## Why the ordering rather than the numbers
+ *
+ * A case asserting `NATURAL_LINE_BOX === 1.196` pins a value, and the next
+ * person to measure it more precisely would simply update the number and
+ * learn nothing. What has to hold is the RELATION, so it is exercised through
+ * the hook's actual decision rather than asserted arithmetically: a box led
+ * at the natural line box, overrunning by more than a pixel and less than a
+ * quarter of an em, must come back at full size.
+ *
+ * ## Which direction it holds in, because the fix is not obvious
+ *
+ * The allowance exists because a face whose natural line box is tighter than
+ * `TIGHT_LEADING` hangs its descenders outside that box, so `scrollHeight`
+ * exceeds `clientHeight` at every type size — the argument `SLACK_EM`'s own
+ * docstring makes. That is a fact about letterforms, not a tuning choice.
+ *
+ * So if a face is ever measured with a natural line box at or above
+ * `TIGHT_LEADING`, widening `TIGHT_LEADING` to keep this green is the wrong
+ * response: the premise it rests on has stopped holding, and the overhang it
+ * tolerates is no longer there to tolerate.
+ */
+describe('the natural line box against the tight-leading threshold', () => {
+  // More than the pixel of rounding, less than a quarter of an em at 100px.
+  // A box that overruns by this much fits under the generous allowance and
+  // does not under the strict one, which is what makes it discriminate.
+  const OVERRUN_PX = 10
+  const FONT_PX = 100
+
+  it('leaves a box led at the natural line box at full size', () => {
+    stubBox(100 + OVERRUN_PX, 100)
+    render(<TypedBox fontSizePx={FONT_PX} leading={NATURAL_LINE_BOX} />)
+    expect(
+      scaleOf(),
+      `a box led at NATURAL_LINE_BOX (${NATURAL_LINE_BOX}) overran by ` +
+        `${OVERRUN_PX}px and was shrunk. That means it is no longer under ` +
+        `TIGHT_LEADING, so it lost the quarter-em overhang allowance and now ` +
+        `gets a single pixel. The two constants sit four thousandths apart ` +
+        `and a derived design's 100% line spacing lands exactly on the ` +
+        `first, so this moves EVERY ordinary text box in EVERY deck-derived ` +
+        `design onto the strict path: they will shrink below the size the ` +
+        `deck sets them at, everywhere, with nothing else failing. If a face ` +
+        `has genuinely been measured at or above TIGHT_LEADING, do not widen ` +
+        `TIGHT_LEADING to get past this — the descender overhang it exists ` +
+        `to tolerate is no longer there, and the allowance should go instead.`,
+    ).toBe(1)
+  })
+
+  it('shrinks the same box once its leading is no longer tight', () => {
+    // The control. Without it the case above would pass on a hook that had
+    // stopped shrinking anything at all, and a permanent green is worth less
+    // than no check. Same box, same overrun, leading moved to the far side
+    // of the threshold.
+    stubBox(100 + OVERRUN_PX, 100)
+    render(<TypedBox fontSizePx={FONT_PX} leading={1.5} />)
+    expect(
+      scaleOf(),
+      'a box led loosely enough to have no descender overhang should get ' +
+        'the pixel of rounding and nothing more, so a ten-pixel overrun is ' +
+        'a real one',
+    ).toBeLessThan(1)
   })
 })

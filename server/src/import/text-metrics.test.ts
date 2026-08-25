@@ -4,7 +4,9 @@
  * Both answers are arithmetic — there is no browser on the server — so the
  * numbers here are worked by hand from the same constants the module uses: a
  * character is half the type size wide, a line is one and a half times it
- * tall, and a 16:9 slide is 56.25 `cqi` deep.
+ * tall, a 16:9 slide is 56.25 `cqi` deep, every box reserves Google's text
+ * inset of 2 `cqi` across and 1 down, and a line gives up 3 characters to
+ * wrapping at word boundaries.
  *
  * Exact numbers rather than "about right", because two readers depend on this
  * agreeing with itself: the box that gets grown to fit its content, and the
@@ -23,15 +25,21 @@ const slot = (over: Partial<CandidateSlot> = {}): CandidateSlot => ({
 })
 
 describe('what a box can hold', () => {
-  it('is how many characters fit across times how many lines fit down', () => {
-    // 80cqi wide at 4cqi type is 40 characters; 16.875cqi deep is 2 lines
-    expect(capacityOf(slot({ fontSize: 4 }))).toEqual({ maxChars: 80 })
+  it('is what fits across, over as many lines as fit down', () => {
+    // 80cqi wide less 2 of inset is 78, which is 39 characters at 4cqi type;
+    // 16.875cqi deep less 1 of inset is 2 lines. The first line is broken and
+    // gives up the 3-character wrapping allowance, the second ends the run
+    // and gives up nothing: 36 + 39.
+    expect(capacityOf(slot({ fontSize: 4 }))).toEqual({ maxChars: 75 })
   })
 
   it('counts a list’s characters per point rather than per box', () => {
-    // A point is one line of the box, so its bound is one line's worth
+    // A point is one line of the box, so its bound is one line's worth —
+    // less the 1.4em the marker's indent takes, and with the 0.4em between
+    // points paid out of the height. No wrapping allowance: a point that
+    // takes one line is a point that never wraps.
     expect(capacityOf(slot({ kind: 'bullets', fontSize: 4 }))).toEqual({
-      maxChars: 40,
+      maxChars: 36,
       maxItems: 2,
     })
   })
@@ -54,7 +62,7 @@ describe('what a box can hold', () => {
           fontSize: 0.5,
         }),
       ),
-    ).toEqual({ maxChars: 200, maxItems: 50 })
+    ).toEqual({ maxChars: 189, maxItems: 50 })
   })
 
   it('bounds a box in whole characters, which is what the schema takes', () => {
@@ -83,18 +91,19 @@ describe('the room a box’s own content needs', () => {
   })
 
   it('is the lines it holds, at the height a line takes', () => {
-    // Two lines of 4cqi type, each 1.5 times its size, over a 56.25cqi slide
+    // Two lines of 4cqi type, each 1.5 times its size, plus the inset the
+    // box reserves, over a 56.25cqi slide
     expect(
       heightForText(slot({ fontSize: 4, held: { lines: 2, longest: 10 } })),
-    ).toBeCloseTo(12 / 56.25, 10)
+    ).toBeCloseTo(13 / 56.25, 10)
   })
 
   it('gives a line that runs past the box the rows it will wrap onto', () => {
-    // 100 characters across a 40-character box is three rows, not one — a
+    // 100 characters across a 36-character line is three rows, not one — a
     // box measured at one row hides the other two
     expect(
       heightForText(slot({ fontSize: 4, held: { lines: 2, longest: 100 } })),
-    ).toBeCloseTo(36 / 56.25, 10)
+    ).toBeCloseTo(37 / 56.25, 10)
   })
 
   it('asks for more room for the same text set larger', () => {
@@ -140,7 +149,7 @@ describe('the edges a real deck actually reaches', () => {
     // pull everything below it up over the text
     expect(
       heightForText(slot({ fontSize: 4, held: { lines: 2, longest: 0 } })),
-    ).toBeCloseTo(12 / 56.25, 10)
+    ).toBeCloseTo(13 / 56.25, 10)
   })
 
   it('asks for no room for a box measured as holding nothing', () => {
@@ -177,20 +186,45 @@ describe('the way a box is actually set', () => {
     // the multiplier turned out to have been taken against Title Case rather
     // than prose, which understated it on every face.
     const set = { fontFamily: 'montserrat' }
-    expect(capacityOf(slot({ fontSize: 4 }), set).maxChars).toBe(76)
+    // 37 characters of prose across, 30 of capitals; two lines each, the
+    // first of them broken.
+    expect(capacityOf(slot({ fontSize: 4 }), set).maxChars).toBe(37 + 34)
     expect(
       capacityOf(slot({ fontSize: 4 }), { ...set, caps: true }).maxChars,
-    ).toBe(62)
+    ).toBe(30 + 27)
   })
 
   it('fits more lines down a box set with tight display leading', () => {
     // A display face at 0.95 puts half again as many lines in the same box as
     // the 1.5 fallback allows — which is how a title box was told it holds
     // one line when it holds two.
-    expect(capacityOf(slot({ fontSize: 4 })).maxChars).toBe(80)
+    //
+    // FOUR, and the number has now been checked against a browser rather than
+    // argued from the arithmetic. 15.875cqi of interior at 3.8cqi a line
+    // takes four with room over; the reason this case said three is that a
+    // face led below its natural box hangs ink outside that box at each end,
+    // and the run was required to fit INCLUDING the overhang — four lines
+    // plus 0.984cqi of ink is 16.18 in a box of 15.875.
+    //
+    // That was the estimate being stricter than the renderer, which is the
+    // defect `SLACK_EM` exists to close: `useFitText` allows a box led under
+    // `TIGHT_LEADING` a quarter em of overrun before it shrinks anything, and
+    // 0.305cqi of overhang is well inside the 1.0cqi that allows.
+    //
+    // Measured, in the built app, in this exact box: 147 characters draw on
+    // FOUR lines at `--fit-scale` 1.00, with `scrollHeight` equal to
+    // `clientHeight` and no overflow at all. The control is 190 characters in
+    // the same box, which shrinks to 0.95 — so the measurement can report a
+    // box that does not fit, and "four lines fit" is a result rather than the
+    // absence of one.
+    //
+    // What is left is 0.31cqi of worst-case ink outside the box, about 3px at
+    // the size this renders — real for a descender, nil for a line without
+    // one, and the same limit the ink model states for every tight-led box.
+    expect(capacityOf(slot({ fontSize: 4 })).maxChars).toBe(75)
     expect(
       capacityOf(slot({ fontSize: 4 }), { lineHeight: 0.95 }).maxChars,
-    ).toBe(160)
+    ).toBe(39 + 36 + 36 + 36)
   })
 
   it('gives capitals the extra rows they wrap onto', () => {
@@ -198,19 +232,99 @@ describe('the way a box is actually set', () => {
     // same words need twice the room
     const held = { lines: 2, longest: 36 }
     expect(heightForText(slot({ fontSize: 4, held }))).toBeCloseTo(
-      12 / 56.25,
+      13 / 56.25,
       10,
     )
     expect(
       heightForText(slot({ fontSize: 4, held }), { caps: true }),
-    ).toBeCloseTo(24 / 56.25, 10)
+    ).toBeCloseTo(25 / 56.25, 10)
   })
 
   it('asks for less room for the same lines set tighter', () => {
+    // Less than the 13cqi the same two lines take at the 1.5 fallback, and
+    // more than the 8.6 the leading alone would suggest: two lines at 0.95
+    // are 7.6cqi of line box, plus 0.984 of ink hanging outside it, plus the
+    // 1cqi inset Google keeps. A box given only the 8.6 clips its own
+    // descenders, which is the defect the overhang term exists for.
     const held = { lines: 2, longest: 10 }
     expect(
       heightForText(slot({ fontSize: 4, held }), { lineHeight: 0.95 }),
-    ).toBeCloseTo(7.6 / 56.25, 10)
+    ).toBeCloseTo(9.584 / 56.25, 10)
+  })
+
+  it('does not lay text out in the inset Google keeps for itself', () => {
+    // REGRESSION, and the one that reached shipped geometry. Slides draws
+    // text inside 0.1in left and right and 0.05in top and bottom, and the
+    // arithmetic divided the whole box — so a design filled to the budget it
+    // declared overflowed. Worst on a narrow box: 8% of usable width on a
+    // caption a quarter of the slide wide.
+    //
+    // Read as the difference the inset makes: the same box, measured with
+    // the inset it actually has, holds less than the raw rectangle would.
+    const raw = slot({ box: { x: 0, y: 0, w: 0.8, h: 0.3 }, fontSize: 4 })
+    const wider = slot({ box: { x: 0, y: 0, w: 0.82, h: 0.3 }, fontSize: 4 })
+    // 2cqi more box is exactly the inset, so the wider one holds what the
+    // narrower one would have held had the inset not been reserved: 80cqi of
+    // usable width rather than 78, which is one more character on each of its
+    // two lines.
+    const across = (usable: number) => Math.floor(usable / 2)
+    const overTwoLines = (fits: number) => fits + (fits - 3)
+    expect(capacityOf(raw).maxChars).toBe(overTwoLines(across(78)))
+    expect(capacityOf(wider).maxChars).toBe(overTwoLines(across(80)))
+  })
+
+  it('leaves a line the characters word wrapping cannot use', () => {
+    // A browser breaks at spaces and leaves the tail of each line empty; the
+    // arithmetic packs characters tight. Measured at 2.3–5.6 characters over
+    // real prose at every line length, so three is given back — without it a
+    // box filled to its own budget wraps onto a line it does not have.
+    //
+    // 78cqi of usable width at 4cqi type measures 39 characters, and a line
+    // that has to break claims 36. The allowance is charged once per BREAK
+    // rather than once per line: a run of two lines breaks once, so it holds
+    // 36 + 39 rather than 36 twice. Charged per line, NYU's own titles did
+    // not fit the boxes they are set in.
+    expect(capacityOf(slot({ fontSize: 4 })).maxChars).toBe(36 + 39)
+  })
+
+  it('makes a list pay for its markers and the space between its points', () => {
+    // The renderer draws a bullets box as a list with a 1.4em indent for the
+    // marker and 0.4em between points (`slots.tsx`), and neither is available
+    // to the words. On an eleven-point list the gaps alone are four ems.
+    //
+    // Same box, same type: prose gets the full width and every line, a list
+    // gives up the indent across and a gap between each point down.
+    const prose = capacityOf(slot({ fontSize: 4 }))
+    const list = capacityOf(slot({ kind: 'bullets', fontSize: 4 }))
+    expect(list.maxChars).toBeLessThan(prose.maxChars! / list.maxItems!)
+    // 15.875cqi of usable height is 3.97 ems; at 1.5 plus a 0.4 gap that is
+    // two points, where 1.5 alone would have said two as well — the gap
+    // shows on a longer list, which is where it was costing a fifth of the
+    // box.
+    const tall = capacityOf(
+      slot({
+        kind: 'bullets',
+        box: { x: 0, y: 0, w: 0.8, h: 0.9 },
+        fontSize: 2,
+      }),
+    )
+    expect(tall.maxItems).toBe(
+      Math.floor(((0.9 * 56.25 - 1) / 2 + 0.4) / (1.5 + 0.4)),
+    )
+  })
+
+  it('grows a box by what the same estimate says it holds', () => {
+    // The invariant the whole module exists for: a box given exactly its
+    // budget must need no more room than it has. Asserted with the list,
+    // because that is where the two readings disagreed — the capacity paid
+    // for markers and gaps and the growth step did not.
+    const s = slot({ kind: 'bullets', fontSize: 4 })
+    const { maxChars, maxItems } = capacityOf(s)
+    const needed = heightForText({
+      ...s,
+      held: { lines: maxItems!, longest: maxChars! },
+    })
+    expect(needed).toBeLessThanOrEqual(s.box.h + 1e-9)
   })
 
   it('is unchanged for a box that says nothing about how it is set', () => {

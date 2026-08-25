@@ -183,6 +183,24 @@ export interface ImportReport {
    */
   assetsFailed?: number
   /**
+   * Pages the author had marked "skip slide", which were left out.
+   *
+   * Said rather than done quietly, because afterwards a deck that never had
+   * those pages and a deck whose pages were dropped look exactly the same.
+   * Absent when there were none — the common case, and not the same claim as
+   * zero would make in a deck that had some.
+   */
+  slidesSkipped?: number
+  /**
+   * Strokes the import declined to draw: a rule running diagonally, which has
+   * no rectangle that stands for it.
+   *
+   * Counted for the same reason skipped pages are. The refusal stays a
+   * refusal — a slab drawn across a slide is worse than a missing stroke, and
+   * worse still for having a number defending it.
+   */
+  rulesDeclined?: number
+  /**
    * Content that could not be placed, by the slide it was on (EXP-5).
    *
    * Named rather than counted, because "3 boxes were dropped" is not something

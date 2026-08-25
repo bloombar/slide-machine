@@ -51,6 +51,10 @@ export interface CandidateSlot {
   /** The family the presentation named, mapped to a bundled stack later —
    * never fetched at display time (docs/TEMPLATES.md §5). */
   fontFamily?: string
+  /** The box's leading as a multiple of its type size, where the source
+   * stated one. What the box is drawn at, and what its budget is measured
+   * against — the two have to be the same number or the budget is fiction. */
+  lineHeight?: number
   /** How the text sits in its box, from the slide it came from. */
   align?: 'start' | 'center' | 'end'
   vAlign?: 'start' | 'center' | 'end'
@@ -102,20 +106,62 @@ export interface Candidate {
  * The least a box must be able to hold to be CONTENT rather than ornament.
  *
  * A design carries text that was never meant to be written into: a decorative
- * initial, a slide number, a single glyph set large in a corner. Imported as
- * slots they do three kinds of harm — they sit in the editor as boxes an
- * author cannot use, they overlap the real content, and worst, the AI is told
- * a `body` slot holds one character, because a box's budget is derived from
- * its geometry (`text-metrics`). NYU's own template deck has exactly one: a
- * 5%-wide box carrying a single violet glyph, which imported as a body slot
- * with `maxChars: 1`.
+ * initial, a single glyph set large in a corner. Imported as slots they do
+ * three kinds of harm — they sit in the editor as boxes an author cannot use,
+ * they overlap the real content, and worst, the AI is told a `body` slot
+ * holds one character, because a box's budget is derived from its geometry
+ * (`text-metrics`). NYU's own template deck has exactly one: a 5%-wide box
+ * carrying a single violet glyph, which imported as a body slot with
+ * `maxChars: 1`.
  *
- * Four characters is below any real word and far below anything a design
- * would ask an author to write, so the rule costs nothing a content box
- * wanted. The estimate is the same generous one used everywhere else, so a
- * box that is merely small keeps its place.
+ * ## What this count can and cannot tell apart
+ *
+ * The estimate below is capacity, and capacity is `area * 7500 / fontSize²`
+ * — the box's share of the page divided by the SQUARE of its type. So it
+ * goes low for two opposite reasons and reads the same either way: a box is
+ * called ornament because it is small, or because its type is enormous. The
+ * threshold is a type-size cliff wearing a character count's clothes.
+ *
+ * Set at four it erased NYU's section numeral: "01" at 250pt across half the
+ * page, the dominant graphic of the divider slide, capacity 2. The same
+ * deck's "100%" passes at capacity 8 and would drop to 2 one step up the
+ * deck's own type scale, with nothing about the box changed but its size.
+ *
+ * ## Why two, and why nothing cleverer
+ *
+ * Two is the floor of what this count can honestly claim. A box with room
+ * for one character is a box drawn around a mark: whatever is put there, the
+ * space admits nothing longer, which is a drawing decision rather than a
+ * writing one. At two the box admits a sequence — a two-letter word, a
+ * section number, a "Q1" — and a design that draws "01" is asking for
+ * exactly that choice.
+ *
+ * The claim is weak deliberately, because the stronger ones are unavailable:
+ *
+ *   - AREA separates NYU's two boxes by 43x, but the threshold would be read
+ *     off that gap, and a constant fitted to the deck that motivated it is a
+ *     constant that agrees with itself.
+ *   - TYPE SIZE relative to the deck's scale does not separate them at all.
+ *     The glyph is set at 5.83cqi, which is that deck's TITLE size on six
+ *     slides.
+ *   - What does distinguish them is not size. The glyph is a non-placeholder
+ *     box on a LAYOUT page — one no slide can address and every slide
+ *     redraws, which is the argument `isPageArt` already makes for pictures
+ *     and the honest place for this rule to move. Not made here: it needs
+ *     `asDesign`, a fact about how the page is being READ rather than about
+ *     the box, and this guard is asked about boxes on slides too.
+ *
+ * So the count is left doing the little it can do correctly. What that costs
+ * is a box of capacity two or three that really is ornament, which now
+ * imports as a slot. Note the cost is NOT the slide number this docstring
+ * used to claim: a slide number is small type in a small box, and small type
+ * is exactly what makes capacity high — such a box passed at four already.
+ *
+ * Measured against both captured decks, `presentation-nyu-bold.json` and
+ * `presentation-urban-hydrology.json`, moving four to two reclassifies one
+ * box across the two of them, and it is the numeral.
  */
-const MIN_CONTENT_CHARS = 4
+const MIN_CONTENT_CHARS = 2
 
 const holdsAWord = (element: SourceElement): boolean => {
   if (element.kind === 'image' || element.kind === 'table') return true
@@ -337,6 +383,7 @@ export const candidateOf = (
       ...(colorOf(element) ? { color: colorOf(element) } : {}),
       ...(element.fill ? { background: element.fill } : {}),
       ...(fontOf(element) ? { fontFamily: fontOf(element) } : {}),
+      ...(element.lineHeight ? { lineHeight: element.lineHeight } : {}),
       ...(element.align ? { align: element.align } : {}),
       ...(element.vAlign ? { vAlign: element.vAlign } : {}),
       content: element,

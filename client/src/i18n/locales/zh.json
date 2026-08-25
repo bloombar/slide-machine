@@ -473,6 +473,8 @@
         "summary": "{slides} 张幻灯片 → {layouts} 个版式",
         "merged": "合并了 {count} 张几乎相同的幻灯片",
         "approximated": "{count} 张匹配到最接近的版式",
+        "skipped": "已排除 {count} 张标记为“跳过”的幻灯片",
+        "rulesDeclined": "有 {count} 条斜线无法重绘",
         "assetsFailed": "{count} 张图片无法获取",
         "review": "你的演示文稿未被更改。"
       },

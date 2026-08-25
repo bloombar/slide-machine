@@ -23,6 +23,7 @@ import type {
 import {
   WHITEBOARD_LAYOUT_TYPE,
   defaultLayoutTree,
+  treeFromPositions,
 } from '@slide-machine/shared'
 import { rendererFor } from './index'
 import { DEFAULT_TEXT_STYLES, type ThemeColors } from '../theme'
@@ -50,6 +51,12 @@ interface TemplateFile {
     type: string
     slots: Array<string | { name: string; kind?: string }>
     tree?: LayoutNode
+    /** A design imported from Slides states its geometry as rectangles and
+     * carries no tree; the loader builds one from these. */
+    elementPositions?: Record<
+      string,
+      { x: number; y: number; w: number; h: number }
+    >
   }>
 }
 
@@ -126,13 +133,37 @@ describe('layout trees match the template files', () => {
   for (const template of templateFiles) {
     for (const file of template.layouts) {
       const declared = file.slots.map(slotName).sort()
-      // What the loader actually ships for this layout: the tree the file
-      // authored, and only failing that the default for its type
-      // (`adoptDefaultTree`, server). Reading the default alone was right
-      // when no built-in drew its own, and wrong the moment one did — it
-      // checked a tree the template does not use, and could not see a
-      // layout of the author's own at all (TMPL-9).
-      const tree = file.tree ?? defaultLayoutTree(file.type)
+      /*
+       * What the loader actually ships for this layout, in the loader's own
+       * order (`adoptDefaultTree`, server): the tree the file authored, then
+       * a tree built from the rectangles the file measured, and only failing
+       * both the default for its type.
+       *
+       * The middle branch is the one that matters and it used to be missing.
+       * A design imported from Slides arrives as measured boxes and no tree,
+       * and the server turns those boxes into a tree of `free` nodes at
+       * exactly the rectangles they were measured at — so its slots are all
+       * present. Skipping to the type default instead compared such a
+       * template against a generic tree it never uses, which reported every
+       * box the design added beyond the conventional set as missing. On the
+       * first built-in to arrive that way that was twenty-two failures, none
+       * of them real: the slots render, they simply do not appear in a tree
+       * the app never builds for this layout.
+       */
+      const measured = file.elementPositions ?? {}
+      const tree =
+        file.tree ??
+        (Object.keys(measured).length
+          ? treeFromPositions(
+              measured as Parameters<typeof treeFromPositions>[0],
+              // Normalized to the shape the builder takes: a conventional
+              // slot may be written as a bare name in a template file.
+              file.slots.map(slot =>
+                typeof slot === 'string' ? { name: slot } : slot,
+              ),
+            )
+          : undefined) ??
+        defaultLayoutTree(file.type)
 
       it(`${template.id}/${file.type}: has a tree`, () => {
         // The whiteboard is the one layout with nothing to draw (WB-1).

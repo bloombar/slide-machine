@@ -104,6 +104,18 @@ export interface SourceElement {
     colWidths?: number[]
     rowHeights?: number[]
   }
+  /**
+   * The box's leading, as the CSS multiple of its type size.
+   *
+   * Google states it as `lineSpacing`, a percentage OF NORMAL rather than of
+   * the type size, so the reader converts it (`lineHeightFrom`). Carried
+   * because a design's leading is as much a part of how it looks as its type
+   * size, and because the capacity arithmetic divides a box's height by it:
+   * a display title set tight fits two lines where the app's default fits
+   * one, which is the difference between a budget a title fits and one it
+   * overflows.
+   */
+  lineHeight?: number
   /** How the text sits in its box: across, then down. A centred title read as
    * left-aligned is the single most visible way an import stops looking like
    * the deck it came from. */
@@ -141,6 +153,18 @@ export interface SourcePage {
   /** What the presenter said over this slide, from the speaker notes
    * (EXP-8/EDIT-6). Slides only. */
   notes?: string
+  /**
+   * Whether the author marked this page not-for-presentation.
+   *
+   * Google calls it "skip slide": the page stays in the file and the deck
+   * never shows it. Template decks use it for their own instructions — NYU's
+   * ship a "Template Notes" page of links to their usage guidelines — so a
+   * skipped page is usually documentation ABOUT the deck rather than part of
+   * it. Carried here rather than acted on, because reading is not the stage
+   * that decides: `import-recon` reports what a deck holds, skipped pages
+   * included, while an import leaves them out.
+   */
+  skipped?: boolean
 }
 
 /** The colours a presentation is drawn in, resolved to literals. */
@@ -169,4 +193,15 @@ export interface SourcePresentation {
   /** The presentation's own layouts, where it defines any worth using. */
   layouts: SourcePage[]
   slides: SourcePage[]
+  /**
+   * Strokes the reader declined to draw: a `line` element running diagonally,
+   * which has no rectangle that stands for it.
+   *
+   * Counted rather than dropped quietly, for the reason a skipped page is
+   * counted — afterwards, a deck that never had the stroke and a deck whose
+   * stroke we declined look exactly the same. The refusal itself stays a
+   * refusal: a slab drawn across a slide would be worse than the missing
+   * stroke, and worse still for having a number defending it.
+   */
+  rulesDeclined?: number
 }

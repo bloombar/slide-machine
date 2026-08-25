@@ -16,6 +16,7 @@
  * stored authorization really does turn out to lack it, the caller is told to
  * reconnect rather than shown an error it cannot act on.
  */
+import { NATURAL_LINE_BOX } from '@slide-machine/shared'
 import {
   type SourceBox,
   type SourceElement,
@@ -441,6 +442,20 @@ const fontSizeCqi = (
   return Math.round(((points * (EMU / 72)) / pageWidth) * 100 * 100) / 100
 }
 
+/**
+ * What Google's line spacing means as a CSS line-height multiple.
+ *
+ * `lineSpacing` is a percentage of NORMAL, and normal is not `line-height: 1`
+ * — it is the font's own natural line box, which is `NATURAL_LINE_BOX` and
+ * where the measurement behind that number is recorded.
+ *
+ * Rounded to thousandths rather than hundredths on purpose: at display sizes
+ * a hundredth of a line is a couple of pixels, which is the margin the
+ * measurement used to rule out a neighbouring value.
+ */
+export const lineHeightFrom = (lineSpacing: number): number =>
+  Math.round(lineSpacing * NATURAL_LINE_BOX * 10) / 1000
+
 /** The first run style a shape states, which is where a placeholder keeps the
  * type its slides are meant to be set in. */
 const firstRunStyle = (
@@ -704,11 +719,108 @@ const paintedFill = (
   return colorOf(fill.solidFill, scheme)
 }
 
+/**
+ * A rule: Google's `line` page element, read as the thin filled rectangle it
+ * draws.
+ *
+ * Its own reader rather than a case of the shape path, for two reasons that
+ * both make the shape path give a wrong answer rather than no answer.
+ *
+ * A line states its extent through a transform whose OMITTED scale means
+ * ZERO. `{scaleX: 0.2072}` with no `scaleY` is a horizontal rule a fifth of
+ * an inch long; read the missing value as 1 — which is right for every shape,
+ * because Google always sends both for those — and it becomes a three-inch
+ * square. That is why these arrived with nonsensical geometry and were then
+ * dropped for having no `shape`.
+ *
+ * Defaulting the missing scale to 1 is the natural thing to write, and it is
+ * worth knowing how natural: someone who had been told this rule twenty
+ * minutes earlier independently computed one of these rules as spanning
+ * 0.500 to 0.828 — a third of the slide — by writing `?? 1` again. Both lines
+ * on that slide depend on getting it right; one omits `scaleX` and the other
+ * omits `scaleY`.
+ *
+ * And a line's thickness is not in its box at all. The box has one dimension
+ * of zero by construction; what makes it visible is `weight`, in EMU, so the
+ * rectangle is only right once the weight is put back as the missing side.
+ *
+ * Straight horizontal and vertical rules only. A diagonal has no rectangle
+ * that stands for it, and drawing one as a box would put a slab across the
+ * slide where the design has a stroke — worse than leaving it out, and
+ * leaving it out is what happens today.
+ */
+const ruleOf = (
+  raw: Record<string, unknown>,
+  line: {
+    lineProperties?: {
+      lineFill?: { solidFill?: Record<string, unknown> }
+      weight?: Dimension
+    }
+  },
+  page: { width: number; height: number },
+  scheme: Record<string, string>,
+  id: string,
+  declined: { count: number },
+): SourceElement | null => {
+  const size = raw.size as { width?: Dimension; height?: Dimension } | undefined
+  const t = (raw.transform ?? {}) as {
+    scaleX?: number
+    scaleY?: number
+    translateX?: number | Dimension
+    translateY?: number | Dimension
+    unit?: string
+  }
+  const w = emu(size?.width) * (t.scaleX ?? 0)
+  const h = emu(size?.height) * (t.scaleY ?? 0)
+  // A diagonal is declined rather than approximated, and the refusal is
+  // COUNTED — a deck that never had the stroke and a deck whose stroke we
+  // declined look identical afterwards.
+  if (w > 0 && h > 0) {
+    declined.count++
+    return null
+  }
+  if (w <= 0 && h <= 0) return null
+  const weight = emu(line.lineProperties?.weight)
+  if (!weight) return null
+  const fill = colorOf(line.lineProperties?.lineFill?.solidFill, scheme)
+  if (!fill) return null
+  const clamp = (v: number) => Math.min(1, Math.max(0, v))
+  /*
+   * The transform gives the stroke's CENTRELINE, not the rectangle's leading
+   * edge, so the ink straddles it and the box is `path ± weight / 2`.
+   *
+   * Measured rather than reasoned: three rules read off the source renders,
+   * two horizontal and one vertical. Every one of them has its shipped
+   * leading edge sitting on the source's centre to within a pixel, while the
+   * leading-edge reading misses by 15 to 25px — six to seventeen times the
+   * ±1px an ink extent can be read to. Along the THICKNESS axis only: length
+   * and position on the other axis were right all along, and so is the
+   * stroke width.
+   *
+   * It displaced every imported rule by half its own weight, and only the one
+   * that landed on a picture boundary gave it away. On white space, four
+   * pixels of slip is invisible — which is why this shipped looking correct.
+   */
+  const offset = (extent: number) => (extent ? 0 : weight / 2)
+  return {
+    id,
+    kind: 'decoration',
+    box: {
+      x: clamp((translation(t.translateX, t.unit) - offset(w)) / page.width),
+      y: clamp((translation(t.translateY, t.unit) - offset(h)) / page.height),
+      w: clamp((w || weight) / page.width),
+      h: clamp((h || weight) / page.height),
+    },
+    fill,
+  }
+}
+
 const elementOf = (
   raw: Record<string, unknown>,
   page: { width: number; height: number },
   scheme: Record<string, string>,
   ancestry: Ancestry,
+  declined: { count: number },
 ): SourceElement | null => {
   const id = (raw.objectId as string) ?? ''
   const chain = shapeChain(raw, ancestry)
@@ -727,6 +839,16 @@ const elementOf = (
   // part of the lecture: it says nothing the picture's own alt text has not
   // already said, and read as content it becomes a caption nobody wrote.
   if (isCreditLine(raw.description as string | undefined)) return null
+
+  const line = raw.line as
+    | {
+        lineProperties?: {
+          lineFill?: { solidFill?: Record<string, unknown> }
+          weight?: Dimension
+        }
+      }
+    | undefined
+  if (line) return ruleOf(raw, line, page, scheme, id, declined)
 
   const image = raw.image as { contentUrl?: string } | undefined
   if (image) {
@@ -826,11 +948,22 @@ const elementOf = (
         ?.textElements ?? []) as Record<string, unknown>[]
     ).map(
       p =>
-        (p.paragraphMarker as { style?: { alignment?: string } } | undefined)
-          ?.style?.alignment,
+        (
+          p.paragraphMarker as
+            { style?: { alignment?: string; lineSpacing?: number } } | undefined
+        )?.style,
     ),
   )
-  const align = ACROSS[paragraphs.find(Boolean) ?? '']
+  const align = ACROSS[paragraphs.map(p => p?.alignment).find(Boolean) ?? '']
+  // Leading inherits exactly as alignment does: a title set tight on the
+  // layout page stays tight on every slide built from it, and no slide says
+  // so. Nearest ancestor to state one wins, which is what `chain` is ordered
+  // by. A deck that states none at all leaves this unset, and the estimate's
+  // own fallback stands (`text-metrics`).
+  const spacing = paragraphs
+    .map(p => p?.lineSpacing)
+    .find((value): value is number => typeof value === 'number' && value > 0)
+  const lineHeight = spacing === undefined ? undefined : lineHeightFrom(spacing)
   const vAlign =
     DOWN[
       chain
@@ -868,6 +1001,9 @@ const elementOf = (
       ...(placeholder && Object.values(empty).some(v => v !== undefined)
         ? { runs: [{ text: '', ...empty }] }
         : {}),
+      // How this box would be LED, for the same reason its type is carried:
+      // an untouched placeholder is still set in the design's leading.
+      ...(lineHeight ? { lineHeight } : {}),
       ...(align ? { align } : {}),
       ...(vAlign ? { vAlign } : {}),
     }
@@ -887,6 +1023,7 @@ const elementOf = (
     ...(slotName ? { slotName } : {}),
     runs,
     ...(bulleted ? { bulleted: true } : {}),
+    ...(lineHeight ? { lineHeight } : {}),
     ...(align ? { align } : {}),
     ...(vAlign ? { vAlign } : {}),
   }
@@ -1028,6 +1165,7 @@ const inheritedDecoration = (
   scheme: Record<string, string>,
   ancestry: Ancestry,
   own: SourceElement[],
+  declined: { count: number },
 ): SourceElement[] => {
   // What the page already draws itself. An author who copied the rule — or the
   // logo — onto the slide should not end up with it drawn twice.
@@ -1047,7 +1185,7 @@ const inheritedDecoration = (
     for (const rawElement of flattenGroups(
       (ancestor.pageElements ?? []) as Record<string, unknown>[],
     )) {
-      const read = elementOf(rawElement, page, scheme, ancestry)
+      const read = elementOf(rawElement, page, scheme, ancestry, declined)
       if (!read) continue
       const element =
         read.kind === 'image' && read.imageUrl
@@ -1068,6 +1206,7 @@ const pageOf = (
   page: { width: number; height: number },
   scheme: Record<string, string>,
   ancestry: Ancestry,
+  declined: { count: number } = { count: 0 },
 ): SourcePage => {
   const rawElements = flattenGroups(
     (raw.pageElements ?? []) as Record<string, unknown>[],
@@ -1077,9 +1216,12 @@ const pageOf = (
   const metadata = metadataOf(rawElements)
   const themeStyles = themeStylesOf(rawElements)
   const notes = notesOf(raw)
+  const skipped = Boolean(
+    (raw.slideProperties as { isSkipped?: boolean } | undefined)?.isSkipped,
+  )
   const own = creditedPictures(
     rawElements
-      .map(el => elementOf(el, page, scheme, ancestry))
+      .map(el => elementOf(el, page, scheme, ancestry, declined))
       .filter((el): el is SourceElement => el !== null),
     printedCredits(rawElements),
   )
@@ -1098,12 +1240,13 @@ const pageOf = (
     // The design's own rules and bands go first, because they sit behind what
     // the slide draws on top of them.
     elements: [
-      ...inheritedDecoration(chain, page, scheme, ancestry, own),
+      ...inheritedDecoration(chain, page, scheme, ancestry, own, declined),
       ...own,
     ],
     ...(metadata ? { slotMetadata: metadata } : {}),
     ...(themeStyles ? { themeStyles } : {}),
     ...(notes ? { notes } : {}),
+    ...(skipped ? { skipped } : {}),
   }
 }
 
@@ -1323,9 +1466,14 @@ export const toSourcePresentation = (
   // Indexed before anything is read, because a slide's boxes and colours are
   // mostly stated on the layout and master behind it, not on the slide.
   const ancestry = indexAncestry(rawLayouts, rawMasters)
-  const layouts = rawLayouts.map(l => pageOf(l, page, scheme, ancestry))
+  // Strokes the reader declines to draw, counted across the whole deck so the
+  // import can say so rather than dropping them quietly.
+  const declined = { count: 0 }
+  const layouts = rawLayouts.map(l =>
+    pageOf(l, page, scheme, ancestry, declined),
+  )
   const slides = ((raw.slides ?? []) as Record<string, unknown>[]).map(s =>
-    pageOf(s, page, scheme, ancestry),
+    pageOf(s, page, scheme, ancestry, declined),
   )
   return {
     id: (raw.presentationId as string) ?? '',
@@ -1335,6 +1483,7 @@ export const toSourcePresentation = (
     theme: themeOf(scheme, dominantBackground(slides), [...slides, ...layouts]),
     layouts,
     slides,
+    ...(declined.count ? { rulesDeclined: declined.count } : {}),
   }
 }
 

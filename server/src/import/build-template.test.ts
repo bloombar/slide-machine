@@ -561,7 +561,14 @@ describe('room for what the box actually held', () => {
   it('leaves a box that already has the room exactly as it was drawn', () => {
     // The geometry IS the design. Growing one that fits would redraw a deck
     // that was never wrong.
-    expect(bodyOf(withBody(0.6)).h).toBe(0.6)
+    //
+    // 0.62 rather than a round 0.6 because these four points need 0.6044 —
+    // eight wrapped lines, their gaps, the inset and the overhang. 0.6 was
+    // chosen as comfortably enough before the inset and the wrapping
+    // allowance were charged for, and it has been 0.4% short ever since.
+    // Stated here so that a future change to the arithmetic fails this case
+    // with a reason rather than a mystery.
+    expect(bodyOf(withBody(0.62)).h).toBe(0.62)
   })
 
   it('does not move the box, only lengthens it', () => {

@@ -53,11 +53,38 @@ console.log(
   '  Each of these silently changed what somebody was looking at, at least once.',
 )
 
+/* --- Pages the author marked not-for-presentation ------------------------ */
+// Worth its own section because this script exists to say what a deck is
+// before anything is imported, and a page that is in the file but not in the
+// presentation is exactly the kind of thing nobody notices until a layout
+// appears in the template that the design never had. A template deck marks
+// its own instructions page this way.
+const skippedPages = deck.slides
+  .map((slide, index) => ({ slide, number: index + 1 }))
+  .filter(({ slide }) => slide.skipped)
+// The same rule the importer applies, including its refusal to import
+// nothing: a deck that is skipped end to end is imported whole.
+const presented = deck.slides.filter(slide => !slide.skipped)
+const importing = presented.length ? presented : deck.slides
+rule('NOT FOR PRESENTATION')
+console.log(
+  skippedPages.length
+    ? `  ${skippedPages.length} of ${deck.slides.length} pages marked "skip slide": ${skippedPages
+        .map(({ number }) => `#${number}`)
+        .join(', ')}`
+    : '  none — every page here is part of the presentation',
+)
+console.log(
+  importing.length === deck.slides.length && skippedPages.length
+    ? '  Every page is skipped, so the import keeps them all: importing nothing is worse.'
+    : `  An import leaves them out of the design AND of the lecture: ${importing.length} pages are imported.`,
+)
+
 /* --- Which import path the deck itself selects --------------------------- */
-const usedLayouts = new Set(deck.slides.map(s => s.layoutId).filter(Boolean))
+const usedLayouts = new Set(importing.map(s => s.layoutId).filter(Boolean))
 rule('AUTHORED OR CLUSTERED')
 console.log(
-  `  slides ${deck.slides.length} · layout pages ${deck.layouts.length} · used by slides ${usedLayouts.size}`,
+  `  slides ${importing.length} · layout pages ${deck.layouts.length} · used by slides ${usedLayouts.size}`,
 )
 console.log(
   usedLayouts.size > 1
@@ -74,7 +101,7 @@ console.log(
 console.log(
   keep === 'false'
     ? `  Tidying was asked for, so expect roughly ${usedLayouts.size} layouts plus the whiteboard.`
-    : `  But keepEverySlide SUPPRESSES it: expect ${deck.slides.length} layouts plus the whiteboard, one per slide.`,
+    : `  But keepEverySlide SUPPRESSES it: expect ${importing.length} layouts plus the whiteboard, one per slide.`,
 )
 
 /* --- Backgrounds --------------------------------------------------------- */

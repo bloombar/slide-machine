@@ -73,6 +73,11 @@ export default function SlideMath({ tex, display = true }: Props) {
 
   return (
     <span
+      // `slide-math` removes KaTeX's own display margin (index.css). A slot
+      // already IS the display context — it is a box of its own, placed and
+      // centred by the design — so the stylesheet's `margin: 1em 0` is a
+      // second one, invisible and inside the box.
+      className="slide-math"
       // KaTeX's own markup, produced from the author's source rather than
       // supplied by anyone: `trust: false` above is what keeps it that way.
       dangerouslySetInnerHTML={{ __html: rendered.html }}

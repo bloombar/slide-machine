@@ -1009,3 +1009,60 @@ describe('a bulleted list, read the way Google sends it', () => {
     expect(list?.constraints?.maxBullets).toBe(4)
   })
 })
+
+describe('a page the author marked "skip slide"', () => {
+  /** The same slide, marked not-for-presentation. */
+  const skipped = (id: string, jitter = 0): SourcePage => ({
+    ...slide(id, jitter),
+    skipped: true,
+  })
+
+  it('is left out of the design and out of the lecture', async () => {
+    // NYU's template decks carry a "Template Notes" page — links to their
+    // usage guidelines — marked this way. It is documentation ABOUT the deck,
+    // so a layout derived from it is a design the deck does not have, and a
+    // lecture slide made from it is the template's instructions in somebody's
+    // class. `keepEverySlide` gives one layout per slide, so the count says
+    // outright which slides became layouts.
+    const deck = presentation([slide('s1'), skipped('s2'), slide('s3', 0.02)])
+    const result = await importSourcePresentation(deck, {
+      keepEverySlide: true,
+    })
+    expect(
+      result.template.layouts.filter(l => l.type !== WHITEBOARD_LAYOUT_TYPE),
+    ).toHaveLength(2)
+    expect(result.template.layoutOfSlide).not.toHaveProperty('s2')
+    expect(result.slides.map(s => s.slideId)).toEqual(['s1', 's3'])
+  })
+
+  it('is counted in the report, not dropped silently', async () => {
+    // Afterwards, a deck that never had the page and a deck whose page was
+    // left out look exactly the same. Only the report can tell them apart.
+    const result = await importSourcePresentation(
+      presentation([slide('s1'), skipped('s2')]),
+      { keepEverySlide: true },
+    )
+    expect(result.report.slidesSkipped).toBe(1)
+    // And the pages that WERE read are counted as read, so the two numbers
+    // add up to the deck.
+    expect(result.report.slidesRead).toBe(1)
+  })
+
+  it('claims nothing about a deck that skipped nothing', async () => {
+    const result = await importSourcePresentation(presentation([slide('s1')]), {
+      keepEverySlide: true,
+    })
+    expect(result.report.slidesSkipped).toBeUndefined()
+  })
+
+  it('never leaves an import with nothing at all', async () => {
+    // A deck skipped end to end is still a deck someone asked us to import,
+    // and importing none of it is worse than importing all of it.
+    const result = await importSourcePresentation(
+      presentation([skipped('s1'), skipped('s2', 0.02)]),
+      { keepEverySlide: true },
+    )
+    expect(result.slides.map(s => s.slideId)).toEqual(['s1', 's2'])
+    expect(result.report.slidesSkipped).toBeUndefined()
+  })
+})

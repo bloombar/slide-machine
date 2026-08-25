@@ -382,6 +382,117 @@ Two designs do not meet this today, measured at `2aa10ad`: `classic` and `midnig
 
 A limit is derived from an average character width, so this is a statement about content of ordinary letter widths rather than a guarantee that no string of that length can ever shrink a box.
 
+#### TMPL-13 Import element accounting
+
+Import already says what it merged, what it approximated, and what it could not fetch ([TMPL-8](#tmpl-8-template-import-from-google-slides)). It does not say what it **discarded**, and that silence is where three real defects lived undetected through a full thirteen-slide fidelity review of NYU Bold: a 250pt section numeral, one half of a matched pair of quotation ornaments, and a slide number on eleven of thirteen pages. None of them produced a warning, a count, or an empty box. They were simply not there, and nothing on either side of the import was in a position to notice.
+
+**Absence is the one defect our checks cannot see.** Every fidelity check compares something that exists on both sides — geometry, colour, leading, wrapping, contrast. A source element that was never imported makes no box to measure, so every one of those checks passes, correctly, on the part of the design that survived. A screenshot of the result looks clean, because it is clean; it is merely not the design that was imported.
+
+**So the import reconciles rather than merely reports.** Every element the source presentation actually draws — on its slides, on the layout pages its slides inherit from, and on its master — ends the import in exactly one of three recorded states:
+
+- **placed** — it became a slot ([TMPL-9](#tmpl-9-open-slot--layout-model)) or a piece of a layout's decoration;
+- **dropped for a stated reason** — page marked "skip slide", a stroke with no rectangle that stands for it, a box too small to hold a word, an asset that would not retrieve;
+- **unaccounted** — nothing claimed it, and no rule refused it.
+
+The third state is the point. The second is produced today one field at a time — skipped pages, declined strokes, unfetched assets each have their own count — and each field exists because somebody thought of that category in advance and added it. The categories nobody thought of have no field and report nothing at all: a box the ornament rule judged too small to hold a word is discarded in silence today, and that single unrecorded rule accounts for two of the three absences. Reconciling against an enumeration of the source turns "we never considered this" from silence into a line in the report. `ImportReport` already carries the instinct — `slidesSkipped`, `rulesDeclined`, `contentDropped` are each one predicted category, and the requirement here is the completion of that idea rather than a new one; the completion is the part that catches what nobody predicted.
+
+**The report shows the unaccounted, named and located** — the slide it was on, what it is, where it sat, and its first few characters if it has any ("slide 2 · text '01' · x 0.48 y 0.32 · 0.51 × 0.68"). Named rather than counted, for the same reason dropped content is named rather than counted: "three elements were unaccounted" is not something an instructor can act on and "slide 2: the big 01" is. Zero unaccounted is stated as a claim, not as an absent line, since a report that says nothing when everything was fine reads identically to one that never ran.
+
+**What this does not promise.** It says every element has a destination; it does not say the destination is right. An element placed in decoration that should have been a slot is fully accounted and still wrong — a section numeral frozen into the design says "01" on every section divider of every deck built from that template, and looks perfect in every screenshot of the slide it came from. Whether a thing is design or content stays a judgement, made against the deck and checked by rendering ours beside the source. This requirement narrows what a human has to look for; it does not replace the looking.
+
+**What it costs.** Three things, honestly:
+
+- **Deciding what "draws" means is the hard part, not the bookkeeping.** Google marks an unfilled shape with an opaque white fill next to `propertyState: NOT_RENDERED`; a box whose only content is a generated slide number holds no text run; an empty placeholder renders a prompt in the editor and nothing in the presentation. Reading any of these naively makes the enumeration report every empty placeholder in the deck as an element, and forty spurious unaccounted lines are as unread as none. Each of those three rules had to be got right before the count meant anything.
+- **The silent failure moves rather than disappears.** An element the enumerator cannot see is not reported as unaccounted; it is reported as not being in the source. That is the same blindness one level up, so the enumeration itself needs a check with an independent basis — reconciling the words the source's own PDF render prints against the elements enumerated closes it for text, which is where the three real absences happened to live.
+- **Some furniture is genuinely ignorable**, and a rule that never says so buries its own signal. Categories that are decided once — a slide-number field, a footer, a date — belong in "dropped for a stated reason" with the reason recorded, not in "unaccounted" on every deck forever.
+
+**It runs before anyone looks at a screenshot**, on every import, and it is the cheapest of the checks: it reads two files and needs no browser. It is also the only one of them that would have found the other two defects on its own.
+
+#### TMPL-14 A design may draw its own text
+
+A design's furniture is not only rules, bands and logos. Decks draw **words** as design: a decorative initial, an oversized quotation mark, a watermark, a standing label a layout always carries. A design today can draw a fill or a picture and nothing else, so every one of these is lost on import and cannot be authored into a built-in either.
+
+NYU Bold's quotation layout is the worked example. Its source brackets the quote with a matched pair of accent marks — a large opening quotation mark above and a rule below. We ship the rule and not the mark, so the layout is half of a symmetry, and nothing in the import said so.
+
+**Decoration may therefore carry text**, with its own face, size, weight, colour and alignment, drawn exactly as a band or a logo is drawn: never editable, never offered to the AI, never counted toward any slot's budget, and identical on every slide built on that layout.
+
+**That last clause is the whole distinction, and getting it wrong is worse than the gap it closes.** Text belongs to the design only when it is the same on every slide the layout produces. A section number is not: it reads 01 on the first divider and 02 on the second, so it is content and belongs in a slot ([TMPL-9](#tmpl-9-open-slot--layout-model)). Frozen into decoration it would be fully accounted by [TMPL-13](#tmpl-13-import-element-accounting), render perfectly, survive every fidelity check we have, and say 01 on every section divider of every deck built from that template. A defect that passes both the accounting and the screenshot is the expensive kind, so the rule an importer applies is the origin of the element — inherited from the layout page, or drawn on the slide itself — rather than anything about how the text looks.
+
+#### TMPL-15 Generated fields survive import
+
+A presentation's slide numbers, dates and footers are **generated fields**: the source states where the value goes and the presenting application supplies it. They are a third thing alongside design and content — nobody authors them, and they differ on every slide.
+
+Our reader cannot see them at all. It reads a box's text runs, and a generated field has none, so the box arrives empty and is discarded as an empty placeholder. NYU Bold carries a slide-number field on every layout but its title and section pages; eleven of its thirteen slides are numbered in the source and none in ours. That was not a decision anybody made.
+
+**Import therefore reads a generated field as what it is** — recording which field a box carries rather than the value the source happened to render — so that a design that numbers its slides is imported as one that numbers its slides. Where the app has no equivalent for a field, it is dropped **for a stated reason** under [TMPL-13](#tmpl-13-import-element-accounting) rather than in silence, which is what separates "we do not support footers" from "we never saw it".
+
+#### TMPL-16 A slot says what it can hold
+
+A slot states how MUCH it holds ([TMPL-6](#tmpl-6-layout-descriptors-for-ai-selection)) and never what KIND of characters. Every rule that has to reason about a box's contents therefore guesses, and two of them guess in opposite directions.
+
+The **overlap** rule must decide whether two boxes collide. Ink height depends on the glyphs: in Montserrat 700 a digit rises 0.700 em above its baseline and an accented capital 0.900. On NYU Bold's section divider that difference decides the question — the numeral's box is `maxChars: 2` and described "as digits", and its digits clear the title's last line by 0.062 of the slide, while an `Á` in the same box would overlap it by 2.6%. The rule can assume the worst glyph the face contains and fault a correct design, or assume ordinary letters and be silently wrong for three of the five locales the app ships. Neither is right, because the box's own description already answers the question and nothing can read it.
+
+Nor is the exposure only the exotic case. Measured on that divider, a **solidus alone** in the number box — nothing above it at all — sits within 2px of the title's baseline. Every other collision in that design needs two unlucky glyphs at once; this one needs the slot to receive a single character it has no way to refuse. **A design cannot be made safe by moving a box when the hazard is one glyph in a two-character slot**, which is why the geometry was adjusted and this requirement still stands.
+
+The **ornament** rule must decide whether a box is too small to write in. It estimates characters from area and type size, so a box holding two digits at display size is indistinguishable from a decorative glyph nobody could type into.
+
+**So a slot may declare the character set it accepts** — digits, capitals, ordinary text — and the rules read that declaration instead of guessing. A declaration is enforced where it can be (the editor and generation refuse what the slot does not accept) so that a rule may rely on it, which is what separates it from a label saying "Part number" that nothing checks.
+
+`caps` is the shape this already takes: it is a style, applied by the renderer, so a box set in capitals **cannot** receive a lowercase descender and a rule may depend on it. The gap is that everything else about a box's contents is prose.
+
+Until this exists, rules that depend on glyph shape state their assumption and its cost in the same breath — which strings they exclude, and by how much — rather than quietly assuming the convenient case.
+
+#### TMPL-17 A design that names no face is measured against none
+
+A design may name the typefaces it is set in, and three of the app's built-ins — `classic`, `midnight` and `seminar` — name none. Their text falls back to the platform's own UI face: one thing on macOS, another on Windows, another on Linux, each with its own advance widths and vertical metrics.
+
+Every budget those designs state was derived and validated against **one** of those faces, on whichever machine measured it. A reader on any other platform is looking at a design whose stated limits were never checked for the face they are seeing, and [TMPL-12](#tmpl-12-every-shipped-design-holds-what-it-says-it-holds)'s promise — that a design holds what it says it holds — silently narrows to "on the platform that measured it". The gate found this by disagreeing with itself: the same designs pass on a developer's machine and fail in CI, at their own declared budgets, with no code between the two.
+
+**So a shipped design either names its faces, or its budgets hold for every face it can plausibly be drawn in** — the second being a real option, since a limit derived conservatively across the candidate faces costs only the characters the widest of them would have taken. What is not an option is a limit that is accurate for one face and unstated about the rest.
+
+This is a statement about the **designs**, not about the browser they are measured in. A design that names its faces has one answer everywhere and needs nothing here.
+
+#### TMPL-18 A tolerated fault is tolerated at the size it was measured
+
+A design that fails a check ([TMPL-12](#tmpl-12-every-shipped-design-holds-what-it-says-it-holds)) may be **recorded** rather than fixed, so that a new fault fails the build instead of joining a list of old ones. Recording is a judgement, and every recorded fault carries what it was measured at.
+
+**That measurement is currently prose, and nothing compares against it.** An entry is matched to a fault by a fragment of its text, so an entry goes on matching however far the fault worsens: a box recorded as shrinking its type to 85% still matches the same box shrinking to 40%. **The mechanism built to stop a new fault passing silently will absorb a regression in an old one just as silently** — the numbers that would reveal it sit beside the entry as text nobody diffs. With four entries a reader notices. With twenty-one they do not, and eye-reading is the only check the list has.
+
+**So a recorded fault states its magnitude in a form the check can compare, and the build fails when the fault gets worse.** Recording says "this much is wrong and no more"; it does not say "this box is exempt".
+
+**And an entry that no longer matches any fault fails too**, so the list shrinks when a design is repaired instead of describing a defect that no longer exists. One exception, which is why entries say what KIND of fault they are: an entry recorded as **platform-specific** legitimately does not reproduce on every machine, and its absence is not evidence of repair.
+
+The point is that a list of tolerated faults decays in both directions — entries that outlive their defect, and defects that outgrow their entries — and the longer it is, the less a reader can be the mechanism that catches either.
+
+#### TMPL-19 A box holds its budget while its neighbours hold theirs
+
+[TMPL-12](#tmpl-12-every-shipped-design-holds-what-it-says-it-holds) fills a design to its own stated limits and measures the result. It fills them **one box at a time**, and that is the whole of the gap: a walk that fills one box and leaves its siblings empty never puts two boxes at their budgets simultaneously, so it cannot see a box that is destroyed by a neighbour rather than by its own contents.
+
+In a design whose geometry is a **flow** — an arrangement the renderer resolves, rather than a list of rectangles — a box has no fixed size to be measured against. Its height is what its siblings leave it. So a budget states what a box holds in a rectangle that exists only for a particular combination of content, and every check that reads the budget alone is reading a promise about a box nobody has drawn.
+
+`nyu-elegant`'s closing page is the worked example, measured in a browser:
+
+- caption alone, at its full stated budget of 110 characters — 741.8 × 57.94px, type at 100%, nothing hidden;
+- the same caption, same budget, with its **sibling** title filled to *its* stated 44 — 483.8 × 2.48px, type shrunk to the renderer's 40% floor, 10px of content hidden.
+
+The height went to the sibling. The title node carries `shrink: 0` and the caption does not, so the caption absorbs the entire overflow of a title that was itself only doing what its budget permits. Both boxes are inside their stated limits and the page is destroyed. Seven of that design's nine recorded faults are this one cause, on six boxes across four layouts; cutting the titles and touching no caption budget clears five of them outright and restores a section divider that had been squeezed to zero width.
+
+**So the walk fills every box on a layout at once**, and a design's budgets are a set that must hold together rather than a list that holds one at a time. Where boxes compete for the same space, the design states which one yields — leaving it to the renderer's default means the last shrinkable child silently absorbs everyone else's overflow.
+
+**A collapsed box is the failure mode to name, because it is the one that looks like a decision.** A box shrunk to nothing renders as a design with fewer elements, not as a broken one: no clipping, no overlap, nothing off the slide. The graphic that vanishes carries no text, so no rule that reads text can see it go.
+
+#### TMPL-20 A flow design's budgets are checked, or the check says they are not
+
+[TMPL-12](#tmpl-12-every-shipped-design-holds-what-it-says-it-holds)'s budgets are verified by recomputing each one from the rectangle it was derived from. A flow-stated design has no such rectangle ([TMPL-19](#tmpl-19-a-box-holds-its-budget-while-its-neighbours-hold-theirs)), so today the check reaches none of its boxes — and **passes**, in a case named after the design it did not examine.
+
+Measured: 0 of `nyu-elegant`'s 36 per-box budgets are recomputable, against 34 of 34 for `nyu-bold`. The suite reports `11 passed` either way. A green from a check that examined nothing is indistinguishable from a green from a check that examined everything, and the design behind that green turned out to carry nine reproducible faults.
+
+The gap is documented honestly in the check's own prose, which is why it is a requirement rather than a bug — and the prose also records the moment it was nearly closed. Resolving the trees with empty content produced thirty-six disagreements, "body boxes reported at four hundredths of the slide's height — flow boxes collapsed for want of anything to hold", and these were set aside as false findings "against a design that is fine". The collapse was real; the design was not fine. The reasoning was correct about the cause and wrong about the conclusion, and it pointed the instrument away from the exact failure it had just produced.
+
+**So a check states, in its result and not only in its prose, how much it examined.** A case that reaches nothing reports that it reached nothing and fails or skips explicitly, rather than passing. Coverage is part of the result: "34 of 34 budgets recomputed" and "0 of 36" are different outcomes and must not print the same word.
+
+**And a flow design's budgets are verified against a resolved layout with every box filled**, which is the rectangle those budgets are actually promises about — the same fill-them-all walk [TMPL-19](#tmpl-19-a-box-holds-its-budget-while-its-neighbours-hold-theirs) requires. Empty content is what made the earlier attempt unreadable; content at the budgets is what the budgets describe.
+
 ### 8. Live Lecture Capture
 
 #### CAP-1 Session lifecycle
