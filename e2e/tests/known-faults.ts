@@ -77,11 +77,12 @@ export interface KnownFault {
    * and absent for the one who does not, so the number recorded is a property
    * of the face the runner resolved rather than of the design.
    *
-   * The discriminator sits in the same CI run: `nyu-elegant` names a real
-   * face and its nine faults are byte-identical here and there, while the
-   * three faceless designs disagree between machines and agree byte for byte
-   * with EACH OTHER. That is what makes this a measurement rather than a
-   * story about fonts.
+   * The discriminator was `nyu-elegant`, which names a real face: its nine
+   * faults were byte-identical here and in CI, while the three faceless
+   * designs disagree between machines and agree byte for byte with EACH
+   * OTHER. That is what made this a measurement rather than a story about
+   * fonts. Those nine are gone — the design was repaired — so the control is
+   * now `nyu-bold`, which also names its faces.
    *
    * It is also what a stale-entry check would have to exempt: an entry that
    * legitimately does not reproduce here cannot be required to match.
@@ -241,63 +242,6 @@ export const KNOWN_FAULTS: KnownFault[] = [
     platform: PLATFORM_FACE,
   },
 
-  // ---- nyu-elegant ----
-  //
-  // NO platform caveat, and the absence is the point. This design names Frank
-  // Ruhl Libre, and its nine faults are byte-identical locally and in CI.
-  // They reproduce, so they are the design: nine boxes wrong at their own
-  // stated budgets, on a design this branch does not touch.
-  {
-    design: 'nyu-elegant',
-    match: 'closing at its budget "caption" only fits because',
-    measured:
-      'shrunk to 40% - the floor - drawn 8.6px against 21.5px, in a box that lays out 486x2px holding 110 chars',
-  },
-  {
-    design: 'nyu-elegant',
-    match: 'closing at its budget "caption" hides its content',
-    measured: '10px tall hidden, allowed 8.0px at leading 1.35 on 8.6px',
-  },
-  {
-    design: 'nyu-elegant',
-    match: 'closing at its budget "caption" cuts the descenders',
-    measured: '8px of reachable ink outside the box, leading 1.35 at 8.6px',
-  },
-  {
-    design: 'nyu-elegant',
-    match: 'title at its budget "caption" hides its content',
-    measured:
-      '29px tall hidden, allowed 8.0px at leading 1.35 on 21.5px, 70 chars',
-  },
-  {
-    design: 'nyu-elegant',
-    match: 'section at its budget "caption" hides its content',
-    measured:
-      '58px tall hidden, allowed 8.0px at leading 1.35 on 21.5px, 90 chars',
-  },
-  {
-    design: 'nyu-elegant',
-    match: 'content-list at its budget "bullets" only fits because',
-    measured:
-      'shrunk to 75%, drawn 18.3px against 24.4px, box 892x128, 280 chars',
-  },
-  {
-    design: 'nyu-elegant',
-    match: 'quote at its budget "body" only fits because',
-    measured:
-      'shrunk to 80%, drawn 54.7px against 68.3px, box 714x245, 100 chars',
-  },
-  {
-    design: 'nyu-elegant',
-    match: 'title-image at its budget "title" only fits because',
-    measured:
-      'shrunk to 88%, drawn 76.9px against 87.8px, box 742x209, 44 chars',
-  },
-  {
-    design: 'nyu-elegant',
-    match: 'title-image at its budget "title" cuts the descenders',
-    measured: '14px of reachable ink outside the box, leading 0.95 at 76.9px',
-  },
   {
     design: 'nyu-bold',
     match: 'section at its budget "number" cuts the descenders',
