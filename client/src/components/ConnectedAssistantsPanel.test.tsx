@@ -5,10 +5,11 @@
  * else": the button must cut exactly the assistant it sits next to, and the
  * list afterwards must come from the server rather than from optimism.
  */
-import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import ConnectedAssistantsPanel from './ConnectedAssistantsPanel'
 import { mockFetchRoutes } from '../test/fetch-mock'
+import * as runtimeConfig from '../runtime-config'
 
 const CONNECTIONS = [
   {
@@ -25,8 +26,18 @@ const CONNECTIONS = [
   },
 ]
 
+beforeEach(() => {
+  // The deployment can host agent access unless a test says otherwise.
+  vi.spyOn(runtimeConfig, 'getAgentAccessEnabled').mockReturnValue(true)
+  Object.defineProperty(window, 'location', {
+    value: { origin: 'https://slides.example.edu' },
+    writable: true,
+  })
+})
+
 afterEach(() => {
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 const renderPanel = (
@@ -165,5 +176,96 @@ describe('disconnecting', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /Disconnect/ })[0]!)
     // The assistant is still listed: nothing is hidden that was not cut.
     expect(await screen.findByText(/Something went wrong/)).toBeTruthy()
+  })
+})
+
+describe('how to connect one', () => {
+  it('hands over the address to paste, since the app cannot start the flow', async () => {
+    // There is no "connect" button and cannot be — an authorization flow
+    // begins at the assistant. The address is the only part of it the app
+    // can offer, and without it the panel is a dead end.
+    renderPanel()
+
+    expect(await screen.findByText('Connect an assistant')).toBeTruthy()
+    expect(screen.getByText('https://slides.example.edu/api/mcp')).toBeTruthy()
+  })
+
+  it('shows it to an account with nothing connected — the case that needs it most', async () => {
+    renderPanel([])
+
+    expect(
+      await screen.findByText(/No AI assistants are connected/),
+    ).toBeTruthy()
+    expect(screen.getByText('https://slides.example.edu/api/mcp')).toBeTruthy()
+  })
+
+  it('says the assistant will come back for approval', async () => {
+    // Someone pasting an address into a third-party tool should know a consent
+    // step is coming, rather than wondering what they just authorised.
+    renderPanel()
+    expect(
+      await screen.findByText(/send you back here to approve/),
+    ).toBeTruthy()
+  })
+
+  it('copies the address, and says it did', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      writable: true,
+    })
+    renderPanel()
+
+    fireEvent.click(await screen.findByRole('button', { name: /Copy/ }))
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(
+        'https://slides.example.edu/api/mcp',
+      ),
+    )
+    expect(await screen.findByText('Copied')).toBeTruthy()
+  })
+
+  it('stops saying "Copied" after a moment, so the label is not stale', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+      writable: true,
+    })
+    renderPanel()
+
+    fireEvent.click(await screen.findByRole('button', { name: /Copy/ }))
+    expect(await screen.findByText('Copied')).toBeTruthy()
+
+    await act(async () => {
+      vi.advanceTimersByTime(2100)
+    })
+    expect(screen.queryByText('Copied')).toBeNull()
+    vi.useRealTimers()
+  })
+
+  it('leaves the address on screen when the clipboard refuses', async () => {
+    // Clipboard access can be denied by permission policy. The address is
+    // selectable either way, so this is a convenience failing, not the panel.
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
+      writable: true,
+    })
+    renderPanel()
+
+    fireEvent.click(await screen.findByRole('button', { name: /Copy/ }))
+    expect(screen.getByText('https://slides.example.edu/api/mcp')).toBeTruthy()
+    expect(screen.queryByText('Copied')).toBeNull()
+  })
+
+  it('offers nothing to a deployment that cannot host an assistant', async () => {
+    // An https origin is required. Handing out an address that would refuse
+    // the assistant is worse than saying nothing.
+    vi.spyOn(runtimeConfig, 'getAgentAccessEnabled').mockReturnValue(false)
+    renderPanel([])
+
+    expect(
+      await screen.findByText(/No AI assistants are connected/),
+    ).toBeTruthy()
+    expect(screen.queryByText('Connect an assistant')).toBeNull()
   })
 })

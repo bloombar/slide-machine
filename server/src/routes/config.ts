@@ -10,6 +10,7 @@ import { serverTranscriptionAvailable } from '../lib/transcribe-audio'
 import { translationEnabled } from '../lib/translate-slides'
 import { feedbackEnabled } from './feedback'
 import { mailerAvailable } from '../lib/mailer'
+import { oauthAvailable } from './oauth'
 
 export const configRouter = Router()
 
@@ -37,6 +38,7 @@ const ttsEnabled = (): boolean => {
 
 configRouter.get('/config', (_req, res) => {
   const body: RuntimeConfig = {
+    agentAccessEnabled: oauthAvailable(),
     sttEngine: sttEngine(),
     ttsEnabled: ttsEnabled(),
     translationEnabled: translationEnabled(),

@@ -22,7 +22,7 @@ future work in the spec — [SPEC.md §18](SPEC.md#18-future-work), open questio
 | The endpoint | `POST /api/mcp` — [routes/mcp.ts](../server/src/routes/mcp.ts) |
 | **OAuth authorization server (§5)** | Built — [oauth/](../server/src/oauth/) and [routes/oauth.ts](../server/src/routes/oauth.ts). Dynamic client registration, PKCE, scopes, refresh-token rotation, revocation, and the two discovery documents. |
 | The consent screen (§5.1) | Built — [OAuthConsentPage.tsx](../client/src/pages/OAuthConsentPage.tsx) |
-| Connected-assistants list and disconnect (§5.3) | Built — [ConnectedAssistantsPanel.tsx](../client/src/components/ConnectedAssistantsPanel.tsx), account settings → Privacy |
+| Connected-assistants list and disconnect (§5.3) | Built — [ConnectedAssistantsPanel.tsx](../client/src/components/ConnectedAssistantsPanel.tsx), account settings → Privacy. The same panel hands over the address to paste into an assistant, which is the only part of connecting the app can offer: an authorization flow starts at the client, so there is no "connect" button and cannot be. |
 | The in-app chat assistant (§3.4) | Not built |
 
 **What has not been done:** the tool set has still not been validated against

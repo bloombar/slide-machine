@@ -28,7 +28,8 @@
     "listSeparator": "、",
     "adminEditNotice": "你正以管理员身份编辑其他用户的{entity, select, account {账户} project {项目} lecture {课程} other {设置}}。你在此做的每一处更改都会记入审计日志。",
     "undo": "撤销",
-    "redo": "重做"
+    "redo": "重做",
+    "copy": "复制"
   },
   "nav": {
     "brand": "The Slide Machine",
@@ -1351,6 +1352,10 @@
     "none": "此账户尚未连接任何 AI 助手。",
     "connectedOn": "连接于 {date}",
     "disconnect": "断开连接",
-    "failed": "无法加载已连接的助手。"
+    "failed": "无法加载已连接的助手。",
+    "connectTitle": "连接助手",
+    "connectHint": "将此地址粘贴到您的 AI 助手的连接器设置中。支持远程 MCP 连接器的助手（例如 Claude）会完成其余步骤。",
+    "connectApproval": "助手会把您送回这里进行批准，之后才能看到任何内容。",
+    "copied": "已复制"
   }
 }

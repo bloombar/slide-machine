@@ -28,7 +28,8 @@
     "listSeparator": ", ",
     "adminEditNotice": "You are editing another user's {entity, select, account {account} project {project} lecture {lecture} other {settings}} as an admin. Every change you make here is recorded in the audit log.",
     "undo": "Undo",
-    "redo": "Redo"
+    "redo": "Redo",
+    "copy": "Copy"
   },
   "nav": {
     "brand": "The Slide Machine",
@@ -1351,6 +1352,10 @@
     "none": "No AI assistants are connected to this account.",
     "connectedOn": "Connected {date}",
     "disconnect": "Disconnect",
-    "failed": "Could not load connected assistants."
+    "failed": "Could not load connected assistants.",
+    "connectTitle": "Connect an assistant",
+    "connectHint": "Paste this address into your AI assistant's connector settings. Assistants that support remote MCP connectors — such as Claude — will do the rest.",
+    "connectApproval": "The assistant will send you back here to approve it before it can see anything.",
+    "copied": "Copied"
   }
 }

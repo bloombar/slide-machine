@@ -28,7 +28,8 @@
     "listSeparator": ", ",
     "adminEditNotice": "Estás editando {entity, select, account {la cuenta} project {el proyecto} lecture {la clase} other {los ajustes}} de otra persona como administrador. Cada cambio que hagas aquí queda registrado en el registro de auditoría.",
     "undo": "Deshacer",
-    "redo": "Rehacer"
+    "redo": "Rehacer",
+    "copy": "Copiar"
   },
   "nav": {
     "brand": "The Slide Machine",
@@ -1351,6 +1352,10 @@
     "none": "No hay asistentes de IA conectados a esta cuenta.",
     "connectedOn": "Conectado el {date}",
     "disconnect": "Desconectar",
-    "failed": "No se pudieron cargar los asistentes conectados."
+    "failed": "No se pudieron cargar los asistentes conectados.",
+    "connectTitle": "Conectar un asistente",
+    "connectHint": "Pega esta dirección en los ajustes de conectores de tu asistente de IA. Los asistentes compatibles con conectores MCP remotos —como Claude— harán el resto.",
+    "connectApproval": "El asistente te devolverá aquí para que lo apruebes antes de poder ver nada.",
+    "copied": "Copiado"
   }
 }
