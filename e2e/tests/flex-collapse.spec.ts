@@ -57,6 +57,46 @@
  * hidden, and restores a section divider whose HEIGHT had been squeezed from
  * 1.53px to zero (its width, 35.95px, never changed).
  *
+ * ## The control is the instrument, and it is the one nobody budgets for
+ *
+ * Every trap below was caught by the same thing: a run over an UNMODIFIED
+ * copy, whose only job was to reproduce a number already in hand. It tells
+ * you nothing new when it works, which is exactly why it is easy to skip —
+ * and it is the only check here that has ever caught anything.
+ *
+ * The reason it works is that these bugs do not produce implausible numbers.
+ * They produce ordinary ones. Every assertion in this file passed while it
+ * was measuring a slide that has never existed; the sole contradiction
+ * available was against a value measured earlier. So when this probe is
+ * pointed at something new, point it at something OLD first.
+ *
+ * The general rule, which is `slide-boxes.ts`'s too: an instrument may report
+ * a DIFFERENCE across configurations and must not report a LEVEL across time.
+ * Every row of one sweep is measured in one page load against one tree, so
+ * differences between rows survive whatever the tree was. Only a number that
+ * has to hold across runs needs the tree pinned — and that is the only kind
+ * that has gone wrong.
+ *
+ * ## Never key a result on `--fit-scale`
+ *
+ * A box crushed to zero height reports `scale 1.0000`, identical to a healthy
+ * one. `useFitText`'s `measure()` opens with `if (!el.clientHeight) return`,
+ * so a collapsed box is never measured at all and keeps its initial state.
+ * Absent measurement is indistinguishable from a pass.
+ *
+ * Measured, not reasoned: eight collapsed boxes across six runs, every one
+ * reporting 1.0000 — `quote.caption` at 29px hidden, `section.caption` at
+ * 58px hidden. **Read rendered height and `scrollHeight - clientHeight`.**
+ * This file happens to do that, and it was luck rather than judgement: the
+ * fields were chosen before anyone knew it mattered. The next person will not
+ * be lucky.
+ *
+ * A related one, from the other end: a `shrink: 0` box with no explicit
+ * height has its content AS its height, so `scrollHeight === clientHeight`
+ * and `fits()` asks whether it fits inside itself — it always does. Such a
+ * box can overflow its PARENT by any amount while reporting scale 1.000 and
+ * overflow 0. `quote.body` did it by 69px.
+ *
  * ## Two traps this file fell into first, which are easy to fall into again
  *
  * Both were bugs in the MEASUREMENT that produced healthy-looking numbers,
@@ -66,10 +106,10 @@
  * does NOT clear its content, and two `fill()` strings of different lengths
  * share a prefix.
  */
-import { writeFileSync, mkdirSync, readFileSync } from 'node:fs'
+import { writeFileSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { test, expect, type Page } from './fixtures'
-import { settled, descenderFaultsOn } from './slide-boxes'
+import { settled, descenderFaultsOn, boxesOf, inkOf } from './slide-boxes'
 import { createProject } from './helpers'
 
 const DESIGN = process.env.PROBE_DESIGN ?? 'nyu-elegant'
@@ -87,6 +127,25 @@ const OUT = path.resolve(process.env.PROBE_OUT ?? 'artifacts/flex-collapse')
  * filling it instead to what its box supports says which of the two the
  * descender fault was.
  */
+/**
+ * Literal text for a slot, as `layout.slot=text`, semicolon separated.
+ *
+ * A budget override sets how MANY characters a box is filled with; this sets
+ * WHICH. The distinction matters for a box whose safety argument rests on the
+ * characters it is expected to hold — "this box is set in digits" is an
+ * argument about content, and only content with a descender in it can test
+ * whether the argument survives a comma.
+ */
+const TEXT = new Map(
+  (process.env.PROBE_TEXT ?? '')
+    .split(';')
+    .filter(Boolean)
+    .map(pair => {
+      const at = pair.indexOf('=')
+      return [pair.slice(0, at), pair.slice(at + 1)] as const
+    }),
+)
+
 const OVERRIDE = new Map(
   (process.env.PROBE_FILL ?? '')
     .split(',')
@@ -106,12 +165,34 @@ interface SlotSpec {
   maxItems?: number
 }
 
-const TEMPLATE = JSON.parse(
-  readFileSync(
-    path.resolve(`../server/config/templates/${DESIGN}.json`),
-    'utf8',
-  ),
-) as {
+/**
+ * Where the design is read from — which MUST be where the server reads it.
+ *
+ * This probe fills each box to the budget it finds in the template file, and
+ * the app draws that box from the template the SERVER loaded. Those are two
+ * reads of what is meant to be one file, and when they diverge the probe
+ * measures a slide that has never existed: old boxes filled to new budgets,
+ * or the reverse. Nothing downstream can detect it — every box holds exactly
+ * what it was asked to hold, so the char-count assertions pass and the
+ * numbers look ordinary.
+ *
+ * It happened. Pointing the server at a scratch templates directory with
+ * `TEMPLATES_DIR` while this file went on reading the working tree produced a
+ * run where three titles were filled to budgets 20% smaller than the boxes
+ * being drawn, and the collapse under investigation politely disappeared. The
+ * only reason it was caught is that the run was a CONTROL — an unmodified
+ * copy, which had to reproduce the baseline and did not.
+ *
+ * So the directory is one setting, and the run prints which file it read and
+ * how big it was. A harness pointed at two files should be visible in its own
+ * log rather than inferred from a surprising result.
+ */
+const TEMPLATES = path.resolve(
+  process.env.PROBE_TEMPLATES ?? '../server/config/templates',
+)
+const TEMPLATE_FILE = path.join(TEMPLATES, `${DESIGN}.json`)
+
+const TEMPLATE = JSON.parse(readFileSync(TEMPLATE_FILE, 'utf8')) as {
   name: string
   layouts: { type: string; label: string; slots?: SlotSpec[] }[]
 }
@@ -263,6 +344,13 @@ test('where a computed box gets its height', async ({ page }) => {
     'a probe, not a check — run with FLEX_PROBE=1',
   )
   test.setTimeout(600_000)
+  // Printed, not assumed: if the server was pointed elsewhere with
+  // TEMPLATES_DIR, this line and the server's own configuration are the only
+  // places the disagreement is visible.
+  console.log(
+    `TEMPLATE   read ${TEMPLATE_FILE} (${statSync(TEMPLATE_FILE).size} bytes) ` +
+      `— the server must be reading this same directory`,
+  )
   await page.emulateMedia({ reducedMotion: 'reduce' })
   const email = `flex-${Date.now()}@example.com`
   await page.goto('/register')
@@ -318,11 +406,12 @@ test('where a computed box gets its height', async ({ page }) => {
     const chars = (slot: SlotSpec): number =>
       OVERRIDE.get(`${type}.${slot.name}`) ?? slot.maxChars ?? 40
     const budgetText = (slot: SlotSpec): string =>
-      slot.kind === 'bullets'
+      TEXT.get(`${type}.${slot.name}`) ??
+      (slot.kind === 'bullets'
         ? Array.from({ length: slot.maxItems ?? 3 }, (_, i) =>
             fill(chars(slot), `${slot.name}${i}`),
           ).join('\n')
-        : fill(chars(slot), slot.name)
+        : fill(chars(slot), slot.name))
     /** What that text amounts to once the browser has it, newlines dropped. */
     const budgetChars = (slot: SlotSpec): number =>
       slot.kind === 'bullets' ? chars(slot) * (slot.maxItems ?? 3) : chars(slot)
@@ -379,6 +468,50 @@ test('where a computed box gets its height', async ({ page }) => {
 
     // The ink-vs-box rule, run on the same state the gate runs it on, so a
     // descender fault can be attributed to the leading or to the budget.
+    /*
+     * The ink each box actually puts on the page, and the white space
+     * between consecutive ones.
+     *
+     * Reported because a band between two elements is a fact about INK, not
+     * about rectangles: a box is as tall as its leading makes it, and the
+     * glyphs sit somewhere inside that. Two instruments disagreed 1.7x over
+     * one such band, and neither was reporting the quantity a reader sees.
+     */
+    const measured = await boxesOf(slide)
+    const inks = measured
+      .filter(b => b.hasText)
+      .map(b => ({ id: b.id, box: { y: b.y, h: b.h }, ink: inkOf(b) }))
+      .filter(b => b.ink)
+      .sort((a, b) => (a.ink!.y ?? 0) - (b.ink!.y ?? 0))
+    for (const b of inks)
+      console.log(
+        `INK        ${type}.${b.id} box y=${(b.box.y * 56.25).toFixed(3)} ` +
+          `h=${(b.box.h * 56.25).toFixed(3)}cqi  ink y=${(b.ink!.y * 56.25).toFixed(3)} ` +
+          `h=${(b.ink!.h * 56.25).toFixed(3)}cqi`,
+      )
+    for (let i = 1; i < inks.length; i++) {
+      const prev = inks[i - 1]!.ink!,
+        cur = inks[i]!.ink!
+      const gapCqi = (cur.y - (prev.y + prev.h)) * 56.25
+      console.log(
+        `BAND       ${type}.${inks[i - 1]!.id}->${inks[i]!.id} ` +
+          `${gapCqi.toFixed(3)}cqi = ${(gapCqi * 7.2).toFixed(2)}pt` +
+          (gapCqi < 0 ? '   <<< INK OVERLAP' : ''),
+      )
+    }
+    /*
+     * A picture of the slide, so a band can be measured without a font model.
+     *
+     * The `INK` lines above come from `inkBoxOf`, which places glyphs inside
+     * their line box from a table of face metrics. That is the same model one
+     * side of a disagreement was using, so a number derived from it cannot
+     * settle that disagreement — it agrees with that side by construction.
+     * Counting coloured pixels answers the same question with no model in it
+     * at all.
+     */
+    mkdirSync(OUT, { recursive: true })
+    await slide.screenshot({ path: path.join(OUT, `${type}.png`) })
+
     const descenders = await descenderFaultsOn(slide, `${DESIGN} ${type}`)
     for (const fault of descenders) console.log(`DESCENDER  ${fault}`)
     if (!descenders.length) console.log(`DESCENDER  ${type}: none`)
