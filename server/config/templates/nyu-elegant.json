@@ -80,7 +80,7 @@
         "fontFamily": "frank-ruhl-libre",
         "fontSize": 17,
         "fontWeight": 700,
-        "lineHeight": 1.0,
+        "lineHeight": 1.196,
         "color": "accent",
         "maxChars": 8
       },
@@ -1099,7 +1099,7 @@
           "name": "figure",
           "kind": "text",
           "label": "The figure",
-          "description": "The number alone: \"32%\", \"1.4bn\". Never a sentence. Nothing that descends below the baseline — no comma, no bracket, no g or y: this box is drawn with descender protection off and would clip one.",
+          "description": "The number alone: \"32%\", \"1.4bn\". Never a sentence.",
           "maxChars": 8,
           "required": true
         },
@@ -1125,7 +1125,7 @@
           "direction": "column",
           "justify": "center",
           "alignItems": "center",
-          "gap": 0
+          "gap": 0.4
         },
         "children": [
           {
@@ -1133,8 +1133,7 @@
             "slot": "figure",
             "style": {
               "textStyle": "statNumber",
-              "align": "center",
-              "paddingY": 0
+              "align": "center"
             },
             "shrink": 0
           },
