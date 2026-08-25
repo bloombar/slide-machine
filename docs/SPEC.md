@@ -488,6 +488,21 @@ The height went to the sibling. The title node carries `shrink: 0` and the capti
 
 **So the walk fills every box on a layout at once**, and a design's budgets are a set that must hold together rather than a list that holds one at a time. Where boxes compete for the same space, the design states which one yields — leaving it to the renderer's default means the last shrinkable child silently absorbs everyone else's overflow.
 
+**Stating the yielder moves the fault; it does not remove it, and it can hide it.** A box marked
+`shrink: 0` is never compressed, so its own box is exactly its content — it overflows its parent in
+silence, reporting full scale and zero overflow, and the room it takes comes out of whichever sibling
+still yields. Measured on `nyu-elegant`'s quote page: naming the body as the box that holds turned a
+visible fault into an invisible one. Before, the body shrank its type to 80% and the caption survived at
+28.97px, which every check could see. After, the body holds at 374.19px in a 305px column — 69px past
+its parent, reported clean — and the attribution is drawn at zero height. The design now states which
+box yields and states the wrong one.
+
+So a design states the yielder **and** its budgets are cut until the holding boxes fit without it: a
+`shrink: 0` that is load-bearing is a fault waiting behind a green. On that page no budget anyone
+proposed was small enough — 78 and 60 characters both wrap to four lines where three is the most that
+leaves the caption alive — and three independent arithmetic models agreed on a figure the browser
+contradicted.
+
 **A collapsed box is the failure mode to name, because it is the one that looks like a decision.** A box shrunk to nothing renders as a design with fewer elements, not as a broken one: no clipping, no overlap, nothing off the slide. The graphic that vanishes carries no text, so no rule that reads text can see it go.
 
 #### TMPL-20 A flow design's budgets are checked, or the check says they are not
