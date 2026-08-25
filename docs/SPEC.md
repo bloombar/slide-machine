@@ -663,7 +663,25 @@ from opposite ends. It receives the allowance today. Key the threshold off `NATU
 stops qualifying, so **the geometry of a shipped layout moves without anyone editing the template**: a
 change to a constant in `shared/` silently redraws a design nobody in that change is looking at. Whether
 the move is visible is a measurement and not an inference, and it must be taken before the fix lands,
-not after. If it is visible, the template edit ships alongside the threshold change.
+not after. **Measured, and it is not a redraw — it is a collapse.** Same box, same eight-character content, the
+two leadings four thousandths apart and nothing else changed:
+
+    lineHeight 1.196   scale 1.0000   drawn 165.9px   client 198  scroll 206   slack 41.5px
+    lineHeight 1.200   scale 0.4000   drawn  66.4px   client  80  scroll  82   slack  1.0px
+
+The design's largest element goes to **40% of its size**, and it stops there because it has hit
+`MIN_SCALE`, not because it fits — at the floor it is still 2px over. Every check stays green, because a
+scale of 0.4000 is the fitter working exactly as designed.
+
+**And the box is already faulty, which is the finding under the finding.** `clientHeight 198,
+scrollHeight 206`: the figure overflows its own rectangle by 8px at its own stated budget, today, on a
+shipped design. By [TMPL-12](#tmpl-12-every-shipped-design-holds-what-it-says-it-holds) the design does
+not hold what it says it holds. It draws only because the allowance catches it — **the gate is not blind
+here, it is holding a broken box up** — and that is true whatever happens to any threshold.
+
+So the box is repaired before the threshold is, and repairing it is what makes the threshold safe to
+change: **a box that fits unaided does not care where the boundary sits.** Fixing the constant first
+would leave a landmine whose trigger is a value nobody associates with this design.
 
 **Blast radius, measured.** Moving the boundary to `NATURAL_LINE_BOX` removes the allowance from boxes led at exactly 1.196: in the shipped designs that is `nyu-elegant.statNumber` and nothing else, since every other exposed role is genuinely below it — title 0.95, sectionTitle 0.95, quote 1.05, statLabel 1.1, `nyu-bold.title` 0.957. Only `nyu-bold` and `nyu-elegant` name faces at all; the three that name none sit at the pixel floor and are unaffected. The reason to do it is that the constant should mean what its docstring says, not the one box it currently moves — and an imported design led at its natural box would land in the same window, which matters now that import reads leading from the source.
 
