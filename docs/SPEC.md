@@ -641,6 +641,24 @@ budgets are.
 
 **This does not close [TMPL-20](#tmpl-20-a-flow-designs-budgets-are-checked-or-the-check-says-they-are-not), and a change here must not be sold as closing it.** A shrink-aware resolver would report NYU Elegant's closing caption at 2.48px — correct — and still say nothing about the type having gone to the renderer's 40% floor, because seven of that design's nine recorded faults are `useFitText` outcomes measured off live `scrollHeight`/`clientHeight`, two need glyph metrics, and line counts are estimated from an average character width with no font engine. It would see the collapse and not the consequence.
 
+#### TMPL-23 The overhang allowance reaches only boxes that need it and can use it
+
+A box led below its face's natural line box hangs ink outside that box at every type size, so the fitter grants it `SLACK_EM` — a quarter of an em — before it shrinks anything. Without that allowance the search chases an overrun it can never clear and takes a title to two fifths. The allowance is right and the rule around it is stated in `TIGHT_LEADING`'s own docstring:
+
+> A box set **at or above** its face's natural box contains its own glyphs, so it needs no allowance; one set below does not shrink its letters to match. Only such a box is given room. Everywhere else the tolerance stays at the pixel of rounding it began as — otherwise a quarter of an em of slack on body text hides a genuinely clipped line.
+
+**The code admits the one case that paragraph excludes.** `NATURAL_LINE_BOX` is 1.196 and `TIGHT_LEADING` is 1.2. The test is `leading >= TIGHT_LEADING → 1`, so a box led at **exactly its face's natural line box** fails `1.196 >= 1.2` and receives the full quarter-em. A box at its natural line box has no overhang to tolerate — that is what the natural line box means — and it is the one box guaranteed room for one. The four thousandths are not a margin around the rule; they are a window admitting its own counterexample. `nyu-elegant`'s `statNumber` sits in that window today, at 41.5px of allowance on a box that needs none.
+
+**And the allowance is granted on the authority of a mechanism that does not always run.** Its justification is to match the fitter, but a box pinned `shrink: 0` never reaches the fitter at all ([TMPL-19](#tmpl-19-a-box-holds-its-budget-while-its-neighbours-hold-theirs)) — it is asked whether it fits inside itself and always answers yes. So the gate extends a tolerance to boxes the tolerance cannot help, and a clip inside that band is invisible: measured on the same box before its leading was reverted, a **23px clip sat inside a 41.5px allowance and was not reported.**
+
+The two halves are independent and neither implies the other — one is about which boxes qualify, the other about which boxes the allowance can help — and both point the same way. **So the allowance is granted only where a box's leading is genuinely below its face's natural box, and only where the mechanism it defers to actually runs.**
+
+**A clean measurement does not close this.** Asking whether anything is hiding in a given band today answers whether a design happens to exercise the hole, not whether the hole is there. That distinction is the subject of [TMPL-20](#tmpl-20-a-flow-designs-budgets-are-checked-or-the-check-says-they-are-not) and it applies to its own gate.
+
+**Nothing currently catches it.** `tight-leading-budget.test.ts` pins the mechanism *relative* to the constant — it compares `TIGHT_LEADING - 0.001` against `TIGHT_LEADING` — so it passes at any value the constant takes. It proves the allowance is applied consistently and says nothing about whether the boundary is in the right place. A test written against a constant cannot check the constant.
+
+**Blast radius, measured.** Moving the boundary to `NATURAL_LINE_BOX` removes the allowance from boxes led at exactly 1.196: in the shipped designs that is `nyu-elegant.statNumber` and nothing else, since every other exposed role is genuinely below it — title 0.95, sectionTitle 0.95, quote 1.05, statLabel 1.1, `nyu-bold.title` 0.957. Only `nyu-bold` and `nyu-elegant` name faces at all; the three that name none sit at the pixel floor and are unaffected. The reason to do it is that the constant should mean what its docstring says, not the one box it currently moves — and an imported design led at its natural box would land in the same window, which matters now that import reads leading from the source.
+
 ### 8. Live Lecture Capture
 
 #### CAP-1 Session lifecycle
