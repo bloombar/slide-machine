@@ -876,7 +876,7 @@
           "label": "Statement",
           "description": "The sentence itself, verbatim. Never a description of it.",
           "multiline": true,
-          "maxChars": 78,
+          "maxChars": 55,
           "required": true
         },
         {
