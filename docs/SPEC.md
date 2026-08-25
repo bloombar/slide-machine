@@ -559,6 +559,26 @@ A check built on it would therefore examine every one of the 36 budgets this req
 reach, report full coverage, and **pass on the design whose collapse prompted the requirement** — the
 same defect as the 0-of-36 green, one layer down and harder to see, because this time the check really
 did run. **A check's coverage and its sensitivity are separate claims and both have to be made.**
+
+**And the blindness has a pattern: every model we check designs with is exact on the healthy case and
+blind on the failing one.** Three instruments, found separately in one day, turned out to be one defect
+with three faces.
+
+- `resolveTreeBoxes` models `grow` and not `shrink` — right until a column runs out of room.
+- `useFitText` never measures a box with no `clientHeight` — right until a box is crushed.
+- `inkBoxOf` predicts where ink would go, not where it went — accurate on a box with room, wrong by a
+  factor of ten on a clipped one, reporting a 9.25pt overlap where a pixel count found a 4.43pt gap.
+
+This is not coincidence. Each models the design **as drawn**, and drawing is defined on a canvas that
+does not run out. Every failure worth catching happens at the boundary, and the boundary is the one
+thing none of them represents. So a model is evidence about a design with room and a hypothesis about a
+design without one, and **a check aimed at an over-full box needs an instrument that measures the
+surface rather than predicts it** — a browser, or pixels.
+
+That reaches work already shipped. The audit's overlap rule is decided on `inkBoxOf`
+([TMPL-16](#tmpl-16-a-slot-says-what-it-can-hold)), and overlap exists for imports, which arrive as full
+as their author made them — the case where that instrument is least reliable.
+
 Reaching a box is not the same as being able to see it fail, and an instrument blind to the failure mode
 reports the same green as a design that does not have it.
 
