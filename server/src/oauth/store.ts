@@ -43,8 +43,31 @@ export const ACCESS_TOKEN_TTL_SECONDS = 60 * 60
  * settled on for the same problem.
  */
 export const REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 182
-/** Five minutes: the walk from the consent screen back to the assistant. */
+/**
+ * Five minutes: the walk from the consent screen back to the assistant.
+ *
+ * Short because an authorization code is a bearer credential in a URL — it
+ * travels through a browser redirect, lands in history, and may be logged
+ * along the way. RFC 6749 asks for ten minutes at most; five is comfortable
+ * for a redirect and leaves little room to catch one in flight.
+ */
 export const AUTHORIZATION_CODE_TTL_SECONDS = 5 * 60
+
+/**
+ * Fifteen minutes for the *pending* half — the time a person has to read the
+ * consent screen and decide.
+ *
+ * A separate number because it measures something else entirely. Five minutes
+ * is a machine round-trip; this is a human being asked to weigh what an
+ * assistant is about to be allowed to do, possibly after signing in first, on
+ * a screen they have never seen before. Sharing one clock meant a careful
+ * reader ran out of time, and — worse — that taking four minutes to decide
+ * left the code only one minute to be exchanged.
+ *
+ * The two are re-based on approval: the pending window ends when the answer
+ * comes, and the code gets its own full five minutes from that moment.
+ */
+export const CONSENT_REQUEST_TTL_SECONDS = 15 * 60
 
 /**
  * Keyed by the refresh secret rather than the JWT one: these are opaque

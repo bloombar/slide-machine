@@ -53,7 +53,7 @@ import {
 import { OAuthClientModel } from '../models/oauth-client'
 import { OAuthAuthorizationModel } from '../models/oauth-authorization'
 import {
-  AUTHORIZATION_CODE_TTL_SECONDS,
+  CONSENT_REQUEST_TTL_SECONDS,
   generateToken,
   hashToken,
   issueTokens,
@@ -149,7 +149,7 @@ export const provider: OAuthServerProvider = {
       scopes: requestedScopes(params.scopes),
       codeChallenge: params.codeChallenge,
       resource: params.resource?.href,
-      expiresAt: new Date(Date.now() + AUTHORIZATION_CODE_TTL_SECONDS * 1000),
+      expiresAt: new Date(Date.now() + CONSENT_REQUEST_TTL_SECONDS * 1000),
     })
 
     res.redirect(`${CONSENT_PATH}?request=${request._id.toString()}`)

@@ -23,6 +23,10 @@ import { OAuthClientModel } from '../../src/models/oauth-client'
 import { OAuthTokenModel } from '../../src/models/oauth-token'
 import { OAuthAuthorizationModel } from '../../src/models/oauth-authorization'
 import { SCOPES } from '../../src/oauth/scopes'
+import {
+  AUTHORIZATION_CODE_TTL_SECONDS,
+  CONSENT_REQUEST_TTL_SECONDS,
+} from '../../src/oauth/store'
 
 const server = createApp().listen(0)
 afterAll(() => server.close())
@@ -220,6 +224,55 @@ describe('living alongside the application', () => {
     ]) {
       expect(meta.body[key], key).toContain('/oauth/')
     }
+  })
+})
+
+describe('how long each half of the flow lasts', () => {
+  it('gives a person longer to decide than a machine gets to redirect', async () => {
+    // Two different measurements. Five minutes is a browser redirect; the
+    // consent window is a human being asked to weigh what an assistant may
+    // do, possibly after signing in first. Sharing one clock meant a careful
+    // reader ran out of time.
+    expect(CONSENT_REQUEST_TTL_SECONDS).toBeGreaterThan(
+      AUTHORIZATION_CODE_TTL_SECONDS,
+    )
+  })
+
+  it('gives the code a full window from the moment of approval', async () => {
+    // The bug this pins: with one shared clock, taking four minutes to read
+    // the screen left the code one minute to be exchanged.
+    const session = await registerUser('windows@example.test')
+    const client = await registerClient()
+    const { challenge } = pkce()
+
+    const authorize = await request(server).get('/oauth/authorize').query({
+      client_id: client.client_id,
+      response_type: 'code',
+      redirect_uri: 'https://assistant.test/cb',
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+    })
+    const requestId = new URL(
+      authorize.headers.location!,
+      'http://localhost',
+    ).searchParams.get('request')!
+
+    // Stand where a slow reader stands: the request is nearly out of time.
+    const nearlyGone = new Date(Date.now() + 2000)
+    await OAuthAuthorizationModel.updateOne(
+      { _id: requestId },
+      { $set: { expiresAt: nearlyGone } },
+    )
+
+    await request(server)
+      .post(`/api/oauth/authorization/${requestId}/approve`)
+      .set('Authorization', `Bearer ${session}`)
+      .send({})
+
+    const after = await OAuthAuthorizationModel.findById(requestId)
+    expect(after!.expiresAt.getTime()).toBeGreaterThan(
+      nearlyGone.getTime() + 60_000,
+    )
   })
 })
 

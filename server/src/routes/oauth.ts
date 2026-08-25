@@ -33,7 +33,11 @@ import { HttpError } from '../middleware/error'
 import { OAuthAuthorizationModel } from '../models/oauth-authorization'
 import { OAuthClientModel } from '../models/oauth-client'
 import { provider, supportedScopes } from '../oauth/provider'
-import { generateToken, hashToken } from '../oauth/store'
+import {
+  AUTHORIZATION_CODE_TTL_SECONDS,
+  generateToken,
+  hashToken,
+} from '../oauth/store'
 import { SCOPE_DESCRIPTIONS, type Scope } from '../oauth/scopes'
 import { env } from '../config/env'
 
@@ -242,9 +246,21 @@ oauthConsentRouter.post(
     const request = await pendingRequest(String(req.params.id))
 
     const code = generateToken()
+    // Re-based on the answer, not on the request. The window a person had to
+    // decide is over; the code now gets its own full window, so someone who
+    // read the screen carefully does not hand their assistant a credential
+    // that is about to expire.
     const claimed = await OAuthAuthorizationModel.findOneAndUpdate(
       { _id: request._id, codeHash: { $exists: false } },
-      { $set: { codeHash: hashToken(code), userId: req.userId } },
+      {
+        $set: {
+          codeHash: hashToken(code),
+          userId: req.userId,
+          expiresAt: new Date(
+            Date.now() + AUTHORIZATION_CODE_TTL_SECONDS * 1000,
+          ),
+        },
+      },
     )
     if (!claimed) {
       throw new HttpError(
