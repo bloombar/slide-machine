@@ -442,6 +442,15 @@ The **ornament** rule must decide whether a box is too small to write in. It est
 
 Until this exists, rules that depend on glyph shape state their assumption and its cost in the same breath — which strings they exclude, and by how much — rather than quietly assuming the convenient case.
 
+**And the design has nowhere to write that assumption down.** A slot's description is the only prose a
+template file carries and it is capped at 200 characters, which holds the rule and not its derivation.
+So `nyu-elegant`'s big figure states what it may contain — nothing descending below the baseline, no
+comma, no bracket — and the measurements that justify switching the renderer's descender protection off
+for that box live in a commit message, which is the one place nobody looks when deciding whether a value
+is still right. A design that must opt out of a protection needs somewhere durable to say why, next to
+the opt-out. This is the same gap as [TMPL-14](#tmpl-14-a-design-may-draw-its-own-text) from the other
+side: there a design could not say something the model had no field for, here it cannot say why.
+
 #### TMPL-17 A design that names no face is measured against none
 
 A design may name the typefaces it is set in, and three of the app's built-ins — `classic`, `midnight` and `seminar` — name none. Their text falls back to the platform's own UI face: one thing on macOS, another on Windows, another on Linux, each with its own advance widths and vertical metrics.
