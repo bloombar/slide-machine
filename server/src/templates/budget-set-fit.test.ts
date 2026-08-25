@@ -45,6 +45,27 @@
  * exactly its available height and its budget set exceeds it, which is one of
  * the recorded faults and is invisible to the resolved reading.
  *
+ * ## Two boxes sharing a column are not two measurements
+ *
+ * This reports one number per column. So a column that stops being over-full
+ * says nothing about WHICH box got the room, and the check cannot tell "the
+ * box I cut got smaller" from "the box that was crushing it got smaller".
+ *
+ * That is not hypothetical and it cost real time on this branch.
+ * `content-list`'s body was cut from 180 characters to 146 to bring its
+ * column inside itself, which it did — and the bullets beneath it went on
+ * failing in a browser at exactly the scale they failed at before, because
+ * the room the cut freed was never theirs. Reading the column's improvement
+ * as the bullets' improvement was available, wrong, and invisible here.
+ *
+ * A related trap on the same layout, for the same reason: at the size the
+ * fitter had already shrunk those bullets to, 50 characters and 70 occupied
+ * the same single line, so the box's height was items times line-height and
+ * the character budget was not part of it. Cutting `maxChars` would have
+ * moved this check's arithmetic and not moved the page. **A budget this
+ * check responds to is not necessarily a budget the box's height depends
+ * on.**
+ *
  * ## What is NOT examined, and why it is reported rather than skipped
  *
  * Only a layout whose root is a flex column. A nested column's height is
