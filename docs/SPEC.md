@@ -451,6 +451,21 @@ is still right. A design that must opt out of a protection needs somewhere durab
 the opt-out. This is the same gap as [TMPL-14](#tmpl-14-a-design-may-draw-its-own-text) from the other
 side: there a design could not say something the model had no field for, here it cannot say why.
 
+**But writing the assumption down is not what makes a box safe, and treating it as though it were is
+the failure this clause was nearly used to excuse.** A stated assumption earns its place when a *rule*
+depends on one — the overlap rule asking what glyphs a box can hold. It is worth nothing when it is the
+only thing standing between a box and a clipped glyph, because the reader of that sentence is the one
+party who was never going to type the bracket. `nyu-elegant`'s big figure was given a description
+reading *nothing that descends below the baseline — no comma, no bracket* while its descender protection
+was switched off; rendering `(1,234)g` at the eight characters `maxChars` already permitted put 20px of
+ink outside the box and drove the figure and its label into overlap. Nothing in the system rejects
+`(32%)`, so the sentence was documentation of a hope.
+
+**So the question to ask of an opt-out is not whether it is documented but what the box does when it
+receives the thing the note forbids** — and until this requirement is code, the answer for any slot the
+generator or an author can fill is "whatever the worst permitted string does". An opt-out defended by
+prose is an opt-out defended by nothing.
+
 #### TMPL-17 A design that names no face is measured against none
 
 A design may name the typefaces it is set in, and three of the app's built-ins — `classic`, `midnight` and `seminar` — name none. Their text falls back to the platform's own UI face: one thing on macOS, another on Windows, another on Linux, each with its own advance widths and vertical metrics.
@@ -572,6 +587,12 @@ Six layouts across three designs put content **up to 31% of the slide height bel
 **What makes this a requirement rather than a bug is that nothing we have can see it.** The [TMPL-19](#tmpl-19-a-box-holds-its-budget-while-its-neighbours-hold-theirs) arithmetic does not reach it — `two-column` is a grid root, one of the fifty shipped layouts that check reports as unreachable. The browser walk does not reach it either, because the browser is the surface where the box is correctly shrunk. **The defect lives in the one place neither instrument looks**, and it surfaced only because somebody pointed the export resolver at content and read the numbers.
 
 **So the export path is checked against the render path**, and no resolved box leaves the slide when a column is over-full. That assertion is the one that would have caught this.
+
+**A note for whoever takes this.** The six layouts are on `classic`, `midnight` and `seminar` — the
+three designs that name no typeface — so the geometry measured here is against whichever face the
+measuring machine resolved, and the work is entangled with
+[TMPL-17](#tmpl-17-a-design-that-names-no-face-is-measured-against-none) exactly as those designs' list
+budgets are.
 
 **This does not close [TMPL-20](#tmpl-20-a-flow-designs-budgets-are-checked-or-the-check-says-they-are-not), and a change here must not be sold as closing it.** A shrink-aware resolver would report NYU Elegant's closing caption at 2.48px — correct — and still say nothing about the type having gone to the renderer's 40% floor, because seven of that design's nine recorded faults are `useFitText` outcomes measured off live `scrollHeight`/`clientHeight`, two need glyph metrics, and line counts are estimated from an average character width with no font engine. It would see the collapse and not the consequence.
 
