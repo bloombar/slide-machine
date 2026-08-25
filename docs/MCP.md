@@ -319,7 +319,11 @@ and not the tool surface, is the expensive part.
 - **Consent that means something.** The instructor sees what is being granted
   before it is granted.
 - **Revocation without collateral damage.** Disconnect one assistant; stay
-  signed in everywhere else.
+  signed in everywhere else. Access tokens last an hour and refresh tokens six
+  months — the latter an *idle* window, since rotation restarts the clock on
+  every use, so a connection in regular use never lapses. Six months rather
+  than one because this application runs on a semester calendar, and a shorter
+  window would disconnect instructors over every winter break.
 - **Limited blast radius.** Scopes let a token be read-only, or barred from
   billing and account deletion, independent of what the person can do.
 - **Visibility.** The app knows which assistant is calling, which is the

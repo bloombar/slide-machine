@@ -25,8 +25,24 @@ import { env } from '../config/env'
 
 /** One hour. Long enough for a working session, short enough to bound a leak. */
 export const ACCESS_TOKEN_TTL_SECONDS = 60 * 60
-/** Thirty days. A connection the user has not revoked keeps working. */
-export const REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30
+/**
+ * Six months — and it is an **idle** timeout, not a lifetime.
+ *
+ * Rotation issues a fresh token on every exchange, so the clock restarts each
+ * time an assistant is used: a connection in regular use never expires at all.
+ * What this actually bounds is a connection nobody has touched in half a year,
+ * which is the one worth ending — "I tried an assistant once and forgot about
+ * it" is a live key nobody is watching, and if that vendor is breached later,
+ * nobody is looking.
+ *
+ * Six rather than one month because this application runs on an academic
+ * calendar. A winter break is four to six weeks and a summer is three months,
+ * so a month would disconnect instructors over every holiday — at exactly the
+ * moment they are least inclined to work out why. Six months clears any break
+ * while still lapsing something genuinely abandoned. It is the window Google
+ * settled on for the same problem.
+ */
+export const REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 182
 /** Five minutes: the walk from the consent screen back to the assistant. */
 export const AUTHORIZATION_CODE_TTL_SECONDS = 5 * 60
 

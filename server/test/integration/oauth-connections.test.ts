@@ -15,6 +15,8 @@ import { OAuthTokenModel } from '../../src/models/oauth-token'
 import { OAuthClientModel } from '../../src/models/oauth-client'
 import { UserModel } from '../../src/models/user'
 import {
+  ACCESS_TOKEN_TTL_SECONDS,
+  REFRESH_TOKEN_TTL_SECONDS,
   connectionsFor,
   disconnect,
   issueTokens,
@@ -117,6 +119,44 @@ describe('issuing and verifying', () => {
       scopes: [SCOPES.read],
     })
     expect(await verifyToken(tokens.refreshToken)).toBeNull()
+  })
+})
+
+describe('how long a connection lasts', () => {
+  it('gives a refresh token a window that clears an academic break', () => {
+    // Pinned deliberately: this application runs on a semester calendar, and a
+    // shorter window would disconnect instructors over every holiday. Changing
+    // it should be a decision, not a drift.
+    expect(REFRESH_TOKEN_TTL_SECONDS).toBe(60 * 60 * 24 * 182)
+  })
+
+  it('keeps access tokens short, because they live outside our control', () => {
+    expect(ACCESS_TOKEN_TTL_SECONDS).toBe(60 * 60)
+  })
+
+  it('restarts the clock on every use, so an active connection never lapses', async () => {
+    // This is what makes the window an IDLE timeout rather than a lifetime,
+    // and it is the whole reason six months is generous rather than limiting.
+    const first = await issueTokens({
+      clientId: 'client-a',
+      userId,
+      scopes: [SCOPES.read],
+    })
+    const issued = await OAuthTokenModel.findOne({ kind: 'refresh' })
+
+    // Age the stored token, then use it: the replacement must be dated from
+    // the exchange, not inherited from the token it replaced.
+    const aged = new Date(Date.now() + 1000)
+    await OAuthTokenModel.updateMany({ kind: 'refresh' }, { expiresAt: aged })
+
+    const rotated = await rotateTokens(first.refreshToken, 'client-a')
+    expect(rotated).not.toBeNull()
+
+    const replacement = await OAuthTokenModel.findOne({ kind: 'refresh' })
+    expect(replacement!.expiresAt.getTime()).toBeGreaterThan(aged.getTime())
+    expect(replacement!.expiresAt.getTime()).toBeGreaterThan(
+      issued!.expiresAt.getTime() - 1000,
+    )
   })
 })
 
