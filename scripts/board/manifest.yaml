@@ -1544,6 +1544,40 @@
   phase: 2
   status: Backlog
   review: false
+- id: TMPL-21
+  title: Decoration carries its text
+  full: TMPL-14 says a design's decoration may carry words. Nothing implements it.
+    LayoutDecoration is x/y/w/h/shape/fill/imageUrl/radius, so a design that
+    needs to draw a word has no field to put it in, and two boxes in a shipped
+    built-in are sitting in that gap right now. The eyebrow. NYU Elegant's
+    source draws P A R T 0 1 at the top left of eleven of its thirteen pages —
+    0.97cqi Montserrat bold, letterspaced, 9a6aba, at x 0.037 y 0.049. It is on
+    none of ours. It is the deck's most repeated mark after its logo and it is
+    identical on every slide of a layout, so by TMPL-14's own rule it is
+    decoration in the plainest possible way. The numerals, which are the harder
+    case. The same deck's image-list…
+  section: §7 Style Template Library
+  family: TMPL
+  phase: 2
+  status: Backlog
+  review: false
+- id: TMPL-22
+  title: An export draws what the renderer draws
+  full: "A deck exported to PDF or PowerPoint is the same design the screen shows.
+    Where the two disagree, the export is wrong, because the screen is where the
+    design was authored and checked. They disagree today, on every tree-stated
+    layout that overflows. resolveTreeBoxes — the geometry both writers use —
+    distributes free space only when there is surplus. On overflow it leaves
+    every child at its natural height and lets the column overrun, because it
+    models grow and not shrink. The renderer does the opposite: FlowLayout sets
+    minHeight: 0 on every flow child and lets CSS compress them. Measured, with
+    every box filled to its own stated budget: classic/list — bullets from y
+    0.284 to 1.237…"
+  section: §7 Style Template Library
+  family: TMPL
+  phase: 2
+  status: Backlog
+  review: false
 - id: BILL-1
   title: Subscription tiers
   full: "The product offers four subscription tiers, each priced accordingly

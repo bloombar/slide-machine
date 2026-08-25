@@ -534,6 +534,47 @@ did run. **A check's coverage and its sensitivity are separate claims and both h
 Reaching a box is not the same as being able to see it fail, and an instrument blind to the failure mode
 reports the same green as a design that does not have it.
 
+#### TMPL-21 Decoration carries its text
+
+[TMPL-14](#tmpl-14-a-design-may-draw-its-own-text) says a design's decoration may carry words. Nothing implements it. `LayoutDecoration` is `x/y/w/h/shape/fill/imageUrl/radius`, so a design that needs to draw a word has no field to put it in, and two boxes in a shipped built-in are sitting in that gap right now.
+
+**The eyebrow.** NYU Elegant's source draws `P A R T   0 1` at the top left of **eleven of its thirteen pages** — 0.97cqi Montserrat bold, letterspaced, `#9a6aba`, at x 0.037 y 0.049. It is on none of ours. It is the deck's most repeated mark after its logo and it is identical on every slide of a layout, so by TMPL-14's own rule it is decoration in the plainest possible way.
+
+**The numerals, which are the harder case.** The same deck's `image-list` page carries three notes, each headed `0 1 .`, `0 2 .`, `0 3 .`, letterspaced Montserrat bold in `#57068c` above a note set in `#333333`. The obvious reading is that they vary, so they are content and want a slot. **That reading is wrong, and it is TMPL-14's own warning running the other way.** The rule is *the same on every slide the layout produces*. These vary across the three positions within one layout and do not vary between slides — note 1 reads `0 1 .` on every slide anybody ever builds from `image-list`. A slot would put an editable box on the slide where the design meant a printed numeral.
+
+**So a piece of decoration may carry text**: a string with its own face, size, weight, colour, letter-spacing and alignment, drawn where a band or a logo is drawn. Never editable, never offered to the AI, never counted toward any slot's budget, identical on every slide built on that layout.
+
+**The touch list is wider than it looks, and every entry is a place the text can silently vanish:**
+
+- `LayoutDecoration` gains the text and its type fields, and `templateFileSchema` accepts them.
+- `FlowLayout` returns early for a node with no slot and renders `<div aria-hidden>` carrying `surfaceStyle` alone; `before`/`after` are drawn twenty lines further down and are unreachable for such a node. **There is no path today by which a slotless node draws a character.** `PositionedLayout` maps decoration separately and has the same gap.
+- Both exporters read decoration through `deck-layout.ts`, where a piece with no slot becomes `kind: 'rule'` — a rectangle and a colour. A text piece needs a box kind of its own or it exports as a coloured bar.
+- `build-template.ts` drops any decoration piece with neither a fill nor a stored picture, so **an imported text ornament is erased one stage after it is demoted.** That is why the importer's own ornament test could not assert the demotion: a green there would have meant nothing.
+
+**A second problem that is NOT this one and must not be folded into it.** The numerals are `#57068c` directly above note text in `#333333`, **inside one box in the source**. Our model gives a box one colour — `deck-layout.ts` takes the first run's colour and draws every run in it, the same limitation the link-colour work met. So the eyebrow needs fixed layout text and is satisfiable here; the numerals additionally need per-run colour within a box, or modelling as one decoration piece per row, which is available once this lands and is probably right — but only because the design puts them on their own line. **A design running a coloured figure inline in a sentence stays inexpressible.**
+
+**What a partial implementation costs, since the temptation is real.** `LayoutNode.before` already prints literal characters — the quotation marks a quote layout wraps its body in. Putting `0 1 . ` there renders it inline, in the note's grey, on the note's first line. It would look deliberate and be wrong twice over, which by TMPL-14's framing is the expensive kind: it passes accounting, passes every geometry rule, and renders a design nobody drew.
+
+#### TMPL-22 An export draws what the renderer draws
+
+A deck exported to PDF or PowerPoint is the same design the screen shows. Where the two disagree, the export is wrong, because the screen is where the design was authored and checked.
+
+They disagree today, on every tree-stated layout that overflows. `resolveTreeBoxes` — the geometry both writers use — distributes free space only when there is surplus. On overflow it leaves every child at its natural height and lets the column overrun, because it models `grow` and not `shrink`. The renderer does the opposite: `FlowLayout` sets `minHeight: 0` on every flow child and lets CSS compress them.
+
+Measured, with every box filled to its own stated budget:
+
+- `classic/list` — bullets from y 0.284 to **1.237**
+- `classic/two-column` — body to **1.311**, image to **1.154**
+- `midnight/list`, `midnight/two-column`, `seminar/list`, `seminar/two-column` — identical
+
+Six layouts across three designs put content **up to 31% of the slide height below the bottom edge** of an exported file, at budgets those designs declare. On screen the same boxes are shrunk to fit and stay on the slide.
+
+**What makes this a requirement rather than a bug is that nothing we have can see it.** The [TMPL-19](#tmpl-19-a-box-holds-its-budget-while-its-neighbours-hold-theirs) arithmetic does not reach it — `two-column` is a grid root, one of the fifty shipped layouts that check reports as unreachable. The browser walk does not reach it either, because the browser is the surface where the box is correctly shrunk. **The defect lives in the one place neither instrument looks**, and it surfaced only because somebody pointed the export resolver at content and read the numbers.
+
+**So the export path is checked against the render path**, and no resolved box leaves the slide when a column is over-full. That assertion is the one that would have caught this.
+
+**This does not close [TMPL-20](#tmpl-20-a-flow-designs-budgets-are-checked-or-the-check-says-they-are-not), and a change here must not be sold as closing it.** A shrink-aware resolver would report NYU Elegant's closing caption at 2.48px — correct — and still say nothing about the type having gone to the renderer's 40% floor, because seven of that design's nine recorded faults are `useFitText` outcomes measured off live `scrollHeight`/`clientHeight`, two need glyph metrics, and line counts are estimated from an average character width with no font engine. It would see the collapse and not the consequence.
+
 ### 8. Live Lecture Capture
 
 #### CAP-1 Session lifecycle
