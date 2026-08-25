@@ -486,6 +486,20 @@ A design that fails a check ([TMPL-12](#tmpl-12-every-shipped-design-holds-what-
 
 **And an entry that no longer matches any fault fails too**, so the list shrinks when a design is repaired instead of describing a defect that no longer exists. One exception, which is why entries say what KIND of fault they are: an entry recorded as **platform-specific** legitimately does not reproduce on every machine, and its absence is not evidence of repair.
 
+**None of this exists yet, and the gap is one comparison wide.** `unknownFaults` filters incoming
+faults against the list; nothing walks the list. The match is `fault.includes(known.match)` — a
+substring — so a dead entry goes on suppressing anything on that box whose message shares its prefix.
+**The list does not merely fail to shrink; it stays armed.**
+
+And the data that would catch it is already gathered. `template-load-limits.spec.ts` computes
+`tolerated` and counts the design's entries in `known-faults.ts`, and prints both. A stale entry is
+exactly `tolerated` being lower than `listed`. **The two numbers sit side by side in one string and
+nothing compares them** — and that string is the message of an `expect` that passes, so on a green run,
+which is precisely when a stale entry matters, nobody ever sees it.
+
+**A number computed for a failure message is not a check.** It is printed only when something else has
+already failed, which is the one case where the reader does not need it.
+
 The point is that a list of tolerated faults decays in both directions — entries that outlive their defect, and defects that outgrow their entries — and the longer it is, the less a reader can be the mechanism that catches either.
 
 #### TMPL-19 A box holds its budget while its neighbours hold theirs
