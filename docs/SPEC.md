@@ -680,8 +680,19 @@ not hold what it says it holds. It draws only because the allowance catches it �
 here, it is holding a broken box up** — and that is true whatever happens to any threshold.
 
 So the box is repaired before the threshold is, and repairing it is what makes the threshold safe to
-change: **a box that fits unaided does not care where the boundary sits.** Fixing the constant first
-would leave a landmine whose trigger is a value nobody associates with this design.
+change: **a box that fits unaided does not care where the boundary sits.**
+
+**The two halves are not symmetric, and the measurement is what shows it.** The window is not a hole
+that happens to have a box sitting in it — **the box has been standing on the hole.** That figure has
+never fitted its own rectangle, before this branch as well as after, and it draws only because the
+allowance covers it. So moving the boundary first would not risk a landmine, it would detonate one: the
+box that loses its allowance is the box currently depending on it. Repairing the box is a precondition
+for changing the constant, not an alternative to it.
+
+**And the check written for exactly this class does not reach it.** The [TMPL-19](#tmpl-19-a-box-holds-its-budget-while-its-neighbours-hold-theirs)
+arithmetic measures a column against its children; this overflow is inside one box's own line box — a
+box against itself, not against its siblings. It is not a column-level fact at all, so that check is not
+too coarse for it, it is aimed at the wrong axis.
 
 **Blast radius, measured.** Moving the boundary to `NATURAL_LINE_BOX` removes the allowance from boxes led at exactly 1.196: in the shipped designs that is `nyu-elegant.statNumber` and nothing else, since every other exposed role is genuinely below it — title 0.95, sectionTitle 0.95, quote 1.05, statLabel 1.1, `nyu-bold.title` 0.957. Only `nyu-bold` and `nyu-elegant` name faces at all; the three that name none sit at the pixel floor and are unaffected. The reason to do it is that the constant should mean what its docstring says, not the one box it currently moves — and an imported design led at its natural box would land in the same window, which matters now that import reads leading from the source.
 
