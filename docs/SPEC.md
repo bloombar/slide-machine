@@ -575,6 +575,18 @@ thing none of them represents. So a model is evidence about a design with room a
 design without one, and **a check aimed at an over-full box needs an instrument that measures the
 surface rather than predicts it** — a browser, or pixels.
 
+**And a measurement of a design is a measurement of a version of it.** Four wrong numbers in one day
+came from the same place: a probe reading budgets from the working tree while the server drew boxes from
+elsewhere; a sweep whose baseline was measured against a template three people were committing to; two
+separate reports of a design's state that had moved two commits before they were read. Every one looked
+exactly like a sound result, because each was — of a file that no longer existed.
+
+The rule the failures share is narrow enough to act on: **an instrument may report a difference across
+configurations and must not report a level across time.** Every row of one sweep is measured in one page
+load against one tree, so differences between rows survive whatever the tree was; only a figure that has
+to hold across runs needs the version pinned. So a measurement carries the hash of what it measured, and
+a number quoted without one is a number about an unknown file.
+
 That reaches work already shipped. The audit's overlap rule is decided on `inkBoxOf`
 ([TMPL-16](#tmpl-16-a-slot-says-what-it-can-hold)), and overlap exists for imports, which arrive as full
 as their author made them — the case where that instrument is least reliable.
