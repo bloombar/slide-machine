@@ -80,7 +80,7 @@
         "fontFamily": "frank-ruhl-libre",
         "fontSize": 17,
         "fontWeight": 700,
-        "lineHeight": 1.196,
+        "lineHeight": 1.3,
         "color": "accent",
         "maxChars": 8
       },
