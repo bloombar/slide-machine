@@ -657,6 +657,14 @@ The two halves are independent and neither implies the other — one is about wh
 
 **Nothing currently catches it.** `tight-leading-budget.test.ts` pins the mechanism *relative* to the constant — it compares `TIGHT_LEADING - 0.001` against `TIGHT_LEADING` — so it passes at any value the constant takes. It proves the allowance is applied consistently and says nothing about whether the boundary is in the right place. A test written against a constant cannot check the constant.
 
+**Fixing it changes a shipped design, and the fix has to carry that.** `nyu-elegant`'s big figure is
+led at 1.196 and pinned `shrink: 0` — both halves of this requirement on one box, found independently
+from opposite ends. It receives the allowance today. Key the threshold off `NATURAL_LINE_BOX` and it
+stops qualifying, so **the geometry of a shipped layout moves without anyone editing the template**: a
+change to a constant in `shared/` silently redraws a design nobody in that change is looking at. Whether
+the move is visible is a measurement and not an inference, and it must be taken before the fix lands,
+not after. If it is visible, the template edit ships alongside the threshold change.
+
 **Blast radius, measured.** Moving the boundary to `NATURAL_LINE_BOX` removes the allowance from boxes led at exactly 1.196: in the shipped designs that is `nyu-elegant.statNumber` and nothing else, since every other exposed role is genuinely below it — title 0.95, sectionTitle 0.95, quote 1.05, statLabel 1.1, `nyu-bold.title` 0.957. Only `nyu-bold` and `nyu-elegant` name faces at all; the three that name none sit at the pixel floor and are unaffected. The reason to do it is that the constant should mean what its docstring says, not the one box it currently moves — and an imported design led at its natural box would land in the same window, which matters now that import reads leading from the source.
 
 ### 8. Live Lecture Capture
