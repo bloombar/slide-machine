@@ -589,3 +589,90 @@ export const resolveTreeBoxes = (
   // The root itself is the slide; it is never a box the export draws.
   return out.filter(box => box.node !== root && box.w > 0 && box.h > 0)
 }
+
+/**
+ * What a layout's ROOT column needs from itself, against what it has.
+ *
+ * `resolveTreeBoxes` answers where a box lands once the arrangement has been
+ * worked out — which means a box that grows reports the room it was given and
+ * a box that shrinks reports the room it was left. Neither is what a budget
+ * describes. A budget says how much text a box holds, and the question this
+ * answers is the one nobody could ask before: filled to their own stated
+ * budgets ALL AT ONCE, do a column's boxes need more room than the column has
+ * (TMPL-19)?
+ *
+ * So every child is measured at its CONTENT height, with `grow` and `shrink`
+ * ignored on purpose. Those two decide who wins a fight over room; this is
+ * about whether there is a fight.
+ *
+ * ## Only the root, and only a flex column
+ *
+ * A nested column's height is whatever its parent gave it, so its demand
+ * cannot be stated without resolving the parent, and a figure derived that way
+ * would be reporting the arrangement rather than the budgets. A caller is told
+ * `null` and why, rather than handed a number that looks like the others.
+ *
+ * ## What a satisfied demand does NOT mean
+ *
+ * That the layout draws correctly. A column with room to spare can still put
+ * type on the floor, clip a descender or hide a line, because none of that is
+ * arithmetic over rectangles — it is glyph metrics and the type fitter, and
+ * this has neither (TMPL-20). Room enough is necessary and it is not
+ * sufficient.
+ */
+export interface ColumnDemand {
+  /** Room the column has for its children, `cqi`. */
+  available: number
+  /** Room its children want, plus the gaps between them, `cqi`. */
+  needed: number
+  /** Per child, so a caller can say which box is the expensive one. */
+  children: { id: string; slot?: string; needs: number }[]
+  /** What the gaps cost in total, `cqi`. */
+  gaps: number
+}
+
+/**
+ * The root column's demand, or `null` with the reason it has none — a layout
+ * arranged as a grid, as absolutely placed boxes, or with no tree at all.
+ */
+export const columnDemand = (
+  layout: Pick<Layout, 'type' | 'slots' | 'tree'>,
+  theme: Record<string, unknown>,
+  lines: LinesOf,
+): { demand: ColumnDemand } | { demand: null; why: string } => {
+  const tree =
+    layout.tree ?? defaultLayoutTree(layout.type) ?? treeFromSlots(layout.slots)
+  if (!tree) return { demand: null, why: 'the layout has no tree' }
+  const spec = tree.container
+  if (!spec) return { demand: null, why: 'the root is a single box' }
+  if (spec.mode !== 'flex' || spec.direction !== 'column')
+    return {
+      demand: null,
+      why: `the root is a ${spec.mode === 'grid' ? 'grid' : `flex ${spec.direction ?? 'row'}`}`,
+    }
+  const ctx: Ctx = {
+    textStyles: themeTextStyles(theme),
+    kindOf: name => layout.slots.find(s => s.name === name)?.kind,
+    lines,
+  }
+  const root = withSafeArea(tree, theme)
+  const kids = flowChildren(root, ctx)
+  if (!kids.length)
+    return { demand: null, why: 'every child is placed absolutely' }
+  const p = padding(resolveStyle(root.style, ctx.textStyles))
+  const innerW = Math.max(0, W - 2 * p.x)
+  const children = kids.map(kid => ({
+    id: kid.id,
+    ...(kid.slot ? { slot: kid.slot } : {}),
+    needs: contentHeight(kid, innerW, ctx),
+  }))
+  const gapTotal = gaps(spec).y * (kids.length - 1)
+  return {
+    demand: {
+      available: Math.max(0, H - 2 * p.y),
+      needed: sum(children.map(c => c.needs)) + gapTotal,
+      children,
+      gaps: gapTotal,
+    },
+  }
+}
