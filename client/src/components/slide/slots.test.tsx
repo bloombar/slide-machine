@@ -233,6 +233,23 @@ describe('SlideSlot', () => {
     onRemoveImage: vi.fn(),
   })
 
+  // Both directions, because either alone passes trivially: a rule that
+  // letterboxed every picture satisfies the first expectation, and the
+  // unconditional `cover` this replaced satisfies the second.
+  it.each([
+    ['stock', 'object-contain', 'object-cover'],
+    ['seeded', 'object-contain', 'object-cover'],
+    ['generated', 'object-cover', 'object-contain'],
+    [undefined, 'object-cover', 'object-contain'],
+  ] as const)('shows a %s picture with %s and not %s', (source, fit, not) => {
+    const { container } = render(
+      <SlideSlot {...imageEditor({ imageSource: source })} />,
+    )
+    const img = container.querySelector('img')!
+    expect(img).toHaveClass(fit)
+    expect(img).not.toHaveClass(not)
+  })
+
   it('gives owners Replace and Remove buttons over an image', () => {
     render(<SlideSlot {...imageEditor()} />)
     expect(

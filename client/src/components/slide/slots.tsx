@@ -317,12 +317,24 @@ function ImageSlot({
   // sees the "i" when there is credit to read (IMG-5)
   const showInfo = hasImage && (canEditAttribution || hasAttribution)
 
+  // A found picture — one the app fetched from the web ('stock') or one the
+  // instructor supplied themselves ('seeded', which covers seed material and
+  // uploads) — was framed for nothing in particular, so it is shown whole and
+  // letterboxed rather than cropped to fill its box. That is the fit the
+  // export already uses. A generated picture is drawn to order, and a picture
+  // with no recorded provenance is usually an imported design's, so both keep
+  // `cover` — which is what a full-bleed layout is drawn around.
+  const fit =
+    content.imageSource === 'stock' || content.imageSource === 'seeded'
+      ? 'object-contain'
+      : 'object-cover'
+
   const image = (
     <img
       src={imageRef}
       alt={slide.caption ?? slide.title ?? t('slide.image.alt')}
       onError={() => setFailedSrc(imageRef ?? null)}
-      className="h-full w-full object-cover transition-opacity duration-500"
+      className={`h-full w-full ${fit} transition-opacity duration-500`}
       // What a picture with a transparent ground sits on, from the design
       // rather than from whatever the slide happens to be (`imageBackground`).
       style={{ backgroundColor: colors.imageBackground }}
