@@ -16,6 +16,12 @@ actionsRouter.post('/actions/:name', requireAuth, async (req, res) => {
     userId: req.userId,
     requestId: randomUUID(),
     origin: appOrigin(req),
+    // Said rather than left out. A person clicking is the overwhelmingly
+    // common case and the tempting one to leave implicit, but "no channel"
+    // and "the app" then look identical — and the check that an assistant's
+    // work is recorded and a person's is not cannot tell a working guard from
+    // a row that failed to write (docs/MCP.md §6).
+    channel: 'app',
   })
   res.json(result)
 })

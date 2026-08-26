@@ -10,7 +10,7 @@ share, what they don't, and what would have to change in the spec. Both remain
 future work in the spec — [SPEC.md §18](SPEC.md#18-future-work), open question
 [§19.11](SPEC.md#19-open-questions) — and the spec has not been edited.
 
-**What is built** (branch `feat/MCP-1-remote-mcp-server`, tracked by
+**What is built** (branch `mcp-server`, tracked by
 [issue #129](https://github.com/bloombar/slide-machine/issues/129)):
 
 | | State |
@@ -23,6 +23,7 @@ future work in the spec — [SPEC.md §18](SPEC.md#18-future-work), open questio
 | **OAuth authorization server (§5)** | Built — [oauth/](../server/src/oauth/) and [routes/oauth.ts](../server/src/routes/oauth.ts). Dynamic client registration, PKCE, scopes, refresh-token rotation, revocation, and the two discovery documents. |
 | The consent screen (§5.1) | Built — [OAuthConsentPage.tsx](../client/src/pages/OAuthConsentPage.tsx) |
 | Connected-assistants list and disconnect (§5.3) | Built — [ConnectedAssistantsPanel.tsx](../client/src/components/ConnectedAssistantsPanel.tsx), account settings → Privacy. The same panel hands over the address to paste into an assistant, which is the only part of connecting the app can offer: an authorization flow starts at the client, so there is no "connect" button and cannot be. |
+| Agent actions recorded distinguishably (§6) | Built — [audit/agent-log.ts](../server/src/audit/agent-log.ts), written from the dispatcher on the `agent` channel |
 | The in-app chat assistant (§3.4) | Not built |
 
 **What has not been done:** the tool set has still not been validated against
@@ -430,16 +431,40 @@ scheduled rather than trusting this page.
   `ws/audio-socket.ts`. An agent therefore gets edits but not media reads or
   streams — a real usability constraint that should be stated rather than
   discovered.
-- **Agent calls are indistinguishable from human ones.**
-  [`ActionContext`](../server/src/actions/context.ts) carries
-  `userId`/`requestId`/`origin` — no actor channel. Admin actions get an
-  immutable audit trail ([ADMIN-7](SPEC.md#admin-7-audit-log)); agent edits get
-  nothing comparable, which is exactly the FERPA surface
-  [§19.11](SPEC.md#19-open-questions) gestures at. Adding a channel field now is
-  small and keeps the audit story available later.
+- **Agent calls are distinguishable from human ones — now.**
+  [`ActionContext`](../server/src/actions/context.ts) carries a `channel`
+  alongside `userId`/`requestId`/`origin`. Both HTTP entry points set it
+  explicitly — `app` on [routes/actions.ts](../server/src/routes/actions.ts),
+  `agent` on [routes/mcp.ts](../server/src/routes/mcp.ts) — and the dispatcher
+  writes every agent-channel action to an append-only trail
+  ([models/agent-action-log.ts](../server/src/models/agent-action-log.ts)):
+  the action, the account, the lecture, and whether it succeeded, was refused,
+  or failed. It records reads as well as writes, since an assistant that read
+  every lecture on an account did something worth being able to see.
+
+  **The input is deliberately not kept.** Tracing which lecture an assistant
+  renamed needs the action and the lecture, not the words; keeping payloads
+  would stand up a second copy of lecture content under a different retention
+  story than the deck it came from
+  ([§16](SPEC.md#16-privacy-security--compliance), P-1/P-2).
+
+  Two things this is not. It has **no retention window** — like the admin log
+  ([ADMIN-7](SPEC.md#admin-7-audit-log)) it grows without bound, which is
+  tolerable while agent traffic is rate-limited and a small minority of calls,
+  and is the next thing to decide about it. And it has **no UI**: rows are
+  readable from the database and nowhere else, so an instructor cannot yet see
+  what their own assistant did. Both are follow-on work, not oversights.
+
+  The channel also rides onto the cost ledger (BILL-7), where it is
+  **provisioning rather than a live signal**: no action an assistant can reach
+  spends anything today, because the tool surface excludes generation, exports,
+  imports and quizzes — every metered path there is. The column is there so
+  that the first metered tool arrives with its spend already attributable.
 - **Caps bound spend, not volume.** An agent loops faster than a human clicks.
-  [lib/rate-limit.ts](../server/src/lib/rate-limit.ts) exists and should apply
-  to this path.
+  Applied: [routes/mcp.ts](../server/src/routes/mcp.ts) rate-limits per
+  account rather than per address, since an assistant's calls arrive from a
+  vendor's servers and one instructor's runaway loop must not lock out the
+  others sharing that IP.
 - **Destructive and student-facing operations need confirmation, not just
   authorization.** `quiz.publish`, the `export.*` family, `deck.diarize`, and
   anything touching [EVAL](SPEC.md#eval-1-live-session-telemetry) exports either
@@ -504,7 +529,9 @@ skipped and forgotten.
 - What is the answer to prompt injection beyond confirmation and a narrow tool
   surface — and is that answer good enough to expose student-adjacent data at
   all? (§5.4)
-- Are agent-originated actions audited distinguishably, and does FERPA require
-  it? ([§19.11](SPEC.md#19-open-questions))
+- ~~Are agent-originated actions audited distinguishably?~~ **They are** (§6).
+  What remains open is the FERPA half — whether that trail is what an
+  institutional review would ask for, how long it must be kept, and whether an
+  instructor has a right to see it ([§19.11](SPEC.md#19-open-questions)).
 - Will NYU IT approve a third-party connector for managed faculty accounts? (§5)
 - Do the non-action routes (§6) ever need agent-reachable equivalents?

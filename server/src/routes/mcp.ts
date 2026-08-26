@@ -105,8 +105,19 @@ mcpRouter.post(
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
     })
+    // `channel: 'agent'` is the only mark an agent call carries. Everything
+    // else about it is deliberately identical to a call from the app's own
+    // front end — same account, same authorization, same metering — so this
+    // is the single point where the distinction can be recorded at all, and
+    // it is what lets the cost ledger answer afterwards which work an
+    // assistant caused (docs/MCP.md §6).
     const server = createMcpServer(
-      { userId, requestId: randomUUID(), origin: resourceUrl() },
+      {
+        userId,
+        requestId: randomUUID(),
+        origin: resourceUrl(),
+        channel: 'agent',
+      },
       auth.scopes,
     )
 

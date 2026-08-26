@@ -121,6 +121,39 @@ describe('an action names what it worked on', () => {
   })
 })
 
+describe('how the request arrived', () => {
+  it('marks an ordinary action as coming through the app', async () => {
+    await act(ada, 'export.download', { deckId, format: 'yaml' })
+    expect((await lastEvent())?.channel).toBe('app')
+  })
+
+  it('carries an agent channel from the ambient attribution onto the row', async () => {
+    // Deliberately not through a tool call: no action an assistant can reach
+    // spends anything today — the agent surface excludes generation, exports,
+    // imports and quizzes, which is every metered path there is (docs/MCP.md
+    // §6). So this exercises the ledger writer directly, and says so, rather
+    // than dressing a synthetic context up as an end-to-end result. What it
+    // proves is narrow and real: when a metered action does become reachable,
+    // the row will say an assistant caused it.
+    const { runWithUsage } = await import('../../src/billing/usage-attribution')
+    const { recordCostEvent } = await import('../../src/billing/cost-ledger')
+    const payerId = (await UserModel.findOne({
+      email: 'ada@example.com',
+    }))!._id.toString()
+
+    await runWithUsage(
+      { userId: payerId, actorId: payerId, channel: 'agent' },
+      () => recordCostEvent({ payerId, metric: 'exports', quantity: 1 }),
+    )
+
+    const row = await lastEvent()
+    expect(row?.channel).toBe('agent')
+    // The channel says how it arrived; actorKind still says who, and the two
+    // must not have collapsed into one another.
+    expect(row?.actorKind).toBe('owner')
+  })
+})
+
 describe('the reports see it', () => {
   it('rolls a lecture’s spend up under that lecture', async () => {
     await act(ada, 'export.download', { deckId, format: 'yaml' })

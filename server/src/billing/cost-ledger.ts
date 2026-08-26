@@ -89,6 +89,13 @@ export const recordCostEvent = async ({
       payerId,
       actorId,
       actorKind,
+      // Not subject to the `sameParty` guard above, and deliberately so. That
+      // guard protects *entity* references, which belong to one account and
+      // must not be inherited across a party boundary. The channel is a fact
+      // about the request itself — an assistant made this call — and stays
+      // true of every piece of work the request causes, whoever ends up
+      // paying for it. Absent context is the system, which is not an agent.
+      channel: context?.channel ?? 'app',
       projectId: sameParty ? (context?.projectId ?? null) : null,
       projectName: sameParty ? context?.projectName : undefined,
       deckId: sameParty ? (context?.deckId ?? null) : null,

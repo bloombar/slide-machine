@@ -2,6 +2,8 @@
  * Execution context passed to every action (SPEC TECH-13). Carries the
  * acting user (once auth lands) and a request id for tracing.
  */
+import type { ActorChannel } from '@slide-machine/shared'
+
 export interface ActionContext {
   userId?: string
   requestId: string
@@ -13,4 +15,14 @@ export interface ActionContext {
    * Absent outside HTTP (seeding, background work), where nothing redirects.
    */
   origin?: string
+  /**
+   * How this call reached the application — the app's own front end, or an
+   * external AI assistant over MCP (docs/MCP.md §6).
+   *
+   * Absent means `app`. Only the MCP endpoint sets anything else, and it is
+   * the one path where the distinction is not recoverable from anything else
+   * on the request: an agent's calls are ordinary calls by the account that
+   * authorized them, and are meant to be.
+   */
+  channel?: ActorChannel
 }
