@@ -12,6 +12,7 @@ import type {
 import {
   charCount,
   clampToBudget,
+  closeMarkdown,
   titleFromPhrase,
   updateOverflows,
 } from './slide-fit'
@@ -437,5 +438,185 @@ describe('an authored box that will not fit', () => {
         unlimited,
       ),
     ).toBe(false)
+  })
+})
+
+/**
+ * Markdown a clamp cut in half (GEN-11).
+ *
+ * Slot text is Markdown and the generation prompt asks for it, so a budget
+ * cut can land inside a `**bold**` run or a `[label](url)`. These check what
+ * an audience would SEE — that no delimiter reaches the slide on its own —
+ * rather than that the function was called.
+ */
+describe('closeMarkdown', () => {
+  it('drops emphasis the cut left open', () => {
+    expect(closeMarkdown('Photosynthesis is **the')).toBe(
+      'Photosynthesis is the',
+    )
+    expect(closeMarkdown('It is *quite')).toBe('It is quite')
+    expect(closeMarkdown('The ~~old')).toBe('The old')
+  })
+
+  it('drops a backtick run the cut left open', () => {
+    expect(closeMarkdown('Run `npm')).toBe('Run npm')
+  })
+
+  it('drops a link whose destination the cut removed', () => {
+    // The label in brackets is markup, not a link: back to where it opened
+    expect(closeMarkdown('See the [reference guide](https://exa')).toBe(
+      'See the',
+    )
+    expect(closeMarkdown('See the [reference')).toBe('See the')
+  })
+
+  it('leaves a link the cut fell after alone', () => {
+    const whole = 'See the [guide](https://example.com) first'
+    expect(closeMarkdown(whole)).toBe(whole)
+  })
+
+  it('leaves brackets that are prose, not a link, alone', () => {
+    // "[sic]" and "[1]" are how people write, and Markdown draws them as
+    // themselves — cutting back to before one would delete words to repair
+    // nothing
+    expect(closeMarkdown('The report said this [sic]')).toBe(
+      'The report said this [sic]',
+    )
+  })
+
+  it('keeps the sign that something was cut', () => {
+    // Dropping the unfinished link must not also drop the clamp's own "…",
+    // or a truncated caption reads as a short complete one
+    expect(closeMarkdown('See the [reference guide](https://exa…')).toBe(
+      'See the…',
+    )
+  })
+
+  it('keeps emphasis that closed before the cut', () => {
+    expect(closeMarkdown('**Light** and *water*')).toBe('**Light** and *water*')
+    expect(closeMarkdown('**Bold** then *open')).toBe('**Bold** then open')
+  })
+
+  it('tells bold from two italics', () => {
+    // "**" split as italic would count four delimiters and leave the run open
+    expect(closeMarkdown('a **b** c')).toBe('a **b** c')
+  })
+})
+
+describe('a budget cut through Markdown', () => {
+  const layout = (slots: LayoutDescriptor['slots']): LayoutDescriptor[] => [
+    { type: 'lab', label: 'Lab', purpose: 'a worked example', slots },
+  ]
+
+  it('never leaves half a delimiter on a conventional slot', () => {
+    const fitted = clampToBudget(
+      {
+        action: 'new',
+        layoutType: 'content',
+        slots: {
+          title: 'A very **long and emphasized** title here',
+          body: 'Chlorophyll absorbs **red and blue light** from the sun',
+          bullets: ['Absorbs `chlorophyll` pigment strongly'],
+          caption: 'See the [reference guide](https://example.com) for more',
+        },
+      } as SlideGenerationResult,
+      [
+        {
+          type: 'content',
+          label: 'Content',
+          purpose: 'general',
+          slots: [],
+          constraints: {
+            maxTitleChars: 20,
+            maxBodyChars: 30,
+            maxBulletChars: 20,
+            maxCaptionChars: 20,
+          },
+        },
+      ],
+    )
+    for (const text of [
+      fitted.slots.title,
+      fitted.slots.body,
+      fitted.slots.caption,
+      ...(fitted.slots.bullets ?? []),
+    ]) {
+      // Every cut here lands inside a delimiter, so an unchanged clamp would
+      // fail this — the strings are chosen to make the check mean something
+      expect(text).toBeTruthy()
+      expect(text).not.toMatch(/\*/)
+      expect(text).not.toMatch(/`/)
+      expect(text).not.toMatch(/\[/)
+    }
+  })
+
+  it('leaves a literal asterisk alone when nothing was cut', () => {
+    // "5 * 3" is arithmetic, not emphasis. Tidying is only ever a repair to
+    // damage the clamp did, so text within budget must come back untouched
+    const fitted = clampToBudget(
+      {
+        action: 'new',
+        layoutType: 'content',
+        slots: { body: '5 * 3' },
+      } as SlideGenerationResult,
+      [
+        {
+          type: 'content',
+          label: 'Content',
+          purpose: 'general',
+          slots: [],
+          constraints: { maxBodyChars: 200 },
+        },
+      ],
+    )
+    expect(fitted.slots.body).toBe('5 * 3')
+  })
+
+  it('repairs an authored text box and its bullets', () => {
+    const fitted = clampToBudget(
+      {
+        action: 'new',
+        layoutType: 'lab',
+        slots: {},
+        declared: {
+          note: { kind: 'text', value: 'Compare **this and that** closely' },
+          points: { kind: 'bullets', items: ['Use the `map` function here'] },
+        },
+      } as SlideGenerationResult,
+      layout([
+        { name: 'note', kind: 'text', label: 'Note', maxChars: 16 },
+        { name: 'points', kind: 'bullets', label: 'Points', maxChars: 12 },
+      ]),
+    )
+    expect(fitted.declared?.note).toEqual({
+      kind: 'text',
+      value: 'Compare this…',
+    })
+    expect(fitted.declared?.points).toEqual({
+      kind: 'bullets',
+      items: ['Use the…'],
+    })
+  })
+
+  it('leaves a preformatted box exactly as written', () => {
+    // Preformatted is shown as its own characters and never read as Markdown,
+    // so an asterisk in it is an asterisk the author typed
+    const fitted = clampToBudget(
+      {
+        action: 'new',
+        layoutType: 'lab',
+        slots: {},
+        declared: {
+          art: { kind: 'preformatted', value: 'a * b * c d e f' },
+        },
+      } as SlideGenerationResult,
+      layout([
+        { name: 'art', kind: 'preformatted', label: 'Art', maxChars: 9 },
+      ]),
+    )
+    expect(fitted.declared?.art).toEqual({
+      kind: 'preformatted',
+      value: 'a * b *…',
+    })
   })
 })

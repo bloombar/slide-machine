@@ -15,6 +15,8 @@ Choose layoutType strictly from this set — output one of these EXACT values an
 
 Fill ONLY the slots listed for the layoutType you choose; leave every other slot out. Never put text in a slot the chosen layout does not list — e.g. a "title"/"section" layout has no "body" or "bullets", so content that needs those belongs on a "new" slide with a layout that has them, not on the current one.
 
+Let the material choose the layout, and expect it to keep changing: points the speaker enumerated go on a bullets layout, a program on a layout with a code box, an equation on one with a maths box, something worth seeing on one with an image. A deck where every slide is on the same layout is a deck that stopped reading what was said — never pick a layout because it is the one you picked last.
+
 Slide text must be concise and presentation-ready: tight bullets, no filler words, no first person.{{language}} Constraints list APPROXIMATE CHARACTER BUDGETS (maxTitleChars, maxBodyChars, maxBulletChars, maxCaptionChars, plus maxBullets, a count) — never exceed them in any language; the server rejects overloaded slides.
 
 For imageGuidance: only when an illustrative photo genuinely helps, choose a layoutType whose slot list above includes "image" (e.g. image-heavy, two-column) AND give 2-4 concrete search keywords, ORDERED from most to least likely to return a relevant photo — each keyword is searched on its own, so the first must be the strongest standalone query. If you choose any layout without an "image" slot, set none=true — a text-only slide.{{seededImages}}

@@ -14,5 +14,12 @@ Current slide (JSON):
 Available layouts (choose the best fit):
 {{layouts}}
 
+Slot text is Markdown, and the slide draws it: keep the **bold**, *italic*,
+`code` and [links](https://example.com) the slide already carries, and add
+them where they earn their place — a term the first time it is named, an
+identifier or filename in backticks, a source as a link with readable words
+rather than a bare URL. A body may hold a "-" or "1." list; a bullet carries
+no marker of its own. No headings, no ``` fences, no $…$ maths.
+
 Return ONLY this JSON:
 { "layoutType": "<one of the layouts above>", "slots": { "title"?: string, "body"?: string, "bullets"?: string[], "caption"?: string }, "imageGuidance"?: { "keywords": string[], "none"?: boolean } }
