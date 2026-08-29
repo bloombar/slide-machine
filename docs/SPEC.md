@@ -657,6 +657,16 @@ measuring machine resolved, and the work is entangled with
 [TMPL-17](#tmpl-17-a-design-that-names-no-face-is-measured-against-none) exactly as those designs' list
 budgets are.
 
+**And the change makes an older hazard reachable.** `resolveTreeBoxes` ends
+`out.filter(box => box.w > 0 && box.h > 0)`, so a box resolved to nothing is not exported small — it is
+**absent**. Before this change an over-full column overflowed and every box survived; now a sufficiently
+over-full one can compress a box to zero and drop it silently. The behaviour is not new and this change
+does not cause it, but this change is what puts content in reach of it.
+
+It is the same failure as the collapsed caption that began this work: **a box that disappears renders as
+a design with fewer elements rather than as a broken one**, and no rule that reads a box can see one that
+is not there. Not fixed here.
+
 **This does not close [TMPL-20](#tmpl-20-a-flow-designs-budgets-are-checked-or-the-check-says-they-are-not), and a change here must not be sold as closing it.** A shrink-aware resolver would report NYU Elegant's closing caption at 2.48px — correct — and still say nothing about the type having gone to the renderer's 40% floor, because seven of that design's nine recorded faults are `useFitText` outcomes measured off live `scrollHeight`/`clientHeight`, two need glyph metrics, and line counts are estimated from an average character width with no font engine. It would see the collapse and not the consequence.
 
 #### TMPL-23 The overhang allowance reaches only boxes that need it and can use it

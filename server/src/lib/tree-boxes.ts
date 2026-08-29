@@ -462,11 +462,34 @@ const arrange = (
   )
   const totalGrow = sum(growth)
   const free = mainAvail - sum(base) - gapMain * (kids.length - 1)
-  const sizes = base.map((size, i) =>
-    totalGrow > 0 && free > 0
-      ? size + (free * (growth[i] ?? 0)) / totalGrow
-      : size,
-  )
+  /*
+   * What each child yields when the line is over-full, as CSS does it.
+   *
+   * `flex-shrink` defaults to 1 and is scaled by the child's own base size,
+   * so a big box gives up more than a small one. Floored at zero, because the
+   * renderer sets `min-height: 0` on every flow child (client FlowLayout) and
+   * a box can therefore be taken to nothing.
+   *
+   * Without this the resolver distributed surplus and ignored deficit, so an
+   * over-full column kept every child at its content height and simply ran
+   * off the slide — while the browser shrank the same boxes and kept them on
+   * it. That gap is only visible from the export, which is the one reader of
+   * this file that draws without a browser to correct it (TMPL-22).
+   *
+   * Deficit and surplus cannot both apply, so this is the same branch rather
+   * than a second pass: `free` is one number and it has one sign.
+   */
+  const shrinkWeight = kids.map((kid, i) => (kid.shrink ?? 1) * (base[i] ?? 0))
+  const totalShrink = sum(shrinkWeight)
+  const sizes = base.map((size, i) => {
+    if (totalGrow > 0 && free > 0)
+      return size + (free * (growth[i] ?? 0)) / totalGrow
+    // Nothing that can give way means the line stays over-full and overflows,
+    // which is what CSS does with a row of `flex-shrink: 0` children.
+    if (free < 0 && totalShrink > 0)
+      return Math.max(0, size + (free * (shrinkWeight[i] ?? 0)) / totalShrink)
+    return size
+  })
 
   const { offset, between } =
     totalGrow > 0 && free > 0
