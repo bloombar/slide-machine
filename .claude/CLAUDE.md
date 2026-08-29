@@ -1,5 +1,7 @@
 # Instructions to Claude
 
+Before doing any new task, check for stale PRs or jobs.
+
 ## Testing
 
 Before finalizing major changes to code, do thorough 100% code coverage unit tests, integration tests. For changes that affect both front- and back-end, add e2e tests using Playwright with live front- and back-ends with live test db to ensure correct functionality. All passing passing tests should be reproducible during regression testing as we develop new code.
