@@ -15,7 +15,14 @@ const layout = (type: string, label: string, slots: string[]): Layout =>
     label,
     purpose: `use for ${type}`,
     slots: slots.map(name => ({ name, kind: 'text', label: name })),
-    elementPositions: {},
+    // Positioned rather than empty, so the data-driven renderer draws every
+    // slot and a test can read which layout is on screen off the slide.
+    elementPositions: Object.fromEntries(
+      slots.map((name, i) => [
+        name,
+        { x: 0.1, y: 0.1 + i * 0.2, w: 0.8, h: 0.15 },
+      ]),
+    ),
   }) as Layout
 
 const template = (over: Partial<Template> = {}): Template => ({
@@ -39,6 +46,20 @@ const mine = template({
   ownerId: 'u1',
   name: 'My Style',
   visibility: 'private',
+})
+
+/** Three layouts to page through, plus the whiteboard that is never paged to.
+ * Each carries a distinctly named slot, so which layout is drawn can be read
+ * off the rendered slide rather than only off the counter. */
+const many = template({
+  id: 'many-1',
+  name: 'Many',
+  layouts: [
+    layout('content', 'Content', ['title', 'contentMark']),
+    layout('list', 'List', ['listMark']),
+    layout('title', 'Title', ['titleMark']),
+    layout('whiteboard', 'Whiteboard', []),
+  ],
 })
 
 const renderLibrary = (
@@ -101,5 +122,96 @@ describe('TemplateLibrary (TMPL-1)', () => {
   it('marks your own templates as custom', () => {
     renderLibrary({ userId: 'u1' })
     expect(screen.getByText('Custom')).toBeInTheDocument()
+  })
+})
+
+describe('TemplateLibrary layout paging (TMPL-1)', () => {
+  const renderMany = (
+    props: Partial<Parameters<typeof TemplateLibrary>[0]> = {},
+  ) => renderLibrary({ templates: [many], value: 'many-1', ...props })
+
+  it('offers no arrows on a template with a single layout to show', () => {
+    // The shipped fixture is one content layout plus the whiteboard
+    renderLibrary({ templates: [template()], value: 'built-1' })
+    expect(screen.queryByLabelText(/^Next layout/)).toBeNull()
+    expect(screen.queryByLabelText(/^Previous layout/)).toBeNull()
+  })
+
+  it('starts on the design’s first layout, whatever type it is', () => {
+    // Not the one a preview picks when left to itself: paging runs through a
+    // template in the order it declares its layouts
+    renderLibrary({
+      templates: [
+        template({
+          layouts: [
+            layout('title', 'Title', ['titleMark']),
+            layout('content', 'Content', ['contentMark']),
+          ],
+        }),
+      ],
+    })
+    expect(screen.getByText('1/2')).toBeInTheDocument()
+    expect(screen.getByText('titleMark')).toBeInTheDocument()
+  })
+
+  it('steps to the next layout without leaving the tab', () => {
+    renderMany()
+    expect(screen.getByText('1/3')).toBeInTheDocument()
+    expect(screen.getByText('contentMark')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Next layout of Many'))
+
+    // The counter moved and so did the slide it names
+    expect(screen.getByText('2/3')).toBeInTheDocument()
+    expect(screen.getByText('listMark')).toBeInTheDocument()
+    expect(screen.queryByText('contentMark')).toBeNull()
+  })
+
+  it('steps backwards too', () => {
+    renderMany()
+    fireEvent.click(screen.getByLabelText('Next layout of Many'))
+    fireEvent.click(screen.getByLabelText('Previous layout of Many'))
+    expect(screen.getByText('1/3')).toBeInTheDocument()
+    expect(screen.getByText('contentMark')).toBeInTheDocument()
+  })
+
+  it('wraps round the ends rather than stopping', () => {
+    renderMany()
+    fireEvent.click(screen.getByLabelText('Previous layout of Many'))
+    // Back from the first is the last
+    expect(screen.getByText('3/3')).toBeInTheDocument()
+    expect(screen.getByText('titleMark')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Next layout of Many'))
+    expect(screen.getByText('1/3')).toBeInTheDocument()
+  })
+
+  it('never pages to the whiteboard', () => {
+    renderMany()
+    // Four layouts, three of them worth showing (TMPL-7)
+    const next = screen.getByLabelText('Next layout of Many')
+    for (let i = 0; i < 3; i++) fireEvent.click(next)
+    expect(screen.getByText('1/3')).toBeInTheDocument()
+    expect(screen.getByText('contentMark')).toBeInTheDocument()
+  })
+
+  it('does not select the template it is paging', () => {
+    const onChange = vi.fn()
+    renderMany({ onChange, value: 'built-1', templates: [template(), many] })
+    fireEvent.click(screen.getByLabelText('Next layout of Many'))
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('leaves the other cards where they were', () => {
+    const other = template({
+      id: 'many-2',
+      name: 'Other',
+      layouts: many.layouts,
+    })
+    renderLibrary({ templates: [many, other], value: 'many-1' })
+    fireEvent.click(screen.getByLabelText('Next layout of Many'))
+    // One card moved on, the other did not
+    expect(screen.getByText('2/3')).toBeInTheDocument()
+    expect(screen.getByText('1/3')).toBeInTheDocument()
   })
 })

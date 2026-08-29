@@ -39,6 +39,28 @@ test('template library: duplicate, edit, apply, delete', async ({ page }) => {
   expect(await previews.count()).toBeGreaterThan(0)
   const shipped = await previews.count()
 
+  await test.step('a card pages through its own layouts, in the tab (TMPL-1)', async () => {
+    // Only a browser can say the slide itself redrew: jsdom can check which
+    // layout was handed to the preview, not that a different one was painted.
+    const classic = page.getByRole('radio', { name: /Classic/ })
+    const before = await classic.innerText()
+    const checkedBefore = await classic.getAttribute('aria-checked')
+
+    await page.getByRole('button', { name: 'Next layout of Classic' }).click()
+    await expect.poll(async () => classic.innerText()).not.toBe(before)
+
+    // Paging is looking, not choosing: nothing was selected and nothing
+    // navigated away from the Design tab.
+    expect(await classic.getAttribute('aria-checked')).toBe(checkedBefore)
+    await expect(library).toBeVisible()
+
+    // And back again lands where it started.
+    await page
+      .getByRole('button', { name: 'Previous layout of Classic' })
+      .click()
+    await expect.poll(async () => classic.innerText()).toBe(before)
+  })
+
   // Duplicating is how a template is made: the copy opens straight in the
   // editor, since its name is the first thing anyone changes (TMPL-4). The
   // editor is the copy's own page, at its own permalink — a design belongs to
