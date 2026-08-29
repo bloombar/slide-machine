@@ -54,12 +54,45 @@ const nyuBold = (): Template => {
   return found
 }
 
+/**
+ * The numeral box, as it was shipped when these numbers were measured.
+ *
+ * The design no longer carries it: a section number has to change from one
+ * divider to the next and the app has no notion of a section's index, so the
+ * slot was removed rather than filled by hand or guessed at. See
+ * `docs/DECISIONS.md`.
+ *
+ * It stays here because the RULE is what this file tests, and the rule is
+ * unchanged. These figures were measured against the real design and the
+ * geometry is reproduced verbatim; what is gone is a design that ships it,
+ * not the case it made. Reading a fault here as a statement about a shipped
+ * template would now be wrong, which is why this says so.
+ */
+const NUMERAL = {
+  x: 0.47556123496281716,
+  y: 0.3429566676387674,
+  w: 0.506496062992126,
+  h: 0.6570433323612326,
+  fontSize: 34.72,
+  fontWeight: 700,
+  fontFamily: 'montserrat',
+  color: '#8900e1',
+  lineHeight: 1.196,
+  align: 'start',
+  vAlign: 'start',
+} as const
+
 /** Just the divider, as its own one-layout template — so a fault from any
- * other layout cannot be mistaken for this one. */
+ * other layout cannot be mistaken for this one. The numeral is put back
+ * because the design no longer ships one; everything else is as shipped. */
 const dividerOnly = (change?: (layout: Layout) => void): Template => {
   const template = JSON.parse(JSON.stringify(nyuBold())) as Template
   const divider = template.layouts.find(l => l.type === 'section')
   if (!divider) throw new Error('nyu-bold has no section layout')
+  divider.elementPositions = {
+    ...(divider.elementPositions ?? {}),
+    number: { ...NUMERAL },
+  } as Layout['elementPositions']
   change?.(divider)
   return { ...template, layouts: [divider] }
 }
@@ -82,8 +115,8 @@ describe('what counts as two boxes of words colliding', () => {
     expect(title, 'the divider has no title box').toBeDefined()
     expect(
       number,
-      'the divider has no numeral box — the ornament guard in ' +
-        'candidate.ts drops it when it measures capacity below its floor',
+      'the numeral box is missing from the fixture — it is supplied by ' +
+        'dividerOnly() and no longer comes from the shipped design',
     ).toBeDefined()
 
     // The rectangles really do overlap. If they ever stop, this file is
