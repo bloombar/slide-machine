@@ -641,11 +641,15 @@ Measured, with every box filled to its own stated budget:
 - `classic/two-column` — body to **1.311**, image to **1.154**
 - `midnight/list`, `midnight/two-column`, `seminar/list`, `seminar/two-column` — identical
 
-Six layouts across three designs put content **up to 31% of the slide height below the bottom edge** of an exported file, at budgets those designs declare. On screen the same boxes are shrunk to fit and stay on the slide.
+**Three of those six are this requirement. The other three are a different defect and must not be folded in.** `two-column` runs off the slide in the *browser* as well, and already says so: `known-faults.ts` records its title at `y -0.035` and its body's bottom at `1.035`. There the resolver and the renderer **agree in direction** and differ only in magnitude — 1.311 against 1.035 — so the design is broken and the export merely exaggerates it. Teaching the resolver `shrink` would move that number and **would not put the content back on the slide**, and anyone expecting otherwise would read a correct change as a failed one.
+
+`list` is the case this requirement is about. The browser records it as *shrinking and staying on the slide*; the resolver puts it at 1.237. **There the exporters genuinely draw something the renderer never drew.** So: **three layouts across three designs**, up to 23.7% below the edge.
+
+The predicted result for `list`, which is checkable: base title 9.6 (`shrink: 0`) + bullets 53.6 + gap 3.0 = 66.2 against 49.5 available; the 16.7 deficit falls entirely on the only shrinkable child, giving bullets 36.9 and a column of exactly 49.5, with everything on the slide.
 
 **What makes this a requirement rather than a bug is that nothing we have can see it.** The [TMPL-19](#tmpl-19-a-box-holds-its-budget-while-its-neighbours-hold-theirs) arithmetic does not reach it — `two-column` is a grid root, one of the fifty shipped layouts that check reports as unreachable. The browser walk does not reach it either, because the browser is the surface where the box is correctly shrunk. **The defect lives in the one place neither instrument looks**, and it surfaced only because somebody pointed the export resolver at content and read the numbers.
 
-**So the export path is checked against the render path**, and no resolved box leaves the slide when a column is over-full. That assertion is the one that would have caught this.
+**So the export path is checked against the render path**, and no resolved box leaves the slide **when the renderer keeps it on**. That last clause is load-bearing: a blanket "nothing leaves the slide" would fail on a design that genuinely overflows, like `two-column`, and would be wrong to. The assertion distinguishes a design that is broken from an export that misdraws a design that is not.
 
 **A note for whoever takes this.** The six layouts are on `classic`, `midnight` and `seminar` — the
 three designs that name no typeface — so the geometry measured here is against whichever face the
