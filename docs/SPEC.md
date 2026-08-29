@@ -434,6 +434,8 @@ The **overlap** rule must decide whether two boxes collide. Ink height depends o
 
 Nor is the exposure only the exotic case. Measured on that divider, a **solidus alone** in the number box — nothing above it at all — sits within 2px of the title's baseline. Every other collision in that design needs two unlucky glyphs at once; this one needs the slot to receive a single character it has no way to refuse. **A design cannot be made safe by moving a box when the hazard is one glyph in a two-character slot**, which is why the geometry was adjusted and this requirement still stands.
 
+**That box has since been removed from the design by decision** — a section number has to change from one divider to the next, and the app has no notion of a section's index, so the slot could only ever have been filled by hand or guessed at by the model. NYU Bold's section divider now ships without it. The argument above is unchanged: it was measured on a real box and it is why this requirement exists, but the worked example is now historical rather than live.
+
 The **ornament** rule must decide whether a box is too small to write in. It estimates characters from area and type size, so a box holding two digits at display size is indistinguishable from a decorative glyph nobody could type into.
 
 **So a slot may declare the character set it accepts** — digits, capitals, ordinary text — and the rules read that declaration instead of guessing. A declaration is enforced where it can be (the editor and generation refuse what the slot does not accept) so that a rule may rely on it, which is what separates it from a label saying "Part number" that nothing checks.
@@ -741,12 +743,7 @@ exactly 1.196:
 Two independent readings give five and six; they differ over boxes whose size is inherited rather than
 stated, and the count is not settled. Neither reading is one.
 
-**And the sequencing argument returns with it.** `section/number` is the numeral box whose descender is
-already a recorded fault and whose geometry needed a hand nudge — a box known to be marginal, currently
-drawing inside an 8.68cqi allowance. **Nobody has measured whether any of these five fits unaided.**
-Until someone has, moving the boundary is not the no-op it appears to be: it is the same bet that lost
-on `nyu-elegant`, on a design nobody has looked at. Each box needs a `scroll`/`client` reading at its
-stated budget before the constant moves.
+**And the sequencing argument returned with it — then closed.** `section/number` was the numeral box whose descender was a recorded fault and whose geometry needed a hand nudge: measured, it overflowed its own rectangle by 48px and drew only because an 84.7px allowance caught it, and the other four boxes in the window fit unaided. **That box has since been removed from the design**, for reasons that have nothing to do with this requirement — a section number must change between dividers and the app has no notion of a section's index. With it goes the only box that did not fit, so **nothing in the window now depends on the allowance and the boundary can move freely.** Re-verify before it does: this is a claim about a state, and states move.
 
 ### 8. Live Lecture Capture
 
