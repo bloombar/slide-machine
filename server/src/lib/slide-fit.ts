@@ -18,6 +18,59 @@ import type {
 export const charCount = (text: string | undefined): number =>
   text ? text.trim().length : 0
 
+/**
+ * Inline Markdown a cut left unterminated, tidied away.
+ *
+ * A text or bullet box is drawn as Markdown, and the generation prompt now
+ * asks for it — emphasis, an identifier in backticks, a link. A budget cut
+ * lands wherever the budget says, which is as easily inside a `**bold**` run
+ * or halfway through a `[label](url)` as between two plain words. What an
+ * audience then reads is not emphasis; it is the asterisks themselves.
+ *
+ * Nothing here re-flows or re-wraps: an unfinished link goes back to where it
+ * opened, and a delimiter left in an odd number is dropped. Both leave
+ * readable prose, which is what the clamp was for.
+ *
+ * Only ever applied to text the clamp actually shortened. Balanced markup has
+ * even counts and would survive this untouched, but a literal asterisk in
+ * prose nobody cut ("5 * 3") is not a delimiter, and must not be treated as
+ * one.
+ */
+export const closeMarkdown = (text: string): string => {
+  /*
+   * A link is the only construct spanning more than one delimiter, and only
+   * an unfinished one is a problem: the text goes back to where it opened
+   * rather than showing a label in brackets with no destination.
+   *
+   * Brackets in prose are left alone. "[sic]" and "[1]" are not links, they
+   * are how people write, and Markdown draws them as themselves — cutting a
+   * caption back to before one would delete words to repair nothing.
+   */
+  const opened = text.lastIndexOf('[')
+  const tail = opened === -1 ? '' : text.slice(opened)
+  const unfinished =
+    opened !== -1 &&
+    // A destination that opened and never closed, or a label with no "]".
+    (/^\[[^\]]*\]\([^)]*$/.test(tail) || !/^\[[^\]]*\]/.test(tail))
+  let out = unfinished ? text.slice(0, opened).trimEnd() : text
+
+  // Bold is two of the character italic uses, so it is taken out of the way
+  // first and put back at the end; otherwise "**" reads as two italics.
+  const BOLD = '\u0000'
+  out = out.split('**').join(BOLD)
+  for (const mark of [BOLD, '~~', '*', '`']) {
+    const parts = out.split(mark)
+    // An even part count means an odd number of the delimiter: the cut fell
+    // inside a run, and the one that opened it is dropped.
+    if (parts.length % 2 === 0)
+      out = parts.slice(0, -1).join(mark) + parts[parts.length - 1]
+  }
+  out = out.split(BOLD).join('**').trimEnd()
+  // The clamp's own "…" says the text was cut; dropping a link must not also
+  // drop the only sign that anything is missing.
+  return text.endsWith('…') && !out.endsWith('…') ? `${out}…` : out
+}
+
 /** Truncates to a character budget; no-op when within it. Cuts at the
  * last word boundary inside the budget when one exists (spaced
  * languages), otherwise hard-cuts at the budget (CJK). */
@@ -227,7 +280,12 @@ const fitDeclared = (
       }
       case 'bullets': {
         const items = (maxItems ? value.items.slice(0, maxItems) : value.items)
-          .map(item => clampChars(clampWords(item, maxWords), maxChars))
+          .map(item => {
+            const clamped = clampChars(clampWords(item, maxWords), maxChars)
+            return clamped === item || clamped === undefined
+              ? clamped
+              : closeMarkdown(clamped)
+          })
           .filter((item): item is string => Boolean(item))
         if (!items.length) continue
         out[name] = { kind: 'bullets', items }
@@ -235,7 +293,16 @@ const fitDeclared = (
       }
       case 'text':
       case 'preformatted': {
-        const text = clampChars(clampWords(value.value, maxWords), maxChars)
+        const clamped = clampChars(clampWords(value.value, maxWords), maxChars)
+        // A preformatted box is shown exactly as written and is never read as
+        // Markdown, so an asterisk in it is an asterisk — tidying one would
+        // delete a character the author meant.
+        const text =
+          value.kind === 'text' &&
+          clamped !== undefined &&
+          clamped !== value.value
+            ? closeMarkdown(clamped)
+            : clamped
         if (!text?.trim()) continue
         out[name] = { ...value, value: text }
         break
@@ -254,12 +321,18 @@ export const clampToBudget = (
   const limits = budgetsFor(result, descriptors)
   const words = wordBudgetsFor(result, descriptors)
   // Both bind where both are given: words first, so a whole-word cut is what
-  // a character ceiling then measures.
+  // a character ceiling then measures. A cut that shortened the text is then
+  // tidied, so no half of a Markdown delimiter reaches the slide.
   const fit = (
     text: string | undefined,
     chars: number | undefined,
     max: number | undefined,
-  ) => clampChars(clampWords(text, max), chars)
+  ) => {
+    const clamped = clampChars(clampWords(text, max), chars)
+    return clamped === text || clamped === undefined
+      ? clamped
+      : closeMarkdown(clamped)
+  }
   return {
     ...result,
     slots: {

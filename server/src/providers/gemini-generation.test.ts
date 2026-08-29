@@ -1421,3 +1421,137 @@ describe('a second worked example gets its own slide (GEN-11)', () => {
     )
   })
 })
+
+/**
+ * Markdown, bullets and pictures the model was never told it could use.
+ *
+ * A text or bullet box has been drawn through `SlideMarkdown` all along —
+ * emphasis, inline code, links, and lists in a multi-line box — and the
+ * prompt never said so, so the model wrote flat prose and pasted bare URLs.
+ * These assert what a template's boxes make the model READ, since that is the
+ * only part of "the model now knows" this side can check: a prompt that lost
+ * the sentence is indistinguishable from one that kept it, once a stubbed
+ * reply comes back either way.
+ */
+describe('what a text box may hold (GEN-11)', () => {
+  const promptFor = async (req: SlideGenerationRequest): Promise<string> => {
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
+    )
+    await new GeminiGenerationProvider().generateSlideContent(req)
+    const [, init] = fetchMock.mock.calls[0]!
+    return JSON.parse(String(init.body)).contents[0].parts[0].text as string
+  }
+
+  const withKinds = (kinds: string[]): SlideGenerationRequest =>
+    ({
+      phrase: 'chlorophyll absorbs red and blue light',
+      rollingContext: [],
+      layoutDescriptors: [
+        {
+          type: 'content',
+          label: 'Content',
+          purpose: 'x',
+          slots: kinds.map((kind, i) => ({
+            name: `slot${i}`,
+            kind,
+            label: `Slot ${i}`,
+          })),
+        },
+      ],
+    }) as never
+
+  it('offers Markdown emphasis, code and links in a text box', async () => {
+    const prompt = await promptFor(withKinds(['text']))
+    expect(prompt).toContain('written in Markdown')
+    expect(prompt).toContain('**bold**')
+    expect(prompt).toContain('`backticks`')
+    expect(prompt).toContain('[label](https://example.com)')
+  })
+
+  it('asks for a link’s words rather than its bare URL', async () => {
+    const prompt = await promptFor(withKinds(['text']))
+    expect(prompt).toContain('never the bare URL')
+  })
+
+  it('allows a list inside a multi-line text box', async () => {
+    const prompt = await promptFor(withKinds(['text']))
+    expect(prompt).toContain('A multi-line box may also hold')
+  })
+
+  it('refuses the Markdown the renderer does not draw', async () => {
+    // Headings are the layout's job (TMPL-6); a fence and $…$ maths reach the
+    // audience as their own source, so both are refused where every template
+    // reads it — not only in the code and maths entries a design may not have
+    const prompt = await promptFor(withKinds(['text']))
+    expect(prompt).toContain('No headings, no ``` fences, no $…$ maths')
+  })
+
+  it('lets a bullet carry Markdown but never its own marker', async () => {
+    const prompt = await promptFor(withKinds(['bullets']))
+    expect(prompt).toContain('no "-" or "1." of its')
+  })
+
+  it('says a preformatted box is not Markdown', async () => {
+    const prompt = await promptFor(withKinds(['preformatted']))
+    expect(prompt).toContain('never read as Markdown')
+  })
+})
+
+describe('reaching for a bullets or image layout (GEN-11)', () => {
+  const promptFor = async (req: SlideGenerationRequest): Promise<string> => {
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
+    )
+    await new GeminiGenerationProvider().generateSlideContent(req)
+    const [, init] = fetchMock.mock.calls[0]!
+    return JSON.parse(String(init.body)).contents[0].parts[0].text as string
+  }
+
+  const withKinds = (kinds: string[]): SlideGenerationRequest =>
+    ({
+      phrase: 'there are three stages: absorption, transfer and fixation',
+      rollingContext: [],
+      layoutDescriptors: [
+        {
+          type: 'content',
+          label: 'Content',
+          purpose: 'x',
+          slots: kinds.map((kind, i) => ({
+            name: `slot${i}`,
+            kind,
+            label: `Slot ${i}`,
+          })),
+        },
+      ],
+    }) as never
+
+  it('says an enumeration belongs in a bullets box', async () => {
+    // Left to itself the model settles on one layout, and a lecture of listed
+    // steps comes out as paragraphs that list them
+    const prompt = await promptFor(withKinds(['bullets']))
+    expect(prompt).toContain('When the speaker ENUMERATES')
+    expect(prompt).toContain('not a paragraph that lists them')
+  })
+
+  it('says something worth seeing belongs on an image layout', async () => {
+    const prompt = await promptFor(withKinds(['image']))
+    expect(prompt).toContain('an audience would want to')
+    expect(prompt).toContain('SEE')
+  })
+
+  it('says neither to a template with only prose boxes', async () => {
+    // A design with no bullets and no picture should not be told when it
+    // would want one — the box does not exist to fill
+    const prompt = await promptFor(withKinds(['text']))
+    expect(prompt).not.toContain('When the speaker ENUMERATES')
+    expect(prompt).not.toContain('would want to')
+  })
+
+  it('tells the model the layout is expected to keep changing', async () => {
+    // From generation.txt, so a template of any shape gets it
+    const prompt = await promptFor(withKinds(['text', 'bullets', 'image']))
+    expect(prompt).toContain('Let the material choose the layout')
+    expect(prompt).toContain('never pick a layout because it is the one you')
+  })
+})

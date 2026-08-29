@@ -81,10 +81,34 @@ const outputShape = (
  * its kind. Only the kinds this template actually declares are described —
  * telling a history template how to write LaTeX spends the budget on a box
  * that does not exist, and invites a formula nobody asked for.
+ *
+ * ## Markdown in a text box
+ *
+ * A text or bullet box is drawn through `SlideMarkdown`, so emphasis, inline
+ * code and links have worked on every slide for as long as the renderer has —
+ * and the model was never told, so it wrote flat prose and pasted bare URLs.
+ * Saying it here is what turns a supported feature into one that appears.
+ *
+ * What is offered is exactly what the renderer draws, no more: the allowed
+ * element list is inline emphasis, code and links everywhere, plus lists in a
+ * multi-line box. Headings are the layout's job (TMPL-6) and are not
+ * rendered. A fenced block and `$…$` maths are not rendered either — they
+ * reach the audience as their own source — so both are refused HERE rather
+ * than only in the code and maths entries below, which a template without
+ * those boxes never sees.
  */
 const KIND_SHAPES: Record<string, string> = {
-  text: 'text — a string of prose',
-  bullets: 'bullets — an array of strings, one per point',
+  text:
+    'text — a string of prose, written in Markdown: **bold**, *italic*, ' +
+    '`backticks` around an identifier, filename or command, and ' +
+    '[label](https://example.com) for a link, whose label is the words a ' +
+    'reader would click, never the bare URL. A multi-line box may also hold ' +
+    'a "-" or "1." list. No headings, no ``` fences, no $…$ maths: a listing ' +
+    'or a formula goes in a box of its own, never in a text box',
+  bullets:
+    'bullets — an array of strings, one per point, each carrying the same ' +
+    'inline Markdown (**bold**, `code`, links) but no "-" or "1." of its ' +
+    'own, which the slide draws',
   code:
     'code — a runnable program listing and nothing else: real indentation, ' +
     'real newlines, no markdown fence, and NEVER a sentence describing code',
@@ -92,7 +116,8 @@ const KIND_SHAPES: Record<string, string> = {
     'math — a LaTeX expression and nothing else, no $ delimiters, and NEVER ' +
     'a sentence describing the formula',
   preformatted:
-    'preformatted — a string whose exact spacing and line breaks matter',
+    'preformatted — a string whose exact spacing and line breaks matter, ' +
+    'shown exactly as written and never read as Markdown',
   table:
     'table — { "header"?: string[], "rows": string[][] }, every row the same length',
   image: 'image — never written; leave it out and give imageGuidance instead',
@@ -110,8 +135,22 @@ const KIND_SHAPES: Record<string, string> = {
  *
  * Only for the kinds this template actually declares: a design with no maths
  * box should not be told when it would want one.
+ *
+ * Bullets and images are here for the same reason the specialized kinds are.
+ * A model that is only told which layouts exist settles on one of them and
+ * stays there, and a lecture comes out as forty paragraphs — the points the
+ * speaker actually enumerated flattened into prose, and nothing to look at.
  */
 const REACH_FOR_KIND: Record<string, string> = {
+  bullets:
+    'When the speaker ENUMERATES — steps, reasons, options, contrasts, or ' +
+    'several parallel things — that belongs in a bullets box, one point per ' +
+    'item, not a paragraph that lists them. Choose a layoutType that HAS ' +
+    'one; where a sentence sets the points up, prefer a layout with both.',
+  image:
+    'When what is under discussion is something an audience would want to ' +
+    'SEE — a place, an object, a person, a process — choose a layoutType ' +
+    'that HAS an image box and give imageGuidance keywords for it.',
   code:
     'When the speaker STATES a program, a command, a function or a few lines ' +
     'of a language — dictating it, walking through it, or describing what it ' +
