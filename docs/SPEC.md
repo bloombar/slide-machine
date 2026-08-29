@@ -708,7 +708,31 @@ arithmetic measures a column against its children; this overflow is inside one b
 box against itself, not against its siblings. It is not a column-level fact at all, so that check is not
 too coarse for it, it is aimed at the wrong axis.
 
-**Blast radius, measured.** Moving the boundary to `NATURAL_LINE_BOX` removes the allowance from boxes led at exactly 1.196: in the shipped designs that is `nyu-elegant.statNumber` and nothing else, since every other exposed role is genuinely below it — title 0.95, sectionTitle 0.95, quote 1.05, statLabel 1.1, `nyu-bold.title` 0.957. Only `nyu-bold` and `nyu-elegant` name faces at all; the three that name none sit at the pixel floor and are unaffected. The reason to do it is that the constant should mean what its docstring says, not the one box it currently moves — and an imported design led at its natural box would land in the same window, which matters now that import reads leading from the source.
+**Blast radius — and the first figure recorded here was wrong.** This originally read "one box,
+`nyu-elegant.statNumber`, and nothing else". That survey walked theme roles and `tree` nodes. It did not
+walk `elementPositions`, which is where a **positioned** design states its per-box styles — so it was a
+complete survey of one of the two ways this codebase states a box's style, reported as a complete
+survey. The same merged-population error this work has produced repeatedly, in a filed number.
+
+Re-measured against `better-faster` at `b5ccd9b`: `nyu-elegant.statNumber` has left the window (it is
+1.30 since the box was repaired), and **at least five boxes on `nyu-bold` are in it**, all at leading
+exactly 1.196:
+
+    ROLE heading          size  1.94    allowance 0.48cqi
+    section/number        size 34.72    allowance 8.68cqi
+    big-number/title      size 20.83    allowance 5.21cqi
+    quote/title           size  8.33    allowance 2.08cqi
+    quote-image/title     size inherited
+
+Two independent readings give five and six; they differ over boxes whose size is inherited rather than
+stated, and the count is not settled. Neither reading is one.
+
+**And the sequencing argument returns with it.** `section/number` is the numeral box whose descender is
+already a recorded fault and whose geometry needed a hand nudge — a box known to be marginal, currently
+drawing inside an 8.68cqi allowance. **Nobody has measured whether any of these five fits unaided.**
+Until someone has, moving the boundary is not the no-op it appears to be: it is the same bet that lost
+on `nyu-elegant`, on a design nobody has looked at. Each box needs a `scroll`/`client` reading at its
+stated budget before the constant moves.
 
 ### 8. Live Lecture Capture
 
