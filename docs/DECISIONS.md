@@ -2,6 +2,22 @@
 
 Short records of non-obvious choices, for when we revisit them.
 
+## Section numerals: drop them rather than derive them (2026-08-29)
+
+**Problem.** NYU Bold's section divider carries a large "01"; NYU Elegant prints "P A R T 0 1" in the top-left corner of ten of its thirteen pages. Both are **section numbers** — the source decks read 01 on the first part and would read 02 on the second. Neither is decoration: freezing either into the design would say "01" on every divider of every deck built from that template, which is the failure [TMPL-14](SPEC.md#tmpl-14-a-design-may-draw-its-own-text) uses as its own worked example.
+
+**What we do not have.** The app has no notion of a section or its index — `sectionNumber`, `sectionIndex` and `sectionCount` appear nowhere. So a numeral slot can only be filled by hand or guessed at by the model, and generation is per-slide, so the model would be counting dividers it may not have in context. A deck shipping two slides both numbered "02" is the likely failure, and nobody would notice until it was projected.
+
+**Choice.** **Remove the numeral from NYU Bold's `section` layout, and do not add the eyebrow to NYU Elegant.** Not derive them, not track them, not prompt for them.
+
+**Why not derive it**, which was the tempting answer. A section's number is implied by the deck — the *n*th slide on a section-starting layout is section *n* — so it needs no stored state. But layouts are open ([TMPL-9](SPEC.md#tmpl-9-open-slot--layout-model)) and a template may call its divider anything, so "what starts a section" would itself need declaring, and the general version is a layout flag plus a derivation plus a generated-field kind that reads it ([TMPL-15](SPEC.md#tmpl-15-generated-fields-survive-import)). That is a reasonable feature and a poor reason to build one: the whole of it exists to print two digits that two templates want and no user has asked for.
+
+**What this reverses.** [`#289`](https://github.com/bloombar/slide-machine/pull/289) restored that numeral after finding the importer had deleted it silently, and accepted a descender fault to keep it, arguing that "the alternative is shipping a section divider without its dominant graphic." That entry also stated everything needed to reverse the call, which is what happened. The reversal is not that the original ruling was wrong — the box really was being lost silently, and finding that is what [TMPL-13](SPEC.md#tmpl-13-import-element-accounting) exists for. It is that **deliberately declining to ship an element is a different act from losing one**, and only the second is a defect.
+
+**What it settles for free.** That numeral was the only box in [TMPL-23](SPEC.md#tmpl-23-the-overhang-allowance-reaches-only-boxes-that-need-it-and-can-use-it)'s window that did not fit unaided — 48px over its own rectangle, drawing only because an 84.7px allowance caught it. With the box gone, nothing in the window depends on the allowance, and the `TIGHT_LEADING` boundary can move without a template repair alongside it. It also removes the last entry from `known-faults.ts` for any design that names its typefaces.
+
+**Limits.** NYU Elegant's `image-list` numerals — "0 1 .", "0 2 .", "0 3 ." heading three notes on one slide — are **not** this case and are unaffected. Those vary by position within a layout and not between slides, so they are genuinely decoration; they remain unshipped for a different reason, which is that decoration cannot carry text at all ([TMPL-21](SPEC.md#tmpl-21-decoration-carries-its-text)).
+
 ## Markdown in text boxes: repair the cut, never re-flow it (2026-08-29)
 
 **Problem.** `SlideMarkdown` already draws `**bold**`, `*italic*`, backticks and links, and nothing told the model that. Slides arrived flattened. Telling it, though, puts markup in a string that [slide-fit.ts](../server/src/lib/slide-fit.ts) may then clamp to a slot's `maxChars` — and a budget cut lands wherever the budget says, as easily inside a `**bold**` run or halfway through a `[label](url)` as between two words. What the audience reads then is not emphasis; it is the asterisks themselves.
