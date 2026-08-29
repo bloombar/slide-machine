@@ -442,6 +442,30 @@ The **ornament** rule must decide whether a box is too small to write in. It est
 
 Until this exists, rules that depend on glyph shape state their assumption and its cost in the same breath — which strings they exclude, and by how much — rather than quietly assuming the convenient case.
 
+**And the design has nowhere to write that assumption down.** A slot's description is the only prose a
+template file carries and it is capped at 200 characters, which holds the rule and not its derivation.
+So `nyu-elegant`'s big figure states what it may contain — nothing descending below the baseline, no
+comma, no bracket — and the measurements that justify switching the renderer's descender protection off
+for that box live in a commit message, which is the one place nobody looks when deciding whether a value
+is still right. A design that must opt out of a protection needs somewhere durable to say why, next to
+the opt-out. This is the same gap as [TMPL-14](#tmpl-14-a-design-may-draw-its-own-text) from the other
+side: there a design could not say something the model had no field for, here it cannot say why.
+
+**But writing the assumption down is not what makes a box safe, and treating it as though it were is
+the failure this clause was nearly used to excuse.** A stated assumption earns its place when a *rule*
+depends on one — the overlap rule asking what glyphs a box can hold. It is worth nothing when it is the
+only thing standing between a box and a clipped glyph, because the reader of that sentence is the one
+party who was never going to type the bracket. `nyu-elegant`'s big figure was given a description
+reading *nothing that descends below the baseline — no comma, no bracket* while its descender protection
+was switched off; rendering `(1,234)g` at the eight characters `maxChars` already permitted put 20px of
+ink outside the box and drove the figure and its label into overlap. Nothing in the system rejects
+`(32%)`, so the sentence was documentation of a hope.
+
+**So the question to ask of an opt-out is not whether it is documented but what the box does when it
+receives the thing the note forbids** — and until this requirement is code, the answer for any slot the
+generator or an author can fill is "whatever the worst permitted string does". An opt-out defended by
+prose is an opt-out defended by nothing.
+
 #### TMPL-17 A design that names no face is measured against none
 
 A design may name the typefaces it is set in, and three of the app's built-ins — `classic`, `midnight` and `seminar` — name none. Their text falls back to the platform's own UI face: one thing on macOS, another on Windows, another on Linux, each with its own advance widths and vertical metrics.
@@ -462,6 +486,20 @@ A design that fails a check ([TMPL-12](#tmpl-12-every-shipped-design-holds-what-
 
 **And an entry that no longer matches any fault fails too**, so the list shrinks when a design is repaired instead of describing a defect that no longer exists. One exception, which is why entries say what KIND of fault they are: an entry recorded as **platform-specific** legitimately does not reproduce on every machine, and its absence is not evidence of repair.
 
+**None of this exists yet, and the gap is one comparison wide.** `unknownFaults` filters incoming
+faults against the list; nothing walks the list. The match is `fault.includes(known.match)` — a
+substring — so a dead entry goes on suppressing anything on that box whose message shares its prefix.
+**The list does not merely fail to shrink; it stays armed.**
+
+And the data that would catch it is already gathered. `template-load-limits.spec.ts` computes
+`tolerated` and counts the design's entries in `known-faults.ts`, and prints both. A stale entry is
+exactly `tolerated` being lower than `listed`. **The two numbers sit side by side in one string and
+nothing compares them** — and that string is the message of an `expect` that passes, so on a green run,
+which is precisely when a stale entry matters, nobody ever sees it.
+
+**A number computed for a failure message is not a check.** It is printed only when something else has
+already failed, which is the one case where the reader does not need it.
+
 The point is that a list of tolerated faults decays in both directions — entries that outlive their defect, and defects that outgrow their entries — and the longer it is, the less a reader can be the mechanism that catches either.
 
 #### TMPL-19 A box holds its budget while its neighbours hold theirs
@@ -475,9 +513,37 @@ In a design whose geometry is a **flow** — an arrangement the renderer resolve
 - caption alone, at its full stated budget of 110 characters — 741.8 × 57.94px, type at 100%, nothing hidden;
 - the same caption, same budget, with its **sibling** title filled to *its* stated 44 — 483.8 × 2.48px, type shrunk to the renderer's 40% floor, 10px of content hidden.
 
-The height went to the sibling. The title node carries `shrink: 0` and the caption does not, so the caption absorbs the entire overflow of a title that was itself only doing what its budget permits. Both boxes are inside their stated limits and the page is destroyed. Seven of that design's nine recorded faults are this one cause, on six boxes across four layouts; cutting the titles and touching no caption budget clears five of them outright and restores a section divider that had been squeezed to zero width.
+The height went to the sibling. The title node carries `shrink: 0` and the caption does not, so the caption absorbs the entire overflow of a title that was itself only doing what its budget permits. Both boxes are inside their stated limits and the page is destroyed. Seven of that design's nine recorded faults are this one cause, on five boxes across five layouts; cutting the titles and touching no caption budget clears five of them outright and restores a section divider that had been squeezed from 1.53px to zero height — height being the axis the column distributes, so the rule keeps its full 35.95px width throughout and simply stops existing.
 
 **So the walk fills every box on a layout at once**, and a design's budgets are a set that must hold together rather than a list that holds one at a time. Where boxes compete for the same space, the design states which one yields — leaving it to the renderer's default means the last shrinkable child silently absorbs everyone else's overflow.
+
+**Stating the yielder moves the fault; it does not remove it, and it can hide it.** A box marked
+`shrink: 0` is never compressed, so its own box is exactly its content — it overflows its parent in
+silence, reporting full scale and zero overflow, and the room it takes comes out of whichever sibling
+still yields. Measured on `nyu-elegant`'s quote page: naming the body as the box that holds turned a
+visible fault into an invisible one. Before, the body shrank its type to 80% and the caption survived at
+28.97px, which every check could see. After, the body holds at 374.19px in a 305px column — 69px past
+its parent, reported clean — and the attribution is drawn at zero height. The design now states which
+box yields and states the wrong one.
+
+So a design states the yielder **and** its budgets are cut until the holding boxes fit without it: a
+`shrink: 0` that is load-bearing is a fault waiting behind a green. On that page no budget anyone
+proposed was small enough — 78 and 60 characters both wrap to four lines where three is the most that
+leaves the caption alive — and three independent arithmetic models agreed on a figure the browser
+contradicted.
+
+**Pinning a box is two decisions, and a design records it as one.** `shrink: 0` says this box does not
+yield. It also says this box will not shrink its own type, because those are the same mechanism seen
+from either end: the fitter asks whether a box's content exceeds the box, and a pinned box with no
+stated height *is* its content, so it is asked whether it fits inside itself and always answers yes.
+`nyu-elegant`'s quote body sits 69px past its parent reporting full scale and no overflow. Before it was
+pinned it shrank its type to 80%, which every check could see. Pinning it did not make it fit — it
+removed it from the fitter's reach, and the overflow it used to absorb by shrinking now lands on the
+sibling.
+
+So a design that names a holder has also, silently, exempted it from the one mechanism that would have
+reported the problem. **Both halves belong in whatever a template says about that box, and only one of
+them is written down today.**
 
 **A collapsed box is the failure mode to name, because it is the one that looks like a decision.** A box shrunk to nothing renders as a design with fewer elements, not as a broken one: no clipping, no overlap, nothing off the slide. The graphic that vanishes carries no text, so no rule that reads text can see it go.
 
@@ -489,9 +555,160 @@ Measured: 0 of `nyu-elegant`'s 36 per-box budgets are recomputable, against 34 o
 
 The gap is documented honestly in the check's own prose, which is why it is a requirement rather than a bug — and the prose also records the moment it was nearly closed. Resolving the trees with empty content produced thirty-six disagreements, "body boxes reported at four hundredths of the slide's height — flow boxes collapsed for want of anything to hold", and these were set aside as false findings "against a design that is fine". The collapse was real; the design was not fine. The reasoning was correct about the cause and wrong about the conclusion, and it pointed the instrument away from the exact failure it had just produced.
 
-**So a check states, in its result and not only in its prose, how much it examined.** A case that reaches nothing reports that it reached nothing and fails or skips explicitly, rather than passing. Coverage is part of the result: "34 of 34 budgets recomputed" and "0 of 36" are different outcomes and must not print the same word.
+**So a check states, in its result and not only in its prose, how much it examined.** Coverage is part of the result: "34 of 34 budgets recomputed" and "0 of 36" are different outcomes and must not print the same word.
+
+**The quantity that matters is what was declared and not reached, rather than what was reached.** `classic`, `midnight` and `seminar` each recompute 0 of 0 — they declare no per-box budgets, so there is nothing to examine and nothing is hidden. `nyu-elegant` recomputes 0 of 36. Both read as zero coverage and only one is a hole, so a rule written against "reached nothing" faults three designs for a condition that is not the defect. What separates them is budgets declared on layouts the check cannot read, which is a number the check already computes.
 
 **And a flow design's budgets are verified against a resolved layout with every box filled**, which is the rectangle those budgets are actually promises about — the same fill-them-all walk [TMPL-19](#tmpl-19-a-box-holds-its-budget-while-its-neighbours-hold-theirs) requires. Empty content is what made the earlier attempt unreadable; content at the budgets is what the budgets describe.
+
+**The resolver that check runs on must model the failure it is looking for.** The app already has a
+headless resolver of tree geometry — `resolveTreeBoxes`, used by the exporters — and filling every box
+to its budget through it picks out the same four over-full layouts a browser does. It models `grow` and
+does **not** model `shrink`: on overflow it leaves every child at its natural height and lets the column
+overrun. So it can say a set does not fit, and it can never reproduce a collapse. Asked about
+`nyu-elegant`'s closing caption it reports the box at its natural 5.94cqi, where the browser draws
+2.48px.
+
+A check built on it would therefore examine every one of the 36 budgets this requirement exists to
+reach, report full coverage, and **pass on the design whose collapse prompted the requirement** — the
+same defect as the 0-of-36 green, one layer down and harder to see, because this time the check really
+did run. **A check's coverage and its sensitivity are separate claims and both have to be made.**
+
+**And the blindness has a pattern: every model we check designs with is exact on the healthy case and
+blind on the failing one.** Three instruments, found separately in one day, turned out to be one defect
+with three faces.
+
+- `resolveTreeBoxes` models `grow` and not `shrink` — right until a column runs out of room.
+- `useFitText` never measures a box with no `clientHeight` — right until a box is crushed.
+- `inkBoxOf` predicts where ink would go, not where it went — accurate on a box with room, wrong by a
+  factor of ten on a clipped one, reporting a 9.25pt overlap where a pixel count found a 4.43pt gap.
+
+This is not coincidence. Each models the design **as drawn**, and drawing is defined on a canvas that
+does not run out. Every failure worth catching happens at the boundary, and the boundary is the one
+thing none of them represents. So a model is evidence about a design with room and a hypothesis about a
+design without one, and **a check aimed at an over-full box needs an instrument that measures the
+surface rather than predicts it** — a browser, or pixels.
+
+**And a measurement of a design is a measurement of a version of it.** Four wrong numbers in one day
+came from the same place: a probe reading budgets from the working tree while the server drew boxes from
+elsewhere; a sweep whose baseline was measured against a template three people were committing to; two
+separate reports of a design's state that had moved two commits before they were read. Every one looked
+exactly like a sound result, because each was — of a file that no longer existed.
+
+The rule the failures share is narrow enough to act on: **an instrument may report a difference across
+configurations and must not report a level across time.** Every row of one sweep is measured in one page
+load against one tree, so differences between rows survive whatever the tree was; only a figure that has
+to hold across runs needs the version pinned. So a measurement carries the hash of what it measured, and
+a number quoted without one is a number about an unknown file.
+
+That reaches work already shipped. The audit's overlap rule is decided on `inkBoxOf`
+([TMPL-16](#tmpl-16-a-slot-says-what-it-can-hold)), and overlap exists for imports, which arrive as full
+as their author made them — the case where that instrument is least reliable.
+
+Reaching a box is not the same as being able to see it fail, and an instrument blind to the failure mode
+reports the same green as a design that does not have it.
+
+#### TMPL-21 Decoration carries its text
+
+[TMPL-14](#tmpl-14-a-design-may-draw-its-own-text) says a design's decoration may carry words. Nothing implements it. `LayoutDecoration` is `x/y/w/h/shape/fill/imageUrl/radius`, so a design that needs to draw a word has no field to put it in, and two boxes in a shipped built-in are sitting in that gap right now.
+
+**The eyebrow.** NYU Elegant's source draws `P A R T   0 1` at the top left of **eleven of its thirteen pages** — 0.97cqi Montserrat bold, letterspaced, `#9a6aba`, at x 0.037 y 0.049. It is on none of ours. It is the deck's most repeated mark after its logo and it is identical on every slide of a layout, so by TMPL-14's own rule it is decoration in the plainest possible way.
+
+**The numerals, which are the harder case.** The same deck's `image-list` page carries three notes, each headed `0 1 .`, `0 2 .`, `0 3 .`, letterspaced Montserrat bold in `#57068c` above a note set in `#333333`. The obvious reading is that they vary, so they are content and want a slot. **That reading is wrong, and it is TMPL-14's own warning running the other way.** The rule is *the same on every slide the layout produces*. These vary across the three positions within one layout and do not vary between slides — note 1 reads `0 1 .` on every slide anybody ever builds from `image-list`. A slot would put an editable box on the slide where the design meant a printed numeral.
+
+**So a piece of decoration may carry text**: a string with its own face, size, weight, colour, letter-spacing and alignment, drawn where a band or a logo is drawn. Never editable, never offered to the AI, never counted toward any slot's budget, identical on every slide built on that layout.
+
+**The touch list is wider than it looks, and every entry is a place the text can silently vanish:**
+
+- `LayoutDecoration` gains the text and its type fields, and `templateFileSchema` accepts them.
+- `FlowLayout` returns early for a node with no slot and renders `<div aria-hidden>` carrying `surfaceStyle` alone; `before`/`after` are drawn twenty lines further down and are unreachable for such a node. **There is no path today by which a slotless node draws a character.** `PositionedLayout` maps decoration separately and has the same gap.
+- Both exporters read decoration through `deck-layout.ts`, where a piece with no slot becomes `kind: 'rule'` — a rectangle and a colour. A text piece needs a box kind of its own or it exports as a coloured bar.
+- `build-template.ts` drops any decoration piece with neither a fill nor a stored picture, so **an imported text ornament is erased one stage after it is demoted.** That is why the importer's own ornament test could not assert the demotion: a green there would have meant nothing.
+
+**A second problem that is NOT this one and must not be folded into it.** The numerals are `#57068c` directly above note text in `#333333`, **inside one box in the source**. Our model gives a box one colour — `deck-layout.ts` takes the first run's colour and draws every run in it, the same limitation the link-colour work met. So the eyebrow needs fixed layout text and is satisfiable here; the numerals additionally need per-run colour within a box, or modelling as one decoration piece per row, which is available once this lands and is probably right — but only because the design puts them on their own line. **A design running a coloured figure inline in a sentence stays inexpressible.**
+
+**What a partial implementation costs, since the temptation is real.** `LayoutNode.before` already prints literal characters — the quotation marks a quote layout wraps its body in. Putting `0 1 . ` there renders it inline, in the note's grey, on the note's first line. It would look deliberate and be wrong twice over, which by TMPL-14's framing is the expensive kind: it passes accounting, passes every geometry rule, and renders a design nobody drew.
+
+#### TMPL-22 An export draws what the renderer draws
+
+A deck exported to PDF or PowerPoint is the same design the screen shows. Where the two disagree, the export is wrong, because the screen is where the design was authored and checked.
+
+They disagree today, on every tree-stated layout that overflows. `resolveTreeBoxes` — the geometry both writers use — distributes free space only when there is surplus. On overflow it leaves every child at its natural height and lets the column overrun, because it models `grow` and not `shrink`. The renderer does the opposite: `FlowLayout` sets `minHeight: 0` on every flow child and lets CSS compress them.
+
+Measured, with every box filled to its own stated budget:
+
+- `classic/list` — bullets from y 0.284 to **1.237**
+- `classic/two-column` — body to **1.311**, image to **1.154**
+- `midnight/list`, `midnight/two-column`, `seminar/list`, `seminar/two-column` — identical
+
+Six layouts across three designs put content **up to 31% of the slide height below the bottom edge** of an exported file, at budgets those designs declare. On screen the same boxes are shrunk to fit and stay on the slide.
+
+**What makes this a requirement rather than a bug is that nothing we have can see it.** The [TMPL-19](#tmpl-19-a-box-holds-its-budget-while-its-neighbours-hold-theirs) arithmetic does not reach it — `two-column` is a grid root, one of the fifty shipped layouts that check reports as unreachable. The browser walk does not reach it either, because the browser is the surface where the box is correctly shrunk. **The defect lives in the one place neither instrument looks**, and it surfaced only because somebody pointed the export resolver at content and read the numbers.
+
+**So the export path is checked against the render path**, and no resolved box leaves the slide when a column is over-full. That assertion is the one that would have caught this.
+
+**A note for whoever takes this.** The six layouts are on `classic`, `midnight` and `seminar` — the
+three designs that name no typeface — so the geometry measured here is against whichever face the
+measuring machine resolved, and the work is entangled with
+[TMPL-17](#tmpl-17-a-design-that-names-no-face-is-measured-against-none) exactly as those designs' list
+budgets are.
+
+**This does not close [TMPL-20](#tmpl-20-a-flow-designs-budgets-are-checked-or-the-check-says-they-are-not), and a change here must not be sold as closing it.** A shrink-aware resolver would report NYU Elegant's closing caption at 2.48px — correct — and still say nothing about the type having gone to the renderer's 40% floor, because seven of that design's nine recorded faults are `useFitText` outcomes measured off live `scrollHeight`/`clientHeight`, two need glyph metrics, and line counts are estimated from an average character width with no font engine. It would see the collapse and not the consequence.
+
+#### TMPL-23 The overhang allowance reaches only boxes that need it and can use it
+
+A box led below its face's natural line box hangs ink outside that box at every type size, so the fitter grants it `SLACK_EM` — a quarter of an em — before it shrinks anything. Without that allowance the search chases an overrun it can never clear and takes a title to two fifths. The allowance is right and the rule around it is stated in `TIGHT_LEADING`'s own docstring:
+
+> A box set **at or above** its face's natural box contains its own glyphs, so it needs no allowance; one set below does not shrink its letters to match. Only such a box is given room. Everywhere else the tolerance stays at the pixel of rounding it began as — otherwise a quarter of an em of slack on body text hides a genuinely clipped line.
+
+**The code admits the one case that paragraph excludes.** `NATURAL_LINE_BOX` is 1.196 and `TIGHT_LEADING` is 1.2. The test is `leading >= TIGHT_LEADING → 1`, so a box led at **exactly its face's natural line box** fails `1.196 >= 1.2` and receives the full quarter-em. A box at its natural line box has no overhang to tolerate — that is what the natural line box means — and it is the one box guaranteed room for one. The four thousandths are not a margin around the rule; they are a window admitting its own counterexample. `nyu-elegant`'s `statNumber` sits in that window today, at 41.5px of allowance on a box that needs none.
+
+**And the allowance is granted on the authority of a mechanism that does not always run.** Its justification is to match the fitter, but a box pinned `shrink: 0` never reaches the fitter at all ([TMPL-19](#tmpl-19-a-box-holds-its-budget-while-its-neighbours-hold-theirs)) — it is asked whether it fits inside itself and always answers yes. So the gate extends a tolerance to boxes the tolerance cannot help, and a clip inside that band is invisible: measured on the same box before its leading was reverted, a **23px clip sat inside a 41.5px allowance and was not reported.**
+
+The two halves are independent and neither implies the other — one is about which boxes qualify, the other about which boxes the allowance can help — and both point the same way. **So the allowance is granted only where a box's leading is genuinely below its face's natural box, and only where the mechanism it defers to actually runs.**
+
+**A clean measurement does not close this.** Asking whether anything is hiding in a given band today answers whether a design happens to exercise the hole, not whether the hole is there. That distinction is the subject of [TMPL-20](#tmpl-20-a-flow-designs-budgets-are-checked-or-the-check-says-they-are-not) and it applies to its own gate.
+
+**Nothing currently catches it.** `tight-leading-budget.test.ts` pins the mechanism *relative* to the constant — it compares `TIGHT_LEADING - 0.001` against `TIGHT_LEADING` — so it passes at any value the constant takes. It proves the allowance is applied consistently and says nothing about whether the boundary is in the right place. A test written against a constant cannot check the constant.
+
+**Fixing it changes a shipped design, and the fix has to carry that.** `nyu-elegant`'s big figure is
+led at 1.196 and pinned `shrink: 0` — both halves of this requirement on one box, found independently
+from opposite ends. It receives the allowance today. Key the threshold off `NATURAL_LINE_BOX` and it
+stops qualifying, so **the geometry of a shipped layout moves without anyone editing the template**: a
+change to a constant in `shared/` silently redraws a design nobody in that change is looking at. Whether
+the move is visible is a measurement and not an inference, and it must be taken before the fix lands,
+not after. **Measured, and it is not a redraw — it is a collapse.** Same box, same eight-character content, the
+two leadings four thousandths apart and nothing else changed:
+
+    lineHeight 1.196   scale 1.0000   drawn 165.9px   client 198  scroll 206   slack 41.5px
+    lineHeight 1.200   scale 0.4000   drawn  66.4px   client  80  scroll  82   slack  1.0px
+
+The design's largest element goes to **40% of its size**, and it stops there because it has hit
+`MIN_SCALE`, not because it fits — at the floor it is still 2px over. Every check stays green, because a
+scale of 0.4000 is the fitter working exactly as designed.
+
+**And the box is already faulty, which is the finding under the finding.** `clientHeight 198,
+scrollHeight 206`: the figure overflows its own rectangle by 8px at its own stated budget, today, on a
+shipped design. By [TMPL-12](#tmpl-12-every-shipped-design-holds-what-it-says-it-holds) the design does
+not hold what it says it holds. It draws only because the allowance catches it — **the gate is not blind
+here, it is holding a broken box up** — and that is true whatever happens to any threshold.
+
+So the box is repaired before the threshold is, and repairing it is what makes the threshold safe to
+change: **a box that fits unaided does not care where the boundary sits.**
+
+**The two halves are not symmetric, and the measurement is what shows it.** The window is not a hole
+that happens to have a box sitting in it — **the box has been standing on the hole.** That figure has
+never fitted its own rectangle, before this branch as well as after, and it draws only because the
+allowance covers it. So moving the boundary first would not risk a landmine, it would detonate one: the
+box that loses its allowance is the box currently depending on it. Repairing the box is a precondition
+for changing the constant, not an alternative to it.
+
+**And the check written for exactly this class does not reach it.** The [TMPL-19](#tmpl-19-a-box-holds-its-budget-while-its-neighbours-hold-theirs)
+arithmetic measures a column against its children; this overflow is inside one box's own line box — a
+box against itself, not against its siblings. It is not a column-level fact at all, so that check is not
+too coarse for it, it is aimed at the wrong axis.
+
+**Blast radius, measured.** Moving the boundary to `NATURAL_LINE_BOX` removes the allowance from boxes led at exactly 1.196: in the shipped designs that is `nyu-elegant.statNumber` and nothing else, since every other exposed role is genuinely below it — title 0.95, sectionTitle 0.95, quote 1.05, statLabel 1.1, `nyu-bold.title` 0.957. Only `nyu-bold` and `nyu-elegant` name faces at all; the three that name none sit at the pixel floor and are unaffected. The reason to do it is that the constant should mean what its docstring says, not the one box it currently moves — and an imported design led at its natural box would land in the same window, which matters now that import reads leading from the source.
 
 ### 8. Live Lecture Capture
 
