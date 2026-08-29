@@ -10,13 +10,31 @@
  * measured on entry and reserved as the field's minimum size, so
  * swapping between the two never shifts the slide layout.
  */
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
+import Portal from './Portal'
+
+/** Space between the field and its hint, and from the viewport's edges. */
+const HINT_GAP = 4
+
+/** Narrow fields get a readable hint rather than one word per line. */
+const HINT_MIN_WIDTH = 180
 
 interface Props {
   value: string
   /** Accessible name, e.g. "Slide title" or "Bullet 2". */
   label: string
   onSave: (value: string) => void
+  /** The value may hold line breaks of its own: Enter types one rather than
+   * finishing the edit, and pasted newlines are kept rather than flattened
+   * into spaces. Not what picks the element — every field that wraps is a
+   * textarea, one-line values included. */
   multiline?: boolean
   /** Formatted display of the value; editing always shows the raw source. */
   renderValue?: (value: string) => ReactNode
@@ -33,7 +51,8 @@ interface Props {
   debounceMs?: number
   /** Ellipsize the display when it outgrows the space it is given, for a
    * title in a narrow header. Off by default: text that wraps over several
-   * lines (slide bullets) must keep wrapping. Editing is unaffected. */
+   * lines (slide bullets) must keep wrapping. The field follows: a display
+   * that ellipsizes is edited on one line, one that wraps is edited wrapped. */
   truncate?: boolean
   /**
    * Edit the value as source rather than as prose (EDIT-7): a monospaced
@@ -86,6 +105,19 @@ export default function EditableText({
     h: number
   } | null>(null)
   const displayRef = useRef<HTMLSpanElement>(null)
+  // Both elements are state, not refs, so the placement effect below re-runs
+  // when they appear: a ref object is only ever filled in, and nothing
+  // re-renders when it is.
+  const [fieldEl, setFieldEl] = useState<
+    HTMLInputElement | HTMLTextAreaElement | null
+  >(null)
+  const [hintEl, setHintEl] = useState<HTMLElement | null>(null)
+  const [hintBox, setHintBox] = useState<{
+    top: number
+    left: number
+    width: number
+  } | null>(null)
+  const hintId = useId()
   const originalRef = useRef(value)
   const lastSavedRef = useRef(value)
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -103,6 +135,51 @@ export default function EditableText({
     return () => clearTimeout(timerRef.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, editing, debounceMs])
+
+  /*
+   * Puts the hint under the field, in viewport coordinates.
+   *
+   * It is drawn through a portal (see the render below), so it has no ancestor
+   * to be positioned against and no ancestor to be clipped by — which is the
+   * point. Position: fixed, re-read whenever the field moves, whenever either
+   * element resizes, and on any scroll, since the deck and the list view both
+   * scroll under it.
+   *
+   * A layout effect: the placement has to be applied in the frame the hint
+   * first paints, or it appears in the corner and jumps.
+   */
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useLayoutEffect(() => {
+    if (!editing || !hint || !fieldEl) return
+    const place = () => {
+      const box = fieldEl.getBoundingClientRect()
+      const height = hintEl?.offsetHeight ?? 0
+      // Under the field, unless the viewport has no room left there — a box
+      // at the bottom of the screen puts its hint above itself instead.
+      const below = box.bottom + HINT_GAP + height <= window.innerHeight
+      setHintBox({
+        top: below
+          ? box.bottom + HINT_GAP
+          : Math.max(HINT_GAP, box.top - HINT_GAP - height),
+        left: box.left,
+        width: box.width,
+      })
+    }
+    place()
+    const resize = new ResizeObserver(place)
+    resize.observe(fieldEl)
+    if (hintEl) resize.observe(hintEl)
+    // Capturing, so a scroll in any container between here and the document
+    // is seen and not just one on the window.
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    return () => {
+      resize.disconnect()
+      window.removeEventListener('scroll', place, true)
+      window.removeEventListener('resize', place)
+    }
+  }, [editing, hint, fieldEl, hintEl])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const startEditing = () => {
     // Reserve the rendered box so the source field can't shrink the layout
@@ -175,8 +252,18 @@ export default function EditableText({
     value: draft,
     autoFocus: true,
     'aria-label': label,
+    ref: (node: HTMLInputElement | HTMLTextAreaElement | null) =>
+      setFieldEl(node),
+    // The hint is drawn elsewhere in the document, so the field has to name
+    // it: a portal breaks the reading order that would otherwise carry it.
+    'aria-describedby': hint ? hintId : undefined,
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-      setDraft(e.target.value),
+      // A one-line value stays one line even when the field it is typed into
+      // could hold two: pasting a paragraph into a title used to be flattened
+      // by the input element itself, and a textarea does not do that for us.
+      setDraft(
+        multiline ? e.target.value : e.target.value.replace(/[\r\n]+/g, ' '),
+      ),
     onBlur: finish,
     onKeyDown: (e: React.KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -220,28 +307,68 @@ export default function EditableText({
     } as React.CSSProperties,
   }
 
-  const field = multiline ? (
-    // As many rows as the text has, no more: a floor of two made a one-line
-    // box taller the moment it was clicked, which moves a box that centres
-    // its contents. `minHeight` already holds the space the box displayed.
-    <textarea rows={Math.max(1, draft.split('\n').length)} {...sharedProps} />
-  ) : (
+  /*
+   * A textarea unless the display truncates, whether or not the value is
+   * multi-line.
+   *
+   * An input never wraps: a title that reads as three lines on the slide
+   * straightened into one long line the moment it was clicked, scrolling
+   * sideways under the cursor, and the box stopped looking like the box. A
+   * textarea wraps the same text the same way, so what is being edited looks
+   * like what was there. Only a box that ellipsizes keeps the input — that
+   * display does not wrap either, so a wrapping field would misrepresent it.
+   *
+   * Rows: as many as the text has, no more. A floor of two made a one-line box
+   * taller the moment it was clicked, which moves a box that centres its
+   * contents, and `minHeight` already holds the space the display took —
+   * including the height of its wrapping.
+   */
+  const field = truncate ? (
     <input {...sharedProps} />
+  ) : (
+    <textarea rows={Math.max(1, draft.split('\n').length)} {...sharedProps} />
   )
   if (!hint) return field
-  // The hint sits OUT of the flow, under the field.
-  //
-  // In flow it made the content taller the moment editing began, and a box
-  // that centres its contents vertically — which an imported design's title
-  // usually does — pushed the words up and out from under the reader, then
-  // dropped them back when editing ended. A box is where its design put it,
-  // and typing in it is not a reason to move it.
+  /*
+   * The hint is drawn OUT of the slide entirely, and placed over it.
+   *
+   * It cannot live in the box it describes. A slide box clips what it holds
+   * (`overflow-hidden`) and is sized by its design, so a hint under a field
+   * that already fills the box was cut in half or lost. Taking it out of the
+   * flow was not enough either: absolutely positioned or not, it still counted
+   * as the box's content, so `useFitText` saw a box overflowing by the height
+   * of the hint and shrank the type to the floor to try to fit it — a box was
+   * clipped AND its words went tiny the moment the cursor entered it.
+   *
+   * So it goes to the document root through a portal and is positioned against
+   * the field's own rectangle. Nothing between it and the document can clip it
+   * and nothing measures it, which is the whole of what it needs.
+   *
+   * It is chrome now rather than slide content: a fixed small size that stays
+   * readable however small the slide is drawn, a dark chip so it reads over
+   * any theme's background, and no pointer events — clicking it would blur the
+   * field it describes and end the edit.
+   */
   return (
-    <span className="relative inline-block w-full">
+    <>
       {field}
-      <span className="absolute top-full left-0 mt-[0.6cqi] block text-[1.4cqi] leading-snug opacity-60">
-        {hint}
-      </span>
-    </span>
+      <Portal>
+        <span
+          id={hintId}
+          ref={setHintEl}
+          className="pointer-events-none fixed z-20 rounded bg-slate-900/90 px-1.5 py-0.5 text-xs leading-snug text-white shadow-sm"
+          style={{
+            top: hintBox?.top ?? 0,
+            left: hintBox?.left ?? 0,
+            width: 'max-content',
+            maxWidth: Math.max(hintBox?.width ?? 0, HINT_MIN_WIDTH),
+            // Placed before it paints; until then it has nowhere to be.
+            visibility: hintBox ? 'visible' : 'hidden',
+          }}
+        >
+          {hint}
+        </span>
+      </Portal>
+    </>
   )
 }
