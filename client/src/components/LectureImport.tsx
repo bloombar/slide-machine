@@ -33,7 +33,9 @@ import { dispatchAction } from '../api/actions'
 import { ApiError } from '../api/http'
 import { apiErrorMessage } from '../i18n/apiError'
 import { isPptx, readAsBase64 } from '../lib/import-file'
-import { importSourceFrom } from './template/TemplateImport'
+import { importSourceFor } from './template/TemplateImport'
+import DrivePicker from './DrivePicker'
+import type { PickedDriveItem } from '../lib/google-picker'
 
 export default function LectureImport({
   projectId,
@@ -56,13 +58,15 @@ export default function LectureImport({
   onClose: () => void
 }) {
   const { t } = useTranslation()
-  const [link, setLink] = useState('')
+  /** The presentation chosen in Google's picker, waiting to be imported. */
+  const [picked, setPicked] = useState<PickedDriveItem | null>(null)
+  const [picking, setPicking] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [needsGoogle, setNeedsGoogle] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
 
-  const source = importSourceFrom(link)
+  const source = picked ? importSourceFor(picked) : null
 
   /** A lecture this app exported earlier, restored as the lecture it was
    * (EXP-3). No design is derived: the file names the template it wants. */
@@ -148,7 +152,7 @@ export default function LectureImport({
       },
     )
       .then(result => {
-        setLink('')
+        setPicked(null)
         // Handed over rather than shown here: the panel closes on success, so
         // what happened has to survive it.
         onImported(result)
@@ -174,8 +178,12 @@ export default function LectureImport({
       .finally(() => setBusy(false))
   }
 
-  /** Sends the instructor through Google's consent screen and back here. */
-  const connect = () => {
+  /** Sends the instructor through Google's consent screen and back here. *
+   * `onConnected` runs when the connect completed without leaving the page —
+   * mock mode, or an account that was already connected — so the picker that
+   * sent us here can open again rather than making the instructor find it.
+   */
+  const connect = (onConnected?: () => void) => {
     setBusy(true)
     setError(null)
     dispatchAction<{ status: string; url?: string }>('quiz.connectGoogle', {
@@ -186,6 +194,7 @@ export default function LectureImport({
         else {
           setNeedsGoogle(false)
           setBusy(false)
+          onConnected?.()
         }
       })
       .catch(() => {
@@ -203,18 +212,23 @@ export default function LectureImport({
         {t('lecture.importSlides.description')}
       </p>
 
-      <form onSubmit={submit} className="mt-3 flex flex-wrap gap-2">
-        <label className="sr-only" htmlFor="lecture-import-link">
-          {t('lecture.importSlides.linkLabel')}
-        </label>
-        <input
-          id="lecture-import-link"
-          type="text"
-          value={link}
-          onChange={e => setLink(e.target.value)}
-          placeholder={t('lecture.importSlides.linkPlaceholder')}
-          className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-sm"
-        />
+      <form
+        onSubmit={submit}
+        className="mt-3 flex flex-wrap items-center gap-2"
+      >
+        {/* Google's picker does the browsing: the app holds only `drive.file`
+            and cannot list a Drive, and choosing the presentation is what
+            lets it read that one file. */}
+        <button
+          type="button"
+          onClick={() => setPicking(true)}
+          className="inline-flex min-w-0 items-center gap-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          <Upload className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="truncate">
+            {picked ? picked.name : t('lecture.importSlides.choose')}
+          </span>
+        </button>
         <button
           type="submit"
           disabled={!source || busy}
@@ -233,18 +247,30 @@ export default function LectureImport({
         </button>
       </form>
 
-      {/* Said only once something has been typed, so an empty field is not an
-          error the instructor has not made yet. */}
-      {link.trim() && !source && (
-        <p className="mt-2 text-sm text-slate-500">
-          {t('template.import.errors.link')}
-        </p>
+      {picking && (
+        <DrivePicker
+          kind="importable"
+          title={t('lecture.importSlides.choose')}
+          onPick={item => {
+            setPicked(item)
+            setPicking(false)
+            setError(null)
+          }}
+          onCancel={() => setPicking(false)}
+          // The picker cannot list a Drive this account has not granted, so
+          // the reconnect closes it and opens it again once the grant is in
+          // place — rather than leaving an error where the files should be.
+          onReconnect={() => {
+            setPicking(false)
+            connect(() => setPicking(true))
+          }}
+        />
       )}
 
       {needsGoogle && (
         <button
           type="button"
-          onClick={connect}
+          onClick={() => connect()}
           disabled={busy}
           className="mt-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700"
         >

@@ -1,7 +1,7 @@
 /**
  * Quiz tab end to end (QUIZ-1..6): an instructor opens a lecture's settings,
  * connects Google, generates a quiz (optionally folding in the transcript),
- * creates a Drive folder to save it in, gets a shareable Form URL with a
+ * chooses a Drive folder to save it in, gets a shareable Form URL with a
  * working copy button, and can delete the quiz. The Google side is mock-backed
  * (QUIZ_PROVIDER=mock), so the full flow runs with the live front/back end and
  * test DB.
@@ -56,13 +56,16 @@ test('generate and publish a quiz from lecture settings', async ({ page }) => {
   await expect(includeTranscript).toBeVisible()
   await includeTranscript.check()
 
-  // Create a new destination folder; the finder steps into it, and we save there
-  await picker.getByRole('button', { name: 'New folder' }).click()
-  await picker.getByLabel('New folder name').fill('E2E Quizzes')
-  await picker.getByRole('button', { name: 'Create' }).click()
-  await expect(
-    picker.getByRole('button', { name: 'E2E Quizzes' }),
-  ).toBeVisible()
+  // Choose a destination folder. With no Google configured this opens the
+  // app's own dialog over the mock Drive; live it is Google's Picker, which a
+  // browser test cannot drive.
+  await picker.getByRole('button', { name: 'Change' }).click()
+  const drive = page.getByRole('dialog', { name: 'Choose from Google Drive' })
+  await drive.getByRole('button', { name: 'Quizzes' }).click()
+  await drive.getByRole('button', { name: 'Choose this folder' }).click()
+  // The footer, not the destination row: both name the folder, and the
+  // footer is the one that states where the Form will actually land.
+  await expect(picker.getByText(/Saving to:\s*Quizzes/)).toBeVisible()
 
   await picker.getByRole('button', { name: 'Generate & save' }).click()
 

@@ -6,9 +6,10 @@
  * could not already: hand back the bytes of a file the user can see. Listing
  * and folder creation live in `quiz-google.ts`; this is the read.
  *
- * The account already grants `drive.readonly`, which is what the Slides import
- * uses, so nothing here asks a user to reconnect (P-5: reads are read-only and
- * never modify the source file).
+ * The file arrives from Google's Picker, and picking it is what grants this
+ * app access to it under `drive.file` — the app has no standing access to the
+ * rest of the Drive and cannot list it (P-5: reads are read-only and never
+ * modify the source file).
  */
 
 /** A Drive read that could not be completed, with whether reconnecting helps. */
@@ -60,24 +61,6 @@ const refusedRead = (
         false,
         true,
       )
-
-/**
- * The file id inside whatever the instructor pasted.
- *
- * A Drive file URL is `/file/d/<id>/view`; a link from some other corner of
- * Drive carries it as `?id=`. A bare id is accepted too, since that is what
- * someone who knows the system will paste. Anything else is refused here so
- * the complaint is about the link rather than a confusing 404 from Google.
- */
-export const driveFileIdFrom = (input: string): string | null => {
-  const text = input.trim()
-  if (!text) return null
-  const fromUrl = /\/file\/d\/([a-zA-Z0-9_-]+)/.exec(text)
-  if (fromUrl) return fromUrl[1]!
-  const fromQuery = /[?&]id=([a-zA-Z0-9_-]+)/.exec(text)
-  if (fromQuery) return fromQuery[1]!
-  return /^[a-zA-Z0-9_-]{10,}$/.test(text) ? text : null
-}
 
 /** How much of a file will be read. A template export is a few kilobytes of
  * YAML; anything approaching this is not one, and reading it would be a way

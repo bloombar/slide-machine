@@ -5,7 +5,8 @@
  *   - PDF and YAML can be downloaded directly, or saved to Google Drive.
  *   - Google Slides is always created in the connected Google Drive.
  * Saving to Drive (and Google Slides) first connects a Google account if
- * needed, then opens a finder-style folder picker to choose the destination.
+ * needed, then opens Google's own picker to choose the destination folder
+ * (DrivePicker).
  * The server runs the Google side mock- or live-backed per config; this UI is
  * identical either way.
  */
@@ -13,15 +14,11 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Check,
-  ChevronRight,
   Download,
   ExternalLink,
   FileText,
-  Folder,
-  FolderPlus,
   Presentation,
   Trash2,
-  X,
 } from 'lucide-react'
 import type {
   DeckExportFormat,
@@ -45,8 +42,8 @@ import { dispatchAction } from '../api/actions'
 // the hook's `t` is (which changes identity on every language switch,
 // and would re-run the fetch).
 import { t as translate } from '../i18n'
-import Portal from './Portal'
 import ConfirmDialog from './ConfirmDialog'
+import DrivePicker from './DrivePicker'
 
 interface Props {
   deckId: string
@@ -103,262 +100,6 @@ const saveToDisk = (file: ExportDownload): void => {
   // Defer the revoke: some browsers read the blob asynchronously after the
   // click, and revoking on the same tick can produce an empty download.
   setTimeout(() => URL.revokeObjectURL(url), 0)
-}
-
-/**
- * Finder-style Google Drive folder browser: navigate into folders via the
- * breadcrumb, create new ones, and export into whichever folder you're in.
- * Reuses the quiz feature's Drive actions (a Google connection is all they
- * need).
- */
-export function FolderPicker({
-  formatLabel,
-  saving,
-  onCancel,
-  onChoose,
-  onReconnect,
-}: {
-  formatLabel: string
-  saving: boolean
-  onCancel: () => void
-  onChoose: (folder: DriveFolder) => void
-  onReconnect: () => void
-}) {
-  const { t } = useTranslation()
-  // Rooted at My Drive — a Google product name, so it is not translated.
-  const [path, setPath] = useState<DriveFolder[]>([
-    { id: 'root', name: 'My Drive' },
-  ])
-  const [folders, setFolders] = useState<DriveFolder[]>([])
-  const [loadedFor, setLoadedFor] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [newFolderName, setNewFolderName] = useState('')
-  const [creatingNew, setCreatingNew] = useState(false)
-  const [creating, setCreating] = useState(false)
-
-  const current = path[path.length - 1]!
-
-  useEffect(() => {
-    let ignore = false
-    dispatchAction<{ folders: DriveFolder[] }>('quiz.driveFolders', {
-      parentId: current.id,
-    })
-      .then(r => {
-        if (ignore) return
-        setFolders(r.folders)
-        setLoadedFor(current.id)
-        setError(null)
-      })
-      .catch(() => {
-        if (!ignore) {
-          setError(translate('quiz.errors.loadFolders'))
-        }
-      })
-    return () => {
-      ignore = true
-    }
-  }, [current.id])
-
-  const loading = loadedFor !== current.id
-
-  const openFolder = (f: DriveFolder) => {
-    setCreatingNew(false)
-    setPath(p => [...p, f])
-  }
-  const goTo = (index: number) => {
-    setCreatingNew(false)
-    setPath(p => p.slice(0, index + 1))
-  }
-
-  const createFolder = () => {
-    const name = newFolderName.trim()
-    if (!name) return
-    setCreating(true)
-    setError(null)
-    dispatchAction<DriveFolder>('quiz.createFolder', {
-      name,
-      parentId: current.id,
-    })
-      .then(folder => {
-        setNewFolderName('')
-        setCreatingNew(false)
-        openFolder(folder)
-      })
-      .catch(() => setError(t('quiz.errors.createFolder')))
-      .finally(() => setCreating(false))
-  }
-
-  return (
-    <Portal>
-      <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
-        <div
-          aria-hidden
-          onClick={onCancel}
-          className="absolute inset-0 bg-black/30"
-        />
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={t('quiz.folder.dialog')}
-          className="relative flex max-h-[85vh] w-full max-w-md flex-col rounded-lg bg-white p-6 shadow-xl"
-        >
-          <header className="mb-3 flex items-start justify-between">
-            <h2 className="text-lg font-bold">
-              {t('export.folder.title', { format: formatLabel })}
-            </h2>
-            <button
-              aria-label={t('common.close')}
-              onClick={onCancel}
-              className="rounded p-1 text-slate-400 hover:text-slate-700"
-            >
-              <X className="h-5 w-5" aria-hidden />
-            </button>
-          </header>
-
-          <div className="flex-1 overflow-y-auto pr-1">
-            <nav
-              aria-label={t('quiz.folder.path')}
-              className="mb-2 flex flex-wrap items-center gap-0.5 text-sm text-slate-600"
-            >
-              {path.map((f, i) => (
-                <span key={f.id} className="flex items-center gap-0.5">
-                  {i > 0 && (
-                    <ChevronRight
-                      className="h-3.5 w-3.5 text-slate-400"
-                      aria-hidden
-                    />
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => goTo(i)}
-                    disabled={i === path.length - 1}
-                    className="rounded px-1 hover:text-slate-900 disabled:font-semibold disabled:text-slate-900"
-                  >
-                    {f.name}
-                  </button>
-                </span>
-              ))}
-            </nav>
-
-            <div className="max-h-44 min-h-[6rem] overflow-y-auto rounded-md border border-slate-200">
-              {error ? (
-                <div className="p-3">
-                  <p className="text-sm text-rose-600">{error}</p>
-                  <button
-                    type="button"
-                    onClick={onReconnect}
-                    className="mt-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-slate-50"
-                  >
-                    {t('quiz.reconnect')}
-                  </button>
-                </div>
-              ) : loading ? (
-                <p className="p-3 text-sm text-slate-500">
-                  {t('common.loading')}
-                </p>
-              ) : folders.length === 0 ? (
-                <p className="p-3 text-sm text-slate-400">
-                  {t('export.folder.empty')}
-                </p>
-              ) : (
-                <ul className="divide-y divide-slate-100">
-                  {folders.map(f => (
-                    <li key={f.id}>
-                      <button
-                        type="button"
-                        onClick={() => openFolder(f)}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-start text-sm hover:bg-slate-50"
-                      >
-                        <Folder
-                          className="h-4 w-4 shrink-0 text-indigo-500"
-                          aria-hidden
-                        />
-                        <span className="flex-1 truncate">{f.name}</span>
-                        <ChevronRight
-                          className="h-4 w-4 shrink-0 text-slate-300"
-                          aria-hidden
-                        />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            <div className="mt-2">
-              {creatingNew ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    aria-label={t('quiz.folder.newName')}
-                    autoFocus
-                    value={newFolderName}
-                    onChange={e => setNewFolderName(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && createFolder()}
-                    placeholder={t('quiz.folder.newIn', {
-                      folder: current.name,
-                    })}
-                    className="min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1.5 text-sm"
-                  />
-                  <button
-                    type="button"
-                    disabled={!newFolderName.trim() || creating}
-                    onClick={createFolder}
-                    className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-                  >
-                    {creating ? t('quiz.folder.creating') : t('common.create')}
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={t('quiz.folder.cancelNew')}
-                    onClick={() => {
-                      setCreatingNew(false)
-                      setNewFolderName('')
-                    }}
-                    className="rounded p-1 text-slate-400 hover:text-slate-700"
-                  >
-                    <X className="h-4 w-4" aria-hidden />
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setCreatingNew(true)}
-                  className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:underline"
-                >
-                  <FolderPlus className="h-4 w-4" aria-hidden />
-                  {t('quiz.folder.new')}
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-4 flex items-center justify-between gap-2 border-t border-slate-100 pt-4">
-            <span className="min-w-0 truncate text-xs text-slate-500">
-              {t('quiz.savingTo')}{' '}
-              <span className="font-medium text-slate-700">{current.name}</span>
-            </span>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={onCancel}
-                className="rounded-md px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900"
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => onChoose(current)}
-                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-              >
-                {saving ? t('export.saving') : t('export.saveHere')}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </Portal>
-  )
 }
 
 export default function ExportPanel({ deckId, locale }: Props) {
@@ -787,11 +528,14 @@ export default function ExportPanel({ deckId, locale }: Props) {
       )}
 
       {picking && (
-        <FolderPicker
-          formatLabel={formatLabel}
-          saving={busy}
+        <DrivePicker
+          kind="folder"
+          title={t('export.folder.title', { format: formatLabel })}
+          confirmLabel={t('export.saveHere')}
+          busyLabel={t('export.saving')}
+          busy={busy}
           onCancel={() => setPicking(false)}
-          onChoose={saveToDrive}
+          onPick={saveToDrive}
           onReconnect={connectGoogle}
         />
       )}

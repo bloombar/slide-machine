@@ -238,6 +238,21 @@ const envSchema = z
     TTS_DEFAULT_VOICE: z.string().optional(),
     GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
     GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
+    // Google Picker, the chooser for connected-account Drive files and folders
+    // (docs/GOOGLE_API_KEYS.md §6). The app holds only `drive.file`, which
+    // cannot list a Drive, so the user picks in Google's own widget and the
+    // pick is what grants access to that one file.
+    //
+    // A *browser* API key, published through GET /api/config and therefore not
+    // a secret — restrict it to the Picker API and your own referrers in the
+    // Cloud Console. Absent in live mode → Drive saving and importing report
+    // themselves unavailable rather than opening a chooser that cannot work.
+    GOOGLE_PICKER_API_KEY: z.string().optional(),
+    // The Cloud project NUMBER (not the project id, not the OAuth client id).
+    // Picker sends it as the app id, and it is what ties a picked file's grant
+    // to this OAuth client — get it wrong and the pick succeeds while the
+    // server's later read 404s.
+    GOOGLE_PICKER_APP_ID: z.string().optional(),
     // Public origin the app is reached at, used to build the Google OAuth
     // redirect URI (docs/GOOGLE_SIGN_IN.md) and post-login redirects. Must
     // match a redirect URI registered in the Cloud Console byte-for-byte.

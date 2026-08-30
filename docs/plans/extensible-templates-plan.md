@@ -334,9 +334,9 @@ Two things from that plan this one adopts wholesale:
 
 ### Phase 6 — Authoring
 
-Google Slides import (**TMPL-8**, currently zero code — needs the Slides API and the
-`presentations.readonly` scope already documented at GOOGLE_API_KEYS.md:247) derives layouts,
-geometry, and slots. Two paths, and the second is the one that must work well:
+Google Slides import (**TMPL-8**, currently zero code — needs the Slides API; the scope
+line here is superseded, `presentations.get` accepts the `drive.file` the app already
+holds, see GOOGLE_API_KEYS.md §6) derives layouts, geometry, and slots. Two paths, and the second is the one that must work well:
 
 - **Presentations we exported** carry `slot:<name>` alt-text tokens and the template blob, so
   import is lossless — kinds, descriptions, and limits all survive.

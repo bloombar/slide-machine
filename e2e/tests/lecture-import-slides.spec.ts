@@ -2,12 +2,14 @@
  * Creating a lecture from a Google Slides presentation end to end (EXP-5).
  *
  * The design analysis, the content mapping and the action are covered by unit
- * and integration tests. What only a browser can say is that one paste
+ * and integration tests. What only a browser can say is that choosing one file
  * produces a lecture an instructor can actually open and teach from — with
  * slides drawn in the imported design rather than an empty deck wearing it.
  *
- * Google is mock-backed, so the presentation read is the deliberately messy
- * sample deck (server/src/import/mock-presentation.ts).
+ * Google is mock-backed, so the chooser is the app's own dialog over a
+ * fabricated Drive (live it is Google's Picker, which a browser test cannot
+ * drive), and the presentation read is the deliberately messy sample deck
+ * (server/src/import/mock-presentation.ts).
  */
 import { test, expect } from './fixtures'
 import { createProject } from './helpers'
@@ -17,7 +19,7 @@ const user = { email: `lecimport-${stamp}@example.com`, name: 'Importer' }
 const password = 'sturdy-passw0rd'
 const projectName = `LecImport${stamp}`
 
-test('lecture import: paste a link, get a deck drawn in its own design', async ({
+test('lecture import: pick a presentation, get a deck drawn in its own design', async ({
   page,
 }) => {
   await page.goto('/register')
@@ -33,31 +35,29 @@ test('lecture import: paste a link, get a deck drawn in its own design', async (
 
   // The import stays out of the way until asked for: most visits to a project
   // are not about starting from an existing deck.
-  await expect(page.getByLabel('Google Slides link')).toBeHidden()
+  const choose = page.getByRole('button', { name: 'Choose a presentation' })
+  await expect(choose).toBeHidden()
   await page.getByRole('button', { name: 'Create new' }).click()
   // One import entry: the panel asks which source, rather than the menu.
   await page.getByRole('menuitem', { name: 'Import a lecture' }).click()
+  await expect(choose).toBeVisible()
 
-  const field = page.getByLabel('Google Slides link')
-  await expect(field).toBeVisible()
-
-  // A link that is not one is refused before anything is sent.
-  await field.fill('my lecture deck')
+  // Nothing to import until something is chosen.
   await expect(
     page.getByRole('button', { name: 'Import lecture' }),
   ).toBeDisabled()
 
-  await field.fill(
-    `https://docs.google.com/presentation/d/1AbCdEf${stamp}/edit`,
-  )
-  await page.getByRole('button', { name: 'Import lecture' }).click()
+  // This account has never connected Google, so the first open of the picker
+  // is a missing step rather than a failure — and taking it lands back at the
+  // files rather than at a closed panel.
+  await choose.click()
+  const reconnect = page.getByRole('button', { name: 'Reconnect Google' })
+  await expect(reconnect).toBeVisible({ timeout: 20_000 })
+  await reconnect.click()
 
-  // This account has never connected Google — a missing step rather than a
-  // failure, so the step is offered.
-  const connect = page.getByRole('button', { name: 'Connect Google' })
-  await expect(connect).toBeVisible({ timeout: 20_000 })
-  await connect.click()
-  await expect(connect).toBeHidden({ timeout: 20_000 })
+  const picker = page.getByRole('dialog', { name: 'Choose from Google Drive' })
+  await expect(picker).toBeVisible({ timeout: 20_000 })
+  await picker.getByRole('button', { name: 'Rainwater Harvesting' }).click()
 
   await page.getByRole('button', { name: 'Import lecture' }).click()
 
@@ -66,7 +66,7 @@ test('lecture import: paste a link, get a deck drawn in its own design', async (
   await expect(page.getByText(/10 slides became \d+ layouts/)).toBeVisible({
     timeout: 20_000,
   })
-  await expect(page.getByLabel('Google Slides link')).toBeHidden()
+  await expect(choose).toBeHidden()
 
   // The lecture is real: listed, and it opens with slides already on it —
   // an import that produced an empty deck wearing the design would pass every

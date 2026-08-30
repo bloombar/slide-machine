@@ -457,8 +457,6 @@
       "open": "Importar un diseño",
       "title": "Importar un diseño de Google Slides",
       "description": "Indica una presentación de tu Drive y deduciremos el diseño que hay detrás —colores, tipografía y dónde va cada cosa— y lo guardaremos como una plantilla que puedes editar.",
-      "linkLabel": "Enlace de Google Slides o Drive",
-      "linkPlaceholder": "Pega un enlace de Google Slides o un enlace de Drive a un diseño .yaml",
       "submit": "Importar diseño",
       "tidy": "Combinar diapositivas casi idénticas en un solo diseño",
       "tidyFile": "Reducir la presentación que abras a menos maquetas",
@@ -466,7 +464,6 @@
       "tidyHintFile": "Se aplica a las presentaciones. Una presentación suele repetir un mismo diseño muchas veces; un archivo de diseño no tiene diapositivas que combinar.",
       "working": "Leyendo la presentación…",
       "errors": {
-        "link": "Eso no parece un enlace de Google Slides ni de Drive.",
         "google": "Google no nos dejó leer esa presentación. Comprueba que puedes abrirla tú.",
         "failed": "No se pudo importar esa presentación"
       },
@@ -481,7 +478,8 @@
       },
       "connectPrompt": "Conecta una cuenta de Google para leer una presentación de tu Drive.",
       "connect": "Conectar Google",
-      "otherSources": "O sube un archivo"
+      "otherSources": "O sube un archivo",
+      "choose": "Elegir en Google Drive"
     },
     "fileImport": {
       "open": "Importar un archivo de diseño (.yaml o .pptx)",
@@ -523,8 +521,6 @@
     "importSlides": {
       "title": "Crear una clase a partir de una presentación de Google Slides",
       "description": "Trae una presentación desde tu Drive, de Google Slides o PowerPoint. Cada diapositiva llega tal como la hiciste.",
-      "linkLabel": "Enlace de Google Slides",
-      "linkPlaceholder": "Pega el enlace de la presentación",
       "submit": "Importar clase",
       "working": "Leyendo la presentación…",
       "report": {
@@ -536,7 +532,8 @@
         "failed": "No se pudo importar esa presentación"
       },
       "otherSources": "O sube un archivo",
-      "fileOpen": "Importar un archivo de clase (.yaml o .pptx)"
+      "fileOpen": "Importar un archivo de clase (.yaml o .pptx)",
+      "choose": "Elegir una presentación"
     },
     "errors": {
       "create": "No se pudo crear la clase"
@@ -1148,14 +1145,7 @@
     "savingTo": "Guardando en:",
     "folder": {
       "dialog": "Elegir una carpeta de Drive",
-      "title": "Guardar el cuestionario en…",
-      "path": "Ruta de la carpeta",
-      "empty": "Aquí no hay subcarpetas. Guarda el cuestionario en esta carpeta o crea una nueva abajo.",
-      "new": "Nueva carpeta",
-      "newName": "Nombre de la nueva carpeta",
-      "newIn": "Nueva carpeta en {folder}",
-      "cancelNew": "Cancelar la nueva carpeta",
-      "creating": "Creando…"
+      "title": "Guardar el cuestionario en…"
     },
     "options": {
       "questionCount": "Número de preguntas",
@@ -1214,7 +1204,6 @@
       "status": "No se pudo cargar el estado del cuestionario",
       "connect": "No se pudo conectar tu cuenta de Google",
       "loadFolders": "No se pudieron cargar tus carpetas de Drive. Puede que tu cuenta de Google no haya concedido acceso a Drive.",
-      "createFolder": "No se pudo crear la carpeta",
       "generate": "No se pudo generar el cuestionario: inténtalo de nuevo",
       "publish": "No se pudo publicar el cuestionario: inténtalo de nuevo",
       "delete": "No se pudo eliminar el cuestionario: inténtalo de nuevo"
@@ -1255,8 +1244,7 @@
       }
     },
     "folder": {
-      "title": "Guardar el {format} en…",
-      "empty": "Aquí no hay subcarpetas. Guarda en esta carpeta o crea una nueva abajo."
+      "title": "Guardar el {format} en…"
     },
     "includeWhiteboard": {
       "label": "Incluir las anotaciones de la pizarra",
@@ -1279,6 +1267,18 @@
     "notes": {
       "heading": "Algunas cosas no se pudieron llevar a este archivo",
       "math-not-typeset": "No se pudo componer una fórmula, así que se omitió en lugar de escribirla como código: {detail}"
+    }
+  },
+  "drive": {
+    "picker": {
+      "dialog": "Elegir en Google Drive",
+      "path": "Ruta de la carpeta",
+      "emptyFolders": "No hay subcarpetas aquí. Guarda en esta carpeta.",
+      "emptyFiles": "Aquí no hay nada que importar.",
+      "unavailable": "Google Drive no está configurado en este servidor, así que no se puede elegir nada de él.",
+      "failed": "No se pudo abrir el selector de archivos de Google.",
+      "change": "Cambiar",
+      "chooseHere": "Elegir esta carpeta"
     }
   },
   "errors": {

@@ -8,6 +8,7 @@
  * A failed fetch falls back to the keyless browser engine.
  */
 import type {
+  DrivePickerConfig,
   OperatorDetails,
   RuntimeConfig,
   SttEngine,
@@ -40,6 +41,7 @@ let runtime: RuntimeConfig = {
   interimFlushEnabled: false,
   interimFlushWords: 140,
   sttCaptureSampleRate: 24000,
+  drivePicker: { mode: 'mock' },
 }
 let loaded: Promise<RuntimeConfig> | null = null
 
@@ -112,3 +114,10 @@ export const getInterimFlushWords = (): number => runtime.interimFlushWords
 /** Rate (Hz) mic capture downsamples to before streaming (CAP-3). */
 export const getSttCaptureSampleRate = (): number =>
   runtime.sttCaptureSampleRate
+
+/** How the user chooses a Drive file or folder: Google's Picker, the app's own
+ * mock dialog, or not at all (EXP-4). Mock until config loads, and mock for an
+ * older server that names none — which is what a machine with no credentials
+ * wants anyway. */
+export const getDrivePicker = (): DrivePickerConfig =>
+  runtime.drivePicker ?? { mode: 'mock' }

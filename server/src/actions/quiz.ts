@@ -3,8 +3,8 @@
  * lecture settings drives these:
  *   - quiz.status        — is Google connected, and is there a published quiz?
  *   - quiz.connectGoogle — connect a Google account for Drive/Forms access
- *   - quiz.driveFolders  — folders to choose as the Form's destination
- *   - quiz.createFolder  — make a new Drive folder to save quizzes into
+ *   - quiz.driveFolders  — the mock Drive the destination picker browses when
+ *                          there is no Google (live uses Google's Picker)
  *   - quiz.publish       — generate the quiz and create the Google Form
  *   - quiz.delete        — remove the published quiz (regenerate yields new Qs)
  *
@@ -13,8 +13,8 @@
  *     the Form URL is fabricated. No Google contact.
  *   - 'live': connect runs the real offline OAuth flow (returns a consent URL
  *     the client redirects to; the callback stores an encrypted refresh
- *     token), folders come from Drive, and the Form is created for real via
- *     the imported Quiz Generator library.
+ *     token), the destination folder is chosen in Google's Picker, and the
+ *     Form is created for real via the imported Quiz Generator library.
  * The quiz *content* is always generated for real by the QuizGenerationProvider.
  */
 import { z } from 'zod'
@@ -51,14 +51,11 @@ import { canEditAcl } from '../lib/access'
 import { registry } from '../providers/registry'
 import { publishQuiz } from '../lib/quiz-publish'
 import { splitPointsEqually } from '../lib/quiz-points'
-import {
-  createDriveFolderLive,
-  deleteQuizLive,
-  listDriveFoldersLive,
-  publishQuizLive,
-} from '../lib/quiz-google'
+import { deleteQuizLive, publishQuizLive } from '../lib/quiz-google'
 import { buildConnectUrl, signConnectState } from '../auth/google-connect'
 import { decryptToken } from '../lib/token-crypto'
+import { HttpError } from '../middleware/error'
+import { googleLive } from '../lib/export-mode'
 
 const isLive = (): boolean => env.QUIZ_PUBLISH_MODE === 'live'
 
@@ -168,9 +165,15 @@ const mockFolderTree: Record<string, DriveFolder[]> = {
   'folder-lectures': [{ id: 'folder-week1', name: 'Week 1' }],
 }
 
-/** The sub-folders inside `parentId` (default My Drive root) for the picker's
+/**
+ * The sub-folders inside `parentId` (default My Drive root) for the mock
  * finder view. Files are not listed — you save into a folder. Navigating into
- * a folder re-calls this with its id. */
+ * a folder re-calls this with its id.
+ *
+ * Mock only. Live, the instructor chooses the destination in Google's own
+ * Picker: the app holds only `drive.file`, which cannot list a Drive, and
+ * picking the folder is what grants access to it.
+ */
 export const quizDriveFolders = defineAction<
   { parentId?: string },
   { folders: DriveFolder[] },
@@ -179,42 +182,20 @@ export const quizDriveFolders = defineAction<
   name: 'quiz.driveFolders',
   access: requiresGoogleDrive(signedIn(), 'quiz'),
   input: z.object({ parentId: z.string().optional() }).strict(),
-  execute: async (ctx, input, { googleUser: user }) => {
-    const parentId = input.parentId ?? 'root'
-    if (isLive()) {
-      const refreshToken = decryptToken(user.googleQuizRefreshToken!)
-      return { folders: await listDriveFoldersLive(refreshToken, parentId) }
+  execute: async (ctx, input) => {
+    // Refused rather than answered with fiction: a live deployment reaching
+    // this has a client that failed to open the Picker, and a fabricated tree
+    // would offer folders that do not exist. `googleLive`, not this module's
+    // `isLive`: the chooser is shared with export, so either surface being
+    // live means a real Drive id is required.
+    if (googleLive()) {
+      throw new HttpError(
+        400,
+        'drive_picker_required',
+        'Live folder browsing is done in the Google Picker',
+      )
     }
-    return { folders: mockFolderTree[parentId] ?? [] }
-  },
-})
-
-/**
- * Creates a new Drive folder to save quizzes into (QUIZ-2), returning it so the
- * client can select it. Live: creates it in the instructor's Drive; mock:
- * fabricates a folder id from the name.
- */
-export const quizCreateFolder = defineAction<
-  { name: string; parentId?: string },
-  DriveFolder,
-  WithGoogle<Signed>
->({
-  name: 'quiz.createFolder',
-  access: requiresGoogleDrive(signedIn(), 'quiz'),
-  input: z.object({
-    name: z.string().trim().min(1).max(120),
-    parentId: z.string().optional(),
-  }),
-  execute: async (ctx, input, { googleUser: user }) => {
-    const parentId = input.parentId ?? 'root'
-    if (isLive()) {
-      const refreshToken = decryptToken(user.googleQuizRefreshToken!)
-      return createDriveFolderLive(refreshToken, input.name, parentId)
-    }
-    return {
-      id: `folder-${input.name.toLowerCase().replace(/\s+/g, '-')}`,
-      name: input.name,
-    }
+    return { folders: mockFolderTree[input.parentId ?? 'root'] ?? [] }
   },
 })
 
@@ -452,7 +433,6 @@ export const quizDelete = defineAction<
 registerAction(quizStatus)
 registerAction(quizConnectGoogle)
 registerAction(quizDriveFolders)
-registerAction(quizCreateFolder)
 registerAction(quizGenerate)
 registerAction(quizPublish)
 registerAction(quizDelete)

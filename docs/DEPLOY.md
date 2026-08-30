@@ -193,6 +193,8 @@ value is baked into the SPA at build.
 | `GOOGLE_OAUTH_CLIENT_ID` | secret | OAuth client id (§3, §7) |
 | `GOOGLE_OAUTH_CLIENT_SECRET` | secret | OAuth client secret (§3, §7) |
 | `VITE_GOOGLE_OAUTH_CLIENT_ID` | plain, **build-time** | the same OAuth client id. Vite inlines it at build so the "Continue with Google" button renders. **Scope must be Build-time** — bindables like `${_self.PUBLIC_URL}` can't be used at build. It's public (ships in the bundle), so not a secret. |
+| `GOOGLE_PICKER_API_KEY` | plain | browser API key for Google's file chooser, restricted to the Picker API and your domain. Published to the client through `/api/config`, so not a secret (docs/GOOGLE_API_KEYS.md §6). Required once `EXPORT_MODE` or `QUIZ_PUBLISH_MODE` is `live` |
+| `GOOGLE_PICKER_APP_ID` | plain | the Cloud **project number** — not the project id, not the OAuth client id. Wrong value = a pick that appears to work and a server read that 404s |
 | `FLICKR_API_KEY` | secret | image enrichment (optional) |
 | `STORAGE_PROVIDER` | plain | `s3` |
 | `S3_ENDPOINT` | plain | `https://<region>.digitaloceanspaces.com` |

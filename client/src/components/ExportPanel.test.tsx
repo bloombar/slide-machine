@@ -294,7 +294,7 @@ describe('ExportPanel', () => {
       await screen.findByRole('radio', { name: /Save to Google Drive/ }),
     )
     fireEvent.click(screen.getByRole('button', { name: 'Save PDF to Drive' }))
-    await screen.findByRole('dialog', { name: 'Choose a Drive folder' })
+    await screen.findByRole('dialog', { name: 'Choose from Google Drive' })
     // Save into the current (root) folder.
     fireEvent.click(screen.getByRole('button', { name: 'Save here' }))
     // The file appears both in the confirmation and the "Saved to Drive" list.

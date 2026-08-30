@@ -62,14 +62,18 @@ describe('connect state', () => {
 })
 
 describe('buildConnectUrl', () => {
-  it('requests the Forms/Drive scopes with offline access', async () => {
+  it('requests only drive.file, with offline access', async () => {
     const url = new URL(buildConnectUrl('the-state', ''))
     expect(url.host).toBe('accounts.google.com')
     const scope = url.searchParams.get('scope')!
-    expect(scope).toContain('auth/forms.body')
-    expect(scope).toContain('auth/drive.file')
-    // Browsing the instructor's existing Drive folders (QUIZ-2 finder)
-    expect(scope).toContain('auth/drive.readonly')
+    expect(scope).toBe('https://www.googleapis.com/auth/drive.file')
+    // The scopes this deliberately no longer asks for. `forms.body*` are
+    // sensitive and `drive.readonly` is restricted — between them they would
+    // put the deployment through Google's review and an annual paid security
+    // assessment, and `drive.file` covers every call the app makes
+    // (docs/GOOGLE_PRODUCTION_MODE.md).
+    expect(scope).not.toContain('auth/forms.body')
+    expect(scope).not.toContain('auth/drive.readonly')
     expect(url.searchParams.get('access_type')).toBe('offline')
     expect(url.searchParams.get('prompt')).toBe('consent')
     expect(url.searchParams.get('state')).toBe('the-state')
@@ -132,23 +136,19 @@ describe('exchangeConnectCode', () => {
 
 describe('grantedDriveAccess', () => {
   const DRIVE_FILE = 'https://www.googleapis.com/auth/drive.file'
-  const DRIVE_READONLY = 'https://www.googleapis.com/auth/drive.readonly'
 
-  it('is true when both Drive scopes are granted', () => {
-    expect(grantedDriveAccess(`openid ${DRIVE_FILE} ${DRIVE_READONLY}`)).toBe(
-      true,
-    )
+  it('is true when drive.file is granted', () => {
+    expect(grantedDriveAccess(`openid ${DRIVE_FILE}`)).toBe(true)
+    expect(grantedDriveAccess(DRIVE_FILE)).toBe(true)
   })
 
-  it('is false when a Drive scope is missing (granular consent unticked)', () => {
-    // Identity-only grant — the exact shape that dead-ended the folder picker.
+  it('is false when it is missing (granular consent unticked)', () => {
+    // Identity-only grant — the exact shape that dead-ends every Drive call.
     expect(
       grantedDriveAccess(
         'openid https://www.googleapis.com/auth/userinfo.email',
       ),
     ).toBe(false)
-    // Only one of the two Drive scopes is not enough.
-    expect(grantedDriveAccess(DRIVE_FILE)).toBe(false)
   })
 
   it('is false for an empty scope string', () => {

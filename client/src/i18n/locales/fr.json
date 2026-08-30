@@ -457,8 +457,6 @@
       "open": "Importer un design",
       "title": "Importer un design depuis Google Slides",
       "description": "Indiquez une présentation de votre Drive et nous en déduirons le design — couleurs, typographie et emplacement des éléments — pour l'enregistrer comme un modèle que vous pourrez modifier.",
-      "linkLabel": "Lien Google Slides ou Drive",
-      "linkPlaceholder": "Collez un lien Google Slides, ou un lien Drive vers un design .yaml",
       "submit": "Importer le design",
       "tidy": "Regrouper les diapositives quasi identiques en une seule mise en page",
       "tidyFile": "Réduire la présentation que vous ouvrez à moins de mises en page",
@@ -466,7 +464,6 @@
       "tidyHintFile": "S’applique aux présentations. Un diaporama reprend souvent une même maquette plusieurs fois ; un fichier de design n’a pas de diapositives à combiner.",
       "working": "Lecture de la présentation…",
       "errors": {
-        "link": "Cela ne ressemble pas à un lien Google Slides ou Drive.",
         "google": "Google ne nous a pas laissés lire cette présentation. Vérifiez que vous pouvez l'ouvrir vous-même.",
         "failed": "Impossible d'importer cette présentation"
       },
@@ -481,7 +478,8 @@
       },
       "connectPrompt": "Connectez un compte Google pour lire une présentation de votre Drive.",
       "connect": "Connecter Google",
-      "otherSources": "Ou téléversez un fichier"
+      "otherSources": "Ou téléversez un fichier",
+      "choose": "Choisir dans Google Drive"
     },
     "fileImport": {
       "open": "Importer un fichier de design (.yaml ou .pptx)",
@@ -523,8 +521,6 @@
     "importSlides": {
       "title": "Créer un cours à partir d’une présentation Google Slides",
       "description": "Importez une présentation depuis votre Drive — Google Slides ou PowerPoint. Chaque diapositive arrive telle que vous l’avez faite.",
-      "linkLabel": "Lien Google Slides",
-      "linkPlaceholder": "Collez le lien de la présentation",
       "submit": "Importer le cours",
       "working": "Lecture de la présentation…",
       "report": {
@@ -536,7 +532,8 @@
         "failed": "Impossible d’importer cette présentation"
       },
       "otherSources": "Ou téléversez un fichier",
-      "fileOpen": "Importer un fichier de cours (.yaml ou .pptx)"
+      "fileOpen": "Importer un fichier de cours (.yaml ou .pptx)",
+      "choose": "Choisir une présentation"
     },
     "errors": {
       "create": "Impossible de créer le cours"
@@ -1148,14 +1145,7 @@
     "savingTo": "Enregistrement dans :",
     "folder": {
       "dialog": "Choisir un dossier Drive",
-      "title": "Enregistrer le quiz dans…",
-      "path": "Chemin du dossier",
-      "empty": "Aucun sous-dossier ici. Enregistrez le quiz dans ce dossier, ou créez-en un ci-dessous.",
-      "new": "Nouveau dossier",
-      "newName": "Nom du nouveau dossier",
-      "newIn": "Nouveau dossier dans {folder}",
-      "cancelNew": "Annuler le nouveau dossier",
-      "creating": "Création…"
+      "title": "Enregistrer le quiz dans…"
     },
     "options": {
       "questionCount": "Nombre de questions",
@@ -1214,7 +1204,6 @@
       "status": "Impossible de charger l'état du quiz",
       "connect": "Impossible de connecter votre compte Google",
       "loadFolders": "Impossible de charger vos dossiers Drive. Votre compte Google n'a peut-être pas accordé l'accès à Drive.",
-      "createFolder": "Impossible de créer le dossier",
       "generate": "Impossible de générer le quiz — veuillez réessayer",
       "publish": "Impossible de publier le quiz — veuillez réessayer",
       "delete": "Impossible de supprimer le quiz — veuillez réessayer"
@@ -1255,8 +1244,7 @@
       }
     },
     "folder": {
-      "title": "Enregistrer le {format} dans…",
-      "empty": "Aucun sous-dossier ici. Enregistrez dans ce dossier, ou créez-en un ci-dessous."
+      "title": "Enregistrer le {format} dans…"
     },
     "includeWhiteboard": {
       "label": "Inclure les annotations du tableau blanc",
@@ -1279,6 +1267,18 @@
     "notes": {
       "heading": "Certains éléments n’ont pas pu être repris dans ce fichier",
       "math-not-typeset": "Une formule n’a pas pu être composée ; elle a été omise plutôt qu’écrite sous forme de code : {detail}"
+    }
+  },
+  "drive": {
+    "picker": {
+      "dialog": "Choisir dans Google Drive",
+      "path": "Chemin du dossier",
+      "emptyFolders": "Aucun sous-dossier ici. Enregistrez dans ce dossier.",
+      "emptyFiles": "Rien à importer ici.",
+      "unavailable": "Google Drive n'est pas configuré sur ce serveur : impossible d'y choisir un fichier.",
+      "failed": "Impossible d’ouvrir le sélecteur de fichiers Google.",
+      "change": "Modifier",
+      "chooseHere": "Choisir ce dossier"
     }
   },
   "errors": {

@@ -34,7 +34,7 @@ import {
 import { dispatchAction } from '../api/actions'
 import { ApiError } from '../api/http'
 import { apiErrorMessage } from '../i18n/apiError'
-import { FolderPicker } from './ExportPanel'
+import DrivePicker from './DrivePicker'
 import { downloadExport } from '../lib/download'
 import TemplateDesignPanel from './template/TemplateDesignPanel'
 import TemplateUpdateNotice from './template/TemplateUpdateNotice'
@@ -733,11 +733,16 @@ export default function DeckSettingsModal({
             </p>
 
             {pickingFolder ? (
-              <FolderPicker
-                formatLabel={t('template.exportToSlides')}
-                saving={slidesBusy}
+              <DrivePicker
+                kind="folder"
+                title={t('export.folder.title', {
+                  format: t('template.exportToSlides'),
+                })}
+                confirmLabel={t('export.saveHere')}
+                busyLabel={t('export.saving')}
+                busy={slidesBusy}
                 onCancel={() => setPickingFolder(false)}
-                onChoose={exportTemplateToDrive}
+                onPick={exportTemplateToDrive}
                 onReconnect={() => setPickingFolder(false)}
               />
             ) : (
