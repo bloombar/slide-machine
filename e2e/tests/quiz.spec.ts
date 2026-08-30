@@ -66,10 +66,28 @@ test('generate and publish a quiz from lecture settings', async ({ page }) => {
 
   await picker.getByRole('button', { name: 'Generate & save' }).click()
 
-  // Review step (QUIZ-2): the generated questions appear with editable points;
-  // publish from here.
+  // Review step (QUIZ-2): the generated questions appear, editable, and are
+  // published exactly as they leave this dialog.
   const review = page.getByRole('dialog', { name: 'Review quiz questions' })
   await expect(review).toBeVisible()
+
+  // The stem is a real input, not a label — the instructor can correct a
+  // question the AI nearly got right instead of regenerating the whole quiz.
+  const stem = review.getByLabel('Text of question 1')
+  await expect(stem).toBeVisible()
+  await stem.fill('Where does photosynthesis take place?')
+
+  // Emptying a question stops the publish rather than failing at the server,
+  // which would strand the instructor after the folder was already chosen.
+  await stem.fill('')
+  await expect(
+    review.getByRole('button', { name: 'Publish quiz' }),
+  ).toBeDisabled()
+  await stem.fill('Where does photosynthesis take place?')
+  await expect(
+    review.getByRole('button', { name: 'Publish quiz' }),
+  ).toBeEnabled()
+
   await review.getByRole('button', { name: 'Publish quiz' }).click()
 
   // The shareable Form URL appears with a copy button

@@ -1194,9 +1194,15 @@
     "review": {
       "dialog": "检查测验题目",
       "title": "检查并设置分值",
-      "hint": "调整每道题的分值，然后发布。总分：",
+      "hint": "可编辑任意题目，然后发布。总分：",
       "points": "分值",
-      "pointsFor": "第 {number} 题的分值"
+      "pointsFor": "第 {number} 题的分值",
+      "questionFor": "第 {number} 题的题干",
+      "choiceFor": "第 {number} 题的选项 {choice}",
+      "correctFor": "将第 {number} 题的选项 {choice} 标记为正确答案",
+      "answers": "可接受的答案",
+      "answerFor": "第 {number} 题的可接受答案 {answer}",
+      "incomplete": "请先填写所有题目和选项。"
     },
     "errors": {
       "status": "无法加载测验状态",

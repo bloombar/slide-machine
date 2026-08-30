@@ -593,8 +593,36 @@ function FolderPicker({
 }
 
 /**
+ * A question the instructor has not finished writing.
+ *
+ * The Form is created from exactly what this dialog holds, so a blank stem or
+ * a blank choice would reach students as an unanswerable question. The server
+ * refuses an empty stem outright (`question: z.string().min(1)`), which would
+ * surface as a failed publish after the Drive folder was already chosen —
+ * later, and less clearly, than saying so here.
+ */
+const isIncomplete = (q: QuizQuestion): boolean =>
+  !q.question.trim() || (q.choices ?? []).some(c => !c.trim())
+
+/**
  * Review-before-publish step (QUIZ-2): shows the generated questions and lets
- * the instructor override each one's points before the Form is created.
+ * the instructor correct them before the Form is created.
+ *
+ * Editable because the questions are published exactly as they leave here —
+ * `quiz.publish` takes this array as given rather than regenerating from it.
+ * A generated question that is nearly right was previously all-or-nothing:
+ * publish the wrong wording, or delete the quiz and generate a fresh set and
+ * lose the four that were fine.
+ *
+ * The stem, every choice, and which choice is correct are all editable, since
+ * they are one thing. Rewriting "What number does indexing begin at?" without
+ * being able to touch its choices produces a question whose answers no longer
+ * fit it — a worse state than the one being fixed.
+ *
+ * Accepted answers for a short-answer question are editable where the AI wrote
+ * some. None are added where it wrote none: a question with no accepted answer
+ * is manually graded, and turning that into an auto-graded one is a decision
+ * about the quiz rather than a correction to it.
  */
 function QuizPreview({
   questions,
@@ -612,10 +640,52 @@ function QuizPreview({
   const { t } = useTranslation()
   const [edited, setEdited] = useState<QuizQuestion[]>(questions)
   const total = edited.reduce((sum, q) => sum + (q.points ?? 0), 0)
+  const incomplete = edited.some(isIncomplete)
+
+  /** Replaces one question, leaving the rest untouched. */
+  const patch = (index: number, change: Partial<QuizQuestion>) =>
+    setEdited(qs => qs.map((q, i) => (i === index ? { ...q, ...change } : q)))
 
   const setPoints = (index: number, raw: string) => {
     const points = Math.max(0, Number(raw) || 0)
-    setEdited(qs => qs.map((q, i) => (i === index ? { ...q, points } : q)))
+    patch(index, { points })
+  }
+
+  /** Rewrites one choice in place, keeping which choices are correct. */
+  const setChoice = (index: number, choiceIndex: number, text: string) =>
+    patch(index, {
+      choices: (edited[index]!.choices ?? []).map((c, ci) =>
+        ci === choiceIndex ? text : c,
+      ),
+    })
+
+  /** Rewrites one accepted answer of a short-answer question. */
+  const setAnswer = (index: number, answerIndex: number, text: string) =>
+    patch(index, {
+      correctAnswers: (edited[index]!.correctAnswers ?? []).map((a, ai) =>
+        ai === answerIndex ? text : a,
+      ),
+    })
+
+  /**
+   * Marks which choice is correct.
+   *
+   * Single-choice has exactly one, so picking a new one replaces the old.
+   * Multiple-answer toggles, and is kept sorted so the published Form lists
+   * the answers in the order the choices appear rather than the order they
+   * happened to be clicked.
+   */
+  const setCorrect = (index: number, choiceIndex: number) => {
+    const q = edited[index]!
+    if (q.type === 'multiple_choice') {
+      const current = q.correctIndexes ?? []
+      const next = current.includes(choiceIndex)
+        ? current.filter(c => c !== choiceIndex)
+        : [...current, choiceIndex].sort((a, b) => a - b)
+      patch(index, { correctIndexes: next })
+    } else {
+      patch(index, { correctIndex: choiceIndex })
+    }
   }
 
   return (
@@ -649,30 +719,103 @@ function QuizPreview({
 
           <ol className="flex-1 space-y-3 overflow-y-auto pr-1">
             {edited.map((q, i) => (
-              <li
-                key={i}
-                className="flex items-start gap-3 rounded-md border border-slate-200 p-3"
-              >
-                <span className="mt-0.5 text-sm font-semibold text-slate-400">
-                  {i + 1}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm text-slate-800">{q.question}</p>
-                  <span className="text-xs uppercase tracking-wide text-slate-400">
-                    {t(`quiz.types.${q.type}.name`, { defaultValue: q.type })}
+              <li key={i} className="rounded-md border border-slate-200 p-3">
+                <div className="flex items-start gap-3">
+                  <span className="mt-2 text-sm font-semibold text-slate-400">
+                    {i + 1}
                   </span>
+                  <div className="min-w-0 flex-1">
+                    <textarea
+                      rows={2}
+                      aria-label={t('quiz.review.questionFor', {
+                        number: i + 1,
+                      })}
+                      value={q.question}
+                      onChange={e => patch(i, { question: e.target.value })}
+                      className="w-full resize-y rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-800"
+                    />
+                    <span className="text-xs uppercase tracking-wide text-slate-400">
+                      {t(`quiz.types.${q.type}.name`, { defaultValue: q.type })}
+                    </span>
+                  </div>
+                  <label className="shrink-0 text-xs text-slate-500">
+                    {t('quiz.review.points')}
+                    <input
+                      type="number"
+                      min={0}
+                      aria-label={t('quiz.review.pointsFor', { number: i + 1 })}
+                      value={q.points ?? 0}
+                      onChange={e => setPoints(i, e.target.value)}
+                      className="mt-0.5 w-16 rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-800"
+                    />
+                  </label>
                 </div>
-                <label className="shrink-0 text-xs text-slate-500">
-                  {t('quiz.review.points')}
-                  <input
-                    type="number"
-                    min={0}
-                    aria-label={t('quiz.review.pointsFor', { number: i + 1 })}
-                    value={q.points ?? 0}
-                    onChange={e => setPoints(i, e.target.value)}
-                    className="mt-0.5 w-16 rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-800"
-                  />
-                </label>
+
+                {/* The choices, with the correct one(s) marked. A radio for
+                    single-choice and a checkbox for multiple-answer, so the
+                    control itself says how many answers are expected. */}
+                {(q.choices?.length ?? 0) > 0 && (
+                  <ul className="mt-2 space-y-1 pl-7">
+                    {q.choices!.map((choice, ci) => (
+                      <li key={ci} className="flex items-center gap-2">
+                        <input
+                          type={
+                            q.type === 'multiple_choice' ? 'checkbox' : 'radio'
+                          }
+                          name={`quiz-correct-${i}`}
+                          aria-label={t('quiz.review.correctFor', {
+                            choice: ci + 1,
+                            number: i + 1,
+                          })}
+                          checked={
+                            q.type === 'multiple_choice'
+                              ? (q.correctIndexes ?? []).includes(ci)
+                              : q.correctIndex === ci
+                          }
+                          onChange={() => setCorrect(i, ci)}
+                          className="shrink-0 accent-indigo-600"
+                        />
+                        <input
+                          type="text"
+                          aria-label={t('quiz.review.choiceFor', {
+                            choice: ci + 1,
+                            number: i + 1,
+                          })}
+                          value={choice}
+                          onChange={e => setChoice(i, ci, e.target.value)}
+                          className="min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-800"
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {/* Accepted answers, where a short-answer question has any.
+                    A question with none is manually graded and stays that
+                    way — see the note on this component. */}
+                {(q.correctAnswers?.length ?? 0) > 0 && (
+                  <div className="mt-2 pl-7">
+                    <span className="text-xs uppercase tracking-wide text-slate-400">
+                      {t('quiz.review.answers')}
+                    </span>
+                    <ul className="mt-1 space-y-1">
+                      {q.correctAnswers!.map((answer, ai) => (
+                        <li key={ai}>
+                          <input
+                            type="text"
+                            aria-label={t('quiz.review.answerFor', {
+                              answer: ai + 1,
+                              number: i + 1,
+                            })}
+                            value={answer}
+                            onChange={e => setAnswer(i, ai, e.target.value)}
+                            className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-800"
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </li>
             ))}
           </ol>
@@ -682,7 +825,14 @@ function QuizPreview({
               {t('quiz.savingTo')}{' '}
               <span className="font-medium text-slate-700">{folderName}</span>
             </span>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              {/* Said next to the button that is refusing, rather than as an
+                  error after a failed publish. */}
+              {incomplete && (
+                <span className="text-xs text-amber-700">
+                  {t('quiz.review.incomplete')}
+                </span>
+              )}
               <button
                 type="button"
                 onClick={onCancel}
@@ -692,7 +842,7 @@ function QuizPreview({
               </button>
               <button
                 type="button"
-                disabled={publishing}
+                disabled={publishing || incomplete}
                 onClick={() => onPublish(edited)}
                 className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
               >

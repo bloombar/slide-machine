@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import type { QuizQuestion } from '@slide-machine/shared'
 import QuizPanel from './QuizPanel'
 import { mockFetchRoutes } from '../test/fetch-mock'
 
@@ -218,6 +219,214 @@ describe('QuizPanel', () => {
       expect(published).toMatchObject({
         driveFolderId: 'folder-quizzes',
         driveFolderName: 'Quizzes',
+      }),
+    )
+  })
+
+  /**
+   * Reaches the review step with a given set of generated questions, and
+   * captures what publish actually sent.
+   *
+   * The captured body is the point: the Form is built from exactly this array
+   * (`quiz.publish` publishes it as given), so an edit that does not appear
+   * here never reaches a student, however well the input rendered.
+   */
+  const reviewing = async (questions: unknown[]) => {
+    const sent: { questions?: QuizQuestion[] } = {}
+    mockFetchRoutes({
+      'quiz.status': () => ({ status: 200, body: { googleConnected: true } }),
+      'quiz.driveFolders': () => ({ status: 200, body: { folders: [] } }),
+      'quiz.generate': () => ({ status: 200, body: { questions } }),
+      'quiz.publish': init => {
+        Object.assign(sent, JSON.parse(String(init?.body)))
+        return {
+          status: 200,
+          body: { formUrl: FORM_URL, publishedAt: '2026-07-20T00:00:00.000Z' },
+        }
+      },
+    })
+    render(<QuizPanel deckId="d1" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate quiz' }),
+    )
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Generate & save' }),
+    )
+    await screen.findByLabelText('Text of question 1')
+    return sent
+  }
+
+  const MCQ = {
+    type: 'single_choice',
+    question: 'What number does Python indexing begin at?',
+    points: 20,
+    choices: ['0', '1', '-1'],
+    correctIndex: 0,
+  }
+
+  it('publishes a reworded question, not the generated one (QUIZ-2)', async () => {
+    const sent = await reviewing([MCQ])
+    fireEvent.change(screen.getByLabelText('Text of question 1'), {
+      target: { value: 'What index does the first element of a list have?' },
+    })
+    await publishFromPreview()
+    await waitFor(() =>
+      expect(sent.questions?.[0]?.question).toBe(
+        'What index does the first element of a list have?',
+      ),
+    )
+  })
+
+  it('publishes an edited choice (QUIZ-2)', async () => {
+    const sent = await reviewing([MCQ])
+    fireEvent.change(screen.getByLabelText('Choice 2 for question 1'), {
+      target: { value: 'one' },
+    })
+    await publishFromPreview()
+    // Only that choice changed; the others are carried through as generated
+    await waitFor(() =>
+      expect(sent.questions?.[0]?.choices).toEqual(['0', 'one', '-1']),
+    )
+  })
+
+  it('moves the correct answer to the choice the instructor marks (QUIZ-2)', async () => {
+    const sent = await reviewing([MCQ])
+    // Generated with choice 1 correct; the instructor says it is choice 3
+    fireEvent.click(
+      screen.getByLabelText('Mark choice 3 correct for question 1'),
+    )
+    await publishFromPreview()
+    await waitFor(() => expect(sent.questions?.[0]?.correctIndex).toBe(2))
+  })
+
+  it('toggles several correct answers for a multiple-answer question (QUIZ-2)', async () => {
+    const sent = await reviewing([
+      {
+        type: 'multiple_choice',
+        question: 'Which are sequence types?',
+        points: 20,
+        choices: ['list', 'tuple', 'int'],
+        correctIndexes: [0],
+      },
+    ])
+    fireEvent.click(
+      screen.getByLabelText('Mark choice 2 correct for question 1'),
+    )
+    await publishFromPreview()
+    // Kept in choice order, not click order, so the Form reads as the list does
+    await waitFor(() =>
+      expect(sent.questions?.[0]?.correctIndexes).toEqual([0, 1]),
+    )
+  })
+
+  it('unmarks a correct answer that was marked (QUIZ-2)', async () => {
+    const sent = await reviewing([
+      {
+        type: 'multiple_choice',
+        question: 'Which are sequence types?',
+        points: 20,
+        choices: ['list', 'tuple', 'int'],
+        correctIndexes: [0, 2],
+      },
+    ])
+    fireEvent.click(
+      screen.getByLabelText('Mark choice 3 correct for question 1'),
+    )
+    await publishFromPreview()
+    await waitFor(() =>
+      expect(sent.questions?.[0]?.correctIndexes).toEqual([0]),
+    )
+  })
+
+  it('edits an accepted answer of a short-answer question (QUIZ-2)', async () => {
+    const sent = await reviewing([
+      {
+        type: 'short_text',
+        question: 'Name the method that appends to a list.',
+        points: 20,
+        correctAnswers: ['apend'],
+      },
+    ])
+    fireEvent.change(
+      screen.getByLabelText('Accepted answer 1 for question 1'),
+      {
+        target: { value: 'append' },
+      },
+    )
+    await publishFromPreview()
+    await waitFor(() =>
+      expect(sent.questions?.[0]?.correctAnswers).toEqual(['append']),
+    )
+  })
+
+  it('offers no accepted-answer box where the AI wrote none (QUIZ-2)', async () => {
+    // A question with no accepted answer is manually graded; inventing one is
+    // a decision about the quiz, not a correction to it
+    await reviewing([
+      { type: 'short_text', question: 'Explain why.', points: 20 },
+    ])
+    expect(screen.queryByText('Accepted answers')).not.toBeInTheDocument()
+  })
+
+  it('refuses to publish a question emptied of its text (QUIZ-2)', async () => {
+    // The server rejects an empty stem, which would otherwise surface as a
+    // failed publish after the folder was already chosen
+    await reviewing([MCQ])
+    fireEvent.change(screen.getByLabelText('Text of question 1'), {
+      target: { value: '   ' },
+    })
+    expect(screen.getByRole('button', { name: 'Publish quiz' })).toBeDisabled()
+    expect(
+      screen.getByText('Fill in every question and choice first.'),
+    ).toBeInTheDocument()
+  })
+
+  it('refuses to publish a choice emptied of its text (QUIZ-2)', async () => {
+    await reviewing([MCQ])
+    fireEvent.change(screen.getByLabelText('Choice 2 for question 1'), {
+      target: { value: '' },
+    })
+    expect(screen.getByRole('button', { name: 'Publish quiz' })).toBeDisabled()
+  })
+
+  it('publishes again once the blank is filled back in (QUIZ-2)', async () => {
+    // The guard must lift, or a typo would strand the instructor in the dialog
+    const sent = await reviewing([MCQ])
+    const stem = screen.getByLabelText('Text of question 1')
+    fireEvent.change(stem, { target: { value: '' } })
+    expect(screen.getByRole('button', { name: 'Publish quiz' })).toBeDisabled()
+    fireEvent.change(stem, { target: { value: 'Where does indexing start?' } })
+    expect(
+      screen.getByRole('button', { name: 'Publish quiz' }),
+    ).not.toBeDisabled()
+    await publishFromPreview()
+    await waitFor(() =>
+      expect(sent.questions?.[0]?.question).toBe('Where does indexing start?'),
+    )
+  })
+
+  it('leaves an untouched question exactly as generated (QUIZ-2)', async () => {
+    const sent = await reviewing([
+      MCQ,
+      {
+        type: 'single_choice',
+        question: 'Which method appends?',
+        points: 20,
+        choices: ['append', 'push'],
+        correctIndex: 0,
+      },
+    ])
+    fireEvent.change(screen.getByLabelText('Text of question 1'), {
+      target: { value: 'Edited' },
+    })
+    await publishFromPreview()
+    await waitFor(() =>
+      expect(sent.questions?.[1]).toEqual({
+        type: 'single_choice',
+        question: 'Which method appends?',
+        points: 20,
+        choices: ['append', 'push'],
+        correctIndex: 0,
       }),
     )
   })
