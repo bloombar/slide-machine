@@ -1555,3 +1555,57 @@ describe('reaching for a bullets or image layout (GEN-11)', () => {
     expect(prompt).toContain('never pick a layout because it is the one you')
   })
 })
+
+/**
+ * Keywords the model wrote long, cut before anything searches for them (IMG-1).
+ *
+ * The prompt asks for one or two words, and asking is not enough — measured
+ * against the real sources, the phrases it writes unprompted returned zero
+ * usable candidates, so the slide's picture box stayed empty for good. This is
+ * the same shape as the character budgets: guided by the prompt, enforced by
+ * the server (`clampToBudget`).
+ */
+describe('image keywords are cut to a searchable length (IMG-1)', () => {
+  const withKeywords = async (keywords: string[]) => {
+    fetchMock.mockResolvedValue(
+      geminiReply({
+        action: 'new',
+        layoutType: 'content',
+        slots: { title: 'T' },
+        imageGuidance: { keywords },
+      }),
+    )
+    const result = await new GeminiGenerationProvider().generateSlideContent(
+      request(),
+    )
+    return result.imageGuidance?.keywords
+  }
+
+  it('cuts a phrase that describes the slide down to what names the subject', async () => {
+    expect(
+      await withKeywords(['mitochondrion cristae electron transport chain']),
+    ).toEqual(['mitochondrion cristae'])
+  })
+
+  it('leaves a keyword that was already short alone', async () => {
+    expect(await withKeywords(['parthenon', 'greek temple'])).toEqual([
+      'parthenon',
+      'greek temple',
+    ])
+  })
+
+  it('drops a duplicate the cut created', async () => {
+    expect(
+      await withKeywords([
+        'chloroplast thylakoid membrane',
+        'chloroplast thylakoid stack',
+      ]),
+    ).toEqual(['chloroplast thylakoid'])
+  })
+
+  it('still passes an empty list through as empty', async () => {
+    // "A picture, but I did not say of what" is handled on the server side by
+    // falling back to the slide's own words, not by inventing keywords here
+    expect(await withKeywords([])).toEqual([])
+  })
+})

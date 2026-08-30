@@ -149,6 +149,7 @@ import {
   seededImageCandidates,
   type SeedAssetDoc,
 } from '../lib/seed-assets'
+import { imageSearchTerms } from '../lib/source-images'
 import { deleteDeckCascade } from '../lib/cascade'
 import { env } from '../config/env'
 import type {
@@ -219,11 +220,14 @@ const maybeEnrich = (
     return
   }
 
-  if (!guidance.keywords.length) return
+  // The model's keywords, or the slide's own words when it asked for a picture
+  // without saying what of (IMG-1).
+  const keywords = imageSearchTerms(guidance, context ?? {})
+  if (!keywords.length) return
   void enrichSlideImages(
     slideId,
     slots,
-    guidance.keywords,
+    keywords,
     seededImageCandidates(images),
     context,
   )
@@ -1435,6 +1439,14 @@ export const sessionPhrase = defineAction<
       // keywords leaves the existing ones intact.
       if (result.imageGuidance?.keywords?.length) {
         lastSlide.imageKeywords = result.imageGuidance.keywords
+      } else if (
+        // Still nothing to search for, on a slide whose layout has a picture
+        // box: mine the slide's own words rather than leave the box empty.
+        !lastSlide.imageKeywords?.length &&
+        layoutHasImageSlot(lastSlide.layoutType, descriptors)
+      ) {
+        const derived = imageSearchTerms(result.imageGuidance, lastSlide)
+        if (derived.length) lastSlide.imageKeywords = derived
       }
       lastSlide.sourceTranscript = [lastSlide.sourceTranscript, input.phrase]
         .filter(Boolean)
@@ -1465,6 +1477,22 @@ export const sessionPhrase = defineAction<
       return event({ kind: 'slide.update', slide: toSlideDto(lastSlide) })
     }
 
+    // Resolved before the slide is written, not after: the client watches for
+    // an arriving image only on a slide that already carries search terms
+    // (DeckViewerPage `watchImage`), so a picture found for terms we never
+    // stored would sit in the database until the next reload.
+    const newSlideSearchTerms = layoutHasImageSlot(
+      result.layoutType,
+      descriptors,
+    )
+      ? imageSearchTerms(result.imageGuidance, {
+          title: result.slots.title,
+          body: result.slots.body,
+          bullets: result.slots.bullets,
+          caption: result.slots.caption,
+        })
+      : []
+
     const slide = await SlideModel.create({
       deckId: deck._id,
       index: deck.slideOrder.length,
@@ -1477,7 +1505,9 @@ export const sessionPhrase = defineAction<
       // layout declares (GEN-11). The conventional four are derived onto the
       // slot map by the model's own hook, so only these are set here.
       ...(result.declared ? { slots: result.declared } : {}),
-      imageKeywords: result.imageGuidance?.keywords,
+      imageKeywords: newSlideSearchTerms.length
+        ? newSlideSearchTerms
+        : undefined,
       sourceTranscript: input.phrase,
     })
     deck.slideOrder.push(slide._id.toString())
@@ -1496,7 +1526,7 @@ export const sessionPhrase = defineAction<
           body: result.slots.body,
           bullets: result.slots.bullets,
           caption: result.slots.caption,
-          imageKeywords: result.imageGuidance?.keywords,
+          imageKeywords: newSlideSearchTerms,
           layoutType: result.layoutType,
         },
         'replace',
