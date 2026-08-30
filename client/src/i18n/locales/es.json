@@ -798,6 +798,12 @@
       "code": "Añadir código",
       "codeIn": "Añadir código {language}",
       "preformatted": "Añadir texto preformateado"
+    },
+    "split": {
+      "title": "¿Dividir esta diapositiva?",
+      "intro": "Esta diapositiva contiene {count} ideas distintas ({reason}). Mostrarla como {count} diapositivas sería más claro:",
+      "confirm": "Dividir en {count} diapositivas",
+      "untitled": "(parte sin título)"
     }
   },
   "image": {

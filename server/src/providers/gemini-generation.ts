@@ -33,7 +33,11 @@ import type {
   ImportedLayoutDescriptor,
   ImportedLayoutSemantics,
 } from '@slide-machine/shared'
-import { isVoiceCommand, WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
+import {
+  isVoiceCommand,
+  WHITEBOARD_LAYOUT_TYPE,
+  MAX_SPLIT_PARTS,
+} from '@slide-machine/shared'
 import type { HealthComponent } from '@slide-machine/shared'
 import { env } from '../config/env'
 import { hasContent, splitGeneratedSlots } from '../lib/generated-slots'
@@ -888,6 +892,49 @@ const reformatResultSchema = z.object({
     .optional(),
 })
 
+/**
+ * The refine reply: the reformat shape, plus the model's case for showing the
+ * slide as several (GEN-4). Kept separate from `reformatResultSchema` so a
+ * reformat, which has no business restructuring a lecture, cannot return one.
+ */
+const refineResultSchema = reformatResultSchema.extend({
+  splitProposal: z
+    .object({
+      reason: z.string().default(''),
+      parts: z.array(
+        z.object({
+          layoutType: z.string().optional(),
+          slots: z.object({
+            title: z.string().optional(),
+            body: z.string().optional(),
+            bullets: z.array(z.string()).optional(),
+            caption: z.string().optional(),
+          }),
+          imageGuidance: z
+            .object({
+              keywords: z.array(z.string()),
+              none: z.boolean().optional(),
+            })
+            .optional(),
+        }),
+      ),
+    })
+    .optional(),
+})
+
+/** A part with nothing in it is not a slide. The model occasionally pads its
+ * list to a round number, and an empty part would become a blank slide the
+ * instructor has to notice and delete. */
+const partHasContent = (part: {
+  slots: { title?: string; body?: string; bullets?: string[]; caption?: string }
+}): boolean =>
+  Boolean(
+    part.slots.title?.trim() ||
+    part.slots.body?.trim() ||
+    part.slots.caption?.trim() ||
+    part.slots.bullets?.some(b => b.trim()),
+  )
+
 /** The `- type: purpose` layout menu shared by the refine/reformat prompts. */
 const layoutMenu = (
   descriptors: SlideReformatRequest['layoutDescriptors'],
@@ -986,6 +1033,7 @@ const refinePrompt = (req: SlideRefineRequest): string =>
     context: contextFragment(req.seedContext),
     language: languageFragment(req.language),
     layouts: layoutMenu(req.layoutDescriptors),
+    maxSplitParts: String(MAX_SPLIT_PARTS),
   })
 
 const refitResultSchema = z.object({
@@ -1411,18 +1459,45 @@ export class GeminiGenerationProvider implements GenerationProvider {
       if (error instanceof GenerationUnavailableError) throw error
       return unchanged
     }
-    // The refine output shape matches the reformat one (slots + layout + image).
-    const parsed = reformatResultSchema.safeParse(raw)
+    const parsed = refineResultSchema.safeParse(raw)
     if (!parsed.success) return unchanged
     const allowed = new Set(req.layoutDescriptors.map(d => d.type))
-    const layoutType = (
-      parsed.data.layoutType &&
-      allowed.has(parsed.data.layoutType as LayoutType)
-        ? parsed.data.layoutType
-        : req.current.layoutType
-    ) as LayoutType
+    const layoutOf = (candidate: string | undefined): LayoutType =>
+      (candidate && allowed.has(candidate as LayoutType)
+        ? candidate
+        : req.current.layoutType) as LayoutType
+
+    /*
+     * The proposal, or nothing.
+     *
+     * Dropped whole rather than repaired down to one part: "this slide should
+     * be several" and "this slide should be one slide" are different claims,
+     * and only the model can make the first. A single surviving part would
+     * reach the instructor as a split that is not one.
+     *
+     * Empty parts are removed before the cap, so a model that padded its list
+     * to three does not spend the allowance on blanks.
+     */
+    const proposed = parsed.data.splitProposal
+    const parts = (proposed?.parts ?? [])
+      .filter(partHasContent)
+      .slice(0, MAX_SPLIT_PARTS)
+      .map(part => ({
+        layoutType: layoutOf(part.layoutType),
+        slots: part.slots,
+        imageGuidance: part.imageGuidance
+          ? {
+              keywords: tightenSearchPhrases(part.imageGuidance.keywords).slice(
+                0,
+                6,
+              ),
+              none: part.imageGuidance.none,
+            }
+          : undefined,
+      }))
+
     return {
-      layoutType,
+      layoutType: layoutOf(parsed.data.layoutType),
       slots: parsed.data.slots,
       imageGuidance: parsed.data.imageGuidance
         ? {
@@ -1432,6 +1507,9 @@ export class GeminiGenerationProvider implements GenerationProvider {
             none: parsed.data.imageGuidance.none,
           }
         : undefined,
+      ...(parts.length > 1
+        ? { splitProposal: { reason: proposed?.reason?.trim() ?? '', parts } }
+        : {}),
     }
   }
 

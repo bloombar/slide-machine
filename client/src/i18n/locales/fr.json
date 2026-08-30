@@ -798,6 +798,12 @@
       "code": "Ajouter du code",
       "codeIn": "Ajouter du code {language}",
       "preformatted": "Ajouter du texte préformaté"
+    },
+    "split": {
+      "title": "Diviser cette diapositive ?",
+      "intro": "Cette diapositive contient {count} idées distinctes ({reason}). La présenter en {count} diapositives serait plus clair :",
+      "confirm": "Diviser en {count} diapositives",
+      "untitled": "(partie sans titre)"
     }
   },
   "image": {

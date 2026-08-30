@@ -6,7 +6,10 @@
  */
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import type { SlideGenerationRequest } from '@slide-machine/shared'
-import { VOICE_COMMAND_DESCRIPTORS } from '@slide-machine/shared'
+import {
+  VOICE_COMMAND_DESCRIPTORS,
+  MAX_SPLIT_PARTS,
+} from '@slide-machine/shared'
 const testEnv = vi.hoisted(() => ({
   GEMINI_API_KEY: 'test-key' as string | undefined,
   GEMINI_MODEL: 'gemini-test-model',
@@ -1607,5 +1610,140 @@ describe('image keywords are cut to a searchable length (IMG-1)', () => {
     // "A picture, but I did not say of what" is handled on the server side by
     // falling back to the slide's own words, not by inventing keywords here
     expect(await withKeywords([])).toEqual([])
+  })
+})
+
+/**
+ * A refine that proposes showing one slide as several (GEN-4).
+ *
+ * The proposal is a claim about the SHAPE of the lecture, so what matters
+ * here is what survives validation: a malformed or one-part proposal must not
+ * reach the instructor as an offer, because accepting it would restructure a
+ * deck on the model's say-so and produce slides nobody read.
+ */
+describe('split proposals from a refine (GEN-4)', () => {
+  const refineWith = async (reply: Record<string, unknown>) => {
+    fetchMock.mockResolvedValue(geminiReply(reply))
+    return new GeminiGenerationProvider().refineSlide({
+      current: { layoutType: 'content', title: 'Stages', body: 'Three of.' },
+      level: 3,
+      layoutDescriptors: [
+        { type: 'content', label: 'Content', purpose: 'x', slots: [] },
+        { type: 'list', label: 'List', purpose: 'y', slots: [] },
+      ],
+    } as never)
+  }
+
+  const part = (title: string) => ({
+    layoutType: 'content',
+    slots: { title, body: `About ${title}.` },
+  })
+
+  it('carries a well-formed proposal back with its parts and reason', async () => {
+    const res = await refineWith({
+      layoutType: 'content',
+      slots: { title: 'Stages' },
+      splitProposal: {
+        reason: 'three separate stages',
+        parts: [part('Absorption'), part('Transfer'), part('Fixation')],
+      },
+    })
+    expect(res.splitProposal?.reason).toBe('three separate stages')
+    expect(res.splitProposal?.parts.map(p => p.slots.title)).toEqual([
+      'Absorption',
+      'Transfer',
+      'Fixation',
+    ])
+  })
+
+  it('leaves the refined single slide intact alongside it', async () => {
+    // The instructor may decline, and must still get the refine they asked for
+    const res = await refineWith({
+      layoutType: 'list',
+      slots: { title: 'Stages', bullets: ['a', 'b'] },
+      splitProposal: { reason: 'r', parts: [part('One'), part('Two')] },
+    })
+    expect(res.layoutType).toBe('list')
+    expect(res.slots.bullets).toEqual(['a', 'b'])
+  })
+
+  it('says nothing when the model proposed nothing', async () => {
+    const res = await refineWith({
+      layoutType: 'content',
+      slots: { title: 'Stages' },
+    })
+    expect(res.splitProposal).toBeUndefined()
+  })
+
+  it('drops a proposal of one part — that is not a split', async () => {
+    const res = await refineWith({
+      layoutType: 'content',
+      slots: { title: 'Stages' },
+      splitProposal: { reason: 'r', parts: [part('Only')] },
+    })
+    expect(res.splitProposal).toBeUndefined()
+  })
+
+  it('drops empty parts, and the proposal with them when too few survive', async () => {
+    // A padded list would otherwise become a blank slide in the deck
+    const res = await refineWith({
+      layoutType: 'content',
+      slots: { title: 'Stages' },
+      splitProposal: {
+        reason: 'r',
+        parts: [part('Real'), { layoutType: 'content', slots: {} }],
+      },
+    })
+    expect(res.splitProposal).toBeUndefined()
+  })
+
+  it('keeps the real parts when only some were empty', async () => {
+    const res = await refineWith({
+      layoutType: 'content',
+      slots: { title: 'Stages' },
+      splitProposal: {
+        reason: 'r',
+        parts: [
+          part('One'),
+          { layoutType: 'content', slots: { title: '   ' } },
+          part('Two'),
+        ],
+      },
+    })
+    expect(res.splitProposal?.parts.map(p => p.slots.title)).toEqual([
+      'One',
+      'Two',
+    ])
+  })
+
+  it('never offers more parts than the cap', async () => {
+    const res = await refineWith({
+      layoutType: 'content',
+      slots: { title: 'Stages' },
+      splitProposal: {
+        reason: 'r',
+        parts: ['A', 'B', 'C', 'D', 'E'].map(part),
+      },
+    })
+    expect(res.splitProposal?.parts).toHaveLength(MAX_SPLIT_PARTS)
+  })
+
+  it('corrects a part onto a layout the design actually has', async () => {
+    // An invented layout would draw nothing at all
+    const res = await refineWith({
+      layoutType: 'content',
+      slots: { title: 'Stages' },
+      splitProposal: {
+        reason: 'r',
+        parts: [
+          { layoutType: 'invented-layout', slots: { title: 'One' } },
+          { layoutType: 'list', slots: { title: 'Two' } },
+        ],
+      },
+    })
+    expect(res.splitProposal?.parts.map(p => p.layoutType)).toEqual([
+      'content',
+      'list',
+    ])
   })
 })

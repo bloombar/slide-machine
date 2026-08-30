@@ -798,6 +798,12 @@
       "code": "添加代码",
       "codeIn": "添加 {language} 代码",
       "preformatted": "添加预格式化文本"
+    },
+    "split": {
+      "title": "拆分这张幻灯片？",
+      "intro": "这张幻灯片包含 {count} 个独立的要点（{reason}）。拆成 {count} 张会更清晰：",
+      "confirm": "拆分为 {count} 张幻灯片",
+      "untitled": "（无标题部分）"
     }
   },
   "image": {

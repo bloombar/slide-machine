@@ -21,5 +21,20 @@ identifier or filename in backticks, a source as a link with readable words
 rather than a bare URL. A body may hold a "-" or "1." list; a bullet carries
 no marker of its own. No headings, no ``` fences, no $…$ maths.
 
+Some slides cannot be improved at this size. When ONE slide is carrying more
+than one idea — separate stages, a definition and its examples, two arguments
+set against each other — the clearest version of it is several slides, and no
+amount of rewording gets there. Say so with "splitProposal", giving the
+COMPLETE content of each part exactly as you would write those slides. Order
+them as they should appear; the first replaces this slide.
+
+Propose a split ONLY when the slide genuinely holds separate ideas. A slide
+that is merely long, or dense on ONE idea, is refined, not split — say nothing
+and leave "splitProposal" out, which is the right answer for most slides.
+Never propose more than {{maxSplitParts}} parts, and never propose a part with
+no content of its own. Still fill "slots" with your best single-slide version
+either way: the instructor decides whether to split, and gets the refined
+slide if they decline.
+
 Return ONLY this JSON:
-{ "layoutType": "<one of the layouts above>", "slots": { "title"?: string, "body"?: string, "bullets"?: string[], "caption"?: string }, "imageGuidance"?: { "keywords": string[], "none"?: boolean } }
+{ "layoutType": "<one of the layouts above>", "slots": { "title"?: string, "body"?: string, "bullets"?: string[], "caption"?: string }, "imageGuidance"?: { "keywords": string[], "none"?: boolean }, "splitProposal"?: { "reason": "<a short phrase naming what the parts are>", "parts": [ { "layoutType": "<one of the layouts above>", "slots": { ... }, "imageGuidance"?: { ... } } ] } }

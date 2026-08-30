@@ -197,6 +197,7 @@ const ACCESS_INDEX: Record<string, AccessDescriptor> = {
   'deck.diarize': { resource: 'deck', level: 'edit' },
   'deck.refine': { resource: 'deck', level: 'edit' },
   'deck.refineSlide': { resource: 'deck', level: 'edit' },
+  'deck.splitSlide': { resource: 'deck', level: 'edit' },
   'deck.refineSlideTranscript': { resource: 'deck', level: 'edit' },
   'deck.refineStatus': { resource: 'refineJob', level: 'edit' },
   'deck.reformat': { resource: 'deck', level: 'edit' },
