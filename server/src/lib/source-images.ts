@@ -49,6 +49,38 @@ export const applyImageKeywords = (
 }
 
 /**
+ * The terms a slide's empty picture boxes are searched with.
+ *
+ * The model's own keywords when it wrote any. It regularly asks for a picture
+ * without saying what of — a layout with an image box, and an imageGuidance
+ * carrying no keywords — and that used to end the matter: enrichment returned
+ * before it began and the box stayed empty for good. The slide's own words
+ * stand in instead, title first, which is what `deriveImageKeywords` already
+ * did for a slide moved onto an image layout by hand (EDIT-3). The live
+ * generation path simply never reached it.
+ *
+ * Empty for a slide getting no picture at all — no guidance, or guidance that
+ * said text-only. That distinction matters beyond wasted searches: the terms
+ * are persisted, and the client polls for an arriving image only on a slide
+ * that has some, so terms on a text-only slide would leave it waiting for
+ * something nothing is going to send.
+ */
+export const imageSearchTerms = (
+  guidance: { keywords: string[]; none?: boolean } | undefined,
+  slide: {
+    title?: string
+    body?: string
+    bullets?: string[]
+    caption?: string
+  },
+): string[] => {
+  if (!guidance || guidance.none) return []
+  return guidance.keywords.length
+    ? guidance.keywords
+    : deriveImageKeywords(slide)
+}
+
+/**
  * Sources every empty picture box on a slide, in the background.
  *
  * Call *after* the slide is saved: the keywords have to be persisted for the

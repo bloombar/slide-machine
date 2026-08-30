@@ -43,6 +43,7 @@ import { meterGeminiUsage, type GeminiUsageMetadata } from './usage-metadata'
 import { noteGenerationRefusal } from '../telemetry/generation-signals'
 import { GenerationUnavailableError } from './errors'
 import { freedomPolicy, renderGenerationPrompt } from './prompt-templates'
+import { tightenSearchPhrases } from '../enrichment/keywords'
 import {
   renderRefinePrompt,
   renderNarratePrompt,
@@ -1282,7 +1283,7 @@ export class GeminiGenerationProvider implements GenerationProvider {
       ...content,
       imageGuidance: guidance
         ? {
-            keywords: guidance.keywords.slice(0, 6),
+            keywords: tightenSearchPhrases(guidance.keywords).slice(0, 6),
             seededImageId:
               guidance.seededImageId && seededIds.has(guidance.seededImageId)
                 ? guidance.seededImageId
@@ -1383,7 +1384,9 @@ export class GeminiGenerationProvider implements GenerationProvider {
       slots: parsed.data.slots,
       imageGuidance: parsed.data.imageGuidance
         ? {
-            keywords: parsed.data.imageGuidance.keywords.slice(0, 6),
+            keywords: tightenSearchPhrases(
+              parsed.data.imageGuidance.keywords,
+            ).slice(0, 6),
             none: parsed.data.imageGuidance.none,
           }
         : undefined,
@@ -1423,7 +1426,9 @@ export class GeminiGenerationProvider implements GenerationProvider {
       slots: parsed.data.slots,
       imageGuidance: parsed.data.imageGuidance
         ? {
-            keywords: parsed.data.imageGuidance.keywords.slice(0, 6),
+            keywords: tightenSearchPhrases(
+              parsed.data.imageGuidance.keywords,
+            ).slice(0, 6),
             none: parsed.data.imageGuidance.none,
           }
         : undefined,
