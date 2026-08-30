@@ -12,7 +12,7 @@
  * browser's measuring, which is the browser's job.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { render, screen, cleanup } from '@testing-library/react'
+import { render, screen, cleanup, waitFor } from '@testing-library/react'
 import { NATURAL_LINE_BOX } from '@slide-machine/shared'
 import { useFitText } from './useFitText'
 
@@ -192,6 +192,37 @@ describe('fitting a box’s type to what it holds', () => {
     stubBox(1000, 100)
     render(<Box enabled={false} />)
     expect(scaleOf()).toBe(1)
+  })
+
+  it('holds its size while the box is being typed into', () => {
+    // A field's height is reserved in pixels from the display it replaced, so
+    // it does not answer to the type size the search steps: whatever editing
+    // adds is height no scale can clear, and the search ran every step and
+    // landed on the floor. The words went to two fifths under the cursor.
+    stubBox(140, 100)
+    render(
+      <Box>
+        <input aria-label="Slide title" defaultValue="words" />
+      </Box>,
+    )
+    expect(scaleOf()).toBe(1)
+  })
+
+  it('measures again once the field goes away', async () => {
+    // The control. Without it the case above would pass on a hook that had
+    // stopped measuring altogether, and a box left small for the rest of the
+    // session is the fault this replaced.
+    stubBox(140, 100)
+    const { rerender } = render(
+      <Box>
+        <input aria-label="Slide title" defaultValue="words" />
+      </Box>,
+    )
+    expect(scaleOf()).toBe(1)
+    rerender(<Box>words</Box>)
+    // The re-measure rides on the mutation observer, which fires in a
+    // microtask rather than in the render that emptied the box.
+    await waitFor(() => expect(scaleOf()).toBeLessThan(1))
   })
 
   it('does not measure a box that has no size yet', () => {

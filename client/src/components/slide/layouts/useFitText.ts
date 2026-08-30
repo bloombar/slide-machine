@@ -57,6 +57,21 @@ const MIN_SCALE = 0.4
  * that fitting settles in a frame or two. */
 const STEPS = 24
 
+/**
+ * Whether this box is being typed into rather than read.
+ *
+ * Its content is then a form control, and a control is not text: its height is
+ * reserved in pixels from the display it replaced, so it does not answer to the
+ * type size this search is stepping. Whatever editing adds — an outline, a row
+ * a textarea grew — is height no scale can clear, so the search runs every step
+ * and lands on the floor, and the words shrink to two fifths under the cursor.
+ *
+ * So the box keeps the size it was fitted at until the field goes away, which
+ * the mutation observer below sees as a change of children.
+ */
+const beingEdited = (el: HTMLElement): boolean =>
+  Boolean(el.querySelector('input, textarea, [contenteditable="true"]'))
+
 const slackFor = (el: HTMLElement): number => {
   const cs = getComputedStyle(el)
   const size = parseFloat(cs.fontSize)
@@ -163,6 +178,8 @@ export const useFitText = (
       // measured, and shrinking against a zero height would take every box to
       // the floor.
       if (!el.clientHeight) return
+      // Being edited: hold the size it was fitted at (`beingEdited`).
+      if (beingEdited(el)) return
       // Start from full size: the content may have got shorter, and a box
       // that only ever shrank would stay small for the rest of the session.
       el.style.setProperty('--fit-scale', '1')

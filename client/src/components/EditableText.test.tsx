@@ -151,22 +151,108 @@ describe('EditableText', () => {
  * out from under the reader — and back down when they finish.
  */
 describe('editing does not move the box', () => {
-  it('keeps the hint out of the flow, so it adds no height', () => {
+  it('draws the hint outside the box, so nothing can clip it', () => {
+    // The box a slide gives a field is sized by its design and clips what it
+    // holds, so a hint drawn inside it was cut off — and counted as the box's
+    // content, which took `useFitText` to the floor trying to fit it. It is
+    // placed over the slide instead, from the document root.
     render(
-      <EditableText
-        value="Runoff"
-        label="Slide title"
-        hint="The main presentation title or section heading."
-        onSave={vi.fn()}
-      />,
+      <div data-testid="box" style={{ overflow: 'hidden', height: 20 }}>
+        <EditableText
+          value="Runoff"
+          label="Slide title"
+          hint="The main presentation title or section heading."
+          onSave={vi.fn()}
+        />
+      </div>,
     )
     fireEvent.click(screen.getByTitle('Click to edit Slide title'))
     const hint = screen.getByText(
       'The main presentation title or section heading.',
     )
-    // Absolutely placed under the field: visible, and costing no height
-    expect(hint).toHaveClass('absolute')
-    expect(hint).toHaveClass('top-full')
+    expect(hint.closest('[data-testid="box"]')).toBeNull()
+    expect(hint.parentElement).toBe(document.body)
+    // Nothing but the field is left inside the box, so it costs no height
+    expect(screen.getByTestId('box')).toContainElement(
+      screen.getByRole('textbox'),
+    )
+    // Over the slide rather than under it, and untouchable: a click on the
+    // hint would blur the field it describes and end the edit
+    expect(hint).toHaveClass('fixed')
+    expect(hint).toHaveClass('pointer-events-none')
+  })
+
+  it('names the hint from the field, which a portal would otherwise lose', () => {
+    // Out of the reading order, a screen reader would never reach it.
+    render(
+      <EditableText
+        value="Runoff"
+        label="Slide title"
+        hint="One line on what this part covers."
+        onSave={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByTitle('Click to edit Slide title'))
+    expect(screen.getByRole('textbox')).toHaveAccessibleDescription(
+      'One line on what this part covers.',
+    )
+  })
+
+  it('takes the hint away with the field when the edit ends', () => {
+    render(
+      <EditableText
+        value="Runoff"
+        label="Slide title"
+        hint="One line on what this part covers."
+        onSave={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByTitle('Click to edit Slide title'))
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Escape' })
+    // A portal outlives its own subtree if it is not unmounted with it
+    expect(
+      screen.queryByText('One line on what this part covers.'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('edits a wrapping box in a field that wraps', () => {
+    // An input never wraps: a title that reads as three lines on the slide
+    // straightened into one long line under the cursor and the box stopped
+    // looking like the box.
+    render(
+      <EditableText
+        value="A title long enough to wrap over more than one line"
+        label="Slide title"
+        onSave={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByTitle('Click to edit Slide title'))
+    expect(screen.getByRole('textbox').tagName).toBe('TEXTAREA')
+  })
+
+  it('edits a truncating box on one line, as it is displayed', () => {
+    // The control: a header title ellipsizes rather than wrapping, so a
+    // wrapping field would misrepresent it.
+    render(
+      <EditableText
+        value="A lecture title in a narrow header"
+        label="Slide title"
+        truncate
+        onSave={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByTitle('Click to edit Slide title'))
+    expect(screen.getByRole('textbox').tagName).toBe('INPUT')
+  })
+
+  it('keeps a one-line value on one line, whatever is pasted into it', () => {
+    // A textarea does not flatten pasted newlines the way an input did.
+    const onSave = vi.fn()
+    render(<EditableText value="Runoff" label="Slide title" onSave={onSave} />)
+    fireEvent.click(screen.getByTitle('Click to edit Slide title'))
+    const box = screen.getByRole('textbox')
+    fireEvent.change(box, { target: { value: 'One\nTwo' } })
+    expect(box).toHaveValue('One Two')
   })
 
   it('gives a one-line box one row, not two', () => {

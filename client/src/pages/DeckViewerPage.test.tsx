@@ -800,12 +800,16 @@ describe('DeckViewerPage microphone capture', () => {
     })
     expect(await screen.findByText('3 / 3')).toBeInTheDocument()
     expect(
-      screen.getByRole('heading', { name: 'Third slide' }),
+      await screen.findByRole('heading', { name: 'Third slide' }),
     ).toBeInTheDocument()
 
-    // Navigate away, then an UPDATE to that slide pulls the view back
+    // Navigate away, then an UPDATE to that slide pulls the view back.
+    // Awaited, not read straight back: the key moves the carousel through a
+    // state update, and asserting in the same tick passed only while the
+    // machine was quick enough — it is the assertion that was racing, not the
+    // navigation that was slow.
     fireEvent.keyDown(window, { key: 'ArrowLeft' })
-    expect(screen.getByText('2 / 3')).toBeInTheDocument()
+    expect(await screen.findByText('2 / 3')).toBeInTheDocument()
     act(() => {
       recognition.onresult?.({
         resultIndex: 0,
@@ -813,7 +817,9 @@ describe('DeckViewerPage microphone capture', () => {
       })
     })
     expect(await screen.findByText('3 / 3')).toBeInTheDocument()
-    expect(screen.getByText('Body extended')).toBeInTheDocument()
+    // Awaited for the same reason: the counter and the text it names do not
+    // have to land in the same render.
+    expect(await screen.findByText('Body extended')).toBeInTheDocument()
 
     // In list view, generation events center the changed slide
     fireEvent.click(screen.getByRole('button', { name: 'List view' }))
