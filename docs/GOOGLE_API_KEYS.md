@@ -263,6 +263,8 @@ Requesting a scope in code is only half of it — it must also be declared on th
 
 Take the **Sensitive / Restricted** label the picker shows next to each scope as authoritative — it decides your verification path below, and Google reclassifies scopes from time to time.
 
+Going to production with these scopes — publishing, verification, and the annual security assessment `drive.readonly` triggers — is [GOOGLE_PRODUCTION_MODE.md](GOOGLE_PRODUCTION_MODE.md).
+
 ### What you don't need to change
 
 Adding a connected-account scope touches the two places above and nothing else. In particular:

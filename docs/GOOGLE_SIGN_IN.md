@@ -56,7 +56,8 @@ before you can create a client.
    pilot, click **Publish app** to move to **In production** so any user can sign
    in without being a listed test user. Basic scopes (email/profile/openid) do
    **not** require Google's app-verification review; the broader Drive scopes
-   later may.
+   do. Step-by-step, with what verification costs:
+   [GOOGLE_PRODUCTION_MODE.md](GOOGLE_PRODUCTION_MODE.md).
 
 ## 2. Create the OAuth 2.0 Client ID
 
