@@ -20,26 +20,7 @@ import type {
 } from '@slide-machine/shared'
 import { defineTool } from '../tool'
 import { registerTool } from '../registry'
-
-/** A date as a model should read it: unambiguous, no locale in play. */
-const onDay = (value: string | Date | undefined): string =>
-  value ? new Date(value).toISOString().slice(0, 10) : 'unknown'
-
-/**
- * How a project is named, including when it has no name.
- *
- * Three cases, and they mean different things. A title is genuinely optional —
- * the project created for a user's first lecture has none, and the app shows a
- * placeholder — so an empty one is ordinary and says "untitled". A title that
- * is missing entirely means the project was not in the listing at all, which
- * is not ordinary, and flattening the two would tell a model that a lookup
- * failure and an unnamed project are the same thing.
- *
- * Passing the empty string straight through printed `in project ""`, which
- * reads as broken data rather than an absent name.
- */
-const projectName = (title: string | undefined): string =>
-  title === undefined ? 'unknown' : title.trim() ? title : 'Untitled project'
+import { onDay, projectName } from './prose'
 
 /** One lecture as a line of prose, ids included. */
 const lectureLine = (deck: Deck, projectTitle: string | undefined): string =>
@@ -192,16 +173,22 @@ export const createLecture = defineTool({
   name: 'create_lecture',
   title: 'Create a lecture',
   description:
-    'Creates an empty lecture inside a project. Needs a project id — get one ' +
-    'from find_lectures. The lecture starts with no slides; use ' +
-    'set_lecture_notes to give it the material it should be built from.',
+    'Creates an empty lecture inside a project. Needs a project id: call ' +
+    'find_projects and ask the instructor which project this lecture belongs ' +
+    'in. Do not pick one yourself, and do not reuse a project id from an ' +
+    'earlier lecture without checking — filing a lecture under the wrong ' +
+    'course is not something this tool can undo. The lecture starts with no ' +
+    'slides; use set_lecture_notes to give it the material it should be ' +
+    'built from.',
   readOnly: false,
   uses: ['deck.create'],
   input: {
     projectId: z
       .string()
       .min(1)
-      .describe('The project the lecture belongs to, from find_lectures.'),
+      .describe(
+        'The project the lecture belongs to, from find_projects and confirmed with the instructor.',
+      ),
     title: z
       .string()
       .trim()

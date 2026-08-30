@@ -8,5 +8,6 @@
  * is invisible to the test that checks no tool reaches a forbidden action.
  */
 import './lectures'
+import './projects'
 import './slides'
 import './templates'

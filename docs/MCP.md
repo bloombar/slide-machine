@@ -17,7 +17,7 @@ future work in the spec — [SPEC.md §18](SPEC.md#18-future-work), open questio
 | --- | --- |
 | Schema derivation and action descriptions (§3.1, §3.2) | Built — [actions/catalog.ts](../server/src/actions/catalog.ts) |
 | Model-legible errors (§3.3) | Built — [actions/agent-error.ts](../server/src/actions/agent-error.ts) |
-| The MCP tool surface (§4) | A first set of ten tools — [mcp/tools/](../server/src/mcp/tools/) |
+| The MCP tool surface (§4) | A first set of eleven tools — [mcp/tools/](../server/src/mcp/tools/) |
 | The safety boundary (§6) | Built and enforced by test — [mcp/forbidden.ts](../server/src/mcp/forbidden.ts) |
 | The endpoint | `POST /api/mcp` — [routes/mcp.ts](../server/src/routes/mcp.ts) |
 | **OAuth authorization server (§5)** | Built — [oauth/](../server/src/oauth/) and [routes/oauth.ts](../server/src/routes/oauth.ts). Dynamic client registration, PKCE, scopes, refresh-token rotation, revocation, and the two discovery documents. |
