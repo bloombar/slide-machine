@@ -22,6 +22,7 @@ export default function PreviewCard({
   testId,
   captionClassName = 'block',
   data,
+  chrome = 'card',
   children,
 }: {
   template: Template
@@ -41,8 +42,18 @@ export default function PreviewCard({
    * without reading the words off it — the picture above the caption is the
    * first thing in a card's text now, so its name is not. */
   data?: Record<string, string>
+  /**
+   * What the card is made of.
+   *
+   * `card` frames the picture and its caption together in a bordered tile.
+   * `bare` drops the frame and puts a hairline round the picture itself, so a
+   * grid of them reads as a wall of slides rather than a wall of boxes; the
+   * picture lifts on hover, which the frame used to do with a border colour.
+   */
+  chrome?: 'card' | 'bare'
   children: ReactNode
 }) {
+  const bare = chrome === 'bare'
   return (
     <button
       type="button"
@@ -54,13 +65,33 @@ export default function PreviewCard({
       // caption beside it made taller: a button centres its contents in the
       // space it is given, which left the previews in a row at different
       // heights.
-      className={`flex w-full flex-col overflow-hidden rounded-lg border-2 p-1 text-start transition-colors ${
-        selected
-          ? 'border-indigo-600'
-          : 'border-slate-200 hover:border-slate-400'
+      className={`group flex w-full flex-col text-start ${
+        bare
+          ? ''
+          : `overflow-hidden rounded-lg border-2 p-1 transition-colors ${
+              selected
+                ? 'border-indigo-600'
+                : 'border-slate-200 hover:border-slate-400'
+            }`
       }`}
     >
-      <TemplatePreview template={template} layout={layout} testId={testId} />
+      <TemplatePreview
+        template={template}
+        layout={layout}
+        testId={testId}
+        // A ring rather than a thicker border for the chosen one: a ring
+        // paints outside the box, so the picture does not resize when it is
+        // picked and the row does not shuffle around it.
+        className={
+          bare
+            ? `overflow-hidden rounded-lg border transition-shadow group-hover:shadow-lg ${
+                selected
+                  ? 'border-indigo-600 ring-1 ring-indigo-600'
+                  : 'border-slate-200'
+              }`
+            : ''
+        }
+      />
       <span className={`mt-1.5 w-full px-1 pb-0.5 ${captionClassName}`}>
         {children}
       </span>

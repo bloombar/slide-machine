@@ -92,6 +92,25 @@ describe('LayoutPickerModal (EDIT-3)', () => {
     )
   })
 
+  it('frames the slide rather than the card', () => {
+    // A wall of slides should read as slides: no tile around the picture and
+    // its words, a hairline on the picture itself, and the picture lifts
+    // under the pointer — which the frame used to do with a border colour.
+    setup()
+    const card = screen.getByRole('radio', { name: /List/ })
+    expect(card.className).not.toMatch(/border/)
+    const frame = screen.getAllByTestId('layout-preview')[1]!.parentElement!
+    expect(frame).toHaveClass('border', 'border-slate-200')
+    expect(frame).toHaveClass('group-hover:shadow-lg')
+  })
+
+  it('rings the chosen slide instead of resizing it', () => {
+    // A ring paints outside the box, so picking one does not shuffle the row.
+    setup()
+    const frame = screen.getAllByTestId('layout-preview')[0]!.parentElement!
+    expect(frame).toHaveClass('ring-1', 'ring-indigo-600')
+  })
+
   it('marks the slide’s current layout as checked', () => {
     setup()
     expect(screen.getByRole('radio', { name: /Content/ })).toHaveAttribute(
