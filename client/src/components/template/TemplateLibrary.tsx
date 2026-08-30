@@ -22,7 +22,7 @@ import { ChevronLeft, ChevronRight, Copy, Pencil, Trash2 } from 'lucide-react'
 import type { Layout, Template } from '@slide-machine/shared'
 import { WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
 import { templateName } from '../../i18n/templateName'
-import TemplatePreview from './TemplatePreview'
+import PreviewCard from './PreviewCard'
 
 /** A template the signed-in user authored, rather than one that shipped. */
 export const isOwnTemplate = (template: Template, userId?: string): boolean =>
@@ -96,33 +96,24 @@ export default function TemplateLibrary({
                 the row is inside the radio, and a button cannot hold another
                 button. Same arrangement as the editor rail's delete icon. */}
             <div className="relative">
-              <button
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                onClick={() => onChange(template.id)}
-                className={`w-full overflow-hidden rounded-lg border-2 p-1 text-start transition-colors ${
-                  selected
-                    ? 'border-indigo-600'
-                    : 'border-slate-200 hover:border-slate-400'
+              <PreviewCard
+                template={template}
+                layout={shown}
+                selected={selected}
+                onSelect={() => onChange(template.id)}
+                captionClassName={`flex items-center gap-1.5 ${
+                  pageable ? 'pr-20' : ''
                 }`}
               >
-                <TemplatePreview template={template} layout={shown} />
-                <span
-                  className={`mt-1.5 flex items-center gap-1.5 px-1 pb-0.5 ${
-                    pageable ? 'pr-20' : ''
-                  }`}
-                >
-                  <span className="min-w-0 truncate text-sm font-medium">
-                    {name}
-                  </span>
-                  {own && (
-                    <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[0.65rem] font-medium text-slate-600">
-                      {t('template.custom')}
-                    </span>
-                  )}
+                <span className="min-w-0 truncate text-sm font-medium">
+                  {name}
                 </span>
-              </button>
+                {own && (
+                  <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[0.65rem] font-medium text-slate-600">
+                    {t('template.custom')}
+                  </span>
+                )}
+              </PreviewCard>
 
               {pageable && (
                 <div className="absolute bottom-1 right-1.5 flex items-center gap-0.5">

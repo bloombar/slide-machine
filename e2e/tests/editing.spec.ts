@@ -120,6 +120,24 @@ test('in-place editing in the viewer, including list view and bullets', async ({
   await expect(
     page.getByRole('radio', { name: /^Title Opening/ }),
   ).toHaveAttribute('aria-checked', 'true')
+  // Every choice is a miniature slide, not a line of prose (EDIT-3): one
+  // preview per layout, drawn by the renderer the slide itself uses, and
+  // each drawing its OWN layout rather than the same one over and over
+  {
+    const dialog = page.getByRole('dialog', { name: 'Change slide layout' })
+    const previews = dialog.getByTestId('layout-preview')
+    const layouts = await dialog.getByRole('radio').count()
+    await expect(previews).toHaveCount(layouts)
+    // The bullet-list card shows bullets; the title card does not. By
+    // element, not by role: a preview is decoration to a screen reader, so
+    // nothing inside one has a role to be found by.
+    await expect(
+      dialog.getByRole('radio', { name: /^Bullet list/ }).locator('li'),
+    ).not.toHaveCount(0)
+    await expect(
+      dialog.getByRole('radio', { name: /^Title Opening/ }).locator('li'),
+    ).toHaveCount(0)
+  }
   await page.getByRole('radio', { name: /quote/i }).click()
   await expect(page.getByTestId('slide').first()).toHaveAttribute(
     'data-layout',

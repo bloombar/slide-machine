@@ -38,7 +38,7 @@ import { writeFileSync, mkdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { test, expect, type Page } from './fixtures'
 import { settled } from './slide-boxes'
-import { createProject } from './helpers'
+import { createProject, pickLayout } from './helpers'
 
 const OUT = path.resolve(process.env.DIAGNOSE_OUT ?? 'artifacts/diagnose')
 
@@ -170,12 +170,7 @@ test('measures the boxes a design draws', async ({ page }) => {
     await page.getByRole('menuitem', { name: 'Change layout' }).click()
     const dialog = page.getByRole('dialog', { name: 'Change slide layout' })
     await expect(dialog).toBeVisible()
-    const radios = dialog.getByRole('radio')
-    const labels = (await radios.allInnerTexts()).map(t =>
-      (t.split('\n')[0] ?? '').trim(),
-    )
-    const which = labels.indexOf(layout.label)
-    await radios.nth(which).click()
+    await pickLayout(dialog, layout.label)
     await expect(slide).toHaveAttribute('data-layout', type)
     await page
       .getByText(/Filled the boxes this layout added/)

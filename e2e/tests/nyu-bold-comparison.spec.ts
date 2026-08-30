@@ -48,7 +48,7 @@ import {
 import path from 'node:path'
 import { test, expect, type APIRequestContext } from './fixtures'
 import { faultsOn, settled } from './slide-boxes'
-import { createProject } from './helpers'
+import { createProject, pickLayout } from './helpers'
 
 const OUT = path.resolve(process.env.COMPARE_OUT ?? 'artifacts/nyu-bold')
 
@@ -301,18 +301,7 @@ test('captures every imported layout beside its source deck', async ({
     await page.getByRole('menuitem', { name: 'Change layout' }).click()
     const dialog = page.getByRole('dialog', { name: 'Change slide layout' })
     await expect(dialog).toBeVisible()
-    // Each radio reads as its label followed by the layout's purpose, and
-    // "Title" is a prefix of "Title 2" — so it is matched on the label line
-    // exactly rather than by a name pattern that would take the wrong one.
-    const radios = dialog.getByRole('radio')
-    const labels = (await radios.allInnerTexts()).map(t =>
-      (t.split('\n')[0] ?? '').trim(),
-    )
-    const which = labels.indexOf(layout.label)
-    expect(which, `no layout offered called "${layout.label}"`).toBeGreaterThan(
-      -1,
-    )
-    await radios.nth(which).click()
+    await pickLayout(dialog, layout.label)
     await expect(slide).toHaveAttribute('data-layout', layout.type)
     // Switching layout raises a toast offering to undo the boxes it filled,
     // and it sits over the slide. Photographing it would put a piece of the

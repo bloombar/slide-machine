@@ -130,7 +130,7 @@ import {
   settled,
   shrunkOn,
 } from './slide-boxes'
-import { createProject } from './helpers'
+import { createProject, pickLayout } from './helpers'
 import { KNOWN_FAULTS, unknownFaults } from './known-faults'
 
 const stamp = Date.now()
@@ -608,15 +608,7 @@ const switchTo = async (page: Page, layout: LayoutSpec) => {
   await page.getByRole('menuitem', { name: 'Change layout' }).click()
   const dialog = page.getByRole('dialog', { name: 'Change slide layout' })
   await expect(dialog).toBeVisible()
-  const radios = dialog.getByRole('radio')
-  const labels = (await radios.allInnerTexts()).map(t =>
-    (t.split('\n')[0] ?? '').trim(),
-  )
-  const which = labels.indexOf(layout.label)
-  expect(which, `no layout offered called "${layout.label}"`).toBeGreaterThan(
-    -1,
-  )
-  await radios.nth(which).click()
+  await pickLayout(dialog, layout.label)
   const slide = page.getByTestId('slide').first()
   await expect(slide).toHaveAttribute('data-layout', layout.type)
   // The toast offering to undo the boxes the switch filled sits over the
