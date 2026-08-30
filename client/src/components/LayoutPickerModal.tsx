@@ -93,6 +93,9 @@ export default function LayoutPickerModal({
               // Told apart from the Design tab's grid of previews, which
               // shows whole templates rather than one template's layouts.
               testId="layout-preview"
+              // No tile round the picture and its words: a wall of slides
+              // reads as slides, and the hairline is on the slide itself.
+              chrome="bare"
               // A card's own name, for anything that has to find one without
               // reading it off the card: the picture is the first thing in a
               // card's text now, so its name no longer is.
