@@ -1194,9 +1194,15 @@
     "review": {
       "dialog": "Review quiz questions",
       "title": "Review & set points",
-      "hint": "Adjust each question’s points, then publish. Total:",
+      "hint": "Edit any question, then publish. Total:",
       "points": "Points",
-      "pointsFor": "Points for question {number}"
+      "pointsFor": "Points for question {number}",
+      "questionFor": "Text of question {number}",
+      "choiceFor": "Choice {choice} for question {number}",
+      "correctFor": "Mark choice {choice} correct for question {number}",
+      "answers": "Accepted answers",
+      "answerFor": "Accepted answer {answer} for question {number}",
+      "incomplete": "Fill in every question and choice first."
     },
     "errors": {
       "status": "Could not load the quiz status",

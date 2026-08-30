@@ -1194,9 +1194,15 @@
     "review": {
       "dialog": "Relire les questions du quiz",
       "title": "Relire et attribuer les points",
-      "hint": "Ajustez les points de chaque question, puis publiez. Total :",
+      "hint": "Modifiez les questions, puis publiez. Total :",
       "points": "Points",
-      "pointsFor": "Points de la question {number}"
+      "pointsFor": "Points de la question {number}",
+      "questionFor": "Texte de la question {number}",
+      "choiceFor": "Choix {choice} de la question {number}",
+      "correctFor": "Marquer le choix {choice} comme correct pour la question {number}",
+      "answers": "Réponses acceptées",
+      "answerFor": "Réponse acceptée {answer} de la question {number}",
+      "incomplete": "Remplissez d’abord chaque question et chaque choix."
     },
     "errors": {
       "status": "Impossible de charger l'état du quiz",
