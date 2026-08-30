@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { ActionCaller } from '../tool'
-import { findProjects } from './projects'
+import { createProject, findProjects } from './projects'
 import { createLecture } from './lectures'
 
 const fakeCall = (
@@ -97,11 +97,12 @@ describe('find_projects', () => {
     expect(out.data).toEqual({ projects: [] })
   })
 
-  it('tells an account with no projects to ask before creating anything', async () => {
+  it('sends an account with no projects to create_project, after asking', async () => {
     const call = fakeCall({ 'project.list': [] })
     const out = await findProjects.run(call, {})
     expect(out.text).toContain('no projects yet')
     expect(out.text).toContain('ask the instructor')
+    expect(out.text).toContain('create_project')
   })
 
   it('reads a project with no date without inventing one', async () => {
@@ -139,5 +140,96 @@ describe('create_lecture, on choosing a project', () => {
       ['deck.create', { projectId: 'p2', title: 'Week 4' }],
     ])
     expect(out.data).toEqual({ id: 'd1', title: 'Week 4', projectId: 'p2' })
+  })
+})
+
+describe('create_project', () => {
+  it('creates the project and hands back the id create_lecture needs', async () => {
+    const call = fakeCall({
+      'project.create': {
+        id: 'p9',
+        title: 'Algorithms, Autumn 2026',
+        course: 'CS-201',
+        description: 'Sorting, graphs, complexity.',
+        visibility: 'public',
+      },
+    })
+    const out = await createProject.run(call, {
+      title: 'Algorithms, Autumn 2026',
+      course: 'CS-201',
+      description: 'Sorting, graphs, complexity.',
+    })
+
+    expect(call.calls).toEqual([
+      [
+        'project.create',
+        {
+          title: 'Algorithms, Autumn 2026',
+          course: 'CS-201',
+          description: 'Sorting, graphs, complexity.',
+        },
+      ],
+    ])
+    expect(out.text).toContain('project id: p9')
+    expect(out.text).toContain('create_lecture')
+    expect(out.data).toEqual({
+      id: 'p9',
+      title: 'Algorithms, Autumn 2026',
+      course: 'CS-201',
+      description: 'Sorting, graphs, complexity.',
+      visibility: 'public',
+    })
+  })
+
+  it('omits the optional fields rather than sending empty ones', async () => {
+    // project.create stores what it is given; sending course: undefined
+    // writes a key the app then has to treat as meaningful.
+    const call = fakeCall({
+      'project.create': { id: 'p9', title: 'Seminar', visibility: 'public' },
+    })
+    await createProject.run(call, { title: 'Seminar' })
+    expect(call.calls).toEqual([['project.create', { title: 'Seminar' }]])
+  })
+
+  it('reports the visibility the project was actually given', async () => {
+    // An unverified email forces restricted (AUTH-3), so the tool must
+    // report what came back rather than assume the default.
+    const call = fakeCall({
+      'project.create': {
+        id: 'p9',
+        title: 'Seminar',
+        visibility: 'restricted',
+      },
+    })
+    const out = await createProject.run(call, { title: 'Seminar' })
+    expect(out.text).toContain('this account only')
+  })
+
+  it('says a public project is visible to anyone with the link', async () => {
+    const call = fakeCall({
+      'project.create': { id: 'p9', title: 'Seminar', visibility: 'public' },
+    })
+    const out = await createProject.run(call, { title: 'Seminar' })
+    expect(out.text).toContain('anyone with the link')
+  })
+
+  it('names an untitled project rather than printing an empty one', async () => {
+    const call = fakeCall({
+      'project.create': { id: 'p9', title: '', visibility: 'public' },
+    })
+    const out = await createProject.run(call, { title: 'x' })
+    expect(out.text).toContain('Untitled project')
+  })
+
+  it('warns that it cannot undo what it creates, and to check first', async () => {
+    // project.delete is forbidden to agents, so a duplicate made here has
+    // to be cleared up by hand. The model is told that up front.
+    expect(createProject.description).toContain('find_projects')
+    expect(createProject.description).toContain('delete')
+  })
+
+  it('reaches project.create and nothing else', () => {
+    expect(createProject.uses).toEqual(['project.create'])
+    expect(createProject.readOnly).toBe(false)
   })
 })

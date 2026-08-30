@@ -319,6 +319,87 @@ describe('the full connect flow', () => {
     expect(res.body.result.content[0].text).toContain('Week 4')
   })
 
+  it('creates a project, then files a lecture into the id it returned', async () => {
+    // The two new tools working together over the real protocol: unit tests
+    // drive them against a fake caller, which cannot show that project.create
+    // is reachable through OAuth and that the id it prints is one
+    // create_lecture actually accepts.
+    const session = await registerUser('newcourse@example.test')
+    const { tokens } = await connect(session)
+
+    const made = await mcp(tokens.access_token, {
+      jsonrpc: '2.0',
+      id: 10,
+      method: 'tools/call',
+      params: {
+        name: 'create_project',
+        arguments: { title: 'Algorithms, Autumn 2026', course: 'CS-201' },
+      },
+    })
+    expect(made.body.result.isError).toBeUndefined()
+    const projectId = made.body.result.structuredContent.id as string
+    expect(projectId).toBeTruthy()
+
+    const filed = await mcp(tokens.access_token, {
+      jsonrpc: '2.0',
+      id: 11,
+      method: 'tools/call',
+      params: {
+        name: 'create_lecture',
+        arguments: { projectId, title: 'Week 1 — Sorting' },
+      },
+    })
+    expect(filed.body.result.isError).toBeUndefined()
+    expect(filed.body.result.structuredContent.projectId).toBe(projectId)
+
+    // And the project is discoverable by the tool that exists to offer it.
+    const found = await mcp(tokens.access_token, {
+      jsonrpc: '2.0',
+      id: 12,
+      method: 'tools/call',
+      params: { name: 'find_projects', arguments: {} },
+    })
+    expect(found.body.result.content[0].text).toContain(projectId)
+    expect(found.body.result.content[0].text).toContain('CS-201')
+  })
+
+  it('creates the project for the approving account alone', async () => {
+    const owner = await registerUser('mine@example.test')
+    const bystander = await registerUser('theirs@example.test')
+    const { tokens } = await connect(owner)
+
+    const made = await mcp(tokens.access_token, {
+      jsonrpc: '2.0',
+      id: 13,
+      method: 'tools/call',
+      params: {
+        name: 'create_project',
+        arguments: { title: 'Private Course' },
+      },
+    })
+    expect(made.body.result.isError).toBeUndefined()
+
+    // Assert the project exists for the owner BEFORE asserting it is absent
+    // for the bystander. The absence on its own is not evidence: it reads
+    // exactly the same when create_project never ran at all.
+    const mine = await request(server)
+      .post('/api/actions/project.list')
+      .set('Authorization', `Bearer ${owner}`)
+      .send({})
+    expect((mine.body as { title: string }[]).map(p => p.title)).toContain(
+      'Private Course',
+    )
+
+    // The bystander's own listing must not have gained a project.
+    const theirs = await request(server)
+      .post('/api/actions/project.list')
+      .set('Authorization', `Bearer ${bystander}`)
+      .send({})
+    expect(
+      (theirs.body as { title: string }[]).map(p => p.title),
+    ).not.toContain('Private Course')
+  })
+
   it('exchanges a refresh token, and burns the one it was given', async () => {
     const session = await registerUser('refresh@example.test')
     const { client, tokens } = await connect(session)
