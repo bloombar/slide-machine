@@ -18,6 +18,7 @@
  * - ≤4 words with no prior context → a title slide
  * - anything else → a content slide (first words become the title)
  */
+import { MAX_SPLIT_PARTS } from '@slide-machine/shared'
 import type {
   GenerationProvider,
   LayoutDescriptor,
@@ -35,6 +36,7 @@ import type {
   VoiceCommand,
   ImportedLayoutDescriptor,
   ImportedLayoutSemantics,
+  SlideSplitPart,
 } from '@slide-machine/shared'
 import { CONVENTIONAL_SLOTS } from '@slide-machine/shared'
 import { registry } from './registry'
@@ -397,7 +399,28 @@ export class MockGenerationProvider implements GenerationProvider {
     return { slots: {} }
   }
 
+  /**
+   * Deterministic refine. A slide carrying three or more bullets also comes
+   * back with a split proposal, one bullet per part (GEN-4).
+   *
+   * Deterministic on purpose: the confirm-before-split flow has a branch that
+   * only exists when a proposal arrives, and without a way to produce one
+   * without the live model, that branch could only ever be tested by mocking
+   * the provider — which tests the mock, not the flow. Three bullets is the
+   * trigger because it is exactly the shape the real prompt is asked to split
+   * on: separate ideas sharing one slide.
+   */
   async refineSlide(req: SlideRefineRequest): Promise<SlideRefineResult> {
+    const bullets = req.current.bullets ?? []
+    const parts = bullets
+      .slice(0, MAX_SPLIT_PARTS)
+      .map((bullet, i): SlideSplitPart => ({
+        layoutType: req.current.layoutType,
+        slots: {
+          title: `${req.current.title ?? 'Slide'} (${i + 1})`,
+          body: bullet,
+        },
+      }))
     return {
       layoutType: req.current.layoutType,
       slots: {
@@ -406,6 +429,14 @@ export class MockGenerationProvider implements GenerationProvider {
         bullets: req.current.bullets,
         caption: `Refined (level ${req.level})`,
       },
+      ...(bullets.length >= 3
+        ? {
+            splitProposal: {
+              reason: `${parts.length} separate points`,
+              parts,
+            },
+          }
+        : {}),
     }
   }
 

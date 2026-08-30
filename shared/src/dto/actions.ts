@@ -12,6 +12,10 @@ import type {
 } from '../types/deck'
 import type { AccountType, ProfileVisibility } from '../types/user'
 import type { WordTiming } from '../providers/transcription'
+import type {
+  SlideSplitPart,
+  SlideSplitProposal,
+} from '../providers/generation'
 
 export interface ProjectCreateInput {
   /** Optional: a blank title stores a titleless "default" project, which
@@ -393,6 +397,37 @@ export interface DeckRefineSlideResult {
   /** Speakers were identified for this slide's audio (absent when not asked
    * for); true only when the slide was actually reframed as student speech. */
   reframed?: boolean
+  /**
+   * The model's case for showing this slide as several (GEN-4).
+   *
+   * Nothing has been done about it: the slide comes back refined as one
+   * slide, and this is the offer. The viewer shows the parts and applies them
+   * with `deck.splitSlide` only if the instructor accepts. Absent whenever
+   * one slide is the right answer.
+   */
+  splitProposal?: SlideSplitProposal
+}
+
+/**
+ * Apply a split the instructor accepted (GEN-4).
+ *
+ * The parts are sent back rather than looked up, so what is written is
+ * exactly what they were shown — the same contract the quiz review uses
+ * (QUIZ-2). They are validated against the deck's own template regardless.
+ */
+export interface DeckSplitSlideInput {
+  deckId: string
+  slideId: string
+  parts: SlideSplitPart[]
+}
+
+export interface DeckSplitSlideResult {
+  /** The original slide, now holding the first part. */
+  slide: Slide
+  /** The slides created after it, in order. */
+  added: Slide[]
+  /** The deck's slide order after the insert, so the viewer can re-key. */
+  slideOrder: string[]
 }
 
 /** Refine just one slide's spoken narration (EDIT-6 "Refine" in the transcript

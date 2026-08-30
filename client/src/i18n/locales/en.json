@@ -798,6 +798,12 @@
       "code": "Add code",
       "codeIn": "Add {language} code",
       "preformatted": "Add preformatted text"
+    },
+    "split": {
+      "title": "Split this slide?",
+      "intro": "This slide holds {count} separate ideas ({reason}). Showing it as {count} slides would be clearer:",
+      "confirm": "Split into {count} slides",
+      "untitled": "(untitled part)"
     }
   },
   "image": {
