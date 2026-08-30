@@ -30,6 +30,7 @@ describe('renderRefinePrompt', () => {
       language: '\n\nWrite the slide text in: fr',
       layouts: '- content: General slide',
       maxSplitParts: '3',
+      load: '',
     })
     expect(prompt).toContain('Refinement strength 4 of 5')
     expect(prompt).toContain('{"title":"Stars"}')
@@ -52,6 +53,7 @@ describe('renderRefinePrompt', () => {
       language: '',
       layouts: '- content: x',
       maxSplitParts: '3',
+      load: '',
     })
     expect(prompt).not.toContain('Original spoken transcript')
     expect(prompt).not.toContain('Lecture context')
@@ -177,6 +179,7 @@ describe('Markdown in the post-lecture prompts', () => {
       language: '',
       layouts: '- content: x',
       maxSplitParts: '3',
+      load: '',
     })
 
   const reformat = () =>

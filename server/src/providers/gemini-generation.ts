@@ -1021,6 +1021,49 @@ const callGemini = async (prompt: string, label: string): Promise<string> => {
   return text
 }
 
+/**
+ * How full the slide is, measured against its layout's own limits (GEN-4).
+ *
+ * Whether a slide is overloaded is not a judgement call the model has to
+ * make from the text — the server already knows the budgets and can count.
+ * Asked to judge it unaided, the model reads the layout's purpose as
+ * permission ("list: use for 3-6 short parallel points" sanctions six
+ * bullets) and declines to split slides that plainly want splitting.
+ *
+ * So it is stated as arithmetic instead, the way the generation prompt states
+ * the current slide's load. Empty when the layout declares no limits, which
+ * is nothing to say rather than a slide with room.
+ */
+const slideLoadFragment = (req: SlideRefineRequest): string => {
+  const layout = req.layoutDescriptors.find(
+    d => d.type === req.current.layoutType,
+  )
+  const limits = layout?.constraints
+  if (!limits) return ''
+  const parts: string[] = []
+  const bullets = req.current.bullets?.length ?? 0
+  if (limits.maxBullets && bullets)
+    parts.push(`${bullets} of at most ${limits.maxBullets} bullets`)
+  const body = req.current.body?.trim().length ?? 0
+  if (limits.maxBodyChars && body)
+    parts.push(`${body} of about ${limits.maxBodyChars} body characters`)
+  if (!parts.length) return ''
+
+  // Named as a threshold rather than left for the model to infer: "at or over"
+  // is the whole signal, and a number without a rule beside it was being read
+  // as description.
+  const full =
+    (limits.maxBullets ? bullets >= limits.maxBullets : false) ||
+    (limits.maxBodyChars ? body >= limits.maxBodyChars * 0.9 : false)
+  return `\n\nHow full this slide is, against its own layout's limits: ${parts.join(
+    '; ',
+  )}.${
+    full
+      ? ' This slide is AT its limit — it is carrying as much as the layout can show. That is the case a split exists for, so propose one unless the content is genuinely a single indivisible idea.'
+      : ''
+  }`
+}
+
 /** Slide-refine prompt: improve the slide at a 1–5 strength. */
 const refinePrompt = (req: SlideRefineRequest): string =>
   renderRefinePrompt({
@@ -1034,6 +1077,7 @@ const refinePrompt = (req: SlideRefineRequest): string =>
     language: languageFragment(req.language),
     layouts: layoutMenu(req.layoutDescriptors),
     maxSplitParts: String(MAX_SPLIT_PARTS),
+    load: slideLoadFragment(req),
   })
 
 const refitResultSchema = z.object({

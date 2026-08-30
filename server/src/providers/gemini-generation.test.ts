@@ -1747,3 +1747,86 @@ describe('split proposals from a refine (GEN-4)', () => {
     ])
   })
 })
+
+/**
+ * Telling the refine how full the slide is (GEN-4).
+ *
+ * Whether a slide is overloaded is arithmetic the server can do, not a
+ * judgement the model should make from the text. Asked to judge it unaided it
+ * read the layout's own purpose as permission — "list: use for 3-6 short
+ * parallel points" sanctions six bullets — and declined to split slides that
+ * plainly wanted splitting: measured against the live model, a six-bullet
+ * slide was never offered a split in three runs. Stated as a count with a
+ * threshold beside it, the same slide was offered one in four runs of four.
+ */
+describe('the slide’s load in the refine prompt (GEN-4)', () => {
+  const promptFor = async (
+    current: Record<string, unknown>,
+    constraints?: Record<string, number>,
+  ) => {
+    fetchMock.mockResolvedValue(geminiReply({ layoutType: 'list', slots: {} }))
+    await new GeminiGenerationProvider().refineSlide({
+      current: { layoutType: 'list', ...current },
+      level: 3,
+      layoutDescriptors: [
+        {
+          type: 'list',
+          label: 'List',
+          purpose: 'points',
+          slots: [],
+          ...(constraints ? { constraints } : {}),
+        },
+      ],
+    } as never)
+    const [, init] = fetchMock.mock.calls[0]!
+    return JSON.parse(String(init.body)).contents[0].parts[0].text as string
+  }
+
+  it('counts the slide against its layout’s own limits', async () => {
+    const prompt = await promptFor(
+      { bullets: ['a', 'b', 'c'] },
+      { maxBullets: 6 },
+    )
+    expect(prompt).toContain('3 of at most 6 bullets')
+  })
+
+  it('says nothing more when the slide has room', async () => {
+    // A number alone is description; the instruction is what makes it act
+    const prompt = await promptFor(
+      { bullets: ['a', 'b', 'c'] },
+      { maxBullets: 6 },
+    )
+    expect(prompt).not.toContain('AT its limit')
+  })
+
+  it('names the threshold when the slide is full', async () => {
+    const prompt = await promptFor(
+      { bullets: ['a', 'b', 'c', 'd', 'e', 'f'] },
+      { maxBullets: 6 },
+    )
+    expect(prompt).toContain('6 of at most 6 bullets')
+    expect(prompt).toContain('AT its limit')
+    expect(prompt).toContain('propose one unless')
+  })
+
+  it('counts a body against its character budget too', async () => {
+    const prompt = await promptFor(
+      { body: 'x'.repeat(190) },
+      { maxBodyChars: 200 },
+    )
+    expect(prompt).toContain('190 of about 200 body characters')
+    // 95% of the budget is full enough to be worth saying so
+    expect(prompt).toContain('AT its limit')
+  })
+
+  it('says nothing at all when the layout declares no limits', async () => {
+    // Nothing to measure against is not the same as a slide with room
+    const prompt = await promptFor({ bullets: ['a', 'b'] })
+    expect(prompt).not.toContain('How full this slide is')
+  })
+
+  it('leaves an empty box out of the count', async () => {
+    const prompt = await promptFor({ bullets: [] }, { maxBullets: 6 })
+    expect(prompt).not.toContain('How full this slide is')
+  })
+})

@@ -9,7 +9,7 @@ detail the slide lost, but keep the slide concise and presentation-ready — do
 not dump the transcript onto the slide.
 
 Current slide (JSON):
-{{current}}{{transcript}}{{context}}{{language}}
+{{current}}{{load}}{{transcript}}{{context}}{{language}}
 
 Available layouts (choose the best fit):
 {{layouts}}
