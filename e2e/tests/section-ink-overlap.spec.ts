@@ -46,7 +46,7 @@
  */
 import { test, expect } from './fixtures'
 import { settled } from './slide-boxes'
-import { createProject } from './helpers'
+import { createProject, pickLayout } from './helpers'
 
 const TITLE = process.env.PROBE_TITLE ?? 'PRESENTATION PART ONE TITLE'
 const NUMBER = process.env.PROBE_NUMBER ?? '01'
@@ -182,11 +182,7 @@ test('measures whether the divider’s two texts touch', async ({ page }) => {
   await page.getByRole('menuitem', { name: 'Change layout' }).click()
   const dialog = page.getByRole('dialog', { name: 'Change slide layout' })
   await expect(dialog).toBeVisible()
-  const radios = dialog.getByRole('radio')
-  const labels = (await radios.allInnerTexts()).map(t =>
-    (t.split('\n')[0] ?? '').trim(),
-  )
-  await radios.nth(labels.indexOf(LAYOUT_LABEL)).click()
+  await pickLayout(dialog, LAYOUT_LABEL)
   await expect(slide).toHaveAttribute('data-layout', LAYOUT)
 
   for (const [label, value] of [

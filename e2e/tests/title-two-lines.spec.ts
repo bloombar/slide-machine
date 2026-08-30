@@ -48,7 +48,7 @@
  */
 import { test, expect } from './fixtures'
 import { settled } from './slide-boxes'
-import { createProject } from './helpers'
+import { createProject, pickLayout } from './helpers'
 
 /** The deck's own part title, exactly as NYU set it. Twenty-seven
  * characters, which is the whole dispute. */
@@ -93,11 +93,7 @@ test('measures whether the part title draws on two lines', async ({ page }) => {
   await page.getByRole('menuitem', { name: 'Change layout' }).click()
   const dialog = page.getByRole('dialog', { name: 'Change slide layout' })
   await expect(dialog).toBeVisible()
-  const radios = dialog.getByRole('radio')
-  const labels = (await radios.allInnerTexts()).map(t =>
-    (t.split('\n')[0] ?? '').trim(),
-  )
-  await radios.nth(labels.indexOf(LAYOUT_LABEL)).click()
+  await pickLayout(dialog, LAYOUT_LABEL)
   await expect(slide).toHaveAttribute('data-layout', LAYOUT)
 
   // The edit has to LAND. An unfilled box measures as a perfectly healthy
