@@ -37,18 +37,15 @@
  * Recorded with their numbers so a reader sees what is tolerated rather than
  * inferring it from a green.
  *
- * ## One entry here is NOT pre-existing, and that is a different act
+ * ## No entry here is one this work introduced
  *
- * The mechanism above exists so a NEW fault fails rather than joining a list
- * of old ones. Putting a new fault on the list is therefore the one move this
- * file is built to prevent, and it has been made once, deliberately, with a
- * ruling behind it. It carries an `introduced` field; the pre-existing ones
- * do not, and a reader must be able to tell them apart at a glance.
- *
- * If a later reader thinks that call was wrong, the entry states everything
- * needed to reverse it. Reversing it means shipping a section divider without
- * its dominant graphic, which is the defect this whole branch began from —
- * that is the trade, and it is written down rather than implied.
+ * The mechanism exists so a NEW fault fails rather than joining a list of old
+ * ones, which makes putting a new fault on the list the one move this file is
+ * built to prevent. It was made once, deliberately, for `nyu-bold`'s section
+ * numeral — and then reversed: the numeral was removed from the design
+ * altogether, so the fault it reported no longer exists and the entry went
+ * with it. The `introduced` field stays because the distinction it draws is
+ * the right one; no entry carries it today.
  */
 
 /** One tolerated fault: the design, and enough of the message to identify it. */
@@ -77,11 +74,14 @@ export interface KnownFault {
    * and absent for the one who does not, so the number recorded is a property
    * of the face the runner resolved rather than of the design.
    *
-   * The discriminator sits in the same CI run: `nyu-elegant` names a real
-   * face and its nine faults are byte-identical here and there, while the
-   * three faceless designs disagree between machines and agree byte for byte
-   * with EACH OTHER. That is what makes this a measurement rather than a
-   * story about fonts.
+   * The discriminator was `nyu-elegant`, which names a real face: its nine
+   * faults were byte-identical here and in CI, while the three faceless
+   * designs disagree between machines and agree byte for byte with EACH
+   * OTHER. That is what made this a measurement rather than a story about
+   * fonts. Both designs that name their faces now carry no entries at all,
+   * so the discriminator is gone with them — every entry below belongs to a
+   * faceless design, and the claim rests on the measurement that was taken
+   * rather than on a control still present in the file.
    *
    * It is also what a stale-entry check would have to exempt: an entry that
    * legitimately does not reproduce here cannot be required to match.
@@ -239,94 +239,6 @@ export const KNOWN_FAULTS: KnownFault[] = [
     measured:
       'shrunk to 95%, drawn 37.1px against 39.0px, box 820x389, 202 chars',
     platform: PLATFORM_FACE,
-  },
-
-  // ---- nyu-elegant ----
-  //
-  // NO platform caveat, and the absence is the point. This design names Frank
-  // Ruhl Libre, and its nine faults are byte-identical locally and in CI.
-  // They reproduce, so they are the design: nine boxes wrong at their own
-  // stated budgets, on a design this branch does not touch.
-  {
-    design: 'nyu-elegant',
-    match: 'closing at its budget "caption" only fits because',
-    measured:
-      'shrunk to 40% - the floor - drawn 8.6px against 21.5px, in a box that lays out 486x2px holding 110 chars',
-  },
-  {
-    design: 'nyu-elegant',
-    match: 'closing at its budget "caption" hides its content',
-    measured: '10px tall hidden, allowed 8.0px at leading 1.35 on 8.6px',
-  },
-  {
-    design: 'nyu-elegant',
-    match: 'closing at its budget "caption" cuts the descenders',
-    measured: '8px of reachable ink outside the box, leading 1.35 at 8.6px',
-  },
-  {
-    design: 'nyu-elegant',
-    match: 'title at its budget "caption" hides its content',
-    measured:
-      '29px tall hidden, allowed 8.0px at leading 1.35 on 21.5px, 70 chars',
-  },
-  {
-    design: 'nyu-elegant',
-    match: 'section at its budget "caption" hides its content',
-    measured:
-      '58px tall hidden, allowed 8.0px at leading 1.35 on 21.5px, 90 chars',
-  },
-  {
-    design: 'nyu-elegant',
-    match: 'content-list at its budget "bullets" only fits because',
-    measured:
-      'shrunk to 75%, drawn 18.3px against 24.4px, box 892x128, 280 chars',
-  },
-  {
-    design: 'nyu-elegant',
-    match: 'quote at its budget "body" only fits because',
-    measured:
-      'shrunk to 80%, drawn 54.7px against 68.3px, box 714x245, 100 chars',
-  },
-  {
-    design: 'nyu-elegant',
-    match: 'title-image at its budget "title" only fits because',
-    measured:
-      'shrunk to 88%, drawn 76.9px against 87.8px, box 742x209, 44 chars',
-  },
-  {
-    design: 'nyu-elegant',
-    match: 'title-image at its budget "title" cuts the descenders',
-    measured: '14px of reachable ink outside the box, leading 0.95 at 76.9px',
-  },
-  {
-    design: 'nyu-bold',
-    match: 'section at its budget "number" cuts the descenders',
-    measured:
-      '32px of reachable ink outside the box, at 34.72cqi — and the shared ' +
-      'ink model derives 31.9px from the font tables independently',
-    introduced:
-      'NEW ON THIS BRANCH, unlike everything above it. The section numeral ' +
-      'is the box this PR restored, and it reports a fault the base branch ' +
-      'never had because the base branch had deleted the box.\n\n' +
-      'Unreachable for what the slot holds. The rule reports the worst case ' +
-      'over characters a box COULD carry; digits have no descenders, so ' +
-      'nothing is cut today. It becomes real the moment somebody types a ' +
-      '`g`, and nothing enforces that they cannot.\n\n' +
-      'No geometry closes it, measured rather than argued. The box is ' +
-      '1.0645em of height holding a 1.196em line, and changing its type ' +
-      'size only trades one rule for the other: at 34.72cqi the descender ' +
-      'rule faults and the overlap rule is silent; at 29.00cqi the line ' +
-      'fits and the overlap rule faults at 0.3% instead, because the ' +
-      'smaller type sits higher. There is no size that satisfies both. And ' +
-      "the vertical axis is closed too — the box's bottom IS the slide's " +
-      'bottom, so unlike the title/numeral overlap on the same slide, which ' +
-      'was closed by moving a box 0.020 down, there is nowhere for this one ' +
-      'to go.\n\n' +
-      'TMPL-16 — a slot declaring the characters it holds — is the only ' +
-      'thing that closes it, and would close it exactly.\n\n' +
-      'The alternative to accepting it is shipping a section divider ' +
-      'without its dominant graphic, which is the defect this branch began ' +
-      'from.',
   },
 ]
 

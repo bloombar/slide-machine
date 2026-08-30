@@ -37,6 +37,9 @@ import type {
   SlideRefineParts,
   SpeakerRole,
   Stroke,
+  SlideSplitProposal,
+  DeckSplitSlideInput,
+  DeckSplitSlideResult,
 } from '@slide-machine/shared'
 import { remapDrawingAnchors } from './remap-drawings'
 import { applySlideTranscript } from '../lib/slide-transcript'
@@ -44,6 +47,8 @@ import { defineAction } from './define'
 import { requireAiTokens, assertUserCapacity } from '../billing/meter-hooks'
 import { currentUsageUser, meterUsage } from '../billing/usage-context'
 import { registerAction, ActionForbiddenError } from './dispatch'
+import { MAX_SPLIT_PARTS } from '@slide-machine/shared'
+import { imageSearchTerms } from '../lib/source-images'
 import {
   deckEditor,
   refineJobEditor,
@@ -493,6 +498,14 @@ const resolveParts = (
  *  - imagery alone needs no generation call: enrichment falls back to the
  *    slide's own keywords, so nothing is billed for text that is discarded.
  */
+interface RefineOutcome {
+  /** The slide was eligible and the pass ran (false for a hand-edited slide,
+   * or when every part was switched off). */
+  changed: boolean
+  /** The model's case for showing this slide as several. Never applied here. */
+  splitProposal?: SlideSplitProposal
+}
+
 const refineOneSlide = async (
   slide: SlideDoc,
   level: number,
@@ -500,10 +513,10 @@ const refineOneSlide = async (
   descriptors: LayoutDescriptor[],
   gen: GenerationProvider,
   parts?: SlideRefineParts,
-): Promise<boolean> => {
-  if (slide.manuallyEdited) return false
+): Promise<RefineOutcome> => {
+  if (slide.manuallyEdited) return { changed: false }
   const want = resolveParts(parts)
-  if (!want.text && !want.layout && !want.imagery) return false
+  if (!want.text && !want.layout && !want.imagery) return { changed: false }
 
   // Only the text/layout passes need the model; imagery-only skips the call.
   const offered = want.layout
@@ -551,7 +564,20 @@ const refineOneSlide = async (
       deck,
       descriptors,
     )
-  return true
+  return {
+    changed: true,
+    // Carried out, never acted on here (GEN-4). Splitting changes the shape of
+    // the lecture, so it is the instructor's call, made against the parts they
+    // can read — see `deckSplitSlide`. A refine that proposed one and applied
+    // it would restructure a deck on a button that says "refine".
+    //
+    // Only when the words were on the table: a layout- or imagery-only refine
+    // has no business claiming the slide holds two ideas, and the model was
+    // not asked to judge that.
+    ...(want.text && result?.splitProposal
+      ? { splitProposal: result.splitProposal }
+      : {}),
+  }
 }
 
 /**
@@ -721,7 +747,12 @@ const runRefine = async (
             // one the day it grows the checkboxes.
             input.refineSlides.parts,
           )
-          if (refined) {
+          // A whole-lecture refine does not split. One click that restructured
+          // a twenty-slide deck into thirty would be a different lecture, and
+          // there is nowhere in a batch pass to ask. Any proposal the model
+          // makes here is dropped; the instructor gets it per slide, where
+          // they can read the parts before agreeing.
+          if (refined.changed) {
             changed.add(slide._id.toString())
             slidesRefined++
           }
@@ -958,9 +989,10 @@ export const deckRefineSlide = defineAction<
       slide = (await SlideModel.findById(slide._id)) ?? slide
     }
 
-    const refined = contentEnabled
+    const outcome = contentEnabled
       ? await refineOneSlide(slide, slidesLevel, deck, descriptors, gen, parts)
-      : false
+      : { changed: false }
+    const refined = outcome.changed
 
     // Re-narrate when the transcript pass is on, or whenever the content
     // changed, so TTS playback stays in-line with the slide.
@@ -989,11 +1021,153 @@ export const deckRefineSlide = defineAction<
       refined,
       narrationUpdated,
       ...(reframed === undefined ? {} : { reframed }),
+      // Offered, not done: the viewer asks, and `deck.splitSlide` applies it
+      // only if the instructor says yes.
+      ...(outcome.splitProposal
+        ? { splitProposal: outcome.splitProposal }
+        : {}),
     }
   },
 })
 
 registerAction(deckRefineSlide)
+
+/**
+ * deck.splitSlide — writes a split the instructor accepted (GEN-4).
+ *
+ * Separate from the refine that proposed it, and deliberately so. A refine
+ * improves one slide; this changes how many slides the lecture has, which is
+ * the instructor's decision and needs their yes. Keeping them apart is also
+ * what lets the dialog show the parts before anything is written: nothing can
+ * appear in the deck that was not on screen when they agreed.
+ *
+ * The parts come back from the client rather than being looked up, so what is
+ * written is exactly what was shown — the same contract as the quiz review
+ * (QUIZ-2) — and are validated against the deck's own template regardless.
+ *
+ * The FIRST part replaces the original slide, keeping its id. That is what
+ * makes the split non-destructive in the ways that matter: its narration, its
+ * whiteboard drawings, its transcript segments and anything else keyed to that
+ * id stay attached to a slide that still exists. The rest are inserted after
+ * it, and every slide below shifts down.
+ */
+export const deckSplitSlide = defineAction<
+  DeckSplitSlideInput,
+  DeckSplitSlideResult,
+  DeckAccess
+>({
+  name: 'deck.splitSlide',
+  access: byDeckId,
+  input: z.object({
+    deckId: z.string().min(1),
+    slideId: z.string().min(1),
+    parts: z
+      .array(
+        z.object({
+          layoutType: z.string().min(1),
+          slots: z.object({
+            title: z.string().optional(),
+            body: z.string().optional(),
+            bullets: z.array(z.string()).optional(),
+            caption: z.string().optional(),
+          }),
+          imageGuidance: z
+            .object({
+              keywords: z.array(z.string()),
+              none: z.boolean().optional(),
+            })
+            .optional(),
+        }),
+      )
+      // Fewer than two is not a split, and the cap is what the instructor was
+      // asked to read.
+      .min(2)
+      .max(MAX_SPLIT_PARTS),
+  }),
+  execute: async (ctx, input, { deck }) => {
+    const slide = await SlideModel.findOne({
+      _id: input.slideId,
+      deckId: deck._id,
+    })
+    if (!slide) throw new ActionForbiddenError()
+
+    const template = await resolveDeckTemplate(deck)
+    const descriptors = template ? layoutDescriptors(template) : []
+    const known = new Set(descriptors.map(d => d.type))
+    // A layout this deck's design does not have would draw nothing. Falling
+    // back to the slide's own layout keeps every part visible, which beats
+    // refusing the split the instructor already agreed to.
+    const layoutOf = (candidate: string): string =>
+      known.has(candidate) ? candidate : slide.layoutType
+
+    const [first, ...rest] = input.parts
+
+    // The original keeps its id and takes the first part.
+    applyContent(slide, {
+      layoutType: layoutOf(first!.layoutType),
+      slots: first!.slots,
+    })
+    // The part's own picture terms, so its box fills for what THIS part is
+    // about rather than for what the undivided slide was.
+    const firstTerms = imageSearchTerms(first!.imageGuidance, first!.slots)
+    if (firstTerms.length) slide.imageKeywords = firstTerms
+    await slide.save()
+
+    const created = []
+    for (const part of rest) {
+      const made = await SlideModel.create({
+        deckId: deck._id,
+        // Placed by slideOrder below; this is a provisional value.
+        index: deck.slideOrder.length,
+        layoutType: layoutOf(part.layoutType),
+        title: part.slots.title,
+        body: part.slots.body,
+        bullets: part.slots.bullets,
+        caption: part.slots.caption,
+        imageKeywords: imageSearchTerms(part.imageGuidance, part.slots),
+        // The words came from this slide, so the part answers for the same
+        // stretch of speech. Without it a new part has no source material and
+        // its narration would be written from the slide text alone.
+        sourceTranscript: slide.sourceTranscript,
+      })
+      created.push(made)
+    }
+
+    // Insert directly after the original, then renumber: `index` has to agree
+    // with position in slideOrder, which is what every other mutation of the
+    // order does (slide.delete, deck.reorderSlides).
+    const at = deck.slideOrder.indexOf(input.slideId)
+    const newIds = created.map(s => s._id.toString())
+    deck.slideOrder =
+      at === -1
+        ? [...deck.slideOrder, ...newIds]
+        : [
+            ...deck.slideOrder.slice(0, at + 1),
+            ...newIds,
+            ...deck.slideOrder.slice(at + 1),
+          ]
+    await deck.save()
+    await Promise.all(
+      deck.slideOrder.map((id, i) =>
+        SlideModel.updateOne({ _id: id }, { index: i }),
+      ),
+    )
+    await touchDeck(deck._id)
+
+    // Re-read so the DTOs carry the indexes just written.
+    const fresh = (await SlideModel.findById(slide._id)) ?? slide
+    const addedFresh = await SlideModel.find({ _id: { $in: newIds } }).sort({
+      index: 1,
+    })
+    return {
+      slide: toSlideDto(fresh),
+      added: addedFresh.map(toSlideDto),
+      slideOrder: deck.slideOrder,
+    }
+  },
+})
+
+registerAction(deckSplitSlide)
 
 /**
  * deck.refineSlideTranscript — refines ONE slide's spoken narration and hands

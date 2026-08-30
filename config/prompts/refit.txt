@@ -30,6 +30,12 @@ Rules:
   An empty box is better than filler.
 - Text boxes take a string. Bullet boxes take an array of strings, each one
   a tight phrase with no trailing punctuation.
+- Text and bullets are Markdown, and the slide draws it: carry over the
+  **bold**, *italic*, `code` and [links](https://example.com) the content
+  already had rather than flattening them. A multi-line text box may hold a
+  "-" or "1." list; a bullet carries no marker of its own. No headings, no
+  ``` fences, no $…$ maths — a listing or a formula belongs in a box of that
+  kind.
 
 Return ONLY this JSON, with one key per box you filled:
 { "slots": { "<box name>": "<text>" | ["<point>", "<point>"] } }

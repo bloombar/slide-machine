@@ -165,6 +165,35 @@ byte of descriptor costs latency. `description` is length-capped, self-evident c
 slots are described tersely, and if the set has to be trimmed that is logged rather than
 silently truncated.
 
+### What the model is told about a box
+
+Above the layout menu the prompt states, once, what each **kind** in this template's layouts
+holds and when to reach for it ([gemini-generation.ts](../server/src/providers/gemini-generation.ts)).
+Only the kinds a template actually declares are described — telling a history template how to
+write LaTeX spends the budget on a box that does not exist.
+
+- **`text` and `bullets` are Markdown**, because that is what `SlideMarkdown` draws: `**bold**`,
+  `*italic*`, backticks around an identifier or a filename, and `[label](url)` links written
+  with the words a reader would click rather than a bare URL. A multi-line text box may also
+  hold a `-` or `1.` list. Headings, ``` fences and `$…$` maths are refused — the renderer does
+  not draw them, so they would reach the audience as their own source. A listing or a formula
+  belongs in a `code` or `math` box.
+- **When to reach for a box**, which is a different question from what goes in it: an
+  enumeration belongs in `bullets` rather than a paragraph that lists things, something worth
+  seeing belongs on a layout with an `image`, a spoken program in `code`, a spoken equation in
+  `math`. A lecturer does not say "example" first; talking through the thing is the signal.
+- **The layout is expected to keep changing.** `generation.txt` says so directly: a deck where
+  every slide is on the same layout is one that stopped reading what was said.
+
+The same Markdown line is carried by the post-lecture prompts (`refine`, `reformat`, `refit`),
+so a later pass sharpens a slide's markup instead of flattening it.
+
+A budget cut is repaired afterwards: clamping to `maxChars` can land inside a `**bold**` run or
+a half-written link, and `closeMarkdown` in [slide-fit.ts](../server/src/lib/slide-fit.ts) drops
+what the cut left open so no delimiter reaches the slide on its own. It runs only on text the
+clamp actually shortened — an asterisk in prose nobody cut is arithmetic, not emphasis — and
+never on a `preformatted` box, which is shown exactly as written.
+
 ## 4. Rendering
 
 **A layout is data, not code.** It carries a `tree` — containers and boxes — and

@@ -223,6 +223,9 @@
     "nameLabel": "Nombre de la plantilla",
     "themeLabel": "Colores por defecto",
     "layoutsLabel": "Diseños",
+    "previousLayout": "Diseño anterior de {name}",
+    "nextLayout": "Diseño siguiente de {name}",
+    "layoutPosition": "{index}/{total}",
     "atCapacity": "Vista previa con cada caja en su límite",
     "atCapacityHint": "Muestra la diapositiva con todo el texto que puede contener. Puedes ajustar la capacidad de cada caja en sus ajustes.",
     "layoutName": "Nombre",
@@ -798,6 +801,12 @@
       "code": "Añadir código",
       "codeIn": "Añadir código {language}",
       "preformatted": "Añadir texto preformateado"
+    },
+    "split": {
+      "title": "¿Dividir esta diapositiva?",
+      "intro": "Esta diapositiva contiene {count} ideas distintas ({reason}). Mostrarla como {count} diapositivas sería más claro:",
+      "confirm": "Dividir en {count} diapositivas",
+      "untitled": "(parte sin título)"
     }
   },
   "image": {
@@ -1194,9 +1203,15 @@
     "review": {
       "dialog": "Revisar las preguntas del cuestionario",
       "title": "Revisar y asignar puntos",
-      "hint": "Ajusta los puntos de cada pregunta y luego publica. Total:",
+      "hint": "Edita cualquier pregunta y luego publica. Total:",
       "points": "Puntos",
-      "pointsFor": "Puntos de la pregunta {number}"
+      "pointsFor": "Puntos de la pregunta {number}",
+      "questionFor": "Texto de la pregunta {number}",
+      "choiceFor": "Opción {choice} de la pregunta {number}",
+      "correctFor": "Marcar la opción {choice} como correcta en la pregunta {number}",
+      "answers": "Respuestas aceptadas",
+      "answerFor": "Respuesta aceptada {answer} de la pregunta {number}",
+      "incomplete": "Completa todas las preguntas y opciones primero."
     },
     "errors": {
       "status": "No se pudo cargar el estado del cuestionario",

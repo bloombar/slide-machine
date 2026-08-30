@@ -29,6 +29,8 @@ describe('renderRefinePrompt', () => {
       context: '\n\nLecture context:\nSEED',
       language: '\n\nWrite the slide text in: fr',
       layouts: '- content: General slide',
+      maxSplitParts: '3',
+      load: '',
     })
     expect(prompt).toContain('Refinement strength 4 of 5')
     expect(prompt).toContain('{"title":"Stars"}')
@@ -50,6 +52,8 @@ describe('renderRefinePrompt', () => {
       context: '',
       language: '',
       layouts: '- content: x',
+      maxSplitParts: '3',
+      load: '',
     })
     expect(prompt).not.toContain('Original spoken transcript')
     expect(prompt).not.toContain('Lecture context')
@@ -153,5 +157,69 @@ describe('unknown placeholders', () => {
     expect(() => renderRefinePrompt({ level: '2' })).toThrow(
       /refine\.txt uses unknown placeholder/,
     )
+  })
+})
+
+/**
+ * Markdown surviving a post-lecture pass.
+ *
+ * Refine, reformat and re-fit all rewrite the same text boxes the live
+ * generation prompt fills, and a rewrite that does not know slot text is
+ * Markdown flattens the emphasis, the code spans and the links out of a slide
+ * that already had them. Each template is checked on its own: the three are
+ * separate files, and one carrying the line says nothing about the others.
+ */
+describe('Markdown in the post-lecture prompts', () => {
+  const refine = () =>
+    renderRefinePrompt({
+      level: '3',
+      current: '{}',
+      transcript: '',
+      context: '',
+      language: '',
+      layouts: '- content: x',
+      maxSplitParts: '3',
+      load: '',
+    })
+
+  const reformat = () =>
+    renderReformatPrompt({
+      current: '{}',
+      transcript: 'LECTURER: x',
+      context: '',
+      language: '',
+      layouts: '- content: x',
+    })
+
+  const refit = () =>
+    renderRefitPrompt({
+      fromLayout: 'content',
+      fromSlots: '- title',
+      toLayout: 'list',
+      toPurpose: 'points',
+      toSlots: '- bullets',
+      fill: '- bullets',
+      orphaned: '',
+      context: '',
+      language: '',
+    })
+
+  it('tells refine the slide text is Markdown, and to keep it', () => {
+    const prompt = refine()
+    expect(prompt).toContain('Slot text is Markdown')
+    expect(prompt).toContain('[links](https://example.com)')
+    expect(prompt).toContain('No headings, no ``` fences, no $…$ maths')
+  })
+
+  it('tells reformat the same', () => {
+    const prompt = reformat()
+    expect(prompt).toContain('Slot text is Markdown')
+    expect(prompt).toContain('[links](https://example.com)')
+  })
+
+  it('tells a re-fit to carry the markup across rather than flatten it', () => {
+    const prompt = refit()
+    expect(prompt).toContain('Text and bullets are Markdown')
+    expect(prompt).toContain('rather than flattening them')
   })
 })

@@ -272,6 +272,55 @@ export interface SlideRefineResult {
     caption?: string
   }
   imageGuidance?: ImageGuidance
+  /**
+   * The model's case for showing this slide as several (GEN-4).
+   *
+   * A refine can only ever make one slide the best version of itself, and
+   * some slides cannot be made good at that size: three ideas on one slide
+   * refine into three ideas on one slide, more tidily worded. Splitting is
+   * the only improvement left, and it is a change to the SHAPE of the
+   * lecture rather than to its wording.
+   *
+   * So it is proposed, never applied. `refineSlide` returns this alongside
+   * the refined slide and changes nothing; the instructor is shown what the
+   * parts would be and decides. Absent whenever one slide is the right
+   * answer, which is most of the time.
+   */
+  splitProposal?: SlideSplitProposal
+}
+
+/** How many slides one slide may be proposed as. Bounded because a refine
+ * that offered to become eight slides is proposing a different lecture, not
+ * a clearer one — and the instructor has to read every part before saying
+ * yes. */
+export const MAX_SPLIT_PARTS = 3
+
+/**
+ * One slide, shown as several (GEN-4).
+ *
+ * Carries the whole content of each part, not an instruction to re-generate:
+ * what the instructor is shown in the confirm dialog is exactly what will be
+ * written if they accept, so nothing can be produced on acceptance that they
+ * did not read.
+ */
+export interface SlideSplitProposal {
+  /** Why this slide wants to be several, in one short phrase, for the
+   * dialog — "three separate stages", "a definition and two examples". */
+  reason: string
+  /** The parts, in the order they would appear. The FIRST replaces the
+   * original slide; the rest are inserted after it. */
+  parts: SlideSplitPart[]
+}
+
+export interface SlideSplitPart {
+  layoutType: string
+  slots: {
+    title?: string
+    body?: string
+    bullets?: string[]
+    caption?: string
+  }
+  imageGuidance?: ImageGuidance
 }
 
 /**

@@ -13,7 +13,14 @@
  * raised for the file rather than chased test by test.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
+import {
+  render,
+  screen,
+  fireEvent,
+  act,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { MemoryRouter, Routes, Route, useParams } from 'react-router'
 import { AuthProvider } from '../auth/AuthContext'
 import { setAccessToken } from '../auth/token'
@@ -432,6 +439,155 @@ describe('DeckViewerPage spoken transcript editing (EDIT-6)', () => {
   })
 })
 
+/**
+ * A refine that offers to show one slide as several (GEN-4).
+ *
+ * The offer is the whole point: the refine has already improved the slide as
+ * one slide, and splitting changes the shape of the lecture, so nothing is
+ * written until the instructor says yes. These assert what reaches the DECK —
+ * a dialog that appears is not evidence, because declining must leave the
+ * deck exactly as a refine without a proposal would.
+ */
+describe('DeckViewerPage split proposal (GEN-4)', () => {
+  const PROPOSAL = {
+    reason: 'two separate stages',
+    parts: [
+      { layoutType: 'content', slots: { title: 'Light absorption' } },
+      { layoutType: 'content', slots: { title: 'Carbon fixation' } },
+    ],
+  }
+
+  /** Reaches the "would you like to split this?" dialog, and records what
+   * `deck.splitSlide` was sent (never called = never sent). */
+  const afterRefine = async (proposal: unknown = PROPOSAL) => {
+    const sent: { body?: { parts?: unknown[] } } = {}
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+      '/api/actions/deck.refineSlide': () => ({
+        status: 200,
+        body: {
+          slide: { id: 's1', deckId: 'deck1', index: 0, layoutType: 'content' },
+          refined: true,
+          narrationUpdated: false,
+          ...(proposal ? { splitProposal: proposal } : {}),
+        },
+      }),
+      '/api/actions/deck.splitSlide': init => {
+        sent.body = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: {
+            slide: {
+              id: 's1',
+              deckId: 'deck1',
+              index: 0,
+              layoutType: 'content',
+              title: 'Light absorption',
+            },
+            added: [
+              {
+                id: 's-new',
+                deckId: 'deck1',
+                index: 1,
+                layoutType: 'content',
+                title: 'Carbon fixation',
+              },
+            ],
+            slideOrder: ['s1', 's-new'],
+          },
+        }
+      },
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Refine this slide with AI' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Refine' }))
+    return sent
+  }
+
+  it('asks before splitting, naming the parts it would make', async () => {
+    await afterRefine()
+    expect(
+      await screen.findByRole('alertdialog', { name: /Split this slide/i }),
+    ).toBeInTheDocument()
+    // The instructor decides against what they can read, not a count
+    expect(screen.getByText('Light absorption')).toBeInTheDocument()
+    expect(screen.getByText('Carbon fixation')).toBeInTheDocument()
+    expect(screen.getByText(/two separate stages/)).toBeInTheDocument()
+  })
+
+  it('writes nothing until the offer is accepted', async () => {
+    const sent = await afterRefine()
+    await screen.findByRole('alertdialog', { name: /Split this slide/i })
+    expect(sent.body).toBeUndefined()
+  })
+
+  it('sends exactly the parts that were shown, on accept', async () => {
+    const sent = await afterRefine()
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Split into 2 slides/i }),
+    )
+    await vi.waitFor(() => expect(sent.body?.parts).toEqual(PROPOSAL.parts))
+  })
+
+  it('shows the split result, and the new slide after it', async () => {
+    // The viewer shows one slide at a time: the original now holds part one,
+    // and part two is the slide after it
+    await afterRefine()
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Split into 2 slides/i }),
+    )
+    await screen.findByText('Light absorption')
+    fireEvent.click(screen.getByRole('button', { name: 'Next slide' }))
+    await screen.findByText('Carbon fixation')
+  })
+
+  it('leaves the deck alone when the offer is declined', async () => {
+    const sent = await afterRefine()
+    const dialog = await screen.findByRole('alertdialog', {
+      name: /Split this slide/i,
+    })
+    // Scoped: more than one dialog on this page has a Cancel
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await vi.waitFor(() =>
+      expect(
+        screen.queryByRole('alertdialog', { name: /Split this slide/i }),
+      ).not.toBeInTheDocument(),
+    )
+    expect(sent.body).toBeUndefined()
+    // The refined single slide is what stays on screen
+    expect(screen.queryByText('Light absorption')).not.toBeInTheDocument()
+  })
+
+  it('says nothing at all when the refine proposed no split', async () => {
+    // Which is most refines — the dialog must not appear for them
+    await afterRefine(null)
+    await vi.waitFor(() =>
+      expect(
+        screen.queryByRole('alertdialog', { name: /Split this slide/i }),
+      ).not.toBeInTheDocument(),
+    )
+  })
+})
+
 describe('DeckViewerPage per-slide refine (GEN-4/WB-1)', () => {
   const refineRoutes = (body: object, onRefine?: () => void) => ({
     '/api/auth/refresh': () => ({
@@ -800,12 +956,16 @@ describe('DeckViewerPage microphone capture', () => {
     })
     expect(await screen.findByText('3 / 3')).toBeInTheDocument()
     expect(
-      screen.getByRole('heading', { name: 'Third slide' }),
+      await screen.findByRole('heading', { name: 'Third slide' }),
     ).toBeInTheDocument()
 
-    // Navigate away, then an UPDATE to that slide pulls the view back
+    // Navigate away, then an UPDATE to that slide pulls the view back.
+    // Awaited, not read straight back: the key moves the carousel through a
+    // state update, and asserting in the same tick passed only while the
+    // machine was quick enough — it is the assertion that was racing, not the
+    // navigation that was slow.
     fireEvent.keyDown(window, { key: 'ArrowLeft' })
-    expect(screen.getByText('2 / 3')).toBeInTheDocument()
+    expect(await screen.findByText('2 / 3')).toBeInTheDocument()
     act(() => {
       recognition.onresult?.({
         resultIndex: 0,
@@ -813,7 +973,9 @@ describe('DeckViewerPage microphone capture', () => {
       })
     })
     expect(await screen.findByText('3 / 3')).toBeInTheDocument()
-    expect(screen.getByText('Body extended')).toBeInTheDocument()
+    // Awaited for the same reason: the counter and the text it names do not
+    // have to land in the same render.
+    expect(await screen.findByText('Body extended')).toBeInTheDocument()
 
     // In list view, generation events center the changed slide
     fireEvent.click(screen.getByRole('button', { name: 'List view' }))

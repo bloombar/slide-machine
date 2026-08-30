@@ -20,7 +20,9 @@ are computed in [`gemini-generation.ts`](../server/src/providers/gemini-generati
 Slots filled by [`gemini-generation.ts`](../server/src/providers/gemini-generation.ts):
 `outputShape` (the JSON contract — kept in code because zod enforces it),
 `freedomPolicy` (from the bands + the resolved 1–5 setting),
-`layouts` (the template's layout descriptors and character budgets),
+`layouts` (the template's layout descriptors and character budgets, plus a
+legend of what each declared **kind** holds — text and bullets are Markdown —
+and when to reach for one; see [TEMPLATES.md §3](TEMPLATES.md#what-the-model-is-told-about-a-box)),
 `seededImages`, `projectSeed`, `deckSeed` (seed notes + extracted document
 text), `rolling` (recent slides), `capacity` (current-slide load),
 `voiceCommands` (the [CAP-4](SPEC.md#cap-4-voice-commands) command option set — empty unless

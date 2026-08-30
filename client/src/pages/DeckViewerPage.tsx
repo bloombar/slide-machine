@@ -35,6 +35,8 @@ import type {
   Slide,
   SlideEvent,
   SlideRefineOptions,
+  SlideSplitProposal,
+  DeckSplitSlideResult,
   SlideRefitLayoutResult,
   SlotValue,
   Stroke,
@@ -311,6 +313,15 @@ export default function DeckViewerPage() {
   const [pendingImages, setPendingImages] = useState<Set<string>>(new Set())
   // The slide currently being refined via its kebab (drives a status toast)
   const [refiningSlideId, setRefiningSlideId] = useState<string | null>(null)
+  /**
+   * A split the refine offered and the instructor has not answered yet
+   * (GEN-4). Nothing has been written: the slide is already refined as one
+   * slide, and this is the offer to show it as several.
+   */
+  const [pendingSplit, setPendingSplit] = useState<{
+    slideId: string
+    proposal: SlideSplitProposal
+  } | null>(null)
   // An edit the server did not take. Cleared by the next one that lands, so
   // the notice never outlives the problem it describes.
   const [editFailed, setEditFailed] = useState(false)
@@ -1704,6 +1715,46 @@ export default function DeckViewerPage() {
     }
   }
 
+  /**
+   * Writes a split the instructor accepted, and shows it (GEN-4).
+   *
+   * The parts go back exactly as they were displayed, so nothing appears in
+   * the deck that was not in the dialog. The original slide keeps its id and
+   * its place; the rest are spliced in directly after it.
+   */
+  const applySplit = async () => {
+    if (!pendingSplit) return
+    const { slideId, proposal } = pendingSplit
+    setPendingSplit(null)
+    try {
+      const res = await dispatchAction<DeckSplitSlideResult>(
+        'deck.splitSlide',
+        { deckId: view.deck.id, slideId, parts: proposal.parts },
+      )
+      setView(v => {
+        if (!v) return v
+        const at = v.slides.findIndex(s => s.id === res.slide.id)
+        if (at === -1) return v
+        return {
+          ...v,
+          // The order comes from the server rather than being rebuilt here:
+          // it is what decides which slides the deck shows, and inserting into
+          // `slides` alone would add slides the viewer never renders.
+          deck: { ...v.deck, slideOrder: res.slideOrder },
+          slides: [
+            ...v.slides.slice(0, at),
+            res.slide,
+            ...res.added,
+            ...v.slides.slice(at + 1),
+          ],
+        }
+      })
+      touchDeckLocally()
+    } catch {
+      setImageError('Could not split that slide — try again')
+    }
+  }
+
   /** Refines one slide with the lecture's Refine settings, then patches it in
    * place. Runs synchronously (one slide is quick); a toast shows progress. */
   const refineSlide = async (slideId: string, options?: SlideRefineOptions) => {
@@ -1739,6 +1790,11 @@ export default function DeckViewerPage() {
         commit()
       }
       touchDeckLocally()
+      // The slide is refined either way; this only asks whether to show it as
+      // several. Raised after the refined content is on screen, so the parts
+      // are judged against the slide as it now reads.
+      if (res.splitProposal)
+        setPendingSplit({ slideId: res.slide.id, proposal: res.splitProposal })
     } catch (error) {
       setImageError('Could not refine that slide — try again')
       // The dialog reports its own failure and stays open to retry.
@@ -2397,6 +2453,38 @@ export default function DeckViewerPage() {
             }}
           />
         )}
+
+      {pendingSplit && (
+        <ConfirmDialog
+          title={t('slide.split.title')}
+          tone="neutral"
+          message={
+            <>
+              <p>
+                {t('slide.split.intro', {
+                  count: pendingSplit.proposal.parts.length,
+                  reason: pendingSplit.proposal.reason,
+                })}
+              </p>
+              <ol className="mt-2 list-decimal space-y-1 pl-5">
+                {pendingSplit.proposal.parts.map((part, i) => (
+                  <li key={i}>
+                    {part.slots.title?.trim() ||
+                      part.slots.body?.trim() ||
+                      part.slots.bullets?.[0] ||
+                      t('slide.split.untitled')}
+                  </li>
+                ))}
+              </ol>
+            </>
+          }
+          confirmLabel={t('slide.split.confirm', {
+            count: pendingSplit.proposal.parts.length,
+          })}
+          onConfirm={() => void applySplit()}
+          onCancel={() => setPendingSplit(null)}
+        />
+      )}
 
       {askAdmin && (
         <ConfirmDialog

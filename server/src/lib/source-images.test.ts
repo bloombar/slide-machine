@@ -10,7 +10,11 @@ import { describe, it, expect } from 'vitest'
 import type { HydratedDocument } from 'mongoose'
 import type { SlideDb } from '../models/slide'
 import type { DeckTemplate } from '../templates/versions'
-import { applyImageKeywords, emptyImageSlotsOf } from './source-images'
+import {
+  applyImageKeywords,
+  emptyImageSlotsOf,
+  imageSearchTerms,
+} from './source-images'
 
 /** A template shaped like the built-in ones, plus one an author built. */
 const template = {
@@ -146,5 +150,46 @@ describe('applyImageKeywords', () => {
     const doc = slide({ layoutType: 'image-heavy' })
     expect(applyImageKeywords(doc)).toEqual([])
     expect(doc.imageKeywords).toBeUndefined()
+  })
+})
+
+/**
+ * What a slide's pictures are searched for (IMG-1).
+ *
+ * The distinction that matters is "no keywords" versus "no picture wanted".
+ * The first used to end enrichment before it started, leaving a picture box
+ * empty for good on a layout that exists to hold one; the second must keep
+ * doing exactly that.
+ */
+describe('imageSearchTerms', () => {
+  const slide = {
+    title: 'The Chloroplast',
+    body: 'Where photosynthesis happens.',
+  }
+
+  it('uses the model’s keywords when it wrote some', () => {
+    expect(imageSearchTerms({ keywords: ['chloroplast'] }, slide)).toEqual([
+      'chloroplast',
+    ])
+  })
+
+  it('falls back to the slide’s own words when it wrote none', () => {
+    // Asking for a picture without saying what of is not a request for no
+    // picture — the title says what the slide is about
+    expect(imageSearchTerms({ keywords: [] }, slide)).toEqual(['chloroplast'])
+  })
+
+  it('searches for nothing when the model said text-only', () => {
+    expect(imageSearchTerms({ keywords: [], none: true }, slide)).toEqual([])
+  })
+
+  it('searches for nothing when there is no guidance at all', () => {
+    expect(imageSearchTerms(undefined, slide)).toEqual([])
+  })
+
+  it('is empty for a slide with no words to mine', () => {
+    // Nothing to search for, and the client must not be left polling for a
+    // picture that is never going to be sent
+    expect(imageSearchTerms({ keywords: [] }, {})).toEqual([])
   })
 })

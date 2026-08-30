@@ -2,6 +2,40 @@
 
 Short records of non-obvious choices, for when we revisit them.
 
+## Section numerals: drop them rather than derive them (2026-08-29)
+
+**Problem.** NYU Bold's section divider carries a large "01"; NYU Elegant prints "P A R T 0 1" in the top-left corner of ten of its thirteen pages. Both are **section numbers** — the source decks read 01 on the first part and would read 02 on the second. Neither is decoration: freezing either into the design would say "01" on every divider of every deck built from that template, which is the failure [TMPL-14](SPEC.md#tmpl-14-a-design-may-draw-its-own-text) uses as its own worked example.
+
+**What we do not have.** The app has no notion of a section or its index — `sectionNumber`, `sectionIndex` and `sectionCount` appear nowhere. So a numeral slot can only be filled by hand or guessed at by the model, and generation is per-slide, so the model would be counting dividers it may not have in context. A deck shipping two slides both numbered "02" is the likely failure, and nobody would notice until it was projected.
+
+**Choice.** **Remove the numeral from NYU Bold's `section` layout, and do not add the eyebrow to NYU Elegant.** Not derive them, not track them, not prompt for them.
+
+**Why not derive it**, which was the tempting answer. A section's number is implied by the deck — the *n*th slide on a section-starting layout is section *n* — so it needs no stored state. But layouts are open ([TMPL-9](SPEC.md#tmpl-9-open-slot--layout-model)) and a template may call its divider anything, so "what starts a section" would itself need declaring, and the general version is a layout flag plus a derivation plus a generated-field kind that reads it ([TMPL-15](SPEC.md#tmpl-15-generated-fields-survive-import)). That is a reasonable feature and a poor reason to build one: the whole of it exists to print two digits that two templates want and no user has asked for.
+
+**What this reverses.** [`#289`](https://github.com/bloombar/slide-machine/pull/289) restored that numeral after finding the importer had deleted it silently, and accepted a descender fault to keep it, arguing that "the alternative is shipping a section divider without its dominant graphic." That entry also stated everything needed to reverse the call, which is what happened. The reversal is not that the original ruling was wrong — the box really was being lost silently, and finding that is what [TMPL-13](SPEC.md#tmpl-13-import-element-accounting) exists for. It is that **deliberately declining to ship an element is a different act from losing one**, and only the second is a defect.
+
+**What it settles for free.** That numeral was the only box in [TMPL-23](SPEC.md#tmpl-23-the-overhang-allowance-reaches-only-boxes-that-need-it-and-can-use-it)'s window that did not fit unaided — 48px over its own rectangle, drawing only because an 84.7px allowance caught it. With the box gone, nothing in the window depends on the allowance, and the `TIGHT_LEADING` boundary can move without a template repair alongside it. It also removes the last entry from `known-faults.ts` for any design that names its typefaces.
+
+**Limits.** NYU Elegant's `image-list` numerals — "0 1 .", "0 2 .", "0 3 ." heading three notes on one slide — are **not** this case and are unaffected. Those vary by position within a layout and not between slides, so they are genuinely decoration; they remain unshipped for a different reason, which is that decoration cannot carry text at all ([TMPL-21](SPEC.md#tmpl-21-decoration-carries-its-text)).
+
+## Markdown in text boxes: repair the cut, never re-flow it (2026-08-29)
+
+**Problem.** `SlideMarkdown` already draws `**bold**`, `*italic*`, backticks and links, and nothing told the model that. Slides arrived flattened. Telling it, though, puts markup in a string that [slide-fit.ts](../server/src/lib/slide-fit.ts) may then clamp to a slot's `maxChars` — and a budget cut lands wherever the budget says, as easily inside a `**bold**` run or halfway through a `[label](url)` as between two words. What the audience reads then is not emphasis; it is the asterisks themselves.
+
+**Choice.** The prompt describes only the box kinds a template actually declares, and `closeMarkdown` tidies what a cut left open. Headings, ``` fences and `$…$` maths are **refused rather than budgeted for**, because the renderer does not draw them: they would reach the audience as their own source. A listing or a formula belongs in a `code` or `math` box, which is a different question from what goes inside one — an enumeration wants `bullets` rather than a paragraph that lists things, and a lecturer does not say "example" first, so talking through the thing is the signal.
+
+**Repair, never re-flow.** `closeMarkdown` does not re-wrap or re-fit. An unfinished link goes back to where it opened; a delimiter left in an odd number is dropped. Both leave readable prose, which is all the clamp was ever for. Re-flowing would mean the fitted length is no longer the length that was fitted.
+
+**Only ever applied to text the clamp shortened**, and that guard is the whole safety argument. Balanced markup has even delimiter counts and survives untouched, but a literal asterisk in prose nobody cut — "5 \* 3" — is not a delimiter and must not be treated as one. The function has no way to tell those apart; the caller does.
+
+**Two details that are easy to get wrong.** Bold is two of the character italic uses, so `**` is masked to a sentinel before `*` is counted, or it reads as two italics. And the clamp's own `…` is the only sign that anything is missing, so dropping an unfinished link must not also drop it — `[the guide](htt…` becomes `Read…`, not `Read`.
+
+**Brackets in prose are left alone.** "[sic]" and "[1]" are how people write, Markdown draws them as themselves, and cutting a caption back to before one would delete words to repair nothing. Only a bracket that opened a destination and never closed it counts as unfinished.
+
+**Limits.** Delimiters are counted across the whole string, **including inside a balanced code span**: `` Use `5 * 3` here `` becomes `` Use `5  3` here ``, because the lone `*` makes the count even and the repair branch drops it. This is the one case the guard does not cover — uncut prose is safe, but *cut* text carrying a code span with an odd delimiter inside is reachable, and a bullet clamped to `maxChars` can produce it. Cosmetic and narrow, recorded rather than fixed; the fix is to mask code spans before counting, the way `**` is already masked out of `*`'s way.
+
+**The same Markdown line rides the post-lecture prompts** (`refine`, `reformat`, `refit`), so a later pass sharpens a slide's markup instead of flattening what an earlier one added.
+
 ## Research instrumentation: build the recorder and the export, buy nothing else (2026-08-10)
 
 **Problem.** [SPEC §12](SPEC.md#12-evaluation--metrics) promised the grant a mixed-methods evaluation and then described it in prose with no requirement ids, so it generated no board issues, had no owner, and was entirely unimplemented. Writing the Fall-2026 study protocol turned that from an untidiness into a blocker: the design needs to exclude a session whose system misbehaved, and there was no way to know afterwards which sessions those were. Meanwhile the obvious-looking features — read the quiz responses back, build a ratings widget, chart it all — each looked like the natural thing to build and each turns out to be the wrong one.

@@ -232,3 +232,96 @@ test('in-place editing in the viewer, including list view and bullets', async ({
   await expect(page.getByTestId('slide').locator('br')).toHaveCount(1)
   await expect(page.getByTestId('slide')).toContainText('line two')
 })
+
+/**
+ * A slot's authoring hint is drawn over the slide, not inside the box it
+ * describes (EDIT-7/TMPL-10), and entering a box does not resize its type
+ * (TMPL-8).
+ *
+ * Only a browser can show this fault. A slide box clips what it holds and is
+ * sized by its design, so a hint drawn under a field that already fills the
+ * box was cut off — and, counting as the box's content, it made the box
+ * overflow, so `useFitText` shrank the words to its floor for as long as the
+ * cursor was in them. jsdom lays nothing out and reports neither.
+ */
+test('a slot hint clears its box, and the type keeps its size', async ({
+  page,
+}) => {
+  const hintEmail = `hint-${Date.now()}@example.com`
+  await page.goto('/register')
+  await page.getByLabel('Display name').fill('Hinter')
+  await page.getByLabel('Email').fill(hintEmail)
+  await page.getByLabel('Password').fill(password)
+  await page.getByRole('button', { name: 'Create account' }).click()
+
+  await createProject(page, 'Hints')
+  await page
+    .getByRole('button', { name: 'Start a new lecture in Hints' })
+    .click()
+  await expect(page).toHaveURL(/\/d\//)
+  await page.getByRole('button', { name: 'Start lecture' }).click()
+  await page.getByLabel('Spoken phrase').fill('The cell membrane is a barrier')
+  await page.getByRole('button', { name: 'Speak' }).click()
+  await expect(page.getByTestId('slide')).toBeVisible()
+
+  // NYU Bold writes a description for every slot, so its boxes have hints —
+  // and its title box is tight enough that one drawn inside it would not fit
+  await page.getByRole('button', { name: 'Lecture settings' }).click()
+  await page.getByRole('tab', { name: 'Design' }).click()
+  await page.getByRole('radio', { name: /nyu bold/i }).click()
+  await page.getByRole('button', { name: 'Close settings' }).click()
+  await expect(page.getByTestId('slide')).toBeVisible()
+
+  /** The type size and fit scale of the box holding a named slot. */
+  const boxType = () =>
+    page.evaluate(() => {
+      const box = document
+        .querySelector('[data-flip-slot="title"]')
+        ?.closest('[data-node-id]') as HTMLElement | null
+      const cs = box && getComputedStyle(box)
+      return cs
+        ? {
+            fontSize: cs.fontSize,
+            fit: cs.getPropertyValue('--fit-scale').trim(),
+          }
+        : null
+    })
+
+  // Wait for the new design to be on screen before measuring it. NYU Bold
+  // names the box "Title" where the built-in calls it "Slide title", so the
+  // label is the signal that the slide has redrawn — measuring on the way
+  // there compares one template's type size against another's.
+  await expect(page.getByTitle('Click to edit Title')).toBeVisible()
+  const before = await boxType()
+  expect(before?.fit).toBe('1')
+
+  await page.locator('[data-flip-slot="title"] [role="button"]').click()
+  const field = page.getByRole('textbox', { name: 'Title' })
+  await expect(field).toBeVisible()
+
+  // The words are the size they were: the box is not re-fitted around a field
+  // whose height is reserved in pixels and cannot answer to a smaller type
+  await expect
+    .poll(async () => (await boxType())?.fontSize)
+    .toBe(before?.fontSize)
+  expect((await boxType())?.fit).toBe('1')
+
+  // The hint is on screen and out of the box, so nothing can clip it
+  const hint = page.getByText('A label for the paragraph, in capitals.')
+  await expect(hint).toBeVisible()
+  expect(await hint.evaluate(el => el.parentElement === document.body)).toBe(
+    true,
+  )
+  const rect = await hint.boundingBox()
+  const view = page.viewportSize()
+  expect(rect).not.toBeNull()
+  expect(rect!.y).toBeGreaterThanOrEqual(0)
+  expect(rect!.y + rect!.height).toBeLessThanOrEqual(view!.height)
+
+  // A box whose text wraps is edited in a field that wraps
+  expect(await field.evaluate(el => el.tagName)).toBe('TEXTAREA')
+
+  // And the hint leaves with the edit
+  await page.keyboard.press('Escape')
+  await expect(hint).toHaveCount(0)
+})

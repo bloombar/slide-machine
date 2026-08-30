@@ -462,11 +462,34 @@ const arrange = (
   )
   const totalGrow = sum(growth)
   const free = mainAvail - sum(base) - gapMain * (kids.length - 1)
-  const sizes = base.map((size, i) =>
-    totalGrow > 0 && free > 0
-      ? size + (free * (growth[i] ?? 0)) / totalGrow
-      : size,
-  )
+  /*
+   * What each child yields when the line is over-full, as CSS does it.
+   *
+   * `flex-shrink` defaults to 1 and is scaled by the child's own base size,
+   * so a big box gives up more than a small one. Floored at zero, because the
+   * renderer sets `min-height: 0` on every flow child (client FlowLayout) and
+   * a box can therefore be taken to nothing.
+   *
+   * Without this the resolver distributed surplus and ignored deficit, so an
+   * over-full column kept every child at its content height and simply ran
+   * off the slide — while the browser shrank the same boxes and kept them on
+   * it. That gap is only visible from the export, which is the one reader of
+   * this file that draws without a browser to correct it (TMPL-22).
+   *
+   * Deficit and surplus cannot both apply, so this is the same branch rather
+   * than a second pass: `free` is one number and it has one sign.
+   */
+  const shrinkWeight = kids.map((kid, i) => (kid.shrink ?? 1) * (base[i] ?? 0))
+  const totalShrink = sum(shrinkWeight)
+  const sizes = base.map((size, i) => {
+    if (totalGrow > 0 && free > 0)
+      return size + (free * (growth[i] ?? 0)) / totalGrow
+    // Nothing that can give way means the line stays over-full and overflows,
+    // which is what CSS does with a row of `flex-shrink: 0` children.
+    if (free < 0 && totalShrink > 0)
+      return Math.max(0, size + (free * (shrinkWeight[i] ?? 0)) / totalShrink)
+    return size
+  })
 
   const { offset, between } =
     totalGrow > 0 && free > 0
@@ -588,4 +611,91 @@ export const resolveTreeBoxes = (
   place(root, { x: 0, y: 0, w: W, h: H }, ctx, out)
   // The root itself is the slide; it is never a box the export draws.
   return out.filter(box => box.node !== root && box.w > 0 && box.h > 0)
+}
+
+/**
+ * What a layout's ROOT column needs from itself, against what it has.
+ *
+ * `resolveTreeBoxes` answers where a box lands once the arrangement has been
+ * worked out — which means a box that grows reports the room it was given and
+ * a box that shrinks reports the room it was left. Neither is what a budget
+ * describes. A budget says how much text a box holds, and the question this
+ * answers is the one nobody could ask before: filled to their own stated
+ * budgets ALL AT ONCE, do a column's boxes need more room than the column has
+ * (TMPL-19)?
+ *
+ * So every child is measured at its CONTENT height, with `grow` and `shrink`
+ * ignored on purpose. Those two decide who wins a fight over room; this is
+ * about whether there is a fight.
+ *
+ * ## Only the root, and only a flex column
+ *
+ * A nested column's height is whatever its parent gave it, so its demand
+ * cannot be stated without resolving the parent, and a figure derived that way
+ * would be reporting the arrangement rather than the budgets. A caller is told
+ * `null` and why, rather than handed a number that looks like the others.
+ *
+ * ## What a satisfied demand does NOT mean
+ *
+ * That the layout draws correctly. A column with room to spare can still put
+ * type on the floor, clip a descender or hide a line, because none of that is
+ * arithmetic over rectangles — it is glyph metrics and the type fitter, and
+ * this has neither (TMPL-20). Room enough is necessary and it is not
+ * sufficient.
+ */
+export interface ColumnDemand {
+  /** Room the column has for its children, `cqi`. */
+  available: number
+  /** Room its children want, plus the gaps between them, `cqi`. */
+  needed: number
+  /** Per child, so a caller can say which box is the expensive one. */
+  children: { id: string; slot?: string; needs: number }[]
+  /** What the gaps cost in total, `cqi`. */
+  gaps: number
+}
+
+/**
+ * The root column's demand, or `null` with the reason it has none — a layout
+ * arranged as a grid, as absolutely placed boxes, or with no tree at all.
+ */
+export const columnDemand = (
+  layout: Pick<Layout, 'type' | 'slots' | 'tree'>,
+  theme: Record<string, unknown>,
+  lines: LinesOf,
+): { demand: ColumnDemand } | { demand: null; why: string } => {
+  const tree =
+    layout.tree ?? defaultLayoutTree(layout.type) ?? treeFromSlots(layout.slots)
+  if (!tree) return { demand: null, why: 'the layout has no tree' }
+  const spec = tree.container
+  if (!spec) return { demand: null, why: 'the root is a single box' }
+  if (spec.mode !== 'flex' || spec.direction !== 'column')
+    return {
+      demand: null,
+      why: `the root is a ${spec.mode === 'grid' ? 'grid' : `flex ${spec.direction ?? 'row'}`}`,
+    }
+  const ctx: Ctx = {
+    textStyles: themeTextStyles(theme),
+    kindOf: name => layout.slots.find(s => s.name === name)?.kind,
+    lines,
+  }
+  const root = withSafeArea(tree, theme)
+  const kids = flowChildren(root, ctx)
+  if (!kids.length)
+    return { demand: null, why: 'every child is placed absolutely' }
+  const p = padding(resolveStyle(root.style, ctx.textStyles))
+  const innerW = Math.max(0, W - 2 * p.x)
+  const children = kids.map(kid => ({
+    id: kid.id,
+    ...(kid.slot ? { slot: kid.slot } : {}),
+    needs: contentHeight(kid, innerW, ctx),
+  }))
+  const gapTotal = gaps(spec).y * (kids.length - 1)
+  return {
+    demand: {
+      available: Math.max(0, H - 2 * p.y),
+      needed: sum(children.map(c => c.needs)) + gapTotal,
+      children,
+      gaps: gapTotal,
+    },
+  }
 }

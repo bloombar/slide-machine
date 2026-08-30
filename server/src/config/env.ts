@@ -111,6 +111,11 @@ const envSchema = z
     IMAGE_SOURCE_RESULTS: z.coerce.number().int().positive().default(8),
     // Most keyword phrases fanned out per search (each fires all sources).
     IMAGE_MAX_QUERY_PHRASES: z.coerce.number().int().positive().default(6),
+    // Words kept from each search phrase. Sources match every word of a query,
+    // so a long phrase is a long list of conditions and finds nothing; two
+    // significant words keep the subject and still return a pool to rank
+    // (`tightenSearchPhrase`).
+    IMAGE_MAX_QUERY_WORDS: z.coerce.number().int().positive().default(2),
     // AI re-rank (IMG-1): after gathering candidates, Gemini picks the best match
     // for the slide and rewrites its caption to match. Shortlist bounds how many
     // top-scored candidates are handed to the model.

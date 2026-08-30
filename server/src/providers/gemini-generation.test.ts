@@ -6,7 +6,10 @@
  */
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import type { SlideGenerationRequest } from '@slide-machine/shared'
-import { VOICE_COMMAND_DESCRIPTORS } from '@slide-machine/shared'
+import {
+  VOICE_COMMAND_DESCRIPTORS,
+  MAX_SPLIT_PARTS,
+} from '@slide-machine/shared'
 const testEnv = vi.hoisted(() => ({
   GEMINI_API_KEY: 'test-key' as string | undefined,
   GEMINI_MODEL: 'gemini-test-model',
@@ -1419,5 +1422,411 @@ describe('a second worked example gets its own slide (GEN-11)', () => {
     expect(prompt).toContain(
       'never answer "none" merely because the box is full',
     )
+  })
+})
+
+/**
+ * Markdown, bullets and pictures the model was never told it could use.
+ *
+ * A text or bullet box has been drawn through `SlideMarkdown` all along —
+ * emphasis, inline code, links, and lists in a multi-line box — and the
+ * prompt never said so, so the model wrote flat prose and pasted bare URLs.
+ * These assert what a template's boxes make the model READ, since that is the
+ * only part of "the model now knows" this side can check: a prompt that lost
+ * the sentence is indistinguishable from one that kept it, once a stubbed
+ * reply comes back either way.
+ */
+describe('what a text box may hold (GEN-11)', () => {
+  const promptFor = async (req: SlideGenerationRequest): Promise<string> => {
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
+    )
+    await new GeminiGenerationProvider().generateSlideContent(req)
+    const [, init] = fetchMock.mock.calls[0]!
+    return JSON.parse(String(init.body)).contents[0].parts[0].text as string
+  }
+
+  const withKinds = (kinds: string[]): SlideGenerationRequest =>
+    ({
+      phrase: 'chlorophyll absorbs red and blue light',
+      rollingContext: [],
+      layoutDescriptors: [
+        {
+          type: 'content',
+          label: 'Content',
+          purpose: 'x',
+          slots: kinds.map((kind, i) => ({
+            name: `slot${i}`,
+            kind,
+            label: `Slot ${i}`,
+          })),
+        },
+      ],
+    }) as never
+
+  it('offers Markdown emphasis, code and links in a text box', async () => {
+    const prompt = await promptFor(withKinds(['text']))
+    expect(prompt).toContain('written in Markdown')
+    expect(prompt).toContain('**bold**')
+    expect(prompt).toContain('`backticks`')
+    expect(prompt).toContain('[label](https://example.com)')
+  })
+
+  it('asks for a link’s words rather than its bare URL', async () => {
+    const prompt = await promptFor(withKinds(['text']))
+    expect(prompt).toContain('never the bare URL')
+  })
+
+  it('allows a list inside a multi-line text box', async () => {
+    const prompt = await promptFor(withKinds(['text']))
+    expect(prompt).toContain('A multi-line box may also hold')
+  })
+
+  it('refuses the Markdown the renderer does not draw', async () => {
+    // Headings are the layout's job (TMPL-6); a fence and $…$ maths reach the
+    // audience as their own source, so both are refused where every template
+    // reads it — not only in the code and maths entries a design may not have
+    const prompt = await promptFor(withKinds(['text']))
+    expect(prompt).toContain('No headings, no ``` fences, no $…$ maths')
+  })
+
+  it('lets a bullet carry Markdown but never its own marker', async () => {
+    const prompt = await promptFor(withKinds(['bullets']))
+    expect(prompt).toContain('no "-" or "1." of its')
+  })
+
+  it('says a preformatted box is not Markdown', async () => {
+    const prompt = await promptFor(withKinds(['preformatted']))
+    expect(prompt).toContain('never read as Markdown')
+  })
+})
+
+describe('reaching for a bullets or image layout (GEN-11)', () => {
+  const promptFor = async (req: SlideGenerationRequest): Promise<string> => {
+    fetchMock.mockResolvedValue(
+      geminiReply({ action: 'none', layoutType: 'content', slots: {} }),
+    )
+    await new GeminiGenerationProvider().generateSlideContent(req)
+    const [, init] = fetchMock.mock.calls[0]!
+    return JSON.parse(String(init.body)).contents[0].parts[0].text as string
+  }
+
+  const withKinds = (kinds: string[]): SlideGenerationRequest =>
+    ({
+      phrase: 'there are three stages: absorption, transfer and fixation',
+      rollingContext: [],
+      layoutDescriptors: [
+        {
+          type: 'content',
+          label: 'Content',
+          purpose: 'x',
+          slots: kinds.map((kind, i) => ({
+            name: `slot${i}`,
+            kind,
+            label: `Slot ${i}`,
+          })),
+        },
+      ],
+    }) as never
+
+  it('says an enumeration belongs in a bullets box', async () => {
+    // Left to itself the model settles on one layout, and a lecture of listed
+    // steps comes out as paragraphs that list them
+    const prompt = await promptFor(withKinds(['bullets']))
+    expect(prompt).toContain('When the speaker ENUMERATES')
+    expect(prompt).toContain('not a paragraph that lists them')
+  })
+
+  it('says something worth seeing belongs on an image layout', async () => {
+    const prompt = await promptFor(withKinds(['image']))
+    expect(prompt).toContain('an audience would want to')
+    expect(prompt).toContain('SEE')
+  })
+
+  it('says neither to a template with only prose boxes', async () => {
+    // A design with no bullets and no picture should not be told when it
+    // would want one — the box does not exist to fill
+    const prompt = await promptFor(withKinds(['text']))
+    expect(prompt).not.toContain('When the speaker ENUMERATES')
+    expect(prompt).not.toContain('would want to')
+  })
+
+  it('tells the model the layout is expected to keep changing', async () => {
+    // From generation.txt, so a template of any shape gets it
+    const prompt = await promptFor(withKinds(['text', 'bullets', 'image']))
+    expect(prompt).toContain('Let the material choose the layout')
+    expect(prompt).toContain('never pick a layout because it is the one you')
+  })
+})
+
+/**
+ * Keywords the model wrote long, cut before anything searches for them (IMG-1).
+ *
+ * The prompt asks for one or two words, and asking is not enough — measured
+ * against the real sources, the phrases it writes unprompted returned zero
+ * usable candidates, so the slide's picture box stayed empty for good. This is
+ * the same shape as the character budgets: guided by the prompt, enforced by
+ * the server (`clampToBudget`).
+ */
+describe('image keywords are cut to a searchable length (IMG-1)', () => {
+  const withKeywords = async (keywords: string[]) => {
+    fetchMock.mockResolvedValue(
+      geminiReply({
+        action: 'new',
+        layoutType: 'content',
+        slots: { title: 'T' },
+        imageGuidance: { keywords },
+      }),
+    )
+    const result = await new GeminiGenerationProvider().generateSlideContent(
+      request(),
+    )
+    return result.imageGuidance?.keywords
+  }
+
+  it('cuts a phrase that describes the slide down to what names the subject', async () => {
+    expect(
+      await withKeywords(['mitochondrion cristae electron transport chain']),
+    ).toEqual(['mitochondrion cristae'])
+  })
+
+  it('leaves a keyword that was already short alone', async () => {
+    expect(await withKeywords(['parthenon', 'greek temple'])).toEqual([
+      'parthenon',
+      'greek temple',
+    ])
+  })
+
+  it('drops a duplicate the cut created', async () => {
+    expect(
+      await withKeywords([
+        'chloroplast thylakoid membrane',
+        'chloroplast thylakoid stack',
+      ]),
+    ).toEqual(['chloroplast thylakoid'])
+  })
+
+  it('still passes an empty list through as empty', async () => {
+    // "A picture, but I did not say of what" is handled on the server side by
+    // falling back to the slide's own words, not by inventing keywords here
+    expect(await withKeywords([])).toEqual([])
+  })
+})
+
+/**
+ * A refine that proposes showing one slide as several (GEN-4).
+ *
+ * The proposal is a claim about the SHAPE of the lecture, so what matters
+ * here is what survives validation: a malformed or one-part proposal must not
+ * reach the instructor as an offer, because accepting it would restructure a
+ * deck on the model's say-so and produce slides nobody read.
+ */
+describe('split proposals from a refine (GEN-4)', () => {
+  const refineWith = async (reply: Record<string, unknown>) => {
+    fetchMock.mockResolvedValue(geminiReply(reply))
+    return new GeminiGenerationProvider().refineSlide({
+      current: { layoutType: 'content', title: 'Stages', body: 'Three of.' },
+      level: 3,
+      layoutDescriptors: [
+        { type: 'content', label: 'Content', purpose: 'x', slots: [] },
+        { type: 'list', label: 'List', purpose: 'y', slots: [] },
+      ],
+    } as never)
+  }
+
+  const part = (title: string) => ({
+    layoutType: 'content',
+    slots: { title, body: `About ${title}.` },
+  })
+
+  it('carries a well-formed proposal back with its parts and reason', async () => {
+    const res = await refineWith({
+      layoutType: 'content',
+      slots: { title: 'Stages' },
+      splitProposal: {
+        reason: 'three separate stages',
+        parts: [part('Absorption'), part('Transfer'), part('Fixation')],
+      },
+    })
+    expect(res.splitProposal?.reason).toBe('three separate stages')
+    expect(res.splitProposal?.parts.map(p => p.slots.title)).toEqual([
+      'Absorption',
+      'Transfer',
+      'Fixation',
+    ])
+  })
+
+  it('leaves the refined single slide intact alongside it', async () => {
+    // The instructor may decline, and must still get the refine they asked for
+    const res = await refineWith({
+      layoutType: 'list',
+      slots: { title: 'Stages', bullets: ['a', 'b'] },
+      splitProposal: { reason: 'r', parts: [part('One'), part('Two')] },
+    })
+    expect(res.layoutType).toBe('list')
+    expect(res.slots.bullets).toEqual(['a', 'b'])
+  })
+
+  it('says nothing when the model proposed nothing', async () => {
+    const res = await refineWith({
+      layoutType: 'content',
+      slots: { title: 'Stages' },
+    })
+    expect(res.splitProposal).toBeUndefined()
+  })
+
+  it('drops a proposal of one part — that is not a split', async () => {
+    const res = await refineWith({
+      layoutType: 'content',
+      slots: { title: 'Stages' },
+      splitProposal: { reason: 'r', parts: [part('Only')] },
+    })
+    expect(res.splitProposal).toBeUndefined()
+  })
+
+  it('drops empty parts, and the proposal with them when too few survive', async () => {
+    // A padded list would otherwise become a blank slide in the deck
+    const res = await refineWith({
+      layoutType: 'content',
+      slots: { title: 'Stages' },
+      splitProposal: {
+        reason: 'r',
+        parts: [part('Real'), { layoutType: 'content', slots: {} }],
+      },
+    })
+    expect(res.splitProposal).toBeUndefined()
+  })
+
+  it('keeps the real parts when only some were empty', async () => {
+    const res = await refineWith({
+      layoutType: 'content',
+      slots: { title: 'Stages' },
+      splitProposal: {
+        reason: 'r',
+        parts: [
+          part('One'),
+          { layoutType: 'content', slots: { title: '   ' } },
+          part('Two'),
+        ],
+      },
+    })
+    expect(res.splitProposal?.parts.map(p => p.slots.title)).toEqual([
+      'One',
+      'Two',
+    ])
+  })
+
+  it('never offers more parts than the cap', async () => {
+    const res = await refineWith({
+      layoutType: 'content',
+      slots: { title: 'Stages' },
+      splitProposal: {
+        reason: 'r',
+        parts: ['A', 'B', 'C', 'D', 'E'].map(part),
+      },
+    })
+    expect(res.splitProposal?.parts).toHaveLength(MAX_SPLIT_PARTS)
+  })
+
+  it('corrects a part onto a layout the design actually has', async () => {
+    // An invented layout would draw nothing at all
+    const res = await refineWith({
+      layoutType: 'content',
+      slots: { title: 'Stages' },
+      splitProposal: {
+        reason: 'r',
+        parts: [
+          { layoutType: 'invented-layout', slots: { title: 'One' } },
+          { layoutType: 'list', slots: { title: 'Two' } },
+        ],
+      },
+    })
+    expect(res.splitProposal?.parts.map(p => p.layoutType)).toEqual([
+      'content',
+      'list',
+    ])
+  })
+})
+
+/**
+ * Telling the refine how full the slide is (GEN-4).
+ *
+ * Whether a slide is overloaded is arithmetic the server can do, not a
+ * judgement the model should make from the text. Asked to judge it unaided it
+ * read the layout's own purpose as permission — "list: use for 3-6 short
+ * parallel points" sanctions six bullets — and declined to split slides that
+ * plainly wanted splitting: measured against the live model, a six-bullet
+ * slide was never offered a split in three runs. Stated as a count with a
+ * threshold beside it, the same slide was offered one in four runs of four.
+ */
+describe('the slide’s load in the refine prompt (GEN-4)', () => {
+  const promptFor = async (
+    current: Record<string, unknown>,
+    constraints?: Record<string, number>,
+  ) => {
+    fetchMock.mockResolvedValue(geminiReply({ layoutType: 'list', slots: {} }))
+    await new GeminiGenerationProvider().refineSlide({
+      current: { layoutType: 'list', ...current },
+      level: 3,
+      layoutDescriptors: [
+        {
+          type: 'list',
+          label: 'List',
+          purpose: 'points',
+          slots: [],
+          ...(constraints ? { constraints } : {}),
+        },
+      ],
+    } as never)
+    const [, init] = fetchMock.mock.calls[0]!
+    return JSON.parse(String(init.body)).contents[0].parts[0].text as string
+  }
+
+  it('counts the slide against its layout’s own limits', async () => {
+    const prompt = await promptFor(
+      { bullets: ['a', 'b', 'c'] },
+      { maxBullets: 6 },
+    )
+    expect(prompt).toContain('3 of at most 6 bullets')
+  })
+
+  it('says nothing more when the slide has room', async () => {
+    // A number alone is description; the instruction is what makes it act
+    const prompt = await promptFor(
+      { bullets: ['a', 'b', 'c'] },
+      { maxBullets: 6 },
+    )
+    expect(prompt).not.toContain('AT its limit')
+  })
+
+  it('names the threshold when the slide is full', async () => {
+    const prompt = await promptFor(
+      { bullets: ['a', 'b', 'c', 'd', 'e', 'f'] },
+      { maxBullets: 6 },
+    )
+    expect(prompt).toContain('6 of at most 6 bullets')
+    expect(prompt).toContain('AT its limit')
+    expect(prompt).toContain('propose one unless')
+  })
+
+  it('counts a body against its character budget too', async () => {
+    const prompt = await promptFor(
+      { body: 'x'.repeat(190) },
+      { maxBodyChars: 200 },
+    )
+    expect(prompt).toContain('190 of about 200 body characters')
+    // 95% of the budget is full enough to be worth saying so
+    expect(prompt).toContain('AT its limit')
+  })
+
+  it('says nothing at all when the layout declares no limits', async () => {
+    // Nothing to measure against is not the same as a slide with room
+    const prompt = await promptFor({ bullets: ['a', 'b'] })
+    expect(prompt).not.toContain('How full this slide is')
+  })
+
+  it('leaves an empty box out of the count', async () => {
+    const prompt = await promptFor({ bullets: [] }, { maxBullets: 6 })
+    expect(prompt).not.toContain('How full this slide is')
   })
 })

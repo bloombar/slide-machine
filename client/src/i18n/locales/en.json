@@ -223,6 +223,9 @@
     "nameLabel": "Template name",
     "themeLabel": "Default colours",
     "layoutsLabel": "Layouts",
+    "previousLayout": "Previous layout of {name}",
+    "nextLayout": "Next layout of {name}",
+    "layoutPosition": "{index}/{total}",
     "atCapacity": "Preview with every box at its limit",
     "atCapacityHint": "Shows the slide with as much text as it can hold. You can adjust the capacity of each box in its settings.",
     "layoutName": "Name",
@@ -798,6 +801,12 @@
       "code": "Add code",
       "codeIn": "Add {language} code",
       "preformatted": "Add preformatted text"
+    },
+    "split": {
+      "title": "Split this slide?",
+      "intro": "This slide holds {count} separate ideas ({reason}). Showing it as {count} slides would be clearer:",
+      "confirm": "Split into {count} slides",
+      "untitled": "(untitled part)"
     }
   },
   "image": {
@@ -1194,9 +1203,15 @@
     "review": {
       "dialog": "Review quiz questions",
       "title": "Review & set points",
-      "hint": "Adjust each question’s points, then publish. Total:",
+      "hint": "Edit any question, then publish. Total:",
       "points": "Points",
-      "pointsFor": "Points for question {number}"
+      "pointsFor": "Points for question {number}",
+      "questionFor": "Text of question {number}",
+      "choiceFor": "Choice {choice} for question {number}",
+      "correctFor": "Mark choice {choice} correct for question {number}",
+      "answers": "Accepted answers",
+      "answerFor": "Accepted answer {answer} for question {number}",
+      "incomplete": "Fill in every question and choice first."
     },
     "errors": {
       "status": "Could not load the quiz status",

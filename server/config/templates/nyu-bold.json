@@ -2,7 +2,7 @@
   "id": "nyu-bold",
   "name": "NYU Bold",
   "renderMode": "positioned",
-  "aiInstructions": "Audience: NYU students, faculty and staff — educated generalists, not specialists in this subject. This design shouts: titles are set in enormous capitals and every title box is short, so write a title as a label, not a sentence — two or three short words. A long title is cut, not shrunk; put the sentence you wanted to title with in the body beneath. Elsewhere write plain, precise academic English and expand an acronym the first time it appears. One idea per slide, sentence case in body and bullets. No hype, no emoji. Name the source of any quotation or statistic.",
+  "aiInstructions": "Audience: NYU students, faculty and staff \u2014 educated generalists, not specialists in this subject. This design shouts: titles are set in enormous capitals and every title box is short, so write a title as a label, not a sentence \u2014 two or three short words. A long title is cut, not shrunk; put the sentence you wanted to title with in the body beneath. Elsewhere write plain, precise academic English and expand an acronym the first time it appears. One idea per slide, sentence case in body and bullets. No hype, no emoji. Name the source of any quotation or statistic.",
   "theme": {
     "background": "#ffffff",
     "surface": "#f3f3f3",
@@ -187,15 +187,6 @@
           "description": "One line on what this part covers.",
           "maxChars": 32,
           "required": false
-        },
-        {
-          "name": "number",
-          "kind": "text",
-          "label": "Part number",
-          "description": "The part number as digits — \"01\", \"02\". Two characters, no words.",
-          "multiline": true,
-          "maxChars": 2,
-          "required": false
         }
       ],
       "elementPositions": {
@@ -222,19 +213,6 @@
           "fontFamily": "montserrat",
           "color": "#ffffff",
           "lineHeight": 1.375,
-          "align": "start",
-          "vAlign": "start"
-        },
-        "number": {
-          "x": 0.47556123496281716,
-          "y": 0.3429566676387674,
-          "w": 0.506496062992126,
-          "h": 0.6570433323612326,
-          "fontSize": 34.72,
-          "fontWeight": 700,
-          "fontFamily": "montserrat",
-          "color": "#8900e1",
-          "lineHeight": 1.196,
           "align": "start",
           "vAlign": "start"
         }
@@ -1071,7 +1049,7 @@
           "name": "title",
           "kind": "text",
           "label": "Figure",
-          "description": "The figure alone — \"100%\", \"1831\". No words.",
+          "description": "The figure alone \u2014 \"100%\", \"1831\". No words.",
           "multiline": true,
           "maxChars": 7,
           "required": true
