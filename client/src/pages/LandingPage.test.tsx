@@ -94,6 +94,18 @@ describe('LandingPage', () => {
     }
   })
 
+  it('gives every feature card an icon, decorative rather than announced', async () => {
+    renderLanding(401)
+    await screen.findByRole('heading', { name: 'The Slide Machine' })
+
+    // One icon per card, beside the wording rather than instead of it: the
+    // headings above still carry the meaning for a screen reader.
+    const cards = screen
+      .getByRole('heading', { name: 'What it does' })
+      .parentElement!.querySelectorAll('svg[aria-hidden]')
+    expect(cards).toHaveLength(6)
+  })
+
   it('states every kind of user data it asks for and why', async () => {
     renderLanding(401)
     await screen.findByRole('heading', { name: 'The Slide Machine' })

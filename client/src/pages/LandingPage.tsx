@@ -16,13 +16,32 @@
  */
 import { Link, Navigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import { LogIn } from 'lucide-react'
+import {
+  ClipboardCheck,
+  FileDown,
+  FileUp,
+  Languages,
+  LogIn,
+  Mic,
+  PenLine,
+} from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import NavLocaleSwitcher from '../i18n/NavLocaleSwitcher'
 import { getBadgeUrl } from '../components/layout/badge'
 
-/** The feature cards, as key stems under `landing`, in reading order. */
-const FEATURES = ['Live', 'Seed', 'Board', 'Quiz', 'Speak', 'After'] as const
+/**
+ * The feature cards, in reading order: a key stem under `landing`, and the
+ * icon that sits beside it. The icons are decorative — every card says what
+ * it is in words — so they are hidden from assistive technology.
+ */
+const FEATURES = [
+  { name: 'Live', Icon: Mic },
+  { name: 'Seed', Icon: FileUp },
+  { name: 'Board', Icon: PenLine },
+  { name: 'Quiz', Icon: ClipboardCheck },
+  { name: 'Speak', Icon: Languages },
+  { name: 'After', Icon: FileDown },
+] as const
 
 /** The data disclosures, as key stems under `landing.data`. */
 const DATA = ['Account', 'Google', 'Drive', 'Speech'] as const
@@ -72,17 +91,22 @@ export default function LandingPage() {
           {t('landing.featuresTitle')}
         </h2>
         <div className="mt-6 grid gap-6 sm:grid-cols-2">
-          {FEATURES.map(name => (
+          {FEATURES.map(({ name, Icon }) => (
             <div
               key={name}
-              className="rounded-lg border border-slate-200 p-5 text-left"
+              className="flex gap-4 rounded-lg border border-slate-200 p-5 text-left"
             >
-              <h3 className="font-semibold text-slate-900">
-                {t(`landing.feature${name}Title`)}
-              </h3>
-              <p className="mt-2 leading-7 text-slate-700">
-                {t(`landing.feature${name}Body`)}
-              </p>
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-indigo-50 text-indigo-600">
+                <Icon className="h-5 w-5" aria-hidden />
+              </span>
+              <div>
+                <h3 className="font-semibold text-slate-900">
+                  {t(`landing.feature${name}Title`)}
+                </h3>
+                <p className="mt-2 leading-7 text-slate-700">
+                  {t(`landing.feature${name}Body`)}
+                </p>
+              </div>
             </div>
           ))}
         </div>
