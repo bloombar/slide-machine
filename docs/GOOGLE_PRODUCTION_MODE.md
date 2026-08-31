@@ -108,6 +108,20 @@ The brand name is **The Slide Machine**, in the app and in the console. A
 console that says `Slide Machine` and a homepage that says something else is
 the first requirement failing.
 
+**The app is client-rendered, so the page in a browser is not the page on the
+wire.** `curl https://theslidemachine.com` returns `<div id="root"></div>` and
+a script tag: every word of the table above lives inside the JS bundle. A
+reader that does not execute it — and the Trust & Safety review is not
+Googlebot — sees nothing. [index.html](../client/index.html) therefore carries
+a `<noscript>` summary of the same three things, checked on the wire by
+`public-homepage.spec.ts` and as a file by `client/src/index-html.test.ts`.
+
+This does **not** cover `/privacy` and `/terms`, which are served from the same
+index.html and whose prose is still JS-only. If a reviewer reports the policy
+itself as unreachable rather than unlinked, that needs prerendering those
+routes — a bigger change than another `noscript` block, and worth doing only
+against an actual finding.
+
 - Fill `OPERATOR_NAME`, `OPERATOR_JURISDICTION`, `OPERATOR_CONTACT_EMAIL`,
   `OPERATOR_POSTAL_ADDRESS` ([DEPLOY.md §5](DEPLOY.md#5-environment-variables)).
   Left blank, the live page shows `[Operator legal name]`.
