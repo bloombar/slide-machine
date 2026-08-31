@@ -1106,6 +1106,8 @@
       "general": {
         "titleHeading": "Lecture title",
         "titleHint": "Name this lecture. Leave it blank to let the AI title it from your speech as the lecture unfolds.",
+        "projectHeading": "Project",
+        "projectHint": "Which project this lecture is filed under. Moving it keeps its slides, notes and sharing, but it starts inheriting the new project's settings.",
         "seedNotesHeading": "Seed notes",
         "seedNotesHint": "Lecture-specific background material, added on top of the project's seed notes. Saved automatically.",
         "seedNotesLabel": "Lecture seed notes",

@@ -21,6 +21,7 @@ export {
   deckEditor,
   deckViewer,
   deckOwner,
+  deckMove,
   deckSettings,
   deckSettingsAdmin,
   deckSettingsView,

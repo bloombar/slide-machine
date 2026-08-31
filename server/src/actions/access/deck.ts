@@ -13,8 +13,14 @@ import { DeckModel, loadDeckAcl } from '../../models/deck'
 import { canEditAcl, canViewAcl } from '../../lib/access'
 import { ActionForbiddenError } from '../dispatch'
 import { definePolicy, type AccessPolicy, type PickId } from './policy'
+import { projectOwner } from './project'
 import { requireUser, overrideActor, requireAdminEmail } from './common'
-import type { AdminActor, DeckAccess, DeckSettingsAccess } from './types'
+import type {
+  AdminActor,
+  DeckAccess,
+  DeckMoveAccess,
+  DeckSettingsAccess,
+} from './types'
 
 /**
  * Loads the lecture named by `pick` and its resolved ACL, or refuses.
@@ -60,6 +66,42 @@ export const deckOwner = <I>(pick: PickId<I>): AccessPolicy<I, DeckAccess> =>
     if (access.acl.ownerId !== access.userId) throw new ActionForbiddenError()
     return access
   })
+
+/**
+ * Moving a lecture into another project (PROJ-3): the caller must own the
+ * lecture AND own the project it lands in.
+ *
+ * Two resources at once, which no single resource/level says — so it declares
+ * itself, with the reason recorded, exactly as the other self-authorizing
+ * actions do (access/policy.ts). The rule is still written as one policy
+ * rather than left in the handler, and both halves reuse the levels they
+ * would use alone: `deckOwner`'s check on the lecture, `projectOwner` on the
+ * destination — the same gate `deck.create` applies, because a move puts a
+ * lecture in a project the same way creating one there would.
+ */
+export const deckMove = <I>(
+  pickDeck: PickId<I>,
+  pickProject: PickId<I>,
+): AccessPolicy<I, DeckMoveAccess> =>
+  definePolicy(
+    {
+      resource: 'none',
+      level: 'open',
+      custom: {
+        reason:
+          'a move is two resources — the caller must own the lecture and own the destination project (the gate deck.create applies), and no single resource/level says both',
+      },
+    },
+    async (ctx, input) => {
+      const access = await loadDeck(requireUser(ctx), pickDeck(input))
+      if (access.acl.ownerId !== access.userId) throw new ActionForbiddenError()
+      const { project } = await projectOwner<I>(pickProject).authorize(
+        ctx,
+        input,
+      )
+      return { ...access, project }
+    },
+  )
 
 /**
  * Admits the caller to a lecture's settings (ADMIN-5): an owner or editor as

@@ -209,6 +209,14 @@ An instructor can create a **slide project** ahead of a lecture, with metadata (
 
 Projects persist in MongoDB and can be reopened, duplicated, archived, and deleted. Deletion is a **soft delete** — recoverable during a retention window before a background sweep permanently purges it, and cascading to the project's decks ([P-10](#16-privacy-security--compliance)/[P-11](#16-privacy-security--compliance)). A project may contain multiple decks (e.g., one per lecture session).
 
+#### PROJ-3 Move a lecture between projects
+
+A lecture is filed under one project, and the file it sits in can be wrong — a session recorded in the wrong course, a project split in two after the fact. Its owner can **move it to another project**, from the lecture's own settings.
+
+The lecture carries everything of its own across: slides, transcript, template, seed notes and seed material, sharing overrides, quiz and exports. What changes is what it inherits — from the moment it lands, it takes the new project's seed context, AI freedom, language and narration voice wherever it has no setting of its own, and a lecture that follows its project's privacy settings ([SHARE-1](#share-1-saved-deck-viewer--permalink)) follows the new project's. A lecture that has pinned its own access keeps it.
+
+Moving is authorized exactly as creating would be: the mover must own the lecture **and** own the destination project, which is what starting a lecture in a project asks ([PROJ-1](#proj-1-pre-create-a-project)). So the destinations offered are the projects the user could have created the lecture in to begin with.
+
 #### SEED-1 Document seeding
 
 Users can seed a project by importing content from:

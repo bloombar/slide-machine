@@ -1106,6 +1106,8 @@
       "general": {
         "titleHeading": "Titre du cours",
         "titleHint": "Donnez un nom à ce cours. Laissez le champ vide pour que l'IA le titre à partir de vos propos au fil du cours.",
+        "projectHeading": "Projet",
+        "projectHint": "Le projet dans lequel ce cours est classé. Le déplacer conserve ses diapositives, ses notes et son partage, mais il hérite désormais des réglages du nouveau projet.",
         "seedNotesHeading": "Notes sources",
         "seedNotesHint": "Documentation propre à ce cours, ajoutée aux notes sources du projet. Enregistrée automatiquement.",
         "seedNotesLabel": "Notes sources du cours",
