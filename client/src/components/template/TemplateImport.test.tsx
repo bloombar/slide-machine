@@ -1,18 +1,20 @@
 /**
  * Importing a design from Google Slides (TMPL-8), from the instructor's side.
  *
- * Two things carry this screen: a pasted link has to become a presentation id
- * without the instructor thinking about it, and the report has to say what the
- * import did — consolidation is lossy, and silence about it would leave the
- * author wondering what was thrown away.
+ * Two things carry this screen: what the instructor picked in Drive has to
+ * reach the right import — a presentation is a design to derive, a file is one
+ * this app already wrote — and the report has to say what the import did, since
+ * consolidation is lossy and silence about it would leave the author wondering
+ * what was thrown away.
+ *
+ * The picker here is the mock one: with no Google configured, DrivePicker
+ * draws the app's own dialog over `drive.importables`, which is what a dev
+ * machine and this suite get.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import type { Template } from '@slide-machine/shared'
-import TemplateImport, {
-  presentationIdFrom,
-  importSourceFrom,
-} from './TemplateImport'
+import TemplateImport, { importSourceFor } from './TemplateImport'
 import { ApiError } from '../../api/http'
 
 const dispatchAction = vi.fn()
@@ -34,9 +36,34 @@ const result = (over: Record<string, unknown> = {}) => ({
   },
 })
 
+/** The (mock) Drive the picker browses: one presentation to derive a design
+ * from, and one design file this app exported earlier. */
+const TREE = {
+  folders: [],
+  files: [
+    {
+      id: '1AbCdEfGhIjKl',
+      name: 'Photosynthesis',
+      mimeType: 'application/vnd.google-apps.presentation',
+    },
+    {
+      id: '1FiLe_iD-99',
+      name: 'classic.template.yaml',
+      mimeType: 'application/x-yaml',
+    },
+  ],
+}
+
+/** What the import itself answers. Set per test; the picker's own listing is
+ * answered separately, so one mock can serve both calls. */
+let importOutcome: () => Promise<unknown>
+
 beforeEach(() => {
   dispatchAction.mockReset()
-  dispatchAction.mockResolvedValue(result())
+  importOutcome = () => Promise.resolve(result())
+  dispatchAction.mockImplementation((action: string) =>
+    action === 'drive.importables' ? Promise.resolve(TREE) : importOutcome(),
+  )
 })
 
 /** Opens the panel, which stays out of the way until asked for. */
@@ -44,111 +71,77 @@ const openPanel = () => {
   fireEvent.click(screen.getByRole('button', { name: /import a design/i }))
 }
 
-/** Types a link and submits it. */
-const importLink = (link: string) => {
-  fireEvent.change(screen.getByRole('textbox'), { target: { value: link } })
+/** Opens the Drive picker and chooses the named file. */
+const pick = async (name: RegExp) => {
+  fireEvent.click(
+    screen.getByRole('button', { name: /choose from google drive/i }),
+  )
+  fireEvent.click(await screen.findByRole('button', { name }))
+}
+
+/** Chooses a file and submits it for import. */
+const pickAndImport = async (name: RegExp) => {
+  await pick(name)
   fireEvent.click(screen.getByRole('button', { name: /import design/i }))
 }
 
-describe('the link an instructor pastes', () => {
-  it('is read out of a Google Slides URL', () => {
-    expect(
-      presentationIdFrom(
-        'https://docs.google.com/presentation/d/1AbC_dEf-123/edit?usp=drivesdk',
-      ),
-    ).toBe('1AbC_dEf-123')
-  })
+/** The presentation in the tree above; the id every assertion expects. */
+const PRESENTATION = /photosynthesis/i
+/** The exported design file in the tree above. */
+const DESIGN_FILE = /classic\.template\.yaml/i
 
-  it('is read out of a Drive link that carries it as a parameter', () => {
-    expect(
-      presentationIdFrom('https://drive.google.com/open?id=1AbC_dEf'),
-    ).toBe('1AbC_dEf')
-  })
-
-  it('is taken as-is when they pasted the bare id', () => {
-    expect(presentationIdFrom('1AbCdEfGhIjKl')).toBe('1AbCdEfGhIjKl')
-  })
-
-  it('is nothing when they pasted something else', () => {
-    // Better a clear complaint than a confusing failure from the server
-    expect(presentationIdFrom('my lecture deck')).toBeNull()
-    expect(presentationIdFrom('')).toBeNull()
-    expect(presentationIdFrom('   ')).toBeNull()
-  })
-
-  it('ignores surrounding whitespace, which a paste often brings', () => {
-    expect(presentationIdFrom('  1AbCdEfGhIjKl \n')).toBe('1AbCdEfGhIjKl')
-  })
-})
-
-describe('what a pasted link turns out to be', () => {
+describe('what the picked file turns out to be', () => {
   it('sends a presentation to the design import', () => {
     expect(
-      importSourceFrom(
-        'https://docs.google.com/presentation/d/1AbC_dEf-123/edit',
-      ),
+      importSourceFor({
+        id: '1AbC_dEf-123',
+        name: 'Photosynthesis',
+        mimeType: 'application/vnd.google-apps.presentation',
+      }),
     ).toEqual({ action: 'template.importFromSlides', id: '1AbC_dEf-123' })
   })
 
-  it('sends a Drive file to the file import, which is what one is', () => {
-    // `/file/d/` is Drive's shape for a stored file, and an exported design
-    // is exactly that — so the instructor pastes either link in one box and
-    // does not have to know which of two it belonged in
+  it('sends anything else to the file import, which is what it is', () => {
+    // A design this app exported is a stored file, not a presentation — and
+    // the picker says which by mime type, so nothing has to be guessed from
+    // the shape of a link
     expect(
-      importSourceFrom('https://drive.google.com/file/d/1FiLe_iD-99/view'),
+      importSourceFor({
+        id: '1FiLe_iD-99',
+        name: 'classic.template.yaml',
+        mimeType: 'application/x-yaml',
+      }),
     ).toEqual({ action: 'template.importFromDrive', id: '1FiLe_iD-99' })
-  })
-
-  it('takes a bare id as a presentation, which is what gets pasted', () => {
-    expect(importSourceFrom('1AbCdEfGhIjKl')).toEqual({
-      action: 'template.importFromSlides',
-      id: '1AbCdEfGhIjKl',
-    })
-  })
-
-  it('is nothing when they pasted something else', () => {
-    expect(importSourceFrom('my lecture deck')).toBeNull()
-    expect(importSourceFrom('   ')).toBeNull()
   })
 })
 
 describe('importing', () => {
   it('stays out of the way until asked for', () => {
     render(<TemplateImport onImported={vi.fn()} />)
-    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /choose from google drive/i }),
+    ).not.toBeInTheDocument()
   })
 
-  it('will not submit until the link is one', async () => {
+  it('will not submit until a file has been chosen', async () => {
     render(<TemplateImport onImported={vi.fn()} />)
     openPanel()
     expect(
       screen.getByRole('button', { name: /import design/i }),
     ).toBeDisabled()
 
-    fireEvent.change(screen.getByRole('textbox'), {
-      target: { value: 'not a link' },
-    })
-    expect(
-      screen.getByRole('button', { name: /import design/i }),
-    ).toBeDisabled()
-    expect(screen.getByText(/doesn't look like/i)).toBeInTheDocument()
+    await pick(PRESENTATION)
+    expect(screen.getByRole('button', { name: /import design/i })).toBeEnabled()
   })
 
-  it('says nothing about an empty field, which is not a mistake yet', async () => {
+  it('sends the id of the file that was picked', async () => {
     render(<TemplateImport onImported={vi.fn()} />)
     openPanel()
-    expect(screen.queryByText(/doesn't look like/i)).not.toBeInTheDocument()
-  })
-
-  it('sends the id it found, not the whole link', async () => {
-    dispatchAction.mockResolvedValue(result())
-    render(<TemplateImport onImported={vi.fn()} />)
-    openPanel()
-    importLink('https://docs.google.com/presentation/d/1AbC_dEf-123/edit')
+    await pickAndImport(PRESENTATION)
 
     await waitFor(() =>
       expect(dispatchAction).toHaveBeenCalledWith('template.importFromSlides', {
-        presentationId: '1AbC_dEf-123',
+        presentationId: '1AbCdEfGhIjKl',
         keepEverySlide: true,
       }),
     )
@@ -161,7 +154,7 @@ describe('importing', () => {
     render(<TemplateImport onImported={vi.fn()} />)
     openPanel()
     expect(screen.getByRole('checkbox')).not.toBeChecked()
-    importLink('1AbCdEfGhIjKl')
+    await pickAndImport(PRESENTATION)
 
     await waitFor(() =>
       expect(dispatchAction).toHaveBeenCalledWith('template.importFromSlides', {
@@ -177,7 +170,7 @@ describe('importing', () => {
     render(<TemplateImport onImported={vi.fn()} />)
     openPanel()
     fireEvent.click(screen.getByRole('checkbox'))
-    importLink('1AbCdEfGhIjKl')
+    await pickAndImport(PRESENTATION)
 
     await waitFor(() =>
       expect(dispatchAction).toHaveBeenCalledWith('template.importFromSlides', {
@@ -189,19 +182,18 @@ describe('importing', () => {
 
   it('hands the new design back so it can be worn straight away', async () => {
     const onImported = vi.fn()
-    dispatchAction.mockResolvedValue(result())
     render(<TemplateImport onImported={onImported} />)
     openPanel()
-    importLink('1AbCdEfGhIjKl')
+    await pickAndImport(PRESENTATION)
 
     await waitFor(() => expect(onImported).toHaveBeenCalledWith(template))
   })
 
   it('says it is working, since reading a deck is not instant', async () => {
-    dispatchAction.mockReturnValue(new Promise(() => {}))
+    importOutcome = () => new Promise(() => {})
     render(<TemplateImport onImported={vi.fn()} />)
     openPanel()
-    importLink('1AbCdEfGhIjKl')
+    await pickAndImport(PRESENTATION)
 
     expect(await screen.findByText(/reading the presentation/i)).toBeVisible()
   })
@@ -209,10 +201,10 @@ describe('importing', () => {
 
 describe('what the instructor is told afterwards', () => {
   const importOne = async (over: Record<string, unknown> = {}) => {
-    dispatchAction.mockResolvedValue(result(over))
+    importOutcome = () => Promise.resolve(result(over))
     render(<TemplateImport onImported={vi.fn()} />)
     openPanel()
-    importLink('1AbCdEfGhIjKl')
+    await pickAndImport(PRESENTATION)
     await screen.findByRole('status')
   }
 
@@ -258,19 +250,51 @@ describe('what the instructor is told afterwards', () => {
   })
 })
 
+describe('choosing before Google is connected', () => {
+  it('connects from inside the picker and opens it again', async () => {
+    // The picker cannot list a Drive this account has not granted, so the
+    // first open is an error with a way out. Taking it must land back at the
+    // files — not at a closed panel the instructor has to find again.
+    let connected = false
+    dispatchAction.mockImplementation((action: string) => {
+      if (action === 'quiz.connectGoogle') {
+        connected = true
+        return Promise.resolve({ status: 'connected' })
+      }
+      if (action === 'drive.importables') {
+        return connected
+          ? Promise.resolve(TREE)
+          : Promise.reject(new ApiError(403, 'capability_required', 'connect'))
+      }
+      return importOutcome()
+    })
+
+    render(<TemplateImport onImported={vi.fn()} />)
+    openPanel()
+    fireEvent.click(
+      screen.getByRole('button', { name: /choose from google drive/i }),
+    )
+    fireEvent.click(await screen.findByRole('button', { name: /reconnect/i }))
+
+    // Reopened on its own, now listing what the grant allows.
+    expect(
+      await screen.findByRole('button', { name: PRESENTATION }),
+    ).toBeInTheDocument()
+  })
+})
+
 describe('when it will not work', () => {
   it('explains a presentation Google would not hand over', async () => {
     // Told apart by code rather than by sniffing the message for "google",
     // which missed every refusal it had not seen before — and missed this one
     // entirely while it arrived as a plain 500
-    dispatchAction.mockImplementation(() =>
+    importOutcome = () =>
       Promise.reject(
         new ApiError(400, 'source_unreadable', 'Slides read failed (500)'),
-      ),
-    )
+      )
     render(<TemplateImport onImported={vi.fn()} />)
     openPanel()
-    importLink('1AbCdEfGhIjKl')
+    await pickAndImport(PRESENTATION)
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       /would not hand over that file/i,
@@ -280,18 +304,17 @@ describe('when it will not work', () => {
   it('says a presentation that is not there is not there', async () => {
     // A different instruction from a refused read: check the link, not the
     // account
-    dispatchAction.mockImplementation(() =>
+    importOutcome = () =>
       Promise.reject(
         new ApiError(
           404,
           'source_not_found',
           'That presentation was not found',
         ),
-      ),
-    )
+      )
     render(<TemplateImport onImported={vi.fn()} />)
     openPanel()
-    importLink('1AbCdEfGhIjKl')
+    await pickAndImport(PRESENTATION)
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       /not found in your drive/i,
@@ -299,14 +322,13 @@ describe('when it will not work', () => {
   })
 
   it('offers the reconnect when Google refuses the account', async () => {
-    dispatchAction.mockImplementation(() =>
+    importOutcome = () =>
       Promise.reject(
         new ApiError(403, 'google_reconnect', 'would not let this account'),
-      ),
-    )
+      )
     render(<TemplateImport onImported={vi.fn()} />)
     openPanel()
-    importLink('1AbCdEfGhIjKl')
+    await pickAndImport(PRESENTATION)
 
     expect(
       await screen.findByRole('button', { name: /connect google/i }),
@@ -314,10 +336,10 @@ describe('when it will not work', () => {
   })
 
   it('reports any other failure without blaming the instructor', async () => {
-    dispatchAction.mockImplementation(() => Promise.reject(new Error('boom')))
+    importOutcome = () => Promise.reject(new Error('boom'))
     render(<TemplateImport onImported={vi.fn()} />)
     openPanel()
-    importLink('1AbCdEfGhIjKl')
+    await pickAndImport(PRESENTATION)
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       /could not import that presentation/i,
@@ -326,11 +348,11 @@ describe('when it will not work', () => {
 })
 
 describe('a design file kept in Drive', () => {
-  it('is imported by its link, through the file route', async () => {
-    dispatchAction.mockResolvedValue(template)
+  it('is imported through the file route', async () => {
+    importOutcome = () => Promise.resolve(template)
     render(<TemplateImport onImported={vi.fn()} />)
     openPanel()
-    importLink('https://drive.google.com/file/d/1FiLe_iD-99/view')
+    await pickAndImport(DESIGN_FILE)
 
     await waitFor(() =>
       expect(dispatchAction).toHaveBeenCalledWith('template.importFromDrive', {
@@ -339,14 +361,12 @@ describe('a design file kept in Drive', () => {
     )
   })
 
-  it('offers no consolidation choice, having no slides to consolidate', () => {
+  it('offers no consolidation choice, having no slides to consolidate', async () => {
     render(<TemplateImport onImported={vi.fn()} />)
     openPanel()
     expect(screen.getByRole('checkbox')).toBeInTheDocument()
 
-    fireEvent.change(screen.getByRole('textbox'), {
-      target: { value: 'https://drive.google.com/file/d/1FiLe_iD-99/view' },
-    })
+    await pick(DESIGN_FILE)
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
   })
 
@@ -354,10 +374,10 @@ describe('a design file kept in Drive', () => {
     // A file comes back as the template it already was: no slides were read,
     // so there is nothing to say about what became of them
     const onImported = vi.fn()
-    dispatchAction.mockResolvedValue(template)
+    importOutcome = () => Promise.resolve(template)
     render(<TemplateImport onImported={onImported} />)
     openPanel()
-    importLink('https://drive.google.com/file/d/1FiLe_iD-99/view')
+    await pickAndImport(DESIGN_FILE)
 
     await waitFor(() => expect(onImported).toHaveBeenCalledWith(template))
     expect(screen.queryByTestId('import-report')).not.toBeInTheDocument()

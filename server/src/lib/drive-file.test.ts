@@ -1,18 +1,14 @@
 /**
  * Unit tests for reading a template file out of a connected Drive (EXP-3/EXP-4).
  *
- * Two things matter here. The id has to come out of whatever the instructor
- * pasted, because they paste a link and not an id. And a read that goes wrong
- * has to say which kind of wrong it is: a missing grant is a step the user can
- * take, a missing file is not, and telling them apart is the difference
- * between an actionable message and a shrug.
+ * What matters here is that a read which goes wrong says which kind of wrong
+ * it is: a missing grant is a step the user can take, a missing file is not,
+ * and telling them apart is the difference between an actionable message and
+ * a shrug. The file id itself now comes from Google's Picker, so there is no
+ * link to parse.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import {
-  driveFileIdFrom,
-  readDriveFileTextLive,
-  DriveFileUnreadableError,
-} from './drive-file'
+import { readDriveFileTextLive, DriveFileUnreadableError } from './drive-file'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -22,35 +18,6 @@ const respond = (status: number, body = '', headers: HeadersInit = {}) =>
     'fetch',
     vi.fn().mockResolvedValue(new Response(body, { status, headers })),
   )
-
-describe('the link an instructor pastes', () => {
-  it('is read out of a Drive file URL', () => {
-    expect(
-      driveFileIdFrom('https://drive.google.com/file/d/1AbC_dEf-123/view'),
-    ).toBe('1AbC_dEf-123')
-  })
-
-  it('is read out of a link that carries it as a parameter', () => {
-    expect(driveFileIdFrom('https://drive.google.com/open?id=1AbC_dEf')).toBe(
-      '1AbC_dEf',
-    )
-  })
-
-  it('is taken as-is when they pasted the bare id', () => {
-    expect(driveFileIdFrom('1AbCdEfGhIjKl')).toBe('1AbCdEfGhIjKl')
-  })
-
-  it('is nothing when they pasted something else', () => {
-    // Better a clear complaint than a confusing 404 from Google
-    expect(driveFileIdFrom('my template file')).toBeNull()
-    expect(driveFileIdFrom('')).toBeNull()
-    expect(driveFileIdFrom('   ')).toBeNull()
-  })
-
-  it('ignores surrounding whitespace, which a paste often brings', () => {
-    expect(driveFileIdFrom('  1AbCdEfGhIjKl \n')).toBe('1AbCdEfGhIjKl')
-  })
-})
 
 describe('reading the file', () => {
   it('asks Drive for the bytes, not the metadata', async () => {

@@ -4,8 +4,29 @@
  * mock publisher), so this exercises the full connect → folders → publish
  * flow, persistence on the deck, and ownership enforcement — no network.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  afterAll,
+  beforeEach,
+} from 'vitest'
 import request from 'supertest'
+
+// Hermetic: a developer's local EXPORT_MODE=live must not leak in. The folder
+// listing refuses whenever *either* Google surface is live, because the id it
+// returns would then have to be a real one — so the modes are pinned here
+// rather than inherited from whatever .env happens to say.
+vi.mock('../../src/config/env', async importActual => {
+  const actual = await importActual<typeof import('../../src/config/env')>()
+  return {
+    ...actual,
+    env: { ...actual.env, EXPORT_MODE: 'mock', QUIZ_PUBLISH_MODE: 'mock' },
+  }
+})
+
 import { env } from '../../src/config/env'
 import { connectMongo, disconnectMongo } from '../../src/db/mongoose'
 import { createApp } from '../../src/app'
@@ -147,19 +168,6 @@ describe('quiz actions', () => {
       (await DeckModel.findById(deckId))!.projectId,
     )
     expect(project!.quizDefaults?.questionCount).toBe(7)
-  })
-
-  it('creates a new destination folder (mock)', async () => {
-    await act(ada, 'quiz.connectGoogle')
-    const res = await act(ada, 'quiz.createFolder', { name: 'Week 5' })
-    expect(res.status).toBe(200)
-    expect(res.body).toEqual({ id: 'folder-week-5', name: 'Week 5' })
-  })
-
-  it('rejects folder creation until Google is connected', async () => {
-    expect((await act(ada, 'quiz.createFolder', { name: 'X' })).status).toBe(
-      403,
-    )
   })
 
   it('navigates into a sub-folder (mock finder tree)', async () => {

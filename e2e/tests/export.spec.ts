@@ -1,7 +1,7 @@
 /**
  * Deck export end to end (EXP-1/EXP-2/EXP-4): an instructor opens a lecture's
  * settings Export tab, downloads the deck as a PDF, and saves it to Google
- * Slides in a Drive folder they create. The Google side is mock-backed
+ * Slides in a Drive folder they choose. The Google side is mock-backed
  * (EXPORT_MODE defaults to mock), so the full flow runs with the live
  * front/back end and test DB; the PDF download is produced for real.
  */
@@ -51,15 +51,12 @@ test('export a lecture to PDF download and Google Slides in Drive', async ({
     .getByRole('button', { name: 'Save Google Slides to Drive' })
     .click()
 
-  // Create a destination folder in the picker, then save into it
-  const picker = page.getByRole('dialog', { name: 'Choose a Drive folder' })
+  // Choose a destination folder in the picker, then save into it. With no
+  // Google configured this is the app's own dialog over the mock Drive;
+  // live it is Google's Picker, which a browser test cannot drive.
+  const picker = page.getByRole('dialog', { name: 'Choose from Google Drive' })
   await expect(picker).toBeVisible()
-  await picker.getByRole('button', { name: 'New folder' }).click()
-  await picker.getByLabel('New folder name').fill('E2E Exports')
-  await picker.getByRole('button', { name: 'Create' }).click()
-  await expect(
-    picker.getByRole('button', { name: 'E2E Exports' }),
-  ).toBeVisible()
+  await picker.getByRole('button', { name: 'Lectures' }).click()
   await picker.getByRole('button', { name: 'Save here' }).click()
 
   // The resulting Google Slides link appears (in the confirmation and the
@@ -67,7 +64,7 @@ test('export a lecture to PDF download and Google Slides in Drive', async ({
   await expect(
     dialog.locator('a[href*="docs.google.com/presentation"]').first(),
   ).toBeVisible()
-  await expect(dialog.getByText(/Saved to E2E Exports/)).toBeVisible()
+  await expect(dialog.getByText(/Saved to Lectures/)).toBeVisible()
   // The saved export is listed and can be deleted.
   await expect(dialog.getByText('Saved to Drive')).toBeVisible()
 })
@@ -101,11 +98,9 @@ test('export a design to Google Slides in Drive (EXP-6)', async ({ page }) => {
 
   await dialog.getByRole('button', { name: 'As Google Slides' }).click()
 
-  const picker = page.getByRole('dialog', { name: 'Choose a Drive folder' })
+  const picker = page.getByRole('dialog', { name: 'Choose from Google Drive' })
   await expect(picker).toBeVisible()
-  await picker.getByRole('button', { name: 'New folder' }).click()
-  await picker.getByLabel('New folder name').fill('E2E Designs')
-  await picker.getByRole('button', { name: 'Create' }).click()
+  await picker.getByRole('button', { name: 'Lectures' }).click()
   await picker.getByRole('button', { name: 'Save here' }).click()
 
   // The design is in Drive, and opens in Slides rather than as a file

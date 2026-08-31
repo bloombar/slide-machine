@@ -20,8 +20,8 @@ a new project just for this.
 
 > **One client, reused later.** This same OAuth client is also used for
 > connected Google Drive import/export ([EXP-4](SPEC.md#exp-4-connected-accounts-google-drive)),
-> which just requests broader scopes at consent time. Set it up once here for
-> sign-in; no second client is needed for Drive.
+> which requests one further scope at consent time (`drive.file`). Set it up
+> once here for sign-in; no second client is needed for Drive.
 
 ## 1. Configure the OAuth consent screen
 
@@ -48,15 +48,17 @@ before you can create a client.
 6. **Scopes:** add the three basic sign-in scopes — **`openid`**,
    **`.../auth/userinfo.email`**, and **`.../auth/userinfo.profile`**. These
    return the verified email, name, and avatar the app needs to create an
-   account. (Drive scopes for [EXP-4](SPEC.md#exp-4-connected-accounts-google-drive)
-   are added later, not now.)
+   account. (The connected-account scope for
+   [EXP-4](SPEC.md#exp-4-connected-accounts-google-drive) — `drive.file`, and
+   only that — is added later, not now.)
 7. **Test users:** while the consent screen is in **Testing** mode, only accounts
    you list here can sign in. Add the team's and pilot testers' Google emails.
 8. **Publishing status:** keep it in **Testing** for development. Before the Fall
    pilot, click **Publish app** to move to **In production** so any user can sign
-   in without being a listed test user. Basic scopes (email/profile/openid) do
-   **not** require Google's app-verification review; the broader Drive scopes
-   do. Step-by-step, with what verification costs:
+   in without being a listed test user. Neither the sign-in scopes
+   (email/profile/openid) nor the connected-account scope (`drive.file`) is
+   sensitive or restricted, so publishing needs no Google review — only a
+   brand-verification pass to show the app's name and logo. Step-by-step:
    [GOOGLE_PRODUCTION_MODE.md](GOOGLE_PRODUCTION_MODE.md).
 
 ## 2. Create the OAuth 2.0 Client ID

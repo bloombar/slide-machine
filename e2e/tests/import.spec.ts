@@ -58,5 +58,7 @@ test('round-trip: export a lecture to YAML and re-import it', async ({
   // import does not leave a box open over the list it just added to.
   await expect(page.getByText(/^Imported /)).toBeVisible()
   await expect(lectureLinks).toHaveCount(2)
-  await expect(page.getByLabel('Google Slides link')).toBeHidden()
+  await expect(
+    page.getByRole('button', { name: 'Choose a presentation' }),
+  ).toBeHidden()
 })

@@ -3,7 +3,9 @@
  * The Google boundaries (connect helpers, Drive/Forms service, token crypto)
  * are mocked, so this exercises the real action + route wiring — connect
  * returns a consent redirect, the callback stores the encrypted token, and
- * folders/publish go through the live service — without contacting Google.
+ * publish goes through the live service — without contacting Google. Folder
+ * browsing has no live path at all: the app holds only `drive.file`, so the
+ * choosing happens in Google's Picker, in the browser.
  */
 import {
   describe,
@@ -33,26 +35,14 @@ vi.mock('../../src/auth/google-connect', () => ({
   })),
   exchangeConnectCode: vi.fn(async () => ({
     refreshToken: 'refresh-token-123',
-    scope:
-      'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly',
+    scope: 'https://www.googleapis.com/auth/drive.file',
   })),
-  // The real predicate: Drive access requires both drive.file and drive.readonly.
-  grantedDriveAccess: vi.fn((scope: string) => {
-    const g = new Set(scope.split(' '))
-    return (
-      g.has('https://www.googleapis.com/auth/drive.file') &&
-      g.has('https://www.googleapis.com/auth/drive.readonly')
-    )
-  }),
+  // The real predicate: one scope, and the connection is refused without it.
+  grantedDriveAccess: vi.fn((scope: string) =>
+    new Set(scope.split(' ')).has('https://www.googleapis.com/auth/drive.file'),
+  ),
 }))
 vi.mock('../../src/lib/quiz-google', () => ({
-  listDriveFoldersLive: vi.fn(async () => [{ id: 'f1', name: 'Quizzes' }]),
-  createDriveFolderLive: vi.fn(
-    async (_t: string, name: string, _parentId?: string) => ({
-      id: 'live-folder-1',
-      name,
-    }),
-  ),
   publishQuizLive: vi.fn(async () => ({
     formId: 'F1',
     formUrl: 'https://docs.google.com/forms/d/F1/viewform',
@@ -222,20 +212,9 @@ describe('quiz actions (live mode)', () => {
     expect(user!.googleConnected).toBeFalsy()
   })
 
-  it('creates a Drive folder in live mode', async () => {
-    await UserModel.updateOne(
-      { _id: adaId },
-      {
-        googleConnected: true,
-        googleQuizRefreshToken: 'enc:refresh-token-123',
-      },
-    )
-    const res = await act(ada, 'quiz.createFolder', { name: 'Week 5 quizzes' })
-    expect(res.status).toBe(200)
-    expect(res.body).toEqual({ id: 'live-folder-1', name: 'Week 5 quizzes' })
-  })
-
-  it('lists live folders and publishes through the library once connected', async () => {
+  it('refuses to browse folders live — the Picker does that', async () => {
+    // Answering with the mock tree here would offer folders that do not exist
+    // in the instructor's Drive, and the publish would then fail at Google.
     await UserModel.updateOne(
       { _id: adaId },
       {
@@ -244,8 +223,20 @@ describe('quiz actions (live mode)', () => {
       },
     )
     const folders = await act(ada, 'quiz.driveFolders')
-    expect(folders.body.folders).toEqual([{ id: 'f1', name: 'Quizzes' }])
+    expect(folders.status).toBe(400)
+    expect(folders.body.error?.code ?? folders.body.code).toBe(
+      'drive_picker_required',
+    )
+  })
 
+  it('publishes through the library into the folder that was picked', async () => {
+    await UserModel.updateOne(
+      { _id: adaId },
+      {
+        googleConnected: true,
+        googleQuizRefreshToken: 'enc:refresh-token-123',
+      },
+    )
     const publish = await act(ada, 'quiz.publish', {
       deckId,
       driveFolderId: 'root',

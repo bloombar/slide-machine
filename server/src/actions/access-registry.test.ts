@@ -136,11 +136,6 @@ const ACCESS_INDEX: Record<string, AccessDescriptor> = {
     capabilities: ['google-drive'],
   },
   'quiz.connectGoogle': { resource: 'self', level: 'self' },
-  'quiz.createFolder': {
-    resource: 'none',
-    level: 'signedIn',
-    capabilities: ['google-drive'],
-  },
   'quiz.delete': { resource: 'deck', level: 'edit' },
   'quiz.driveFolders': {
     resource: 'none',
@@ -181,6 +176,11 @@ const ACCESS_INDEX: Record<string, AccessDescriptor> = {
   // Browsing Drive for something to import: the first step of an import, so
   // the same grant and the same surface as the imports themselves.
   'drive.importables': {
+    resource: 'none',
+    level: 'signedIn',
+    capabilities: ['google-drive'],
+  },
+  'drive.pickerToken': {
     resource: 'none',
     level: 'signedIn',
     capabilities: ['google-drive'],

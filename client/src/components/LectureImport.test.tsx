@@ -2,11 +2,14 @@
  * Creating a lecture from a Google Slides presentation (EXP-5), from the
  * instructor's side.
  *
- * Three things carry this panel: the pasted link has to become a presentation
- * id without the instructor thinking about it, the lecture has to arrive in
- * the list straight away, and the report has to say what happened to both
- * halves — an import that produced a template as well is something the author
- * may want to keep instead of the lecture.
+ * Three things carry this panel: the presentation picked in Drive has to reach
+ * the import with the project it lands in, the lecture has to arrive in the
+ * list straight away, and the report has to say what happened to both halves —
+ * an import that produced a template as well is something the author may want
+ * to keep instead of the lecture.
+ *
+ * The picker here is the mock one: with no Google configured, DrivePicker
+ * draws the app's own dialog over `drive.importables`.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
@@ -34,15 +37,43 @@ const result = (over: Record<string, unknown> = {}) => ({
   },
 })
 
+/** The (mock) Drive the picker browses: one presentation to import. */
+const TREE = {
+  folders: [],
+  files: [
+    {
+      id: '1AbC_dEf-123',
+      name: 'Photosynthesis',
+      mimeType: 'application/vnd.google-apps.presentation',
+    },
+  ],
+}
+
+/** What the import itself answers; the picker's listing is answered
+ * separately, so one mock serves both calls. */
+let importOutcome: () => Promise<unknown>
+
 beforeEach(() => {
   dispatchAction.mockReset()
-  dispatchAction.mockResolvedValue(result())
+  importOutcome = () => Promise.resolve(result())
+  dispatchAction.mockImplementation((action: string) =>
+    action === 'drive.importables' ? Promise.resolve(TREE) : importOutcome(),
+  )
 })
 
-const importLink = (link: string) => {
-  fireEvent.change(screen.getByLabelText('Google Slides link'), {
-    target: { value: link },
-  })
+/** Opens the Drive picker and chooses the presentation in it. */
+const pick = async () => {
+  fireEvent.click(
+    screen.getByRole('button', { name: /choose a presentation/i }),
+  )
+  fireEvent.click(
+    await screen.findByRole('button', { name: /photosynthesis/i }),
+  )
+}
+
+/** Chooses the presentation and submits it. */
+const pickAndImport = async () => {
+  await pick()
   fireEvent.click(screen.getByRole('button', { name: 'Import lecture' }))
 }
 
@@ -52,24 +83,19 @@ const renderPanel = () =>
   )
 
 describe('importing a lecture', () => {
-  it('will not submit until the link is one', () => {
+  it('will not submit until a presentation has been chosen', async () => {
     renderPanel()
     expect(
       screen.getByRole('button', { name: 'Import lecture' }),
     ).toBeDisabled()
 
-    fireEvent.change(screen.getByLabelText('Google Slides link'), {
-      target: { value: 'not a link' },
-    })
-    expect(
-      screen.getByRole('button', { name: 'Import lecture' }),
-    ).toBeDisabled()
-    expect(screen.getByText(/doesn't look like/i)).toBeInTheDocument()
+    await pick()
+    expect(screen.getByRole('button', { name: 'Import lecture' })).toBeEnabled()
   })
 
-  it('sends the id it found and the project it lands in', async () => {
+  it('sends the id it was given and the project it lands in', async () => {
     renderPanel()
-    importLink('https://docs.google.com/presentation/d/1AbC_dEf-123/edit')
+    await pickAndImport()
 
     await waitFor(() =>
       expect(dispatchAction).toHaveBeenCalledWith('deck.importFromSlides', {
@@ -86,7 +112,7 @@ describe('importing a lecture', () => {
     // The instructor asked for their lecture, not a tidied version of it.
     renderPanel()
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
-    importLink('1AbCdEfGhIjKl')
+    await pickAndImport()
 
     await waitFor(() =>
       expect(dispatchAction).toHaveBeenCalledWith(
@@ -105,7 +131,7 @@ describe('importing a lecture', () => {
         onClose={vi.fn()}
       />,
     )
-    importLink('1AbCdEfGhIjKl')
+    await pickAndImport()
 
     await waitFor(() =>
       expect(onImported).toHaveBeenCalledWith(
@@ -127,7 +153,7 @@ describe('what happens once it has worked', () => {
         onClose={vi.fn()}
       />,
     )
-    importLink('1AbCdEfGhIjKl')
+    await pickAndImport()
 
     await waitFor(() =>
       expect(onImported).toHaveBeenCalledWith(
@@ -146,7 +172,7 @@ describe('what happens once it has worked', () => {
     render(
       <LectureImport projectId="p1" onImported={vi.fn()} onClose={vi.fn()} />,
     )
-    importLink('1AbCdEfGhIjKl')
+    await pickAndImport()
 
     await waitFor(() => expect(dispatchAction).toHaveBeenCalled())
     expect(
@@ -155,10 +181,11 @@ describe('what happens once it has worked', () => {
   })
 
   it('carries a file import’s warnings up the same way', async () => {
-    dispatchAction.mockResolvedValue({
-      deck,
-      warnings: ['Unknown template "foo" — using the default instead.'],
-    })
+    importOutcome = () =>
+      Promise.resolve({
+        deck,
+        warnings: ['Unknown template "foo" — using the default instead.'],
+      })
     const onImported = vi.fn()
     render(
       <LectureImport
@@ -189,9 +216,9 @@ describe('what happens once it has worked', () => {
 
 describe('when it will not work', () => {
   it('offers the missing step rather than an error, when Google is not connected', async () => {
-    dispatchAction.mockRejectedValue(new Error('connect google first'))
+    importOutcome = () => Promise.reject(new Error('connect google first'))
     renderPanel()
-    importLink('1AbCdEfGhIjKl')
+    await pickAndImport()
 
     expect(
       await screen.findByRole('button', { name: /connect google/i }),
@@ -202,11 +229,10 @@ describe('when it will not work', () => {
     // A pasted link to a colleague's lecture. This used to offer "Connect
     // Google", which sends them through the consent screen to arrive back at
     // exactly the same refusal — the connection was never the problem.
-    dispatchAction.mockRejectedValue(
-      new ApiError(403, 'source_forbidden', 'no access'),
-    )
+    importOutcome = () =>
+      Promise.reject(new ApiError(403, 'source_forbidden', 'no access'))
     renderPanel()
-    importLink('1AbCdEfGhIjKl')
+    await pickAndImport()
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       /do not have access/i,
@@ -215,11 +241,10 @@ describe('when it will not work', () => {
   })
 
   it('still offers the reconnect when the connection IS the problem', async () => {
-    dispatchAction.mockRejectedValue(
-      new ApiError(403, 'google_reconnect', 'stale'),
-    )
+    importOutcome = () =>
+      Promise.reject(new ApiError(403, 'google_reconnect', 'stale'))
     renderPanel()
-    importLink('1AbCdEfGhIjKl')
+    await pickAndImport()
 
     expect(
       await screen.findByRole('button', { name: /connect google/i }),
@@ -227,9 +252,9 @@ describe('when it will not work', () => {
   })
 
   it('reports any other failure without blaming the instructor', async () => {
-    dispatchAction.mockRejectedValue(new Error('boom'))
+    importOutcome = () => Promise.reject(new Error('boom'))
     renderPanel()
-    importLink('1AbCdEfGhIjKl')
+    await pickAndImport()
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       /could not import that presentation/i,

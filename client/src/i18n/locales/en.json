@@ -457,8 +457,6 @@
       "open": "Import a design",
       "title": "Import a design from Google Slides",
       "description": "Point at a presentation in your Drive and we'll work out the design behind it — colours, type and where things sit — and save it as a template you can edit.",
-      "linkLabel": "Google Slides or Drive link",
-      "linkPlaceholder": "Paste a Google Slides link, or a Drive link to a .yaml design",
       "submit": "Import design",
       "tidy": "Combine near-identical slides into one layout",
       "tidyFile": "Tidy the presentation you open into fewer layouts",
@@ -466,7 +464,6 @@
       "tidyHintFile": "Applies to presentations. A slide deck usually rebuilds one design many times over; a design file has no slides to combine.",
       "working": "Reading the presentation…",
       "errors": {
-        "link": "That doesn't look like a Google Slides or Drive link.",
         "google": "Google wouldn't let us read that presentation. Check you can open it yourself.",
         "failed": "Could not import that presentation"
       },
@@ -481,7 +478,8 @@
       },
       "connectPrompt": "Connect a Google account to read a presentation from your Drive.",
       "connect": "Connect Google",
-      "otherSources": "Or upload a file"
+      "otherSources": "Or upload a file",
+      "choose": "Choose from Google Drive"
     },
     "fileImport": {
       "open": "Import a design file (.yaml or .pptx)",
@@ -523,8 +521,6 @@
     "importSlides": {
       "title": "Create a lecture from a Google Slides presentation",
       "description": "Bring in a presentation from your Drive — Google Slides or PowerPoint. Every slide comes across exactly as you made it.",
-      "linkLabel": "Google Slides link",
-      "linkPlaceholder": "Paste the presentation link",
       "submit": "Import lecture",
       "working": "Reading the presentation…",
       "report": {
@@ -536,7 +532,8 @@
         "failed": "Could not import that presentation"
       },
       "otherSources": "Or upload a file",
-      "fileOpen": "Import a lecture file (.yaml or .pptx)"
+      "fileOpen": "Import a lecture file (.yaml or .pptx)",
+      "choose": "Choose a presentation"
     },
     "errors": {
       "create": "Could not create the lecture"
@@ -1148,14 +1145,7 @@
     "savingTo": "Saving to:",
     "folder": {
       "dialog": "Choose a Drive folder",
-      "title": "Save the quiz to…",
-      "path": "Folder path",
-      "empty": "No sub-folders here. Save the quiz into this folder, or make a new one below.",
-      "new": "New folder",
-      "newName": "New folder name",
-      "newIn": "New folder in {folder}",
-      "cancelNew": "Cancel new folder",
-      "creating": "Creating…"
+      "title": "Save the quiz to…"
     },
     "options": {
       "questionCount": "Number of questions",
@@ -1214,7 +1204,6 @@
       "status": "Could not load the quiz status",
       "connect": "Could not connect your Google account",
       "loadFolders": "Could not load your Drive folders. Your Google account may not have granted Drive access.",
-      "createFolder": "Could not create the folder",
       "generate": "Could not generate the quiz — please try again",
       "publish": "Could not publish the quiz — please try again",
       "delete": "Could not delete the quiz — please try again"
@@ -1255,8 +1244,7 @@
       }
     },
     "folder": {
-      "title": "Save {format} to…",
-      "empty": "No sub-folders here. Save into this folder, or make a new one below."
+      "title": "Save {format} to…"
     },
     "includeWhiteboard": {
       "label": "Include whiteboard markups",
@@ -1279,6 +1267,18 @@
     "notes": {
       "heading": "Some things could not be carried into this file",
       "math-not-typeset": "A formula could not be typeset, so it was left out rather than written as its source: {detail}"
+    }
+  },
+  "drive": {
+    "picker": {
+      "dialog": "Choose from Google Drive",
+      "path": "Folder path",
+      "emptyFolders": "No sub-folders here. Save into this folder.",
+      "emptyFiles": "Nothing here to import.",
+      "unavailable": "Google Drive is not set up on this server, so nothing can be chosen from it.",
+      "failed": "Google's file chooser could not be opened.",
+      "change": "Change",
+      "chooseHere": "Choose this folder"
     }
   },
   "errors": {

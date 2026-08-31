@@ -457,8 +457,6 @@
       "open": "导入设计",
       "title": "从 Google 幻灯片导入设计",
       "description": "指定你云端硬盘中的一份演示文稿，我们会分析它的设计——配色、字体和元素位置——并保存为可编辑的模板。",
-      "linkLabel": "Google 幻灯片或云端硬盘链接",
-      "linkPlaceholder": "粘贴 Google 幻灯片链接，或指向 .yaml 设计文件的云端硬盘链接",
       "submit": "导入设计",
       "tidy": "将几乎相同的幻灯片合并为一个版式",
       "tidyFile": "将您打开的演示文稿精简为更少的版式",
@@ -466,7 +464,6 @@
       "tidyHintFile": "适用于演示文稿。幻灯片通常会多次重复同一种版式；设计文件没有可合并的幻灯片。",
       "working": "正在读取演示文稿…",
       "errors": {
-        "link": "这看起来不像 Google 幻灯片或云端硬盘链接。",
         "google": "Google 不允许我们读取该演示文稿。请确认你自己能打开它。",
         "failed": "无法导入该演示文稿"
       },
@@ -481,7 +478,8 @@
       },
       "connectPrompt": "连接 Google 账号，以便读取你云端硬盘中的演示文稿。",
       "connect": "连接 Google",
-      "otherSources": "或上传文件"
+      "otherSources": "或上传文件",
+      "choose": "从 Google 云端硬盘中选择"
     },
     "fileImport": {
       "open": "导入设计文件（.yaml 或 .pptx）",
@@ -523,8 +521,6 @@
     "importSlides": {
       "title": "用 Google 幻灯片演示文稿创建课程",
       "description": "从你的云端硬盘导入演示文稿——Google 幻灯片或 PowerPoint。每张幻灯片都会原样呈现。",
-      "linkLabel": "Google 幻灯片链接",
-      "linkPlaceholder": "粘贴演示文稿链接",
       "submit": "导入课程",
       "working": "正在读取演示文稿…",
       "report": {
@@ -536,7 +532,8 @@
         "failed": "无法导入该演示文稿"
       },
       "otherSources": "或上传文件",
-      "fileOpen": "导入课程文件（.yaml 或 .pptx）"
+      "fileOpen": "导入课程文件（.yaml 或 .pptx）",
+      "choose": "选择演示文稿"
     },
     "errors": {
       "create": "无法创建课程"
@@ -1148,14 +1145,7 @@
     "savingTo": "保存到：",
     "folder": {
       "dialog": "选择云端硬盘文件夹",
-      "title": "将测验保存到…",
-      "path": "文件夹路径",
-      "empty": "这里没有子文件夹。可以把测验保存到当前文件夹，或在下方新建一个。",
-      "new": "新建文件夹",
-      "newName": "新文件夹名称",
-      "newIn": "在“{folder}”中新建文件夹",
-      "cancelNew": "取消新建文件夹",
-      "creating": "创建中…"
+      "title": "将测验保存到…"
     },
     "options": {
       "questionCount": "题目数量",
@@ -1214,7 +1204,6 @@
       "status": "无法加载测验状态",
       "connect": "无法连接你的 Google 账户",
       "loadFolders": "无法加载你的云端硬盘文件夹。你的 Google 账户可能未授予云端硬盘访问权限。",
-      "createFolder": "无法创建文件夹",
       "generate": "无法生成测验——请重试",
       "publish": "无法发布测验——请重试",
       "delete": "无法删除测验——请重试"
@@ -1255,8 +1244,7 @@
       }
     },
     "folder": {
-      "title": "将 {format} 保存到…",
-      "empty": "这里没有子文件夹。可以保存到当前文件夹，或在下方新建一个。"
+      "title": "将 {format} 保存到…"
     },
     "includeWhiteboard": {
       "label": "包含白板标注",
@@ -1279,6 +1267,18 @@
     "notes": {
       "heading": "有些内容无法放入此文件",
       "math-not-typeset": "有一个公式无法排版，因此被略去，而不是写成源码：{detail}"
+    }
+  },
+  "drive": {
+    "picker": {
+      "dialog": "从 Google 云端硬盘中选择",
+      "path": "文件夹路径",
+      "emptyFolders": "这里没有子文件夹。保存到此文件夹。",
+      "emptyFiles": "这里没有可导入的内容。",
+      "unavailable": "此服务器未配置 Google 云端硬盘，因此无法从中选择文件。",
+      "failed": "无法打开 Google 文件选择器。",
+      "change": "更改",
+      "chooseHere": "选择此文件夹"
     }
   },
   "errors": {

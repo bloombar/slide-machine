@@ -547,8 +547,9 @@ consolidation runs in tests and on a machine with no credentials.
 A design also travels as the file it was exported to (SPEC
 [EXP-3](SPEC.md#exp-3-round-trip-import)). `template.import` takes the YAML
 `template.export` writes and recreates it as a new template in the caller's library;
-`template.importFromDrive` is the same import reading the file out of the connected Drive
-by pasted link, since EXP-3 allows an upload **or** a connected account. Once the bytes
+`template.importFromDrive` is the same import reading the file out of the connected Drive,
+by the id of a file the instructor picked in Google's Picker, since EXP-3 allows an upload
+**or** a connected account. Once the bytes
 are in hand both take the same path, so neither route can drift into accepting what the
 other refuses.
 
@@ -996,11 +997,11 @@ writes `e2e/.uploads-e2e`. A template imported by one is therefore missing its p
 the other, and the symptom is decoration that silently does not render rather than an error.
 Check with a direct request for the file, not by looking at the slide.
 
-- **Google Slides import needs no new OAuth scope, and nobody has to reconnect.** This note
-  previously said the opposite; a live check against the Slides API settled it. The `drive.readonly`
-  already granted for the folder picker is enough for `presentations.get`, so an instructor
-  connected for quiz publishing or export can import immediately. The reader still handles a
-  403/401 by asking for a reconnect rather than assuming — a file shared without the right
+- **Google Slides import needs no OAuth scope beyond the one connect already grants.**
+  `presentations.get` accepts `drive.file`, checked against Google's own method reference, so
+  an instructor connected for quiz publishing or export can import immediately — on any file
+  they choose in the Picker, which is what grants access to it. The reader still handles a
+  403/401 by asking for a reconnect rather than assuming: a file shared without the right
   access produces the same status, and that case is real even when the scopes are fine.
   Setup: [GOOGLE_API_KEYS.md](GOOGLE_API_KEYS.md).
 - **Import has a mock mode**, as every Google-touching feature does, so the test suite and

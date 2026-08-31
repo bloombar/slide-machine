@@ -25,6 +25,10 @@ const envState = {
   OPERATOR_JURISDICTION: '',
   OPERATOR_CONTACT_EMAIL: '',
   OPERATOR_POSTAL_ADDRESS: '',
+  EXPORT_MODE: 'mock',
+  QUIZ_PUBLISH_MODE: 'mock',
+  GOOGLE_PICKER_API_KEY: undefined as string | undefined,
+  GOOGLE_PICKER_APP_ID: undefined as string | undefined,
 }
 vi.mock('../config/env', () => ({ env: envState }))
 vi.mock('../lib/transcribe-audio', () => ({
@@ -53,6 +57,10 @@ beforeEach(() => {
   envState.OPERATOR_CONTACT_EMAIL = ''
   envState.OPERATOR_POSTAL_ADDRESS = ''
   feedbackEnabled.mockReturnValue(false)
+  envState.EXPORT_MODE = 'mock'
+  envState.QUIZ_PUBLISH_MODE = 'mock'
+  envState.GOOGLE_PICKER_API_KEY = undefined
+  envState.GOOGLE_PICKER_APP_ID = undefined
 })
 
 describe('GET /api/config', () => {
@@ -67,6 +75,9 @@ describe('GET /api/config', () => {
       interimFlushEnabled: false,
       interimFlushWords: 140,
       sttCaptureSampleRate: 24000,
+      // Mock unless EXPORT_MODE is live: a machine with no Google gets the
+      // app's own Drive dialog rather than Google's Picker.
+      drivePicker: { mode: 'mock' },
       translationEnabled: false,
       feedbackEnabled: false,
       mailEnabled: false,
@@ -164,5 +175,47 @@ describe('GET /api/config', () => {
     envState.TRANSLATION_PROVIDER = 'google-cloud'
     envState.GOOGLE_CLOUD_TRANSLATION_KEY = 'translate-key'
     expect(await getConfig()).toMatchObject({ translationEnabled: true })
+  })
+})
+
+describe('which Drive chooser the client should open', () => {
+  it('is the mock dialog when the deployment does not talk to Google', async () => {
+    // A dev machine and the test suite: the whole save-and-import flow stays
+    // exercisable with no credentials, as every Google surface here is.
+    expect((await getConfig()).drivePicker).toEqual({ mode: 'mock' })
+  })
+
+  it("is Google's Picker once live and configured", async () => {
+    envState.EXPORT_MODE = 'live'
+    envState.GOOGLE_PICKER_API_KEY = 'browser-key'
+    envState.GOOGLE_PICKER_APP_ID = '1234567890'
+
+    expect((await getConfig()).drivePicker).toEqual({
+      mode: 'google',
+      apiKey: 'browser-key',
+      appId: '1234567890',
+    })
+  })
+
+  it('is nothing at all when live but unconfigured', async () => {
+    // Not the mock: fabricated folders on a live deployment would offer
+    // destinations that do not exist. The client says Drive is unavailable.
+    envState.EXPORT_MODE = 'live'
+    envState.GOOGLE_PICKER_API_KEY = 'browser-key'
+
+    expect((await getConfig()).drivePicker).toEqual({ mode: 'none' })
+
+    envState.GOOGLE_PICKER_API_KEY = undefined
+    envState.GOOGLE_PICKER_APP_ID = '1234567890'
+    expect((await getConfig()).drivePicker).toEqual({ mode: 'none' })
+  })
+  it('is the Picker when only quiz publishing is live', async () => {
+    // Two switches, one chooser: a Form really created in Drive needs a real
+    // folder id even when exports are still mocked.
+    envState.QUIZ_PUBLISH_MODE = 'live'
+    envState.GOOGLE_PICKER_API_KEY = 'browser-key'
+    envState.GOOGLE_PICKER_APP_ID = '1234567890'
+
+    expect((await getConfig()).drivePicker).toMatchObject({ mode: 'google' })
   })
 })

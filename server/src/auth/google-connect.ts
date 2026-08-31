@@ -1,7 +1,7 @@
 /**
  * Google account *connect* flow for quiz publishing (SPEC EXP-4 / QUIZ-4).
- * Separate from sign-in (auth/google.ts): it requests the broader Forms/Drive
- * scopes with OFFLINE access so the server gets a refresh token and can create
+ * Separate from sign-in (auth/google.ts): it requests per-file Drive access
+ * with OFFLINE access so the server gets a refresh token and can create
  * a Form in the instructor's Drive later, on their behalf. The refresh token
  * is encrypted at rest (token-crypto.ts); this module only builds the consent
  * URL, exchanges the code, and mints an authorized client for the library.
@@ -44,25 +44,27 @@ export const verifyConnectState = async (
 }
 
 /**
- * Least-privilege scopes (docs/GOOGLE_API_KEYS.md §6). `drive.file` grants
- * write access to files this app creates (the Form + any folders it makes);
- * `drive.readonly` lets the folder picker browse the instructor's existing
- * Drive to choose a destination. Deck export (PDF/YAML/Google Slides, EXP-1/
- * EXP-4) needs no extra scope: files are created — and a .pptx is converted to
- * native Google Slides — with `drive.file`. Template import (TMPL-8) needs no
- * extra scope either: `presentations.get` is covered by `drive.readonly`,
- * verified against the live API rather than assumed, so an instructor already
- * connected can import without reconnecting.
+ * One scope, deliberately (docs/GOOGLE_API_KEYS.md §6).
+ *
+ * `drive.file` is per-file: it covers what this app creates and what the user
+ * hands it by picking the file in Google's Picker. That is enough for every
+ * Google call the app makes — quiz publishing (`forms.create`,
+ * `forms.batchUpdate`, `forms.get` all accept it, and the app only ever
+ * touches a Form it created), deck and template export, reading a picked
+ * presentation for import (`presentations.get` accepts it too), and trashing
+ * a published Form.
+ *
+ * It is also the only Drive scope Google classes as non-sensitive. The
+ * `forms.body*` pair it replaces are sensitive, and `drive.readonly` is
+ * restricted — that one alone would oblige the deployment to pass a paid
+ * third-party security assessment every year, and it bought exactly one
+ * thing: `files.list`, the app browsing a Drive itself. Google's Picker does
+ * the browsing now (docs/GOOGLE_PRODUCTION_MODE.md).
  *
  * Instructors must reconnect once after a scope is genuinely added, so their
  * stored token carries it.
  */
-const CONNECT_SCOPES = [
-  'https://www.googleapis.com/auth/forms.body',
-  'https://www.googleapis.com/auth/forms.body.readonly',
-  'https://www.googleapis.com/auth/drive.file',
-  'https://www.googleapis.com/auth/drive.readonly',
-]
+const CONNECT_SCOPES = ['https://www.googleapis.com/auth/drive.file']
 
 /** Credentials or a clear 503 when the connect route runs unconfigured. */
 const requireConfigured = (): { id: string; secret: string } => {
@@ -91,7 +93,7 @@ export const connectRedirectUri = (requestOrigin: string): string => {
   return `${base.replace(/\/$/, '')}/api/auth/google/callback`
 }
 
-/** The consent URL to send the browser to, requesting offline Forms/Drive access.
+/** The consent URL to send the browser to, requesting offline Drive access.
  * `loginHint` (the user's Google email, when they signed in with Google)
  * pre-selects the account, so the connect is a single "Allow" rather than an
  * account chooser. */
@@ -152,15 +154,13 @@ export const exchangeConnectCode = async (
 }
 
 /**
- * The scopes a connection must carry to browse and save to Drive: `drive.file`
- * (create/save) and `drive.readonly` (list the folder tree). Google's granular
- * consent lets a user grant sign-in but untick these, yielding a token that
- * 403s on every Drive call — so the connect flow verifies they are present.
+ * The scope a connection must carry to save to and read from Drive.
+ *
+ * Google's granular consent lets a user grant sign-in but untick this,
+ * yielding a token that 403s on every Drive call — so the connect flow
+ * verifies it is present rather than assuming the request succeeded.
  */
-const REQUIRED_CONNECT_SCOPES = [
-  'https://www.googleapis.com/auth/drive.file',
-  'https://www.googleapis.com/auth/drive.readonly',
-]
+const REQUIRED_CONNECT_SCOPES = ['https://www.googleapis.com/auth/drive.file']
 
 /** Whether the granted scope string carries the Drive access the app needs. */
 export const grantedDriveAccess = (scope: string): boolean => {

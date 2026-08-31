@@ -1,6 +1,6 @@
 /**
  * Importing a design from Google Slides end to end (TMPL-8): connect an
- * account, paste a presentation link, and get a template back that the
+ * account, pick a presentation in Drive, and get a template back that the
  * library shows, the editor opens and a lecture can actually wear.
  *
  * The consolidation is proved by unit tests and the action by integration
@@ -9,7 +9,9 @@
  * opens in the editor with the layouts the import derived, and applies to the
  * project without anything breaking.
  *
- * Google is mock-backed, so the presentation read is the deliberately messy
+ * Google is mock-backed, so the chooser is the app's own dialog over a
+ * fabricated Drive (live it is Google's Picker, which a browser test cannot
+ * drive) and the presentation read is the deliberately messy
  * sample deck (server/src/import/mock-presentation.ts) — three real designs
  * rebuilt with jitter, plus one odd slide. Every consolidation pass runs.
  */
@@ -20,9 +22,8 @@ const stamp = Date.now()
 const user = { email: `import-${stamp}@example.com`, name: 'Importer' }
 const password = 'sturdy-passw0rd'
 const projectName = `TmplImport${stamp}`
-const link = `https://docs.google.com/presentation/d/1AbCdEf${stamp}/edit`
 
-test('template import: connect, paste a link, get a usable design', async ({
+test('template import: connect, pick a presentation, get a usable design', async ({
   page,
 }) => {
   await page.goto('/register')
@@ -46,33 +47,29 @@ test('template import: connect, paste a link, get a usable design', async ({
 
   // The panel stays out of the way until asked for — importing is not what
   // most visits to this tab are about.
-  await expect(page.getByLabel(/Google Slides or Drive link/i)).toBeHidden()
+  const choose = page.getByRole('button', { name: 'Choose from Google Drive' })
+  await expect(choose).toBeHidden()
   await page.getByRole('button', { name: /^Import a design$/i }).click()
+  await expect(choose).toBeVisible()
 
-  const field = page.getByLabel(/Google Slides or Drive link/i)
-  await expect(field).toBeVisible()
-
-  // A link that is not one is refused before anything is sent, so the
-  // instructor gets a clear complaint rather than a server error.
-  await field.fill('my lecture deck')
+  // Nothing to import until something is chosen.
   await expect(
     page.getByRole('button', { name: 'Import design' }),
   ).toBeDisabled()
-  await expect(page.getByText(/doesn't look like/i)).toBeVisible()
-
-  // The id is pulled out of the pasted URL; the instructor never sees one.
-  await field.fill(link)
-  await page.getByRole('button', { name: 'Import design' }).click()
 
   // This account has never connected Google, and that is a missing step
-  // rather than a failure — so the panel offers the step instead of an error
-  // the instructor cannot act on. Import needs no scope beyond the one already
-  // used to browse Drive, so it is the same connection export uses
-  // (docs/TEMPLATES.md §11).
-  const connect = page.getByRole('button', { name: 'Connect Google' })
-  await expect(connect).toBeVisible({ timeout: 20_000 })
-  await connect.click()
-  await expect(connect).toBeHidden({ timeout: 20_000 })
+  // rather than a failure — so the picker offers the step instead of an error
+  // the instructor cannot act on, and reopens on the files once it is taken.
+  // Import needs no scope beyond the one export already uses, so it is the
+  // same connection (docs/TEMPLATES.md §11).
+  await choose.click()
+  const reconnect = page.getByRole('button', { name: 'Reconnect Google' })
+  await expect(reconnect).toBeVisible({ timeout: 20_000 })
+  await reconnect.click()
+
+  const picker = page.getByRole('dialog', { name: 'Choose from Google Drive' })
+  await expect(picker).toBeVisible({ timeout: 20_000 })
+  await picker.getByRole('button', { name: 'Rainwater Harvesting' }).click()
 
   await page.getByRole('button', { name: 'Import design' }).click()
 
@@ -155,19 +152,19 @@ test('ticking the box combines near-identical slides', async ({ page }) => {
   await page.getByRole('tab', { name: 'Design' }).click()
   await page.getByRole('button', { name: /^Import a design$/i }).click()
 
-  const field = page.getByLabel(/Google Slides or Drive link/i)
-  await expect(field).toBeVisible()
-  await field.fill(link)
+  // Same missing step as above: this account has never connected Google.
+  await page.getByRole('button', { name: 'Choose from Google Drive' }).click()
+  const reconnect = page.getByRole('button', { name: 'Reconnect Google' })
+  await expect(reconnect).toBeVisible({ timeout: 20_000 })
+  await reconnect.click()
+
+  const picker = page.getByRole('dialog', { name: 'Choose from Google Drive' })
+  await expect(picker).toBeVisible({ timeout: 20_000 })
+  await picker.getByRole('button', { name: 'Rainwater Harvesting' }).click()
+
   await page
     .getByRole('checkbox', { name: /combine near-identical slides/i })
     .check()
-  await page.getByRole('button', { name: 'Import design' }).click()
-
-  // Same missing step as above: this account has never connected Google.
-  const connect = page.getByRole('button', { name: 'Connect Google' })
-  await expect(connect).toBeVisible({ timeout: 20_000 })
-  await connect.click()
-  await expect(connect).toBeHidden({ timeout: 20_000 })
   await page.getByRole('button', { name: 'Import design' }).click()
 
   const report = page.getByTestId('import-report')

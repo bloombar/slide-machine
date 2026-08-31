@@ -137,7 +137,7 @@ describe('ProjectPage', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Import a lecture' }))
 
     expect(
-      await screen.findByLabelText('Google Slides link'),
+      await screen.findByRole('button', { name: /choose a presentation/i }),
     ).toBeInTheDocument()
     expect(screen.getByLabelText(/import a lecture file/i)).toBeInTheDocument()
   })
