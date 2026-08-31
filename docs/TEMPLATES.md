@@ -534,10 +534,10 @@ renamable, and applied to nothing. An import is a good guess and still a guess, 
 produces is a starting point its author reviews, never a change to a lecture.
 
 The action is `template.importFromSlides`, reached from the Design tab of a lecture's or
-project's settings: the instructor pastes the presentation's link and the id is read out of
-it. It is metered against the **import** allowance
+project's settings: the instructor chooses the presentation in Google's Picker, and picking
+it is what grants access to it. It is metered against the **import** allowance
 (SPEC [BILL-3](SPEC.md#bill-3-usage-caps--metering)), and needs no Google scope beyond the
-one already used to browse Drive ([§11](#11-operational-notes)). Like every Google-touching
+`drive.file` connect already grants ([§11](#11-operational-notes)). Like every Google-touching
 feature it has a **mock mode**, which reads a deliberately messy sample deck — three designs
 rebuilt by hand with jitter, plus one slide like nothing else in it — so the whole
 consolidation runs in tests and on a machine with no credentials.

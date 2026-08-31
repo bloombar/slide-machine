@@ -424,9 +424,10 @@ export const templateExportToDrive = defineAction<
  * is a guess — a good one, and still a guess — so what it produces is a
  * starting point the author reviews, not a change to a lecture.
  *
- * Needs no OAuth scope beyond the one already used to browse Drive: reading a
- * presentation is covered by `drive.readonly`, which is verified rather than
- * assumed (docs/TEMPLATES.md §11).
+ * Needs no OAuth scope beyond the one connect already grants: the
+ * presentation arrives from Google's Picker, and picking it is what puts it
+ * inside `drive.file`, which is verified rather than assumed
+ * (docs/TEMPLATES.md §11).
  */
 export const templateImportFromSlides = defineAction<
   {

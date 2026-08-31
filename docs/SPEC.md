@@ -1063,7 +1063,7 @@ Users can connect their **own Google Drive** account via OAuth to import from an
 - **Import** — pull source documents and previously-exported decks/templates from Drive ([SEED-1](#seed-1-document-seeding)).
 - **Export** — push outputs to the connected destination: **PDF / Google Slides / YAML** to Google Drive (round-trippable via EXP-3).
 - Connecting an account is **separate from sign-in identity** (AUTH-1): it grants broader, purpose-specific scopes (Drive files) and a user who signed in by email can still connect Drive. Connections are listed in the profile and are **revocable** at any time; tokens are stored encrypted ([P-9](#16-privacy-security--compliance)).
-- Reading a user's **existing** Google Slides presentations (TMPL-8 / EXP-5) requires a **presentation-read scope** beyond those needed to create files. Because a stored authorization only carries the scopes granted when it was issued, **adding a scope requires already-connected users to reconnect once**; the app detects the missing grant and prompts, rather than failing without explanation. Setup: [GOOGLE_API_KEYS.md](GOOGLE_API_KEYS.md).
+- Reading a user's **existing** Google Slides presentations (TMPL-8 / EXP-5) needs **no scope beyond the one connect already grants**: the presentation arrives from Google's Picker, and picking it is what puts it inside `drive.file`. Because a stored authorization only carries the scopes granted when it was issued, **adding a scope would require already-connected users to reconnect once**; the app detects a missing grant and prompts, rather than failing without explanation. Setup: [GOOGLE_API_KEYS.md](GOOGLE_API_KEYS.md).
 
 #### EXP-5 Lecture import from Google Slides
 

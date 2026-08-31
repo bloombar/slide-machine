@@ -5,12 +5,11 @@
  * brief, so this — not the template editor — is the realistic way to get a
  * template that looks like their own material.
  *
- * ## Paste a link, not a file picker
+ * ## Google's Picker, not a browser of our own
  *
- * The instructor already has the presentation open, and its address is in
- * their clipboard. A Drive browser would be a second thing to learn for the
- * same result, so this takes the link and pulls the id out of it — or the bare
- * id, if that is what they have.
+ * The app holds only `drive.file`, which cannot list a Drive, so the
+ * presentation is chosen in Google's own Picker — and choosing it there is
+ * what grants this app access to it.
  *
  * ## The report is the point of the screen after
  *
