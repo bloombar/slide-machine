@@ -59,9 +59,11 @@ describe('index.html', () => {
     }
   })
 
-  it('names the drive.file scope and its limits', () => {
-    expect(noscript).toContain('drive.file')
-    expect(noscript).toContain('cannot list, search or read the rest of your')
+  it('names the narrow scope and its limits', () => {
+    expect(noscript).toContain('least possible permission')
+    expect(noscript).toContain(
+      'cannot and do not view, search, or read the rest of your',
+    )
   })
 
   it('links the privacy policy and the terms', () => {

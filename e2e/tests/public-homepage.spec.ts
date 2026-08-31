@@ -93,12 +93,12 @@ test('the served HTML carries the disclosures without running any JavaScript', a
   expect(html).toContain('<noscript>')
   expect(html).toContain('The Slide Machine')
   expect(html).toMatch(/builds your lecture slides live/i)
-  // Each data disclosure, and the connect scope by name
+  // Each data disclosure, and the narrow-permission promise
   expect(html).toContain('Your account')
   expect(html).toContain('Google sign-in')
   expect(html).toContain('Connecting Google Drive')
   expect(html).toContain('Your microphone')
-  expect(html).toContain('drive.file')
+  expect(html).toContain('least possible permission')
   // And a real link to the policy, not one React would have to draw
   expect(html).toContain('href="/privacy"')
   expect(html).toContain('href="/terms"')

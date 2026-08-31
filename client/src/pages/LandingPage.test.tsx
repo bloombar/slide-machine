@@ -122,15 +122,18 @@ describe('LandingPage', () => {
     expect(body).toContain('Your microphone')
   })
 
-  it('names the drive.file scope and its limits', async () => {
+  it('names the narrow scope and its limits', async () => {
     renderLanding(401)
     await screen.findByRole('heading', { name: 'The Slide Machine' })
 
     const body = document.body.textContent ?? ''
     // The narrow scope is the whole point of the disclosure: the page has to
-    // say which permission is requested and that it cannot read the Drive.
-    expect(body).toContain('drive.file')
-    expect(body).toContain('cannot list, search or read the rest of your Drive')
+    // say that the least possible permission is requested and that it cannot
+    // read the rest of the Drive.
+    expect(body).toContain('least possible permission')
+    expect(body).toContain(
+      'cannot and do not view, search, or read the rest of your Google Drive',
+    )
   })
 
   it('links to the privacy policy without needing the drawer', async () => {
