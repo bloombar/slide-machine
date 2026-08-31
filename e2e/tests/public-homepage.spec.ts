@@ -104,6 +104,45 @@ test('the served HTML carries the disclosures without running any JavaScript', a
   expect(html).toContain('href="/terms"')
 })
 
+// Google's privacy-policy requirement asks for the policy "in the body of a
+// dedicated privacy policy web page". A link is not the body, and a
+// client-rendered page has no body until the bundle runs — so this reads
+// /privacy and /terms off the wire, with no browser rendering, the way a
+// checker that does not execute JavaScript would.
+test('the policy and the terms are in the served body, without JavaScript', async ({
+  page,
+}) => {
+  const privacy = (await (await page.request.get('/privacy')).text()).replace(
+    /\s+/g,
+    ' ',
+  )
+  expect(privacy).toContain('<h1>Privacy policy</h1>')
+  // Real sections of the document, not a summary of it
+  expect(privacy).toContain('What we collect')
+  expect(privacy).toContain('Google Drive')
+  // Built from the operator this deployment configured (playwright.config.ts)
+  expect(privacy).toContain('E2E Teaching Ltd')
+  expect(privacy).not.toContain('[Operator legal name]')
+
+  const terms = (await (await page.request.get('/terms')).text()).replace(
+    /\s+/g,
+    ' ',
+  )
+  expect(terms).toContain('<h1>Terms &amp; conditions</h1>')
+  expect(terms).toContain('E2E Teaching Ltd')
+})
+
+// The home page keeps the app summary — the documents replace it only on
+// their own paths, and a swap that leaked everywhere would be a regression
+// the test above could not see.
+test('the home page still carries the app summary, not a document', async ({
+  page,
+}) => {
+  const html = (await (await page.request.get('/')).text()).replace(/\s+/g, ' ')
+  expect(html).toContain('What we ask for, and why')
+  expect(html).not.toContain('<h1>Privacy policy</h1>')
+})
+
 test('the register form names the terms and the policy', async ({ page }) => {
   await page.goto('/register')
   const form = page.locator('form')

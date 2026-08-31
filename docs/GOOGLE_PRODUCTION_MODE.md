@@ -116,11 +116,17 @@ Googlebot — sees nothing. [index.html](../client/index.html) therefore carries
 a `<noscript>` summary of the same three things, checked on the wire by
 `public-homepage.spec.ts` and as a file by `client/src/index-html.test.ts`.
 
-This does **not** cover `/privacy` and `/terms`, which are served from the same
-index.html and whose prose is still JS-only. If a reviewer reports the policy
-itself as unreachable rather than unlinked, that needs prerendering those
-routes — a bigger change than another `noscript` block, and worth doing only
-against an actual finding.
+`/privacy` and `/terms` go further: the server **renders the document into the
+response** for those two paths, replacing that summary
+([static.ts](../server/src/static.ts) `inlineDocument`). The privacy
+requirement asks for the policy "in the body of a dedicated privacy policy web
+page", and a link is not a body.
+
+The words come from `@slide-machine/shared`, the same module the client draws,
+so the served page and the drawn one cannot disagree. The operator is read per
+request from `OPERATOR_*` — which is why this is a request-time render and not
+a build-time one: changing who runs the deployment stays a restart, not a
+rebuild.
 
 - Fill `OPERATOR_NAME`, `OPERATOR_JURISDICTION`, `OPERATOR_CONTACT_EMAIL`,
   `OPERATOR_POSTAL_ADDRESS` ([DEPLOY.md §5](DEPLOY.md#5-environment-variables)).
