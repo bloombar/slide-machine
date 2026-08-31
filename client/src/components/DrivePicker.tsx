@@ -94,14 +94,30 @@ function GooglePickerHost({
       .catch(() => setError(t('drive.picker.failed')))
   }, [kind, locale, onCancel, onPick, t])
 
-  if (!error) return null
+  if (error)
+    return (
+      <Notice
+        title={t('drive.picker.dialog')}
+        message={error}
+        onCancel={onCancel}
+        onReconnect={onReconnect}
+      />
+    )
+
+  // Google's chooser is an iframe on docs.google.com, so it needs its own
+  // third-party cookies to find the user's Google session. Browsers that block
+  // them — Brave with Shields up, Safari, Firefox, Chrome incognito — get
+  // Google's bare "You must sign in to access this content" instead of their
+  // files, with nothing to say the browser did it. The app cannot detect this
+  // (the iframe loads fine, so no error reaches us) and cannot work around it,
+  // so it says so underneath the picker while the picker is the thing on
+  // screen. Pointer events off: this is a caption, never a target.
   return (
-    <Notice
-      title={t('drive.picker.dialog')}
-      message={error}
-      onCancel={onCancel}
-      onReconnect={onReconnect}
-    />
+    <Portal>
+      <p className="pointer-events-none fixed inset-x-0 bottom-4 z-[2000] mx-auto max-w-md rounded-md bg-slate-900/85 px-4 py-2 text-center text-xs text-white">
+        {t('drive.picker.cookieHint')}
+      </p>
+    </Portal>
   )
 }
 

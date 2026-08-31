@@ -276,6 +276,46 @@ Two values, both published to the browser through `GET /api/config` and neither 
 
 **Get the app id wrong and the failure is silent-looking:** the pick succeeds, and the server's later read of that file 404s. It is what ties the picked file's grant to this OAuth client.
 
+#### When the Picker won't open
+
+Two failures look like app bugs and are not. Both were hit on the first live deployment.
+
+**"The API developer key is invalid."** The `developerKey` is checked against the Cloud
+project, not against your app. Check, in this order:
+
+1. **Google Picker API is enabled** on the project — easy to miss, because it is not listed
+   beside Drive/Slides/Forms in most setup guides. This is the usual cause.
+2. **The key's API restriction includes Google Picker API.** A key restricted to the other
+   APIs fails exactly the same way.
+3. **Both are on the same project** as `GOOGLE_PICKER_APP_ID` — the project *number*, which
+   also appears as `appId` in the picker URL. Enabling the API on a different project in the
+   console's project switcher looks identical to having done it.
+
+Key restriction changes take a few minutes to propagate, and Google's edge servers disagree
+with each other while they do, so a retry that fails right after an edit is not evidence the
+edit was wrong. Note also that **OAuth verification status is unrelated** — a project mid
+brand-review issues working tokens and working keys; if consent completed, verification is
+not what broke the Picker.
+
+**"Sign in to your Google Account / You must sign in to access this content"**, drawn inside
+the chooser itself. The Picker is an iframe on `docs.google.com`, and it needs **third-party
+cookies** to find the user's Google session. The OAuth token the app passes authorizes the
+API call, not the iframe's UI. Browsers that block those cookies — **Brave with Shields up,
+Safari, Firefox's Total Cookie Protection, Chrome incognito** — get this screen instead of
+their files.
+
+**There is no fix on the app's side**, which is worth stating plainly because it looks like
+one is missing. The iframe loads successfully, so no error reaches the app to catch;
+`drive.file` cannot list a Drive, so the app cannot fall back to a browser of its own; and a
+pasted Drive link cannot replace a pick, because `drive.file` only reaches a file the user
+actually chose in the Picker. All the app can do is say what happened, which
+[DrivePicker.tsx](../client/src/components/DrivePicker.tsx) does in a caption under the
+chooser. Users have to allow third-party cookies for the site — or, for a lecture, upload the
+`.pptx` directly, which needs no Google at all.
+
+Expect this to be a recurring support question rather than a one-off, and note that the same
+constraint applies to the folder chooser used by export and quiz publishing.
+
 Both unset while `EXPORT_MODE`/`QUIZ_PUBLISH_MODE` are `mock` is normal and correct — the client falls back to its own dialog over a fabricated Drive, which is what dev machines and the test suite use. Live with only one of them set, Drive saving and importing report themselves unavailable rather than opening a chooser that could only come back empty.
 
 ### Configure the scopes in the console

@@ -1308,6 +1308,7 @@
       "emptyFiles": "Rien à importer ici.",
       "unavailable": "Google Drive n'est pas configuré sur ce serveur : impossible d'y choisir un fichier.",
       "failed": "Impossible d’ouvrir le sélecteur de fichiers Google.",
+      "cookieHint": "Si Google vous demande de vous connecter, votre navigateur bloque les cookies tiers — Brave Shields, Safari, Firefox et la navigation privée de Chrome le font tous. Autorisez-les pour ce site, puis rouvrez le sélecteur.",
       "change": "Modifier",
       "chooseHere": "Choisir ce dossier"
     }
