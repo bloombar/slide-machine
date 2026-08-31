@@ -64,7 +64,7 @@
     "dataGoogleTitle": "Iniciar sesión con Google",
     "dataGoogleBody": "Si eliges iniciar sesión con Google, recibimos de Google tu nombre, tu correo y tu foto de perfil. Los usamos para crear e identificar tu cuenta, y para nada más. Son los únicos datos de Google que nos da el inicio de sesión.",
     "dataDriveTitle": "Conectar Google Drive",
-    "dataDriveBody": "Exportar una presentación a Google Slides o publicar un cuestionario como formulario de Google es opcional y pide un único permiso acotado: drive.file. Solo alcanza los archivos que crea la propia aplicación y los que le entregas eligiéndolos en el selector de archivos de Google. No puede listar, buscar ni leer el resto de tu Drive.",
+    "dataDriveBody": "Importar o exportar presentaciones o cuestionarios a tu cuenta de Google es opcional, y para hacerlo pedimos a Google el mínimo permiso posible. Por eso no podemos ver, buscar ni leer el resto de los archivos y carpetas de tu Google Drive, y no lo hacemos.",
     "dataSpeechTitle": "Tu micrófono",
     "dataSpeechBody": "Mientras se graba una clase, el audio del micrófono se transcribe a texto para construir las diapositivas. También podemos conservar la propia grabación, para que una clase pueda volver a transcribirse, refinarse, distinguir a quienes hablan, reproducir su narración original junto a las diapositivas y analizar su calidad. Cuánto tiempo se conserva depende de tu plan y de lo que aún haya que hacer con la grabación. Una grabación conservada se almacena solo en el servidor, nunca se expone a quien no pueda editar esa clase, y se borra al vencer su periodo de retención.",
     "dataNever": "No vendemos tus datos ni los usamos para entrenar modelos de IA de terceros.",

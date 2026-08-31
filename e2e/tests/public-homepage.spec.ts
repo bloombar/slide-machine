@@ -37,13 +37,15 @@ test('the homepage says what user data it asks for, and why', async ({
   await expect(
     page.getByRole('heading', { name: 'What we ask for, and why' }),
   ).toBeVisible()
-  // The Google grants are named individually, and the connect scope by name:
-  // "we use Google" is not a purpose statement.
+  // The Google grants are named individually, and the limit on the connect
+  // scope is spelled out: "we use Google" is not a purpose statement.
   await expect(page.getByText('Google sign-in')).toBeVisible()
   await expect(page.getByText('Connecting Google Drive')).toBeVisible()
-  await expect(page.getByText(/drive\.file/)).toBeVisible()
+  await expect(page.getByText(/least possible permission/)).toBeVisible()
   await expect(
-    page.getByText(/cannot list, search or read the rest of your Drive/),
+    page.getByText(
+      /cannot and do not view, search, or read the rest of your Google Drive/,
+    ),
   ).toBeVisible()
 })
 
@@ -93,12 +95,12 @@ test('the served HTML carries the disclosures without running any JavaScript', a
   expect(html).toContain('<noscript>')
   expect(html).toContain('The Slide Machine')
   expect(html).toMatch(/builds your lecture slides live/i)
-  // Each data disclosure, and the connect scope by name
+  // Each data disclosure, and the narrow-permission promise
   expect(html).toContain('Your account')
   expect(html).toContain('Google sign-in')
   expect(html).toContain('Connecting Google Drive')
   expect(html).toContain('Your microphone')
-  expect(html).toContain('drive.file')
+  expect(html).toContain('least possible permission')
   // And a real link to the policy, not one React would have to draw
   expect(html).toContain('href="/privacy"')
   expect(html).toContain('href="/terms"')
