@@ -194,6 +194,15 @@ export interface DeckDeleteInput {
   deckId: string
 }
 
+/**
+ * Owner-only: file the lecture under a different project (PROJ-3). The
+ * caller must own both the lecture and the destination project.
+ */
+export interface DeckMoveInput {
+  deckId: string
+  projectId: string
+}
+
 /** Owner-only: hand the deck to another user; the old owner stays an editor. */
 export interface DeckTransferOwnershipInput {
   deckId: string

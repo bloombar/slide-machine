@@ -27,6 +27,7 @@ import {
   type DeckRefineStatusResult,
   type DeckSetRefineSettingsInput,
   type Locale,
+  type Project,
   type RefineJobSummary,
   type SlideRefineParts,
   type Template,
@@ -56,6 +57,7 @@ import {
 } from './refine/RefineControls'
 import { getTtsEnabled, getRefineSlidesDefaultLevel } from '../runtime-config'
 import { lectureTitle } from '../lib/lecture'
+import { projectTitle as projectLabel, untitledProject } from '../lib/project'
 
 /** The tabs in order; each id also keys its label under
  * `deck.settings.tabs.<id>` in the locale bundles. */
@@ -85,6 +87,10 @@ interface Props {
   initialTab?: TabId
   /** Editors manage access too; only the owner can transfer ownership. */
   isOwner: boolean
+  /** The title of the project this lecture is filed under, for the move
+   * control (PROJ-3) — a lecture can sit in a project its owner does not
+   * own, which is then missing from the list of destinations. */
+  projectTitle?: string
   /** True when an admin has opened a lecture they cannot otherwise edit
    * (ADMIN-5): adds the audit banner and drops the sections that change
    * content rather than settings. */
@@ -105,6 +111,10 @@ interface Props {
   onDeckChange: (deck: Deck) => void
   /** Fired after the lecture is deleted; the viewer leaves the page. */
   onDeleted: () => void
+  /** Fired after the lecture is moved to another project (PROJ-3), which
+   * changes everything it inherits — freedom, language, voice, access — so
+   * the viewer reloads rather than patching the deck alone. */
+  onMoved?: () => void
   /** Fired after a reformat so the viewer reloads its (now-revised) slides. */
   onReformatted: () => void
 }
@@ -115,6 +125,7 @@ export default function DeckSettingsModal({
   projectTtsVoice,
   initialTab = 'general',
   isOwner,
+  projectTitle,
   adminOverride = false,
   viewerIsAdmin = false,
   slidesHaveDrawings = false,
@@ -123,6 +134,7 @@ export default function DeckSettingsModal({
   onTemplateChange,
   onDeckChange,
   onDeleted,
+  onMoved,
   onReformatted,
 }: Props) {
   const { t } = useTranslation()
@@ -193,6 +205,53 @@ export default function DeckSettingsModal({
       .then(onDeckChange)
       .catch(() => {
         // Quiet failure: the field reverts to the saved title on re-render
+      })
+  }
+
+  // Where this lecture could be moved to (PROJ-3): the projects the user
+  // owns, which is exactly where they could have started it. Loaded for the
+  // owner alone — nobody else is offered the move, and an admin editing
+  // someone else's lecture would only see their own projects.
+  const [projects, setProjects] = useState<Project[]>([])
+  useEffect(() => {
+    if (!isOwner || adminOverride) return
+    let cancelled = false
+    dispatchAction<Project[]>('project.list')
+      .then(list => {
+        if (!cancelled) setProjects(list)
+      })
+      .catch(() => {
+        // Quiet failure: the control simply offers nowhere to move to
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isOwner, adminOverride])
+
+  // The lecture's own project is always an option, even when the user does
+  // not own it (a project handed on keeps the lectures with their owners) —
+  // otherwise the select would open on a value it does not list.
+  const destinations = projects.some(p => p.id === deck.projectId)
+    ? projects.map(p => ({ id: p.id, title: projectLabel(p) }))
+    : [
+        {
+          id: deck.projectId,
+          title: projectTitle?.trim() || untitledProject(),
+        },
+        ...projects.map(p => ({ id: p.id, title: projectLabel(p) })),
+      ]
+
+  /** Files the lecture under another project. Everything it inherits changes
+   * with it, so the viewer is asked to reload after the deck is updated. */
+  const moveToProject = (projectId: string) => {
+    if (projectId === deck.projectId) return
+    dispatchAction<Deck>('deck.move', { deckId: deck.id, projectId })
+      .then(updated => {
+        onDeckChange(updated)
+        onMoved?.()
+      })
+      .catch(() => {
+        // Quiet failure: the select reverts to the saved project on rerender
       })
   }
 
@@ -528,6 +587,28 @@ export default function DeckSettingsModal({
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
             />
           </div>
+          {isOwner && !adminOverride && destinations.length > 1 && (
+            <div>
+              <h3 className="mb-2 text-lg font-semibold text-slate-700">
+                {t('deck.settings.general.projectHeading')}
+              </h3>
+              <p className="mb-3 text-sm text-slate-500">
+                {t('deck.settings.general.projectHint')}
+              </p>
+              <select
+                aria-label={t('deck.settings.general.projectHeading')}
+                value={deck.projectId}
+                onChange={e => moveToProject(e.target.value)}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              >
+                {destinations.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <h3 className="mb-2 text-lg font-semibold text-slate-700">
               {t('deck.settings.general.seedNotesHeading')}

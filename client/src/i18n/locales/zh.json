@@ -1106,6 +1106,8 @@
       "general": {
         "titleHeading": "课程标题",
         "titleHint": "为这节课程命名。留空则由 AI 根据你在课上所讲的内容拟定标题。",
+        "projectHeading": "项目",
+        "projectHint": "这节课程所属的项目。移动后其幻灯片、备注和共享设置保持不变，但会开始继承新项目的设置。",
         "seedNotesHeading": "参考笔记",
         "seedNotesHint": "这节课程专属的背景资料，叠加在项目参考笔记之上。自动保存。",
         "seedNotesLabel": "课程参考笔记",

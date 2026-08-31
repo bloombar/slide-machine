@@ -46,6 +46,14 @@ export interface DeckSettingsAccess extends DeckAccess {
   admin: AdminActor | null
 }
 
+/**
+ * A lecture and the project it is being moved into (PROJ-3) — two resources,
+ * both owned by the caller, so the action neither loads either one again.
+ */
+export interface DeckMoveAccess extends DeckAccess {
+  project: HydratedDocument<ProjectDb>
+}
+
 export interface ProjectAccess extends Signed {
   project: HydratedDocument<ProjectDb>
   acl: ResolvedAcl

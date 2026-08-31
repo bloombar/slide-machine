@@ -1106,6 +1106,8 @@
       "general": {
         "titleHeading": "Título de la clase",
         "titleHint": "Ponle nombre a esta clase. Déjalo en blanco para que la IA lo titule a partir de lo que digas a medida que avanza.",
+        "projectHeading": "Proyecto",
+        "projectHint": "El proyecto en el que está guardada esta clase. Al moverla conserva sus diapositivas, sus notas y su uso compartido, pero pasa a heredar la configuración del nuevo proyecto.",
         "seedNotesHeading": "Notas de referencia",
         "seedNotesHint": "Material de fondo propio de esta clase, añadido sobre las notas de referencia del proyecto. Se guarda automáticamente.",
         "seedNotesLabel": "Notas de referencia de la clase",

@@ -2431,6 +2431,7 @@ export default function DeckViewerPage() {
             projectTtsVoice={view.projectTtsVoice}
             initialTab={settingsTab ?? 'general'}
             isOwner={isOwner}
+            projectTitle={view.project?.title}
             adminOverride={adminOverride}
             viewerIsAdmin={isAdmin === true}
             slidesHaveDrawings={view.slides.some(s =>
@@ -2440,6 +2441,16 @@ export default function DeckViewerPage() {
             onClose={closeSettings}
             onDeckChange={deck => setView(v => (v ? { ...v, deck } : v))}
             onDeleted={() => void navigate('/app')}
+            onMoved={() => {
+              // A move changes what the lecture inherits — the project in the
+              // header, its AI freedom, language and voice — so reload the
+              // view rather than patch the deck alone.
+              apiFetch<DeckViewResponse>(`/api/decks/${slug}`)
+                .then(setView)
+                .catch(() => {
+                  // Quiet failure: the current view stays until the next load
+                })
+            }}
             onTemplateChange={(deck, template) =>
               setView(v => (v ? { ...v, deck, template } : v))
             }
