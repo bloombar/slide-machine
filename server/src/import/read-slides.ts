@@ -11,9 +11,10 @@
  * Drive can export a presentation as .pptx, which would mean parsing OOXML.
  * The Slides API hands back the same information already structured — shapes,
  * placeholder types, text runs with resolved styles, the master's colour
- * scheme — and its read methods accept the `drive.readonly` scope this app
- * already asks for. Nobody should have to reconnect to import a design; if a
- * stored authorization really does turn out to lack it, the caller is told to
+ * scheme — and its read methods accept `drive.file`, the one scope this app
+ * asks for, because the instructor handed the presentation over in Google's
+ * Picker. Nobody should have to reconnect to import a design; if a stored
+ * authorization really does turn out to lack the grant, the caller is told to
  * reconnect rather than shown an error it cannot act on.
  */
 import { NATURAL_LINE_BOX } from '@slide-machine/shared'
