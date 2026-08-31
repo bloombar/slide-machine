@@ -242,6 +242,9 @@ from `SMTP_USER`). Nothing is stored — the inbox is the record.
 Both ride on the same `SMTP_*` / `MAIL_PROVIDER` settings as the feedback
 form — no separate account, no extra key.
 
+Setting up a mailbox and the DNS records that keep our mail out of spam
+folders: [EMAIL.md](EMAIL.md).
+
 **Without mail configured the app still works.** Registration succeeds, and
 "I forgot my password" still answers the same way it always does; there is
 simply no link to deliver, and the account pages say so rather than promising
