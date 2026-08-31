@@ -1277,6 +1277,7 @@
       "emptyFiles": "Aquí no hay nada que importar.",
       "unavailable": "Google Drive no está configurado en este servidor, así que no se puede elegir nada de él.",
       "failed": "No se pudo abrir el selector de archivos de Google.",
+      "cookieHint": "Si Google te pide que inicies sesión, tu navegador está bloqueando las cookies de terceros: Brave Shields, Safari, Firefox y el modo incógnito de Chrome lo hacen. Permítelas para este sitio y vuelve a abrir el selector.",
       "change": "Cambiar",
       "chooseHere": "Elegir esta carpeta"
     }

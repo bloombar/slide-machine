@@ -89,11 +89,33 @@ describe("Google's own picker", () => {
     )
   })
 
-  it('draws nothing of its own — the widget is Google’s', async () => {
+  it('draws no chooser of its own — the widget is Google’s', async () => {
     openGooglePicker.mockResolvedValue(null)
-    const { container } = render(<DrivePicker kind="folder" {...props} />)
+    render(<DrivePicker kind="folder" {...props} />)
     await waitFor(() => expect(openGooglePicker).toHaveBeenCalled())
-    expect(container).toBeEmptyDOMElement()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('captions the chooser with why it may demand a sign-in', async () => {
+    // Brave with Shields up, Safari and Firefox block the third-party cookies
+    // the Picker iframe needs, and Google answers with a bare sign-in screen.
+    // Nothing reaches the app to catch, so the caption is always drawn.
+    openGooglePicker.mockResolvedValue(null)
+    render(<DrivePicker kind="folder" {...props} />)
+
+    expect(
+      await screen.findByText(/blocking third-party cookies/i),
+    ).toBeInTheDocument()
+  })
+
+  it('replaces the caption with the failure when one is catchable', async () => {
+    dispatchAction.mockRejectedValue(new Error('google_reconnect'))
+    render(<DrivePicker kind="folder" {...props} />)
+
+    expect(await screen.findByText(/could not be opened/i)).toBeInTheDocument()
+    expect(
+      screen.queryByText(/blocking third-party cookies/i),
+    ).not.toBeInTheDocument()
   })
 
   it('hands back what was picked', async () => {

@@ -1277,6 +1277,7 @@
       "emptyFiles": "Nothing here to import.",
       "unavailable": "Google Drive is not set up on this server, so nothing can be chosen from it.",
       "failed": "Google's file chooser could not be opened.",
+      "cookieHint": "If Google asks you to sign in, your browser is blocking third-party cookies — Brave Shields, Safari, Firefox and Chrome incognito all do. Allow them for this site, then open the chooser again.",
       "change": "Change",
       "chooseHere": "Choose this folder"
     }

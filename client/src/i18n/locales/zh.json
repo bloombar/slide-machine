@@ -1277,6 +1277,7 @@
       "emptyFiles": "这里没有可导入的内容。",
       "unavailable": "此服务器未配置 Google 云端硬盘，因此无法从中选择文件。",
       "failed": "无法打开 Google 文件选择器。",
+      "cookieHint": "如果 Google 要求你登录，说明浏览器拦截了第三方 Cookie — Brave Shields、Safari、Firefox 和 Chrome 无痕模式都会这样做。请为本站允许第三方 Cookie，然后重新打开选择器。",
       "change": "更改",
       "chooseHere": "选择此文件夹"
     }
