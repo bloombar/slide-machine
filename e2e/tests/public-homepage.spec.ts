@@ -37,13 +37,15 @@ test('the homepage says what user data it asks for, and why', async ({
   await expect(
     page.getByRole('heading', { name: 'What we ask for, and why' }),
   ).toBeVisible()
-  // The Google grants are named individually, and the connect scope by name:
-  // "we use Google" is not a purpose statement.
+  // The Google grants are named individually, and the limit on the connect
+  // scope is spelled out: "we use Google" is not a purpose statement.
   await expect(page.getByText('Google sign-in')).toBeVisible()
   await expect(page.getByText('Connecting Google Drive')).toBeVisible()
-  await expect(page.getByText(/drive\.file/)).toBeVisible()
+  await expect(page.getByText(/least possible permission/)).toBeVisible()
   await expect(
-    page.getByText(/cannot list, search or read the rest of your Drive/),
+    page.getByText(
+      /cannot and do not view, search, or read the rest of your Google Drive/,
+    ),
   ).toBeVisible()
 })
 
