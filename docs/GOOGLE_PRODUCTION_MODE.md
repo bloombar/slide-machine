@@ -62,12 +62,17 @@ opening a chooser that could only come back empty.
 ### 3.2 A custom domain, for the app's name and logo
 
 Not a blocker for the feature, but a blocker for **brand verification** — the
-pass that makes the consent screen show `Slide Machine` and its logo instead of
+pass that makes the consent screen show `The Slide Machine` and its logo instead of
 a bare URL. Verification requires the homepage, privacy policy and terms to sit
 on an **authorized domain**, and an authorized domain must be one whose
 ownership you verified in Google Search Console.
 `slide-machine-xxxxx.ondigitalocean.app` cannot be: `ondigitalocean.app` is
 DigitalOcean's top private domain, not yours.
+
+**Done:** the app is deployed at <https://theslidemachine.com>, which is what
+the homepage, `/privacy` and `/terms` must be reached at for verification.
+Steps 1–3 below are the record of how; step 4 (Search Console) is the one to
+re-check if verification complains about the authorized domain.
 
 1. Register a domain and attach it — DO dashboard → app → **Settings →
    Domains** ([DEPLOY.md §6](DEPLOY.md#6-register-the-google-oauth-redirect-uri)).
@@ -85,6 +90,24 @@ The homepage, `/privacy` and `/terms` must be publicly reachable without
 logging in (they are — see [App.tsx](../client/src/App.tsx)), on the domain
 above, and linked from the consent screen.
 
+Google rejected a first verification attempt on the **homepage** requirements,
+which are stricter than "the page loads signed out". A homepage that is a
+tagline and a sign-in button fails two of them. What the page has to do is
+[AUTH-7](SPEC.md#auth-7-public-homepage--consent-disclosures), and it now does:
+
+| Google's requirement | Where it is met |
+| --- | --- |
+| Accurately represent and identify the app or brand | Hero on [LandingPage.tsx](../client/src/pages/LandingPage.tsx) — the mark and the name **The Slide Machine**, which is also what the console's Branding tab must say |
+| Fully describe the app's functionality | The "What it does" section — the live loop plus four feature cards |
+| Explain with transparency the purpose for which the app requests user data | The "What we ask for, and why" section — the account fields, what Google sign-in receives, what `drive.file` does and does not reach, and what happens to microphone audio |
+| Hosted on a verified domain you own | <https://theslidemachine.com> (§3.2) |
+| Link to the privacy policy, matching the consent screen | [SiteFooter.tsx](../client/src/components/layout/SiteFooter.tsx) on every page, plus an inline link in the data section and in the notice under both auth forms. Set the consent screen's link to `https://theslidemachine.com/privacy` **byte for byte** |
+| Visible without logging in | The whole page; signed-in visitors are redirected to `/app` instead |
+
+The brand name is **The Slide Machine**, in the app and in the console. A
+console that says `Slide Machine` and a homepage that says something else is
+the first requirement failing.
+
 - Fill `OPERATOR_NAME`, `OPERATOR_JURISDICTION`, `OPERATOR_CONTACT_EMAIL`,
   `OPERATOR_POSTAL_ADDRESS` ([DEPLOY.md §5](DEPLOY.md#5-environment-variables)).
   Left blank, the live page shows `[Operator legal name]`.
@@ -101,7 +124,7 @@ Cloud Console → **Google Auth Platform** (this is where "APIs & Services →
 OAuth consent screen" moved during 2025; the tabs are **Branding / Audience /
 Clients / Data Access / Verification Center**).
 
-- **Branding** — app name `Slide Machine`, logo, support email, app home page,
+- **Branding** — app name `The Slide Machine`, logo, support email, app home page,
   privacy policy and terms links, and the authorized domain from §3.2.
 - **Data Access** — the declared scopes must match what the code requests, no
   more: the four in the §1 table. A scope declared but unused is a rejection

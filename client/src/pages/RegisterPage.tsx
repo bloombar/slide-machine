@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthContext'
 import { apiErrorMessage } from '../i18n/apiError'
 import GoogleSignInButton from '../components/GoogleSignInButton'
+import LegalConsentNotice from '../components/LegalConsentNotice'
 import NavLocaleSwitcher from '../i18n/NavLocaleSwitcher'
 
 export default function RegisterPage() {
@@ -87,6 +88,7 @@ export default function RegisterPage() {
           {submitting ? t('auth.creatingAccount') : t('auth.createAccount')}
         </button>
         <GoogleSignInButton action={t('auth.signUp')} />
+        <LegalConsentNotice action="register" />
         <p className="text-sm text-slate-500">
           {t('auth.alreadyRegistered')}{' '}
           <Link to="/login" className="text-indigo-600">

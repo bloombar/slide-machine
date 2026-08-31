@@ -61,6 +61,22 @@ const CASES: Array<{
     },
     expects: 'marker',
   },
+  {
+    key: 'auth.legalRegister',
+    components: {
+      termsLink: <a href="/terms" data-testid="marker" />,
+      privacyLink: <a href="/privacy" data-testid="privacy-marker" />,
+    },
+    expects: 'marker',
+  },
+  {
+    key: 'auth.legalSignIn',
+    components: {
+      termsLink: <a href="/terms" data-testid="marker" />,
+      privacyLink: <a href="/privacy" data-testid="privacy-marker" />,
+    },
+    expects: 'marker',
+  },
 ]
 
 afterEach(cleanup)

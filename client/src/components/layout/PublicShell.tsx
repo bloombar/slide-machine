@@ -2,10 +2,13 @@
  * Public layout (landing, sign-in, register, permalink viewer): a
  * hamburger menu on the left (Home, Profile / log out, or Log in when
  * signed out) and a right-hand action area pages fill via ShellActions.
+ * Below the page, a footer row of links to the static pages, so the privacy
+ * policy is one click away without opening the drawer.
  */
 import { Link, Outlet } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import HealthFooter from './HealthFooter'
+import SiteFooter from './SiteFooter'
 import ShellMenu from './ShellMenu'
 import { ShellDrawerFrame } from './ShellDrawer'
 import { getBadgeUrl } from './badge'
@@ -66,6 +69,7 @@ export default function PublicShell() {
         <main className="flex w-full flex-1 flex-col">
           <Outlet />
         </main>
+        <SiteFooter />
         <HealthFooter />
       </div>
     </ShellDrawerFrame>

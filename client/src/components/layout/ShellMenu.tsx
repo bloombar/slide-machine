@@ -18,32 +18,13 @@ import { useIsAdmin } from '../../hooks/useIsAdmin'
 import { getFeedbackEnabled } from '../../runtime-config'
 import { ADMIN_LINKS } from '../admin/AdminNav'
 import { DRAWER_PX, DRAWER_WIDTH, useShellDrawer } from './ShellDrawer'
+import { STATIC_GROUPS } from './staticLinks'
 
 /** The admin entry's label. Hardcoded English, not a translation key: the
  * console it opens is English-only by design (docs/I18N.md), and so is the
  * way in. Kept out of JSX so the no-literal-string rule, which only reads
  * JSX, does not need a disable comment. */
 const ADMIN_LABEL = 'Admin'
-
-/**
- * The static pages, in the two fenced groups they are read as: what we are
- * and how to reach us, then the two documents. Each inner array becomes one
- * group with a rule above it.
- *
- * English for the same reason as ADMIN_LABEL: the pages themselves are
- * English-only documents (client/src/content/document.ts), so a translated
- * way in would promise something the page does not deliver.
- */
-const STATIC_GROUPS: { to: string; label: string; needsMail?: boolean }[][] = [
-  [
-    { to: '/about', label: 'About us' },
-    { to: '/feedback', label: 'Send feedback', needsMail: true },
-  ],
-  [
-    { to: '/privacy', label: 'Privacy policy' },
-    { to: '/terms', label: 'Terms & conditions' },
-  ],
-]
 
 /** Rule between the admin entry and the everyday links around it. */
 const SEPARATOR = 'my-1 border-t border-slate-200'

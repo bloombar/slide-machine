@@ -39,12 +39,41 @@
     "profile": "个人资料",
     "accountSettings": "账户设置",
     "logIn": "登录",
-    "logOut": "退出登录"
+    "logOut": "退出登录",
+    "legal": "信息与法律条款"
   },
   "landing": {
-    "title": "The Slide Machine V2",
+    "title": "The Slide Machine",
     "tagline": "尽管开口讲——幻灯片会跟上。",
-    "cta": "登录后开始使用"
+    "intro": "The Slide Machine 会在你讲课的同时，根据你实际说出的内容实时生成幻灯片。开始一堂课，然后开口说：语音被即时转写，我们的 AI 智能体把你的话实时变成排版精良的幻灯片，并在合适的位置配上我们检索到的图片。",
+    "cta": "登录后开始使用",
+    "ctaAbout": "了解更多关于本项目",
+    "featuresTitle": "它能做什么",
+    "featureLiveTitle": "边讲边写的幻灯片",
+    "featureLiveBody": "语音识别与生成式 AI 模型在整堂课中协同工作，根据你刚说的内容选择标题、要点、段落或图片版式。",
+    "featureSeedTitle": "以你自己的材料为起点",
+    "featureSeedBody": "如果你已经有提纲、布置给学生的读物、现成的演示文稿，或想要收录的一组图片，把它们加进来，The Slide Machine 会据此帮你打磨出理想的讲义。",
+    "featureBoardTitle": "任意幻灯片上的白板",
+    "featureBoardBody": "课堂中随手涂画。笔迹会锚定到你当时所说的字词上，因此回放时与讲述同步。",
+    "featureAfterTitle": "课后可编辑、可导出",
+    "featureAfterBody": "课程结束后一切仍可更改。编辑讲义、重新排版、整体润色，并导出为 PDF、YAML 或 Google Slides。",
+    "dataTitle": "我们索取哪些数据，以及为什么",
+    "dataIntro": "The Slide Machine 只索取尽可能少的数据，并且只在某项功能确实需要时索取。以下是它请求的每一项数据及其用途。",
+    "dataAccountTitle": "你的账号",
+    "dataAccountBody": "一个电子邮箱、一个显示名称，以及一个我们只以哈希形式保存的密码——用于识别你的身份，并让你的作品归你所有。",
+    "dataGoogleTitle": "使用 Google 登录",
+    "dataGoogleBody": "如果你选择使用 Google 登录，我们会从 Google 获取你的姓名、电子邮箱和头像。我们仅用它们来创建和识别你的账号，别无他用。登录只会给我们这些 Google 数据。",
+    "dataDriveTitle": "连接 Google 云端硬盘",
+    "dataDriveBody": "把演示文稿导出到 Google Slides、或把测验发布为 Google 表单都是可选的，且只请求一项范围极窄的权限：drive.file。它只能访问应用自己创建的文件，以及你在 Google 自带的文件选择器中亲手交给它的文件。它无法列出、搜索或读取你云端硬盘中的其他内容。",
+    "dataSpeechTitle": "你的麦克风",
+    "dataSpeechBody": "课程录制期间，麦克风音频会被转写成文字以生成幻灯片。我们也可能保留录音本身，以便对课程重新转写、润色、区分发言人、配合幻灯片回放原始讲述，并分析其质量。保留时长取决于你的套餐，以及录音还需要经过哪些处理。保留的录音仅存放在服务器端，绝不会提供给没有该课程编辑权限的人，并在保留期满后删除。",
+    "dataNever": "我们不出售你的数据，也不会用它训练第三方 AI 模型。",
+    "dataMore": "完整说明见我们的隐私政策。",
+    "privacyLink": "隐私政策",
+    "featureQuizTitle": "课堂小测",
+    "featureQuizBody": "根据完成的讲义生成一份小测，并发布为 Google 表单，让学生下课时作答，由 Google 自动批改。",
+    "featureSpeakTitle": "翻译并朗读",
+    "featureSpeakBody": "用你选择的语言阅读已完成的课程，并让课文以该语言朗读出来——便于复习，也照顾到母语并非授课语言的学生。"
   },
   "auth": {
     "signIn": "登录",
@@ -102,7 +131,9 @@
       "resendError": "无法再发送链接——请重试",
       "unavailable": "此服务器无法发送邮件，因此无法重新发送链接。",
       "confirmed": "已确认"
-    }
+    },
+    "legalRegister": "创建账号即表示你同意我们的<termsLink>条款与条件</termsLink>和<privacyLink>隐私政策</privacyLink>。",
+    "legalSignIn": "登录即表示你同意我们的<termsLink>条款与条件</termsLink>和<privacyLink>隐私政策</privacyLink>。"
   },
   "health": {
     "summary": "API {status}",

@@ -39,12 +39,41 @@
     "profile": "Profile",
     "accountSettings": "Account settings",
     "logIn": "Log in",
-    "logOut": "Log out"
+    "logOut": "Log out",
+    "legal": "Legal and information"
   },
   "landing": {
-    "title": "The Slide Machine V2",
+    "title": "The Slide Machine",
     "tagline": "Speak freely — the slides will follow.",
-    "cta": "Sign in to get started"
+    "intro": "The Slide Machine builds your lecture slides live, from what you actually say, while you say it. Start a lecture and talk: your speech is transcribed and our AI agent turns your spoken words into well-formatted slides in real-time, with images we source added at appropriate places as you speak.",
+    "cta": "Sign in to get started",
+    "ctaAbout": "Read more about the project",
+    "featuresTitle": "What it does",
+    "featureLiveTitle": "Slides written as you speak",
+    "featureLiveBody": "Speech recognition and a generative AI model run together through the lecture, choosing a title, bullets, a paragraph or an image layout to match what you just said.",
+    "featureSeedTitle": "Seeded from your own material",
+    "featureSeedBody": "If you already have an outline, a reading you assigned to students, an existing deck, or a set of images that you want included, add them and The Slide Machine will use them to help craft the perfect deck.",
+    "featureBoardTitle": "A whiteboard over any slide",
+    "featureBoardBody": "Draw mid-lecture. Strokes are anchored to the words you were speaking at the time, so they replay in step with the narration afterwards.",
+    "featureAfterTitle": "Editable and exportable afterwards",
+    "featureAfterBody": "Nothing is frozen when the lecture ends. Edit the deck, re-lay it out, refine it as a whole, and export it to PDF, YAML or Google Slides.",
+    "dataTitle": "What we ask for, and why",
+    "dataIntro": "The Slide Machine asks for as little as it can, and only when a feature needs it. Here is every piece of data it requests and what it is used for.",
+    "dataAccountTitle": "Your account",
+    "dataAccountBody": "An email address, a display name, and a password we store only as a hash — so we can identify you and keep your work yours.",
+    "dataGoogleTitle": "Google sign-in",
+    "dataGoogleBody": "If you choose to sign in with Google, we receive your name, email address and profile picture from Google. We use them to create and identify your account, and for nothing else. This is the only Google data sign-in gives us.",
+    "dataDriveTitle": "Connecting Google Drive",
+    "dataDriveBody": "Exporting a deck to Google Slides or publishing a quiz as a Google Form is optional, and asks for one narrow permission: drive.file. It reaches only the files the app itself creates and the files you hand it by picking them in Google's own file picker. It cannot list, search or read the rest of your Drive.",
+    "dataSpeechTitle": "Your microphone",
+    "dataSpeechBody": "While a lecture is recording, microphone audio is transcribed into text so the slides can be built. We may also keep the recording itself, so that a lecture can be re-transcribed, refined, its speakers separated, its original narration replayed alongside the slides, and its quality analysed. How long a recording is kept depends on your plan and on what still has to be done with it. A kept recording is stored server-side only, is never exposed to anyone without edit access to that lecture, and is deleted when its retention window passes.",
+    "dataNever": "We do not sell your data, and we do not use it to train third-party AI models.",
+    "dataMore": "The full detail is in our privacy policy.",
+    "privacyLink": "Privacy policy",
+    "featureQuizTitle": "Exit-ticket quizzes",
+    "featureQuizBody": "Generate a quiz from the finished deck and publish it as a Google Form, so the class can answer it on the way out and Google can grade it for you.",
+    "featureSpeakTitle": "Translated, and read aloud",
+    "featureSpeakBody": "Read a finished lecture in the language you pick, and have its text spoken aloud in that language — for revision, and for students who did not hear it in their first language."
   },
   "auth": {
     "signIn": "Sign in",
@@ -102,7 +131,9 @@
       "resendError": "Could not send another link — try again",
       "unavailable": "This server cannot send email, so the link cannot be re-sent.",
       "confirmed": "Confirmed"
-    }
+    },
+    "legalRegister": "By creating an account you agree to our <termsLink>Terms & conditions</termsLink> and <privacyLink>Privacy policy</privacyLink>.",
+    "legalSignIn": "By signing in you agree to our <termsLink>Terms & conditions</termsLink> and <privacyLink>Privacy policy</privacyLink>."
   },
   "health": {
     "summary": "API {status}",
