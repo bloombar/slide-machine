@@ -79,6 +79,31 @@ test('the footer carries the same links on every public page', async ({
   }
 })
 
+// The checks above all run in a browser, which executes the bundle. This one
+// deliberately does not: it reads the HTML off the wire, the way a fetch that
+// runs no JavaScript sees it. The app is client-rendered, so without the
+// noscript fallback that response is an empty <div id="root"> — everything
+// above would still pass while a non-rendering reader saw nothing at all.
+test('the served HTML carries the disclosures without running any JavaScript', async ({
+  page,
+}) => {
+  const body = await (await page.request.get('/')).text()
+  const html = body.replace(/\s+/g, ' ')
+
+  expect(html).toContain('<noscript>')
+  expect(html).toContain('The Slide Machine')
+  expect(html).toMatch(/builds your lecture slides live/i)
+  // Each data disclosure, and the connect scope by name
+  expect(html).toContain('Your account')
+  expect(html).toContain('Google sign-in')
+  expect(html).toContain('Connecting Google Drive')
+  expect(html).toContain('Your microphone')
+  expect(html).toContain('drive.file')
+  // And a real link to the policy, not one React would have to draw
+  expect(html).toContain('href="/privacy"')
+  expect(html).toContain('href="/terms"')
+})
+
 test('the register form names the terms and the policy', async ({ page }) => {
   await page.goto('/register')
   const form = page.locator('form')

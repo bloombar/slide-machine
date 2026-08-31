@@ -38,6 +38,90 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- What the page says to anything that does not run JavaScript. The app
+      is client-rendered, so without this the served HTML is an empty <div>:
+      a fetch that does not execute the bundle sees no description of the
+      product, no statement of what user data it asks for, and no link to the
+      privacy policy — the three things Google's OAuth homepage requirements
+      turn on (docs/GOOGLE_PRODUCTION_MODE.md §3.3, AUTH-7).
+
+      It is a summary, not a second copy of the landing page: the same claims
+      in fewer words, so there is less to drift. English only, like the static
+      documents it links to, because the visitor here is a crawler.
+
+      Note what this does NOT fix: /privacy and /terms are served from this
+      same file, so their prose is still JS-only. If a reviewer reports the
+      policy itself as unreachable, that needs prerendering, not another
+      noscript block. -->
+    <noscript>
+      <div
+        style="
+          max-width: 44rem;
+          margin: 0 auto;
+          padding: 2rem 1rem;
+          font-family: system-ui, sans-serif;
+          line-height: 1.6;
+          color: #1e293b;
+        "
+      >
+        <h1>The Slide Machine</h1>
+        <p><strong>Speak freely — the slides will follow.</strong></p>
+        <p>
+          The Slide Machine builds your lecture slides live, from what you
+          actually say, while you say it. Start a lecture and talk: your speech
+          is transcribed and our AI agent turns your spoken words into
+          well-formatted slides in real-time, with images we source added at
+          appropriate places as you speak. You can seed a lecture with your own
+          outline, readings, decks or images; draw on any slide mid-lecture;
+          generate an exit-ticket quiz from the finished deck; read and hear the
+          lecture in another language; and edit or export the deck afterwards to
+          PDF, YAML or Google Slides.
+        </p>
+
+        <h2>What we ask for, and why</h2>
+        <ul>
+          <li>
+            <strong>Your account.</strong> An email address, a display name, and
+            a password we store only as a hash — so we can identify you and keep
+            your work yours.
+          </li>
+          <li>
+            <strong>Google sign-in.</strong> If you choose to sign in with
+            Google, we receive your name, email address and profile picture from
+            Google. We use them to create and identify your account, and for
+            nothing else.
+          </li>
+          <li>
+            <strong>Connecting Google Drive.</strong> Exporting a deck to Google
+            Slides or publishing a quiz as a Google Form is optional, and asks
+            for one narrow permission: <code>drive.file</code>. It reaches only
+            the files the app itself creates and the files you hand it by
+            picking them in Google's own file picker. It cannot list, search or
+            read the rest of your Drive.
+          </li>
+          <li>
+            <strong>Your microphone.</strong> While a lecture is recording,
+            audio is transcribed into text so the slides can be built. We may
+            also keep the recording itself; how long depends on your plan and on
+            what still has to be done with it.
+          </li>
+        </ul>
+        <p>
+          We do not sell your data, and we do not use it to train third-party AI
+          models.
+        </p>
+
+        <p>
+          <a href="/privacy">Privacy policy</a> ·
+          <a href="/terms">Terms &amp; conditions</a> ·
+          <a href="/about">About us</a>
+        </p>
+        <p>
+          The Slide Machine needs JavaScript to run. Please enable it to use the
+          app.
+        </p>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
