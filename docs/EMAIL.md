@@ -5,9 +5,9 @@ to and send as**. Everything else here — an inbox you can read, the DNS record
 that keep the mail out of spam folders — exists so that the address it sends
 from is a real, trusted address on our own domain.
 
-Today production sends as `parrhesia@wonkledge.com`, which is a different
-domain from the product. This document sets up `theslidemachine.com` addresses
-instead.
+Production sends as `parrhesia@theslidemachine.com`. This document is how that
+mailbox is set up, and what has to be true in DNS for the mail it sends to be
+trusted.
 
 ## Can mail live at DreamHost while the site lives at DigitalOcean?
 
@@ -35,14 +35,14 @@ Mail clients should use `imap.dreamhost.com` / `smtp.dreamhost.com` directly.
 
 | Piece | Value |
 | --- | --- |
-| Mailbox | `noreply@theslidemachine.com` (app sender) |
-| Mailbox | `feedback@theslidemachine.com` (where the form lands) |
+| Mailbox | `parrhesia@theslidemachine.com` |
 | Sending host | `smtp.dreamhost.com:587`, STARTTLS |
 | DNS added at DigitalOcean | `MX` on apex, `TXT` SPF on apex, `TXT` DKIM, `TXT` DMARC |
 
-Two mailboxes rather than one keeps the app's outgoing address separate from a
-human inbox, so a reply to a verification email does not land in the same place
-as a bug report. Use one if you'd rather; set both env vars to it.
+One mailbox does both jobs: the app sends as it, and the feedback form delivers
+to it. If you later want a reply to a verification email to land somewhere other
+than the bug reports, add a second address and point `FEEDBACK_EMAIL` at it —
+nothing else changes.
 
 ## 1. Add the domain for mail at DreamHost
 
@@ -55,16 +55,14 @@ If the panel insists on taking over DNS, decline: we keep DNS at DigitalOcean
 and copy the records across by hand in step 3. That is the supported path —
 DreamHost documents it for domains whose DNS is managed elsewhere.
 
-## 2. Create the mailboxes
+## 2. Create the mailbox
 
-**Mail → Manage Email → Create New Email Address**, twice:
+**Mail → Manage Email → Create New Email Address**:
+`parrhesia@theslidemachine.com`.
 
-- `noreply@theslidemachine.com`
-- `feedback@theslidemachine.com`
-
-Use a generated password of real length for `noreply` — it goes into a secret,
-never into anyone's mail client. Save both somewhere durable before leaving the
-page; DreamHost will not show the password again.
+Use a generated password of real length — it goes into a deployment secret, not
+into anyone's mail client. Save it somewhere durable before leaving the page;
+DreamHost will not show it again.
 
 ## 3. Copy the DNS records to DigitalOcean
 
@@ -91,7 +89,7 @@ the panel actually shows you.
 
 ### TXT — SPF, which says who may send as us
 
-One record on `@`. DreamHost's own domains use:
+One record on `@`. DreamHost's standard value is:
 
 ```
 v=spf1 mx include:netblocks.dreamhost.com include:relay.mailchannels.net -all
@@ -113,12 +111,12 @@ looks forged.
 
 ### TXT — DMARC, which tells receivers what to do
 
-Neither `theslidemachine.com` nor `wonkledge.com` has one today. Start in
-report-only so nothing is rejected while you watch:
+`theslidemachine.com` has none today. Start in report-only so nothing is
+rejected while you watch:
 
 ```
 Name:  _dmarc
-Value: v=DMARC1; p=none; rua=mailto:feedback@theslidemachine.com
+Value: v=DMARC1; p=none; rua=mailto:parrhesia@theslidemachine.com
 ```
 
 Move to `p=quarantine` and then `p=reject` once the reports show only our own
@@ -136,7 +134,7 @@ dig +short TXT _dmarc.theslidemachine.com
 ```
 
 Then confirm the mailbox itself works, independent of our app: send a message
-to `feedback@theslidemachine.com` from an outside address and read it in
+to `parrhesia@theslidemachine.com` from an outside address and read it in
 DreamHost webmail. If that fails, the problem is DNS or the mailbox — do not go
 looking for it in the app.
 
@@ -149,15 +147,15 @@ environment):
 | --- | --- |
 | `SMTP_HOST` | `smtp.dreamhost.com` |
 | `SMTP_PORT` | `587` |
-| `SMTP_USER` | `noreply@theslidemachine.com` (the **full address**, not the local part) |
+| `SMTP_USER` | `parrhesia@theslidemachine.com` (the **full address**, not the local part) |
 | `SMTP_PASSWORD` | the mailbox password — **secret** |
-| `MAIL_FROM` | `noreply@theslidemachine.com` |
-| `MAIL_FROM_NAME` | `The Slide Machine` |
-| `FEEDBACK_EMAIL` | `feedback@theslidemachine.com` |
+| `MAIL_FROM` | `parrhesia@theslidemachine.com` |
+| `MAIL_FROM_NAME` | `The Slide Machine` — the name a recipient's inbox shows |
+| `FEEDBACK_EMAIL` | `parrhesia@theslidemachine.com` |
 
 `MAIL_FROM` must stay on the same domain as the SPF and DKIM records above.
-Sending as one domain while authenticating as another is what breaks
-alignment, and it is why the current `@wonkledge.com` sender is worth moving.
+Authenticating as one domain while sending as another is what breaks alignment,
+and misaligned mail is what lands in spam folders.
 
 **An env change on App Platform requires a redeploy to take effect.** The
 running container keeps its old environment until it is replaced, so a
