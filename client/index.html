@@ -49,10 +49,10 @@
       in fewer words, so there is less to drift. English only, like the static
       documents it links to, because the visitor here is a crawler.
 
-      Note what this does NOT fix: /privacy and /terms are served from this
-      same file, so their prose is still JS-only. If a reviewer reports the
-      policy itself as unreachable, that needs prerendering, not another
-      noscript block. -->
+      On /privacy and /terms the server replaces this summary with the
+      document itself (server/src/static.ts, inlineDocument), because Google
+      asks for the policy "in the body of a dedicated privacy policy web
+      page" and a link is not a body. Every other path keeps what is here. -->
     <noscript>
       <div
         style="
