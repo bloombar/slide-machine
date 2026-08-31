@@ -14,15 +14,36 @@ import { createProject, openProjectSettings } from './helpers'
 
 const password = 'sturdy-passw0rd'
 
-/** The most recent link of a kind, out of the mail the server has sent. */
-const linkFromMail = (path: string): string => {
-  const log = readFileSync(MAIL_LOG, 'utf8')
+/** The most recent link of a kind in the mail sent to one address, or '' if
+ * no such message has arrived yet. Each logged message is one `---` block,
+ * headed by a line naming its recipient. */
+const linkTo = (path: string, to: string): string => {
+  const blocks = readFileSync(MAIL_LOG, 'utf8').split('\n---\n')
+  const mine = blocks.filter(block => block.includes(`to=${to} `))
   const matches = [
-    ...log.matchAll(new RegExp(`(https?://\\S*${path}\\S*)`, 'g')),
+    ...mine.join('\n').matchAll(new RegExp(`(https?://\\S*${path}\\S*)`, 'g')),
   ]
-  const last = matches.at(-1)
-  if (!last) throw new Error(`no ${path} link in the sent mail`)
-  return last[1]!
+  return matches.at(-1)?.[1] ?? ''
+}
+
+/**
+ * Waits for the link the server mailed to one address, and returns it.
+ *
+ * Two reasons this waits rather than reads once. The verification mail is
+ * started by registration and not awaited by it, so the message can land a
+ * moment after the browser has already moved on. And the log holds every
+ * message the run has sent — so a test that reads too early does not fail,
+ * it silently picks up the *previous* test's link and goes on to make
+ * confusing assertions about the wrong account. Scoping to the recipient is
+ * what turns that into a wait instead of a wrong answer.
+ */
+const linkFromMail = async (path: string, to: string): Promise<string> => {
+  await expect
+    .poll(() => linkTo(path, to), {
+      message: `no ${path} link mailed to ${to}`,
+    })
+    .not.toBe('')
+  return linkTo(path, to)
 }
 
 /** Registers a fresh account and lands on the app. */
@@ -66,7 +87,7 @@ test('email verification: unverified cannot publish, the link fixes it (AUTH-3)'
   await page.getByRole('button', { name: 'Close settings' }).click()
 
   // Follow the link the server mailed
-  await page.goto(linkFromMail('/verify-email'))
+  await page.goto(await linkFromMail('/verify-email', email))
   await expect(page.getByText(/your address is confirmed/i)).toBeVisible()
 
   // Now it publishes
@@ -90,7 +111,7 @@ test('a used verification link does not work twice (AUTH-3)', async ({
 }) => {
   const email = `once-${Date.now()}@example.com`
   await registerAs(page, email, 'Once')
-  const link = linkFromMail('/verify-email')
+  const link = await linkFromMail('/verify-email', email)
 
   await page.goto(link)
   await expect(page.getByText(/your address is confirmed/i)).toBeVisible()
@@ -122,7 +143,7 @@ test('password reset: the link sets a new password and ends sessions (AUTH-4)', 
   // Says the same thing whether or not the address has an account
   await expect(page.getByText(/if that address has an account/i)).toBeVisible()
 
-  await page.goto(linkFromMail('/reset-password'))
+  await page.goto(await linkFromMail('/reset-password', email))
   const newPassword = 'a-different-passw0rd'
   await page.getByLabel('New password').fill(newPassword)
   await page.getByRole('button', { name: 'Save the new password' }).click()

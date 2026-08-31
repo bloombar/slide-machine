@@ -88,6 +88,7 @@ services:
       # the SMTP_* set above, plus these. MAIL_FROM defaults to SMTP_USER.
       # - key: MAIL_PROVIDER      # smtp | log | none (default smtp)
       # - key: MAIL_FROM
+      # - key: MAIL_FROM_NAME   # inbox display name, e.g. "The Slide Machine"
       # - key: FEEDBACK_EMAIL
       # Named verbatim by /privacy and /terms; blank shows a bracketed
       # placeholder there. Not secret. See docs/DEPLOY.md "Before launch".

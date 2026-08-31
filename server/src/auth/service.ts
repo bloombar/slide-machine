@@ -52,16 +52,24 @@ export const register = async (
       passwordHash,
       ...(locale ? { locale } : {}),
     })
-    // Best-effort, and deliberately awaited: the response tells the client
-    // whether to say "check your email", and the send is a local hand-off to
-    // the relay rather than a delivery wait.
+    // Started, not awaited. Handing a message to a relay is not a local
+    // hand-off — a relay that is refusing logins or answering slowly takes
+    // seconds to fail, and awaiting it here would make that the sign-up's
+    // latency and, past a gateway timeout, its error. Nothing in the response
+    // reports the send, so there is nothing to wait for: the account page
+    // shows an unconfirmed address and offers another link, and *that* path
+    // reports truthfully whether one went out.
     if (origin) {
-      await sendVerificationEmail(
+      void sendVerificationEmail(
         user._id.toString(),
         user.email,
         user.displayName,
         origin,
-      )
+      ).catch(error => {
+        // sendVerificationEmail swallows its own failures; this is only so a
+        // future edit above its try block cannot become an unhandled rejection.
+        console.warn('Could not send the verification email:', error)
+      })
     }
     return {
       user: toUserDto(user),

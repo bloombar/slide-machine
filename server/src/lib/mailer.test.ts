@@ -17,6 +17,7 @@ vi.mock('nodemailer', () => ({ createTransport: createTransportMock }))
 const envState = {
   MAIL_PROVIDER: 'smtp' as 'smtp' | 'log' | 'none',
   MAIL_FROM: undefined as string | undefined,
+  MAIL_FROM_NAME: undefined as string | undefined,
   SMTP_HOST: undefined as string | undefined,
   SMTP_PORT: undefined as number | undefined,
   SMTP_USER: undefined as string | undefined,
@@ -41,6 +42,7 @@ const message = {
 beforeEach(() => {
   envState.MAIL_PROVIDER = 'smtp'
   envState.MAIL_FROM = undefined
+  envState.MAIL_FROM_NAME = undefined
   envState.SMTP_HOST = 'smtp.example.com'
   envState.SMTP_PORT = undefined
   envState.SMTP_USER = 'app@example.com'
@@ -123,6 +125,9 @@ describe('sendMail', () => {
       port: 587,
       secure: false,
       auth: { user: 'app@example.com', pass: 'secret' },
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 20_000,
     })
   })
 
@@ -164,6 +169,54 @@ describe('sendMail', () => {
     })
   })
 
+  // Every timeout matters on its own: a relay can refuse the TCP connection,
+  // accept it and never greet, or greet and then stall mid-message.
+  it('bounds every stage of the connection', async () => {
+    await sendMail(message)
+    const options = createTransportMock.mock.calls[0]![0]
+    for (const key of [
+      'connectionTimeout',
+      'greetingTimeout',
+      'socketTimeout',
+    ]) {
+      expect(options[key]).toBeTypeOf('number')
+      expect(options[key]).toBeLessThanOrEqual(30_000)
+    }
+  })
+
+  it('sends the bare address when no display name is configured', async () => {
+    await sendMail(message)
+    expect(sendMailMock.mock.calls[0]![0]!.from).toBe('app@example.com')
+  })
+
+  // Nodemailer does the quoting and any encoding; it is handed the parts.
+  it('names the sender when a display name is configured', async () => {
+    envState.MAIL_FROM_NAME = 'The Slide Machine'
+    envState.MAIL_FROM = 'noreply@example.com'
+    await sendMail(message)
+    expect(sendMailMock.mock.calls[0]![0]!.from).toEqual({
+      name: 'The Slide Machine',
+      address: 'noreply@example.com',
+    })
+  })
+
+  it('ignores a display name that is only whitespace', async () => {
+    envState.MAIL_FROM_NAME = '   '
+    await sendMail(message)
+    expect(sendMailMock.mock.calls[0]![0]!.from).toBe('app@example.com')
+  })
+
+  // Set from the environment rather than a form, so this is defence in depth
+  // — but a From header is a header like any other.
+  it('strips line breaks from the display name', async () => {
+    envState.MAIL_FROM_NAME = 'Slide\r\nBcc: victim@example.com'
+    await sendMail(message)
+    expect(sendMailMock.mock.calls[0]![0]!.from).toEqual({
+      name: 'Slide Bcc: victim@example.com',
+      address: 'app@example.com',
+    })
+  })
+
   it('writes the whole message to the log instead of relaying it', async () => {
     envState.MAIL_PROVIDER = 'log'
     const info = vi.spyOn(console, 'info').mockImplementation(() => {})
@@ -171,6 +224,32 @@ describe('sendMail', () => {
     expect(sendMailMock).not.toHaveBeenCalled()
     expect(info.mock.calls[0]![0]).toContain('feedback@example.com')
     expect(info.mock.calls[0]![0]).toContain('A message')
+    info.mockRestore()
+  })
+
+  // The log transport needs no sender, and a checkout with none configured
+  // should not have "undefined" written into its diagnostics.
+  it('leaves the sender out of the log when there is none', async () => {
+    envState.MAIL_PROVIDER = 'log'
+    envState.SMTP_USER = undefined
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+    await sendMail(message)
+    expect(info.mock.calls[0]![0]).not.toContain('undefined')
+    expect(info.mock.calls[0]![0]).toContain('[mail] to=feedback@example.com')
+    info.mockRestore()
+  })
+
+  // Reading the log is how a developer checks what a configured server would
+  // have delivered, so the sender has to read the way an inbox would show it.
+  it('shows the named sender in the log transport', async () => {
+    envState.MAIL_PROVIDER = 'log'
+    envState.MAIL_FROM_NAME = 'The Slide Machine'
+    envState.MAIL_FROM = 'noreply@example.com'
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+    await sendMail(message)
+    expect(info.mock.calls[0]![0]).toContain(
+      '"The Slide Machine" <noreply@example.com>',
+    )
     info.mockRestore()
   })
 })

@@ -39,9 +39,33 @@ export class MailUnavailableError extends Error {
   }
 }
 
+/** Drops CR/LF from a header value. Nodemailer encodes headers correctly on
+ * its own, but these values can come from an unauthenticated form, and a
+ * subject or reply-to that cannot carry a line break cannot smuggle a header
+ * into the message however it is encoded. */
+const oneLine = (value: string): string => value.replace(/[\r\n]+/g, ' ').trim()
+
 /** The address mail is sent as. SMTP_USER is the fallback because most
  * relays require the sender to be the authenticated account. */
 export const mailFrom = (): string | undefined => env.MAIL_FROM ?? env.SMTP_USER
+
+/**
+ * The sender as a recipient's inbox shows it: the address, plus the display
+ * name from MAIL_FROM_NAME when one is configured. Nodemailer encodes the
+ * name itself, including non-ASCII, so this hands it the parts rather than a
+ * pre-formatted string.
+ *
+ * The address is what actually has to be right — it is what SPF and DKIM are
+ * checked against. The name is only what the reader sees, so an unset one is
+ * a plainer message, never an undeliverable one.
+ */
+const fromField = ():
+  string | { name: string; address: string } | undefined => {
+  const address = mailFrom()
+  if (!address) return undefined
+  const name = env.MAIL_FROM_NAME?.trim()
+  return name ? { name: oneLine(name), address } : address
+}
 
 /**
  * Whether a message handed to `sendMail` would actually go somewhere. SMTP
@@ -69,16 +93,18 @@ const smtpTransport = (): Transporter => {
       auth: env.SMTP_USER
         ? { user: env.SMTP_USER, pass: env.SMTP_PASSWORD }
         : undefined,
+      // Nodemailer's own defaults run to minutes, which is long enough for a
+      // sick relay to hold a request open past a hosting platform's gateway
+      // timeout — the caller then sees a 504 from the edge instead of the
+      // error this module raises. A send that cannot complete in twenty
+      // seconds is not going to; fail while someone is still listening.
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 20_000,
     })
   }
   return transporter
 }
-
-/** Drops CR/LF from a header value. Nodemailer encodes headers correctly on
- * its own, but these values can come from an unauthenticated form, and a
- * subject or reply-to that cannot carry a line break cannot smuggle a header
- * into the message however it is encoded. */
-const oneLine = (value: string): string => value.replace(/[\r\n]+/g, ' ').trim()
 
 /**
  * Sends a message, or throws MailUnavailableError when the server has no way
@@ -89,7 +115,7 @@ export const sendMail = async (mail: OutgoingMail): Promise<void> => {
   if (!mailerAvailable()) throw new MailUnavailableError()
 
   const message = {
-    from: mailFrom(),
+    from: fromField(),
     to: mail.to,
     subject: oneLine(mail.subject),
     text: mail.text,
@@ -99,8 +125,15 @@ export const sendMail = async (mail: OutgoingMail): Promise<void> => {
   if (env.MAIL_PROVIDER === 'log') {
     // The whole message, so a developer reading the log sees exactly what a
     // configured server would have delivered.
+    // Rendered the way an inbox would show it. The log transport needs no
+    // sender at all, so leave the field out rather than print "undefined".
+    const from =
+      typeof message.from === 'object'
+        ? `"${message.from.name}" <${message.from.address}>`
+        : message.from
     const rendered =
-      `[mail] to=${message.to} subject=${message.subject}` +
+      `[mail]${from ? ` from=${from}` : ''} to=${message.to}` +
+      ` subject=${message.subject}` +
       `${message.replyTo ? ` reply-to=${message.replyTo}` : ''}\n${message.text}`
     console.info(rendered)
     // The e2e run reads links out of this file, because a mailed token is

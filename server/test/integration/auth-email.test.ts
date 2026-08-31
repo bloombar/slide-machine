@@ -42,10 +42,25 @@ const tokenFromMail = (): string => {
   return decodeURIComponent(match[1]!)
 }
 
-const register = (email: string, password = 'longenough1') =>
-  request(server)
+/**
+ * Registers, then waits for the verification mail the registration started.
+ *
+ * Registration hands the message off without awaiting it, so the 201 can beat
+ * the send — the account existing is what the response promises, and the mail
+ * follows. Every test below reads the mail, so the wait belongs here rather
+ * than repeated at each call site. Skipped when the server has no way to send,
+ * since then no message is coming and waiting would only time out.
+ */
+const register = async (email: string, password = 'longenough1') => {
+  const before = sent.length
+  const res = await request(server)
     .post('/api/auth/register')
     .send({ email, password, displayName: email.split('@')[0] })
+  if (res.status === 201 && mailer.mailerAvailable()) {
+    await vi.waitFor(() => expect(sent.length).toBeGreaterThan(before))
+  }
+  return res
+}
 
 const login = (email: string, password: string) =>
   request(server).post('/api/auth/login').send({ email, password })
