@@ -39,12 +39,41 @@
     "profile": "Profil",
     "accountSettings": "Paramètres du compte",
     "logIn": "Connexion",
-    "logOut": "Déconnexion"
+    "logOut": "Déconnexion",
+    "legal": "Informations et mentions légales"
   },
   "landing": {
-    "title": "The Slide Machine V2",
+    "title": "The Slide Machine",
     "tagline": "Parlez librement — les diapositives suivront.",
-    "cta": "Connectez-vous pour commencer"
+    "intro": "The Slide Machine construit vos diapositives en direct, à partir de ce que vous dites vraiment, pendant que vous le dites. Lancez un cours et parlez : votre parole est transcrite et notre agent IA transforme vos mots en diapositives bien mises en page, en temps réel, avec des images que nous trouvons et plaçons aux endroits appropriés pendant que vous parlez.",
+    "cta": "Connectez-vous pour commencer",
+    "ctaAbout": "En savoir plus sur le projet",
+    "featuresTitle": "Ce que fait l'application",
+    "featureLiveTitle": "Des diapositives écrites pendant que vous parlez",
+    "featureLiveBody": "La reconnaissance vocale et un modèle d'IA générative fonctionnent ensemble pendant tout le cours et choisissent un titre, des puces, un paragraphe ou une mise en page avec image selon ce que vous venez de dire.",
+    "featureSeedTitle": "Alimentée par vos propres documents",
+    "featureSeedBody": "Si vous avez déjà un plan, une lecture que vous avez donnée à vos étudiants, une présentation existante ou un ensemble d'images à inclure, ajoutez-les : The Slide Machine s'en servira pour composer la présentation idéale.",
+    "featureBoardTitle": "Un tableau blanc sur chaque diapositive",
+    "featureBoardBody": "Dessinez en plein cours. Les traits sont ancrés aux mots que vous prononciez à cet instant, et sont donc rejoués au rythme de la narration.",
+    "featureAfterTitle": "Modifiable et exportable ensuite",
+    "featureAfterBody": "Rien n'est figé à la fin du cours. Modifiez la présentation, remettez-la en page, affinez-la dans son ensemble et exportez-la en PDF, YAML ou Google Slides.",
+    "dataTitle": "Ce que nous demandons, et pourquoi",
+    "dataIntro": "The Slide Machine demande le strict minimum, et seulement quand une fonctionnalité l'exige. Voici chaque donnée demandée et son usage.",
+    "dataAccountTitle": "Votre compte",
+    "dataAccountBody": "Une adresse e-mail, un nom affiché et un mot de passe que nous ne conservons que sous forme de hachage — pour vous identifier et garder votre travail à vous.",
+    "dataGoogleTitle": "Connexion avec Google",
+    "dataGoogleBody": "Si vous choisissez de vous connecter avec Google, nous recevons de Google votre nom, votre adresse e-mail et votre photo de profil. Nous les utilisons pour créer et identifier votre compte, et pour rien d'autre. C'est la seule donnée Google que la connexion nous donne.",
+    "dataDriveTitle": "Connecter Google Drive",
+    "dataDriveBody": "Exporter une présentation vers Google Slides ou publier un quiz sous forme de Google Form est facultatif et ne demande qu'une autorisation restreinte : drive.file. Elle n'atteint que les fichiers créés par l'application et ceux que vous lui confiez en les choisissant dans le sélecteur de fichiers de Google. Elle ne peut ni lister, ni rechercher, ni lire le reste de votre Drive.",
+    "dataSpeechTitle": "Votre microphone",
+    "dataSpeechBody": "Pendant l'enregistrement d'un cours, l'audio du microphone est transcrit en texte afin de construire les diapositives. Nous pouvons également conserver l'enregistrement lui-même, pour qu'un cours puisse être retranscrit, affiné, ses locuteurs distingués, sa narration d'origine rejouée avec les diapositives et sa qualité analysée. La durée de conservation dépend de votre forfait et de ce qu'il reste à faire avec l'enregistrement. Un enregistrement conservé est stocké uniquement côté serveur, n'est jamais exposé à quiconque n'a pas le droit de modifier ce cours, et est supprimé à l'échéance de sa durée de conservation.",
+    "dataNever": "Nous ne vendons pas vos données et ne les utilisons pas pour entraîner des modèles d'IA tiers.",
+    "dataMore": "Tout le détail figure dans notre politique de confidentialité.",
+    "privacyLink": "Politique de confidentialité",
+    "featureQuizTitle": "Quiz de fin de séance",
+    "featureQuizBody": "Générez un quiz à partir de la présentation terminée et publiez-le sous forme de Google Form : la classe y répond en sortant et Google le corrige pour vous.",
+    "featureSpeakTitle": "Traduit, et lu à voix haute",
+    "featureSpeakBody": "Relisez un cours terminé dans la langue de votre choix et faites lire son texte à voix haute dans cette langue — pour réviser, et pour les étudiants qui ne l'ont pas entendu dans leur langue maternelle."
   },
   "auth": {
     "signIn": "Se connecter",
@@ -102,7 +131,9 @@
       "resendError": "Impossible d’envoyer un autre lien — réessayez",
       "unavailable": "Ce serveur ne peut pas envoyer d’e-mails, le lien ne peut donc pas être renvoyé.",
       "confirmed": "Confirmée"
-    }
+    },
+    "legalRegister": "En créant un compte, vous acceptez nos <termsLink>Conditions générales</termsLink> et notre <privacyLink>Politique de confidentialité</privacyLink>.",
+    "legalSignIn": "En vous connectant, vous acceptez nos <termsLink>Conditions générales</termsLink> et notre <privacyLink>Politique de confidentialité</privacyLink>."
   },
   "health": {
     "summary": "API {status}",

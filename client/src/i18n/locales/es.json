@@ -39,12 +39,41 @@
     "profile": "Perfil",
     "accountSettings": "Ajustes de la cuenta",
     "logIn": "Iniciar sesión",
-    "logOut": "Cerrar sesión"
+    "logOut": "Cerrar sesión",
+    "legal": "Información y avisos legales"
   },
   "landing": {
-    "title": "The Slide Machine V2",
+    "title": "The Slide Machine",
     "tagline": "Habla con libertad: las diapositivas te seguirán.",
-    "cta": "Inicia sesión para empezar"
+    "intro": "The Slide Machine crea tus diapositivas en directo, a partir de lo que realmente dices, mientras lo dices. Empieza una clase y habla: tu voz se transcribe y nuestro agente de IA convierte tus palabras en diapositivas bien maquetadas en tiempo real, con imágenes que buscamos y colocamos en los puntos adecuados mientras hablas.",
+    "cta": "Inicia sesión para empezar",
+    "ctaAbout": "Conoce más sobre el proyecto",
+    "featuresTitle": "Qué hace",
+    "featureLiveTitle": "Diapositivas escritas mientras hablas",
+    "featureLiveBody": "El reconocimiento de voz y un modelo de IA generativa trabajan juntos durante toda la clase y eligen un título, viñetas, un párrafo o un diseño con imagen según lo que acabas de decir.",
+    "featureSeedTitle": "Partiendo de tu propio material",
+    "featureSeedBody": "Si ya tienes un guion, una lectura que asignaste a tus estudiantes, una presentación existente o un conjunto de imágenes que quieras incluir, añádelos y The Slide Machine los usará para componer la presentación perfecta.",
+    "featureBoardTitle": "Una pizarra sobre cualquier diapositiva",
+    "featureBoardBody": "Dibuja en mitad de la clase. Los trazos quedan anclados a las palabras que estabas diciendo en ese momento, así que se reproducen al ritmo de la narración.",
+    "featureAfterTitle": "Editable y exportable después",
+    "featureAfterBody": "Nada queda congelado al terminar la clase. Edita la presentación, rediséñala, refínala en conjunto y expórtala a PDF, YAML o Google Slides.",
+    "dataTitle": "Qué te pedimos y por qué",
+    "dataIntro": "The Slide Machine pide lo mínimo posible, y solo cuando una función lo necesita. Estos son todos los datos que solicita y para qué se usan.",
+    "dataAccountTitle": "Tu cuenta",
+    "dataAccountBody": "Una dirección de correo, un nombre visible y una contraseña que guardamos solo como hash, para identificarte y que tu trabajo siga siendo tuyo.",
+    "dataGoogleTitle": "Iniciar sesión con Google",
+    "dataGoogleBody": "Si eliges iniciar sesión con Google, recibimos de Google tu nombre, tu correo y tu foto de perfil. Los usamos para crear e identificar tu cuenta, y para nada más. Son los únicos datos de Google que nos da el inicio de sesión.",
+    "dataDriveTitle": "Conectar Google Drive",
+    "dataDriveBody": "Exportar una presentación a Google Slides o publicar un cuestionario como formulario de Google es opcional y pide un único permiso acotado: drive.file. Solo alcanza los archivos que crea la propia aplicación y los que le entregas eligiéndolos en el selector de archivos de Google. No puede listar, buscar ni leer el resto de tu Drive.",
+    "dataSpeechTitle": "Tu micrófono",
+    "dataSpeechBody": "Mientras se graba una clase, el audio del micrófono se transcribe a texto para construir las diapositivas. También podemos conservar la propia grabación, para que una clase pueda volver a transcribirse, refinarse, distinguir a quienes hablan, reproducir su narración original junto a las diapositivas y analizar su calidad. Cuánto tiempo se conserva depende de tu plan y de lo que aún haya que hacer con la grabación. Una grabación conservada se almacena solo en el servidor, nunca se expone a quien no pueda editar esa clase, y se borra al vencer su periodo de retención.",
+    "dataNever": "No vendemos tus datos ni los usamos para entrenar modelos de IA de terceros.",
+    "dataMore": "Todo el detalle está en nuestra política de privacidad.",
+    "privacyLink": "Política de privacidad",
+    "featureQuizTitle": "Cuestionarios de salida",
+    "featureQuizBody": "Genera un cuestionario a partir de la presentación terminada y publícalo como formulario de Google, para que la clase lo responda al salir y Google lo califique por ti.",
+    "featureSpeakTitle": "Traducido y leído en voz alta",
+    "featureSpeakBody": "Lee una clase terminada en el idioma que elijas y escucha su texto leído en voz alta en ese idioma: para repasar, y para quienes no la oyeron en su lengua materna."
   },
   "auth": {
     "signIn": "Iniciar sesión",
@@ -102,7 +131,9 @@
       "resendError": "No se pudo enviar otro enlace: inténtalo de nuevo",
       "unavailable": "Este servidor no puede enviar correo, así que no se puede reenviar el enlace.",
       "confirmed": "Confirmada"
-    }
+    },
+    "legalRegister": "Al crear una cuenta aceptas nuestros <termsLink>Términos y condiciones</termsLink> y nuestra <privacyLink>Política de privacidad</privacyLink>.",
+    "legalSignIn": "Al iniciar sesión aceptas nuestros <termsLink>Términos y condiciones</termsLink> y nuestra <privacyLink>Política de privacidad</privacyLink>."
   },
   "health": {
     "summary": "API {status}",

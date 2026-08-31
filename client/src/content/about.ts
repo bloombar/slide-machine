@@ -20,15 +20,18 @@ it.
 
 ## How it works
 
-You start a lecture and talk. Speech is transcribed as you go, and each
-phrase is handed to a generative AI model that decides what it means for the
-deck in front of you: extend the slide you are on, or begin the next slide, using
-whichever layout suits the material — a title, a subtitle, a list of bullet points, a paragraph, a big image, or something else.
+You start a lecture and talk. Your speech is transcribed and our AI agent
+turns your spoken words into well-formatted slides in real-time, with images
+we source added at appropriate places as you speak: extending the slide you
+are on, or beginning the next slide, using whichever layout suits the material
+— a title, a subtitle, a list of bullet points, a paragraph, a big image, or
+something else.
 
 A few things happen around that core loop:
 
-- **Seeding.** If you already have notes or images you want to use in your lecture, you can use them!  Give a project an outline, a reading, a slide deck or a set of
-  images beforehand, and the same material informs what is generated. A
+- **Seeding.** If you already have an outline, a reading you assigned to
+  students, an existing deck, or a set of images that you want included, add
+  them and The Slide Machine will use them to help craft the perfect deck. A
   pre-lecture pass can pull out the terms, names and acronyms likely to come
   up, which also teaches the speech recognizer to hear them correctly.
 - **Images.** Slides that want a picture get one, whether supplied by you or automatically sourced by the app from public open source
@@ -36,10 +39,15 @@ A few things happen around that core loop:
 - **A whiteboard.** Draw over any slide mid-lecture. Strokes are anchored to
   the words you were speaking at the time, so they replay in step with the
   narration afterwards.
+- **Exit-ticket quizzes.** A quiz can be generated from the finished deck and
+  published as a Google Form, so the class can answer it on the way out and
+  Google can grade it for you.
+- **Translated, and read aloud.** A finished lecture can be read in the
+  language you pick, and its text spoken aloud in that language — for
+  revision, and for students who did not hear it in their first language.
 - **Afterwards.** Nothing is frozen when the lecture ends. Slides can be
-  edited, re-laid out, translated, refined as a whole, or exported to PDF, YAML, or Google
-  Slides. An exit-ticket quiz can be generated from the deck and published as
-  a Google Form for auto-grading.
+  edited, re-laid out, refined as a whole, or exported to PDF, YAML, or Google
+  Slides.
 
 ## Where it came from
 

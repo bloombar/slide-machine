@@ -46,12 +46,17 @@ test('each entry opens its page', async ({ page }) => {
 })
 
 // The documents link to each other; the links have to be router links, or
-// each one costs a full page load.
+// each one costs a full page load. Scoped to the article: the site footer
+// (SiteFooter) links the same page from every page, and this is about the
+// link inside the prose.
 test('the About page links onward to the policy and the form', async ({
   page,
 }) => {
   await page.goto('/about')
-  await page.getByRole('link', { name: 'privacy policy' }).click()
+  await page
+    .getByRole('article')
+    .getByRole('link', { name: 'privacy policy' })
+    .click()
   await expect(
     page.getByRole('heading', { level: 1, name: 'Privacy policy' }),
   ).toBeVisible()

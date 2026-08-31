@@ -40,11 +40,12 @@ whiteboard drawings, style templates, quizzes, and any material you upload to
 seed a project — documents, slide decks, images, notes.
 
 **Live speech.** While a lecture is recording, microphone audio is
-transcribed into text. **Audio is not kept by default.** Where a deployment
-turns retention on — it exists so that a lecture can be re-transcribed, its
-speakers separated, and its original narration replayed per slide — the
-recording is stored server-side only, is never exposed through the API to
-anyone without edit access to that lecture, and is deleted automatically once
+transcribed into text. We may also keep the recording itself — it lets a
+lecture be re-transcribed, refined, its speakers separated, its original
+narration replayed per slide, and its quality analysed. **How long a
+recording is kept depends on your plan and on what still has to be done with
+it.** A kept recording is stored server-side only, is never exposed through
+the API to anyone without edit access to that lecture, and is deleted once
 its retention window passes.
 
 **Usage.** Counts of the metered things you do — minutes transcribed, slides
@@ -55,9 +56,9 @@ be applied and the service's own costs understood.
 store only a customer reference and your subscription's status. **We never
 see or store card numbers.**
 
-**Connected accounts.** If you connect Google Drive or GitHub, we store the
-resulting access tokens encrypted, so that exports and quiz publishing can
-act on your behalf. Tokens are never sent to your browser and you can
+**Connected accounts.** If you connect Google Drive, we store the resulting
+access tokens encrypted, so that exports and quiz publishing can act on your
+behalf. Tokens are never sent to your browser and you can
 disconnect at any time.
 
 **Technical records.** Ordinary server logs (request paths, timestamps,
@@ -167,7 +168,7 @@ You can, at any time and without asking us:
 - **Delete** any lecture, project, upload — or your entire account, which
   takes your content with it.
 - **Control visibility** of your profile and of each lecture.
-- **Disconnect** Google or GitHub, and **cancel** a subscription.
+- **Disconnect** Google, and **cancel** a subscription.
 
 Depending on where you live you may also have statutory rights of access,
 correction, portability, erasure, and objection. Write to

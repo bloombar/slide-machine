@@ -88,6 +88,15 @@ These are **defaults for new work, not a lock**. Every project and lecture keeps
 
 The prompt is asked but not enforced — because all three answers are valid and "other" is the way past it, there is nothing to skip. It is asked of accounts that predate the question too, since they have no answer stored either. The unverified-email restriction ([AUTH-3](#auth-3-email-verification)) is independent and still applies: whichever is stricter wins, so an unverified educator's first projects are still restricted.
 
+#### AUTH-7 Public homepage & consent disclosures
+
+The application's homepage is public and is a description of the product, not a door. Signed out, it identifies the app by name and mark, describes what the app does in enough detail to be a description rather than a slogan, and states **every kind of user data the app asks for and the purpose it is asked for** — the account fields, what Google sign-in receives, what the `drive.file` connect scope ([EXP-4](#exp-4-connected-accounts-google-drive)) does and does not reach, and what happens to microphone audio. Signed-in visitors are taken to their home screen instead.
+
+The privacy policy and the terms are reachable in **one click from any page without opening a menu**: a footer of static-page links on both shells, in addition to the hamburger's. The sign-in and register forms each name both documents inline, beside the button that starts an account — including the Google one, where pressing it begins an OAuth grant.
+
+These are conditions of Google's OAuth homepage requirements as well as good manners; the homepage, the policy and the terms must sit on the deployment's own verified domain (docs/GOOGLE_PRODUCTION_MODE.md).
+
+
 ### 5. Plans, Billing & Usage Limits
 
 #### BILL-1 Subscription tiers

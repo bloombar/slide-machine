@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthContext'
 import { apiErrorMessage } from '../i18n/apiError'
 import GoogleSignInButton from '../components/GoogleSignInButton'
+import LegalConsentNotice from '../components/LegalConsentNotice'
 import NavLocaleSwitcher from '../i18n/NavLocaleSwitcher'
 
 export default function LoginPage() {
@@ -84,6 +85,7 @@ export default function LoginPage() {
           {submitting ? t('auth.signingIn') : t('auth.signIn')}
         </button>
         <GoogleSignInButton action={t('auth.signIn')} />
+        <LegalConsentNotice action="signIn" />
         <p className="text-sm">
           <Link to="/forgot-password" className="text-indigo-600">
             {t('auth.forgotPassword')}

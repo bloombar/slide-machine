@@ -87,8 +87,8 @@ attribution intact when you export, publish or present — is yours to do.**
 ## Third-party services
 
 The service depends on others: AI providers, speech and translation
-services, image sources, a payment provider, and — when you connect them —
-Google Drive, Google Forms and GitHub. Their terms apply to their parts, we
+services, image sources, a payment provider, and — when you connect it —
+Google Drive and Google Forms. Their terms apply to their parts, we
 do not control them, and an interruption at one of them can interrupt the
 feature that uses it.
 
