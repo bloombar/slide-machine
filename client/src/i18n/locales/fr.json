@@ -74,7 +74,9 @@
     "featureQuizTitle": "Quiz de fin de séance",
     "featureQuizBody": "Générez un quiz à partir de la présentation terminée et publiez-le sous forme de Google Form : la classe y répond en sortant et Google le corrige pour vous.",
     "featureSpeakTitle": "Traduit, et lu à voix haute",
-    "featureSpeakBody": "Relisez un cours terminé dans la langue de votre choix et faites lire son texte à voix haute dans cette langue — pour réviser, et pour les étudiants qui ne l'ont pas entendu dans leur langue maternelle."
+    "featureSpeakBody": "Relisez un cours terminé dans la langue de votre choix et faites lire son texte à voix haute dans cette langue — pour réviser, et pour les étudiants qui ne l'ont pas entendu dans leur langue maternelle.",
+    "featureMcpTitle": "Depuis votre assistant IA",
+    "featureMcpBody": "Connectez The Slide Machine à l'assistant que vous utilisez déjà — Claude ou ChatGPT — et demandez-lui de créer un cours ou d'en retoucher un. La connexion passe par une norme ouverte appelée MCP, et les diapositives apparaissent dans votre compte, prêtes à être ouvertes et modifiées."
   },
   "auth": {
     "signIn": "Se connecter",

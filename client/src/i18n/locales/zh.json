@@ -74,7 +74,9 @@
     "featureQuizTitle": "课堂小测",
     "featureQuizBody": "根据完成的讲义生成一份小测，并发布为 Google 表单，让学生下课时作答，由 Google 自动批改。",
     "featureSpeakTitle": "翻译并朗读",
-    "featureSpeakBody": "用你选择的语言阅读已完成的课程，并让课文以该语言朗读出来——便于复习，也照顾到母语并非授课语言的学生。"
+    "featureSpeakBody": "用你选择的语言阅读已完成的课程，并让课文以该语言朗读出来——便于复习，也照顾到母语并非授课语言的学生。",
+    "featureMcpTitle": "在 AI 助手里制作",
+    "featureMcpBody": "把 The Slide Machine 连到你已经在用的助手——Claude 或 ChatGPT——直接让它做一节课，或者改一节已有的课。连接走的是名为 MCP 的开放标准，生成的幻灯片会出现在你的账户里，随时可以打开编辑。"
   },
   "auth": {
     "signIn": "登录",

@@ -49,6 +49,24 @@ A few things happen around that core loop:
   edited, re-laid out, refined as a whole, or exported to PDF, YAML, or Google
   Slides.
 
+## Made from your AI assistant
+
+You do not have to be in the app to build a lecture. The Slide Machine can be
+connected to the AI assistant you already talk to — **Claude** or **ChatGPT** —
+and then you can simply ask it: *"make me a lecture on photosynthesis for my
+Biology 101 course"*, or *"look at my Week 4 lecture and add two slides on
+worked examples."* It works inside your own account, so what it makes is yours,
+in your courses, ready to open and edit like anything else.
+
+The connection uses **MCP**, an open standard for letting an assistant work
+with an outside app. Setting it up takes about five minutes, needs no code, and
+is done once per assistant. An assistant you connect can read and write
+lectures and slides — and nothing else: it cannot delete anything, share a
+lecture, publish a quiz, or spend money, and you can disconnect it at any
+moment.
+
+[How to connect an assistant](/assistants) walks through it step by step.
+
 ## Where it came from
 
 The first Slide Machine was created to help its author lecture to 4th grade

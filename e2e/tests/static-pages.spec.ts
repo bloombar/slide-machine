@@ -63,6 +63,23 @@ test('the About page links onward to the policy and the form', async ({
   await expect(page.getByText(/Last updated:/)).toBeVisible()
 })
 
+// /assistants is reached from the About page rather than from the menu, so
+// the prose link is its only way in and the one that can rot.
+test('the About page leads to the assistant instructions', async ({ page }) => {
+  await page.goto('/about')
+  await page
+    .getByRole('article')
+    .getByRole('link', { name: 'How to connect an assistant' })
+    .click()
+  await expect(page).toHaveURL(/\/assistants$/)
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Connecting an AI assistant' }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('heading', { level: 3, name: 'ChatGPT' }),
+  ).toBeVisible()
+})
+
 // These four are the only pages written outside the app's usual page
 // scaffolding, so they are the ones that can drift out of it. The content
 // column is the app's (AppShell's main, ProfilePage), and the check is that
@@ -88,7 +105,13 @@ test('the static pages sit in the same column as the rest of the app', async ({
     .boundingBox()
   expect(home).not.toBeNull()
 
-  for (const path of ['/about', '/privacy', '/terms', '/feedback']) {
+  for (const path of [
+    '/about',
+    '/assistants',
+    '/privacy',
+    '/terms',
+    '/feedback',
+  ]) {
     await page.goto(path)
     const heading = await page.getByRole('heading', { level: 1 }).boundingBox()
     expect(heading, path).not.toBeNull()

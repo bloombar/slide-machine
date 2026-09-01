@@ -22,6 +22,7 @@ import PlanPricingPage from './pages/PlanPricingPage'
 import DeckViewerPage from './pages/DeckViewerPage'
 import TemplateEditorPage from './pages/TemplateEditorPage'
 import AboutPage from './pages/AboutPage'
+import ConnectAssistantPage from './pages/ConnectAssistantPage'
 import FeedbackPage from './pages/FeedbackPage'
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
 import TermsPage from './pages/TermsPage'
@@ -69,6 +70,7 @@ export default function App() {
             without an account is no policy, and the feedback form is most
             useful to someone who cannot get in. */}
         <Route path="/about" element={<AboutPage />} />
+        <Route path="/assistants" element={<ConnectAssistantPage />} />
         <Route path="/feedback" element={<FeedbackPage />} />
         <Route path="/privacy" element={<PrivacyPolicyPage />} />
         <Route path="/terms" element={<TermsPage />} />

@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import type { OperatorDetails } from '@slide-machine/shared'
 import { ABOUT } from './about'
+import { ASSISTANTS } from './assistants'
 import { privacyDocument } from './privacy'
 import { termsDocument } from './terms'
 import * as runtimeConfig from '../runtime-config'
@@ -36,13 +37,14 @@ const BLANK: OperatorDetails = {
 
 const documents: [string, StaticDocument][] = [
   ['about', ABOUT],
+  ['assistants', ASSISTANTS],
   ['privacy', privacyDocument(ACME)],
   ['terms', termsDocument(ACME)],
 ]
 
 /** Every route the app serves a static document (or the feedback form) at.
  * A document may link to these and to nothing else in-app. */
-const ROUTES = ['/about', '/feedback', '/privacy', '/terms']
+const ROUTES = ['/about', '/assistants', '/feedback', '/privacy', '/terms']
 
 /** In-app link targets in a Markdown body: `[text](/path)`. */
 const internalLinks = (body: string): string[] =>
