@@ -150,7 +150,7 @@ describe('LandingPage', () => {
     await screen.findByRole('heading', { name: 'The Slide Machine' })
 
     expect(
-      screen.getByRole('link', { name: /sign in to get started/i }),
+      screen.getByRole('link', { name: /sign in to start/i }),
     ).toHaveAttribute('href', '/login')
     // Registration is reached from the sign-in page, not from a second
     // button competing with the first
