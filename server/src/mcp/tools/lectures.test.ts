@@ -32,6 +32,10 @@ const fakeCall = (
 const deck = {
   id: 'deck-1',
   projectId: 'proj-1',
+  // The address the lecture opens at is built from this. `PUBLIC_BASE_URL` is
+  // set for the whole suite in vitest.config.ts, so the URLs asserted below
+  // are the ones a tool would really hand an assistant.
+  permalinkSlug: 'week-4-recursion',
   title: 'Week 4 — Recursion',
   slideOrder: ['slide-1', 'slide-2'],
   updatedAt: '2026-08-20T10:00:00.000Z',
@@ -53,6 +57,35 @@ describe('find_lectures', () => {
     expect(out.text).toContain('CS 101')
     expect(out.text).toContain('2 slides')
     expect(out.data).toMatchObject({ lectures: [{ id: 'deck-1' }] })
+  })
+
+  it('gives each lecture an address the instructor can open', async () => {
+    // An assistant cannot see slides, so a link is the only way it can show
+    // its work — and it must not have to assemble one itself.
+    const call = fakeCall({
+      'deck.list': [deck],
+      'project.list': [{ id: 'proj-1', title: 'CS 101' }],
+    })
+    const out = await findLectures.run(call, {})
+
+    expect(out.text).toContain('http://localhost:3000/d/week-4-recursion')
+    expect(out.data).toMatchObject({
+      lectures: [{ url: 'http://localhost:3000/d/week-4-recursion' }],
+    })
+  })
+
+  it('leaves the link out rather than printing a broken one', async () => {
+    // A deck with no permalink is not a lecture anyone can open; the line
+    // must still read as a sentence.
+    const call = fakeCall({
+      'deck.list': [{ ...deck, permalinkSlug: '' }],
+      'project.list': [{ id: 'proj-1', title: 'CS 101' }],
+    })
+    const out = await findLectures.run(call, {})
+
+    expect(out.text).not.toContain('undefined')
+    expect(out.text).not.toContain('open at')
+    expect(out.text).toContain('deck-1')
   })
 
   it('filters on the lecture title, case-insensitively', async () => {
@@ -191,6 +224,39 @@ describe('read_lecture', () => {
     expect(out.text).toContain('A tree unfolding')
     expect(out.text).toContain('Chapter 6')
     expect(out.text).toContain('may edit')
+  })
+
+  it('gives the lecture’s address and the rule for opening one slide', async () => {
+    // One address plus the rule, rather than a URL on every slide line: a
+    // forty-slide lecture would otherwise spend most of this answer
+    // repeating the same prefix.
+    const call = fakeCall({ 'deck.get': view })
+    const out = await readLecture.run(call, { lectureId: 'deck-1' })
+
+    expect(out.text).toContain('http://localhost:3000/d/week-4-recursion')
+    expect(out.text).toContain('?slide=<slide id>')
+    expect(out.text).toContain('signed in')
+    // The prefix appears once, not once per slide.
+    expect(out.text.split('/d/week-4-recursion').length - 1).toBe(1)
+  })
+
+  it('carries a per-slide address in the structured answer', async () => {
+    const call = fakeCall({ 'deck.get': view })
+    const out = await readLecture.run(call, { lectureId: 'deck-1' })
+
+    expect(out.data).toMatchObject({
+      url: 'http://localhost:3000/d/week-4-recursion',
+      slides: [
+        {
+          id: 'slide-1',
+          url: 'http://localhost:3000/d/week-4-recursion?slide=slide-1',
+        },
+        {
+          id: 'slide-2',
+          url: 'http://localhost:3000/d/week-4-recursion?slide=slide-2',
+        },
+      ],
+    })
   })
 
   it('names an untitled project when reading a lecture too', async () => {

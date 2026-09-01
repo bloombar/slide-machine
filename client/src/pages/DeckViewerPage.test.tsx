@@ -3876,3 +3876,101 @@ describe('DeckViewerPage narration in the translated language (PLAY-3)', () => {
     ).toBeInTheDocument()
   })
 })
+
+/**
+ * Opening the viewer at one slide, and getting in when you are not signed in.
+ *
+ * Both serve the same journey: an assistant working over MCP cannot see the
+ * slides it edits, so it hands the instructor a link (docs/MCP.md). That link
+ * arrives in a chat window, which means it is followed by a browser that may
+ * have no session and by a reader who has not chosen a slide.
+ */
+describe('DeckViewerPage, opened from a link', () => {
+  /** The viewer at an address, with the deck served and the session decided. */
+  const openAt = (entry: string, signedIn = true, deckStatus = 200) => {
+    mockFetchRoutes({
+      '/api/auth/refresh': () =>
+        signedIn
+          ? {
+              status: 200,
+              body: {
+                user: { id: 'u1', displayName: 'Ada' },
+                accessToken: 't',
+              },
+            }
+          : { status: 401 },
+      '/api/decks/shared-abc123': () =>
+        deckStatus === 200
+          ? { status: 200, body: { ...deckView, canEdit: signedIn } }
+          : { status: deckStatus, body: { error: { code: 'not_found' } } },
+    })
+    return render(
+      <MemoryRouter initialEntries={[entry]}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+            <Route path="/login" element={<p>LOGIN PAGE</p>} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+  }
+
+  it('opens on the slide the link names', async () => {
+    openAt('/d/shared-abc123?slide=s2')
+
+    // Carousel view shows one slide, so the second slide being on screen is
+    // the whole assertion.
+    expect(await screen.findByText('Second')).toBeInTheDocument()
+    expect(screen.queryByText('Hello')).not.toBeInTheDocument()
+  })
+
+  it('opens at the beginning when no slide is named', async () => {
+    openAt('/d/shared-abc123')
+    expect(await screen.findByText('Hello')).toBeInTheDocument()
+  })
+
+  it('opens at the beginning when the slide is not in this deck', async () => {
+    // A slide since deleted, or a mistyped link: the deck still opens.
+    openAt('/d/shared-abc123?slide=s99')
+    expect(await screen.findByText('Hello')).toBeInTheDocument()
+  })
+
+  it('offers a signed-out reader the sign-in that might let them in', async () => {
+    // A private deck and a deck that does not exist are the same 404, so the
+    // message cannot say which — but signing in is what resolves the one of
+    // them that is resolvable.
+    openAt('/d/shared-abc123?slide=s2', false, 404)
+
+    expect(
+      await screen.findByText(/does not exist or is private/),
+    ).toBeInTheDocument()
+    const signIn = await screen.findByRole('link', { name: 'Sign in' })
+    fireEvent.click(signIn)
+    expect(await screen.findByText('LOGIN PAGE')).toBeInTheDocument()
+  })
+
+  it('does not offer sign-in to someone already signed in', async () => {
+    // They are signed in and still cannot see it: signing in again is not the
+    // answer, and offering it would send them round a loop.
+    openAt('/d/shared-abc123', true, 404)
+
+    expect(
+      await screen.findByText(/does not exist or is private/),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'Sign in' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('does not offer sign-in when the deck simply failed to load', async () => {
+    openAt('/d/shared-abc123', false, 500)
+
+    expect(
+      await screen.findByText(/Could not load this deck/),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'Sign in' }),
+    ).not.toBeInTheDocument()
+  })
+})

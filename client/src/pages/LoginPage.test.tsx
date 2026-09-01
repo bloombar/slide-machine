@@ -81,6 +81,39 @@ describe('LoginPage', () => {
     expect(screen.queryByText('APP HOME')).not.toBeInTheDocument()
   })
 
+  it('returns to where the visitor was headed, not to /app', async () => {
+    // A link from outside the app — an assistant pointing at one slide
+    // (docs/MCP.md) — sends someone here with a destination in hand. Landing
+    // them on the home page instead loses it: they arrived to see one thing.
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({ status: 401 }),
+      '/api/auth/login': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+    })
+    render(
+      <MemoryRouter
+        initialEntries={[
+          { pathname: '/login', state: { from: '/d/week-4?slide=s2' } },
+        ]}
+      >
+        <AuthProvider>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/app" element={<div>APP HOME</div>} />
+            <Route path="/d/:slug" element={<div>THE LECTURE</div>} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByRole('button', { name: /sign in/i })
+    submit()
+
+    expect(await screen.findByText('THE LECTURE')).toBeInTheDocument()
+    expect(screen.queryByText('APP HOME')).not.toBeInTheDocument()
+  })
+
   it('surfaces a failed Google sign-in from the callback redirect', async () => {
     mockFetchRoutes({ '/api/auth/refresh': () => ({ status: 401 }) })
     render(

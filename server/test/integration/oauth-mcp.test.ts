@@ -646,3 +646,101 @@ describe('what consent actually decided', () => {
     expect(res.status).toBe(401)
   })
 })
+
+/**
+ * The link a tool hands back (docs/MCP.md §4).
+ *
+ * The unit tests check that a URL is built from a slug. What they cannot show
+ * is that the slug is one the app will actually serve — the tools compose
+ * actions, the viewer is served by a different route, and a link that formats
+ * perfectly and resolves to nothing is exactly as useless as no link at all.
+ * So this follows the address home.
+ */
+describe('the link an assistant hands back', () => {
+  it('points at a lecture the app really serves, on the slide that changed', async () => {
+    const session = await registerUser('linked@example.test')
+    const project = await request(server)
+      .post('/api/actions/project.create')
+      .set('Authorization', `Bearer ${session}`)
+      .send({ title: 'CS 101' })
+    const { tokens } = await connect(session)
+
+    const made = await mcp(tokens.access_token, {
+      jsonrpc: '2.0',
+      id: 40,
+      method: 'tools/call',
+      params: {
+        name: 'create_lecture',
+        arguments: { projectId: project.body.id, title: 'Week 4 — Recursion' },
+      },
+    })
+    const lectureId = made.body.result.structuredContent.id as string
+
+    const added = await mcp(tokens.access_token, {
+      jsonrpc: '2.0',
+      id: 41,
+      method: 'tools/call',
+      params: {
+        name: 'add_slide',
+        arguments: { lectureId, title: 'Base case' },
+      },
+    })
+    expect(added.body.result.isError).toBeUndefined()
+
+    const slideId = added.body.result.structuredContent.id as string
+    const link = added.body.result.structuredContent.url as string
+    // The model reads prose, so the address must be in the text too — not
+    // only in structured output a client may never show it.
+    expect(added.body.result.content[0].text).toContain(link)
+
+    const url = new URL(link)
+    expect(url.searchParams.get('slide')).toBe(slideId)
+
+    // Follow it: the viewer's own route, addressed by the slug in the link,
+    // with the session an instructor clicking it would have.
+    const slug = url.pathname.replace('/d/', '')
+    const viewed = await request(server)
+      .get(`/api/decks/${slug}`)
+      .set('Authorization', `Bearer ${session}`)
+    expect(viewed.status).toBe(200)
+    expect(viewed.body.deck.id).toBe(lectureId)
+    expect(viewed.body.slides.map((s: { id: string }) => s.id)).toContain(
+      slideId,
+    )
+  })
+
+  it('is refused to someone else, so the link is not the credential', async () => {
+    // Nothing about the address grants access: it is the ordinary sign-in
+    // that decides, which is why no signing or expiry is needed on it.
+    const owner = await registerUser('linkowner@example.test')
+    const stranger = await registerUser('linkstranger@example.test')
+    const project = await request(server)
+      .post('/api/actions/project.create')
+      .set('Authorization', `Bearer ${owner}`)
+      .send({ title: 'CS 101' })
+    // Projects made by a confirmed account are public by default, and a
+    // lecture inherits that — so the private case has to be asked for.
+    await request(server)
+      .post('/api/actions/project.setAccess')
+      .set('Authorization', `Bearer ${owner}`)
+      .send({ projectId: project.body.id, visibility: 'restricted' })
+    const { tokens } = await connect(owner)
+
+    const made = await mcp(tokens.access_token, {
+      jsonrpc: '2.0',
+      id: 42,
+      method: 'tools/call',
+      params: {
+        name: 'create_lecture',
+        arguments: { projectId: project.body.id, title: 'Private' },
+      },
+    })
+    const link = made.body.result.structuredContent.url as string
+    const slug = new URL(link).pathname.replace('/d/', '')
+
+    const asStranger = await request(server)
+      .get(`/api/decks/${slug}`)
+      .set('Authorization', `Bearer ${stranger}`)
+    expect(asStranger.status).toBe(404)
+  })
+})

@@ -218,8 +218,11 @@ describe('what the trail is for', () => {
   })
 
   it('ties the several actions of one tool call together', async () => {
-    // add_slide composes slide.add and slide.editContent — one instruction
-    // from the instructor, two rows, and the request id is what says so.
+    // add_slide composes slide.add, slide.editContent, and the deck.get that
+    // turns the lecture id into the address it hands back — one instruction
+    // from the instructor, three rows, and the request id is what says so.
+    // The read is on the trail like any other: an assistant reading a lecture
+    // is a thing that happened, whatever it read it for.
     const res = await callTool(agentToken, 'add_slide', {
       lectureId: deckId,
       title: 'Nodes',
@@ -230,7 +233,11 @@ describe('what the trail is for', () => {
     const rows = await AgentActionLogModel.find({})
       .sort({ createdAt: 1 })
       .lean()
-    expect(rows.map(r => r.action)).toEqual(['slide.add', 'slide.editContent'])
+    expect(rows.map(r => r.action)).toEqual([
+      'slide.add',
+      'slide.editContent',
+      'deck.get',
+    ])
     expect(new Set(rows.map(r => r.requestId)).size).toBe(1)
   })
 

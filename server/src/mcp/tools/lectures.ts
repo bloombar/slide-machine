@@ -20,23 +20,25 @@ import type {
 } from '@slide-machine/shared'
 import { defineTool } from '../tool'
 import { registerTool } from '../registry'
-import { onDay, projectName } from './prose'
+import { onDay, openAt, projectName } from './prose'
+import { lectureUrl } from '../../lib/deck-link'
 
 /** One lecture as a line of prose, ids included. */
 const lectureLine = (deck: Deck, projectTitle: string | undefined): string =>
   `- "${deck.title || 'Untitled lecture'}" (lecture id: ${deck.id}) — ` +
   `${deck.slideOrder.length} slide${deck.slideOrder.length === 1 ? '' : 's'}, ` +
   `in project "${projectName(projectTitle)}" (project id: ${deck.projectId}), ` +
-  `last changed ${onDay(deck.updatedAt)}`
+  `last changed ${onDay(deck.updatedAt)}` +
+  openAt(lectureUrl(deck.permalinkSlug))
 
 export const findLectures = defineTool({
   name: 'find_lectures',
   title: 'Find lectures',
   description:
     'Lists the lectures this account owns, newest first, with the id of each ' +
-    'one and the project it belongs to. Call this first: every other tool ' +
-    'needs a lecture id, and this is where ids come from. Optionally filter by ' +
-    'a word from the lecture or project title.',
+    'one, the project it belongs to, and the address it can be opened at. Call ' +
+    'this first: every other tool needs a lecture id, and this is where ids ' +
+    'come from. Optionally filter by a word from the lecture or project title.',
   readOnly: true,
   uses: ['deck.list', 'project.list'],
   input: {
@@ -88,6 +90,7 @@ export const findLectures = defineTool({
           projectTitle: titleOf.get(deck.projectId) ?? null,
           slideCount: deck.slideOrder.length,
           updatedAt: deck.updatedAt,
+          url: lectureUrl(deck.permalinkSlug) ?? null,
         })),
       },
     }
@@ -108,9 +111,10 @@ export const readLecture = defineTool({
   name: 'read_lecture',
   title: 'Read a lecture',
   description:
-    'Returns one lecture in full: its settings, its seed notes, and every ' +
-    'slide in order with the slide id, layout and content of each. This is the ' +
-    'only way to get slide ids, so call it before editing or reordering slides.',
+    'Returns one lecture in full: its settings, its seed notes, every slide in ' +
+    'order with the slide id, layout and content of each, and the address the ' +
+    'lecture can be opened at. This is the only way to get slide ids, so call ' +
+    'it before editing or reordering slides.',
   readOnly: true,
   uses: ['deck.get'],
   input: {
@@ -125,6 +129,7 @@ export const readLecture = defineTool({
     })
     const { deck, slides, template } = view
 
+    const url = lectureUrl(deck.permalinkSlug)
     const header = [
       `Lecture "${deck.title || 'Untitled lecture'}" (lecture id: ${deck.id})`,
       `Project: "${projectName(view.project.title)}" (project id: ${view.project.id})`,
@@ -135,6 +140,16 @@ export const readLecture = defineTool({
         ? 'This account may edit this lecture.'
         : 'This account may only read this lecture; edits will be refused.',
     ]
+    // One address and the rule for pointing it at a slide, rather than a URL
+    // on every slide line — a forty-slide lecture would spend most of this
+    // answer repeating the same prefix.
+    if (url) {
+      header.push(
+        `Open in the app: ${url} — the instructor must be signed in, and ` +
+          `adding "?slide=<slide id>" to that address opens one slide. Offer ` +
+          `this link when the instructor should look at something.`,
+      )
+    }
     if (deck.seedContext) {
       header.push(`Seed notes:\n${deck.seedContext}`)
     }
@@ -150,6 +165,7 @@ export const readLecture = defineTool({
       data: {
         id: deck.id,
         title: deck.title,
+        url: url ?? null,
         projectId: deck.projectId,
         templateId: deck.templateId,
         visibility: deck.visibility,
@@ -163,6 +179,7 @@ export const readLecture = defineTool({
           body: slide.body ?? null,
           bullets: slide.bullets ?? [],
           caption: slide.caption ?? null,
+          url: lectureUrl(deck.permalinkSlug, slide.id) ?? null,
         })),
       },
     }
@@ -200,9 +217,17 @@ export const createLecture = defineTool({
       projectId: input.projectId,
       title: input.title,
     })
+    const url = lectureUrl(deck.permalinkSlug)
     return {
-      text: `Created lecture "${deck.title || 'Untitled lecture'}" (lecture id: ${deck.id}) in project ${deck.projectId}. It has no slides yet.`,
-      data: { id: deck.id, title: deck.title, projectId: deck.projectId },
+      text:
+        `Created lecture "${deck.title || 'Untitled lecture'}" (lecture id: ${deck.id}) ` +
+        `in project ${deck.projectId}${openAt(url)}. It has no slides yet.`,
+      data: {
+        id: deck.id,
+        title: deck.title,
+        projectId: deck.projectId,
+        url: url ?? null,
+      },
     }
   },
 })
@@ -222,9 +247,10 @@ export const renameLecture = defineTool({
       deckId: input.lectureId,
       title: input.title,
     })
+    const url = lectureUrl(deck.permalinkSlug)
     return {
-      text: `Renamed lecture ${deck.id} to "${deck.title || 'Untitled lecture'}".`,
-      data: { id: deck.id, title: deck.title },
+      text: `Renamed lecture ${deck.id} to "${deck.title || 'Untitled lecture'}"${openAt(url)}.`,
+      data: { id: deck.id, title: deck.title, url: url ?? null },
     }
   },
 })
@@ -254,11 +280,12 @@ export const setLectureNotes = defineTool({
       deckId: input.lectureId,
       seedContext: input.notes,
     })
+    const url = lectureUrl(deck.permalinkSlug)
     return {
       text: input.notes
-        ? `Set ${input.notes.length} characters of seed notes on lecture ${deck.id}, replacing whatever was there.`
-        : `Cleared the seed notes on lecture ${deck.id}.`,
-      data: { id: deck.id },
+        ? `Set ${input.notes.length} characters of seed notes on lecture ${deck.id}, replacing whatever was there${openAt(url)}.`
+        : `Cleared the seed notes on lecture ${deck.id}${openAt(url)}.`,
+      data: { id: deck.id, url: url ?? null },
     }
   },
 })

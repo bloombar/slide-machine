@@ -42,6 +42,7 @@ import type {
   WordTiming,
 } from '@slide-machine/shared'
 import {
+  SLIDE_PARAM,
   WHITEBOARD_LAYOUT_TYPE,
   hasVisibleDrawings,
   deckSourceLocale,
@@ -231,6 +232,14 @@ export default function DeckViewerPage() {
     [showingTranslation, translation.perSlide],
   )
   const [error, setError] = useState<string | null>(null)
+  /**
+   * Whether signing in could change the answer — true only for the 404 the
+   * API gives a private deck, which is the same 404 it gives a deck that does
+   * not exist. Someone arriving from outside the app (an assistant's link,
+   * SPEC §18) hits this before they hit a login screen, and "does not exist or
+   * is private" is a dead end unless it offers the one thing that might help.
+   */
+  const [signInMayHelp, setSignInMayHelp] = useState(false)
   // A lecture list's Share option deep-links to the sharing tab; the
   // layout picker's "Change template" link deep-links to the design tab
   const [settingsTab, setSettingsTab] = useState<SettingsTabId | null>(() => {
@@ -538,7 +547,7 @@ export default function DeckViewerPage() {
   const nav = useSlideNavigation(view?.slides.length ?? 0, mode, index =>
     ttsRef.current?.skipTo(index),
   )
-  const { setCurrent } = nav
+  const { setCurrent, scrollTo } = nav
   // Always-fresh mirror of the current slide index, so voice commands running
   // from stale mic-queue closures can tell whether the deck is at its end.
   const currentRef = useRef(nav.current)
@@ -609,8 +618,10 @@ export default function DeckViewerPage() {
       })
       .catch(err => {
         if (cancelled) return
+        const missing = err instanceof ApiError && err.status === 404
+        setSignInMayHelp(missing)
         setError(
-          err instanceof ApiError && err.status === 404
+          missing
             ? 'This deck does not exist or is private'
             : 'Could not load this deck',
         )
@@ -619,6 +630,33 @@ export default function DeckViewerPage() {
       cancelled = true
     }
   }, [slug, status])
+
+  /**
+   * A link from outside naming one slide — `?slide=<slide id>`, which an
+   * assistant working over MCP hands back so the instructor can look at what
+   * it changed (docs/MCP.md).
+   *
+   * Honoured once per address rather than on every render: the deck reloads
+   * for reasons of its own, and re-running this would drag the reader back to
+   * the linked slide each time they had moved off it.
+   */
+  const jumpedToRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!view) return
+    const wanted = new URLSearchParams(location.search).get(SLIDE_PARAM)
+    if (!wanted || jumpedToRef.current === wanted) return
+    jumpedToRef.current = wanted
+    const index = view.slides.findIndex(slide => slide.id === wanted)
+    // A slide id this deck does not have — one since deleted, a mistyped
+    // link — opens the deck at the beginning rather than failing the page.
+    if (index < 0) return
+    setCurrent(index)
+    // List view scrolls to it; carousel view has already swapped slide. The
+    // frame's wait is what the other jump sites do — the row has to exist
+    // before it can be scrolled to, and landing on index 0 changes no state
+    // for the navigation's own scroll effect to react to.
+    requestAnimationFrame(() => scrollTo(index))
+  }, [view, location.search, setCurrent, scrollTo])
 
   // Stop any in-flight image polling when the viewer unmounts
   useEffect(() => {
@@ -1435,8 +1473,17 @@ export default function DeckViewerPage() {
 
   if (error) {
     return (
-      <div className="flex flex-1 items-center justify-center text-slate-500">
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 text-slate-500">
         <p role="alert">{error}</p>
+        {signInMayHelp && status === 'anonymous' && (
+          <Link
+            className="text-sky-400 underline underline-offset-2 hover:text-sky-300"
+            to="/login"
+            state={{ from: `${location.pathname}${location.search}` }}
+          >
+            {t('auth.signIn')}
+          </Link>
+        )}
       </div>
     )
   }

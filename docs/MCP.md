@@ -252,6 +252,39 @@ Questions that have to be answered before any of this is real:
 - **Read tools are not optional.** An agent that cannot find a deck cannot edit
   one, and this is easy to under-build.
 
+### 4.2 Showing the instructor what changed
+
+An assistant cannot see the slides it edits. The MCP protocol would let a tool
+return an image, and this does not: the server has no slide rasteriser (the
+only pixel-faithful renderer is the React viewer), and a rendered slide costs
+roughly 700 tokens of the model's context per call for something the model
+cannot act on anyway.
+
+Tools return **a link into the app** instead —
+`/d/:permalinkSlug?slide=<slide id>`, built by
+[lib/deck-link.ts](../server/src/lib/deck-link.ts). What it costs is a handful
+of tokens; what it buys is the instructor looking at the real slide.
+
+Three things about it are deliberate:
+
+- **Nothing about the link grants access.** The viewer fetches the deck with
+  the browser's own session, so a private lecture opens for its owner and reads
+  as missing to everyone else — the ordinary sign-in, not a signed URL with an
+  expiry to get wrong. Someone who follows a link signed out is offered the
+  sign-in and lands back on the slide it named.
+- **The slide is a query parameter, not a fragment.** A fragment never reaches
+  the server and does not survive the sign-in round trip, which is exactly the
+  journey a link from a chat window takes.
+- **The origin comes from configuration, never from the request.**
+  `CLIENT_APP_URL ?? PUBLIC_BASE_URL`; the MCP route's own origin is the API
+  resource (`<issuer>/api/mcp`), which is not where the SPA is in dev. With
+  neither set the link is left out rather than guessed at.
+
+Read tools have the lecture in hand and build links directly. `edit_slides`
+and `add_slide` are addressed to slide ids, so they spend one extra `deck.get`
+per call — per call, not per edit — which is on the agent audit trail (§6) like
+any other read.
+
 ## 5. The OAuth work — the real cost
 
 [§19.11](SPEC.md#19-open-questions) files "the remote-OAuth model" alongside
